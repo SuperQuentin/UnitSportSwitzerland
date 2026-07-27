@@ -278,9 +278,10 @@ public partial class ClientWorld : Node3D
         AddChild(PlayerReplication.CreateSpawner());
         var net = new NetworkManager { Name = "Net" };
         AddChild(net);
-        var parts = host.Split(':');
-        int port = parts.Length > 1 && int.TryParse(parts[1], out int p) ? p : NetworkManager.DefaultPort;
-        net.StartClient(parts[0], port);
+        // Handles bare hosts, host:port, and bracketed IPv6 — a plain colon split breaks on
+        // the IPv6 address Tailscale hands out alongside the 100.x one.
+        var (address, port) = NetworkManager.ParseEndpoint(host);
+        net.StartClient(address, port);
 
         Multiplayer.ConnectedToServer += () =>
         {

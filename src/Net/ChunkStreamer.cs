@@ -140,7 +140,12 @@ public partial class ChunkStreamer : Node
             if (!_pending.Remove(requestId, out pending)) return;
         }
 
-        GD.Print($"[stream] request {requestId} {pending.Kind} {pending.Tile} {why}");
+        // "Not connected" is the ordinary state during startup and in single player — the LOD
+        // rings ask for tiles before the link is up. Logging it would bury the failures that
+        // actually mean something.
+        if (!why.StartsWith("not connected", StringComparison.Ordinal))
+            GD.Print($"[stream] request {requestId} {pending.Kind} {pending.Tile} {why}");
+
         pending.Completion.TrySetResult(new AssetResult(null, permanent));
     }
 

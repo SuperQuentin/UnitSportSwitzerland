@@ -63,13 +63,21 @@ public partial class ServerWorld : Node3D
 
         // Serves generated terrain files to clients that lack them. Reads raw bytes straight
         // off disk, so it costs the server no decoding work.
-        _streamer = ChunkStreamer.CreateServer(TerrainPaths.FindChunkDir());
+        _streamer = ChunkStreamer.CreateServer(chunkDir);
+        if (ParseStreamBandwidth() is { } megabytesPerSecond)
+        {
+            _streamer.BytesPerSecondPerPeer = (int)(megabytesPerSecond * 1024 * 1024);
+            // fr-CH machine: an uninvariant format renders 0.75 as "0,75"
+            GD.Print("[server] terrain streaming capped at "
+                + megabytesPerSecond.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+                + " MB/s per client");
+        }
         AddChild(_streamer);
 
         var net = new NetworkManager { Name = "Net" };
         AddChild(net);
         int port = ParsePort();
-        if (!net.StartServer(port))
+        if (!net.StartServer(port, NetworkManager.ParseBindArg()))
         {
             GetTree().Quit(1);
             return;
@@ -77,6 +85,26 @@ public partial class ServerWorld : Node3D
 
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;
+    }
+
+    /// <summary>
+    /// Reads "--stream-bandwidth &lt;MB/s&gt;", the per-client terrain streaming cap.
+    /// <para>
+    /// The 3 MB/s default is sized for a LAN. Over the internet it is 24 Mbit/s <i>per
+    /// client</i>, which will saturate most home uplinks with two players on it, so a server
+    /// exposed through Tailscale or a forwarded port usually wants this set.
+    /// </para>
+    /// </summary>
+    private static double? ParseStreamBandwidth()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        for (int i = 0; i < args.Length - 1; i++)
+            if (args[i] == "--stream-bandwidth"
+                && double.TryParse(args[i + 1], System.Globalization.NumberStyles.Float, inv, out double v)
+                && v > 0)
+                return v;
+        return null;
     }
 
     private static int ParsePort()

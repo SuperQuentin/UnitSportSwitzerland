@@ -257,10 +257,46 @@ Two things worth knowing before extending the pipeline:
 ```bash
 # dedicated server
 godot --headless --path . -- --server [--port 7777] [--admin-password <pw>]
+                                      [--bind <ip>] [--stream-bandwidth <MB/s>]
 
 # client
 godot --path . -- --connect 127.0.0.1 [--name Syra]
 ```
+
+The server binds to **all interfaces** by default and prints where it can be reached:
+
+```
+[net] server listening on UDP 7777 (all interfaces)
+[net]   reachable at 192.168.178.38:7777
+[net]   reachable at 100.85.45.114:7777
+```
+
+### Playing over Tailscale or a forwarded port
+
+**ENet is UDP.** That is the one thing that decides whether a given tunnel works:
+
+| | |
+|---|---|
+| **Tailscale** | works as-is — connect to the 100.x address or the MagicDNS name |
+| **Port forwarding** | works, but the router rule must be **UDP**, not TCP |
+| **ngrok (free), Cloudflare Tunnel** | **will not work** — TCP/HTTP only |
+| **WireGuard, ZeroTier, Hamachi** | work, same as Tailscale |
+
+```bash
+# tailnet only: nothing is listening on the public interface even if the router forwards
+godot --headless --path . -- --server --bind 100.85.45.114 --stream-bandwidth 1
+
+# clients — any of these forms parse
+godot --path . -- --connect 100.85.45.114
+godot --path . -- --connect 100.85.45.114:7777
+godot --path . -- --connect myserver.tail1234.ts.net
+godot --path . -- --connect "[fd7a:115c:a1e0::1]:7777"
+```
+
+**Set `--stream-bandwidth` for anything off-LAN.** The 3 MB/s default is sized for a local
+network; over the internet that is 24 Mbit/s *per client*, which will saturate a home uplink
+with two players on it. `--stream-bandwidth 1` is 8 Mbit/s each and still fills a city in
+about a minute.
 
 The server runs the same chunk streaming with meshes disabled — it only needs height data
 around each player. Transforms are client-authoritative and relayed by the server.
