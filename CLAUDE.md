@@ -111,6 +111,14 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   The menu also owns the mouse: opening releases the pointer, closing recaptures it, which
   is why `SpectatorCamera` no longer handles Esc. `--menu` forces the picker open (and is
   how it gets screenshotted).
+- **On foot** (`src/Player/FootPlayer.cs`): WASD + Shift at 1.6 / 4.6 m/s, Space to jump, plus
+  two momentum moves — **slide** (Ctrl, run only, launches at 7 m/s, gains speed downhill, ends
+  keeping horizontal speed if you Space out of it) and **wall jump** (Space in the air against
+  a surface past ~70°, twice per airtime, never twice on the same face). Both launches decay
+  back to `RunSpeed` through `AirDrag`, so neither raises the top speed on flat ground; the
+  air branch *steers without braking* above running pace, because the ordinary `MoveToward`
+  air control kills a launch in half a second and makes both moves pointless. Sliding shrinks
+  the capsule to 0.9 m, so it fits where standing does not.
 - **GPX ghost racing** (`src/Gpx/`): `GpxParser` -> `GpxTrack` (LV95 via `SwissProjection`,
   cumulative time + distance). `RacePlayback` owns ONE clock; each `Runner` samples its own
   track at that shared time, so several GPX files start together and race as ghosts —
@@ -217,6 +225,20 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   as a giant next to 10 m buildings. Realistic 1.6 / 4.6 m/s plus head bob and a running
   FOV kick is what makes the world feel human-sized. `FootPlayer` reads *physical keys*,
   so `Input.action_press` will not drive it in tests — use godot-ai `game_manage input_key`.
+- **`IsOnWall()` flickers between adjacent physics frames.** Pressed flat against a building
+  face, the solver reports contact on roughly every *other* frame, so a wall jump gated on
+  same-frame contact silently misses about half of all attempts — it looks like an input bug,
+  not a physics one. `FootPlayer` remembers the last qualifying wall normal for 0.18 s
+  (`WallCoyoteTime`) and the last jump press for 0.14 s (`JumpBufferTime`), and jumps when
+  both are live. Verified: v.y = 4.6 and 5.41 m/s along the wall normal, one frame after press.
+- **A held movement key that starts a state must be edge-triggered.** A spent slide ends at
+  ~2 m/s, the walk puts you back over the 2.6 m/s entry threshold in about a second, and a
+  *held* Ctrl then starts the next one — measured as a permanent 7 m/s crouch-run. Slide entry
+  takes a fresh press; holding only sustains the slide you are in.
+- **Crouch states need a headroom test before standing.** `FootPlayer.EndSlide` returns false
+  when a standing capsule will not fit (shape query, radius shaved 3 cm), so releasing Ctrl in
+  a tunnel keeps you down instead of forcing the body up through the roof — and you cannot
+  jump out of a slide you could not stand up in either.
 
 - **GWR: classify on GKLAS, not GKAT.** GKAT only says whether a building is residential
   at all, so using it labels every village house an apartment block. GKLAS 1110/1121 are

@@ -51,11 +51,30 @@ godot --path . -- --at 2538000,1152000     # or by LV95 easting/northing
 
 - **WASD + mouse** — fly around. **Shift** boost. Click to take the mouse back after a menu
 - **T** — drop onto the ground and walk. **T** again to fly
+- On foot: **Shift** run, **Space** jump, **Ctrl** slide, **Space** against a wall to wall jump
 - **Tab** — search for a town and teleport there (only places with terrain are listed)
 - **G** — load one or more `.gpx` tracks and watch them race
 - **H** — hide the interface for a clean view (a small button top-right brings it back)
 - **Enter** — chat, when connected to a server (**/** for a command)
 - **Esc** — back to the mode menu
+
+### Moving on foot
+
+Walking is deliberately slow — 1.6 m/s walking, 4.6 m/s running — because that is what makes a
+10 m building read as 10 m tall. The two momentum moves are the exception:
+
+- **Slide** (**Ctrl**, or **C**): only from a run, never from a walk — a slide out of a standstill
+  would be a free speed boost. It launches at 7 m/s, then gains speed downhill and loses it to
+  friction on the flat. **A/D** steer it; they do not drive it. **Space** ends it and keeps the
+  horizontal speed, which is how you get distance off a descent. The capsule shrinks to 0.9 m
+  while down, and you will not stand back up under something too low to stand in.
+- **Wall jump** (**Space** in the air, touching a wall): 4.6 m/s up and 5.4 m/s away from the
+  face. A surface counts as a wall past ~70°, so scree slopes do not qualify. Twice per airtime,
+  and never twice on the same face — two opposing walls in a gully chimney, one flat wall does
+  not become a ladder.
+
+Both launches bleed back to running pace on their own, so neither raises your top speed on
+flat ground.
 
 The Godot binary used during development:
 
