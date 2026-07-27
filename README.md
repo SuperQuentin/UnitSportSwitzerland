@@ -22,6 +22,14 @@ Then press play in the Godot editor, or:
 godot --path . 
 ```
 
+> **A fresh clone has no terrain data.** The generated chunks are 5.3 GB and the source
+> geodata 155 GB, so neither is in the repository. The game starts anyway — into an empty
+> world — and you have two ways to fill it:
+>
+> - **join a server** and the whole world streams in and is cached (see *Terrain streaming*);
+> - **generate it yourself** by downloading the swisstopo data and running the preprocessor
+>   (see *Building the terrain* below).
+
 A mode menu opens first:
 
 | Mode | What it is |

@@ -33,9 +33,23 @@ public partial class ClientWorld : Node3D
     {
         var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
         var manifest = await source.LoadManifestAsync();
-        var origin = new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
+
+        // A fresh clone has no terrain at all: the generated data is 5.3 GB and is not in the
+        // repository. That is not fatal — the world is simply empty until either the
+        // preprocessor is run or a server is joined, which streams everything.
+        bool hasLocalTerrain = manifest.Tiles.Count > 0;
+
+        var origin = hasLocalTerrain
+            ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
+            : WorldOrigin.SwissDefault();
+
         _worldOrigin = origin;
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
+
+        if (!hasLocalTerrain)
+            GD.PushWarning(
+                "[world] no terrain data found. Generate it with tools/TerrainPreprocessor, "
+                + "or join a server and it will stream in. See the README.");
 
         var material = new ShaderMaterial
         {
@@ -175,6 +189,24 @@ public partial class ClientWorld : Node3D
         }
     }
 
+    /// <summary>
+    /// Puts the player down again after the world origin moved.
+    ///
+    /// <para>
+    /// Only happens on a client that had no terrain of its own and adopted the server's
+    /// anchor. Its position was an offset from a placeholder origin and now means somewhere
+    /// else entirely, so the spawn is simply re-run against the new one.
+    /// </para>
+    /// </summary>
+    private void RespawnAfterRebase()
+    {
+        if (_chunks == null || _worldOrigin == null || _teleporter == null) return;
+
+        var (spawnE, spawnN) = SpawnPoint.ParseTarget();
+        _teleporter.TeleportTo(spawnE, spawnN, "spawn");
+        _chatUi?.Append("Adopted the server's world; terrain will stream in.", ChatKind.System);
+    }
+
     /// <summary>Switches mode, tearing down whatever the previous one owned.</summary>
     private void EnterMode(GameMode mode)
     {
@@ -230,6 +262,10 @@ public partial class ClientWorld : Node3D
         // streamable, and refuses to stream at all if the two worlds disagree on the origin.
         _terrainSync = new ClientTerrainSync(_streamer!, _chunks!, _worldOrigin!);
         _terrainSync.Status += line => _chatUi?.Append(line, ChatKind.System);
+
+        // Adopting the server's anchor changes what every world coordinate means, so whatever
+        // was placed against the old one has to be put down again.
+        _terrainSync.Rebased += () => Callable.From(RespawnAfterRebase).CallDeferred();
         AddChild(_terrainSync);
 
         _players = new Node3D { Name = "Players" };

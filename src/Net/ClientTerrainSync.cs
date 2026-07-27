@@ -44,6 +44,12 @@ public sealed partial class ClientTerrainSync : Node
     /// <summary>Raised when the two sides disagree about the world origin.</summary>
     public event Action<string>? OriginMismatch;
 
+    /// <summary>
+    /// Raised when a client with no terrain adopted the server's origin. The host should
+    /// respawn whatever it had placed, since its world position now means something else.
+    /// </summary>
+    public event Action? Rebased;
+
     /// <summary>True once the server manifest has been merged.</summary>
     public bool Synced { get; private set; }
 
@@ -81,6 +87,17 @@ public sealed partial class ClientTerrainSync : Node
 
         double de = Math.Abs(manifest.SuggestedOriginLv95.E - _origin.E);
         double dn = Math.Abs(manifest.SuggestedOriginLv95.N - _origin.N);
+
+        // A client with no terrain of its own has no world to contradict, so it adopts the
+        // server's anchor instead of refusing. This is the fresh-clone path: nothing has been
+        // placed yet, so there is nothing for a rebase to invalidate, and the whole world then
+        // streams in. Refusing here would make a clone with no data unable to play at all.
+        if ((de > 0.5 || dn > 0.5) && _chunks.AvailableTileCount == 0)
+        {
+            _origin.Rebase(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
+            de = dn = 0;
+            Rebased?.Invoke();
+        }
 
         if (de > 0.5 || dn > 0.5)
         {

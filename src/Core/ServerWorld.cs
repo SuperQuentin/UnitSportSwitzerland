@@ -21,8 +21,23 @@ public partial class ServerWorld : Node3D
 
     public override async void _Ready()
     {
-        var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
+        string chunkDir = TerrainPaths.FindChunkDir();
+        var source = new LocalChunkSource(chunkDir);
         var manifest = await source.LoadManifestAsync();
+
+        // Unlike a client, a server cannot shrug this off: it is the authority on where the
+        // world is and the only source of terrain for clients that lack it. Starting anyway
+        // would hand every client an origin of 0/0 and a world with nothing in it.
+        if (manifest.Tiles.Count == 0)
+        {
+            GD.PushError(
+                $"[server] no terrain data in {chunkDir}. A server has nothing to serve and no "
+                + "world origin to hand out. Generate the chunks first (see the README), or "
+                + "point at an existing set with --chunks <dir>.");
+            GetTree().Quit(1);
+            return;
+        }
+
         var origin = new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
         GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
 

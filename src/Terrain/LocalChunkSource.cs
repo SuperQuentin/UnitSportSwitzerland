@@ -1,3 +1,4 @@
+using Godot;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain;
@@ -9,11 +10,38 @@ public sealed class LocalChunkSource : IChunkSource
 
     public LocalChunkSource(string dir) => _dir = dir;
 
+    /// <summary>
+    /// Reads manifest.json, or returns an empty manifest when there is none.
+    ///
+    /// <para>
+    /// A fresh clone has no <c>terrain_chunks/</c> at all — the generated data is 5.3 GB and
+    /// is not in the repository — so "no manifest" is an ordinary state, not an error. An
+    /// empty manifest is the truthful answer: this source has no tiles. The caller decides
+    /// what to do about it, and with a server to join the answer is "nothing, it will all
+    /// stream".
+    /// </para>
+    /// </summary>
     public async Task<TerrainManifest> LoadManifestAsync(CancellationToken ct = default)
     {
         string path = Path.Combine(_dir, "manifest.json");
-        string json = await File.ReadAllTextAsync(path, ct);
-        return TerrainManifest.FromJson(json);
+
+        if (!File.Exists(path))
+        {
+            GD.PushWarning($"[terrain] no manifest at {path}; this copy has no terrain data");
+            return new TerrainManifest();
+        }
+
+        try
+        {
+            string json = await File.ReadAllTextAsync(path, ct);
+            return TerrainManifest.FromJson(json);
+        }
+        catch (Exception e)
+        {
+            // A truncated or half-written manifest should not take the boot down either.
+            GD.PushError($"[terrain] {path} could not be read: {e.Message}");
+            return new TerrainManifest();
+        }
     }
 
     public Task<ChunkGrid?> LoadChunkAsync(TileId id, CancellationToken ct = default)

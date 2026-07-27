@@ -11,11 +11,38 @@ namespace UnitSport.Core;
 /// </summary>
 public sealed class WorldOrigin
 {
-    public double E { get; }
-    public double N { get; }
+    public double E { get; private set; }
+    public double N { get; private set; }
 
     public WorldOrigin(double e, double n)
     {
+        E = e;
+        N = n;
+    }
+
+    /// <summary>
+    /// Fallback anchor for a copy of the game with no terrain data at all — roughly the
+    /// centre of Switzerland. Anything is better than LV95 0/0, which is 2.6 million metres
+    /// away and would destroy float precision the moment real data arrived.
+    /// </summary>
+    public static WorldOrigin SwissDefault() => new(2660000, 1190000);
+
+    /// <summary>
+    /// Moves the anchor.
+    ///
+    /// <para>
+    /// Only legal while nothing has been placed in the world, which in practice means "a
+    /// client with no local terrain has just been told where the server's world is". Every
+    /// existing world-space coordinate is an offset from the old anchor, so rebasing with
+    /// chunks or players already positioned would silently teleport all of them; the caller
+    /// is responsible for having nothing to invalidate.
+    /// </para>
+    /// </summary>
+    public void Rebase(double e, double n)
+    {
+        if (Math.Abs(E - e) < 0.5 && Math.Abs(N - n) < 0.5) return;
+
+        GD.Print($"[world] origin rebased from LV95 {E:F0}/{N:F0} to {e:F0}/{n:F0}");
         E = e;
         N = n;
     }

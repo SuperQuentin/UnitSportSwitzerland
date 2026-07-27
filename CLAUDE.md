@@ -314,6 +314,17 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 - **`ChunkManager` records "this tile has no roads/buildings/trees" after ONE empty load.**
   Correct for local files, wrong over a network, so `NetworkChunkSource` retries transient
   failures internally rather than letting a null reach the manager.
+- **A fresh clone has NO terrain** — the generated data is gitignored — so a missing
+  `manifest.json` is an ordinary state, not an error. `LocalChunkSource` returns an empty
+  manifest and the client boots into an empty world with a message; it used to throw
+  `FileNotFoundException` out of `ClientWorld._Ready` and take the game down. A *server* still
+  fails fast, because it is the authority on where the world is and has nothing to serve.
+- **Never default the world origin to LV95 0/0.** Switzerland is 2.6 million metres from
+  there, so float precision collapses the moment real data arrives. With no manifest,
+  `WorldOrigin.SwissDefault()` is used, and a client with zero tiles then *adopts* the
+  server's origin via `Rebase` rather than refusing the mismatch — refusing is right when two
+  populated worlds disagree, wrong when you have no world at all. Rebasing changes what every
+  world coordinate means, so `ClientWorld.RespawnAfterRebase` puts the player down again.
 - **The client needs its own request budget, not just the server's.** The LOD rings reach nine
   tiles out, so arriving somewhere new makes 361 tiles want their .terr at once — ~177 MB.
   Unbudgeted, the client floods the server, most requests are refused, and the retries fight:
