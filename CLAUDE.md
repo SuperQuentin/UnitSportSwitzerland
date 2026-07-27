@@ -330,6 +330,17 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   server's origin via `Rebase` rather than refusing the mismatch — refusing is right when two
   populated worlds disagree, wrong when you have no world at all. Rebasing changes what every
   world coordinate means, so `ClientWorld.RespawnAfterRebase` puts the player down again.
+- **`places.json` is the one asset the UI reads, not the streamer** — so it was silently left
+  out of `AssetKind` and a streaming client connected fine, pulled terrain fine, and showed an
+  empty Tab search. It is now `AssetKind.Places`, fetched during sync into the cache, and
+  `PlaceSearchUi.ReloadIndex()` re-reads it (the UI is built long before the connection).
+- **Tile loads are CHAINS, and unordered concurrency starves them.** Each tile awaits chunk →
+  holes → cover → roads → buildings. Starting all 361 tiles at once means every chain's first
+  request goes out before any chain's second, so a streaming client downloads 361 height grids
+  and renders none of them — no tile has its cover yet. `MaxConcurrentBuilds` (6) plus
+  nearest-first ordering in `EvaluateRings` fixes it: measured 175k prims after 55 s before,
+  **4.34 M after 15 s** after. Neither change affects local loading, where the per-frame commit
+  budget is the limiter — measured byte-identical at caps of 6 and 24.
 - **The client needs its own request budget, not just the server's.** The LOD rings reach nine
   tiles out, so arriving somewhere new makes 361 tiles want their .terr at once — ~177 MB.
   Unbudgeted, the client floods the server, most requests are refused, and the retries fight:

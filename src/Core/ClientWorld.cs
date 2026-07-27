@@ -266,6 +266,10 @@ public partial class ClientWorld : Node3D
         // Adopting the server's anchor changes what every world coordinate means, so whatever
         // was placed against the old one has to be put down again.
         _terrainSync.Rebased += () => Callable.From(RespawnAfterRebase).CallDeferred();
+
+        // The town index arrives after this UI was built, so it has to be told to re-read.
+        _terrainSync.PlacesReceived += () =>
+            Callable.From(() => _places?.ReloadIndex()).CallDeferred();
         AddChild(_terrainSync);
 
         _players = new Node3D { Name = "Players" };

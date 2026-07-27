@@ -44,6 +44,9 @@ public sealed partial class ClientTerrainSync : Node
     /// <summary>Raised when the two sides disagree about the world origin.</summary>
     public event Action<string>? OriginMismatch;
 
+    /// <summary>Raised once the town index has been cached, so the Tab search can reload.</summary>
+    public event Action? PlacesReceived;
+
     /// <summary>
     /// Raised when a client with no terrain adopted the server's origin. The host should
     /// respawn whatever it had placed, since its world position now means something else.
@@ -126,6 +129,43 @@ public sealed partial class ClientTerrainSync : Node
 
         GD.Print($"[stream] {line}");
         Status?.Invoke(line);
+
+        await SyncPlacesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Pulls the town index so the Tab teleport search works on a client that shipped without
+    /// one. Purely cosmetic if it fails — /city still resolves server-side.
+    /// </summary>
+    private async Task SyncPlacesAsync(CancellationToken ct)
+    {
+        string dir = Core.TerrainPaths.FindCacheDir();
+        string path = Path.Combine(dir, PlaceIndex.FileName);
+
+        byte[]? bytes = (await _streamer
+            .FetchAsync(AssetKind.Places, new TileId(0, 0), ct)
+            .ConfigureAwait(false)).Data;
+
+        if (bytes is null)
+        {
+            GD.Print("[stream] server has no place index; the Tab search will stay empty");
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(dir);
+            await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[stream] could not cache the place index: {e.Message}");
+            return;
+        }
+
+        int count = PlaceIndex.FromJson(System.Text.Encoding.UTF8.GetString(bytes)).Places.Count;
+        GD.Print($"[stream] place index received: {count} towns");
+        PlacesReceived?.Invoke();
     }
 
     /// <summary>Filename of the cached copy of the server's index.</summary>

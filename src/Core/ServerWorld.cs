@@ -73,6 +73,7 @@ public partial class ServerWorld : Node3D
                 + " MB/s per client");
         }
         AddChild(_streamer);
+        _chat.Streamer = _streamer;
 
         var net = new NetworkManager { Name = "Net" };
         AddChild(net);

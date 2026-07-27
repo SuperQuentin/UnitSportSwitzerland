@@ -4,6 +4,18 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Net;
 
 /// <summary>
+/// Outcome of one asset request.
+/// </summary>
+/// <param name="Data">The raw file, or null when it did not arrive.</param>
+/// <param name="PermanentlyMissing">
+/// True only when the server said it does not have the file. A transfer refused for
+/// backpressure, a timeout or a failed integrity check leaves this false, so the caller
+/// asks again later instead of writing the tile off for the session — conflating the two
+/// is how a busy server permanently blanks terrain it actually has.
+/// </param>
+public readonly record struct AssetResult(byte[]? Data, bool PermanentlyMissing);
+
+/// <summary>
 /// Streams generated terrain files from the server to clients that do not have them.
 ///
 /// <para>
@@ -21,18 +33,6 @@ namespace UnitSport.Net;
 /// at most <see cref="BytesPerSecondPerPeer"/> to each client, on a channel of its own.
 /// </para>
 /// </summary>
-/// <summary>
-/// Outcome of one asset request.
-/// </summary>
-/// <param name="Data">The raw file, or null when it did not arrive.</param>
-/// <param name="PermanentlyMissing">
-/// True only when the server said it does not have the file. A transfer refused for
-/// backpressure, a timeout or a failed integrity check leaves this false, so the caller
-/// asks again later instead of writing the tile off for the session — conflating the two
-/// is how a busy server permanently blanks terrain it actually has.
-/// </param>
-public readonly record struct AssetResult(byte[]? Data, bool PermanentlyMissing);
-
 public partial class ChunkStreamer : Node
 {
     /// <summary>Node name, which must match on server and client for RPC routing.</summary>
@@ -280,6 +280,10 @@ public partial class ChunkStreamer : Node
 
     /// <summary>Drops a disconnected peer's queued transfers.</summary>
     public void ForgetPeer(long peer) => _queues.Remove(peer);
+
+    /// <summary>Transfers still queued for a peer, for the /stream diagnostic.</summary>
+    public int QueuedTransfers(long peer) =>
+        _queues.TryGetValue(peer, out var queue) ? queue.Transfers.Count : 0;
 
     public override void _Process(double delta)
     {

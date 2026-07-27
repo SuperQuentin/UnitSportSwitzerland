@@ -17,6 +17,7 @@ public partial class PlaceSearchUi : CanvasLayer
     private LineEdit _query = null!;
     private ItemList _results = null!;
     private Label _hint = null!;
+    private Label? _title;
     private List<Place> _shown = new();
 
     /// <summary>
@@ -34,12 +35,7 @@ public partial class PlaceSearchUi : CanvasLayer
     {
         Layer = 20;   // above the GPX HUD
 
-        string path = System.IO.Path.Combine(TerrainPaths.FindChunkDir(), PlaceIndex.FileName);
-        if (System.IO.File.Exists(path))
-            _index = PlaceIndex.FromJson(System.IO.File.ReadAllText(path));
-        else
-            GD.PushWarning($"[places] {PlaceIndex.FileName} not found — run the preprocessor " +
-                           "with --places --gwr <gwr data.sqlite>");
+        LoadIndex();
 
         _panel = new PanelContainer
         {
@@ -60,9 +56,9 @@ public partial class PlaceSearchUi : CanvasLayer
         var rows = new VBoxContainer();
         _panel.AddChild(rows);
 
-        var title = new Label { Text = $"Teleport — {_index.Places.Count} places with terrain" };
-        title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
-        rows.AddChild(title);
+        _title = new Label { Text = $"Teleport — {_index.Places.Count} places with terrain" };
+        _title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
+        rows.AddChild(_title);
 
         _query = new LineEdit { PlaceholderText = "type a town name…" };
         _query.TextChanged += _ => Refresh();
@@ -107,6 +103,47 @@ public partial class PlaceSearchUi : CanvasLayer
 
         var place = matches[0];
         return _teleporter.TeleportTo(place.E, place.N, place.Name);
+    }
+
+    /// <summary>
+    /// Reads the town index: local chunk directory first, then the streaming cache.
+    ///
+    /// <para>
+    /// The cache is what makes this work on a client that shipped without terrain — the index
+    /// arrives from the server after connecting, which is well after this UI was built, hence
+    /// <see cref="ReloadIndex"/>.
+    /// </para>
+    /// </summary>
+    private void LoadIndex()
+    {
+        foreach (string dir in new[] { TerrainPaths.FindChunkDir(), TerrainPaths.FindCacheDir() })
+        {
+            string path = System.IO.Path.Combine(dir, PlaceIndex.FileName);
+            if (!System.IO.File.Exists(path)) continue;
+
+            try
+            {
+                _index = PlaceIndex.FromJson(System.IO.File.ReadAllText(path));
+                if (_index.Places.Count > 0) return;
+            }
+            catch (Exception e)
+            {
+                GD.PushWarning($"[places] {path} could not be read: {e.Message}");
+            }
+        }
+
+        GD.PushWarning(
+            $"[places] no {PlaceIndex.FileName} found. Run the preprocessor with "
+            + "--places --gwr <gwr data.sqlite>, or join a server and it will be sent.");
+    }
+
+    /// <summary>Re-reads the index after one arrives from the server, and refreshes the list.</summary>
+    public void ReloadIndex()
+    {
+        LoadIndex();
+        if (_title is not null)
+            _title.Text = $"Teleport — {_index.Places.Count} places with terrain";
+        Refresh();
     }
 
     public bool IsOpen => _panel.Visible;

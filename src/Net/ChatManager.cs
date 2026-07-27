@@ -244,6 +244,7 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help": SendHelp(sender); return;
+            case "stream": ReportStreaming(sender); return;
             case "who": SendWho(sender); return;
             case "name": if (RequiresAvatar(sender, verb)) CommandName(sender, rest); return;
             case "city": if (RequiresAvatar(sender, verb)) CommandCity(sender, rest); return;
@@ -280,7 +281,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -291,6 +292,30 @@ public partial class ChatManager : Node
                 + "/kick <player> [reason]  /admin list|add <name>|remove <name>",
                 ChatKind.Private);
     }
+
+    /// <summary>Client-side streaming stats, injected by ClientWorld.</summary>
+    public Func<string>? StreamStatus { get; set; }
+
+    /// <summary>
+    /// Reports what terrain streaming is doing. Exists because the failure mode is silence —
+    /// a client that cannot stream looks exactly like a client standing somewhere empty.
+    /// </summary>
+    private void ReportStreaming(long sender)
+    {
+        // The server answers with what it is serving; the client prints its own side locally,
+        // since only it knows its cache and its tile count.
+        int queued = 0;
+        if (_streamer is not null) queued = _streamer.QueuedTransfers(sender);
+
+        ReplyTo(sender,
+            $"server: {(_streamer is null ? "streaming disabled" : $"{queued} transfer(s) queued for you")}",
+            ChatKind.Private);
+    }
+
+    /// <summary>Set on the server so /stream can report queue depth.</summary>
+    public ChunkStreamer? Streamer { get => _streamer; set => _streamer = value; }
+
+    private ChunkStreamer? _streamer;
 
     private void SendWho(long sender)
     {

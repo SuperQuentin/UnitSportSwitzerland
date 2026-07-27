@@ -26,6 +26,15 @@ public partial class ChunkManager : Node3D
     private WorldOrigin? _origin;
     private Material? _material;
     private HashSet<TileId> _available = new();
+
+    /// <summary>
+    /// Tile builds allowed to run concurrently. Local disk could take far more, but the
+    /// per-frame commit budget is the real limiter there, so a small number costs nothing
+    /// locally and is what makes streaming usable.
+    /// </summary>
+    private const int MaxConcurrentBuilds = 6;
+
+    private int _buildsInFlight;
     private readonly List<Node3D> _anchors = new();
     private readonly Dictionary<TileId, ChunkState> _chunks = new();
     private readonly ConcurrentQueue<BuildResult> _ready = new();
@@ -231,7 +240,11 @@ public partial class ChunkManager : Node3D
                 }
         }
 
-        foreach (var (id, want) in desired)
+        // Nearest first. With everything on local disk the order barely matters, but when the
+        // data is streaming it decides what the player sees: unordered, the tile underfoot
+        // queues behind up to 360 others nine rings out, and you stand in a hole for a minute
+        // while the horizon fills in.
+        foreach (var (id, want) in desired.OrderBy(kv => kv.Value.Dist))
         {
             if (!_chunks.TryGetValue(id, out var state))
                 _chunks[id] = state = new ChunkState();
@@ -244,7 +257,19 @@ public partial class ChunkManager : Node3D
 
             if ((needMesh || needCollision || needRoads || needBuildings || needGrid)
                 && state.PendingStride == -1)
+            {
+                // Cap how many tiles are being built at once. Every tile's load is a chain —
+                // chunk, then holes, then cover, then roads — and when that data is streaming,
+                // starting all 361 of them means every chain's first request goes out before
+                // any chain's second one. The result is a client that downloads 361 height
+                // grids and renders none of them, because not one tile has its cover yet.
+                // Letting a few tiles finish completely is what puts ground under your feet.
+                if (Interlocked.CompareExchange(ref _buildsInFlight, 0, 0) >= MaxConcurrentBuilds)
+                    break;
+
+                Interlocked.Increment(ref _buildsInFlight);
                 StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings);
+            }
         }
 
         // unload with hysteresis
@@ -325,6 +350,12 @@ public partial class ChunkManager : Node3D
             catch (Exception e)
             {
                 GD.PushError($"Chunk build failed for {id}: {e}");
+            }
+            finally
+            {
+                // Released whatever happened, or the cap would leak slots on the first
+                // failed tile and streaming would stop dead.
+                Interlocked.Decrement(ref _buildsInFlight);
             }
         });
     }

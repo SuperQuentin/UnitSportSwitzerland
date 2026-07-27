@@ -323,10 +323,18 @@ godot --path . -- --chunks ./small_region --cache ./my_cache --connect 127.0.0.1
 | Integrity | CRC-32 checked before anything is cached |
 | Cache cap | 2 GB, oldest-first eviction |
 
-Measured on one machine: a client shipping 25 tiles (32 MB) joined a server holding all 6,699
-(5.3 GB), spawned in Sion which it did not have, and pulled **952 files / 226 MB in 75 s** —
-356 chunks, 356 cover rasters, 81 road tiles, 49 building tiles, 49 tree tiles. The road and
-building counts match the LOD rings exactly (9×9 and 7×7). Revisiting fetched **0** new files.
+Tiles are fetched **nearest first**, and only a few at a time, so what is under your feet
+arrives before the horizon. Measured on a client with no terrain at all, joining and spawning
+in Sion:
+
+| after joining | detail on screen |
+|---|---|
+| 15 s | 4.34 M prims — buildings, roads and trees around you |
+| 30 s | 5.06 M prims |
+| 60 s | 5.19 M prims, rings filled out to the horizon |
+
+The town index (`places.json`) is sent too, so **Tab** search works on a client that shipped
+without it. Revisiting somewhere already streamed fetches **0** new files.
 
 ### Chat
 

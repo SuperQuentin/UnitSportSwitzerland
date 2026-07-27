@@ -26,6 +26,16 @@ public enum AssetKind
 
     /// <summary>.holes carved terrain quads; present on very few tiles.</summary>
     Holes = 6,
+
+    /// <summary>
+    /// places.json, the searchable town index behind the Tab teleport.
+    /// <para>
+    /// Not tile-scoped, and easy to forget: it is the only asset the *UI* reads rather than
+    /// the streamer, so a client without it connects fine, streams terrain fine, and simply
+    /// shows an empty city list.
+    /// </para>
+    /// </summary>
+    Places = 7,
 }
 
 /// <summary>
@@ -62,6 +72,7 @@ public static class AssetStream
     public static string FileNameFor(AssetKind kind, TileId id) => kind switch
     {
         AssetKind.Manifest => "manifest.json",
+        AssetKind.Places => PlaceIndex.FileName,
         AssetKind.Chunk => ChunkFormat.ChunkFileName(id),
         AssetKind.Roads => RoadFormat.FileName(id),
         AssetKind.Cover => CoverFormat.FileName(id),
