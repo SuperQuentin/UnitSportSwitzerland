@@ -1,0 +1,18 @@
+<Project Sdk="Godot.NET.Sdk/4.7.1">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>UnitSport</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- keep the offline tools and data folders out of the game assembly's wildcard compile -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tools/**;terrain_chunks/**;ressources/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="tools\TerrainFormat\TerrainFormat.csproj" />
+  </ItemGroup>
+
+</Project>

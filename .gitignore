@@ -1,0 +1,74 @@
+# =============================================================================
+# Downloaded source data — ~155 GB, never committed
+# =============================================================================
+# swissALTI3D XYZ zips, the swissTLM3D GeoPackage (4.8 GB on its own),
+# swissBUILDINGS3D, the GWR register and the Veloland route keys. All of it is
+# re-downloadable from swisstopo / BFS / ASTRA; the README has the recipes.
+#
+# The directory's own .gdignore is deliberately kept. Without it the Godot
+# editor tries to import every one of those files the moment the data is put
+# back, which is exactly the situation a fresh clone lands in.
+/ressources/data/*
+!/ressources/data/.gdignore
+
+
+# =============================================================================
+# Generated terrain — ~55 GB, rebuilt by tools/TerrainPreprocessor
+# =============================================================================
+# terrain_chunks/      .terr .road .cover .trees .bldg .holes, plus
+#                      manifest.json and places.json (~5.3 GB for this region)
+# terrain_chunks_temp/ quantized parse cache from pass 1 (~50 GB). Resumable —
+#                      keeping it only saves re-parsing the XYZ zips.
+# terrain_chunks_png/  optional --dump-png debug heightmaps
+/terrain_chunks/*
+!/terrain_chunks/.gdignore
+/terrain_chunks_temp/
+/terrain_chunks_png/
+
+
+# =============================================================================
+# Personal recordings
+# =============================================================================
+# GPX files here are real rides, so they carry the actual coordinates of where
+# somebody lives and trains. Ignored by default rather than committed by
+# accident. Force-add one deliberately if you want a sample track in the repo:
+#   git add -f sample.gpx
+*.gpx
+
+
+# =============================================================================
+# Godot
+# =============================================================================
+.godot/
+/android/
+.mono/
+
+# Export output. export_presets.cfg holds local paths and can hold signing
+# credentials, so it stays out too.
+export_presets.cfg
+/build/
+/export/
+*.pck
+*.translation
+
+
+# =============================================================================
+# .NET build output
+# =============================================================================
+bin/
+obj/
+*.user
+*.userprefs
+*.suo
+.vs/
+.idea/
+*.swp
+
+
+# =============================================================================
+# Local scratch
+# =============================================================================
+*.log
+*.tmp
+Thumbs.db
+.DS_Store
