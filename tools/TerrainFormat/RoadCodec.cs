@@ -7,9 +7,12 @@ namespace UnitSport.Terrain.Format;
 ///
 /// Layout (little-endian):
 ///   header 24 B: magic u32, version u16, flags u16, tileE i32, tileN i32,
-///                segmentCount u32, reserved u32
+///                segmentCount u32, junctionCount u32 (0 in v1, where the word was reserved)
 ///   per segment: class u8, surface u8, flags u16, width f32, pointCount u16, pad u16,
 ///                then pointCount * 3 f32 (x, y=altitude, z) local to the tile NW corner
+///   v2 only, after the segments —
+///   per junction: class u8, layer i8, vertexCount u16, indexCount u16, pad u16,
+///                 then vertexCount * 3 f32, then indexCount u16
 /// </summary>
 public static class RoadCodec
 {
@@ -22,7 +25,7 @@ public static class RoadCodec
         BinaryPrimitives.WriteInt32LittleEndian(header[8..], tile.Id.E);
         BinaryPrimitives.WriteInt32LittleEndian(header[12..], tile.Id.N);
         BinaryPrimitives.WriteUInt32LittleEndian(header[16..], (uint)tile.Segments.Count);
-        BinaryPrimitives.WriteUInt32LittleEndian(header[20..], 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(header[20..], (uint)tile.Junctions.Count);
         output.Write(header);
 
         Span<byte> rec = stackalloc byte[12];
@@ -43,6 +46,29 @@ public static class RoadCodec
                 output.Write(f);
             }
         }
+
+        Span<byte> jrec = stackalloc byte[8];
+        Span<byte> u16 = stackalloc byte[2];
+        foreach (var junction in tile.Junctions)
+        {
+            jrec[0] = (byte)junction.Class;
+            jrec[1] = unchecked((byte)junction.Layer);
+            BinaryPrimitives.WriteUInt16LittleEndian(jrec[2..], (ushort)junction.VertexCount);
+            BinaryPrimitives.WriteUInt16LittleEndian(jrec[4..], (ushort)junction.Indices.Length);
+            BinaryPrimitives.WriteUInt16LittleEndian(jrec[6..], 0);
+            output.Write(jrec);
+
+            foreach (float v in junction.Vertices)
+            {
+                BinaryPrimitives.WriteSingleLittleEndian(f, v);
+                output.Write(f);
+            }
+            foreach (ushort i in junction.Indices)
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(u16, i);
+                output.Write(u16);
+            }
+        }
     }
 
     public static RoadTile Decode(Stream input)
@@ -54,13 +80,15 @@ public static class RoadCodec
         if (magic != RoadFormat.Magic)
             throw new InvalidDataException($"Bad road magic 0x{magic:X8}");
         ushort version = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
-        if (version != RoadFormat.Version)
+        if (version < RoadFormat.MinReadableVersion || version > RoadFormat.Version)
             throw new InvalidDataException($"Unsupported road version {version}");
 
         var id = new TileId(
             BinaryPrimitives.ReadInt32LittleEndian(header[8..]),
             BinaryPrimitives.ReadInt32LittleEndian(header[12..]));
         uint count = BinaryPrimitives.ReadUInt32LittleEndian(header[16..]);
+        // v1 wrote a zero here, so a v1 file simply reports no junctions
+        uint junctionCount = BinaryPrimitives.ReadUInt32LittleEndian(header[20..]);
 
         var segments = new List<RoadSegment>((int)count);
         Span<byte> rec = stackalloc byte[12];
@@ -85,6 +113,34 @@ public static class RoadCodec
             });
         }
 
-        return new RoadTile { Id = id, Segments = segments };
+        var junctions = new List<RoadJunction>((int)junctionCount);
+        Span<byte> jrec = stackalloc byte[8];
+        for (uint j = 0; j < junctionCount; j++)
+        {
+            input.ReadExactly(jrec);
+            var cls = (RoadClass)jrec[0];
+            sbyte layer = unchecked((sbyte)jrec[1]);
+            int vertexCount = BinaryPrimitives.ReadUInt16LittleEndian(jrec[2..]);
+            int indexCount = BinaryPrimitives.ReadUInt16LittleEndian(jrec[4..]);
+
+            var vertices = new float[vertexCount * 3];
+            var vbytes = new byte[vertices.Length * 4];
+            input.ReadExactly(vbytes);
+            for (int p = 0; p < vertices.Length; p++)
+                vertices[p] = BinaryPrimitives.ReadSingleLittleEndian(vbytes.AsSpan(p * 4));
+
+            var indices = new ushort[indexCount];
+            var ibytes = new byte[indexCount * 2];
+            input.ReadExactly(ibytes);
+            for (int p = 0; p < indexCount; p++)
+                indices[p] = BinaryPrimitives.ReadUInt16LittleEndian(ibytes.AsSpan(p * 2));
+
+            junctions.Add(new RoadJunction
+            {
+                Class = cls, Layer = layer, Vertices = vertices, Indices = indices,
+            });
+        }
+
+        return new RoadTile { Id = id, Segments = segments, Junctions = junctions };
     }
 }

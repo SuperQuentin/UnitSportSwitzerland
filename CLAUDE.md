@@ -94,6 +94,24 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   index) from the *triangle* normal; the shader draws the window grid from those. Storey
   height comes from GWR `GASTW` (69% coverage), else wall height / 2.9 m. Barns, garages,
   tanks and anything under 3 m opt out with uv.y < 0.
+- **RoadGen** (`tools/RoadGen/`, standalone, no Godot): a lab for road *geometry*. Builds a
+  road network graph (endpoint snapping, X-crossing noding, T splitting, all layer-aware),
+  fits **clothoid** spiral-arc-spiral corners so curvature never jumps, then makes junctions
+  **explicit polygons** that the roads stop at instead of overlapping. Markings are offset
+  curves generated only between the junction trims. Exports SVG plan views and OBJ, and
+  self-checks (seam gap, chord budget, endpoint drift, degenerate triangles) with a non-zero
+  exit on failure. `--demo` runs four hand-built scenes with no data at all; `--tiles` reads
+  real `.road` files; `--synth` grows a network from a tensor field. Not wired into
+  `TerrainPreprocessor`; `--rewrite` post-processes built `.road` tiles in place instead, which
+  is what actually gets junctions into the game — see its README for why that seam and what is
+  missing.
+- **`.road` format v2** adds junction polygons after the segments, counted in the header word
+  v1 left reserved, so every v1 offset is unchanged and v1 files still decode. A region built
+  before the rewrite renders exactly as it did. `RoadMeshBuilder.AppendJunction` draws the caps
+  with no lane markings — painting them would put back the crossing lines the junction exists to
+  remove. **The rewrite is not idempotent and refuses to run twice**: the second pass trims
+  already-trimmed roads and replaces the full-size caps with near-zero ones, leaving a hole at
+  every junction.
 - **Runtime** (`src/`): `Terrain/ChunkManager` streams LOD rings around anchors (workers
   build arrays, main thread commits ≤2 meshes + 1 collision per frame);
   `HeightMapShape3D` collision on d≤1 tiles (CollisionShape3D scale (2,1,2));
@@ -176,6 +194,10 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 - Buildings export (needs GDAL): `python tools/export_buildings.py --bbox 2578500 1108500 2586500 1115500`
 - Features: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --tlm <tlm.gpkg> --route-keys ressources/data/routes/route_keys.sqlite --cover --buildings ressources/data/buildings3d/buildings.gpkg --gwr ressources/data/gwr/data.sqlite`
 - Roads preprocessing: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --roads-only --tlm ressources/data/tlm3d/SWISSTLM3D_2026_LV95_LN02.gpkg --route-keys ressources/data/routes/route_keys.sqlite`
+- Junctions (run **after** roads preprocessing, rewrites `.road` in place as v2):
+  `dotnet run --project tools/RoadGen -c Release -- --rewrite --chunks terrain_chunks`
+  (`--dry-run` to measure only, `--tiles "E,N;E,N"` to limit, `--force` to override the
+  already-rewritten guard)
 - Place index: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --places --gwr ressources/data/gwr/data.sqlite`
   writes `places.json`; **Tab** in game opens the teleport search (`PlaceSearchUi`). A
   municipality is placed at its **densest 500 m GWR cell**, not its centroid — communes
@@ -277,6 +299,22 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 - **Never fall back to TLM's Z for one vertex of a draped line.** The two height models
   disagree by metres, so the road grows a spike at exactly that vertex. Interpolate across
   the gap from the neighbours instead (`DrapeHeights`).
+- **Carrying a height across a plan-view move is only safe where the ground is flat.** The
+  rewrite keeps each vertex's altitude from the original line at the nearest point — which is
+  right, because the originals hold the drape, the surveyed deck heights and the approach ramps
+  that re-draping would destroy. Region-wide that costs a mean of 8 mm and a p99 of 9 cm over
+  9.3 M samples, but the worst case was **12 m**: a footpath on a cliff lip, moved 0.48 m, where
+  swissALTI3D drops tens of metres between adjacent cells. Two bounds fix it — `MaxOffset` keeps
+  smoothing inside the road's own width, and the rewriter's cliff guard snaps the remainder back
+  onto the surveyed line (230 vertices in the whole country). Measure this with
+  `--rewrite --dry-run`; never assume it.
+- **swissTLM3D draws a direction-separated road as TWO centrelines, one per carriageway** —
+  but `RoadFormat.DefaultWidth` is applied per line, so both halves of the A9 are drawn 11 m
+  wide and painted over each other. Measured with `tools/RoadGen --tiles`: on four tiles around
+  Riddes, `motorway+motorway` self-overlap is 15,787 m² and `railway+railway` 5,266 m², which
+  together are **98.6% of all carriageway overlap** — junction geometry is not the problem
+  there. `--divided-scale 0.6` takes the motorway figure to 7,342 m². Not applied by default
+  because narrowing every dual carriageway changes how the whole world looks.
 - **Junction ribbons need a per-class depth bias.** TLM centrelines meet exactly — an exit
   ramp starts on the motorway centreline — so ribbons draped with the same offset come out
   coplanar and z-fight into flickering stripes at every junction. `ClassLift` adds 1.2 cm

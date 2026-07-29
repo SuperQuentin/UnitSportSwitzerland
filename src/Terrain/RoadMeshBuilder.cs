@@ -18,7 +18,7 @@ public static class RoadMeshBuilder
         int quadCount = 0;
         foreach (var s in tile.Segments)
             quadCount += Math.Max(0, s.PointCount - 1);
-        if (quadCount == 0) return null;
+        if (quadCount == 0 && tile.Junctions.Count == 0) return null;
 
         var vertices = new List<Vector3>(quadCount * 4);
         var colors = new List<Color>(quadCount * 4);
@@ -27,6 +27,9 @@ public static class RoadMeshBuilder
         var uvs = new List<Vector2>(quadCount * 4);
         var uv2s = new List<Vector2>(quadCount * 4);
         var indices = new List<int>(quadCount * 6);
+
+        foreach (var junction in tile.Junctions)
+            AppendJunction(junction, vertices, colors, uvs, uv2s, indices);
 
         foreach (var seg in tile.Segments)
         {
@@ -42,6 +45,64 @@ public static class RoadMeshBuilder
         return vertices.Count == 0
             ? null
             : new MeshData(vertices.ToArray(), colors.ToArray(), uvs.ToArray(), uv2s.ToArray(), indices.ToArray());
+    }
+
+    /// <summary>
+    /// Draws the paved area where roads meet, pre-triangulated by <c>tools/RoadGen</c>.
+    ///
+    /// <para>
+    /// The carriageways arriving here have been trimmed back to this polygon's edge, so nothing
+    /// overlaps and the cap is what fills the middle. It carries no lane markings on purpose:
+    /// the whole reason lane lines used to cross each other in the middle of an intersection is
+    /// that the ribbons ran straight through it, and painting the cap would put them back.
+    /// </para>
+    ///
+    /// <para>
+    /// Present only in format v2 tiles. A region built before the rewrite simply has none, and
+    /// renders exactly as it did.
+    /// </para>
+    /// </summary>
+    private static void AppendJunction(RoadJunction junction, List<Vector3> vertices,
+        List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices)
+    {
+        int n = junction.VertexCount;
+        if (n < 3 || junction.Indices.Length < 3) return;
+
+        // a bridge deck's junction has to ride at the same lift as the deck it sits on, or the
+        // cap sinks into the soffit
+        float lift = junction.Layer > 0 ? BridgeLift : 0f;
+
+        // the cap borrows the dominant arm's tint via a stand-in segment, so a junction between
+        // farm tracks stays dirt-coloured instead of turning into a slab of asphalt
+        var probe = new RoadSegment
+        {
+            Class = junction.Class,
+            Surface = junction.Class is RoadClass.Track or RoadClass.Path
+                ? RoadSurface.Natural : RoadSurface.Paved,
+            Flags = RoadFlags.None,
+            Width = 0,
+            Points = Array.Empty<float>(),
+        };
+        var color = ColorFor(probe).SrgbToLinear();
+
+        int baseIndex = vertices.Count;
+        for (int i = 0; i < n; i++)
+        {
+            vertices.Add(new Vector3(
+                junction.Vertices[i * 3],
+                junction.Vertices[i * 3 + 1] + lift,
+                junction.Vertices[i * 3 + 2]));
+            colors.Add(color);
+            uvs.Add(new Vector2(0f, 0f));
+            uv2s.Add(new Vector2((float)MarkingStyle.None, 0f));
+        }
+
+        for (int i = 0; i + 2 < junction.Indices.Length; i += 3)
+        {
+            indices.Add(baseIndex + junction.Indices[i]);
+            indices.Add(baseIndex + junction.Indices[i + 1]);
+            indices.Add(baseIndex + junction.Indices[i + 2]);
+        }
     }
 
     private static void AppendSegment(RoadSegment seg, List<Vector3> vertices,

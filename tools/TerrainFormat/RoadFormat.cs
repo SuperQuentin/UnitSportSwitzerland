@@ -67,10 +67,43 @@ public sealed class RoadSegment
     public int PointCount => Points.Length / 3;
 }
 
+/// <summary>
+/// The paved area where several roads meet, as its own triangulated surface.
+///
+/// <para>
+/// A junction has to be a real object rather than the accidental overlap of the ribbons that
+/// arrive at it. Drawing every centreline to full length paints four carriageways on top of
+/// each other at every intersection, which no depth bias turns into a junction — it only stops
+/// the flicker. Roads are trimmed back to this polygon's edge and it fills the middle.
+/// ASAM OpenDRIVE reaches the same conclusion: junction connecting-roads are singled out as the
+/// only roads in that standard whose surfaces may overlap.
+/// </para>
+/// </summary>
+public sealed class RoadJunction
+{
+    /// <summary>Class of the dominant arm, so the cap is tinted like the road it belongs to.</summary>
+    public RoadClass Class { get; init; }
+
+    /// <summary>0 ground, 1 bridge deck, -1 tunnel — matching the arms that meet here.</summary>
+    public sbyte Layer { get; init; }
+
+    /// <summary>xyz triples, tile-local, same frame as <see cref="RoadSegment.Points"/>.</summary>
+    public required float[] Vertices { get; init; }
+
+    /// <summary>Triangle list indexing <see cref="Vertices"/>.</summary>
+    public required ushort[] Indices { get; init; }
+
+    public int VertexCount => Vertices.Length / 3;
+    public int TriangleCount => Indices.Length / 3;
+}
+
 public sealed class RoadTile
 {
     public TileId Id { get; init; }
     public required List<RoadSegment> Segments { get; init; }
+
+    /// <summary>Empty in v1 files, which stay readable.</summary>
+    public List<RoadJunction> Junctions { get; init; } = new();
 }
 
 public static class RoadFormat
@@ -78,7 +111,14 @@ public static class RoadFormat
     /// <summary>"USRD" little-endian.</summary>
     public const uint Magic = 0x44525355;
 
-    public const ushort Version = 1;
+    /// <summary>
+    /// 2 adds junction polygons, appended after the segments. The count went into the header's
+    /// previously reserved word, so the header size and every v1 offset are unchanged and
+    /// <see cref="RoadCodec.Decode"/> still reads v1 files — an already-built region keeps
+    /// working until it is rewritten.
+    /// </summary>
+    public const ushort Version = 2;
+    public const ushort MinReadableVersion = 1;
     public const int HeaderSize = 24;
 
     public static string FileName(TileId id) => $"roads_{id.E}_{id.N}.road";
