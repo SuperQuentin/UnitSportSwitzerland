@@ -176,10 +176,22 @@ public partial class PlaceSearchUi : CanvasLayer
         _shown = _index.Search(_query.Text);
         _results.Clear();
         foreach (var p in _shown)
-            _results.AddItem(string.IsNullOrEmpty(p.Canton)
-                ? $"{p.Name}   ({p.Buildings} buildings)"
-                : $"{p.Name}, {p.Canton}   ({p.Buildings} buildings)");
+            _results.AddItem(Describe(p));
     }
+
+    /// <summary>
+    /// A summit is described by its height and a town by its size, because those are the two
+    /// different things that make one worth picking out of a list. Labelling a mountain
+    /// "0 buildings" would be true and useless.
+    /// </summary>
+    private static string Describe(Place p) => p.Kind switch
+    {
+        PlaceKind.Summit => $"{p.Name}   ▲ {p.Elevation} m",
+        PlaceKind.Pass => $"{p.Name}   ⌒ pass, {p.Elevation} m",
+        _ => string.IsNullOrEmpty(p.Canton)
+            ? $"{p.Name}   ({p.Buildings} buildings)"
+            : $"{p.Name}, {p.Canton}   ({p.Buildings} buildings)",
+    };
 
     private void Go(int index)
     {

@@ -18,12 +18,59 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   (`belagsart`), hiking (`wanderwege`), cycling (Veloland `TLM_ID` join via
   `tools/export_route_keys.py`), and bridge/tunnel/stairs (`kunstbaute`). Polylines are
   clipped to tile boundaries, densified to ≤4 m, and draped onto the terrain.
+- **Aerial ropeways**: `tlm_oev_uebrige_bahn` -> `RoadClass.Cableway/Chairlift/SkiLift/RopeTow`,
+  carried in the `.road` file but **not draped** — TLM digitises these along the *cable*, verified
+  against our own heightfield: chairlifts run a median 11.9 m up, gondolas 14.6 m, and the
+  Isérables tramway spans the Rhône valley 200 m clear of the ground. `RoadMeshBuilder` draws the
+  cable as two ribbons crossed in a plus (a single flat one vanishes edge-on) and grows a tower
+  from the terrain under every vertex — which is where the real pylons are, because that is where
+  a cable changes direction. `Foerderband` and `Lift` are dropped: a conveyor and a building lift
+  are not ropeways.
+- **Watercourses**: `tlm_gewaesser_fliessgewaesser` -> `Watercourse`/`DryChannel`/`Bisse`, draped
+  like roads (their Z sits on the ground — median offset −0.14 m) and meshed by
+  `WaterMeshBuilder` so they take the water material instead of being drawn as narrow blue roads.
+  This is what puts water in the mountains at all: the cover raster only finds water wide enough
+  to register on the 2 m lattice, which in alpine terrain is almost none of it. `Druckstollen`
+  (a pressure tunnel, 232 m *underground*) and `Druckleitung` (a penstock ~5 m above ground) are
+  excluded — they are hydro plumbing, and drawing them would run rivers through mountains — as
+  is anything whose `verlauf` is `Unterirdisch`, which is 42% of the channels around Riddes and
+  would otherwise put streams down the middle of village streets.
+  **The raster wins over the lines**: `WaterMeshBuilder` drops any channel that mostly runs
+  inside already-mapped water, because the Rhône is in this dataset as a centreline like every
+  other river and drawing it laid a 2.5 m creek down a 50 m channel.
+- **Protective works and walls**: `tlm_bauten_verbauung` -> `AvalancheBarrier`/`TorrentWorks`/
+  `DryStoneWall` and `tlm_bauten_mauer` -> `Wall`, carried in the `.road` file and extruded
+  upward by `RoadMeshBuilder.AppendWall` rather than laid flat. They keep their surveyed Z
+  because for a `Schutzverbauung` that Z is the **top** of the structure — measured a median
+  2.80 m above our heightfield with a p90 of 5.81 m, the real height range of snow bridges — so
+  each is grown from the terrain up to it. Walls and torrent works are digitised much closer to
+  the ground (+0.15 to +0.95 m) and are clamped to a per-class minimum, or they would render as
+  kerbstones. Region: 5.8k barriers (166 km), 3.7k torrent works, 3.7k dry-stone walls (657 km).
+- **Named summits and passes**: `tlm_namen_name_pkt` -> `places.json` alongside the GWR towns,
+  so **Tab** finds mountains. `Place.Kind` and `Elevation` are what let search rank a peak among
+  peaks by height and a town among towns by size — a mountain has no buildings, so without a
+  per-kind `Rank` every summit sorted below the smallest hamlet. Names are multilingual and
+  pipe-separated (`Nordend | Punta Nordend`); the first form is kept. Region: 329 towns, 1,243
+  summits, 402 passes. **This layer is POINT geometry** — `GeoPackageReader.ParseLines` returns
+  nothing for it and fails silently; use `ParsePoints`.
+- **swissTLM3D maps NO ski pistes.** Checked every one of the 41 layers: the only piste values
+  are `Graspiste`/`Hartbelagpiste`, which are airfield runways, and `Skisprungschanze`, a ski
+  jump. Downhill runs would have to come from OSM (`piste:type=downhill`) or be synthesised.
 - **Railways**: `tlm_oev_eisenbahn` carries gauge (`objektart` Normalspur/Schmalspur),
   `anzahl_spuren`, `zahnradbahn` (rack), `standseilbahn` (funicular), `ausser_betrieb`
   and `auf_strasse`. Rendered as a ballast ribbon plus real rail geometry
   (`RoadMeshBuilder.AppendRails`) at 1.435 m / 1.0 m gauge, doubled for two-track lines.
   Sleepers are a shader stripe, not geometry — at 0.65 m spacing they would cost tens of
   thousands of triangles per km for a few pixels.
+- **Type changes blend**: swissTLM3D splits a road wherever any attribute changes, so a
+  widening or an asphalt-to-gravel change is two features sharing an endpoint, and ribboning
+  them independently leaves a step — a shoulder sticking out of the carriageway plus a hard
+  colour seam. `RoadMeshBuilder.FindTypeJoins` indexes segment endpoints per tile, and where
+  exactly **two** meet (three is a junction, already covered by its polygon) pulls both to the
+  *mean* width and colour at the shared vertex, then eases each back to its own over 5–22 m.
+  Taking the mean is what closes the step: tapering each side toward the other's value still
+  arrives at two different numbers. Smoothstep, not a linear ramp — a straight ramp leaves a
+  crease where the rate of change jumps. Roughly 94 such joins per 16 tiles.
 - **Road markings**: swisstopo publishes NO lane/marking dataset (`tlm_strassen_strasseninfo`
   is junctions and POIs, not lanes). Markings are therefore *inferred* at build time from
   width class + `belagsart` + `richtungsgetrennt` into a `MarkingStyle`, baked into uv2.x,
@@ -68,6 +115,13 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   `tlm_areale_verkehrsareal` (parking, last so a car park beats everything).
   Unmapped ground falls back to altitude bands — TLM maps **no arable parcels at all**, so
   farmland, meadow and the ground between village houses genuinely are not in the data.
+- **A land-use polygon must never overwrite Water in the cover raster.** The layers are stamped
+  in order of increasing specificity, which is right for land use — an allotment inside a park
+  should win — but a `nutzungsareal` polygon is an administrative boundary, not a ground surface,
+  and several are drawn straight across a river. The gravel extraction areas beside the Rhône at
+  Riddes are mapped as `Abbauareal` *over the water*, which erased the river from the raster: the
+  Rhône rendered as a gap in the middle of its own course. `CoverExtractor.MarkIn` now refuses to
+  overwrite `Water`. A quarry does not flow.
 - **Vineyards live in `nutzungsareal`, not `bodenbedeckung`.** `Reben` is a *land use*, so
   looking for it among the ground-cover classes silently returns nothing and the whole
   Valais renders as generic pasture. Same for orchards (`Obstanlage`).
@@ -198,7 +252,9 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   `dotnet run --project tools/RoadGen -c Release -- --rewrite --chunks terrain_chunks`
   (`--dry-run` to measure only, `--tiles "E,N;E,N"` to limit, `--force` to override the
   already-rewritten guard)
-- Place index: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --places --gwr ressources/data/gwr/data.sqlite`
+- Place index: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --places --gwr ressources/data/gwr/data.sqlite --tlm <tlm.gpkg>`
+  (`--tlm` adds named summits and passes; without it the index is towns only). **This also
+  re-runs roads, which strips the junction polygons — always finish with `RoadGen --rewrite`.**
   writes `places.json`; **Tab** in game opens the teleport search (`PlaceSearchUi`). A
   municipality is placed at its **densest 500 m GWR cell**, not its centroid — communes
   stretch up the hillside, so the centroid of Riddes lands on the mountain above it.
@@ -308,13 +364,18 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   smoothing inside the road's own width, and the rewriter's cliff guard snaps the remainder back
   onto the surveyed line (230 vertices in the whole country). Measure this with
   `--rewrite --dry-run`; never assume it.
-- **swissTLM3D draws a direction-separated road as TWO centrelines, one per carriageway** —
-  but `RoadFormat.DefaultWidth` is applied per line, so both halves of the A9 are drawn 11 m
-  wide and painted over each other. Measured with `tools/RoadGen --tiles`: on four tiles around
-  Riddes, `motorway+motorway` self-overlap is 15,787 m² and `railway+railway` 5,266 m², which
-  together are **98.6% of all carriageway overlap** — junction geometry is not the problem
-  there. `--divided-scale 0.6` takes the motorway figure to 7,342 m². Not applied by default
-  because narrowing every dual carriageway changes how the whole world looks.
+- **swissTLM3D draws a direction-separated road as TWO centrelines, one per carriageway** — so
+  `DefaultWidth`, which describes the whole road, must not be applied to each line. Measured on
+  the A9 and its neighbours: the two motorway centrelines run a median **8.1 m** apart while each
+  was drawn 11 m wide, a 3 m overlap for the length of every motorway in the country. Fixed by
+  `RoadFormat.WidthFor`, which applies `DividedCarriagewayFactor` (0.55) to any `Divided` line;
+  `motorway+motorway` overlap went **15,778 -> 6,279 m²**. The residual is real: at an interchange
+  the carriageways genuinely converge (25th percentile separation 3.8 m). `railway+railway`
+  (~5,100 m²) is untouched, because TLM does not flag parallel tracks as direction-separated.
+- **Densifying is for draping, so anything that is not draped must skip it.** `RoadExtractor`
+  densifies every line to 4 m to give the drape enough samples. An aerial ropeway is not draped,
+  and the renderer puts a tower under every vertex — so densifying turned each gondola line into
+  a picket fence of pylons marching up the mountain at 4 m spacing.
 - **Junction ribbons need a per-class depth bias.** TLM centrelines meet exactly — an exit
   ramp starts on the motorway centreline — so ribbons draped with the same offset come out
   coplanar and z-fight into flickering stripes at every junction. `ClassLift` adds 1.2 cm
@@ -394,6 +455,29 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   out of `AssetKind` and a streaming client connected fine, pulled terrain fine, and showed an
   empty Tab search. It is now `AssetKind.Places`, fetched during sync into the cache, and
   `PlaceSearchUi.ReloadIndex()` re-reads it (the UI is built long before the connection).
+- **Publish the terrain before the things that stand on it.** A tile build fetches chunk →
+  holes → cover → roads → buildings and used to commit all of it at once, so a streaming client
+  saw nothing until the last link landed. `ChunkManager` now enqueues an *interim* `BuildResult`
+  carrying just the surface mesh and collision, then a second one with roads/buildings/trees.
+  Same files, same order, same worker — the ground simply stops waiting for the tail. Measured
+  against a loopback server with no local terrain: at 2 s, **346 → 504,270 primitives**; full
+  load unchanged at ~3 s. `Interim` results must NOT clear `PendingStride`, or the ring
+  evaluator starts a second build for a tile whose first is still running.
+- **Rendering a coarse preview from the height grid alone is WORSE, despite sounding better.**
+  Tried it: a separate pass that builds a stride-10 mesh from just the `.terr`. It adds a second
+  serialised stage per tile and both stages compete for the same six streaming slots, so the
+  full builds starve. Measured 5,746 prims at 6 s where the baseline had finished at 3 s —
+  roughly three times slower to a complete world. Removed.
+- **A build that throws must release its tile.** `PendingStride` is only cleared on commit, so
+  an exception or a missing file left the tile pending for ever and it was never retried or
+  drawn — one failed worker permanently deleted that piece of the world. Failures now go on
+  `_failedBuilds` for the main thread to reset. (Found because a bad preview stride threw on
+  every tile and the whole map stayed empty.)
+- **The commit loop must gate on the budget the result actually needs.** It read
+  `while (meshBudget > 0 && collisionBudget > 0 ...)`, so the single allowed collision commit
+  ended the loop for that frame with the mesh budget untouched — throttling commits to about one
+  tile per frame exactly when tiles arrived fastest. Peek first, and break only on the budget
+  that result requires.
 - **Tile loads are CHAINS, and unordered concurrency starves them.** Each tile awaits chunk →
   holes → cover → roads → buildings. Starting all 361 tiles at once means every chain's first
   request goes out before any chain's second, so a streaming client downloads 361 height grids

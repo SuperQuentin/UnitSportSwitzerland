@@ -65,7 +65,7 @@ if (roadsOnly || featuresOnly)
             Console.Error.WriteLine("--places requires --gwr <gwr data.sqlite>");
             return 2;
         }
-        int rc = PlaceStage.Run(gwrPath, outDir, existing.Tiles.Select(t => t.Id).ToHashSet());
+        int rc = PlaceStage.Run(gwrPath, outDir, existing.Tiles.Select(t => t.Id).ToHashSet(), tlmGpkg);
         if (rc != 0) return rc;
         if (tlmGpkg == null && buildingsGpkg == null) return 0;
     }

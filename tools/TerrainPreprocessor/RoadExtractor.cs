@@ -16,14 +16,28 @@ public sealed class RoadExtractor
     /// <summary>
     /// Extra lift per road class, so ribbons that share ground do not fight for depth.
     ///
+    /// <para>
     /// TLM centrelines meet exactly at a junction: an exit ramp starts on the motorway
     /// centreline, a side road ends on the through road. Both are draped from the same
     /// heightfield with the same offset, so their ribbons come out coplanar and the
     /// overlap tears into flickering stripes wherever they cross. Ordering them by class
     /// puts the bigger road on top — 1.2 cm per class step is invisible at this fidelity
     /// but decisive for the depth test.
+    /// </para>
+    ///
+    /// <para>
+    /// The arithmetic only makes sense for the ordered road classes 0..12. The aerial, water
+    /// and wall families that follow are not part of that ordering and would come out
+    /// negative, sinking a stream into the ground.
+    /// </para>
     /// </summary>
-    private static double ClassLift(RoadClass cls) => (12 - (int)cls) * 0.012;
+    private static double ClassLift(RoadClass cls)
+    {
+        // own Z; nothing to bias
+        if (RoadFormat.IsAerial(cls) || RoadFormat.IsWall(cls)) return 0;
+        if (RoadFormat.IsWatercourse(cls)) return 0.06;         // just clear of the terrain
+        return (12 - (int)cls) * 0.012;
+    }
 
     /// <summary>
     /// Max spacing between draped points. TLM3D puts vertices only where the road
@@ -70,6 +84,12 @@ public sealed class RoadExtractor
         "objektart", "kunstbaute", "anzahl_spuren", "verkehrsmittel",
         "zahnradbahn", "standseilbahn", "ausser_betrieb",
     };
+
+    /// <summary>Aerial ropeways carry only the type and the geometry.</summary>
+    private static readonly string[] TypeOnlyColumns = { "objektart" };
+
+    /// <summary><c>verlauf</c> says whether the channel is on the surface or in a pipe.</summary>
+    private static readonly string[] WaterColumns = { "objektart", "verlauf" };
 
     private readonly string _gpkgPath;
     private readonly HashSet<string> _cycleUuids = new(StringComparer.OrdinalIgnoreCase);
@@ -144,6 +164,9 @@ public sealed class RoadExtractor
         using var conn = GeoPackageReader.Open(_gpkgPath);
         ExtractRoads(conn, minE, minN, maxE, maxN);
         ExtractRailways(conn, minE, minN, maxE, maxN);
+        ExtractAerial(conn, minE, minN, maxE, maxN);
+        ExtractWatercourses(conn, minE, minN, maxE, maxN);
+        ExtractDefences(conn, minE, minN, maxE, maxN);
 
         // Where a deck or bore ends, note the height it ends at. The approach road is a
         // separate TLM feature, so this is the only way it can learn what to ramp up to —
@@ -187,7 +210,79 @@ public sealed class RoadExtractor
                 if (_mtbUuids.Contains(uuid)) flags |= RoadFlags.MountainBike;
             }
 
-            Collect(reader, cls, surface, flags, RoadFormat.DefaultWidth(cls));
+            Collect(reader, cls, surface, flags, RoadFormat.WidthFor(cls, flags));
+        }
+    }
+
+    /// <summary>
+    /// Aerial ropeways. These keep their surveyed Z — see <see cref="RoadFormat.IsAerial"/> —
+    /// so unlike everything else here the height is the answer, not a starting point.
+    /// </summary>
+    private void ExtractAerial(SqliteConnection conn,
+        double minE, double minN, double maxE, double maxN)
+    {
+        using var cmd = GeoPackageReader.BboxQuery(conn, "tlm_oev_uebrige_bahn", "geom",
+            TypeOnlyColumns, minE, minN, maxE, maxN);
+        using var reader = cmd.ExecuteReader();
+
+        while (reader.Read())
+        {
+            if (RoadFormat.ParseAerial(Str(reader, 0)) is not { } cls) continue;
+            Collect(reader, cls, RoadSurface.Unknown, RoadFlags.None, RoadFormat.DefaultWidth(cls));
+        }
+    }
+
+    /// <summary>
+    /// Watercourses. Draped like a road, because their surveyed Z sits on the ground anyway —
+    /// measured against our own heightfield, the median offset is −0.14 m.
+    /// </summary>
+    private void ExtractWatercourses(SqliteConnection conn,
+        double minE, double minN, double maxE, double maxN)
+    {
+        using var cmd = GeoPackageReader.BboxQuery(conn, "tlm_gewaesser_fliessgewaesser", "geom",
+            WaterColumns, minE, minN, maxE, maxN);
+        using var reader = cmd.ExecuteReader();
+
+        while (reader.Read())
+        {
+            if (RoadFormat.ParseWatercourse(Str(reader, 0)) is not { } cls) continue;
+
+            // A culverted channel is in a pipe under the ground. TLM maps them as ordinary
+            // watercourses and they are not a small share: 179 of the 423 around Riddes alone.
+            // Drawing them puts streams down the middle of village streets.
+            if (Str(reader, 1) is { } verlauf
+                && verlauf.StartsWith("Unterirdisch", StringComparison.Ordinal)) continue;
+
+            Collect(reader, cls, RoadSurface.Natural, RoadFlags.None, RoadFormat.DefaultWidth(cls));
+        }
+    }
+
+    /// <summary>
+    /// Protective works and walls. Like ropeways these keep their surveyed Z, because for an
+    /// avalanche barrier that Z is the top of the structure; the mesh builder grows each wall
+    /// from the terrain up to it.
+    /// </summary>
+    private void ExtractDefences(SqliteConnection conn,
+        double minE, double minN, double maxE, double maxN)
+    {
+        using (var cmd = GeoPackageReader.BboxQuery(conn, "tlm_bauten_verbauung", "geom",
+            TypeOnlyColumns, minE, minN, maxE, maxN))
+        using (var reader = cmd.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                if (RoadFormat.ParseDefence(Str(reader, 0)) is not { } cls) continue;
+                Collect(reader, cls, RoadSurface.Unknown, RoadFlags.None, RoadFormat.DefaultWidth(cls));
+            }
+        }
+
+        using (var cmd = GeoPackageReader.BboxQuery(conn, "tlm_bauten_mauer", "geom",
+            TypeOnlyColumns, minE, minN, maxE, maxN))
+        using (var reader = cmd.ExecuteReader())
+        {
+            while (reader.Read())
+                Collect(reader, RoadClass.Wall, RoadSurface.Unknown, RoadFlags.None,
+                    RoadFormat.DefaultWidth(RoadClass.Wall));
         }
     }
 
@@ -241,12 +336,21 @@ public sealed class RoadExtractor
             {
                 if (!result.TryGetValue(piece.Tile, out var tile)) continue;
 
-                // bridges and tunnels keep their surveyed height; everything else is
-                // draped so it follows the terrain the player actually walks on
-                bool useOwnZ = (flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0;
+                // bridges, tunnels and aerial ropeways keep their surveyed height; everything
+                // else is draped so it follows the terrain the player actually walks on. For a
+                // cableway the Z *is* the answer — draping one would lay the cable on the ground.
+                bool useOwnZ = (flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0
+                    || RoadFormat.IsAerial(cls) || RoadFormat.IsWall(cls);
                 // structures need densifying too, otherwise the end blend has nowhere to
-                // interpolate across
-                var dense = Densify(piece.Points);
+                // interpolate across.
+                //
+                // An aerial ropeway is the one thing that must NOT be densified. Densifying
+                // exists to give the drape enough samples to follow the ground, and a cable is
+                // not draped — but the renderer puts a tower under every vertex, so a 4 m
+                // spacing turns a gondola line into a picket fence marching up the mountain.
+                // The surveyed vertices are already exactly where the real pylons are, because
+                // that is where a cable changes direction.
+                var dense = RoadFormat.IsAerial(cls) ? piece.Points : Densify(piece.Points);
 
                 // cumulative distance, used to ease structure heights into the approach
                 var along = new double[dense.Count];
@@ -340,6 +444,14 @@ public sealed class RoadExtractor
             RoadClass.Motorway or RoadClass.Expressway => 0.20,
             RoadClass.Track => 0.50,
             RoadClass.Path or RoadClass.Link or RoadClass.Unknown => 0.55,
+
+            // A mountain stream really does fall over a cliff, so clamping it to a road's
+            // gradient would lift the bed clear of the gorge it runs in. A bisse is the
+            // opposite case: it was dug to hold a near-constant fall, so a steep step in one
+            // is a drape artefact and gets clamped like a road.
+            RoadClass.Watercourse or RoadClass.DryChannel => 2.0,
+            RoadClass.Bisse => 0.30,
+
             _ => 0.35,
         };
     }

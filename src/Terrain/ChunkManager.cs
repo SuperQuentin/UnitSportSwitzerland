@@ -38,6 +38,13 @@ public partial class ChunkManager : Node3D
     private readonly List<Node3D> _anchors = new();
     private readonly Dictionary<TileId, ChunkState> _chunks = new();
     private readonly ConcurrentQueue<BuildResult> _ready = new();
+
+    /// <summary>
+    /// Tiles whose build threw or found nothing. Without this a failure left
+    /// <c>PendingStride</c> set for ever and the tile was never retried or replaced — one
+    /// exception on a worker permanently deleted that piece of the world.
+    /// </summary>
+    private readonly ConcurrentQueue<TileId> _failedBuilds = new();
     private double _sinceEval = double.MaxValue;
 
     private sealed class ChunkState
@@ -59,7 +66,7 @@ public partial class ChunkManager : Node3D
     }
 
     private readonly record struct BuildResult(
-        TileId Id, int Stride, ChunkGrid Grid,
+        TileId Id, int Stride, ChunkGrid Grid, bool Interim,
         TerrainMeshBuilder.MeshData? Mesh, float[]? CollisionMap,
         RoadMeshBuilder.MeshData? Roads, bool RoadsRequested,
         HashSet<int>? Holes, byte[]? Cover,
@@ -131,32 +138,61 @@ public partial class ChunkManager : Node3D
     {
         if (_source == null || _origin == null) return;
 
-        CommitReadyResults();
+        while (_failedBuilds.TryDequeue(out var failedId))
+            if (_chunks.TryGetValue(failedId, out var failed))
+            {
+                failed.PendingStride = -1;
+                failed.PendingCollision = false;
+                failed.PendingRoads = false;
+                failed.PendingBuildings = false;
+            }
 
+        int committed = CommitReadyResults();
+
+        // Re-evaluate the moment a build slot frees, not on the next tick. Builds routinely
+        // finish in well under the evaluation interval, so waiting for it left the worker slots
+        // idle and capped the whole loader at MaxConcurrentBuilds per interval — 24 tiles a
+        // second however fast the disk actually is.
         _sinceEval += delta;
-        if (_sinceEval >= EvalInterval)
+        if (_sinceEval >= EvalInterval || committed > 0)
         {
             _sinceEval = 0;
             EvaluateRings();
         }
     }
 
-    private void CommitReadyResults()
+    /// <summary>Returns how many results were committed, so the caller knows a slot freed.</summary>
+    private int CommitReadyResults()
     {
         int meshBudget = MeshCommitsPerFrame;
         int collisionBudget = CollisionCommitsPerFrame;
+        int committed = 0;
 
-        while (meshBudget > 0 && collisionBudget > 0 && _ready.TryDequeue(out var result))
+        // Peek before dequeuing, and stop only on the budget this particular result actually
+        // needs. The previous form required *both* budgets to be positive, so the single
+        // allowed collision commit ended the whole loop for that frame — leaving the mesh
+        // budget untouched and everything behind it waiting, which throttled the queue to
+        // roughly one tile per frame exactly when tiles were arriving fastest.
+        while (_ready.TryPeek(out var next))
         {
+            if (next.Mesh != null && meshBudget <= 0) break;
+            if (next.CollisionMap != null && collisionBudget <= 0) break;
+            if (!_ready.TryDequeue(out var result)) break;
+
             if (!_chunks.TryGetValue(result.Id, out var state))
                 continue; // chunk was unloaded while building — drop
 
+            committed++;
             state.Grid = result.Grid;
             state.Holes = result.Holes;
             state.HolesLoaded = true;
             state.Cover = result.Cover;
             state.CoverLoaded = true;
-            state.PendingStride = -1;
+
+            // An interim result is the terrain half of a build whose roads and buildings are
+            // still being assembled on the worker. The tile must stay marked pending, or the
+            // ring evaluator would start a second build for it while the first is mid-flight.
+            if (!result.Interim) state.PendingStride = -1;
 
             if (result.Mesh != null)
             {
@@ -196,6 +232,8 @@ public partial class ChunkManager : Node3D
             }
             state.ActiveStride = result.Stride;
         }
+
+        return committed;
     }
 
     private ChunkNode EnsureNode(TileId id, ChunkState state)
@@ -244,7 +282,9 @@ public partial class ChunkManager : Node3D
         // data is streaming it decides what the player sees: unordered, the tile underfoot
         // queues behind up to 360 others nine rings out, and you stand in a hole for a minute
         // while the horizon fills in.
-        foreach (var (id, want) in desired.OrderBy(kv => kv.Value.Dist))
+        var ordered = desired.OrderBy(kv => kv.Value.Dist).ToList();
+
+        foreach (var (id, want) in ordered)
         {
             if (!_chunks.TryGetValue(id, out var state))
                 _chunks[id] = state = new ChunkState();
@@ -310,17 +350,33 @@ public partial class ChunkManager : Node3D
             try
             {
                 var grid = cachedGrid ?? await source.LoadChunkAsync(id);
-                if (grid == null) return; // file missing despite manifest — treated as unavailable
+                // file missing despite the manifest — release the tile so it is not stuck pending
+                if (grid == null) { _failedBuilds.Enqueue(id); return; }
                 var holes = holesLoaded ? cachedHoles : await source.LoadHolesAsync(id);
                 var cover = coverLoaded ? cachedCover : await source.LoadCoverAsync(id);
                 var mesh = buildMesh ? TerrainMeshBuilder.BuildSurface(grid, stride, holes, cover) : null;
                 var collision = wantCollision ? TerrainMeshBuilder.BuildCollisionMap(grid, holes) : null;
 
+                // Publish the ground the moment it exists, before the roads and buildings that
+                // sit on it have been fetched and meshed.
+                //
+                // The tile load is a chain — chunk, holes, cover, roads, buildings — and holding
+                // every part of it back until the last link finished is what made a streaming
+                // client stand over a hole. Splitting the commit costs nothing: the same files
+                // are fetched in the same order on the same worker. The terrain simply stops
+                // waiting for the tail. Trying instead to render a *coarse* tile from the height
+                // grid alone was measurably worse — it adds a second serialised stage per tile
+                // and both stages compete for the same six streaming slots.
+                if (mesh != null || collision != null)
+                    _ready.Enqueue(new BuildResult(id, stride, grid, Interim: true,
+                        mesh, collision, null, false, holes, cover, null, null, false, null, null));
+
                 RoadMeshBuilder.MeshData? roads = null;
+                RoadTile? roadTile = null;
                 if (wantRoads)
                 {
-                    var roadTile = await source.LoadRoadsAsync(id);
-                    // the grid lets bridge piers find their footing on the terrain
+                    roadTile = await source.LoadRoadsAsync(id);
+                    // the grid lets bridge piers and cableway pylons find their footing
                     if (roadTile != null) roads = RoadMeshBuilder.Build(roadTile, grid);
                 }
 
@@ -329,7 +385,9 @@ public partial class ChunkManager : Node3D
                 if (wantBuildings)
                 {
                     trees = await source.LoadTreesAsync(id);
-                    if (cover != null) water = WaterMeshBuilder.Build(grid, cover);
+                    // watercourses ride in the road tile but are meshed here, so a stream gets
+                    // the water material instead of being drawn as a narrow blue road
+                    if (cover != null) water = WaterMeshBuilder.Build(grid, cover, roadTile);
                 }
 
                 BuildingMeshBuilder.MeshData? buildings = null;
@@ -344,11 +402,14 @@ public partial class ChunkManager : Node3D
                     }
                 }
 
-                _ready.Enqueue(new BuildResult(id, stride, grid, mesh, collision, roads, wantRoads,
+                // the mesh and collision already went out above, so this carries only the tail
+                _ready.Enqueue(new BuildResult(id, stride, grid, Interim: false,
+                    null, null, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water));
             }
             catch (Exception e)
             {
+                _failedBuilds.Enqueue(id);
                 GD.PushError($"Chunk build failed for {id}: {e}");
             }
             finally

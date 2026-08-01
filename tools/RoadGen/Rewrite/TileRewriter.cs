@@ -169,6 +169,7 @@ public static class TileRewriter
 
             var net = new RoadNetwork();
             var loaded = new Dictionary<TileId, RoadTile>();
+            var passthrough = new Dictionary<TileId, List<RoadSegment>>();
 
             foreach (var id in context)
             {
@@ -181,7 +182,22 @@ public static class TileRewriter
                 if (block.Contains(id)) tilesRead++;
 
                 foreach (var segment in tile.Segments)
+                {
+                    // Aerial ropeways and watercourses are carried in the same file but are not
+                    // carriageways, and must not enter the graph. A cableway would be snapped to
+                    // the road it flies over; a stream confluence would be handed a junction
+                    // polygon and rendered as a patch of tarmac in the middle of a river.
+                    if (RoadFormat.IsAerial(segment.Class) || RoadFormat.IsWatercourse(segment.Class)
+                        || RoadFormat.IsWall(segment.Class))
+                    {
+                        if (!passthrough.TryGetValue(id, out var keep))
+                            passthrough[id] = keep = new List<RoadSegment>();
+                        keep.Add(segment);
+                        continue;
+                    }
+
                     AddSegment(net, id, segment, options.DividedScale);
+                }
             }
 
             if (net.Links.Count == 0) continue;
@@ -251,6 +267,9 @@ public static class TileRewriter
 
                 var segments = output.TryGetValue(id, out var s) ? s : new List<RoadSegment>();
                 var junctions = caps.TryGetValue(id, out var j) ? j : new List<RoadJunction>();
+
+                // cableways and watercourses go back exactly as they came in
+                if (passthrough.TryGetValue(id, out var kept)) segments.AddRange(kept);
 
                 if (options.DryRun) { tilesWritten++; continue; }
 

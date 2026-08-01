@@ -184,7 +184,20 @@ public sealed class CoverExtractor
         if ((uint)col >= CoverFormat.Size || (uint)row >= CoverFormat.Size) return;
         // reject positions that only round onto this tile's lattice from outside it
         if (Math.Abs(fc - col) > 0.01 || Math.Abs(fr - row) > 0.01) return;
-        cells[row * CoverFormat.Size + col] = (byte)cls;
+
+        int index = row * CoverFormat.Size + col;
+
+        // Water is never overwritten by a later, more specific layer.
+        //
+        // The layers are stamped in order of increasing specificity, which is right for land
+        // use — an allotment inside a park should win. But a land-use polygon is an
+        // administrative boundary, not a ground surface, and several of them are drawn right
+        // across a river: the gravel extraction areas beside the Rhône at Riddes are mapped as
+        // Abbauareal over the water, which erased the river from the raster and left the Rhône
+        // rendering as a gap with a thin channel line through it. A quarry does not flow.
+        if ((CoverClass)cells[index] == CoverClass.Water && cls != CoverClass.Water) return;
+
+        cells[index] = (byte)cls;
     }
 
     /// <summary>

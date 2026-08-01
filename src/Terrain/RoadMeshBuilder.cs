@@ -31,9 +31,27 @@ public static class RoadMeshBuilder
         foreach (var junction in tile.Junctions)
             AppendJunction(junction, vertices, colors, uvs, uv2s, indices);
 
-        foreach (var seg in tile.Segments)
+        var joins = FindTypeJoins(tile);
+
+        for (int i = 0; i < tile.Segments.Count; i++)
         {
-            AppendSegment(seg, vertices, colors, uvs, uv2s, indices);
+            var seg = tile.Segments[i];
+
+            // Aerial ropeways are not ribbons on the ground, and watercourses are meshed by
+            // WaterMeshBuilder so they share the water material rather than the asphalt one.
+            if (RoadFormat.IsWatercourse(seg.Class)) continue;
+            if (RoadFormat.IsAerial(seg.Class))
+            {
+                AppendCableway(seg, tile.Id, grid, vertices, colors, uvs, uv2s, indices);
+                continue;
+            }
+            if (RoadFormat.IsWall(seg.Class))
+            {
+                AppendWall(seg, tile.Id, grid, vertices, colors, uvs, uv2s, indices);
+                continue;
+            }
+
+            AppendSegment(seg, joins[i], vertices, colors, uvs, uv2s, indices);
             if (seg.Class == RoadClass.Railway)
                 AppendRails(seg, vertices, colors, uvs, uv2s, indices);
             if ((seg.Flags & RoadFlags.Tunnel) != 0)
@@ -105,7 +123,329 @@ public static class RoadMeshBuilder
         }
     }
 
-    private static void AppendSegment(RoadSegment seg, List<Vector3> vertices,
+    /// <summary>
+    /// An aerial ropeway: the cable at its surveyed height, plus a tower under every vertex.
+    ///
+    /// <para>
+    /// The heights are not invented. swissTLM3D digitises these lines along the <i>cable</i>,
+    /// which was verified against this project's own heightfield around Riddes: chairlifts run
+    /// a median 11.9 m above ground, gondolas 14.6 m, and an aerial tramway reaches 73 m where
+    /// it crosses a gorge. So the line is used verbatim and the towers are grown up from the
+    /// terrain to meet it, which also means a pylon lands wherever the surveyors put a vertex —
+    /// exactly where the real ones are, because that is where a cable changes direction.
+    /// </para>
+    ///
+    /// <para>
+    /// No catenary sag is modelled. The vertices already sit at the sheave heights, so curving
+    /// between them would dip the cable below its own towers on every span.
+    /// </para>
+    /// </summary>
+    private static void AppendCableway(RoadSegment seg, TileId id, ChunkGrid? grid,
+        List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s,
+        List<int> indices)
+    {
+        int n = seg.PointCount;
+        if (n < 2) return;
+
+        var cableColour = new Color(0.18f, 0.18f, 0.20f).SrgbToLinear();
+        var pylonColour = new Color(0.42f, 0.41f, 0.39f).SrgbToLinear();
+        float half = Math.Max(seg.Width, 0.04f) * 0.5f;
+
+        // Two ribbons crossed in a plus, not one. A single flat ribbon disappears completely
+        // when viewed edge-on — which for a cableway strung across a valley is most of the time,
+        // since the player is usually beside it rather than under it.
+        for (int pass = 0; pass < 2; pass++)
+        {
+            int baseIndex = vertices.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var p = Point(seg, i);
+                Vector3 forward = i == 0 ? Point(seg, 1) - Point(seg, 0)
+                    : i == n - 1 ? Point(seg, n - 1) - Point(seg, n - 2)
+                    : Point(seg, i + 1) - Point(seg, i - 1);
+                forward.Y = 0;
+                if (forward.LengthSquared() < 1e-8f) forward = Vector3.Forward;
+                forward = forward.Normalized();
+
+                var lateral = pass == 0
+                    ? new Vector3(-forward.Z, 0, forward.X) * half   // horizontal
+                    : new Vector3(0, half, 0);                       // vertical
+
+                vertices.Add(p - lateral);
+                vertices.Add(p + lateral);
+                colors.Add(cableColour); colors.Add(cableColour);
+                uvs.Add(new Vector2(0f, -1f));
+                uvs.Add(new Vector2(0f, 1f));
+                uv2s.Add(new Vector2((float)MarkingStyle.None, 0f));
+                uv2s.Add(new Vector2((float)MarkingStyle.None, 0f));
+            }
+
+            for (int i = 0; i < n - 1; i++)
+            {
+                int a = baseIndex + i * 2;
+                indices.Add(a); indices.Add(a + 1); indices.Add(a + 2);
+                indices.Add(a + 1); indices.Add(a + 3); indices.Add(a + 2);
+            }
+        }
+
+        if (grid == null) return;
+
+        float radius = RoadFormat.PylonRadius(seg.Class);
+        float headroom = RoadFormat.PylonHeadroom(seg.Class);
+
+        for (int i = 0; i < n; i++)
+        {
+            var top = Point(seg, i);
+            double e = id.MinE + top.X;
+            double north = id.MaxN - top.Z;
+            double ground = grid.SampleHeight(e, north);
+            if (double.IsNaN(ground)) continue;
+
+            // A terminal station sits on the ground and needs no tower; so does any vertex the
+            // cable happens to pass close over. Below this the mast would be a stub in the mud.
+            float height = top.Y - (float)ground;
+            if (height < 2.0f) continue;
+
+            AppendPylon(top, height + headroom, radius, pylonColour,
+                vertices, colors, uvs, uv2s, indices);
+        }
+    }
+
+    /// <summary>
+    /// A structure standing along a line: avalanche barriers, torrent works, dry-stone walls.
+    ///
+    /// <para>
+    /// The height is real where the data has it. TLM digitises a <c>Schutzverbauung</c> along
+    /// the <i>top</i> of the barrier — measured against this project's heightfield around
+    /// Riddes, a median 2.80 m above ground with a 90th percentile of 5.81 m, which is the
+    /// actual height range of snow bridges. So each post is grown from the terrain up to the
+    /// surveyed Z, and only clamped where that would be absurd: walls and torrent works are
+    /// digitised much closer to the ground (+0.15 to +0.95 m) and without a floor would render
+    /// as kerbstones.
+    /// </para>
+    /// </summary>
+    private static void AppendWall(RoadSegment seg, TileId id, ChunkGrid? grid,
+        List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s,
+        List<int> indices)
+    {
+        int n = seg.PointCount;
+        if (n < 2 || grid == null) return;
+
+        var (minHeight, maxHeight) = RoadFormat.WallHeight(seg.Class);
+        float halfThickness = RoadFormat.WallThickness(seg.Class) * 0.5f;
+        var colour = WallColour(seg.Class).SrgbToLinear();
+
+        // 4 vertices per station: outer/inner at base and top
+        int baseIndex = vertices.Count;
+        int emitted = 0;
+
+        for (int i = 0; i < n; i++)
+        {
+            var top = Point(seg, i);
+            double ground = grid.SampleHeight(id.MinE + top.X, id.MaxN - top.Z);
+            if (double.IsNaN(ground)) return;
+
+            float height = Math.Clamp(top.Y - (float)ground, minHeight, maxHeight);
+            float baseY = (float)ground;
+
+            Vector3 forward = i == 0 ? Point(seg, 1) - Point(seg, 0)
+                : i == n - 1 ? Point(seg, n - 1) - Point(seg, n - 2)
+                : Point(seg, i + 1) - Point(seg, i - 1);
+            forward.Y = 0;
+            if (forward.LengthSquared() < 1e-8f) forward = Vector3.Forward;
+            forward = forward.Normalized();
+            var lateral = new Vector3(-forward.Z, 0, forward.X) * halfThickness;
+
+            var footA = new Vector3(top.X, baseY, top.Z) - lateral;
+            var footB = new Vector3(top.X, baseY, top.Z) + lateral;
+            var capA = footA + new Vector3(0, height, 0);
+            var capB = footB + new Vector3(0, height, 0);
+
+            foreach (var v in stackalloc[] { footA, capA, footB, capB })
+            {
+                vertices.Add(v);
+                colors.Add(colour);
+                uvs.Add(new Vector2(0f, 0f));
+                uv2s.Add(new Vector2((float)MarkingStyle.None, 0f));
+            }
+            emitted++;
+        }
+
+        for (int i = 0; i < emitted - 1; i++)
+        {
+            int a = baseIndex + i * 4;
+            int b = a + 4;
+
+            // outward face, inward face, and the cap between them
+            Quad(indices, a + 0, a + 1, b + 1, b + 0);
+            Quad(indices, b + 2, b + 3, a + 3, a + 2);
+            Quad(indices, a + 1, a + 3, b + 3, b + 1);
+        }
+    }
+
+    private static void Quad(List<int> indices, int a, int b, int c, int d)
+    {
+        indices.Add(a); indices.Add(b); indices.Add(c);
+        indices.Add(a); indices.Add(c); indices.Add(d);
+    }
+
+    private static Color WallColour(RoadClass cls) => cls switch
+    {
+        // galvanised steel snow bridges, weathered
+        RoadClass.AvalancheBarrier => new Color(0.44f, 0.44f, 0.42f),
+        // poured concrete check dams
+        RoadClass.TorrentWorks => new Color(0.54f, 0.53f, 0.50f),
+        // warm local stone, the Valais terracing
+        RoadClass.DryStoneWall => new Color(0.53f, 0.47f, 0.38f),
+        _ => new Color(0.56f, 0.55f, 0.52f),
+    };
+
+    /// <summary>A four-sided tapering mast. Square section: at PS1 resolution a round one costs
+    /// triangles nobody can see.</summary>
+    private static void AppendPylon(Vector3 top, float height, float radius, Color colour,
+        List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s,
+        List<int> indices)
+    {
+        var baseCentre = top - new Vector3(0, height, 0);
+        float baseRadius = radius * 1.6f;   // splayed feet read as a lattice tower
+
+        int start = vertices.Count;
+        for (int corner = 0; corner < 4; corner++)
+        {
+            double angle = corner * Math.PI / 2 + Math.PI / 4;
+            var dir = new Vector3((float)Math.Cos(angle), 0, (float)Math.Sin(angle));
+            vertices.Add(baseCentre + dir * baseRadius);
+            vertices.Add(top + dir * radius);
+            colors.Add(colour); colors.Add(colour);
+            uvs.Add(new Vector2(0f, -1f));
+            uvs.Add(new Vector2(0f, 1f));
+            uv2s.Add(new Vector2((float)MarkingStyle.None, 0f));
+            uv2s.Add(new Vector2((float)MarkingStyle.None, 0f));
+        }
+
+        for (int corner = 0; corner < 4; corner++)
+        {
+            int a = start + corner * 2;
+            int b = start + ((corner + 1) % 4) * 2;
+            indices.Add(a); indices.Add(a + 1); indices.Add(b + 1);
+            indices.Add(a); indices.Add(b + 1); indices.Add(b);
+        }
+    }
+
+    /// <summary>
+    /// What a segment's ribbon should be at each end so a differently-classed neighbour meets it
+    /// exactly. A blend length of zero means the end is left alone.
+    /// </summary>
+    private readonly record struct RoadJoin(
+        float StartWidth, Color StartColour, float StartBlend,
+        float EndWidth, Color EndColour, float EndBlend);
+
+    /// <summary>Shortest taper, so even a small change gets a few metres to happen over.</summary>
+    private const float MinTypeBlend = 5f;
+    private const float MaxTypeBlend = 22f;
+
+    /// <summary>
+    /// Finds where two roads of different type meet end to end, and works out the width and
+    /// colour they must share at that point.
+    ///
+    /// <para>
+    /// swissTLM3D splits a road wherever any attribute changes, so a lane widening from 3 m to
+    /// 4 m or a road turning from asphalt to gravel is two separate features that happen to
+    /// share an endpoint. Ribboned independently they meet in a step — a visible shoulder
+    /// sticking out of the carriageway, and a hard colour seam across it.
+    /// </para>
+    ///
+    /// <para>
+    /// Both sides are pulled to the <i>mean</i> width and colour at the shared vertex and then
+    /// eased back to their own over the following stretch. Taking the mean is what makes the
+    /// join exact: if each side merely tapered toward the other's value it would still arrive at
+    /// a different number, and the step would shrink rather than close.
+    /// </para>
+    ///
+    /// <para>
+    /// Only ends shared by exactly two segments are considered. Three or more is a junction, and
+    /// the junction polygon already covers that ground.
+    /// </para>
+    /// </summary>
+    private static RoadJoin[] FindTypeJoins(RoadTile tile)
+    {
+        var joins = new RoadJoin[tile.Segments.Count];
+        var ends = new Dictionary<(int, int), (int Seg, bool AtStart, int Count)>();
+
+        for (int i = 0; i < tile.Segments.Count; i++)
+        {
+            var seg = tile.Segments[i];
+            if (seg.PointCount < 2) continue;
+            if (RoadFormat.IsWatercourse(seg.Class) || RoadFormat.IsAerial(seg.Class)
+                || RoadFormat.IsWall(seg.Class)) continue;
+
+            Record(ends, Key(seg, 0), i, true);
+            Record(ends, Key(seg, seg.PointCount - 1), i, false);
+        }
+
+        for (int i = 0; i < tile.Segments.Count; i++)
+        {
+            var seg = tile.Segments[i];
+            if (seg.PointCount < 2) continue;
+            if (RoadFormat.IsWatercourse(seg.Class) || RoadFormat.IsAerial(seg.Class)
+                || RoadFormat.IsWall(seg.Class)) continue;
+
+            var mine = ColorFor(seg).SrgbToLinear();
+
+            foreach (bool atStart in stackalloc[] { true, false })
+            {
+                var key = Key(seg, atStart ? 0 : seg.PointCount - 1);
+                if (!ends.TryGetValue(key, out var slot) || slot.Count != 2) continue;
+
+                // the slot holds the *other* member if this one is the second to arrive
+                int otherIndex = slot.Seg == i ? -1 : slot.Seg;
+                if (otherIndex < 0) continue;
+
+                var other = tile.Segments[otherIndex];
+                var theirs = ColorFor(other).SrgbToLinear();
+
+                float widthDelta = Math.Abs(seg.Width - other.Width);
+                float colourDelta = Math.Abs(mine.R - theirs.R) + Math.Abs(mine.G - theirs.G)
+                    + Math.Abs(mine.B - theirs.B);
+                if (widthDelta < 0.05f && colourDelta < 0.02f) continue;   // same type, nothing to do
+
+                float meetWidth = (seg.Width + other.Width) * 0.5f;
+                var meetColour = mine.Lerp(theirs, 0.5f);
+                float blend = Math.Clamp(widthDelta * 6f, MinTypeBlend, MaxTypeBlend);
+
+                joins[i] = atStart
+                    ? joins[i] with { StartWidth = meetWidth, StartColour = meetColour, StartBlend = blend }
+                    : joins[i] with { EndWidth = meetWidth, EndColour = meetColour, EndBlend = blend };
+                joins[otherIndex] = ApplyToOther(joins[otherIndex], other, key, meetWidth, meetColour, blend);
+            }
+        }
+
+        return joins;
+    }
+
+    private static RoadJoin ApplyToOther(RoadJoin join, RoadSegment other, (int, int) key,
+        float width, Color colour, float blend)
+    {
+        bool atStart = Key(other, 0) == key;
+        return atStart
+            ? join with { StartWidth = width, StartColour = colour, StartBlend = blend }
+            : join with { EndWidth = width, EndColour = colour, EndBlend = blend };
+    }
+
+    /// <summary>Endpoint identity, quantised to a centimetre.</summary>
+    private static (int, int) Key(RoadSegment seg, int i) =>
+        ((int)MathF.Round(seg.Points[i * 3] * 100f), (int)MathF.Round(seg.Points[i * 3 + 2] * 100f));
+
+    private static void Record(Dictionary<(int, int), (int Seg, bool AtStart, int Count)> ends,
+        (int, int) key, int segment, bool atStart)
+    {
+        if (ends.TryGetValue(key, out var existing))
+            ends[key] = (existing.Seg, existing.AtStart, existing.Count + 1);
+        else
+            ends[key] = (segment, atStart, 1);
+    }
+
+    private static void AppendSegment(RoadSegment seg, in RoadJoin join, List<Vector3> vertices,
         List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices)
     {
         int n = seg.PointCount;
@@ -122,11 +462,20 @@ public static class RoadMeshBuilder
         // raw vertex colours do not — without it dark asphalt renders washed-out grey.
         var color = ColorFor(seg).SrgbToLinear();
 
+        var along = new float[n];
+        for (int i = 1; i < n; i++) along[i] = along[i - 1] + pts[i].DistanceTo(pts[i - 1]);
+        float total = along[^1];
+
+        // neither taper may reach past the middle, or a short segment would blend both ends
+        // into each other and never reach its own width at all
+        float startBlend = Math.Min(join.StartBlend, total * 0.5f);
+        float endBlend = Math.Min(join.EndBlend, total * 0.5f);
+
         // Per-vertex offset direction = bisector of adjacent segment directions, so the
         // ribbon stays continuous through corners instead of tearing at each joint.
         int baseIndex = vertices.Count;
         float style = (float)MarkingStyleFor(seg);
-        float travelled = 0f;
+
         for (int i = 0; i < n; i++)
         {
             Vector3 forward;
@@ -137,17 +486,33 @@ public static class RoadMeshBuilder
             forward.Y = 0;
             if (forward.LengthSquared() < 1e-8f) forward = Vector3.Forward;
             forward = forward.Normalized();
-            var side = new Vector3(-forward.Z, 0, forward.X) * half;
 
-            if (i > 0) travelled += pts[i].DistanceTo(pts[i - 1]);
+            float vertexHalf = half;
+            var vertexColor = color;
 
+            // Ease rather than lerp: a straight ramp still leaves a visible crease where the
+            // taper meets the constant width, because the *rate* of change jumps there.
+            if (startBlend > 0 && along[i] < startBlend)
+            {
+                float t = Smooth(along[i] / startBlend);
+                vertexHalf = Mathf.Lerp(join.StartWidth * 0.5f, half, t);
+                vertexColor = join.StartColour.Lerp(color, t);
+            }
+            else if (endBlend > 0 && total - along[i] < endBlend)
+            {
+                float t = Smooth((total - along[i]) / endBlend);
+                vertexHalf = Mathf.Lerp(join.EndWidth * 0.5f, half, t);
+                vertexColor = join.EndColour.Lerp(color, t);
+            }
+
+            var side = new Vector3(-forward.Z, 0, forward.X) * vertexHalf;
             var p = pts[i] + new Vector3(0, lift, 0);
             vertices.Add(p - side);
             vertices.Add(p + side);
-            colors.Add(color);
-            colors.Add(color);
-            uvs.Add(new Vector2(travelled, -1f));
-            uvs.Add(new Vector2(travelled, 1f));
+            colors.Add(vertexColor);
+            colors.Add(vertexColor);
+            uvs.Add(new Vector2(along[i], -1f));
+            uvs.Add(new Vector2(along[i], 1f));
             uv2s.Add(new Vector2(style, 0f));
             uv2s.Add(new Vector2(style, 0f));
         }
@@ -158,6 +523,13 @@ public static class RoadMeshBuilder
             indices.Add(a); indices.Add(a + 1); indices.Add(a + 2);
             indices.Add(a + 1); indices.Add(a + 3); indices.Add(a + 2);
         }
+    }
+
+    /// <summary>Smoothstep: zero slope at both ends, so the taper leaves no crease.</summary>
+    private static float Smooth(float t)
+    {
+        t = Math.Clamp(t, 0f, 1f);
+        return t * t * (3f - 2f * t);
     }
 
     /// <summary>

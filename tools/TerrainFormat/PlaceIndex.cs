@@ -3,7 +3,14 @@ using System.Text.Json.Serialization;
 
 namespace UnitSport.Terrain.Format;
 
-/// <summary>A settlement you can teleport to, with terrain confirmed present.</summary>
+public enum PlaceKind
+{
+    Town = 0,
+    Summit = 1,
+    Pass = 2,
+}
+
+/// <summary>A place you can teleport to, with terrain confirmed present.</summary>
 public sealed class Place
 {
     public required string Name { get; set; }
@@ -15,6 +22,19 @@ public sealed class Place
 
     /// <summary>Building count, used to rank search results by size.</summary>
     public int Buildings { get; set; }
+
+    public PlaceKind Kind { get; set; } = PlaceKind.Town;
+
+    /// <summary>Metres above sea level. Zero for towns, whose height comes from the terrain.</summary>
+    public int Elevation { get; set; }
+
+    /// <summary>
+    /// What search ranks by, so a peak is ordered among peaks by height and a town among towns
+    /// by size. Without this every summit would sort below the smallest hamlet, since a mountain
+    /// has no buildings.
+    /// </summary>
+    [JsonIgnore]
+    public int Rank => Kind == PlaceKind.Town ? Buildings : Elevation;
 
     [JsonIgnore]
     public TileId Tile => TileId.FromLv95(E, N);
@@ -47,14 +67,14 @@ public sealed class PlaceIndex
     public List<Place> Search(string query, int limit = 12)
     {
         if (string.IsNullOrWhiteSpace(query))
-            return Places.OrderByDescending(p => p.Buildings).Take(limit).ToList();
+            return Places.OrderByDescending(p => p.Rank).Take(limit).ToList();
 
         string q = Normalize(query);
         return Places
             .Select(p => (Place: p, Key: Normalize(p.Name)))
             .Where(x => x.Key.Contains(q, StringComparison.Ordinal))
             .OrderBy(x => x.Key.StartsWith(q, StringComparison.Ordinal) ? 0 : 1)
-            .ThenByDescending(x => x.Place.Buildings)
+            .ThenByDescending(x => x.Place.Rank)
             .Take(limit)
             .Select(x => x.Place)
             .ToList();
