@@ -38,6 +38,9 @@ public partial class ChunkStreamer : Node
     /// <summary>Node name, which must match on server and client for RPC routing.</summary>
     public const string NodeName = "ChunkStream";
 
+    /// <summary>Set as the node leaves the tree; read by the worker threads. See FetchAsync.</summary>
+    private volatile bool _shuttingDown;
+
     /// <summary>Server-side bandwidth ceiling per client.</summary>
     public int BytesPerSecondPerPeer { get; set; } = 3 * 1024 * 1024;
 
@@ -100,6 +103,13 @@ public partial class ChunkStreamer : Node
     {
         if (IsServing) return Task.FromResult(new AssetResult(null, true));
 
+        // Quitting while tiles are still in flight used to take the process down with an access
+        // violation inside CallDeferred: the worker threads outlive the tree, and deferring onto
+        // a freed native object is not a managed exception, it is a 0xC0000005. The flag is set
+        // on the main thread as the node leaves the tree, so by the time Godot frees anything
+        // the workers have stopped queueing work for it.
+        if (_shuttingDown) return Task.FromResult(new AssetResult(null, false));
+
         uint requestId;
         PendingRequest pending;
         lock (_pending)
@@ -131,6 +141,8 @@ public partial class ChunkStreamer : Node
 
         return pending.Completion.Task;
     }
+
+    public override void _ExitTree() => _shuttingDown = true;
 
     private void Fail(uint requestId, string why, bool permanent)
     {

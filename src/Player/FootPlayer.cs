@@ -84,6 +84,60 @@ public partial class FootPlayer : CharacterBody3D
     private const float AirSteer = 1.6f;    // how fast a launch can be aimed
     private const float AirDrag = 1.1f;     // m/s² bleeding a launch back to RunSpeed
 
+    // --- mounts ---
+    /// <summary>
+    /// What the player is riding, as a <see cref="RideKind"/>. Replicated, so everyone else sees
+    /// you on the bike rather than walking at 40 km/h.
+    ///
+    /// <para>
+    /// An int and not the enum because Godot's replication moves Variants: an enum property is
+    /// marshalled as its underlying integer anyway, and spelling that out here keeps the wire
+    /// format explicit rather than dependent on how the binding happens to marshal an enum.
+    /// </para>
+    /// </summary>
+    [Export] public int RideKindId { get; set; }
+
+    private Rideable? _ride;
+    private RideMotion _motion;
+    private Node3D? _visual;
+    private RideKind _visualKind = RideKind.OnFoot;
+
+    /// <summary>Free look while riding. Steering owns the body's yaw, so the eyes get their own.</summary>
+    private float _lookYaw;
+
+    /// <summary>Camera pull-in when the chase position is inside a hillside.</summary>
+    private float _chaseBlend = 1f;
+
+    /// <summary>Smoothed real ground speed, for telling an impact from terrain roughness.</summary>
+    private float _realSpeed;
+
+    /// <summary>How fast the smoothed real speed follows the measured one, per second.</summary>
+    private const float ImpactResponse = 6f;
+
+    /// <summary>A shortfall smaller than this is the ground, not a wall. m/s.</summary>
+    private const float ImpactTolerance = 1.0f;
+
+    /// <summary>How hard an impact bleeds the model's speed, m/s². A crash, not a brake.</summary>
+    private const float ImpactDecel = 25f;
+
+    /// <summary>What is being ridden, or null on foot. Read by the HUD and the picker.</summary>
+    public RideKind Ride => (RideKind)RideKindId;
+
+    /// <summary>Ground speed, m/s — for a speedometer, and for the trainer link later.</summary>
+    public float RideSpeed => _motion.Speed;
+
+    /// <summary>
+    /// Replaces the keyboard while mounted, when set.
+    ///
+    /// <para>
+    /// A home trainer <i>is</i> an input device: it reports watts and cadence, which is what the
+    /// throttle means to <see cref="Bicycle"/>. Routing it through here rather than into the
+    /// vehicle keeps one movement path for a keyboard rider and a pedalling one, so a bug can
+    /// only be in one of them. <see cref="RideProbe"/> uses the same seam to ride headlessly.
+    /// </para>
+    /// </summary>
+    public Func<RideInput>? RideControls { get; set; }
+
     private Camera3D? _camera;
     private CollisionShape3D _body = null!;
     private CapsuleShape3D _capsule = null!;
@@ -130,6 +184,10 @@ public partial class FootPlayer : CharacterBody3D
     {
         _placed = false;
 
+        // A teleport is not a descent: arriving somewhere new at 60 km/h because that is how
+        // fast you left is how a rider ends up in a lake.
+        _motion.Speed = 0f;
+
         // a teleport mid-slide would otherwise land you crouched in the new place, with the
         // capsule still short and no ground contact to end the slide against
         if (_sliding && _body is not null)
@@ -146,6 +204,9 @@ public partial class FootPlayer : CharacterBody3D
         var replication = new SceneReplicationConfig();
         replication.AddProperty(".:position");
         replication.AddProperty(".:rotation");
+        // What you are riding travels with where you are. Without it a remote client sees a
+        // figure sprinting down a descent at 60 km/h in a running pose.
+        replication.AddProperty(".:RideKindId");
         var sync = new MultiplayerSynchronizer
         {
             // deterministic name: replication matches nodes by path across peers, and
@@ -195,15 +256,103 @@ public partial class FootPlayer : CharacterBody3D
         }
         else
         {
-            // remote player: a visible marker, transform comes from the synchronizer
-            AddChild(new MeshInstance3D
-            {
-                Mesh = new CapsuleMesh { Radius = BodyRadius, Height = StandHeight },
-                Position = new Vector3(0, StandHeight * 0.5f, 0),
-            });
+            // Remote player: a figure rather than a capsule, so you can tell which way someone
+            // is facing. The transform still comes from the synchronizer; this is only what it
+            // moves. Colour is derived from the peer id, which is unique and already agreed by
+            // every client, so two players never end up in the same jersey.
             SetPhysicsProcess(false);
             SetProcessUnhandledInput(false);
         }
+
+        RefreshVisual();
+    }
+
+    /// <summary>
+    /// Rebuilds the body mesh when the ride changes.
+    ///
+    /// <para>
+    /// The local player has no visual on foot — that view is from inside their own head — but
+    /// gains one the moment they mount, because the camera goes third person and there would
+    /// otherwise be a bicycle-shaped hole where the rider is.
+    /// </para>
+    /// </summary>
+    private void RefreshVisual()
+    {
+        var kind = (RideKind)RideKindId;
+        if (_visual != null && kind == _visualKind) return;
+
+        _visual?.QueueFree();
+        _visual = null;
+        _visualKind = kind;
+
+        int rider = GetMultiplayerAuthority();
+
+        if (kind == RideKind.OnFoot)
+        {
+            if (IsMultiplayerAuthority()) return;   // first person: nothing to draw
+            _visual = new MeshInstance3D
+            {
+                Name = "Body",
+                Mesh = Avatar.HumanMeshBuilder.Build(Avatar.HumanPalette.ForRider(rider)),
+                MaterialOverride = Avatar.HumanMeshBuilder.Material(),
+            };
+        }
+        else
+        {
+            _visual = (_ride ?? Rideable.Create(kind))?.BuildVisual(rider);
+        }
+
+        if (_visual != null)
+        {
+            _visual.Name = "Body";
+            AddChild(_visual);
+        }
+    }
+
+    /// <summary>
+    /// Remote players get no physics, so the replicated ride kind has to be polled. It changes
+    /// perhaps twice a minute; comparing an int per frame is cheaper than an RPC to announce it.
+    /// </summary>
+    public override void _Process(double delta)
+    {
+        if (IsMultiplayerAuthority())
+        {
+            if (_visual != null && _ride != null) _ride.Animate(_visual, _motion, (float)delta);
+            return;
+        }
+        RefreshVisual();
+    }
+
+    /// <summary>
+    /// Mounts, dismounts, or swaps. Returns false when it cannot be done right now.
+    ///
+    /// <para>
+    /// Refused in mid-air and while sliding, and refused above <see cref="Rideable.DismountSpeed"/>:
+    /// stepping off skis at 70 km/h is not a dismount, and allowing it makes the descent
+    /// consequence-free. Getting <i>on</i> is refused at speed for the same reason — a bike
+    /// materialising under a sprinting player is how you clip through a wall.
+    /// </para>
+    /// </summary>
+    public bool SetRide(RideKind kind)
+    {
+        if (kind == (RideKind)RideKindId) return true;
+        if (!IsOnFloor() || _sliding) return false;
+
+        float speed = new Vector2(Velocity.X, Velocity.Z).Length();
+        float limit = _ride?.DismountSpeed ?? RunSpeed + 0.5f;
+        if (speed > limit) return false;
+
+        _ride = Rideable.Create(kind);
+        RideKindId = (int)kind;
+
+        // Momentum carries across the change: freewheeling to a halt and stepping off should
+        // leave you walking, not standing still, and the reverse is what makes a rolling start
+        // off a slide feel continuous.
+        _motion = new RideMotion { Speed = speed, Yaw = Rotation.Y, Lean = 0f };
+        _lookYaw = 0f;
+
+        RefreshVisual();
+        return true;
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -212,7 +361,14 @@ public partial class FootPlayer : CharacterBody3D
 
         if (@event is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
         {
-            RotateY(-motion.Relative.X * 0.0022f);
+            // Mounted, the body's yaw belongs to the steering — a bicycle goes where it points,
+            // and letting the mouse turn it would mean looking over your shoulder steered you
+            // into the ditch. The mouse gets its own yaw, which recentres itself.
+            if (_ride != null)
+                _lookYaw = Mathf.Clamp(_lookYaw - motion.Relative.X * 0.0022f, -2.4f, 2.4f);
+            else
+                RotateY(-motion.Relative.X * 0.0022f);
+
             _pitch = Mathf.Clamp(_pitch - motion.Relative.Y * 0.0022f,
                 -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
         }
@@ -236,6 +392,12 @@ public partial class FootPlayer : CharacterBody3D
         // Movement reads physical keys directly, so a focused text field has to be checked
         // explicitly or typing in chat walks the player around.
         bool typing = UnitSport.Core.UiFocus.TextEntryActive;
+
+        if (_ride != null)
+        {
+            RidePhysics(dt, typing, onFloor);
+            return;
+        }
 
         var input = Vector2.Zero;
         if (!typing)
@@ -399,20 +561,141 @@ public partial class FootPlayer : CharacterBody3D
             EndSlide();
 
         UpdateCameraFeel(dt, running, onFloor);
+        ClampAboveTerrain(delta);
+    }
 
-        // safety net: never end up under the terrain surface
-        if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground)
-            && GlobalPosition.Y < ground - 2f)
+    /// <summary>Safety net: never end up under the terrain surface, on foot or mounted.</summary>
+    private void ClampAboveTerrain(double delta)
+    {
+        if (Terrain == null || !Terrain.TryGetHeight(GlobalPosition, out float ground)
+            || GlobalPosition.Y >= ground - 2f) return;
+
+        _sinceSnapWarning += delta;
+        if (_sinceSnapWarning > 2)
         {
-            _sinceSnapWarning += delta;
-            if (_sinceSnapWarning > 2)
-            {
-                _sinceSnapWarning = 0;
-                GD.Print($"[player] {Name} below terrain ({GlobalPosition.Y:F1} < {ground:F1}), snapping up");
-            }
-            GlobalPosition = new Vector3(GlobalPosition.X, ground + 1f, GlobalPosition.Z);
-            Velocity = Vector3.Zero;
+            _sinceSnapWarning = 0;
+            GD.Print($"[player] {Name} below terrain ({GlobalPosition.Y:F1} < {ground:F1}), snapping up");
         }
+        GlobalPosition = new Vector3(GlobalPosition.X, ground + 1f, GlobalPosition.Z);
+        Velocity = Vector3.Zero;
+        _motion.Speed = 0f;
+    }
+
+    /// <summary>
+    /// One physics step on a vehicle. Gravity, terrain following and collision stay here — they
+    /// are properties of the body, not of the bicycle — while the vehicle decides only how fast
+    /// it is going and which way it points.
+    /// </summary>
+    private void RidePhysics(float dt, bool typing, bool onFloor)
+    {
+        var input = RideControls?.Invoke() ?? new RideInput(
+            Throttle: !typing && Input.IsPhysicalKeyPressed(Key.W) ? 1f : 0f,
+            Brake: !typing && Input.IsPhysicalKeyPressed(Key.S) ? 1f : 0f,
+            Steer: SteerInput(),
+            Effort: !typing && Input.IsPhysicalKeyPressed(Key.Shift));
+
+        // The gradient the vehicle feels is the one along its own path, not the steepness of
+        // the ground: a road that contours a mountainside is level to ride even though the
+        // hillside it crosses is at 60%. Using the terrain slope directly would charge a rider
+        // for every traverse.
+        var normal = onFloor ? GetFloorNormal() : Vector3.Up;
+        var heading = -GlobalTransform.Basis.Z with { Y = 0 };
+        heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
+
+        float grade = onFloor
+            ? -(heading.X * normal.X + heading.Z * normal.Z) / Mathf.Max(normal.Y, 0.15f)
+            : 0f;
+
+        _ride!.Step(input, new RideGround(onFloor, grade), dt, ref _motion);
+
+        // yaw changed, so the direction of travel has to be taken again
+        Rotation = new Vector3(0, _motion.Yaw, 0);
+        heading = -GlobalTransform.Basis.Z with { Y = 0 };
+        heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
+
+        var velocity = Velocity;
+        velocity.X = heading.X * _motion.Speed;
+        velocity.Z = heading.Z * _motion.Speed;
+        velocity.Y = onFloor ? Mathf.Min(velocity.Y, 0f) : velocity.Y - Gravity * dt;
+
+        Velocity = velocity;
+        MoveAndSlide();
+
+        // Hitting something has to cost the speed, or the vehicle grinds along the wall at
+        // 50 km/h and shoots off the moment the wall ends.
+        //
+        // GetRealVelocity, not Velocity: MoveAndSlide leaves Velocity projected along whatever
+        // it hit, and against a slope too steep to climb that projection points up the face and
+        // keeps most of its magnitude — so a skier jammed against a bank reported 22 km/h while
+        // its position had not changed for twelve seconds.
+        //
+        // Smoothed and thresholded, though, because the instantaneous figure is not a clean
+        // signal: the ground is a 2 m lattice, and climbing each bump costs a little forward
+        // motion every single frame. Clamping to it directly compounds those dips — measured at
+        // 107 m of riding down to 11 m on flat ground, a bike bled to walking pace by nothing
+        // but the terrain's own roughness. Only a shortfall that persists is an impact.
+        var real = GetRealVelocity();
+        float achieved = new Vector2(real.X, real.Z).Length();
+        _realSpeed = Mathf.Lerp(_realSpeed, achieved, 1f - Mathf.Exp(-ImpactResponse * dt));
+        if (_realSpeed < _motion.Speed - ImpactTolerance)
+            _motion.Speed = Mathf.Max(_realSpeed, _motion.Speed - ImpactDecel * dt);
+
+        UpdateRideCamera(dt);
+        ClampAboveTerrain(dt);
+    }
+
+    /// <summary>
+    /// Chase camera. Third person, because you asked for a bicycle and a bicycle you cannot see
+    /// is a first-person walk with a different speed.
+    /// </summary>
+    private void UpdateRideCamera(float dt)
+    {
+        if (_visual != null)
+            _visual.Rotation = new Vector3(0, 0, _motion.Lean);
+
+        if (_camera == null || _ride == null) return;
+
+        // the free look springs back to centre, so letting go of the mouse puts the road ahead
+        _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
+
+        // both are local to the body, which is yaw-only, so the camera stays level
+        var eye = new Vector3(0, _ride.EyeHeight, 0);
+        var back = new Basis(Vector3.Up, _lookYaw)
+            * new Vector3(0, _ride.ChaseHeight, _ride.ChaseDistance);
+
+        // Pull in when the camera would sit inside the hillside. Alpine terrain climbs behind
+        // you constantly, so without this half of every ascent is spent looking at the inside
+        // of a mountain.
+        var basis = GlobalTransform.Basis;
+        var from = GlobalPosition + basis * eye;
+        var to = GlobalPosition + basis * back;
+
+        float wanted = 1f;
+        var query = PhysicsRayQueryParameters3D.Create(from, to,
+            CollisionMask, new Godot.Collections.Array<Rid> { GetRid() });
+        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        if (hit.Count > 0)
+        {
+            float span = Mathf.Max(0.01f, (to - from).Length());
+            // 0.85 keeps the lens off the rock face it just found
+            wanted = Mathf.Clamp((hit["position"].AsVector3() - from).Length() / span * 0.85f,
+                0.15f, 1f);
+        }
+
+        // ease out, snap in: arriving late at a wall means a frame with the camera inside it
+        _chaseBlend = wanted < _chaseBlend
+            ? wanted
+            : Mathf.Lerp(_chaseBlend, wanted, 1f - Mathf.Exp(-4f * dt));
+
+        _camera.Position = eye.Lerp(back, _chaseBlend);
+
+        // the camera banks a fraction of the machine's lean — enough to feel the turn, not
+        // enough to tip the horizon over
+        _camera.Rotation = new Vector3(_pitch, _lookYaw, _motion.Lean * 0.35f);
+
+        float t = Mathf.Clamp(_motion.Speed / _ride.FovSpeed, 0f, 1f);
+        _camera.Fov = Mathf.Lerp(_camera.Fov, Mathf.Lerp(_ride.BaseFov, _ride.MaxFov, t * t),
+            1f - Mathf.Exp(-3f * dt));
     }
 
     /// <summary>A/D as -1..1, for the slide's camera bank. Zero while a text field has the keyboard.</summary>

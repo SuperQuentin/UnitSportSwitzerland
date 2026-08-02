@@ -20,6 +20,7 @@ public partial class ClientWorld : Node3D
     private Node3D? _players;
     private GpxSession? _gpx;
     private PlaceSearchUi? _places;
+    private RideUi? _rides;
     private MainMenu? _menu;
     private Teleporter? _teleporter;
     private ChatManager? _chat;
@@ -110,7 +111,8 @@ public partial class ClientWorld : Node3D
         // large import that is usually empty space. "--at E,N" overrides it (LV95 metres).
         // --shot and --probe place the camera themselves, and a spawn drop would fight
         // them for the height.
-        bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null;
+        bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
+            || RideProbe.ParseArgs() != null;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -129,6 +131,13 @@ public partial class ClientWorld : Node3D
         _places = PlaceSearchUi.Create(_teleporter);
         AddChild(_places);
 
+        // E picks what you travel as. Same rule as the teleporter: the player node is resolved
+        // at the moment of the press, because in multiplayer it is spawned by the server and
+        // replaced on a reconnect — holding one from startup would move a node nobody controls.
+        _rides = RideUi.Create();
+        _rides.ActivePlayer = () => _onFoot ? LocalPlayer : null;
+        AddChild(_rides);
+
         // G opens a GPX track for playback; the session owns its own camera and HUD
         _gpx = GpxSession.Create(_chunks, origin, _spectator);
         _gpx.ExitRequested += () => EnterMode(GameMode.Explore);
@@ -143,6 +152,10 @@ public partial class ClientWorld : Node3D
         // which is also how the menu itself gets screenshotted with --shot.
         bool forceMenu = Array.IndexOf(OS.GetCmdlineUserArgs(), "--menu") >= 0;
         if (forceMenu) Callable.From(() => _menu.Open()).CallDeferred();
+
+        // same trick for the ride picker, which is otherwise only reachable by pressing E
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--ridemenu") >= 0)
+            Callable.From(() => _rides.Open()).CallDeferred();
 
         // --gpx <path> may be repeated; each one joins the race as another ghost
         var args = OS.GetCmdlineUserArgs();
@@ -162,6 +175,16 @@ public partial class ClientWorld : Node3D
         if (host != null) StartNetworking(host);
         else if (gpxFromCommandLine) Callable.From(() => EnterMode(GameMode.GpxReplay)).CallDeferred();
         else if (!forceMenu && !placedByTool) _menu.Open();
+
+        if (RideProbe.ParseArgs() is { } ride)
+        {
+            // park the streaming anchor on the spawn so the tile under the rider arrives with
+            // collision — without it the probe drops through an empty world and measures gravity
+            var (rideE, rideN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(rideE, rideN, 1200);
+            AddChild(new RideProbe(_chunks, origin, ride.Kind, ride.Seconds, ride.Shot));
+            return;
+        }
 
         if (TunnelProbe.ParseArgs() is { } probe)
         {
@@ -346,6 +369,15 @@ public partial class ClientWorld : Node3D
             return;
         }
         if (_places is { IsOpen: true }) return;
+
+        // RideUi consumes E itself while open (from _UnhandledKeyInput, which runs first), so
+        // reaching here means it is closed.
+        if (key.PhysicalKeycode == Key.E)
+        {
+            _rides?.Open();
+            return;
+        }
+        if (_rides is { IsOpen: true }) return;
 
         if (key.PhysicalKeycode == Key.T) ToggleMode();
     }

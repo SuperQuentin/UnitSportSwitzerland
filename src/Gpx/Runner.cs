@@ -70,34 +70,23 @@ public partial class Runner : Node3D
         Avatar = new Node3D { Name = "Avatar" };
         AddChild(Avatar);
 
+        // A running figure, jerseyed in the runner's own tint so the leaderboard colour and the
+        // avatar agree. One mesh, one material, one draw call — a race can have a dozen of these
+        // on screen and each is a few hundred triangles.
         _body = new MeshInstance3D
         {
             Name = "Body",
-            Mesh = new CapsuleMesh { Radius = 0.28f, Height = 1.5f },
-            Position = new Vector3(0, 0.75f, 0),
-            MaterialOverride = Material(Tint),
+            Mesh = UnitSport.Avatar.HumanMeshBuilder.Build(
+                UnitSport.Avatar.HumanPalette.Default with { Jersey = Tint, Helmet = Tint },
+                UnitSport.Avatar.HumanPose.Running),
+            MaterialOverride = UnitSport.Avatar.HumanMeshBuilder.Material(),
         };
         Avatar.AddChild(_body);
-
-        Avatar.AddChild(new MeshInstance3D
-        {
-            Name = "Head",
-            Mesh = new SphereMesh { Radius = 0.13f, Height = 0.26f },
-            Position = new Vector3(0, 1.62f, 0),
-            MaterialOverride = Material(new Color(0.90f, 0.78f, 0.66f)),
-        });
 
         _chunks.AddAnchor(Avatar);
     }
 
     public override void _ExitTree() => _chunks.RemoveAnchor(Avatar);
-
-    private static StandardMaterial3D Material(Color color) => new()
-    {
-        AlbedoColor = color,
-        Roughness = 1.0f,
-        SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
-    };
 
     /// <summary>Places the avatar for the shared race time.</summary>
     public void UpdateTo(double raceTime, double clockSpeed, double delta)
@@ -158,7 +147,9 @@ public partial class Runner : Node3D
         {
             _bobPhase += (float)(delta * clockSpeed * Speed * 1.9);
             float amp = Mathf.Clamp((float)Speed / 5f, 0.15f, 1f);
-            _body.Position = new Vector3(0, 0.75f + Mathf.Sin(_bobPhase * 2f) * 0.05f * amp, 0);
+            // the figure's origin is at its feet, unlike the capsule this replaced whose origin
+            // was its centre — so the bob is about zero, not about half a body height
+            _body.Position = new Vector3(0, Mathf.Sin(_bobPhase * 2f) * 0.05f * amp, 0);
         }
     }
 

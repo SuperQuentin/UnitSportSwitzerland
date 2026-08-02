@@ -183,6 +183,23 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   The menu also owns the mouse: opening releases the pointer, closing recaptures it, which
   is why `SpectatorCamera` no longer handles Esc. `--menu` forces the picker open (and is
   how it gets screenshotted).
+- **Avatars** (`src/Avatar/`): procedural low-poly figures and a road bike, built from two
+  primitives only — a tapered tube and a box (`MeshScratch`) — so each is one surface and one
+  draw call. `HumanMeshBuilder` poses a figure from a table of joint positions (Standing,
+  Running, Cycling); `BikeMeshBuilder` uses real 700c geometry (0.99 m wheelbase, 0.27 m bottom
+  bracket, saddle at 0.90 m) because a bike is a shape everyone knows. `Cyclist` combines them
+  and splits the mesh three ways — frame, rider, and per-leg — so the cranks turn with cadence
+  and the knees follow by a two-bone solve rather than keyframes. Preview with
+  `<godot> --path . -- --avatars <seconds> <out.png> [--view deg] [--focus 0..3]`.
+- **A riding position is derived from the bike, never eyeballed.** The three contact points are
+  fixed — hips on the saddle, hands on the drops, feet on the pedals — so the shoulder is the
+  one place a 0.52 m torso and a 0.58 m arm can both reach. Hand-placing those joints produced a
+  rider lying horizontally in front of the bars; with the ends pinned, the middle is not a free
+  choice.
+- **Judge model proportions with a long lens.** The avatar preview's focus camera sits 9 m back
+  at 13° FOV, near-orthographic. A close wide-angle view of a bicycle enlarges whichever end is
+  nearer and makes correct geometry look wrong — that cost an iteration of "fixing" a rider that
+  was already right.
 - **On foot** (`src/Player/FootPlayer.cs`): WASD + Shift at 1.6 / 4.6 m/s, Space to jump, plus
   two momentum moves — **slide** (Ctrl, run only, launches at 7 m/s, gains speed downhill, ends
   keeping horizontal speed if you Space out of it) and **wall jump** (Space in the air against
@@ -191,6 +208,25 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   air branch *steers without braking* above running pace, because the ordinary `MoveToward`
   air control kills a launch in half a second and makes both moves pointless. Sliding shrinks
   the capsule to 0.9 m, so it fits where standing does not.
+- **Mounts** (`src/Player/Rideable.cs`): **E** opens a picker (`RideUi`) — On foot / Road bike /
+  Skis. A vehicle is a table of numbers plus a mesh: everything touching the body, the network,
+  the camera and the UI lives once in `FootPlayer`, so adding one is a class plus a line in
+  `Rideable.Create`. Both share one model — mass, a resistive force, `SlopeAccel` — and differ
+  only in where propulsion comes from. Mounted, speed is a **scalar along a heading**, not a
+  velocity vector: a bike goes where it points, and strafing is something people do, not
+  vehicles. The camera goes third-person with a raycast pull-in, and the machine's lean is
+  *derived* (`tan φ = v·ω/g`), never authored.
+  - `Bicycle` runs the real power equation, `m·a = P/v − ½ρ·CdA·v² − Crr·m·g − m·g·sinθ`.
+    Nothing is tuned: 180 W gives 32.7 km/h flat, 9.3 km/h up 8%, and 63.8 km/h freewheeling
+    down it. Steering is lean-limited, so the turn radius grows with speed. `RiderWatts` is the
+    input **because a home trainer measures watts** — RideLink drops straight into it.
+  - `Skis` have no engine. Turning *costs* speed (`EdgeScrub`), which is the whole of skiing:
+    pointed straight down a 30% face you reach 80 km/h, and carving across the fall line is the
+    only brake. W is a capped poling shuffle, because skis on the flat would otherwise strand you.
+  - `FootPlayer.RideControls` replaces the keyboard when set — one movement path for a keyboard
+    rider and a pedalling one, and the seam `RideProbe` and the trainer both use.
+  - `RideKindId` is replicated, so remote players are seen on the bike rather than sprinting
+    at 40 km/h in a running pose.
 - **GPX ghost racing** (`src/Gpx/`): `GpxParser` -> `GpxTrack` (LV95 via `SwissProjection`,
   cumulative time + distance). `RacePlayback` owns ONE clock; each `Runner` samples its own
   track at that shared time, so several GPX files start together and race as ghosts —
@@ -278,6 +314,10 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   a deferred call (GPX replay) would otherwise steal the camera after the shot was set up.
   Add `--menu` to capture the mode picker.
 - Tunnel collision check: `<godot> --path . -- --probe lv95E,lv95N,seconds`
+- Riding check: `<godot> --path . -- --ride bike|skis,seconds[,out.png] [--at E,N]` — mounts,
+  holds the throttle via `RideControls`, and prints speed/altitude/clearance every 2 s with a
+  non-zero exit if the rider went nowhere or ended under the terrain. Riding is the one part
+  that cannot be judged from a screenshot; add `--ridemenu` (with `--shot`) to capture the picker.
 
 ## Gotchas (learned the hard way)
 
@@ -313,6 +353,24 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   ~2 m/s, the walk puts you back over the 2.6 m/s entry threshold in about a second, and a
   *held* Ctrl then starts the next one — measured as a permanent 7 m/s crouch-run. Slide entry
   takes a fresh press; holding only sustains the slide you are in.
+- **Feeding collision back into a vehicle needs `GetRealVelocity`, and a threshold.** Two wrong
+  versions came first. (1) `Velocity` after `MoveAndSlide` is *projected along whatever you hit*,
+  and against a slope too steep to climb that projection points up the face and keeps most of its
+  magnitude — a skier jammed against a bank reported 22 km/h while its position had not changed
+  for twelve seconds. (2) Clamping to `GetRealVelocity` every frame then killed the bike, because
+  the ground is a 2 m lattice and crossing each bump costs a little forward motion *every frame*;
+  compounded, that bled a bike from 107 m of riding to 11 m on flat ground. Only a shortfall
+  that **persists** (smoothed, and past `ImpactTolerance`) is an impact.
+- **A crank turning the wrong way is instantly obvious to anyone who rides.** The bike faces +Z,
+  so driving forward turns the chainring with its top moving toward +Z — meaning a crank starting
+  at the front goes *down* next. Taking the obvious `(sin, cos)` circle runs it backwards. The
+  same sign appears in `BikeMeshBuilder.Cranks` and `Cyclist.UpdateLegs`; they can only disagree
+  if one is edited alone. Check it with `--avatars … --crank <rad>`, which parks the cranks —
+  rotation direction cannot be judged from one frame.
+- **Quitting while tiles stream used to crash the process.** `ChunkStreamer.FetchAsync` runs on
+  worker threads and defers onto the main one; the workers outlive the tree, and deferring onto a
+  freed native object is a 0xC0000005, not a managed exception. `_shuttingDown` is set in
+  `_ExitTree` so the workers stop queueing before Godot frees anything.
 - **Crouch states need a headroom test before standing.** `FootPlayer.EndSlide` returns false
   when a standing capsule will not fit (shape query, radius shaved 3 cm), so releasing Ctrl in
   a tunnel keeps you down instead of forcing the body up through the roof — and you cannot
