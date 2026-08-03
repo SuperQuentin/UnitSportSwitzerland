@@ -28,7 +28,13 @@ public partial class Main : Node
 			if (ci >= 0 && ci + 1 < a.Length) float.TryParse(a[ci + 1],
 				System.Globalization.NumberStyles.Float,
 				System.Globalization.CultureInfo.InvariantCulture, out crank);
-			AddChild(UnitSport.Avatar.AvatarPreview.Create(seconds, output, view, focus, crank));
+			float stride = float.NaN;
+			int si = Array.IndexOf(a, "--stride");
+			if (si >= 0 && si + 1 < a.Length) float.TryParse(a[si + 1],
+				System.Globalization.NumberStyles.Float,
+				System.Globalization.CultureInfo.InvariantCulture, out stride);
+			AddChild(UnitSport.Avatar.AvatarPreview.Create(
+				seconds, output, view, focus, crank, stride));
 			return;
 		}
 

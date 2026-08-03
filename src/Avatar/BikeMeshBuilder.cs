@@ -159,7 +159,10 @@ public static class BikeMeshBuilder
     /// </summary>
     public static void Cranks(MeshScratch s, BikePalette p, float crankAngle)
     {
-        s.Ring(BottomBracket + new Vector3(0.055f, 0, 0), Vector3.Right, 0.075f, 0.098f, 0.004f,
+        // Chainring on the rider's right — the drive side, on every road bike ever made.
+        // Facing +Z in author space the rider's right is −X, not +X, which is the sort of thing
+        // that is invisible until someone who rides looks at it from the correct side.
+        s.Ring(BottomBracket - new Vector3(0.055f, 0, 0), Vector3.Right, 0.075f, 0.098f, 0.004f,
             p.Accent, 12);
         s.Tube(BottomBracket - new Vector3(0.060f, 0, 0), BottomBracket + new Vector3(0.060f, 0, 0),
             0.020f, p.Accent, 6);

@@ -38,6 +38,8 @@ public partial class GpxSession : Node
     public override void _Ready()
     {
         _race = RacePlayback.Create(_chunks, _origin);
+        // matching finishes on its own schedule, so the course line has to be told
+        _race.SnapChanged += RefreshRibbon;
         AddChild(_race);
 
         _camera = PlaybackCamera.Create(_race);
@@ -106,6 +108,10 @@ public partial class GpxSession : Node
                 _race.CycleFocus();
                 RefreshRibbon();
                 break;
+            case Key.R when _race.Runners.Count > 0 && !_race.Matching:
+                _race.SetSnapToRoads(!_race.SnapToRoads);
+                RefreshRibbon();
+                break;
         }
     }
 
@@ -157,6 +163,14 @@ public partial class GpxSession : Node
                  $"{TimeSpan.FromSeconds(track.Duration):hh\\:mm\\:ss}, " +
                  $"ascent {track.Ascent.ToString("0", inv)} m, timing={track.HasTiming}");
 
+        // Where the track is, in both frames. The LV95 pair says which tiles have to exist;
+        // the world one is what --shot needs to point a camera at it.
+        double midE = (track.Points.Min(p => p.E) + track.Points.Max(p => p.E)) * 0.5;
+        double midN = (track.Points.Min(p => p.N) + track.Points.Max(p => p.N)) * 0.5;
+        var centre = _origin.ToWorld(midE, midN, 0);
+        GD.Print($"[gpx]  centre LV95 {midE.ToString("0", inv)}/{midN.ToString("0", inv)}"
+                 + $"  world {centre.X.ToString("0", inv)},{centre.Z.ToString("0", inv)}");
+
         try
         {
             bool first = _race.Runners.Count == 0;
@@ -166,6 +180,11 @@ public partial class GpxSession : Node
             {
                 _camera.Current = true;
                 _race.Seek(0);
+
+                // "--snap" turns road matching on as soon as there is something to match, which
+                // is how it gets verified headlessly alongside --gpx and --shot
+                if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--snap") >= 0)
+                    _race.SetSnapToRoads(true);
             }
             RefreshRibbon();
         }
@@ -197,10 +216,14 @@ public partial class GpxSession : Node
     {
         var focused = _race.Focused;
         if (focused == null) return;
-        if (_ribbon != null && _ribbon.Track == focused.Track) return;
+
+        // compare against the *active* variant: flipping the road snap changes the course under
+        // the runner, and a ribbon still drawn from the raw fixes would contradict it
+        var course = focused.Active;
+        if (_ribbon != null && _ribbon.Track == course) return;
 
         _ribbon?.QueueFree();
-        _ribbon = TrackRibbon.Create(focused.Track, _chunks, _origin);
+        _ribbon = TrackRibbon.Create(course, _chunks, _origin);
         AddChild(_ribbon);
     }
 }

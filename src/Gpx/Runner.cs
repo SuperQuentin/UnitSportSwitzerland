@@ -12,12 +12,27 @@ namespace UnitSport.Gpx;
 public partial class Runner : Node3D
 {
     public GpxTrack Track { get; private set; } = null!;
+
+    /// <summary>The same track snapped to the road network, once matching has finished.</summary>
+    public GpxTrack? Snapped { get; set; }
+
+    /// <summary>Whether playback follows <see cref="Snapped"/>. Ignored until it exists.</summary>
+    public bool UseSnapped { get; set; }
+
+    /// <summary>
+    /// The variant actually being played. Everything that reads the course — the runner, the
+    /// ribbon, the leaderboard — goes through this, so the toggle can never move one and not
+    /// the other.
+    /// </summary>
+    public GpxTrack Active => UseSnapped && Snapped != null ? Snapped : Track;
+
     public Color Tint { get; private set; }
 
     private WorldOrigin _origin = null!;
     private ChunkManager _chunks = null!;
     private MeshInstance3D _body = null!;
-    private float _bobPhase;
+    private UnitSport.Avatar.HumanPalette _palette = null!;
+    private float _stridePhase;
     private Vector3 _smoothPos;
     private bool _placed;
 
@@ -72,13 +87,13 @@ public partial class Runner : Node3D
 
         // A running figure, jerseyed in the runner's own tint so the leaderboard colour and the
         // avatar agree. One mesh, one material, one draw call — a race can have a dozen of these
-        // on screen and each is a few hundred triangles.
+        // on screen and each is a few hundred triangles. The mesh is rebuilt each frame from the
+        // gait, which is the same cost again and buys legs that actually run.
+        _palette = UnitSport.Avatar.HumanPalette.Default with { Jersey = Tint, Helmet = Tint };
         _body = new MeshInstance3D
         {
             Name = "Body",
-            Mesh = UnitSport.Avatar.HumanMeshBuilder.Build(
-                UnitSport.Avatar.HumanPalette.Default with { Jersey = Tint, Helmet = Tint },
-                UnitSport.Avatar.HumanPose.Running),
+            Mesh = UnitSport.Avatar.HumanMeshBuilder.BuildStride(_palette, 0f, 0f),
             MaterialOverride = UnitSport.Avatar.HumanMeshBuilder.Material(),
         };
         Avatar.AddChild(_body);
@@ -91,9 +106,10 @@ public partial class Runner : Node3D
     /// <summary>Places the avatar for the shared race time.</summary>
     public void UpdateTo(double raceTime, double clockSpeed, double delta)
     {
-        Finished = raceTime >= Track.Duration;
+        var course = Active;
+        Finished = raceTime >= course.Duration;
 
-        var (e, n, recordedEle, speed, distance) = Track.Sample(raceTime);
+        var (e, n, recordedEle, speed, distance) = course.Sample(raceTime);
         Speed = Finished ? 0 : speed;
         Distance = distance;
 
@@ -123,10 +139,10 @@ public partial class Runner : Node3D
         // Facing comes from a look-ahead rather than the adjacent point: over a single
         // 1 Hz step the residual jitter still dominates the direction, which is what makes
         // the runner yaw from side to side like a boat.
-        double ahead = Math.Min(raceTime + HeadingLookahead, Track.Duration);
+        double ahead = Math.Min(raceTime + HeadingLookahead, course.Duration);
         double behind = Math.Max(raceTime - HeadingLookahead, 0);
-        var (fe, fn, _, _, _) = Track.Sample(ahead);
-        var (be, bn, _, _, _) = Track.Sample(behind);
+        var (fe, fn, _, _, _) = course.Sample(ahead);
+        var (be, bn, _, _, _) = course.Sample(behind);
         var dir = _origin.ToWorld(fe, fn, recordedEle) - _origin.ToWorld(be, bn, recordedEle);
         dir.Y = 0;
 
@@ -143,14 +159,19 @@ public partial class Runner : Node3D
         // error from a C# callback can bring the runtime down
         Avatar.GlobalTransform = new Transform3D(SafeBasis(Heading), pos);
 
-        if (delta > 0 && Speed > 0.2)
+        // The stride runs on the *replay* clock, not the wall clock: at 4x playback the legs
+        // have to turn over four times as fast or the runner skates. Head bob is no longer
+        // applied here — the gait raises and drops the hips itself, which is the real thing
+        // the old sine wave was standing in for.
+        if (delta > 0)
         {
-            _bobPhase += (float)(delta * clockSpeed * Speed * 1.9);
-            float amp = Mathf.Clamp((float)Speed / 5f, 0.15f, 1f);
-            // the figure's origin is at its feet, unlike the capsule this replaced whose origin
-            // was its centre — so the bob is about zero, not about half a body height
-            _body.Position = new Vector3(0, Mathf.Sin(_bobPhase * 2f) * 0.05f * amp, 0);
+            float scaled = (float)(delta * clockSpeed);
+            _stridePhase = UnitSport.Avatar.HumanMeshBuilder.AdvancePhase(
+                _stridePhase, (float)Speed, scaled);
         }
+
+        _body.Mesh = UnitSport.Avatar.HumanMeshBuilder.BuildStride(
+            _palette, (float)Speed, _stridePhase);
     }
 
     public static Basis SafeBasis(Vector3 forward)

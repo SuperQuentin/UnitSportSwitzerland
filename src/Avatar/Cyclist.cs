@@ -133,7 +133,8 @@ public partial class Cyclist : Node3D
             var pedal = BottomBracket + new Vector3(
                 side, -Mathf.Sin(angle) * CrankLength, Mathf.Cos(angle) * CrankLength);
 
-            var knee = SolveKnee(hip, pedal, side);
+            // the knee leads the hip on a bicycle; +Z is forward in author space
+            var knee = Limb.Solve(hip, pedal, ThighLength, ShinLength, new Vector3(0, 0, 1));
 
             var scratch = new MeshScratch();
             scratch.Tube(hip, knee, 0.088f, 0.062f, _palette.Shorts, 6);
@@ -144,38 +145,4 @@ public partial class Cyclist : Node3D
         }
     }
 
-    /// <summary>
-    /// Two-bone solve: places the knee so both bones keep their length, bending forward.
-    ///
-    /// <para>
-    /// The knee sits on the circle where the two bone spheres intersect. Picking the forward
-    /// solution is what stops the leg snapping through backwards at the top of the stroke —
-    /// there are always two valid answers and only one of them is a knee.
-    /// </para>
-    /// </summary>
-    private static Vector3 SolveKnee(Vector3 hip, Vector3 pedal, float side)
-    {
-        var toPedal = pedal - hip;
-        float distance = toPedal.Length();
-
-        // a fully extended leg has no bend to compute; nudge it so the tubes stay valid
-        float reach = ThighLength + ShinLength - 0.001f;
-        if (distance >= reach)
-            return hip + toPedal.Normalized() * ThighLength;
-        if (distance < 1e-4f) return hip + Vector3.Forward * ThighLength;
-
-        var direction = toPedal / distance;
-
-        // distance along hip→pedal to the plane where the two spheres meet
-        float along = (distance * distance + ThighLength * ThighLength - ShinLength * ShinLength)
-                      / (2f * distance);
-        float radius = Mathf.Sqrt(Mathf.Max(0f, ThighLength * ThighLength - along * along));
-
-        // bend toward +Z (forward): the knee leads the hip, as on a bicycle
-        var sideways = new Vector3(side, 0, 0).Normalized();
-        var bend = direction.Cross(sideways).Normalized();
-        if (bend.Z < 0) bend = -bend;
-
-        return hip + direction * along + bend * radius;
-    }
 }

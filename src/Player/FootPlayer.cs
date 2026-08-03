@@ -102,6 +102,13 @@ public partial class FootPlayer : CharacterBody3D
     private Node3D? _visual;
     private RideKind _visualKind = RideKind.OnFoot;
 
+    // --- remote figure animation ---
+    private MeshInstance3D? _walker;
+    private Avatar.HumanPalette _walkPalette = Avatar.HumanPalette.Default;
+    private float _stridePhase;
+    private Vector3 _lastSeenPosition;
+    private float _seenSpeed;
+
     /// <summary>Free look while riding. Steering owns the body's yaw, so the eyes get their own.</summary>
     private float _lookYaw;
 
@@ -290,15 +297,18 @@ public partial class FootPlayer : CharacterBody3D
         if (kind == RideKind.OnFoot)
         {
             if (IsMultiplayerAuthority()) return;   // first person: nothing to draw
-            _visual = new MeshInstance3D
+            _walkPalette = Avatar.HumanPalette.ForRider(rider);
+            _walker = new MeshInstance3D
             {
                 Name = "Body",
-                Mesh = Avatar.HumanMeshBuilder.Build(Avatar.HumanPalette.ForRider(rider)),
+                Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f),
                 MaterialOverride = Avatar.HumanMeshBuilder.Material(),
             };
+            _visual = _walker;
         }
         else
         {
+            _walker = null;
             _visual = (_ride ?? Rideable.Create(kind))?.BuildVisual(rider);
         }
 
@@ -320,7 +330,36 @@ public partial class FootPlayer : CharacterBody3D
             if (_visual != null && _ride != null) _ride.Animate(_visual, _motion, (float)delta);
             return;
         }
+
         RefreshVisual();
+        AnimateRemoteWalk((float)delta);
+    }
+
+    /// <summary>
+    /// Walks the remote figure's legs at whatever speed it is actually covering ground.
+    ///
+    /// <para>
+    /// Speed is measured from the replicated position rather than sent: it is already implied by
+    /// the transform stream, and a second synchronised property would only give the two ways to
+    /// disagree. Smoothed, because that stream arrives at the network's rate rather than the
+    /// frame rate, so the raw difference is zero on most frames and a spike on the rest.
+    /// </para>
+    /// </summary>
+    private void AnimateRemoteWalk(float dt)
+    {
+        if (_walker == null || dt <= 0) return;
+
+        var here = GlobalPosition;
+        float measured = new Vector2(here.X - _lastSeenPosition.X, here.Z - _lastSeenPosition.Z)
+            .Length() / dt;
+        _lastSeenPosition = here;
+
+        // reject the teleport-sized jumps a respawn or a rebase produces
+        if (measured > 40f) measured = _seenSpeed;
+        _seenSpeed = Mathf.Lerp(_seenSpeed, measured, 1f - Mathf.Exp(-6f * dt));
+
+        _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, _seenSpeed, dt);
+        _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, _seenSpeed, _stridePhase);
     }
 
     /// <summary>

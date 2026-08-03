@@ -187,10 +187,16 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   primitives only — a tapered tube and a box (`MeshScratch`) — so each is one surface and one
   draw call. `HumanMeshBuilder` poses a figure from a table of joint positions (Standing,
   Running, Cycling); `BikeMeshBuilder` uses real 700c geometry (0.99 m wheelbase, 0.27 m bottom
-  bracket, saddle at 0.90 m) because a bike is a shape everyone knows. `Cyclist` combines them
+  bracket, saddle at 0.90 m) because a bike is a shape everyone knows. Walking and running are
+  **one gait** in `HumanMeshBuilder.GaitRig`, solved from the constraint that a planted foot
+  travels backwards at exactly the body's speed; the walk/run changeover is the duty factor
+  crossing 0.5, which is what creates the flight phase. `Cyclist` combines them
   and splits the mesh three ways — frame, rider, and per-leg — so the cranks turn with cadence
   and the knees follow by a two-bone solve rather than keyframes. Preview with
-  `<godot> --path . -- --avatars <seconds> <out.png> [--view deg] [--focus 0..3]`.
+  `<godot> --path . -- --avatars <seconds> <out.png> [--view deg] [--focus 0..4]`;
+  `--crank <rad>` parks the cranks and `--stride <m/s>` lays one gait cycle out as a strip.
+  Neither a crank's direction nor a foot's slip can be judged from a single frame.
+  All limbs go through `Limb.Solve` (two-bone IK), never keyframes.
 - **A riding position is derived from the bike, never eyeballed.** The three contact points are
   fixed — hips on the saddle, hands on the drops, feet on the pedals — so the shoulder is the
   one place a 0.52 m torso and a 0.58 m arm can both reach. Hand-placing those joints produced a
@@ -236,8 +242,22 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   timeline scrubber, speed multiplier, and a leaderboard with gaps in metres and seconds.
   Each runner is a **streaming anchor**, so terrain loads around the race not the camera.
   Elevation is draped (GPS ele kept only as a drift statistic — measured ~1 m on a real
-  track, a good check that projection and heightfield agree).
+  track, a good check that projection and heightfield agree). Each ghost's legs run the shared
+  gait at its own measured speed, on the **replay** clock — at 4x playback the legs turn over
+  four times as fast, or the runner skates. The gait raises and drops the hips itself, which is
+  what the old hand-written head bob was standing in for.
+  **Snap to roads** (`RoadMatcher`/`RoadNetwork`, HUD button or **R**): map-matches a recording
+  onto the mapped network so a ghost runs *on* the road rather than 5 m beside it. Hidden Markov
+  model in the style of Newson & Krumm — emission from GPS-to-road distance (σ 8 m), transition
+  from |route distance − GPS distance| over a bounded Dijkstra, Viterbi over the whole track.
+  Pointwise nearest-road snapping is what this replaces: the nearest road is very often the wrong
+  one, and the runner then flickers between a carriageway and the cycle path beside it. Each
+  runner keeps **both** variants (`Runner.Raw`/`Snapped`, `Active`), so the toggle is a fair
+  comparison and not a reload; matching runs off the main thread (93 ms for 16 km, tiles
+  included) and is applied back on it. Measured on a real 16 km ride: 98% of fixes near a road,
+  mean move 2.9 m, p95 10.6 m, length +0.2%.
   Keys: **G** add track(s), **Space** play/pause, **C** camera, **F** follow next runner,
+  **R** snap to roads,
   **H** show/hide UI (the toggle button lives outside the hidden panels, or hiding the UI
   would remove the only way back).
   `--gpx <path>` may be repeated to start a race from the command line.
@@ -361,6 +381,41 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   the ground is a 2 m lattice and crossing each bump costs a little forward motion *every frame*;
   compounded, that bled a bike from 107 m of riding to 11 m on flat ground. Only a shortfall
   that **persists** (smoothed, and past `ImpactTolerance`) is an impact.
+- **A map-matched track needs its DISPLACEMENT rate-limited, not its position.** Where the model
+  changes road, the projection jumps: the two roads meet at a junction but the switch happens
+  wherever the fixes stop being nearer one than the other, which is somewhere else. Measured 29
+  steps over 10 m in a single fix across 16 km — one visible sideways twitch every ~550 m. Two
+  fixes failed first: switching at the thinning-sample boundary made it *worse* (51), and
+  bridging unmatched gaps changed nothing. Slew-limiting the snap offset to 1.2 m per fix took it
+  to **0**, and costs only that the track is briefly between two roads at a junction instead of
+  exactly on one — which looks like cutting a corner, i.e. like a runner.
+- **`RoadNetwork` must snap endpoints to rejoin tile-clipped roads.** `.road` segments are clipped
+  at every kilometre boundary, so a road crossing one arrives as two features with coincident
+  ends. Without a snap tolerance every tile edge is a dead end, no route crosses one, and the
+  transition term then scores every step near a seam as impossible.
+- **A `.road` file is not a road file.** It also carries cable cars, rivers, avalanche barriers
+  and dry-stone walls. Matching a GPS track onto a wall is not a near miss, and a wall or a
+  watercourse is often the closest line to a riverside path — `RoadNetwork.IsTravellable` is the
+  filter, and railways are excluded too because they parallel valley roads for kilometres.
+- **A gait is solved from the no-slip constraint, and the arithmetic has two traps.** The planted
+  foot must travel backwards at exactly the body's speed or the figure moonwalks, so the stance
+  sweep is `v × stance time` — and (1) **a cycle is two steps**, so stance time is `duty × 2/cadence`;
+  dropping that factor of two halves every stride. (2) The **ankle** does not travel that far,
+  because contact rolls heel-to-toe along the foot (~0.22 m walking) while the ankle is nearly
+  still. Without that term the sweep comes out at roughly twice what a 0.85 m leg can span and
+  every stance frame clamps. Measured slip after both: 0% from a walk to 3.5 m/s, 8% at 4.6, and
+  26% at a 6 m/s sprint, which is honestly out of the model's reach.
+  Two more, both found by rendering a cycle as a strip: the hip is highest at midstance when
+  **walking** and lowest when **running** (one sign for both makes one gait look wheeled), and
+  arm swing is about a *third* of the leg's — matching the foot needs ±0.6 m from a 0.52 m arm,
+  so the elbows straighten and the runner sleepwalks.
+- **Avatar meshes are authored facing +Z; a Godot node faces −Z.** `MeshScratch.Build` applies the
+  half turn on the way out, once, instead of at each of the four places a figure is parented to a
+  node. Skipping it does not look like a modelling error — the body travels correctly and only the
+  machine is turned around, which from a chase camera reads as *riding in reverse*, and on a GPX
+  ghost as running backwards. It survives a preview turntable, where there is no direction of
+  travel to contradict it. Related: facing +Z, the rider's right is **−X**, so a chainring at +X
+  is on the wrong side of the bike.
 - **A crank turning the wrong way is instantly obvious to anyone who rides.** The bike faces +Z,
   so driving forward turns the chainring with its top moving toward +Z — meaning a crank starting
   at the front goes *down* next. Taking the obvious `(sin, cos)` circle runs it backwards. The

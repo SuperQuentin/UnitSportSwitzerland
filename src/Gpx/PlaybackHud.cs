@@ -17,6 +17,8 @@ public partial class PlaybackHud : CanvasLayer
     private Button _speedButton = null!;
     private Button _cameraButton = null!;
     private Button _focusButton = null!;
+    private Button _snapButton = null!;
+    private string _snapState = "";
     private Label _stats = null!;
     private Label _title = null!;
     private VBoxContainer _board = null!;
@@ -126,6 +128,20 @@ public partial class PlaybackHud : CanvasLayer
         _focusButton = Button("Follow: 1", () => { _race.CycleFocus(); Refresh(); });
         buttons.AddChild(_focusButton);
 
+        // Snapping is a claim about the data, not a display option, so the button reports what
+        // happened — "matching…", "3/4 on roads", or the reason it could not — rather than just
+        // sitting pressed. A track over open mountainside genuinely has no roads to follow, and
+        // that has to be visible or the toggle looks broken.
+        _snapButton = Button("Roads: off", () =>
+        {
+            _race.SetSnapToRoads(!_race.SnapToRoads);
+            Refresh();
+        });
+        _snapButton.CustomMinimumSize = new Vector2(132, 26);
+        _snapButton.TooltipText =
+            "Snap the recorded track onto the mapped road network (R)";
+        buttons.AddChild(_snapButton);
+
         buttons.AddChild(new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
         buttons.AddChild(Button("+ Add ghost", () => AddRequested?.Invoke()));
         buttons.AddChild(Button("Clear", () => ClearRequested?.Invoke()));
@@ -219,11 +235,18 @@ public partial class PlaybackHud : CanvasLayer
         _focusButton.Text = $"Follow: {_race.FocusIndex + 1}";
         _timeline.MaxValue = Math.Max(1, _race.Duration);
 
+        _snapButton.Text = _race.Matching ? "Roads: matching…"
+            : _race.SnapToRoads ? $"Roads: {(_race.SnapStatus.Length > 0 ? _race.SnapStatus : "on")}"
+            : "Roads: off";
+        _snapButton.Disabled = _race.Matching || _race.Runners.Count == 0;
+
         var focused = _race.Focused;
-        _title.Text = focused == null
+        var course = focused?.Active;
+        _title.Text = focused == null || course == null
             ? "no track loaded — press G"
-            : $"{focused.Track.Name}  —  {focused.Track.Length / 1000:0.00} km" +
-              (focused.Track.HasTiming ? "" : "  (no timing, assumed pace)");
+            : $"{focused.Track.Name}  —  {course.Length / 1000:0.00} km" +
+              (focused.Track.HasTiming ? "" : "  (no timing, assumed pace)") +
+              (focused.UseSnapped && focused.Snapped != null ? "  (on roads)" : "");
     }
 
     public override void _Process(double _)
@@ -231,6 +254,16 @@ public partial class PlaybackHud : CanvasLayer
         if (!_uiVisible) return;   // nothing on screen to update
         if (!_scrubbing) _timeline.SetValueNoSignal(_race.Time);
         if (Math.Abs(_timeline.MaxValue - Math.Max(1, _race.Duration)) > 0.01) Refresh();
+
+        // Road matching finishes on a worker thread, so nothing the player did marks the moment
+        // the button should stop saying "matching". Watching the state it displays is enough —
+        // and it is one string comparison, against wiring an event through for one label.
+        string snapState = $"{_race.Matching}|{_race.SnapToRoads}|{_race.SnapStatus}";
+        if (snapState != _snapState)
+        {
+            _snapState = snapState;
+            Refresh();
+        }
 
         bool complete = _race.Complete;
         if (complete != _finishPanel.Visible)

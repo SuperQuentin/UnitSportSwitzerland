@@ -24,6 +24,7 @@ public partial class AvatarPreview : Node3D
     private float _viewDegrees = 90;
     private int _focus = -1;
     private float _crank = float.NaN;
+    private float _stride = float.NaN;
     private Cyclist? _cyclist;
     private readonly List<Node3D> _turntables = new();
 
@@ -44,11 +45,11 @@ public partial class AvatarPreview : Node3D
     }
 
     public static AvatarPreview Create(double seconds, string output, float viewDegrees = 90,
-        int focus = -1, float crank = float.NaN) =>
+        int focus = -1, float crank = float.NaN, float stride = float.NaN) =>
         new()
         {
             Name = "AvatarPreview", _seconds = seconds, _output = output,
-            _viewDegrees = viewDegrees, _focus = focus, _crank = crank,
+            _viewDegrees = viewDegrees, _focus = focus, _crank = crank, _stride = stride,
         };
 
     public override void _Ready()
@@ -85,6 +86,29 @@ public partial class AvatarPreview : Node3D
             },
         };
         AddChild(ground);
+
+        // --stride lays one gait cycle out as a strip. A walk cycle cannot be judged from a
+        // single frame any more than a crank can: what matters is whether the planted foot
+        // stays put between frames, which needs the frames side by side.
+        if (!float.IsNaN(_stride))
+        {
+            const int steps = 6;
+            var strip = new List<Node3D>();
+            for (int i = 0; i < steps; i++)
+                strip.Add(new MeshInstance3D
+                {
+                    Mesh = HumanMeshBuilder.BuildStride(
+                        HumanPalette.ForRider(i), _stride, i / (float)steps),
+                    MaterialOverride = material,
+                });
+
+            for (int i = 0; i < steps; i++) Place((i - (steps - 1) * 0.5f) * 1.15f, strip[i]);
+            var strideCam = new Camera3D { Position = new Vector3(0, 0.95f, 12.5f), Fov = 34 };
+            AddChild(strideCam);
+            strideCam.LookAt(new Vector3(0, 0.85f, 0), Vector3.Up);
+            strideCam.Current = true;
+            return;
+        }
 
         var subjects = new List<Node3D>
         {

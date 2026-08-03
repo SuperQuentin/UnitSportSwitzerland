@@ -23,6 +23,13 @@ public partial class ChunkManager : Node3D
     public LodPolicy Lod { get; set; } = new();
 
     private IChunkSource? _source;
+
+    /// <summary>
+    /// Where tiles come from. Exposed so features that need the underlying data rather than the
+    /// rendered world — GPX road matching reads <c>.road</c> tiles the streaming rings may never
+    /// have loaded — can ask for it directly, and get the same shipped/cache/server tiering.
+    /// </summary>
+    public IChunkSource? Source => _source;
     private WorldOrigin? _origin;
     private Material? _material;
     private HashSet<TileId> _available = new();
