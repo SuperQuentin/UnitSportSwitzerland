@@ -418,10 +418,13 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   once and meshes **10x10 km blocks** (101x101 verts, altitude-band colours only — no cover) out to
   `HorizonKm` (setting, default 60, `--horizon <km>`), one block committed per frame. It is what makes
   the world an open map: the snow peaks 50 km down the Rhône are on screen for ~100 draws. The blocks
-  use their **own** `ps1_terrain` material instance carrying `detail_min/max`, a world-XZ rectangle =
-  the primary anchor's ring square, inside which the shader `discard`s — so the lattice never shows
-  through a tunnel floor or a carved portal, and the tile material (rectangle left at 0/0) never pays
-  for the test. Streamed like `places.json` (`AssetKind.Horizon`, fetched during `ClientTerrainSync`,
+  use their **own** `ps1_terrain` material instance carrying a **per-tile coverage texture**
+  (`HorizonLayer.SetCovered`, one R8 texel per km tile over the region, sampled by world XZ) inside
+  which the shader `discard`s — so the lattice never shows through a tunnel floor or a carved portal,
+  and the tile material (`use_cover = false`) never pays for the test. A texel is set the frame a
+  tile's surface mesh commits and cleared when it unloads. **Not a ring rectangle**: that was tried
+  first and was wrong both ways — it dropped the horizon under tiles that had not arrived yet (a
+  visible gap while loading) and kept it under tiles that had left the rings but not yet unloaded. Streamed like `places.json` (`AssetKind.Horizon`, fetched during `ClientTerrainSync`,
   `HorizonReceived` -> `HorizonLayer.Reload`). Camera `Far` follows it (`GameSettings.CameraFar`).
 - **Settings** (`Core/GameSettings`, `Core/SettingsMenu`, `user://settings.json`): render distance
   in tile rings (6..40, default **15**), detail preset (Low/Medium/High = inner ring table + road/
@@ -436,6 +439,28 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   without being saved. The last ring is always **stride 50** (`LodPolicy.FarStride`, 21x21 verts,
   from the `.terrc`), which is what makes 40 rings (6,561 tiles) cost about what 9 used to.
   A server ignores all of it and keeps 2 rings of full grids around each player.
+- **Stutter is a main-thread commit problem, and every commit is now cheap** — measured with
+  `--fly x,y,z,yaw,speed,seconds` (`FlightProbe`, prints p50/p95/p99/max frame time and counts
+  frames over 20 and 33 ms, non-zero exit on any >33 ms). Baseline after the first async pass: 14
+  frames over 33 ms in a 12 s flight at 150 m/s, worst 147 ms. Four causes, each found by logging
+  commits over 15 ms: (1) **collision** — a 1001² `HeightMapShape3D` is ~80 ms to build, and it was
+  built under the fly camera, which never touches the ground; collision now goes only to anchors
+  that ask for it (`AddAnchor(node, collision:)`, default `node is PhysicsBody3D`; `FootPlayer`
+  registers itself, `TunnelProbe` registers its point). It is also committed **once**, not interim
+  then blended: from local disk the road tile is milliseconds behind, so the ground waits for it
+  (`publishInterimCollision`); over the network it does not. (2) **Trees** — `SetInstanceTransform`
+  + `SetInstanceColor` per tree was two native calls × 60k; the worker now packs the 16-float
+  instance buffer (`ChunkNode.BuildTreeBuffers`) and builds the `MultiMesh` itself with a
+  `CustomAabb`, since assigning a buffer without one makes the server walk every instance for the
+  bounds on the main thread. (3) **ArrayMesh** creation moved to the worker for terrain, roads,
+  buildings and water (`ChunkNode.ToArrayMesh`; `RenderingServer` is thread-safe) — the main thread
+  only assigns the resource. (4) **Building collision** (`ConcavePolygonShape3D`, a BVH build, up to
+  80 ms for a town tile) now rides with the terrain collision — only the tile a body stands on — not
+  with every building mesh. Every result counts against the ms budget, not just surfaces. And the
+  ring evaluation's scan + sort (6,561 tiles at 40 rings, previously every 0.1 s and after every
+  commit — a 51 ms frame) is cached and redone only when an anchor's tile, the ring table, the view
+  octant or the tile set changes. After: **0 frames over 20 ms** at 15 rings, max 12.7 ms; at 40
+  rings max 22 ms; at 6 rings / 150 km horizon / 32 builds max 15.9 ms.
 - **Build cancellation** (`ChunkState.Cts`/`Generation`): every `source.Load*Async` gets the tile's
   token and the worker checks it between stages. A tile that leaves the desired set (beyond
   `MaxDist + UnloadSlack`) or whose *pending* stride is finer than what it now wants past
@@ -525,6 +550,9 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 - French features for a box (needs the terrain built there already; merges into existing tiles):
   `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --france 6.21,46.26,6.27,46.30`
 - Tunnel collision check: `<godot> --path . -- --probe lv95E,lv95N,seconds`
+- Streaming smoothness: `<godot> --path . -- --fly x,y,z,yawDeg,speedMps,seconds [--rings N --horizon km --builds N]`
+  — flies straight at that speed and prints the frame-time distribution; exits non-zero on any
+  frame over 33 ms. The way to check a loader change, since a hitch never shows in a `--shot`.
 - Replay verification flags (all alongside `--gpx <track>`): `--snap` road matching, `--cinemamode`
   Absolute Cinema, `--speed <n>` the playback multiplier, `--lens <n>` a lens profile by index,
   `--path <0..100>` course-line opacity, `--forceshot <name>` pins Absolute Cinema to one named

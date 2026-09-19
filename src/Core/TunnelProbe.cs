@@ -11,7 +11,7 @@ namespace UnitSport.Core;
 ///
 ///   godot --path . -- --probe lv95E,lv95N,seconds
 /// </summary>
-public partial class TunnelProbe : Node
+public partial class TunnelProbe : Node3D
 {
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
@@ -27,6 +27,16 @@ public partial class TunnelProbe : Node
         _n = n;
         _settle = settle;
     }
+
+    // The raycast needs collision under the portal, and nothing here is a physics body, so
+    // this node stands in as a collision anchor at the probe point.
+    public override void _Ready()
+    {
+        Position = _origin.ToWorld(_e, _n, 0);
+        _chunks.AddAnchor(this, collision: true);
+    }
+
+    public override void _ExitTree() => _chunks.RemoveAnchor(this);
 
     public static string[]? ParseArgs()
     {

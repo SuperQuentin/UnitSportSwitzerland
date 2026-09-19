@@ -193,6 +193,7 @@ public partial class ChunkManager : Node3D
         public bool PendingRoads;
         public bool HasBuildings;
         public bool PendingBuildings;
+        public bool HasBuildingCollision;
         public ChunkGrid? Grid;
         public HashSet<int>? Holes;   // tunnel portals; null until the tile is first loaded
         public bool HolesLoaded;
@@ -217,13 +218,15 @@ public partial class ChunkManager : Node3D
         }
     }
 
+    // Meshes arrive as ready ArrayMesh resources: the worker builds them (RenderingServer is
+    // thread-safe), so the main thread's share of a commit is assigning them to nodes.
     private readonly record struct BuildResult(
         TileId Id, int Stride, int Generation, ChunkGrid Grid, bool Interim,
-        TerrainMeshBuilder.MeshData? Mesh, float[]? CollisionMap,
-        RoadMeshBuilder.MeshData? Roads, bool RoadsRequested,
+        ArrayMesh? Mesh, float[]? CollisionMap,
+        ArrayMesh? Roads, bool RoadsRequested,
         HashSet<int>? Holes, byte[]? Cover,
-        BuildingMeshBuilder.MeshData? Buildings, Vector3[]? BuildingFaces, bool BuildingsRequested,
-        List<TreeInstance>? Trees, WaterMeshBuilder.MeshData? Water,
+        ArrayMesh? Buildings, Vector3[]? BuildingFaces, bool BuildingsRequested,
+        ChunkNode.TreeMeshes? Trees, ArrayMesh? Water,
         Vector3[]? RoadCollisionFaces = null);
 
     private Material? _roadMaterial;
@@ -252,6 +255,7 @@ public partial class ChunkManager : Node3D
             Horizon.Initialize(source, origin, horizonMaterial,
                 () => _anchors.Select(a => a.GlobalPosition));
             AddChild(Horizon);
+            FitHorizonCoverage();
         }
 
         // A server only holds grids for height queries around players, so the player's
@@ -330,7 +334,15 @@ public partial class ChunkManager : Node3D
         int added = 0;
         foreach (var id in tiles)
             if (_available.Add(id)) added++;
+        if (added > 0) FitHorizonCoverage();
         return added;
+    }
+
+    private void FitHorizonCoverage()
+    {
+        if (Horizon == null || _available.Count == 0) return;
+        Horizon.EnsureCoverage(_available.Min(t => t.E), _available.Max(t => t.E),
+            _available.Min(t => t.N), _available.Max(t => t.N));
     }
 
     /// <summary>Tiles this client believes exist, from local data plus anything merged in.</summary>
@@ -342,9 +354,26 @@ public partial class ChunkManager : Node3D
     /// </summary>
     public IReadOnlySet<TileId> AvailableTiles => _available;
 
-    public void AddAnchor(Node3D anchor) => _anchors.Add(anchor);
+    /// <summary>
+    /// Registers a streaming anchor. Collision is built only around anchors that ask for it -
+    /// by default any physics body, since a fly camera or a replay ghost never touches the
+    /// ground and a 1001^2 HeightMapShape3D is the most expensive thing a frame can commit.
+    /// </summary>
+    public void AddAnchor(Node3D anchor, bool? collision = null)
+    {
+        if (!_anchors.Contains(anchor)) _anchors.Add(anchor);
+        if (collision ?? anchor is PhysicsBody3D) _collisionAnchors.Add(anchor);
+    }
 
-    public void RemoveAnchor(Node3D anchor) => _anchors.Remove(anchor);
+    public void RemoveAnchor(Node3D anchor)
+    {
+        _anchors.Remove(anchor);
+        _collisionAnchors.Remove(anchor);
+    }
+
+    private readonly HashSet<Node3D> _collisionAnchors = new();
+
+    public bool HasAnchor(Node3D anchor) => _anchors.Contains(anchor);
 
     public int ActiveChunkCount => _chunks.Count;
 
@@ -460,6 +489,17 @@ public partial class ChunkManager : Node3D
         return true;
     }
 
+    /// <summary>
+    /// Whether the tile under a world position has its collision shape committed. A body
+    /// placed before that falls through the ground it can see.
+    /// </summary>
+    public bool HasCollisionAt(Vector3 worldPos)
+    {
+        if (_origin == null) return false;
+        var (e, n) = _origin.ToLv95(worldPos);
+        return _chunks.TryGetValue(TileId.FromLv95(e, n), out var state) && state.HasCollision;
+    }
+
     /// <summary>Script/debug-friendly variant of TryGetHeight; -inf when unknown.</summary>
     public float GetHeightAt(Vector3 worldPos) =>
         TryGetHeight(worldPos, out float h) ? h : float.NegativeInfinity;
@@ -508,9 +548,12 @@ public partial class ChunkManager : Node3D
         // one 1001^2 HeightMapShape3D is the single most expensive thing committed here.
         while (_ready.TryPeek(out var next))
         {
+            // every result counts against the time budget - a tail with buildings and 60k
+            // trees is as expensive as a surface, and letting those through unbudgeted
+            // stacked five of them into one 120 ms frame
             bool overBudget = !OfflineMode && meshCommits > 0
                 && clock.Elapsed.TotalMilliseconds >= CommitBudgetMs;
-            if (next.Mesh != null && overBudget) break;
+            if (overBudget) break;
             if (next.CollisionMap != null && collisionBudget <= 0) break;
             if (!_ready.TryDequeue(out var result)) break;
 
@@ -520,6 +563,7 @@ public partial class ChunkManager : Node3D
                 continue; // cancelled and restarted; this is the stale build's output
 
             committed++;
+            double t0 = clock.Elapsed.TotalMilliseconds;
             state.Grid = result.Grid;
             state.Holes = result.Holes;
             state.HolesLoaded = true;
@@ -531,10 +575,11 @@ public partial class ChunkManager : Node3D
             // ring evaluator would start a second build for it while the first is mid-flight.
             if (!result.Interim) { state.PendingStride = -1; state.Cts = null; }
 
+            meshCommits++;
             if (result.Mesh != null)
             {
-                EnsureNode(result.Id, state).SetMesh(result.Mesh, _material!);
-                meshCommits++;
+                EnsureNode(result.Id, state).SetMesh(result.Mesh);
+                Horizon?.SetCovered(result.Id, true);
             }
             if (result.CollisionMap != null)
             {
@@ -543,33 +588,38 @@ public partial class ChunkManager : Node3D
                 state.PendingCollision = false;
                 collisionBudget--;
             }
+            if (result.BuildingFaces != null)
+            {
+                if (result.BuildingFaces.Length > 0)
+                    EnsureNode(result.Id, state).SetBuildingCollision(result.BuildingFaces);
+                state.HasBuildingCollision = true;
+            }
             if (result.RoadCollisionFaces != null)
                 EnsureNode(result.Id, state).SetRoadCollision(result.RoadCollisionFaces);
             if (result.RoadsRequested)
             {
-                if (result.Roads != null && _roadMaterial != null)
-                    EnsureNode(result.Id, state).SetRoads(result.Roads, _roadMaterial);
+                if (result.Roads != null)
+                    EnsureNode(result.Id, state).SetRoads(result.Roads);
                 // tiles with no road data still count as done, so we stop re-requesting
                 state.HasRoads = true;
                 state.PendingRoads = false;
             }
             if (result.BuildingsRequested)
             {
-                if (result.Buildings != null && _buildingMaterial != null)
-                {
-                    var node = EnsureNode(result.Id, state);
-                    node.SetBuildings(result.Buildings, _buildingMaterial);
-                    if (result.BuildingFaces is { Length: > 0 })
-                        node.SetBuildingCollision(result.BuildingFaces);
-                }
-                if (result.Trees is { Count: > 0 } && _treeMaterial != null)
-                    EnsureNode(result.Id, state).SetTrees(result.Trees, _treeMaterial);
-                if (result.Water != null && _waterMaterial != null)
-                    EnsureNode(result.Id, state).SetWater(result.Water, _waterMaterial);
+                if (result.Buildings != null)
+                    EnsureNode(result.Id, state).SetBuildings(result.Buildings);
+                if (result.Trees != null)
+                    EnsureNode(result.Id, state).SetTrees(result.Trees);
+                if (result.Water != null)
+                    EnsureNode(result.Id, state).SetWater(result.Water);
                 state.HasBuildings = true;
                 state.PendingBuildings = false;
             }
             state.ActiveStride = result.Stride;
+            // a single commit past a frame is worth knowing about: it is what a hitch IS
+            double took = clock.Elapsed.TotalMilliseconds - t0;
+            if (took > 33)
+                GD.Print($"[commit] {result.Id} stride {result.Stride} {(result.Interim ? "interim" : "tail")} took {took:F0} ms");
         }
 
         return committed;
@@ -589,76 +639,46 @@ public partial class ChunkManager : Node3D
         return state.Node;
     }
 
+    private readonly record struct Want(int Stride, bool Collision, bool Roads, bool Buildings, int Dist);
+
+    /// <summary>
+    /// The ring evaluation's expensive half - the square scan, the sort, the unload pass - is
+    /// only redone when something it depends on has changed: an anchor's tile, the ring table,
+    /// the view sector, the set of known tiles. Between those it walks the cached order, which
+    /// at 40 rings is 6,561 dictionary lookups rather than a 6,561-entry sort every 0.1 s and
+    /// again after every commit - measured as a 51 ms frame at the largest render distance.
+    /// </summary>
+    private List<KeyValuePair<TileId, Want>> _ordered = new();
+    private string _orderedKey = "";
+
     private void EvaluateRings()
     {
-        // desired stride per tile = finest over all anchors (0 = grid-only when meshes are off)
-        var desired = new Dictionary<TileId, (int Stride, bool Collision, bool Roads, bool Buildings, int Dist)>();
-        foreach (var anchor in _anchors)
-        {
-            var center = _origin!.TileAt(anchor.GlobalPosition);
-            int radius = Lod.MaxDist;
-            for (int de = -radius; de <= radius; de++)
-                for (int dn = -radius; dn <= radius; dn++)
-                {
-                    var id = new TileId(center.E + de, center.N + dn);
-                    if (!_available.Contains(id)) continue;
-                    int dist = Math.Max(Math.Abs(de), Math.Abs(dn));
-                    int stride = BuildMeshes ? Lod.StrideFor(dist) : 0;
-                    if (stride < 0) continue;
-                    bool collision = BuildCollision && dist <= Lod.CollisionMaxDist;
-                    bool roads = BuildMeshes && dist <= Lod.RoadMaxDist;
-                    bool buildings = BuildMeshes && dist <= Lod.BuildingMaxDist;
-                    // strides are all 0 when meshes are off, otherwise all > 0: min = finest
-                    if (desired.TryGetValue(id, out var cur))
-                        desired[id] = (Math.Min(cur.Stride, stride), cur.Collision || collision,
-                            cur.Roads || roads, cur.Buildings || buildings, Math.Min(cur.Dist, dist));
-                    else
-                        desired[id] = (stride, collision, roads, buildings, dist);
-                }
-        }
-
-        // Nearest first. With everything on local disk the order barely matters, but when the
-        // data is streaming it decides what the player sees: unordered, the tile underfoot
-        // queues behind up to 360 others nine rings out, and you stand in a hole for a minute
-        // while the horizon fills in. Tiles behind the camera are pushed three rings back in
-        // the queue - what is in front of you is what you are waiting for.
         var view = ViewDirection;
-        var primary = _anchors.Count > 0 ? _origin!.TileAt(_anchors[0].GlobalPosition) : default;
-        double Priority(TileId id, int dist)
-        {
-            if (dist <= 2 || view == Vector3.Zero) return dist;
-            var to = new Vector3(id.E - primary.E, 0, -(id.N - primary.N)).Normalized();
-            return to.Dot(view) < -0.3 ? dist + 3 : dist;
-        }
-        var ordered = desired.OrderBy(kv => Priority(kv.Key, kv.Value.Dist)).ToList();
+        // eight sectors: enough to keep "in front of me first" without re-sorting on every
+        // degree of mouse movement
+        int sector = view == Vector3.Zero ? -1
+            : (int)Math.Floor((Math.Atan2(view.Z, view.X) + Math.PI) / (Math.PI / 4)) & 7;
+        var keyBuilder = new System.Text.StringBuilder();
+        foreach (var anchor in _anchors)
+            keyBuilder.Append(_origin!.TileAt(anchor.GlobalPosition)).Append(_collisionAnchors.Contains(anchor) ? 'p' : 'c').Append(';');
+        keyBuilder.Append('|').Append(Lod.GetHashCode()).Append('|').Append(sector)
+            .Append('|').Append(_available.Count).Append('|').Append(BuildMeshes);
+        string key = keyBuilder.ToString();
 
-        // The horizon is dropped wherever real tiles are drawn. The rectangle is the primary
-        // anchor's ring square, which is exact for one anchor and a fair approximation for
-        // several: a ghost's box far from the camera keeps its horizon, which is invisible
-        // from here anyway.
-        if (Horizon != null && _origin != null)
+        if (key != _orderedKey)
         {
-            if (_anchors.Count == 0 || !BuildMeshes)
-                Horizon.SetDetailRect(Vector2.Zero, Vector2.Zero);
-            else
-            {
-                int r = Lod.MaxDist;
-                var nw = _origin.ToWorld((primary.E - r) * 1000.0, (primary.N + r + 1) * 1000.0, 0);
-                var se = _origin.ToWorld((primary.E + r + 1) * 1000.0, (primary.N - r) * 1000.0, 0);
-                Horizon.SetDetailRect(new Vector2(nw.X, nw.Z), new Vector2(se.X, se.Z));
-            }
+            _orderedKey = key;
+            RecomputeDesired(view);
         }
 
-        _desired.Clear();
-        foreach (var (id, _) in ordered) _desired.Add(id);
-
-        foreach (var (id, want) in ordered)
+        foreach (var (id, want) in _ordered)
         {
             if (!_chunks.TryGetValue(id, out var state))
                 _chunks[id] = state = new ChunkState();
 
             bool needMesh = BuildMeshes && state.ActiveStride != want.Stride;
-            bool needCollision = want.Collision && !state.HasCollision && !state.PendingCollision;
+            bool needCollision = want.Collision && !state.PendingCollision
+                && (!state.HasCollision || !state.HasBuildingCollision);
             bool needRoads = want.Roads && !state.HasRoads && !state.PendingRoads;
             bool needBuildings = want.Buildings && !state.HasBuildings && !state.PendingBuildings;
             bool needGrid = state.Grid == null;
@@ -689,6 +709,57 @@ public partial class ChunkManager : Node3D
                 StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings);
             }
         }
+    }
+
+    private void RecomputeDesired(Vector3 view)
+    {
+        // desired stride per tile = finest over all anchors (0 = grid-only when meshes are off)
+        var desired = new Dictionary<TileId, Want>();
+        foreach (var anchor in _anchors)
+        {
+            var center = _origin!.TileAt(anchor.GlobalPosition);
+            int radius = Lod.MaxDist;
+            for (int de = -radius; de <= radius; de++)
+                for (int dn = -radius; dn <= radius; dn++)
+                {
+                    var id = new TileId(center.E + de, center.N + dn);
+                    if (!_available.Contains(id)) continue;
+                    int dist = Math.Max(Math.Abs(de), Math.Abs(dn));
+                    int stride = BuildMeshes ? Lod.StrideFor(dist) : 0;
+                    if (stride < 0) continue;
+                    // Only a body needs ground to stand on. The fly camera and a replay's ghosts
+                    // are the fast movers, and a 1001^2 HeightMapShape3D costs ~80 ms to commit -
+                    // building nine of them under a camera nothing collides with was the single
+                    // biggest hitch in a flight.
+                    bool collision = BuildCollision && dist <= Lod.CollisionMaxDist
+                        && _collisionAnchors.Contains(anchor);
+                    bool roads = BuildMeshes && dist <= Lod.RoadMaxDist;
+                    bool buildings = BuildMeshes && dist <= Lod.BuildingMaxDist;
+                    // strides are all 0 when meshes are off, otherwise all > 0: min = finest
+                    if (desired.TryGetValue(id, out var cur))
+                        desired[id] = new Want(Math.Min(cur.Stride, stride), cur.Collision || collision,
+                            cur.Roads || roads, cur.Buildings || buildings, Math.Min(cur.Dist, dist));
+                    else
+                        desired[id] = new Want(stride, collision, roads, buildings, dist);
+                }
+        }
+
+        // Nearest first. With everything on local disk the order barely matters, but when the
+        // data is streaming it decides what the player sees: unordered, the tile underfoot
+        // queues behind up to 360 others nine rings out, and you stand in a hole for a minute
+        // while the horizon fills in. Tiles behind the camera are pushed three rings back in
+        // the queue - what is in front of you is what you are waiting for.
+        var primary = _anchors.Count > 0 ? _origin!.TileAt(_anchors[0].GlobalPosition) : default;
+        double Priority(TileId id, int dist)
+        {
+            if (dist <= 2 || view == Vector3.Zero) return dist;
+            var to = new Vector3(id.E - primary.E, 0, -(id.N - primary.N)).Normalized();
+            return to.Dot(view) < -0.3 ? dist + 3 : dist;
+        }
+        _ordered = desired.OrderBy(kv => Priority(kv.Key, kv.Value.Dist)).ToList();
+
+        _desired.Clear();
+        foreach (var (id, _) in _ordered) _desired.Add(id);
 
         // unload with hysteresis
         var toRemove = new List<TileId>();
@@ -712,6 +783,7 @@ public partial class ChunkManager : Node3D
             }
             gone.Node?.QueueFree();
             _chunks.Remove(id);
+            Horizon?.SetCovered(id, false);
         }
     }
 
@@ -750,6 +822,12 @@ public partial class ChunkManager : Node3D
         bool coverLoaded = state.CoverLoaded;
         var source = _source!;
         bool buildMesh = BuildMeshes && stride > 0;
+        bool streaming = Streaming?.Invoke() == true;
+        var terrainMaterial = _material;
+        var roadMaterial = _roadMaterial;
+        var buildingMaterial = _buildingMaterial;
+        var waterMaterial = _waterMaterial;
+        var treeMaterial = _treeMaterial;
 
         Task.Run(async () =>
         {
@@ -781,10 +859,18 @@ public partial class ChunkManager : Node3D
                 Lap(ref _msAux, clock);
                 ct.ThrowIfCancellationRequested();
 
-                var mesh = buildMesh ? TerrainMeshBuilder.BuildSurface(grid, stride, holes, cover) : null;
+                ArrayMesh? mesh = null;
+                if (buildMesh && terrainMaterial != null)
+                    mesh = ChunkNode.ToArrayMesh(TerrainMeshBuilder.BuildSurface(grid, stride, holes, cover), terrainMaterial);
                 Lap(ref _msSurface, clock);
 
+                // The collision map is dequantised here in any case, but whether it is published
+                // NOW or only once the road tile has been blended in is the difference between
+                // one 80 ms HeightMapShape3D commit per tile and two. From local disk the road
+                // tile is milliseconds behind, so the ground waits for it; over the network it
+                // may be seconds, and a player standing over a hole is worse than a hitch.
                 var collision = wantCollision ? TerrainMeshBuilder.BuildCollisionMap(grid, holes) : null;
+                bool publishInterimCollision = collision != null && (!wantRoads || streaming);
                 Lap(ref _msCollision, clock);
                 ct.ThrowIfCancellationRequested();
 
@@ -798,11 +884,12 @@ public partial class ChunkManager : Node3D
                 // waiting for the tail. Trying instead to render a *coarse* tile from the height
                 // grid alone was measurably worse — it adds a second serialised stage per tile
                 // and both stages compete for the same six streaming slots.
-                if (mesh != null || collision != null)
+                if (mesh != null || publishInterimCollision)
                     _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: true,
-                        mesh, collision, null, false, holes, cover, null, null, false, null, null));
+                        mesh, publishInterimCollision ? collision : null, null, false, holes, cover,
+                        null, null, false, null, null));
 
-                RoadMeshBuilder.MeshData? roads = null;
+                ArrayMesh? roads = null;
                 RoadTile? roadTile = null;
                 if (wantRoads)
                 {
@@ -811,37 +898,51 @@ public partial class ChunkManager : Node3D
                     Lap(ref _msRoadLoad, clock);
 
                     // the grid lets bridge piers and cableway pylons find their footing
-                    if (roadTile != null) roads = RoadMeshBuilder.Build(roadTile, grid);
+                    if (roadTile != null && roadMaterial != null)
+                        roads = ChunkNode.ToArrayMesh(RoadMeshBuilder.Build(roadTile, grid), roadMaterial);
                     Lap(ref _msRoadMesh, clock);
                 }
 
-                List<TreeInstance>? trees = null;
-                WaterMeshBuilder.MeshData? water = null;
+                ChunkNode.TreeMeshes? trees = null;
+                ArrayMesh? water = null;
                 if (wantBuildings)
                 {
-                    trees = await source.LoadTreesAsync(id, ct);
+                    var treeList = await source.LoadTreesAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
+                    if (treeList is { Count: > 0 } && treeMaterial != null)
+                    {
+                        // a tile's trees lie within its square; the height range is the
+                        // terrain's plus the tallest tree, generously
+                        var bounds = new Aabb(new Vector3(0, grid.MinHeight - 10, 0),
+                            new Vector3(1000, grid.MaxHeight - grid.MinHeight + 80, 1000));
+                        trees = ChunkNode.BuildTreeMeshes(ChunkNode.BuildTreeBuffers(treeList), treeMaterial, bounds);
+                    }
                     Lap(ref _msTrees, clock);
 
                     // watercourses ride in the road tile but are meshed here, so a stream gets
                     // the water material instead of being drawn as a narrow blue road
-                    if (cover != null) water = WaterMeshBuilder.Build(grid, cover, roadTile);
+                    if (cover != null && waterMaterial != null
+                        && WaterMeshBuilder.Build(grid, cover, roadTile) is { } waterData)
+                        water = ChunkNode.ToArrayMesh(waterData, waterMaterial);
                     Lap(ref _msWater, clock);
                 }
 
-                BuildingMeshBuilder.MeshData? buildings = null;
+                // Building collision goes with the terrain's, not with the building meshes: a
+                // ConcavePolygonShape3D is a BVH build on the main thread (up to 80 ms for a
+                // town tile), and only the tile a body stands on needs one. Empty faces still
+                // mark the tile done, so it is not asked again.
+                ArrayMesh? buildings = null;
                 Vector3[]? buildingFaces = null;
-                if (wantBuildings)
+                if (wantBuildings || wantCollision)
                 {
                     var bTile = await source.LoadBuildingsAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
                     Lap(ref _msBldgLoad, clock);
 
-                    if (bTile != null)
-                    {
-                        buildings = BuildingMeshBuilder.Build(bTile);
-                        buildingFaces = BuildingMeshBuilder.BuildCollisionFaces(bTile);
-                    }
+                    if (wantBuildings && bTile != null && buildingMaterial != null)
+                        buildings = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(bTile), buildingMaterial);
+                    if (wantCollision)
+                        buildingFaces = bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : [];
                     Lap(ref _msBldgMesh, clock);
                 }
 
@@ -851,7 +952,7 @@ public partial class ChunkManager : Node3D
                 // fix. Recomputed rather than patched in place: BuildCollisionMap is a cheap
                 // dequantize pass, and redoing it keeps the corridor-blend logic in one place
                 // rather than needing a second incremental-update code path.
-                float[]? blendedCollision = null;
+                float[]? blendedCollision = publishInterimCollision ? null : collision;
                 Vector3[]? bridgeCollision = null;
                 if (wantCollision && roadTile != null)
                 {

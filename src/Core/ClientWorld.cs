@@ -134,6 +134,7 @@ public partial class ClientWorld : Node3D
         // --shot and --probe place the camera themselves, and a spawn drop would fight
         // them for the height.
         bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
+            || FlightProbe.ParseArgs() != null
             || RideProbe.ParseArgs() != null || Gpx.Cinema.CinemaProbe.ParseArgs() != null;
         if (!placedByTool)
         {
@@ -230,6 +231,18 @@ public partial class ClientWorld : Node3D
             AddChild(new TunnelProbe(_chunks, origin,
                 double.Parse(probe[0], inv0), double.Parse(probe[1], inv0),
                 double.Parse(probe[2], inv0)));
+            return;
+        }
+
+        if (FlightProbe.ParseArgs() is { } fly)
+        {
+            _spectator.SetProcess(false);
+            _spectator.SetProcessUnhandledInput(false);
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            AddChild(new FlightProbe(_spectator, _chunks,
+                new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
+                float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv)));
             return;
         }
 

@@ -79,18 +79,71 @@ public partial class HorizonLayer : Node3D
         });
     }
 
-    /// <summary>
-    /// World-space XZ rectangle currently covered by real tiles, inside which the horizon is
-    /// not drawn. Pass min == max to draw it everywhere (no tiles at all).
-    /// </summary>
-    public void SetDetailRect(Vector2 min, Vector2 max)
+    // ---- coverage: which km tiles have a real mesh on screen ---------------------------
+    //
+    // One texel per tile over the whole region (Switzerland is ~350 x 220 km, so a few hundred
+    // texels a side), sampled by world position in the shader. Per tile rather than one ring
+    // rectangle because the rectangle was wrong twice: it dropped the horizon under tiles that
+    // had not arrived yet - the gap seen while loading - and kept it under tiles that had
+    // left the rings but not yet unloaded.
+
+    private Image? _coverImage;
+    private ImageTexture? _coverTexture;
+    private int _coverMinE, _coverMaxN, _coverCols, _coverRows;
+    private bool _coverDirty;
+
+    /// <summary>(Re)sizes the coverage texture to hold every tile the world knows about.</summary>
+    public void EnsureCoverage(int minE, int maxE, int minN, int maxN)
     {
-        _material?.SetShaderParameter("detail_min", min);
-        _material?.SetShaderParameter("detail_max", max);
+        int cols = maxE - minE + 1, rows = maxN - minN + 1;
+        if (_coverImage != null && minE >= _coverMinE && maxN <= _coverMaxN
+            && minE + cols <= _coverMinE + _coverCols && maxN - rows >= _coverMaxN - _coverRows)
+            return;
+
+        // a little slack so a merged server manifest rarely forces a rebuild
+        minE -= 8; maxE += 8; minN -= 8; maxN += 8;
+        cols = maxE - minE + 1; rows = maxN - minN + 1;
+        var image = Image.CreateEmpty(cols, rows, false, Image.Format.R8);
+        image.Fill(Colors.Black);
+        // carry over what is already covered
+        if (_coverImage != null)
+            for (int r = 0; r < _coverRows; r++)
+                for (int c = 0; c < _coverCols; c++)
+                    if (_coverImage.GetPixel(c, r).R > 0.5f)
+                    {
+                        int e = _coverMinE + c, n = _coverMaxN - r;
+                        image.SetPixel(e - minE, maxN - n, Colors.White);
+                    }
+        _coverImage = image;
+        _coverMinE = minE; _coverMaxN = maxN; _coverCols = cols; _coverRows = rows;
+        _coverTexture = ImageTexture.CreateFromImage(image);
+
+        var nw = _origin!.ToWorld(minE * ChunkFormat.TileSizeM, (maxN + 1) * ChunkFormat.TileSizeM, 0);
+        _material?.SetShaderParameter("detail_cover", _coverTexture);
+        _material?.SetShaderParameter("cover_origin", new Vector2(nw.X, nw.Z));
+        _material?.SetShaderParameter("cover_extent",
+            new Vector2((float)(cols * ChunkFormat.TileSizeM), (float)(rows * ChunkFormat.TileSizeM)));
+        _material?.SetShaderParameter("use_cover", true);
+    }
+
+    /// <summary>Marks a tile as drawn by real terrain (or not); the texture uploads next frame.</summary>
+    public void SetCovered(TileId id, bool covered)
+    {
+        if (_coverImage == null) return;
+        int c = id.E - _coverMinE, r = _coverMaxN - id.N;
+        if (c < 0 || r < 0 || c >= _coverCols || r >= _coverRows) return;
+        _coverImage.SetPixel(c, r, covered ? Colors.White : Colors.Black);
+        _coverDirty = true;
     }
 
     public override void _Process(double delta)
     {
+        if (_coverDirty && _coverTexture != null && _coverImage != null)
+        {
+            _coverTexture.Update(_coverImage);
+            _coverDirty = false;
+        }
+
         if (_index == null || _origin == null || _anchors == null) return;
 
         // one block a frame: a 101x101 ArrayMesh is small, but a teleport wants ~100 of them

@@ -13,27 +13,24 @@ public partial class ChunkNode : Node3D
     private MeshInstance3D? _roadInstance;
     private StaticBody3D? _body;
 
-    public void SetMesh(TerrainMeshBuilder.MeshData data, Material material)
+    // ---- ArrayMesh construction ---------------------------------------------------------
+    //
+    // Building the ArrayMesh is the expensive half of a commit - a million-vertex tile is
+    // 30 ms of packing and upload - and none of it needs the scene tree. Godot's
+    // RenderingServer is thread-safe (calls from other threads are queued), so the build
+    // worker creates the resource and the main thread only assigns it to a MeshInstance3D.
+
+    public static ArrayMesh ToArrayMesh(TerrainMeshBuilder.MeshData data, Material material)
     {
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
         arrays[(int)Mesh.ArrayType.Index] = data.Indices;
-
-        var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        mesh.SurfaceSetMaterial(0, material);
-
-        if (_meshInstance == null)
-        {
-            _meshInstance = new MeshInstance3D();
-            AddChild(_meshInstance);
-        }
-        _meshInstance.Mesh = mesh;
+        return Finish(arrays, material);
     }
 
-    public void SetRoads(RoadMeshBuilder.MeshData data, Material material)
+    public static ArrayMesh ToArrayMesh(RoadMeshBuilder.MeshData data, Material material)
     {
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
@@ -42,11 +39,52 @@ public partial class ChunkNode : Node3D
         arrays[(int)Mesh.ArrayType.TexUV] = data.Uvs;
         arrays[(int)Mesh.ArrayType.TexUV2] = data.Uv2s;
         arrays[(int)Mesh.ArrayType.Index] = data.Indices;
+        return Finish(arrays, material);
+    }
 
+    public static ArrayMesh ToArrayMesh(BuildingMeshBuilder.MeshData data, Material material)
+    {
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
+        arrays[(int)Mesh.ArrayType.Color] = data.Colors;
+        arrays[(int)Mesh.ArrayType.TexUV] = data.Uvs;
+        arrays[(int)Mesh.ArrayType.TexUV2] = data.Uv2s;
+        return Finish(arrays, material);
+    }
+
+    public static ArrayMesh ToArrayMesh(WaterMeshBuilder.MeshData data, Material material)
+    {
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
+        arrays[(int)Mesh.ArrayType.Index] = data.Indices;
+        return Finish(arrays, material);
+    }
+
+    private static ArrayMesh Finish(Godot.Collections.Array arrays, Material material)
+    {
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         mesh.SurfaceSetMaterial(0, material);
+        return mesh;
+    }
 
+    public void SetMesh(TerrainMeshBuilder.MeshData data, Material material) =>
+        SetMesh(ToArrayMesh(data, material));
+
+    public void SetMesh(ArrayMesh mesh)
+    {
+        if (_meshInstance == null)
+        {
+            _meshInstance = new MeshInstance3D();
+            AddChild(_meshInstance);
+        }
+        _meshInstance.Mesh = mesh;
+    }
+
+    public void SetRoads(ArrayMesh mesh)
+    {
         if (_roadInstance == null)
         {
             _roadInstance = new MeshInstance3D { Name = "Roads" };
@@ -58,19 +96,8 @@ public partial class ChunkNode : Node3D
     private MeshInstance3D? _buildingInstance;
     private StaticBody3D? _buildingBody;
 
-    public void SetBuildings(BuildingMeshBuilder.MeshData data, Material material)
+    public void SetBuildings(ArrayMesh mesh)
     {
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
-        arrays[(int)Mesh.ArrayType.Color] = data.Colors;
-        arrays[(int)Mesh.ArrayType.TexUV] = data.Uvs;
-        arrays[(int)Mesh.ArrayType.TexUV2] = data.Uv2s;
-
-        var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        mesh.SurfaceSetMaterial(0, material);
-
         if (_buildingInstance == null)
         {
             _buildingInstance = new MeshInstance3D { Name = "Buildings" };
@@ -136,36 +163,34 @@ public partial class ChunkNode : Node3D
     /// and shrubs share a spire, while fruit trees and TLM's surveyed single trees are
     /// broadleaves standing in the open and need a round crown to read as such.
     /// </summary>
-    public void SetTrees(IReadOnlyList<TreeInstance> trees, Material material)
+    /// <summary>
+    /// Instance buffers for the two tree MultiMeshes, in Godot's packed layout (12 transform
+    /// floats then 4 colour floats per instance). Pure arithmetic, so it runs on the build
+    /// worker; the main thread then uploads each with one <c>Buffer</c> assignment instead of
+    /// two native calls per tree — 60,000 trees a tile used to cost 30 ms of commit.
+    /// </summary>
+    public sealed record TreeBuffers(float[] Conifers, int ConiferCount, float[] Broadleaves, int BroadleafCount);
+
+    public static TreeBuffers BuildTreeBuffers(IReadOnlyList<TreeInstance> trees)
     {
         // Kind: 0 conifer, 1 shrub, 2 fruit tree, 3 surveyed solitary broadleaf
-        Fill(ref _coniferInstance, "Trees", trees, t => t.Kind is 0 or 1, ConeMesh(material));
-        Fill(ref _broadleafInstance, "Broadleaves", trees, t => t.Kind is 2 or 3, CrownMesh(material));
+        var (cone, coneCount) = Pack(trees, t => t.Kind is 0 or 1);
+        var (crown, crownCount) = Pack(trees, t => t.Kind is 2 or 3);
+        return new TreeBuffers(cone, coneCount, crown, crownCount);
     }
 
-    private void Fill(ref MultiMeshInstance3D? node, string name, IReadOnlyList<TreeInstance> trees,
-        Func<TreeInstance, bool> wanted, ArrayMesh mesh)
+    private const int FloatsPerInstance = 16;
+
+    private static (float[] Buffer, int Count) Pack(IReadOnlyList<TreeInstance> trees, Func<TreeInstance, bool> wanted)
     {
-        var picked = new List<TreeInstance>();
-        foreach (var t in trees) if (wanted(t)) picked.Add(t);
+        int count = 0;
+        foreach (var t in trees) if (wanted(t)) count++;
+        var buffer = new float[count * FloatsPerInstance];
 
-        if (picked.Count == 0)
+        int i = 0;
+        foreach (var t in trees)
         {
-            if (node != null) node.Visible = false;
-            return;
-        }
-
-        var multi = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseColors = true,
-            Mesh = mesh,
-            InstanceCount = picked.Count,
-        };
-
-        for (int i = 0; i < picked.Count; i++)
-        {
-            var t = picked[i];
+            if (!wanted(t)) continue;
             // scale the shared unit mesh to this tree's height; girth separates the kinds
             float slenderness = t.Kind switch
             {
@@ -175,24 +200,72 @@ public partial class ChunkNode : Node3D
                 _ => 0.26f,   // conifer
             };
             float radius = t.Height * slenderness;
-            var basis = new Basis(
-                new Vector3(radius, 0, 0),
-                new Vector3(0, t.Height, 0),
-                new Vector3(0, 0, radius));
-            multi.SetInstanceTransform(i, new Transform3D(basis, new Vector3(t.X, t.Y, t.Z)));
 
             // vary tone per tree so a forest is not one flat mass
             float v = (i * 0.6180339f) % 1f;
-            var tint = t.Kind switch
+            var tint = (t.Kind switch
             {
                 1 => new Color(0.30f, 0.36f, 0.20f),
                 2 => new Color(0.28f + v * 0.06f, 0.40f + v * 0.07f, 0.18f + v * 0.04f),
                 3 => new Color(0.21f + v * 0.08f, 0.35f + v * 0.10f, 0.16f + v * 0.05f),
                 _ => new Color(0.13f + v * 0.07f, 0.24f + v * 0.09f, 0.12f + v * 0.05f),
-            };
-            multi.SetInstanceColor(i, tint.SrgbToLinear());
-        }
+            }).SrgbToLinear();
 
+            // Transform3D as three rows of (basis column x, y, z, origin): a diagonal basis
+            // of (radius, height, radius) with the tree's position as the last column.
+            int o = i * FloatsPerInstance;
+            buffer[o + 0] = radius; buffer[o + 1] = 0; buffer[o + 2] = 0; buffer[o + 3] = t.X;
+            buffer[o + 4] = 0; buffer[o + 5] = t.Height; buffer[o + 6] = 0; buffer[o + 7] = t.Y;
+            buffer[o + 8] = 0; buffer[o + 9] = 0; buffer[o + 10] = radius; buffer[o + 11] = t.Z;
+            buffer[o + 12] = tint.R; buffer[o + 13] = tint.G; buffer[o + 14] = tint.B; buffer[o + 15] = tint.A;
+            i++;
+        }
+        return (buffer, count);
+    }
+
+    /// <summary>The two MultiMeshes of a tile, built on the worker; null where a tile has none.</summary>
+    public sealed record TreeMeshes(MultiMesh? Conifers, MultiMesh? Broadleaves);
+
+    /// <summary>
+    /// Builds the MultiMesh resources off the main thread. The bounds are given rather than
+    /// computed: assigning a buffer makes the RenderingServer walk every instance for an AABB,
+    /// 16 ms for a 60k-tree tile on the main thread, unless a custom one is already set.
+    /// </summary>
+    public static TreeMeshes BuildTreeMeshes(TreeBuffers trees, Material material, Aabb bounds)
+    {
+        return new TreeMeshes(
+            Make(trees.Conifers, trees.ConiferCount, ConeMesh(material), bounds),
+            Make(trees.Broadleaves, trees.BroadleafCount, CrownMesh(material), bounds));
+    }
+
+    private static MultiMesh? Make(float[] buffer, int count, ArrayMesh mesh, Aabb bounds)
+    {
+        if (count == 0) return null;
+        var multi = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseColors = true,
+            Mesh = mesh,
+            CustomAabb = bounds,
+            InstanceCount = count,
+        };
+        multi.Buffer = buffer;
+        return multi;
+    }
+
+    public void SetTrees(TreeMeshes trees)
+    {
+        Fill(ref _coniferInstance, "Trees", trees.Conifers);
+        Fill(ref _broadleafInstance, "Broadleaves", trees.Broadleaves);
+    }
+
+    private void Fill(ref MultiMeshInstance3D? node, string name, MultiMesh? multi)
+    {
+        if (multi == null)
+        {
+            if (node != null) node.Visible = false;
+            return;
+        }
         if (node == null)
         {
             node = new MultiMeshInstance3D { Name = name };
@@ -265,17 +338,8 @@ public partial class ChunkNode : Node3D
 
     private MeshInstance3D? _waterInstance;
 
-    public void SetWater(WaterMeshBuilder.MeshData data, Material material)
+    public void SetWater(ArrayMesh mesh)
     {
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
-        arrays[(int)Mesh.ArrayType.Index] = data.Indices;
-
-        var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        mesh.SurfaceSetMaterial(0, material);
-
         if (_waterInstance == null)
         {
             _waterInstance = new MeshInstance3D { Name = "Water" };

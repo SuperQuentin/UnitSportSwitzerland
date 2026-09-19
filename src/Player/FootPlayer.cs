@@ -211,6 +211,17 @@ public partial class FootPlayer : CharacterBody3D
         }
     }
 
+    /// <summary>
+    /// A body is what needs ground under it, so it registers itself as a collision anchor
+    /// rather than relying on whoever spawned it to remember - the ride probe did not.
+    /// </summary>
+    public override void _EnterTree()
+    {
+        if (Terrain != null && !Terrain.HasAnchor(this)) Terrain.AddAnchor(this, collision: true);
+    }
+
+    public override void _ExitTree() => Terrain?.RemoveAnchor(this);
+
     public override void _Ready()
     {
         // authority pushes its transform to everyone else (server relays)
@@ -424,7 +435,10 @@ public partial class FootPlayer : CharacterBody3D
         // drop onto the terrain surface once its height data is available
         if (!_placed)
         {
-            if (Terrain == null || !Terrain.TryGetHeight(GlobalPosition, out float g))
+            // and its collision: the fly camera does not ask for one, so the tile this body
+            // was dropped onto may have a mesh and no ground to stand on for a few frames
+            if (Terrain == null || !Terrain.TryGetHeight(GlobalPosition, out float g)
+                || !Terrain.HasCollisionAt(GlobalPosition))
                 return;
             GlobalPosition = new Vector3(GlobalPosition.X, Mathf.Max(GlobalPosition.Y, g + 1f), GlobalPosition.Z);
             _placed = true;
