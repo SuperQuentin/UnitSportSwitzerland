@@ -17,6 +17,11 @@ uniform float bay_depth = 5.0;
 uniform float vine_row_spacing = 2.0;  // typical Valais row spacing
 uniform vec3 vine_color : source_color = vec3(0.22, 0.32, 0.15);
 uniform float mow_stripe = 6.0;
+// The far-horizon material only: world-XZ rectangle covered by real streamed tiles, inside
+// which the 100 m lattice is dropped so it never shows through a tunnel floor or a carved
+// portal. Equal min/max (the default) disables it, so tile materials never pay for it.
+uniform vec2 detail_min = vec2(0.0);
+uniform vec2 detail_max = vec2(0.0);
 
 
 varying vec3 world_pos;
@@ -35,6 +40,11 @@ void vertex() {
 
 
 void fragment() {
+    if (detail_max.x > detail_min.x
+        && world_pos.x > detail_min.x && world_pos.x < detail_max.x
+        && world_pos.z > detail_min.y && world_pos.z < detail_max.y) {
+        discard;
+    }
     vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
     if (n.y < 0.0) {
         n = -n;

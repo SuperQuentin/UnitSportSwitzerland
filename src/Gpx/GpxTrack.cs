@@ -1,3 +1,5 @@
+using UnitSport.Player;
+
 namespace UnitSport.Gpx;
 
 /// <summary>One recorded fix, already projected to LV95.</summary>
@@ -15,6 +17,27 @@ public sealed class GpxTrack
 
     /// <summary>True when the file carried usable timestamps.</summary>
     public required bool HasTiming { get; init; }
+
+    /// <summary>
+    /// True when <see cref="TrackPoint.Elevation"/> is the road surface rather than a GPS reading.
+    ///
+    /// <para>
+    /// A recorded track is draped onto the terrain at playback, because its own elevation is
+    /// noisy. A road-matched one must NOT be: the road already carries a surveyed deck height on
+    /// a bridge and a bore height in a tunnel, and re-draping throws both away — dropping the
+    /// runner into the gorge the bridge spans and walking them over the mountain the tunnel goes
+    /// through.
+    /// </para>
+    /// </summary>
+    public bool ElevationIsSurface { get; init; }
+
+    /// <summary>
+    /// What the recording was made as, so playback can put the right avatar on the course
+    /// instead of always running one. Read from the GPX <c>&lt;type&gt;</c> element; a file with
+    /// no type, or one naming an activity we do not model a rig for, plays as a runner - the
+    /// original behaviour, so nothing regresses for the tracks this never mattered for.
+    /// </summary>
+    public RideKind Kind { get; init; } = RideKind.OnFoot;
 
     public double Duration => Points.Count == 0 ? 0 : Points[^1].Seconds;
     public double Length => Points.Count == 0 ? 0 : Points[^1].Distance;

@@ -49,7 +49,7 @@ godot --path . -- --goto Lausanne          # by name
 godot --path . -- --at 2538000,1152000     # or by LV95 easting/northing
 ```
 
-- **WASD + mouse** — fly around. **Shift** boost. Click to take the mouse back after a menu
+- **WASD + mouse** — fly around. **Space** up, **Shift** down, **Ctrl** boost. Click to take the mouse back after a menu
 - **T** — drop onto the ground and walk. **T** again to fly
 - On foot: **Shift** run, **Space** jump, **Ctrl** slide, **Space** against a wall to wall jump
 - **Tab** — search for a town and teleport there (only places with terrain are listed)

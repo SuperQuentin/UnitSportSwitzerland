@@ -57,36 +57,61 @@ public partial class RacePlayback : Node3D
         if (enabled == SnapToRoads) return;
         SnapToRoads = enabled;
 
-        if (!enabled)
+        // EVERY exit from here has changed which course the runners follow, so every exit has to
+        // say so. Raising SnapChanged only when a matching pass finished meant the two paths that
+        // return early - turning it off, and turning it back on when everything is already matched
+        // - left the ribbon drawn from one variant while the avatar ran the other. That does not
+        // read as a stale ribbon; it reads as the body being rotated off the path. Hence one
+        // try/finally rather than an invoke copied before four returns, which is how it drifted.
+        try
         {
-            foreach (var r in Runners) r.UseSnapped = false;
-            SnapStatus = "";
+            if (!enabled)
+            {
+                // A match still running would otherwise land minutes later and re-arm a toggle the
+                // player has already turned off. SnapStatus is deliberately NOT cleared: it is only
+                // ever displayed while snapping is on, and keeping it means turning the toggle back
+                // on reports the original "3/4" rather than a flat "on".
+                _matchCancel?.Cancel();
+                _matchCancel = null;
+                Matching = false;
+                foreach (var r in Runners) r.UseSnapped = false;
+                Seek(Time);
+                return;
+            }
+
+            foreach (var r in Runners) r.UseSnapped = true;
             Seek(Time);
-            return;
+
+            var pending = Runners.Where(r => r.Snapped == null).ToList();
+            if (pending.Count == 0)
+            {
+                // Clearing Matching here is what stops the button sticking. Add() cancels a running
+                // pass by flipping the flag and calling back in; the cancelled task returns without
+                // reaching Finish(), so if the new call lands on this branch nothing else ever
+                // clears Matching - and the button stays disabled and R stays blocked for good.
+                Matching = false;
+                SnapStatus = "on";
+                return;
+            }
+
+            var source = _chunks.Source;
+            if (source == null)
+            {
+                Matching = false;
+                SnapStatus = "no terrain source";
+                return;
+            }
+
+            _matchCancel?.Cancel();
+            _matchCancel = new CancellationTokenSource();
+            Matching = true;
+            SnapStatus = "matching…";
+            _ = MatchAllAsync(pending, source, _matchCancel.Token);
         }
-
-        foreach (var r in Runners) r.UseSnapped = true;
-        Seek(Time);
-
-        var pending = Runners.Where(r => r.Snapped == null).ToList();
-        if (pending.Count == 0)
+        finally
         {
-            SnapStatus = "on";
-            return;
+            SnapChanged?.Invoke();
         }
-
-        var source = _chunks.Source;
-        if (source == null)
-        {
-            SnapStatus = "no terrain source";
-            return;
-        }
-
-        _matchCancel?.Cancel();
-        _matchCancel = new CancellationTokenSource();
-        Matching = true;
-        SnapStatus = "matching…";
-        _ = MatchAllAsync(pending, source, _matchCancel.Token);
     }
 
     private async Task MatchAllAsync(List<Runner> runners, Terrain.IChunkSource source,
@@ -121,7 +146,8 @@ public partial class RacePlayback : Node3D
                     + $"length {runner.Track.Length / 1000:F2} -> {result.Track!.Length / 1000:F2} km "
                     + $"({shrink:P1} shorter), moved mean {result.MeanOffset:F1} m / "
                     + $"p95 {result.P95Offset:F1} m, {result.Jumps} road hops, "
-                    + $"{clock.ElapsedMilliseconds} ms");
+                    + $"{clock.ElapsedMilliseconds} ms, "
+                    + $"road surface up to {result.MaxLift:F1} m off the recording");
             }
             else
             {
@@ -159,7 +185,10 @@ public partial class RacePlayback : Node3D
         SnapChanged?.Invoke();
     }
 
-    /// <summary>Raised when matching completes, so the HUD can stop saying "matching".</summary>
+    /// <summary>
+    /// Raised whenever the active course changes - both ends of the toggle, and the end of a
+    /// matching pass. Anything derived from the course (the ribbon, the cinema plan) hangs off it.
+    /// </summary>
     public event Action? SnapChanged;
 
     public override void _ExitTree() => _matchCancel?.Cancel();
@@ -228,6 +257,25 @@ public partial class RacePlayback : Node3D
             }
         }
 
-        foreach (var r in Runners) r.UpdateTo(Time, Speed, delta);
+        // Zero delta while paused. The runners use it to advance their stride and to ease their
+        // rendered position; handing them the real frame time with the clock stopped leaves the
+        // legs running on the spot at a standstill.
+        foreach (var r in Runners) r.UpdateTo(Time, Speed, Playing ? delta : 0);
+    }
+
+    /// <summary>
+    /// Advances the race by an explicit step instead of the frame time.
+    ///
+    /// <para>
+    /// For the video exporter, which renders far slower than real time and must not let the
+    /// clock follow how long a frame happened to take. Everything downstream — stride phase,
+    /// position easing, camera lag — is driven from this same number, so the recording is
+    /// identical whether a frame took 8 ms or 8 seconds.
+    /// </para>
+    /// </summary>
+    public void StepTo(double time, double dt)
+    {
+        Time = Math.Clamp(time, 0, Duration);
+        foreach (var r in Runners) r.UpdateTo(Time, Speed, dt);
     }
 }

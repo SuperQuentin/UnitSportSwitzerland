@@ -11,8 +11,13 @@ namespace UnitSport.Gpx;
 /// Each one is a sideways hop between roads — the exact artefact the HMM exists to prevent —
 /// so this is the number that says whether it worked, not the average offset.
 /// </param>
+/// <param name="MaxLift">
+/// Largest height difference between the recording and the road surface it matched onto. This is
+/// the bridge-and-tunnel figure: draped on terrain instead, the runner would be this far below a
+/// deck or above a bore.
+/// </param>
 public readonly record struct MatchResult(GpxTrack? Track, string Status, double MatchedShare,
-    double MeanOffset = 0, double P95Offset = 0, int Jumps = 0)
+    double MeanOffset = 0, double P95Offset = 0, int Jumps = 0, double MaxLift = 0)
 {
     public bool Ok => Track != null;
 }
@@ -209,7 +214,12 @@ public static class TrackMatcher
 
         var snapped = Rebuild(track, samples, chosen, network);
         var (mean, p95, jumps) = Quality(track, snapped);
-        return new MatchResult(snapped, "on", share, mean, p95, jumps);
+
+        double lift = 0;
+        for (int i = 0; i < Math.Min(track.Points.Count, snapped.Points.Count); i++)
+            lift = Math.Max(lift, Math.Abs(snapped.Points[i].Elevation - track.Points[i].Elevation));
+
+        return new MatchResult(snapped, "on", share, mean, p95, jumps, lift);
     }
 
     /// <summary>
@@ -415,6 +425,8 @@ public static class TrackMatcher
         int total = track.Points.Count;
         var offsetE = new double[total];
         var offsetN = new double[total];
+        var surface = new double[total];
+        var onRoad = new bool[total];
 
         int sample = 0;
         for (int i = 0; i < total; i++)
@@ -437,7 +449,13 @@ public static class TrackMatcher
             {
                 if (edge < 0) continue;
                 var hit = Closest(network.Edges[edge], p.E, p.N);
-                if (hit.Distance < best) { best = hit.Distance; e = hit.E; n = hit.N; }
+                if (hit.Distance < best)
+                {
+                    best = hit.Distance;
+                    e = hit.E; n = hit.N;
+                    surface[i] = hit.Height;
+                    onRoad[i] = true;
+                }
             }
 
             offsetE[i] = e - p.E;
@@ -462,7 +480,11 @@ public static class TrackMatcher
             }
             previousE = e; previousN = n;
 
-            points.Add(new TrackPoint(e, n, p.Elevation, p.Seconds, cumulative));
+            // The road's own altitude where we have it, the recording's where we do not. Falling
+            // back to the recorded value rather than to the terrain keeps an unmatched stretch
+            // from stepping down off a viaduct the matched part is still on.
+            double height = onRoad[i] ? surface[i] : p.Elevation;
+            points.Add(new TrackPoint(e, n, height, p.Seconds, cumulative));
         }
 
         return new GpxTrack
@@ -470,16 +492,20 @@ public static class TrackMatcher
             Name = track.Name,
             Points = points,
             HasTiming = track.HasTiming,
+            ElevationIsSurface = true,
             MinElevation = track.MinElevation,
             MaxElevation = track.MaxElevation,
             Ascent = track.Ascent,
+            Kind = track.Kind,
         };
     }
 
     /// <summary>Nearest point on a whole edge, scanning its segments.</summary>
-    private static (double Distance, double E, double N) Closest(RoadEdge edge, double e, double n)
+    private static (double Distance, double E, double N, double Height) Closest(
+        RoadEdge edge, double e, double n)
     {
-        double best = double.MaxValue, bestE = edge.E[0], bestN = edge.N[0];
+        double best = double.MaxValue;
+        double bestE = edge.E[0], bestN = edge.N[0], bestY = edge.Height[0];
 
         for (int i = 0; i < edge.E.Length - 1; i++)
         {
@@ -490,9 +516,16 @@ public static class TrackMatcher
 
             double px = ax + dx * t, py = ay + dy * t;
             double d = (e - px) * (e - px) + (n - py) * (n - py);
-            if (d < best) { best = d; bestE = px; bestN = py; }
+
+            if (d < best)
+            {
+                best = d;
+                bestE = px; bestN = py;
+                // the road's own surface at this point: a deck over a gorge, a bore in a mountain
+                bestY = edge.Height[i] + (edge.Height[i + 1] - edge.Height[i]) * t;
+            }
         }
 
-        return (Math.Sqrt(best), bestE, bestN);
+        return (Math.Sqrt(best), bestE, bestN, bestY);
     }
 }

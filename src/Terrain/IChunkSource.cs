@@ -14,6 +14,17 @@ public interface IChunkSource
     /// <summary>Returns null when the tile does not exist in this source.</summary>
     Task<ChunkGrid?> LoadChunkAsync(TileId id, CancellationToken ct = default);
 
+    /// <summary>
+    /// The decimated companion tile, for rings that render one vertex in ten or twenty.
+    ///
+    /// <para>
+    /// Null both when the tile does not exist and when the region was built before coarse tiles
+    /// did; the caller falls back to <see cref="LoadChunkAsync"/>, which is correct in either
+    /// case and simply reads 490 KB to use 5 of them.
+    /// </para>
+    /// </summary>
+    Task<ChunkGrid?> LoadCoarseChunkAsync(TileId id, CancellationToken ct = default);
+
     /// <summary>Roads/railways for a tile; null when the tile has no road file.</summary>
     Task<RoadTile?> LoadRoadsAsync(TileId id, CancellationToken ct = default);
 
@@ -30,4 +41,10 @@ public interface IChunkSource
 
     /// <summary>Tree instances for a tile; null when the tile has none.</summary>
     Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default);
+
+    /// <summary>
+    /// The region-wide far-horizon lattice (<c>horizon.bin</c>); null when the region was built
+    /// before it existed, in which case the world simply ends at the last LOD ring as it used to.
+    /// </summary>
+    Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default);
 }

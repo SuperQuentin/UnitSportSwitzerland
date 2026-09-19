@@ -27,11 +27,16 @@ public partial class ClientWorld : Node3D
     private ChatUi? _chatUi;
     private ChunkStreamer? _streamer;
     private NetworkChunkSource? _chunkSource;
+    private CachingChunkSource? _cache;
     private ClientTerrainSync? _terrainSync;
     private WorldOrigin? _worldOrigin;
 
     public override async void _Ready()
     {
+        GameSettings.Load();
+        ApplyViewportSettings();
+        GameSettings.Changed += ApplyViewportSettings;
+
         var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
         var manifest = await source.LoadManifestAsync();
 
@@ -75,6 +80,17 @@ public partial class ClientWorld : Node3D
             Shader = GD.Load<Shader>("res://shaders/ps1_water.gdshader"),
         };
 
+        // Fog is a setting now (off by default: the far horizon is the point). Every world
+        // material carries the uniforms, so the toggle just re-pushes two floats to each.
+        var worldMaterials = new[] { material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial };
+        foreach (var m in worldMaterials) FogUniforms.Apply(m);
+        GameSettings.Changed += () =>
+        {
+            foreach (var m in worldMaterials) FogUniforms.Apply(m);
+            _chunks?.ApplySettings(GameSettings.Current);
+            SetCameraFar(GameSettings.Current.CameraFar);
+        };
+
         // The streamer exists even offline. Its fetches short-circuit to null with no peer, so
         // single player is unaffected — but the on-disk cache is still consulted, which means
         // terrain pulled during an earlier multiplayer session stays usable offline.
@@ -85,8 +101,14 @@ public partial class ClientWorld : Node3D
             source, TerrainPaths.FindChunkDir(), _streamer, TerrainPaths.FindCacheDir());
         _chunkSource = streamedSource;
 
+        // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
+        // it back up — which a route that doubles back does constantly.
+        _cache = new CachingChunkSource(streamedSource);
+
         _chunks = new ChunkManager { Name = "Terrain" };
-        _chunks.Initialize(streamedSource, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
+        // the auto build cap depends on whether tiles are coming over the wire
+        _chunks.Streaming = () => _streamer?.ServerReachable == true;
+        _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
 
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
@@ -112,7 +134,7 @@ public partial class ClientWorld : Node3D
         // --shot and --probe place the camera themselves, and a spawn drop would fight
         // them for the height.
         bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null;
+            || RideProbe.ParseArgs() != null || Gpx.Cinema.CinemaProbe.ParseArgs() != null;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -148,6 +170,10 @@ public partial class ClientWorld : Node3D
         _menu.QuitRequested += () => GetTree().Quit();
         AddChild(_menu);
 
+        // "--settings" opens the settings panel straight away, for screenshotting it
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--settings") >= 0)
+            Callable.From(() => _menu.OpenSettings()).CallDeferred();
+
         // "--menu" forces the picker open even when a mode was named on the command line,
         // which is also how the menu itself gets screenshotted with --shot.
         bool forceMenu = Array.IndexOf(OS.GetCmdlineUserArgs(), "--menu") >= 0;
@@ -175,6 +201,15 @@ public partial class ClientWorld : Node3D
         if (host != null) StartNetworking(host);
         else if (gpxFromCommandLine) Callable.From(() => EnterMode(GameMode.GpxReplay)).CallDeferred();
         else if (!forceMenu && !placedByTool) _menu.Open();
+
+        // Pure analysis: it loads the tiles it needs itself, so it neither waits for streaming
+        // nor cares where the spectator is.
+        if (Gpx.Cinema.CinemaProbe.ParseArgs() is { } cinemaTrack)
+        {
+            AddChild(new Gpx.Cinema.CinemaProbe(cinemaTrack, origin, streamedSource,
+                manifest.Tiles.Select(t => t.Id).ToHashSet()));
+            return;
+        }
 
         if (RideProbe.ParseArgs() is { } ride)
         {
@@ -240,6 +275,7 @@ public partial class ClientWorld : Node3D
         {
             _gpx.SetReturnCamera(_onFoot && LocalPlayer != null ? LocalPlayer.Camera : _spectator);
             _gpx.End();
+            ParkExploreAnchor(false);
         }
 
         switch (mode)
@@ -252,6 +288,7 @@ public partial class ClientWorld : Node3D
 
             case GameMode.GpxReplay:
                 _gpx.SetReturnCamera(_onFoot && LocalPlayer != null ? LocalPlayer.Camera : _spectator);
+                ParkExploreAnchor(true);
                 _gpx.Begin();
                 break;
 
@@ -263,6 +300,32 @@ public partial class ClientWorld : Node3D
 
         _menu?.NoteMode(mode);
         GD.Print($"[world] mode: {mode}");
+    }
+
+    /// <summary>Whether replay has taken the exploring anchor off the streamer.</summary>
+    private bool _exploreAnchorParked;
+
+    /// <summary>
+    /// Takes the exploring camera off the streamer while a replay owns the screen.
+    ///
+    /// <para>
+    /// The spectator is registered as a streaming anchor at boot and stays wherever it was left
+    /// — the Riddes spawn, usually. A GPX track can be a hundred kilometres away, and every
+    /// anchor pulls its own nine-ring box, so leaving it registered meant streaming <b>722</b>
+    /// tiles for a run that needs 361, with the other 361 permanently off camera. Worse for the
+    /// video exporter, which waits for the world to settle before every frame and was therefore
+    /// waiting on terrain nobody would ever see.
+    /// </para>
+    /// </summary>
+    private void ParkExploreAnchor(bool parked)
+    {
+        if (_chunks == null || _spectator == null || parked == _exploreAnchorParked) return;
+        _exploreAnchorParked = parked;
+
+        // exactly one of the two is registered at a time — see EnterFoot/LeaveFoot
+        Node3D anchor = _onFoot && LocalPlayer != null ? LocalPlayer : _spectator;
+        if (parked) _chunks.RemoveAnchor(anchor);
+        else _chunks.AddAnchor(anchor);
     }
 
     private void StartNetworking(string host)
@@ -293,6 +356,10 @@ public partial class ClientWorld : Node3D
         // The town index arrives after this UI was built, so it has to be told to re-read.
         _terrainSync.PlacesReceived += () =>
             Callable.From(() => _places?.ReloadIndex()).CallDeferred();
+
+        // Same for the horizon: a client that shipped without one gets it during sync.
+        _terrainSync.HorizonReceived += () =>
+            Callable.From(() => _chunks?.Horizon?.Reload()).CallDeferred();
         AddChild(_terrainSync);
 
         _players = new Node3D { Name = "Players" };
@@ -388,6 +455,10 @@ public partial class ClientWorld : Node3D
 
     public override void _Process(double delta)
     {
+        // the loader queues what is in front of the live camera first, whichever camera that is
+        if (_chunks != null && GetViewport().GetCamera3D() is { } cam)
+            _chunks.ViewDirection = -cam.GlobalTransform.Basis.Z;
+
         if (!_networked || _players == null) return;
         _sinceStatus += delta;
         if (_sinceStatus < 5) return;
@@ -397,10 +468,32 @@ public partial class ClientWorld : Node3D
                 GD.Print($"[status] player {p.Name} at {p.GlobalPosition:F1}");
     }
 
+    /// <summary>Viewport-level settings: 3D render scale and vsync.</summary>
+    private void ApplyViewportSettings()
+    {
+        var s = GameSettings.Current;
+        GetViewport().Scaling3DScale = s.RenderScale;
+        DisplayServer.WindowSetVsyncMode(s.VSync
+            ? DisplayServer.VSyncMode.Enabled
+            : DisplayServer.VSyncMode.Disabled);
+    }
+
+    /// <summary>Every camera in the tree, whichever mode owns it: the horizon must not be clipped.</summary>
+    private void SetCameraFar(float far)
+    {
+        foreach (var node in FindChildren("*", "Camera3D", recursive: true, owned: false))
+            if (node is Camera3D cam) cam.Far = far;
+    }
+
     /// <summary>Switches between the free spectator camera and the on-foot player (T key).</summary>
     public void ToggleMode()
     {
         if (_chunks == null || _spectator == null) return;
+
+        // Replay owns the camera and has deliberately taken the exploring anchor off the
+        // streamer; swapping underneath it would both steal the view and put a second
+        // nine-ring box back on the loader.
+        if (_gpx is { Active: true }) return;
 
         if (!_onFoot)
         {

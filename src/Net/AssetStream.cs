@@ -36,6 +36,23 @@ public enum AssetKind
     /// </para>
     /// </summary>
     Places = 7,
+
+    /// <summary>
+    /// .terrc, the decimated companion tile — 5 KB against the full tile's 490 KB.
+    /// <para>
+    /// Worth more over the wire than on disk: the outer LOD rings are 280 of a client's 361
+    /// tiles and render one vertex in ten or twenty, so serving them the full grid was 137 MB
+    /// per anchor to draw 5 MB of mountains.
+    /// </para>
+    /// </summary>
+    ChunkCoarse = 8,
+
+    /// <summary>
+    /// horizon.bin, the whole region's 100 m lattice in one file. Not tile-scoped, like
+    /// <see cref="Places"/>: fetched once during sync so a streaming client sees mountains past
+    /// its rings too.
+    /// </summary>
+    Horizon = 9,
 }
 
 /// <summary>
@@ -73,7 +90,9 @@ public static class AssetStream
     {
         AssetKind.Manifest => "manifest.json",
         AssetKind.Places => PlaceIndex.FileName,
+        AssetKind.Horizon => HorizonFormat.FileName,
         AssetKind.Chunk => ChunkFormat.ChunkFileName(id),
+        AssetKind.ChunkCoarse => ChunkFormat.CoarseFileName(id),
         AssetKind.Roads => RoadFormat.FileName(id),
         AssetKind.Cover => CoverFormat.FileName(id),
         AssetKind.Trees => TreeFormat.FileName(id),

@@ -28,8 +28,28 @@ public partial class TrackRibbon : MeshInstance3D
     private const double StepM = 3.0;
 
     private const float HalfWidth = 0.8f;
-    private const float TreadLift = 0.28f;   // tread height above ground
+    private const float TreadLift = 0.28f;   // tread height above the reference it drapes onto
     private const float KerbDepth = 0.34f;   // how far the sides sink in
+
+    /// <summary>
+    /// Extra tread lift used ON TOP of <see cref="TreadLift"/> for a road-matched (snapped)
+    /// course, over and above what a course draped straight onto the terrain gets.
+    ///
+    /// <para>
+    /// A snapped ribbon's height comes from <c>TrackMatcher</c>'s straight interpolation along
+    /// the SAME <c>.road</c> vertices <c>RoadMeshBuilder</c> renders from — but the rendered road
+    /// tread is not always drawn at exactly that stored height. Bridges get a further
+    /// <c>BridgeLift</c> (0.15 m) purely to stop the deck z-fighting the terrain; junctions and
+    /// type-change joins blend width and height a little at the seam. None of that shows up in
+    /// the plain vertex heights <c>TrackMatcher</c> reads, so the two systems computing
+    /// "how high is this road" independently do not agree to the centimetre - and the base
+    /// 0.28 m tread lift, sized for clearing raw terrain noise, was not always enough to clear
+    /// the *rendered road surface* too. This adds enough margin to cover the largest known
+    /// render-time offset (the bridge lift) with room to spare, so a road-following ribbon
+    /// stays visibly above the road it is drawn over rather than under it.
+    /// </para>
+    /// </summary>
+    private const float RoadClearance = 0.25f;
 
     public static TrackRibbon Create(GpxTrack track, ChunkManager chunks, WorldOrigin origin) => new()
     {
@@ -37,14 +57,38 @@ public partial class TrackRibbon : MeshInstance3D
         _track = track,
         _chunks = chunks,
         _origin = origin,
-        MaterialOverride = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_path.gdshader"),
-        },
+        MaterialOverride = RibbonMaterial(),
     };
+
+    private static ShaderMaterial RibbonMaterial()
+    {
+        var m = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_path.gdshader") };
+        Core.FogUniforms.Apply(m);
+        return m;
+    }
+
+    private float _opacity = 1f;
+
+    /// <summary>
+    /// How solid the strip is drawn, 0 to 1. At 0 the node is hidden outright rather than drawn
+    /// fully transparent — an invisible ribbon should cost nothing, and the rebuild below stops
+    /// with it, since re-deriving geometry nobody can see is pure waste on a route that keeps
+    /// streaming new terrain underneath it.
+    /// </summary>
+    public float Opacity
+    {
+        get => _opacity;
+        set
+        {
+            _opacity = Mathf.Clamp(value, 0f, 1f);
+            Visible = _opacity > 0.001f;
+            if (MaterialOverride is ShaderMaterial m) m.SetShaderParameter("alpha", _opacity);
+        }
+    }
 
     public override void _Process(double delta)
     {
+        if (!Visible) return;
         _sinceRebuild += delta;
         if (_sinceRebuild < 1.5) return;
         _sinceRebuild = 0;
@@ -66,14 +110,19 @@ public partial class TrackRibbon : MeshInstance3D
             var (e, n, ele, _, _) = _track.Sample(seconds);
             var p = _origin.ToWorld(e, n, ele);
 
-            // only include stretches whose terrain has streamed in
+            // Only include stretches whose terrain has streamed in — the ribbon is still gated on
+            // that even for a road-matched course, because a segment with nothing under it would
+            // hang in space at the edge of the loaded world.
             if (!_chunks.TryGetHeight(p, out float ground))
             {
                 prev = null;
                 continue;
             }
             resolved++;
-            p.Y = ground;
+
+            // A road-matched course carries the road surface, decks and bores included. Re-draping
+            // it would run the course line down into the gorge the bridge crosses.
+            if (!_track.ElevationIsSurface) p.Y = ground;
 
             var dir = prev.HasValue ? p - prev.Value : Vector3.Forward;
             dir.Y = 0;
@@ -90,7 +139,7 @@ public partial class TrackRibbon : MeshInstance3D
         _lastResolved = resolved;
 
         var verts = new List<Vector3>(centres.Count * 8);
-        var up = new Vector3(0, TreadLift, 0);
+        var up = new Vector3(0, TreadLift + (_track.ElevationIsSurface ? RoadClearance : 0f), 0);
         var down = new Vector3(0, -KerbDepth, 0);
 
         for (int i = 0; i < centres.Count - 1; i++)

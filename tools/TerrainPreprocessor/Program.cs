@@ -11,6 +11,8 @@ string? inDir = null, outDir = null, tempDir = null, pngDir = null;
 string? tlmGpkg = null, routeKeys = null, buildingsGpkg = null, gwrPath = null;
 bool verify = false;
 bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false;
+bool coarseOnly = false, horizonOnly = false;
+string? franceBox = null;
 int jobs = Math.Min(4, Environment.ProcessorCount);
 
 for (int i = 0; i < args.Length; i++)
@@ -29,12 +31,116 @@ for (int i = 0; i < args.Length; i++)
         case "--places": doPlaces = true; break;
         case "--roads-only": roadsOnly = true; break;
         case "--features-only": featuresOnly = true; break;
+        case "--coarse": coarseOnly = true; break;
+        case "--horizon": horizonOnly = true; break;
         case "--verify": verify = true; break;
+        case "--france": franceBox = args[++i]; break;
         case "--jobs": jobs = int.Parse(args[++i]); break;
         default:
             Console.Error.WriteLine($"Unknown argument: {args[i]}");
             return 2;
     }
+}
+
+// ---- horizon: one region-wide 100 m lattice, from the tiles already built ------------------
+if (horizonOnly)
+{
+    if (outDir == null)
+    {
+        Console.Error.WriteLine("--horizon requires --out <chunk dir>");
+        return 2;
+    }
+    return HorizonStage.Run(outDir, jobs);
+}
+
+// ---- coarse companion tiles: decimate what is already built -----------------------------
+// Standalone because it needs nothing but the .terr files themselves. A region built before
+// .terrc existed gets its horizon tiles for 5 KB apiece without re-parsing a single XYZ zip.
+if (coarseOnly)
+{
+    if (outDir == null)
+    {
+        Console.Error.WriteLine("--coarse requires --out <chunk dir>");
+        return 2;
+    }
+
+    var coarseFiles = Directory.GetFiles(outDir, "chunk_*.terr");
+    if (coarseFiles.Length == 0)
+    {
+        Console.Error.WriteLine($"No .terr files in {outDir}");
+        return 2;
+    }
+
+    var coarseClock = Stopwatch.StartNew();
+    long readBytes = 0, wroteBytes = 0;
+    int written = 0;
+
+    Parallel.ForEach(coarseFiles, new ParallelOptions { MaxDegreeOfParallelism = jobs }, path =>
+    {
+        ChunkGrid grid;
+        using (var fs = File.OpenRead(path)) grid = ChunkCodec.Decode(fs);
+        if (grid.Stride != 1) return;   // already a companion; nothing to decimate
+
+        var coarse = grid.Decimate(ChunkFormat.CoarseStride);
+
+        // Construct then verify. The whole claim of this pass is that the horizon renders
+        // *identically* from the small file, and that claim rests on the mesh builder reading
+        // HeightAt(c * stride, r * stride) — so check exactly that, for every vertex the coarse
+        // grid holds and at both strides the LOD rings use. 2,601 comparisons a tile is nothing
+        // against having quietly reshaped the mountains.
+        foreach (int renderStride in new[] { ChunkFormat.CoarseStride, ChunkFormat.CoarseStride * 2 })
+        {
+            int m = (ChunkFormat.GridSize - 1) / renderStride + 1;
+            for (int r = 0; r < m; r++)
+                for (int c = 0; c < m; c++)
+                {
+                    int fc = c * renderStride, fr = r * renderStride;
+                    if (coarse.HeightAt(fc, fr) != grid.HeightAt(fc, fr))
+                        throw new InvalidDataException(
+                            $"{grid.Id}: coarse tile differs at ({fc},{fr}) stride {renderStride}");
+                }
+        }
+
+        string outPath = Path.Combine(outDir, ChunkFormat.CoarseFileName(grid.Id));
+        using (var fs = File.Create(outPath))
+            ChunkCodec.Encode(coarse, fs);
+
+        // and that what lands on disk decodes back to what we checked
+        using (var fs = File.OpenRead(outPath))
+        {
+            var reread = ChunkCodec.Decode(fs);
+            if (reread.Stride != ChunkFormat.CoarseStride
+                || !reread.Heights.AsSpan().SequenceEqual(coarse.Heights))
+                throw new InvalidDataException($"{grid.Id}: coarse tile did not round-trip");
+        }
+
+        Interlocked.Add(ref readBytes, new FileInfo(path).Length);
+        Interlocked.Add(ref wroteBytes, new FileInfo(outPath).Length);
+        int n = Interlocked.Increment(ref written);
+        if (n % 500 == 0) Console.WriteLine($"  [{n}/{coarseFiles.Length}]");
+    });
+
+    Console.WriteLine($"Coarse pass: {written} tiles in {coarseClock.Elapsed.TotalSeconds:F1}s, "
+        + $"read {readBytes / 1048576.0:F0} MB -> wrote {wroteBytes / 1048576.0:F1} MB "
+        + $"({(double)readBytes / Math.Max(1, wroteBytes):F0}x smaller)");
+    // the horizon reads the companions just written, so a region gets both in one go
+    return HorizonStage.Run(outDir, jobs);
+}
+
+// ---- French import: adds IGN BD TOPO features to tiles that already exist ---------------
+if (franceBox != null)
+{
+    if (outDir == null)
+    {
+        Console.Error.WriteLine("--france requires --out <chunk dir>");
+        return 2;
+    }
+    if (FranceStage.ParseBox(franceBox) is not { } box)
+    {
+        Console.Error.WriteLine("--france wants minLon,minLat,maxLon,maxLat in degrees");
+        return 2;
+    }
+    return await FranceStage.RunAsync(outDir, box.MinLon, box.MinLat, box.MaxLon, box.MaxLat);
 }
 
 if (outDir == null || (inDir == null && !roadsOnly && !featuresOnly))
@@ -154,6 +260,9 @@ foreach (var (id, _) in tiles.Values)
     var grid = builder.Build(id);
     using (var fs = File.Create(Path.Combine(outDir, ChunkFormat.ChunkFileName(id))))
         ChunkCodec.Encode(grid, fs);
+    // the horizon's copy of the same tile, 5 KB instead of 490
+    using (var fs = File.Create(Path.Combine(outDir, ChunkFormat.CoarseFileName(id))))
+        ChunkCodec.Encode(grid.Decimate(ChunkFormat.CoarseStride), fs);
     manifest.Tiles.Add(new ManifestTile { E = id.E, N = id.N, Min = grid.MinHeight, Max = grid.MaxHeight });
 }
 
@@ -170,6 +279,8 @@ manifest.SuggestedOriginLv95 = new Lv95Point
     N = Math.Round((manifest.BoundsLv95.MinN + manifest.BoundsLv95.MaxN) / 2),
 };
 File.WriteAllText(Path.Combine(outDir, "manifest.json"), manifest.ToJson());
+// the far horizon is cut from the same tiles, one file for the whole region
+if (HorizonStage.Run(outDir, jobs) is var hrc && hrc != 0) return hrc;
 Console.WriteLine($"Pass 2 done in {sw.Elapsed.TotalSeconds:F1}s -> {manifest.Tiles.Count} chunks, " +
                   $"heights {manifest.Tiles.Min(t => t.Min):F0}..{manifest.Tiles.Max(t => t.Max):F0} m");
 

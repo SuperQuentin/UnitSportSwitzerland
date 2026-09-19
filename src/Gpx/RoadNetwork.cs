@@ -9,6 +9,19 @@ public sealed class RoadEdge
     public required double[] E { get; init; }
     public required double[] N { get; init; }
 
+    /// <summary>
+    /// The road surface's own altitude at each vertex, metres above sea level.
+    ///
+    /// <para>
+    /// This is the whole reason bridges and tunnels work. The preprocessor drapes an ordinary
+    /// road onto the terrain but keeps the <b>surveyed</b> Z for a bridge deck and a tunnel bore,
+    /// so a track that takes its height from here crosses the gorge on the bridge and goes
+    /// through the mountain rather than over it. Dropping this column, which is what the first
+    /// version did, is what put the runner in the river.
+    /// </para>
+    /// </summary>
+    public required double[] Height { get; init; }
+
     /// <summary>Cumulative length to each vertex; <c>[^1]</c> is the whole edge.</summary>
     public required double[] Cumulative { get; init; }
 
@@ -41,7 +54,8 @@ public sealed class RoadEdge
 }
 
 /// <summary>A point projected onto a road: which edge, how far along, and how far off it was.</summary>
-public readonly record struct RoadHit(int Edge, double Arc, double Distance, double E, double N);
+public readonly record struct RoadHit(int Edge, double Arc, double Distance,
+    double E, double N, double Height);
 
 /// <summary>
 /// The road network around a track, as a graph you can measure routes through.
@@ -139,12 +153,14 @@ public sealed class RoadNetwork
 
             var e = new double[count];
             var n = new double[count];
+            var y = new double[count];
             var cum = new double[count];
 
             for (int i = 0; i < count; i++)
             {
                 // tile-local is X east, Z south from the NW corner
                 e[i] = tile.Id.MinE + segment.Points[i * 3];
+                y[i] = segment.Points[i * 3 + 1];          // absolute altitude, already draped
                 n[i] = tile.Id.MaxN - segment.Points[i * 3 + 2];
                 if (i > 0)
                 {
@@ -158,7 +174,7 @@ public sealed class RoadNetwork
             int index = _edges.Count;
             var edge = new RoadEdge
             {
-                E = e, N = n, Cumulative = cum,
+                E = e, N = n, Height = y, Cumulative = cum,
                 Class = segment.Class, Flags = segment.Flags,
                 NodeA = NodeAt(e[0], n[0]),
                 NodeB = NodeAt(e[^1], n[^1]),
@@ -258,8 +274,9 @@ public sealed class RoadNetwork
         double px = ax + dx * t, py = ay + dy * t;
         double distance = Math.Sqrt((e - px) * (e - px) + (n - py) * (n - py));
         double arc = g.Cumulative[vertex] + (g.Cumulative[vertex + 1] - g.Cumulative[vertex]) * t;
+        double height = g.Height[vertex] + (g.Height[vertex + 1] - g.Height[vertex]) * t;
 
-        return new RoadHit(edgeIndex, arc, distance, px, py);
+        return new RoadHit(edgeIndex, arc, distance, px, py, height);
     }
 
     /// <summary>

@@ -55,6 +55,17 @@ public sealed class LocalChunkSource : IChunkSource
         }, ct);
     }
 
+    public Task<ChunkGrid?> LoadCoarseChunkAsync(TileId id, CancellationToken ct = default)
+    {
+        return Task.Run(() =>
+        {
+            string path = Path.Combine(_dir, ChunkFormat.CoarseFileName(id));
+            if (!File.Exists(path)) return (ChunkGrid?)null;
+            using var fs = File.OpenRead(path);
+            return ChunkCodec.Decode(fs);
+        }, ct);
+    }
+
     public Task<HashSet<int>?> LoadHolesAsync(TileId id, CancellationToken ct = default)
     {
         return Task.Run(() =>
@@ -96,6 +107,17 @@ public sealed class LocalChunkSource : IChunkSource
             if (!File.Exists(path)) return (List<TreeInstance>?)null;
             using var fs = File.OpenRead(path);
             return TreeFormat.Decode(fs);
+        }, ct);
+    }
+
+    public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
+    {
+        return Task.Run(() =>
+        {
+            string path = Path.Combine(_dir, HorizonFormat.FileName);
+            if (!File.Exists(path)) return (HorizonIndex?)null;
+            using var fs = File.OpenRead(path);
+            return HorizonFormat.Decode(fs);
         }, ct);
     }
 

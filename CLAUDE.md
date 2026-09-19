@@ -7,8 +7,24 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 
 - **Data pipeline**: swissALTI3D XYZ zips (`ressources/data/swiss_chunks/`, LV95/EPSG:2056,
   0.5 m grid, 1 km tiles) → `tools/TerrainPreprocessor` → `.terr` binary chunks +
-  `manifest.json` in `terrain_chunks/` (501×501 vertices, 2 m grid, global uint16
-  quantization so tile seams are bit-identical). Runtime never parses XYZ.
+  `manifest.json` in `terrain_chunks/` (**1001×1001 vertices, 1 m grid** — format `Version = 2`,
+  global uint16 quantization so tile seams are bit-identical). Runtime never parses XYZ.
+  1 m was chosen over matching the source's 0.5 m exactly: it still recovers real detail the old
+  2 m grid discarded, at 4× the vertex count per tile rather than 0.5 m's 16×, and `GridSize-1`
+  (1000) still divides every LOD/coarse stride (1, 2, 4, 10, 20) cleanly, so the ring table needed
+  no redesign. **`ChunkBuilder`'s source-cell averaging is now ratio-general** (`Ratio =
+  XyzParser.CellsPerSide / (GridSize-1)`, currently 2): it used to hardcode a 4-cell window
+  regardless of ratio, which was only correct by coincidence at ratio 2 and silently discarded 12
+  of the 16 cells a 2 m vertex's true footprint covered at the old ratio 4 — real, measurable
+  aliasing, confirmed by rebuilding the same tiles both ways and comparing (field boundaries and
+  mountain rock texture visibly sharper after the fix; a furrow micro-pattern in flat fields was
+  entirely smoothed away before it). **Cover-class boundaries are blended, not hard-edged**:
+  `TerrainMeshBuilder.BoundaryBlendedColor` averages a vertex's colour with any of its four
+  cardinal neighbours that hold a different class, so a forest/meadow edge is a gradient across
+  one quad instead of an instant jump — worse before this at coarse LOD strides, where a single
+  20-40 m quad could straddle the whole boundary. A region built before `Version = 2` has 2 m
+  tiles and must be fully re-preprocessed (`--verify`, then `--coarse`, then `RoadGen --rewrite`)
+  before its coarse companions and junctions are valid again.
 - **Shared format code**: `tools/TerrainFormat` classlib (TileId, ChunkFormat, ChunkGrid,
   ChunkCodec, TerrainManifest) — referenced by both the preprocessor and the game csproj.
   The game csproj excludes `tools/**` from its wildcard compile.
@@ -96,6 +112,33 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   (`RoadMeshBuilder.AppendBridgeStructure`). Piers sample the terrain via the tile's
   `ChunkGrid` and are skipped above `MaxPierHeight` — TLM3D has no bridge-type attribute,
   so tall gorge crossings are left as unsupported spans rather than sprouting 130 m columns.
+- **Roads are merged into terrain collision, not just draped over it.** The player always
+  physically stood on the bare-terrain `HeightMapShape3D` — roads had no collision of their own
+  at all — which was invisible on flat ground but a real mismatch wherever a road's surveyed
+  height genuinely diverges from raw terrain (an embankment, a cut, a graded approach
+  swissALTI3D never modelled) and **severe** on a bridge: zero collision under the deck, so a
+  player walking onto a visual span fell straight through to the valley floor below.
+  `TerrainMeshBuilder.BlendRoadCorridor` closes the ordinary case: for every at-grade
+  road/path/rail segment (excluding `RoadFlags.Bridge`/`Tunnel`, aerial ropeways, watercourses
+  and walls — none of those is a ground-level surface), it walks the segment's own densified
+  polyline and smoothsteps the terrain **collision** floor toward the segment's own stored
+  height — already carrying `RoadExtractor`'s approach-ramp blend from preprocess time, so no
+  height is re-derived — from full weight at the road's own half-width out to zero
+  `CorridorFalloffM` (3 m) beyond it. Bridges are excluded on purpose: a heightfield has one
+  height per (x, z) column, so it cannot represent a deck floating above the gorge it crosses —
+  blending toward deck height there would fill the gorge in. Those get `RoadMeshBuilder.
+  BuildBridgeCollisionFaces` instead, a small `ConcavePolygonShape3D` for the deck TOP only
+  (mirroring `BuildingMeshBuilder.BuildCollisionFaces`'s pattern) — piers and parapets stay
+  visual-only, since falling through the deck was the actual reported problem, not clipping a
+  pier. Both run in `ChunkManager.StartBuild`'s **tail**, after the road tile has loaded: the
+  bare-terrain collision still publishes immediately in the **interim** result so the ground
+  never waits on roads (see the interim/tail split below), and gets silently replaced with the
+  blended version once available — `CommitReadyResults` already re-applies `SetCollision`
+  whenever a later `BuildResult` carries a non-null `CollisionMap`, so no new commit path was
+  needed, only a second call to `BuildCollisionMap` with the road tile it didn't have the first
+  time. Tunnel interiors are not touched here — the existing hole-carving at the portal already
+  works, mostly by the coincidence that undisturbed rock blocks a player; verify with `--probe`
+  before assuming that needs its own collision too.
 - **Buildings**: swissBUILDINGS3D 3.0 LoD2 TINs -> `tools/export_buildings.py` (GDAL, the
   only step needing it) -> `buildings.gpkg` -> `.bldg` per tile. GWR cadastre is joined
   **spatially** (EGID is null in the 3.0 Beta); classification uses GKLAS, not GKAT.
@@ -103,6 +146,22 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   Solids are **re-seated on our heightfield** (median of a 3x3 footprint sample, base set
   0.8 m below ground): the source foundation block is referenced to swisstopo's terrain,
   not ours, which buried every building by ~3 m and some by over 5 m.
+- **France (cross-border)**: IGN **BD TOPO®** via the Géoplateforme WFS (`data.geopf.fr`, Licence
+  Ouverte 2.0) -> `FranceStage`, run as `--france minLon,minLat,maxLon,maxLat`. No GDAL, no
+  download: a bbox query returns GeoJSON, projected WGS84 -> LV95 on arrival so French data lands
+  on **the same kilometre lattice** as the Swiss and the two share a tile.
+  **swissALTI3D already covers a few km past the border**, so terrain was never the gap — only
+  the things standing on it. Buildings come as footprint + `hauteur` + `altitude_min/max_toit`,
+  i.e. eave *and* ridge, so `FranceBuildings` pitches a roof where those genuinely differ (568 of
+  1361 around Veigy) and leaves the rest flat rather than inventing a shape. Roads map
+  `nature` -> `RoadClass` and use the surveyed `largeur_de_chaussee`, which is better than the
+  Swiss side, where width is inferred from a class.
+  **The stage merges, never replaces**: border tiles already hold Swiss data (2506/1125 is 1.1 MB
+  of Swiss buildings), so it decodes, appends and writes back. Re-runs are safe — French buildings
+  are marked with `YearBuilt = 1` (BD TOPO has no build year, so nothing French ever has a real
+  one) and roads keep a `.road.swiss` copy of the original.
+  Not imported: land cover, trees, and cycle routes — the `amenagement_cyclable_*` fields come
+  back null from this WFS, so no French road is ever flagged `Cycle`.
 - **Land cover**: **six** TLM area layers are rasterised onto the 501x501 vertex lattice ->
   `.cover` (deflate, ~2 KB/tile) -> baked into terrain vertex colours by `CoverPalette`.
   They are drawn in order of increasing specificity, each overriding the last:
@@ -168,12 +227,50 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   every junction.
 - **Runtime** (`src/`): `Terrain/ChunkManager` streams LOD rings around anchors (workers
   build arrays, main thread commits ≤2 meshes + 1 collision per frame);
-  `HeightMapShape3D` collision on d≤1 tiles (CollisionShape3D scale (2,1,2));
+  `HeightMapShape3D` collision on d≤1 tiles (CollisionShape3D scale derived from
+  `ChunkFormat.SpacingM`, currently 1 m — see the road-collision-merge entry above for how it
+  gets blended toward road height, and a second small `ConcavePolygonShape3D` body for bridge
+  decks);
   `shaders/ps1_terrain.gdshader` does vertex snap, flat shading via derivatives, palette
   bands, Bayer dither, fog. Fidelity knobs: `rendering/scaling_3d/scale` (0.75) and the
   per-shader `snap_resolution` (640x480) — lower both for a grittier PS1 look, raise for
-  crispness. LOD rings live in `LodPolicy` (stride 1 underfoot, out to 40 m quads at d=9). `Core/Main` boots ServerWorld (`--server` /
+  crispness.
+  **The game renders at a fixed 1152x648 and Godot scales that to the window**
+  (`display/window/stretch/mode = "viewport"`). Not `canvas_items`: there the 3D renders at the
+  window's real size, so the same world is sharper on a 1440p monitor than on a laptop and the
+  PS1 look drifts with the display. `aspect = "expand"` means a non-16:9 window gets a wider or
+  taller view rather than black bars — measured 1152x648 in a 1920x1080 window and 1152x864 in an
+  800x600 one, no distortion either way. Side effect worth knowing: `--shot` and the video
+  exporter now always write frames at the internal resolution, whatever the window is. LOD rings live in `LodPolicy` (stride 1 underfoot, out to 40 m quads at d=9). `Core/Main` boots ServerWorld (`--server` /
   dedicated_server feature) or ClientWorld (`--connect host[:port]`, offline otherwise).
+- **Camera sightline cut** (`ChunkManager.SetSightlineCut`, driven per frame by
+  `PlaybackCamera.UpdateSightlineCut`): when a ray from the camera to the runner's head hits
+  something, a corridor along that segment is **dissolved with a Bayer-dither `discard`** in
+  `ps1_building`/`ps1_tree`. Dither, not alpha: those shaders are `unshaded` with no blend mode,
+  the trees are one MultiMesh sharing a single material so per-instance transparency is not
+  available, and a dithered dissolve is already this renderer's visual language. One uniform write
+  reaches the whole streamed world however much has loaded since. The radius is **ramped**, never
+  switched - a corridor that snaps open reads as geometry popping out of existence - and it settles
+  to exactly 0 so the shaders take their disabled branch. **Terrain and roads are deliberately
+  excluded**: dissolving ground opens a hole straight through to the sky, which looks far worse
+  than the hillside it was hiding, and a camera behind a ridge is already rejected outright by
+  `ShotContext.CanSee` before the shot is committed. A road lying flat never occludes anything.
+- **Attention arrow** (`AttentionArrow`, driven from `PlaybackCamera.Step`): a comic-strip red
+  chevron with a billboarded "HERE" label pops in above the runner's head whenever the ACTIVE
+  camera is far enough away that they are hard to pick out — a wide Locked-off tripod, or a
+  spectator who has flown Free off across the valley, are both "far" the same way. The trigger is
+  pure distance from whichever camera is live, not tied to one mode or one shot, so it works
+  everywhere except First-person (where the camera IS the runner's eye, so distance is already
+  ~0). Drawn `NoDepthTest` on purpose: it reads through the tree or building that is hiding the
+  runner in the first place, which is the whole point of it existing. Hysteresis (shows past 35 m,
+  hides under 25 m) stops it flickering right at one fixed threshold. **HUD Arrow button / `--arrow
+  off`** turns it off entirely. Billboarded **full spherical, not fixed-Y**: fixed-Y was tried
+  first and reads worse specifically for this game, because `TopDown` and a climbed `DroneReveal`
+  look near straight down, and a fixed-Y plane only rotates around the vertical — from overhead it
+  turns edge-on and "HERE" collapses into an unreadable sliver. Full spherical has no such
+  failure: Godot's "enabled" billboard mode is screen-aligned (it copies the camera's own
+  right/up vectors onto the quad) rather than a look-at, so there is no degenerate pole to hit —
+  confirmed readable straight down with `--forceshot "Top down"`.
 - **Modes** (`Core/MainMenu`, `GameMode`): Explore / GpxReplay / Multiplayer. `ClientWorld`
   owns the switching; **Esc** opens the picker, and it is shown at boot unless a mode was
   named on the command line (`--connect`, `--gpx`) or a verification tool is running
@@ -233,6 +330,10 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
     rider and a pedalling one, and the seam `RideProbe` and the trainer both use.
   - `RideKindId` is replicated, so remote players are seen on the bike rather than sprinting
     at 40 km/h in a running pose.
+  - **Space hops** on either mount (`FootPlayer.RideJumpVelocity`, 3.2 m/s, edge-triggered, ground
+    only): a bunny hop or a pop off a lip that carries the momentum it already had. The free-fly
+    camera uses the same keys vertically — **Space** up, **Shift** down (Q/E still work), boost
+    moved to **Ctrl**.
 - **GPX ghost racing** (`src/Gpx/`): `GpxParser` -> `GpxTrack` (LV95 via `SwissProjection`,
   cumulative time + distance). `RacePlayback` owns ONE clock; each `Runner` samples its own
   track at that shared time, so several GPX files start together and race as ghosts —
@@ -245,25 +346,108 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   track, a good check that projection and heightfield agree). Each ghost's legs run the shared
   gait at its own measured speed, on the **replay** clock — at 4x playback the legs turn over
   four times as fast, or the runner skates. The gait raises and drops the hips itself, which is
-  what the old hand-written head bob was standing in for.
-  **Snap to roads** (`RoadMatcher`/`RoadNetwork`, HUD button or **R**): map-matches a recording
+  what the old hand-written head bob was standing in for. **The avatar matches the recording**:
+  `GpxTrack.Kind` (from the GPX `<type>` element) puts a real pedalling `Cyclist` — the player's
+  own bike rig, not a second one — on a ride recorded as cycling, tinted to the runner's
+  leaderboard colour rather than the rig's own rider-index palette; anything else still runs.
+  Cadence is driven from the sampled speed by the same curve the player's own bike uses.
+  **Snap to roads** (`TrackMatcher`/`RoadNetwork`, HUD button or **R**): map-matches a recording
   onto the mapped network so a ghost runs *on* the road rather than 5 m beside it. Hidden Markov
   model in the style of Newson & Krumm — emission from GPS-to-road distance (σ 8 m), transition
   from |route distance − GPS distance| over a bounded Dijkstra, Viterbi over the whole track.
   Pointwise nearest-road snapping is what this replaces: the nearest road is very often the wrong
   one, and the runner then flickers between a carriageway and the cycle path beside it. Each
-  runner keeps **both** variants (`Runner.Raw`/`Snapped`, `Active`), so the toggle is a fair
+  runner keeps **both** variants (`Runner.Track`/`Snapped`, `Active`), so the toggle is a fair
   comparison and not a reload; matching runs off the main thread (93 ms for 16 km, tiles
   included) and is applied back on it. Measured on a real 16 km ride: 98% of fixes near a road,
   mean move 2.9 m, p95 10.6 m, length +0.2%.
   Keys: **G** add track(s), **Space** play/pause, **C** camera, **F** follow next runner,
+  **Video export** (`VideoExporter`, HUD button): renders the whole run to an mp4 with the camera
+  and speed as set, **not in real time**. It drives the clock in exact 1/fps steps and hands that
+  same step to the runners and the camera instead of `delta`, so a frame that took eight seconds
+  is indistinguishable from one that took eight milliseconds. Before each frame it waits for
+  `ChunkManager.SettledNear(camera, 6)` — what the frame can see, not the whole world — and terrain
+  that has not arrived is a hole that cannot be fixed afterwards. It also sets
+  `ChunkManager.OfflineMode` and starts an `ExportPrefetcher` that reads the entire route into the
+  tile cache in route order, so no frame is ever the first to ask for a tile.
+  Frames are **streamed raw into ffmpeg's stdin** (`-f rawvideo`, via `System.Diagnostics.Process`
+  — Godot's `OS.CreateProcess` has no stdin pipe), so nothing is PNG-compressed on the main thread
+  and the encoder works while the game renders the next frame; `frame_00000.png` is still written
+  as a known-good reference still, which is how a flipped or colour-swapped pipe would be caught.
+  Without ffmpeg on PATH it falls back to the PNG sequence plus `encode.bat`.
+  `--export <dir>[,fps][,speed][,warmup]` does the same headlessly.
   **R** snap to roads,
+  **Lens** button cycles a simulated optic (`LensLayer`, `shaders/lens.gdshader`): a full-screen
+  `CanvasLayer` at layer 5 - under the HUD's 10, so the controls are never bent - doing barrel
+  distortion, chromatic aberration and a vignette, paired with a per-profile **FOV bias** applied
+  in `ShotContext.Place`. The bias is not decoration: distortion warps the picture that was drawn
+  and cannot widen it, so curvature without extra field of view reads as a warped photo rather
+  than a wide lens. It tops out around 150 degrees of true FOV; a real >=180 fisheye needs the
+  scene rendered to a cube, which is 3-5x the draws and was not worth it for a look.
+  **Path** slider fades the course ribbon out (`TrackRibbon.Opacity`, `ps1_path.gdshader` gained
+  `blend_mix` + an `alpha` uniform). At 0 the node is hidden outright and stops rebuilding. The
+  opacity lives on `GpxSession`, not the ribbon, because `RefreshRibbon` destroys and rebuilds the
+  ribbon on every snap toggle and focus change.
+  **Pace** button (Cinema only) scales `Director.Pacing`, i.e. every shot's min and max duration.
+  **Shot** dropdown (Cinema only, `Director.SetForced`/`PlaybackCamera.ForcedCinemaShot`) pins the
+  director to one named shot picked by hand — "Auto" gives the choice back. `Begin` is still
+  tested every time the pin (re)starts, so it never opens on a bad vantage, but once running it
+  is held regardless of `StillGood`, the event timeline, or Pacing, none of which mean anything
+  once a human has taken over. `--forceshot <name>` is the headless equivalent, for screenshotting
+  or exporting one shot on its own rather than hoping the director cuts to it in time.
   **H** show/hide UI (the toggle button lives outside the hidden panels, or hiding the UI
   would remove the only way back).
   `--gpx <path>` may be repeated to start a race from the command line.
 - **Multiplayer**: client-authoritative transforms, MultiplayerSpawner + Synchronizer,
   ENet port 7777. Server runs ChunkManager with BuildMeshes=false (grid-only, for
   height queries around players).
+- **Coarse tiles**: every `.terr` has a `.terrc` companion — the same grid **point-decimated at
+  stride 10** (51x51, **5.2 KB** against 490 KB). The LOD rings render one vertex in ten or twenty
+  past ring 4, so 280 of the 361 tiles an anchor wants were reading a 490 KB file to use 5 KB of
+  it. Decimation, not averaging, is what makes it free: `TerrainMeshBuilder.BuildSurface` already
+  samples `HeightMetersAt(c * stride, r * stride)`, so the kept vertices are *exactly* the ones
+  the mesh uses and the geometry is bit-identical (the `--coarse` pass asserts this per tile at
+  both strides). A tile reads the full grid whenever anything is built **onto** it — collision,
+  roads, watercourses, building footings all sample the heightfield — so the rule is full at
+  d <= `RoadMaxDist`, coarse beyond. `ChunkGrid` carries its own `Stride` and `RequireFull()`
+  guards the callers that cannot take a 20 m lattice. The whole region's companions are 33 MB.
+- **Far horizon** (`HorizonLayer`, `horizon.bin`, `tools/TerrainFormat/HorizonFormat.cs`): every tile
+  decimated to a **100 m lattice** (11x11 samples, 242 B) and packed into ONE region-wide file by the
+  preprocessor's `--horizon` pass (also run at the end of a full build and of `--coarse`; 6,699 tiles ->
+  1.6 MB in 3.6 s, read from the `.terrc` companions since stride 10 divides 100). The client reads it
+  once and meshes **10x10 km blocks** (101x101 verts, altitude-band colours only — no cover) out to
+  `HorizonKm` (setting, default 60, `--horizon <km>`), one block committed per frame. It is what makes
+  the world an open map: the snow peaks 50 km down the Rhône are on screen for ~100 draws. The blocks
+  use their **own** `ps1_terrain` material instance carrying `detail_min/max`, a world-XZ rectangle =
+  the primary anchor's ring square, inside which the shader `discard`s — so the lattice never shows
+  through a tunnel floor or a carved portal, and the tile material (rectangle left at 0/0) never pays
+  for the test. Streamed like `places.json` (`AssetKind.Horizon`, fetched during `ClientTerrainSync`,
+  `HorizonReceived` -> `HorizonLayer.Reload`). Camera `Far` follows it (`GameSettings.CameraFar`).
+- **Settings** (`Core/GameSettings`, `Core/SettingsMenu`, `user://settings.json`): render distance
+  in tile rings (6..40, default **15**), detail preset (Low/Medium/High = inner ring table + road/
+  building reach, `LodPolicy.Create`), horizon km, fog on/off (**off by default** — the shaders keep
+  their fog code and `FogUniforms.Apply` pushes `fog_start/end` past the far plane when off), parallel
+  tile builds (0 = auto: `ProcessorCount` from local disk, 6 when `ChunkStreamer.ServerReachable`),
+  mesh commit budget in **ms per frame** (replaces the fixed 2 meshes/frame: a stride-50 tile is 441
+  vertices and a stride-1 one a million, so a count was sized for the wrong one), 3D render scale,
+  VSync. Every change applies live (`GameSettings.Changed` -> `ChunkManager.ApplySettings`, the
+  materials, the cameras' `Far`) and saves. Main menu **Settings** button; `--settings` opens it for a
+  screenshot; `--rings N --horizon km --fog on|off --detail low|medium|high` override for one run
+  without being saved. The last ring is always **stride 50** (`LodPolicy.FarStride`, 21x21 verts,
+  from the `.terrc`), which is what makes 40 rings (6,561 tiles) cost about what 9 used to.
+  A server ignores all of it and keeps 2 rings of full grids around each player.
+- **Build cancellation** (`ChunkState.Cts`/`Generation`): every `source.Load*Async` gets the tile's
+  token and the worker checks it between stages. A tile that leaves the desired set (beyond
+  `MaxDist + UnloadSlack`) or whose *pending* stride is finer than what it now wants past
+  `RoadMaxDist` is cancelled on the spot — the worker slot frees now instead of when the chain it was
+  reading finishes, and `CommitReadyResults` drops any result whose generation is stale. Measured: 12
+  in-flight Riddes builds cancelled within one evaluation of a 50 km jump (`SettleReport` prints
+  `cancelled=`). Tiles **behind the camera** (`ChunkManager.ViewDirection`, set per frame from the live
+  camera) are queued three rings later than those in front, never skipped.
+- **`CachingChunkSource`** decorates the source chain with a byte-budgeted LRU of decoded tiles,
+  so ground that is left and returned to is not decoded twice — `france.gpx` retreads 30.5% of
+  its own route. `ChunkManager.OfflineMode` unlocks the per-frame commit budget and the build cap
+  for a video export, where nobody is watching and a hitch costs nothing.
 - **Terrain streaming** (`Net/ChunkStreamer`, `Terrain/NetworkChunkSource`): the server serves
   generated files to clients that lack them. `IChunkSource` was already the seam, so
   `NetworkChunkSource` decorates `LocalChunkSource` with three tiers — shipped -> cache
@@ -295,6 +479,11 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 ## Commands
 
 - Preprocess: `dotnet run --project tools/TerrainPreprocessor -c Release -- --in ressources/data/swiss_chunks --out terrain_chunks --verify --dump-png terrain_chunks_png`
+- Coarse companion tiles (needed once for a region built before they existed; a normal build
+  emits them): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --coarse --jobs 8`
+  — 6,699 tiles in 10 s, 3,207 MB read -> 33 MB written, every tile verified bit-identical.
+- Far horizon (needed once for a region built before it existed; a normal build and `--coarse` emit
+  it): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --horizon --jobs 8`
 - Build game: `dotnet build UnitSportSwitzerland.csproj`
 - Dedicated server: `<godot> --headless --path . -- --server [--port N]`
 - Client: `<godot> --path . -- --connect 127.0.0.1` (no args = offline, T toggles
@@ -333,7 +522,21 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   as an aerial one. `ShotRunner` also re-claims `Current` every frame — a mode entered from
   a deferred call (GPX replay) would otherwise steal the camera after the shot was set up.
   Add `--menu` to capture the mode picker.
+- French features for a box (needs the terrain built there already; merges into existing tiles):
+  `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --france 6.21,46.26,6.27,46.30`
 - Tunnel collision check: `<godot> --path . -- --probe lv95E,lv95N,seconds`
+- Replay verification flags (all alongside `--gpx <track>`): `--snap` road matching, `--cinemamode`
+  Absolute Cinema, `--speed <n>` the playback multiplier, `--lens <n>` a lens profile by index,
+  `--path <0..100>` course-line opacity, `--forceshot <name>` pins Absolute Cinema to one named
+  shot (matches the HUD's override list, e.g. `"Ankle cam"` — quote it, names have spaces),
+  `--arrow off` disables the "HERE" marker, and `--cinemastats <screenSeconds>` which runs the
+  director for that much SCREEN time and prints
+  cuts, rejections and seconds-per-shot, then quits. The last two are how the pacing claim is
+  actually checked: "a scene is as long at 32x as at 1x" is a number, and eyeballing cannot tell a
+  director cutting twice too often from one cutting twenty times too often — and a forced shot
+  held for the whole window (1 cut, not a fresh one every few seconds) is how the manual override
+  itself is checked, the same way. Example:
+  `<godot> --path . -- --gpx seb.gpx --cinemamode --speed 32 --cinemastats 40`
 - Riding check: `<godot> --path . -- --ride bike|skis,seconds[,out.png] [--at E,N]` — mounts,
   holds the throttle via `RideControls`, and prints speed/altitude/clearance every 2 s with a
   non-zero exit if the rider went nowhere or ended under the terrain. Riding is the one part
@@ -341,6 +544,128 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 
 ## Gotchas (learned the hard way)
 
+- **`ConcavePolygonShape3D` is one-sided for collision unless told otherwise, and geometry that
+  "looks right" can still be on the wrong side of that test.** The bridge-deck collision
+  (`RoadMeshBuilder.BuildBridgeCollisionFaces`) shipped with the shape genuinely present at
+  exactly the right position and height — confirmed by dumping its face vertices — and a
+  straight-down `PhysicsRayQueryParameters3D` probe still passed clean through it to the terrain
+  metres below, reproducing the exact fall-through the collision exists to prevent. Godot's
+  `ConcavePolygonShape3D.BackfaceCollision` defaults to **false**, so a ray or a `MoveAndSlide`
+  approaching from the "back" of the triangle winding is not stopped at all — not a near miss,
+  a complete pass-through, and nothing about the visual mesh rendering correctly (or the face
+  data looking sane on inspection) says anything about which side that is. Set
+  `BackfaceCollision = true` on any collision shape a player approaches from a direction its
+  winding was not deliberately authored for — a deck walked on from above is exactly that case.
+  **This was caught only by actually raycasting the running game with the godot-ai MCP**
+  (`game_eval` + `PhysicsRayQueryParameters3D.create`), not by reading the code, not by checking
+  the shape's face data, and not by a visual `--shot` — the geometry inspection said everything
+  was fine. `BuildingBody`'s collision shape has the same `BackfaceCollision: false` default and
+  was not touched — its winding comes from the visual mesh, which had to be correct for
+  rendering to look right, so there is no equivalent evidence it is broken, but it has not been
+  verified with a raycast either.
+- **A visibility test that CUTS AWAY defeats a dissolve that was built to avoid cutting away.**
+  `LockedOff`, `DroneOrbit` and `LowHeroPass` all re-tested `ctx.CanSee` in `StillGood`, so the
+  instant anything drifted between the camera and the runner the Director scored the shot
+  "broken" and cut to something else — before the sightline-cut shader ever got a frame to
+  dissolve it in. The dissolve existed and worked; Absolute Cinema simply never gave it the
+  chance, because pre-empting a shot happens the same frame the obstruction appears and a fade
+  needs several. `CanSee` still gates `Begin` — a shot never STARTS aimed at a wall — but once
+  running these three now trust the dissolve instead of testing sight afresh every frame. This is
+  also why "the old Cinematic mode sees through things and Absolute Cinema doesn't" was reported
+  as a difference between modes when the shader code was actually identical for both: Cinematic
+  never had a competing cut-away trigger to race against, and Cinema's own `StillGood` was
+  quietly winning that race every time.
+- **A camera placed relative to raw TERRAIN can end up under the ROAD the runner is actually on.**
+  `AnkleCam` and `LowHeroPass` computed their ground height from `ctx.Ground(p)` — the bare
+  terrain grid — with `ctx.Subject.Y` as a fallback only when the tile hadn't streamed in yet.
+  But a runner on a road is not always AT terrain height: a graded cut or a low embankment sits
+  measurably above it, which swissALTI3D does not model (see the bridge-approach gotcha below).
+  For a camera placed a couple of metres from the runner, the runner's OWN elevation — already
+  correct, road-matched or draped, whichever applies — is a far better local reference than the
+  bare grid, and using terrain alone put the lowest-angle shots' cameras under the visible road
+  surface on exactly the stretches where the two disagreed, which is also where a low angle makes
+  the clipping most obvious. `ShotContext.GroundNear` takes `Math.Max(Ground(p), Subject.Y - cap)`
+  instead — a cap, not the runner's height outright, so AnkleCam's own by-design offset below the
+  runner is not clamped away.
+- **Two systems computing "how high is this road" independently will not agree to the
+  centimetre, and a lift sized for one will not clear the other.** The GPX ribbon's tread sits
+  `TreadLift` above the height `TrackMatcher` interpolated along the `.road` polyline; the
+  rendered road tread `RoadMeshBuilder` draws from the SAME polyline adds its own render-time
+  offsets on top for reasons that have nothing to do with the recording — `BridgeLift` (0.15 m,
+  purely to stop a deck z-fighting the terrain), and a little more at junctions and type-change
+  joins where width and height are blended across the seam. None of that is visible to
+  `TrackMatcher`, so the base 0.28 m tread lift — sized to clear terrain noise on a DRAPED course
+  — was not always enough to clear the render-time offsets on a SNAPPED one, and the ribbon sank
+  under the road it was following rather than the ground beneath it. Fixed with a second,
+  larger `RoadClearance` margin applied only when `ElevationIsSurface` is true.
+- **A flat-shaded quad mesh is NOT a bilinear surface, and a height query must match whichever one
+  is actually on screen.** `ChunkGrid.SampleHeight` blends all four corners of a quad smoothly;
+  `TerrainMeshBuilder.BuildSurface` splits every quad into two FLAT triangles along a fixed
+  diagonal. At full resolution (2 m spacing) the two agree to a few centimetres and nobody
+  notices. At the coarse LOD strides most of a streamed world renders at beyond ring 4 (20-40 m
+  spacing), they diverge by up to **1.4 m on real terrain here** (measured: stride-10 tile,
+  400 random samples, max 1.44 m, mean 5 cm) - enough that a GPX ribbon's 0.28 m tread lift was
+  nowhere near enough to clear it, and the route visibly sank under the ground the player could
+  see. `ChunkGrid.SampleMeshHeight` replicates the mesh's own triangle split exactly (verified
+  continuous across the diagonal), and `ChunkManager.TryGetHeight` - the avatar, the GPX ribbon,
+  the cinema camera's ground and `CanSee` checks, all of it - now goes through that instead.
+  `SampleHeight` itself is untouched: the preprocessor and `RoadMeshBuilder` call it against
+  always-full-resolution grids (`RequireFull()`-guarded), and their baked output was generated
+  against it, so changing it would need a full re-preprocess of already-built terrain for no gain.
+- **A GPX recording's activity comes from the file, not an assumption.** `Runner` always built a
+  running figure, so a bike ride played back as someone jogging alongside their own bicycle.
+  `GpxParser` now reads the standard `<trk><type>` element (Strava, Garmin and most exporters
+  write it; matched by substring - "cycling", "biking", "road biking", "1" all count, since
+  exporters do not agree on the string) into `GpxTrack.Kind` (`UnitSport.Player.RideKind`, the
+  same enum the player's own mount picker uses), carried through `TrackMatcher` so a road-matched
+  copy keeps it. `Runner` builds the real `Cyclist` rig - the one E mounts, not a second one - for
+  `RideKind.RoadBike`, via `Cyclist.CreateWithTint` rather than `Cyclist.Create(riderIndex)`:
+  the existing factory colours from `HumanPalette.ForRider(index)`'s hue formula, which is a
+  *different* colour than the fixed six-entry leaderboard palette `Runner.Tint` already uses for
+  a human avatar, and a bike ghost whose rider colour disagreed with its own leaderboard row would
+  be its own small bug. Cadence is driven from `Runner.Speed` through the same
+  `speed * 60 / 6.2` clamp(40,112) formula `Bicycle.cs` drives the player's own legs from - there
+  is no wattage for a recording, but there is a speed, and `Cyclist` already freezes the cranks
+  below ~0.01 rpm so a finished or paused ghost simply stops pedalling. Camera mounts (helmet POV,
+  ankle cam, etc.) come from `HumanMeshBuilder.MountsForPose(HumanPose.Cycling)`, a fixed-pose
+  sibling of the gait-sampled `MountsFor` added for this - a cyclist has no gait phase to sample,
+  the legs just turn a crank around a fixed torso. A track with no `<type>`, or an unrecognised
+  one, still plays as a runner: this is additive, not a reclassification of every existing GPX.
+- **State derived from the course must be re-derived on EVERY path that changes it.**
+  `RacePlayback.SetSnapToRoads` raised `SnapChanged` only from the end of a matching pass, so the
+  two paths that return early - turning the toggle off, and turning it back on when everything is
+  already matched - left the ribbon drawn from one variant while the avatar ran the other. It does
+  not read as a stale ribbon; it reads as **the body being rotated off the path**, which is how it
+  was reported. The event is now raised from a `finally`, and `EnsureCinemaPlan` is subscribed to
+  it too, or the director keeps cutting to corners belonging to the other variant. Same class of
+  bug in the HUD: the camera button's shot name was recomputed only inside `Refresh()`, which
+  nothing called on a cut, so it showed whichever shot was running the last time any control was
+  pressed. `_camera.CinemaCuts` is now in the change-detection string - the count, not the name,
+  because two consecutive cuts can land on shots of the same name.
+- **Cinema shot LENGTH was never the reason it cut too fast at high speed.** `_target` and `_held`
+  were already in screen seconds and already unscaled by the clock. The collapse came from the
+  other two triggers: `Imminent`'s lead window widens with the clock, so at 32x it spans 51 track
+  seconds while the clock advances 32 per screen second - the window is essentially never empty,
+  and the same event re-fired a cut on every frame past `MinSeconds`. Fixed by capping the lead
+  (`MaxLeadSeconds`) and by letting an event pull exactly **one** cut (`Director._covered`).
+  `Imminent` must still be called unconditionally, never behind a `&&` short-circuit: it is what
+  walks `_cursor` past events the clock has left behind, so skipping it parks the cursor on the
+  covered event for ever. Second cause: `LockedOff` and `DroneOrbit` guard themselves with fixed
+  metre distances that a runner eats in about a second at 32x, where `LowHeroPass` already scaled
+  by `ClockSpeed`. Measured on a 4 km track, 40 screen seconds: **1x 7 cuts, 8x 8, 32x 12 -> 9**.
+- **The video exporter fed the camera TRACK seconds where it wanted SCREEN seconds.**
+  `_step` is `clockSpeed / fps`; `ShotContext.Dt` and every easing rate in `PlaybackCamera` are
+  screen rates, and `ctx.Follow()` re-applies `ClockSpeed` itself - so the multiplier was counted
+  twice and an export paced visibly differently from the preview the player had just set up at the
+  same speed. It is `_camera.Step(1.0 / _fps)`; only `_race.StepTo` takes `_step`.
+- **A facing look-ahead must be bounded by DISTANCE, not just time.** `HeadingLookahead` is 2.5 s
+  either side, which is ~17 m on foot and 60-100 m on a bike. That is fine for outrunning GPS
+  jitter on a raw recording and wrong on a road-matched one, which has real corners: a hairpin is
+  chorded straight across, and on a switchback the two samples land on opposite legs so the
+  difference collapses toward the degenerate guard and the heading **freezes**. Bounded now by
+  `MaxHeadingChordM`. The facing slerp also has to be clock-scaled like the position follow next
+  to it, or at 8x the body keeps up with the course while its heading lags eight times as far
+  behind every corner.
 - **Raw GPX motion looks like a boat.** Three separate causes, all handled: positions are
   smoothed at parse over a *distance* window (`GpxParser.SmoothingWindowM`, so dense 1 Hz
   tracks are filtered while sparse ones are untouched); facing comes from a +/-2.5 s
@@ -351,6 +676,15 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   metres of jitter between consecutive fixes, so differencing a single segment reports a
   walk as a run and never settles. `GpxTrack.SpeedWindow` (6 s either side) makes the
   readout match the avatar's real world speed — verified at 5.8 reported vs 5.6 measured.
+- **A hand-built basis must be checked for HANDEDNESS, not just direction.** `right = up × forward`
+  and `right = forward × up` differ by a sign, and that sign is the difference between a rotation
+  and a **reflection** (determinant −1). Both `PlaybackCamera.Aim` and `Runner.SafeBasis` had the
+  operands the wrong way round, so the replay camera rendered the **entire world mirrored** and
+  every ghost was mirrored on top of it. It hides extremely well: the −Z column is unaffected, so
+  facing still looks right, and terrain is symmetric enough that nothing looks wrong — until you
+  follow a route you know and every turn you took comes back the other way. `--shot` never showed
+  it, because `ShotRunner` sets `Rotation` as Euler angles instead of building a basis. The rule:
+  `right = forward × up`, and if a basis is built by hand, assert `det ≈ +1`.
 - **Never call `LookAt` on data-driven transforms.** A degenerate target makes Godot raise
   an error, and an error raised inside a C# callback can take the whole runtime down
   ("Fatal error. Internal CLR error." with a stack ending in `DebuggingUtils.GetCurrentStackInfo`).
@@ -381,6 +715,17 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   the ground is a 2 m lattice and crossing each bump costs a little forward motion *every frame*;
   compounded, that bled a bike from 107 m of riding to 11 m on flat ground. Only a shortfall
   that **persists** (smoothed, and past `ImpactTolerance`) is an impact.
+- **`get_image()` on the root viewport from `_Process` returns whatever the render thread last
+  left there.** `ShotRunner` gets away with it because the scene has been static for seconds by
+  the time it grabs. A per-frame exporter does not: measured 75 identical frames of empty sky,
+  with `RenderTotalPrimitivesInFrame` reading 0 at the moment of capture while a `--shot` from the
+  same camera position drew 5.2 M. Await `RenderingServer.FramePostDraw` first.
+- **A stopped figure is not a slow walk.** `HumanMeshBuilder.Cadence` has a floor — it must, or a
+  figure inching forward takes one step a minute — and that floor keeps the legs turning over
+  when the body has stopped. Everything the gait displaces is scaled by a `moving` factor that
+  reaches zero at 0.25 m/s, and `AdvancePhase` freezes below it. Second half of the same bug:
+  `RacePlayback` passed the real frame delta to its runners **while paused**, so a paused replay
+  ran on the spot.
 - **A map-matched track needs its DISPLACEMENT rate-limited, not its position.** Where the model
   changes road, the projection jumps: the two roads meet at a junction but the switch happens
   wherever the fixes stop being nearer one than the other, which is somewhere else. Measured 29
@@ -431,6 +776,24 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   a tunnel keeps you down instead of forcing the body up through the roof — and you cannot
   jump out of a slide you could not stand up in either.
 
+- **A generated roof must be VERIFIED, not reasoned about.** Four rounds of fixing individual
+  failure modes each roughly halved the damage and none reached zero: the single-ridge model
+  bowtied on concave footprints (236/541 buildings), a fan cap emitted backwards triangles on
+  concave rings (759/1239), collinear vertices stalled the ear clipper, and — the subtle one — an
+  inset wider than the building's half-width turns the offset ring **inside out while every
+  vertex is still inside the original**, so a containment check passes it and the roof faces
+  down. What actually worked was building the roof into a scratch list and testing the property
+  that matters (`FranceBuildings.FacesUp`: every normal above a 75° pitch), falling back to flat
+  when it fails. 0 malformed faces of 14,081. Construct-then-verify beats enumerating the ways
+  polygon offsetting can go wrong.
+- **BD TOPO's GeoJSON types are not consistent.** `hauteur` and the altitudes come back as JSON
+  numbers; `position_par_rapport_au_sol` — the bridge/tunnel level — comes back as the *string*
+  `"1"`. Reading only `JsonValueKind.Number` found **zero bridges**, which is indistinguishable
+  from a region that has none. `BdFeature.Number` accepts both.
+- **swissALTI3D does not stop at the border.** All six tiles under a track at Veigy-Foncenex carry
+  real elevations, 374–430 m, no voids. Assuming French terrain had to be imported first (RGE
+  ALTI) would have been a week of work to replace data already present — check the tiles before
+  believing a coverage claim.
 - **GWR: classify on GKLAS, not GKAT.** GKAT only says whether a building is residential
   at all, so using it labels every village house an apartment block. GKLAS 1110/1121 are
   one/two-dwelling houses; 12xx are non-residential.
@@ -553,6 +916,36 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 - **`ChunkManager` records "this tile has no roads/buildings/trees" after ONE empty load.**
   Correct for local files, wrong over a network, so `NetworkChunkSource` retries transient
   failures internally rather than letting a null reach the manager.
+- **"Not connected to a server" is NOT a transient failure for a game that has no server.**
+  This one cost ten minutes on every cold start and hid for months behind plausible explanations.
+  `NetworkChunkSource` falls through to the network whenever a local file is absent — and a
+  `.holes` file is absent for **6,067 of 6,699 tiles**, because almost nothing has a tunnel. With
+  no server, `ChunkStreamer` reported "not connected" as *transient*, so `FetchLoopAsync` retried
+  five times with backoff — 0.4 + 0.9 + 2 + 4 = **7.3 s per tile** — while holding one of the six
+  global fetch slots. Six slots over 7.3 s is a hard ceiling of **0.8 tiles per second** whatever
+  the disk does. Measured before the fix: 887 s of worker time, **100%** of it in
+  `holes+cover`, with `.terr` reads at 0%. After: 0.0 s, and a cold start of **0.6 s** where the
+  budget had been 600. The fix is `ChunkStreamer.ServerReachable` — a per-frame snapshot, because
+  connectivity is only knowable on the main thread — and `ObtainAsync` returning null immediately
+  when there is no peer at all. Deliberately *no peer* rather than *not currently connected*: a
+  client mid-join has a peer whose status is `Connecting`, and a null reaching `ChunkManager` is
+  recorded as "this tile has no roads" for the rest of the session.
+  **The lesson generalises**: profile the load path before optimising it. Tile size, mesh cost and
+  LOD radius are the obvious suspects and were together under 5% of the time.
+- **A mode that owns the screen must drop the anchors of the mode it replaced.** `ClientWorld`
+  registers the spectator camera as a streaming anchor at boot and never removed it on entering
+  GPX replay, so a run at Veigy streamed a second full 361-tile box around Riddes, 100 km away and
+  permanently off camera — and the video exporter waited for it before every frame.
+  `ParkExploreAnchor` takes it off for the duration; `ToggleMode` (T) is now refused during replay,
+  since swapping underneath it would both steal the camera and put the box back.
+- **`Settled` is the wrong question for a frame.** It asks "is anything, anywhere, still loading".
+  `SettledNear(eye, rings)` asks what a frame actually needs, and distance makes the difference
+  invisible rather than merely acceptable: `fog_color` and the environment background are the
+  **same colour** and `fog_end` is 8 km, so a tile missing past ring 8 renders as exactly the
+  colour it would have had. It must test the *desired* set, not the loaded one — `EvaluateRings`
+  breaks out of its loop at the build cap, so tiles further down the nearest-first order have no
+  state at all, and checking only the states that exist reports a world as settled before most of
+  it has been asked for.
 - **A fresh clone has NO terrain** — the generated data is gitignored — so a missing
   `manifest.json` is an ordinary state, not an error. `LocalChunkSource` returns an empty
   manifest and the client boots into an empty world with a message; it used to throw

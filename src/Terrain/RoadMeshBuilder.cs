@@ -15,6 +15,9 @@ public static class RoadMeshBuilder
 
     public static MeshData? Build(RoadTile tile, ChunkGrid? grid = null)
     {
+        // Bridge piers, cableway pylons and wall footings are grown from the ground up, so a
+        // decimated grid would stand them on a 20 m approximation of it.
+        grid?.RequireFull(nameof(RoadMeshBuilder));
         int quadCount = 0;
         foreach (var s in tile.Segments)
             quadCount += Math.Max(0, s.PointCount - 1);
@@ -63,6 +66,60 @@ public static class RoadMeshBuilder
         return vertices.Count == 0
             ? null
             : new MeshData(vertices.ToArray(), colors.ToArray(), uvs.ToArray(), uv2s.ToArray(), indices.ToArray());
+    }
+
+    /// <summary>
+    /// Flat triangle soup for the walkable TOP of every bridge deck in the tile — the one piece
+    /// of collision a heightfield genuinely cannot provide, since it has one height per (x, z)
+    /// column and a deck floats above whatever the terrain is doing underneath (a gorge, a
+    /// river). <c>TerrainMeshBuilder.BlendRoadCorridor</c> explicitly excludes bridges for the
+    /// same reason in reverse — blending terrain toward a deck's height would fill in the gorge
+    /// it crosses.
+    ///
+    /// <para>
+    /// Deck only: piers and parapets stay visual-only. A player clipping through a pier or
+    /// resting an elbow on a parapet was never the reported problem — falling clean through the
+    /// deck was — and piers already stand inside terrain collision for their full height below
+    /// the deck, so they are self-supporting without needing their own shape.
+    /// </para>
+    /// </summary>
+    public static Vector3[] BuildBridgeCollisionFaces(RoadTile tile)
+    {
+        var faces = new List<Vector3>();
+
+        foreach (var seg in tile.Segments)
+        {
+            if ((seg.Flags & RoadFlags.Bridge) == 0) continue;
+            int n = seg.PointCount;
+            if (n < 2) continue;
+
+            float half = seg.Width * 0.5f;
+            var left = new Vector3[n];
+            var right = new Vector3[n];
+            for (int i = 0; i < n; i++)
+            {
+                // same deck line AppendBridgeStructure draws from, so the collision sits exactly
+                // under the visible tread rather than needing its own separate height source
+                var p = Point(seg, i) + new Vector3(0, BridgeLift, 0);
+                Vector3 forward = i == 0 ? Point(seg, 1) - Point(seg, 0)
+                    : i == n - 1 ? Point(seg, n - 1) - Point(seg, n - 2)
+                    : Point(seg, i + 1) - Point(seg, i - 1);
+                forward.Y = 0;
+                if (forward.LengthSquared() < 1e-8f) forward = Vector3.Forward;
+                forward = forward.Normalized();
+                var side = new Vector3(-forward.Z, 0, forward.X) * half;
+                left[i] = p - side;
+                right[i] = p + side;
+            }
+
+            for (int i = 0; i < n - 1; i++)
+            {
+                faces.Add(left[i]); faces.Add(right[i]); faces.Add(left[i + 1]);
+                faces.Add(right[i]); faces.Add(right[i + 1]); faces.Add(left[i + 1]);
+            }
+        }
+
+        return faces.ToArray();
     }
 
     /// <summary>

@@ -18,7 +18,7 @@ public static class ChunkCodec
         BinaryPrimitives.WriteInt32LittleEndian(header[8..], grid.Id.E);
         BinaryPrimitives.WriteInt32LittleEndian(header[12..], grid.Id.N);
         BinaryPrimitives.WriteUInt16LittleEndian(header[16..], ChunkFormat.GridSize);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[18..], 0); // reserved
+        BinaryPrimitives.WriteUInt16LittleEndian(header[18..], (ushort)grid.Stride);
         BinaryPrimitives.WriteSingleLittleEndian(header[20..], grid.MinHeight);
         BinaryPrimitives.WriteSingleLittleEndian(header[24..], grid.MaxHeight);
         BinaryPrimitives.WriteUInt32LittleEndian(header[28..], 0); // reserved
@@ -59,15 +59,25 @@ public static class ChunkCodec
         ushort gridSize = BinaryPrimitives.ReadUInt16LittleEndian(header[16..]);
         if (gridSize != ChunkFormat.GridSize)
             throw new InvalidDataException($"Unsupported grid size {gridSize}");
+
+        // This word was written as zero and ignored, which is what lets the coarse tile share the
+        // format instead of needing one of its own: every .terr already on disk reads back as
+        // stride 1, and the decimated companion is the same file with a different number here.
+        int stride = BinaryPrimitives.ReadUInt16LittleEndian(header[18..]);
+        if (stride == 0) stride = 1;
+        if ((ChunkFormat.GridSize - 1) % stride != 0)
+            throw new InvalidDataException($"Unsupported chunk stride {stride}");
+
         float minH = BinaryPrimitives.ReadSingleLittleEndian(header[20..]);
         float maxH = BinaryPrimitives.ReadSingleLittleEndian(header[24..]);
 
-        var heights = new ushort[ChunkFormat.GridSize * ChunkFormat.GridSize];
+        int size = (ChunkFormat.GridSize - 1) / stride + 1;
+        var heights = new ushort[size * size];
         input.ReadExactly(MemoryMarshal.AsBytes(heights.AsSpan()));
         if (!BitConverter.IsLittleEndian)
             for (int i = 0; i < heights.Length; i++)
                 heights[i] = BinaryPrimitives.ReverseEndianness(heights[i]);
 
-        return new ChunkGrid(id, heights, minH, maxH);
+        return new ChunkGrid(id, heights, minH, maxH, stride);
     }
 }

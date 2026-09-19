@@ -18,12 +18,39 @@ public partial class PlaybackHud : CanvasLayer
     private Button _cameraButton = null!;
     private Button _focusButton = null!;
     private Button _snapButton = null!;
+    private Button _paceButton = null!;
+    private Button _lensButton = null!;
+    private OptionButton _shotButton = null!;
+    private Button _arrowButton = null!;
+    private HSlider _pathSlider = null!;
+    private int _paceIndex = 1;   // 1x
+    private static readonly float[] PaceSteps = { 0.5f, 1f, 1.5f, 2f, 3f };
     private string _snapState = "";
+    private Button _exportButton = null!;
+    private Button _fpsButton = null!;
+    private int _fpsIndex = 1;
+    private static readonly int[] FpsSteps = { 24, 30, 60 };
+
+    /// <summary>The exporter, once the session has one. Null until then.</summary>
+    public VideoExporter? Exporter { get; set; }
+
+    /// <summary>Raised with the chosen frame rate when the player asks to export.</summary>
+    public event Action<int>? ExportRequested;
+
+    /// <summary>Raised with 0..1 as the course-line slider moves.</summary>
+    public event Action<float>? PathOpacityChanged;
+
+    /// <summary>Raised when the lens button is pressed; the session owns the post-process.</summary>
+    public event Action? LensCycleRequested;
+
+    /// <summary>Name of the lens in force, written back by whoever handles the cycle.</summary>
+    public string LensName { get; set; } = "None";
     private Label _stats = null!;
     private Label _title = null!;
     private VBoxContainer _board = null!;
     private PanelContainer _boardPanel = null!;
     private PanelContainer _controls = null!;
+    private VBoxContainer _controlRows = null!;
     private Button _toggleButton = null!;
     private bool _uiVisible = true;
     private int _speedIndex = 2;   // 1x
@@ -72,6 +99,7 @@ public partial class PlaybackHud : CanvasLayer
 
         var rows = new VBoxContainer();
         _controls.AddChild(rows);
+        _controlRows = rows;
 
         var top = new HBoxContainer();
         rows.AddChild(top);
@@ -100,7 +128,11 @@ public partial class PlaybackHud : CanvasLayer
         _timeline.ValueChanged += v => { if (_scrubbing) _race.Seek(v); };
         rows.AddChild(_timeline);
 
-        var buttons = new HBoxContainer();
+        // A flow container, not a box: the controls total 1240 px of minimum width and the frame
+        // is 1152, so a single row silently cut the last button off the right edge. Flowing wraps
+        // to a second line instead, and keeps working if the row grows again or the window is
+        // made narrow.
+        var buttons = new HFlowContainer();
         rows.AddChild(buttons);
 
         _playButton = Button("Pause", () => { _race.TogglePlay(); Refresh(); });
@@ -142,7 +174,88 @@ public partial class PlaybackHud : CanvasLayer
             "Snap the recorded track onto the mapped road network (R)";
         buttons.AddChild(_snapButton);
 
-        buttons.AddChild(new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        // Cutting rhythm is taste, not a fact, so it is a control rather than a constant. It
+        // scales every shot's min and max duration; the durations themselves are already in
+        // screen seconds, so a scene runs as long at 32x as it does at 1x.
+        _paceButton = Button("Pace: 1x", () =>
+        {
+            _paceIndex = (_paceIndex + 1) % PaceSteps.Length;
+            _camera.CinemaPacing = PaceSteps[_paceIndex];
+            Refresh();
+        });
+        _paceButton.CustomMinimumSize = new Vector2(92, 26);
+        _paceButton.TooltipText = "How long Absolute Cinema holds each shot";
+        buttons.AddChild(_paceButton);
+
+        _lensButton = Button("Lens: None", () =>
+        {
+            LensCycleRequested?.Invoke();
+            Refresh();
+        });
+        _lensButton.CustomMinimumSize = new Vector2(132, 26);
+        _lensButton.TooltipText =
+            "Simulated optics: barrel distortion, chromatic aberration and vignette";
+        buttons.AddChild(_lensButton);
+
+        // A manual override, not a replacement for the director: picking a shot here pins the
+        // camera to it (Begin is still tested, so it never opens on a bad placement) and leaves
+        // the event timeline and pacing to mean nothing until "Auto" is chosen again.
+        _shotButton = new OptionButton { CustomMinimumSize = new Vector2(150, 26) };
+        _shotButton.AddItem("Shot: Auto");
+        foreach (string name in PlaybackCamera.CinemaShotNames) _shotButton.AddItem(name);
+        _shotButton.TooltipText = "Override Absolute Cinema's choice of shot";
+        _shotButton.ItemSelected += index =>
+        {
+            _camera.ForcedCinemaShot = index == 0 ? null : _shotButton.GetItemText((int)index);
+        };
+        buttons.AddChild(_shotButton);
+
+        // The course line is drawn for orientation, and orientation is exactly what you do not
+        // want burnt into a video. A slider rather than a toggle because the useful setting for
+        // an export is usually a faint one, not none.
+        var path = new HBoxContainer();
+        path.AddChild(new Label { Text = "Path" });
+        _pathSlider = new HSlider
+        {
+            MinValue = 0, MaxValue = 100, Value = 100, Step = 1,
+            CustomMinimumSize = new Vector2(110, 22),
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+        };
+        _pathSlider.TooltipText = "Opacity of the course line";
+        _pathSlider.ValueChanged += v => PathOpacityChanged?.Invoke((float)v / 100f);
+        path.AddChild(_pathSlider);
+        buttons.AddChild(path);
+
+        // Not gated to Cinema: the arrow works from any camera, so the toggle stays available
+        // in every mode the way the button it sits next to (Path) does.
+        _arrowButton = Button("Arrow: on", () =>
+        {
+            _camera.AttentionArrowEnabled = !_camera.AttentionArrowEnabled;
+            Refresh();
+        });
+        _arrowButton.CustomMinimumSize = new Vector2(92, 26);
+        _arrowButton.TooltipText =
+            "Show a \"HERE\" marker over the runner when the camera is too far to spot them";
+        buttons.AddChild(_arrowButton);
+
+        // Export sits next to the camera and speed controls on purpose: those two are what it
+        // records, so the button belongs beside the things it captures.
+        _fpsButton = Button("30 fps", () =>
+        {
+            _fpsIndex = (_fpsIndex + 1) % FpsSteps.Length;
+            Refresh();
+        });
+        _fpsButton.CustomMinimumSize = new Vector2(72, 26);
+        _fpsButton.TooltipText = "Frame rate of the exported video";
+        buttons.AddChild(_fpsButton);
+
+        _exportButton = Button("Export video", () => ExportRequested?.Invoke(FpsSteps[_fpsIndex]));
+        _exportButton.CustomMinimumSize = new Vector2(108, 26);
+        _exportButton.TooltipText =
+            "Render the whole run to a video with the current camera and speed. "
+            + "Slower than real time — it waits for terrain to load on every frame.";
+        buttons.AddChild(_exportButton);
+
         buttons.AddChild(Button("+ Add ghost", () => AddRequested?.Invoke()));
         buttons.AddChild(Button("Clear", () => ClearRequested?.Invoke()));
         buttons.AddChild(Button("Exit replay", () => ExitRequested?.Invoke()));
@@ -231,7 +344,19 @@ public partial class PlaybackHud : CanvasLayer
         _speedButton.Text = SpeedSteps[_speedIndex] < 1
             ? $"{SpeedSteps[_speedIndex]:0.##}x"
             : $"{SpeedSteps[_speedIndex]:0}x";
-        _cameraButton.Text = $"Cam: {_camera.Mode}";
+        _cameraButton.Text = _camera.Mode == CameraMode.Cinema
+            ? $"Absolute Cinema — {_camera.CinemaShot}"
+            : $"Cam: {_camera.Mode}";
+        // Fixed at the width of the longest shot name. The size used to be recomputed from the
+        // text on every refresh, which was harmless only while the label was stale — now that it
+        // updates on every cut, a width that tracked the text would reflow the whole flow
+        // container several times a minute.
+        _cameraButton.CustomMinimumSize = new Vector2(250, 26);
+        _paceButton.Text = $"Pace: {PaceSteps[_paceIndex]:0.##}x";
+        _paceButton.Visible = _camera.Mode == CameraMode.Cinema;
+        _shotButton.Visible = _camera.Mode == CameraMode.Cinema;
+        _arrowButton.Text = _camera.AttentionArrowEnabled ? "Arrow: on" : "Arrow: off";
+        _lensButton.Text = $"Lens: {LensName}";
         _focusButton.Text = $"Follow: {_race.FocusIndex + 1}";
         _timeline.MaxValue = Math.Max(1, _race.Duration);
 
@@ -239,6 +364,12 @@ public partial class PlaybackHud : CanvasLayer
             : _race.SnapToRoads ? $"Roads: {(_race.SnapStatus.Length > 0 ? _race.SnapStatus : "on")}"
             : "Roads: off";
         _snapButton.Disabled = _race.Matching || _race.Runners.Count == 0;
+
+        bool exporting = Exporter is { Running: true };
+        _fpsButton.Text = $"{FpsSteps[_fpsIndex]} fps";
+        _fpsButton.Disabled = exporting;
+        _exportButton.Text = exporting ? $"Cancel  {Exporter!.Progress:P0}" : "Export video";
+        _exportButton.Disabled = _race.Runners.Count == 0;
 
         var focused = _race.Focused;
         var course = focused?.Active;
@@ -252,13 +383,26 @@ public partial class PlaybackHud : CanvasLayer
     public override void _Process(double _)
     {
         if (!_uiVisible) return;   // nothing on screen to update
+        // The panel is anchored to the bottom edge, so its height is the offset to its top. Fixed
+        // at 104 px it clipped the button row the moment that row wrapped to two lines — and a
+        // control you cannot see is a control that does not exist.
+        float wanted = _controlRows.GetCombinedMinimumSize().Y + 20;
+        if (Math.Abs(_controls.OffsetTop + wanted) > 0.5f) _controls.OffsetTop = -wanted;
+
         if (!_scrubbing) _timeline.SetValueNoSignal(_race.Time);
         if (Math.Abs(_timeline.MaxValue - Math.Max(1, _race.Duration)) > 0.01) Refresh();
 
         // Road matching finishes on a worker thread, so nothing the player did marks the moment
         // the button should stop saying "matching". Watching the state it displays is enough —
         // and it is one string comparison, against wiring an event through for one label.
-        string snapState = $"{_race.Matching}|{_race.SnapToRoads}|{_race.SnapStatus}";
+        // The director cuts on its own schedule, so — exactly like road matching — nothing the
+        // player does marks the moment the label should change. CinemaCuts is the cheap signal:
+        // it ticks once per cut, where comparing the shot NAME would miss a cut back to a shot of
+        // the same name. Without this the button showed whichever shot happened to be running the
+        // last time any control was pressed, which at 32x is many cuts ago.
+        string snapState = $"{_race.Matching}|{_race.SnapToRoads}|{_race.SnapStatus}"
+            + $"|{Exporter?.Running}|{Exporter?.Progress:F3}"
+            + $"|{_camera.Mode}|{_camera.CinemaCuts}";
         if (snapState != _snapState)
         {
             _snapState = snapState;

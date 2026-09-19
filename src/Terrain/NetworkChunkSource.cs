@@ -104,6 +104,16 @@ public sealed class NetworkChunkSource : IChunkSource
             .ConfigureAwait(false);
     }
 
+    public async Task<ChunkGrid?> LoadCoarseChunkAsync(TileId id, CancellationToken ct = default)
+    {
+        if (await _local.LoadCoarseChunkAsync(id, ct).ConfigureAwait(false) is { } local)
+            return local;
+
+        return await ObtainAsync(AssetKind.ChunkCoarse, id, ct,
+            bytes => { using var ms = new MemoryStream(bytes); return ChunkCodec.Decode(ms); })
+            .ConfigureAwait(false);
+    }
+
     public async Task<RoadTile?> LoadRoadsAsync(TileId id, CancellationToken ct = default)
     {
         if (await _local.LoadRoadsAsync(id, ct).ConfigureAwait(false) is { } local) return local;
@@ -149,6 +159,24 @@ public sealed class NetworkChunkSource : IChunkSource
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Shipped copy first, else the one <see cref="ClientTerrainSync"/> pulled into the cache
+    /// during sync. Not fetched on demand here: it is a single region-wide file, and the sync
+    /// already knows the moment a server is there to ask.
+    /// </summary>
+    public async Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
+    {
+        if (await _local.LoadHorizonAsync(ct).ConfigureAwait(false) is { } local) return local;
+
+        string path = Path.Combine(_cacheDirectory, HorizonFormat.FileName);
+        if (!File.Exists(path)) return null;
+        return await Task.Run(() =>
+        {
+            using var fs = File.OpenRead(path);
+            return HorizonFormat.Decode(fs);
+        }, ct).ConfigureAwait(false);
+    }
+
     // ---- cache and fetch ------------------------------------------------------------------
 
     /// <summary>
@@ -169,6 +197,21 @@ public sealed class NetworkChunkSource : IChunkSource
 
         if (bytes is null)
         {
+            // With no server there is nothing to fetch from, and the retry ladder cannot help.
+            //
+            // This one check is worth more than everything else in the loading path put together.
+            // Most tiles legitimately have no .holes file — 632 of 6,699 do — so an offline
+            // single-player session asked the network for a file that does not exist, was told
+            // "not connected", treated that as *transient*, and retried five times with backoff:
+            // 0.4 + 0.9 + 2 + 4 = 7.3 seconds per tile, while holding one of the six global fetch
+            // slots. Six slots over 7.3 seconds is a hard ceiling of 0.8 tiles per second no
+            // matter how fast the disk is, and that ceiling — not file size, not meshing — is
+            // what made a cold start take ten minutes.
+            //
+            // Deliberately not recorded in _knownMissing: a client that connects later must be
+            // able to ask for exactly these files.
+            if (!_streamer.ServerReachable) return null;
+
             bytes = await FetchWithRetryAsync(kind, id, key, ct).ConfigureAwait(false);
             if (bytes is null) return null;
 

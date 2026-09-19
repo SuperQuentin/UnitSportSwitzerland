@@ -31,6 +31,12 @@ public partial class FootPlayer : CharacterBody3D
     /// <summary>Upward kick of a wall jump. Slightly over a standing jump — it has to clear a lip.</summary>
     [Export] public float WallJumpUp { get; set; } = 4.6f;
 
+    /// <summary>
+    /// Vertical launch of a bunny hop on the bike or a pop on skis (m/s). Lower than a
+    /// standing jump: a rider lifts the machine with them, and 3 m/s is a kerb, not a stunt.
+    /// </summary>
+    [Export] public float RideJumpVelocity { get; set; } = 3.2f;
+
     /// <summary>Push away from the wall. Above <see cref="RunSpeed"/>, so it actually launches.</summary>
     [Export] public float WallJumpPush { get; set; } = 5.4f;
 
@@ -255,7 +261,7 @@ public partial class FootPlayer : CharacterBody3D
                 Name = "Camera",
                 Position = new Vector3(0, EyeHeight, 0),
                 Near = 0.08f,
-                Far = 20000f,
+                Far = Core.GameSettings.Current.CameraFar,
                 Fov = BaseFov,
             };
             AddChild(_camera);
@@ -656,6 +662,14 @@ public partial class FootPlayer : CharacterBody3D
         velocity.X = heading.X * _motion.Speed;
         velocity.Z = heading.Z * _motion.Speed;
         velocity.Y = onFloor ? Mathf.Min(velocity.Y, 0f) : velocity.Y - Gravity * dt;
+
+        // Space hops: edge-triggered like the on-foot jump, so holding it does not bunny-hop
+        // every frame, and only from the ground - there is nothing to push against in the air.
+        // Speed and heading are untouched: a hop carries the bike's momentum, it does not add any.
+        bool spaceDown = !typing && Input.IsPhysicalKeyPressed(Key.Space);
+        bool hop = spaceDown && !_jumpHeld && onFloor;
+        _jumpHeld = spaceDown;
+        if (hop) velocity.Y = RideJumpVelocity;
 
         Velocity = velocity;
         MoveAndSlide();

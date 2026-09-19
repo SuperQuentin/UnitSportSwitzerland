@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode unshaded, cull_disabled;
+render_mode unshaded, cull_disabled, blend_mix, depth_draw_opaque;
 
 // The GPX route rendered as a raised path. Flat-shaded from screen derivatives like the
 // terrain, so the top surface and the side walls separate and the strip reads as a solid
@@ -13,6 +13,11 @@ uniform vec3 fog_color : source_color = vec3(0.72, 0.78, 0.86);
 uniform vec3 top_color : source_color = vec3(0.98, 0.74, 0.12);
 uniform vec3 side_color : source_color = vec3(0.62, 0.42, 0.06);
 uniform vec3 sun_direction = vec3(0.45, 0.8, 0.25);
+
+// The course line is an orientation aid, and orientation is the last thing you want burnt into
+// a finished video. depth_draw_opaque above goes with the blend mode: this is a raised strip
+// with real thickness, not a decal, so it still has to occlude itself correctly.
+uniform float alpha : hint_range(0.0, 1.0) = 1.0;
 
 varying vec3 world_pos;
 
@@ -52,4 +57,5 @@ void fragment() {
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
     ALBEDO = mix(col, fog_color, fog);
+    ALPHA = alpha;
 }

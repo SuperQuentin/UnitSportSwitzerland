@@ -3,8 +3,9 @@ using Godot;
 namespace UnitSport.Player;
 
 /// <summary>
-/// Free fly camera: WASD + QE (physical keys, layout-independent), mouse look, Shift for
-/// boost, mouse wheel to change speed. Click to take mouse capture back after a menu.
+/// Free fly camera: WASD (physical keys, layout-independent), Space / E up, Shift / Q down,
+/// mouse look, Ctrl for boost, mouse wheel to change speed. Click to take mouse capture back
+/// after a menu.
 /// </summary>
 public partial class SpectatorCamera : Camera3D
 {
@@ -18,7 +19,7 @@ public partial class SpectatorCamera : Camera3D
     public override void _Ready()
     {
         Near = 1f;
-        Far = 20000f;
+        Far = Core.GameSettings.Current.CameraFar;
         Input.MouseMode = Input.MouseModeEnum.Captured;
     }
 
@@ -59,12 +60,14 @@ public partial class SpectatorCamera : Camera3D
         if (Input.IsPhysicalKeyPressed(Key.S)) dir += Basis.Z;
         if (Input.IsPhysicalKeyPressed(Key.A)) dir -= Basis.X;
         if (Input.IsPhysicalKeyPressed(Key.D)) dir += Basis.X;
-        if (Input.IsPhysicalKeyPressed(Key.E)) dir += Vector3.Up;
-        if (Input.IsPhysicalKeyPressed(Key.Q)) dir -= Vector3.Up;
+        // Space/Shift match the on-foot and mounted controls (Space jumps there), so the
+        // vertical axis is on the same keys whatever you are; Q/E stay for the other hand.
+        if (Input.IsPhysicalKeyPressed(Key.E) || Input.IsPhysicalKeyPressed(Key.Space)) dir += Vector3.Up;
+        if (Input.IsPhysicalKeyPressed(Key.Q) || Input.IsPhysicalKeyPressed(Key.Shift)) dir -= Vector3.Up;
 
         if (dir != Vector3.Zero)
         {
-            float speed = Speed * (Input.IsPhysicalKeyPressed(Key.Shift) ? BoostMultiplier : 1f);
+            float speed = Speed * (Input.IsPhysicalKeyPressed(Key.Ctrl) ? BoostMultiplier : 1f);
             Position += dir.Normalized() * speed * (float)delta;
         }
     }

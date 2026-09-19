@@ -31,11 +31,12 @@ public partial class MainMenu : CanvasLayer
     private LineEdit _host = null!;
     private Label _status = null!;
     private Button _resume = null!;
+    private SettingsMenu _settings = null!;
 
     /// <summary>Server address typed into the multiplayer row.</summary>
     public string Host => string.IsNullOrWhiteSpace(_host.Text) ? "127.0.0.1" : _host.Text.Trim();
 
-    public bool IsOpen => _panel.Visible;
+    public bool IsOpen => _panel.Visible || _settings.Visible;
 
     /// <summary>The mode currently running, shown so the menu can offer to resume it.</summary>
     public GameMode? Current { get; private set; }
@@ -65,6 +66,11 @@ public partial class MainMenu : CanvasLayer
         style.SetCornerRadiusAll(6);
         _panel.AddThemeStyleboxOverride("panel", style);
         centre.AddChild(_panel);
+
+        // the settings panel swaps in for the main one, in the same centred slot
+        _settings = SettingsMenu.Create();
+        _settings.BackRequested += () => { _settings.Visible = false; _panel.Visible = true; };
+        centre.AddChild(_settings);
 
         var rows = new VBoxContainer();
         rows.AddThemeConstantOverride("separation", 8);
@@ -108,6 +114,10 @@ public partial class MainMenu : CanvasLayer
         rows.AddChild(hostRow);
 
         rows.AddChild(new HSeparator());
+
+        ModeButton(rows, "Settings",
+            "Render distance, detail, horizon, fog and performance",
+            OpenSettings);
 
         var quit = new Button { Text = "Quit", CustomMinimumSize = new Vector2(0, 30) };
         quit.Pressed += () => QuitRequested?.Invoke();
@@ -154,9 +164,18 @@ public partial class MainMenu : CanvasLayer
     public void Open() => SetOpen(true);
     public void Close() => SetOpen(false);
 
+    /// <summary>Opens the menu straight onto the settings panel.</summary>
+    public void OpenSettings()
+    {
+        SetOpen(true);
+        _panel.Visible = false;
+        _settings.Visible = true;
+    }
+
     private void SetOpen(bool open)
     {
         _panel.Visible = open;
+        _settings.Visible = false;
         if (open)
         {
             _status.Text = Current == null
@@ -183,7 +202,15 @@ public partial class MainMenu : CanvasLayer
     public override void _UnhandledKeyInput(InputEvent @event)
     {
         if (!IsOpen) return;
-        if (@event is InputEventKey { Pressed: true, PhysicalKeycode: Key.Escape } && Current != null)
+        if (@event is not InputEventKey { Pressed: true, PhysicalKeycode: Key.Escape }) return;
+        if (_settings.Visible)
+        {
+            // Esc from settings goes back to the menu, not out of it
+            _settings.Visible = false;
+            _panel.Visible = true;
+            GetViewport().SetInputAsHandled();
+        }
+        else if (Current != null)
         {
             Close();
             GetViewport().SetInputAsHandled();

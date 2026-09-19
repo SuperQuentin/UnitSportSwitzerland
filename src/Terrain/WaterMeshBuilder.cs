@@ -34,6 +34,8 @@ public static class WaterMeshBuilder
 
     public static MeshData? Build(ChunkGrid grid, byte[] cover, RoadTile? roads = null)
     {
+        // The water surface *is* the terrain height at a water cell, sampled per 2 m vertex.
+        grid.RequireFull(nameof(WaterMeshBuilder));
         int last = ChunkFormat.GridSize - 1;
         int m = last / Stride + 1;
         float quad = (float)(Stride * ChunkFormat.SpacingM);

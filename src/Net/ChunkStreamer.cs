@@ -99,6 +99,40 @@ public partial class ChunkStreamer : Node
     /// and the tile stays blank forever.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Whether there is a server to ask at all, readable from a worker thread.
+    ///
+    /// <para>
+    /// Connectivity itself is only knowable on the main thread, so this is a snapshot refreshed
+    /// each frame. Being a frame stale is harmless in both directions: a stale <c>false</c> delays
+    /// a fetch by one frame, and a stale <c>true</c> falls into the check inside
+    /// <see cref="FetchAsync"/> that was doing the whole job before.
+    /// </para>
+    ///
+    /// <para>
+    /// It exists because "there is no server" was being reported as a <i>transient</i> failure —
+    /// which it is, for a client whose connection dropped, and is not for a single-player game
+    /// that never had one. See <c>NetworkChunkSource.ObtainAsync</c> for what that cost.
+    /// </para>
+    ///
+    /// <para>
+    /// The test is deliberately "is there a peer at all" and <b>not</b> "is it connected right
+    /// now". A client mid-join has a peer whose status is still <c>Connecting</c>, and a fetch
+    /// then has to fail <i>transiently</i> and retry — because a null reaching
+    /// <see cref="ChunkManager"/> is recorded as "this tile has no roads" for the rest of the
+    /// session. Narrowing this to the case that is unambiguous, no peer at all, keeps every
+    /// networked path behaving exactly as it did.
+    /// </para>
+    /// </summary>
+    public bool ServerReachable => _serverReachable;
+
+    private volatile bool _serverReachable;
+
+    private void RefreshReachability() =>
+        _serverReachable = !IsServing
+            && Multiplayer.HasMultiplayerPeer()
+            && Multiplayer.GetUniqueId() != 1;
+
     public Task<AssetResult> FetchAsync(AssetKind kind, TileId id, CancellationToken ct = default)
     {
         if (IsServing) return Task.FromResult(new AssetResult(null, true));
@@ -299,6 +333,8 @@ public partial class ChunkStreamer : Node
 
     public override void _Process(double delta)
     {
+        RefreshReachability();
+
         if (IsServing)
         {
             PumpServer(delta);

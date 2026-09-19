@@ -92,6 +92,41 @@ public partial class ChunkNode : Node3D
         _buildingBody.AddChild(new CollisionShape3D { Shape = shape });
     }
 
+    private StaticBody3D? _roadBody;
+
+    /// <summary>
+    /// Bridge deck collision — the one piece of road geometry a heightfield cannot represent
+    /// (a deck floats above terrain, at a different height than the ground it crosses). Every
+    /// other at-grade road/path already stands on terrain collision blended toward it; see
+    /// <c>TerrainMeshBuilder.BlendRoadCorridor</c>.
+    /// </summary>
+    public void SetRoadCollision(Vector3[] faces)
+    {
+        if (faces.Length == 0)
+        {
+            _roadBody?.QueueFree();
+            _roadBody = null;
+            return;
+        }
+
+        // BackfaceCollision: a bridge deck is walked on from above, but Godot's default (false)
+        // makes a ConcavePolygonShape3D one-sided for exactly the queries a player's own
+        // MoveAndSlide and a straight-down raycast both are - a ray from above that happens to
+        // approach the "wrong" side of the triangle winding passes straight through as if the
+        // deck were not there at all. Verified with a direct PhysicsRayQueryParameters3D probe
+        // from above a real bridge: without this the ray landed on the terrain far below,
+        // exactly the fall-through this collision exists to prevent.
+        var shape = new ConcavePolygonShape3D { Data = faces, BackfaceCollision = true };
+        if (_roadBody == null)
+        {
+            _roadBody = new StaticBody3D { Name = "RoadBody" };
+            AddChild(_roadBody);
+        }
+        foreach (Node child in _roadBody.GetChildren())
+            child.QueueFree();
+        _roadBody.AddChild(new CollisionShape3D { Shape = shape });
+    }
+
     private MultiMeshInstance3D? _coniferInstance;
     private MultiMeshInstance3D? _broadleafInstance;
 
@@ -266,8 +301,10 @@ public partial class ChunkNode : Node3D
         var collisionShape = new CollisionShape3D
         {
             Shape = shape,
-            // HeightMapShape3D cells are 1 unit and the shape is XZ-centered; scale to the
-            // 2 m grid and move to the tile center. Verified against the height sampler in M3.
+            // HeightMapShape3D cells are 1 unit and the shape is XZ-centered; scale to
+            // ChunkFormat.SpacingM and move to the tile center. Verified against the height
+            // sampler in M3. Position is half the 1000 m tile size, not the grid spacing —
+            // unaffected by a spacing change.
             Position = new Vector3(500f, 0f, 500f),
             Scale = new Vector3((float)ChunkFormat.SpacingM, 1f, (float)ChunkFormat.SpacingM),
         };

@@ -33,6 +33,7 @@ public partial class Cyclist : Node3D
     private MeshInstance3D _cranks = null!;
     private readonly MeshInstance3D[] _legs = new MeshInstance3D[2];
     private HumanPalette _palette = HumanPalette.Default;
+    private BikePalette _bikePalette = BikePalette.Default;
 
     private float _crankAngle;
     private float _cadenceRpm;
@@ -51,7 +52,7 @@ public partial class Cyclist : Node3D
     public void SetCrankAngle(float radians)
     {
         _crankAngle = Mathf.Wrap(radians, 0f, Mathf.Tau);
-        _cranks.Mesh = BikeMeshBuilder.BuildCranks(BikePalette.ForRider(_riderIndex), _crankAngle);
+        _cranks.Mesh = BikeMeshBuilder.BuildCranks(_bikePalette, _crankAngle);
         UpdateLegs();
     }
 
@@ -59,14 +60,30 @@ public partial class Cyclist : Node3D
     {
         Name = "Cyclist",
         _palette = HumanPalette.ForRider(riderIndex),
-        _riderIndex = riderIndex,
+        _bikePalette = BikePalette.ForRider(riderIndex),
     };
 
-    private int _riderIndex;
+    /// <summary>
+    /// A rider whose colour comes from an existing tint rather than a rider index.
+    ///
+    /// <para>
+    /// GPX playback already colours each runner from a fixed six-entry palette so the
+    /// leaderboard and the avatar agree — <see cref="Runner"/>'s human avatar is built the same
+    /// way, jersey and helmet set from the same <c>Color</c>. Rebuilding that tint through
+    /// <c>HumanPalette.ForRider(index)</c>'s hue formula would pick a different, unrelated
+    /// colour, so a bike ghost's leaderboard row and its rider would disagree.
+    /// </para>
+    /// </summary>
+    public static Cyclist CreateWithTint(Color tint) => new()
+    {
+        Name = "Cyclist",
+        _palette = HumanPalette.Default with { Jersey = tint, Helmet = tint },
+        _bikePalette = BikePalette.Default with { Accent = tint },
+    };
 
     public override void _Ready()
     {
-        var bikePalette = BikePalette.ForRider(_riderIndex);
+        var bikePalette = _bikePalette;
         var material = HumanMeshBuilder.Material();
 
         AddChild(new MeshInstance3D
@@ -106,7 +123,7 @@ public partial class Cyclist : Node3D
         if (_cadenceRpm <= 0.01f) return;
 
         _crankAngle = Mathf.Wrap(_crankAngle + (float)(_cadenceRpm / 60.0 * Mathf.Tau * delta), 0f, Mathf.Tau);
-        _cranks.Mesh = BikeMeshBuilder.BuildCranks(BikePalette.ForRider(_riderIndex), _crankAngle);
+        _cranks.Mesh = BikeMeshBuilder.BuildCranks(_bikePalette, _crankAngle);
         UpdateLegs();
     }
 

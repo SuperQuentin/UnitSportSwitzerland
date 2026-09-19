@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Xml;
+using UnitSport.Player;
 
 namespace UnitSport.Gpx;
 
@@ -36,6 +37,7 @@ public static class GpxParser
         var lons = new List<double>();
         var eles = new List<double>();
         var times = new List<DateTime?>();
+        string? activityType = null;
 
         var settings = new XmlReaderSettings { IgnoreComments = true, IgnoreWhitespace = true };
         using (var reader = XmlReader.Create(path, settings))
@@ -43,6 +45,7 @@ public static class GpxParser
             double? pendingEle = null;
             DateTime? pendingTime = null;
             bool inPoint = false;
+            bool inTrack = false;
 
             // NOTE: ReadElementContentAsString() already advances past the element, so the
             // loop must not call Read() again on those branches — doing so silently skips
@@ -57,6 +60,20 @@ public static class GpxParser
 
                 switch (reader.LocalName)
                 {
+                    case "trk":
+                    case "rte":
+                        inTrack = true;
+                        reader.Read();
+                        break;
+
+                    // <type> is the standard GPX field for what the activity was (Strava, Garmin
+                    // and most other exporters all write it). Only the FIRST one counts - it must
+                    // be read before the first trkpt sets inTrack's sibling state moot, and a
+                    // route/track can carry only one anyway.
+                    case "type" when inTrack && activityType == null:
+                        activityType = reader.ReadElementContentAsString();
+                        break;
+
                     case "trkpt":
                     case "rtept":
                     {
@@ -98,7 +115,22 @@ public static class GpxParser
         if (lats.Count == 0)
             throw new InvalidDataException("No track or route points found in the GPX file");
 
-        return Build(Path.GetFileNameWithoutExtension(path), lats, lons, eles, times);
+        return Build(Path.GetFileNameWithoutExtension(path), lats, lons, eles, times, ParseKind(activityType));
+    }
+
+    /// <summary>
+    /// GPX's &lt;type&gt; is free text - exporters write "cycling", "Cycling", "biking",
+    /// "mountain biking", "road biking", "1" (Strava's numeric type for a ride) and no doubt
+    /// others. Matched by substring rather than exact value for exactly that reason. Anything
+    /// not recognised as a ride plays as a runner, which is what every track already did before
+    /// this existed - a GPX this cannot classify is not a regression, it is silence.
+    /// </summary>
+    private static RideKind ParseKind(string? type)
+    {
+        if (string.IsNullOrEmpty(type)) return RideKind.OnFoot;
+        string t = type.ToLowerInvariant();
+        if (t.Contains("cycl") || t.Contains("bik") || t == "1") return RideKind.RoadBike;
+        return RideKind.OnFoot;
     }
 
     private static void Commit(List<double> eles, List<DateTime?> times,
@@ -157,7 +189,7 @@ public static class GpxParser
     }
 
     private static GpxTrack Build(string name, List<double> lats, List<double> lons,
-        List<double> eles, List<DateTime?> times)
+        List<double> eles, List<DateTime?> times, RideKind kind)
     {
         int n = lats.Count;
         var points = new List<TrackPoint>(n);
@@ -215,6 +247,7 @@ public static class GpxParser
             MinElevation = minEle == double.MaxValue ? 0 : minEle,
             MaxElevation = maxEle == double.MinValue ? 0 : maxEle,
             Ascent = ascent,
+            Kind = kind,
         };
     }
 }

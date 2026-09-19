@@ -107,6 +107,61 @@ public static class HumanMeshBuilder
         return scratch.Build();
     }
 
+    /// <summary>
+    /// Places a camera can be mounted on a moving figure, in the built mesh's own frame.
+    ///
+    /// <para>
+    /// <b>Already flipped to face -Z</b>, like <see cref="MeshScratch.Build"/> output. The rig is
+    /// authored facing +Z, so a mount taken straight off it sits on the wrong side of the body and
+    /// points backwards - the same half turn that made every avatar ride in reverse. Returning
+    /// mounts in mesh space means a caller can use them directly with the node's transform.
+    /// </para>
+    /// </summary>
+    public readonly record struct GaitMounts(
+        Vector3 Eye, Vector3 Head, Vector3 Chest, Vector3 Hip,
+        Vector3 ShoulderL, Vector3 ShoulderR, Vector3 FootL, Vector3 FootR,
+        float Lean);
+
+    /// <summary>
+    /// The mount points for one instant of the gait.
+    ///
+    /// <para>
+    /// Computed from the same <see cref="GaitRig"/> the mesh is built from, so a head-mounted
+    /// camera inherits the real stride bob rather than an approximation of it - which is the whole
+    /// difference between a helmet cam and a camera floating near a head.
+    /// </para>
+    /// </summary>
+    public static GaitMounts MountsFor(float speed, float phase) => MountsForRig(GaitRig(speed, phase));
+
+    /// <summary>
+    /// Mounts for a fixed (non-gait) pose — a cyclist, who does not run, still needs a head to
+    /// hang a POV camera off and a foot to frame an ankle shot from. Shares the exact derivation
+    /// <see cref="MountsFor"/> uses, so a static pose's camera points are correct by construction
+    /// rather than duplicated by hand into whichever caller needed them next.
+    /// </summary>
+    public static GaitMounts MountsForPose(HumanPose pose) => MountsForRig(RigFor(pose));
+
+    private static GaitMounts MountsForRig(Rig rig)
+    {
+        // the eye sits high in the head and forward of its centre, along the head's own axis
+        var headAxis = (rig.HeadTop - rig.HeadBase).Normalized();
+        var head = rig.HeadBase.Lerp(rig.HeadTop, 0.5f);
+        var eye = rig.HeadBase + headAxis * 0.12f + new Vector3(0, 0, 0.085f);
+
+        return new GaitMounts(
+            Eye: Flip(eye),
+            Head: Flip(head),
+            Chest: Flip(rig.Chest),
+            Hip: Flip(rig.Hip),
+            ShoulderL: Flip(rig.ShoulderL),
+            ShoulderR: Flip(rig.ShoulderR),
+            FootL: Flip(rig.AnkleL),
+            FootR: Flip(rig.AnkleR),
+            Lean: rig.TorsoLean);
+
+        static Vector3 Flip(Vector3 v) => new(-v.X, v.Y, -v.Z);
+    }
+
     private static void AppendRig(MeshScratch scratch, HumanPalette palette, Rig rig,
         bool includeLegs, bool helmet)
     {
@@ -219,7 +274,15 @@ public static class HumanMeshBuilder
     /// cadence. Driven by time rather than distance so a paused or scrubbed replay behaves.
     /// </summary>
     public static float AdvancePhase(float phase, float speed, float dt) =>
-        Mathf.PosMod(phase + Cadence(speed) * 0.5f * dt, 1f);
+        speed < StandingSpeed ? phase
+            : Mathf.PosMod(phase + Cadence(speed) * 0.5f * dt, 1f);
+
+    /// <summary>
+    /// Below this the figure is standing, not moving. The cycle stops rather than crawling,
+    /// because <see cref="Cadence"/> has a floor — it has to, or a figure inching forward would
+    /// take one step per minute — and that floor keeps the legs going when the body does not.
+    /// </summary>
+    public const float StandingSpeed = 0.25f;
 
     private static Rig GaitRig(float speed, float phase)
     {
@@ -231,10 +294,17 @@ public static class HumanMeshBuilder
         // 0.93 m at 4.6. Walking past this speed is not awkward by accident.
         float run = Mathf.Clamp((v - 1.7f) / 1.0f, 0f, 1f);
 
+        // How much of the gait applies at all. Standing still is not a slow walk: the cadence
+        // floor keeps the legs turning over at 1.6 steps/s however slowly the body moves, so
+        // without this a stationary runner — stopped at a junction, or a paused replay — marches
+        // on the spot. Everything the gait displaces is scaled by it, and at zero the rig
+        // collapses to the standing pose it should be.
+        float moving = Mathf.Clamp(v / 0.6f, 0f, 1f);
+
         float cadence = Cadence(v);
         float duty = Mathf.Lerp(0.62f, 0.34f, run);
-        float hipY = Mathf.Lerp(0.885f, 0.860f, run);
-        float lift = Mathf.Lerp(0.055f, 0.230f, run);                 // swing foot clearance
+        float hipY = Mathf.Lerp(0.935f, Mathf.Lerp(0.885f, 0.860f, run), moving);
+        float lift = Mathf.Lerp(0.055f, 0.230f, run) * moving;        // swing foot clearance
 
         // A cycle is two steps, so it lasts 2/cadence, and one foot is down for `duty` of it.
         // The body travels v × that while the foot is planted — which is the no-slip constraint,
@@ -248,7 +318,7 @@ public static class HumanMeshBuilder
         // where the strike is further forward on the foot. Without this term the required sweep
         // comes out at roughly twice what a 0.85 m leg can span.
         float footRoll = Mathf.Lerp(0.22f, 0.12f, run);
-        float sweep = Mathf.Max(0.05f, v * stance - footRoll);
+        float sweep = Mathf.Max(0.05f, v * stance - footRoll) * moving;
 
         // A runner does not land with the foot far out in front — it lands close to under the
         // body and leaves a long way behind. Walking is near enough symmetric about the hip.
@@ -263,12 +333,13 @@ public static class HumanMeshBuilder
         // midstance; running compresses onto a bent one and rises through the flight phase, so
         // it is lowest there. Using one sign for both makes whichever gait got it wrong look
         // like a torso being wheeled along.
-        float bob = Mathf.Lerp(1f, -1f, run) * Mathf.Lerp(0.032f, 0.042f, run)
+        float bob = Mathf.Lerp(1f, -1f, run) * Mathf.Lerp(0.032f, 0.042f, run) * moving
             * Mathf.Cos(Mathf.Tau * 2f * (phase - duty * 0.5f));
         float hip = hipY + bob;
 
-        // Forward lean, about the hip. Nine degrees at a run, barely any at a walk.
-        float lean = Mathf.Lerp(0.03f, 0.16f, run);
+        // Forward lean, about the hip. Nine degrees at a run, barely any at a walk, upright
+        // when stopped — a figure standing still leaning forward looks about to fall over.
+        float lean = Mathf.Lerp(0.03f, 0.16f, run) * moving;
 
         Vector3 Lean(float x, float aboveHip, float forward, float amount)
         {

@@ -47,6 +47,9 @@ public sealed partial class ClientTerrainSync : Node
     /// <summary>Raised once the town index has been cached, so the Tab search can reload.</summary>
     public event Action? PlacesReceived;
 
+    /// <summary>The far-horizon file arrived from the server and is in the cache.</summary>
+    public event Action? HorizonReceived;
+
     /// <summary>
     /// Raised when a client with no terrain adopted the server's origin. The host should
     /// respawn whatever it had placed, since its world position now means something else.
@@ -131,6 +134,41 @@ public sealed partial class ClientTerrainSync : Node
         Status?.Invoke(line);
 
         await SyncPlacesAsync(ct).ConfigureAwait(false);
+        await SyncHorizonAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Pulls the region's far-horizon lattice so a client streaming everything still sees the
+    /// mountains past its LOD rings. 1.6 MB for the current region, once per session.
+    /// </summary>
+    private async Task SyncHorizonAsync(CancellationToken ct)
+    {
+        string dir = Core.TerrainPaths.FindCacheDir();
+        string path = Path.Combine(dir, HorizonFormat.FileName);
+
+        byte[]? bytes = (await _streamer
+            .FetchAsync(AssetKind.Horizon, new TileId(0, 0), ct)
+            .ConfigureAwait(false)).Data;
+
+        if (bytes is null)
+        {
+            GD.Print("[stream] server has no horizon file; the world ends at the last ring");
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(dir);
+            await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[stream] could not cache the horizon: {e.Message}");
+            return;
+        }
+
+        GD.Print($"[stream] horizon received: {bytes.Length / 1024} KB");
+        HorizonReceived?.Invoke();
     }
 
     /// <summary>
