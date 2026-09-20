@@ -72,3 +72,13 @@ obj/
 *.tmp
 Thumbs.db
 .DS_Store
+__pycache__/
+*.pyc
+
+
+# =============================================================================
+# MCP / agent tool state — local caches, not project source
+# =============================================================================
+.serena/
+.fr_backup/
+graphify-out/
