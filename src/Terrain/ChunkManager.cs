@@ -117,25 +117,117 @@ public partial class ChunkManager : Node3D
     /// is actually largest.
     /// </para>
     /// </summary>
-    private long _msChunk, _msAux, _msSurface, _msCollision;
-    private long _msRoadLoad, _msRoadMesh, _msTrees, _msWater, _msBldgLoad, _msBldgMesh;
+    private readonly long[] _stageMs = new long[StageNames.Length];
+
+    /// <summary>Build stages in the order a worker runs them; indexes into every stage array.</summary>
+    public static readonly string[] StageNames =
+    {
+        "chunk", "holes+cover", "surface", "collision", "road-read", "road-mesh",
+        "trees", "water", "bldg-read", "bldg-mesh", "blend+tail",
+    };
+    private const int StChunk = 0, StAux = 1, StSurface = 2, StCollision = 3, StRoadLoad = 4,
+        StRoadMesh = 5, StTrees = 6, StWater = 7, StBldgLoad = 8, StBldgMesh = 9, StTail = 10;
+
+    /// <summary>One finished tile build, for the session recorder.</summary>
+    public readonly record struct BuildLog(TileId Id, int Stride, int Dist, double GroundMs,
+        double CompleteMs, bool Collision, bool Roads, bool Buildings, long[] StageMs);
+
+    /// <summary>Raised on the main thread when a build's last result is committed.</summary>
+    public event Action<BuildLog>? BuildLogged;
+
+    /// <summary>Raised on the main thread for every result committed: tile, stride, interim, ms.</summary>
+    public event Action<TileId, int, bool, double>? CommitLogged;
+
+    /// <summary>The current cap on builds in flight, so a saturated loader can be recognised.</summary>
+    public int BuildCap => MaxConcurrentBuilds;
+    private readonly (string, double)[] _stageAvgScratch = new (string, double)[StageNames.Length];
+
+    private int _completedBuilds;
+    private double _lastCommitMs;
+    private int _lastCommits;
+    private readonly LatencyWindow _groundLatency = new(128);
+    private readonly LatencyWindow _completeLatency = new(128);
+
+    /// <summary>
+    /// Build start -> first visible surface ("ground") and -> last result committed ("complete"),
+    /// both measured on the main thread, so they include queueing behind the commit budget.
+    /// </summary>
+    private void RecordLatency(ChunkState state, BuildResult result)
+    {
+        if (state.BuildStartedTicks == 0) return;
+        double ms = System.Diagnostics.Stopwatch.GetElapsedTime(state.BuildStartedTicks).TotalMilliseconds;
+        if (!state.GroundRecorded && result.Mesh != null)
+        {
+            _groundLatency.Add(ms);
+            state.GroundRecorded = true;
+            state.GroundMs = ms;
+        }
+        if (result.Interim) return;
+        _completeLatency.Add(ms);
+        _completedBuilds++;
+        state.BuildStartedTicks = 0;
+
+        if (BuildLogged != null)
+        {
+            int dist = int.MaxValue;
+            foreach (var anchor in _anchors)
+                dist = Math.Min(dist, LodPolicy.Distance(result.Id, _origin!.TileAt(anchor.GlobalPosition)));
+            BuildLogged(new BuildLog(result.Id, result.Stride, dist,
+                state.GroundRecorded ? state.GroundMs : double.NaN, ms,
+                result.CollisionMap != null, result.RoadsRequested, result.BuildingsRequested,
+                result.StageMs ?? new long[StageNames.Length]));
+        }
+    }
+
+    /// <summary>A snapshot of the loader for the performance overlay. Main thread only.</summary>
+    public PerfStats GetPerfStats()
+    {
+        int pending = 0;
+        foreach (var state in _chunks.Values) if (state.PendingStride >= 0) pending++;
+        int builds = Math.Max(1, _completedBuilds);
+        // reused, so the recorder can ask every frame without making garbage
+        var stages = _stageAvgScratch;
+        for (int i = 0; i < StageNames.Length; i++)
+            stages[i] = (StageNames[i], Volatile.Read(ref _stageMs[i]) / (double)builds);
+        return new PerfStats(
+            Loaded: _chunks.Count, Desired: _desired.Count, Pending: pending,
+            InFlight: Volatile.Read(ref _buildsInFlight), ReadyQueue: _ready.Count,
+            Cancelled: CancelledBuilds, Completed: _completedBuilds,
+            FullLoads: Volatile.Read(ref _fullLoads), CoarseLoads: Volatile.Read(ref _coarseLoads),
+            HorizonBlocks: Horizon?.BlockCount ?? 0,
+            GroundP50: _groundLatency.Percentile(0.5), GroundP95: _groundLatency.Percentile(0.95),
+            CompleteP50: _completeLatency.Percentile(0.5), CompleteP95: _completeLatency.Percentile(0.95),
+            LastCommitMs: _lastCommitMs, LastCommits: _lastCommits,
+            StageAvgMs: stages);
+    }
+
+    /// <summary>The last N samples, for percentiles that follow what is loading now.</summary>
+    private sealed class LatencyWindow(int size)
+    {
+        private readonly double[] _values = new double[size];
+        private readonly double[] _scratch = new double[size];
+        private int _count, _next;
+
+        public void Add(double v)
+        {
+            _values[_next] = v;
+            _next = (_next + 1) % _values.Length;
+            _count = Math.Min(_count + 1, _values.Length);
+        }
+
+        public double Percentile(double p)
+        {
+            if (_count == 0) return double.NaN;
+            Array.Copy(_values, _scratch, _count);
+            Array.Sort(_scratch, 0, _count);
+            return _scratch[Math.Min(_count - 1, (int)(p * _count))];
+        }
+    }
 
     /// <summary>Where the worker time went, longest first. Empty before anything has been built.</summary>
     public string BuildTimeReport()
     {
-        var stages = new (string Name, long Ms)[]
-        {
-            ("chunk", Volatile.Read(ref _msChunk)),
-            ("holes+cover", Volatile.Read(ref _msAux)),
-            ("surface", Volatile.Read(ref _msSurface)),
-            ("collision", Volatile.Read(ref _msCollision)),
-            ("road-read", Volatile.Read(ref _msRoadLoad)),
-            ("road-mesh", Volatile.Read(ref _msRoadMesh)),
-            ("trees", Volatile.Read(ref _msTrees)),
-            ("water", Volatile.Read(ref _msWater)),
-            ("bldg-read", Volatile.Read(ref _msBldgLoad)),
-            ("bldg-mesh", Volatile.Read(ref _msBldgMesh)),
-        };
+        var stages = StageNames.Select((name, i) => (Name: name, Ms: Volatile.Read(ref _stageMs[i]))).ToArray();
 
         long total = stages.Sum(x => x.Ms);
         if (total == 0) return "no builds";
@@ -205,6 +297,11 @@ public partial class ChunkManager : Node3D
         public CancellationTokenSource? Cts;
         public int Generation;
 
+        /// <summary>Stopwatch timestamp of the build in flight, 0 when idle; for the perf overlay.</summary>
+        public long BuildStartedTicks;
+        public bool GroundRecorded;
+        public double GroundMs;
+
         public void CancelPending()
         {
             if (Cts == null) return;
@@ -227,7 +324,7 @@ public partial class ChunkManager : Node3D
         HashSet<int>? Holes, byte[]? Cover,
         ArrayMesh? Buildings, Vector3[]? BuildingFaces, bool BuildingsRequested,
         ChunkNode.TreeMeshes? Trees, ArrayMesh? Water,
-        Vector3[]? RoadCollisionFaces = null);
+        Vector3[]? RoadCollisionFaces = null, long[]? StageMs = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -574,6 +671,7 @@ public partial class ChunkManager : Node3D
             // still being assembled on the worker. The tile must stay marked pending, or the
             // ring evaluator would start a second build for it while the first is mid-flight.
             if (!result.Interim) { state.PendingStride = -1; state.Cts = null; }
+            RecordLatency(state, result);
 
             meshCommits++;
             if (result.Mesh != null)
@@ -618,10 +716,13 @@ public partial class ChunkManager : Node3D
             state.ActiveStride = result.Stride;
             // a single commit past a frame is worth knowing about: it is what a hitch IS
             double took = clock.Elapsed.TotalMilliseconds - t0;
+            CommitLogged?.Invoke(result.Id, result.Stride, result.Interim, took);
             if (took > 33)
                 GD.Print($"[commit] {result.Id} stride {result.Stride} {(result.Interim ? "interim" : "tail")} took {took:F0} ms");
         }
 
+        _lastCommitMs = clock.Elapsed.TotalMilliseconds;
+        _lastCommits = committed;
         return committed;
     }
 
@@ -787,10 +888,15 @@ public partial class ChunkManager : Node3D
         }
     }
 
-    /// <summary>Charges the time since the last lap to one stage and restarts the clock.</summary>
-    private static void Lap(ref long into, System.Diagnostics.Stopwatch clock)
+    /// <summary>
+    /// Charges the time since the last lap to one stage — in the session totals and in this
+    /// build's own breakdown — and restarts the clock.
+    /// </summary>
+    private void Lap(int stage, long[] build, System.Diagnostics.Stopwatch clock)
     {
-        Interlocked.Add(ref into, clock.ElapsedMilliseconds);
+        long ms = clock.ElapsedMilliseconds;
+        Interlocked.Add(ref _stageMs[stage], ms);
+        build[stage] += ms;
         clock.Restart();
     }
 
@@ -798,6 +904,8 @@ public partial class ChunkManager : Node3D
         bool wantRoads, bool wantBuildings)
     {
         state.PendingStride = stride;
+        state.BuildStartedTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+        state.GroundRecorded = false;
         state.PendingCollision = wantCollision;
         state.PendingRoads = wantRoads;
         state.PendingBuildings = wantBuildings;
@@ -834,6 +942,7 @@ public partial class ChunkManager : Node3D
             try
             {
                 var clock = System.Diagnostics.Stopwatch.StartNew();
+                var stageMs = new long[StageNames.Length];
 
                 var grid = cachedGrid;
                 if (grid == null && !needsFullGrid)
@@ -848,7 +957,7 @@ public partial class ChunkManager : Node3D
                     grid = await source.LoadChunkAsync(id, ct);
                     if (grid != null) Interlocked.Increment(ref _fullLoads);
                 }
-                Lap(ref _msChunk, clock);
+                Lap(StChunk, stageMs, clock);
 
                 // file missing despite the manifest — release the tile so it is not stuck pending
                 if (grid == null) { _failedBuilds.Enqueue(id); return; }
@@ -856,13 +965,13 @@ public partial class ChunkManager : Node3D
 
                 var holes = holesLoaded ? cachedHoles : await source.LoadHolesAsync(id, ct);
                 var cover = coverLoaded ? cachedCover : await source.LoadCoverAsync(id, ct);
-                Lap(ref _msAux, clock);
+                Lap(StAux, stageMs, clock);
                 ct.ThrowIfCancellationRequested();
 
                 ArrayMesh? mesh = null;
                 if (buildMesh && terrainMaterial != null)
                     mesh = ChunkNode.ToArrayMesh(TerrainMeshBuilder.BuildSurface(grid, stride, holes, cover), terrainMaterial);
-                Lap(ref _msSurface, clock);
+                Lap(StSurface, stageMs, clock);
 
                 // The collision map is dequantised here in any case, but whether it is published
                 // NOW or only once the road tile has been blended in is the difference between
@@ -871,7 +980,7 @@ public partial class ChunkManager : Node3D
                 // may be seconds, and a player standing over a hole is worse than a hitch.
                 var collision = wantCollision ? TerrainMeshBuilder.BuildCollisionMap(grid, holes) : null;
                 bool publishInterimCollision = collision != null && (!wantRoads || streaming);
-                Lap(ref _msCollision, clock);
+                Lap(StCollision, stageMs, clock);
                 ct.ThrowIfCancellationRequested();
 
                 // Publish the ground the moment it exists, before the roads and buildings that
@@ -895,7 +1004,7 @@ public partial class ChunkManager : Node3D
                 {
                     roadTile = await source.LoadRoadsAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
-                    Lap(ref _msRoadLoad, clock);
+                    Lap(StRoadLoad, stageMs, clock);
 
                     // the grid lets bridge piers and cableway pylons find their footing.
                     // Build returns null for a tile whose road segments are all watercourses
@@ -903,7 +1012,7 @@ public partial class ChunkManager : Node3D
                     if (roadTile != null && roadMaterial != null
                         && RoadMeshBuilder.Build(roadTile, grid) is { } roadData)
                         roads = ChunkNode.ToArrayMesh(roadData, roadMaterial);
-                    Lap(ref _msRoadMesh, clock);
+                    Lap(StRoadMesh, stageMs, clock);
                 }
 
                 ChunkNode.TreeMeshes? trees = null;
@@ -920,14 +1029,14 @@ public partial class ChunkManager : Node3D
                             new Vector3(1000, grid.MaxHeight - grid.MinHeight + 80, 1000));
                         trees = ChunkNode.BuildTreeMeshes(ChunkNode.BuildTreeBuffers(treeList), treeMaterial, bounds);
                     }
-                    Lap(ref _msTrees, clock);
+                    Lap(StTrees, stageMs, clock);
 
                     // watercourses ride in the road tile but are meshed here, so a stream gets
                     // the water material instead of being drawn as a narrow blue road
                     if (cover != null && waterMaterial != null
                         && WaterMeshBuilder.Build(grid, cover, roadTile) is { } waterData)
                         water = ChunkNode.ToArrayMesh(waterData, waterMaterial);
-                    Lap(ref _msWater, clock);
+                    Lap(StWater, stageMs, clock);
                 }
 
                 // Building collision goes with the terrain's, not with the building meshes: a
@@ -940,14 +1049,14 @@ public partial class ChunkManager : Node3D
                 {
                     var bTile = await source.LoadBuildingsAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
-                    Lap(ref _msBldgLoad, clock);
+                    Lap(StBldgLoad, stageMs, clock);
 
                     if (wantBuildings && bTile != null && buildingMaterial != null
                         && BuildingMeshBuilder.Build(bTile) is { } buildingData)
                         buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
                     if (wantCollision)
                         buildingFaces = bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : [];
-                    Lap(ref _msBldgMesh, clock);
+                    Lap(StBldgMesh, stageMs, clock);
                 }
 
                 // The bare-terrain collision already went out above so the ground never waits on
@@ -988,11 +1097,12 @@ public partial class ChunkManager : Node3D
                         terrainMaterial);
                 }
 
+                Lap(StTail, stageMs, clock);
                 ct.ThrowIfCancellationRequested();
                 _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: false,
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
-                    bridgeCollision));
+                    bridgeCollision, stageMs));
             }
             catch (OperationCanceledException)
             {

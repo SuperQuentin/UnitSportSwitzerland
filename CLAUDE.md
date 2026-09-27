@@ -436,6 +436,24 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   without being saved. The last ring is always **stride 50** (`LodPolicy.FarStride`, 21x21 verts,
   from the `.terrc`), which is what makes 40 rings (6,561 tiles) cost about what 9 used to.
   A server ignores all of it and keeps 2 rings of full grids around each player.
+- **Performance overlay** (`Core/PerfOverlay`, **F3** cycles Off / FPS / Detailed, saved as
+  `GameSettings.PerfOverlay`, also in Settings; `--perf off|fps|full` for one run). Detailed shows
+  frame avg/p99/max over 2 s, draws/prims/memory, and the loader via `ChunkManager.GetPerfStats()`:
+  queue depths, builds/s, per-stage worker ms per tile, and tile latency over the last 128 builds —
+  **ground** (build start -> first surface committed) and **complete** (-> last result committed).
+  Both are timed on the main thread, so they include waiting behind the commit budget. Hidden
+  during a video export (`OfflineMode`); shows up in `--shot` captures, which is how to screenshot it.
+- **Session perf log** (`Core/PerfRecorder`, **F4** start/stop, `--perflog [seconds]` from boot,
+  Settings -> "Open folder"): writes `user://perf_logs/<timestamp>/` with `frames.csv` (per frame:
+  frame/GPU/render-CPU ms, draws, prims, memory, GC counts, loader queues, commits, camera LV95 +
+  speed, mode), `builds.csv` (per tile: latency + worker ms of every stage), `commits.csv`,
+  `events.log` (hitches tagged commit/gc/gpu/other, teleports, mode and settings changes) and
+  `summary.txt` ending in a diagnosis. **Use the viewport's measured GPU time, not
+  `Performance.TimeProcess`, to tell GPU- from CPU-bound**: TimeProcess absorbs the wait for the
+  renderer and read 50 ms on a frame the GPU spent 35 ms of. A frame's delta pays for the
+  PREVIOUS frame's commits, so the recorder runs last (`ProcessPriority`) and shifts its commit/GC
+  context by one frame. The per-build stage array also times `blend+tail` (road-blended collision +
+  visual re-mesh), which `BuildTimeReport` never counted and which measured ~33% of worker time.
 - **Stutter is a main-thread commit problem, and every commit is now cheap** — measured with
   `--fly x,y,z,yaw,speed,seconds` (`FlightProbe`, prints p50/p95/p99/max frame time and counts
   frames over 20 and 33 ms, non-zero exit on any >33 ms). Baseline after the first async pass: 14

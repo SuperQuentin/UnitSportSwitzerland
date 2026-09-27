@@ -71,6 +71,16 @@ public partial class SettingsMenu : PanelContainer
 
         ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
 
+        OptionRow(rows, "Performance overlay (F3)", new[] { "Off", "FPS", "Detailed" }, (int)s.PerfOverlay,
+            i => GameSettings.Current.PerfOverlay = (PerfOverlayMode)i);
+
+        var logs = new HBoxContainer();
+        logs.AddChild(new Label { Text = "Performance logs (F4 records)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        var openLogs = new Button { Text = "Open folder" };
+        openLogs.Pressed += PerfRecorder.OpenLogsFolder;
+        logs.AddChild(openLogs);
+        rows.AddChild(logs);
+
         rows.AddChild(new HSeparator());
         var back = new Button { Text = "Back", CustomMinimumSize = new Vector2(0, 30) };
         back.Pressed += () => BackRequested?.Invoke();

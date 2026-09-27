@@ -161,6 +161,12 @@ public partial class ClientWorld : Node3D
         _rides.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_rides);
 
+        // F4 records a session's performance to user://perf_logs; F3 shows the live numbers
+        var recorder = new PerfRecorder(_chunks, origin,
+            () => (_gpx?.Active == true ? "replay" : _onFoot ? "foot" : "fly") + (_networked ? "+net" : ""));
+        AddChild(recorder);
+        AddChild(new PerfOverlay(_chunks, _cache, recorder));
+
         // G opens a GPX track for playback; the session owns its own camera and HUD
         _gpx = GpxSession.Create(_chunks, origin, _spectator);
         _gpx.ExitRequested += () => EnterMode(GameMode.Explore);

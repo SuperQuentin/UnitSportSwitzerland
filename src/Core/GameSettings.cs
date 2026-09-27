@@ -13,6 +13,14 @@ public enum DetailPreset
     High = 2,
 }
 
+/// <summary>What the on-screen performance overlay shows (F3 cycles it).</summary>
+public enum PerfOverlayMode
+{
+    Off = 0,
+    Fps = 1,
+    Detailed = 2,
+}
+
 /// <summary>
 /// Player-tunable rendering and streaming settings, persisted to <c>user://settings.json</c>.
 ///
@@ -60,6 +68,9 @@ public sealed class GameSettings
 
     public bool VSync { get; set; } = true;
 
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public PerfOverlayMode PerfOverlay { get; set; } = PerfOverlayMode.Off;
+
     /// <summary>Camera far plane that keeps the whole horizon in view, with room to spare.</summary>
     [JsonIgnore]
     public float CameraFar => Math.Max(20_000f, (HorizonKm + 10) * 1000f);
@@ -93,7 +104,8 @@ public sealed class GameSettings
         Current = loaded;
         GD.Print($"[settings] rings={loaded.RenderDistanceRings} horizon={loaded.HorizonKm}km "
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "
-            + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} vsync={loaded.VSync}");
+            + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} vsync={loaded.VSync} "
+            + $"perf={loaded.PerfOverlay}");
     }
 
     public void Save()
@@ -144,6 +156,10 @@ public sealed class GameSettings
                 case "--builds" when int.TryParse(v, out int b): MaxConcurrentBuilds = b; break;
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
+                case "--perf":
+                    PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,
+                        "fps" => PerfOverlayMode.Fps, _ => PerfOverlayMode.Off };
+                    break;
             }
         }
         Clamp();
