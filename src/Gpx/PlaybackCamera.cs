@@ -148,7 +148,7 @@ public partial class PlaybackCamera : Camera3D
         {
             // leave nothing dissolved behind when the race empties out
             if (_cut > 0) { _cut = 0; _chunks.SetSightlineCut(Vector3.Zero, Vector3.Zero, 0); }
-            if (_arrow != null) _arrow.Visible = false;
+            _bubble?.HideNow();
             return;
         }
 
@@ -244,27 +244,27 @@ public partial class PlaybackCamera : Camera3D
         // Distance alone, deliberately not gated to one mode or one shot: a Locked-off tripod
         // and a spectator who has flown the Free camera off across the valley are the same
         // problem - the runner is somewhere on screen (or off it) too small to find.
-        _arrow ??= AttentionArrow.Create();
-        if (_arrow.GetParent() == null) GetParent()?.AddChild(_arrow);
-        _arrow.Enabled = _arrowEnabled;
-        _arrow.UpdateFrame(focused.HeadWorld, GlobalPosition, dt);
+        _bubble ??= ZoomBubble.Create(_chunks);
+        if (_bubble.GetParent() == null) GetParent()?.AddChild(_bubble);
+        _bubble.Enabled = _bubbleEnabled;
+        _bubble.UpdateFrame(focused, this, dt);
     }
 
-    private AttentionArrow? _arrow;
-    private bool _arrowEnabled = true;
+    private ZoomBubble? _bubble;
+    private bool _bubbleEnabled = true;
 
     /// <summary>
-    /// Turns the "HERE" marker on or off. Stored on the camera rather than only on the arrow
-    /// node, same reason as <see cref="CinemaPacing"/>: the arrow is created lazily on the first
+    /// Turns the zoom bubble on or off. Stored on the camera rather than only on the bubble,
+    /// same reason as <see cref="CinemaPacing"/>: the bubble is created lazily on the first
     /// frame with a focused runner, and a toggle made before that must not be forgotten.
     /// </summary>
-    public bool AttentionArrowEnabled
+    public bool ZoomBubbleEnabled
     {
-        get => _arrowEnabled;
+        get => _bubbleEnabled;
         set
         {
-            _arrowEnabled = value;
-            if (_arrow != null) _arrow.Enabled = value;
+            _bubbleEnabled = value;
+            if (_bubble != null) _bubble.Enabled = value;
         }
     }
 

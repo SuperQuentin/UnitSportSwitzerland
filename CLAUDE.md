@@ -255,22 +255,19 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   excluded**: dissolving ground opens a hole straight through to the sky, which looks far worse
   than the hillside it was hiding, and a camera behind a ridge is already rejected outright by
   `ShotContext.CanSee` before the shot is committed. A road lying flat never occludes anything.
-- **Attention arrow** (`AttentionArrow`, driven from `PlaybackCamera.Step`): a comic-strip red
-  chevron with a billboarded "HERE" label pops in above the runner's head whenever the ACTIVE
-  camera is far enough away that they are hard to pick out — a wide Locked-off tripod, or a
-  spectator who has flown Free off across the valley, are both "far" the same way. The trigger is
-  pure distance from whichever camera is live, not tied to one mode or one shot, so it works
-  everywhere except First-person (where the camera IS the runner's eye, so distance is already
-  ~0). Drawn `NoDepthTest` on purpose: it reads through the tree or building that is hiding the
-  runner in the first place, which is the whole point of it existing. Hysteresis (shows past 35 m,
-  hides under 25 m) stops it flickering right at one fixed threshold. **HUD Arrow button / `--arrow
-  off`** turns it off entirely. Billboarded **full spherical, not fixed-Y**: fixed-Y was tried
-  first and reads worse specifically for this game, because `TopDown` and a climbed `DroneReveal`
-  look near straight down, and a fixed-Y plane only rotates around the vertical — from overhead it
-  turns edge-on and "HERE" collapses into an unreadable sliver. Full spherical has no such
-  failure: Godot's "enabled" billboard mode is screen-aligned (it copies the camera's own
-  right/up vectors onto the quad) rather than a look-at, so there is no degenerate pole to hit —
-  confirmed readable straight down with `--forceshot "Top down"`.
+- **Zoom bubble** (`ZoomBubble`, driven from `PlaybackCamera.Step`): whenever the ACTIVE camera
+  is far enough from the runner that they are a few pixels (a wide Locked-off tripod, a Free
+  camera flown across the valley), a comic speech bubble pops up holding a **live close-up** of the
+  runner, its tail pointing at where they are in the main picture. It replaced a red "HERE" arrow,
+  which said where the runner was but still left them too small to see. The inset is a 256² 
+  `SubViewport` with `OwnWorld3D = false`, so it renders the same streamed world with no extra
+  loading (the runner is already an anchor), from a chase camera 4.5 m behind along `Heading`,
+  eased and clamped above the ground; its update mode is `Disabled` whenever the bubble is hidden,
+  so it costs nothing up close. `CanvasLayer` 6: above `LensLayer` (5) so the barrel distortion
+  does not bend it, below the HUD (10). A runner off screen or behind the lens pins the bubble to
+  the nearest edge, tail pointing outward. Trigger is pure distance with hysteresis (shows past
+  35 m, hides under 25 m). Exported videos include it — the layer draws into the root viewport.
+  **HUD Bubble button / `--bubble off`** (`--arrow off` still accepted) turns it off.
 - **Modes** (`Core/MainMenu`, `GameMode`): Explore / GpxReplay / Multiplayer. `ClientWorld`
   owns the switching; **Esc** opens the picker, and it is shown at boot unless a mode was
   named on the command line (`--connect`, `--gpx`) or a verification tool is running
@@ -568,7 +565,7 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   Absolute Cinema, `--speed <n>` the playback multiplier, `--lens <n>` a lens profile by index,
   `--path <0..100>` course-line opacity, `--forceshot <name>` pins Absolute Cinema to one named
   shot (matches the HUD's override list, e.g. `"Ankle cam"` — quote it, names have spaces),
-  `--arrow off` disables the "HERE" marker, and `--cinemastats <screenSeconds>` which runs the
+  `--bubble off` disables the zoom bubble, and `--cinemastats <screenSeconds>` which runs the
   director for that much SCREEN time and prints
   cuts, rejections and seconds-per-shot, then quits. The last two are how the pacing claim is
   actually checked: "a scene is as long at 32x as at 1x" is a number, and eyeballing cannot tell a

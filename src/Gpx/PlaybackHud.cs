@@ -226,16 +226,16 @@ public partial class PlaybackHud : CanvasLayer
         path.AddChild(_pathSlider);
         buttons.AddChild(path);
 
-        // Not gated to Cinema: the arrow works from any camera, so the toggle stays available
+        // Not gated to Cinema: the bubble works from any camera, so the toggle stays available
         // in every mode the way the button it sits next to (Path) does.
-        _arrowButton = Button("Arrow: on", () =>
+        _arrowButton = Button("Bubble: on", () =>
         {
-            _camera.AttentionArrowEnabled = !_camera.AttentionArrowEnabled;
+            _camera.ZoomBubbleEnabled = !_camera.ZoomBubbleEnabled;
             Refresh();
         });
-        _arrowButton.CustomMinimumSize = new Vector2(92, 26);
+        _arrowButton.CustomMinimumSize = new Vector2(104, 26);
         _arrowButton.TooltipText =
-            "Show a \"HERE\" marker over the runner when the camera is too far to spot them";
+            "Show a zoomed-in bubble of the runner when the camera is too far to spot them";
         buttons.AddChild(_arrowButton);
 
         // Export sits next to the camera and speed controls on purpose: those two are what it
@@ -355,7 +355,7 @@ public partial class PlaybackHud : CanvasLayer
         _paceButton.Text = $"Pace: {PaceSteps[_paceIndex]:0.##}x";
         _paceButton.Visible = _camera.Mode == CameraMode.Cinema;
         _shotButton.Visible = _camera.Mode == CameraMode.Cinema;
-        _arrowButton.Text = _camera.AttentionArrowEnabled ? "Arrow: on" : "Arrow: off";
+        _arrowButton.Text = _camera.ZoomBubbleEnabled ? "Bubble: on" : "Bubble: off";
         _lensButton.Text = $"Lens: {LensName}";
         _focusButton.Text = $"Follow: {_race.FocusIndex + 1}";
         _timeline.MaxValue = Math.Max(1, _race.Duration);

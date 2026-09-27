@@ -380,10 +380,11 @@ public partial class GpxSession : Node
                 int fi = Array.IndexOf(user, "--forceshot");
                 if (fi >= 0 && fi + 1 < user.Length) _camera.ForcedCinemaShot = user[fi + 1];
 
-                // "--arrow off" turns off the "HERE" marker, for a screenshot comparison against
-                // one with it on.
-                if (Array.IndexOf(user, "--arrow") is var ai && ai >= 0 && ai + 1 < user.Length)
-                    _camera.AttentionArrowEnabled = user[ai + 1] != "off";
+                // "--bubble off" turns off the zoom bubble, for a screenshot comparison against
+                // one with it on. "--arrow" is the old name, from when it was a "HERE" marker.
+                foreach (var flag in new[] { "--bubble", "--arrow" })
+                    if (Array.IndexOf(user, flag) is var bi && bi >= 0 && bi + 1 < user.Length)
+                        _camera.ZoomBubbleEnabled = user[bi + 1] != "off";
 
                 int ci = Array.IndexOf(sargs, "--cinemastats");
                 if (ci >= 0 && ci + 1 < sargs.Length && double.TryParse(sargs[ci + 1],
