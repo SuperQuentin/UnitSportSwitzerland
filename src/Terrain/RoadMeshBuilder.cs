@@ -810,10 +810,19 @@ public static class RoadMeshBuilder
     }
 
     /// <summary>
+    /// One tunnel mouth's placement, shared between the bore extrusion here and
+    /// <c>TerrainMeshBuilder</c>'s portal wall so both draw the identical arch at the
+    /// identical position instead of two independently-computed shapes.
+    /// </summary>
+    public readonly record struct TunnelPortal(Vector3 Mouth, Vector3 Inward, float HalfWidth, float Height);
+
+    /// <summary>
     /// Arch cross-section of a tunnel bore as (lateral, up) fractions of half-width and
     /// clear height. Deliberately few segments — a faceted bore is the right look here.
+    /// Internal (not private) so <c>TerrainMeshBuilder</c>'s portal wall extrudes the exact
+    /// same shape at each mouth instead of guessing its own.
     /// </summary>
-    private static readonly (float X, float Y)[] BoreProfile =
+    internal static readonly (float X, float Y)[] BoreProfile =
     {
         (-1.00f, 0.00f),
         (-1.00f, 0.35f),
@@ -827,37 +836,30 @@ public static class RoadMeshBuilder
     };
 
     /// <summary>
-    /// Extrudes the arch profile along a tunnel centreline. The road ribbon already
-    /// provides the carriageway, so this adds only walls and crown. Rendered with
-    /// cull_disabled, so the faces read correctly from inside the bore.
-    /// </summary>
-    /// <summary>
     /// Distance the bore is pushed out past each end of the tunnel centreline. Without
     /// it the arch begins exactly where the rock begins, so from outside the road simply
-    /// stops at a notch in the hillside with nothing to drive into.
+    /// stops at a notch in the hillside with nothing to drive into. Also how far
+    /// <c>TunnelCarver</c> (tools/TerrainPreprocessor) extends its own carve, so the hole
+    /// breaks the surface at exactly the same point the bore does.
     /// </summary>
     private const float PortalExtension = 5f;
 
-    /// <summary>How far the headwall face stands proud of the bore opening.</summary>
-    private const float HeadwallMargin = 1.15f;
-
-    private static readonly Color PortalColor = new Color(0.50f, 0.49f, 0.47f);
-
     /// <summary>
-    /// Extrudes the arch profile along a tunnel centreline, extended past both ends and
-    /// capped with a headwall so the mouth reads as a built portal rather than a hole in
-    /// the dirt. The road ribbon already provides the carriageway, so this adds walls,
-    /// crown and facing only. Rendered with cull_disabled, so it reads from inside too.
+    /// A tunnel segment's centreline, extended <see cref="PortalExtension"/> past each end
+    /// so the bore/portal break the surface instead of stopping at a bare notch. Shared by
+    /// the bore extrusion and <see cref="ComputeTunnelPortals"/> so both agree on exactly
+    /// where a mouth sits.
     /// </summary>
-    private static void AppendTunnelBore(RoadSegment seg, TileId tile, ChunkGrid? grid,
-        List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s,
-        List<int> indices)
+    private static List<Vector3> ExtendedTunnelPath(RoadSegment seg)
     {
         int n = seg.PointCount;
-        if (n < 2) return;
-
-        // extend the centreline outward at both ends so the arch breaks the surface
         var path = new List<Vector3>(n + 2);
+        if (n < 2)
+        {
+            for (int i = 0; i < n; i++) path.Add(Point(seg, i));
+            return path;
+        }
+
         var firstDir = (Point(seg, 1) - Point(seg, 0)) with { Y = 0 };
         var lastDir = (Point(seg, n - 1) - Point(seg, n - 2)) with { Y = 0 };
         if (firstDir.LengthSquared() > 1e-8f)
@@ -865,18 +867,67 @@ public static class RoadMeshBuilder
         for (int i = 0; i < n; i++) path.Add(Point(seg, i));
         if (lastDir.LengthSquared() > 1e-8f)
             path.Add(Point(seg, n - 1) + lastDir.Normalized() * PortalExtension);
+        return path;
+    }
 
-        int m = path.Count;
+    /// <summary>
+    /// A tunnel segment's half-width and clear height, the latter fit to the cover that
+    /// actually exists: the nominal clear height is a guess by road class, but an underpass
+    /// beneath a rail embankment may have only two or three metres over it, and a bore
+    /// taller than its own cover pokes out through the ground above — which is exactly what
+    /// a tunnel must never do. Shared by the bore extrusion and
+    /// <see cref="ComputeTunnelPortals"/> so both use the identical dimensions.
+    /// </summary>
+    private static (float HalfWidth, float Height) TunnelDims(RoadSegment seg, TileId tile, ChunkGrid? grid)
+    {
         float halfWidth = RoadFormat.TunnelWidth(seg.Class) * 0.5f;
-
-        // Fit the bore to the cover that actually exists. The nominal clear height is a
-        // guess by road class; an underpass beneath a rail embankment may have only two
-        // or three metres over it, and a bore taller than its own cover pokes out through
-        // the ground above — which is exactly what a tunnel must never do.
         float height = RoadFormat.TunnelHeight(seg.Class);
         float cover = MinCover(seg, tile, grid);
         if (cover > 0f)
             height = Mathf.Clamp(cover - 0.4f, 2.4f, height);
+        return (halfWidth, height);
+    }
+
+    /// <summary>
+    /// Every tunnel mouth in a tile, for <c>TerrainMeshBuilder</c>'s portal wall — computed
+    /// from the same extended path and dimensions <see cref="AppendTunnelBore"/> itself
+    /// extrudes, so the terrain-side wall and the bore agree exactly instead of two
+    /// independently-derived shapes hoping to coincide.
+    /// </summary>
+    public static List<TunnelPortal> ComputeTunnelPortals(RoadTile tile, ChunkGrid? grid)
+    {
+        var portals = new List<TunnelPortal>();
+        foreach (var seg in tile.Segments)
+        {
+            if ((seg.Flags & RoadFlags.Tunnel) == 0) continue;
+            var path = ExtendedTunnelPath(seg);
+            if (path.Count < 2) continue;
+
+            var (halfWidth, height) = TunnelDims(seg, tile.Id, grid);
+            portals.Add(new TunnelPortal(path[0], path[1], halfWidth, height));
+            portals.Add(new TunnelPortal(path[^1], path[^2], halfWidth, height));
+        }
+        return portals;
+    }
+
+    /// <summary>
+    /// Extrudes the arch profile along a tunnel centreline, extended past both ends so it
+    /// breaks the surface. The road ribbon already provides the carriageway, so this adds
+    /// only walls and crown — the mouth itself is closed by <c>TerrainMeshBuilder</c>'s
+    /// portal wall (see <see cref="ComputeTunnelPortals"/>), not by anything built here, so
+    /// it's derived from the same hole mask the carved opening actually used rather than an
+    /// independent guess. Rendered with cull_disabled, so the faces read correctly from
+    /// inside the bore.
+    /// </summary>
+    private static void AppendTunnelBore(RoadSegment seg, TileId tile, ChunkGrid? grid,
+        List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s,
+        List<int> indices)
+    {
+        var path = ExtendedTunnelPath(seg);
+        int m = path.Count;
+        if (m < 2) return;
+
+        var (halfWidth, height) = TunnelDims(seg, tile, grid);
         int ring = BoreProfile.Length;
         int baseIndex = vertices.Count;
 
@@ -913,11 +964,6 @@ public static class RoadMeshBuilder
                 indices.Add(a); indices.Add(c); indices.Add(b);
                 indices.Add(b); indices.Add(c); indices.Add(d);
             }
-
-        AppendHeadwall(path[0], path[1], halfWidth, height, tile, grid,
-            vertices, colors, uvs, uv2s, indices);
-        AppendHeadwall(path[m - 1], path[m - 2], halfWidth, height, tile, grid,
-            vertices, colors, uvs, uv2s, indices);
     }
 
     /// <summary>
@@ -937,80 +983,6 @@ public static class RoadMeshBuilder
             min = Mathf.Min(min, (float)grid.SampleHeight(e, nn) - p.Y);
         }
         return min == float.MaxValue ? 0f : Mathf.Max(min, 0f);
-    }
-
-    private static float TerrainAbove(Vector3 local, TileId tile, ChunkGrid? grid)
-    {
-        if (grid == null) return 0f;
-        return (float)grid.SampleHeight(tile.MinE + local.X, tile.MaxN - local.Z) - local.Y;
-    }
-
-    /// <summary>
-    /// Builds the portal face at one mouth: a broad wall standing in the hillside with the
-    /// bore's arch cut out of it, plus wing walls raking back into the slope.
-    ///
-    /// This is what joins the tunnel to the terrain. Carving alone leaves the ground mesh
-    /// with raw open edges and the bore floating inside the gap; the wall spans wider and
-    /// taller than the carved opening, so those edges end up behind it and the mouth reads
-    /// as a built structure set into the hill.
-    /// </summary>
-    private static void AppendHeadwall(Vector3 mouth, Vector3 inward, float halfWidth, float height,
-        TileId tile, ChunkGrid? grid,
-        List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s,
-        List<int> indices)
-    {
-        var forward = (inward - mouth) with { Y = 0 };
-        if (forward.LengthSquared() < 1e-8f) return;
-        forward = forward.Normalized();
-        var side = new Vector3(-forward.Z, 0, forward.X);
-
-        // The face has to cover the carved opening, but must not stand proud of the
-        // ground it is set into — a wall towering over a low rail embankment reads as a
-        // monolith dropped on a field. Clamp it to the cover just inside the mouth.
-        float faceHalf = halfWidth * 2.1f;
-        float faceTop = height * 1.7f;
-        float aboveMouth = TerrainAbove(inward, tile, grid);
-        if (aboveMouth > 0f)
-            faceTop = Mathf.Clamp(aboveMouth + 0.4f, height * 1.02f, faceTop);
-        float faceBottom = -3.0f;   // sunk below the road so no gap opens under it
-
-        int ring = BoreProfile.Length;
-        int baseIndex = vertices.Count;
-        var linear = PortalColor.SrgbToLinear();
-        var shadow = (PortalColor * 0.72f).SrgbToLinear();
-
-        // Pair each arch vertex with a point on the enclosing rectangle, found by pushing
-        // outward from the arch centre until the rectangle bound is met. Connecting the
-        // two rings fills the wall around the opening.
-        for (int k = 0; k < ring; k++)
-        {
-            var (px, py) = BoreProfile[k];
-            var inner = mouth + side * (px * halfWidth) + new Vector3(0, py * height, 0);
-
-            float dx = px, dy = py - 0.25f;   // splay about the springing line
-            if (Mathf.Abs(dx) < 1e-4f && Mathf.Abs(dy) < 1e-4f) dy = 1f;
-            float scale = Mathf.Min(
-                Mathf.Abs(dx) < 1e-4f ? float.MaxValue : faceHalf / (Mathf.Abs(dx) * halfWidth),
-                dy > 0 ? faceTop / (dy * height) : Mathf.Abs(faceBottom) / (Mathf.Abs(dy) * height));
-            var outer = mouth + side * (dx * halfWidth * scale)
-                        + new Vector3(0, 0.25f * height + dy * height * scale, 0);
-
-            vertices.Add(inner); vertices.Add(outer);
-            colors.Add(linear); colors.Add(linear);
-            uvs.Add(Vector2.Zero); uvs.Add(Vector2.Zero);
-            uv2s.Add(Vector2.Zero); uv2s.Add(Vector2.Zero);
-        }
-
-        for (int k = 0; k < ring - 1; k++)
-        {
-            int a = baseIndex + k * 2;
-            indices.Add(a); indices.Add(a + 1); indices.Add(a + 2);
-            indices.Add(a + 1); indices.Add(a + 3); indices.Add(a + 2);
-        }
-
-        // No wing walls: the sides of the cut are now lined by TerrainMeshBuilder from the
-        // hole mask, which shares the terrain's own grid. Slabs generated here from the
-        // road centreline could never meet a hole quantised to that lattice.
     }
 
     private static Vector3 Point(RoadSegment s, int i) =>

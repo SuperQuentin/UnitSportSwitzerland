@@ -12,7 +12,7 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   1 m was chosen over matching the source's 0.5 m exactly: it still recovers real detail the old
   2 m grid discarded, at 4× the vertex count per tile rather than 0.5 m's 16×, and `GridSize-1`
   (1000) still divides every LOD/coarse stride (1, 2, 4, 10, 20) cleanly, so the ring table needed
-  no redesign. **`ChunkBuilder`'s source-cell averaging is now ratio-general** (`Ratio =
+  no redesign. **The source-cell averaging (`TileReducer`) is ratio-general** (`Ratio =
   XyzParser.CellsPerSide / (GridSize-1)`, currently 2): it used to hardcode a 4-cell window
   regardless of ratio, which was only correct by coincidence at ratio 2 and silently discarded 12
   of the 16 cells a 2 m vertex's true footprint covered at the old ratio 4 — real, measurable
@@ -504,6 +504,17 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 ## Commands
 
 - Preprocess: `dotnet run --project tools/TerrainPreprocessor -c Release -- --in ressources/data/swiss_chunks --out terrain_chunks --verify --dump-png terrain_chunks_png`
+  `--in` is recursive and repeatable (sources on any drive/share), `--jobs` defaults to all cores,
+  `--io-jobs` (4) caps concurrent source reads. **One pass, no parse cache**: `TerrainBuild`
+  reduces each tile straight to its interior vertices plus 16 KB of perimeter *partial sums*
+  (`<temp>/E_N.edge`); a tile is written once every tile around it has published its partials, so
+  the old 50 GB pass-1 `.raw` cache and its single-threaded, lock-per-cell pass 2 are gone.
+  Output is byte-identical to the old pipeline (checked on all 6,699 tiles). Incremental: tiles
+  with a valid `.terr` + `.edge` and an unchanged source (size + mtime) are skipped, and only the
+  seams of their new neighbours are refreshed from the existing `.terr`. `--force` re-parses,
+  `--fresh` drops tiles from earlier runs. Numbers are read by a fixed-point scanner
+  (`mantissa / 10^d` is one correctly rounded division, i.e. the same double `Utf8Parser` gives);
+  the tool targets net9.0 for its zlib-ng inflate.
 - Coarse companion tiles (needed once for a region built before they existed; a normal build
   emits them): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --coarse --jobs 8`
   — 6,699 tiles in 10 s, 3,207 MB read -> 33 MB written, every tile verified bit-identical.

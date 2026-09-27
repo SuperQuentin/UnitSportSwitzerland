@@ -156,35 +156,58 @@ The response contains several survey years per tile — keep the newest. Each ti
 ### 3. Build the terrain chunks
 
 ```bash
-dotnet run --project tools/TerrainPreprocessor -c Release -- \
-  --in ressources/data/swiss_chunks --out terrain_chunks --verify
+dotnet run --project tools/TerrainPreprocessor -c Release --   --in ressources/data/swiss_chunks --out terrain_chunks --verify
 ```
 
-This parses every XYZ zip into a 501×501 height grid at 2 m spacing and writes one `.terr`
-per tile plus `manifest.json`. Pass 1 is cached in `terrain_chunks_temp/`, so re-running
-only parses tiles it has not seen.
+Sources can live anywhere — another drive, a NAS share, several folders at once. `--in` is
+searched recursively and may be repeated; when a tile appears twice the newest survey year wins.
+Only the 0.5 m product is picked up (2 m files in the same folder are ignored). Bare `.xyz`
+files work as well as `.xyz.zip`.
 
-`--verify` checks that neighbouring tiles share bit-identical edges. `--dump-png <dir>`
+```bash
+dotnet run --project tools/TerrainPreprocessor -c Release --   --in D:/swissalti3d --in X:/geodata/alti3d --out terrain_chunks --io-jobs 2
+```
+
+`python tools/swiss_data.py --out D:/swissalti3d swissalti3d --bbox ...` downloads straight there.
+The downloader runs 8 files in parallel (`--jobs`), fetches files over 256 MB as parallel byte
+ranges, checks every file against swisstopo's SHA-256, and resumes interrupted `.part` files.
+With `--fill-disk` it downloads what fits instead of refusing, stopping `--reserve-mb` (default
+500) above empty and taking tiles nearest the bbox centre first, so a full drive holds one
+contiguous area. Measured: 37 tiles / 737 MB in 4 s (was 21 s), the 4.8 GB swissTLM3D in 21 s,
+and a re-run with nothing new in 0.3 s without contacting the server.
+
+Each tile is read, inflated, parsed and reduced to its 1001×1001 grid in one parallel pass, and
+written as soon as the tiles around it have been parsed (they share its edges). `--verify` reads
+every tile back and checks that neighbouring tiles share bit-identical edges. `--dump-png <dir>`
 writes hillshade mosaics, which is the quickest way to spot a bad tile.
 
-### 3b. Importing a large region
+| Option | Default | |
+|---|---|---|
+| `--jobs N` | all cores | tiles processed at once (inflate + parse is the CPU cost) |
+| `--io-jobs N` | 4 | sources read at once — lower it (1-2) for a spinning disk or a slow share |
+| `--temp <dir>` | `<out>_temp` | edge cache, 16 KB per tile |
+| `--force` | | re-parse every source, ignoring the cache |
+| `--fresh` | | the dataset is exactly this run's sources; forget tiles built by earlier runs |
 
-The pipeline scales to thousands of tiles, but plan for the disk and the wait:
+### 3b. Importing a large region
 
 | Per 1000 tiles | |
 |---|---|
 | source zips | ~19 GB |
-| parse cache (`terrain_chunks_temp/`) | ~8 GB |
-| output `.terr` | ~0.5 GB |
-| parse time at `--jobs 8` | ~2 min |
+| edge cache (`terrain_chunks_temp/*.edge`) | 16 MB |
+| output `.terr` + `.terrc` | ~2 GB |
+| build time, 12 cores from NVMe | ~40 s |
 
-So a 6,700-tile region (roughly 125 x 90 km of western Switzerland) is about **125 GB of
-zips, 54 GB of cache, 3.4 GB of output and 15 minutes**. Use `--jobs` to match your core
-count; 8 sustains roughly 9 tiles/second.
+The build is **incremental**. The edge cache keeps each tile's 16 KB of seam data, so a
+tile whose `.terr` exists and whose source has not changed (size + timestamp) is not parsed
+again. When a new neighbour arrives, only its seam is recomputed from the existing `.terr`.
+You can therefore import Switzerland one download batch or one drive at a time, and an
+interrupted run resumes where it stopped. Tiles from earlier runs stay in `manifest.json` even
+when their sources are no longer under `--in`, unless you pass `--fresh`.
 
-Pass 1 is **resumable** — the cache is keyed by tile, so an interrupted run picks up where
-it stopped, and adding tiles later only parses the new ones. The cache can be deleted once
-the `.terr` files exist.
+`<temp>/*.raw` files left by the old two-pass preprocessor (8 MB each, ~50 GB for this region)
+are still read instead of the zip when present, which skips inflating. Nothing needs them any
+more, though, so delete them once a build has finished.
 
 Two things change when the area grows:
 

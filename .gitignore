@@ -17,8 +17,8 @@
 # =============================================================================
 # terrain_chunks/      .terr .road .cover .trees .bldg .holes, plus
 #                      manifest.json and places.json (~5.3 GB for this region)
-# terrain_chunks_temp/ quantized parse cache from pass 1 (~50 GB). Resumable —
-#                      keeping it only saves re-parsing the XYZ zips.
+# terrain_chunks_temp/ edge cache, 16 KB/tile (*.edge) — makes rebuilds incremental.
+#                      Old *.raw files there (8 MB/tile) are no longer needed.
 # terrain_chunks_png/  optional --dump-png debug heightmaps
 /terrain_chunks/*
 !/terrain_chunks/.gdignore
@@ -82,3 +82,6 @@ __pycache__/
 .serena/
 .fr_backup/
 graphify-out/
+
+# GPX recordings (personal tracks used for replay testing)
+*.gpx

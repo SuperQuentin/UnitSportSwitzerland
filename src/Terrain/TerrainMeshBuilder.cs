@@ -15,9 +15,20 @@ public static class TerrainMeshBuilder
     /// <summary>
     /// Indexed grid mesh at the given stride with skirts on all four edges (skirts hide
     /// cracks at LOD-ring transitions; same-LOD tile seams are exact by construction).
+    ///
+    /// <para>
+    /// <paramref name="blendedHeights"/>, when given, is a full-resolution height array from
+    /// <see cref="BuildBlendedHeights"/> — the same corridor-blended heights already used for
+    /// collision, now also driving the vertices actually sent to the GPU, so the terrain a
+    /// player SEES rises or dips to meet an at-grade road exactly like the ground they stand
+    /// on already does. Only consulted at <c>stride &lt;= MaxHoleStride</c> (see that
+    /// constant): beyond it a road is narrower than one LOD quad, so the blend would touch
+    /// almost no vertex for no visible effect.
+    /// </para>
     /// </summary>
     public static MeshData BuildSurface(ChunkGrid grid, int stride, IReadOnlySet<int>? holes = null,
-        byte[]? cover = null)
+        byte[]? cover = null, float[]? blendedHeights = null,
+        IReadOnlyList<RoadMeshBuilder.TunnelPortal>? portals = null)
     {
         int last = ChunkFormat.GridSize - 1;      // 1000
         if (last % stride != 0)
@@ -39,7 +50,9 @@ public static class TerrainMeshBuilder
             for (int c = 0; c < m; c++)
             {
                 int fc = c * stride, fr = r * stride;
-                float alt = (float)grid.HeightMetersAt(fc, fr);
+                float alt = blendedHeights != null
+                    ? blendedHeights[fr * ChunkFormat.GridSize + fc]
+                    : (float)grid.HeightMetersAt(fc, fr);
                 vertices[r * m + c] = new Vector3(c * quad, alt, r * quad);
 
                 colors[r * m + c] = (cover == null
@@ -78,7 +91,7 @@ public static class TerrainMeshBuilder
 
         var mesh = new MeshData(vertices, colors, indices);
         if (holes is { Count: > 0 } && stride <= MaxHoleStride)
-            mesh = AppendCutWalls(mesh, grid, holes, stride, m, quad);
+            mesh = AppendCutWalls(mesh, grid, holes, stride, m, quad, portals);
         return mesh;
     }
 
@@ -174,17 +187,31 @@ public static class TerrainMeshBuilder
     }
 
     private static readonly Color CutWallColor = new Color(0.34f, 0.31f, 0.28f);
+    private static readonly Color PortalColor = new Color(0.50f, 0.49f, 0.47f);
+
+    /// <summary>
+    /// Matches <c>TunnelCarver.SideMargin</c> (tools/TerrainPreprocessor, a separate
+    /// project so the constant can't be shared directly) — the extra radius the offline
+    /// carve stamps around a tunnel's half-width when deciding which quads to remove. Reused
+    /// here so the portal wall's outer ring lands on the same disc the hole mask was actually
+    /// carved to, instead of an independently guessed rectangle. Keep the two in sync.
+    /// </summary>
+    private const float PortalSideMargin = 1.6f;
 
     /// <summary>
     /// Lines the sides of a carved opening with vertical walls, so the ground mesh is
-    /// closed instead of ending at a raw edge with daylight behind it.
+    /// closed instead of ending at a raw edge with daylight behind it. At each tunnel
+    /// <paramref name="portals"/> end, an arched portal wall (the same profile the bore
+    /// itself is extruded from, see <see cref="RoadMeshBuilder.BoreProfile"/>) replaces the
+    /// flat wall instead of stacking behind it — see <see cref="AppendPortalWall"/>.
     ///
     /// The walls are derived from the hole mask and the same height grid the surface uses,
     /// which is the whole point: geometry built separately from the road centreline could
-    /// never line up with a hole quantised to the 2 m lattice.
+    /// never line up with a hole quantised to the lattice.
     /// </summary>
     private static MeshData AppendCutWalls(MeshData mesh, ChunkGrid grid,
-        IReadOnlySet<int> holes, int stride, int m, float quad)
+        IReadOnlySet<int> holes, int stride, int m, float quad,
+        IReadOnlyList<RoadMeshBuilder.TunnelPortal>? portals)
     {
         grid.RequireFull(nameof(AppendCutWalls));
         // floor of the cut: below the lowest ground it touches, so the bore and road hide it
@@ -205,6 +232,20 @@ public static class TerrainMeshBuilder
 
         bool Carved(int c, int r) =>
             (uint)c < m - 1 && (uint)r < m - 1 && IsHole(holes, c, r, stride);
+
+        // an edge within a portal's own carve radius of its mouth is the disc-shaped cap the
+        // offline carve stamped there — the arch wall covers it, so the flat wall must not
+        bool InPortalWindow(Vector3 p)
+        {
+            if (portals == null) return false;
+            foreach (var portal in portals)
+            {
+                float radius = portal.HalfWidth + PortalSideMargin;
+                float dx = p.X - portal.Mouth.X, dz = p.Z - portal.Mouth.Z;
+                if (dx * dx + dz * dz <= radius * radius) return true;
+            }
+            return false;
+        }
 
         // for every carved quad, wall off each side that faces uncarved ground
         for (int r = 0; r < m - 1; r++)
@@ -229,6 +270,7 @@ public static class TerrainMeshBuilder
 
                     var a = mesh.Vertices[r0 * m + c0];
                     var b = mesh.Vertices[r1 * m + c1];
+                    if (InPortalWindow((a + b) * 0.5f)) return;
 
                     int i0 = verts.Count;
                     verts.Add(a);
@@ -242,15 +284,97 @@ public static class TerrainMeshBuilder
                 }
             }
 
+        if (portals != null)
+            foreach (var portal in portals)
+                AppendPortalWall(portal, grid, floor, verts, cols, idx);
+
         return new MeshData(verts.ToArray(), cols.ToArray(), idx.ToArray());
     }
 
     /// <summary>
-    /// Coarser than this and a portal-sized hole would be inflated to the size of a whole
-    /// LOD quad (40 m at stride 20), tearing a gash in the mountain. Tunnels are only
-    /// visible up close anyway, so distant rings simply stay solid.
+    /// Closes one tunnel mouth with the same arch profile the bore itself is extruded from
+    /// (<see cref="RoadMeshBuilder.BoreProfile"/>), so the inner ring here is bit-identical
+    /// to the bore's own end ring — no seam at the arch. The outer ring is sized to the same
+    /// disc <see cref="PortalSideMargin"/> the offline carve used, and its height is sampled
+    /// straight from the grid within that disc, so the face never stands lower than the
+    /// ground actually around it and its footprint always matches the real carved hole
+    /// instead of an independently guessed shape.
     /// </summary>
-    private const int MaxHoleStride = 4;
+    private static void AppendPortalWall(RoadMeshBuilder.TunnelPortal portal, ChunkGrid grid,
+        float floor, List<Vector3> verts, List<Color> cols, List<int> idx)
+    {
+        var forward = (portal.Inward - portal.Mouth) with { Y = 0 };
+        if (forward.LengthSquared() < 1e-8f) return;
+        forward = forward.Normalized();
+        var side = new Vector3(-forward.Z, 0, forward.X);
+
+        float outerRadius = portal.HalfWidth + PortalSideMargin;
+        float outerTopAbs = SampleMaxHeightNear(grid, portal.Mouth, outerRadius) + 0.4f;
+        outerTopAbs = Mathf.Max(outerTopAbs, portal.Mouth.Y + portal.Height * 1.02f);
+        float faceTopRel = outerTopAbs - portal.Mouth.Y;
+        float faceBottomRel = floor - portal.Mouth.Y;
+
+        var ring = RoadMeshBuilder.BoreProfile;
+        int baseIndex = verts.Count;
+        var linear = PortalColor.SrgbToLinear();
+
+        // Pair each arch vertex with a point on the enclosing disc-derived rectangle, found
+        // by pushing outward from the arch centre until that bound is met — same approach
+        // AppendHeadwall used to use against a guessed rectangle, now against a real one.
+        for (int k = 0; k < ring.Length; k++)
+        {
+            var (px, py) = ring[k];
+            var inner = portal.Mouth + side * (px * portal.HalfWidth) + new Vector3(0, py * portal.Height, 0);
+
+            float dx = px, dy = py - 0.25f;
+            if (Mathf.Abs(dx) < 1e-4f && Mathf.Abs(dy) < 1e-4f) dy = 1f;
+            float scale = Mathf.Min(
+                Mathf.Abs(dx) < 1e-4f ? float.MaxValue : outerRadius / (Mathf.Abs(dx) * portal.HalfWidth),
+                dy > 0
+                    ? faceTopRel / (dy * portal.Height)
+                    : Mathf.Abs(faceBottomRel) / (Mathf.Abs(dy) * portal.Height));
+            var outer = portal.Mouth + side * (dx * portal.HalfWidth * scale)
+                        + new Vector3(0, 0.25f * portal.Height + dy * portal.Height * scale, 0);
+
+            verts.Add(inner); verts.Add(outer);
+            cols.Add(linear); cols.Add(linear);
+        }
+
+        for (int k = 0; k < ring.Length - 1; k++)
+        {
+            int a = baseIndex + k * 2;
+            idx.Add(a); idx.Add(a + 1); idx.Add(a + 2);
+            idx.Add(a + 1); idx.Add(a + 3); idx.Add(a + 2);
+        }
+    }
+
+    private static float SampleMaxHeightNear(ChunkGrid grid, Vector3 local, float radius)
+    {
+        float spacing = (float)ChunkFormat.SpacingM;
+        int c0 = Mathf.RoundToInt(local.X / spacing), r0 = Mathf.RoundToInt(local.Z / spacing);
+        int cells = Mathf.CeilToInt(radius / spacing);
+        int last = ChunkFormat.GridSize - 1;
+        float max = float.MinValue;
+        for (int dr = -cells; dr <= cells; dr++)
+            for (int dc = -cells; dc <= cells; dc++)
+            {
+                if (dc * dc + dr * dr > cells * cells) continue;
+                int c = c0 + dc, r = r0 + dr;
+                if ((uint)c > (uint)last || (uint)r > (uint)last) continue;
+                max = Mathf.Max(max, (float)grid.HeightMetersAt(c, r));
+            }
+        return max == float.MinValue ? local.Y : max;
+    }
+
+    /// <summary>
+    /// Shared near-field threshold for both tunnel holes and the visual road/path corridor
+    /// blend in <see cref="BuildSurface"/>: coarser than this and a portal-sized hole would be
+    /// inflated to the size of a whole LOD quad (40 m at stride 20), tearing a gash in the
+    /// mountain — and a road corridor (a few metres wide) would fall between vertices spaced
+    /// tens of metres apart, blending nothing for real cost. Both are only visible up close
+    /// anyway, so distant rings simply stay solid/unblended.
+    /// </summary>
+    public const int MaxHoleStride = 4;
 
     /// <summary>
     /// A rendered quad is dropped only when *every* full-res cell it covers is carved.
@@ -285,6 +409,42 @@ public static class TerrainMeshBuilder
         return ii;
     }
 
+    /// <summary>Full-resolution heights, straight off the grid, with no road blending.</summary>
+    private static float[] DequantizedHeights(ChunkGrid grid)
+    {
+        grid.RequireFull(nameof(DequantizedHeights));
+        var map = new float[ChunkFormat.GridSize * ChunkFormat.GridSize];
+        for (int i = 0; i < map.Length; i++)
+            map[i] = (float)ChunkFormat.Dequantize(grid.Heights[i]);
+        return map;
+    }
+
+    /// <summary>
+    /// The visual mesh's blend target sits this far below each road's own drawn surface —
+    /// matching <c>RoadExtractor.DrapeOffset</c> (tools/TerrainPreprocessor, a separate
+    /// project so the constant can't be shared directly) so the terrain rises to just under
+    /// the ribbon instead of erasing the deliberate lift that keeps the two from z-fighting.
+    /// Collision uses 0 instead — see <see cref="BlendRoadCorridor"/>.
+    /// </summary>
+    public const double VisualBlendClearance = 0.35;
+
+    /// <summary>
+    /// Full-resolution heights with every at-grade road/path/rail corridor blended toward its
+    /// own surveyed height — see <see cref="BlendRoadCorridor"/> for the algorithm and
+    /// <paramref name="verticalClearance"/>. Used both for <see cref="BuildCollisionMap"/>
+    /// (the physics floor, clearance 0) and, via <see cref="BuildSurface"/>'s
+    /// <c>blendedHeights</c> parameter, the mesh a player actually sees (clearance
+    /// <see cref="VisualBlendClearance"/>) — same algorithm, different target height, so the
+    /// ground you stand on and the ground you look at both track the road without the visual
+    /// mesh climbing all the way up into the ribbon it's supposed to sit under.
+    /// </summary>
+    public static float[] BuildBlendedHeights(ChunkGrid grid, RoadTile roadTile, double verticalClearance = 0.0)
+    {
+        var map = DequantizedHeights(grid);
+        BlendRoadCorridor(map, ChunkFormat.GridSize, roadTile, verticalClearance);
+        return map;
+    }
+
     /// <summary>
     /// Absolute heights for HeightMapShape3D: index r*501+c, x=east=col, z=south=row.
     /// Carved cells become NaN, which Jolt treats as a hole in the heightfield — that is
@@ -302,24 +462,35 @@ public static class TerrainMeshBuilder
     public static float[] BuildCollisionMap(ChunkGrid grid, IReadOnlySet<int>? holes = null,
         RoadTile? roadTile = null)
     {
-        grid.RequireFull(nameof(BuildCollisionMap));
-        int n = ChunkFormat.GridSize;
-        var map = new float[n * n];
-        for (int i = 0; i < map.Length; i++)
-            map[i] = (float)ChunkFormat.Dequantize(grid.Heights[i]);
-
-        if (roadTile != null) BlendRoadCorridor(map, n, roadTile);
-
-        if (holes != null)
-            foreach (int cell in holes)
-            {
-                int c = cell % HoleFormat.QuadsPerSide;
-                int r = cell / HoleFormat.QuadsPerSide;
-                // a quad is bounded by 4 vertices; NaN on its top-left removes it
-                map[r * n + c] = float.NaN;
-            }
-
+        var map = roadTile != null ? BuildBlendedHeights(grid, roadTile) : DequantizedHeights(grid);
+        StampHoles(map, holes);
         return map;
+    }
+
+    /// <summary>
+    /// Same as the other overload, but from a height source the caller already has (e.g. a
+    /// <see cref="BuildBlendedHeights"/> result also being reused to rebuild the visual mesh)
+    /// instead of recomputing the corridor blend a second time. The source is copied, never
+    /// mutated in place.
+    /// </summary>
+    public static float[] BuildCollisionMap(float[] heights, IReadOnlySet<int>? holes)
+    {
+        var map = (float[])heights.Clone();
+        StampHoles(map, holes);
+        return map;
+    }
+
+    private static void StampHoles(float[] map, IReadOnlySet<int>? holes)
+    {
+        if (holes == null) return;
+        int n = ChunkFormat.GridSize;
+        foreach (int cell in holes)
+        {
+            int c = cell % HoleFormat.QuadsPerSide;
+            int r = cell / HoleFormat.QuadsPerSide;
+            // a quad is bounded by 4 vertices; NaN on its top-left removes it
+            map[r * n + c] = float.NaN;
+        }
     }
 
     /// <summary>How far past a road's own half-width the collision blend fades back to bare
@@ -343,8 +514,23 @@ public static class TerrainMeshBuilder
     /// — none of them is a surface at ground level, so pulling the terrain up to a cableway's
     /// cable or a retaining wall's coping would be exactly the wrong direction of "seamless."
     /// </para>
+    ///
+    /// <para>
+    /// <paramref name="verticalClearance"/> pulls the blend target that far BELOW each
+    /// segment's own stored Y instead of onto it. Collision wants a clearance of 0 — the
+    /// physics floor should be exactly where the visible road surface is, or a player's feet
+    /// clip through or hover above it. The visual mesh does not: <c>seg.Points.Y</c> already
+    /// includes <c>RoadExtractor</c>'s own <c>DrapeOffset</c> (0.35 m, plus a per-class
+    /// stagger) — a small deliberate lift that keeps the road ribbon drawn just above the
+    /// terrain it's draped on. Blending the terrain mesh all the way up to that same Y
+    /// erases the lift and puts two coincident surfaces in the same place, which reads as
+    /// flickering/glitching geometry, not as "seamless." Passing a clearance close to that
+    /// same offset re-opens just enough gap for the ribbon to sit visibly above the ground
+    /// again, while the terrain still rises to meet the general vicinity of the road instead
+    /// of the raw (possibly metres-off) swissALTI3D height.
+    /// </para>
     /// </summary>
-    private static void BlendRoadCorridor(float[] map, int n, RoadTile roadTile)
+    private static void BlendRoadCorridor(float[] map, int n, RoadTile roadTile, double verticalClearance = 0.0)
     {
         double spacing = ChunkFormat.SpacingM;
 
@@ -372,7 +558,7 @@ public static class TerrainMeshBuilder
                     double x = ax + (bx - ax) * t, z = az + (bz - az) * t;
                     // the segment's own stored Y already carries the approach-ramp blend
                     // RoadExtractor baked in at preprocess time - no re-derivation needed
-                    double roadY = ay + (by - ay) * t;
+                    double roadY = ay + (by - ay) * t - verticalClearance;
                     int c0 = (int)Math.Round(x / spacing), r0 = (int)Math.Round(z / spacing);
 
                     for (int dr = -cells; dr <= cells; dr++)

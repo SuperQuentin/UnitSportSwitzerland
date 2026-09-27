@@ -897,9 +897,12 @@ public partial class ChunkManager : Node3D
                     ct.ThrowIfCancellationRequested();
                     Lap(ref _msRoadLoad, clock);
 
-                    // the grid lets bridge piers and cableway pylons find their footing
-                    if (roadTile != null && roadMaterial != null)
-                        roads = ChunkNode.ToArrayMesh(RoadMeshBuilder.Build(roadTile, grid), roadMaterial);
+                    // the grid lets bridge piers and cableway pylons find their footing.
+                    // Build returns null for a tile whose road segments are all watercourses
+                    // (meshed separately, below) or aerial-only with nothing left to draw.
+                    if (roadTile != null && roadMaterial != null
+                        && RoadMeshBuilder.Build(roadTile, grid) is { } roadData)
+                        roads = ChunkNode.ToArrayMesh(roadData, roadMaterial);
                     Lap(ref _msRoadMesh, clock);
                 }
 
@@ -939,8 +942,9 @@ public partial class ChunkManager : Node3D
                     ct.ThrowIfCancellationRequested();
                     Lap(ref _msBldgLoad, clock);
 
-                    if (wantBuildings && bTile != null && buildingMaterial != null)
-                        buildings = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(bTile), buildingMaterial);
+                    if (wantBuildings && bTile != null && buildingMaterial != null
+                        && BuildingMeshBuilder.Build(bTile) is { } buildingData)
+                        buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
                     if (wantCollision)
                         buildingFaces = bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : [];
                     Lap(ref _msBldgMesh, clock);
@@ -949,23 +953,44 @@ public partial class ChunkManager : Node3D
                 // The bare-terrain collision already went out above so the ground never waits on
                 // roads to load. Now that the road tile is here, replace it with one blended
                 // toward each at-grade corridor's own surveyed height - the "seamless" collision
-                // fix. Recomputed rather than patched in place: BuildCollisionMap is a cheap
-                // dequantize pass, and redoing it keeps the corridor-blend logic in one place
-                // rather than needing a second incremental-update code path.
+                // fix - and, when the render stride is fine enough to matter (see
+                // TerrainMeshBuilder.MaxHoleStride), rebuild the VISUAL mesh with the same blend
+                // at a small clearance below it (see TerrainMeshBuilder.VisualBlendClearance),
+                // so the ground a player sees now matches the ground they stand on too, instead
+                // of only the physics floor knowing about the road. Two clearances, so two
+                // separate blend passes - sharing one array would either z-fight the mesh
+                // against the road ribbon (clearance 0) or float the collision floor above the
+                // ribbon's own surface (clearance 0.35 m).
+                bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
+
                 float[]? blendedCollision = publishInterimCollision ? null : collision;
                 Vector3[]? bridgeCollision = null;
                 if (wantCollision && roadTile != null)
                 {
-                    blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes, roadTile);
+                    var collisionHeights = TerrainMeshBuilder.BuildBlendedHeights(grid, roadTile);
+                    blendedCollision = TerrainMeshBuilder.BuildCollisionMap(collisionHeights, holes);
                     // A heightfield cannot hold a deck floating above the terrain it crosses, so
                     // bridges get their own small collision body alongside the blended ground.
                     bridgeCollision = RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile);
                 }
 
-                // the mesh already went out above; collision goes out again only if blended
+                ArrayMesh? tailMesh = null;
+                if (buildMesh && terrainMaterial != null && roadTile != null && nearField)
+                {
+                    var visualHeights = TerrainMeshBuilder.BuildBlendedHeights(
+                        grid, roadTile, TerrainMeshBuilder.VisualBlendClearance);
+                    // Tunnel portal walls close the mouth from the same hole mask the carve
+                    // used, so they need the tile's tunnel geometry - computed once here from
+                    // the same source RoadMeshBuilder's own bore extrusion uses, so both agree.
+                    var portals = RoadMeshBuilder.ComputeTunnelPortals(roadTile, grid);
+                    tailMesh = ChunkNode.ToArrayMesh(
+                        TerrainMeshBuilder.BuildSurface(grid, stride, holes, cover, visualHeights, portals),
+                        terrainMaterial);
+                }
+
                 ct.ThrowIfCancellationRequested();
                 _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: false,
-                    null, blendedCollision, roads, wantRoads,
+                    tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
                     bridgeCollision));
             }
