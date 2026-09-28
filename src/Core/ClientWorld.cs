@@ -34,6 +34,8 @@ public partial class ClientWorld : Node3D
     public override async void _Ready()
     {
         GameSettings.Load();
+        // after Load, so the saved stick deadzone is what the actions start with
+        PlayerInput.Install(this);
         ApplyViewportSettings();
         GameSettings.Changed += ApplyViewportSettings;
 
@@ -116,6 +118,17 @@ public partial class ClientWorld : Node3D
 
         AddChild(_chunks);
 
+        // Vehicles left standing in the world. Same node path as on the server, so parking and
+        // claiming work over the network; offline it just holds the nodes.
+        var vehicles = Vehicles.VehicleManager.Create(this, _chunks);
+        vehicles.PlayerPositions = () =>
+        {
+            var at = new List<Vector3>();
+            if (LocalPlayer is { } lp) at.Add(lp.GlobalPosition);
+            if (GetViewport().GetCamera3D() is { } cam) at.Add(cam.GlobalPosition);
+            return at;
+        };
+
         AddChild(new WorldEnvironment
         {
             Environment = new Godot.Environment
@@ -135,7 +148,9 @@ public partial class ClientWorld : Node3D
         // them for the height.
         bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
             || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || Gpx.Cinema.CinemaProbe.ParseArgs() != null;
+            || RideProbe.ParseArgs() != null || Gpx.Cinema.CinemaProbe.ParseArgs() != null
+            || RoadStandProbe.Requested() || MantleProbe.Requested()
+            || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -215,6 +230,38 @@ public partial class ClientWorld : Node3D
         {
             AddChild(new Gpx.Cinema.CinemaProbe(cinemaTrack, origin, streamedSource,
                 manifest.Tiles.Select(t => t.Id).ToHashSet()));
+            return;
+        }
+
+        if (Vehicles.VehicleProbe.ParseArgs() is { Requested: true } vcheck)
+        {
+            var (vE, vN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(vE, vN, 1200);
+            AddChild(new Vehicles.VehicleProbe(_chunks, origin, vcheck.Shot));
+            return;
+        }
+
+        if (FlightCheckProbe.ParseArgs() is { } flycheck)
+        {
+            var (fE, fN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(fE, fN, 1200);
+            AddChild(new FlightCheckProbe(_chunks, origin, flycheck.Kind, flycheck.Shot));
+            return;
+        }
+
+        if (MantleProbe.Requested())
+        {
+            var (mE, mN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(mE, mN, 1200);
+            AddChild(new MantleProbe(_chunks, origin));
+            return;
+        }
+
+        if (RoadStandProbe.Requested())
+        {
+            var (checkE, checkN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(checkE, checkN, 1200);
+            AddChild(new RoadStandProbe(_chunks, origin));
             return;
         }
 
@@ -433,15 +480,17 @@ public partial class ClientWorld : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
+        // Actions rather than keys, so Start, Y and the D-pad do what Esc, E and T do. Echo is
+        // refused: a held key must not re-open the menu it just closed.
+        if (!@event.IsPressed() || @event.IsEcho()) return;
 
         // ChatUi handles Enter, slash and Esc from _UnhandledKeyInput, which runs first; if
         // it is typing, nothing here should fire.
         if (_chatUi is { IsTyping: true }) return;
 
-        // Esc is the way back to the mode menu. MainMenu consumes it while open, so
+        // Esc / Start is the way back to the mode menu. MainMenu consumes it while open, so
         // reaching here means the menu is closed.
-        if (key.PhysicalKeycode == Key.Escape)
+        if (@event.IsActionPressed(PlayerInput.Menu))
         {
             _menu?.Open();
             return;
@@ -449,23 +498,25 @@ public partial class ClientWorld : Node3D
         if (_menu is { IsOpen: true }) return;
 
         // while the search box has focus, keys belong to it
-        if (key.PhysicalKeycode == Key.Tab)
+        if (@event.IsActionPressed(PlayerInput.Teleport))
         {
             _places?.Toggle();
             return;
         }
         if (_places is { IsOpen: true }) return;
 
-        // RideUi consumes E itself while open (from _UnhandledKeyInput, which runs first), so
-        // reaching here means it is closed.
-        if (key.PhysicalKeycode == Key.E)
+        // RideUi consumes E / Y itself while open (from _UnhandledInput, which runs first on
+        // its deeper node), so reaching here means it is closed. In a vehicle E gets out, beside
+        // a parked one it gets in; only with neither does it open the picker.
+        if (@event.IsActionPressed(PlayerInput.InteractMount))
         {
+            if (_onFoot && LocalPlayer is { } lp && lp.TryInteract()) return;
             _rides?.Open();
             return;
         }
         if (_rides is { IsOpen: true }) return;
 
-        if (key.PhysicalKeycode == Key.T) ToggleMode();
+        if (@event.IsActionPressed(PlayerInput.ToggleMode)) ToggleMode();
     }
 
     private FootPlayer? LocalPlayer => _networked ? GetLocalNetPlayer() : _player;
@@ -487,7 +538,7 @@ public partial class ClientWorld : Node3D
                 GD.Print($"[status] player {p.Name} at {p.GlobalPosition:F1}");
     }
 
-    /// <summary>Viewport-level settings: 3D render scale and vsync.</summary>
+    /// <summary>Viewport-level settings: window, 3D render scale and vsync.</summary>
     private void ApplyViewportSettings()
     {
         var s = GameSettings.Current;
@@ -495,6 +546,42 @@ public partial class ClientWorld : Node3D
         DisplayServer.WindowSetVsyncMode(s.VSync
             ? DisplayServer.VSyncMode.Enabled
             : DisplayServer.VSyncMode.Disabled);
+        ApplyWindow(s);
+    }
+
+    private (WindowMode Mode, int W, int H)? _appliedWindow;
+
+    /// <summary>
+    /// Window mode and size, touched only when those settings themselves changed: every other
+    /// setting also raises <see cref="GameSettings.Changed"/>, and re-applying the saved size then
+    /// would snap back a window the player had just dragged to a new size.
+    /// </summary>
+    private void ApplyWindow(GameSettings s)
+    {
+        if (DisplayServer.GetName() == "headless") return;
+        var wanted = (s.WindowMode, s.WindowWidth, s.WindowHeight);
+        if (_appliedWindow == wanted) return;
+        _appliedWindow = wanted;
+
+        switch (s.WindowMode)
+        {
+            case WindowMode.Fullscreen:
+                DisplayServer.WindowSetMode(DisplayServer.WindowMode.ExclusiveFullscreen);
+                return;
+            case WindowMode.Borderless:
+                DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
+                return;
+        }
+
+        if (DisplayServer.WindowGetMode() != DisplayServer.WindowMode.Windowed)
+            DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
+        if (s.WindowWidth <= 0 || s.WindowHeight <= 0) return;
+
+        int screen = DisplayServer.WindowGetCurrentScreen();
+        var usable = DisplayServer.ScreenGetUsableRect(screen);
+        var size = new Vector2I(Math.Min(s.WindowWidth, usable.Size.X), Math.Min(s.WindowHeight, usable.Size.Y));
+        DisplayServer.WindowSetSize(size);
+        DisplayServer.WindowSetPosition(usable.Position + (usable.Size - size) / 2);
     }
 
     /// <summary>Every camera in the tree, whichever mode owns it: the horizon must not be clipped.</summary>

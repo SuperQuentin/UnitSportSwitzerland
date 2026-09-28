@@ -58,6 +58,8 @@ public static class BuildingStage
         Console.WriteLine($"  cadastre matched: {extractor.Matched}/{extractor.Total} ({pct:F0}%), " +
                           $"year known {withYear}, floors known {withFloors}");
         Console.WriteLine($"  re-seated on terrain: {extractor.Reseated} buildings, max shift {extractor.MaxLift:F1} m");
+        if (extractor.StrayBuildings > 0)
+            Console.WriteLine($"  stray faces dropped: {extractor.StrayFaces} from {extractor.StrayBuildings} buildings");
         Console.WriteLine("  by kind: " + string.Join(", ", byKind.Select(kv => $"{kv.Key}={kv.Value}")));
         return 0;
     }

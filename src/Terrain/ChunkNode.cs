@@ -22,7 +22,10 @@ public partial class ChunkNode : Node3D
 
     public static ArrayMesh ToArrayMesh(TerrainMeshBuilder.MeshData data, Material material)
     {
-        var arrays = new Godot.Collections.Array();
+        // disposed on return: AddSurfaceFromArrays has copied the data into the RenderingServer,
+        // and the packed native copies inside this Array are tens of MB per tile that would
+        // otherwise wait for a finalizer
+        using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
@@ -32,7 +35,7 @@ public partial class ChunkNode : Node3D
 
     public static ArrayMesh ToArrayMesh(RoadMeshBuilder.MeshData data, Material material)
     {
-        var arrays = new Godot.Collections.Array();
+        using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
@@ -44,7 +47,7 @@ public partial class ChunkNode : Node3D
 
     public static ArrayMesh ToArrayMesh(BuildingMeshBuilder.MeshData data, Material material)
     {
-        var arrays = new Godot.Collections.Array();
+        using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
@@ -55,11 +58,23 @@ public partial class ChunkNode : Node3D
 
     public static ArrayMesh ToArrayMesh(WaterMeshBuilder.MeshData data, Material material)
     {
-        var arrays = new Godot.Collections.Array();
+        using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Index] = data.Indices;
         return Finish(arrays, material);
+    }
+
+    /// <summary>
+    /// Assigns a mesh and frees the one it replaces. Every tile mesh is owned by exactly one
+    /// instance, so nothing else can still be holding the old one; left to the GC, a tile rebuilt
+    /// at a finer stride kept its coarse mesh (and a moving camera a trail of them) alive.
+    /// </summary>
+    private static void Swap(MeshInstance3D instance, Mesh mesh)
+    {
+        var old = instance.Mesh;
+        instance.Mesh = mesh;
+        if (old != null && old != mesh) old.Dispose();
     }
 
     private static ArrayMesh Finish(Godot.Collections.Array arrays, Material material)
@@ -80,7 +95,7 @@ public partial class ChunkNode : Node3D
             _meshInstance = new MeshInstance3D();
             AddChild(_meshInstance);
         }
-        _meshInstance.Mesh = mesh;
+        Swap(_meshInstance, mesh);
     }
 
     public void SetRoads(ArrayMesh mesh)
@@ -90,7 +105,7 @@ public partial class ChunkNode : Node3D
             _roadInstance = new MeshInstance3D { Name = "Roads" };
             AddChild(_roadInstance);
         }
-        _roadInstance.Mesh = mesh;
+        Swap(_roadInstance, mesh);
     }
 
     private MeshInstance3D? _buildingInstance;
@@ -103,7 +118,7 @@ public partial class ChunkNode : Node3D
             _buildingInstance = new MeshInstance3D { Name = "Buildings" };
             AddChild(_buildingInstance);
         }
-        _buildingInstance.Mesh = mesh;
+        Swap(_buildingInstance, mesh);
     }
 
     public void SetBuildingCollision(Vector3[] faces)
@@ -125,7 +140,7 @@ public partial class ChunkNode : Node3D
     /// Bridge deck collision — the one piece of road geometry a heightfield cannot represent
     /// (a deck floats above terrain, at a different height than the ground it crosses). Every
     /// other at-grade road/path already stands on terrain collision blended toward it; see
-    /// <c>TerrainMeshBuilder.BlendRoadCorridor</c>.
+    /// <c>TerrainMeshBuilder.ComputeRoadBlend</c>.
     /// </summary>
     public void SetRoadCollision(Vector3[] faces)
     {
@@ -272,23 +287,41 @@ public partial class ChunkNode : Node3D
             AddChild(node);
         }
         node.Visible = true;
+        var previous = node.Multimesh;
         node.Multimesh = multi;
+        // the MultiMesh is this tile's own; its shared unit tree mesh is not, so only the
+        // wrapper is released, never previous.Mesh
+        if (previous != null && previous != multi) previous.Dispose();
     }
 
-    /// <summary>Unit-height 5-sided cone, origin at the base.</summary>
+    /// <summary>
+    /// Unit-height conifer: a 5-sided cone on a bare trunk, origin at the base. The foliage
+    /// used to reach down to 15% of the height, so a 25 m spruce was 13 m wide at eye level
+    /// and walled in every forest trail; starting it at <c>trunkTop</c> leaves the silhouette
+    /// from above unchanged and opens the ground-level view. 20 triangles, like the crown.
+    /// </summary>
     private static ArrayMesh ConeMesh(Material material)
     {
         const int sides = 5;
+        const float trunkTop = 0.28f, neck = 0.22f;
         var verts = new List<Vector3>();
         var apex = new Vector3(0, 1, 0);
+        var under = new Vector3(0, neck, 0);
         for (int i = 0; i < sides; i++)
         {
             float a0 = Mathf.Tau * i / sides;
             float a1 = Mathf.Tau * (i + 1) / sides;
-            var p0 = new Vector3(Mathf.Cos(a0), 0.15f, Mathf.Sin(a0));
-            var p1 = new Vector3(Mathf.Cos(a1), 0.15f, Mathf.Sin(a1));
+            var p0 = new Vector3(Mathf.Cos(a0), trunkTop, Mathf.Sin(a0));
+            var p1 = new Vector3(Mathf.Cos(a1), trunkTop, Mathf.Sin(a1));
             verts.Add(apex); verts.Add(p0); verts.Add(p1);
-            verts.Add(p1); verts.Add(p0); verts.Add(new Vector3(0, 0, 0));
+            verts.Add(p1); verts.Add(p0); verts.Add(under);
+
+            // trunk: the same thin prism the broadleaf stands on
+            var t0 = new Vector3(Mathf.Cos(a0) * 0.10f, 0, Mathf.Sin(a0) * 0.10f);
+            var t1 = new Vector3(Mathf.Cos(a1) * 0.10f, 0, Mathf.Sin(a1) * 0.10f);
+            verts.Add(t0); verts.Add(new Vector3(t1.X, neck, t1.Z)); verts.Add(t1);
+            verts.Add(t0); verts.Add(new Vector3(t0.X, neck, t0.Z));
+            verts.Add(new Vector3(t1.X, neck, t1.Z));
         }
         return BuildMesh(verts, material);
     }
@@ -327,7 +360,7 @@ public partial class ChunkNode : Node3D
 
     private static ArrayMesh BuildMesh(List<Vector3> verts, Material material)
     {
-        var arrays = new Godot.Collections.Array();
+        using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = verts.ToArray();
         var mesh = new ArrayMesh();
@@ -345,7 +378,30 @@ public partial class ChunkNode : Node3D
             _waterInstance = new MeshInstance3D { Name = "Water" };
             AddChild(_waterInstance);
         }
-        _waterInstance.Mesh = mesh;
+        Swap(_waterInstance, mesh);
+    }
+
+    /// <summary>
+    /// Frees this tile's meshes now rather than when their managed wrappers are finalized.
+    /// Call before QueueFree on unload: the memory is the RenderingServer's, so the GC sees a
+    /// few bytes per tile and a fast flight left hundreds of MB of dead meshes waiting on it.
+    /// </summary>
+    public void ReleaseResources()
+    {
+        foreach (var instance in new[] { _meshInstance, _roadInstance, _buildingInstance, _waterInstance })
+        {
+            var mesh = instance?.Mesh;
+            if (mesh == null) continue;
+            instance!.Mesh = null;
+            mesh.Dispose();
+        }
+        foreach (var node in new[] { _coniferInstance, _broadleafInstance })
+        {
+            var multi = node?.Multimesh;
+            if (multi == null) continue;
+            node!.Multimesh = null;
+            multi.Dispose();
+        }
     }
 
     public void ClearRoads()

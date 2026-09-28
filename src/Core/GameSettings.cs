@@ -13,6 +13,14 @@ public enum DetailPreset
     High = 2,
 }
 
+/// <summary>How the game window occupies the screen.</summary>
+public enum WindowMode
+{
+    Windowed = 0,
+    Borderless = 1,
+    Fullscreen = 2,
+}
+
 /// <summary>What the on-screen performance overlay shows (F3 cycles it).</summary>
 public enum PerfOverlayMode
 {
@@ -33,6 +41,16 @@ public enum PerfOverlayMode
 /// verification run cannot quietly change what the player sees next time.
 /// </para>
 /// </summary>
+/// <summary>
+/// How vehicles and running are tuned. Game is the arcade layer on top of the physics; Sim is the
+/// untouched real-world model, kept because a home trainer's watts only mean anything in it.
+/// </summary>
+public enum RideProfile
+{
+    Game,
+    Sim,
+}
+
 public sealed class GameSettings
 {
     private const string File = "user://settings.json";
@@ -63,13 +81,55 @@ public sealed class GameSettings
     /// <summary>Main-thread milliseconds per frame spent turning built tiles into Godot meshes.</summary>
     public double CommitBudgetMs { get; set; } = 4;
 
-    /// <summary>Viewport 3D scale, the biggest single fidelity/performance knob.</summary>
+    /// <summary>
+    /// Viewport 3D scale, the biggest single fidelity/performance knob. The game lays out at a
+    /// fixed <see cref="BaseWidth"/>x<see cref="BaseHeight"/> (<c>stretch/mode = "viewport"</c>)
+    /// and the 3D is drawn at this fraction of it, so this IS the 3D render resolution; above 1
+    /// it supersamples. The UI is untouched, which is why resolution is not changed through the
+    /// root's content scale size: that would resize every HUD element with it.
+    /// </summary>
     public float RenderScale { get; set; } = 0.75f;
+    public const int BaseWidth = 1152, BaseHeight = 648;
+    public const float MinRenderScale = 0.25f, MaxRenderScale = 2f;
 
     public bool VSync { get; set; } = true;
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PerfOverlayMode PerfOverlay { get; set; } = PerfOverlayMode.Off;
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public WindowMode WindowMode { get; set; } = WindowMode.Windowed;
+
+    // --- controls ---
+    /// <summary>Right-stick look speed multiplier; 1 turns at <see cref="PlayerInput.StickTurnRate"/>.</summary>
+    public float StickSensitivity { get; set; } = 1f;
+    public bool InvertY { get; set; }
+
+    /// <summary>Stick travel ignored around centre. Worn pads drift, so it is a setting.</summary>
+    public float StickDeadzone { get; set; } = 0.18f;
+
+    /// <summary>Controller rumble on landings, impacts and speed.</summary>
+    public bool Vibration { get; set; } = true;
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public RideProfile RideProfile { get; set; } = RideProfile.Game;
+
+    // --- feel ---
+    /// <summary>Sound effects volume, 0..1.</summary>
+    public float SfxVolume { get; set; } = 0.8f;
+
+    /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
+    public float ScreenShake { get; set; } = 1f;
+
+    /// <summary>Radial streaks at the screen edge at speed.</summary>
+    public bool SpeedLines { get; set; } = true;
+
+    /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
+    public bool ThirdPerson { get; set; } = true;
+
+    /// <summary>Window size when windowed; 0 leaves whatever size the window already has.</summary>
+    public int WindowWidth { get; set; }
+    public int WindowHeight { get; set; }
 
     /// <summary>Camera far plane that keeps the whole horizon in view, with room to spare.</summary>
     [JsonIgnore]
@@ -105,7 +165,7 @@ public sealed class GameSettings
         GD.Print($"[settings] rings={loaded.RenderDistanceRings} horizon={loaded.HorizonKm}km "
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "
             + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} vsync={loaded.VSync} "
-            + $"perf={loaded.PerfOverlay}");
+            + $"window={loaded.WindowMode} perf={loaded.PerfOverlay}");
     }
 
     public void Save()
@@ -135,7 +195,13 @@ public sealed class GameSettings
         HorizonKm = Math.Clamp(HorizonKm, 0, MaxHorizonKm);
         MaxConcurrentBuilds = Math.Clamp(MaxConcurrentBuilds, 0, MaxBuildsCap);
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
-        RenderScale = Math.Clamp(RenderScale, 0.35f, 1f);
+        RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
+        StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
+        SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
+        ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
+        StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
+        WindowWidth = Math.Clamp(WindowWidth, 0, 7680);
+        WindowHeight = Math.Clamp(WindowHeight, 0, 4320);
     }
 
     /// <summary>
@@ -156,6 +222,8 @@ public sealed class GameSettings
                 case "--builds" when int.TryParse(v, out int b): MaxConcurrentBuilds = b; break;
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
+                case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
+                case "--view": ThirdPerson = v != "first" && v != "1st"; break;
                 case "--perf":
                     PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,
                         "fps" => PerfOverlayMode.Fps, _ => PerfOverlayMode.Off };

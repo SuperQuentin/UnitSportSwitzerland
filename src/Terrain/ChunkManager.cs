@@ -100,6 +100,16 @@ public partial class ChunkManager : Node3D
         : LocalMaxConcurrentBuilds;
 
     private int _buildsInFlight;
+
+    /// <summary>
+    /// Builds finer than the coarse stride, counted apart from the total. A stride-1 build holds
+    /// ~300 MB while it runs (the surface, its road-blended copy, and the native copies handed to
+    /// the RenderingServer), against a few MB for a far tile. Flying fast keeps every slot busy
+    /// with fine tiles, and 32 of them at once exhausted memory and crashed the process in the
+    /// native allocator. Capping only these keeps the far rings loading at full parallelism.
+    /// </summary>
+    private int _fineBuildsInFlight;
+    private const int MaxFineBuilds = 6;
     private int _cancelledBuilds;
 
     /// <summary>Builds abandoned mid-flight because their tile stopped being wanted.</summary>
@@ -601,9 +611,29 @@ public partial class ChunkManager : Node3D
     public float GetHeightAt(Vector3 worldPos) =>
         TryGetHeight(worldPos, out float h) ? h : float.NegativeInfinity;
 
+    private long _allocatedAtLastCollect;
+    private const long CollectEveryBytes = 1L << 30;
+
+    /// <summary>
+    /// Every tile build throws away multi-MB arrays, which live on the large-object heap and are
+    /// only reclaimed by a gen-2 collection - and the GC, seeing no pressure, deferred that for a
+    /// whole 40 s flight while the dead arrays piled up from 1 to 4.4 GB (8.3 GB process peak at
+    /// 300 m/s, and an out-of-memory crash in the native allocator on a smaller machine budget).
+    /// A background gen-2 per GB allocated keeps the heap near its live size; it runs concurrently
+    /// with the game, so the main-thread pause is the short marking phases only.
+    /// </summary>
+    private void CollectBuildGarbage()
+    {
+        long allocated = GC.GetTotalAllocatedBytes();
+        if (allocated - _allocatedAtLastCollect < CollectEveryBytes) return;
+        _allocatedAtLastCollect = allocated;
+        GC.Collect(2, GCCollectionMode.Forced, blocking: false);
+    }
+
     public override void _Process(double delta)
     {
         if (_source == null || _origin == null) return;
+        CollectBuildGarbage();
 
         while (_failedBuilds.TryDequeue(out var failedId))
             if (_chunks.TryGetValue(failedId, out var failed))
@@ -654,18 +684,28 @@ public partial class ChunkManager : Node3D
             if (next.CollisionMap != null && collisionBudget <= 0) break;
             if (!_ready.TryDequeue(out var result)) break;
 
-            if (!_chunks.TryGetValue(result.Id, out var state))
-                continue; // chunk was unloaded while building — drop
-            if (result.Generation != state.Generation)
-                continue; // cancelled and restarted; this is the stale build's output
+            if (!_chunks.TryGetValue(result.Id, out var state)
+                || result.Generation != state.Generation)
+            {
+                // unloaded while building, or a cancelled build's stale output. Free its
+                // resources now: their memory is native, invisible to the GC, and would
+                // otherwise sit there until a finalizer got round to it.
+                Release(result);
+                continue;
+            }
 
             committed++;
             double t0 = clock.Elapsed.TotalMilliseconds;
             state.Grid = result.Grid;
             state.Holes = result.Holes;
             state.HolesLoaded = true;
-            state.Cover = result.Cover;
-            state.CoverLoaded = true;
+            // The cover raster is 1001^2 bytes whatever the stride, so keeping it on every tile
+            // cost 1 MB per tile - ~1 GB at 15 rings, 6.5 GB at 40 - for tiles drawn one vertex
+            // in ten or fifty. Only tiles rendered finer than the coarse stride keep it; a far
+            // tile that comes back closer gets it from CachingChunkSource or disk (~2 KB deflated).
+            bool keepCover = result.Stride > 0 && result.Stride < ChunkFormat.CoarseStride;
+            state.Cover = keepCover ? result.Cover : null;
+            state.CoverLoaded = keepCover;
 
             // An interim result is the terrain half of a build whose roads and buildings are
             // still being assembled on the worker. The tile must stay marked pending, or the
@@ -805,9 +845,17 @@ public partial class ChunkManager : Node3D
                 // Letting a few tiles finish completely is what puts ground under your feet.
                 if (Interlocked.CompareExchange(ref _buildsInFlight, 0, 0) >= MaxConcurrentBuilds)
                     break;
+                // skip, not break: coarse tiles further down the order still fit
+                bool fine = want.Stride > 0 && want.Stride < ChunkFormat.CoarseStride;
+                if (fine && !OfflineMode && Volatile.Read(ref _fineBuildsInFlight) >= MaxFineBuilds)
+                    continue;
 
                 Interlocked.Increment(ref _buildsInFlight);
-                StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings);
+                // Collision on a road tile needs the road tile even when its roads are already
+                // drawn: the floor is blended toward them. The usual way to get here is exactly
+                // that - flying over an area (roads, no collision) and then dropping on foot.
+                StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings,
+                    roadsForCollision: needCollision && want.Roads, fine: fine);
             }
         }
     }
@@ -882,6 +930,7 @@ public partial class ChunkManager : Node3D
                 gone.CancelPending();
                 Interlocked.Increment(ref _cancelledBuilds);
             }
+            gone.Node?.ReleaseResources();
             gone.Node?.QueueFree();
             _chunks.Remove(id);
             Horizon?.SetCovered(id, false);
@@ -900,9 +949,20 @@ public partial class ChunkManager : Node3D
         clock.Restart();
     }
 
-    private void StartBuild(TileId id, ChunkState state, int stride, bool wantCollision,
-        bool wantRoads, bool wantBuildings)
+    private static void Release(BuildResult r)
     {
+        r.Mesh?.Dispose();
+        r.Roads?.Dispose();
+        r.Buildings?.Dispose();
+        r.Water?.Dispose();
+        r.Trees?.Conifers?.Dispose();
+        r.Trees?.Broadleaves?.Dispose();
+    }
+
+    private void StartBuild(TileId id, ChunkState state, int stride, bool wantCollision,
+        bool wantRoads, bool wantBuildings, bool roadsForCollision = false, bool fine = false)
+    {
+        if (fine) Interlocked.Increment(ref _fineBuildsInFlight);
         state.PendingStride = stride;
         state.BuildStartedTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         state.GroundRecorded = false;
@@ -923,6 +983,10 @@ public partial class ChunkManager : Node3D
 
         var cachedGrid = state.Grid;
         if (cachedGrid != null && needsFullGrid && cachedGrid.Stride != 1) cachedGrid = null;
+        // ...and the other way: a tile that has drifted out of the full-grid rings swaps its
+        // 2 MB grid for the 5 KB companion, or every tile the player has ever walked past keeps
+        // one. SampleMeshHeight on the coarse grid matches what is now drawn there anyway.
+        if (cachedGrid != null && !needsFullGrid && cachedGrid.Stride == 1) cachedGrid = null;
 
         var cachedHoles = state.Holes;
         bool holesLoaded = state.HolesLoaded;
@@ -968,9 +1032,16 @@ public partial class ChunkManager : Node3D
                 Lap(StAux, stageMs, clock);
                 ct.ThrowIfCancellationRequested();
 
+                // the core (grid + skirts, no cut walls) is kept: the road-blended tail patches a
+                // copy of it rather than building a million vertices again
                 ArrayMesh? mesh = null;
+                TerrainMeshBuilder.MeshData? surfaceCore = null;
                 if (buildMesh && terrainMaterial != null)
-                    mesh = ChunkNode.ToArrayMesh(TerrainMeshBuilder.BuildSurface(grid, stride, holes, cover), terrainMaterial);
+                {
+                    surfaceCore = TerrainMeshBuilder.BuildSurfaceCore(grid, stride, holes, cover);
+                    mesh = ChunkNode.ToArrayMesh(
+                        TerrainMeshBuilder.FinishSurface(surfaceCore, grid, stride, holes, null), terrainMaterial);
+                }
                 Lap(StSurface, stageMs, clock);
 
                 // The collision map is dequantised here in any case, but whether it is published
@@ -978,8 +1049,15 @@ public partial class ChunkManager : Node3D
                 // one 80 ms HeightMapShape3D commit per tile and two. From local disk the road
                 // tile is milliseconds behind, so the ground waits for it; over the network it
                 // may be seconds, and a player standing over a hole is worse than a hitch.
-                var collision = wantCollision ? TerrainMeshBuilder.BuildCollisionMap(grid, holes) : null;
-                bool publishInterimCollision = collision != null && (!wantRoads || streaming);
+                // Only built here when it is published now; otherwise the tail builds the blended
+                // one directly, and a bare map made here would be thrown away unused.
+                // A tile whose roads are drawn already still blends its floor toward them: waiting
+                // for the (cached) road tile beats publishing bare terrain, which sits the whole
+                // drape offset - 0.35 m plus - under every road and path, so the player walked
+                // around sunk to the ankles in them.
+                bool blendsRoads = wantRoads || roadsForCollision;
+                bool publishInterimCollision = wantCollision && (!blendsRoads || streaming);
+                var collision = publishInterimCollision ? TerrainMeshBuilder.BuildCollisionMap(grid, holes) : null;
                 Lap(StCollision, stageMs, clock);
                 ct.ThrowIfCancellationRequested();
 
@@ -1013,6 +1091,14 @@ public partial class ChunkManager : Node3D
                         && RoadMeshBuilder.Build(roadTile, grid) is { } roadData)
                         roads = ChunkNode.ToArrayMesh(roadData, roadMaterial);
                     Lap(StRoadMesh, stageMs, clock);
+                }
+                else if (roadsForCollision)
+                {
+                    // only for the collision blend below; the roads already drawn stay as they
+                    // are, since the result says it did not request them
+                    roadTile = await source.LoadRoadsAsync(id, ct);
+                    ct.ThrowIfCancellationRequested();
+                    Lap(StRoadLoad, stageMs, clock);
                 }
 
                 ChunkNode.TreeMeshes? trees = null;
@@ -1066,35 +1152,51 @@ public partial class ChunkManager : Node3D
                 // TerrainMeshBuilder.MaxHoleStride), rebuild the VISUAL mesh with the same blend
                 // at a small clearance below it (see TerrainMeshBuilder.VisualBlendClearance),
                 // so the ground a player sees now matches the ground they stand on too, instead
-                // of only the physics floor knowing about the road. Two clearances, so two
-                // separate blend passes - sharing one array would either z-fight the mesh
-                // against the road ribbon (clearance 0) or float the collision floor above the
-                // ribbon's own surface (clearance 0.35 m).
+                // of only the physics floor knowing about the road. Two clearances but ONE
+                // corridor pass: the blend is a sparse list of (cell, weight, road height) and
+                // each consumer applies its own clearance - 0 for collision, 0.35 m for the mesh,
+                // or the mesh z-fights the road ribbon. The mesh is patched, not rebuilt: only
+                // the vertices under corridors move (measured ~33% of all worker time when it
+                // rebuilt every vertex of a stride-1 tile a second time).
                 bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
+                bool visualBlend = surfaceCore != null && roadTile != null && nearField;
 
-                float[]? blendedCollision = publishInterimCollision ? null : collision;
+                // one corridor pass, applied twice at different clearances
+                var blend = roadTile != null && (wantCollision || visualBlend)
+                    ? TerrainMeshBuilder.ComputeRoadBlend(roadTile) : null;
+
+                float[]? blendedCollision = null;
                 Vector3[]? bridgeCollision = null;
                 if (wantCollision && roadTile != null)
                 {
-                    var collisionHeights = TerrainMeshBuilder.BuildBlendedHeights(grid, roadTile);
-                    blendedCollision = TerrainMeshBuilder.BuildCollisionMap(collisionHeights, holes);
+                    blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes, blend);
                     // A heightfield cannot hold a deck floating above the terrain it crosses, so
                     // bridges get their own small collision body alongside the blended ground.
                     bridgeCollision = RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile);
                 }
+                else if (wantCollision && !publishInterimCollision)
+                    blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes); // no road tile after all
 
                 ArrayMesh? tailMesh = null;
-                if (buildMesh && terrainMaterial != null && roadTile != null && nearField)
+                if (visualBlend)
                 {
-                    var visualHeights = TerrainMeshBuilder.BuildBlendedHeights(
-                        grid, roadTile, TerrainMeshBuilder.VisualBlendClearance);
                     // Tunnel portal walls close the mouth from the same hole mask the carve
                     // used, so they need the tile's tunnel geometry - computed once here from
                     // the same source RoadMeshBuilder's own bore extrusion uses, so both agree.
-                    var portals = RoadMeshBuilder.ComputeTunnelPortals(roadTile, grid);
-                    tailMesh = ChunkNode.ToArrayMesh(
-                        TerrainMeshBuilder.BuildSurface(grid, stride, holes, cover, visualHeights, portals),
-                        terrainMaterial);
+                    var portals = RoadMeshBuilder.ComputeTunnelPortals(roadTile!, grid);
+                    bool hasCorridors = blend!.Cells.Length > 0;
+                    bool hasPortalWalls = holes is { Count: > 0 } && portals.Count > 0;
+                    // Nothing to change on a tile with no at-grade road and no portal: the
+                    // surface already committed is the final one.
+                    if (hasCorridors || hasPortalWalls)
+                    {
+                        var core = hasCorridors
+                            ? TerrainMeshBuilder.PatchSurface(surfaceCore!, grid, stride, cover, blend,
+                                TerrainMeshBuilder.VisualBlendClearance)
+                            : surfaceCore!;
+                        tailMesh = ChunkNode.ToArrayMesh(
+                            TerrainMeshBuilder.FinishSurface(core, grid, stride, holes, portals), terrainMaterial!);
+                    }
                 }
 
                 Lap(StTail, stageMs, clock);
@@ -1119,6 +1221,7 @@ public partial class ChunkManager : Node3D
                 // Released whatever happened, or the cap would leak slots on the first
                 // failed tile and streaming would stop dead.
                 Interlocked.Decrement(ref _buildsInFlight);
+                if (fine) Interlocked.Decrement(ref _fineBuildsInFlight);
             }
         });
     }

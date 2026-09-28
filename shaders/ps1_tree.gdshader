@@ -11,6 +11,30 @@ uniform float fog_end = 8000.0;
 uniform vec3 fog_color : source_color = vec3(0.72, 0.78, 0.86);
 
 varying vec3 world_pos;
+varying vec3 view_pos;
+
+// --- near-camera fade -------------------------------------------------------------------
+// Trees close to the lens AND in front of it dissolve, for every camera (on foot, chase cam,
+// free fly, replay). Walking a forest trail at eye height otherwise puts a canopy across the
+// whole frame. The periphery is kept solid so a forest still reads as one around you.
+// View-space and uniform-driven only: nothing on the C# side changes per frame.
+uniform float near_fade = 1.0;       // 0 disables
+uniform float near_fade_in = 1.5;    // fully dissolved closer than this (m)
+uniform float near_fade_out = 8.0;   // fully solid beyond this (m)
+uniform float near_fade_cone = 0.55; // cos of the off-axis angle where it starts to apply
+
+float near_keep(vec3 v) {
+    if (near_fade <= 0.0) {
+        return 1.0;
+    }
+    float d = length(v);
+    if (d >= near_fade_out || d < 1e-3) {
+        return 1.0;
+    }
+    float close = 1.0 - smoothstep(near_fade_in, near_fade_out, d);
+    float ahead = smoothstep(near_fade_cone, 0.95, -v.z / d);
+    return 1.0 - near_fade * close * ahead;
+}
 
 // --- sightline cut ----------------------------------------------------------------------
 // Dissolves anything standing between a camera and its subject. The fade is a Bayer-dither
@@ -52,6 +76,7 @@ float sightline_keep(vec3 p) {
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    view_pos = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     vec4 clip = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
     if (clip.w > 0.0) {
         vec2 half_res = snap_resolution * 0.5;
@@ -74,9 +99,9 @@ void fragment() {
         3.0, 11.0, 1.0, 9.0,
         15.0, 7.0, 13.0, 5.0);
 
-    // dissolve anything between the camera and its subject, using the same 4x4 Bayer pattern
+    // dissolve anything between the camera and its subject, or right in front of the lens, using the same 4x4 Bayer pattern
     // the colour quantiser below uses, so the fade reads as part of the renderer
-    float keep = sightline_keep(world_pos);
+    float keep = min(sightline_keep(world_pos), near_keep(view_pos));
     if (keep < 1.0) {
         int ci = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
         if (keep < bayer[ci] / 16.0) {

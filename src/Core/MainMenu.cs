@@ -69,7 +69,7 @@ public partial class MainMenu : CanvasLayer
 
         // the settings panel swaps in for the main one, in the same centred slot
         _settings = SettingsMenu.Create();
-        _settings.BackRequested += () => { _settings.Visible = false; _panel.Visible = true; };
+        _settings.BackRequested += () => { _settings.Visible = false; _panel.Visible = true; PlayerInput.FocusFirst(_panel); };
         centre.AddChild(_settings);
 
         var rows = new VBoxContainer();
@@ -123,7 +123,7 @@ public partial class MainMenu : CanvasLayer
         quit.Pressed += () => QuitRequested?.Invoke();
         rows.AddChild(quit);
 
-        var hint = new Label { Text = "Esc opens this menu at any time" };
+        var hint = new Label { Text = "Esc / Start opens this menu at any time" };
         hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
         rows.AddChild(hint);
     }
@@ -170,10 +170,14 @@ public partial class MainMenu : CanvasLayer
         SetOpen(true);
         _panel.Visible = false;
         _settings.Visible = true;
+        PlayerInput.FocusFirst(_settings);
     }
 
     private void SetOpen(bool open)
     {
+        // Held while open so the player does not walk off under the menu: a pad's left stick is
+        // also ui_up/ui_down, and navigating the list would otherwise steer the body behind it.
+        UiFocus.Set(this, open);
         _panel.Visible = open;
         _settings.Visible = false;
         if (open)
@@ -183,6 +187,7 @@ public partial class MainMenu : CanvasLayer
                 : $"Currently: {Describe(Current.Value)}";
             _resume.Visible = Current != null;
             Input.MouseMode = Input.MouseModeEnum.Visible;
+            PlayerInput.FocusFirst(_panel);
         }
         else if (Current is GameMode.Explore or GameMode.Multiplayer)
         {
@@ -199,15 +204,17 @@ public partial class MainMenu : CanvasLayer
         _ => mode.ToString(),
     };
 
-    public override void _UnhandledKeyInput(InputEvent @event)
+    public override void _UnhandledInput(InputEvent @event)
     {
-        if (!IsOpen) return;
-        if (@event is not InputEventKey { Pressed: true, PhysicalKeycode: Key.Escape }) return;
+        if (!IsOpen || !@event.IsPressed() || @event.IsEcho()) return;
+        // Esc, Start or B — the pad has no Esc, and B is back everywhere else on a console
+        if (!@event.IsActionPressed(PlayerInput.Menu) && !@event.IsActionPressed("ui_cancel")) return;
         if (_settings.Visible)
         {
             // Esc from settings goes back to the menu, not out of it
             _settings.Visible = false;
             _panel.Visible = true;
+            PlayerInput.FocusFirst(_panel);
             GetViewport().SetInputAsHandled();
         }
         else if (Current != null)

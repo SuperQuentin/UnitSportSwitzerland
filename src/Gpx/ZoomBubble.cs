@@ -135,6 +135,26 @@ public partial class ZoomBubble : CanvasLayer
     }
 
     /// <summary>
+    /// Screen seconds the bubble stays away after a camera cut. Long enough that the new shot
+    /// reads first, short enough that the bubble is still clearly "for" it.
+    /// </summary>
+    private const float CutHoldOff = 0.4f;
+
+    private float _holdOff;
+
+    /// <summary>
+    /// The camera just cut to a different shot. Everything on screen jumped, so the bubble's
+    /// eased position would visibly slide across the frame to catch up with the runner's new
+    /// spot. Instead it vanishes on the cut itself, stays away for a beat, then pops in fresh
+    /// wherever the new shot puts the runner.
+    /// </summary>
+    public void OnCameraCut()
+    {
+        HideNow();
+        _holdOff = CutHoldOff;
+    }
+
+    /// <summary>
     /// Called once a frame with the focused runner and the camera the picture is being drawn
     /// from. <paramref name="dt"/> is screen seconds; pass 0 to snap instead of ease (seeking).
     /// </summary>
@@ -143,6 +163,11 @@ public partial class ZoomBubble : CanvasLayer
         var head = runner.HeadWorld;
         float dist = head.DistanceTo(camera.GlobalPosition);
         bool want = Enabled && (_shown > 0.01f ? dist > HideBelow : dist > ShowBeyond);
+        if (_holdOff > 0)
+        {
+            _holdOff -= dt;
+            want = false;
+        }
 
         _shown = dt > 0
             ? Mathf.MoveToward(_shown, want ? 1f : 0f, dt * FadeRate)

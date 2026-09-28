@@ -54,6 +54,21 @@ public partial class PlaybackHud : CanvasLayer
     private Button _toggleButton = null!;
     private bool _uiVisible = true;
     private int _speedIndex = 2;   // 1x
+
+    /// <summary>
+    /// Moves the playback multiplier one step. The button wraps (one button, so it has to);
+    /// the D-pad clamps, because up/down pressed past the end should stay there rather than
+    /// jump from 32x to 0.25x. Lives here so the button label cannot disagree with the clock.
+    /// </summary>
+    public void StepSpeed(int direction, bool wrap = false)
+    {
+        int n = SpeedSteps.Length;
+        _speedIndex = wrap
+            ? ((_speedIndex + direction) % n + n) % n
+            : Math.Clamp(_speedIndex + direction, 0, n - 1);
+        _race.Speed = SpeedSteps[_speedIndex];
+        Refresh();
+    }
     private bool _scrubbing;
 
     public event Action? AddRequested;
@@ -141,12 +156,7 @@ public partial class PlaybackHud : CanvasLayer
         buttons.AddChild(Button("10s >>", () => _race.Seek(_race.Time + 10)));
         buttons.AddChild(Button("Restart", () => _race.Seek(0)));
 
-        _speedButton = Button("1x", () =>
-        {
-            _speedIndex = (_speedIndex + 1) % SpeedSteps.Length;
-            _race.Speed = SpeedSteps[_speedIndex];
-            Refresh();
-        });
+        _speedButton = Button("1x", () => StepSpeed(+1, wrap: true));
         buttons.AddChild(_speedButton);
 
         _cameraButton = Button("Cam: Chase", () =>

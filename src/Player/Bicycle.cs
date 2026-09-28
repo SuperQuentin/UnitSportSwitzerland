@@ -25,7 +25,7 @@ public sealed class Bicycle : Rideable
 {
     public override RideKind Kind => RideKind.RoadBike;
     public override string Label => "Road bike";
-    public override string Blurb => "W pedal, Shift sprint, S brake, A/D steer — climbs cost you";
+    public override string Blurb => "W / RT pedal, Shift / X sprint, S / LT brake, A/D / stick steer — climbs cost you";
 
     // ---- the rider and the machine ----
     /// <summary>Rider, bike, bottles and kit.</summary>
@@ -52,18 +52,36 @@ public sealed class Bicycle : Rideable
     private const float BrakeDecel = 5.2f;       // dry tarmac, both brakes, short of a stoppie
 
     // ---- steering ----
-    /// <summary>Maximum lean, radians. Past ~35° a road tyre lets go.</summary>
-    private const float MaxLean = 0.60f;
+    /// <summary>
+    /// Maximum lean, radians (~43°). A pro descending on dry tarmac reaches 45°; the old 34° was
+    /// a nervous commuter's, and at 50 km/h it made a hairpin need the whole road.
+    /// </summary>
+    private const float MaxLean = 0.75f;
 
     /// <summary>
     /// Cap on yaw rate. The physical limit <c>ω = g·tanφ/v</c> goes to infinity as the bike
     /// slows, which is true of a real bike — you can turn it on the spot at walking pace — but
     /// left uncapped a mouse-flick at 1 m/s spins the rider like a top.
     /// </summary>
-    private const float MaxYawRate = 1.5f;
+    private const float MaxYawRate = 1.8f;
+
+    /// <summary>How quickly the rider rolls into a lean, 1/s — ~0.2 s to most of the way.</summary>
+    private const float BankResponse = 5.5f;
+
+    // ---- the Game profile (Rideable.Arcade): a much fitter, braver rider on the same physics ----
+    /// <summary>Cruise and sprint, W. 350 W holds ~40 km/h on the flat, 900 W sprints past 55.</summary>
+    private const float ArcadeWatts = 350f, ArcadeSprintWatts = 900f;
+    private const float ArcadeMaxThrust = 420f;
+    /// <summary>Knee-down grip and a quicker roll-in: corners you would not dare in real life.</summary>
+    private const float ArcadeMaxLean = 0.88f, ArcadeBankResponse = 7.5f, ArcadeMaxYawRate = 2.1f;
+    private const float ArcadeBrakeDecel = 7.5f;
 
     /// <summary>Below this the bike is being wheeled, not ridden, and steering is direct.</summary>
     private const float WalkingPace = 1.2f;
+
+    /// <summary>The figure's own eye, so first person sits where the drawn head is looking from.</summary>
+    public override Vector3 FirstPersonEye { get; } = HumanMeshBuilder.MountsForPose(HumanPose.Cycling).Eye
+        + new Vector3(0, 0, -0.06f);   // just proud of the face, so the head never fills the lens
 
     public override float EyeHeight => 1.48f;
     public override float ChaseDistance => 3.9f;
@@ -74,6 +92,17 @@ public sealed class Bicycle : Rideable
 
     public override Node3D BuildVisual(int riderIndex) => Cyclist.Create(riderIndex);
 
+    public override bool IsVehicle => true;
+
+    public override Node3D BuildParkedVisual(int riderIndex) => new MeshInstance3D
+    {
+        Name = "Bike",
+        Mesh = BikeMeshBuilder.Build(BikePalette.ForRider(riderIndex)),
+        MaterialOverride = HumanMeshBuilder.Material(),
+    };
+
+    public override (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 0.55f, 0), new Vector3(0.45f, 1.1f, 1.75f));
+
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
         float v = motion.Speed;
@@ -83,16 +112,10 @@ public sealed class Bicycle : Rideable
         // same handlebar input that flicks you round a bollard at 5 km/h is a long sweeping
         // bend at 50. Modelling it the other way — a fixed turn rate — is what makes vehicles
         // in games feel like they are on rails.
-        float yawRate = 0f;
-        if (Mathf.Abs(input.Steer) > 0.01f)
-        {
-            float limit = v > WalkingPace
-                ? Mathf.Min(Gravity * Mathf.Tan(MaxLean) / v, MaxYawRate)
-                : MaxYawRate;
-            yawRate = -input.Steer * limit;   // +yaw is left in Godot, +steer is right
-        }
-        motion.Yaw += yawRate * dt;
-        motion.Lean = LeanFor(v, yawRate, MaxLean);
+        bool arcade = Arcade;
+        SteerByLean(ref motion, input.Steer, v,
+            arcade ? ArcadeMaxLean : MaxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
+            arcade ? ArcadeBankResponse : BankResponse, WalkingPace, dt);
 
         if (!ground.OnFloor)
         {
@@ -103,8 +126,11 @@ public sealed class Bicycle : Rideable
         }
 
         // --- the power equation -----------------------------------------------------
-        float watts = input.Throttle * (input.Effort ? SprintWatts : RiderWatts);
-        float thrust = watts > 0 ? Mathf.Min(watts / Mathf.Max(v, 0.5f), MaxThrust) : 0f;
+        // Sim keeps RiderWatts, which is what a home trainer writes into; Game ignores it
+        float watts = input.Throttle * (arcade
+            ? (input.Effort ? ArcadeSprintWatts : ArcadeWatts)
+            : (input.Effort ? SprintWatts : RiderWatts));
+        float thrust = watts > 0 ? Mathf.Min(watts / Mathf.Max(v, 0.5f), arcade ? ArcadeMaxThrust : MaxThrust) : 0f;
 
         float drag = 0.5f * AirDensity * DragArea * v * v;
         float rolling = RollingResistance * Mass * Gravity;
@@ -112,7 +138,7 @@ public sealed class Bicycle : Rideable
         float accel = (thrust - drag - rolling) / Mass + SlopeAccel(ground.Grade);
         v += accel * dt;
 
-        if (input.Brake > 0.01f) v -= input.Brake * BrakeDecel * dt;
+        if (input.Brake > 0.01f) v -= input.Brake * (arcade ? ArcadeBrakeDecel : BrakeDecel) * dt;
 
         // A bicycle does not roll backwards down a hill; it stops and you put a foot down.
         // Letting the speed go negative would drive the whole model backwards through itself.

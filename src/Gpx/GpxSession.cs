@@ -117,7 +117,23 @@ public partial class GpxSession : Node
         _lens.Visible = active;
         _hud.SetProcess(active);
         SetProcessUnhandledInput(active);
+        SetProcessInput(active);
         if (!active && _dialog != null) _dialog.Hide();
+    }
+
+    /// <summary>
+    /// Pad buttons are taken in <c>_Input</c>, ahead of the GUI: once a HUD button has been
+    /// clicked it keeps focus, and the GUI would then turn A into pressing it and the D-pad into
+    /// walking focus along the button row, so none of the replay controls would ever arrive.
+    /// Anything that owns the screen - the main menu, chat, a file dialog - gets them instead.
+    /// </summary>
+    public override void _Input(InputEvent @event)
+    {
+        if (@event is not InputEventJoypadButton { Pressed: true } pad) return;
+        if (UnitSport.Core.UiFocus.TextEntryActive) return;
+        if (_dialog is { Visible: true } || _exportDialog is { Visible: true }) return;
+
+        if (HandlePad(pad.ButtonIndex)) GetViewport().SetInputAsHandled();
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -161,6 +177,65 @@ public partial class GpxSession : Node
                 RefreshRibbon();
                 break;
         }
+    }
+
+    /// <summary>
+    /// Replay on a controller: A play/pause, Y camera, X snap to roads, RB next runner, LB hide
+    /// the UI, D-pad left/right seek 10 s, up/down playback speed. Start still opens the menu
+    /// (ClientWorld), and cancels an export here. Adding tracks stays on G / the HUD button:
+    /// it opens a file dialog, which a pad cannot usefully drive.
+    ///
+    /// <para>
+    /// Buttons read directly rather than through actions: these meanings only exist in replay,
+    /// and giving them global actions would collide with jump, slide and the mount picker, which
+    /// share the same face buttons. Returns true when the press was used, so ClientWorld does not
+    /// also act on it (D-pad down is its fly/foot toggle).
+    /// </para>
+    /// </summary>
+    private bool HandlePad(JoyButton button)
+    {
+        if (_exporter.Running)
+        {
+            if (button is not (JoyButton.Start or JoyButton.B)) return false;
+            _exporter.Cancel();
+            return true;
+        }
+
+        bool any = _race.Runners.Count > 0;
+        switch (button)
+        {
+            case JoyButton.A when any:
+                _race.TogglePlay();
+                return true;
+            case JoyButton.Y when any:
+                _camera.AdoptCurrentOrientation();
+                _camera.CycleMode();
+                return true;
+            case JoyButton.X when any && !_race.Matching:
+                _race.SetSnapToRoads(!_race.SnapToRoads);
+                RefreshRibbon();
+                return true;
+            case JoyButton.RightShoulder when any:
+                _race.CycleFocus();
+                RefreshRibbon();
+                return true;
+            case JoyButton.LeftShoulder:
+                _hud.ToggleUi();
+                return true;
+            case JoyButton.DpadLeft when any:
+                _race.Seek(_race.Time - 10);
+                return true;
+            case JoyButton.DpadRight when any:
+                _race.Seek(_race.Time + 10);
+                return true;
+            case JoyButton.DpadUp:
+                _hud.StepSpeed(+1);
+                return true;
+            case JoyButton.DpadDown:
+                _hud.StepSpeed(-1);
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

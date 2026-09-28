@@ -92,16 +92,85 @@ public sealed class BuildingExtractor
             var rings = GeoPackageReader.ParsePolygons((byte[])reader.GetValue(1));
             if (rings.Count == 0) continue;
 
-            Total++;
             AddBuilding(result, objektart, rings);
         }
 
         return result;
     }
 
+    public int StrayFaces { get; private set; }
+    public int StrayBuildings { get; private set; }
+
+    /// <summary>
+    /// swissBUILDINGS3D 3.0 has solids carrying faces kilometres from the building itself —
+    /// nationwide, 798 "single houses" span more than 200 m, the worst 4.3 km. Left in, they
+    /// inflate the bounding box, so the 3x3 ground sample lands on a distant hillside (re-seat
+    /// shifts of 700 m) and the stray triangles render as slivers across the landscape. A face
+    /// is dropped when any vertex lies further from the median face centre than
+    /// max(<see cref="StrayMinM"/>, <see cref="StrayFactor"/> x the median face distance) —
+    /// generous enough that a genuine 600 m hall keeps its far walls. The same happens
+    /// vertically (a face 320 m under a house in flat Geneva), so a vertex more than
+    /// <see cref="StrayVerticalM"/> from the median face height goes too — the tallest Swiss
+    /// tower is 205 m, so its roof sits about 100 m from its median face.
+    /// </summary>
+    private const double StrayMinM = 150, StrayFactor = 4, StrayVerticalM = 180;
+
+    private List<GeoPackageReader.Ring> DropStrayFaces(List<GeoPackageReader.Ring> rings)
+    {
+        if (rings.Count < 3) return rings;
+        var cx = new double[rings.Count];
+        var cy = new double[rings.Count];
+        var cz = new double[rings.Count];
+        for (int r = 0; r < rings.Count; r++)
+        {
+            var ring = rings[r];
+            for (int i = 0; i < ring.Count; i++)
+            {
+                cx[r] += ring.Xyz[i * 3]; cy[r] += ring.Xyz[i * 3 + 1]; cz[r] += ring.Xyz[i * 3 + 2];
+            }
+            cx[r] /= Math.Max(1, ring.Count);
+            cy[r] /= Math.Max(1, ring.Count);
+            cz[r] /= Math.Max(1, ring.Count);
+        }
+        double mx = Median(cx), my = Median(cy), mz = Median(cz);
+        var dist = new double[rings.Count];
+        for (int r = 0; r < rings.Count; r++) dist[r] = Math.Sqrt((cx[r] - mx) * (cx[r] - mx) + (cy[r] - my) * (cy[r] - my));
+        double limit = Math.Max(StrayMinM, StrayFactor * Median(dist));
+
+        List<GeoPackageReader.Ring>? kept = null;
+        for (int r = 0; r < rings.Count; r++)
+        {
+            var ring = rings[r];
+            bool stray = false;
+            for (int i = 0; i < ring.Count && !stray; i++)
+            {
+                double dx = ring.Xyz[i * 3] - mx, dy = ring.Xyz[i * 3 + 1] - my;
+                stray = dx * dx + dy * dy > limit * limit
+                    || Math.Abs(ring.Xyz[i * 3 + 2] - mz) > StrayVerticalM;
+            }
+            if (stray)
+            {
+                kept ??= rings.Take(r).ToList();
+                StrayFaces++;
+            }
+            else kept?.Add(ring);
+        }
+        if (kept == null) return rings;
+        StrayBuildings++;
+        return kept;
+    }
+
+    private static double Median(double[] values)
+    {
+        var sorted = (double[])values.Clone();
+        Array.Sort(sorted);
+        return sorted[sorted.Length / 2];
+    }
+
     private void AddBuilding(Dictionary<TileId, BuildingTile> result, string? objektart,
         List<GeoPackageReader.Ring> rings)
     {
+        rings = DropStrayFaces(rings);
         double minE = double.MaxValue, maxE = double.MinValue;
         double minN = double.MaxValue, maxN = double.MinValue;
         double minZ = double.MaxValue, maxZ = double.MinValue;
@@ -133,6 +202,9 @@ public sealed class BuildingExtractor
         if (!result.TryGetValue(tile, out var bucket)) return;
 
         var match = FindCadastre(minE, minN, maxE, maxN, cE, cN);
+        // counted here, not per query row: the batch bbox also returns buildings owned by
+        // tiles in other batches, which are skipped above and must not dilute the match rate
+        Total++;
         if (match != null) Matched++;
 
         // Re-seat the solid on our own heightfield. Sampling a 3x3 grid over the footprint

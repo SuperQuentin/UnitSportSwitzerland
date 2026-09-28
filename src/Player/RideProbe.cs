@@ -44,6 +44,11 @@ public partial class RideProbe : Node
         _kind = kind;
         _seconds = seconds;
         _shot = shot;
+
+        // The probe checks the physics against real-world numbers (180 W -> 32.7 km/h flat), so
+        // it rides the Sim profile unless told otherwise with --profile game. Not saved.
+        if (!OS.GetCmdlineUserArgs().Contains("--profile"))
+            Core.GameSettings.Current.RideProfile = Core.RideProfile.Sim;
     }
 
     /// <summary>Returns the requested vehicle and duration, or null when --ride was not given.</summary>

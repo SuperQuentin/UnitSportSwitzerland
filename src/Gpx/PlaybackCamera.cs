@@ -220,20 +220,29 @@ public partial class PlaybackCamera : Camera3D
 
             case CameraMode.Free:
             {
+                // right stick looks, as a rate; the mouse arrives as events in _UnhandledInput
+                var look = Core.PlayerInput.LookRate;
+                _yaw -= look.X * dt;
+                _pitch = Mathf.Clamp(_pitch - look.Y * dt, -1.55f, 1.55f);
+
                 var basis = new Basis(Vector3.Up, _yaw) * new Basis(Vector3.Right, _pitch);
                 Basis = basis;
 
-                var move = Vector3.Zero;
-                if (Input.IsPhysicalKeyPressed(Key.W)) move -= basis.Z;
-                if (Input.IsPhysicalKeyPressed(Key.S)) move += basis.Z;
-                if (Input.IsPhysicalKeyPressed(Key.A)) move -= basis.X;
-                if (Input.IsPhysicalKeyPressed(Key.D)) move += basis.X;
-                if (Input.IsPhysicalKeyPressed(Key.E)) move += Vector3.Up;
-                if (Input.IsPhysicalKeyPressed(Key.Q)) move -= Vector3.Up;
-                if (move != Vector3.Zero)
+                // Left stick / WASD through the shared actions so a pad flies this too. Vertical
+                // stays on E/Q and the triggers, not the Explore fly_up/fly_down actions: here
+                // Space is play/pause, and Shift has always been this camera's boost.
+                var stick = Core.PlayerInput.Move;
+                bool typing = Core.UiFocus.TextEntryActive;
+                float up = typing ? 0f
+                    : (Input.IsPhysicalKeyPressed(Key.E) ? 1f : 0f) - (Input.IsPhysicalKeyPressed(Key.Q) ? 1f : 0f)
+                      + Input.GetJoyAxis(0, JoyAxis.TriggerRight) - Input.GetJoyAxis(0, JoyAxis.TriggerLeft);
+                var move = basis * new Vector3(stick.X, 0, stick.Y) + Vector3.Up * up;
+                if (move.LengthSquared() > 1e-6f)
                 {
-                    float speed = Input.IsPhysicalKeyPressed(Key.Shift) ? 120f : 25f;
-                    GlobalPosition += move.Normalized() * speed * dt;
+                    bool boost = !typing && (Input.IsPhysicalKeyPressed(Key.Shift)
+                        || Core.PlayerInput.Held(Core.PlayerInput.FlyBoost));
+                    float speed = boost ? 120f : 25f;
+                    GlobalPosition += move.Normalized() * speed * Mathf.Min(move.Length(), 1f) * dt;
                 }
                 break;
             }
@@ -247,11 +256,27 @@ public partial class PlaybackCamera : Camera3D
         _bubble ??= ZoomBubble.Create(_chunks);
         if (_bubble.GetParent() == null) GetParent()?.AddChild(_bubble);
         _bubble.Enabled = _bubbleEnabled;
+
+        // A cut (a new Cinema shot, a camera-mode change, following another runner) has already
+        // moved the camera this frame, so hide the bubble before it is drawn from the new view -
+        // otherwise it slides across the screen to catch up. Cuts are counted, not named: two
+        // consecutive shots can share a name.
+        int cuts = CinemaCuts;
+        if (cuts != _bubbleCuts || Mode != _bubbleMode || !ReferenceEquals(focused, _bubbleRunner))
+        {
+            if (_bubbleRunner != null) _bubble.OnCameraCut();
+            _bubbleCuts = cuts;
+            _bubbleMode = Mode;
+            _bubbleRunner = focused;
+        }
         _bubble.UpdateFrame(focused, this, dt);
     }
 
     private ZoomBubble? _bubble;
     private bool _bubbleEnabled = true;
+    private int _bubbleCuts;
+    private CameraMode _bubbleMode;
+    private Runner? _bubbleRunner;
 
     /// <summary>
     /// Turns the zoom bubble on or off. Stored on the camera rather than only on the bubble,

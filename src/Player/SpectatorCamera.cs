@@ -3,8 +3,8 @@ using Godot;
 namespace UnitSport.Player;
 
 /// <summary>
-/// Free fly camera: WASD (physical keys, layout-independent), Space / E up, Shift / Q down,
-/// mouse look, Ctrl for boost, mouse wheel to change speed. Click to take mouse capture back
+/// Free fly camera: WASD / left stick, Space / E / RT up, Shift / Q / LT down, mouse or right
+/// stick look, Ctrl / L3 for boost, mouse wheel to change speed. Click to take mouse capture back
 /// after a menu.
 /// </summary>
 public partial class SpectatorCamera : Camera3D
@@ -52,23 +52,33 @@ public partial class SpectatorCamera : Camera3D
 
     public override void _Process(double delta)
     {
-        // physical keys are read directly, so a focused text field must be checked here too
-        if (UnitSport.Core.UiFocus.TextEntryActive) return;
+        float dt = (float)delta;
 
-        var dir = Vector3.Zero;
-        if (Input.IsPhysicalKeyPressed(Key.W)) dir -= Basis.Z;
-        if (Input.IsPhysicalKeyPressed(Key.S)) dir += Basis.Z;
-        if (Input.IsPhysicalKeyPressed(Key.A)) dir -= Basis.X;
-        if (Input.IsPhysicalKeyPressed(Key.D)) dir += Basis.X;
-        // Space/Shift match the on-foot and mounted controls (Space jumps there), so the
-        // vertical axis is on the same keys whatever you are; Q/E stay for the other hand.
-        if (Input.IsPhysicalKeyPressed(Key.E) || Input.IsPhysicalKeyPressed(Key.Space)) dir += Vector3.Up;
-        if (Input.IsPhysicalKeyPressed(Key.Q) || Input.IsPhysicalKeyPressed(Key.Shift)) dir -= Vector3.Up;
-
-        if (dir != Vector3.Zero)
+        // right stick: a rate, integrated here; the mouse arrives as events above
+        var look = UnitSport.Core.PlayerInput.LookRate;
+        if (look != Vector2.Zero)
         {
-            float speed = Speed * (Input.IsPhysicalKeyPressed(Key.Ctrl) ? BoostMultiplier : 1f);
-            Position += dir.Normalized() * speed * (float)delta;
+            _yaw -= look.X * dt;
+            _pitch = Mathf.Clamp(_pitch - look.Y * dt, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
+            Rotation = new Vector3(_pitch, _yaw, 0);
+        }
+
+        // PlayerInput returns neutral while a text field has the keyboard, so typing in chat
+        // does not fly the camera. Space/Shift match the on-foot and mounted controls, so the
+        // vertical axis is on the same keys whatever you are; Q/E stay for the other hand, and
+        // the triggers do it on a pad.
+        var stick = UnitSport.Core.PlayerInput.Move;
+        var dir = Basis * new Vector3(stick.X, 0, stick.Y);
+        dir += Vector3.Up * (UnitSport.Core.PlayerInput.Strength(UnitSport.Core.PlayerInput.FlyUp)
+            - UnitSport.Core.PlayerInput.Strength(UnitSport.Core.PlayerInput.FlyDown));
+
+        if (dir.LengthSquared() > 1e-6f)
+        {
+            // an analog stick asks for part of the speed; a key asks for all of it
+            float amount = Mathf.Min(dir.Length(), 1f);
+            float speed = Speed * amount
+                * (UnitSport.Core.PlayerInput.Held(UnitSport.Core.PlayerInput.FlyBoost) ? BoostMultiplier : 1f);
+            Position += dir.Normalized() * speed * dt;
         }
     }
 }

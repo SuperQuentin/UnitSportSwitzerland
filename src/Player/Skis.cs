@@ -24,7 +24,7 @@ public sealed class Skis : Rideable
 {
     public override RideKind Kind => RideKind.Skis;
     public override string Label => "Skis";
-    public override string Blurb => "Gravity only — A/D carve to shed speed, Shift tuck, S plough";
+    public override string Blurb => "Gravity only — A/D / stick carve to shed speed, Shift / X tuck, S / LT plough";
 
     private const float Mass = 82f;
 
@@ -45,9 +45,19 @@ public sealed class Skis : Rideable
     /// </summary>
     private const float EdgeScrub = 0.30f;
 
-    /// <summary>Skis turn far more readily than a bicycle — no gyroscopic wheel to fight.</summary>
-    private const float MaxLean = 0.75f;
-    private const float MaxYawRate = 2.0f;
+    /// <summary>
+    /// Skis turn far more readily than a bicycle — no gyroscopic wheel to fight. ~57°: a World
+    /// Cup giant-slalom skier is past 60°, and at the old 43° the tightest turn at 70 km/h was
+    /// a 45 m arc, the radius of a lazy cruise rather than a carve.
+    /// </summary>
+    private const float MaxLean = 1.0f;
+    private const float MaxYawRate = 2.4f;
+
+    /// <summary>Quicker than the bike: there is no machine to tip, only knees and hips.</summary>
+    private const float BankResponse = 7f;
+
+    /// <summary>Below this you are shuffling and turn the skis directly.</summary>
+    private const float SlowSpeed = 1.5f;
 
     /// <summary>
     /// Poling and skating, W. Skis on flat ground are close to useless, which is honest but
@@ -55,6 +65,20 @@ public sealed class Skis : Rideable
     /// </summary>
     private const float PoleWatts = 110f;
     private const float PoleSpeedLimit = 6.0f;   // you cannot skate faster than this
+
+    // ---- the Game profile (Rideable.Arcade) ----
+    /// <summary>
+    /// Deeper edges, a quicker roll, and a carve that bites instead of skidding: turning still
+    /// brakes — that is still the whole of skiing — but a clean arc no longer bleeds a run dry.
+    /// Faster skating too, so flats and uphills are a shuffle rather than a strand.
+    /// </summary>
+    private const float ArcadeMaxLean = 1.12f, ArcadeBankResponse = 9f, ArcadeMaxYawRate = 2.7f;
+    private const float ArcadeEdgeScrub = 0.16f, ArcadeSnowFriction = 0.04f;
+    private const float ArcadePoleWatts = 230f, ArcadePoleSpeedLimit = 8.5f;
+
+    /// <summary>The figure's own eye, so first person sits where the drawn head is looking from.</summary>
+    public override Vector3 FirstPersonEye { get; } = HumanMeshBuilder.MountsForPose(HumanPose.Tucked).Eye
+        + new Vector3(0, 0, -0.06f);   // just proud of the face, so the head never fills the lens
 
     public override float EyeHeight => 1.32f;
     public override float ChaseDistance => 4.2f;
@@ -76,18 +100,12 @@ public sealed class Skis : Rideable
         float v = motion.Speed;
 
         // --- steering -----------------------------------------------------------------
-        float yawRate = 0f;
-        if (Mathf.Abs(input.Steer) > 0.01f)
-        {
-            // Same lean-limited turn as the bike, but skis hold an edge rather than balancing
-            // on a contact patch, so the ceiling is higher and it stays usable when slow.
-            float limit = v > 1.5f
-                ? Mathf.Min(Gravity * Mathf.Tan(MaxLean) / v, MaxYawRate)
-                : MaxYawRate;
-            yawRate = -input.Steer * limit;
-        }
-        motion.Yaw += yawRate * dt;
-        motion.Lean = LeanFor(v, yawRate, MaxLean);
+        // Same lean-driven turn as the bike, but skis hold an edge rather than balancing on a
+        // contact patch, so the ceiling is higher, the roll-in quicker, and it stays usable slow.
+        bool arcade = Arcade;
+        float maxLean = arcade ? ArcadeMaxLean : MaxLean;
+        SteerByLean(ref motion, input.Steer, v, maxLean, arcade ? ArcadeMaxYawRate : MaxYawRate,
+            arcade ? ArcadeBankResponse : BankResponse, SlowSpeed, dt);
 
         float dragArea = input.Effort ? TuckDragArea : DragArea;
 
@@ -99,18 +117,22 @@ public sealed class Skis : Rideable
         }
 
         float drag = 0.5f * AirDensity * dragArea * v * v;
-        float friction = SnowFriction * Mass * Gravity;
+        float friction = (arcade ? ArcadeSnowFriction : SnowFriction) * Mass * Gravity;
 
         // poling: capped hard, and it does nothing once gravity is already doing the work
         float thrust = 0f;
-        if (input.Throttle > 0.01f && v < PoleSpeedLimit)
-            thrust = Mathf.Min(PoleWatts / Mathf.Max(v, 0.6f), 150f) * input.Throttle;
+        if (input.Throttle > 0.01f && v < (arcade ? ArcadePoleSpeedLimit : PoleSpeedLimit))
+            thrust = Mathf.Min((arcade ? ArcadePoleWatts : PoleWatts) / Mathf.Max(v, 0.6f), 150f) * input.Throttle;
 
         float accel = (thrust - drag - friction) / Mass + SlopeAccel(ground.Grade);
         v += accel * dt;
 
-        // the edges: this is the brake, and the reason a run is a series of turns
-        v -= Mathf.Abs(input.Steer) * EdgeScrub * v * dt;
+        // The edges: this is the brake, and the reason a run is a series of turns. Scaled by the
+        // SQUARE of how far over you are: a clean carve at moderate edge angle holds its speed,
+        // as it does on snow, and only cranking it right over skids and scrubs. Linear in the
+        // input, every small correction cost speed, so steering at all felt like braking.
+        float edge = motion.Bank / maxLean;
+        v -= edge * edge * (arcade ? ArcadeEdgeScrub : EdgeScrub) * v * dt;
 
         if (input.Brake > 0.01f) v -= input.Brake * PloughDecel * dt;
 

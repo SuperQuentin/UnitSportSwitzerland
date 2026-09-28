@@ -118,13 +118,22 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   height genuinely diverges from raw terrain (an embankment, a cut, a graded approach
   swissALTI3D never modelled) and **severe** on a bridge: zero collision under the deck, so a
   player walking onto a visual span fell straight through to the valley floor below.
-  `TerrainMeshBuilder.BlendRoadCorridor` closes the ordinary case: for every at-grade
+  `TerrainMeshBuilder.ComputeRoadBlend` closes the ordinary case: for every at-grade
   road/path/rail segment (excluding `RoadFlags.Bridge`/`Tunnel`, aerial ropeways, watercourses
   and walls — none of those is a ground-level surface), it walks the segment's own densified
   polyline and smoothsteps the terrain **collision** floor toward the segment's own stored
   height — already carrying `RoadExtractor`'s approach-ramp blend from preprocess time, so no
   height is re-derived — from full weight at the road's own half-width out to zero
-  `CorridorFalloffM` (3 m) beyond it. Bridges are excluded on purpose: a heightfield has one
+  `CorridorFalloffM` (3 m) beyond it — stamped every 1 m, so the pull **compounds** and a
+  shoulder ends much nearer the road than one smoothstep says. That compounded shape is what the
+  game has, so it is kept: the recursion is linear in ground height, so each cell is carried as
+  `ground·P + S` and ONE sparse pass (`RoadBlend`) serves collision (clearance 0) and the visual
+  mesh (`VisualBlendClearance`), with the stamp weights tabled per road. The visual tail is
+  `PatchSurface` on the interim mesh's core — only corridor vertices move — not a second
+  million-vertex build; verified bit-identical to a rebuild, and heights within 1 mm of the old
+  blend. blend+tail went 17.8 -> 6.7 ms/tile (488 -> 194 ms at stride 1). A distance-field blend
+  (true single smoothstep) was tried and is ~17 cm different on average, up to 55 m on cliffs:
+  it is a look change, not an optimisation. Bridges are excluded on purpose: a heightfield has one
   height per (x, z) column, so it cannot represent a deck floating above the gorge it crosses —
   blending toward deck height there would fill the gorge in. Those get `RoadMeshBuilder.
   BuildBridgeCollisionFaces` instead, a small `ConcavePolygonShape3D` for the deck TOP only
@@ -146,6 +155,13 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   Solids are **re-seated on our heightfield** (median of a 3x3 footprint sample, base set
   0.8 m below ground): the source foundation block is referenced to swisstopo's terrain,
   not ours, which buried every building by ~3 m and some by over 5 m.
+  **Stray faces are dropped first** (`BuildingExtractor.DropStrayFaces`): nationwide, 798
+  "single houses" in swissBUILDINGS3D 3.0 span over 200 m (the worst 4.3 km) because their solid
+  carries faces far from the building, and some carry a face 300 m below it. Left in, the 3x3
+  re-seat sample landed on a distant hillside (shifts of 770 m) and the faces drew slivers across
+  the map. A face goes when a vertex is further than max(150 m, 4x the median face distance) from
+  the median face centre, or 180 m above/below the median face height. A whole solid that is
+  consistently off (164 m in one Geneva batch) is not stray — re-seating is what fixes that.
 - **France (cross-border)**: IGN **BD TOPO®** via the Géoplateforme WFS (`data.geopf.fr`, Licence
   Ouverte 2.0) -> `FranceStage`, run as `--france minLon,minLat,maxLon,maxLat`. No GDAL, no
   download: a bbox query returns GeoJSON, projected WGS84 -> LV95 on arrival so French data lands
@@ -198,6 +214,14 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   `CoverStage.BuildRoadMask`. `ChunkNode.SetTrees` builds **two** MultiMeshes per tile
   because a MultiMesh carries exactly one mesh: a cone for 0/1 and a bipyramid crown on a
   trunk for 2/3, since a broadleaf drawn as a spire turns an orchard into a plantation.
+  **The cone stands on a trunk too** (foliage from 28% of the height): it used to reach down to
+  15%, so a 25 m spruce was 13 m wide at eye level and walled in every forest trail. Same apex and
+  ring, so the canopy from above is unchanged; 20 triangles per conifer instead of 10, no measured
+  frame-time cost. **`ps1_tree` also dissolves trees close in front of ANY camera** (`near_fade*`
+  uniforms: fully gone inside 1.5 m, solid past 8 m, only within the forward cone so the
+  periphery still encloses you) with the same Bayer discard as the sightline cut. It is pure
+  view-space shader maths, so on foot, the ride chase cam, free fly and the replay cameras all
+  get it with no C# per frame.
   Current region: ~40 M trees, of which 0.87 M planted and 1.65 M surveyed.
 - **Water**: built at runtime from the Water cover class, not a separate file —
   swissALTI3D already models lakes/rivers as flat surfaces at water level, so the terrain
@@ -300,6 +324,136 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   at 13° FOV, near-orthographic. A close wide-angle view of a bicycle enlarges whichever end is
   nearer and makes correct geometry look wrong — that cost an iteration of "fixing" a rider that
   was already right.
+- **Input** (`Core/PlayerInput`): every gameplay control is a named `InputMap` action registered
+  **in code** at boot (`PlayerInput.Install`, called from `ClientWorld._Ready` after
+  `GameSettings.Load` so the saved deadzone applies), bound to keyboard (physical keycodes, so
+  AZERTY still works), mouse and gamepad. Query through the static facade (`Move`, `LookRate`,
+  `Steer`, `Held`, `Strength`, `Rumble`) rather than `Input.IsPhysicalKeyPressed`: it returns
+  neutral while `UiFocus.TextEntryActive`, so callers no longer each check for typing. Pad layout:
+  left stick move/steer, right stick look (squared response, `StickSensitivity`/`InvertY`),
+  A jump, B slide, L3 sprint (latched until the stick is released), RT/LT throttle/brake (analog
+  straight into `RideInput`), X tuck/sprint, Y mount picker, R3 camera toggle, Start menu,
+  D-pad down fly/foot toggle. Menus call `PlayerInput.FocusFirst` on open so Godot's built-in
+  `ui_*` actions drive them with the D-pad, and `MainMenu` holds `UiFocus` while open or the
+  stick navigating it would also walk the player. Tab (place search) stays keyboard-only: a pad
+  can't type in it. The facade is the seam an OpenXR backend plugs into later.
+  Godot's built-in `ui_accept`/`ui_cancel` have **no** face buttons by default (the D-pad moved
+  focus but A pressed nothing), so `RegisterActions` adds A/B and the left stick to the `ui_*`
+  actions. **GPX replay** has its own pad layout in `GpxSession.HandlePad` (A play/pause, Y
+  camera, X snap, RB next runner, LB hide UI, D-pad ←/→ seek 10 s, ↑/↓ speed; right stick looks
+  in Free), read in `_Input` rather than `_UnhandledInput` because a HUD button left focused by a
+  mouse click would otherwise swallow A and the D-pad.
+- **Third / first person** (`FootPlayer`, **V / R3**, saved as `GameSettings.ThirdPerson`, default
+  third; `--view first|third` for one run). On foot the mouse/stick turn a **view yaw**
+  (`_viewYaw`), not the body: first person sets the body to it every render frame (the old
+  behaviour exactly), third person lets the body turn to face its travel (`FaceTravel` — toward
+  the input while there is some, else the velocity) and orbits a spring-arm camera
+  (`UpdateThirdPersonCamera`) from above the right shoulder in **global** space — parented to the
+  turning body it would swing round every direction change. Movement is relative to the view, so
+  forward is into the screen in both. Both cameras update in `_Process`, not physics, or look lags
+  the mouse by up to a physics tick. The local body is the same `HumanMeshBuilder` figure remote
+  players see: solved gait grounded, `Running` pose airborne (>0.12 s), `Tucked` sliding, and the
+  landing-dip spring spent as a squash. Mounted first person sits at the figure's own eye
+  (`Rideable.FirstPersonEye` from `MountsForPose`), rolled with the lean.
+  Screenshot the player's view with `--ride foot|bike|skis,seconds,out.png` (`foot` stands still).
+- **Feel layer** (`Player/PlayerFeel`, child of the LOCAL `FootPlayer` only): sound, camera shake,
+  speed lines, particles, pad rumble and a small HUD (km/h when mounted, "AIR x.x s" popup after
+  >0.7 s airborne). It only **listens** — `FootPlayer` raises `Landed(fallSpeed)`, `Jumped`,
+  `WallJumped`, `SlideStarted`, `Impacted(lostSpeed)` and exposes `GroundSpeed`, `Motion`,
+  `LastRideInput`, `IsViewing` — so nothing in it can move the player, and it mutes and hides
+  itself whenever another camera is on screen. Intensity is `Excitement`: speed against what is
+  ordinary *for the current mount* (foot 4.8→9, bike 9→18, skis 9→22 m/s). **All audio is
+  synthesised at startup** (`Audio/SfxSynth`: shaped noise → `AudioStreamWav`, loops crossfaded
+  so the seam does not click) — the project has no audio files; replace any property with a
+  sample to upgrade one sound. **No wind loop**: a synthesised one was tried and removed at the
+  user's request — shaped noise reads as hiss, not air; wind needs a real recording. Shake goes through `Camera3D.HOffset/VOffset` (trauma², decaying),
+  which no camera placement code writes, so it never fights the rigs. Speed lines are
+  `shaders/speed_lines.gdshader` on a CanvasLayer at 4. Settings → Feel: volume, shake, speed lines.
+- **Game / Sim profile** (`GameSettings.RideProfile`, Settings → Movement, `--profile game|sim`,
+  default Game; `Rideable.Arcade`). Game is an arcade layer on the SAME equations: bike 350/900 W,
+  0.88 rad lean, harder brakes; skis deeper edges, half the carve scrub, faster skating; running
+  5.8 m/s. Sim is the untouched real-world model, the only one where `Bicycle.RiderWatts` (the
+  home-trainer input) means anything. `--ride` forces Sim unless `--profile` is given, so its
+  reference numbers (180 W → 32.7 km/h) stay checkable.
+- **Tricks, landings, boost** (mounted, `FootPlayer`): hold **Trick (F / RB)** in the air and the
+  stick flips (`_airPitch`) and spins (`_airSpin`) the rider+machine VISUAL — the body keeps its
+  heading. Released, leftover rotation eases to the nearest whole turn. `GradeLanding` (air > 0.3 s)
+  grades the residual angle: < 0.5 rad clean (named trick, speed kick, boost), < 1.1 sloppy (−45%
+  speed), else bail (stopped, 1.2 s on the ground). **Boost (Q / LB)**, Game only: +7 m/s² while the
+  meter lasts (0.4/s); filled by clean air and tricks. `Announced(text, good)` drives the popup +
+  chime in `PlayerFeel`. The visual is rotated about a pivot 0.9 m up, not its origin at the
+  contact patch, or a flip swings the bike through the ground.
+- **Flying** (`Player/Flight.cs`, meshes in `Avatar/AircraftMeshBuilder`): a `Flyer` is a
+  `Rideable` whose `Step` is unused — it owns a full 3D velocity and attitude (`FlightMotion`),
+  because a ground vehicle is a speed along a heading and none of climbing, diving or banking fits
+  that. `FootPlayer.FlyPhysics` carries the velocity through `MoveAndSlide`, turns anything the
+  world took off past `CrashSpeed` into a crash (on foot, dazed 1.5 s — not a respawn), and poses
+  the visual from the attitude about `Flyer.Pivot` while the capsule stays upright and yaw-only.
+  `RideKind` 3–7 appended (never reordered: replicated as an int).
+  - **Base jump**: not a mount. On foot, Jump while falling (vy < −3) with > 12 m under you →
+    **wingsuit** (lift/drag polar, point mass; a fall pulls out into a glide on its own). A bare
+    polar porpoises for ever (measured −36 m/s dive → 13:1 zoom → repeat), so sink is damped toward
+    the polar's steady glide: settles at **133 km/h, 2.7:1, 13 m/s sink**. Jump again → **parachute**
+    (glide 2.1, 4.2 m/s sink, opening shock from 145 to 36 km/h in 1 s); touching ground → on foot.
+    Wingsuit touching ground over 12 m/s = SPLAT. Proximity (< 20 m AGL at > 30 m/s) is scored.
+  - **Paraglider** (picker): the same `Canopy` model at 9.1:1 / 38 km/h; on the ground push forward
+    to run, Jump to launch; stays worn after landing.
+  - **Helicopter** (picker): the look sets the heading (`LookSteers`, mouse/right stick turn
+    `_viewYaw`, not `_lookYaw`), stick flies, Space/RT up, Ctrl/LT down, release holds altitude.
+  - **Plane** (picker): throttle is a LEVER (Shift/RT up, Ctrl/LT down) — nobody holds a key for a
+    whole flight. Stick pitches/rolls, heading follows bank (coordinated turn), roll AND pitch
+    self-level hands-off. Thrust 4.5 m/s² — at 11 it beat gravity and a pull-up climbed vertically
+    for ever. **Airspeed is carried as state** (`FlightMotion.Airspeed`): re-deriving it as
+    velocity·nose fed the stall sink back in as speed once the nose dropped (112 → 394 km/h in 2 s).
+  - Check any of them: `<godot> --path . -- --flycheck wingsuit|glide|paraglider|heli|plane[,out.png]
+    [--at E,N]` — scripted sortie with the real input actions, speed/sink/glide/AGL every second,
+    non-zero exit on a crash or ending under the terrain. `FootPlayer.DebugLaunch` puts a craft in
+    the air for it (no runway or launch slope needed to test a flight model).
+  - Sound: synthesised helicopter rotor (4.5 Hz blade "whop") and piston engine loops, pitch by
+    spool/throttle. No wingsuit/canopy wind — see the removed wind loop above.
+- **Vehicles vs equipment** (`src/Vehicles/`). `Rideable.IsVehicle` (bike, helicopter, plane)
+  splits machines that are **left in the world** from equipment that is worn and ends when taken
+  off (skis, wingsuit, canopies). While driven, a vehicle still lives inside the driver's
+  `FootPlayer` — the proven ride/flight physics, cameras and tricks are untouched. Getting out
+  (E / Y, **anywhere, mid-air included**, with the vehicle's momentum), a crash, or being thrown off
+  a bike hands its `VehicleState` to a `VehicleBody` (CharacterBody3D) that carries on alone: a bike
+  rolls to a stop and tips over, a plane keeps its throttle and flies on until it hits something,
+  a helicopter with no pilot **falls** (`FlightInput.Piloted = false` — autorotation needs a pilot).
+  Getting in (E / Y within 3.5 m) hands the state back (`VehicleManager.Claim`). It sleeps at rest
+  and only anchors collision streaming while moving. **Parked vehicles spawn 0.15 m up**: the
+  terrain collision is a one-sided heightfield, and a box starting exactly on it fell 125 m through
+  the mountain in five seconds. `FootPlayer.FindExit` stands the pedestrian on the *ground* beside
+  the seat — measuring the uphill side at seat height read it as blocked and put the player on
+  the vehicle's roof, which pushed the vehicle through the terrain.
+  - **Engine** (`engine_toggle`, **I / D-pad ↑**, `FlightInput.Engine`): helicopter off → rotor spools
+    down (0.18/s), lift fades below spool 0.6 into autorotation (9 m/s sink); on → ~3 s to lift.
+    Plane off → zero thrust, it glides. Entering starts the engine.
+  - **Damage**: vehicle HP (`FootPlayer.VehicleHealth`, `VehicleBody.Health`) loses `(impact−4)×10`
+    per knock; past `CrashSpeed` or at 0 HP it becomes a **wreck**: `Explosion` (fireball, debris,
+    smoke, flash, synthesised 3D boom) + charred visual burning 30 s, cleared after 90 s. Every peer
+    watches the synced `Wrecked` flag and explodes it locally. Player: `FootPlayer.Health` 100, fall
+    damage above 11 m/s landing, blasts via the static `Explosion.Blast` (each client hurts only its
+    own player — client-authoritative), regen after 6 s, 0 → knocked out 3.5 s and revived at the
+    last safe grounded spot. The occupant of a wreck is **thrown clear** and hurt by the blast.
+  - **Network**: `World/Vehicles` + `World/VehicleSpawner` on server and clients (same path — RPCs
+    route by it). Clients `RequestPark`; the server spawns for everyone with the parker as
+    authority (it simulates, the server has no collision). `RequestClaim` is granted once — the
+    server frees the node everywhere and returns its state — so two players cannot take one
+    vehicle. A leaving peer's vehicles are removed. Untested with two real clients.
+  - Check: `<godot> --path . -- --vehiclecheck[,out.png] --at 2585000,1110000` — 24 checks:
+    helicopter up, bail out mid-air into wingsuit and canopy, empty helicopter falls and explodes;
+    bike parked, stays, re-entered; plane engine off/on; plane crashed with the player in it.
+    Location matters: at Riddes the engine-off plane glides into the mountainside.
+- **Mantle** (on foot): pushing into a wall whose top is 0.45–2.1 m above the feet, with open air
+  over it and standing room on it, pulls you up (automatic in the air, needs Jump on the ground so
+  walking into garden walls does not vault them). Jump + mantle therefore reaches ~3 m. Moved
+  directly, not through MoveAndSlide, which exists to stop exactly this contact. Ground coyote
+  time 0.12 s. Check: `<godot> --path . -- --mantlecheck` (1.4 m and 2.8 m must climb, 3.6 m not).
+- **Steering by lean** (`Rideable.SteerByLean`): the input sets a target bank that eases in over
+  ~0.2 s (out 1.6x faster) and the yaw rate is what that bank sustains, `g·tanφ/v`. Setting the yaw
+  rate straight from the input made every correction a jerk — the "stiff" feel. Ski edge scrub is
+  quadratic in bank, so a moderate carve holds speed. The chase camera trails the turn
+  (`_turnLag` ∝ yaw rate) instead of being bolted behind the rider.
 - **On foot** (`src/Player/FootPlayer.cs`): WASD + Shift at 1.6 / 4.6 m/s, Space to jump, plus
   two momentum moves — **slide** (Ctrl, run only, launches at 7 m/s, gains speed downhill, ends
   keeping horizontal speed if you Space out of it) and **wall jump** (Space in the air against
@@ -429,8 +583,13 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   their fog code and `FogUniforms.Apply` pushes `fog_start/end` past the far plane when off), parallel
   tile builds (0 = auto: `ProcessorCount` from local disk, 6 when `ChunkStreamer.ServerReachable`),
   mesh commit budget in **ms per frame** (replaces the fixed 2 meshes/frame: a stride-50 tile is 441
-  vertices and a stride-1 one a million, so a count was sized for the wrong one), 3D render scale,
-  VSync. Every change applies live (`GameSettings.Changed` -> `ChunkManager.ApplySettings`, the
+  vertices and a stride-1 one a million, so a count was sized for the wrong one), VSync, window
+  mode (windowed / borderless / exclusive fullscreen) and window size, and **3D resolution** — a
+  dropdown of `Scaling3DScale` presets 25–200% shown as the pixels they produce (864x486 = the 75%
+  default). Resolution is deliberately NOT `Root.ContentScaleSize`: in `viewport` stretch mode the UI
+  lays out in that same viewport, so changing it would shrink the HUD at 1080p and balloon it at
+  360p. Window mode/size are only re-applied when those two settings change, or every unrelated
+  setting would snap a hand-resized window back. The panel scrolls — it is taller than 648 px. Every change applies live (`GameSettings.Changed` -> `ChunkManager.ApplySettings`, the
   materials, the cameras' `Far`) and saves. Main menu **Settings** button; `--settings` opens it for a
   screenshot; `--rings N --horizon km --fog on|off --detail low|medium|high` override for one run
   without being saved. The last ring is always **stride 50** (`LodPolicy.FarStride`, 21x21 verts,
@@ -597,6 +756,24 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   that cannot be judged from a screenshot; add `--ridemenu` (with `--shot`) to capture the picker.
 
 ## Gotchas (learned the hard way)
+
+- **A collision build must load the road tile even when the roads are already drawn.** Both the
+  road-blended floor and the bridge-deck collision are built in `StartBuild`'s tail from the road
+  tile, but `EvaluateRings` only asked for roads when they were *missing*. The ordinary way to
+  play — fly over an area (roads load, no collision: the fly camera does not ask for it), then
+  drop on foot — therefore built every tile's collision from BARE terrain and no bridge collision
+  at all: the player stood the full `DrapeOffset` (0.35 m + class lift) inside every road and
+  path, and fell straight through every bridge. `StartBuild(..., roadsForCollision:)` now fetches
+  the (cached) road tile for the blend without re-meshing the roads. Measured with
+  `--roadcheck`: floor − ribbon went from −0.42 m mean to ±0.005 m.
+- **A road's collision core takes the height at the cell's perpendicular foot on the
+  centreline, nearest segment wins** (`ComputeRoadBlend`). Letting the last stamp win, or a
+  neighbouring road's fade-out pull it, left 0.1–0.4 m of scatter (feet sinking into one path,
+  hovering over the next); stamps are 1 m apart, which on a 30% alpine path is 15 cm by itself.
+  The core is at least one lattice spacing wide, or a 1.2 m footpath can miss every corner of the
+  quad its centreline crosses. Check with
+  `<godot> --path . -- --roadcheck [--bridges] [--at E,N]`: drops a body on real road (or bridge
+  deck) points and prints ribbon vs floor vs body, non-zero exit if it rests >5 cm below.
 
 - **`ConcavePolygonShape3D` is one-sided for collision unless told otherwise, and geometry that
   "looks right" can still be on the wrong side of that test.** The bridge-deck collision

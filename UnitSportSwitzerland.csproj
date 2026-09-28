@@ -12,6 +12,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Tiles churn through the large-object heap (1-4 MB grids, covers, collision maps), which
+         the GC never compacts by default: the heap grows with fragmentation, not live data.
+         ConserveMemory (0-9) lets it compact the LOH when fragmentation gets high. -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="tools\TerrainFormat\TerrainFormat.csproj" />
   </ItemGroup>
 

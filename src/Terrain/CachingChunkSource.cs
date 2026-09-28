@@ -51,7 +51,7 @@ public sealed class CachingChunkSource : IChunkSource
         public long LastUsed;
     }
 
-    public CachingChunkSource(IChunkSource inner, long budgetBytes = 512L * 1024 * 1024)
+    public CachingChunkSource(IChunkSource inner, long budgetBytes = 256L * 1024 * 1024)
     {
         _inner = inner;
         _budgetBytes = budgetBytes;

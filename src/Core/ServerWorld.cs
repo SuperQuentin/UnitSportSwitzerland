@@ -15,6 +15,7 @@ public partial class ServerWorld : Node3D
     private ChunkManager? _chunks;
     private Node3D? _players;
     private MultiplayerSpawner? _spawner;
+    private Vehicles.VehicleManager? _vehicles;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
@@ -49,6 +50,10 @@ public partial class ServerWorld : Node3D
         AddChild(_players);
         _spawner = PlayerReplication.CreateSpawner();
         AddChild(_spawner);
+
+        // vehicles standing in the world; the server spawns and removes them for everyone
+        _vehicles = Vehicles.VehicleManager.Create(this, null);
+        _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
 
         // The server owns the place index too, so /city and /tpall resolve against the same
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
@@ -144,6 +149,7 @@ public partial class ServerWorld : Node3D
     {
         GD.Print($"[server] peer {id} disconnected");
         _chat?.ReportDisconnect(id);
+        _vehicles?.ForgetOwner(id);
         _streamer?.ForgetPeer(id);
 
         if (_players!.GetNodeOrNull<Node3D>(id.ToString()) is { } player)

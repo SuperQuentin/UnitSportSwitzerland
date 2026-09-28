@@ -4,7 +4,7 @@ namespace UnitSport.Core;
 
 /// <summary>
 /// The settings panel behind the main menu's "Settings" button: render distance, detail,
-/// horizon, fog, and the streaming knobs. Every control writes straight into
+/// horizon, fog, window mode/size, 3D resolution, and the streaming knobs. Every control writes straight into
 /// <see cref="GameSettings.Current"/> and commits, so the world re-applies itself live and
 /// the file is saved — there is no Apply button to forget.
 /// </summary>
@@ -19,7 +19,7 @@ public partial class SettingsMenu : PanelContainer
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(560, 0);
+        CustomMinimumSize = new Vector2(580, 0);
         Visible = false;
         var style = new StyleBoxFlat
         {
@@ -30,9 +30,19 @@ public partial class SettingsMenu : PanelContainer
         style.SetCornerRadiusAll(6);
         AddThemeStyleboxOverride("panel", style);
 
+        // the panel is taller than the 648 px layout, so it scrolls instead of losing Back
+        var scroll = new ScrollContainer
+        {
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            CustomMinimumSize = new Vector2(0, GameSettings.BaseHeight - 60),
+        };
+        AddChild(scroll);
+        var gutter = new MarginContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        gutter.AddThemeConstantOverride("margin_right", 16); // keeps values clear of the scrollbar
+        scroll.AddChild(gutter);
         var rows = new VBoxContainer();
         rows.AddThemeConstantOverride("separation", 8);
-        AddChild(rows);
+        gutter.AddChild(rows);
 
         var title = new Label { Text = "Settings" };
         title.AddThemeFontSizeOverride("font_size", 26);
@@ -56,6 +66,32 @@ public partial class SettingsMenu : PanelContainer
 
         ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on);
 
+        Section(rows, "Display");
+        OptionRow(rows, "Window", new[] { "Windowed", "Borderless fullscreen", "Fullscreen" }, (int)s.WindowMode,
+            i => GameSettings.Current.WindowMode = (WindowMode)i);
+
+        SizeRow(rows, "Window size", WindowSizes(), s.WindowWidth, s.WindowHeight, "Keep current",
+            (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
+
+        ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
+
+        Section(rows, "Feel");
+        OptionRow(rows, "Movement", new[] { "Game (arcade)", "Simulation (real physics)" }, (int)s.RideProfile,
+            i => GameSettings.Current.RideProfile = (RideProfile)i);
+        SliderRow(rows, "Sound effects", 0, 1, 0.05, s.SfxVolume,
+            v => GameSettings.Current.SfxVolume = (float)v, v => v <= 0 ? "off" : $"{v * 100:F0} %");
+        SliderRow(rows, "Camera shake", 0, 1, 0.05, s.ScreenShake,
+            v => GameSettings.Current.ScreenShake = (float)v, v => v <= 0 ? "off" : $"{v * 100:F0} %");
+        ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on);
+
+        Section(rows, "Controls");
+        SliderRow(rows, "Stick look speed", 0.2, 3, 0.1, s.StickSensitivity,
+            v => GameSettings.Current.StickSensitivity = (float)v, v => $"{v:F1}x");
+        SliderRow(rows, "Stick deadzone", 0.05, 0.5, 0.01, s.StickDeadzone,
+            v => GameSettings.Current.StickDeadzone = (float)v, v => $"{v * 100:F0} %");
+        ToggleRow(rows, "Invert look Y", s.InvertY, on => GameSettings.Current.InvertY = on);
+        ToggleRow(rows, "Controller vibration", s.Vibration, on => GameSettings.Current.Vibration = on);
+
         Section(rows, "Performance");
         SliderRow(rows, "Parallel tile builds", 0, GameSettings.MaxBuildsCap, 1, s.MaxConcurrentBuilds,
             v => GameSettings.Current.MaxConcurrentBuilds = (int)v,
@@ -64,10 +100,6 @@ public partial class SettingsMenu : PanelContainer
         SliderRow(rows, "Mesh commit budget", 1, 16, 1, s.CommitBudgetMs,
             v => GameSettings.Current.CommitBudgetMs = v,
             v => $"{v:F0} ms / frame");
-
-        SliderRow(rows, "3D render scale", 0.35, 1.0, 0.05, s.RenderScale,
-            v => GameSettings.Current.RenderScale = (float)v,
-            v => $"{v * 100:F0} %");
 
         ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
 
@@ -90,6 +122,53 @@ public partial class SettingsMenu : PanelContainer
         hint.AddThemeFontSizeOverride("font_size", 12);
         hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
         rows.AddChild(hint);
+    }
+
+    /// <summary>
+    /// 3D render scales offered as the resolution they produce. The low end is the PS1 look
+    /// pushed further; 75% is the tuned default; above 100% supersamples.
+    /// </summary>
+    private static readonly float[] RenderScales = { 0.25f, 0.35f, 0.5f, 0.625f, 0.75f, 0.875f, 1f, 1.25f, 1.5f, 2f };
+
+    private static void ScaleRow(Container into, string name, float current, Action<float> set)
+    {
+        var scales = RenderScales.ToList();
+        int index = scales.FindIndex(v => Math.Abs(v - current) < 0.001f);
+        if (index < 0) { scales.Add(current); scales.Sort(); index = scales.IndexOf(current); }
+
+        var labels = scales.Select(v =>
+            $"{Math.Round(GameSettings.BaseWidth * v)} x {Math.Round(GameSettings.BaseHeight * v)}  ({v * 100:F0} %)")
+            .ToArray();
+        OptionRow(into, name, labels, index, i => set(scales[i]));
+    }
+
+    /// <summary>Common window sizes that fit on the screen the window is on.</summary>
+    private static Vector2I[] WindowSizes()
+    {
+        var screen = DisplayServer.ScreenGetSize(DisplayServer.WindowGetCurrentScreen());
+        Vector2I[] all =
+        {
+            new(1152, 648), new(1280, 720), new(1366, 768), new(1600, 900),
+            new(1920, 1080), new(2560, 1440), new(3840, 2160),
+        };
+        return all.Where(v => v.X <= screen.X && v.Y <= screen.Y).ToArray();
+    }
+
+    /// <summary>
+    /// A dropdown of WxH sizes. A saved size that is not a preset (hand-edited file,
+    /// <c>--resolution</c>) is shown as its own entry rather than silently replaced.
+    /// </summary>
+    private static void SizeRow(Container into, string name, Vector2I[] presets, int w, int h,
+        string? none, Action<int, int> set)
+    {
+        var sizes = new List<Vector2I>();
+        if (none != null) sizes.Add(Vector2I.Zero);
+        sizes.AddRange(presets);
+        var current = new Vector2I(w, h);
+        if (!sizes.Contains(current)) sizes.Add(current);
+
+        var labels = sizes.Select(v => v == Vector2I.Zero ? none! : $"{v.X} x {v.Y}").ToArray();
+        OptionRow(into, name, labels, sizes.IndexOf(current), i => set(sizes[i].X, sizes[i].Y));
     }
 
     private static string RingsText(double v)

@@ -8,6 +8,12 @@ public enum RideKind
     OnFoot = 0,
     RoadBike = 1,
     Skis = 2,
+    // the flying things (Flight.cs); appended, never reordered, because this travels as an int
+    Wingsuit = 3,
+    Parachute = 4,
+    Paraglider = 5,
+    Helicopter = 6,
+    Plane = 7,
 }
 
 /// <summary>Controls as the vehicle sees them, already stripped of key bindings.</summary>
@@ -40,6 +46,16 @@ public struct RideMotion
 
     /// <summary>Roll into the turn, radians. Derived from speed and yaw rate, never authored.</summary>
     public float Lean;
+
+    /// <summary>
+    /// The rider's commanded bank, radians — the state steering actually moves. The input sets
+    /// where it is heading, it eases there, and the turn follows from it. <see cref="Lean"/> is
+    /// what is drawn, recomputed from the yaw rate this produced.
+    /// </summary>
+    public float Bank;
+
+    /// <summary>Yaw rate from the last step, rad/s. Read by the chase camera to trail the turn.</summary>
+    public float YawRate;
 }
 
 /// <summary>
@@ -62,6 +78,13 @@ public abstract class Rideable
 {
     public const float Gravity = 9.81f;
 
+    /// <summary>
+    /// The arcade tuning layer is active (Settings → Movement: Game). Each vehicle keeps its
+    /// real-world numbers for Sim and swaps a handful of them here — more power and grip, less
+    /// scrub — without a second model: the same equations, just a fitter, braver rider.
+    /// </summary>
+    public static bool Arcade => Core.GameSettings.Current.RideProfile == Core.RideProfile.Game;
+
     public abstract RideKind Kind { get; }
 
     /// <summary>Name in the picker.</summary>
@@ -72,6 +95,12 @@ public abstract class Rideable
 
     /// <summary>Eye height while riding, used when the camera is in first person.</summary>
     public virtual float EyeHeight => 1.42f;
+
+    /// <summary>
+    /// Where the camera sits in first person, in the visual's frame (before lean). Defaults to
+    /// straight above the origin; a bent-over rider's eyes are well forward of that.
+    /// </summary>
+    public virtual Vector3 FirstPersonEye => new(0, EyeHeight, 0);
 
     /// <summary>Chase camera offset behind and above the rider. Zero distance means first person.</summary>
     public virtual float ChaseDistance => 3.6f;
@@ -87,6 +116,29 @@ public abstract class Rideable
 
     /// <summary>The mesh, parented under the player body. Built facing +Z, origin on the ground.</summary>
     public abstract Node3D BuildVisual(int riderIndex);
+
+    // ---- vehicles vs equipment ------------------------------------------------------------
+    /// <summary>
+    /// A vehicle is a thing in the world: left where you get off it, falling and crashing on its
+    /// own (<c>Vehicles.VehicleBody</c>). Equipment — skis, wingsuit, canopies — is worn, and
+    /// taking it off simply ends it.
+    /// </summary>
+    public virtual bool IsVehicle => false;
+
+    /// <summary>Has an engine to switch on and off, and burns when it crashes.</summary>
+    public virtual bool HasEngine => false;
+
+    public virtual float MaxHealth => 100f;
+
+    /// <summary>The mesh as it stands with nobody on it (a bike without its rider).</summary>
+    public virtual Node3D BuildParkedVisual(int riderIndex) => BuildVisual(riderIndex);
+
+    /// <summary>The player's body while riding: radius and height of the capsule.</summary>
+    public virtual float BodyRadius => 0.32f;
+    public virtual float BodyHeight => 1.78f;
+
+    /// <summary>Collision box of the vehicle standing empty in the world: centre and size, node space.</summary>
+    public virtual (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 0.8f, 0), new Vector3(0.6f, 1.6f, 1.6f));
 
     /// <summary>Advances speed, heading and lean by one physics step.</summary>
     public abstract void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion);
@@ -118,10 +170,56 @@ public abstract class Rideable
         Mathf.Clamp(Mathf.Atan(speed * yawRate / Gravity), -maxLean, maxLean);
 
     /// <summary>
+    /// Steers by leaning, the way a bike and a carving ski actually turn: the input sets a
+    /// target bank, the bank eases toward it at <paramref name="bankResponse"/> (1/s), and the
+    /// yaw rate is whatever that bank sustains at this speed, <c>ω = g·tanφ / v</c>.
+    ///
+    /// <para>
+    /// This replaced setting the yaw rate straight from the input, which is what made steering
+    /// feel stiff: the turn was at full rate the frame a key went down and gone the frame it came
+    /// up, so every correction was a jerk. With the bank in between, a tap is a gentle drift, a
+    /// hold rolls in over a fifth of a second and settles into a steady arc, and letting go rolls
+    /// back out — the same input, but it now reads as carving. A keyboard gets the analog feel a
+    /// stick has for free.
+    /// </para>
+    ///
+    /// <para>
+    /// Below <paramref name="slowSpeed"/> the physics would demand an unbounded rate, so the
+    /// speed is floored there and the result capped: at walking pace you steer the bars directly.
+    /// </para>
+    /// </summary>
+    /// <returns>The yaw rate applied, rad/s.</returns>
+    protected static float SteerByLean(ref RideMotion motion, float steer, float speed,
+        float maxLean, float maxYawRate, float bankResponse, float slowSpeed, float dt)
+    {
+        // +yaw is left in Godot, +steer is right; the bank takes the yaw's sign
+        float target = -steer * maxLean;
+
+        // rolling back out of a lean, or across into the other one, is quicker than rolling in:
+        // a rider pushing the bike upright is working with it, not against it
+        bool unwinding = Mathf.Abs(target) < Mathf.Abs(motion.Bank) || target * motion.Bank < 0;
+        float rate = unwinding ? bankResponse * 1.6f : bankResponse;
+        motion.Bank += (target - motion.Bank) * (1f - Mathf.Exp(-rate * dt));
+
+        float yawRate = Gravity * Mathf.Tan(motion.Bank) / Mathf.Max(speed, slowSpeed);
+        yawRate = Mathf.Clamp(yawRate, -maxYawRate, maxYawRate);
+
+        motion.Yaw += yawRate * dt;
+        motion.YawRate = yawRate;
+        motion.Lean = LeanFor(speed, yawRate, maxLean);
+        return yawRate;
+    }
+
+    /// <summary>
     /// Every mountable thing, in picker order — prototypes, used for the menu's labels.
     /// Add one here and to <see cref="Create"/> and it appears everywhere.
     /// </summary>
-    public static readonly Rideable[] All = { new Bicycle(), new Skis() };
+    /// <remarks>
+    /// The wingsuit and parachute are not here: nobody straps into a wingsuit on flat ground.
+    /// They are a base jump — Jump while falling from height — see <c>FootPlayer</c>.
+    /// </remarks>
+    public static readonly Rideable[] All =
+        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() };
 
     /// <summary>
     /// A fresh instance for one rider.
@@ -136,6 +234,11 @@ public abstract class Rideable
     {
         RideKind.RoadBike => new Bicycle(),
         RideKind.Skis => new Skis(),
+        RideKind.Wingsuit => new Wingsuit(),
+        RideKind.Parachute => new Canopy(paraglider: false),
+        RideKind.Paraglider => new Canopy(paraglider: true),
+        RideKind.Helicopter => new Helicopter(),
+        RideKind.Plane => new Plane(),
         _ => null,
     };
 }

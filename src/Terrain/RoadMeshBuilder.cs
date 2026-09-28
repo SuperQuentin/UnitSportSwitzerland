@@ -72,7 +72,7 @@ public static class RoadMeshBuilder
     /// Flat triangle soup for the walkable TOP of every bridge deck in the tile — the one piece
     /// of collision a heightfield genuinely cannot provide, since it has one height per (x, z)
     /// column and a deck floats above whatever the terrain is doing underneath (a gorge, a
-    /// river). <c>TerrainMeshBuilder.BlendRoadCorridor</c> explicitly excludes bridges for the
+    /// river). <c>TerrainMeshBuilder.ComputeRoadBlend</c> explicitly excludes bridges for the
     /// same reason in reverse — blending terrain toward a deck's height would fill in the gorge
     /// it crosses.
     ///

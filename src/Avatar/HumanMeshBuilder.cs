@@ -15,6 +15,15 @@ public enum HumanPose
 
     /// <summary>Ski stance: knees driven forward, torso at 45°, hands out in front.</summary>
     Tucked,
+
+    /// <summary>
+    /// Wingsuit: arms straight out and swept back, legs apart — the suit's wings stretched between
+    /// them. Authored upright like every pose; the flyer lays it prone.
+    /// </summary>
+    Spread,
+
+    /// <summary>Seated in a harness under a canopy: thighs forward, hands up on the brake lines.</summary>
+    Hanging,
 }
 
 /// <summary>Colours for one figure. Kept separate so riders can be told apart at distance.</summary>
@@ -499,6 +508,35 @@ public static class HumanMeshBuilder
             AnkleL: new(-0.110f, 0.100f, 0.100f), ToeL: new(-0.110f, 0.090f, 0.240f),
             HipR: new(0.090f, 0.720f, -0.020f), KneeR: new(0.100f, 0.446f, 0.299f),
             AnkleR: new(0.110f, 0.100f, 0.100f), ToeR: new(0.110f, 0.090f, 0.240f),
+            TorsoLean: 0f),
+
+        // bone lengths as the standing rig's, only the joints re-aimed
+        HumanPose.Spread => new Rig(
+            HeadTop: new(0, 1.780f, 0.02f), HeadBase: new(0, 1.590f, 0.01f),
+            Neck: new(0, 1.525f, 0), Chest: new(0, 1.345f, 0),
+            Waist: new(0, 1.090f, 0), Hip: new(0, 0.965f, 0),
+            ShoulderL: new(-0.180f, 1.445f, 0), ElbowL: new(-0.445f, 1.400f, -0.030f),
+            WristL: new(-0.685f, 1.350f, -0.070f),
+            ShoulderR: new(0.180f, 1.445f, 0), ElbowR: new(0.445f, 1.400f, -0.030f),
+            WristR: new(0.685f, 1.350f, -0.070f),
+            HipL: new(-0.090f, 0.935f, 0), KneeL: new(-0.200f, 0.515f, -0.020f),
+            AnkleL: new(-0.300f, 0.115f, -0.040f), ToeL: new(-0.310f, -0.020f, -0.060f),
+            HipR: new(0.090f, 0.935f, 0), KneeR: new(0.200f, 0.515f, -0.020f),
+            AnkleR: new(0.300f, 0.115f, -0.040f), ToeR: new(0.310f, -0.020f, -0.060f),
+            TorsoLean: 0f),
+
+        HumanPose.Hanging => new Rig(
+            HeadTop: new(0, 1.780f, 0), HeadBase: new(0, 1.590f, 0),
+            Neck: new(0, 1.525f, 0), Chest: new(0, 1.345f, 0),
+            Waist: new(0, 1.090f, 0), Hip: new(0, 0.965f, 0),
+            ShoulderL: new(-0.180f, 1.445f, 0), ElbowL: new(-0.250f, 1.700f, 0.030f),
+            WristL: new(-0.240f, 1.945f, 0.020f),
+            ShoulderR: new(0.180f, 1.445f, 0), ElbowR: new(0.250f, 1.700f, 0.030f),
+            WristR: new(0.240f, 1.945f, 0.020f),
+            HipL: new(-0.090f, 0.935f, 0), KneeL: new(-0.100f, 0.900f, 0.430f),
+            AnkleL: new(-0.100f, 0.500f, 0.520f), ToeL: new(-0.100f, 0.470f, 0.660f),
+            HipR: new(0.090f, 0.935f, 0), KneeR: new(0.100f, 0.900f, 0.430f),
+            AnkleR: new(0.100f, 0.500f, 0.520f), ToeR: new(0.100f, 0.470f, 0.660f),
             TorsoLean: 0f),
 
         _ => new Rig(

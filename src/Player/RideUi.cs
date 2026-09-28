@@ -66,7 +66,7 @@ public partial class RideUi : CanvasLayer
         rows.AddChild(new HSeparator());
 
         Entry(rows, 1, RideKind.OnFoot, "On foot",
-            "WASD, Shift run, Space jump, Ctrl slide, Space at a wall to kick off");
+            "WASD / stick, Shift or L3 run, Space / A jump, Ctrl / B slide, jump at a wall to kick off");
 
         int number = 2;
         foreach (var ride in Rideable.All)
@@ -76,7 +76,7 @@ public partial class RideUi : CanvasLayer
         _status.AddThemeColorOverride("font_color", new Color(0.92f, 0.55f, 0.35f));
         rows.AddChild(_status);
 
-        var hint = new Label { Text = "E closes — you have to be stopped and on the ground" };
+        var hint = new Label { Text = "E / (Y) closes. Bike, helicopter and plane are left where you get off (E / Y); E next to one gets back in" };
         hint.AddThemeFontSizeOverride("font_size", 12);
         hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
         rows.AddChild(hint);
@@ -143,6 +143,8 @@ public partial class RideUi : CanvasLayer
         _panel.Visible = true;
         Input.MouseMode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
+        // a controller player drives the list with the D-pad and A from here
+        PlayerInput.FocusFirst(_panel);
     }
 
     public void Close()
@@ -152,16 +154,21 @@ public partial class RideUi : CanvasLayer
         Input.MouseMode = Input.MouseModeEnum.Captured;
     }
 
-    public override void _UnhandledKeyInput(InputEvent @event)
+    public override void _UnhandledInput(InputEvent @event)
     {
-        if (!IsOpen || @event is not InputEventKey { Pressed: true, Echo: false } key) return;
+        // _UnhandledInput rather than _UnhandledKeyInput: a pad button is not a key event, and
+        // Y / B / Start have to close this the way E and Esc do.
+        if (!IsOpen || !@event.IsPressed() || @event.IsEcho()) return;
 
-        if (key.PhysicalKeycode is Key.E or Key.Escape)
+        if (@event.IsActionPressed(PlayerInput.InteractMount) || @event.IsActionPressed(PlayerInput.Menu)
+            || @event.IsActionPressed("ui_cancel"))
         {
             Close();
             GetViewport().SetInputAsHandled();
             return;
         }
+
+        if (@event is not InputEventKey key) return;
 
         // Key.Key1 is the physical "1", so the shortcuts land in the same place on an AZERTY
         // keyboard as on a QWERTY one — the same reason the movement keys are read physically.
