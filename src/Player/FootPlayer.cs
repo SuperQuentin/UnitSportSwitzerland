@@ -509,8 +509,16 @@ public partial class FootPlayer : CharacterBody3D
         Explosion.Blast -= OnBlast;
     }
 
+    /// <summary>
+    /// What the camera pull-in rays test: everything the body collides with except tree trunks.
+    /// A chase camera in a forest shoved into the rider's head by a trunk it can see past is
+    /// worse than a trunk briefly between lens and rider — the tree shader dissolves that anyway.
+    /// </summary>
+    private uint CameraMask => CollisionMask & ~World.TreeColliders.Layer;
+
     public override void _Ready()
     {
+        CollisionMask |= World.TreeColliders.Layer;   // trunks are solid (layer 2)
         // authority pushes its transform to everyone else (server relays)
         var replication = new SceneReplicationConfig();
         replication.AddProperty(".:position");
@@ -820,7 +828,7 @@ public partial class FootPlayer : CharacterBody3D
         // leave the lens behind it
         float want = 1f;
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            pivot, wanted, CollisionMask, new Godot.Collections.Array<Rid> { GetRid() }));
+            pivot, wanted, CameraMask, new Godot.Collections.Array<Rid> { GetRid() }));
         if (hit.Count > 0)
         {
             float span = Mathf.Max(0.01f, (wanted - pivot).Length());
@@ -1726,7 +1734,7 @@ public partial class FootPlayer : CharacterBody3D
 
         float want = 1f;
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            pivot, wanted, CollisionMask, new Godot.Collections.Array<Rid> { GetRid() }));
+            pivot, wanted, CameraMask, new Godot.Collections.Array<Rid> { GetRid() }));
         if (hit.Count > 0)
         {
             float span = Mathf.Max(0.01f, (wanted - pivot).Length());
@@ -2019,7 +2027,7 @@ public partial class FootPlayer : CharacterBody3D
 
         float wanted = 1f;
         var query = PhysicsRayQueryParameters3D.Create(from, to,
-            CollisionMask, new Godot.Collections.Array<Rid> { GetRid() });
+            CameraMask, new Godot.Collections.Array<Rid> { GetRid() });
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         if (hit.Count > 0)
         {

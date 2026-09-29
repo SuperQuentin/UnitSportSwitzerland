@@ -87,6 +87,7 @@ public partial class VehicleBody : CharacterBody3D
 
     public override void _Ready()
     {
+        CollisionMask |= World.TreeColliders.Layer;   // a runaway car stops at a trunk
         AddToGroup(Group);
         var s = _initial;
         // A hand's breadth up. The terrain collision is a one-sided heightfield, and a box whose

@@ -39,6 +39,38 @@ public sealed class GpxTrack
     /// </summary>
     public RideKind Kind { get; init; } = RideKind.OnFoot;
 
+    /// <summary>
+    /// Where the nose pointed at each fix (Godot yaw, radians), when the recording carries it.
+    /// A track only says where the vehicle went; for a drifting car that is not where it pointed,
+    /// and the drift is the whole point of watching it.
+    /// </summary>
+    public IReadOnlyList<float>? Yaw { get; init; }
+
+    public GpxTrack WithYaw(IReadOnlyList<float> yaw) => new()
+    {
+        Name = Name, Points = Points, HasTiming = HasTiming, ElevationIsSurface = ElevationIsSurface,
+        Kind = Kind, MinElevation = MinElevation, MaxElevation = MaxElevation, Ascent = Ascent, Yaw = yaw,
+    };
+
+    /// <summary>The recorded nose yaw at a playback time, interpolated the short way round; null if none.</summary>
+    public float? SampleYaw(double seconds)
+    {
+        if (Yaw == null || Points.Count == 0) return null;
+        int lo = 0, hi = Points.Count - 1;
+        if (seconds <= Points[0].Seconds) return Yaw[0];
+        if (seconds >= Points[hi].Seconds) return Yaw[hi];
+        while (lo < hi - 1)
+        {
+            int mid = (lo + hi) / 2;
+            if (Points[mid].Seconds <= seconds) lo = mid; else hi = mid;
+        }
+        float a = Yaw[lo], b = Yaw[hi];
+        if (float.IsNaN(a)) return float.IsNaN(b) ? null : b;
+        if (float.IsNaN(b)) return a;
+        float t = (float)((seconds - Points[lo].Seconds) / Math.Max(1e-6, Points[hi].Seconds - Points[lo].Seconds));
+        return a + Godot.Mathf.Wrap(b - a, -Godot.Mathf.Pi, Godot.Mathf.Pi) * t;
+    }
+
     public double Duration => Points.Count == 0 ? 0 : Points[^1].Seconds;
     public double Length => Points.Count == 0 ? 0 : Points[^1].Distance;
 

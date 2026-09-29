@@ -61,21 +61,31 @@ public partial class ClientWorld : Node3D
         var manifest = await source.LoadManifestAsync();
 
         // A fresh clone has no terrain at all: the generated data is 5.3 GB and is not in the
-        // repository. That is not fatal — the world is simply empty until either the
-        // preprocessor is run or a server is joined, which streams everything.
+        // repository. That is not fatal. Until the preprocessor is run or a server is joined
+        // (which streams everything), a generated valley stands in around the spawn point, so
+        // there is something to walk, ride and fly over; real tiles replace it the moment they
+        // are available (ChunkManager.RetireFallback). The origin goes on the spawn point too,
+        // so the stand-in is not tens of kilometres out in float precision.
         bool hasLocalTerrain = manifest.Tiles.Count > 0;
-
-        var origin = hasLocalTerrain
-            ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
-            : WorldOrigin.SwissDefault();
+        ProceduralWorld? generated = null;
+        WorldOrigin origin;
+        if (hasLocalTerrain)
+            origin = new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
+        else
+        {
+            var (spawnE, spawnN) = SpawnPoint.ParseTarget();
+            generated = new ProceduralWorld(spawnE, spawnN);
+            origin = new WorldOrigin(spawnE, spawnN);
+        }
 
         _worldOrigin = origin;
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
 
         if (!hasLocalTerrain)
             GD.PushWarning(
-                "[world] no terrain data found. Generate it with tools/TerrainPreprocessor, "
-                + "or join a server and it will stream in. See the README.");
+                "[world] no terrain data found, showing a generated stand-in world. Generate the "
+                + "real one with tools/TerrainPreprocessor, or join a server and it will stream in. "
+                + "See the README.");
 
         var material = new ShaderMaterial
         {
@@ -121,14 +131,27 @@ public partial class ClientWorld : Node3D
             source, TerrainPaths.FindChunkDir(), _streamer, TerrainPaths.FindCacheDir());
         _chunkSource = streamedSource;
 
+        // The generated stand-in answers only for its own tiles, and only until it is retired;
+        // it sits under the cache so a generated tile is not generated twice.
+        var fallback = generated != null ? new FallbackChunkSource(streamedSource, generated) : null;
+
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
-        _cache = new CachingChunkSource(streamedSource);
+        _cache = new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
 
         _chunks = new ChunkManager { Name = "Terrain" };
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
+        if (fallback != null)
+        {
+            var cache = _cache;
+            _chunks.UseFallback(fallback.World.Tiles, retire: () =>
+            {
+                fallback.Active = false;
+                cache.Clear();
+            });
+        }
 
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
@@ -204,7 +227,8 @@ public partial class ClientWorld : Node3D
         // them for the height.
         bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
             || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || Gpx.Cinema.CinemaProbe.ParseArgs() != null
+            || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
+            || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
@@ -250,6 +274,21 @@ public partial class ClientWorld : Node3D
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);
+        // solid trunks around whatever asks for collision
+        var trees = new World.TreeColliders(_chunks, origin);
+        AddChild(trees);
+
+        // Everything that kept what it read from the generated stand-in forgets it when real
+        // terrain replaces it. The player is put down again: the ground under them just went.
+        _chunks.TerrainReplaced += () =>
+        {
+            Audio.Surfaces.Forget();
+            _ambience?.ForgetTiles();
+            gathering.Forget();
+            _traffic?.Forget();
+            trees.Forget();
+            LocalPlayer?.RequestReplacement();
+        };
         // "--inventory" opens the panel once the player exists, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--inventory") >= 0)
             GetTree().CreateTimer(1.5).Timeout += () => items.Ui.Open();
@@ -371,6 +410,14 @@ public partial class ClientWorld : Node3D
             var (driveE, driveN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(driveE, driveN, 1200);
             AddChild(new DriveProbe(_chunks, origin, drive.Shot, drive.Car, drive.Seconds));
+            return;
+        }
+
+        if (World.TreeCheck.ParseArgs() is { Requested: true } treeCheck)
+        {
+            var (treeE, treeN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(treeE, treeN, 1200);
+            AddChild(new World.TreeCheck(_chunks, origin, treeCheck.Shot));
             return;
         }
 
@@ -522,7 +569,9 @@ public partial class ClientWorld : Node3D
         // Merges the server's tile list so tiles this client never shipped with become
         // streamable, and refuses to stream at all if the two worlds disagree on the origin.
         _terrainSync = new ClientTerrainSync(_streamer!, _chunks!, _worldOrigin!);
-        _terrainSync.Status += line => _chatUi?.Append(line, ChatKind.System);
+        // the sync runs its continuations on the thread pool, and the chat log is UI
+        _terrainSync.Status += line =>
+            Callable.From(() => _chatUi?.Append(line, ChatKind.System)).CallDeferred();
 
         // Adopting the server's anchor changes what every world coordinate means, so whatever
         // was placed against the old one has to be put down again.

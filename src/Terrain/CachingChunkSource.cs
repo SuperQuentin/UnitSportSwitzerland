@@ -34,6 +34,7 @@ public sealed class CachingChunkSource : IChunkSource
     private readonly object _gate = new();
     private long _bytes;
     private long _tick;
+    private long _epoch;   // bumped by Clear, so a fetch that straddles it is not cached
 
     public long CachedBytes { get { lock (_gate) return _bytes; } }
     public int CachedEntries { get { lock (_gate) return _entries.Count; } }
@@ -116,6 +117,7 @@ public sealed class CachingChunkSource : IChunkSource
         Func<T, long> weigh) where T : class
     {
         var key = (slot, id);
+        long epoch;
 
         lock (_gate)
         {
@@ -126,12 +128,16 @@ public sealed class CachingChunkSource : IChunkSource
                 return (T?)hit.Value;
             }
             Misses++;
+            epoch = _epoch;
         }
 
         var value = await fetch().ConfigureAwait(false);
 
         lock (_gate)
         {
+            // fetched from a source that has since been swapped out underneath (the generated
+            // fallback retiring): the caller may still use it, but it must not outlive the Clear
+            if (epoch != _epoch) return value;
             long bytes = value == null ? 32 : weigh(value);
             if (_entries.TryGetValue(key, out var existing)) _bytes -= existing.Bytes;
             _entries[key] = new Entry { Value = value, Bytes = bytes, LastUsed = ++_tick };
@@ -156,13 +162,17 @@ public sealed class CachingChunkSource : IChunkSource
         }
     }
 
-    /// <summary>Forgets everything. For leaving a mode that warmed the cache for its own route.</summary>
+    /// <summary>
+    /// Forgets everything, including whatever is still being fetched. For leaving a mode that
+    /// warmed the cache for its own route, and for the generated fallback world retiring.
+    /// </summary>
     public void Clear()
     {
         lock (_gate)
         {
             _entries.Clear();
             _bytes = 0;
+            _epoch++;
         }
     }
 }

@@ -120,7 +120,7 @@ public sealed class ShotContext
     /// <summary>Points the camera, always with a proper (determinant +1) basis.</summary>
     public void Place(Vector3 position, Vector3 target, float fov = 70f)
     {
-        position = MakeSafe(position);
+        position = MakeSafe(Runner.KeepOutside(position));
         Camera.GlobalPosition = position;
 
         // The lens widens the angle; the post-process bends it. Applied here because Place is the
