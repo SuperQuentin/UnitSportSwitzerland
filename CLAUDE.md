@@ -3,6 +3,21 @@
 Godot 4.7 C# multiplayer game streaming real swissALTI3D terrain as low-poly PS1-style
 world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-want-to-build-dynamic-metcalfe.md`.
 
+## Feature workflow (required)
+
+Several people work on this repo in parallel, so every new feature follows these steps:
+
+1. **Check existing issues first.** Before building anything, search open and recently closed
+   issues (`gh issue list --state all --search "<keywords>"`) and open PRs (`gh pr list`) for
+   work that overlaps: same feature, same files, or the same system (e.g. `ChunkManager`,
+   `FootPlayer`, the `.road` format). If something overlaps, stop and coordinate on that issue
+   rather than building a parallel version.
+2. **Create an issue before writing code.** Use `gh issue create` and describe what the feature
+   does and which files and systems it touches, so the next person's search finds it.
+3. **Work on a new branch, never on `main`.** Branch from an up-to-date `main`, named after the
+   issue (e.g. `feat/<issue#>-short-name`), and reference the issue in commits and in the PR
+   (`Closes #<issue#>`).
+
 ## Working with subagents
 
 - Use the cheapest model that can do the job. Delegate to `model: "haiku"` for mechanical work
