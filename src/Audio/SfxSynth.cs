@@ -45,6 +45,30 @@ public static class SfxSynth
         return s;
     });
 
+    /// <summary>
+    /// Looping tyre squeal: a few stick-slip partials with a slow wobble in pitch and level, over a
+    /// thin band of rubbery noise. Every tone is a whole number of Hz in the two-second loop, so the
+    /// crossfaded seam is in phase and does not thin out; pitch is then set by the player.
+    /// </summary>
+    public static AudioStreamWav Squeal => _squeal ??= Loop(2.0f, 15, (rng, n) =>
+    {
+        var grit = BandPass(Noise(rng, n), 0.12f, 0.3f);
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            // slip-stick: the note trembles around 1.75 kHz, never quite steady
+            float wob = 0.012f * Mathf.Sin(Mathf.Tau * 6f * t) + 0.007f * Mathf.Sin(Mathf.Tau * 11f * t);
+            float amp = 0.75f + 0.25f * Mathf.Sin(Mathf.Tau * 9f * t + 1f);
+            float a = Mathf.Sin(Mathf.Tau * 1750f * t + 40f * wob);
+            float b = 0.6f * Mathf.Sin(Mathf.Tau * 2310f * t + 55f * wob + 0.7f);
+            float c = 0.3f * Mathf.Sin(Mathf.Tau * 3530f * t + 90f * wob + 1.9f);
+            s[i] = (a + b + c) * amp * 0.5f + grit[i] * 1.2f;
+        }
+        return s;
+    });
+    private static AudioStreamWav? _squeal;
+
     /// <summary>Looping ground scrape, for a slide.</summary>
     public static AudioStreamWav Scrape => _scrape ??= Loop(1.5f, 14, (rng, n) =>
     {

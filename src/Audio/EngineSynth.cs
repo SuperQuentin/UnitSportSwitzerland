@@ -19,12 +19,31 @@ public sealed record EngineProfile
     public float WhineMaxHz { get; init; } = 1250f;
     /// <summary>Turboshaft: blade passes per second at full rotor speed.</summary>
     public float BladePassHz { get; init; } = 4.8f;
+    /// <summary>How unlike each other the cylinders fire, 0 = identical, 1 = the default lope.</summary>
+    public float Unevenness { get; init; } = 1f;
 
     /// <summary>A light aircraft's flat-four with a two-blade prop.</summary>
     public static readonly EngineProfile PistonAero = new() { Cylinders = 4, IdleRpm = 700, MaxRpm = 2700, PipeM = 0.9f, PropBlades = 2 };
 
     /// <summary>A light helicopter's turboshaft and two-blade rotor.</summary>
     public static readonly EngineProfile Turboshaft = new() { Turbine = true };
+
+    /// <summary>A high-revving naturally aspirated four with a short pipe: 900 to 7,800 rpm.</summary>
+    public static readonly EngineProfile Inline4Na = new() { Cylinders = 4, IdleRpm = 900, MaxRpm = 7800, PipeM = 0.7f };
+
+    /// <summary>A two-rotor Wankel: fires like a four, but smooth and buzzy, 850 to 8,000 rpm.</summary>
+    public static readonly EngineProfile Rotary = new() { Cylinders = 4, IdleRpm = 850, MaxRpm = 8000, PipeM = 0.6f, Unevenness = 0.25f };
+
+    /// <summary>A turbo flat-four with unequal-length headers: the uneven burble, 850 to 7,000 rpm.</summary>
+    public static readonly EngineProfile Boxer4Turbo = new() { Cylinders = 4, IdleRpm = 850, MaxRpm = 7000, PipeM = 1.0f, Unevenness = 3.5f };
+
+    /// <summary>The engine a car of this style has.</summary>
+    public static EngineProfile For(UnitSport.Avatar.CarStyle style) => style switch
+    {
+        UnitSport.Avatar.CarStyle.RotaryFd => Rotary,
+        UnitSport.Avatar.CarStyle.Rally4wd => Boxer4Turbo,
+        _ => Inline4Na,
+    };
 }
 
 /// <summary>
@@ -88,7 +107,11 @@ public partial class EngineSynth : Node3D
         _rng = new Random(seed * 7919 + 17);
         // no two cylinders fire quite alike: that unevenness is the engine's "lope"
         _cylGain = new float[Math.Max(1, profile.Cylinders)];
-        for (int i = 0; i < _cylGain.Length; i++) _cylGain[i] = 0.9f + 0.2f * (float)_rng.NextDouble();
+        for (int i = 0; i < _cylGain.Length; i++)
+        {
+            float g = 0.9f + 0.2f * (float)_rng.NextDouble();
+            _cylGain[i] = profile.Unevenness == 1f ? g : 1f + (g - 1f) * profile.Unevenness;
+        }
         // exhaust comb: a pressure pulse bounces back from the open pipe end after 2L/c
         _comb = new float[Math.Max(2, (int)(Dsp.Rate * 2f * profile.PipeM / 343f))];
         _voiceKind = GameSettings.Current.EngineVoice;
