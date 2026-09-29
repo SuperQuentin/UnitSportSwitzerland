@@ -31,7 +31,7 @@ public partial class PlayerFeel : Node3D
     private EngineSynth _rotor = null!, _engine = null!;
     private AudioStreamPlayer _squeal = null!;
     private EngineSynth? _carEngine;
-    private Avatar.CarStyle _carEngineStyle;
+    private CarSpec? _carEngineSpec;
     private float _proximity;
     private readonly AudioStreamPlayer[] _voices = new AudioStreamPlayer[8];
     private int _nextVoice;
@@ -211,7 +211,7 @@ public partial class PlayerFeel : Node3D
         {
             RideKind.RoadBike => (9f, 18f),    // 32 → 65 km/h
             RideKind.Skis => (9f, 22f),        // 32 → 80 km/h
-            RideKind.Coupe86 or RideKind.RotaryFd or RideKind.Rally4wd => (15f, 40f),   // 54 → 144 km/h
+            _ when CarCatalog.IsCar(ride) => (15f, 40f),   // 54 → 144 km/h
             _ => (4.8f, 9f),                   // above a run: only slides and launches get here
         };
         return Mathf.Clamp((speed - calm) / (fast - calm), 0f, 1.5f);
@@ -318,11 +318,11 @@ public partial class PlayerFeel : Node3D
             SetLoop(_squeal, 0, 1);
             return;
         }
-        if (_carEngine == null || _carEngineStyle != car.Spec.Style)
+        if (_carEngine == null || _carEngineSpec != car.Spec)
         {
             _carEngine?.QueueFree();
-            _carEngineStyle = car.Spec.Style;
-            _carEngine = new EngineSynth(EngineProfile.For(_carEngineStyle), spatial: false, seed: 3);
+            _carEngineSpec = car.Spec;
+            _carEngine = new EngineSynth(EngineProfile.For(car.Spec.Engine, car.Spec.IdleRpm, car.Spec.Redline), spatial: false, seed: 3);
             AddChild(_carEngine);
         }
         _carEngine.Set(car.Rpm01, car.Throttle, Mathf.Clamp(car.Throttle * 0.8f + 0.2f * car.Rpm01, 0f, 1f),

@@ -2,8 +2,47 @@ using Godot;
 
 namespace UnitSport.Avatar;
 
-/// <summary>The body shape a <see cref="CarRig"/> builds.</summary>
-public enum CarStyle { Coupe86, RotaryFd, Rally4wd }
+/// <summary>The silhouette: where the glass is and how the roof runs into the tail.</summary>
+public enum BodyShape
+{
+    /// <summary>Three-door hatchback, roof carried back to a near-vertical hatch (AE86 hatch, Civic).</summary>
+    Hatchback,
+    /// <summary>Two-door notchback: short roof, separate boot (AE86 coupe, S13, Integra coupe).</summary>
+    Coupe,
+    /// <summary>Long raked glass hatch down to a short tail (RX-7s, 180SX, Supra, GT-R R32 is a Coupe).</summary>
+    Fastback,
+    /// <summary>Four doors and a boot (Impreza, Lancer Evolution).</summary>
+    Sedan,
+    /// <summary>Open two-seater, no roof (Roadster, S2000).</summary>
+    Roadster,
+    /// <summary>Mid-engined: cab forward, long rear deck (MR2, NSX).</summary>
+    Midship,
+}
+
+/// <summary>A rear wing, from none to a GT wing on tall stands.</summary>
+public enum WingSize { None, Lip, Small, Big, Gt }
+
+/// <summary>
+/// Everything a <see cref="CarRig"/> needs to draw one car: shape, real dimensions and livery.
+/// Lengths in metres; colours authored in sRGB like every palette here.
+/// </summary>
+public sealed record CarBody
+{
+    public BodyShape Shape { get; init; } = BodyShape.Coupe;
+    public float Length { get; init; } = 4.3f;
+    public float Width { get; init; } = 1.7f;
+    public float Height { get; init; } = 1.3f;
+    public float WheelRadius { get; init; } = 0.3f;
+    public Color Paint { get; init; } = new(0.9f, 0.9f, 0.9f);
+    /// <summary>Two-tone: the lower body, sills and bumpers (the AE86 "panda" black). Null = paint.</summary>
+    public Color? Lower { get; init; }
+    /// <summary>A bonnet in another colour (carbon, primer). Null = paint.</summary>
+    public Color? Bonnet { get; init; }
+    public Color Rim { get; init; } = new(0.78f, 0.79f, 0.82f);
+    public bool PopUps { get; init; }
+    public WingSize Wing { get; init; }
+    public bool Scoop { get; init; }
+}
 
 /// <summary>
 /// A drivable car's visual: body, four wheels that turn and steer, brake lights. Origin on the
@@ -26,10 +65,10 @@ public partial class CarRig : Node3D
     private readonly Node3D[] _spin = new Node3D[4];
     private StandardMaterial3D _tailMaterial = null!;
 
-    public static CarRig Create(CarStyle style, Color paint)
+    public static CarRig Create(CarBody body, float wheelbase)
     {
         var rig = new CarRig { Name = "Car" };
-        rig.Assemble(CarMeshBuilder.Build(style, paint));
+        rig.Assemble(CarMeshBuilder.Build(body, wheelbase));
         return rig;
     }
 

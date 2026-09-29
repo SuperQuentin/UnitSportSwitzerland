@@ -14,10 +14,8 @@ public enum RideKind
     Paraglider = 5,
     Helicopter = 6,
     Plane = 7,
-    // cars (Car.cs)
-    Coupe86 = 8,
-    RotaryFd = 9,
-    Rally4wd = 10,
+    // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
+    // The next non-car mount is 64.
 }
 
 /// <summary>Controls as the vehicle sees them, already stripped of key bindings.</summary>
@@ -230,12 +228,13 @@ public abstract class Rideable
     /// Add one here and to <see cref="Create"/> and it appears everywhere.
     /// </summary>
     /// <remarks>
+    /// Cars are not here either: there are dozens, and the picker lists <see cref="CarCatalog.All"/>
+    /// on a page of its own.
     /// The wingsuit and parachute are not here: nobody straps into a wingsuit on flat ground.
     /// They are a base jump — Jump while falling from height — see <c>FootPlayer</c>.
     /// </remarks>
     public static readonly Rideable[] All =
-        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane(),
-          new Car(CarSpec.Coupe86), new Car(CarSpec.RotaryFd), new Car(CarSpec.Rally4wd) };
+        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() };
 
     /// <summary>
     /// A fresh instance for one rider.
@@ -255,9 +254,7 @@ public abstract class Rideable
         RideKind.Paraglider => new Canopy(paraglider: true),
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
-        RideKind.Coupe86 => new Car(CarSpec.Coupe86),
-        RideKind.RotaryFd => new Car(CarSpec.RotaryFd),
-        RideKind.Rally4wd => new Car(CarSpec.Rally4wd),
+        _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ => null,
     };
 }

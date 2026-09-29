@@ -1,26 +1,30 @@
 using Godot;
+using UnitSport.Audio;
 using UnitSport.Avatar;
 
 namespace UnitSport.Player;
 
 /// <summary>Which axles the engine turns.</summary>
-public enum Drivetrain { Rear, All }
+public enum Drivetrain { Rear, All, Front }
 
 /// <summary>
 /// One car as numbers. Real-world figures for the machines each one stands for, so the Sim
-/// profile drives like the car and not like a tuned guess.
+/// profile drives like the car and not like a tuned guess. The roster is <see cref="CarCatalog"/>.
 /// </summary>
 public sealed record CarSpec
 {
-    public required RideKind Kind { get; init; }
+    /// <summary>Assigned by <see cref="CarCatalog"/> from the entry's position; never set by hand.</summary>
+    public RideKind Kind { get; init; }
     public required string Label { get; init; }
     public required string Blurb { get; init; }
-    public required CarStyle Style { get; init; }
-    public required Color Paint { get; init; }
+    /// <summary>What it looks like: shape, size, livery.</summary>
+    public required CarBody Body { get; init; }
+    /// <summary>What it sounds like.</summary>
+    public EngineLayout Engine { get; init; } = EngineLayout.Inline4;
 
     /// <summary>Kerb mass with a driver, kg.</summary>
     public float Mass { get; init; }
-    /// <summary>Centre of mass to front / rear axle, m. Their sum is the wheelbase.</summary>
+    /// <summary>Centre of mass to front / rear axle, m. Their sum is the wheelbase; the split is the weight distribution (rear share = FrontAxle / Wheelbase).</summary>
     public float FrontAxle { get; init; }
     public float RearAxle { get; init; }
     /// <summary>Centre of mass height, m: sets how much load a brake or a throttle moves.</summary>
@@ -46,43 +50,6 @@ public sealed record CarSpec
     public float DragArea { get; init; } = 0.65f;
 
     public float Wheelbase => FrontAxle + RearAxle;
-
-    /// <summary>A light 80s hatchback coupe: 130 hp, 950 kg, rear drive, a 7,800 rpm four.</summary>
-    public static readonly CarSpec Coupe86 = new()
-    {
-        Kind = RideKind.Coupe86, Label = "Coupe 86",
-        Blurb = "Light, rear drive, revs to 7,800. W / RT gas, S / LT brake, Space / A handbrake — kick the rear out and counter-steer",
-        Style = CarStyle.Coupe86, Paint = new Color(0.94f, 0.94f, 0.92f),
-        Mass = 1000f, FrontAxle = 1.12f, RearAxle = 1.28f, CgHeight = 0.5f, Grip = 1.0f,
-        PeakKw = 96f, PeakRpm = 6600f, IdleRpm = 900f, Redline = 7800f,
-        Gears = new[] { 3.59f, 2.02f, 1.38f, 1.00f, 0.86f }, FinalDrive = 4.3f,
-        MaxSteer = 0.62f, DragArea = 0.62f,
-    };
-
-    /// <summary>A 90s twin-turbo rotary coupe: 280 hp in 1,300 kg, quick and snappy.</summary>
-    public static readonly CarSpec RotaryFd = new()
-    {
-        Kind = RideKind.RotaryFd, Label = "Rotary FD",
-        Blurb = "Twin-turbo rotary, rear drive, 280 hp. Snappy: throttle alone breaks the rear loose",
-        Style = CarStyle.RotaryFd, Paint = new Color(1f, 0.86f, 0.16f),
-        Mass = 1320f, FrontAxle = 1.2f, RearAxle = 1.23f, CgHeight = 0.46f, Grip = 1.05f,
-        PeakKw = 206f, PeakRpm = 6500f, IdleRpm = 850f, Redline = 8000f,
-        Gears = new[] { 3.48f, 2.02f, 1.39f, 1.00f, 0.72f }, FinalDrive = 4.1f,
-        MaxSteer = 0.6f, DragArea = 0.58f,
-    };
-
-    /// <summary>A turbo boxer rally saloon: four-wheel drive, grips until it doesn't.</summary>
-    public static readonly CarSpec Rally4wd = new()
-    {
-        Kind = RideKind.Rally4wd, Label = "Rally 4WD",
-        Blurb = "Turbo boxer, four-wheel drive. Grips hard; drifts all four wheels on gravel",
-        Style = CarStyle.Rally4wd, Paint = new Color(0.2f, 0.4f, 0.85f),
-        Mass = 1360f, FrontAxle = 1.28f, RearAxle = 1.24f, CgHeight = 0.52f, Grip = 1.05f,
-        PeakKw = 206f, PeakRpm = 6000f, IdleRpm = 850f, Redline = 7000f,
-        Gears = new[] { 3.17f, 1.88f, 1.30f, 0.97f, 0.74f }, FinalDrive = 4.44f,
-        Drive = Drivetrain.All, RearBias = 0.6f,
-        MaxSteer = 0.58f, DragArea = 0.7f,
-    };
 }
 
 /// <summary>
@@ -174,7 +141,7 @@ public sealed class Car : Rideable
     private float _steer;   // eased steering input, −1..1
     private float _shiftTimer;
 
-    public override Node3D BuildVisual(int riderIndex) => CarRig.Create(Spec.Style, Spec.Paint);
+    public override Node3D BuildVisual(int riderIndex) => CarRig.Create(Spec.Body, Spec.Wheelbase);
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
@@ -254,13 +221,18 @@ public sealed class Car : Rideable
             float fxF = -sign * brakeForce * 0.65f;
             float fxR = -sign * brakeForce * 0.35f;
             if (input.Handbrake) fxR = -sign * 0.8f * grip * nr;
-            if (s.Drive == Drivetrain.All) { fxF += drive * (1f - s.RearBias); fxR += drive * s.RearBias; }
-            else fxR += drive;
+            switch (s.Drive)
+            {
+                case Drivetrain.All: fxF += drive * (1f - s.RearBias); fxR += drive * s.RearBias; break;
+                case Drivetrain.Front: fxF += drive; break;
+                default: fxR += drive; break;
+            }
             // no force to push against below walking pace once stopped
             if (Mathf.Abs(u) < 0.3f && drive == 0f) { fxF = 0f; fxR = 0f; u = Mathf.MoveToward(u, 0f, 3f * h); }
             float capF = grip * nf, capR = grip * nr;
+            // demand past the circle, on whichever axle is driven
+            float wheelspin = Mathf.Max(0f, Mathf.Max(Mathf.Abs(fxR) / capR, Mathf.Abs(fxF) / capF) - 0.9f) * 10f;
             fxF = Mathf.Clamp(fxF, -capF, capF);
-            float wheelspin = Mathf.Max(0f, Mathf.Abs(fxR) / capR - 0.9f) * 10f;   // demand past the circle
             fxR = Mathf.Clamp(fxR, -capR, capR);
 
             // --- lateral forces: slip angle through the tyre curve, inside what the circle leaves ---

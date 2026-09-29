@@ -29,7 +29,7 @@ public static class DriftCheck
         foreach (var profile in new[] { RideProfile.Sim, RideProfile.Game })
         {
             GameSettings.Current.RideProfile = profile;
-            foreach (var spec in new[] { CarSpec.Coupe86, CarSpec.RotaryFd, CarSpec.Rally4wd })
+            foreach (var spec in CarCatalog.All)
                 failures += Drive(spec, profile) ? 0 : 1;
         }
         GD.Print(failures == 0 ? "[drift] RESULT: every car drifts and recovers" : $"[drift] RESULT: FAILED ({failures})");

@@ -32,27 +32,36 @@ public static class CarMeshBuilder
         float WsBase, float WsTop, float RgTop, float RgBase);
 
     // Belt = body top through the doors, Hood/Deck = top of the bonnet / boot lid; the four Z
-    // values are the base and top of the windscreen and rear glass. Heights in metres.
-    private static Dims For(CarStyle style) => style switch
+    // values are the base and top of the windscreen and rear glass. Heights in metres. Derived
+    // from the body's real length and height by per-shape proportions, measured off the three
+    // hand-built originals (AE86 hatch, FD, GC8) and extended to the other shapes.
+    private static Dims For(CarBody b, float wheelbase)
     {
-        CarStyle.RotaryFd => new(4.30f, 1.76f, 1.23f, 2.43f, 0.31f, 0.235f, 1.50f, 0.74f, 0.70f, 0.78f, 0.55f, -0.15f, -0.85f, -1.30f),
-        CarStyle.Rally4wd => new(4.40f, 1.74f, 1.43f, 2.52f, 0.32f, 0.225f, 1.50f, 0.86f, 0.86f, 0.88f, 0.95f, 0.25f, -0.60f, -0.95f),
-        _ => new(4.20f, 1.63f, 1.34f, 2.40f, 0.29f, 0.19f, 1.40f, 0.86f, 0.80f, 0.90f, 0.80f, 0.20f, -0.75f, -1.30f),
-    };
+        float hl = b.Length * 0.5f, h = b.Height;
+        // fractions of the half-length: windscreen base, windscreen top, rear glass top, rear glass base
+        var (wsB, wsT, rgT, rgB) = b.Shape switch
+        {
+            BodyShape.Hatchback => (0.38f, 0.10f, -0.36f, -0.62f),
+            BodyShape.Fastback => (0.26f, -0.07f, -0.40f, -0.60f),
+            BodyShape.Sedan => (0.43f, 0.11f, -0.27f, -0.43f),
+            BodyShape.Roadster => (0.28f, 0.14f, -0.16f, -0.22f),
+            BodyShape.Midship => (0.22f, -0.10f, -0.36f, -0.46f),
+            _ => (0.42f, 0.12f, -0.20f, -0.39f),   // Coupe
+        };
+        float deck = b.Shape == BodyShape.Midship ? 0.70f : b.Shape == BodyShape.Fastback ? 0.63f : 0.66f;
+        return new Dims(b.Length, b.Width, h, wheelbase, b.WheelRadius,
+            Mathf.Clamp(0.19f + (b.Width - 1.63f) * 0.33f, 0.18f, 0.27f), b.Width - 0.24f,
+            h * 0.62f, h * 0.60f, h * deck, hl * wsB, hl * wsT, hl * rgT, hl * rgB);
+    }
 
-    private static Color Rim(CarStyle style) => style switch
+    public static CarParts Build(CarBody body, float wheelbase)
     {
-        CarStyle.Rally4wd => new Color(0.86f, 0.66f, 0.15f),   // gold
-        CarStyle.RotaryFd => new Color(0.78f, 0.79f, 0.82f),
-        _ => new Color(0.85f, 0.85f, 0.85f),                   // white steel wheels
-    };
-
-    public static CarParts Build(CarStyle style, Color paint)
-    {
-        var d = For(style);
+        var d = For(body, wheelbase);
+        var paint = body.Paint;
+        bool open = body.Shape == BodyShape.Roadster;
         float hl = d.Length * 0.5f, hw = d.Width * 0.5f;
         float axF = d.Wheelbase * 0.5f, axR = -axF;
-        var lower = style == CarStyle.Coupe86 ? Trim : paint;    // the panda's black lower half
+        var lower = body.Lower ?? paint;    // two-tone: the panda's black lower half
         var s = new MeshScratch();
         var head = new MeshScratch();
         var tail = new MeshScratch();
@@ -73,7 +82,7 @@ public static class CarMeshBuilder
         float bot = sillY1;
         s.Box(new Vector3(0, (bot + d.Belt) * 0.5f, (d.RgBase + d.WsBase) * 0.5f), new Vector3(d.Width, d.Belt - bot, d.WsBase - d.RgBase), paint);
         float noseZ = hl - (hl - d.WsBase) * 0.3f;   // the nose is a little lower and narrower
-        s.Box(new Vector3(0, (bot + d.Hood) * 0.5f, (d.WsBase + noseZ) * 0.5f), new Vector3(d.Width, d.Hood - bot, noseZ - d.WsBase), paint);
+        s.Box(new Vector3(0, (bot + d.Hood) * 0.5f, (d.WsBase + noseZ) * 0.5f), new Vector3(d.Width, d.Hood - bot, noseZ - d.WsBase), body.Bonnet ?? paint);
         s.Box(new Vector3(0, (bot + d.Hood - 0.06f) * 0.5f, (noseZ + hl) * 0.5f), new Vector3(d.Width - 0.1f, d.Hood - 0.06f - bot, hl - noseZ), paint);
         s.Box(new Vector3(0, (bot + d.Deck) * 0.5f, (d.RgBase - hl) * 0.5f), new Vector3(d.Width, d.Deck - bot, d.RgBase + hl), paint);
 
@@ -89,59 +98,64 @@ public static class CarMeshBuilder
         }
         SlopedGlass(s, cw - 0.04f, d.Belt, d.WsBase, d.Roof, d.WsTop);
         SlopedGlass(s, cw - 0.04f, d.Belt, d.RgBase, d.Roof, d.RgTop);
-        s.Box(new Vector3(0, d.Roof - 0.025f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(cw + 0.02f, 0.05f, d.WsTop - d.RgTop), paint);
+        // a roadster's roof is its soft top, up: dark cloth rather than paint
+        s.Box(new Vector3(0, d.Roof - 0.025f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(cw + 0.02f, 0.05f, d.WsTop - d.RgTop), open ? Trim : paint);
         // pillars: A, B (four doors only) and C
         foreach (float sx in new[] { -1f, 1f })
         {
             float px = sx * (cw * 0.5f + 0.005f);
             s.Tube(new Vector3(px, d.Belt, d.WsBase), new Vector3(px, d.Roof, d.WsTop), 0.03f, paint, 4);
             s.Tube(new Vector3(px, d.Belt, d.RgBase), new Vector3(px, d.Roof, d.RgTop), 0.035f, paint, 4);
-            if (style == CarStyle.Rally4wd)
+            if (body.Shape == BodyShape.Sedan)
                 s.Box(new Vector3(px, (d.Belt + d.Roof) * 0.5f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(0.03f, d.Roof - d.Belt, 0.09f), paint);
             // door shut lines and mirrors
             float dz = (d.WsBase + d.RgBase) * 0.5f;
             s.Box(new Vector3(sx * (hw + 0.002f), (bot + d.Belt) * 0.5f, dz + 0.55f), new Vector3(0.01f, d.Belt - bot - 0.05f, 0.02f), Trim);
             s.Box(new Vector3(sx * (hw + 0.002f), (bot + d.Belt) * 0.5f, dz - 0.5f), new Vector3(0.01f, d.Belt - bot - 0.05f, 0.02f), Trim);
-            s.Box(new Vector3(sx * (hw + 0.08f), d.Belt + 0.1f, d.WsBase - 0.1f), new Vector3(0.16f, 0.1f, 0.09f), style == CarStyle.Coupe86 ? Trim : paint);
+            s.Box(new Vector3(sx * (hw + 0.08f), d.Belt + 0.1f, d.WsBase - 0.1f), new Vector3(0.16f, 0.1f, 0.09f), body.Lower != null ? Trim : paint);
         }
 
         // ---- per-car features ----
         var lampY = d.Hood - 0.02f;
-        switch (style)
+        if (body.PopUps)
+            // pop-up headlights, raised: a pod on the bonnet edge with the lamp in its face
+            foreach (float sx in new[] { -1f, 1f })
+            {
+                float x = sx * (hw - 0.3f);
+                s.Box(new Vector3(x, d.Hood + 0.05f, noseZ + 0.1f), new Vector3(0.34f, 0.12f, 0.2f), body.Bonnet ?? paint);
+                head.Box(new Vector3(x, d.Hood + 0.05f, noseZ + 0.205f), new Vector3(0.28f, 0.09f, 0.02f), Head);
+                head.Box(new Vector3(sx * (hw - 0.22f), lampY - 0.12f, hl + 0.005f), new Vector3(0.2f, 0.06f, 0.02f), new Color(1f, 0.6f, 0.12f));   // indicators
+            }
+        else
+            foreach (float sx in new[] { -1f, 1f })
+                head.Box(new Vector3(sx * (hw - 0.36f), d.Hood - 0.06f, hl + 0.005f), new Vector3(0.4f, 0.13f, 0.02f), Head);
+        s.Box(new Vector3(0, sillY1 - 0.1f, hl - 0.03f), new Vector3(0.9f, 0.14f, 0.05f), Trim);   // grille intake
+
+        float wingZ = -hl + 0.55f;
+        switch (body.Wing)
         {
-            case CarStyle.Coupe86:
-            case CarStyle.RotaryFd:
-                // pop-up headlights, raised: a pod on the bonnet edge with the lamp in its face
-                foreach (float sx in new[] { -1f, 1f })
-                {
-                    float x = sx * (hw - 0.3f);
-                    s.Box(new Vector3(x, d.Hood + 0.05f, noseZ + 0.1f), new Vector3(0.34f, 0.12f, 0.2f), paint);
-                    head.Box(new Vector3(x, d.Hood + 0.05f, noseZ + 0.205f), new Vector3(0.28f, 0.09f, 0.02f), Head);
-                    head.Box(new Vector3(sx * (hw - 0.22f), lampY - 0.12f, hl + 0.005f), new Vector3(0.2f, 0.06f, 0.02f), new Color(1f, 0.6f, 0.12f));   // indicators
-                }
-                if (style == CarStyle.RotaryFd)
-                {
-                    // a small rear wing on two struts
-                    foreach (float sx in new[] { -1f, 1f })
-                        s.Box(new Vector3(sx * 0.5f, d.Deck + 0.08f, -hl + 0.6f), new Vector3(0.05f, 0.16f, 0.12f), Trim);
-                    s.Box(new Vector3(0, d.Deck + 0.18f, -hl + 0.6f), new Vector3(1.4f, 0.03f, 0.3f), Trim);
-                    s.Box(new Vector3(0, d.Hood + 0.02f, noseZ - 0.4f), new Vector3(0.9f, 0.03f, 0.5f), Trim);   // bonnet vent
-                }
+            case WingSize.Lip:
+                s.Box(new Vector3(0, d.Deck + 0.03f, -hl + 0.12f), new Vector3(d.Width - 0.2f, 0.05f, 0.18f), paint);
                 break;
-            default:   // rally saloon
+            case WingSize.Small:
+                foreach (float sx in new[] { -1f, 1f })
+                    s.Box(new Vector3(sx * 0.5f, d.Deck + 0.08f, wingZ), new Vector3(0.05f, 0.16f, 0.12f), Trim);
+                s.Box(new Vector3(0, d.Deck + 0.18f, wingZ), new Vector3(1.4f, 0.03f, 0.3f), Trim);
+                break;
+            case WingSize.Big:
+            case WingSize.Gt:
+                float lift = body.Wing == WingSize.Gt ? 0.45f : 0.33f;
                 foreach (float sx in new[] { -1f, 1f })
                 {
-                    head.Box(new Vector3(sx * (hw - 0.36f), d.Hood - 0.06f, hl + 0.005f), new Vector3(0.4f, 0.13f, 0.02f), Head);
-                    head.Box(new Vector3(sx * 0.32f, sillY1 - 0.1f, hl + 0.005f), new Vector3(0.14f, 0.1f, 0.02f), new Color(1f, 0.85f, 0.3f));   // foglamps
-                    // big wing on tall endplates
-                    s.Box(new Vector3(sx * 0.72f, d.Deck + 0.16f, -hl + 0.55f), new Vector3(0.05f, 0.3f, 0.34f), Trim);
-                    s.Box(new Vector3(sx * 0.4f, d.Deck + 0.05f, -hl + 0.55f), new Vector3(0.05f, 0.1f, 0.12f), Trim);
+                    s.Box(new Vector3(sx * 0.72f, d.Deck + lift * 0.5f, wingZ), new Vector3(0.05f, lift - 0.03f, 0.34f), Trim);
+                    s.Box(new Vector3(sx * 0.4f, d.Deck + lift * 0.15f, wingZ), new Vector3(0.05f, lift * 0.3f, 0.12f), Trim);
                 }
-                s.Box(new Vector3(0, d.Deck + 0.33f, -hl + 0.55f), new Vector3(1.6f, 0.04f, 0.42f), Trim);
-                s.Box(new Vector3(0, d.Hood + 0.05f, noseZ - 0.6f), new Vector3(0.5f, 0.1f, 0.55f), Trim);   // bonnet scoop
-                s.Box(new Vector3(0, sillY1 - 0.1f, hl - 0.03f), new Vector3(0.9f, 0.14f, 0.05f), Trim);       // grille intake
+                s.Box(new Vector3(0, d.Deck + lift, wingZ), new Vector3(Mathf.Min(1.6f, d.Width - 0.1f), 0.04f, 0.42f), Trim);
                 break;
         }
+        if (body.Scoop)
+            s.Box(new Vector3(0, d.Hood + 0.05f, noseZ - 0.6f), new Vector3(0.5f, 0.1f, 0.55f), Trim);
+
         // tail lamps across the back, and exhausts
         float tailY = d.Deck - 0.08f;
         foreach (float sx in new[] { -1f, 1f })
@@ -152,7 +166,7 @@ public static class CarMeshBuilder
         s.Box(new Vector3(0, sillY1 + 0.03f, -hl - 0.005f), new Vector3(0.5f, 0.05f, 0.01f), Steel);   // number plate blanks
         s.Box(new Vector3(0, sillY1 + 0.03f, hl + 0.005f), new Vector3(0.5f, 0.05f, 0.01f), Steel);
 
-        return new CarParts(s.Build(), head.Build(), tail.Build(), BuildWheel(d, Rim(style)),
+        return new CarParts(s.Build(), head.Build(), tail.Build(), BuildWheel(d, body.Rim),
             d.WheelR, axF, axR, d.Track * 0.5f);
     }
 

@@ -3,6 +3,9 @@ using UnitSport.Core;
 
 namespace UnitSport.Audio;
 
+/// <summary>A car engine's layout, which is most of what it sounds like.</summary>
+public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8 }
+
 /// <summary>How an engine is built, as far as its sound is concerned.</summary>
 public sealed record EngineProfile
 {
@@ -37,13 +40,17 @@ public sealed record EngineProfile
     /// <summary>A turbo flat-four with unequal-length headers: the uneven burble, 850 to 7,000 rpm.</summary>
     public static readonly EngineProfile Boxer4Turbo = new() { Cylinders = 4, IdleRpm = 850, MaxRpm = 7000, PipeM = 1.0f, Unevenness = 3.5f };
 
-    /// <summary>The engine a car of this style has.</summary>
-    public static EngineProfile For(UnitSport.Avatar.CarStyle style) => style switch
+    /// <summary>A car's engine: the layout's voice, at that car's own idle and redline.</summary>
+    public static EngineProfile For(EngineLayout layout, float idleRpm, float redline) => (layout switch
     {
-        UnitSport.Avatar.CarStyle.RotaryFd => Rotary,
-        UnitSport.Avatar.CarStyle.Rally4wd => Boxer4Turbo,
+        EngineLayout.Rotary or EngineLayout.RotaryTurbo => Rotary,
+        EngineLayout.Boxer4Turbo => Boxer4Turbo,
+        // a six fires half as often again, smoother; a V6 lopes a little more than an inline
+        EngineLayout.Inline6Turbo => Inline4Na with { Cylinders = 6, PipeM = 0.9f, Unevenness = 0.5f },
+        EngineLayout.V6 or EngineLayout.V6Turbo => Inline4Na with { Cylinders = 6, PipeM = 0.85f, Unevenness = 1.4f },
+        EngineLayout.V8 => Inline4Na with { Cylinders = 8, PipeM = 1.1f, Unevenness = 2f },
         _ => Inline4Na,
-    };
+    }) with { IdleRpm = idleRpm, MaxRpm = redline };
 }
 
 /// <summary>
