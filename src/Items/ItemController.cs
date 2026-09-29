@@ -200,6 +200,13 @@ public partial class ItemController : Node
             case ItemUse.Readout:
                 break;
 
+            case ItemUse.Wear:
+                bool on = _inventory.Worn != stack.Id;
+                _inventory.SetWorn(on ? stack.Id : ItemId.None);
+                Play(SfxSynth.Tick, on ? 1.2f : 0.9f);
+                _ui.Toast(on ? $"You put on the {def.Name.ToLowerInvariant()}." : $"You take off the {def.Name.ToLowerInvariant()}.");
+                break;
+
             case ItemUse.Material:
                 _ui.Toast(def.Category == ItemCategory.Money
                     ? $"{stack.Count} CHF. Keep it for trading."

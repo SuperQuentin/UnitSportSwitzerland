@@ -55,6 +55,21 @@ public abstract class Occasion
     /// authored there; the result is converted to linear with them.
     /// </summary>
     public virtual (Color Tint, Color Sky) Grade(float sunElevationDeg, Color tint, Color sky) => (tint, sky);
+
+    /// <summary>Dresses one tile (the Decorations facet). Main thread; must be deterministic in the tile.</summary>
+    public virtual void Decorate(TileContext tile, DecorBuilder into) { }
+
+    /// <summary>Puts this occasion's hunt spots on one tile (the Hunt facet). Deterministic, like <see cref="Decorate"/>.</summary>
+    public virtual void PlaceHunt(TileContext tile, DecorBuilder into) { }
+
+    /// <summary>The extra loot roll this occasion adds to a kind of furniture (the Loot facet), or null.</summary>
+    public virtual (float Chance, Items.ItemId[] Items)? Treats(Interiors.FurnitureType type) => null;
+
+    /// <summary>What a claimed hunt spot gives: mostly treats, now and then the rare hat.</summary>
+    public virtual (Items.ItemId Id, int Count) HuntReward(Random rng) => (Items.ItemId.None, 0);
+
+    /// <summary>The hat everyone wears while this occasion runs (the Hats facet).</summary>
+    public virtual Avatar.Headwear Hat => Avatar.Headwear.None;
 }
 
 /// <summary>

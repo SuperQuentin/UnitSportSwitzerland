@@ -125,6 +125,15 @@ public partial class FootPlayer : CharacterBody3D
     [Export] public int HeldItemId { get; set; }
 
     /// <summary>
+    /// The hat on the figure, as an <see cref="Avatar.Headwear"/> (occasions, #18). Replicated like
+    /// <see cref="HeldItemId"/>; set on the owner by <c>Occasions.OccasionHats</c>.
+    /// </summary>
+    [Export] public int HeadwearId { get; set; }
+
+    private Avatar.Headwear Hat => (Avatar.Headwear)HeadwearId;
+    private Avatar.Headwear _poseHat;
+
+    /// <summary>
     /// The figure's right hand in this node's local space, or null when no figure is drawn
     /// (first person on foot, or mounted). Updated whenever the body mesh is posed.
     /// </summary>
@@ -526,6 +535,7 @@ public partial class FootPlayer : CharacterBody3D
         // figure sprinting down a descent at 60 km/h in a running pose.
         replication.AddProperty(".:RideKindId");
         replication.AddProperty(".:HeldItemId");
+        replication.AddProperty(".:HeadwearId");
         var sync = new MultiplayerSynchronizer
         {
             // deterministic name: replication matches nodes by path across peers, and
@@ -631,7 +641,7 @@ public partial class FootPlayer : CharacterBody3D
             _walker = new MeshInstance3D
             {
                 Name = "Body",
-                Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f),
+                Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f, hat: Hat),
                 MaterialOverride = Avatar.HumanMeshBuilder.Material(),
             };
             _visual = _walker;
@@ -734,7 +744,7 @@ public partial class FootPlayer : CharacterBody3D
         _seenSpeed = Mathf.Lerp(_seenSpeed, measured, 1f - Mathf.Exp(-6f * dt));
 
         _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, _seenSpeed, dt);
-        _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, _seenSpeed, _stridePhase);
+        _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, _seenSpeed, _stridePhase, hat: Hat);
         PlaceHand(Avatar.HumanMeshBuilder.MountsFor(_seenSpeed, _stridePhase));
     }
 
@@ -762,21 +772,24 @@ public partial class FootPlayer : CharacterBody3D
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
 
+        // the two held poses are cached, so a hat put on or taken off rebuilds them
+        if (_poseHat != Hat) { _slidePose = null; _airPose = null; _poseHat = Hat; }
+
         Avatar.HumanMeshBuilder.GaitMounts mounts;
         if (_sliding)
         {
-            _walker.Mesh = _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked);
+            _walker.Mesh = _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked, hat: Hat);
             mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked);
         }
         else if (_airTime > 0.12f)
         {
-            _walker.Mesh = _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running);
+            _walker.Mesh = _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running, hat: Hat);
             mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running);
         }
         else
         {
             _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
-            _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, speed, _stridePhase);
+            _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, speed, _stridePhase, hat: Hat);
             mounts = Avatar.HumanMeshBuilder.MountsFor(speed, _stridePhase);
         }
 

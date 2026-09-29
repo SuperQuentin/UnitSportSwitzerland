@@ -48,10 +48,25 @@ public enum ItemId
     Electronics = 34,
     FuelCan = 35,
     EnginePart = 36,
+
+    // 37, 38: Shotgun and Shells, taken by the bird-hunting PR (#7). Occasions (#18) start at 39.
+
+    // ---- occasions (src/Occasions) ----
+    Candy = 39,
+    Pumpkin = 40,
+    CaramelApple = 41,
+    Biberli = 42,
+    Mandarin = 43,
+    Grittibaenz = 44,
+    Gluehwein = 45,
+    WitchHat = 46,
+    PumpkinHead = 47,
+    SantaHat = 48,
+    ReindeerAntlers = 49,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
-public enum ItemCategory { Gear, Food, Water, Money, Medical, Scrap, Mineral, Part }
+public enum ItemCategory { Gear, Food, Water, Money, Medical, Scrap, Mineral, Part, Cosmetic }
 
 /// <summary>What pressing Use does with the item in hand.</summary>
 public enum ItemUse
@@ -68,6 +83,8 @@ public enum ItemUse
     Consume,
     /// <summary>A material: kept for trading and building; Use does nothing.</summary>
     Material,
+    /// <summary>Use puts it on, or takes it off (a hat — <see cref="Inventory.Worn"/>).</summary>
+    Wear,
 }
 
 /// <summary>
@@ -139,12 +156,29 @@ public static class ItemDefs
         Mat(ItemId.Electronics, "Electronics", 20, "#2a7a3a", "EL", ItemCategory.Scrap, 6),
         Mat(ItemId.FuelCan, "Fuel can", 3, "#c82a1e", "FC", ItemCategory.Part, 25),
         Mat(ItemId.EnginePart, "Engine part", 3, "#6a5a4a", "EP", ItemCategory.Part, 60),
+
+        // occasions (#18): treats found in loot and the hunt while one runs, and the hats
+        Eat(ItemId.Candy, "Candy", 20, "#e8702a", "SW", 5, ItemCategory.Food, 1),
+        Eat(ItemId.Pumpkin, "Pumpkin", 5, "#e07818", "PU", 20, ItemCategory.Food, 3),
+        Eat(ItemId.CaramelApple, "Caramel apple", 5, "#b8581e", "CP", 15, ItemCategory.Food, 2),
+        Eat(ItemId.Biberli, "Biberli", 10, "#8a5a2a", "BI", 15, ItemCategory.Food, 2),
+        Eat(ItemId.Mandarin, "Mandarin", 10, "#f08a18", "MA", 8, ItemCategory.Food, 1),
+        Eat(ItemId.Grittibaenz, "Grittibänz", 5, "#d8a060", "GZ", 25, ItemCategory.Food, 4),
+        Eat(ItemId.Gluehwein, "Glühwein", 5, "#8a1a2a", "GW", 20, ItemCategory.Water, 4),
+        Hat(ItemId.WitchHat, "Witch hat", "#3a2250", "WH"),
+        Hat(ItemId.PumpkinHead, "Pumpkin head", "#e07818", "PH"),
+        Hat(ItemId.SantaHat, "Santa hat", "#c81e24", "SH"),
+        Hat(ItemId.ReindeerAntlers, "Reindeer antlers", "#7a5230", "RA"),
     };
 
     private static ItemDef Eat(ItemId id, string name, int stack, string tint, string glyph, float heal,
         ItemCategory category, float value) =>
         new(id, name, $"Use to {(category == ItemCategory.Water ? "drink" : category == ItemCategory.Medical ? "apply" : "eat")}. Restores {heal:F0} health.",
             ItemUse.Consume, stack, new Color(tint), glyph, heal, category, value);
+
+    private static ItemDef Hat(ItemId id, string name, string tint, string glyph) =>
+        new(id, name, "Use to put it on, or take it off. Others see you wearing it.",
+            ItemUse.Wear, 1, new Color(tint), glyph, 0, ItemCategory.Cosmetic, 10);
 
     private static ItemDef Mat(ItemId id, string name, int stack, string tint, string glyph,
         ItemCategory category, float value) =>

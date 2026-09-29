@@ -88,7 +88,11 @@ public partial class OccasionManager : Node
     public override void _ExitTree()
     {
         GameSettings.Changed -= OnSettingsChanged;
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+            Loot.LootTables.Seasonal = null;
+        }
     }
 
     public override void _Ready()
@@ -97,6 +101,15 @@ public partial class OccasionManager : Node
         ParseCommandLine(OS.GetCmdlineUserArgs());
         GameSettings.Changed += OnSettingsChanged;
         EvaluateAuthority(force: true);
+
+        // Whoever rolls loot here — the server, or an offline client — adds the running
+        // occasions' treats. A client in a server's world never rolls, so its view cannot matter.
+        Loot.LootTables.Seasonal = type =>
+        {
+            foreach (var a in Active)
+                if (a.Has(OccasionFacets.Loot) && a.Content.Treats(type) is { } treats) return treats;
+            return null;
+        };
     }
 
     /// <summary>

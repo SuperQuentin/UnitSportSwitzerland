@@ -45,6 +45,20 @@ public sealed partial class ProceduralWorld
                 yield return v;
     }
 
+    /// <summary>
+    /// The generated villages, as the stand-in for <c>places.json</c> (which a generated world does
+    /// not have): each village's centre on the main road, in LV95, with its building count.
+    /// </summary>
+    public IEnumerable<(double E, double N, int Buildings, string Name)> VillageCentres()
+    {
+        double half = RadiusTiles * 1000.0;
+        foreach (var v in VillagesNear(-half, half))
+        {
+            var (p, _, _) = RoadFrame(v.X);
+            yield return (p.E, p.N, v.Buildings.Count, $"Village {Math.Round(v.X / VillageSpacing):+0;-0;0}");
+        }
+    }
+
     /// <summary>A point on the main road and its unit direction and north-side normal, in LV95.</summary>
     private ((double E, double N) P, (double E, double N) T, (double E, double N) Nrm) RoadFrame(double x)
     {

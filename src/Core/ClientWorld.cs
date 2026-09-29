@@ -150,8 +150,11 @@ public partial class ClientWorld : Node3D
             {
                 fallback.Active = false;
                 cache.Clear();
+                Occasions.OccasionTowns.UseGenerated(null);
             });
         }
+        // the towns occasion props go in: places.json, or the generated villages while they stand in
+        Occasions.OccasionTowns.UseGenerated(fallback?.World);
 
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
@@ -199,6 +202,8 @@ public partial class ClientWorld : Node3D
         // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
         // word online. Before the clock, which reads its sun and sky from it.
         Occasions.OccasionManager.Create(this);
+        // their props, dressed onto each tile as its buildings load
+        AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
 
         // the clock: sun, light colour, sky and night for every shader and the environment
         var chunksForSky = _chunks;
@@ -281,6 +286,10 @@ public partial class ClientWorld : Node3D
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);
+
+        // occasions: the treat / gift hunt (taken with the gather hold) and the seasonal hat
+        AddChild(new Occasions.OccasionHunt());
+        AddChild(new Occasions.OccasionHats(() => LocalPlayer, items.Inventory));
         // solid trunks around whatever asks for collision
         var trees = new World.TreeColliders(_chunks, origin);
         AddChild(trees);
@@ -578,7 +587,12 @@ public partial class ClientWorld : Node3D
 
         // The town index arrives after this UI was built, so it has to be told to re-read.
         _terrainSync.PlacesReceived += () =>
-            Callable.From(() => { _places?.ReloadIndex(); _ambience?.ReloadPlaces(); }).CallDeferred();
+            Callable.From(() =>
+            {
+                _places?.ReloadIndex();
+                _ambience?.ReloadPlaces();
+                Occasions.OccasionTowns.Reload();
+            }).CallDeferred();
 
         // Same for the horizon: a client that shipped without one gets it during sync.
         _terrainSync.HorizonReceived += () =>
