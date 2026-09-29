@@ -190,6 +190,26 @@ public static class SfxSynth
     });
 
     /// <summary>
+    /// One round from an aircraft gun: a hard, bright crack of noise over a short low thump.
+    /// Short enough (0.14 s) that 14 a second overlap into a rattle rather than a smear.
+    /// </summary>
+    public static SfxBank GunBank => _gunBank ??= SfxBank.Build("gun", 6, 0.14f, 43, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        float crack = 38f * J(), thump = 22f * J(), f = 95f * J();
+        var s = HighPass(Noise(rng, n), 0.08f);
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            s[i] = s[i] * 2.2f * Mathf.Exp(-crack * t)
+                 + Mathf.Sin(Mathf.Tau * f * t) * 0.9f * Mathf.Exp(-thump * t);
+        }
+        return s;
+    });
+
+    private static SfxBank? _gunBank;
+
+    /// <summary>
     /// The reward sound for a clean landing or trick: two bright bell partials a fifth apart,
     /// with a quick attack. Pure tones are the one thing here that is not noise, which is why
     /// it cuts through everything else.
