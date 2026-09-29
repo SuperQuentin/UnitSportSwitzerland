@@ -340,7 +340,7 @@ public partial class VehicleBody : CharacterBody3D
         }
         if (_engineSound != null && Ride is Car)
             // ticking over while it rolls; a car at rest is asleep and silent
-            _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep ? 0.2f : 0f);
+            _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep ? 0.1f : 0f);
         else if (_engineSound != null)
         {
             _engineSound.Set(spool, spool, 0.5f, spool * 0.7f);

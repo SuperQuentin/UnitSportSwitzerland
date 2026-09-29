@@ -326,11 +326,12 @@ public partial class PlayerFeel : Node3D
             AddChild(_carEngine);
         }
         _carEngine.Set(car.Rpm01, car.Throttle, Mathf.Clamp(car.Throttle * 0.8f + 0.2f * car.Rpm01, 0f, 1f),
-            _player.EngineOn ? 0.3f + 0.45f * car.Rpm01 : 0f);
+            // half what it was: at 0.75 a car at redline drowned every other sound in the game
+            _player.EngineOn ? 0.15f + 0.22f * car.Rpm01 : 0f);
 
         // a squeal is a note, not a hiss: it appears past a threshold and climbs with the slide
         float slide = grounded ? Mathf.SmoothStep(0.15f, 0.9f, car.TyreSlide) : 0f;
-        SetLoop(_squeal, slide * Mathf.Clamp(speed / 10f, 0f, 1f) * 0.6f, 0.8f + 0.3f * car.TyreSlide + speed / 90f);
+        SetLoop(_squeal, slide * Mathf.Clamp(speed / 10f, 0f, 1f) * 0.35f, 0.8f + 0.3f * car.TyreSlide + speed / 90f);
     }
 
     /// <summary>

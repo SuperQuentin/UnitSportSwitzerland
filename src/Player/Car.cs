@@ -93,8 +93,13 @@ public sealed class Car : Rideable
     // these are Japanese-market cars, right-hand drive
     public override Vector3 FirstPersonEye => new(0.36f, 1.08f, 0.15f);
     public override float EyeHeight => 1.1f;
-    public override float ChaseDistance => 5.4f;
-    public override float ChaseHeight => 1.55f;
+    // Up and behind, looking down ~25° over the roof: from a level camera at roof height the car
+    // itself hid the road you were about to drive onto.
+    public override float ChaseDistance => 6.2f;
+    public override float ChaseHeight => 4.1f;
+    public override float ChasePitch => -0.44f;
+    // stays above the car in a drift rather than swinging round to the side of it
+    public override float ChaseFollowsTravel => 0.15f;
     public override float BaseFov => 68f;
     public override float MaxFov => 90f;
     public override float FovSpeed => 45f;
@@ -144,6 +149,13 @@ public sealed class Car : Rideable
 
     private float _steer;   // eased steering input, −1..1
     private float _shiftTimer;
+
+    /// <summary>
+    /// A copy with the same gear, rack position and read-outs: <see cref="Step"/> is pure apart from
+    /// this state, so stepping a clone forward is a look into the car's future — which is how a
+    /// driver can try a drift before committing to it.
+    /// </summary>
+    public Car Clone() => (Car)MemberwiseClone();
 
     public override Node3D BuildVisual(int riderIndex) => CarRig.Create(Spec.Body, Spec.Wheelbase);
 
@@ -251,7 +263,9 @@ public sealed class Car : Rideable
             // exactly like the FR cars do. Sim leaves each car to its own layout and power.
             if (arcade)
                 latR *= 1f - (s.Drive == Drivetrain.Front ? ArcadeSustainFf : ArcadeSustain) * pedal
-                    * Mathf.Clamp((Mathf.Abs(slipNow) - 0.12f) / 0.2f, 0f, 1f);
+                    // from 14°, not 7°: a bump in an ordinary bend reaches 7° and was tipping plain
+                    // driving into a drift nobody asked for; a real drift passes 14° at once
+                    * Mathf.Clamp((Mathf.Abs(slipNow) - 0.25f) / 0.2f, 0f, 1f);
             float fyF = -latF * Mathf.Sin(tyreC * Mathf.Atan(TyreB * alphaF));
             float fyR = -latR * Mathf.Sin(tyreC * Mathf.Atan(TyreB * alphaR));
 

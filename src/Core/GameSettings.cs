@@ -125,7 +125,7 @@ public sealed class GameSettings
 
     // --- feel ---
     /// <summary>Sound effects volume, 0..1.</summary>
-    public float SfxVolume { get; set; } = 0.8f;
+    public float SfxVolume { get; set; } = 0.5f;
     /// <summary>Ambience volume, 0..1.</summary>
     public float AmbienceVolume { get; set; } = 0.7f;
 

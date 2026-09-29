@@ -1129,7 +1129,9 @@ public partial class FootPlayer : CharacterBody3D
         }
         else _flight = default;
         // a craft skimming the ground must not be snapped onto it
-        FloorSnapLength = _ride is Flyer ? 0.05f : 0.5f;
+        // a car stays on its wheels over a crest the way a suspension keeps it there; 0.5 m let every
+        // Jura hump launch it for a second at 100 km/h, and a car in the air cannot steer
+        FloorSnapLength = _ride switch { Flyer => 0.05f, Car => 1.2f, _ => 0.5f };
 
         // the body is the machine's size while in it — a helicopter is not a 0.3 m person
         if (_capsule != null && !_sliding)
@@ -2000,7 +2002,7 @@ public partial class FootPlayer : CharacterBody3D
         // In a drift the camera swings part of the way toward where the car is going, so the
         // road stays in view while the nose points at the inside verge. Not when reversing.
         float slip = Mathf.Wrap(_motion.Slip, -Mathf.Pi, Mathf.Pi);
-        _slipCam = Mathf.Lerp(_slipCam, Mathf.Abs(slip) < 1.4f ? slip * 0.55f : 0f, 1f - Mathf.Exp(-4f * dt));
+        _slipCam = Mathf.Lerp(_slipCam, Mathf.Abs(slip) < 1.4f ? slip * _ride.ChaseFollowsTravel : 0f, 1f - Mathf.Exp(-4f * dt));
         float orbit = _lookYaw + _turnLag + _slipCam;
 
         // both are local to the body, which is yaw-only, so the camera stays level
@@ -2038,7 +2040,7 @@ public partial class FootPlayer : CharacterBody3D
         // enough to tip the horizon over
         // Rotated by the same orbit angle as its position, so it still looks straight through the
         // rider's axis and they stay centred while the view swings.
-        _camera.Rotation = new Vector3(_pitch, orbit, _motion.Lean * 0.35f);
+        _camera.Rotation = new Vector3(_pitch + _ride.ChasePitch, orbit, _motion.Lean * 0.35f);
 
         ApplyRideFov(dt);
     }
