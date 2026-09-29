@@ -12,6 +12,9 @@ land cover, water and forest from swissTLM3D.
 
 ## Quick start
 
+**New to the project? Follow [SETUP.md](SETUP.md)**: toolchain versions (Godot 4.7.1 .NET,
+.NET 8 + 9 SDKs), first build, a smoke test, and how to get a small region of terrain.
+
 ```bash
 dotnet build UnitSportSwitzerland.csproj
 ```
