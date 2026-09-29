@@ -113,6 +113,13 @@ public abstract class Flyer : Rideable
     /// <summary>Spinning parts — rotors, propellers. Per rendered frame.</summary>
     public virtual void AnimateFlight(Node3D visual, in FlightMotion m, float dt) { }
 
+    /// <summary>Spool and throttle: what spins the rotor or prop and what the engine sounds like.</summary>
+    public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
+        new(flight.Spool, flight.Control, 0, 0);
+
+    public override void AnimateRemote(Node3D visual, Vector4 pose, float dt) =>
+        AnimateFlight(visual, new FlightMotion { Spool = pose.X, Control = pose.Y }, dt);
+
     /// <summary>Places the visual at the craft's attitude, relative to the yaw-only body.</summary>
     public void Pose(Node3D visual, float bodyYaw, in FlightMotion m)
     {

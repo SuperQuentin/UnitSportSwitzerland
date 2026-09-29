@@ -37,6 +37,8 @@ public partial class VehicleBody : CharacterBody3D
     [Export] public bool EngineOn { get; set; }
     /// <summary>The craft's attitude, for a remote copy that only receives position and yaw.</summary>
     [Export] public Quaternion Tilt { get; set; } = Quaternion.Identity;
+    /// <summary>Rotor / prop spool as the authority simulates it; a remote copy used to guess it from <see cref="EngineOn"/>.</summary>
+    [Export] public float Spool { get; set; }
 
     public ChunkManager? Terrain { get; set; }
 
@@ -58,7 +60,6 @@ public partial class VehicleBody : CharacterBody3D
     private bool _anchored;
     private bool _charred;
     private bool _wasWrecked;
-    private float _spoolView;
     private EngineSynth? _engineSound;
     private GpuParticles3D? _fire, _smoke;
     private readonly List<PhysicsBody3D> _ignoring = new();
@@ -111,7 +112,7 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         var replication = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt" })
+        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool" })
             replication.AddProperty(prop);
         var sync = new MultiplayerSynchronizer { Name = "Sync", RootPath = new NodePath(".."), ReplicationConfig = replication };
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
@@ -324,10 +325,8 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         // what the engine and rotor are doing, as far as this peer can know
-        float spool = IsMultiplayerAuthority() ? _flight.Spool
-            : Mathf.MoveToward(_spoolView, EngineOn && !Wrecked ? 1f : 0f, 0.2f * dt);
-        if (Wrecked) spool = 0f;
-        _spoolView = spool;
+        if (IsMultiplayerAuthority()) Spool = _flight.Spool;
+        float spool = Wrecked ? 0f : Spool;
         if (Ride is Flyer f && !Wrecked) f.AnimateFlight(_visual, _flight with { Spool = spool }, dt);
         if (_engineSound != null)
         {

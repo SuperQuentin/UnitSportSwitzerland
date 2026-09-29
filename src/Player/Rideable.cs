@@ -146,6 +146,18 @@ public abstract class Rideable
     /// <summary>Per-frame visual update — spinning cranks, and so on. Called on the render thread.</summary>
     public virtual void Animate(Node3D visual, in RideMotion motion, float dt) { }
 
+    // ---- what other players see ---------------------------------------------------------
+    // The visual's whole transform (lean, tricks, a craft's attitude) is replicated by FootPlayer
+    // as BodyPose. These two carry the moving PARTS: whatever drives them beyond that transform,
+    // packed into four floats the owner writes and every remote copy reads back. Cars: slip,
+    // steer angle, wheel spin, rpm.
+
+    /// <summary>On the rider's own peer, after <see cref="Animate"/>: the state remote copies need to animate the parts.</summary>
+    public virtual Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) => default;
+
+    /// <summary>On every other peer, each frame: animates the parts from what <see cref="WritePose"/> sent.</summary>
+    public virtual void AnimateRemote(Node3D visual, Vector4 pose, float dt) { }
+
     /// <summary>
     /// Gravity's component along the direction of travel, m/s². Negative when climbing.
     ///
