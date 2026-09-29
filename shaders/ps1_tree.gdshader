@@ -1,6 +1,13 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled;
 
+// Time of day, set once per frame for the whole world by World/DayNight: the sun's direction,
+// the colour of the light, the sky the fog fades into (linear), and 0 day .. 1 night.
+global uniform vec3 world_sun_dir;
+global uniform vec3 world_tint;
+global uniform vec3 world_sky;
+global uniform float world_night;
+
 // Trees are MultiMesh instances sharing one cone; colour comes from the per-instance
 // colour, with the same snap/dither/fog treatment as everything else.
 
@@ -89,7 +96,7 @@ void vertex() {
 
 void fragment() {
     vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
-    float ndl = clamp(dot(n, normalize(vec3(0.45, 0.8, 0.25))), 0.0, 1.0);
+    float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     float light = floor(ndl * 3.0) / 3.0 * 0.45 + 0.6;
     vec3 col = COLOR.rgb * light;
 
@@ -109,10 +116,11 @@ void fragment() {
         }
     }
 
+    col *= world_tint;
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
     float dith = (bayer[bi] / 16.0 - 0.5) / color_levels;
     col = floor((col + dith) * color_levels + 0.5) / color_levels;
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
-    ALBEDO = mix(col, fog_color, fog);
+    ALBEDO = mix(col, world_sky, fog);
 }

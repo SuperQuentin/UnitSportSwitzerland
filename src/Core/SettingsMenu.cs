@@ -75,6 +75,13 @@ public partial class SettingsMenu : PanelContainer
 
         ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
 
+        Section(rows, "Time of day");
+        SliderRow(rows, "Start time", 0, 23.5, 0.5, s.StartHour,
+            v => GameSettings.Current.StartHour = (float)v, v => $"{(int)v:00}:{(int)(v % 1 * 60):00}");
+        SliderRow(rows, "Day length", 0, 120, 1, s.DayLengthMinutes,
+            v => GameSettings.Current.DayLengthMinutes = (float)v,
+            v => v <= 0 ? "stopped" : $"{v:F0} min per day");
+
         Section(rows, "Feel");
         OptionRow(rows, "Movement", new[] { "Game (arcade)", "Simulation (real physics)" }, (int)s.RideProfile,
             i => GameSettings.Current.RideProfile = (RideProfile)i);

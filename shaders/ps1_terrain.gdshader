@@ -1,11 +1,17 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled;
 
+// Time of day, set once per frame for the whole world by World/DayNight: the sun's direction,
+// the colour of the light, the sky the fog fades into (linear), and 0 day .. 1 night.
+global uniform vec3 world_sun_dir;
+global uniform vec3 world_tint;
+global uniform vec3 world_sky;
+global uniform float world_night;
+
 // PS1-style terrain: clip-space vertex snapping, flat shading from screen derivatives,
 // altitude/slope palette bands, quantized sun, Bayer-dithered posterization, distance fog.
 
 uniform vec2 snap_resolution = vec2(640.0, 480.0);
-uniform vec3 sun_direction = vec3(0.45, 0.8, 0.25);
 uniform float light_levels = 5.0;
 uniform float color_levels = 16.0;
 uniform float fog_start = 3500.0;
@@ -91,7 +97,7 @@ void fragment() {
     float rockiness = smoothstep(0.62, 0.38, n.y);
     col = mix(col, vec3(0.30, 0.28, 0.26), rockiness * 0.75);
 
-    float ndl = clamp(dot(n, normalize(sun_direction)), 0.0, 1.0);
+    float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     // cliffs get a harder light ramp so faceting reads as rock rather than soft ground
     float levels = mix(light_levels, 3.0, rockiness);
     float light = floor(ndl * levels) / levels * mix(0.55, 0.75, rockiness) + mix(0.45, 0.25, rockiness);
@@ -103,10 +109,11 @@ void fragment() {
         12.0, 4.0, 14.0, 6.0,
         3.0, 11.0, 1.0, 9.0,
         15.0, 7.0, 13.0, 5.0);
+    col *= world_tint;
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
     float dith = (bayer[bi] / 16.0 - 0.5) / color_levels;
     col = floor((col + dith) * color_levels + 0.5) / color_levels;
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
-    ALBEDO = mix(col, fog_color, fog);
+    ALBEDO = mix(col, world_sky, fog);
 }

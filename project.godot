@@ -41,3 +41,22 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
 scaling_3d/scale=0.75
+
+[shader_globals]
+
+world_sun_dir={
+"type": "vec3",
+"value": Vector3(0.45, 0.8, 0.25)
+}
+world_tint={
+"type": "vec3",
+"value": Vector3(1, 1, 1)
+}
+world_sky={
+"type": "vec3",
+"value": Vector3(0.48, 0.57, 0.71)
+}
+world_night={
+"type": "float",
+"value": 0.0
+}

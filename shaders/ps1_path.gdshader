@@ -1,6 +1,13 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled, blend_mix, depth_draw_opaque;
 
+// Time of day, set once per frame for the whole world by World/DayNight: the sun's direction,
+// the colour of the light, the sky the fog fades into (linear), and 0 day .. 1 night.
+global uniform vec3 world_sun_dir;
+global uniform vec3 world_tint;
+global uniform vec3 world_sky;
+global uniform float world_night;
+
 // The GPX route rendered as a raised path. Flat-shaded from screen derivatives like the
 // terrain, so the top surface and the side walls separate and the strip reads as a solid
 // 3D object rather than a painted line.
@@ -12,7 +19,6 @@ uniform float fog_end = 8000.0;
 uniform vec3 fog_color : source_color = vec3(0.72, 0.78, 0.86);
 uniform vec3 top_color : source_color = vec3(0.98, 0.74, 0.12);
 uniform vec3 side_color : source_color = vec3(0.62, 0.42, 0.06);
-uniform vec3 sun_direction = vec3(0.45, 0.8, 0.25);
 
 // The course line is an orientation aid, and orientation is the last thing you want burnt into
 // a finished video. depth_draw_opaque above goes with the blend mode: this is a raised strip
@@ -43,7 +49,7 @@ void fragment() {
     float flat_face = smoothstep(0.45, 0.85, n.y);
     vec3 col = mix(side_color, top_color, flat_face);
 
-    float ndl = clamp(dot(n, normalize(sun_direction)), 0.0, 1.0);
+    float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     col *= floor(ndl * 4.0) / 4.0 * 0.35 + 0.7;
 
     const float bayer[16] = float[16](
@@ -51,11 +57,12 @@ void fragment() {
         12.0, 4.0, 14.0, 6.0,
         3.0, 11.0, 1.0, 9.0,
         15.0, 7.0, 13.0, 5.0);
+    col *= world_tint;
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
     float dith = (bayer[bi] / 16.0 - 0.5) / color_levels;
     col = floor((col + dith) * color_levels + 0.5) / color_levels;
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
-    ALBEDO = mix(col, fog_color, fog);
+    ALBEDO = mix(col, world_sky, fog);
     ALPHA = alpha;
 }

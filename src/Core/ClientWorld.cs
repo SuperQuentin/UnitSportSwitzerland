@@ -129,14 +129,15 @@ public partial class ClientWorld : Node3D
             return at;
         };
 
-        AddChild(new WorldEnvironment
+        var environment = new Godot.Environment
         {
-            Environment = new Godot.Environment
-            {
-                BackgroundMode = Godot.Environment.BGMode.Color,
-                BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
-            },
-        });
+            BackgroundMode = Godot.Environment.BGMode.Color,
+            BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
+        };
+        AddChild(new WorldEnvironment { Environment = environment });
+
+        // the clock: sun, light colour, sky and night for every shader and the environment
+        AddChild(new World.DayNight(environment));
 
         _spectator = new SpectatorCamera { Name = "SpectatorCamera" };
         AddChild(_spectator);

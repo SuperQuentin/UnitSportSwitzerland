@@ -114,6 +114,11 @@ public sealed class GameSettings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public RideProfile RideProfile { get; set; } = RideProfile.Game;
 
+    // --- world ---
+    /// <summary>Real minutes for a whole day; 0 stops the clock at <see cref="StartHour"/>.</summary>
+    public float DayLengthMinutes { get; set; } = 24f;
+    public float StartHour { get; set; } = 10f;
+
     // --- feel ---
     /// <summary>Sound effects volume, 0..1.</summary>
     public float SfxVolume { get; set; } = 0.8f;
@@ -198,6 +203,8 @@ public sealed class GameSettings
         RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
+        DayLengthMinutes = Math.Clamp(DayLengthMinutes, 0f, 240f);
+        StartHour = Math.Clamp(StartHour, 0f, 23.99f);
         ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
         WindowWidth = Math.Clamp(WindowWidth, 0, 7680);
@@ -223,6 +230,9 @@ public sealed class GameSettings
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
+                // a fixed time of day, for screenshots: --time 21.5 is half past nine at night
+                case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
+                    StartHour = hour; DayLengthMinutes = 0; break;
                 case "--view": ThirdPerson = v != "first" && v != "1st"; break;
                 case "--perf":
                     PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,
