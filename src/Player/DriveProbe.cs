@@ -10,24 +10,26 @@ using UnitSport.World;
 namespace UnitSport.Player;
 
 /// <summary>
-/// <c>godot --path . -- --drivecheck[,out_prefix] [--car N] [--seconds S] [--record out.gpx] [--trace]
-/// [--at E,N] [--traffic 0]</c>
+/// <c>godot --path . -- --drivecheck[,out_prefix] [--cars 0,1,3,4 | --car N] [--seconds S] [--finish M]
+/// [--record prefix] [--trace] [--at E,N] [--traffic 0]</c>
 ///
 /// <para>
-/// Drives a car along the real road from the spawn — the main road, straight on at every junction
-/// — with a scripted driver, filmed by a cinematic trackside camera. It grips through ordinary
-/// bends and drifts a corner only where a drift is <b>actually feasible</b>: before each corner it
-/// runs the car's own model forward on a copy of its state (<see cref="Car.Clone"/>) through a
-/// handbrake entry and a held drift, at the current speed and after braking to 85% and 70%, and
-/// commits to the fastest entry whose simulated line stays on the tarmac without spinning. That is
-/// the difference between drifting a hairpin and drifting into the trees on a fast sweeper.
+/// A race down the real road from the spawn (the main road, straight on at every junction): every
+/// listed car on a grid, all at once, in the same world — they touch, and a hard enough touch puts
+/// one out. Each is driven by its own scripted driver working from its own car:
 /// </para>
-///
+/// <list type="bullet">
+/// <item>the <see cref="RaceLine"/> — outside, apex, outside, inside the tarmac — not the surveyed centreline;</item>
+/// <item>its own speed profile from its grip, power, mass and brakes (<see cref="RaceLine.SpeedProfile"/>);</item>
+/// <item>drift cars drift a tight corner only when a forward simulation of THEIR car (<see cref="Car.Clone"/>)
+/// through a handbrake entry stays on the road; grip cars (<see cref="DriveStyle.Grip"/>) never drift;</item>
+/// <item>a slide nobody planned is caught, never held; off the tarmac the driver eases back on slowly;</item>
+/// <item>a faster car closing on a slower one moves across to pass if there is room, else lifts.</item>
+/// </list>
 /// <para>
-/// Prints every plan and every corner, time off the road and impacts; <c>--record</c> writes the
-/// run as a GPX (with the car's yaw per fix) for the replay and Absolute Cinema. Non-zero exit if
-/// it covered under 500 m, never held a planned drift, or wrecked the car; time off the road is
-/// reported (and driven back from gently), not failed.
+/// Filmed live by a cinematic camera on the leader. <c>--record prefix</c> writes one GPX per car
+/// (nose yaw included) for the replay and Absolute Cinema. Prints the classification. Non-zero exit
+/// if nobody reached the finish or no drift car held a planned drift.
 /// </para>
 /// </summary>
 public partial class DriveProbe : Node
@@ -35,67 +37,77 @@ public partial class DriveProbe : Node
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
     private readonly string? _shotPrefix;
-    private readonly int _car;
+    private readonly int[] _cars;
     private readonly double _seconds;
     private static readonly bool Trace = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trace") >= 0;
 
-    private FootPlayer? _player;
-    private Car? _ride;
-    private bool _mounted, _done, _pathRequested;
-    private double _t, _wait;
+    private bool _done, _pathRequested, _started;
+    private double _t, _wait, _countdown = 2.5;
 
-    // the road to drive: one polyline, arc length at each point, width at each point
+    // the road: its centreline (for "on the tarmac"), and the racing line on it
     private readonly List<Vector3> _path = new();
     private readonly List<float> _arc = new();
     private readonly List<float> _width = new();
+    private RaceLine? _line;
+    private float _finish;
 
-    /// <summary>A narrow Jura pass is not a motorway: the scripted driver tops out here.</summary>
-    private const float MaxSpeed = 30f;
+    /// <summary>A narrow Jura pass is not a motorway: no scripted driver goes faster than this.</summary>
+    private const float MaxSpeed = 36f;
     /// <summary>Only corners tighter than this radius, m, are considered for a drift.</summary>
-    private const float DriftRadius = 160f;
+    private const float DriftRadius = 90f;
     private const float PlanSeconds = 3.5f, SimDt = 1f / 60f;
 
-    /// <summary>Everything the driver decides from, so the same policy drives the car and its simulations.</summary>
-    private struct Driver
-    {
-        public int Near;
-        public bool Drifting;
-        public float Handbrake;
-        public float Bend;
-        public float Cap;
-        public float PeakSlip, DriftTime;
-        /// <summary>A drift the planner chose; a slide that happened by itself is only caught, never held.</summary>
-        public bool Planned;
-        /// <summary>Off the tarmac: ease back onto it slowly, no drifting until back.</summary>
-        public bool Recovering;
-    }
-
-    private Driver _live = new() { Bend = 1f, Cap = MaxSpeed };
-    private float _planTimer, _cooldown, _gripUntil;
-
-    // results
-    private int _drifts, _plans, _feasible, _shots, _impacts;
-    private float _bestDrift, _offRoadTime, _worstOff, _topSpeed;
+    private readonly List<Pilot> _pilots = new();
     private readonly List<string> _log = new();
-    private bool _shotThisDrift;
 
     // cinematic camera
     private Camera3D? _cine;
     private bool _cinePlaced;
     private int _cineCorner = -1;
+    private int _shots;
+    private bool _shotThisDrift;
 
-    // recording
     private readonly string? _record = ArgAfter("--record");
-    private readonly StringBuilder _gpx = new();
-    private double _sinceFix;
+
+    /// <summary>Everything a driver decides from, so the same policy drives the car and its simulations.</summary>
+    private struct Driver
+    {
+        public int Near;
+        public bool Drifting, Planned, Recovering;
+        public float Handbrake, Bend, Cap, Lateral;
+        public float PeakSlip, DriftTime;
+    }
+
+    /// <summary>One car in the race and the driver in it.</summary>
+    private sealed class Pilot
+    {
+        public int Slot;
+        public CarSpec Spec = null!;
+        public FootPlayer Player = null!;
+        public Car Car = null!;
+        public float[] Profile = null!;
+        public Driver D = new() { Bend = 1f, Cap = MaxSpeed };
+        public float PlanTimer, Cooldown, GripUntil;
+        public bool Mounted, Out;
+        public double FinishTime = -1;
+        public int Drifts, Plans, Feasible, Impacts, Contacts;
+        public float BestDrift, OffRoad, Top;
+        public readonly StringBuilder Gpx = new();
+        public double SinceFix;
+        public float Arc;
+    }
 
     public DriveProbe(ChunkManager chunks, WorldOrigin origin, string? shotPrefix, int car, double seconds)
     {
         _chunks = chunks;
         _origin = origin;
         _shotPrefix = shotPrefix;
-        _car = car;
         _seconds = seconds;
+        var list = ArgAfter("--cars");
+        _cars = list != null
+            ? list.Split(',').Select(x => int.TryParse(x, out int i) ? i : 0).ToArray()
+            : new[] { car };
+        _finish = float.TryParse(ArgAfter("--finish"), NumberStyles.Float, CultureInfo.InvariantCulture, out float f) ? f : 2000f;
     }
 
     public static (bool Requested, string? Shot, int Car, double Seconds) ParseArgs()
@@ -104,7 +116,7 @@ public partial class DriveProbe : Node
         bool requested = false;
         string? shot = null;
         int car = 0;
-        double seconds = 90;
+        double seconds = 120;
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i].StartsWith("--drivecheck"))
@@ -132,58 +144,99 @@ public partial class DriveProbe : Node
         if (_done) return;
         float dt = (float)delta;
         _wait += delta;
-        if (_wait > _seconds + 120) { GD.Print("[drive] TIMEOUT"); Finish(2); return; }
-
-        var (e, n) = SpawnPoint.ParseTarget();
-        var at = _origin.ToWorld(e, n, 0);
+        if (_wait > _seconds + 150) { GD.Print("[drive] TIMEOUT"); End(); return; }
 
         if (!_pathRequested)
         {
             if (_chunks.Source == null) return;
             _pathRequested = true;
-            _ = BuildPath(at);
+            var (e, n) = SpawnPoint.ParseTarget();
+            _ = BuildPath(_origin.ToWorld(e, n, 0));
             return;
         }
-        if (_path.Count < 2) return;
+        if (_line == null) return;
 
-        if (_player == null)
+        // the grid: two abreast, 9 m between rows, on the racing line near the start
+        if (_pilots.Count == 0)
         {
-            // the driver is what asks for collision here, so it cannot wait for it
-            if (!_chunks.TryGetHeight(_path[0], out float g)) return;
-            _player = new FootPlayer { Name = "Driver", Terrain = _chunks };
-            AddChild(_player);
-            var dir = Flat(_path[Mathf.Min(8, _path.Count - 1)] - _path[0]);
-            _player.GlobalPosition = _path[0] with { Y = g + 1.2f };
-            _player.Rotation = new Vector3(0, Mathf.Atan2(-dir.X, -dir.Z), 0);
-            _player.Impacted += lost => { if (lost > 2f) { _impacts++; _log.Add($"impact -{lost * 3.6f:F0} km/h at {_arc[_live.Near]:F0} m"); } };
-            _player.Announced += (text, _) => _log.Add($"announce: {text}");
+            if (!_chunks.TryGetHeight(_line.Points[0], out _)) return;
+            for (int k = 0; k < _cars.Length; k++)
+            {
+                var spec = CarCatalog.All[Mathf.Clamp(_cars[k], 0, CarCatalog.All.Count - 1)];
+                float s = 12f + 9f * (_cars.Length / 2 - k / 2);
+                int i = _line.IndexAt(s);
+                var fwd = Flat(_line.PointAt(s + 2f) - _line.PointAt(s - 2f)).Normalized();
+                var left = new Vector3(fwd.Z, 0, -fwd.X);
+                float side = _cars.Length == 1 ? 0f : (k % 2 == 0 ? 1f : -1f) * Mathf.Min(1.6f, _line.Room[i] + 0.5f);
+                var at = _line.Points[i] + left * side;
+                float g = _chunks.TryGetHeight(at, out float gh) ? gh : at.Y;
+                var player = new FootPlayer { Name = $"Driver{k}", Terrain = _chunks };
+                AddChild(player);
+                player.GlobalPosition = at with { Y = g + 1.2f };
+                player.Rotation = new Vector3(0, Mathf.Atan2(-fwd.X, -fwd.Z), 0);
+                var pilot = new Pilot { Slot = k, Spec = spec, Player = player };
+                pilot.D.Lateral = side;
+                player.Impacted += lost =>
+                {
+                    if (lost < 2f) return;
+                    pilot.Impacts++;
+                    _log.Add($"{_t,5:F1}s {spec.Label}: impact -{lost * 3.6f:F0} km/h at {pilot.Arc:F0} m");
+                };
+                player.Announced += (text, _) => _log.Add($"{_t,5:F1}s {spec.Label}: {text}");
+                _pilots.Add(pilot);
+            }
             return;
         }
 
-        if (!_mounted)
+        // mount everyone once they are on the ground, then a countdown
+        if (!_started)
         {
-            if (!_player.IsOnFloor()) return;
-            var kind = (RideKind)(CarCatalog.First + Mathf.Clamp(_car, 0, CarCatalog.All.Count - 1));
-            _mounted = _player.SetRide(kind);
-            _ride = _player.Vehicle as Car;
-            GD.Print(_mounted ? $"[drive] driving {_ride!.Label} along {_arc[^1]:F0} m of road" : "[drive] MOUNT REFUSED");
-            if (!_mounted) { Finish(1); return; }
-            _player.RideControls = Drive;
-            BeginGpx();
+            foreach (var p in _pilots)
+            {
+                if (p.Mounted || !p.Player.IsOnFloor()) continue;
+                p.Mounted = p.Player.SetRide(p.Spec.Kind);
+                p.Car = (p.Player.Vehicle as Car)!;
+                p.Profile = _line.SpeedProfile(p.Spec, Rideable.Arcade, p.Spec.Style == DriveStyle.Grip ? 0.9f : 0.84f, MaxSpeed);
+                var pilot = p;
+                p.Player.RideControls = () => Drive(pilot);
+                BeginGpx(p);
+            }
+            if (_pilots.Any(p => !p.Mounted)) return;
+            _countdown -= delta;
+            if (_countdown > 0) return;
+            _started = true;
+            GD.Print($"[drive] GO: {string.Join(", ", _pilots.Select(p => p.Spec.Label + (p.Spec.Style == DriveStyle.Grip ? " (grip)" : "")))} "
+                + $"over {_finish:F0} m of {_line.Length:F0} m");
             return;
         }
 
         _t += delta;
-        Measure(dt);
-        Cinematic(dt);
-        RecordFix(delta);
-        if (Trace && (int)(_t * 4) != (int)((_t - delta) * 4))
+        foreach (var p in _pilots)
         {
-            var m = _player.Motion;
-            GD.Print($"[drive]   t={_t,5:F2} s={_arc[_live.Near],6:F0} v={m.Speed * 3.6f,4:F0} slip={Mathf.RadToDeg(Wrap(m.Slip)),4:F0} "
-                + $"off={Off(_player.GlobalPosition, _live.Near),5:F1} air={!_player.IsOnFloor()} drift={_live.Drifting} cap={_live.Cap * 3.6f:F0} in={_player.LastRideInput}");
+            if (p.Out) continue;
+            p.Arc = _line.Arc[p.D.Near];
+            p.Top = Mathf.Max(p.Top, p.Player.Motion.Speed);
+            if (Off(p.Player.GlobalPosition) - HalfWidthAt(p.Player.GlobalPosition) > 1.5f) p.OffRoad += dt;
+            if (p.FinishTime < 0 && p.Arc >= _finish) { p.FinishTime = _t; _log.Add($"{_t,5:F1}s {p.Spec.Label} FINISHES"); }
+            if (p.Player.Ride != p.Spec.Kind) { p.Out = true; _log.Add($"{_t,5:F1}s {p.Spec.Label} is OUT (crashed at {p.Arc:F0} m)"); }
+            RecordFix(p, delta);
+            // two cars closer than their bodies are touching
+            foreach (var q in _pilots)
+                if (q.Slot > p.Slot && !q.Out && Flat(q.Player.GlobalPosition - p.Player.GlobalPosition).Length() < 2.1f)
+                {
+                    p.Contacts++; q.Contacts++;
+                }
         }
-        if (_t >= _seconds || _live.Near >= _path.Count - 3 || _player.Ride != _ride!.Kind) End();
+        Cinematic(dt);
+        if (Trace && (int)(_t * 2) != (int)((_t - delta) * 2))
+            foreach (var p in _pilots.Where(p => !p.Out))
+            {
+                var m = p.Player.Motion;
+                GD.Print($"[drive]   t={_t,5:F1} {p.Spec.Label,-12} s={p.Arc,6:F0} v={m.Speed * 3.6f,4:F0}/{p.Profile[p.D.Near] * 3.6f,4:F0} "
+                    + $"slip={Mathf.RadToDeg(Wrap(m.Slip)),4:F0} off={Off(p.Player.GlobalPosition),4:F1} drift={p.D.Drifting}");
+            }
+        bool allDone = _pilots.All(p => p.Out || p.FinishTime >= 0);
+        if (_t >= _seconds || allDone) End();
     }
 
     // ------------------------------------------------------------------------------------
@@ -193,7 +246,7 @@ public partial class DriveProbe : Node
     /// <summary>
     /// The main road from the spawn: the nearest drivable edge, then at every junction the edge of
     /// the same class or better that carries on straightest — both ways from the start, keeping
-    /// the longer run.
+    /// the longer run. Then the racing line on it.
     /// </summary>
     private async Task BuildPath(Vector3 at)
     {
@@ -224,6 +277,7 @@ public partial class DriveProbe : Node
         var a = Walk(graph, best, true, bestS);
         var b = Walk(graph, best, false, best.Length - bestS);
         var pts = a.Count >= b.Count ? a : b;
+        var line = RaceLine.Build(pts.Select(p => p.P).ToList(), pts.Select(p => p.W).ToList(), 0.9f);
         Callable.From(() =>
         {
             float s = 0;
@@ -234,10 +288,10 @@ public partial class DriveProbe : Node
                 _arc.Add(s);
                 _width.Add(pts[i].W);
             }
-            GD.Print($"[drive] route: {best.Class}, {s:F0} m, {pts.Count} points");
-            if (Trace)
-                for (float at2 = 0; at2 < s; at2 += 20f)
-                    GD.Print($"[drive]   road s={at2,5:F0} k={Curvature(at2) * 1000f,6:F1}/km  R={1f / Mathf.Max(Curvature(at2), 1e-4f),6:F0} m  w={_width[_arc.BinarySearch(at2) is var bi && bi < 0 ? ~bi - 1 : bi]:F1}");
+            _line = line;
+            _finish = Mathf.Min(_finish, line.Length - 40f);
+            GD.Print($"[drive] route: {best.Class}, {s:F0} m, racing line {line.Length:F0} m "
+                + $"(max {line.Room.DefaultIfEmpty(0).Max():F1} m of room either side)");
         }).CallDeferred();
     }
 
@@ -294,45 +348,75 @@ public partial class DriveProbe : Node
     // the driver: one policy, for the car and for its simulated futures
     // ------------------------------------------------------------------------------------
 
-    private RideInput Drive()
+    private RideInput Drive(Pilot p)
     {
-        var p = _player!;
         float dt = (float)GetPhysicsProcessDeltaTime();
-        var motion = p.Motion;
-        bool wasDrifting = _live.Drifting, wasPlanned = _live.Planned;
-        var input = Policy(ref _live, p.GlobalPosition, motion, dt);
-        if (wasDrifting && !_live.Drifting) { _live.Planned = wasPlanned; EndDrift(); _live.Planned = false; }
-        Plan(p.GlobalPosition, motion, dt);
+        // On the grid: the handbrake, not the brake — at a standstill the brake pedal selects
+        // reverse and then drives it, and the whole grid reversed off the line during the countdown.
+        if (!_started || p.Out) return new RideInput(0f, 0f, 0f, false, Handbrake: true);
+        var motion = p.Player.Motion;
+        bool wasDrifting = p.D.Drifting, wasPlanned = p.D.Planned;
+        Traffic(p);
+        var input = Policy(p, ref p.D, p.Player.GlobalPosition, motion, dt);
+        if (wasDrifting && !p.D.Drifting) EndDrift(p, wasPlanned);
+        Plan(p, p.Player.GlobalPosition, motion, dt);
         return input;
     }
 
-    private RideInput Policy(ref Driver d, Vector3 pos, in RideMotion m, float dt)
+    /// <summary>
+    /// Racecraft: closing on a car ahead, move to the side of the line it is not on if the road has
+    /// room there, otherwise lift to its speed. Keeps a clean race clean; contact still happens.
+    /// </summary>
+    private void Traffic(Pilot p)
     {
+        float want = 0f;
+        p.D.Cap = MaxSpeed;
+        var me = p.Player.GlobalPosition;
+        var fwd = new Basis(Vector3.Up, p.Player.Motion.Yaw + p.Player.Motion.Slip) * Vector3.Forward;
+        foreach (var q in _pilots)
+        {
+            if (q == p || q.Out) continue;
+            var rel = Flat(q.Player.GlobalPosition - me);
+            float ahead = rel.Dot(Flat(fwd));
+            if (ahead < 2f || ahead > 22f) continue;
+            var left = new Vector3(fwd.Z, 0, -fwd.X);
+            float lat = rel.Dot(left);
+            if (Mathf.Abs(lat) > 2.6f) continue;
+            float room = _line!.Room[p.D.Near] + 1f;
+            // go round on the side away from it, if the tarmac allows; else sit behind it
+            float target = lat > 0 ? -room : room;
+            if (room > 1.8f) want = target;
+            else p.D.Cap = Mathf.Min(p.D.Cap, q.Player.Motion.Speed + (ahead - 8f) * 0.5f);
+        }
+        p.D.Lateral = Mathf.MoveToward(p.D.Lateral, want, 1.2f * (float)GetPhysicsProcessDeltaTime());
+    }
+
+    private RideInput Policy(Pilot p, ref Driver d, Vector3 pos, in RideMotion m, float dt)
+    {
+        var line = _line!;
         float v = m.Speed;
         float slip = Wrap(m.Slip);
-        while (d.Near < _path.Count - 2 && Flat(_path[d.Near + 1] - pos).Length() < Flat(_path[d.Near] - pos).Length()) d.Near++;
-        float s0 = _arc[d.Near];
+        while (d.Near < line.Points.Count - 2 && Flat(line.Points[d.Near + 1] - pos).Length() < Flat(line.Points[d.Near] - pos).Length()) d.Near++;
+        float s0 = line.Arc[d.Near];
 
-        // steer the TRAVEL toward a point ahead: in a drift the nose points elsewhere
-        float look = Mathf.Clamp(v * 0.75f, 7f, 28f);
+        // steer the TRAVEL toward a point ahead on the line (plus any overtaking offset)
+        float look = Mathf.Clamp(v * 0.7f, 7f, 30f);
+        var ahead = line.PointAt(s0 + look);
+        if (d.Lateral != 0f)
+        {
+            var t = Flat(line.PointAt(s0 + look + 2f) - line.PointAt(s0 + look - 2f)).Normalized();
+            ahead += new Vector3(t.Z, 0, -t.X) * d.Lateral;
+        }
         var travel = new Basis(Vector3.Up, m.Yaw + m.Slip) * Vector3.Forward;
-        float angle = SignedAngle(Flat(travel), Flat(PointAt(s0 + look) - pos));   // + = target to the left
+        float angle = SignedAngle(Flat(travel), Flat(ahead - pos));   // + = target to the left
         // gentler hands at speed: full lock at 90 km/h to fix a metre of line is what starts a slide
         float steer = Mathf.Clamp(-angle * 2.6f * Mathf.Clamp(15f / Mathf.Max(v, 1f), 0.4f, 1f), -1f, 1f);
 
-        // speed from the curvature ahead: what the tyres hold round the tightest bend in braking reach
-        float want = Mathf.Min(MaxSpeed, d.Cap);
-        for (float a = 0; a < 120f; a += 4f)
-        {
-            float corner = Mathf.Sqrt(7.5f / Mathf.Max(Curvature(s0 + a), 1e-4f));
-            // over a crest the road drops away faster than gravity can follow above √(g·R)
-            corner = Mathf.Min(corner, Mathf.Sqrt(Rideable.Gravity * 0.9f / Mathf.Max(Crest(s0 + a), 1e-4f)));
-            want = Mathf.Min(want, Mathf.Sqrt(corner * corner + 2f * 6f * a));
-        }
+        // this car's own speed along its own profile, a beat ahead
+        float want = Mathf.Min(d.Cap, Mathf.Min(p.Profile[d.Near], p.Profile[line.IndexAt(s0 + v * 0.3f)]));
 
-        // Off the tarmac: everyone goes off sometimes. Come back to it gently — slow, soft hands,
-        // no drifting — rather than yanking the wheel at 90 km/h, which is what starts the next slide.
-        float past = Off(pos, d.Near) - _width[d.Near] * 0.5f;
+        // off the tarmac: come back to it gently — slow, soft hands, no drifting
+        float past = Off(pos) - HalfWidthAt(pos);
         if (past > 1f) d.Recovering = true;
         else if (past < 0.2f) d.Recovering = false;
         if (d.Recovering)
@@ -350,9 +434,8 @@ public partial class DriveProbe : Node
         {
             d.Handbrake -= dt;
             handbrake = d.Handbrake > 0;
-            // which way the road bends here (+ left); hold the nose 30° into it while it lasts
-            float bend = SignedAngle(Flat(PointAt(s0 + 5f) - PointAt(s0 - 5f)), Flat(PointAt(s0 + 25f) - PointAt(s0 + 5f)));
-            if (Mathf.Abs(bend) > 0.04f) d.Bend = Mathf.Sign(bend);
+            float k = line.Curvature[d.Near];
+            if (Mathf.Abs(k) > 0.002f) d.Bend = Mathf.Sign(k);
             float soon = MaxCurvature(s0, 0f, 24f);
             float hold = d.Planned && soon > 1f / (DriftRadius * 1.6f) ? -d.Bend * 0.52f : 0f;
             if (handbrake) steer = -d.Bend * 0.9f;
@@ -360,7 +443,7 @@ public partial class DriveProbe : Node
             {
                 // the wheel holds the ANGLE (minus what the Game assist already counter-steers)...
                 float wheel = slip + 1.5f * (slip - hold) - 0.12f * m.YawRate - (Rideable.Arcade ? 0.45f * slip : 0f);
-                steer = Mathf.Clamp(-wheel / _ride!.Spec.MaxSteer, -1f, 1f);
+                steer = Mathf.Clamp(-wheel / p.Spec.MaxSteer, -1f, 1f);
             }
             // ...and the gas holds the LINE: more gas slides wide, less lets the rears bite
             throttle = handbrake ? 0f : Mathf.Clamp(0.75f - 2.5f * angle * d.Bend + (want - v) * 0.03f, 0.15f, 1f);
@@ -381,49 +464,45 @@ public partial class DriveProbe : Node
     /// <summary>
     /// Decides whether the corner ahead gets drifted, by trying it: the car's own model on a copy of
     /// its state, driven by the same policy through a handbrake entry and a held drift. Fastest
-    /// feasible entry wins; if none stays on the road, the corner is taken on grip.
+    /// feasible entry wins; if none stays on the road, the corner is taken on grip. Grip cars never
+    /// ask.
     /// </summary>
-    private void Plan(Vector3 pos, in RideMotion m, float dt)
+    private void Plan(Pilot p, Vector3 pos, in RideMotion m, float dt)
     {
-        _planTimer -= dt;
-        _cooldown -= dt;
-        float s0 = _arc[_live.Near];
-        if (_live.Drifting || _live.Recovering || _planTimer > 0 || _cooldown > 0 || s0 < _gripUntil) return;
-        _planTimer = 0.2f;
-        if (m.Speed < 12f || MaxCurvature(s0, 10f, 40f) < 1f / DriftRadius) { _live.Cap = MaxSpeed; return; }
+        if (p.Spec.Style == DriveStyle.Grip) return;
+        p.PlanTimer -= dt;
+        p.Cooldown -= dt;
+        float s0 = _line!.Arc[p.D.Near];
+        if (p.D.Drifting || p.D.Recovering || p.PlanTimer > 0 || p.Cooldown > 0 || s0 < p.GripUntil) return;
+        p.PlanTimer = 0.2f;
+        if (m.Speed < 12f || MaxCurvature(s0, 10f, 40f) < 1f / DriftRadius) return;
 
-        _plans++;
+        p.Plans++;
         string tried = "";
         foreach (float factor in new[] { 1f, 0.85f, 0.7f })
         {
-            var (ok, off, peak, entered) = Simulate(pos, m, m.Speed * factor);
+            var (ok, off, peak, entered) = Simulate(p, pos, m, m.Speed * factor);
             tried += $" {factor * 100:F0}%: off {off:F1} m, peak {Mathf.RadToDeg(peak):F0}°{(entered ? "" : " (no entry)")};";
             if (!ok) continue;
-            _feasible++;
+            p.Feasible++;
             if (factor == 1f)
             {
-                _live.Drifting = true;
-                _live.Planned = true;
-                _live.Handbrake = 0.28f;
-                _log.Add($"plan at {s0:F0} m: DRIFT now at {m.Speed * 3.6f:F0} km/h (sim peak {Mathf.RadToDeg(peak):F0}°, off {off:F1} m)");
+                p.D.Drifting = true;
+                p.D.Planned = true;
+                p.D.Handbrake = 0.28f;
+                _log.Add($"{_t,5:F1}s {p.Spec.Label}: DRIFT at {s0:F0} m, {m.Speed * 3.6f:F0} km/h (sim peak {Mathf.RadToDeg(peak):F0}°)");
             }
-            else
-            {
-                // brake to the speed the simulation drifted at; the next plan, slower, commits
-                _live.Cap = m.Speed * factor;
-                _log.Add($"plan at {s0:F0} m: brake to {_live.Cap * 3.6f:F0} km/h, then drift");
-            }
+            else p.D.Cap = m.Speed * factor;   // brake to the speed the simulation drifted at
             return;
         }
-        _log.Add($"plan at {s0:F0} m: GRIP, no feasible drift:{tried}");
-        _live.Cap = MaxSpeed;
-        _gripUntil = s0 + 60f;
+        if (Trace) _log.Add($"{_t,5:F1}s {p.Spec.Label}: grip at {s0:F0} m:{tried}");
+        p.GripUntil = s0 + 60f;
     }
 
-    private (bool Ok, float Off, float Peak, bool Entered) Simulate(Vector3 pos, RideMotion m, float cap)
+    private (bool Ok, float Off, float Peak, bool Entered) Simulate(Pilot p, Vector3 pos, RideMotion m, float cap)
     {
-        var car = _ride!.Clone();
-        var d = _live;
+        var car = p.Car.Clone();
+        var d = p.D;
         d.Cap = cap;
         d.PeakSlip = 0;
         d.DriftTime = 0;
@@ -433,159 +512,145 @@ public partial class DriveProbe : Node
         {
             if (!entered && m.Speed <= cap + 0.5f) { entered = true; d.Drifting = true; d.Planned = true; d.Handbrake = 0.28f; }
             if (!entered && (entryWait += SimDt) > 2f) break;
-            var input = Policy(ref d, pos, m, SimDt);
-            float s = _arc[d.Near];
-            float grade = (PointAt(s + 3f).Y - PointAt(s - 3f).Y) / 6f;
+            var input = Policy(p, ref d, pos, m, SimDt);
+            float s = _line!.Arc[d.Near];
+            float grade = (_line.PointAt(s + 3f).Y - _line.PointAt(s - 3f).Y) / 6f;
             car.Step(input, new RideGround(true, grade), SimDt, ref m);
             var travel = new Basis(Vector3.Up, m.Yaw + m.Slip) * Vector3.Forward;
             pos += travel * m.Speed * SimDt;
-            if (entered) maxOff = Mathf.Max(maxOff, Off(pos, d.Near) - _width[d.Near] * 0.5f);
+            if (entered) maxOff = Mathf.Max(maxOff, Off(pos) - HalfWidthAt(pos));
             if (Mathf.Abs(Wrap(m.Slip)) > 1.35f) return (false, maxOff, d.PeakSlip, entered);
             if (entered && !d.Drifting && t > 1f) break;   // caught and straight: the drift is done
         }
-        // half a metre INSIDE the edge: the plan runs on the road's centreline heights, and the real
-        // camber and bumps have been measured to put the car 3-6 m wider than a plan allowed 0.8 m past it
+        // half a metre INSIDE the edge: the plan runs on the line's heights, and the real camber
+        // and bumps put the car wider than a plan that allowed itself the whole road
         bool ok = entered && maxOff < -0.5f && d.PeakSlip > 0.35f;
         return (ok, maxOff, d.PeakSlip, entered);
     }
 
-    private void EndDrift()
+    private void EndDrift(Pilot p, bool planned)
     {
-        float deg = Mathf.RadToDeg(_live.PeakSlip);
-        _log.Add($"{(_live.Planned ? "DRIFT" : "caught a slide")} at {_arc[_live.Near]:F0} m: peak {deg:F0}°, {_live.DriftTime:F1} s past 15°");
-        if (_live.Planned && deg > 20f && _live.DriftTime > 0.5f) _drifts++;
-        _bestDrift = Mathf.Max(_bestDrift, deg);
-        _live.PeakSlip = 0;
-        _live.DriftTime = 0;
-        _live.Cap = MaxSpeed;
-        _cooldown = 1.2f;
+        float deg = Mathf.RadToDeg(p.D.PeakSlip);
+        if (planned && deg > 20f && p.D.DriftTime > 0.5f) p.Drifts++;
+        if (planned) _log.Add($"{_t,5:F1}s {p.Spec.Label}: drift done, peak {deg:F0}°, {p.D.DriftTime:F1} s past 15°");
+        p.BestDrift = Mathf.Max(p.BestDrift, planned ? deg : 0f);
+        p.D.PeakSlip = 0;
+        p.D.DriftTime = 0;
+        p.Cooldown = 1.2f;
     }
 
     // ------------------------------------------------------------------------------------
-    // measuring, filming, recording
+    // filming, recording, results
     // ------------------------------------------------------------------------------------
-
-    private void Measure(float dt)
-    {
-        var p = _player!;
-        _topSpeed = Mathf.Max(_topSpeed, p.Motion.Speed);
-        float over = Off(p.GlobalPosition, _live.Near) - _width[_live.Near] * 0.5f;
-        _worstOff = Mathf.Max(_worstOff, over);
-        if (over > 1.5f) _offRoadTime += dt;
-
-        // a picture at the peak of the first few drifts, from the cinematic camera
-        float slip = Mathf.Abs(Wrap(p.Motion.Slip));
-        if (_shotPrefix != null && _live.Drifting && _shots < 4 && slip > 0.45f && _live.DriftTime > 0.3f && !_shotThisDrift)
-        {
-            _shotThisDrift = true;
-            string file = $"{_shotPrefix}_drift{++_shots}.png";
-            var image = GetViewport().GetTexture().GetImage();
-            if (image.SavePng(file) == Error.Ok) GD.Print($"[drive] wrote {file} ({Mathf.RadToDeg(slip):F0}° at {p.Motion.Speed * 3.6f:F0} km/h)");
-        }
-        if (!_live.Drifting) _shotThisDrift = false;
-    }
 
     /// <summary>
-    /// The test is filmed: for each drifted corner a camera stands on the outside of the bend a
-    /// little ahead and pans with the car through it; between corners it hangs back and above at
-    /// three-quarters. It is placed on its first frame (never swept in from the world origin), never
-    /// sits under the ground, and dissolves the trees between itself and the car with the same
-    /// sightline cut the replay cameras use, so a forest never blocks the shot.
+    /// The race is filmed on its leader: for each drifted corner a camera stands on the outside of
+    /// the bend a little ahead and pans with the car through it; otherwise it hangs back and above
+    /// at three-quarters. Placed on its first frame, never under the ground, and it dissolves the
+    /// trees in its sightline, so a forest never blocks the shot.
     /// </summary>
     private void Cinematic(float dt)
     {
-        var p = _player!;
+        var lead = _pilots.Where(p => !p.Out).OrderByDescending(p => p.Arc).FirstOrDefault();
+        if (lead == null) return;
         if (_cine == null)
         {
             _cine = new Camera3D { Name = "Cinematic", Fov = 55f, Far = 20000f };
             AddChild(_cine);
         }
+        var p = lead.Player;
         var car = p.GlobalPosition + Vector3.Up * 0.8f;
-        int corner = (int)(_arc[_live.Near] / 60f);
-        if (_live.Drifting && _live.Handbrake > 0.2f && corner != _cineCorner)
+        int corner = (int)(lead.Arc / 60f);
+        if (lead.D.Drifting && lead.D.Handbrake > 0.2f && corner != _cineCorner)
         {
-            // outside of the bend, 25 m on: the side the road turns away from
             _cineCorner = corner;
-            float s = _arc[_live.Near] + 25f;
-            var a = PointAt(s - 4f); var b = PointAt(s + 4f); var c = PointAt(s + 12f);
+            float s = lead.Arc + 25f;
+            var a = _line!.PointAt(s - 4f); var b = _line.PointAt(s + 4f); var c = _line.PointAt(s + 12f);
             var right = Flat(b - a).Normalized().Cross(Vector3.Up);
             float side = SignedAngle(Flat(b - a), Flat(c - b)) > 0 ? 1f : -1f;
-            _cine.GlobalPosition = b + right * side * (_width[_live.Near] * 0.5f + 7f) + Vector3.Up * 2.5f;
+            _cine.GlobalPosition = b + right * side * (HalfWidthAt(b) + 7f) + Vector3.Up * 2.5f;
         }
-        else if (!_live.Drifting)
+        else if (!lead.D.Drifting)
         {
-            // three-quarter chase, high: behind, to the left and above
-            var want = car + new Basis(Vector3.Up, p.Motion.Yaw + p.Motion.Slip) * new Vector3(-4f, 5f, 9f);
+            var want = car + new Basis(Vector3.Up, p.Motion.Yaw + p.Motion.Slip) * new Vector3(-4f, 5f, 11f);
             _cine.GlobalPosition = _cinePlaced ? _cine.GlobalPosition.Lerp(want, 1f - Mathf.Exp(-3f * dt)) : want;
         }
         _cinePlaced = true;
-
-        // never under the ground: at least 1.5 m of air under the lens
         var cp = _cine.GlobalPosition;
         if (_chunks.TryGetHeight(cp, out float ground) && cp.Y < ground + 1.5f) _cine.GlobalPosition = cp with { Y = ground + 1.5f };
-
         var look = car - _cine.GlobalPosition;
         if (look.LengthSquared() > 0.25f && Mathf.Abs(look.Normalized().Y) < 0.98f)
             _cine.GlobalBasis = Basis.LookingAt(look.Normalized(), Vector3.Up);
         _chunks.SetSightlineCut(_cine.GlobalPosition, car, 3f);
         _cine.Current = true;
+
+        float slip = Mathf.Abs(Wrap(p.Motion.Slip));
+        if (_shotPrefix != null && lead.D.Drifting && lead.D.Planned && _shots < 4 && slip > 0.45f && lead.D.DriftTime > 0.3f && !_shotThisDrift)
+        {
+            _shotThisDrift = true;
+            string file = $"{_shotPrefix}_drift{++_shots}.png";
+            if (GetViewport().GetTexture().GetImage().SavePng(file) == Error.Ok)
+                GD.Print($"[drive] wrote {file} ({lead.Spec.Label}, {Mathf.RadToDeg(slip):F0}° at {p.Motion.Speed * 3.6f:F0} km/h)");
+        }
+        if (!lead.D.Drifting) _shotThisDrift = false;
     }
 
-    private void BeginGpx()
+    private void BeginGpx(Pilot p)
     {
         if (_record == null) return;
-        _gpx.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+        p.Gpx.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             .Append("<gpx version=\"1.1\" creator=\"UnitSportSwitzerland drivecheck\" xmlns=\"http://www.topografix.com/GPX/1/1\" ")
             .Append("xmlns:us=\"https://github.com/SuperQuentin/UnitSportSwitzerland\">\n")
-            .Append($"<trk><name>{_ride!.Label} over the pass</name><type>car:{(int)_ride.Kind - CarCatalog.First}</type><trkseg>\n");
+            .Append($"<trk><name>{p.Spec.Label}</name><type>car:{(int)p.Spec.Kind - CarCatalog.First}</type><trkseg>\n");
     }
 
     /// <summary>
     /// One fix every 0.2 s. The yaw (the NOSE, not the direction of travel) rides in an extension:
     /// a track only knows where the car went, and a drift is exactly where the two differ.
     /// </summary>
-    private void RecordFix(double delta)
+    private void RecordFix(Pilot p, double delta)
     {
         if (_record == null) return;
-        _sinceFix += delta;
-        if (_sinceFix < 0.2) return;
-        _sinceFix = 0;
-        var p = _player!;
-        var (e, n) = _origin.ToLv95(p.GlobalPosition);
+        p.SinceFix += delta;
+        if (p.SinceFix < 0.2) return;
+        p.SinceFix = 0;
+        var (e, n) = _origin.ToLv95(p.Player.GlobalPosition);
         var (lat, lon) = SwissProjection.ToWgs84(e, n);
         var ic = CultureInfo.InvariantCulture;
         var time = new System.DateTime(2026, 9, 30, 12, 0, 0, System.DateTimeKind.Utc).AddSeconds(_t);
-        _gpx.Append(ic, $"<trkpt lat=\"{lat:F7}\" lon=\"{lon:F7}\"><ele>{p.GlobalPosition.Y:F1}</ele>")
+        p.Gpx.Append(ic, $"<trkpt lat=\"{lat:F7}\" lon=\"{lon:F7}\"><ele>{p.Player.GlobalPosition.Y:F1}</ele>")
             .Append(ic, $"<time>{time:yyyy-MM-ddTHH:mm:ss.fffZ}</time>")
-            .Append(ic, $"<extensions><us:yaw>{p.Motion.Yaw:F4}</us:yaw></extensions></trkpt>\n");
+            .Append(ic, $"<extensions><us:yaw>{p.Player.Motion.Yaw:F4}</us:yaw></extensions></trkpt>\n");
     }
 
     private void End()
     {
-        if (_live.PeakSlip > 0) EndDrift();
-        var p = _player!;
-        bool wrecked = p.Ride != _ride!.Kind;
-        float covered = _arc[_live.Near];
+        if (_done) return;
         foreach (var line in _log) GD.Print($"[drive]   {line}");
-        GD.Print($"[drive] {_ride.Label}: {covered:F0} m in {_t:F0} s (avg {covered / Mathf.Max((float)_t, 1f) * 3.6f:F0} km/h, "
-            + $"top {_topSpeed * 3.6f:F0} km/h), {_plans} corners planned, {_feasible} drift plans feasible, "
-            + $"{_drifts} held drifts, best {_bestDrift:F0}°, off road {_offRoadTime:F1} s (worst {_worstOff:F1} m past the edge), "
-            + $"{_impacts} impacts, car {(wrecked ? "WRECKED" : $"{p.VehicleHealth:F0}/{_ride.MaxHealth:F0} HP")}");
-        // Going off happens to everyone: it is reported, not failed. What must hold is that the car
-        // got down the pass, drifted where the plan said it could, and came back in one piece.
-        bool ok = covered > 500f && _drifts > 0 && !wrecked;
-        GD.Print(ok ? "[drive] RESULT: drove the pass and drifted the corners it could" : "[drive] RESULT: FAILED");
-        if (_shotPrefix != null)
+        GD.Print("[drive] classification:");
+        int pos = 0;
+        foreach (var p in _pilots.OrderBy(p => p.FinishTime < 0 ? 1e9 - p.Arc : p.FinishTime))
         {
-            var image = GetViewport().GetTexture().GetImage();
-            if (image.SavePng($"{_shotPrefix}_end.png") == Error.Ok) GD.Print($"[drive] wrote {_shotPrefix}_end.png");
+            pos++;
+            string result = p.FinishTime >= 0 ? $"{p.FinishTime:F1} s" : p.Out ? $"OUT at {p.Arc:F0} m" : $"{p.Arc:F0} m";
+            GD.Print($"[drive]   {pos}. {p.Spec.Label,-14} {(p.Spec.Style == DriveStyle.Grip ? "grip " : "drift")} {result,-14} "
+                + $"avg {p.Arc / Mathf.Max((float)(p.FinishTime >= 0 ? p.FinishTime : _t), 1f) * 3.6f:F0} km/h, top {p.Top * 3.6f:F0}, "
+                + $"{p.Drifts} held drifts (best {p.BestDrift:F0}°), {p.Plans} corners planned / {p.Feasible} feasible, "
+                + $"off road {p.OffRoad:F1} s, {p.Impacts} impacts, {p.Contacts / 60f:F1} s in contact");
+            if (_record != null)
+            {
+                p.Gpx.Append("</trkseg></trk></gpx>\n");
+                string file = $"{_record}_{(int)p.Spec.Kind - CarCatalog.First}.gpx";
+                System.IO.File.WriteAllText(file, p.Gpx.ToString());
+                GD.Print($"[drive]      recorded {file}");
+            }
         }
-        if (_record != null)
-        {
-            _gpx.Append("</trkseg></trk></gpx>\n");
-            System.IO.File.WriteAllText(_record, _gpx.ToString());
-            GD.Print($"[drive] recorded {_record}");
-        }
+        bool anyFinish = _pilots.Any(p => p.FinishTime >= 0);
+        bool driftOk = _pilots.All(p => p.Spec.Style == DriveStyle.Grip) || _pilots.Any(p => p.Drifts > 0);
+        bool ok = anyFinish && driftOk;
+        GD.Print(ok ? "[drive] RESULT: raced to the finish, drifting where it fit" : "[drive] RESULT: FAILED");
+        if (_shotPrefix != null && GetViewport().GetTexture().GetImage().SavePng($"{_shotPrefix}_end.png") == Error.Ok)
+            GD.Print($"[drive] wrote {_shotPrefix}_end.png");
         Finish(ok ? 0 : 1);
     }
 
@@ -599,46 +664,42 @@ public partial class DriveProbe : Node
     // geometry
     // ------------------------------------------------------------------------------------
 
-    private Vector3 PointAt(float s)
-    {
-        if (s <= 0) return _path[0];
-        if (s >= _arc[^1]) return _path[^1];
-        int i = _arc.BinarySearch(s);
-        if (i < 0) i = ~i - 1;
-        float span = _arc[i + 1] - _arc[i];
-        return _path[i].Lerp(_path[i + 1], span > 1e-4f ? (s - _arc[i]) / span : 0f);
-    }
-
-    /// <summary>Heading change per metre over ±8 m around arc length s.</summary>
-    private float Curvature(float s)
-    {
-        var a = Flat(PointAt(s) - PointAt(s - 8f));
-        var b = Flat(PointAt(s + 8f) - PointAt(s));
-        if (a.LengthSquared() < 1f || b.LengthSquared() < 1f) return 0f;
-        return Mathf.Abs(SignedAngle(a, b)) / 16f;
-    }
-
-    /// <summary>Vertical curvature of a crest (1/m, 0 in a dip) over ±10 m around s.</summary>
-    private float Crest(float s)
-    {
-        float y0 = PointAt(s - 10f).Y, y1 = PointAt(s).Y, y2 = PointAt(s + 10f).Y;
-        return Mathf.Max(0f, (2f * y1 - y0 - y2) / 100f);
-    }
-
     private float MaxCurvature(float s, float from, float to)
     {
         float k = 0;
-        for (float d = from; d <= to; d += 4f) k = Mathf.Max(k, Curvature(s + d));
+        for (float d = from; d <= to; d += 4f) k = Mathf.Max(k, Mathf.Abs(_line!.Curvature[_line.IndexAt(s + d)]));
         return k;
     }
 
-    /// <summary>Distance from the road centreline near index <paramref name="near"/>.</summary>
-    private float Off(Vector3 pos, int near)
+    /// <summary>Distance from the road centreline, searched near the closest point.</summary>
+    private float Off(Vector3 pos)
     {
+        int near = NearestCentre(pos);
         float off = float.MaxValue;
-        for (int i = Mathf.Max(0, near - 6); i < Mathf.Min(_path.Count - 1, near + 6); i++)
+        for (int i = Mathf.Max(0, near - 3); i < Mathf.Min(_path.Count - 1, near + 3); i++)
             off = Mathf.Min(off, DistanceToSegment(Flat(pos), Flat(_path[i]), Flat(_path[i + 1])));
         return off;
+    }
+
+    private float HalfWidthAt(Vector3 pos) => _width[NearestCentre(pos)] * 0.5f;
+
+    /// <summary>Nearest centreline point: a coarse stride over the 2 m polyline, then a fine search around it.</summary>
+    private int NearestCentre(Vector3 pos)
+    {
+        int i = 0;
+        float best = float.MaxValue;
+        for (int k = 0; k < _path.Count; k += 16)
+        {
+            float d = Flat(_path[k] - pos).LengthSquared();
+            if (d < best) { best = d; i = k; }
+        }
+        int c = i;
+        for (int k = Mathf.Max(0, c - 16); k < Mathf.Min(_path.Count, c + 16); k++)
+        {
+            float d = Flat(_path[k] - pos).LengthSquared();
+            if (d < best) { best = d; i = k; }
+        }
+        return i;
     }
 
     private static float Wrap(float a) => Mathf.Wrap(a, -Mathf.Pi, Mathf.Pi);
