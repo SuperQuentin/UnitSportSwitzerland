@@ -1,0 +1,144 @@
+using Godot;
+using UnitSport.Core;
+using UnitSport.Player;
+using UnitSport.Terrain;
+
+namespace UnitSport.World;
+
+/// <summary>
+/// <c>godot --path . -- --treecheck[,out.png] [--at E,N]</c>: waits for the trunk pool to fill
+/// around a player, picks a real tree 20-40 m away on ground level enough to ride at, puts the
+/// player 25 m short of it on a bike and rides straight at it. Passes when the rider never gets
+/// through the trunk and an impact is registered. Prints how many trunks are live and what the pool
+/// costs per physics frame.
+/// </summary>
+public partial class TreeCheck : Node
+{
+    private readonly ChunkManager _chunks;
+    private readonly WorldOrigin _origin;
+    private readonly string? _shot;
+    private FootPlayer? _player;
+    private double _t;
+    private int _phase;
+    private Vector3 _tree, _dir;
+    private float _radius, _closest = float.MaxValue, _impact, _topSpeed;
+
+    public TreeCheck(ChunkManager chunks, WorldOrigin origin, string? shot)
+    {
+        _chunks = chunks;
+        _origin = origin;
+        _shot = shot;
+    }
+
+    public static (bool Requested, string? Shot) ParseArgs()
+    {
+        foreach (var a in OS.GetCmdlineUserArgs())
+            if (a.StartsWith("--treecheck"))
+            {
+                var parts = a.Split(',');
+                return (true, parts.Length > 1 ? parts[1] : null);
+            }
+        return (false, null);
+    }
+
+    public override void _PhysicsProcess(double delta)
+    {
+        _t += delta;
+        if (_t > 150) { GD.Print("[treecheck] TIMEOUT"); Finish(2); return; }
+        var pool = TreeColliders.Instance;
+
+        switch (_phase)
+        {
+            case 0:   // a player on the ground at the spawn
+            {
+                var (e, n) = SpawnPoint.ParseTarget();
+                var at = _origin.ToWorld(e, n, 0);
+                if (!_chunks.TryGetHeight(at, out float g)) return;
+                _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+                AddChild(_player);
+                _player.GlobalPosition = new Vector3(at.X, g + 1.5f, at.Z);
+                _player.Impacted += lost => _impact += lost;   // reported a slice per frame
+                _phase = 1;
+                _t = 0;
+                return;
+            }
+            case 1:   // the pool fills in around it; pick a tree to hit
+            {
+                if (pool == null || _t < 3 || pool.LiveTrunks == 0 || !_player!.IsOnFloor()) return;
+                var me = _player.GlobalPosition;
+                for (float min = 20f; min < 40f; min += 1f)
+                {
+                    if (pool.NearestLive(me, min) is not { } t) break;
+                    float d = Flat(t.Base - me).Length();
+                    if (d > 40f) break;
+                    var dir = Flat(t.Base - me).Normalized();
+                    var start = t.Base - dir * 25f;
+                    if (!_chunks.TryGetHeight(start, out float gs) || Mathf.Abs(gs - t.Base.Y) > 3f) continue;
+                    if (Blocked(pool, start, t.Base, dir)) continue;
+                    _tree = t.Base; _radius = t.Radius; _dir = dir;
+                    _player.GlobalPosition = start with { Y = gs + 1.2f };
+                    _player.Rotation = new Vector3(0, Mathf.Atan2(-dir.X, -dir.Z), 0);
+                    _player.Velocity = Vector3.Zero;
+                    GD.Print($"[treecheck] {pool.LiveTrunks} trunks live, pool {pool.LastMs:F2} ms this frame "
+                        + $"(max {pool.MaxMs:F2}); riding at a trunk r={_radius:F2} m, 25 m ahead, {Mathf.Abs(gs - t.Base.Y):F1} m climb");
+                    pool.MaxMs = 0;   // from here on: steady state while riding, not the first fill
+                    _phase = 2;
+                    _t = 0;
+                    return;
+                }
+                if (_t > 20) { GD.Print("[treecheck] no rideable tree 20-40 m from the spawn; try another --at"); Finish(1); }
+                return;
+            }
+            case 2:   // mount once settled
+                if (_t < 0.5 || !_player!.IsOnFloor()) return;
+                if (!_player.SetRide(RideKind.RoadBike)) { GD.Print("[treecheck] MOUNT REFUSED"); Finish(1); return; }
+                _player.RideControls = () =>
+                {
+                    // hold the line at the trunk
+                    var to = Flat(_tree - _player.GlobalPosition);
+                    var fwd = Flat(-_player.GlobalBasis.Z);
+                    float err = Mathf.Atan2(fwd.Z * to.X - fwd.X * to.Z, fwd.Dot(to));
+                    return new RideInput(1f, 0f, Mathf.Clamp(-err * 3f, -1f, 1f), true);
+                };
+                _phase = 3;
+                _t = 0;
+                return;
+            case 3:   // ride at it
+            {
+                var p = _player!.GlobalPosition;
+                _closest = Mathf.Min(_closest, Flat(p - _tree).Length());
+                _topSpeed = Mathf.Max(_topSpeed, _player.GroundSpeed);
+                if (_t < 9) return;
+                float past = Flat(p - _tree).Dot(_dir);   // > 0 once beyond the trunk
+                bool through = past > _radius + 0.3f;
+                bool ok = !through && _impact > 3f && _closest > _radius + 0.1f;
+                GD.Print($"[treecheck] top {_topSpeed * 3.6f:F0} km/h, closest {_closest:F2} m to the axis (trunk r {_radius:F2}), "
+                    + $"{(through ? "WENT THROUGH" : "stopped short")}, impacts {_impact * 3.6f:F0} km/h in total, "
+                    + $"{pool!.LiveTrunks} trunks live, pool max {pool.MaxMs:F2} ms/frame");
+                GD.Print(ok ? "[treecheck] RESULT: the tree stopped the rider" : "[treecheck] RESULT: FAILED");
+                if (_shot != null && GetViewport().GetTexture().GetImage().SavePng(_shot) == Error.Ok)
+                    GD.Print($"[treecheck] wrote {_shot}");
+                Finish(ok ? 0 : 1);
+                return;
+            }
+        }
+    }
+
+    /// <summary>Another trunk within 1.5 m of the line would be hit first.</summary>
+    private static bool Blocked(TreeColliders pool, Vector3 from, Vector3 tree, Vector3 dir)
+    {
+        for (float s = 2f; s < 24f; s += 2f)
+            if (pool.NearestLive(from + dir * s) is { } o && Flat(o.Base - tree).Length() > 0.5f
+                && Flat(o.Base - (from + dir * s)).Length() < 1.5f)
+                return true;
+        return false;
+    }
+
+    private static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
+
+    private void Finish(int code)
+    {
+        SetPhysicsProcess(false);
+        GetTree().Quit(code);
+    }
+}
