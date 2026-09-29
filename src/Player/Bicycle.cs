@@ -101,7 +101,6 @@ public sealed class Bicycle : Rideable
         MaterialOverride = HumanMeshBuilder.Material(),
     };
 
-    public override (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 0.55f, 0), new Vector3(0.45f, 1.1f, 1.75f));
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {

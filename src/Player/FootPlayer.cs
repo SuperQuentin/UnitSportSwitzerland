@@ -676,6 +676,8 @@ public partial class FootPlayer : CharacterBody3D
         {
             _visual.Name = "Body";
             AddChild(_visual);
+            // a machine is far bigger than the capsule it moves with; shots hit what is drawn
+            if (kind != RideKind.OnFoot) Hurtbox.Fit(_visual);
             // a craft's mesh is not authored level (the wingsuit is an upright figure); pose it
             // level for a remote copy, which only receives position and yaw
             if (_ride == null && Rideable.Create(kind) is Flyer remoteFlyer)

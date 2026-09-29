@@ -123,6 +123,7 @@ public partial class VehicleBody : CharacterBody3D
             _visual = Ride.BuildParkedVisual((int)Math.Max(1, Owner));
             _visual.Name = "Visual";
             AddChild(_visual);
+            Hurtbox.Fit(_visual);
             if (Ride is Helicopter or Plane)
             {
                 _engineSound = new EngineSynth(Ride is Helicopter ? EngineProfile.Turboshaft : EngineProfile.PistonAero,

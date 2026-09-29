@@ -358,7 +358,8 @@ public sealed class Helicopter : Flyer
     public override bool HasEngine => true;
     public override float BodyRadius => 1.0f;
     public override float BodyHeight => 2.6f;
-    public override (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 1.3f, 2.0f), new Vector3(2.0f, 2.6f, 8.4f));
+    /// <summary>The airframe measured from the mesh, rotor disc left out: a 10 m disc is not something the machine rests on.</summary>
+    public override (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual, "Rotor");
 
     /// <summary>
     /// Spool at which the rotor holds the machine up. Below it lift fades into autorotation:
