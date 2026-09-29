@@ -134,6 +134,59 @@ The runtime never reads raw geodata. Everything is converted first into compact 
 tiles under `terrain_chunks/`. Adding a new area means downloading the source tiles for it
 and re-running the pipeline.
 
+### The easy way: MapSetup
+
+```bash
+dotnet run --project tools/MapSetup
+```
+
+A map of Switzerland opens in the terminal. Pick a zone:
+
+| Key | Selects |
+|---|---|
+| **R** … **R** | a rectangle (move to the opposite corner in between); **E** … **E** erases one |
+| **Space** | the tile or pixel under the cursor |
+| **B** / **N** | paint / erase while moving; **[** **]** set the brush radius in km |
+| **F** | a town, summit or pass, then a radius |
+| **C** | a whole canton |
+| **+** / **-** | zoom (8, 4, 2 or 1 km per pixel); **H** lists every key |
+
+Colours show what is already on the machine (built, downloaded, available). The side panel
+updates as you select: tiles, download size, disk space and an estimated time. **Enter**
+continues to the layers (roads and land cover, buildings, cadastre, cycle routes, place
+index) and a table with size, disk and time per step. The download estimate uses a 6 s
+measurement of your connection. After each run the processing estimates are corrected with
+this machine's real rates, saved in `terrain_chunks_temp/mapsetup_stats.json`.
+
+Then it runs every step below in order:
+
+1. download (via `tools/swiss_data.py`)
+2. unpack TLM and GWR
+3. GDAL exports
+4. terrain build
+5. feature extraction for the selected tiles only
+6. RoadGen junctions
+7. place index
+
+Each step is skipped when its output already exists, so running it again after adding a
+valley only does the new part. Logs are written to `terrain_chunks_temp/mapsetup_logs/`.
+**Ctrl+C** stops a run; `--resume` continues it.
+
+Without the map:
+
+```bash
+dotnet run --project tools/MapSetup -- --town Zermatt --radius 4 --layers terrain,roads --yes
+dotnet run --project tools/MapSetup -- --canton GE --plan-only      # estimate only
+dotnet run --project tools/MapSetup -- --bbox 2580,1110,2585,1115 --layers all
+```
+
+The map, tile sizes, cantons and place names come from the committed
+`tools/MapSetup/switzerland.bin`, so nothing is downloaded before you confirm.
+`--bake` rebuilds that file from swisstopo. It is slow (about 40k HEAD requests) and only
+needed when swisstopo publishes new surveys.
+
+The sections below are the same pipeline by hand.
+
 ### 1. Work out which tiles you need
 
 Tiles are 1 km squares named by their south-west corner in **LV95** coordinates, e.g.
@@ -144,19 +197,14 @@ warning when a track starts outside the prepared area.
 
 ### 2. Download swissALTI3D
 
-Query the swisstopo STAC API for the tiles, then download the `.xyz.zip` assets into
-`ressources/data/swiss_chunks/`.
-
 ```bash
-# bbox is WGS84 lon/lat: minLon,minLat,maxLon,maxLat
-curl -s "https://data.geo.admin.ch/api/stac/v1/collections/ch.swisstopo.swissalti3d/items?bbox=7.14,46.14,7.17,46.19&limit=100" -o stac.json
+python tools/swiss_data.py swissalti3d --bbox 2579000 1109000 2586000 1115000
+python tools/swiss_data.py swissalti3d --tiles-file my_tiles.txt    # one "2583-1113" per line
 ```
 
-The response contains several survey years per tile — keep the newest. Each tile is a
-~110 MB zip of XYZ text at 0.5 m spacing.
-
-> `curl`, not Python. The conda GDAL install replaces openssl and breaks Python's HTTPS
-> with `ASN1: NOT_ENOUGH_DATA`.
+This queries the swisstopo STAC API. It keeps the newest survey of each tile and downloads
+the `.xyz.zip` assets into `ressources/data/swiss_chunks/`. Each tile is a ~19 MB zip of
+XYZ text at 0.5 m spacing. Re-runs skip files that are already current.
 
 ### 3. Build the terrain chunks
 

@@ -3,6 +3,21 @@
 Godot 4.7 C# multiplayer game streaming real swissALTI3D terrain as low-poly PS1-style
 world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-want-to-build-dynamic-metcalfe.md`.
 
+## Feature workflow (required)
+
+Several people work on this repo in parallel, so every new feature follows these steps:
+
+1. **Check existing issues first.** Before building anything, search open and recently closed
+   issues (`gh issue list --state all --search "<keywords>"`) and open PRs (`gh pr list`) for
+   work that overlaps: same feature, same files, or the same system (e.g. `ChunkManager`,
+   `FootPlayer`, the `.road` format). If something overlaps, stop and coordinate on that issue
+   rather than building a parallel version.
+2. **Create an issue before writing code.** Use `gh issue create` and describe what the feature
+   does and which files and systems it touches, so the next person's search finds it.
+3. **Work on a new branch, never on `main`.** Branch from an up-to-date `main`, named after the
+   issue (e.g. `feat/<issue#>-short-name`), and reference the issue in commits and in the PR
+   (`Closes #<issue#>`).
+
 ## Working with subagents
 
 - Use the cheapest model that can do the job. Delegate to `model: "haiku"` for mechanical work
@@ -806,6 +821,19 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 - **Output of any check or probe goes in `test_output/`** (gitignored, with a `.gdignore` so Godot
   never imports it): soundcheck WAVs, `--shot`/`--ride`/`--flycheck` screenshots, test exports.
   Never write them to the project root or a temp path that can end up inside the repo.
+- **Region setup wizard**: `dotnet run --project tools/MapSetup` (`tools/MapSetup/`, Spectre.Console).
+  Terminal map of CH (raw 24-bit ANSI, half-block pixels) to select tiles (rectangle, brush, town +
+  radius, canton), an estimate table (download / disk / time per step), then it chains the whole
+  pipeline below as subprocesses. Every step skips when its output exists, and the state lives in
+  `terrain_chunks_temp/mapsetup*.json`. The map comes from the committed
+  `tools/MapSetup/switzerland.bin` (per-km tile: zip size, survey year, canton, max elevation;
+  places; buildings sheets; nationwide file sizes). `--bake` rebuilds it from STAC +
+  swissBOUNDARIES3D. Non-interactive: `--town X --radius km | --canton VS | --bbox E0,N0,E1,N1 |
+  --tiles-file f | --resume`, `--layers`, `--plan-only`, `--yes`. The tile-list plumbing it relies
+  on: `swiss_data.py --tiles-file/--progress-json`, TerrainPreprocessor
+  `--features-only --tiles-file` and `--places-only` (places without re-running roads, which
+  would strip junctions), RoadGen `--tiles-file --skip-rewritten`, and `export_buildings.py --src`
+  (per-sheet zips).
 - Preprocess: `dotnet run --project tools/TerrainPreprocessor -c Release -- --in ressources/data/swiss_chunks --out terrain_chunks --verify --dump-png terrain_chunks_png`
   `--in` is recursive and repeatable (sources on any drive/share), `--jobs` defaults to all cores,
   `--io-jobs` (4) caps concurrent source reads. **One pass, no parse cache**: `TerrainBuild`
