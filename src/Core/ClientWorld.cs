@@ -17,6 +17,7 @@ public partial class ClientWorld : Node3D
     private FootPlayer? _player;
     private bool _onFoot;
     private bool _networked;
+    private World.Traffic? _traffic;
     private Node3D? _players;
     private GpxSession? _gpx;
     private PlaceSearchUi? _places;
@@ -139,6 +140,24 @@ public partial class ClientWorld : Node3D
         // the clock: sun, light colour, sky and night for every shader and the environment
         AddChild(new World.DayNight(environment));
 
+        // cars on the roads and trains on the railway, around wherever the view is
+        _traffic = new World.Traffic(_chunks, origin)
+        {
+            Focus = () => GetViewport().GetCamera3D()?.GlobalPosition,
+            Obstacles = () => LocalPlayer is { } p ? new[] { p.GlobalPosition } : Array.Empty<Vector3>(),
+        };
+        AddChild(_traffic);
+        if (World.TrafficProbe.ParseArgs() is { Requested: true } tcheck)
+        {
+            var tcam = new Camera3D { Name = "TrafficCam", Far = GameSettings.Current.CameraFar };
+            AddChild(tcam);
+            tcam.MakeCurrent();
+            _chunks.AddAnchor(tcam);
+            var (tE, tN) = SpawnPoint.ParseTarget();
+            tcam.Position = origin.ToWorld(tE, tN, 600);
+            AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot));
+        }
+
         _spectator = new SpectatorCamera { Name = "SpectatorCamera" };
         AddChild(_spectator);
         _chunks.AddAnchor(_spectator);
@@ -151,7 +170,8 @@ public partial class ClientWorld : Node3D
             || FlightProbe.ParseArgs() != null
             || RideProbe.ParseArgs() != null || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
-            || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested;
+            || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
+            || World.TrafficProbe.ParseArgs().Requested;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();

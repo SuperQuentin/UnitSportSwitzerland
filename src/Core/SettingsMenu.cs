@@ -82,6 +82,10 @@ public partial class SettingsMenu : PanelContainer
             v => GameSettings.Current.DayLengthMinutes = (float)v,
             v => v <= 0 ? "stopped" : $"{v:F0} min per day");
 
+        SliderRow(rows, "Traffic", 0, 150, 5, s.TrafficCars,
+            v => GameSettings.Current.TrafficCars = (int)v, v => v <= 0 ? "off" : $"{v:F0} cars");
+        ToggleRow(rows, "Trains", s.Trains, on => GameSettings.Current.Trains = on);
+
         Section(rows, "Feel");
         OptionRow(rows, "Movement", new[] { "Game (arcade)", "Simulation (real physics)" }, (int)s.RideProfile,
             i => GameSettings.Current.RideProfile = (RideProfile)i);

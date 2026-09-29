@@ -119,6 +119,10 @@ public sealed class GameSettings
     public float DayLengthMinutes { get; set; } = 24f;
     public float StartHour { get; set; } = 10f;
 
+    /// <summary>Cars around the player in daytime (about half at night); 0 turns traffic off.</summary>
+    public int TrafficCars { get; set; } = 35;
+    public bool Trains { get; set; } = true;
+
     // --- feel ---
     /// <summary>Sound effects volume, 0..1.</summary>
     public float SfxVolume { get; set; } = 0.8f;
@@ -205,6 +209,7 @@ public sealed class GameSettings
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         DayLengthMinutes = Math.Clamp(DayLengthMinutes, 0f, 240f);
         StartHour = Math.Clamp(StartHour, 0f, 23.99f);
+        TrafficCars = Math.Clamp(TrafficCars, 0, 150);
         ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
         WindowWidth = Math.Clamp(WindowWidth, 0, 7680);
@@ -233,6 +238,7 @@ public sealed class GameSettings
                 // a fixed time of day, for screenshots: --time 21.5 is half past nine at night
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
                     StartHour = hour; DayLengthMinutes = 0; break;
+                case "--traffic" when int.TryParse(v, out int cars): TrafficCars = cars; break;
                 case "--view": ThirdPerson = v != "first" && v != "1st"; break;
                 case "--perf":
                     PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,
