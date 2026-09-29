@@ -1,12 +1,18 @@
 shader_type spatial;
 render_mode unshaded;
 
+// Time of day, set once per frame for the whole world by World/DayNight: the sun's direction,
+// the colour of the light, the sky the fog fades into (linear), and 0 day .. 1 night.
+global uniform vec3 world_sun_dir;
+global uniform vec3 world_tint;
+global uniform vec3 world_sky;
+global uniform float world_night;
+
 // Buildings take their base colour from baked vertex colours (kind + roof/wall + age)
 // and get the same PS1 treatment as the terrain: vertex snap, quantised sun from a
 // screen-derivative flat normal, Bayer dither, distance fog.
 
 uniform vec2 snap_resolution = vec2(640.0, 480.0);
-uniform vec3 sun_direction = vec3(0.45, 0.8, 0.25);
 uniform float light_levels = 5.0;
 uniform float color_levels = 16.0;
 uniform float fog_start = 3500.0;
@@ -91,6 +97,7 @@ void fragment() {
     float detail = fwidth(facade.y);
     // stop a little below the wall plate so the eave never cuts a row in half
     float top = storey_count - 0.22;
+    vec3 glow = vec3(0.0);
     if (facade.y > 0.0 && facade.y < top && detail < 0.6) {
         float u = facade.x;
         float wall_v = fract(facade.y);
@@ -102,13 +109,17 @@ void fragment() {
             // stable per-window hash decides which ones are lit
             vec2 cell = vec2(floor(u / window_spacing), floor(facade.y));
             float r = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
-            vec3 win = r > 0.86 ? window_lit : window_color;
+            // a few lit windows by day, most of a village at night
+            bool lit = r > mix(0.86, 0.35, world_night);
+            vec3 win = lit ? window_lit : window_color;
             // fade the pattern out as it approaches the resolution limit
-            col = mix(col, win, clamp(1.0 - detail / 0.6, 0.0, 1.0));
+            float legible = clamp(1.0 - detail / 0.6, 0.0, 1.0);
+            col = mix(col, win, legible);
+            if (lit) glow = window_lit * legible;
         }
     }
 
-    float ndl = clamp(dot(n, normalize(sun_direction)), 0.0, 1.0);
+    float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     float light = floor(ndl * light_levels) / light_levels * 0.5 + 0.5;
     col *= light;
 
@@ -128,10 +139,13 @@ void fragment() {
         }
     }
 
+    col *= world_tint;
+    // a lit window is its own light: at night it shines through the darkness around it
+    col = max(col, glow * world_night);
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
     float dith = (bayer[bi] / 16.0 - 0.5) / color_levels;
     col = floor((col + dith) * color_levels + 0.5) / color_levels;
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
-    ALBEDO = mix(col, fog_color, fog);
+    ALBEDO = mix(col, world_sky, fog);
 }

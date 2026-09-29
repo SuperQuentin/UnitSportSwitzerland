@@ -18,6 +18,7 @@ public partial class ClientWorld : Node3D
     private FootPlayer? _player;
     private bool _onFoot;
     private bool _networked;
+    private World.Traffic? _traffic;
     private Node3D? _players;
     private GpxSession? _gpx;
     private PlaceSearchUi? _places;
@@ -160,14 +161,33 @@ public partial class ClientWorld : Node3D
             vehicles.Visible = !inside;
         };
 
-        AddChild(new WorldEnvironment
+        var environment = new Godot.Environment
         {
-            Environment = new Godot.Environment
-            {
-                BackgroundMode = Godot.Environment.BGMode.Color,
-                BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
-            },
-        });
+            BackgroundMode = Godot.Environment.BGMode.Color,
+            BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
+        };
+        AddChild(new WorldEnvironment { Environment = environment });
+
+        // the clock: sun, light colour, sky and night for every shader and the environment
+        AddChild(new World.DayNight(environment));
+
+        // cars on the roads and trains on the railway, around wherever the view is
+        _traffic = new World.Traffic(_chunks, origin)
+        {
+            Focus = () => GetViewport().GetCamera3D()?.GlobalPosition,
+            Obstacles = () => LocalPlayer is { } p ? new[] { p.GlobalPosition } : Array.Empty<Vector3>(),
+        };
+        AddChild(_traffic);
+        if (World.TrafficProbe.ParseArgs() is { Requested: true } tcheck)
+        {
+            var tcam = new Camera3D { Name = "TrafficCam", Far = GameSettings.Current.CameraFar };
+            AddChild(tcam);
+            tcam.MakeCurrent();
+            _chunks.AddAnchor(tcam);
+            var (tE, tN) = SpawnPoint.ParseTarget();
+            tcam.Position = origin.ToWorld(tE, tN, 600);
+            AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot));
+        }
 
         _spectator = new SpectatorCamera { Name = "SpectatorCamera" };
         AddChild(_spectator);
@@ -183,7 +203,8 @@ public partial class ClientWorld : Node3D
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
-            || Loot.GatherProbe.ParseArgs().Requested;
+            || Loot.GatherProbe.ParseArgs().Requested
+            || World.TrafficProbe.ParseArgs().Requested;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();

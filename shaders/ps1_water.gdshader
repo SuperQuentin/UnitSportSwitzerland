@@ -1,6 +1,13 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled;
 
+// Time of day, set once per frame for the whole world by World/DayNight: the sun's direction,
+// the colour of the light, the sky the fog fades into (linear), and 0 day .. 1 night.
+global uniform vec3 world_sun_dir;
+global uniform vec3 world_tint;
+global uniform vec3 world_sky;
+global uniform float world_night;
+
 // Water: banded blue with a slow dithered shimmer. No transparency or reflection —
 // PS1-era water was flat colour plus animated dither, which is also what reads best
 // against the terrain's own posterised palette.
@@ -49,10 +56,11 @@ void fragment() {
         12.0, 4.0, 14.0, 6.0,
         3.0, 11.0, 1.0, 9.0,
         15.0, 7.0, 13.0, 5.0);
+    col *= world_tint;
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
     float dith = (bayer[bi] / 16.0 - 0.5) / color_levels;
     col = floor((col + dith) * color_levels + 0.5) / color_levels;
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
-    ALBEDO = mix(col, fog_color, fog);
+    ALBEDO = mix(col, world_sky, fog);
 }
