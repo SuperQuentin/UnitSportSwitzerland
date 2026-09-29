@@ -42,9 +42,13 @@ public static class CarCatalog
                 Paint = White, Lower = Black, Rim = new Color(0.85f, 0.85f, 0.85f), PopUps = true,
             },
             Engine = EngineLayout.Inline4,
-            Mass = 1000f, FrontAxle = 1.12f, RearAxle = 1.28f, CgHeight = 0.5f, Grip = 1.0f,
+            // source: Toyota AE86 Sprinter Trueno GT-APEX 3-door (4A-GE 130 PS/6600, 149 Nm/5200, T50 5MT, 4.300 final); kerb 965 kg + driver; period road tests 0-100 ~8.5 s, 100-0 ~42 m; the series shows Takumi's car with a mechanical LSD; curve fitted to published peaks
+            Mass = 1040f, FrontAxle = 1.128f, RearAxle = 1.272f, CgHeight = 0.5f, Grip = 0.97f,
             PeakKw = 96f, PeakRpm = 6600f, IdleRpm = 900f, Redline = 7800f,
-            Gears = new[] { 3.59f, 2.02f, 1.38f, 1.00f, 0.86f }, FinalDrive = 4.3f,
+            Gears = new[] { 3.587f, 2.022f, 1.384f, 1f, 0.861f }, FinalDrive = 4.3f, Reverse = 3.51f,
+            Torque = new (float, float)[] { (1000f, 105f), (2000f, 118f), (3000f, 130f), (4000f, 140f), (5200f, 149f), (6000f, 146f), (6600f, 138.3f), (7200f, 122f), (7800f, 105f) },
+            Tyre = "185/60R14", BrakeDecel = 9.2f, Diff = Differential.Mechanical,
+            RefZeroTo100 = 8.6f, RefTopKmh = 195f,
             MaxSteer = 0.62f, DragArea = 0.62f,
         },
         new CarSpec
@@ -57,10 +61,14 @@ public static class CarCatalog
                 Paint = new Color(1f, 0.86f, 0.16f), Rim = Silver, PopUps = true, Wing = WingSize.Small,
             },
             Engine = EngineLayout.RotaryTurbo,
-            Mass = 1320f, FrontAxle = 1.2f, RearAxle = 1.23f, CgHeight = 0.46f, Grip = 1.05f,
-            PeakKw = 206f, PeakRpm = 6500f, IdleRpm = 850f, Redline = 8000f,
-            Gears = new[] { 3.48f, 2.02f, 1.39f, 1.00f, 0.72f }, FinalDrive = 4.1f,
-            MaxSteer = 0.6f, DragArea = 0.58f,
+            // source: Mazda FD3S RX-7 Type RS (13B-REW 280 PS/6500, 314 Nm/5000, 5MT 4.100, 225/50R16); the series' car is tuned, stock figures used; road tests 0-100 ~5.3 s, 250-260 km/h unlimited (255 used); curve fitted to published peaks
+            Mass = 1355f, FrontAxle = 1.164f, RearAxle = 1.261f, CgHeight = 0.46f, Grip = 1.06f,
+            PeakKw = 206f, PeakRpm = 6500f, IdleRpm = 800f, Redline = 7000f,
+            Gears = new[] { 3.483f, 2.015f, 1.391f, 1f, 0.719f }, FinalDrive = 4.1f, Reverse = 3.493f,
+            Torque = new (float, float)[] { (1000f, 150f), (2000f, 175f), (3000f, 225f), (4000f, 272f), (5000f, 314f), (6000f, 312f), (6500f, 302.6f), (7000f, 270f) },
+            Tyre = "225/50R16", BrakeDecel = 10.1f, Diff = Differential.Torsen,
+            RefZeroTo100 = 5.3f, RefTopKmh = 255f,
+            MaxSteer = 0.6f, DragArea = 0.6f,
         },
         new CarSpec
         {
@@ -73,11 +81,15 @@ public static class CarCatalog
                 Wing = WingSize.Big, Scoop = true,
             },
             Engine = EngineLayout.Boxer4Turbo,
-            Mass = 1360f, FrontAxle = 1.28f, RearAxle = 1.24f, CgHeight = 0.52f, Grip = 1.05f,
-            PeakKw = 206f, PeakRpm = 6000f, IdleRpm = 850f, Redline = 7000f,
-            Gears = new[] { 3.17f, 1.88f, 1.30f, 0.97f, 0.74f }, FinalDrive = 4.44f,
-            Drive = Drivetrain.All, RearBias = 0.6f,
-            MaxSteer = 0.58f, DragArea = 0.7f,
+            // source: Subaru Impreza WRX STi (GC8, Version V-era: EJ207 280 PS/6500, 353 Nm/4000, 5MT, 4.444 final, 205/50R16, kerb ~1270 kg); the series' Bunta car is not quoted as tuned; curve fitted to published peaks
+            Mass = 1345f, FrontAxle = 1.0332f, RearAxle = 1.4868f, CgHeight = 0.52f, Grip = 1.05f,
+            PeakKw = 206f, PeakRpm = 6500f, IdleRpm = 850f, Redline = 7500f,
+            Gears = new[] { 3.454f, 1.947f, 1.366f, 0.972f, 0.738f }, FinalDrive = 4.444f, Reverse = 3.416f,
+            Torque = new (float, float)[] { (1000f, 170f), (2000f, 250f), (3000f, 315f), (4000f, 353f), (5000f, 345f), (6000f, 320f), (6500f, 302.6f), (7000f, 275f), (7500f, 245f) },
+            Tyre = "205/50R16", BrakeDecel = 9.9f, Diff = Differential.Viscous,
+            RefZeroTo100 = 5.4f, RefTopKmh = 240f,
+            Drive = Drivetrain.All, RearBias = 0.55f,
+            MaxSteer = 0.58f, DragArea = 0.66f,
         },
         // Sources: series character/car lists (GTPlanet "Initial D cars" thread, Initial D wiki extracts),
         // real-world figures from factory/period road-test specs of each model; liveries approximate the series.
@@ -92,10 +104,13 @@ public static class CarCatalog
                 Paint = White, Rim = Silver, PopUps = true, Wing = WingSize.Lip,
             },
             Engine = EngineLayout.RotaryTurbo,
-            // source: Savanna RX-7 Infini III factory specs (13B-T, 215 PS, 5MT, 4.10 final)
-            Mass = 1345f, FrontAxle = 1.17f, RearAxle = 1.26f, CgHeight = 0.47f, Grip = 1.02f,
+            // source: Mazda Savanna RX-7 Infini III (FC3S, 13B-T 215 PS/6500, 275 Nm/3500, 5MT 4.100); kerb ~1270 kg; brochure figures, 0-100 ~7.2 s; curve fitted to published peaks
+            Mass = 1345f, FrontAxle = 1.2028f, RearAxle = 1.2272f, CgHeight = 0.47f, Grip = 1.02f,
             PeakKw = 158f, PeakRpm = 6500f, IdleRpm = 800f, Redline = 7500f,
-            Gears = new[] { 3.483f, 2.015f, 1.391f, 1.000f, 0.719f }, FinalDrive = 4.1f,
+            Gears = new[] { 3.483f, 2.015f, 1.391f, 1f, 0.719f }, FinalDrive = 4.1f, Reverse = 3.493f,
+            Torque = new (float, float)[] { (1000f, 130f), (2000f, 200f), (3000f, 260f), (3500f, 275f), (4500f, 270f), (5500f, 255f), (6500f, 232f), (7000f, 205f), (7500f, 180f) },
+            Tyre = "205/55R16", BrakeDecel = 9.6f, Diff = Differential.Torsen,
+            RefZeroTo100 = 7.2f, RefTopKmh = 235f,
             MaxSteer = 0.6f, DragArea = 0.58f,
         },
         new CarSpec
@@ -109,10 +124,13 @@ public static class CarCatalog
                 Paint = new Color(0.33f, 0.34f, 0.38f), Rim = Silver, Wing = WingSize.Small,
             },
             Engine = EngineLayout.Inline6Turbo,
-            // source: R32 GT-R V-spec II factory specs (RB26DETT, 280 PS, ATTESA E-TS)
-            Mass = 1505f, FrontAxle = 1.07f, RearAxle = 1.545f, CgHeight = 0.5f, Grip = 1.05f,
+            // source: Nissan Skyline GT-R V-spec II (BNR32, RB26DETT 280 PS/6800, 353 Nm/4400, 5MT 4.111, 225/50R16, kerb 1480 kg); period tests 0-100 ~5.6 s; curve fitted to published peaks
+            Mass = 1555f, FrontAxle = 1.0721f, RearAxle = 1.5429f, CgHeight = 0.5f, Grip = 1.05f,
             PeakKw = 206f, PeakRpm = 6800f, IdleRpm = 800f, Redline = 8000f,
-            Gears = new[] { 3.214f, 1.925f, 1.302f, 1.000f, 0.752f }, FinalDrive = 4.111f,
+            Gears = new[] { 3.214f, 1.925f, 1.302f, 1f, 0.752f }, FinalDrive = 4.111f, Reverse = 3.437f,
+            Torque = new (float, float)[] { (1000f, 150f), (2000f, 230f), (3000f, 305f), (4000f, 350f), (4400f, 353f), (5000f, 345f), (6000f, 315f), (6800f, 289.2f), (7500f, 255f), (8000f, 230f) },
+            Tyre = "225/50R16", BrakeDecel = 9.9f, Diff = Differential.Torsen,
+            RefZeroTo100 = 5.6f, RefTopKmh = 250f,
             Drive = Drivetrain.All, RearBias = 0.7f,
             MaxSteer = 0.58f, DragArea = 0.72f,
         },
@@ -127,10 +145,13 @@ public static class CarCatalog
                 Paint = White, Rim = Silver,
             },
             Engine = EngineLayout.Inline4,
-            // source: EG6 Civic SiR-II factory specs (B16A, 160 PS @ 7600, 5MT)
-            Mass = 1115f, FrontAxle = 1.0f, RearAxle = 1.62f, CgHeight = 0.48f, Grip = 1.0f,
-            PeakKw = 118f, PeakRpm = 7600f, IdleRpm = 800f, Redline = 8200f,
-            Gears = new[] { 3.230f, 2.105f, 1.458f, 1.107f, 0.848f }, FinalDrive = 4.4f,
+            // source: Honda Civic SiR-II (EG6, 1995: B16A 170 PS/7600, 155 Nm/7000, 5MT 4.400, 195/55R14, kerb 1050 kg); JDM brochure + period tests 0-100 7.4-7.9 s (7.7 used); open diff; curve fitted to published peaks
+            Mass = 1125f, FrontAxle = 1.0218f, RearAxle = 1.5982f, CgHeight = 0.48f, Grip = 1.05f,
+            PeakKw = 125f, PeakRpm = 7600f, IdleRpm = 800f, Redline = 8200f,
+            Gears = new[] { 3.23f, 2.105f, 1.458f, 1.107f, 0.848f }, FinalDrive = 4.4f, Reverse = 3f,
+            Torque = new (float, float)[] { (1000f, 90f), (2000f, 118f), (3000f, 125f), (4000f, 130f), (5000f, 133f), (5600f, 140f), (6500f, 148f), (7000f, 154f), (7600f, 157f), (8000f, 148f), (8200f, 138f) },
+            Tyre = "195/55R14", BrakeDecel = 9.9f, Diff = Differential.Open,
+            RefZeroTo100 = 7.7f, RefTopKmh = 215f,
             Drive = Drivetrain.Front,
             MaxSteer = 0.6f, DragArea = 0.6f,
         },
@@ -144,10 +165,13 @@ public static class CarCatalog
                 Paint = White, Rim = Silver, PopUps = true,
             },
             Engine = EngineLayout.Inline4Turbo,
-            // source: S13 Silvia K's factory specs (CA18DET, 175 PS)
-            Mass = 1225f, FrontAxle = 1.09f, RearAxle = 1.385f, CgHeight = 0.48f, Grip = 1.0f,
-            PeakKw = 129f, PeakRpm = 6400f, IdleRpm = 850f, Redline = 7000f,
-            Gears = new[] { 3.321f, 1.902f, 1.308f, 1.000f, 0.759f }, FinalDrive = 4.083f,
+            // source: Nissan Silvia K's (S13, CA18DET 175 PS/6400, 226 Nm/4000, 5MT 4.083, 195/60R15, kerb ~1160 kg); brochure; period tests 0-100 ~7.9 s; viscous LSD; curve fitted to published peaks
+            Mass = 1235f, FrontAxle = 1.089f, RearAxle = 1.386f, CgHeight = 0.48f, Grip = 1f,
+            PeakKw = 129f, PeakRpm = 6400f, IdleRpm = 800f, Redline = 7000f,
+            Gears = new[] { 3.321f, 1.902f, 1.308f, 1f, 0.759f }, FinalDrive = 4.083f, Reverse = 3.382f,
+            Torque = new (float, float)[] { (1000f, 130f), (2000f, 175f), (3000f, 210f), (4000f, 226f), (5000f, 215f), (6000f, 200f), (6400f, 192.5f), (7000f, 170f) },
+            Tyre = "195/60R15", BrakeDecel = 9.2f, Diff = Differential.Viscous,
+            RefZeroTo100 = 7.9f, RefTopKmh = 215f,
             MaxSteer = 0.62f, DragArea = 0.62f,
         },
         new CarSpec
@@ -160,10 +184,13 @@ public static class CarCatalog
                 Paint = new Color(0.85f, 0.85f, 0.87f), Rim = Silver, PopUps = true,
             },
             Engine = EngineLayout.Inline4Turbo,
-            // source: RPS13 180SX Type X factory specs (SR20DET, 205 PS)
-            Mass = 1315f, FrontAxle = 1.1f, RearAxle = 1.375f, CgHeight = 0.48f, Grip = 1.0f,
-            PeakKw = 151f, PeakRpm = 6000f, IdleRpm = 850f, Redline = 7200f,
-            Gears = new[] { 3.321f, 1.902f, 1.308f, 1.000f, 0.759f }, FinalDrive = 4.363f,
+            // source: Nissan 180SX Type X (RPS13 late: SR20DET 205 PS/6000, 275 Nm/4000, 5MT 4.363, 205/60R15, kerb 1240 kg); brochure; period tests 0-100 ~7.0 s; viscous LSD; curve fitted to published peaks
+            Mass = 1315f, FrontAxle = 1.0642f, RearAxle = 1.4108f, CgHeight = 0.48f, Grip = 1.02f,
+            PeakKw = 151f, PeakRpm = 6000f, IdleRpm = 800f, Redline = 7200f,
+            Gears = new[] { 3.321f, 1.902f, 1.308f, 1f, 0.759f }, FinalDrive = 4.363f, Reverse = 3.382f,
+            Torque = new (float, float)[] { (1000f, 150f), (2000f, 205f), (3000f, 255f), (4000f, 275f), (5000f, 262f), (6000f, 240.4f), (6500f, 215f), (7000f, 190f), (7200f, 180f) },
+            Tyre = "205/60R15", BrakeDecel = 9.2f, Diff = Differential.Viscous,
+            RefZeroTo100 = 7f, RefTopKmh = 225f,
             MaxSteer = 0.62f, DragArea = 0.62f,
         },
         new CarSpec
@@ -176,10 +203,13 @@ public static class CarCatalog
                 Paint = new Color(0.14f, 0.3f, 0.72f), Rim = Silver,
             },
             Engine = EngineLayout.Inline4Turbo,
-            // source: SR20DET Sileighty conversion (180SX body, S13 front), 205 PS
-            Mass = 1315f, FrontAxle = 1.1f, RearAxle = 1.375f, CgHeight = 0.48f, Grip = 1.02f,
-            PeakKw = 151f, PeakRpm = 6000f, IdleRpm = 850f, Redline = 7200f,
-            Gears = new[] { 3.321f, 1.902f, 1.308f, 1.000f, 0.759f }, FinalDrive = 4.363f,
+            // source: Nissan Sileighty (180SX body, S13 front) with the SR20DET: 205 PS/6000, 275 Nm/4000, 5MT 4.363; mass as 180SX Type X; same figures as RPS13; curve fitted to published peaks; 0-100 estimated
+            Mass = 1315f, FrontAxle = 1.0642f, RearAxle = 1.4108f, CgHeight = 0.48f, Grip = 1.02f,
+            PeakKw = 151f, PeakRpm = 6000f, IdleRpm = 800f, Redline = 7200f,
+            Gears = new[] { 3.321f, 1.902f, 1.308f, 1f, 0.759f }, FinalDrive = 4.363f, Reverse = 3.382f,
+            Torque = new (float, float)[] { (1000f, 150f), (2000f, 205f), (3000f, 255f), (4000f, 275f), (5000f, 262f), (6000f, 240.4f), (6500f, 215f), (7000f, 190f), (7200f, 180f) },
+            Tyre = "205/60R15", BrakeDecel = 9.2f, Diff = Differential.Viscous,
+            RefZeroTo100 = 7f, RefTopKmh = 225f,
             MaxSteer = 0.62f, DragArea = 0.62f,
         },
         new CarSpec
@@ -192,10 +222,13 @@ public static class CarCatalog
                 Paint = new Color(0.6f, 0.7f, 0.82f), Rim = Silver, PopUps = true,
             },
             Engine = EngineLayout.Inline4,
-            // source: AE85 Levin 1.5 factory specs (3A-U, 83 PS)
-            Mass = 970f, FrontAxle = 1.1f, RearAxle = 1.3f, CgHeight = 0.5f, Grip = 0.96f,
-            PeakKw = 61f, PeakRpm = 6000f, IdleRpm = 800f, Redline = 6500f,
-            Gears = new[] { 3.587f, 2.022f, 1.384f, 1.000f, 0.861f }, FinalDrive = 4.1f,
+            // source: Toyota Corolla Levin AE85 1.5 (3A-U 83 PS/5600, 118 Nm/3600, 5MT 4.100, 175/70R13, kerb ~900 kg); brochure figures; 0-100, top and curve estimated from the published peaks
+            Mass = 975f, FrontAxle = 1.104f, RearAxle = 1.296f, CgHeight = 0.5f, Grip = 0.92f,
+            PeakKw = 61f, PeakRpm = 5600f, IdleRpm = 800f, Redline = 6500f,
+            Gears = new[] { 3.587f, 2.022f, 1.384f, 1f, 0.861f }, FinalDrive = 4.1f, Reverse = 3.51f,
+            Torque = new (float, float)[] { (1000f, 80f), (2000f, 100f), (3600f, 118f), (4500f, 114f), (5600f, 104f), (6000f, 95f), (6500f, 85f) },
+            Tyre = "175/70R13", BrakeDecel = 8.6f, Diff = Differential.Open,
+            RefZeroTo100 = 13.5f, RefTopKmh = 165f,
             MaxSteer = 0.62f, DragArea = 0.62f,
         },
         new CarSpec
@@ -208,10 +241,13 @@ public static class CarCatalog
                 Paint = new Color(0.75f, 0.76f, 0.79f), Lower = Black, Rim = Silver, PopUps = true,
             },
             Engine = EngineLayout.Inline4,
-            // source: AE86 Sprinter Trueno GT-APEX factory specs (4A-GE, 130 PS)
-            Mass = 1000f, FrontAxle = 1.12f, RearAxle = 1.28f, CgHeight = 0.5f, Grip = 1.0f,
+            // source: Toyota AE86 Sprinter Trueno GT-APEX 2-door (4A-GE 130 PS/6600, 149 Nm/5200, 5MT 4.300, 185/60R14; kerb ~940 kg); same drivetrain as the hatch; mechanical LSD as in the series; curve fitted to published peaks
+            Mass = 1015f, FrontAxle = 1.128f, RearAxle = 1.272f, CgHeight = 0.5f, Grip = 0.97f,
             PeakKw = 96f, PeakRpm = 6600f, IdleRpm = 900f, Redline = 7800f,
-            Gears = new[] { 3.59f, 2.02f, 1.38f, 1.00f, 0.86f }, FinalDrive = 4.3f,
+            Gears = new[] { 3.587f, 2.022f, 1.384f, 1f, 0.861f }, FinalDrive = 4.3f, Reverse = 3.51f,
+            Torque = new (float, float)[] { (1000f, 105f), (2000f, 118f), (3000f, 130f), (4000f, 140f), (5200f, 149f), (6000f, 146f), (6600f, 138.3f), (7200f, 122f), (7800f, 105f) },
+            Tyre = "185/60R14", BrakeDecel = 9.2f, Diff = Differential.Mechanical,
+            RefZeroTo100 = 8.5f, RefTopKmh = 195f,
             MaxSteer = 0.62f, DragArea = 0.62f,
         },
         // ---- Lancer Evolutions (Team Emperor and later rivals) ----
@@ -226,12 +262,15 @@ public static class CarCatalog
                 Paint = White, Rim = new Color(0.85f, 0.7f, 0.2f), Wing = WingSize.Big, Scoop = true,
             },
             Engine = EngineLayout.Inline4Turbo,
-            // source: Lancer Evolution III GSR factory specs (4G63, 270 PS)
-            Mass = 1325f, FrontAxle = 1.0f, RearAxle = 1.506f, CgHeight = 0.52f, Grip = 1.05f,
+            // source: Mitsubishi Lancer Evolution III GSR (CE9A, 4G63 270 PS/6250, 309 Nm/3000, 5MT 4.529, 205/60R15, kerb ~1260 kg); period tests 0-100 ~5.7 s; viscous centre; curve fitted to published peaks (very flat)
+            Mass = 1335f, FrontAxle = 1.0291f, RearAxle = 1.4809f, CgHeight = 0.52f, Grip = 1.03f,
             PeakKw = 199f, PeakRpm = 6250f, IdleRpm = 850f, Redline = 7500f,
-            Gears = new[] { 2.785f, 1.950f, 1.407f, 1.031f, 0.731f }, FinalDrive = 4.529f,
+            Gears = new[] { 2.785f, 1.95f, 1.407f, 1.031f, 0.731f }, FinalDrive = 4.529f, Reverse = 3.416f,
+            Torque = new (float, float)[] { (1000f, 150f), (2000f, 240f), (3000f, 309f), (4500f, 309f), (5500f, 308f), (6250f, 304f), (6750f, 280f), (7500f, 236f) },
+            Tyre = "205/60R15", BrakeDecel = 9.6f, Diff = Differential.Viscous,
+            RefZeroTo100 = 5.7f, RefTopKmh = 235f,
             Drive = Drivetrain.All, RearBias = 0.5f,
-            MaxSteer = 0.58f, DragArea = 0.68f,
+            MaxSteer = 0.58f, DragArea = 0.72f,
         },
         new CarSpec
         {
@@ -244,10 +283,13 @@ public static class CarCatalog
                 Paint = Silver, Rim = new Color(0.85f, 0.7f, 0.2f), Wing = WingSize.Big, Scoop = true,
             },
             Engine = EngineLayout.Inline4Turbo,
-            // source: Lancer Evolution IV GSR factory specs (4G63, 280 PS, AYC)
-            Mass = 1425f, FrontAxle = 1.0f, RearAxle = 1.5f, CgHeight = 0.52f, Grip = 1.06f,
+            // source: Mitsubishi Lancer Evolution IV GSR (CN9A, 4G63 280 PS/6500, 353 Nm/3000, 5MT 4.529, 205/50R16, kerb 1350 kg, AYC); brochure; period tests 0-100 ~5.3 s; curve fitted to published peaks
+            Mass = 1425f, FrontAxle = 1.0291f, RearAxle = 1.4809f, CgHeight = 0.52f, Grip = 1.06f,
             PeakKw = 206f, PeakRpm = 6500f, IdleRpm = 850f, Redline = 7500f,
-            Gears = new[] { 2.785f, 1.950f, 1.407f, 1.031f, 0.720f }, FinalDrive = 4.529f,
+            Gears = new[] { 2.785f, 1.95f, 1.407f, 1.031f, 0.72f }, FinalDrive = 4.529f, Reverse = 3.416f,
+            Torque = new (float, float)[] { (1000f, 150f), (2000f, 270f), (3000f, 353f), (4000f, 350f), (5000f, 335f), (6000f, 316f), (6500f, 302.6f), (7000f, 275f), (7500f, 240f) },
+            Tyre = "205/50R16", BrakeDecel = 9.8f, Diff = Differential.Torsen,
+            RefZeroTo100 = 5.3f, RefTopKmh = 240f,
             Drive = Drivetrain.All, RearBias = 0.55f,
             MaxSteer = 0.58f, DragArea = 0.68f,
         },
@@ -262,10 +304,13 @@ public static class CarCatalog
                 Paint = new Color(0.16f, 0.16f, 0.2f), Rim = Silver, Wing = WingSize.Big, Scoop = true,
             },
             Engine = EngineLayout.Inline4Turbo,
-            // source: Lancer Evolution VII GSR factory specs (4G63, 280 PS, ACD)
-            Mass = 1455f, FrontAxle = 1.0f, RearAxle = 1.5f, CgHeight = 0.52f, Grip = 1.07f,
+            // source: Mitsubishi Lancer Evolution VII GSR (CT9A, 4G63 280 PS/6500, 373 Nm/3500, 5MT 4.529, 235/45R17, kerb ~1360 kg, ACD+AYC); brochure; period tests 0-100 ~5.2 s; curve fitted to published peaks
+            Mass = 1435f, FrontAxle = 1.05f, RearAxle = 1.575f, CgHeight = 0.52f, Grip = 1.08f,
             PeakKw = 206f, PeakRpm = 6500f, IdleRpm = 850f, Redline = 7500f,
-            Gears = new[] { 2.785f, 1.950f, 1.407f, 1.031f, 0.720f }, FinalDrive = 4.529f,
+            Gears = new[] { 2.785f, 1.95f, 1.407f, 1.031f, 0.72f }, FinalDrive = 4.529f, Reverse = 3.416f,
+            Torque = new (float, float)[] { (1000f, 150f), (2000f, 280f), (3000f, 365f), (3500f, 373f), (4500f, 365f), (5500f, 340f), (6000f, 322f), (6500f, 302.6f), (7000f, 270f), (7500f, 235f) },
+            Tyre = "235/45R17", BrakeDecel = 9.8f, Diff = Differential.Torsen,
+            RefZeroTo100 = 5.2f, RefTopKmh = 245f,
             Drive = Drivetrain.All, RearBias = 0.55f,
             MaxSteer = 0.58f, DragArea = 0.68f,
         },
@@ -281,10 +326,13 @@ public static class CarCatalog
                 Paint = White, Rim = Silver, PopUps = true, Wing = WingSize.Lip,
             },
             Engine = EngineLayout.V6,
-            // source: NSX Type R factory specs (C30A, 280 PS, 5MT)
-            Mass = 1425f, FrontAxle = 1.47f, RearAxle = 1.06f, CgHeight = 0.46f, Grip = 1.06f,
-            PeakKw = 206f, PeakRpm = 7300f, IdleRpm = 850f, Redline = 8000f,
-            Gears = new[] { 3.230f, 2.105f, 1.458f, 1.107f, 0.848f }, FinalDrive = 4.062f,
+            // source: Honda NSX NA1 5MT (C30A 280 PS/7300, 294 Nm/5400, 4.062 final, 225/50R16 rear, kerb 1350 kg); brochure + period tests 0-100 ~5.6 s, ~265 km/h; mechanical LSD estimated; curve fitted to published peaks
+            Mass = 1425f, FrontAxle = 1.4674f, RearAxle = 1.0626f, CgHeight = 0.46f, Grip = 1.06f,
+            PeakKw = 206f, PeakRpm = 7300f, IdleRpm = 800f, Redline = 8000f,
+            Gears = new[] { 3.23f, 2.105f, 1.458f, 1.107f, 0.848f }, FinalDrive = 4.062f, Reverse = 3f,
+            Torque = new (float, float)[] { (1000f, 130f), (2000f, 190f), (3000f, 230f), (4000f, 260f), (5400f, 294f), (6500f, 285f), (7300f, 269.5f), (7800f, 245f), (8000f, 232f) },
+            Tyre = "225/50R16", BrakeDecel = 10.4f, Diff = Differential.Mechanical,
+            RefZeroTo100 = 5.6f, RefTopKmh = 265f,
             MaxSteer = 0.58f, DragArea = 0.62f,
         },
         new CarSpec
@@ -298,10 +346,13 @@ public static class CarCatalog
                 Paint = new Color(0.98f, 0.8f, 0.1f), Rim = Silver,
             },
             Engine = EngineLayout.Inline4,
-            // source: EK9 Civic Type R factory specs (B16B, 185 PS @ 8200)
-            Mass = 1125f, FrontAxle = 1.05f, RearAxle = 1.57f, CgHeight = 0.48f, Grip = 1.02f,
-            PeakKw = 136f, PeakRpm = 8200f, IdleRpm = 800f, Redline = 8600f,
-            Gears = new[] { 3.230f, 2.105f, 1.458f, 1.107f, 0.848f }, FinalDrive = 4.4f,
+            // source: Honda Civic Type R (EK9, B16B 185 PS/8200, 160 Nm/7500, 5MT 4.400, 195/55R15, kerb 1050 kg); JDM brochure; period tests 0-60 mph 6.7 s / 0-100 ~7.0 s; helical LSD (Torsen); curve fitted to published peaks
+            Mass = 1125f, FrontAxle = 1.0218f, RearAxle = 1.5982f, CgHeight = 0.48f, Grip = 1.06f,
+            PeakKw = 136f, PeakRpm = 8200f, IdleRpm = 800f, Redline = 8400f,
+            Gears = new[] { 3.23f, 2.105f, 1.458f, 1.107f, 0.848f }, FinalDrive = 4.4f, Reverse = 3f,
+            Torque = new (float, float)[] { (1000f, 90f), (2000f, 115f), (3000f, 125f), (4000f, 132f), (5000f, 135f), (5600f, 140f), (6500f, 152f), (7500f, 160f), (8200f, 158.4f), (8400f, 148f) },
+            Tyre = "195/55R15", BrakeDecel = 10.1f, Diff = Differential.Torsen,
+            RefZeroTo100 = 7f, RefTopKmh = 220f,
             Drive = Drivetrain.Front,
             MaxSteer = 0.6f, DragArea = 0.6f,
         },
@@ -316,10 +367,13 @@ public static class CarCatalog
                 Paint = White, Rim = Silver, Wing = WingSize.Small,
             },
             Engine = EngineLayout.Inline4,
-            // source: DC2 Integra Type R factory specs (B18C, 200 PS @ 8000); the series' turbo is not modelled
-            Mass = 1155f, FrontAxle = 1.05f, RearAxle = 1.57f, CgHeight = 0.48f, Grip = 1.02f,
-            PeakKw = 147f, PeakRpm = 8000f, IdleRpm = 800f, Redline = 8600f,
-            Gears = new[] { 3.230f, 2.105f, 1.458f, 1.107f, 0.848f }, FinalDrive = 4.4f,
+            // source: Honda Integra Type R (DC2, 96-spec, B18C 200 PS/8000, 181 Nm/7500, 5MT 4.400, 195/55R15, kerb 1080 kg); JDM brochure; period tests 0-100 ~6.6 s; helical LSD (Torsen); series' turbo not modelled; curve fitted to published peaks
+            Mass = 1155f, FrontAxle = 0.9956f, RearAxle = 1.6244f, CgHeight = 0.48f, Grip = 1.06f,
+            PeakKw = 147f, PeakRpm = 8000f, IdleRpm = 800f, Redline = 8400f,
+            Gears = new[] { 3.23f, 2.105f, 1.458f, 1.107f, 0.848f }, FinalDrive = 4.4f, Reverse = 3f,
+            Torque = new (float, float)[] { (1000f, 95f), (2000f, 125f), (3000f, 140f), (4000f, 150f), (5000f, 155f), (5800f, 160f), (6500f, 170f), (7500f, 181f), (8000f, 175.5f), (8400f, 150f) },
+            Tyre = "195/55R15", BrakeDecel = 10f, Diff = Differential.Torsen,
+            RefZeroTo100 = 6.6f, RefTopKmh = 230f,
             Drive = Drivetrain.Front,
             MaxSteer = 0.6f, DragArea = 0.62f,
         },
@@ -335,10 +389,13 @@ public static class CarCatalog
                 Paint = White, Rim = Silver, PopUps = true,
             },
             Engine = EngineLayout.Inline4,
-            // source: MR2 G-Limited factory specs (3S-GE, ~165 PS)
-            Mass = 1335f, FrontAxle = 1.34f, RearAxle = 1.06f, CgHeight = 0.46f, Grip = 1.02f,
-            PeakKw = 121f, PeakRpm = 6800f, IdleRpm = 800f, Redline = 7500f,
-            Gears = new[] { 3.166f, 1.904f, 1.310f, 0.969f, 0.815f }, FinalDrive = 4.312f,
+            // source: Toyota MR2 G-Limited (SW20 1st series, 3S-GE 165 PS/6600, 196 Nm/4800, 5MT 4.312, kerb ~1240 kg); brochure figures; tyre size, 0-100 and top estimated; curve fitted to published peaks
+            Mass = 1315f, FrontAxle = 1.368f, RearAxle = 1.032f, CgHeight = 0.46f, Grip = 1.02f,
+            PeakKw = 121f, PeakRpm = 6600f, IdleRpm = 800f, Redline = 7500f,
+            Gears = new[] { 3.166f, 1.904f, 1.31f, 0.969f, 0.815f }, FinalDrive = 4.312f, Reverse = 3.583f,
+            Torque = new (float, float)[] { (1000f, 100f), (2000f, 145f), (3000f, 175f), (4000f, 190f), (4800f, 196f), (5500f, 190f), (6600f, 175f), (7000f, 165f), (7500f, 145f) },
+            Tyre = "205/55R15", BrakeDecel = 9.4f, Diff = Differential.Open,
+            RefZeroTo100 = 8.4f, RefTopKmh = 215f,
             MaxSteer = 0.58f, DragArea = 0.6f,
         },
         new CarSpec
@@ -352,11 +409,14 @@ public static class CarCatalog
                 Paint = new Color(0.8f, 0.15f, 0.12f), Rim = Silver,
             },
             Engine = EngineLayout.Inline4,
-            // source: MR-S factory specs (1ZZ-FE, 140 PS, 5MT)
-            Mass = 1045f, FrontAxle = 1.37f, RearAxle = 1.08f, CgHeight = 0.44f, Grip = 1.0f,
-            PeakKw = 103f, PeakRpm = 6400f, IdleRpm = 750f, Redline = 7000f,
-            Gears = new[] { 3.538f, 2.045f, 1.376f, 1.031f, 0.838f }, FinalDrive = 4.058f,
-            MaxSteer = 0.6f, DragArea = 0.58f,
+            // source: Toyota MR-S (ZZW30, 1ZZ-FE 140 PS/6400, 171 Nm/4400, 5MT 4.058, 205/50R15 rear, kerb ~970 kg); brochure figures; period tests 0-100 ~8.6 s; curve fitted to published peaks
+            Mass = 1045f, FrontAxle = 1.372f, RearAxle = 1.078f, CgHeight = 0.44f, Grip = 1.02f,
+            PeakKw = 103f, PeakRpm = 6400f, IdleRpm = 750f, Redline = 7200f,
+            Gears = new[] { 3.538f, 2.045f, 1.376f, 1.031f, 0.838f }, FinalDrive = 4.058f, Reverse = 3.583f,
+            Torque = new (float, float)[] { (1000f, 100f), (2000f, 140f), (3000f, 160f), (4400f, 171f), (5500f, 165f), (6400f, 153.7f), (7000f, 135f), (7200f, 125f) },
+            Tyre = "205/50R15", BrakeDecel = 9.2f, Diff = Differential.Open,
+            RefZeroTo100 = 8.6f, RefTopKmh = 200f,
+            MaxSteer = 0.6f, DragArea = 0.62f,
         },
         new CarSpec
         {
@@ -368,10 +428,13 @@ public static class CarCatalog
                 Paint = Silver, Rim = Silver, Wing = WingSize.Big,
             },
             Engine = EngineLayout.Inline6Turbo,
-            // source: Supra RZ factory specs (2JZ-GTE, 280 PS, 6MT)
-            Mass = 1585f, FrontAxle = 1.2f, RearAxle = 1.35f, CgHeight = 0.5f, Grip = 1.08f,
+            // source: Toyota Supra RZ (JZA80, 2JZ-GTE 280 PS/5600, 431 Nm/3600, V160 6MT 3.133, 255/40ZR17 rear, kerb 1510 kg); brochure; period tests 0-100 ~5.1 s; Torsen rear; curve fitted to published peaks
+            Mass = 1585f, FrontAxle = 1.1985f, RearAxle = 1.3515f, CgHeight = 0.5f, Grip = 1.08f,
             PeakKw = 206f, PeakRpm = 5600f, IdleRpm = 750f, Redline = 6800f,
-            Gears = new[] { 3.827f, 2.360f, 1.685f, 1.312f, 1.000f, 0.793f }, FinalDrive = 3.133f,
+            Gears = new[] { 3.827f, 2.36f, 1.685f, 1.312f, 1f, 0.793f }, FinalDrive = 3.133f, Reverse = 3.375f,
+            Torque = new (float, float)[] { (1000f, 180f), (2000f, 330f), (3000f, 410f), (3600f, 431f), (4500f, 420f), (5000f, 390f), (5600f, 351.5f), (6000f, 320f), (6800f, 270f) },
+            Tyre = "255/40R17", BrakeDecel = 10.1f, Diff = Differential.Torsen,
+            RefZeroTo100 = 5.1f, RefTopKmh = 250f,
             MaxSteer = 0.58f, DragArea = 0.68f,
         },
         // ---- Mazda and Nissan rivals ----
@@ -385,10 +448,13 @@ public static class CarCatalog
                 Paint = new Color(0.75f, 0.12f, 0.12f), Rim = Silver, PopUps = true,
             },
             Engine = EngineLayout.Inline4,
-            // source: NA6CE Roadster factory specs (B6-ZE, 120 PS, 5MT)
-            Mass = 1015f, FrontAxle = 1.13f, RearAxle = 1.135f, CgHeight = 0.46f, Grip = 1.0f,
+            // source: Eunos/Mazda Roadster NA6CE (B6-ZE 120 PS/6500, 137 Nm/5500, 5MT 4.100, 185/60R14, kerb 940 kg); brochure; road tests 0-100 ~9.4 s; open diff; curve fitted to published peaks
+            Mass = 1015f, FrontAxle = 1.1325f, RearAxle = 1.1325f, CgHeight = 0.46f, Grip = 1f,
             PeakKw = 88f, PeakRpm = 6500f, IdleRpm = 800f, Redline = 7000f,
-            Gears = new[] { 3.136f, 1.888f, 1.330f, 1.000f, 0.814f }, FinalDrive = 4.1f,
+            Gears = new[] { 3.136f, 1.888f, 1.33f, 1f, 0.814f }, FinalDrive = 4.1f, Reverse = 3.758f,
+            Torque = new (float, float)[] { (1000f, 90f), (2000f, 110f), (3000f, 122f), (4000f, 130f), (5500f, 137f), (6500f, 129.7f), (7000f, 118f), (7200f, 112f) },
+            Tyre = "185/60R14", BrakeDecel = 9.2f, Diff = Differential.Open,
+            RefZeroTo100 = 9.4f, RefTopKmh = 195f,
             MaxSteer = 0.6f, DragArea = 0.58f,
         },
         new CarSpec
@@ -401,11 +467,14 @@ public static class CarCatalog
                 Paint = Silver, Rim = Silver,
             },
             Engine = EngineLayout.Inline4,
-            // source: NB8C Roadster RS factory specs (BP-ZE, 145 PS, 5MT)
-            Mass = 1075f, FrontAxle = 1.13f, RearAxle = 1.135f, CgHeight = 0.46f, Grip = 1.0f,
+            // source: Eunos/Mazda Roadster NB8C (BP-ZE 145 PS/6500, 163 Nm/5000, 5MT 4.100, 185/55R15, kerb ~1010 kg); brochure; tests 0-100 ~8.7 s; Torsen LSD assumed for RS; curve fitted to published peaks
+            Mass = 1085f, FrontAxle = 1.1325f, RearAxle = 1.1325f, CgHeight = 0.46f, Grip = 1.03f,
             PeakKw = 107f, PeakRpm = 6500f, IdleRpm = 800f, Redline = 7000f,
-            Gears = new[] { 3.136f, 1.888f, 1.330f, 1.000f, 0.814f }, FinalDrive = 4.1f,
-            MaxSteer = 0.6f, DragArea = 0.58f,
+            Gears = new[] { 3.136f, 1.888f, 1.33f, 1f, 0.814f }, FinalDrive = 4.1f, Reverse = 3.758f,
+            Torque = new (float, float)[] { (1000f, 100f), (2000f, 130f), (3000f, 148f), (4000f, 158f), (5000f, 163f), (6000f, 158f), (6500f, 157.2f), (7000f, 145f), (7200f, 138f) },
+            Tyre = "185/55R15", BrakeDecel = 9.4f, Diff = Differential.Torsen,
+            RefZeroTo100 = 8.7f, RefTopKmh = 205f,
+            MaxSteer = 0.6f, DragArea = 0.6f,
         },
         new CarSpec
         {
@@ -417,10 +486,13 @@ public static class CarCatalog
                 Paint = new Color(0.2f, 0.24f, 0.34f), Rim = Silver,
             },
             Engine = EngineLayout.Inline6Turbo,
-            // source: ER34 Skyline 25GT Turbo factory specs (RB25DET, 280 PS, 5MT)
-            Mass = 1425f, FrontAxle = 1.2f, RearAxle = 1.465f, CgHeight = 0.5f, Grip = 1.02f,
+            // source: Nissan Skyline 25GT-t coupe (ER34, RB25DET 280 PS/6400, 333 Nm/3200, 5MT 3.937, 205/55R16, kerb ~1310 kg); brochure; tests 0-100 ~6.4 s; viscous LSD; curve fitted to published peaks
+            Mass = 1390f, FrontAxle = 1.146f, RearAxle = 1.5191f, CgHeight = 0.5f, Grip = 1.03f,
             PeakKw = 206f, PeakRpm = 6400f, IdleRpm = 800f, Redline = 7000f,
-            Gears = new[] { 3.321f, 1.902f, 1.308f, 1.000f, 0.759f }, FinalDrive = 3.937f,
+            Gears = new[] { 3.321f, 1.902f, 1.308f, 1f, 0.759f }, FinalDrive = 3.937f, Reverse = 3.382f,
+            Torque = new (float, float)[] { (1000f, 150f), (2000f, 260f), (3000f, 325f), (3200f, 333f), (4000f, 330f), (5000f, 320f), (6000f, 310f), (6400f, 307.4f), (6800f, 280f), (7000f, 265f) },
+            Tyre = "205/55R16", BrakeDecel = 9.9f, Diff = Differential.Viscous,
+            RefZeroTo100 = 6.4f, RefTopKmh = 245f,
             MaxSteer = 0.58f, DragArea = 0.68f,
         },
         new CarSpec
@@ -434,10 +506,13 @@ public static class CarCatalog
                 Paint = new Color(0.33f, 0.17f, 0.5f), Rim = Silver, Wing = WingSize.Small,
             },
             Engine = EngineLayout.Inline6Turbo,
-            // source: BNR34 GT-R V-spec II factory specs (RB26DETT, 280 PS, 6MT, ATTESA E-TS Pro)
-            Mass = 1635f, FrontAxle = 1.146f, RearAxle = 1.519f, CgHeight = 0.5f, Grip = 1.07f,
+            // source: Nissan Skyline GT-R V-spec II (BNR34, RB26DETT 280 PS/6800, 392 Nm/4400, Getrag 6MT 3.545, 235/45R17, kerb 1560 kg, ATTESA E-TS Pro); brochure + Best Motoring; 0-100 ~5.0 s; curve fitted to published peaks
+            Mass = 1635f, FrontAxle = 1.1193f, RearAxle = 1.5457f, CgHeight = 0.5f, Grip = 1.08f,
             PeakKw = 206f, PeakRpm = 6800f, IdleRpm = 800f, Redline = 8000f,
-            Gears = new[] { 3.827f, 2.360f, 1.685f, 1.312f, 1.000f, 0.793f }, FinalDrive = 3.545f,
+            Gears = new[] { 3.827f, 2.36f, 1.685f, 1.312f, 1f, 0.793f }, FinalDrive = 3.545f, Reverse = 3.415f,
+            Torque = new (float, float)[] { (1000f, 150f), (2000f, 250f), (3000f, 340f), (4000f, 385f), (4400f, 392f), (5000f, 385f), (6000f, 320f), (6800f, 289.2f), (7500f, 255f), (8000f, 230f) },
+            Tyre = "235/45R17", BrakeDecel = 10.5f, Diff = Differential.Torsen,
+            RefZeroTo100 = 5f, RefTopKmh = 250f,
             Drive = Drivetrain.All, RearBias = 0.7f,
             MaxSteer = 0.58f, DragArea = 0.7f,
         },
@@ -452,10 +527,13 @@ public static class CarCatalog
                 Paint = new Color(0.85f, 0.45f, 0.1f), Rim = Silver,
             },
             Engine = EngineLayout.V6,
-            // source: Z33 350Z factory specs (VQ35DE, 280 PS, 6MT)
-            Mass = 1525f, FrontAxle = 1.245f, RearAxle = 1.405f, CgHeight = 0.5f, Grip = 1.08f,
+            // source: Nissan Fairlady Z (Z33, VQ35DE 280 PS/6200, 358 Nm/4800, 6MT 3.538, 225/50R17, kerb ~1450 kg); brochure + magazine tests 0-100 ~5.9 s; viscous LSD; curve fitted to published peaks
+            Mass = 1525f, FrontAxle = 1.2323f, RearAxle = 1.4177f, CgHeight = 0.5f, Grip = 1.08f,
             PeakKw = 206f, PeakRpm = 6200f, IdleRpm = 700f, Redline = 6600f,
-            Gears = new[] { 3.794f, 2.324f, 1.624f, 1.271f, 1.000f, 0.794f }, FinalDrive = 3.538f,
+            Gears = new[] { 3.794f, 2.324f, 1.624f, 1.271f, 1f, 0.794f }, FinalDrive = 3.538f, Reverse = 3.382f,
+            Torque = new (float, float)[] { (1000f, 215f), (2000f, 270f), (3000f, 320f), (4000f, 350f), (4800f, 358f), (5500f, 340f), (6200f, 317.2f), (6600f, 290f), (7000f, 260f) },
+            Tyre = "225/50R17", BrakeDecel = 9.8f, Diff = Differential.Viscous,
+            RefZeroTo100 = 5.9f, RefTopKmh = 250f,
             MaxSteer = 0.58f, DragArea = 0.66f,
         },
         // ---- MF Ghost ----
@@ -470,10 +548,13 @@ public static class CarCatalog
             },
             // no naturally-aspirated boxer in EngineLayout, so it borrows the boxer voice
             Engine = EngineLayout.Boxer4Turbo,
-            // source: Toyota GT86 (ZN6, 2012) factory specs (FA20, 200 PS @ 7000, 6MT)
-            Mass = 1315f, FrontAxle = 1.208f, RearAxle = 1.362f, CgHeight = 0.46f, Grip = 1.05f,
+            // source: Toyota GT86 (ZN6, 2012: FA20 200 PS/7000, 205 Nm/6600, 6MT 4.100, 205/55R16, kerb ~1240 kg, Torsen LSD); Toyota brochure (0-100 7.6 s claimed, 226 km/h)
+            Mass = 1315f, FrontAxle = 1.2079f, RearAxle = 1.3621f, CgHeight = 0.46f, Grip = 1.03f,
             PeakKw = 147f, PeakRpm = 7000f, IdleRpm = 700f, Redline = 7450f,
-            Gears = new[] { 3.626f, 2.188f, 1.541f, 1.213f, 1.000f, 0.767f }, FinalDrive = 4.1f,
+            Gears = new[] { 3.626f, 2.188f, 1.541f, 1.213f, 1f, 0.767f }, FinalDrive = 4.1f, Reverse = 3.437f,
+            Torque = new (float, float)[] { (1000f, 120f), (2000f, 130f), (3000f, 150f), (3600f, 145f), (4000f, 150f), (5000f, 180f), (6000f, 203f), (6600f, 205f), (7000f, 200.6f), (7450f, 175f) },
+            Tyre = "205/55R16", BrakeDecel = 10.1f, Diff = Differential.Torsen,
+            RefZeroTo100 = 7.6f, RefTopKmh = 226f,
             MaxSteer = 0.6f, DragArea = 0.6f,
         },
     });
