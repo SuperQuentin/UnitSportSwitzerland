@@ -566,6 +566,25 @@ Several people work on this repo in parallel, so every new feature follows these
   bends (2.5 m/s² lateral) and for the car or player ahead. Density: Settings → Time of day (`TrafficCars`,
   35, ~half at night; `Trains`); `--traffic N`. Check: `<godot> --path . -- --trafficcheck[,out.png]
   [--time h]` — 40 s over the nearest motorway, chases a car then a train, fails if nothing moved.
+- **Cars and drifting** (`Player/Car.cs`, `CarSpec`, `RideKind` 8–10: Coupe 86, Rotary FD, Rally 4WD;
+  issue #1). A car is the one mount that does not go where it points, so `RideMotion` gained **`Slip`**
+  (travel minus nose, rad, + = left; π reversing) and `FootPlayer.RidePhysics` moves the body along
+  `Yaw + Slip` — zero for every other mount, which is why nothing else changed. The model is a planar
+  bicycle model in `RideMotion` alone (speed, slip, yaw rate), so a wall, boost or a sloppy landing that
+  edits `Speed` applies to the car too: slip angles through `sin(C·atan(B·α))` (peak ~0.15 rad), each
+  axle's side force limited to what its **friction circle** leaves after drive/brake force, load
+  transfer from the last step's acceleration, 5-speed auto box, 4 substeps. Every way into a drift
+  falls out of that: **handbrake** (Space / A — `Rideable.CanHop` false, `RideInput.Handbrake`) collapses
+  the rear circle, power-over eats it, and braking into a turn unloads the rear (feint). Game adds grip,
+  power, a counter-steer assist and a **yaw moment that catches the car past ~35°** (the fronts are on
+  the lock stop by then, so steering alone cannot); Sim has none of it. Two traps found by the check:
+  the low-speed kinematic blend must key on TOTAL speed (keyed on forward speed it zeroed the sideways
+  speed at 70° of angle, 50 km/h gone in 0.3 s), and speed-scaled steering lock must lift in a slide or
+  there is not enough counter-steer to catch anything. The chase camera swings ~55% toward the travel.
+  Known limits: the body is still the player capsule (radius 0.85 m), and there is no per-surface grip,
+  so the 4WD does not yet get its gravel advantage. Check: `<godot> --headless --path . -- --driftcheck
+  [--trace]` — flat ground, no world: launch, handbrake entry, 4 s hold, recovery for every car in both
+  profiles; non-zero exit on a spin, no drift, or no recovery.
 - **Mantle** (on foot): pushing into a wall whose top is 0.45–2.1 m above the feet, with open air
   over it and standing room on it, pulls you up (automatic in the air, needs Jump on the ground so
   walking into garden walls does not vault them). Jump + mantle therefore reaches ~3 m. Moved
@@ -1361,3 +1380,13 @@ Several people work on this repo in parallel, so every new feature follows these
 - godot-ai MCP: `game_eval` needs `Engine.get_main_loop().root` (no bare `root`) and
   TAB indentation; `editor_manage monitors_get` reads the EDITOR process, not the game —
   use `Performance.get_monitor` inside `game_eval` for game metrics.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
