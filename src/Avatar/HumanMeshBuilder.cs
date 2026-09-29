@@ -129,7 +129,7 @@ public static class HumanMeshBuilder
     public readonly record struct GaitMounts(
         Vector3 Eye, Vector3 Head, Vector3 Chest, Vector3 Hip,
         Vector3 ShoulderL, Vector3 ShoulderR, Vector3 FootL, Vector3 FootR,
-        float Lean);
+        float Lean, Vector3 HandL, Vector3 HandR);
 
     /// <summary>
     /// The mount points for one instant of the gait.
@@ -166,7 +166,9 @@ public static class HumanMeshBuilder
             ShoulderR: Flip(rig.ShoulderR),
             FootL: Flip(rig.AnkleL),
             FootR: Flip(rig.AnkleR),
-            Lean: rig.TorsoLean);
+            Lean: rig.TorsoLean,
+            HandL: Flip(rig.WristL),
+            HandR: Flip(rig.WristR));
 
         static Vector3 Flip(Vector3 v) => new(-v.X, v.Y, -v.Z);
     }

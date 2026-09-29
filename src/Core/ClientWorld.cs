@@ -196,6 +196,17 @@ public partial class ClientWorld : Node3D
         _rides.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_rides);
 
+        // The inventory is this machine's, not the player node's: it outlives a respawn or a
+        // reconnect, and the player it acts on is resolved per frame like the picker's.
+        var items = new Items.ItemController(Items.Inventory.Load(), origin)
+        {
+            ActivePlayer = () => _onFoot ? LocalPlayer : null,
+        };
+        AddChild(items);
+        // "--inventory" opens the panel once the player exists, for screenshotting it
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--inventory") >= 0)
+            GetTree().CreateTimer(1.5).Timeout += () => items.Ui.Open();
+
         // F4 records a session's performance to user://perf_logs; F3 shows the live numbers
         var recorder = new PerfRecorder(_chunks, origin,
             () => (_gpx?.Active == true ? "replay" : _onFoot ? "foot" : "fly") + (_networked ? "+net" : ""));

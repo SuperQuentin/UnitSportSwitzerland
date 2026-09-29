@@ -116,6 +116,34 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     [Export] public int RideKindId { get; set; }
 
+    // --- held item (see src/Items) ---
+    /// <summary>
+    /// What is in the player's hand, as an <see cref="Items.ItemId"/>. Replicated for the same
+    /// reason <see cref="RideKindId"/> is: other players should see the binoculars, not an empty
+    /// hand held up to a face. The inventory itself is local and is never sent.
+    /// </summary>
+    [Export] public int HeldItemId { get; set; }
+
+    /// <summary>
+    /// The figure's right hand in this node's local space, or null when no figure is drawn
+    /// (first person on foot, or mounted). Updated whenever the body mesh is posed.
+    /// </summary>
+    public Transform3D? HandLocal { get; private set; }
+
+    /// <summary>An item asking for a narrower view (binoculars, a camera's viewfinder); null for the normal FOV.</summary>
+    public float? FovOverride { get; set; }
+
+    /// <summary>
+    /// Look from the eye even in third person, with the body hidden — raising binoculars to your
+    /// face over a shoulder camera would otherwise zoom into the back of your own head.
+    /// </summary>
+    public bool ScopeView { get; set; }
+
+    /// <summary>Multiplies mouse and stick look; an item zoomed to 10° turns it down so aim stays steady.</summary>
+    public float LookScale { get; set; } = 1f;
+
+    public bool IsFirstPerson => !_thirdPerson;
+
     private Rideable? _ride;
     private RideMotion _motion;
     private Node3D? _visual;
@@ -454,6 +482,7 @@ public partial class FootPlayer : CharacterBody3D
         // What you are riding travels with where you are. Without it a remote client sees a
         // figure sprinting down a descent at 60 km/h in a running pose.
         replication.AddProperty(".:RideKindId");
+        replication.AddProperty(".:HeldItemId");
         var sync = new MultiplayerSynchronizer
         {
             // deterministic name: replication matches nodes by path across peers, and
@@ -519,6 +548,9 @@ public partial class FootPlayer : CharacterBody3D
         }
 
         RefreshVisual();
+
+        // every copy draws what is in the hand; only the local one also has a viewmodel
+        AddChild(new Items.HeldItemVisual(this) { Name = "HeldItem" });
     }
 
     /// <summary>
@@ -538,6 +570,7 @@ public partial class FootPlayer : CharacterBody3D
         _visual?.QueueFree();
         _visual = null;
         _walker = null;
+        HandLocal = null;
         _visualKind = kind;
 
         int rider = GetMultiplayerAuthority();
@@ -595,8 +628,19 @@ public partial class FootPlayer : CharacterBody3D
             // moves, the way rotating the body directly always did.
             if (!_thirdPerson)
                 Rotation = new Vector3(0, _viewYaw, 0);
+            else if (ScopeView && _camera != null)
+            {
+                // looking through something held to the eye: first person for as long as it lasts
+                Rotation = new Vector3(0, _viewYaw, 0);
+                _camera.Transform = new Transform3D(new Basis(Vector3.Right, _pitch),
+                    new Vector3(0, EyeHeight + _landingDip, 0));
+                if (_walker != null) _walker.Visible = false;
+                HandLocal = null;
+                _pivotY = float.NaN;
+            }
             else
             {
+                if (_walker != null) _walker.Visible = true;
                 AnimateLocalBody(dt);
                 UpdateThirdPersonCamera(dt);
             }
@@ -632,6 +676,19 @@ public partial class FootPlayer : CharacterBody3D
 
         _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, _seenSpeed, dt);
         _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, _seenSpeed, _stridePhase);
+        PlaceHand(Avatar.HumanMeshBuilder.MountsFor(_seenSpeed, _stridePhase));
+    }
+
+    /// <summary>
+    /// Records where the figure's right hand is, from the same rig the mesh was just built from,
+    /// so a held item swings with the arm instead of floating beside it.
+    /// </summary>
+    private void PlaceHand(Avatar.HumanMeshBuilder.GaitMounts mounts)
+    {
+        if (_walker == null) { HandLocal = null; return; }
+        // mounts are already turned to face -Z, where the figure's right is +X
+        var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
+        HandLocal = _walker.Transform * new Transform3D(Basis.Identity, hand);
     }
 
     /// <summary>
@@ -646,14 +703,22 @@ public partial class FootPlayer : CharacterBody3D
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
 
+        Avatar.HumanMeshBuilder.GaitMounts mounts;
         if (_sliding)
+        {
             _walker.Mesh = _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked);
+            mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked);
+        }
         else if (_airTime > 0.12f)
+        {
             _walker.Mesh = _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running);
+            mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running);
+        }
         else
         {
             _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
             _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, speed, _stridePhase);
+            mounts = Avatar.HumanMeshBuilder.MountsFor(speed, _stridePhase);
         }
 
         // Landing squash: the same spring that dips the first-person eye, spent on the body's
@@ -666,6 +731,7 @@ public partial class FootPlayer : CharacterBody3D
         float down = _stunTimer > 0 && IsOnFloor() ? -1.45f : 0f;
         _walker.Rotation = new Vector3(Mathf.Lerp(_walker.Rotation.X, down, 1f - Mathf.Exp(-10f * dt)), 0, 0);
         _walker.Position = new Vector3(0, Mathf.Abs(_walker.Rotation.X) * 0.12f, 0);
+        PlaceHand(mounts);
     }
 
     /// <summary>
@@ -896,6 +962,14 @@ public partial class FootPlayer : CharacterBody3D
         if (Health <= 0f) Die();
     }
 
+    /// <summary>Restores health (food, water). Returns false when there was nothing to restore.</summary>
+    public bool Heal(float amount)
+    {
+        if (amount <= 0 || _deadTimer > 0 || Health >= MaxHealth - 0.01f) return false;
+        Health = Mathf.Min(MaxHealth, Health + amount);
+        return true;
+    }
+
     /// <summary>
     /// Knocked out: down for a few seconds, then back on your feet where you last stood safely.
     /// Not a reload — the world, the wrecks and whatever you left parked are all still there.
@@ -1042,12 +1116,13 @@ public partial class FootPlayer : CharacterBody3D
             // Mounted, the body's yaw belongs to the steering — a bicycle goes where it points,
             // and letting the mouse turn it would mean looking over your shoulder steered you
             // into the ditch. The mouse gets its own yaw, which recentres itself.
+            float rate = 0.0022f * LookScale;
             if (_ride != null && !LookSteersRide)
-                _lookYaw = Mathf.Clamp(_lookYaw - motion.Relative.X * 0.0022f, -2.4f, 2.4f);
+                _lookYaw = Mathf.Clamp(_lookYaw - motion.Relative.X * rate, -2.4f, 2.4f);
             else
-                _viewYaw -= motion.Relative.X * 0.0022f;
+                _viewYaw -= motion.Relative.X * rate;
 
-            _pitch = ClampPitch(_pitch - motion.Relative.Y * 0.0022f);
+            _pitch = ClampPitch(_pitch - motion.Relative.Y * rate);
         }
     }
 
@@ -1057,7 +1132,7 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     private void ApplyStickLook(float dt)
     {
-        var look = PlayerInput.LookRate;
+        var look = PlayerInput.LookRate * LookScale;
         if (look == Vector2.Zero) return;
 
         if (_ride != null && !LookSteersRide)
@@ -2071,6 +2146,12 @@ public partial class FootPlayer : CharacterBody3D
         // a slide pushes it further, because the speed is the whole reward
         float targetFov = running && groundSpeed > WalkSpeed * 1.2f ? RunFov : BaseFov;
         targetFov = Mathf.Lerp(targetFov, SlideFov, _slideBlend);
+        // a held optic wins, and settles faster: a zoom that drifts in reads as lag
+        if (FovOverride is { } zoom)
+        {
+            _camera.Fov = Mathf.Lerp(_camera.Fov, zoom, 1f - Mathf.Exp(-14f * dt));
+            return;
+        }
         _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov, 1f - Mathf.Exp(-5f * dt));
     }
 }

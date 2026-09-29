@@ -70,6 +70,14 @@ public partial class PlayerInput : Node
     public const string Teleport = "teleport";
     public const string Menu = "menu";
 
+    // --- items (on foot) ---
+    public const string UseItem = "use_item";
+    public const string AimItem = "aim_item";
+    public const string Inventory = "inventory";
+    public const string QuickWheel = "quick_wheel";
+    public const string NextItem = "next_item";
+    public const string PrevItem = "prev_item";
+
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;
 
@@ -218,6 +226,16 @@ public partial class PlayerInput : Node
         Bind(Teleport, Keys(Key.Tab));
         Bind(Menu, Keys(Key.Escape), Button(JoyButton.Start));
 
+        // Items are an on-foot thing, so they reuse the shoulders that only mean something
+        // mounted (RB trick, LB boost). K and X are unused; E and I, the usual inventory keys,
+        // already get in vehicles and start engines.
+        Bind(UseItem, Mouse(MouseButton.Left), Button(JoyButton.RightShoulder));
+        Bind(AimItem, Mouse(MouseButton.Right), Button(JoyButton.LeftShoulder));
+        Bind(Inventory, Keys(Key.K), Button(JoyButton.Back));
+        Bind(QuickWheel, Keys(Key.X), Button(JoyButton.DpadLeft));
+        Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
+        Bind(PrevItem, Mouse(MouseButton.WheelUp));
+
         // Godot's built-in UI actions map the D-pad but not the face buttons, so a pad could
         // walk a menu's focus and never press anything. A confirms and B backs out, as on
         // every console; the stick navigates too, for anyone who reaches for it first.
@@ -231,6 +249,9 @@ public partial class PlayerInput : Node
 
     private static InputEvent[] Keys(params Key[] keys) =>
         keys.Select(k => (InputEvent)new InputEventKey { PhysicalKeycode = k }).ToArray();
+
+    private static InputEvent[] Mouse(MouseButton b) =>
+        new InputEvent[] { new InputEventMouseButton { ButtonIndex = b } };
 
     private static InputEvent[] Button(JoyButton b) =>
         new InputEvent[] { new InputEventJoypadButton { ButtonIndex = b, Device = -1 } };
