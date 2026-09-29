@@ -580,6 +580,25 @@ public partial class ChunkManager : Node3D
             : $"{SettleReport()} nearestPending={worst}@ring{nearest}";
     }
 
+    /// <summary>
+    /// The land-cover class under a point, for tiles loaded at a fine stride (the ones around a
+    /// player — far tiles drop their cover once meshed). False when that is not known.
+    /// </summary>
+    public bool TryGetCover(Vector3 worldPos, out CoverClass cover)
+    {
+        cover = CoverClass.Open;
+        if (_origin == null) return false;
+        var (e, n) = _origin.ToLv95(worldPos);
+        var id = TileId.FromLv95(e, n);
+        if (!_chunks.TryGetValue(id, out var state) || state.Cover is not { } raster) return false;
+        int col = (int)Math.Round(e - id.MinE), row = (int)Math.Round(id.MaxN - n);
+        if ((uint)col >= ChunkFormat.GridSize || (uint)row >= ChunkFormat.GridSize) return false;
+        int i = row * ChunkFormat.GridSize + col;
+        if (i >= raster.Length) return false;
+        cover = (CoverClass)raster[i];
+        return true;
+    }
+
     public bool TryGetHeight(Vector3 worldPos, out float height)
     {
         height = 0f;

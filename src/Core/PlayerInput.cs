@@ -72,6 +72,8 @@ public partial class PlayerInput : Node
 
     // --- items (on foot) ---
     public const string UseItem = "use_item";
+    /// <summary>Hold on foot outdoors to collect stone, water or firewood (<see cref="Loot.Gathering"/>).</summary>
+    public const string Gather = "gather";
     public const string AimItem = "aim_item";
     public const string Inventory = "inventory";
     public const string QuickWheel = "quick_wheel";
@@ -233,6 +235,8 @@ public partial class PlayerInput : Node
         Bind(AimItem, Mouse(MouseButton.Right), Button(JoyButton.LeftShoulder));
         Bind(Inventory, Keys(Key.K), Button(JoyButton.Back));
         Bind(QuickWheel, Keys(Key.X), Button(JoyButton.DpadLeft));
+        // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
+        Bind(Gather, Keys(Key.G), Button(JoyButton.X));
         Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
         Bind(PrevItem, Mouse(MouseButton.WheelUp));
 

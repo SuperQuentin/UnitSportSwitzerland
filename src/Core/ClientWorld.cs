@@ -182,7 +182,8 @@ public partial class ClientWorld : Node3D
             || RideProbe.ParseArgs() != null || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
-            || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null;
+            || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
+            || Loot.GatherProbe.ParseArgs().Requested;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -220,6 +221,9 @@ public partial class ClientWorld : Node3D
         // which decides who gets what; offline this client does both.
         var loot = Loot.LootService.Create(this);
         loot.Items = items;
+        // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
+        var gathering = new Loot.Gathering(_chunks, origin, items);
+        AddChild(gathering);
         // "--inventory" opens the panel once the player exists, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--inventory") >= 0)
             GetTree().CreateTimer(1.5).Timeout += () => items.Ui.Open();
@@ -286,6 +290,13 @@ public partial class ClientWorld : Node3D
             var (vE, vN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(vE, vN, 1200);
             AddChild(new Vehicles.VehicleProbe(_chunks, origin, vcheck.Shot));
+            return;
+        }
+
+        if (Loot.GatherProbe.ParseArgs() is { Requested: true } gcheck)
+        {
+            _chunks.RemoveAnchor(_spectator);
+            AddChild(new Loot.GatherProbe(_chunks, origin, gathering, items, gcheck.Shot));
             return;
         }
 
