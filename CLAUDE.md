@@ -802,6 +802,19 @@ Several people work on this repo in parallel, so every new feature follows these
 - **Output of any check or probe goes in `test_output/`** (gitignored, with a `.gdignore` so Godot
   never imports it): soundcheck WAVs, `--shot`/`--ride`/`--flycheck` screenshots, test exports.
   Never write them to the project root or a temp path that can end up inside the repo.
+- **Region setup wizard**: `dotnet run --project tools/MapSetup` (`tools/MapSetup/`, Spectre.Console).
+  Terminal map of CH (raw 24-bit ANSI, half-block pixels) to select tiles (rectangle, brush, town +
+  radius, canton), an estimate table (download / disk / time per step), then it chains the whole
+  pipeline below as subprocesses. Every step skips when its output exists, and the state lives in
+  `terrain_chunks_temp/mapsetup*.json`. The map comes from the committed
+  `tools/MapSetup/switzerland.bin` (per-km tile: zip size, survey year, canton, max elevation;
+  places; buildings sheets; nationwide file sizes). `--bake` rebuilds it from STAC +
+  swissBOUNDARIES3D. Non-interactive: `--town X --radius km | --canton VS | --bbox E0,N0,E1,N1 |
+  --tiles-file f | --resume`, `--layers`, `--plan-only`, `--yes`. The tile-list plumbing it relies
+  on: `swiss_data.py --tiles-file/--progress-json`, TerrainPreprocessor
+  `--features-only --tiles-file` and `--places-only` (places without re-running roads, which
+  would strip junctions), RoadGen `--tiles-file --skip-rewritten`, and `export_buildings.py --src`
+  (per-sheet zips).
 - Preprocess: `dotnet run --project tools/TerrainPreprocessor -c Release -- --in ressources/data/swiss_chunks --out terrain_chunks --verify --dump-png terrain_chunks_png`
   `--in` is recursive and repeatable (sources on any drive/share), `--jobs` defaults to all cores,
   `--io-jobs` (4) caps concurrent source reads. **One pass, no parse cache**: `TerrainBuild`
