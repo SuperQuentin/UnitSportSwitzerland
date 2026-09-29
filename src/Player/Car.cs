@@ -4,6 +4,21 @@ using UnitSport.Avatar;
 
 namespace UnitSport.Player;
 
+/// <summary>
+/// How the car is driven through a corner, as in the series: the drift cars slide the tight ones,
+/// the grip cars (Nakazato's R32 and his "real racing is grip" line, the Lancers, the Type Rs, the
+/// NSX, the MR2s) never do — they brake later and carry more speed on the racing line instead.
+/// </summary>
+public enum DriveStyle { Drift, Grip }
+
+/// <summary>
+/// What sits between the driven wheels. It decides how much of the axle's grip the engine can use
+/// once the tyres are at their limit: an open diff lets the lightly loaded inside wheel spin away and
+/// the car simply stops accelerating — which is why a stock car will not hold a drift on the throttle
+/// the way one with a mechanical LSD will.
+/// </summary>
+public enum Differential { Open, Viscous, Mechanical, Torsen }
+
 /// <summary>Which axles the engine turns.</summary>
 public enum Drivetrain { Rear, All, Front }
 
@@ -41,6 +56,8 @@ public sealed record CarSpec
     public float FinalDrive { get; init; }
     public float Reverse { get; init; } = 3.5f;
     public Drivetrain Drive { get; init; } = Drivetrain.Rear;
+    /// <summary>Drift or grip through corners, for the scripted drivers.</summary>
+    public DriveStyle Style { get; init; } = DriveStyle.Drift;
     /// <summary>Share of AWD torque sent to the rear axle.</summary>
     public float RearBias { get; init; } = 0.6f;
 
@@ -50,6 +67,62 @@ public sealed record CarSpec
     public float DragArea { get; init; } = 0.65f;
 
     public float Wheelbase => FrontAxle + RearAxle;
+
+    // ---- the real car, as published ----
+    /// <summary>Engine torque curve at the crank, (rpm, N·m) ascending. Empty: a generic curve peaking at <see cref="PeakKw"/>.</summary>
+    public (float Rpm, float Nm)[] Torque { get; init; } = System.Array.Empty<(float, float)>();
+    /// <summary>Tyre size as stamped on the sidewall, e.g. "185/60R14"; sets the rolling radius.</summary>
+    public string Tyre { get; init; } = "";
+    /// <summary>Best braking, m/s², from the published 100-0 km/h distance (v²/2d). 0: from grip.</summary>
+    public float BrakeDecel { get; init; }
+    public Differential Diff { get; init; } = Differential.Open;
+    /// <summary>Published 0-100 km/h, s, and top speed, km/h — what <c>--driftcheck</c> checks the model against.</summary>
+    public float RefZeroTo100 { get; init; }
+    public float RefTopKmh { get; init; }
+
+    /// <summary>Rolling radius from the tyre size (rim + sidewall), m; 0.3 when no tyre is given.</summary>
+    public float WheelRadius
+    {
+        get
+        {
+            // 185/60R14: 185 mm wide, sidewall 60% of that, 14 in rim
+            var t = Tyre.Replace(" ", "").ToUpperInvariant();
+            int slash = t.IndexOf('/'), r = t.IndexOf('R');
+            if (slash < 1 || r < slash
+                || !float.TryParse(t[..slash], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float w)
+                || !float.TryParse(t[(slash + 1)..r], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float ar)
+                || !float.TryParse(new string(t[(r + 1)..].TakeWhile(c => char.IsDigit(c) || c == '.').ToArray()),
+                    System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float rim))
+                return 0.3f;
+            return (rim * 25.4f * 0.5f + w * ar / 100f) / 1000f * 0.97f;   // loaded: ~3% squat
+        }
+    }
+
+    /// <summary>Crank torque at an rpm, N·m: the published curve, else a generic one peaking at the rated power.</summary>
+    public float TorqueAt(float rpm)
+    {
+        if (Torque.Length == 0)
+        {
+            float peak = PeakKw * 1000f / (PeakRpm * Mathf.Tau / 60f);
+            float x = Mathf.Min(rpm / Redline, 1f);
+            return peak * (0.7f + 1.2f * x * (1f - x));
+        }
+        if (rpm <= Torque[0].Rpm) return Torque[0].Nm;
+        for (int i = 1; i < Torque.Length; i++)
+            if (rpm <= Torque[i].Rpm)
+            {
+                var (r0, n0) = Torque[i - 1];
+                var (r1, n1) = Torque[i];
+                return Mathf.Lerp(n0, n1, (rpm - r0) / Mathf.Max(1f, r1 - r0));
+            }
+        return Torque[^1].Nm;
+    }
+
+    /// <summary>Share of the driven axle's grip the engine can use at the limit.</summary>
+    public float DiffFactor => Diff switch
+    {
+        Differential.Open => 0.72f, Differential.Viscous => 0.88f, _ => 1f,
+    };
 }
 
 /// <summary>
@@ -128,7 +201,7 @@ public sealed class Car : Rideable
     public float AccelX { get; private set; }
     public float AccelY { get; private set; }
 
-    private const float WheelRadius = 0.3f;
+    private float WheelRadius => Spec.WheelRadius;
     private const float Driveline = 0.85f;
     private const float AirDensity = 1.2f;
     private const float RollingResistance = 0.013f;
@@ -199,7 +272,7 @@ public sealed class Car : Rideable
             delta = Mathf.Clamp(delta + ArcadeAssist * slipNow - ArcadeYawDamp * motion.YawRate, -s.MaxSteer, s.MaxSteer);
         SteerAngle = delta;
 
-        float peakTorque = s.PeakKw * 1000f / (s.PeakRpm * Mathf.Tau / 60f) * (arcade ? ArcadePower : 1f);
+        float powerScale = arcade ? ArcadePower : 1f;
         float slideAccum = 0f;
         float h = dt / Substeps;
 
@@ -220,8 +293,7 @@ public sealed class Car : Rideable
             float ratio = (reverse ? s.Reverse : s.Gears[Gear - 1]) * s.FinalDrive;
             float wheelRpm = Mathf.Abs(u) / WheelRadius * 60f / Mathf.Tau;
             Rpm = Mathf.Max(s.IdleRpm, wheelRpm * ratio);
-            float x = Mathf.Min(Rpm / s.Redline, 1f);
-            float torque = Rpm >= s.Redline ? 0f : peakTorque * (0.7f + 1.2f * x * (1f - x));
+            float torque = Rpm >= s.Redline ? 0f : s.TorqueAt(Rpm) * powerScale;
             float drive = _shiftTimer > 0 ? 0f : pedal * torque * ratio * Driveline / WheelRadius;
             if (reverse) drive = -drive;
 
@@ -233,7 +305,8 @@ public sealed class Car : Rideable
 
             // --- longitudinal forces per axle ---
             float sign = Mathf.Sign(u);
-            float brakeForce = brake * grip * m * Gravity * 0.95f;
+            // the car's own brakes (published 100-0 km/h), never more than the tyres can take
+            float brakeForce = brake * m * Mathf.Min(s.BrakeDecel > 0 ? s.BrakeDecel * (arcade ? 1.1f : 1f) : 99f, grip * Gravity * 0.95f);
             float fxF = -sign * brakeForce * 0.65f;
             float fxR = -sign * brakeForce * 0.35f;
             if (input.Handbrake) fxR = -sign * 0.8f * grip * nr;
@@ -250,6 +323,14 @@ public sealed class Car : Rideable
             float wheelspin = Mathf.Max(0f, Mathf.Max(Mathf.Abs(fxR) / capR, Mathf.Abs(fxF) / capF) - 0.9f) * 10f;
             fxF = Mathf.Clamp(fxF, -capF, capF);
             fxR = Mathf.Clamp(fxR, -capR, capR);
+            // an open diff lets the inside wheel spin away: the driven axle stops pushing at a
+            // fraction of its grip, which leaves side grip — the car will not power over as easily
+            if (drive != 0f)
+            {
+                float lim = s.DiffFactor;
+                if (s.Drive != Drivetrain.Front && fxR * drive > 0) fxR = Mathf.Clamp(fxR, -capR * lim, capR * lim);
+                if (s.Drive != Drivetrain.Rear && fxF * drive > 0) fxF = Mathf.Clamp(fxF, -capF * lim, capF * lim);
+            }
 
             // --- lateral forces: slip angle through the tyre curve, inside what the circle leaves ---
             float speed = Mathf.Max(Mathf.Abs(u), 1f);

@@ -107,7 +107,11 @@ public static class DriftCheck
         GD.Print($"[drift] {profile,-4} {spec.Label,-10} 0-100 {to100,4:F1}s  top {tm.Speed * 3.6f,4:F0} km/h  "
             + $"entry {entrySpeed * 3.6f,4:F0} km/h  max angle {Mathf.RadToDeg(maxSlip),3:F0}°  "
             + $"drifting {drifting:F1}s  end {Mathf.RadToDeg(endSlip),3:F0}° at {m.Speed * 3.6f,3:F0} km/h"
-            + (spun ? "  SPUN" : "") + (straightSlip >= 0.02f ? "  UNSTABLE" : "") + (ok ? "  ok" : "  FAIL"));
+            + (spun ? "  SPUN" : "") + (straightSlip >= 0.02f ? "  UNSTABLE" : "") + (ok ? "  ok" : "  FAIL")
+            // against the published figures, in Sim only (Game is deliberately faster)
+            + (profile == RideProfile.Sim && spec.RefZeroTo100 > 0
+                ? $"  | real 0-100 {spec.RefZeroTo100:F1}s ({(to100 / spec.RefZeroTo100 - 1f) * 100f:+0;-0}%) top {spec.RefTopKmh:F0} ({(tm.Speed * 3.6f / spec.RefTopKmh - 1f) * 100f:+0;-0}%)"
+                : ""));
         return ok;
     }
 }

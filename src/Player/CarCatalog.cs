@@ -101,6 +101,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "BNR32",
+            Style = DriveStyle.Grip,
             Blurb = "Takeshi Nakazato's Skyline GT-R: the Night Kid's twin-turbo six with AWD grip, heavy in the corners",
             Body = new CarBody
             {
@@ -118,6 +119,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "EG6 hatch",
+            Style = DriveStyle.Grip,
             Blurb = "Shingo Shoji's Civic SiR-II: a front-drive VTEC screamer that wins on the climb",
             Body = new CarBody
             {
@@ -216,6 +218,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "CE9A Evo III",
+            Style = DriveStyle.Grip,
             Blurb = "Kyoichi Sudo's Emperor Evo: turbo four-wheel drive that pulls out of every corner",
             Body = new CarBody
             {
@@ -233,6 +236,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "CN9A Evo IV",
+            Style = DriveStyle.Grip,
             Blurb = "Seiji Iwaki's Evo IV: active yaw control turns the AWD saloon into a scalpel",
             Body = new CarBody
             {
@@ -250,6 +254,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "CT9A Evo VII",
+            Style = DriveStyle.Grip,
             Blurb = "The Evo VII GSR that meets Project D in Final Stage: active centre diff, the last of the iron-block era",
             Body = new CarBody
             {
@@ -268,6 +273,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "NA1 NSX",
+            Style = DriveStyle.Grip,
             Blurb = "Go Hojo's Sidewinder NSX: mid-engined V6, the overwhelming car of Project D's Kanagawa run",
             Body = new CarBody
             {
@@ -284,6 +290,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "EK9 Type R",
+            Style = DriveStyle.Grip,
             Blurb = "A yellow Civic Type R: high-revving front drive that punishes any mistake in a hairpin",
             Body = new CarBody
             {
@@ -301,6 +308,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "DC2 Type R",
+            Style = DriveStyle.Grip,
             Blurb = "A white Integra Type R (turbocharged in the series): the front-drive coupe with the sharpest nose",
             Body = new CarBody
             {
@@ -319,6 +327,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "SW20 MR2",
+            Style = DriveStyle.Grip,
             Blurb = "Kai Kogashiwa's MR2: mid-engine balance, sharp until it snaps",
             Body = new CarBody
             {
@@ -335,6 +344,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "ZZW30 MR-S",
+            Style = DriveStyle.Grip,
             Blurb = "Kai Kogashiwa's open two-seater in Kanagawa: featherweight and mid-engined",
             Body = new CarBody
             {
@@ -416,6 +426,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "BNR34",
+            Style = DriveStyle.Grip,
             Blurb = "Kozo Hoshino's God Foot R34 GT-R of Purple Shadow: AWD, twin turbo, brutally fast on the flat",
             Body = new CarBody
             {
@@ -433,6 +444,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "Z33",
+            Style = DriveStyle.Grip,
             Blurb = "The Fairlady Z from Final Stage's line-up: a torquey V6 coupe, more grip than finesse",
             Body = new CarBody
             {
