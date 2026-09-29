@@ -150,6 +150,10 @@ public partial class ClientWorld : Node3D
             return at;
         };
 
+        // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
+        var combat = Combat.CombatManager.Create(this, _chunks, server: false);
+        combat.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+
         // Building interiors: E at a front door. Same node path as the server's, which plans and
         // stores them; offline this client does both.
         var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
@@ -205,7 +209,8 @@ public partial class ClientWorld : Node3D
             || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
             || Loot.GatherProbe.ParseArgs().Requested
             || Birds.BirdProbe.ParseArgs().Requested
-            || World.TrafficProbe.ParseArgs().Requested;
+            || World.TrafficProbe.ParseArgs().Requested
+            || Combat.CombatProbe.ParseArgs().Requested;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -345,6 +350,14 @@ public partial class ClientWorld : Node3D
             var (iE, iN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(iE, iN, 1200);
             AddChild(new Interiors.InteriorProbe(_chunks, origin, _cache, icheck.Shot));
+            return;
+        }
+
+        if (Combat.CombatProbe.ParseArgs() is { Requested: true } ccheck)
+        {
+            var (cE, cN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(cE, cN, 1200);
+            AddChild(new Combat.CombatProbe(_chunks, origin, ccheck.Shot));
             return;
         }
 

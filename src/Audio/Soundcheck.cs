@@ -13,7 +13,7 @@ public static class Soundcheck
         var banks = new[]
         {
             SfxSynth.StepsBank, SfxSynth.LandingBank, SfxSynth.WhooshBank, SfxSynth.TickBank,
-            SfxSynth.ImpactBank, SfxSynth.ChimeBank, SfxSynth.BoomBank,
+            SfxSynth.ImpactBank, SfxSynth.ChimeBank, SfxSynth.BoomBank, SfxSynth.GunBank,
         };
         foreach (var bank in banks)
             for (int i = 0; i < bank.Variants.Length; i++)

@@ -56,6 +56,8 @@ public partial class PlayerInput : Node
     public const string Trick = "trick";
     public const string LookBehind = "look_behind";
     public const string Boost = "boost";
+    /// <summary>Guns, in an armed craft (plane, helicopter): <see cref="Combat.CombatManager"/>.</summary>
+    public const string Fire = "fire";
 
     // --- free-fly camera ---
     public const string FlyUp = "fly_up";
@@ -216,6 +218,9 @@ public partial class PlayerInput : Node
         Bind(Trick, Keys(Key.F), Button(JoyButton.RightShoulder));
         Bind(LookBehind, Keys(Key.B));
         Bind(Boost, Keys(Key.Q), Button(JoyButton.LeftShoulder));
+        // Flying, the mouse button and RB mean nothing else: items are on foot only, and tricks
+        // and boost belong to the ground mounts.
+        Bind(Fire, Mouse(MouseButton.Left), Button(JoyButton.RightShoulder));
 
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));
