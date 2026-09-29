@@ -15,6 +15,86 @@ public static class BuildingMeshBuilder
     /// <summary>Faces steeper than this are walls; flatter ones are roof.</summary>
     private const float RoofNormalY = 0.45f;
 
+    /// <summary>
+    /// The building mesh plus a front door on each building. The doors are a few boxes appended
+    /// after the facades, with no windows (uv.y &lt; 0), so a tile's buildings and all their doors
+    /// stay one surface and one draw call.
+    /// </summary>
+    public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors)
+    {
+        var data = Build(tile);
+        if (data == null || doors == null || doors.Length == 0) return data;
+
+        var v = new List<Vector3>(doors.Length * 120);
+        var c = new List<Color>(doors.Length * 120);
+        foreach (var d in doors)
+            if (d.Width > 0) AppendDoor(v, c, d, tile.Buildings[d.Index].Kind);
+
+        int n = data.Vertices.Length;
+        var vertices = new Vector3[n + v.Count];
+        var colors = new Color[n + v.Count];
+        var uvs = new Vector2[n + v.Count];
+        var uv2s = new Vector2[n + v.Count];
+        Array.Copy(data.Vertices, vertices, n);
+        Array.Copy(data.Colors, colors, n);
+        Array.Copy(data.Uvs, uvs, n);
+        Array.Copy(data.Uv2s, uv2s, n);
+        for (int i = 0; i < v.Count; i++)
+        {
+            vertices[n + i] = v[i];
+            colors[n + i] = c[i];
+            uvs[n + i] = new Vector2(0f, -1f);
+        }
+        return new MeshData(vertices, colors, uvs, uv2s);
+    }
+
+    /// <summary>Frame, leaf and a doorstep, in the door's own frame (along the wall, out, up).</summary>
+    private static void AppendDoor(List<Vector3> v, List<Color> c, Interiors.DoorSpot d, BuildingKind kind)
+    {
+        var o = d.Outward;
+        var t = new Vector3(-o.Z, 0, o.X);
+        var at = d.Position;
+        float hw = d.Width / 2, h = d.Height;
+
+        Vector3 P(float along, float up, float out_) => at + t * along + Vector3.Up * up + o * out_;
+        void Quad(Vector3 a, Vector3 b, Vector3 cc, Vector3 dd, Color col)
+        {
+            // both windings: the building shader culls back faces and a door is seen from outside
+            v.Add(a); v.Add(b); v.Add(cc); v.Add(a); v.Add(cc); v.Add(dd);
+            v.Add(a); v.Add(cc); v.Add(b); v.Add(a); v.Add(dd); v.Add(cc);
+            for (int i = 0; i < 12; i++) c.Add(col);
+        }
+        void Box(float a0, float a1, float u0, float u1, float o0, float o1, Color col)
+        {
+            var side = col * 0.85f;
+            Quad(P(a0, u0, o1), P(a1, u0, o1), P(a1, u1, o1), P(a0, u1, o1), col);   // face
+            Quad(P(a0, u1, o0), P(a1, u1, o0), P(a1, u1, o1), P(a0, u1, o1), col);   // top
+            Quad(P(a0, u0, o0), P(a0, u1, o0), P(a0, u1, o1), P(a0, u0, o1), side);  // ends
+            Quad(P(a1, u0, o0), P(a1, u0, o1), P(a1, u1, o1), P(a1, u1, o0), side);
+            Quad(P(a0, u0, o0), P(a1, u0, o0), P(a1, u0, o1), P(a0, u0, o1), side * 0.8f);
+        }
+
+        var frame = new Color(0.86f, 0.84f, 0.79f).SrgbToLinear();
+        var leaf = (kind switch
+        {
+            BuildingKind.Agricultural or BuildingKind.Annex => new Color(0.42f, 0.30f, 0.20f),
+            BuildingKind.Industrial => new Color(0.46f, 0.50f, 0.54f),
+            BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Civic => new Color(0.22f, 0.26f, 0.30f),
+            _ => new Color(0.40f, 0.25f, 0.15f),
+        }).SrgbToLinear();
+        var step = new Color(0.62f, 0.61f, 0.58f).SrgbToLinear();
+
+        Box(-hw - 0.12f, -hw, 0, h + 0.12f, 0, 0.08f, frame);
+        Box(hw, hw + 0.12f, 0, h + 0.12f, 0, 0.08f, frame);
+        Box(-hw - 0.12f, hw + 0.12f, h, h + 0.12f, 0, 0.08f, frame);
+        Quad(P(-hw, 0, 0.03f), P(hw, 0, 0.03f), P(hw, h, 0.03f), P(-hw, h, 0.03f), leaf);
+        // handle
+        float hx = hw * 0.7f;
+        Box(hx - 0.04f, hx + 0.04f, 1.0f, 1.08f, 0.03f, 0.08f, frame * 0.7f);
+        // a doorstep: the cue that says "this is a way in" from across the street
+        Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
+    }
+
     public static MeshData? Build(BuildingTile tile)
     {
         int triangles = 0;
@@ -108,7 +188,7 @@ public static class BuildingMeshBuilder
     /// 69% of buildings; otherwise it is inferred from a typical 2.9 m storey.
     /// Kinds that genuinely have few windows (barns, garages, tanks) opt out with 0.
     /// </summary>
-    private static (float Height, int Count) Storeys(Building b)
+    public static (float Height, int Count) Storeys(Building b)
     {
         if (b.Kind is BuildingKind.Annex or BuildingKind.Agricultural
             or BuildingKind.Industrial or BuildingKind.UnderConstruction)

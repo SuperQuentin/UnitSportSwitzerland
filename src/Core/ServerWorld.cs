@@ -19,6 +19,7 @@ public partial class ServerWorld : Node3D
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
+    private Interiors.InteriorManager? _interiors;
 
     public override async void _Ready()
     {
@@ -54,6 +55,11 @@ public partial class ServerWorld : Node3D
         // vehicles standing in the world; the server spawns and removes them for everyone
         _vehicles = Vehicles.VehicleManager.Create(this, null);
         _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
+
+        // building interiors: planned here on first entry, stored under user://interiors, and
+        // handed to everyone who walks in afterwards
+        _interiors = Interiors.InteriorManager.Create(this, source, origin);
+        _interiors.Players = _players;
 
         // The server owns the place index too, so /city and /tpall resolve against the same
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
@@ -143,6 +149,7 @@ public partial class ServerWorld : Node3D
         var node = _spawner!.Spawn(id);
         if (node is Node3D player)
             _chunks!.AddAnchor(player);
+        _interiors?.SendTableTo(id);
     }
 
     private void OnPeerDisconnected(long id)
@@ -150,6 +157,7 @@ public partial class ServerWorld : Node3D
         GD.Print($"[server] peer {id} disconnected");
         _chat?.ReportDisconnect(id);
         _vehicles?.ForgetOwner(id);
+        _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
 
         if (_players!.GetNodeOrNull<Node3D>(id.ToString()) is { } player)

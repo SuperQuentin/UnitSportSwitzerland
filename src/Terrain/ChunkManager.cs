@@ -334,7 +334,8 @@ public partial class ChunkManager : Node3D
         HashSet<int>? Holes, byte[]? Cover,
         ArrayMesh? Buildings, Vector3[]? BuildingFaces, bool BuildingsRequested,
         ChunkNode.TreeMeshes? Trees, ArrayMesh? Water,
-        Vector3[]? RoadCollisionFaces = null, long[]? StageMs = null);
+        Vector3[]? RoadCollisionFaces = null, long[]? StageMs = null,
+        Interiors.DoorSpot[]? Doors = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -746,6 +747,8 @@ public partial class ChunkManager : Node3D
             {
                 if (result.Buildings != null)
                     EnsureNode(result.Id, state).SetBuildings(result.Buildings);
+                if (result.Doors != null)
+                    Interiors.DoorIndex.SetTile(result.Id, _origin!.ToWorld(result.Id.MinE, result.Id.MaxN, 0), result.Doors);
                 if (result.Trees != null)
                     EnsureNode(result.Id, state).SetTrees(result.Trees);
                 if (result.Water != null)
@@ -934,6 +937,7 @@ public partial class ChunkManager : Node3D
             gone.Node?.QueueFree();
             _chunks.Remove(id);
             Horizon?.SetCovered(id, false);
+            Interiors.DoorIndex.ClearTile(id);
         }
     }
 
@@ -1131,15 +1135,24 @@ public partial class ChunkManager : Node3D
                 // mark the tile done, so it is not asked again.
                 ArrayMesh? buildings = null;
                 Vector3[]? buildingFaces = null;
+                Interiors.DoorSpot[]? doors = null;
                 if (wantBuildings || wantCollision)
                 {
                     var bTile = await source.LoadBuildingsAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
                     Lap(StBldgLoad, stageMs, clock);
 
-                    if (wantBuildings && bTile != null && buildingMaterial != null
-                        && BuildingMeshBuilder.Build(bTile) is { } buildingData)
-                        buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
+                    if (wantBuildings && bTile != null && buildingMaterial != null)
+                    {
+                        // Doors face the street, so they need the road tile even when the roads
+                        // themselves are already drawn; it is cached, and without it the door
+                        // choice would depend on load order and disagree between peers.
+                        var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
+                        ct.ThrowIfCancellationRequested();
+                        doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null);
+                        if (BuildingMeshBuilder.Build(bTile, doors) is { } buildingData)
+                            buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
+                    }
                     if (wantCollision)
                         buildingFaces = bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : [];
                     Lap(StBldgMesh, stageMs, clock);
@@ -1204,7 +1217,7 @@ public partial class ChunkManager : Node3D
                 _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: false,
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
-                    bridgeCollision, stageMs));
+                    bridgeCollision, stageMs, doors));
             }
             catch (OperationCanceledException)
             {

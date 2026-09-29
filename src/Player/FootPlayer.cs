@@ -243,6 +243,41 @@ public partial class FootPlayer : CharacterBody3D
     /// <summary>The camera this player is looking through is the one on screen.</summary>
     public bool IsViewing => _camera is { Current: true };
 
+    /// <summary>The building this player is inside (<see cref="Interiors.BuildingKey"/> text), or null outdoors.</summary>
+    public string? InteriorKey { get; private set; }
+    public bool Indoors => InteriorKey != null;
+
+    /// <summary>
+    /// Puts the player inside an interior. Everything that measures against the terrain — the
+    /// drop-onto-the-ground pass, the under-the-terrain rescue, the base-jump height — has to stand
+    /// down while this is set: the interior is thousands of metres under the ground it would test.
+    /// </summary>
+    public void EnterInterior(string key, Vector3 at, float yaw)
+    {
+        if (_sliding) EndSlide();
+        InteriorKey = key;
+        RequestReplacement();
+        _placed = true;
+        GlobalPosition = at;
+        _viewYaw = yaw;
+        Rotation = new Vector3(0, yaw, 0);
+        _lastSafe = at;
+        _hasSafe = true;
+    }
+
+    /// <summary>Back outside; null <paramref name="at"/> just drops the state (a teleport is moving us anyway).</summary>
+    public void LeaveInterior(Vector3? at, float yaw)
+    {
+        InteriorKey = null;
+        if (at is not { } p) return;
+        RequestReplacement();
+        GlobalPosition = p;
+        _viewYaw = yaw;
+        Rotation = new Vector3(0, yaw, 0);
+        _lastSafe = p;
+        _hasSafe = true;
+    }
+
     /// <summary>Downward speed while mounted and airborne, for the ride landing.</summary>
     private float _rideFall;
     private bool _rideWasOnFloor = true;
@@ -494,6 +529,12 @@ public partial class FootPlayer : CharacterBody3D
         // the synchronizer's own authority decides who sends; children added after the
         // parent's SetMultiplayerAuthority default to server authority
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
+        // Interest management: this player's position goes only to peers in the same space —
+        // the same interior, or both outdoors — plus the server, which relays and answers /tp.
+        // The table is the server's (see InteriorManager), never this node's replicated state.
+        if (IsMultiplayerAuthority())
+            sync.AddVisibilityFilter(Callable.From((long peer) =>
+                peer == 1 || Interiors.InteriorManager.Instance?.SameSpaceAsLocal(peer) != false));
         AddChild(sync);
 
         AddToGroup(Group);
@@ -646,6 +687,16 @@ public partial class FootPlayer : CharacterBody3D
             }
             return;
         }
+
+        // someone in another building (or out while we are in) is not here: hidden, and their
+        // last replicated position must not stand in a doorway as an invisible wall
+        bool here = Interiors.InteriorManager.Instance?.SameSpaceAsLocal(GetMultiplayerAuthority()) != false;
+        if (Visible != here)
+        {
+            Visible = here;
+            _body.Disabled = !here;
+        }
+        if (!here) return;
 
         RefreshVisual();
         AnimateRemoteWalk((float)delta);
@@ -813,7 +864,7 @@ public partial class FootPlayer : CharacterBody3D
     public bool SetRide(RideKind kind)
     {
         if (kind == (RideKind)RideKindId) return true;
-        if (!IsOnFloor() || _sliding) return false;
+        if (!IsOnFloor() || _sliding || Indoors) return false;
 
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
         float limit = _ride?.DismountSpeed ?? RunSpeed + 0.5f;
@@ -845,11 +896,18 @@ public partial class FootPlayer : CharacterBody3D
             ExitVehicle();
             return true;
         }
-        if (_ride != null || _mantling || _deadTimer > 0 || Vehicles == null) return false;
+        // inside, E is the front door or nothing: no mount picker in a living room
+        if (Indoors)
+        {
+            var interiors = Interiors.InteriorManager.Instance;
+            return interiors?.TryExit(this) ?? true;
+        }
+        if (_ride != null || _mantling || _deadTimer > 0) return false;
 
-        var vehicle = Vehicles.Nearest(GlobalPosition, EnterReach);
-        if (vehicle == null) return false;
-        Vehicles.Claim(vehicle, EnterVehicle);
+        var vehicle = Vehicles?.Nearest(GlobalPosition, EnterReach);
+        if (vehicle == null)
+            return IsOnFloor() && Interiors.InteriorManager.Instance?.TryEnter(this) == true;
+        Vehicles!.Claim(vehicle, EnterVehicle);
         return true;
     }
 
@@ -1156,7 +1214,7 @@ public partial class FootPlayer : CharacterBody3D
     public override void _PhysicsProcess(double delta)
     {
         // drop onto the terrain surface once its height data is available
-        if (!_placed)
+        if (!_placed && !Indoors)
         {
             // and its collision: the fly camera does not ask for one, so the tile this body
             // was dropped onto may have a mesh and no ground to stand on for a few frames
@@ -1500,7 +1558,7 @@ public partial class FootPlayer : CharacterBody3D
     /// <summary>Safety net: never end up under the terrain surface, on foot or mounted.</summary>
     private void ClampAboveTerrain(double delta)
     {
-        if (Terrain == null || !Terrain.TryGetHeight(GlobalPosition, out float ground)
+        if (Indoors || Terrain == null || !Terrain.TryGetHeight(GlobalPosition, out float ground)
             || GlobalPosition.Y >= ground - 2f) return;
 
         _sinceSnapWarning += delta;

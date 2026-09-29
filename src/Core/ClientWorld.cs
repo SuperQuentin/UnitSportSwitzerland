@@ -149,6 +149,17 @@ public partial class ClientWorld : Node3D
             return at;
         };
 
+        // Building interiors: E at a front door. Same node path as the server's, which plans and
+        // stores them; offline this client does both.
+        var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
+        interiors.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+        interiors.LocalInsideChanged += inside =>
+        {
+            // indoors, the whole outside world is overhead and out of sight: stop drawing it
+            if (_chunks != null) _chunks.Visible = !inside;
+            vehicles.Visible = !inside;
+        };
+
         AddChild(new WorldEnvironment
         {
             Environment = new Godot.Environment
@@ -170,7 +181,8 @@ public partial class ClientWorld : Node3D
             || FlightProbe.ParseArgs() != null
             || RideProbe.ParseArgs() != null || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
-            || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested;
+            || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
+            || Interiors.InteriorProbe.ParseArgs().Requested;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -269,6 +281,14 @@ public partial class ClientWorld : Node3D
             var (vE, vN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(vE, vN, 1200);
             AddChild(new Vehicles.VehicleProbe(_chunks, origin, vcheck.Shot));
+            return;
+        }
+
+        if (Interiors.InteriorProbe.ParseArgs() is { Requested: true } icheck)
+        {
+            var (iE, iN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(iE, iN, 1200);
+            AddChild(new Interiors.InteriorProbe(_chunks, origin, _cache, icheck.Shot));
             return;
         }
 
@@ -631,6 +651,9 @@ public partial class ClientWorld : Node3D
         // streamer; swapping underneath it would both steal the view and put a second
         // nine-ring box back on the loader.
         if (_gpx is { Active: true }) return;
+
+        // flying out of a house would leave the camera in the void under the terrain
+        if (_onFoot && LocalPlayer is { Indoors: true }) return;
 
         if (!_onFoot)
         {

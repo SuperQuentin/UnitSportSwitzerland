@@ -54,6 +54,10 @@ public sealed partial class Teleporter : Node
             return false;
         }
 
+        // a teleport out of a house is a way out of it: drop the interior before moving
+        if (target is Player.FootPlayer { Indoors: true } inside)
+            Interiors.InteriorManager.Instance?.Leave(inside, silent: true);
+
         // A body arrives at walking height; a free camera arrives high enough to see where
         // it landed. Dropping a CharacterBody3D from 220 m would be a long fall.
         float arrival = target is CharacterBody3D ? WalkingArrivalHeight : FlyingArrivalHeight;
