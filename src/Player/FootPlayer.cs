@@ -897,9 +897,11 @@ public partial class FootPlayer : CharacterBody3D
             return true;
         }
         // inside, E is the front door or nothing: no mount picker in a living room
+        // (or the cupboard in front of you: searching comes first, the door is by the door)
         if (Indoors)
         {
             var interiors = Interiors.InteriorManager.Instance;
+            if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             return interiors?.TryExit(this) ?? true;
         }
         if (_ride != null || _mantling || _deadTimer > 0) return false;

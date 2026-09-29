@@ -61,6 +61,9 @@ public partial class ServerWorld : Node3D
         _interiors = Interiors.InteriorManager.Create(this, source, origin);
         _interiors.Players = _players;
 
+        // loot in those interiors: the server rolls it and remembers what was taken
+        Loot.LootService.Create(this);
+
         // The server owns the place index too, so /city and /tpall resolve against the same
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
         var places = LoadPlaces();

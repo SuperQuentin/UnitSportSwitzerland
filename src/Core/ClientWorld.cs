@@ -182,7 +182,7 @@ public partial class ClientWorld : Node3D
             || RideProbe.ParseArgs() != null || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
-            || Interiors.InteriorProbe.ParseArgs().Requested;
+            || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -215,6 +215,11 @@ public partial class ClientWorld : Node3D
             ActivePlayer = () => _onFoot ? LocalPlayer : null,
         };
         AddChild(items);
+
+        // Scavenging: what the furniture in those interiors holds. Same node path as the server's,
+        // which decides who gets what; offline this client does both.
+        var loot = Loot.LootService.Create(this);
+        loot.Items = items;
         // "--inventory" opens the panel once the player exists, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--inventory") >= 0)
             GetTree().CreateTimer(1.5).Timeout += () => items.Ui.Open();
@@ -281,6 +286,14 @@ public partial class ClientWorld : Node3D
             var (vE, vN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(vE, vN, 1200);
             AddChild(new Vehicles.VehicleProbe(_chunks, origin, vcheck.Shot));
+            return;
+        }
+
+        if (Loot.LootProbe.ParseArgs() is { } lootEpochs)
+        {
+            // tables only: no terrain wanted, and quitting mid-stream races the tile workers
+            _chunks.RemoveAnchor(_spectator);
+            AddChild(new Loot.LootProbe(_cache, _chunks, lootEpochs));
             return;
         }
 
