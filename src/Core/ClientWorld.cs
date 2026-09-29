@@ -204,6 +204,7 @@ public partial class ClientWorld : Node3D
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
             || Loot.GatherProbe.ParseArgs().Requested
+            || Birds.BirdProbe.ParseArgs().Requested
             || World.TrafficProbe.ParseArgs().Requested;
         if (!placedByTool)
         {
@@ -245,6 +246,9 @@ public partial class ClientWorld : Node3D
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);
+        // birds around the player, from the real land cover; the shotgun hunts them (J: journal)
+        var birds = new Birds.BirdLife(_chunks, origin, items);
+        AddChild(birds);
         // "--inventory" opens the panel once the player exists, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--inventory") >= 0)
             GetTree().CreateTimer(1.5).Timeout += () => items.Ui.Open();
@@ -318,6 +322,13 @@ public partial class ClientWorld : Node3D
         {
             _chunks.RemoveAnchor(_spectator);
             AddChild(new Loot.GatherProbe(_chunks, origin, gathering, items, gcheck.Shot));
+            return;
+        }
+
+        if (Birds.BirdProbe.ParseArgs() is { Requested: true } bcheck)
+        {
+            _chunks.RemoveAnchor(_spectator);
+            AddChild(new Birds.BirdProbe(_chunks, origin, birds, items, bcheck.Shot));
             return;
         }
 

@@ -43,6 +43,7 @@ public partial class InventoryUi : CanvasLayer
     private ColorRect _flash = null!;
     private ColorRect _binoculars = null!;
     private ViewfinderView _viewfinder = null!;
+    private Label _crosshair = null!;
 
     private Control _panel = null!;
     private readonly SlotButton[] _panelSlots = new SlotButton[Inventory.Size];
@@ -107,6 +108,16 @@ public partial class InventoryUi : CanvasLayer
         _viewfinder = new ViewfinderView { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _viewfinder.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_viewfinder);
+
+        // the shotgun's bead: a plain centred cross
+        _crosshair = new Label
+        {
+            Text = "+", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
+        _crosshair.AddThemeFontSizeOverride("font_size", 28);
+        _crosshair.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _root.AddChild(_crosshair);
 
         _flash = new ColorRect
         {
@@ -481,6 +492,7 @@ public partial class InventoryUi : CanvasLayer
 
         _binoculars.Visible = Scope == ItemUse.Optic;
         _viewfinder.Visible = Scope == ItemUse.Photo;
+        _crosshair.Visible = Scope == ItemUse.Shoot;
         if (_binoculars.Visible && _binoculars.Material is ShaderMaterial sm)
             sm.SetShaderParameter("aspect", _root.Size.X / Mathf.Max(1f, _root.Size.Y));
 

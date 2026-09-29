@@ -48,6 +48,10 @@ public enum ItemId
     Electronics = 34,
     FuelCan = 35,
     EnginePart = 36,
+
+    // ---- hunting (src/Birds) ----
+    Shotgun = 37,
+    Shells = 38,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -68,6 +72,8 @@ public enum ItemUse
     Consume,
     /// <summary>A material: kept for trading and building; Use does nothing.</summary>
     Material,
+    /// <summary>Aim shoulders it, Use fires one shell (<see cref="ItemController.Fire"/>).</summary>
+    Shoot,
 }
 
 /// <summary>
@@ -139,6 +145,11 @@ public static class ItemDefs
         Mat(ItemId.Electronics, "Electronics", 20, "#2a7a3a", "EL", ItemCategory.Scrap, 6),
         Mat(ItemId.FuelCan, "Fuel can", 3, "#c82a1e", "FC", ItemCategory.Part, 25),
         Mat(ItemId.EnginePart, "Engine part", 3, "#6a5a4a", "EP", ItemCategory.Part, 60),
+
+        new(ItemId.Shotgun, "Shotgun", "Aim (right mouse / LB) to shoulder it, Use (left mouse / RB) to fire one shell. Game birds only, and only in season. J opens the field journal.",
+            ItemUse.Shoot, 1, new Color(0.40f, 0.27f, 0.16f), "SG", 0, ItemCategory.Gear, 400f),
+        new(ItemId.Shells, "Shotgun shells", "Ammunition for the shotgun.",
+            ItemUse.Material, 50, new Color(0.70f, 0.16f, 0.12f), "SH", 0, ItemCategory.Gear, 1f),
     };
 
     private static ItemDef Eat(ItemId id, string name, int stack, string tint, string glyph, float heal,
@@ -221,6 +232,17 @@ public static class ItemDefs
                 s.Tube(new Vector3(0, 0.15f, 0), new Vector3(0, 0.19f, 0), 0.035f, 0.015f, new Color(0.30f, 0.60f, 0.95f), 10);
                 s.Tube(new Vector3(0, 0.19f, 0), new Vector3(0, 0.21f, 0), 0.016f, new Color(0.9f, 0.9f, 0.92f), 8);
                 break;
+            case ItemId.Shotgun:
+            {
+                var wood = new Color(0.40f, 0.26f, 0.15f);
+                var steel = new Color(0.22f, 0.23f, 0.25f);
+                s.Box(new Vector3(0, -0.03f, -0.22f), new Vector3(0.04f, 0.09f, 0.34f), wood);      // stock
+                s.Box(new Vector3(0, 0.01f, 0.02f), new Vector3(0.045f, 0.06f, 0.16f), steel);     // action
+                s.Box(new Vector3(0, -0.01f, 0.24f), new Vector3(0.04f, 0.035f, 0.26f), wood);     // fore-end
+                foreach (float x in new[] { -0.011f, 0.011f })
+                    s.Tube(new Vector3(x, 0.025f, 0.08f), new Vector3(x, 0.025f, 0.72f), 0.011f, steel, 6);
+                break;
+            }
             default:
                 // scavenged items: a small box in the item's colour; a bespoke mesh can replace it
                 if (Get(id) is { } def)
