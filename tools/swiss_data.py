@@ -18,6 +18,7 @@ Usage:
     python tools/swiss_data.py gwr --canton vs
     python tools/swiss_data.py veloland
     python tools/swiss_data.py --dry-run swissalti3d --bbox 2579000 1109000 2586000 1115000
+    python tools/swiss_data.py swissalti3d --tiles-file my_tiles.txt       # "2583-1113" per line
     python tools/swiss_data.py --out D:/swissalti3d swissalti3d --bbox 2485000 1075000 2834000 1296000
     python tools/swiss_data.py --out E:/alti --fill-disk swissalti3d --bbox 2485000 1075000 2834000 1296000
 
@@ -87,6 +88,16 @@ def lv95_to_wgs84(e, n):
            - 0.0447 * y * y * x - 0.0140 * x * x * x)
 
     return lat * 100.0 / 36.0, lon * 100.0 / 36.0
+
+
+def wgs84_to_lv95(lat, lon):
+    phi = (lat * 3600.0 - 169028.66) / 10000.0
+    lam = (lon * 3600.0 - 26782.5) / 10000.0
+    e = (2600072.37 + 211455.93 * lam - 10938.51 * lam * phi - 0.36 * lam * phi * phi
+         - 44.54 * lam * lam * lam)
+    n = (1200147.07 + 308807.95 * phi + 3745.25 * lam * lam + 76.63 * phi * phi
+         - 194.56 * lam * lam * phi + 119.79 * phi * phi * phi)
+    return e, n
 
 
 def bbox_lv95_to_wgs84(min_e, min_n, max_e, max_n):
@@ -540,6 +551,59 @@ def bbox_span(feature):
 # ---------------------------------------------------------------------------
 
 
+def load_tiles_file(path):
+    """A --tiles-file: one 1 km tile per line as "E-N" in kilometres (e.g. 2583-1113), the
+    same key swisstopo uses in its item ids. Blank lines and #comments are ignored."""
+    tiles = set()
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.split("#", 1)[0].strip()
+            if line:
+                e, n = line.replace(",", "-").replace("_", "-").split("-")
+                tiles.add((int(e), int(n)))
+    if not tiles:
+        sys.exit(f"error: {path} lists no tiles")
+    return tiles
+
+
+def tiles_bbox_lv95(tiles):
+    return (min(e for e, _ in tiles) * 1000.0, min(n for _, n in tiles) * 1000.0,
+            (max(e for e, _ in tiles) + 1) * 1000.0, (max(n for _, n in tiles) + 1) * 1000.0)
+
+
+def apply_tiles_file(args):
+    """--tiles-file narrows a dataset to exactly those tiles. The STAC query itself only takes a
+    rectangle, so it is sent the tiles' bounding box and the result is filtered: a painted,
+    irregular selection then fetches its own tiles and none of the rectangle's other corners."""
+    args.tiles = load_tiles_file(args.tiles_file) if getattr(args, "tiles_file", None) else None
+    if args.tiles and not args.bbox:
+        args.bbox = list(tiles_bbox_lv95(args.tiles))
+
+
+def item_lv95_bounds(feature):
+    """An item's footprint as an LV95 rectangle, from its polygon. Its WGS84 bbox would do too,
+    but a lon/lat box drawn around a sheet cut on the LV95 grid is tens of metres too big on every
+    side -- enough to count the neighbouring sheets as touching."""
+    ring = ((feature.get("geometry") or {}).get("coordinates") or [[]])[0]
+    if len(ring) >= 3:
+        pts = [wgs84_to_lv95(lat, lon) for lon, lat in ring]
+    else:
+        b = feature.get("bbox") or [0, 0, 0, 0]
+        pts = [wgs84_to_lv95(b[1], b[0]), wgs84_to_lv95(b[3], b[2])]
+    return (min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts))
+
+
+def item_touches_tiles(feature, tiles):
+    """Whether a STAC item's footprint overlaps any of the 1 km tiles. Strictly, and a few metres
+    inside each tile: sheets are cut on the same kilometre lines, and one that merely shares an
+    edge with a tile holds none of its buildings."""
+    x0, y0, x1, y1 = item_lv95_bounds(feature)
+    for e, n in tiles:
+        if e * 1000.0 + 5 < x1 and (e + 1) * 1000.0 - 5 > x0 and n * 1000.0 + 5 < y1 and (n + 1) * 1000.0 - 5 > y0:
+            return True
+    return False
+
+
 def resolve_swissalti3d(args):
     bbox = bbox_lv95_to_wgs84(*args.bbox) if args.bbox else None
     pattern = re.compile(rf"_{re.escape(args.res)}_2056_5728\.xyz\.zip$")
@@ -554,6 +618,8 @@ def resolve_swissalti3d(args):
         if not m:
             continue
         year, tile = m.group(1), m.group(2)
+        if args.tiles is not None and tuple(int(x) for x in tile.split("-")) not in args.tiles:
+            continue
         if tile not in latest_by_tile or year > latest_by_tile[tile][0]:
             latest_by_tile[tile] = (year, feature)
 
@@ -588,6 +654,8 @@ def resolve_swissbuildings3d(args):
     # country the item's own bbox covers.
     features.sort(key=bbox_span, reverse=args.nationwide)
     wanted = [features[0]] if args.nationwide else [f for f in features if bbox_span(f) < 0.5]
+    if args.tiles is not None and not args.nationwide:
+        wanted = [f for f in wanted if item_touches_tiles(f, args.tiles)]
 
     id_re = re.compile(r"^swissbuildings3d_3_0_(\d{4})_(\S+)$")
     latest_by_tile = {}
@@ -681,6 +749,13 @@ def centre_distance(filename, centre):
     return (e - centre[0]) ** 2 + (n - centre[1]) ** 2
 
 
+def emit(args, event, **fields):
+    """--progress-json: one machine-readable line per event, prefixed so a caller can pick it
+    out of the ordinary human output interleaved with it (tools/MapSetup does)."""
+    if getattr(args, "progress_json", False):
+        print("@progress " + json.dumps({"event": event, **fields}), flush=True)
+
+
 def fmt_bytes(n):
     return f"{n / 1e9:.2f} GB" if abs(n) >= 1e9 else f"{n / 1e6:.1f} MB"
 
@@ -694,8 +769,10 @@ def run(args):
         print("warning: no usable SSL context (install certifi); falling back to one curl "
               "process per request, which is much slower", file=sys.stderr)
 
+    apply_tiles_file(args)
     clock = time.time()
     print(f"resolving {args.dataset} assets...", flush=True)
+    emit(args, "stage", name="resolve")
     candidates = list(spec["resolve"](args))
     print(f"{len(candidates)} candidate file(s) listed in {time.time() - clock:.1f}s", flush=True)
 
@@ -726,6 +803,8 @@ def run(args):
     with concurrent.futures.ThreadPoolExecutor(max_workers=HEAD_CHECK_WORKERS) as pool:
         for url, filename, sha, head in pool.map(check, to_check):
             checked += 1
+            if checked % 50 == 0 or checked == len(to_check):
+                emit(args, "check", done=checked, total=len(to_check))
             if not chatty and (checked % PROGRESS_EVERY == 0 or checked == len(to_check)):
                 print(f"  ...checked {checked}/{len(to_check)} "
                       f"({len(plan)} to fetch, {unchanged} unchanged, {unreachable} unreachable)",
@@ -765,6 +844,7 @@ def run(args):
 
     if not plan:
         print("nothing to download.")
+        emit(args, "done", files=0, bytes=0, seconds=0, errors=0, nospace=0)
         return
 
     # nearest the middle of the requested area first, so a download that stops
@@ -775,6 +855,7 @@ def run(args):
 
     total = sum(h["size"] or 0 for _, _, _, h, _ in plan)
     print(f"{len(plan)} file(s) to fetch, {fmt_bytes(total)} total", flush=True)
+    emit(args, "plan", files=len(plan), bytes=total, unchanged=unchanged)
 
     if args.dry_run:
         shown = plan if chatty else plan[:20]
@@ -832,7 +913,7 @@ def run(args):
     done = fetched = nospace = 0
     errors = []
     started = time.time()
-    last_report = last_save = started
+    last_report = last_save = last_json = started
     print(f"downloading with {args.jobs} parallel job(s)...", flush=True)
 
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs)
@@ -860,6 +941,10 @@ def run(args):
                 print(f"  ! {error}", flush=True)
 
             now = time.time()
+            if now - last_json >= 1 or done == len(plan):
+                emit(args, "progress", done=done, total=len(plan), bytes=moved[0], bytes_total=total,
+                     rate=moved[0] / max(0.001, now - started))
+                last_json = now
             if now - last_save > 10:
                 save_manifest(out_dir, manifest)
                 last_save = now
@@ -880,6 +965,7 @@ def run(args):
     save_manifest(out_dir, manifest)
 
     elapsed = time.time() - started
+    emit(args, "done", files=fetched, bytes=moved[0], seconds=elapsed, errors=len(errors), nospace=nospace)
     print(f"done: {fetched} file(s), {fmt_bytes(moved[0])} in {elapsed:.0f}s "
           f"({moved[0] / max(elapsed, 0.001) / 1e6:.0f} MB/s) written to {out_dir}")
     if nospace:
@@ -908,6 +994,8 @@ def _add_run_options(ap, defaults):
                          "stops at --reserve-mb free, nearest-to-bbox-centre tiles first")
     ap.add_argument("--reserve-mb", type=float, default=d(500),
                     help="free space never to go below, in MB (default 500)")
+    ap.add_argument("--progress-json", action="store_true", default=d(False),
+                    help="also print machine-readable '@progress {json}' lines (used by tools/MapSetup)")
 
 
 def build_parser():
@@ -920,13 +1008,16 @@ def build_parser():
         p = sub.add_parser(name, help=spec["help"])
         _add_run_options(p, defaults=False)
         if spec["needs_bbox"]:
-            p.add_argument("--bbox", nargs=4, type=float, required=True,
+            p.add_argument("--bbox", nargs=4, type=float, default=None,
                             metavar=("MINE", "MINN", "MAXE", "MAXN"),
-                            help="LV95 (EPSG:2056) bounding box")
+                            help="LV95 (EPSG:2056) bounding box (this or --tiles-file is required)")
         else:
             p.add_argument("--bbox", nargs=4, type=float, default=None,
                             metavar=("MINE", "MINN", "MAXE", "MAXN"),
                             help="LV95 (EPSG:2056) bounding box (optional, dataset is nationwide)")
+        if name in ("swissalti3d", "swissbuildings3d"):
+            p.add_argument("--tiles-file", metavar="FILE", default=None,
+                            help="only these 1 km tiles, one 'E-N' (km) per line, e.g. 2583-1113")
         if name == "swissalti3d":
             p.add_argument("--res", choices=["0.5", "2"], default="0.5", help="grid resolution in metres")
         if name == "swissbuildings3d":
@@ -948,6 +1039,8 @@ def main():
             print(f"  {name:<18} {spec['help']}")
         return
 
+    if DATASETS[args.dataset]["needs_bbox"] and not args.bbox and not getattr(args, "tiles_file", None):
+        ap.error(f"{args.dataset} needs --bbox or --tiles-file")
     run(args)
 
 

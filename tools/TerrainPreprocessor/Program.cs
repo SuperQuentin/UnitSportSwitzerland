@@ -13,7 +13,10 @@ var inDirs = new List<string>();
 string? outDir = null, tempDir = null, pngDir = null;
 string? tlmGpkg = null, routeKeys = null, buildingsGpkg = null, gwrPath = null;
 bool verify = false;
-bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false;
+bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false, placesOnly = false;
+// --tiles-file: feature passes only touch these tiles ("E-N" in km per line), so adding one valley
+// to a built country does not re-extract every road in it
+string? tilesFile = null;
 bool coarseOnly = false, horizonOnly = false;
 bool force = false, fresh = false;
 string? franceBox = null;
@@ -34,6 +37,10 @@ for (int i = 0; i < args.Length; i++)
         case "--gwr": gwrPath = args[++i]; break;
         case "--cover": doCover = true; break;
         case "--places": doPlaces = true; break;
+        // the place index alone: --places with --tlm (for summits) would otherwise re-run roads,
+        // which strips the junction polygons RoadGen --rewrite added
+        case "--places-only": doPlaces = placesOnly = true; featuresOnly = true; break;
+        case "--tiles-file": tilesFile = args[++i]; break;
         case "--roads-only": roadsOnly = true; break;
         case "--features-only": featuresOnly = true; break;
         case "--coarse": coarseOnly = true; break;
@@ -269,11 +276,18 @@ int RunFeatures(TerrainManifest existing)
         }
         int rc = PlaceStage.Run(gwrPath, outDir, existing.Tiles.Select(t => t.Id).ToHashSet(), tlmGpkg);
         if (rc != 0) return rc;
-        if (tlmGpkg == null && buildingsGpkg == null) return 0;
+        if (placesOnly || (tlmGpkg == null && buildingsGpkg == null)) return 0;
     }
 
     const int BatchSize = 400;
     var ordered = existing.Tiles.OrderBy(t => t.E).ThenBy(t => t.N).ToList();
+    if (tilesFile != null)
+    {
+        var wanted = ReadTilesFile(tilesFile);
+        ordered = ordered.Where(t => wanted.Contains(t.Id)).ToList();
+        Console.WriteLine($"--tiles-file: {ordered.Count} of {wanted.Count} listed tiles are built");
+        if (ordered.Count == 0) return 0;
+    }
     int batches = (ordered.Count + BatchSize - 1) / BatchSize;
 
     for (int b = 0; b < batches; b++)
@@ -286,8 +300,7 @@ int RunFeatures(TerrainManifest existing)
             grids[t.Id] = ChunkCodec.Decode(fs);
         });
         var batch = new Dictionary<TileId, ChunkGrid>(grids);
-        if (batches > 1)
-            Console.WriteLine($"=== batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
+        Console.WriteLine($"=== batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
 
         if (tlmGpkg != null)
         {
@@ -311,4 +324,17 @@ int RunFeatures(TerrainManifest existing)
         }
     }
     return 0;
+}
+
+static HashSet<TileId> ReadTilesFile(string path)
+{
+    var tiles = new HashSet<TileId>();
+    foreach (var raw in File.ReadLines(path))
+    {
+        var line = raw.Split('#')[0].Trim();
+        if (line.Length == 0) continue;
+        var parts = line.Split('-', '_', ',');
+        tiles.Add(new TileId(int.Parse(parts[0]), int.Parse(parts[1])));
+    }
+    return tiles;
 }

@@ -29,6 +29,8 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
 
           --rewrite             trim + junction existing .road tiles IN PLACE (format v2)
               --chunks DIR       default terrain_chunks;  --tiles limits which
+              --tiles-file FILE  same, one "E-N" per line (for lists too long for a command line)
+              --skip-rewritten   leave tiles that already carry junctions alone instead of refusing
               --no-smooth        junctions only, leave centrelines alone
               --dry-run          measure without writing
               --force            rewrite even if the tiles already carry junctions
@@ -83,7 +85,18 @@ else if (args.Contains("--rewrite"))
     double dividedScale = double.Parse(ArgValue("--divided-scale") ?? "1.0", CultureInfo.InvariantCulture);
     bool dryRun = args.Contains("--dry-run");
 
-    var ids = ArgValue("--tiles") is { } spec ? ParseTiles(spec) : DiscoverTiles(chunks);
+    var ids = ArgValue("--tiles-file") is { } file ? ReadTilesFile(file)
+        : ArgValue("--tiles") is { } spec ? ParseTiles(spec) : DiscoverTiles(chunks);
+    if (args.Contains("--skip-rewritten"))
+    {
+        // tools/MapSetup re-runs over a selection that may overlap an earlier one: only the fresh
+        // tiles (a .road, no junctions yet) are safe to rewrite, and a tile with no roads has none
+        int before = ids.Count;
+        ids = ids.Where(id => File.Exists(Path.Combine(chunks, RoadFormat.FileName(id)))
+                              && !TileRewriter.HasJunctions(chunks, id)).ToList();
+        Console.WriteLine($"--skip-rewritten: {ids.Count} of {before} tiles are fresh");
+        if (ids.Count == 0) return 0;
+    }
     if (ids.Count == 0)
     {
         Console.Error.WriteLine($"no .road files found in '{chunks}'");
@@ -221,6 +234,19 @@ static List<TileId> DiscoverTiles(string chunkDir)
         var bits = Path.GetFileNameWithoutExtension(path).Split('_');
         if (bits.Length == 3 && int.TryParse(bits[1], out int e) && int.TryParse(bits[2], out int n))
             ids.Add(new TileId(e, n));
+    }
+    return ids;
+}
+
+static List<TileId> ReadTilesFile(string path)
+{
+    var ids = new List<TileId>();
+    foreach (var raw in File.ReadLines(path))
+    {
+        var line = raw.Split('#')[0].Trim();
+        if (line.Length == 0) continue;
+        var parts = line.Split('-', '_', ',');
+        ids.Add(new TileId(int.Parse(parts[0]), int.Parse(parts[1])));
     }
     return ids;
 }
