@@ -481,6 +481,9 @@ public partial class ChunkManager : Node3D
 
     private readonly HashSet<Node3D> _collisionAnchors = new();
 
+    /// <summary>The anchors that want collision around them (<see cref="World.TreeColliders"/> follows them too).</summary>
+    public IEnumerable<Node3D> CollisionAnchors => _collisionAnchors.Where(GodotObject.IsInstanceValid);
+
     public bool HasAnchor(Node3D anchor) => _anchors.Contains(anchor);
 
     public int ActiveChunkCount => _chunks.Count;

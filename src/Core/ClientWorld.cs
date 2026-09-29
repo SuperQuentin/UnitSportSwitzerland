@@ -199,7 +199,7 @@ public partial class ClientWorld : Node3D
         // them for the height.
         bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
             || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || Gpx.Cinema.CinemaProbe.ParseArgs() != null
+            || RideProbe.ParseArgs() != null || World.TreeCheck.ParseArgs().Requested || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
@@ -245,6 +245,8 @@ public partial class ClientWorld : Node3D
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);
+        // solid trunks around whatever asks for collision
+        AddChild(new World.TreeColliders(_chunks, origin));
         // "--inventory" opens the panel once the player exists, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--inventory") >= 0)
             GetTree().CreateTimer(1.5).Timeout += () => items.Ui.Open();
@@ -358,6 +360,14 @@ public partial class ClientWorld : Node3D
             var (checkE, checkN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(checkE, checkN, 1200);
             AddChild(new RoadStandProbe(_chunks, origin));
+            return;
+        }
+
+        if (World.TreeCheck.ParseArgs() is { Requested: true } treeCheck)
+        {
+            var (treeE, treeN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(treeE, treeN, 1200);
+            AddChild(new World.TreeCheck(_chunks, origin, treeCheck.Shot));
             return;
         }
 
