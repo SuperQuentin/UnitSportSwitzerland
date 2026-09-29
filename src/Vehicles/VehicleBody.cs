@@ -122,10 +122,11 @@ public partial class VehicleBody : CharacterBody3D
             _visual = Ride.BuildParkedVisual((int)Math.Max(1, Owner));
             _visual.Name = "Visual";
             AddChild(_visual);
-            if (Ride is Helicopter or Plane)
+            if (Ride is Helicopter or Plane or Car)
             {
-                _engineSound = new EngineSynth(Ride is Helicopter ? EngineProfile.Turboshaft : EngineProfile.PistonAero,
-                    spatial: true, seed: (int)Math.Max(1, Owner));
+                var profile = Ride is Car parkedCar ? EngineProfile.For(parkedCar.Spec.Style)
+                    : Ride is Helicopter ? EngineProfile.Turboshaft : EngineProfile.PistonAero;
+                _engineSound = new EngineSynth(profile, spatial: true, seed: (int)Math.Max(1, Owner));
                 AddChild(_engineSound);
             }
         }
@@ -329,7 +330,18 @@ public partial class VehicleBody : CharacterBody3D
         if (Wrecked) spool = 0f;
         _spoolView = spool;
         if (Ride is Flyer f && !Wrecked) f.AnimateFlight(_visual, _flight with { Spool = spool }, dt);
-        if (_engineSound != null)
+        if (_visual is Avatar.CarRig rig)
+        {
+            // a driverless car rolls to a stop on its own wheels; it never tips, so no roll here
+            rig.WheelSpin += Velocity.Length() / 0.3f * dt;
+            rig.SteerAngle = 0f;
+            rig.BodyPitch = 0f;
+            rig.BrakeLights = false;
+        }
+        if (_engineSound != null && Ride is Car)
+            // ticking over while it rolls; a car at rest is asleep and silent
+            _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep ? 0.2f : 0f);
+        else if (_engineSound != null)
         {
             _engineSound.Set(spool, spool, 0.5f, spool * 0.7f);
         }
