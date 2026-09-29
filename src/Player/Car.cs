@@ -64,7 +64,7 @@ public sealed record CarSpec
     {
         Kind = RideKind.RotaryFd, Label = "Rotary FD",
         Blurb = "Twin-turbo rotary, rear drive, 280 hp. Snappy: throttle alone breaks the rear loose",
-        Style = CarStyle.RotaryFd, Paint = new Color(0.93f, 0.8f, 0.12f),
+        Style = CarStyle.RotaryFd, Paint = new Color(1f, 0.86f, 0.16f),
         Mass = 1320f, FrontAxle = 1.2f, RearAxle = 1.23f, CgHeight = 0.46f, Grip = 1.05f,
         PeakKw = 206f, PeakRpm = 6500f, IdleRpm = 850f, Redline = 8000f,
         Gears = new[] { 3.48f, 2.02f, 1.39f, 1.00f, 0.72f }, FinalDrive = 4.1f,
@@ -76,7 +76,7 @@ public sealed record CarSpec
     {
         Kind = RideKind.Rally4wd, Label = "Rally 4WD",
         Blurb = "Turbo boxer, four-wheel drive. Grips hard; drifts all four wheels on gravel",
-        Style = CarStyle.Rally4wd, Paint = new Color(0.12f, 0.24f, 0.62f),
+        Style = CarStyle.Rally4wd, Paint = new Color(0.2f, 0.4f, 0.85f),
         Mass = 1360f, FrontAxle = 1.28f, RearAxle = 1.24f, CgHeight = 0.52f, Grip = 1.05f,
         PeakKw = 206f, PeakRpm = 6000f, IdleRpm = 850f, Redline = 7000f,
         Gears = new[] { 3.17f, 1.88f, 1.30f, 0.97f, 0.74f }, FinalDrive = 4.44f,
