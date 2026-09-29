@@ -176,7 +176,8 @@ public partial class CombatManager : Node3D
     {
         var p = LocalPlayer?.Invoke();
         var craft = p?.Vehicle as Flyer;
-        Armed = p != null && craft is Plane or Helicopter;
+        bool paraglider = craft is Canopy { Kind: RideKind.Paraglider };
+        Armed = p != null && (craft is Plane or Helicopter || paraglider);
         _cooldown -= dt;
         if (!Armed) { Ammo = Magazine; LeadPoint = null; return; }
 
@@ -195,12 +196,21 @@ public partial class CombatManager : Node3D
             dir = -att.Z;
             AimPoint = Muzzle(new Vector3(0, 1.3f, -1.2f)) + dir * Boresight;
         }
+        else if (paraglider)
+        {
+            // a gun in the pilot's hands, aimed where they look: the wing flies itself hands-off
+            // for a moment, and a paraglider cannot point its nose at anything quickly anyway
+            muzzle = p.GlobalPosition + p.GlobalBasis * new Vector3(0.25f, 1.15f, -0.5f);
+            var cam = p.Camera;
+            AimPoint = CrosshairPoint(p, cam);
+            dir = (AimPoint - muzzle).Normalized();
+        }
         else
         {
             // a chin turret that follows the camera: the helicopter flies where it looks anyway
             muzzle = Muzzle(new Vector3(0, 0.6f, -2.4f));
             var cam = p.Camera;
-            AimPoint = cam.GlobalPosition - cam.GlobalBasis.Z * TurretRange;
+            AimPoint = CrosshairPoint(p, cam);
             dir = (AimPoint - muzzle).Normalized();
         }
         LeadPoint = FindLead(p, dir, muzzle);
@@ -220,6 +230,30 @@ public partial class CombatManager : Node3D
     }
 
     private float Rand() => (float)_rng.NextDouble() * 2f - 1f;
+
+    /// <summary>
+    /// What the crosshair is on: the first thing along the camera's line of sight — terrain or a
+    /// body, or a target within a few metres of the line — else the turret's range. A gun that
+    /// fires from the pilot's hands or the chin at a fixed point 600 m down the CAMERA's line
+    /// crosses that line only out there: from a chase camera 7 m above the gun, a wing 60 m away
+    /// dead under the crosshair was missed by 3 m every time.
+    /// </summary>
+    private Vector3 CrosshairPoint(FootPlayer me, Camera3D cam)
+    {
+        var from = cam.GlobalPosition;
+        var fwd = -cam.GlobalBasis.Z;
+        float dist = TurretRange;
+        var query = PhysicsRayQueryParameters3D.Create(from, from + fwd * TurretRange);
+        query.Exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
+        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        if (hit.Count > 0) dist = (hit["position"].AsVector3() - from).Length();
+        foreach (var (pos, _) in Targets(me))
+        {
+            float along = (pos - from).Dot(fwd);
+            if (along > 5f && along < dist && (from + fwd * along).DistanceTo(pos) < 6f) dist = along;
+        }
+        return from + fwd * dist;
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
@@ -266,10 +300,53 @@ public partial class CombatManager : Node3D
                 _tracers.RemoveAt(i);
                 continue;
             }
+            if (WingHit(t.Pos, next, t.Shooter) is { } glider)
+            {
+                Hit(glider, t.Shooter);
+                _tracers.RemoveAt(i);
+                continue;
+            }
             if (t.Age > Life) { _tracers.RemoveAt(i); continue; }
             t.Pos = next;
             _tracers[i] = t;
         }
+    }
+
+    /// <summary>
+    /// A paraglider's wing is 10 m across and 8 m over the pilot, and it has no collider — only the
+    /// pilot's capsule does — so every round through the fabric would miss. Tested as a box in the
+    /// pilot's yaw frame (the wing hangs straight above whatever the pilot is doing; a remote copy
+    /// knows no attitude anyway), and a hit on it is a hit on the pilot's rig.
+    /// </summary>
+    private FootPlayer? WingHit(Vector3 from, Vector3 to, long shooter)
+    {
+        foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
+        {
+            if (node is not FootPlayer fp || fp.Ride != RideKind.Paraglider || IsShooter(fp, shooter)) continue;
+            var inv = fp.GlobalTransform.AffineInverse();
+            if (SegmentHitsBox(inv * from, inv * to, WingCentre, WingHalf)) return fp;
+        }
+        return null;
+    }
+
+    private static readonly Vector3 WingCentre = new(0, 7.6f, 0), WingHalf = new(5f, 1.1f, 1.3f);
+
+    /// <summary>Slab test: does the segment a→b pass through the axis-aligned box?</summary>
+    private static bool SegmentHitsBox(Vector3 a, Vector3 b, Vector3 centre, Vector3 half)
+    {
+        float t0 = 0f, t1 = 1f;
+        var d = b - a;
+        for (int k = 0; k < 3; k++)
+        {
+            float lo = centre[k] - half[k] - a[k], hi = centre[k] + half[k] - a[k];
+            if (Mathf.Abs(d[k]) < 1e-6f) { if (lo > 0f || hi < 0f) return false; continue; }
+            float ta = lo / d[k], tb = hi / d[k];
+            if (ta > tb) (ta, tb) = (tb, ta);
+            t0 = Mathf.Max(t0, ta);
+            t1 = Mathf.Min(t1, tb);
+            if (t0 > t1) return false;
+        }
+        return true;
     }
 
     /// <summary>The shooter's own body, which the rounds leave from inside.</summary>
@@ -278,10 +355,19 @@ public partial class CombatManager : Node3D
         if (_exclude.TryGetValue(shooter, out var rids)) return rids;
         rids = new Godot.Collections.Array<Rid>();
         foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (node is FootPlayer fp && fp.GetMultiplayerAuthority() == shooter) rids.Add(fp.GetRid());
+            if (node is FootPlayer fp && IsShooter(fp, shooter)) rids.Add(fp.GetRid());
         if (LocalPlayer?.Invoke() is { } me && shooter == LocalId) rids.Add(me.GetRid());
         return _exclude[shooter] = rids;
     }
+
+    /// <summary>
+    /// Whether this body is the one that fired. Our own rounds come from the local player only:
+    /// every other body on this peer shares our authority offline (and a probe's second pilot does
+    /// online too), so testing authority alone made every local body immune to our fire.
+    /// </summary>
+    private bool IsShooter(FootPlayer fp, long shooter) => shooter == LocalId
+        ? fp == LocalPlayer?.Invoke()
+        : fp.GetMultiplayerAuthority() == shooter;
 
     /// <summary>Damage only what this peer has authority over; the shooter's own peer shows the hit marker.</summary>
     private void Hit(GodotObject? collider, long shooter)
@@ -349,7 +435,11 @@ public partial class CombatManager : Node3D
         foreach (var node in GetTree().GetNodesInGroup(TargetDrone.Group))
             if (node is TargetDrone d) yield return (d.GlobalPosition, d.Velocity);
         foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (node is FootPlayer fp && fp != me) yield return (fp.GlobalPosition + Vector3.Up, fp.Velocity);
+            if (node is FootPlayer fp && fp != me)
+            {
+                yield return (fp.GlobalPosition + Vector3.Up, fp.Velocity);
+                if (fp.Ride == RideKind.Paraglider) yield return (fp.GlobalTransform * WingCentre, fp.Velocity);
+            }
     }
 
     // ------------------------------------------------------------------------------------
