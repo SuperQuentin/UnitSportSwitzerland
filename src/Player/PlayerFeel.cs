@@ -47,7 +47,8 @@ public partial class PlayerFeel : Node3D
     private CanvasLayer _screen = null!;
     private Label _speedLabel = null!, _popup = null!;
     private ProgressBar _boostBar = null!, _healthBar = null!;
-    private Label _engineLabel = null!;
+    private Label _engineLabel = null!, _hint = null!;
+    private float _hintPulse;
     private ColorRect _hurtFlash = null!;
     private bool _wasBoosting;
     private float _popupLife;
@@ -541,6 +542,16 @@ public partial class PlayerFeel : Node3D
         _engineLabel.OffsetRight = -18; _engineLabel.OffsetBottom = -16;
         _screen.AddChild(_engineLabel);
 
+        // What the next button does, while it matters: the base jump chain has no menu, so a
+        // player who does not already know that Jump opens the suit mid-fall would never find it.
+        _hint = HudLabel(22);
+        _hint.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
+        _hint.GrowHorizontal = Control.GrowDirection.Both;
+        _hint.GrowVertical = Control.GrowDirection.Begin;
+        _hint.OffsetBottom = -70;
+        _hint.Visible = false;
+        _screen.AddChild(_hint);
+
         _hurtFlash = new ColorRect { Color = new Color(0.8f, 0, 0, 0), MouseFilter = Control.MouseFilterEnum.Ignore };
         _hurtFlash.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _screen.AddChild(_hurtFlash);
@@ -584,6 +595,8 @@ public partial class PlayerFeel : Node3D
             _engineLabel.Text = (vehicle!.HasEngine ? (_player.EngineOn ? "ENGINE ON  (I / D-pad ↑)" : "ENGINE OFF  (I / D-pad ↑)") + "\n" : "")
                 + $"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%    E / (Y) get out";
 
+        UpdateHint(dt, ride);
+
         // the boost meter, only where boost exists: mounted, Game profile
         _boostBar.Visible = ride is RideKind.RoadBike or RideKind.Skis && Rideable.Arcade;
         _boostBar.Value = _player.BoostMeter;
@@ -600,6 +613,45 @@ public partial class PlayerFeel : Node3D
             _popup.Modulate = new Color(1, 1, 1, Mathf.Clamp(_popupLife / 0.4f, 0f, 1f));
             _popup.Visible = _popupLife > 0;
         }
+    }
+
+    /// <summary>
+    /// Button prompts for the base-jump chain, in the words of the device last used:
+    /// falling with room → open the wingsuit; in the suit → open the canopy (urgent when low);
+    /// under the canopy → how to steer and flare.
+    /// </summary>
+    private void UpdateHint(float dt, RideKind ride)
+    {
+        bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
+        string jump = pad ? "(A)" : "SPACE";
+        string text = "";
+        bool urgent = false;
+
+        switch (ride)
+        {
+            case RideKind.OnFoot:
+                // mirrors FootPlayer's deploy test: falling, and more than 12 m of air below
+                if (!_player.IsOnFloor() && _player.Velocity.Y < -3f && _player.Terrain != null
+                    && _player.Terrain.TryGetHeight(_player.GlobalPosition, out float g)
+                    && _player.GlobalPosition.Y - g > 12f)
+                    text = $"{jump}  open WINGSUIT";
+                break;
+            case RideKind.Wingsuit:
+                urgent = _player.Clearance < 80f;
+                text = $"{jump}  open PARACHUTE" + (urgent ? "  — NOW!" : "")
+                    + $"\n{(pad ? "left stick" : "W / S")} dive · flare     {(pad ? "left stick" : "A / D")} turn";
+                break;
+            case RideKind.Parachute:
+                text = $"{(pad ? "left stick" : "A / D")} steer     {(pad ? "pull back" : "S")} brake — hold it to flare the landing";
+                break;
+        }
+
+        _hint.Visible = text.Length > 0;
+        if (!_hint.Visible) return;
+        _hint.Text = text;
+        _hintPulse += dt * (urgent ? 9f : 3f);
+        float a = 0.75f + 0.25f * Mathf.Sin(_hintPulse);
+        _hint.Modulate = urgent ? new Color(1f, 0.35f, 0.3f, a) : new Color(1f, 1f, 1f, a);
     }
 
     public void Popup(string text, bool good)
