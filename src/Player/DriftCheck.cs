@@ -97,10 +97,12 @@ public static class DriftCheck
         }
 
         // four-wheel drive on tarmac grips its way out of a drift sooner; that is the car, not a bug
-        // Front drive pulls itself straight the moment the throttle goes on, so a front-driver's drift
-        // is the handbrake's and short; it must still get past the angle and be caught.
-        float hold = spec.Drive switch { Drivetrain.All => 0.8f, Drivetrain.Front => 0.4f, _ => 1.5f };
-        bool ok = straightSlip < 0.02f && maxSlip > 0.35f && drifting > hold && !spun && endSlip < 0.1f
+        // Game is the promise that EVERY car drifts: all of them must hold one. Sim is the real car,
+        // and a front-driver or a 90 hp roadster really cannot hold a drift on the throttle; there
+        // it must still get past a drift angle on the handbrake and be caught without a spin.
+        float hold = profile == RideProfile.Game ? 1.5f : 0f;
+        float minAngle = profile == RideProfile.Game ? 0.35f : 0.26f;
+        bool ok = straightSlip < 0.02f && maxSlip > minAngle && drifting >= hold && !spun && endSlip < 0.1f
             && !float.IsNaN(m.Speed);
         GD.Print($"[drift] {profile,-4} {spec.Label,-10} 0-100 {to100,4:F1}s  top {tm.Speed * 3.6f,4:F0} km/h  "
             + $"entry {entrySpeed * 3.6f,4:F0} km/h  max angle {Mathf.RadToDeg(maxSlip),3:F0}°  "

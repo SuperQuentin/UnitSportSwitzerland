@@ -133,6 +133,10 @@ public sealed class Car : Rideable
     private const float ArcadeAssist = 0.45f, ArcadeYawDamp = 0.08f;
     /// <summary>Game: the drift angle beyond which the car is caught (~35°), and how hard, 1/s² and 1/s.</summary>
     private const float ArcadeMaxAngle = 0.6f, ArcadeCatch = 14f, ArcadeCatchDamp = 4f;
+    /// <summary>Game: share of rear side grip the throttle takes away once the car is sideways.</summary>
+    private const float ArcadeSustain = 0.3f;
+    /// <summary>More for a front-driver, whose driven wheels pull it straight the moment the gas goes on.</summary>
+    private const float ArcadeSustainFf = 0.55f;
     private const float ArcadePower = 1.35f, ArcadeGrip = 1.12f;
     /// <summary>Rear side grip left while the handbrake locks them.</summary>
     private const float HandbrakeGrip = 0.35f;
@@ -242,6 +246,12 @@ public sealed class Car : Rideable
             float latF = Mathf.Sqrt(Mathf.Max(capF * capF - fxF * fxF, 0.01f * capF * capF));
             float latR = Mathf.Sqrt(Mathf.Max(capR * capR - fxR * fxR, 0.01f * capR * capR));
             if (input.Handbrake) latR *= HandbrakeGrip;
+            // Game: once sideways, the gas keeps the rear sliding, whatever drives the wheels — so a
+            // front-driver, a mid-engined car or a 90 hp roadster holds a drift on the throttle
+            // exactly like the FR cars do. Sim leaves each car to its own layout and power.
+            if (arcade)
+                latR *= 1f - (s.Drive == Drivetrain.Front ? ArcadeSustainFf : ArcadeSustain) * pedal
+                    * Mathf.Clamp((Mathf.Abs(slipNow) - 0.12f) / 0.2f, 0f, 1f);
             float fyF = -latF * Mathf.Sin(tyreC * Mathf.Atan(TyreB * alphaF));
             float fyR = -latR * Mathf.Sin(tyreC * Mathf.Atan(TyreB * alphaR));
 
