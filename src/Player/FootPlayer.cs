@@ -146,6 +146,7 @@ public partial class FootPlayer : CharacterBody3D
 
     private Rideable? _ride;
     private RideMotion _motion;
+    private float _slipCam;
     private Node3D? _visual;
     private RideKind _visualKind = RideKind.OnFoot;
 
@@ -933,7 +934,7 @@ public partial class FootPlayer : CharacterBody3D
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
         var velocity = _ride is Flyer
             ? _flight.Velocity
-            : heading * _motion.Speed + Vector3.Up * Velocity.Y;
+            : heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Vector3.Up * Velocity.Y;
         return new VehicleState((RideKind)RideKindId, GlobalPosition,
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now);
@@ -1750,7 +1751,9 @@ public partial class FootPlayer : CharacterBody3D
             Throttle: Mathf.Max(PlayerInput.Strength(PlayerInput.Throttle), Mathf.Max(0f, -stick.Y)),
             Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
             Steer: SteerInput(),
-            Effort: PlayerInput.Held(PlayerInput.TuckBoost));
+            Effort: PlayerInput.Held(PlayerInput.TuckBoost),
+            // Space is a hop on a bike and the handbrake in a car
+            Handbrake: _ride is { CanHop: false } && PlayerInput.Held(PlayerInput.Jump));
 
         // After a bail the rider is on the ground, not riding: no drive, no steering.
         if (_bailTimer > 0)
@@ -1807,16 +1810,18 @@ public partial class FootPlayer : CharacterBody3D
         heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
 
+        // a drifting car travels at an angle to its nose; everything else has Slip = 0
+        var travel = heading.Rotated(Vector3.Up, _motion.Slip);
         var velocity = Velocity;
-        velocity.X = heading.X * _motion.Speed;
-        velocity.Z = heading.Z * _motion.Speed;
+        velocity.X = travel.X * _motion.Speed;
+        velocity.Z = travel.Z * _motion.Speed;
         velocity.Y = onFloor ? Mathf.Min(velocity.Y, 0f) : velocity.Y - Gravity * dt;
 
         // Space hops: edge-triggered like the on-foot jump, so holding it does not bunny-hop
         // every frame, and only from the ground - there is nothing to push against in the air.
         // Speed and heading are untouched: a hop carries the bike's momentum, it does not add any.
         bool spaceDown = PlayerInput.Held(PlayerInput.Jump);
-        bool hop = spaceDown && !_jumpHeld && onFloor;
+        bool hop = spaceDown && !_jumpHeld && onFloor && _ride.CanHop;
         _jumpHeld = spaceDown;
         if (hop) { velocity.Y = RideJumpVelocity; Jumped?.Invoke(); }
         LastRideInput = input;
@@ -1992,7 +1997,11 @@ public partial class FootPlayer : CharacterBody3D
         // well out; eased, so the trail itself never snaps
         float lagTarget = Mathf.Clamp(-_motion.YawRate * 0.28f, -0.42f, 0.42f);
         _turnLag = Mathf.Lerp(_turnLag, lagTarget, 1f - Mathf.Exp(-3.5f * dt));
-        float orbit = _lookYaw + _turnLag;
+        // In a drift the camera swings part of the way toward where the car is going, so the
+        // road stays in view while the nose points at the inside verge. Not when reversing.
+        float slip = Mathf.Wrap(_motion.Slip, -Mathf.Pi, Mathf.Pi);
+        _slipCam = Mathf.Lerp(_slipCam, Mathf.Abs(slip) < 1.4f ? slip * 0.55f : 0f, 1f - Mathf.Exp(-4f * dt));
+        float orbit = _lookYaw + _turnLag + _slipCam;
 
         // both are local to the body, which is yaw-only, so the camera stays level
         var eye = new Vector3(0, _ride.EyeHeight, 0);

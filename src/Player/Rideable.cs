@@ -14,6 +14,10 @@ public enum RideKind
     Paraglider = 5,
     Helicopter = 6,
     Plane = 7,
+    // cars (Car.cs)
+    Coupe86 = 8,
+    RotaryFd = 9,
+    Rally4wd = 10,
 }
 
 /// <summary>Controls as the vehicle sees them, already stripped of key bindings.</summary>
@@ -21,7 +25,8 @@ public enum RideKind
 /// <param name="Brake">0..1.</param>
 /// <param name="Steer">-1 left .. +1 right.</param>
 /// <param name="Effort">Shift: sprint on a bike, tuck on skis.</param>
-public readonly record struct RideInput(float Throttle, float Brake, float Steer, bool Effort);
+/// <param name="Handbrake">Space on a car (<see cref="Rideable.CanHop"/> false): locks the rear wheels.</param>
+public readonly record struct RideInput(float Throttle, float Brake, float Steer, bool Effort, bool Handbrake = false);
 
 /// <summary>
 /// The ground under the vehicle.
@@ -56,6 +61,13 @@ public struct RideMotion
 
     /// <summary>Yaw rate from the last step, rad/s. Read by the chase camera to trail the turn.</summary>
     public float YawRate;
+
+    /// <summary>
+    /// Direction of travel minus <see cref="Yaw"/>, radians, same sign as yaw (+ = travelling to
+    /// the left of where the nose points). Zero for everything that goes where it points; a
+    /// drifting car is the one thing that does not. π is reversing.
+    /// </summary>
+    public float Slip;
 }
 
 /// <summary>
@@ -129,6 +141,9 @@ public abstract class Rideable
     public virtual bool HasEngine => false;
 
     public virtual float MaxHealth => 100f;
+
+    /// <summary>Space hops (bike, skis). False on a car, where Space is the handbrake.</summary>
+    public virtual bool CanHop => true;
 
     /// <summary>The mesh as it stands with nobody on it (a bike without its rider).</summary>
     public virtual Node3D BuildParkedVisual(int riderIndex) => BuildVisual(riderIndex);
@@ -219,7 +234,8 @@ public abstract class Rideable
     /// They are a base jump — Jump while falling from height — see <c>FootPlayer</c>.
     /// </remarks>
     public static readonly Rideable[] All =
-        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() };
+        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane(),
+          new Car(CarSpec.Coupe86), new Car(CarSpec.RotaryFd), new Car(CarSpec.Rally4wd) };
 
     /// <summary>
     /// A fresh instance for one rider.
@@ -239,6 +255,9 @@ public abstract class Rideable
         RideKind.Paraglider => new Canopy(paraglider: true),
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
+        RideKind.Coupe86 => new Car(CarSpec.Coupe86),
+        RideKind.RotaryFd => new Car(CarSpec.RotaryFd),
+        RideKind.Rally4wd => new Car(CarSpec.Rally4wd),
         _ => null,
     };
 }
