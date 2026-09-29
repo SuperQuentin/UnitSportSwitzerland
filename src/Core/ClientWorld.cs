@@ -210,7 +210,8 @@ public partial class ClientWorld : Node3D
             || Loot.GatherProbe.ParseArgs().Requested
             || Birds.BirdProbe.ParseArgs().Requested
             || World.TrafficProbe.ParseArgs().Requested
-            || Combat.CombatProbe.ParseArgs().Requested;
+            || Combat.CombatProbe.ParseArgs().Requested
+            || Birds.BirdStrikeProbe.ParseArgs().Requested;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -350,6 +351,14 @@ public partial class ClientWorld : Node3D
             var (iE, iN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(iE, iN, 1200);
             AddChild(new Interiors.InteriorProbe(_chunks, origin, _cache, icheck.Shot));
+            return;
+        }
+
+        if (Birds.BirdStrikeProbe.ParseArgs() is { Requested: true } scheck)
+        {
+            var (sE, sN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(sE, sN, 1200);
+            AddChild(new Birds.BirdStrikeProbe(_chunks, origin, birds, scheck.Shot));
             return;
         }
 

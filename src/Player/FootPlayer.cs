@@ -1040,6 +1040,26 @@ public partial class FootPlayer : CharacterBody3D
         TakeDamage(damage);
     }
 
+    /// <summary>
+    /// A bird strike (<see cref="Birds.BirdLife"/>): damage like a round, and a big enough bird
+    /// through the propeller or the rotor stops the engine — the plane then glides and the
+    /// helicopter autorotates, exactly as if it had been switched off.
+    /// </summary>
+    public void BirdStrike(float damage, bool engineOut)
+    {
+        Shaken?.Invoke(Mathf.Clamp(damage / 40f, 0.15f, 1f));
+        bool stop = engineOut && _ride is { HasEngine: true } && EngineOn;
+        ShotHit(damage);
+        if (stop && _ride is { HasEngine: true })
+        {
+            EngineOn = false;
+            EngineToggled?.Invoke(false);
+            Announced?.Invoke("BIRD STRIKE — ENGINE OUT", false);
+        }
+        // a tit on the windscreen is a thud, not an event worth a banner
+        else if (damage >= 1f) Announced?.Invoke("BIRD STRIKE", false);
+    }
+
     /// <summary>Restores health (food, water). Returns false when there was nothing to restore.</summary>
     public bool Heal(float amount)
     {

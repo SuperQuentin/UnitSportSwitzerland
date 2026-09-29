@@ -55,6 +55,15 @@ public partial class BirdLife : Node3D
     private double _spawnTimer;
     private double _callCooldown;
 
+    /// <summary>This client's birds, for the aircraft guns (<c>CombatManager</c>).</summary>
+    public static BirdLife? Instance { get; private set; }
+
+    /// <summary>Airborne birds try to get out of an aircraft's way; probes switch it off.</summary>
+    public bool EvadeAircraft { get; set; } = true;
+
+    private double _aerialTimer;
+    private readonly HashSet<Bird> _rolled = new();
+
     public BirdJournal Journal { get; private set; } = null!;
     public IReadOnlyList<Bird> Birds => _birds;
 
@@ -79,6 +88,7 @@ public partial class BirdLife : Node3D
     public override void _Ready()
     {
         Name = "Birds";
+        Instance = this;
         Journal = new BirdJournal();
         AddChild(Journal);
         _gun = new AudioStreamPlayer { Name = "Gun", Bus = SfxBus.Name, VolumeDb = -3f };
@@ -121,6 +131,16 @@ public partial class BirdLife : Node3D
             _spawnTimer = 0.4;
             TrySpawn(focus);
         }
+        // Flying fast, the birds that matter are the ones along the flight path, at the height they
+        // really fly: without this every bird is near the ground behind a plane that left it.
+        _aerialTimer -= delta;
+        if (AutoSpawn && player is { IsFlying: true } flyer && flyer.GroundSpeed > 12f
+            && _aerialTimer <= 0 && _birds.Count < Budget)
+        {
+            _aerialTimer = AerialInterval;
+            SpawnAhead(flyer);
+        }
+        if (player is { IsFlying: true } pilot) CheckStrikes(pilot);
 
         // binoculars see much further than the naked eye
         float seen = cam.Fov < 20f ? 300f : SeenRange;
@@ -241,7 +261,8 @@ public partial class BirdLife : Node3D
 
     /// <summary>
     /// Puts one bird in the world. Perched birds go to the top of the nearest real tree, if there
-    /// is one; <paramref name="lift"/> fixes a hovering bird's height instead of drawing one.
+    /// is one; <paramref name="lift"/> fixes a hovering, soaring or flying bird's height above
+    /// <paramref name="at"/> instead of drawing one.
     /// </summary>
     public Bird Spawn(BirdSpecies s, Vector3 at, Bird.Mode mode, float? lift = null)
     {
@@ -391,6 +412,164 @@ public partial class BirdLife : Node3D
         return best;
     }
 
+    // ------------------------------------------------------------------------------------
+    // aircraft: bird strikes and the guns
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>Seconds between birds placed along a fast flight path.</summary>
+    private const double AerialInterval = 2.5;
+
+    /// <summary>
+    /// Mass from length, kg: ~9·L³ lands a sparrow at 30 g, a pigeon at 0.5 kg, a goose at 4 kg and
+    /// a golden eagle at 5.5 kg. The species table carries no mass.
+    /// </summary>
+    // ponytail: allometric guess, overestimates long-necked birds (a swan comes out at 30 kg, hence the cap); add a Mass column if strikes need to be exact
+    public static float Mass(BirdSpecies s) => Mathf.Clamp(9f * s.Length * s.Length * s.Length, 0.01f, 12f);
+
+    /// <summary>How high above the ground a species really flies, m.</summary>
+    private static float Ceiling(BirdSpecies s) => s.Flight switch
+    {
+        FlightStyle.Soar => 400f,     // buzzards, eagles, vultures, storks on thermals
+        FlightStyle.Dart => 150f,     // swifts hawk high
+        FlightStyle.Glide => 200f,    // gulls, kites, harriers
+        _ => s.Body is BodyPlan.Waterfowl or BodyPlan.Heron or BodyPlan.Raptor ? 150f : 50f,
+    };
+
+    /// <summary>
+    /// One bird (or a flock) 120–220 m ahead of an aircraft, within 60 m of its track, at the pilot's
+    /// height above the ground if that species goes that high, otherwise at its own ceiling — so a
+    /// plane skimming a valley meets storks and swallows, and one at 1,000 m meets almost nothing.
+    /// </summary>
+    public int SpawnAhead(FootPlayer pilot)
+    {
+        var flat = pilot.Flight.Velocity with { Y = 0 };
+        if (flat.LengthSquared() < 1f) return 0;
+        var dir = flat.Normalized();
+        var p = pilot.GlobalPosition + dir * Mathf.Lerp(120f, 220f, (float)_rng.NextDouble())
+            + dir.Cross(Vector3.Up) * ((float)_rng.NextDouble() * 2f - 1f) * 60f;
+        if (!_chunks.TryGetHeight(p, out float ground) || !_chunks.TryGetCover(p, out var cover)) return 0;
+        p.Y = ground;
+        var s = Pick(HabitatAt(cover, ground), ground);
+        if (s == null) return 0;
+        float agl = pilot.GlobalPosition.Y - ground;
+        float lift = Mathf.Clamp(agl + ((float)_rng.NextDouble() * 2f - 1f) * 15f, 3f, Ceiling(s));
+        var mode = s.Flight == FlightStyle.Soar ? Bird.Mode.Soaring : Bird.Mode.Flying;
+        int n = Math.Min(1 + _rng.Next(Math.Max(1, s.Flock)), Budget - _birds.Count);
+        for (int i = 0; i < n; i++)
+        {
+            var at = p + new Vector3((float)(_rng.NextDouble() * 2 - 1) * 4f, 0, (float)(_rng.NextDouble() * 2 - 1) * 4f);
+            Spawn(s, at, mode, lift + (float)(_rng.NextDouble() * 2 - 1) * 2f);
+        }
+        return n;
+    }
+
+    /// <summary>
+    /// Where the craft is solid enough to hit a bird: spheres, centre and radius. A plane, or a
+    /// helicopter's rotor disc, is one big sphere; a canopy pilot is their body and their wing.
+    /// </summary>
+    private static (Vector3 Centre, float Radius, bool Intake)[] StrikeVolumes(FootPlayer pilot) => pilot.Ride switch
+    {
+        RideKind.Plane => new[] { (pilot.GlobalPosition + Vector3.Up * 1.4f, 4.5f, true) },
+        RideKind.Helicopter => new[] { (pilot.GlobalPosition + Vector3.Up * 1.8f, 5f, true) },
+        RideKind.Paraglider or RideKind.Parachute => new[]
+        {
+            (pilot.GlobalPosition + Vector3.Up * 1f, 0.7f, false),
+            (pilot.GlobalTransform * new Vector3(0, pilot.Ride == RideKind.Paraglider ? 7.6f : 5.5f, 0), 4f, false),
+        },
+        RideKind.Wingsuit => new[] { (pilot.GlobalPosition + Vector3.Up * 1f, 1f, false) },
+        _ => Array.Empty<(Vector3, float, bool)>(),
+    };
+
+    /// <summary>
+    /// Birds against the local pilot's craft. Each airborne bird the craft will reach within 1.2 s
+    /// gets ONE chance to dodge (small birds are quicker: 85% for a sparrow, 55% for an eagle);
+    /// one that is inside a strike volume dies and hits the craft with ½·m·v², at the closing speed.
+    /// Client-authoritative, like the guns: birds are this client's own, and so is the damage.
+    /// </summary>
+    private void CheckStrikes(FootPlayer pilot)
+    {
+        var volumes = StrikeVolumes(pilot);
+        if (volumes.Length == 0) return;
+        var craftVel = pilot.Flight.Velocity;
+        float speed = craftVel.Length();
+        var nose = -(pilot.Flight.Attitude == default ? pilot.GlobalBasis : pilot.Flight.Attitude.Orthonormalized()).Z;
+        foreach (var b in _birds)
+        {
+            if (b.State is Bird.Mode.Falling or Bird.Mode.Dead) continue;
+            var centre = b.Centre;
+            var rel = centre - volumes[0].Centre;
+
+            if (EvadeAircraft && speed > 5f && !_rolled.Contains(b) && b.State is not (Bird.Mode.Ground or Bird.Mode.Perched or Bird.Mode.Swimming))
+            {
+                var dir = craftVel / speed;
+                float along = rel.Dot(dir);
+                if (along > 0f && along < speed * 1.2f && (rel - dir * along).Length() < volumes[0].Radius + 6f)
+                {
+                    _rolled.Add(b);
+                    float dodge = Mathf.Clamp(0.9f - b.Species.Length * 0.4f, 0.5f, 0.88f);
+                    if (_rng.NextDouble() < dodge) { b.Flush(volumes[0].Centre, _rng); continue; }
+                }
+            }
+
+            foreach (var (c, r, intake) in volumes)
+            {
+                if (centre.DistanceTo(c) > r + b.HitRadius) continue;
+                float closing = (craftVel - b.Velocity).Length();
+                float energy = 0.5f * Mass(b.Species) * closing * closing;
+                bool vehicle = pilot.Vehicle is { IsVehicle: true };
+                // a craft shrugs off what would floor a person: 100 J per point against 20
+                float damage = vehicle ? Mathf.Min(energy / 100f, 70f) : Mathf.Min(energy / 20f, 60f);
+                // through the propeller (nose side) or the rotor/intake: a big enough bird stops it
+                bool ingested = intake && energy > EngineOutJoules
+                    && (pilot.Ride == RideKind.Helicopter || (centre - c).Dot(nose) > 0f);
+                b.Kill(speed > 0.1f ? craftVel / speed : Vector3.Down);
+                Feathers(centre, b.Species.Back, b.Species.Belly);
+                Strikes++;
+                LastStrike = (b.Species.Name, energy, damage, ingested);
+                GD.Print($"[birds] strike: {b.Species.Name} {energy:F0} J -> {damage:F1} damage{(ingested ? ", engine out" : "")}");
+                pilot.BirdStrike(damage, ingested);
+                break;
+            }
+        }
+        _rolled.RemoveWhere(b => b.State is Bird.Mode.Falling or Bird.Mode.Dead || !_birds.Contains(b));
+    }
+
+    /// <summary>Kinetic energy that stops an engine: a goose or an eagle at a light plane's speed, not a crow.</summary>
+    public const float EngineOutJoules = 1500f;
+
+    public int Strikes { get; private set; }
+    public (string Species, float Joules, float Damage, bool EngineOut) LastStrike { get; private set; }
+
+    /// <summary>
+    /// A round from an aircraft gun between two points: the first bird it passes through falls.
+    /// Scored in the journal only when the shot was this client's — a protected bird shot from the
+    /// air costs what it costs on foot.
+    /// </summary>
+    public Bird? TracerHit(Vector3 from, Vector3 to, bool mine)
+    {
+        var seg = to - from;
+        float len2 = seg.LengthSquared();
+        if (len2 < 1e-6f) return null;
+        foreach (var b in _birds)
+        {
+            if (b.State is Bird.Mode.Falling or Bird.Mode.Dead) continue;
+            var c = b.Centre;
+            float t = Mathf.Clamp((c - from).Dot(seg) / len2, 0f, 1f);
+            if (c.DistanceTo(from + seg * t) > b.HitRadius + 0.1f) continue;
+            b.Kill(seg.Normalized());
+            Feathers(c, b.Species.Back, b.Species.Belly);
+            if (mine)
+            {
+                var s = b.Species;
+                int points = Journal.Bag(s, Month);
+                _items.Ui.Toast(points > 0 ? $"{s.Name} — +{points}   (score {Journal.Score})"
+                    : s.IsGame ? $"{s.Name}: out of season. {points}" : $"PROTECTED: {s.Name} ({s.Latin}). {points}");
+            }
+            return b;
+        }
+        return null;
+    }
+
     /// <summary>A bird took off near the player: let it call, if it is the calling kind.</summary>
     internal void Called(Bird b)
     {
@@ -443,6 +622,9 @@ public sealed class Bird
     private readonly BirdMesh.Parts _parts;
 
     public Mode State { get; private set; }
+
+    /// <summary>World velocity while flying free; zero otherwise (a soaring bird's circle is slow next to an aircraft).</summary>
+    public Vector3 Velocity => State == Mode.Flying ? _velocity : Vector3.Zero;
     public bool Seen { get; set; }
     public bool Gone { get; private set; }
 
@@ -492,7 +674,7 @@ public sealed class Bird
         {
             case Mode.Soaring:
                 _radius = 25f + 40f * (float)rng.NextDouble();
-                _anchor = at + Vector3.Up * (50f + 110f * (float)rng.NextDouble());
+                _anchor = at + Vector3.Up * (lift ?? 50f + 110f * (float)rng.NextDouble());
                 _angle = (float)(rng.NextDouble() * Mathf.Tau);
                 at = _anchor + new Vector3(Mathf.Cos(_angle), 0, Mathf.Sin(_angle)) * _radius;
                 break;
@@ -501,7 +683,7 @@ public sealed class Bird
                 _anchor = at;
                 break;
             case Mode.Flying:
-                at += Vector3.Up * (Species.Flight == FlightStyle.Dart ? 6f + 30f * (float)rng.NextDouble() : 12f + 30f * (float)rng.NextDouble());
+                at += Vector3.Up * (lift ?? (Species.Flight == FlightStyle.Dart ? 6f + 30f * (float)rng.NextDouble() : 12f + 30f * (float)rng.NextDouble()));
                 _velocity = new Vector3(Mathf.Sin(_yaw), 0, Mathf.Cos(_yaw)) * Cruise;
                 break;
             case Mode.Swimming:
