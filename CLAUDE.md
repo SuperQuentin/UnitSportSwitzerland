@@ -406,7 +406,7 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
   bus reverb (indoors/tunnel/forest/valley/high). `Ambience` (volume setting): cowbells on pasture
   700-2450 m, a Farnell bubble brook near watercourses, per-forest bird species seeded by tile,
   church bells on the hour at towns < 1.5 km (local clock — the game has none), alpine rockfall.
-  Check: `<godot> --headless --path . -- --soundcheck <dir>` writes every bank variant and a 7 s
+  Check: `<godot> --headless --path . -- --soundcheck test_output/soundcheck` writes every bank variant and a 7 s
   rev sweep per voice × profile as WAV, non-zero exit on NaN or clipping.
 - **Game / Sim profile** (`GameSettings.RideProfile`, Settings → Movement, `--profile game|sim`,
   default Game; `Rideable.Arcade`). Game is an arcade layer on the SAME equations: bike 350/900 W,
@@ -784,6 +784,9 @@ world. Long-term goal: all of Switzerland navigable. Plan: `~/.claude/plans/i-wa
 
 ## Commands
 
+- **Output of any check or probe goes in `test_output/`** (gitignored, with a `.gdignore` so Godot
+  never imports it): soundcheck WAVs, `--shot`/`--ride`/`--flycheck` screenshots, test exports.
+  Never write them to the project root or a temp path that can end up inside the repo.
 - Preprocess: `dotnet run --project tools/TerrainPreprocessor -c Release -- --in ressources/data/swiss_chunks --out terrain_chunks --verify --dump-png terrain_chunks_png`
   `--in` is recursive and repeatable (sources on any drive/share), `--jobs` defaults to all cores,
   `--io-jobs` (4) caps concurrent source reads. **One pass, no parse cache**: `TerrainBuild`

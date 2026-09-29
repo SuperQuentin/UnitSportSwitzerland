@@ -66,6 +66,16 @@ obj/
 
 
 # =============================================================================
+# Check / probe output — soundcheck WAVs, --shot and --ride screenshots, exports
+# =============================================================================
+# Point any verification tool at test_output/ instead of the project root. The
+# .gdignore is kept so the editor never imports what lands there (a WAV dropped
+# anywhere else in the project grows a .import file per sample).
+/test_output/*
+!/test_output/.gdignore
+
+
+# =============================================================================
 # Local scratch
 # =============================================================================
 *.log
