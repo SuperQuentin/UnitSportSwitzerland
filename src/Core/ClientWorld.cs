@@ -46,6 +46,11 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(code);
                 return;
             }
+            if (Array.IndexOf(scArgs, "--driftcheck") >= 0)
+            {
+                GetTree().Quit(Player.DriftCheck.Run());
+                return;
+            }
         }
         // after Load, so the saved stick deadzone is what the actions start with
         PlayerInput.Install(this);

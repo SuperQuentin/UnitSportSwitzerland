@@ -163,7 +163,9 @@ public sealed class Car : Rideable
     /// <summary>Tyre curve: sin(C·atan(B·α)). B sets the peak slip angle (~0.15 rad), C the fall past it.</summary>
     private const float TyreB = 14f, SimTyreC = 1.45f, ArcadeTyreC = 1.3f;
     /// <summary>Game: counter-steer the fronts this fraction of the way toward the direction of travel.</summary>
-    private const float ArcadeAssist = 0.45f;
+    private const float ArcadeAssist = 0.45f, ArcadeYawDamp = 0.08f;
+    /// <summary>Game: the drift angle beyond which the car is caught (~35°), and how hard, 1/s² and 1/s.</summary>
+    private const float ArcadeMaxAngle = 0.6f, ArcadeCatch = 14f, ArcadeCatchDamp = 4f;
     private const float ArcadePower = 1.35f, ArcadeGrip = 1.12f;
     /// <summary>Rear side grip left while the handbrake locks them.</summary>
     private const float HandbrakeGrip = 0.35f;
@@ -203,10 +205,15 @@ public sealed class Car : Rideable
         float rate = Mathf.Abs(steerTarget) < Mathf.Abs(_steer) || steerTarget * _steer < 0 ? 9f : 5f;
         _steer = Mathf.MoveToward(_steer, steerTarget, rate * dt);
         // at speed the same input asks for less lock, or 200 km/h would be twitchier than 20
-        float lockScale = 1f / (1f + Mathf.Max(u, 0f) / 28f);
+        // — but never in a slide: catching a drift needs the full lock, and at 60 km/h the speed
+        // scaling alone left 22° of it, which cannot catch anything
+        float slipNow = Mathf.Wrap(motion.Slip, -Mathf.Pi, Mathf.Pi);
+        float lockScale = Mathf.Lerp(1f / (1f + Mathf.Max(u, 0f) / 28f), 1f, Mathf.Clamp(Mathf.Abs(slipNow) / 0.3f, 0f, 1f));
         float delta = -_steer * s.MaxSteer * lockScale;   // +steer is right, + angle is left
+        // Game: the fronts point part of the way down the direction of travel and lean against
+        // the rotation, as a driver's hands would, so a drift is held rather than spun
         if (arcade && u > 3f)
-            delta = Mathf.Clamp(delta + ArcadeAssist * Mathf.Wrap(motion.Slip, -Mathf.Pi, Mathf.Pi), -s.MaxSteer, s.MaxSteer);
+            delta = Mathf.Clamp(delta + ArcadeAssist * slipNow - ArcadeYawDamp * motion.YawRate, -s.MaxSteer, s.MaxSteer);
         SteerAngle = delta;
 
         float peakTorque = s.PeakKw * 1000f / (s.PeakRpm * Mathf.Tau / 60f) * (arcade ? ArcadePower : 1f);
@@ -274,6 +281,15 @@ public sealed class Car : Rideable
             float fx = fxR + fxF * cos - fyF * sin - drag - roll;
             float fy = fyR + fyF * cos + fxF * sin;
             float mz = a * (fyF * cos + fxF * sin) - b * fyR;
+            // Game: past ArcadeMaxAngle a yaw moment pulls the nose back toward the travel, damped,
+            // so holding the turn with the gas pinned is a held drift and not a spin. The wheels
+            // alone cannot do it: at 60° of angle the fronts are already on the lock stop.
+            if (arcade)
+            {
+                float angle = Mathf.Atan2(w, Mathf.Abs(u));
+                float excess = angle - Mathf.Clamp(angle, -ArcadeMaxAngle, ArcadeMaxAngle);
+                if (excess != 0f) mz += m * a * b * (ArcadeCatch * excess - ArcadeCatchDamp * r);
+            }
 
             float ax = fx / m + SlopeAccel(ground.Grade);
             float ay = fy / m;
@@ -285,7 +301,9 @@ public sealed class Car : Rideable
 
             // Below a few m/s the slip angles are dominated by noise and the model is stiff; blend
             // to rolling without slip, where the yaw rate is simply what the wheels ask for.
-            float k = Mathf.Clamp((Mathf.Abs(u) - 1f) / 3f, 0f, 1f);
+            // On the TOTAL speed: at 70° of drift u is small while the car is still doing 60 km/h
+            // sideways, and blending on u zeroed that sideways speed — 50 km/h lost in 0.3 s.
+            float k = Mathf.Clamp((Mathf.Sqrt(u * u + w * w) - 1f) / 3f, 0f, 1f);
             float rKin = u * Mathf.Tan(delta) / L;
             r = Mathf.Lerp(rKin, r, k);
             w = Mathf.Lerp(0f, w, k);
