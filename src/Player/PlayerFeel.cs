@@ -27,7 +27,8 @@ public partial class PlayerFeel : Node3D
     private readonly FootPlayer _player;
 
     // --- audio ---
-    private AudioStreamPlayer _hiss = null!, _tyre = null!, _scrape = null!, _rotor = null!, _engine = null!;
+    private AudioStreamPlayer _hiss = null!, _tyre = null!, _scrape = null!;
+    private EngineSynth _rotor = null!, _engine = null!;
     private float _proximity;
     private readonly AudioStreamPlayer[] _voices = new AudioStreamPlayer[8];
     private int _nextVoice;
@@ -74,11 +75,13 @@ public partial class PlayerFeel : Node3D
         _hiss = Loop(SfxSynth.Hiss);
         _tyre = Loop(SfxSynth.Tyre);
         _scrape = Loop(SfxSynth.Scrape);
-        _rotor = Loop(SfxSynth.Rotor);
-        _engine = Loop(SfxSynth.Engine);
+        _rotor = new EngineSynth(EngineProfile.Turboshaft, spatial: false, seed: 1);
+        _engine = new EngineSynth(EngineProfile.PistonAero, spatial: false, seed: 2);
+        AddChild(_rotor);
+        AddChild(_engine);
         for (int i = 0; i < _voices.Length; i++)
         {
-            _voices[i] = new AudioStreamPlayer { Name = $"Voice{i}" };
+            _voices[i] = new AudioStreamPlayer { Name = $"Voice{i}", Bus = SfxBus.Name };
             AddChild(_voices[i]);
         }
 
@@ -89,18 +92,18 @@ public partial class PlayerFeel : Node3D
         ((ParticleProcessMaterial)_dust.ProcessMaterial).Color = Dirt;
 
         _player.Landed += OnLanded;
-        _player.Jumped += () => Play(SfxSynth.Whoosh, 0.30f, 1.25f);
+        _player.Jumped += () => Play(SfxSynth.WhooshBank, 0.30f, 1.25f);
         _player.WallJumped += () =>
         {
-            Play(SfxSynth.Whoosh, 0.6f, 0.9f);
-            Play(SfxSynth.Steps[_rng.Next(4)], 0.7f, 0.8f);   // the foot hitting the wall
+            Play(SfxSynth.WhooshBank, 0.6f, 0.9f);
+            Play(SfxSynth.StepsBank, 0.7f, 0.8f);   // the foot hitting the wall
             AddTrauma(0.18f);
         };
-        _player.SlideStarted += () => Play(SfxSynth.Whoosh, 0.45f, 0.7f);
+        _player.SlideStarted += () => Play(SfxSynth.WhooshBank, 0.45f, 0.7f);
         _player.Mantled += () =>
         {
-            Play(SfxSynth.Steps[_rng.Next(4)], 0.6f, 0.75f);   // hands on the lip
-            Play(SfxSynth.Whoosh, 0.25f, 1.3f);
+            Play(SfxSynth.StepsBank, 0.6f, 0.75f);   // hands on the lip
+            Play(SfxSynth.WhooshBank, 0.25f, 1.3f);
         };
         _player.Hurt += amount =>
         {
@@ -111,7 +114,7 @@ public partial class PlayerFeel : Node3D
         _player.EngineToggled += on =>
         {
             // the starter's clunk; the spool-up or wind-down that follows is the rest of it
-            Play(SfxSynth.Impact, 0.35f, on ? 1.6f : 1.1f);
+            Play(SfxSynth.ImpactBank, 0.35f, on ? 1.6f : 1.1f);
             Popup(on ? "ENGINE ON" : "ENGINE OFF", on);
         };
         _player.Announced += (text, good) =>
@@ -119,13 +122,13 @@ public partial class PlayerFeel : Node3D
             Popup(text, good);
             if (good)
             {
-                Play(SfxSynth.Chime, 0.45f, 1f);
+                PlayChime();
                 PlayerInput.Rumble(0.5f, 0.2f, 0.12f);
             }
         };
         _player.Impacted += lost =>
         {
-            Play(SfxSynth.Impact, Mathf.Clamp(lost * 0.12f, 0.25f, 1f), 1f);
+            Play(SfxSynth.ImpactBank, Mathf.Clamp(lost * 0.12f, 0.25f, 1f), 1f);
             AddTrauma(Mathf.Clamp(lost * 0.12f, 0.15f, 0.8f));
         };
     }
@@ -139,7 +142,7 @@ public partial class PlayerFeel : Node3D
         {
             // someone else's camera is on screen (the fly camera): nothing of this belongs there
             SetLoop(_hiss, 0, 1); SetLoop(_tyre, 0, 1); SetLoop(_scrape, 0, 1);
-            SetLoop(_rotor, 0, 1); SetLoop(_engine, 0, 1);
+            _rotor.Set(0, 0, 0, 0); _engine.Set(0, 0, 0, 0);
             _spray.Emitting = _dust.Emitting = false;
             return;
         }
@@ -164,7 +167,7 @@ public partial class PlayerFeel : Node3D
 
         if (_player.Boosting && !_wasBoosting)
         {
-            Play(SfxSynth.Whoosh, 0.6f, 0.8f);
+            Play(SfxSynth.WhooshBank, 0.6f, 0.8f);
             AddTrauma(0.2f);
         }
         _wasBoosting = _player.Boosting;
@@ -191,10 +194,14 @@ public partial class PlayerFeel : Node3D
     private void UpdateAudio(float dt, RideKind ride, bool grounded, float speed)
     {
         var flight = _player.Flight;
-        SetLoop(_rotor, ride == RideKind.Helicopter ? 0.25f + 0.55f * flight.Spool : 0f,
-            0.55f + 0.5f * flight.Spool);
-        SetLoop(_engine, ride == RideKind.Plane ? 0.2f + 0.45f * flight.Spool : 0f,
-            0.6f + 0.8f * flight.Spool);
+        // helicopter: spool is the rotor speed; climbing loads the blades (blade slap)
+        bool heli = ride == RideKind.Helicopter;
+        _rotor.Set(flight.Spool, flight.Spool, Mathf.Clamp(0.35f + flight.Velocity.Y / 8f, 0f, 1f),
+            heli ? 0.3f + 0.6f * flight.Spool : 0f);
+        // plane: Control is the throttle lever, spool the rpm it has wound up to
+        bool plane = ride == RideKind.Plane;
+        _engine.Set(Mathf.Clamp((flight.Spool - 0.15f) / 0.85f, 0f, 1f), flight.Control, flight.Control,
+            plane && flight.Spool > 0.02f ? 0.35f + 0.45f * flight.Spool : 0f);
 
         // Proximity: a wingsuit fast and low is the whole point of one. Time spent under 20 m at
         // speed pays out as a named popup once the pilot climbs out of it (or lands).
@@ -220,7 +227,7 @@ public partial class PlayerFeel : Node3D
             if (_tickAccum >= 1f)
             {
                 _tickAccum -= Mathf.Floor(_tickAccum);
-                Play(SfxSynth.Tick, 0.18f, 0.9f + (float)_rng.NextDouble() * 0.2f);
+                Play(SfxSynth.TickBank, 0.18f, 0.9f + (float)_rng.NextDouble() * 0.2f);
             }
         }
 
@@ -230,7 +237,15 @@ public partial class PlayerFeel : Node3D
         float hiss = skis && grounded
             ? Mathf.Clamp(speed / 20f, 0f, 1f) * 0.3f + edge * Mathf.Clamp(speed / 10f, 0f, 1f) * 0.7f
             : 0f;
-        SetLoop(_hiss, Mathf.Min(hiss, 1f), 0.8f + edge * 0.35f + speed / 60f);
+        // powder is darker, ice brighter and harsher: the one baked hiss is coloured by pitch and level
+        float tone = 1f, hissGain = 1f;
+        if (skis && grounded)
+        {
+            var (lowPass, _, gain) = Surfaces.SkiHiss(SurfaceUnderfoot());
+            tone = Mathf.Pow(lowPass / 4000f, 0.35f);
+            hissGain = gain;
+        }
+        SetLoop(_hiss, Mathf.Min(hiss * hissGain, 1f), (0.8f + edge * 0.35f + speed / 60f) * tone);
 
         // scrape: a slide on foot, or a bike braking hard
         float scrape = 0f, scrapePitch = 1f;
@@ -254,7 +269,7 @@ public partial class PlayerFeel : Node3D
             {
                 _stepAccum -= 1f;
                 float run = Mathf.Clamp(speed / _player.RunSpeed, 0f, 1f);
-                Play(SfxSynth.Steps[_rng.Next(SfxSynth.Steps.Length)], 0.22f + 0.45f * run,
+                Play(Surfaces.Steps(SurfaceUnderfoot()), 0.22f + 0.45f * run,
                     0.9f + (float)_rng.NextDouble() * 0.2f);
             }
         }
@@ -263,7 +278,7 @@ public partial class PlayerFeel : Node3D
 
     private AudioStreamPlayer Loop(AudioStream stream)
     {
-        var p = new AudioStreamPlayer { Stream = stream, VolumeDb = -80f, Autoplay = true };
+        var p = new AudioStreamPlayer { Stream = stream, VolumeDb = -80f, Autoplay = true, Bus = SfxBus.Name };
         AddChild(p);
         return p;
     }
@@ -277,6 +292,30 @@ public partial class PlayerFeel : Node3D
         p.VolumeDb = eased < 0.001f ? -80f : Mathf.LinearToDb(eased);
         p.PitchScale = Mathf.Lerp(p.PitchScale, Mathf.Clamp(pitch, 0.3f, 3f), 0.12f);
         if (!p.Playing) p.Play();
+    }
+
+    // a major-pentatonic climb: a streak of clean tricks plays a rising phrase, not one ding
+    private static readonly float[] ChimeSteps = [1f, 9f / 8f, 5f / 4f, 3f / 2f, 5f / 3f, 2f];
+    private int _chimeStep;
+    private double _lastChime = -10;
+
+    private void PlayChime()
+    {
+        double now = Time.GetTicksMsec() / 1000.0;
+        _chimeStep = now - _lastChime < 4.0 ? Math.Min(_chimeStep + 1, ChimeSteps.Length - 1) : 0;
+        _lastChime = now;
+        Play(SfxSynth.ChimeBank, 0.45f, ChimeSteps[_chimeStep]);
+    }
+
+    private Surface SurfaceUnderfoot() => _player.Terrain is { } chunks
+        ? Surfaces.At(chunks, _player.GlobalPosition, _player.Indoors)
+        : Surface.Grass;
+
+    /// <summary>Plays the next variant of a bank, with its per-play pitch and volume jitter on top.</summary>
+    private void Play(SfxBank bank, float volume, float pitch)
+    {
+        var (stream, jitterPitch, jitterDb) = bank.Pick(_rng);
+        Play(stream, volume * Mathf.DbToLinear(jitterDb), pitch * jitterPitch);
     }
 
     private void Play(AudioStream stream, float volume, float pitch)
@@ -298,7 +337,7 @@ public partial class PlayerFeel : Node3D
     private void OnLanded(float fall)
     {
         float hard = Mathf.Clamp((fall - 2f) / 9f, 0f, 1f);
-        Play(SfxSynth.Landing, 0.25f + 0.75f * hard, 1.15f - 0.35f * hard);
+        Play(Surfaces.Landing(SurfaceUnderfoot()), 0.25f + 0.75f * hard, 1.15f - 0.35f * hard);
         AddTrauma(hard * 0.65f);
 
         // the FOV dips and springs back: FootPlayer eases its FOV every frame, so a nudge here

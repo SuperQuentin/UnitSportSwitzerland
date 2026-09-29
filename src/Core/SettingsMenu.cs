@@ -80,6 +80,10 @@ public partial class SettingsMenu : PanelContainer
             i => GameSettings.Current.RideProfile = (RideProfile)i);
         SliderRow(rows, "Sound effects", 0, 1, 0.05, s.SfxVolume,
             v => GameSettings.Current.SfxVolume = (float)v, v => v <= 0 ? "off" : $"{v * 100:F0} %");
+        SliderRow(rows, "Ambience", 0, 1, 0.05, s.AmbienceVolume,
+            v => GameSettings.Current.AmbienceVolume = (float)v, v => v <= 0 ? "off" : $"{v * 100:F0} %");
+        OptionRow(rows, "Engine voice", new[] { "Realistic", "PS1 SPU", "NES 2A03", "C64 SID", "Genesis FM" }, (int)s.EngineVoice,
+            i => GameSettings.Current.EngineVoice = (UnitSport.Audio.EngineVoice)i);
         SliderRow(rows, "Camera shake", 0, 1, 0.05, s.ScreenShake,
             v => GameSettings.Current.ScreenShake = (float)v, v => v <= 0 ? "off" : $"{v * 100:F0} %");
         ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on);

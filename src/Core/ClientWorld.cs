@@ -13,6 +13,7 @@ namespace UnitSport.Core;
 public partial class ClientWorld : Node3D
 {
     private ChunkManager? _chunks;
+    private Audio.Ambience? _ambience;
     private SpectatorCamera? _spectator;
     private FootPlayer? _player;
     private bool _onFoot;
@@ -34,6 +35,17 @@ public partial class ClientWorld : Node3D
     public override async void _Ready()
     {
         GameSettings.Load();
+        Audio.SfxBus.Ensure();
+        {
+            var scArgs = OS.GetCmdlineUserArgs();
+            int sc = Array.IndexOf(scArgs, "--soundcheck");
+            if (sc >= 0 && sc + 1 < scArgs.Length)
+            {
+                int code = Audio.Soundcheck.Run(scArgs[sc + 1]);
+                GetTree().Quit(code);
+                return;
+            }
+        }
         // after Load, so the saved stick deadzone is what the actions start with
         PlayerInput.Install(this);
         ApplyViewportSettings();
@@ -117,6 +129,14 @@ public partial class ClientWorld : Node3D
         ClientTerrainSync.MergeCachedIndex(_chunks, origin);
 
         AddChild(_chunks);
+        Audio.Surfaces.Origin = origin;
+        var chunksForAudio = _chunks;
+        AddChild(new Audio.ReverbZones(() => GetViewport().GetCamera3D(), () => LocalPlayer?.Indoors == true, chunksForAudio)
+            { Name = "ReverbZones" });
+        _ambience = new Audio.Ambience(chunksForAudio, () => GetViewport().GetCamera3D())
+            { Name = "Ambience", Origin = origin, Volume = GameSettings.Current.AmbienceVolume };
+        AddChild(_ambience);
+        GameSettings.Changed += () => { if (_ambience != null) _ambience.Volume = GameSettings.Current.AmbienceVolume; };
 
         // Vehicles left standing in the world. Same node path as on the server, so parking and
         // claiming work over the network; offline it just holds the nodes.
@@ -421,7 +441,7 @@ public partial class ClientWorld : Node3D
 
         // The town index arrives after this UI was built, so it has to be told to re-read.
         _terrainSync.PlacesReceived += () =>
-            Callable.From(() => _places?.ReloadIndex()).CallDeferred();
+            Callable.From(() => { _places?.ReloadIndex(); _ambience?.ReloadPlaces(); }).CallDeferred();
 
         // Same for the horizon: a client that shipped without one gets it during sync.
         _terrainSync.HorizonReceived += () =>

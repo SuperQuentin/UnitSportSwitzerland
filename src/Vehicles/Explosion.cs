@@ -63,6 +63,7 @@ public partial class Explosion : Node3D
             MaxDistance = 3000f,
             VolumeDb = Mathf.LinearToDb(Mathf.Max(0.01f, Core.GameSettings.Current.SfxVolume)),
             Autoplay = true,
+            Bus = SfxBus.Name,
         };
         AddChild(boom);
     }

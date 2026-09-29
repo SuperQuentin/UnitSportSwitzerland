@@ -117,6 +117,12 @@ public sealed class GameSettings
     // --- feel ---
     /// <summary>Sound effects volume, 0..1.</summary>
     public float SfxVolume { get; set; } = 0.8f;
+    /// <summary>Ambience volume, 0..1.</summary>
+    public float AmbienceVolume { get; set; } = 0.7f;
+
+    /// <summary>Which sound chip the engines are rendered as (<see cref="Audio.EngineSynth"/>).</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Audio.EngineVoice EngineVoice { get; set; } = Audio.EngineVoice.Ps1;
 
     /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
     public float ScreenShake { get; set; } = 1f;
@@ -198,6 +204,7 @@ public sealed class GameSettings
         RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
+        AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);
         ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
         WindowWidth = Math.Clamp(WindowWidth, 0, 7680);
@@ -223,6 +230,14 @@ public sealed class GameSettings
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
+                case "--voice":
+                    EngineVoice = v.ToLowerInvariant() switch
+                    {
+                        "ps1" => Audio.EngineVoice.Ps1, "nes" => Audio.EngineVoice.Nes,
+                        "sid" => Audio.EngineVoice.Sid, "genesis" => Audio.EngineVoice.Genesis,
+                        _ => Audio.EngineVoice.Realistic,
+                    };
+                    break;
                 case "--view": ThirdPerson = v != "first" && v != "1st"; break;
                 case "--perf":
                     PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,

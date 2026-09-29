@@ -59,7 +59,7 @@ public partial class VehicleBody : CharacterBody3D
     private bool _charred;
     private bool _wasWrecked;
     private float _spoolView;
-    private AudioStreamPlayer3D? _engineSound;
+    private EngineSynth? _engineSound;
     private GpuParticles3D? _fire, _smoke;
     private readonly List<PhysicsBody3D> _ignoring = new();
 
@@ -124,14 +124,8 @@ public partial class VehicleBody : CharacterBody3D
             AddChild(_visual);
             if (Ride is Helicopter or Plane)
             {
-                _engineSound = new AudioStreamPlayer3D
-                {
-                    Stream = Ride is Helicopter ? SfxSynth.Rotor : SfxSynth.Engine,
-                    UnitSize = 12f,
-                    MaxDistance = 1500f,
-                    VolumeDb = -80f,
-                    Autoplay = true,
-                };
+                _engineSound = new EngineSynth(Ride is Helicopter ? EngineProfile.Turboshaft : EngineProfile.PistonAero,
+                    spatial: true, seed: (int)Math.Max(1, Owner));
                 AddChild(_engineSound);
             }
         }
@@ -337,9 +331,7 @@ public partial class VehicleBody : CharacterBody3D
         if (Ride is Flyer f && !Wrecked) f.AnimateFlight(_visual, _flight with { Spool = spool }, dt);
         if (_engineSound != null)
         {
-            float vol = spool * 0.7f * Core.GameSettings.Current.SfxVolume;
-            _engineSound.VolumeDb = vol < 0.01f ? -80f : Mathf.LinearToDb(vol);
-            _engineSound.PitchScale = Mathf.Max(0.3f, 0.55f + 0.5f * spool);
+            _engineSound.Set(spool, spool, 0.5f, spool * 0.7f);
         }
 
         // the fire burns out after half a minute; the smoke lingers until the wreck is cleared

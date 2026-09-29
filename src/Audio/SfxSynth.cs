@@ -1,4 +1,5 @@
 using Godot;
+using static UnitSport.Audio.Dsp;
 
 namespace UnitSport.Audio;
 
@@ -21,10 +22,10 @@ namespace UnitSport.Audio;
 /// </summary>
 public static class SfxSynth
 {
-    public const int Rate = 22050;
+    public const int Rate = Dsp.Rate;
 
-    private static AudioStreamWav? _hiss, _tyre, _scrape, _landing, _whoosh, _tick, _impact;
-    private static AudioStreamWav[]? _steps;
+    private static AudioStreamWav? _hiss, _tyre, _scrape;
+    private static SfxBank? _stepsBank, _landingBank, _whooshBank, _tickBank, _impactBank, _chimeBank, _boomBank;
 
     /// <summary>Looping edge hiss for skis: bright, high-passed noise.</summary>
     public static AudioStreamWav Hiss => _hiss ??= Loop(2.0f, 12, (rng, n) =>
@@ -54,52 +55,70 @@ public static class SfxSynth
     });
 
     /// <summary>Four footstep variants, so a run does not sound like a metronome.</summary>
-    public static AudioStreamWav[] Steps => _steps ??= Enumerable.Range(0, 4).Select(v => OneShot(0.14f, 20 + v, (rng, n) =>
+    public static AudioStreamWav[] Steps => StepsBank.Variants;
+
+    /// <summary>Footstep variants with per-variant jitter.</summary>
+    public static SfxBank StepsBank => _stepsBank ??= SfxBank.Build("steps", 6, 0.14f, 20, (rng, n) =>
     {
-        var s = LowPass(Noise(rng, n), 0.18f + 0.05f * v);
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        float cut = (0.18f + 0.05f * (float)rng.NextDouble() * 3f) * J();
+        float d1 = 45f * J(), d2 = 14f * J();
+        var s = LowPass(Noise(rng, n), cut);
         for (int i = 0; i < n; i++)
         {
             float t = (float)i / Rate;
             // a heel-strike click then the softer roll of the sole
-            s[i] = s[i] * 3f * (Mathf.Exp(-45f * t) + 0.35f * Mathf.Exp(-14f * t));
+            s[i] = s[i] * 3f * (Mathf.Exp(-d1 * t) + 0.35f * Mathf.Exp(-d2 * t));
             if (i < 30) s[i] += (float)(rng.NextDouble() * 2 - 1) * 0.5f * (1 - i / 30f);
         }
         return s;
-    })).ToArray();
+    });
 
     /// <summary>Landing thump: a falling low sine under a burst of grit.</summary>
-    public static AudioStreamWav Landing => _landing ??= OneShot(0.4f, 30, (rng, n) =>
+    public static AudioStreamWav Landing => LandingBank.Variants[0];
+
+    public static SfxBank LandingBank => _landingBank ??= SfxBank.Build("landing", 6, 0.4f, 30, (rng, n) =>
     {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        float f0 = 85f * J(), f1 = 38f * J(), d1 = 11f * J(), d2 = 22f * J();
         var grit = LowPass(Noise(rng, n), 0.12f);
         var s = new float[n];
         float phase = 0;
         for (int i = 0; i < n; i++)
         {
             float t = (float)i / Rate;
-            phase += Mathf.Tau * Mathf.Lerp(85f, 38f, Mathf.Min(1f, t / 0.25f)) / Rate;
-            s[i] = Mathf.Sin(phase) * Mathf.Exp(-11f * t) * 0.9f + grit[i] * 3f * Mathf.Exp(-22f * t);
+            phase += Mathf.Tau * Mathf.Lerp(f0, f1, Mathf.Min(1f, t / 0.25f)) / Rate;
+            s[i] = Mathf.Sin(phase) * Mathf.Exp(-d1 * t) * 0.9f + grit[i] * 3f * Mathf.Exp(-d2 * t);
         }
         return s;
     });
 
     /// <summary>A rush of air: jumps and wall kicks.</summary>
-    public static AudioStreamWav Whoosh => _whoosh ??= OneShot(0.38f, 31, (rng, n) =>
+    public static AudioStreamWav Whoosh => WhooshBank.Variants[0];
+
+    public static SfxBank WhooshBank => _whooshBank ??= SfxBank.Build("whoosh", 6, 0.38f, 31, (rng, n) =>
     {
-        var s = BandPass(Noise(rng, n), 0.04f, 0.3f);
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        float lo = 0.04f * J(), hi = 0.3f * J(), sk = 0.6f * J();
+        var s = BandPass(Noise(rng, n), lo, hi);
         for (int i = 0; i < n; i++)
         {
             float x = (float)i / n;
-            float env = Mathf.Sin(Mathf.Pi * Mathf.Pow(x, 0.6f));
+            float env = Mathf.Sin(Mathf.Pi * Mathf.Pow(x, sk));
             s[i] *= 3f * env * env;
         }
         return s;
     });
 
     /// <summary>One click of a freewheel pawl. Repeated at a rate set by wheel speed.</summary>
-    public static AudioStreamWav Tick => _tick ??= OneShot(0.02f, 32, (rng, n) =>
+    public static AudioStreamWav Tick => TickBank.Variants[0];
+
+    public static SfxBank TickBank => _tickBank ??= SfxBank.Build("tick", 6, 0.02f, 32, (rng, n) =>
     {
-        var s = HighPass(Noise(rng, n), 0.4f);
-        for (int i = 0; i < n; i++) s[i] *= 1.4f * Mathf.Exp(-350f * i / Rate);
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        float hp = 0.4f * J(), dk = 350f * J();
+        var s = HighPass(Noise(rng, n), hp);
+        for (int i = 0; i < n; i++) s[i] *= 1.4f * Mathf.Exp(-dk * i / Rate);
         return s;
     });
 
@@ -149,8 +168,12 @@ public static class SfxSynth
     /// An explosion: a noise blast with a hard attack, a falling sub-bass thump under it, and a
     /// long rumbling tail. Played as a 3D sound, so distance does the rest.
     /// </summary>
-    public static AudioStreamWav Boom => _boom ??= OneShot(2.6f, 42, (rng, n) =>
+    public static AudioStreamWav Boom => BoomBank.Variants[0];
+
+    public static SfxBank BoomBank => _boomBank ??= SfxBank.Build("boom", 6, 2.6f, 42, (rng, n) =>
     {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        float f0 = 70f * J(), f1 = 22f * J(), d1 = 9f * J(), d2 = 3.5f * J(), d3 = 1.6f * J();
         var blast = LowPass(Noise(rng, n), 0.25f);
         var rumble = LowPass(Noise(rng, n), 0.012f);
         var s = new float[n];
@@ -158,146 +181,51 @@ public static class SfxSynth
         for (int i = 0; i < n; i++)
         {
             float t = (float)i / Rate;
-            phase += Mathf.Tau * Mathf.Lerp(70f, 22f, Mathf.Min(1f, t / 0.8f)) / Rate;
-            s[i] = blast[i] * 3.5f * Mathf.Exp(-9f * t)
-                 + Mathf.Sin(phase) * 1.2f * Mathf.Exp(-3.5f * t)
-                 + rumble[i] * 14f * Mathf.Exp(-1.6f * t);
+            phase += Mathf.Tau * Mathf.Lerp(f0, f1, Mathf.Min(1f, t / 0.8f)) / Rate;
+            s[i] = blast[i] * 3.5f * Mathf.Exp(-d1 * t)
+                 + Mathf.Sin(phase) * 1.2f * Mathf.Exp(-d2 * t)
+                 + rumble[i] * 14f * Mathf.Exp(-d3 * t);
         }
         return s;
     });
-    private static AudioStreamWav? _boom;
 
     /// <summary>
     /// The reward sound for a clean landing or trick: two bright bell partials a fifth apart,
     /// with a quick attack. Pure tones are the one thing here that is not noise, which is why
     /// it cuts through everything else.
     /// </summary>
-    public static AudioStreamWav Chime => _chime ??= OneShot(0.5f, 34, (rng, n) =>
+    public static AudioStreamWav Chime => ChimeBank.Variants[0];
+
+    public static SfxBank ChimeBank => _chimeBank ??= SfxBank.Build("chime", 6, 0.5f, 34, (rng, n) =>
     {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.03f;
+        float fa = 880f * J(), fb = 1320f * J(), dk = 7f * J();
         var s = new float[n];
         for (int i = 0; i < n; i++)
         {
             float t = (float)i / Rate;
-            float env = Mathf.Min(1f, t * 400f) * Mathf.Exp(-7f * t);
+            float env = Mathf.Min(1f, t * 400f) * Mathf.Exp(-dk * t);
             // the upper note enters a beat later, so it reads as a rising "ding-ding"
-            float second = t > 0.07f ? Mathf.Exp(-7f * (t - 0.07f)) : 0f;
-            s[i] = env * Mathf.Sin(Mathf.Tau * 880f * t) * 0.6f
-                 + second * Mathf.Min(1f, (t - 0.07f) * 400f) * Mathf.Sin(Mathf.Tau * 1320f * t) * 0.5f;
+            float second = t > 0.07f ? Mathf.Exp(-dk * (t - 0.07f)) : 0f;
+            s[i] = env * Mathf.Sin(Mathf.Tau * fa * t) * 0.6f
+                 + second * Mathf.Min(1f, (t - 0.07f) * 400f) * Mathf.Sin(Mathf.Tau * fb * t) * 0.5f;
         }
         return s;
     });
-    private static AudioStreamWav? _chime;
 
     /// <summary>A crash into something solid.</summary>
-    public static AudioStreamWav Impact => _impact ??= OneShot(0.3f, 33, (rng, n) =>
+    public static AudioStreamWav Impact => ImpactBank.Variants[0];
+
+    public static SfxBank ImpactBank => _impactBank ??= SfxBank.Build("impact", 6, 0.3f, 33, (rng, n) =>
     {
-        var s = LowPass(Noise(rng, n), 0.3f);
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        float cut = 0.3f * J(), d1 = 16f * J(), d2 = 14f * J(), f = 60f * J();
+        var s = LowPass(Noise(rng, n), cut);
         for (int i = 0; i < n; i++)
         {
             float t = (float)i / Rate;
-            s[i] = s[i] * 3f * Mathf.Exp(-16f * t) + Mathf.Sin(Mathf.Tau * 60f * t) * Mathf.Exp(-14f * t) * 0.7f;
+            s[i] = s[i] * 3f * Mathf.Exp(-d1 * t) + Mathf.Sin(Mathf.Tau * f * t) * Mathf.Exp(-d2 * t) * 0.7f;
         }
         return s;
     });
-
-    // ------------------------------------------------------------------------------------
-    // building blocks
-    // ------------------------------------------------------------------------------------
-
-    private static float[] Noise(Random rng, int n)
-    {
-        var s = new float[n];
-        for (int i = 0; i < n; i++) s[i] = (float)(rng.NextDouble() * 2 - 1);
-        return s;
-    }
-
-    /// <summary>One-pole low-pass; <paramref name="a"/> is the per-sample coefficient (0..1).</summary>
-    private static float[] LowPass(float[] x, float a)
-    {
-        var y = new float[x.Length];
-        float state = 0;
-        // run twice so a loop starts from a settled filter rather than from silence
-        for (int pass = 0; pass < 2; pass++)
-            for (int i = 0; i < x.Length; i++)
-            {
-                state += a * (x[i] - state);
-                y[i] = state;
-            }
-        return y;
-    }
-
-    private static float[] HighPass(float[] x, float a)
-    {
-        var low = LowPass(x, a);
-        var y = new float[x.Length];
-        for (int i = 0; i < x.Length; i++) y[i] = x[i] - low[i];
-        return y;
-    }
-
-    private static float[] BandPass(float[] x, float lowCut, float highCut)
-    {
-        var upper = LowPass(x, highCut);
-        var lower = LowPass(x, lowCut);
-        for (int i = 0; i < x.Length; i++) upper[i] -= lower[i];
-        return upper;
-    }
-
-    /// <summary>
-    /// A seamless loop: the synthesised tail is crossfaded into the head, so the join has no
-    /// click — random noise does not otherwise end where it began.
-    /// </summary>
-    private static AudioStreamWav Loop(float seconds, int seed, Func<Random, int, float[]> make)
-    {
-        int fade = Rate / 10;
-        int n = (int)(seconds * Rate);
-        var raw = make(new Random(seed), n + fade);
-        var s = new float[n];
-        for (int i = 0; i < n; i++) s[i] = raw[i];
-        for (int i = 0; i < fade; i++)
-        {
-            float t = (float)i / fade;
-            s[i] = raw[n + i] * (1 - t) + raw[i] * t;
-        }
-        var wav = Encode(Normalise(s, 0.8f));
-        wav.LoopMode = AudioStreamWav.LoopModeEnum.Forward;
-        wav.LoopBegin = 0;
-        wav.LoopEnd = n;
-        return wav;
-    }
-
-    private static AudioStreamWav OneShot(float seconds, int seed, Func<Random, int, float[]> make)
-    {
-        int n = (int)(seconds * Rate);
-        var s = make(new Random(seed), n);
-        // a short fade-out, or a cut-off tail clicks
-        int fade = Math.Min(n / 4, Rate / 100);
-        for (int i = 0; i < fade; i++) s[n - 1 - i] *= (float)i / fade;
-        return Encode(Normalise(s, 0.9f));
-    }
-
-    private static float[] Normalise(float[] s, float peak)
-    {
-        float max = 1e-6f;
-        foreach (float v in s) max = Math.Max(max, Math.Abs(v));
-        for (int i = 0; i < s.Length; i++) s[i] *= peak / max;
-        return s;
-    }
-
-    private static AudioStreamWav Encode(float[] s)
-    {
-        var bytes = new byte[s.Length * 2];
-        for (int i = 0; i < s.Length; i++)
-        {
-            short v = (short)Math.Clamp((int)(s[i] * 32767f), short.MinValue, short.MaxValue);
-            bytes[i * 2] = (byte)(v & 0xFF);
-            bytes[i * 2 + 1] = (byte)((v >> 8) & 0xFF);
-        }
-        return new AudioStreamWav
-        {
-            Data = bytes,
-            Format = AudioStreamWav.FormatEnum.Format16Bits,
-            MixRate = Rate,
-            Stereo = false,
-        };
-    }
 }
