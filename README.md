@@ -32,10 +32,10 @@ godot --path .
 
 A mode menu opens first:
 
-| Mode | What it is |
-|---|---|
-| **Explore** | fly and walk the terrain freely |
-| **GPX replay** | run a recorded track, or race several as ghosts |
+| Mode              | What it is                                            |
+| ----------------- | ----------------------------------------------------- |
+| **Explore**       | fly and walk the terrain freely                       |
+| **GPX replay**    | run a recorded track, or race several as ghosts       |
 | **Join a server** | connect to a dedicated server and walk it with others |
 
 **Esc** reopens the menu at any time, so you are never stuck inside a mode. Naming a mode on
@@ -89,17 +89,17 @@ C:\ProgramData\chocolatey\lib\godot-mono\tools\godot_v4.7.1-stable_mono_win64\go
 Press **G**, then pick one or more `.gpx` files — selecting several starts a **ghost race**
 where they all begin together and you watch the gaps open.
 
-| Key / button | Action |
-|---|---|
-| **G** | add track(s) |
-| **Space** | play / pause |
-| **C** | cycle camera: chase → first person → cinematic → free |
-| **F** | follow the next runner |
-| **H** / *Hide UI* button | show or hide the interface |
-| timeline slider | scrub anywhere in the race |
-| speed button | 0.25× up to 32× |
-| **+ Add ghost** | add another runner to a race in progress |
-| **Exit replay** / **Esc** | leave replay and go back to the mode menu |
+| Key / button              | Action                                                |
+| ------------------------- | ----------------------------------------------------- |
+| **G**                     | add track(s)                                          |
+| **Space**                 | play / pause                                          |
+| **C**                     | cycle camera: chase → first person → cinematic → free |
+| **F**                     | follow the next runner                                |
+| **H** / *Hide UI* button  | show or hide the interface                            |
+| timeline slider           | scrub anywhere in the race                            |
+| speed button              | 0.25× up to 32×                                       |
+| **+ Add ghost**           | add another runner to a race in progress              |
+| **Exit replay** / **Esc** | leave replay and go back to the mode menu             |
 
 When the race reaches the finish the clock holds there and a banner offers **Watch again**
 or **Exit replay**.
@@ -181,22 +181,22 @@ written as soon as the tiles around it have been parsed (they share its edges). 
 every tile back and checks that neighbouring tiles share bit-identical edges. `--dump-png <dir>`
 writes hillshade mosaics, which is the quickest way to spot a bad tile.
 
-| Option | Default | |
-|---|---|---|
-| `--jobs N` | all cores | tiles processed at once (inflate + parse is the CPU cost) |
-| `--io-jobs N` | 4 | sources read at once — lower it (1-2) for a spinning disk or a slow share |
-| `--temp <dir>` | `<out>_temp` | edge cache, 16 KB per tile |
-| `--force` | | re-parse every source, ignoring the cache |
-| `--fresh` | | the dataset is exactly this run's sources; forget tiles built by earlier runs |
+| Option         | Default      |                                                                               |
+| -------------- | ------------ | ----------------------------------------------------------------------------- |
+| `--jobs N`     | all cores    | tiles processed at once (inflate + parse is the CPU cost)                     |
+| `--io-jobs N`  | 4            | sources read at once — lower it (1-2) for a spinning disk or a slow share     |
+| `--temp <dir>` | `<out>_temp` | edge cache, 16 KB per tile                                                    |
+| `--force`      |              | re-parse every source, ignoring the cache                                     |
+| `--fresh`      |              | the dataset is exactly this run's sources; forget tiles built by earlier runs |
 
 ### 3b. Importing a large region
 
-| Per 1000 tiles | |
-|---|---|
-| source zips | ~19 GB |
-| edge cache (`terrain_chunks_temp/*.edge`) | 16 MB |
-| output `.terr` + `.terrc` | ~2 GB |
-| build time, 12 cores from NVMe | ~40 s |
+| Per 1000 tiles                            |        |
+| ----------------------------------------- | ------ |
+| source zips                               | ~19 GB |
+| edge cache (`terrain_chunks_temp/*.edge`) | 16 MB  |
+| output `.terr` + `.terrc`                 | ~2 GB  |
+| build time, 12 cores from NVMe            | ~40 s  |
 
 The build is **incremental**. The edge cache keeps each tile's 16 KB of seam data, so a
 tile whose `.terr` exists and whose source has not changed (size + timestamp) is not parsed
@@ -264,13 +264,13 @@ godot --path . -- --probe lv95E,lv95N,seconds
 
 All of it is swisstopo / federal open data, free to use with attribution.
 
-| Dataset | Contents | Source |
-|---|---|---|
-| **swissALTI3D** | terrain, 0.5 m XYZ | STAC `ch.swisstopo.swissalti3d` |
-| **swissTLM3D** | roads, rail, land cover, land use, leisure grounds, sports pitches, airfields, water, individual trees | STAC `ch.swisstopo.swisstlm3d`, GeoPackage (4.8 GB) |
-| **swissBUILDINGS3D 3.0** | LoD2 building solids | STAC `ch.swisstopo.swissbuildings3d_3_0` (14 GB nationwide) |
-| **GWR / RegBL** | building register: year, floors, category | `https://public.madd.bfs.admin.ch/{canton}.zip` |
-| **Veloland / Mountainbikeland** | cycle route networks | STAC `ch.astra.veloland`, `ch.astra.mountainbikeland` |
+| Dataset                         | Contents                                                                                               | Source                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| **swissALTI3D**                 | terrain, 0.5 m XYZ                                                                                     | STAC `ch.swisstopo.swissalti3d`                             |
+| **swissTLM3D**                  | roads, rail, land cover, land use, leisure grounds, sports pitches, airfields, water, individual trees | STAC `ch.swisstopo.swisstlm3d`, GeoPackage (4.8 GB)         |
+| **swissBUILDINGS3D 3.0**        | LoD2 building solids                                                                                   | STAC `ch.swisstopo.swissbuildings3d_3_0` (14 GB nationwide) |
+| **GWR / RegBL**                 | building register: year, floors, category                                                              | `https://public.madd.bfs.admin.ch/{canton}.zip`             |
+| **Veloland / Mountainbikeland** | cycle route networks                                                                                   | STAC `ch.astra.veloland`, `ch.astra.mountainbikeland`       |
 
 Data lives under `ressources/data/` (spelling is deliberate — it is referenced throughout).
 Both that folder and `terrain_chunks/` carry a `.gdignore` so the Godot editor never tries
@@ -317,12 +317,12 @@ The server binds to **all interfaces** by default and prints where it can be rea
 
 **ENet is UDP.** That is the one thing that decides whether a given tunnel works:
 
-| | |
-|---|---|
-| **Tailscale** | works as-is — connect to the 100.x address or the MagicDNS name |
-| **Port forwarding** | works, but the router rule must be **UDP**, not TCP |
-| **ngrok (free), Cloudflare Tunnel** | **will not work** — TCP/HTTP only |
-| **WireGuard, ZeroTier, Hamachi** | work, same as Tailscale |
+|                                     |                                                                 |
+| ----------------------------------- | --------------------------------------------------------------- |
+| **Tailscale**                       | works as-is — connect to the 100.x address or the MagicDNS name |
+| **Port forwarding**                 | works, but the router rule must be **UDP**, not TCP             |
+| **ngrok (free), Cloudflare Tunnel** | **will not work** — TCP/HTTP only                               |
+| **WireGuard, ZeroTier, Hamachi**    | work, same as Tailscale                                         |
 
 ```bash
 # tailnet only: nothing is listening on the public interface even if the router forwards
@@ -358,22 +358,22 @@ means terrain you streamed yesterday still renders with no server running today.
 godot --path . -- --chunks ./small_region --cache ./my_cache --connect 127.0.0.1
 ```
 
-| | |
-|---|---|
+|           |                                                                |
+| --------- | -------------------------------------------------------------- |
 | Bandwidth | 3 MB/s per client, metered server-side on its own ENet channel |
-| Fragment | 24 KB, deflated when that helps |
-| Integrity | CRC-32 checked before anything is cached |
-| Cache cap | 2 GB, oldest-first eviction |
+| Fragment  | 24 KB, deflated when that helps                                |
+| Integrity | CRC-32 checked before anything is cached                       |
+| Cache cap | 2 GB, oldest-first eviction                                    |
 
 Tiles are fetched **nearest first**, and only a few at a time, so what is under your feet
 arrives before the horizon. Measured on a client with no terrain at all, joining and spawning
 in Sion:
 
-| after joining | detail on screen |
-|---|---|
-| 15 s | 4.34 M prims — buildings, roads and trees around you |
-| 30 s | 5.06 M prims |
-| 60 s | 5.19 M prims, rings filled out to the horizon |
+| after joining | detail on screen                                     |
+| ------------- | ---------------------------------------------------- |
+| 15 s          | 4.34 M prims — buildings, roads and trees around you |
+| 30 s          | 5.06 M prims                                         |
+| 60 s          | 5.19 M prims, rings filled out to the horizon        |
 
 The town index (`places.json`) is sent too, so **Tab** search works on a client that shipped
 without it. Revisiting somewhere already streamed fetches **0** new files.
@@ -384,19 +384,19 @@ without it. Revisiting somewhere already streamed fetches **0** new files.
 through what you sent, **Esc** cancels. The log fades back after a few seconds and returns the
 moment anything is said.
 
-| Command | Who | What |
-|---|---|---|
-| `/help` `/who` | anyone | commands you can run; who is online |
-| `/name <name>` | anyone | change your display name |
-| `/city <town>` | anyone | teleport yourself, same index as the **Tab** search |
-| `/me <action>` | anyone | emote |
-| `/login <password>` | anyone | become an operator (needs `--admin-password`) |
-| `/say <text>` | operator | server announcement |
-| `/tp <player>` | operator | go to a player |
-| `/bring <player>` | operator | pull a player to you |
-| `/tpall <town>` | operator | move everyone to a town |
-| `/kick <player> [reason]` | operator | disconnect a player |
-| `/admin list \| add <name> \| remove <name>` | operator | manage the persisted operator list |
+| Command                                      | Who      | What                                                |
+| -------------------------------------------- | -------- | --------------------------------------------------- |
+| `/help` `/who`                               | anyone   | commands you can run; who is online                 |
+| `/name <name>`                               | anyone   | change your display name                            |
+| `/city <town>`                               | anyone   | teleport yourself, same index as the **Tab** search |
+| `/me <action>`                               | anyone   | emote                                               |
+| `/login <password>`                          | anyone   | become an operator (needs `--admin-password`)       |
+| `/say <text>`                                | operator | server announcement                                 |
+| `/tp <player>`                               | operator | go to a player                                      |
+| `/bring <player>`                            | operator | pull a player to you                                |
+| `/tpall <town>`                              | operator | move everyone to a town                             |
+| `/kick <player> [reason]`                    | operator | disconnect a player                                 |
+| `/admin list \| add <name> \| remove <name>` | operator | manage the persisted operator list                  |
 
 ### Operators
 
