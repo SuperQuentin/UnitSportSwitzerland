@@ -86,6 +86,20 @@ public partial class SettingsMenu : PanelContainer
             v => GameSettings.Current.TrafficCars = (int)v, v => v <= 0 ? "off" : $"{v:F0} cars");
         ToggleRow(rows, "Trains", s.Trains, on => GameSettings.Current.Trains = on);
 
+        // One row per occasion. "Off" hides its look (a server can lock it on); loot and the hunt
+        // follow the server whatever this says.
+        Section(rows, "Occasions");
+        var occasions = (IEnumerable<Occasions.OccasionEntry>?)Occasions.OccasionManager.Instance?.Known
+            ?? Occasions.OccasionConfig.Load();
+        foreach (var entry in occasions)
+        {
+            string id = entry.Id;
+            var current = s.OccasionPreferences.TryGetValue(id, out var p) ? p : Occasions.OccasionPreference.Auto;
+            OptionRow(rows, Occasions.OccasionRegistry.Get(id).Title,
+                new[] { "Auto (calendar)", "Off", "Always" }, (int)current,
+                i => GameSettings.Current.OccasionPreferences[id] = (Occasions.OccasionPreference)i);
+        }
+
         Section(rows, "Feel");
         OptionRow(rows, "Movement", new[] { "Game (arcade)", "Simulation (real physics)" }, (int)s.RideProfile,
             i => GameSettings.Current.RideProfile = (RideProfile)i);

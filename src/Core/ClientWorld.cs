@@ -47,6 +47,11 @@ public partial class ClientWorld : Node3D
                 return;
             }
         }
+        if (Occasions.OccasionProbe.Requested)
+        {
+            GetTree().Quit(Occasions.OccasionProbe.Run());
+            return;
+        }
         // after Load, so the saved stick deadzone is what the actions start with
         PlayerInput.Install(this);
         ApplyViewportSettings();
@@ -191,8 +196,16 @@ public partial class ClientWorld : Node3D
         };
         AddChild(new WorldEnvironment { Environment = environment });
 
+        // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
+        // word online. Before the clock, which reads its sun and sky from it.
+        Occasions.OccasionManager.Create(this);
+
         // the clock: sun, light colour, sky and night for every shader and the environment
-        AddChild(new World.DayNight(environment));
+        var chunksForSky = _chunks;
+        AddChild(new World.DayNight(environment)
+        {
+            GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
+        });
 
         // cars on the roads and trains on the railway, around wherever the view is
         _traffic = new World.Traffic(_chunks, origin)

@@ -7,6 +7,7 @@ global uniform vec3 world_sun_dir;
 global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
+#include "res://shaders/world_occasion.gdshaderinc"
 
 // Buildings take their base colour from baked vertex colours (kind + roof/wall + age)
 // and get the same PS1 treatment as the terrain: vertex snap, quantised sun from a
@@ -142,6 +143,8 @@ void fragment() {
     col *= world_tint;
     // a lit window is its own light: at night it shines through the darkness around it
     col = max(col, glow * world_night);
+    // valley mist of a running occasion; a no-op on an ordinary day
+    col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
     float dith = (bayer[bi] / 16.0 - 0.5) / color_levels;
     col = floor((col + dith) * color_levels + 0.5) / color_levels;

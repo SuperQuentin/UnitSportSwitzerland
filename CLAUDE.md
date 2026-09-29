@@ -831,6 +831,26 @@ Several people work on this repo in parallel, so every new feature follows these
 - **Teleport** (`Core/Teleporter`): resolves *what to move* at the moment of the jump, not at
   construction. Flying camera gets ground + 220 m, a `CharacterBody3D` gets ground + 2 m and
   has its velocity zeroed and its placement pass re-armed.
+- **Occasions** (`src/Occasions/`, #18): time-limited themes and events — Halloween (1 Sep–31
+  Oct) and Christmas (1 Nov–31 Dec) so far, built to carry an Olympics or a community event.
+  *Policy* (schedule, facets, priority, `allowClientOptOut`) is `OccasionEntry`, built-in defaults
+  merged under `user://occasions.json` by id; *content* is an `Occasion` subclass with the same
+  id (an id with no class runs as a contentless `GenericOccasion`). Schedules are `MM-DD`
+  (recurring, may wrap over new year) or `YYYY-MM-DD` (one-off); the instance key
+  (`christmas-2026`) is the year the window **opened**, so a new-year-spanning window is one
+  instance. `OccasionManager` at `World/Occasions` on both sides: the dedicated server reads
+  **its own local clock** each minute and replicates the running set (`SetActive`, and
+  `SendTo` on join); offline the client is its own authority. `Active` is that set filtered
+  by the player's per-occasion preference (`GameSettings.OccasionPreferences`: Auto / Off /
+  Always) — Off strips only the **cosmetic** facets, never loot or the hunt, and not at all
+  when the server locked the occasion. Everything reacts to `OccasionManager.Changed`.
+  Rendering reaches every world shader through `shaders/world_occasion.gdshaderinc` and five
+  globals `DayNight` writes each frame (`world_snow`, `world_mist_color/density/top`,
+  `world_lights`); all zero is a strict no-op, and `DayNight` takes its sunrise/sunset/noon
+  and colour grade from the top occasion's `Atmosphere`, reducing exactly to the old 6/18/62°
+  day without one. Overrides: `--occasion <id|none>` (repeatable; replaces the calendar for the
+  session), `--date YYYY-MM-DD`, and `/occasion list|start|stop|auto` in chat or the server
+  console.
 
 ## Commands
 
@@ -927,6 +947,9 @@ Several people work on this repo in parallel, so every new feature follows these
   holds the throttle via `RideControls`, and prints speed/altitude/clearance every 2 s with a
   non-zero exit if the rider went nowhere or ended under the terrain. Riding is the one part
   that cannot be judged from a screenshot; add `--ridemenu` (with `--shot`) to capture the picker.
+- Occasion calendar check: `<godot> --headless --path . -- --occasioncheck` — both ends of every
+  window, the new-year wrap, one-offs, leap day, config merge; non-zero exit on a mismatch.
+  Look at an occasion out of season with `--occasion christmas` (or `--date 2026-12-24`).
 
 ## Gotchas (learned the hard way)
 

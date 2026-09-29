@@ -252,6 +252,14 @@ public partial class ChatManager : Node
             case "me":
                 if (rest.Length > 0) Broadcast($"* {NameOf(sender)} {Scrub(rest)}", ChatKind.System);
                 return;
+            // anyone may list; start/stop/auto are checked inside, against the same IsAdmin
+            case "occasion" or "occasions":
+                if (Occasions.OccasionManager.Instance is not { } occasions)
+                    ReplyTo(sender, "Occasions are not running on this server.", ChatKind.Error);
+                else
+                    foreach (string line in occasions.RunCommand(parts[1..], IsAdmin(sender)))
+                        ReplyTo(sender, line, ChatKind.Private);
+                return;
         }
 
         // Everything past this point is privileged. One check, in one place.
@@ -281,7 +289,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /occasion", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -289,7 +297,8 @@ public partial class ChatManager : Node
         if (IsAdmin(sender))
             ReplyTo(sender,
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
-                + "/kick <player> [reason]  /admin list|add <name>|remove <name>",
+                + "/kick <player> [reason]  /admin list|add <name>|remove <name>  "
+                + "/occasion start|stop <id>|auto",
                 ChatKind.Private);
     }
 

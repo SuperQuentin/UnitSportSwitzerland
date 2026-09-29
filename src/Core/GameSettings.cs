@@ -123,6 +123,12 @@ public sealed class GameSettings
     public int TrafficCars { get; set; } = 35;
     public bool Trains { get; set; } = true;
 
+    /// <summary>
+    /// Per occasion id: follow the calendar, hide its look, or force it (<see cref="Occasions.OccasionManager"/>).
+    /// Absent means Auto.
+    /// </summary>
+    public Dictionary<string, UnitSport.Occasions.OccasionPreference> OccasionPreferences { get; set; } = new();
+
     // --- feel ---
     /// <summary>Sound effects volume, 0..1.</summary>
     public float SfxVolume { get; set; } = 0.8f;
@@ -221,6 +227,7 @@ public sealed class GameSettings
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
         WindowWidth = Math.Clamp(WindowWidth, 0, 7680);
         WindowHeight = Math.Clamp(WindowHeight, 0, 4320);
+        OccasionPreferences ??= new();
     }
 
     /// <summary>
