@@ -37,7 +37,10 @@ public partial class HorizonLayer : Node3D
 
     private readonly Dictionary<(int E, int N), MeshInstance3D?> _blocks = new();
     private readonly HashSet<(int E, int N)> _building = new();
-    private readonly ConcurrentQueue<((int E, int N) Key, TerrainMeshBuilder.MeshData? Mesh)> _ready = new();
+    private readonly ConcurrentQueue<((int E, int N) Key, int Epoch, TerrainMeshBuilder.MeshData? Mesh)> _ready = new();
+
+    /// <summary>Bumped by <see cref="Clear"/>; a block meshed from the old lattice is dropped.</summary>
+    private int _epoch;
     private double _sinceEval = double.MaxValue;
 
     public int BlockCount => _blocks.Count;
@@ -60,6 +63,7 @@ public partial class HorizonLayer : Node3D
         if (_source == null || _loading) return;
         _loading = true;
         var source = _source;
+        int epoch = _epoch;
         Task.Run(async () =>
         {
             HorizonIndex? index = null;
@@ -67,6 +71,8 @@ public partial class HorizonLayer : Node3D
             catch (Exception e) { GD.PushWarning($"[horizon] could not load: {e.Message}"); }
             Callable.From(() =>
             {
+                // a Clear since this started: the lattice is from the world being replaced
+                if (epoch != _epoch) return;
                 _loading = false;
                 if (index == null) return;
                 _index = index;
@@ -77,6 +83,25 @@ public partial class HorizonLayer : Node3D
                 _sinceEval = double.MaxValue;
             }).CallDeferred();
         });
+    }
+
+    /// <summary>
+    /// Drops the lattice, every block and the coverage texture — for when the world they were
+    /// built for is being replaced (the generated fallback retiring, possibly with the origin
+    /// moving under it). <see cref="Reload"/> then reads whatever the source now has.
+    /// </summary>
+    public void Clear()
+    {
+        _epoch++;
+        _loading = false;
+        _index = null;
+        foreach (var block in _blocks.Values) block?.QueueFree();
+        _blocks.Clear();
+        _building.Clear();
+        _coverImage = null;
+        _coverTexture = null;
+        _coverDirty = false;
+        _material?.SetShaderParameter("use_cover", false);
     }
 
     // ---- coverage: which km tiles have a real mesh on screen ---------------------------
@@ -150,7 +175,7 @@ public partial class HorizonLayer : Node3D
         if (_ready.TryDequeue(out var done))
         {
             _building.Remove(done.Key);
-            if (_blocks.ContainsKey(done.Key)) Commit(done.Key, done.Mesh);
+            if (done.Epoch == _epoch && _blocks.ContainsKey(done.Key)) Commit(done.Key, done.Mesh);
         }
 
         _sinceEval += delta;
@@ -187,12 +212,13 @@ public partial class HorizonLayer : Node3D
             _blocks[key] = null;   // reserved; the mesh arrives on the queue
             _building.Add(key);
             var index = _index!;
+            int epoch = _epoch;
             Task.Run(() =>
             {
                 TerrainMeshBuilder.MeshData? mesh = null;
                 try { mesh = TerrainMeshBuilder.BuildHorizonBlock(index, key.E, key.N); }
                 catch (Exception e) { GD.PushError($"[horizon] block {key} failed: {e}"); }
-                _ready.Enqueue((key, mesh));
+                _ready.Enqueue((key, epoch, mesh));
             });
         }
 

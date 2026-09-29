@@ -439,11 +439,80 @@ public partial class ChunkManager : Node3D
     /// <returns>How many tiles were new.</returns>
     public int MergeAvailableTiles(IEnumerable<TileId> tiles)
     {
+        var list = tiles as ICollection<TileId> ?? tiles.ToList();
+        // real tiles have arrived: the generated stand-in world goes, all of it, first
+        if (FallbackActive && list.Count > 0) RetireFallback();
+
         int added = 0;
-        foreach (var id in tiles)
+        foreach (var id in list)
             if (_available.Add(id)) added++;
         if (added > 0) FitHorizonCoverage();
         return added;
+    }
+
+    // ---- the generated fallback world --------------------------------------------------------
+
+    private HashSet<TileId>? _fallbackTiles;
+    private Action? _onFallbackRetired;
+
+    /// <summary>
+    /// True while the world on screen is <see cref="ProceduralWorld"/>'s stand-in rather than
+    /// real terrain. <see cref="AvailableTileCount"/> counts its tiles, so a caller asking "does
+    /// this client have a world of its own?" must check this too.
+    /// </summary>
+    public bool FallbackActive => _fallbackTiles != null;
+
+    /// <summary>
+    /// Raised on the main thread once the fallback's tiles have been unloaded, for anything that
+    /// cached what it read from them (road surfaces, streams, trees to gather, lane graphs).
+    /// </summary>
+    public event Action? TerrainReplaced;
+
+    /// <summary>
+    /// Makes generated tiles available when there are no real ones. <paramref name="retire"/>
+    /// is called when they are thrown away — the host switches the source off there and flushes
+    /// any cache above it, since this class does not know the chain it was handed.
+    /// </summary>
+    public void UseFallback(IEnumerable<TileId> tiles, Action retire)
+    {
+        _fallbackTiles = tiles.ToHashSet();
+        _onFallbackRetired = retire;
+        _available.UnionWith(_fallbackTiles);
+        FitHorizonCoverage();
+        _orderedKey = "";
+        GD.Print($"[terrain] no real terrain: {_fallbackTiles.Count} generated tiles stand in for it");
+    }
+
+    /// <summary>
+    /// Throws the generated world away: every one of its tiles unloaded (builds in flight
+    /// cancelled), the source switched off, the horizon rebuilt from whatever the source now has.
+    /// Main thread only — it frees nodes. Called by <see cref="MergeAvailableTiles"/> the moment
+    /// real tiles arrive, before they are added, so a real tile that shares an id with a
+    /// generated one is always built fresh.
+    /// </summary>
+    public void RetireFallback()
+    {
+        if (_fallbackTiles == null) return;
+
+        foreach (var id in _fallbackTiles)
+        {
+            _available.Remove(id);
+            if (_chunks.ContainsKey(id)) UnloadTile(id);
+        }
+        _fallbackTiles = null;
+        _desired.Clear();
+        _ordered.Clear();
+        _orderedKey = "";
+        _sinceEval = double.MaxValue;
+
+        var retire = _onFallbackRetired;
+        _onFallbackRetired = null;
+        retire?.Invoke();
+
+        Horizon?.Clear();
+        Horizon?.Reload();
+        GD.Print("[terrain] generated fallback world retired");
+        TerrainReplaced?.Invoke();
     }
 
     private void FitHorizonCoverage()
@@ -676,6 +745,27 @@ public partial class ChunkManager : Node3D
             _sinceEval = 0;
             EvaluateRings();
         }
+    }
+
+    /// <summary>
+    /// Cancels every build and waits, briefly, for the workers to let go.
+    ///
+    /// <para>
+    /// A worker makes Godot objects as it goes (the ArrayMeshes and MultiMeshes it hands to the
+    /// main thread), and one that does so after the engine has begun tearing down is an access
+    /// violation in <c>ArrayMesh..ctor</c>, not an exception — the process dies on quit. It took
+    /// something always building at the moment of quitting to show it, which the generated
+    /// fallback world is. Each worker checks its token right before it touches Godot, so after
+    /// the cancel it either stops at that check or is already inside the call, and this wait
+    /// lets that finish while the engine is still alive.
+    /// </para>
+    /// </summary>
+    public override void _ExitTree()
+    {
+        foreach (var state in _chunks.Values) state.CancelPending();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (Volatile.Read(ref _buildsInFlight) > 0 && clock.ElapsedMilliseconds < 3000)
+            Thread.Sleep(5);
     }
 
     /// <summary>Returns how many results were committed, so the caller knows a slot freed.</summary>
@@ -943,21 +1033,23 @@ public partial class ChunkManager : Node3D
             if (minDist > Lod.MaxDist + Lod.UnloadSlack)
                 toRemove.Add(id);
         }
-        foreach (var id in toRemove)
+        foreach (var id in toRemove) UnloadTile(id);
+    }
+
+    private void UnloadTile(TileId id)
+    {
+        var gone = _chunks[id];
+        // free the worker slot now, not when the chain it is reading finishes
+        if (gone.Cts != null)
         {
-            var gone = _chunks[id];
-            // free the worker slot now, not when the chain it is reading finishes
-            if (gone.Cts != null)
-            {
-                gone.CancelPending();
-                Interlocked.Increment(ref _cancelledBuilds);
-            }
-            gone.Node?.ReleaseResources();
-            gone.Node?.QueueFree();
-            _chunks.Remove(id);
-            Horizon?.SetCovered(id, false);
-            Interiors.DoorIndex.ClearTile(id);
+            gone.CancelPending();
+            Interlocked.Increment(ref _cancelledBuilds);
         }
+        gone.Node?.ReleaseResources();
+        gone.Node?.QueueFree();
+        _chunks.Remove(id);
+        Horizon?.SetCovered(id, false);
+        Interiors.DoorIndex.ClearTile(id);
     }
 
     /// <summary>
@@ -1062,6 +1154,8 @@ public partial class ChunkManager : Node3D
                 if (buildMesh && terrainMaterial != null)
                 {
                     surfaceCore = TerrainMeshBuilder.BuildSurfaceCore(grid, stride, holes, cover);
+                    // checked right before every Godot object this worker makes: see _ExitTree
+                    ct.ThrowIfCancellationRequested();
                     mesh = ChunkNode.ToArrayMesh(
                         TerrainMeshBuilder.FinishSurface(surfaceCore, grid, stride, holes, null), terrainMaterial);
                 }
@@ -1112,7 +1206,10 @@ public partial class ChunkManager : Node3D
                     // (meshed separately, below) or aerial-only with nothing left to draw.
                     if (roadTile != null && roadMaterial != null
                         && RoadMeshBuilder.Build(roadTile, grid) is { } roadData)
+                    {
+                        ct.ThrowIfCancellationRequested();
                         roads = ChunkNode.ToArrayMesh(roadData, roadMaterial);
+                    }
                     Lap(StRoadMesh, stageMs, clock);
                 }
                 else if (roadsForCollision)
@@ -1136,7 +1233,9 @@ public partial class ChunkManager : Node3D
                         // terrain's plus the tallest tree, generously
                         var bounds = new Aabb(new Vector3(0, grid.MinHeight - 10, 0),
                             new Vector3(1000, grid.MaxHeight - grid.MinHeight + 80, 1000));
-                        trees = ChunkNode.BuildTreeMeshes(ChunkNode.BuildTreeBuffers(treeList), treeMaterial, bounds);
+                        var buffers = ChunkNode.BuildTreeBuffers(treeList);
+                        ct.ThrowIfCancellationRequested();
+                        trees = ChunkNode.BuildTreeMeshes(buffers, treeMaterial, bounds);
                     }
                     Lap(StTrees, stageMs, clock);
 
@@ -1144,7 +1243,10 @@ public partial class ChunkManager : Node3D
                     // the water material instead of being drawn as a narrow blue road
                     if (cover != null && waterMaterial != null
                         && WaterMeshBuilder.Build(grid, cover, roadTile) is { } waterData)
+                    {
+                        ct.ThrowIfCancellationRequested();
                         water = ChunkNode.ToArrayMesh(waterData, waterMaterial);
+                    }
                     Lap(StWater, stageMs, clock);
                 }
 
@@ -1170,7 +1272,10 @@ public partial class ChunkManager : Node3D
                         ct.ThrowIfCancellationRequested();
                         doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null);
                         if (BuildingMeshBuilder.Build(bTile, doors) is { } buildingData)
+                        {
+                            ct.ThrowIfCancellationRequested();
                             buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
+                        }
                     }
                     if (wantCollision)
                         buildingFaces = bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : [];
@@ -1226,6 +1331,7 @@ public partial class ChunkManager : Node3D
                             ? TerrainMeshBuilder.PatchSurface(surfaceCore!, grid, stride, cover, blend,
                                 TerrainMeshBuilder.VisualBlendClearance)
                             : surfaceCore!;
+                        ct.ThrowIfCancellationRequested();
                         tailMesh = ChunkNode.ToArrayMesh(
                             TerrainMeshBuilder.FinishSurface(core, grid, stride, holes, portals), terrainMaterial!);
                     }

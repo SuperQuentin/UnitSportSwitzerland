@@ -56,19 +56,20 @@ godot --path .
 
 ## 3. Check that it works
 
-With no terrain yet, the game boots into an empty world and says so. That is the normal state
-of a fresh clone, not a failure:
+With no terrain yet, the game boots into a generated stand-in world and says so. That is the
+normal state of a fresh clone, not a failure; real terrain replaces it as soon as there is some:
 
 ```bash
-godot --path . -- --shot 0,300,0,-20,0,3,test_output/smoke.png
+godot --path . -- --shot 0,700,400,-15,0,5,test_output/smoke.png
 ```
 
-Expected output, and a (sky-only) screenshot in `test_output/`:
+Expected output, and a screenshot of a valley village beside a river in `test_output/`:
 
 ```
-WARNING: [world] no terrain data found. Generate it with tools/TerrainPreprocessor, or join a server ...
-[shot] wrote test_output/smoke.png (1152x648) at (0, 300, 0)
-[shot] fps=60 prims=0 draws=0 mem=83MB
+WARNING: [world] no terrain data found, showing a generated stand-in world. Generate the real one with ...
+[terrain] no real terrain: 6561 generated tiles stand in for it
+[shot] wrote test_output/smoke.png (1152x648) at (0, 700, 400)
+[shot] fps=60 prims=8527444 draws=67 mem=158MB
 ```
 
 Put screenshots and probe output in `test_output/`; it is gitignored and hidden from Godot.

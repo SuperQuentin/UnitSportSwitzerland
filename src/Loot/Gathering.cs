@@ -323,8 +323,26 @@ public partial class Gathering : Node
         LoadTile(source, tile);
     }
 
+    private int _epoch;
+
+    /// <summary>
+    /// Drops what was read from the tiles, for when the world under them is replaced (the
+    /// generated fallback retiring). Loads already in flight are discarded when they land.
+    /// </summary>
+    public void Forget()
+    {
+        _epoch++;
+        _trees.Clear();
+        _streams.Clear();
+        _loading.Clear();
+        _taken.Clear();   // keyed by world cell, which a rebase gives a new meaning
+        _target = default;
+        _progress = 0;
+    }
+
     private async void LoadTile(IChunkSource source, TileId tile)
     {
+        int epoch = _epoch;
         try
         {
             var trees = await source.LoadTreesAsync(tile);
@@ -343,6 +361,7 @@ public partial class Gathering : Node
                 }
                 return cells;
             });
+            if (epoch != _epoch) return;
             _trees[tile] = index;
             _streams[tile] = roads?.Segments
                 .Where(s => s.Class is RoadClass.Watercourse or RoadClass.Bisse && (s.Flags & RoadFlags.Tunnel) == 0)
@@ -351,9 +370,9 @@ public partial class Gathering : Node
         catch (Exception e)
         {
             GD.PushWarning($"[gather] tile {tile}: {e.Message}");
-            _trees[tile] = null;
+            if (epoch == _epoch) _trees[tile] = null;
         }
-        finally { _loading.Remove(tile); }
+        finally { if (epoch == _epoch) _loading.Remove(tile); }
     }
 
     private static long CellKey(Vector3 w) =>
