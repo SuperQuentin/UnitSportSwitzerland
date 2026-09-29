@@ -12,6 +12,9 @@ land cover, water and forest from swissTLM3D.
 
 ## Quick start
 
+**New to the project? Follow [SETUP.md](SETUP.md)**: toolchain versions (Godot 4.7.1 .NET,
+.NET 8 + 9 SDKs), first build, a smoke test, and how to get a small region of terrain.
+
 ```bash
 dotnet build UnitSportSwitzerland.csproj
 ```
@@ -23,8 +26,10 @@ godot --path .
 ```
 
 > **A fresh clone has no terrain data.** The generated chunks are 5.3 GB and the source
-> geodata 155 GB, so neither is in the repository. The game starts anyway — into an empty
-> world — and you have two ways to fill it:
+> geodata 155 GB, so neither is in the repository. The game starts anyway, into a **generated
+> stand-in world**: an alpine valley with a river, a road, a railway, villages, farms, forest,
+> rock and snow, built around the spawn point so everything can be tried. It is only a
+> fallback; real terrain replaces it the moment you get some:
 >
 > - **join a server** and the whole world streams in and is cached (see *Terrain streaming*);
 > - **generate it yourself** by downloading the swisstopo data and running the preprocessor

@@ -65,6 +65,18 @@ public partial class TreeColliders : Node3D
         Instance = this;
     }
 
+    /// <summary>
+    /// Drops every trunk and every tree tile read so far: called when real terrain replaces the
+    /// generated stand-in, whose trees are not the real ones. Cells are re-filled as anchors move.
+    /// </summary>
+    public void Forget()
+    {
+        foreach (var bodies in _live.Values)
+            foreach (var b in bodies) { b.ProcessMode = ProcessModeEnum.Disabled; _free.Push(b); }
+        _live.Clear();
+        _tiles.Clear();
+    }
+
     public override void _ExitTree()
     {
         if (Instance == this) Instance = null;
