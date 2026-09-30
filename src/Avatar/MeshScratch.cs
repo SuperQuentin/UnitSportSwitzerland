@@ -68,9 +68,10 @@ public sealed class MeshScratch
             Quad(p, p + 1, q + 1, q);
         }
 
-        // caps, so a limb does not show its hollow interior when seen end-on
-        CapFan(start, sides, evenOffset: 0, flip: true, linear);
-        CapFan(start, sides, evenOffset: 1, flip: false, linear);
+        // caps, so a limb does not show its hollow interior when seen end-on; clockwise from
+        // outside like the sides (they used to be the other way round, facing into the tube)
+        CapFan(start, sides, evenOffset: 0, flip: false, linear);
+        CapFan(start, sides, evenOffset: 1, flip: true, linear);
     }
 
     public void Tube(Vector3 a, Vector3 b, float radius, Color colour, int sides = 6) =>
@@ -178,6 +179,58 @@ public sealed class MeshScratch
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         return mesh;
     }
+
+    /// <summary>
+    /// Volume enclosed by the triangles, signed by their winding: negative when every face is
+    /// clockwise seen from outside (Godot's front face), positive when the mesh is inside out.
+    /// </summary>
+    public float SignedVolume
+    {
+        get
+        {
+            float sum = 0;
+            for (int i = 0; i < _indices.Count; i += 3)
+                sum += _vertices[_indices[i]].Dot(_vertices[_indices[i + 1]].Cross(_vertices[_indices[i + 2]]));
+            return sum / 6f;
+        }
+    }
+
+    /// <summary>
+    /// <c>--meshcheck</c>: each primitive, alone and off the origin, must enclose its own volume
+    /// with every face clockwise from outside — an inside-out primitive shows its far inner walls
+    /// and nothing tucked into it is hidden (#54). Non-zero exit on the first one that is not.
+    /// </summary>
+    public static int Check()
+    {
+        var at = new Vector3(0.3f, 1.1f, -0.7f);
+        var cases = new (string Name, Action<MeshScratch> Draw, float Volume)[]
+        {
+            ("box", m => m.Box(at, new Vector3(0.4f, 0.6f, 0.8f), Colors.White), 0.4f * 0.6f * 0.8f),
+            ("turned box", m => m.Box(at, new Vector3(0.4f, 0.6f, 0.8f), Colors.White, new Basis(Vector3.Up, 0.6f)), 0.4f * 0.6f * 0.8f),
+            ("tube", m => m.Tube(at, at + new Vector3(0.2f, 0.9f, 0.1f), 0.1f, Colors.White),
+                Polygon(6, 0.1f) * new Vector3(0.2f, 0.9f, 0.1f).Length()),
+            ("tapered tube", m => m.Tube(at, at + Vector3.Back, 0.2f, 0.1f, Colors.White),
+                (Polygon(6, 0.2f) + Polygon(6, 0.1f) + Mathf.Sqrt(Polygon(6, 0.2f) * Polygon(6, 0.1f))) / 3f),
+            ("ring", m => m.Ring(at, Vector3.Right, 0.2f, 0.3f, 0.1f, Colors.White),
+                (Polygon(16, 0.3f) - Polygon(16, 0.2f)) * 0.1f),
+        };
+        int failed = 0;
+        foreach (var (name, draw, volume) in cases)
+        {
+            var m = new MeshScratch();
+            draw(m);
+            float v = m.SignedVolume;
+            // one face the wrong way round takes its share off twice, so the total is off
+            bool ok = Mathf.Abs(-v - volume) < 1e-4f;
+            GD.Print($"[meshcheck] {name,-13} signed volume {v:F5} (expect -{volume:F5})  {(ok ? "ok" : "INSIDE OUT")}");
+            if (!ok) failed++;
+        }
+        GD.Print(failed == 0 ? "[meshcheck] RESULT: every primitive faces out" : $"[meshcheck] RESULT: FAILED — {failed} inside out");
+        return failed == 0 ? 0 : 1;
+    }
+
+    /// <summary>Area of a regular polygon of <paramref name="sides"/> with corners at <paramref name="radius"/>.</summary>
+    private static float Polygon(int sides, float radius) => sides / 2f * radius * radius * Mathf.Sin(Mathf.Tau / sides);
 
     private void Add(Vector3 position, Color linear)
     {

@@ -16,4 +16,5 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `stopped-figure-slow-walk` — A stopped figure is not a slow walk: `HumanMeshBuilder.Cadence` has a floor — it must, or a figure inching forward...
 - `gait-solved-from-no-slip` — A gait is solved from the no-slip constraint, and the arithmetic has two traps
 - `avatar-meshes-authored-facing-z` — Avatar meshes are authored facing +Z; a Godot node faces −Z
+- `meshscratch-winding` — MeshScratch winding: every face clockwise from outside (Godot front face); `--meshcheck` signed-volume check (#54)
 - `crank-turning-wrong-way-instantly` — A crank turning the wrong way is instantly obvious to anyone who rides
