@@ -54,8 +54,7 @@ trap 'cd "$REPO"; git worktree remove --force "$WT"' EXIT
 [ -f export_presets.cfg ] || { echo "No export_presets.cfg in the repo root"; exit 1; }
 cp export_presets.cfg "$WT/"
 cd "$WT"
-sed -i "s|^config/name=.*|&
-config/version=\"$V\"|" project.godot
+sed -i "s|^config/name=.*|&\\nconfig/version=\"$V\"|" project.godot
 
 mkdir -p build/windows
 dotnet build UnitSportSwitzerland.csproj -c Release
