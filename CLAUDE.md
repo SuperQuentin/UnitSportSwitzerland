@@ -32,6 +32,7 @@ occasions, core, general. New knowledge goes in a new or existing note plus one 
   4. **Test in multiplayer**: dedicated server + client on loopback, check the feature on the
      **remote** peer (replication, authority, animation, damage). The PR says what was and was not
      verified. Network model: `src/Net/CLAUDE.md`.
+- **Before pushing `main`**: make sure the release hook is on: `git config core.hooksPath tools/hooks` (once per clone; check with `git config core.hooksPath`). Pushing `main` then auto-releases in the background (`docs/notes/general/local-release.md`).
 - Check and probe output goes in `test_output/` (gitignored), never the repo root.
 
 ## Commands
