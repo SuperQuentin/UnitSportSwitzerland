@@ -59,6 +59,11 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(Player.GarageProbe.Check());
                 return;
             }
+            if (Array.IndexOf(scArgs, "--meshcheck") >= 0)
+            {
+                GetTree().Quit(Avatar.MeshScratch.Check());
+                return;
+            }
             if (Array.IndexOf(scArgs, "--spincheck") >= 0)
             {
                 GetTree().Quit(Player.DriftCheck.Spin());
