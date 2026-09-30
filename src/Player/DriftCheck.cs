@@ -32,8 +32,55 @@ public static class DriftCheck
             foreach (var spec in CarCatalog.All)
                 failures += Drive(spec, profile) ? 0 : 1;
         }
+        failures += Wear() ? 0 : 1;
         GD.Print(failures == 0 ? "[drift] RESULT: every car drifts and recovers" : $"[drift] RESULT: FAILED ({failures})");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// With both wear options on: a long drift eats the rear tyres more than the fronts, and ten hard
+    /// stops (fifteen) from 150 to 50 km/h back to back heat the discs into fade — then they must cool again.
+    /// </summary>
+    private static bool Wear()
+    {
+        var s = GameSettings.Current;
+        bool tyre = s.TyreWear, brake = s.BrakeWear;
+        s.TyreWear = s.BrakeWear = true;
+        s.RideProfile = RideProfile.Game;
+        var ground = new RideGround(true, 0f);
+
+        var car = new Car(CarCatalog.All[0]);
+        var m = new RideMotion { Speed = 25f };
+        for (float t = 0; t < 0.3f; t += Dt) car.Step(new RideInput(0f, 0f, -1f, false, Handbrake: true), ground, Dt, ref m);
+        for (float t = 0; t < 30f; t += Dt)
+        {
+            // the Drive() hold: wheels toward the travel, turned in short of the target angle
+            float slip = Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi);
+            float wheel = slip + 1.5f * (slip - Target) - 0.12f * m.YawRate - 0.45f * slip;
+            float throttle = Mathf.Clamp(0.75f + 2f * (Mathf.Abs(Target) - Mathf.Abs(slip)), 0.2f, 1f);
+            car.Step(new RideInput(throttle, 0f, Mathf.Clamp(-wheel / car.Spec.MaxSteer, -1f, 1f), false), ground, Dt, ref m);
+        }
+        float rear = car.TyreWearRear, front = car.TyreWearFront;
+
+        var b = new Car(CarCatalog.All[0]);
+        var bm = new RideMotion();
+        float peak = 0f, minFactor = 1f;
+        for (int stop = 0; stop < 15; stop++)
+        {
+            bm.Speed = 150f / 3.6f; bm.Slip = 0; bm.YawRate = 0;
+            for (float t = 0; t < 8f && bm.Speed > 50f / 3.6f; t += Dt) b.Step(new RideInput(0f, 1f, 0f, false), ground, Dt, ref bm);
+            peak = Mathf.Max(peak, b.BrakeTemp);
+            minFactor = Mathf.Min(minFactor, b.BrakeFactor);
+        }
+        for (float t = 0; t < 60f; t += Dt) { bm.Speed = 20f; b.Step(new RideInput(0f, 0f, 0f, false), ground, Dt, ref bm); }
+        float cooled = b.BrakeTemp;
+
+        s.TyreWear = tyre; s.BrakeWear = brake;
+        bool ok = rear > front && rear > 0.05f && peak > 450f && minFactor < 0.95f && cooled < 300f;
+        GD.Print($"[drift] wear: 30 s of drift wore the rears {rear * 100:F1}%, fronts {front * 100:F1}%; fifteen stops 150->50 km/h "
+            + $"took the discs to {peak:F0}°C (braking down to {minFactor * 100:F0}%), a minute of cruising cooled them to {cooled:F0}°C"
+            + (ok ? "  ok" : "  FAIL"));
+        return ok;
     }
 
     private static bool Drive(CarSpec spec, RideProfile profile)

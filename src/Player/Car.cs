@@ -192,6 +192,34 @@ public sealed class Car : Rideable
     public float Throttle { get; private set; }
     /// <summary>How hard the tyres are sliding, 0..1: squeal and smoke.</summary>
     public float TyreSlide { get; private set; }
+
+    // ---- wear (Settings -> Movement, off by default) ----
+    /// <summary>Tyre wear per axle, 0 new .. 1 finished: the sliding work the tyre has done over its life.</summary>
+    public float TyreWearFront { get; private set; }
+    public float TyreWearRear { get; private set; }
+    /// <summary>Brake disc temperature, °C, and pad wear 0..1.</summary>
+    public float BrakeTemp { get; private set; } = 20f;
+    public float PadWear { get; private set; }
+    /// <summary>What is left of the braking, 0..1: fade from heat times what worn pads still grip.</summary>
+    public float BrakeFactor => BrakeWearOn
+        ? (1f - Mathf.Clamp((BrakeTemp - FadeFrom) / FadeSpan, 0f, 0.6f)) * (1f - 0.5f * PadWear) : 1f;
+
+    private static bool TyreWearOn => Core.GameSettings.Current.TyreWear;
+    private static bool BrakeWearOn => Core.GameSettings.Current.BrakeWear;
+
+    /// <summary>Peak-grip left in a tyre at this wear: little lost until late in its life, 30% when finished.</summary>
+    private static float WornGrip(float wear) => TyreWearOn ? 1f - 0.3f * Mathf.Pow(Mathf.Clamp(wear, 0f, 1f), 1.5f) : 1f;
+
+    /// <summary>
+    /// Sliding work one axle's tyres take over their life, J: ~5 minutes of continuous drifting
+    /// (a rear axle doing ~60 kW of sliding) or an hour and a half of brisk grip driving.
+    /// </summary>
+    private const float TyreLife = 25e6f;
+    /// <summary>Heat capacity of the four discs per kg of car, J/(K·kg) — a light car has small discs (an
+    /// AE86's ~20 kg of iron against a GT-R's ~35) — their cooling rate (1/s at rest, more with airflow),
+    /// the temperature where the pads start to fade and the span to full fade, and the energy a set of
+    /// pads absorbs over its life.</summary>
+    private const float BrakeHeatPerKg = 9f, BrakeCooling = 0.015f, FadeFrom = 450f, FadeSpan = 350f, PadLife = 250e6f;
     /// <summary>Front road-wheel angle, radians, + = left.</summary>
     public float SteerAngle { get; private set; }
     /// <summary>Accumulated wheel rotation, radians, for the rig.</summary>
@@ -306,7 +334,16 @@ public sealed class Car : Rideable
             // --- longitudinal forces per axle ---
             float sign = Mathf.Sign(u);
             // the car's own brakes (published 100-0 km/h), never more than the tyres can take
-            float brakeForce = brake * m * Mathf.Min(s.BrakeDecel > 0 ? s.BrakeDecel * (arcade ? 1.1f : 1f) : 99f, grip * Gravity * 0.95f);
+            float brakeForce = brake * m * Mathf.Min(s.BrakeDecel > 0 ? s.BrakeDecel * (arcade ? 1.1f : 1f) : 99f, grip * Gravity * 0.95f)
+                * BrakeFactor;
+            if (BrakeWearOn)
+            {
+                // the discs take the braking power as heat and shed it to the air, faster at speed;
+                // the pads wear with the energy put through them
+                float power = brakeForce * Mathf.Abs(u);
+                BrakeTemp += (power / (BrakeHeatPerKg * m) - BrakeCooling * (1f + Mathf.Abs(u) / 20f) * (BrakeTemp - 20f)) * h;
+                PadWear = Mathf.Min(1f, PadWear + power * h / PadLife);
+            }
             float fxF = -sign * brakeForce * 0.65f;
             float fxR = -sign * brakeForce * 0.35f;
             if (input.Handbrake) fxR = -sign * 0.8f * grip * nr;
@@ -318,7 +355,7 @@ public sealed class Car : Rideable
             }
             // no force to push against below walking pace once stopped
             if (Mathf.Abs(u) < 0.3f && drive == 0f) { fxF = 0f; fxR = 0f; u = Mathf.MoveToward(u, 0f, 3f * h); }
-            float capF = grip * nf, capR = grip * nr;
+            float capF = grip * nf * WornGrip(TyreWearFront), capR = grip * nr * WornGrip(TyreWearRear);
             // demand past the circle, on whichever axle is driven
             float wheelspin = Mathf.Max(0f, Mathf.Max(Mathf.Abs(fxR) / capR, Mathf.Abs(fxF) / capF) - 0.9f) * 10f;
             fxF = Mathf.Clamp(fxF, -capF, capF);
@@ -349,6 +386,19 @@ public sealed class Car : Rideable
                     * Mathf.Clamp((Mathf.Abs(slipNow) - 0.25f) / 0.2f, 0f, 1f);
             float fyF = -latF * Mathf.Sin(tyreC * Mathf.Atan(TyreB * alphaF));
             float fyR = -latR * Mathf.Sin(tyreC * Mathf.Atan(TyreB * alphaR));
+            if (TyreWearOn)
+            {
+                // sliding power: side force times how fast the contact patch slides sideways, plus
+                // wheelspin on the driven axle; a grip driver barely scrubs, a drifter burns rubber
+                float slideSpeed = Mathf.Abs(u) + 0.5f;
+                float wearF = Mathf.Abs(fyF) * slideSpeed * Mathf.Abs(Mathf.Sin(alphaF));
+                float wearR = Mathf.Abs(fyR) * slideSpeed * Mathf.Abs(Mathf.Sin(alphaR));
+                float spin = wheelspin * 2f;   // m/s of patch slip, roughly
+                if (s.Drive != Drivetrain.Front) wearR += Mathf.Abs(fxR) * spin;
+                if (s.Drive != Drivetrain.Rear) wearF += Mathf.Abs(fxF) * spin;
+                TyreWearFront = Mathf.Min(1f, TyreWearFront + wearF * h / TyreLife);
+                TyreWearRear = Mathf.Min(1f, TyreWearRear + wearR * h / TyreLife);
+            }
 
             // --- resistances and gravity along the grade ---
             float drag = 0.5f * AirDensity * s.DragArea * u * Mathf.Abs(u);
