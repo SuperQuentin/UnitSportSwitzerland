@@ -68,6 +68,15 @@ public sealed class DoorLink
     public MeshInstance3D?[] OutsideQuads { get; } = new MeshInstance3D?[3];
     public MeshInstance3D?[] InsideQuads { get; } = new MeshInstance3D?[3];
     public DoorLeaf? Leaf { get; set; }
+    /// <summary>A barn's pair as its interior sees it, swung with <see cref="Leaf"/> (<see cref="DoorLeaf.CreateShutter"/>).</summary>
+    public DoorLeaf? Shutter { get; set; }
+
+    /// <summary>Both sides' leaves to <paramref name="swing"/>.</summary>
+    public void SetLeaves(float swing)
+    {
+        Leaf?.SetSwing(swing);
+        Shutter?.SetSwing(swing);
+    }
 
     public static DoorLink Create(InteriorLayout layout, EntrancePlan e, WorldOrigin origin, float? outsideWidth, float? outsideHeight = null)
     {
