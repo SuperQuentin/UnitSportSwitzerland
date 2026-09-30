@@ -66,5 +66,5 @@ ZIP="$REPO/$OUT/UnitSportSwitzerland-v$V-windows.zip"; rm -f "$ZIP"
 if command -v zip >/dev/null; then (cd build/windows && zip -qr "$ZIP" .)
 else powershell -NoProfile -Command "Compress-Archive -Path 'build/windows/*' -DestinationPath '$ZIP'"; fi
 
-gh release create "v$V" "$ZIP" --target "$SHA" --title "v$V" --notes-file "$OUT/notes.md"
+gh release create "v$V" "$ZIP" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
 echo "Released v$V"
