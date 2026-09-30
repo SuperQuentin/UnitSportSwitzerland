@@ -348,7 +348,7 @@ public partial class Traffic : Node3D
     /// if it will be in this car's lane when they meet;</item>
     /// <item>at a junction: stay short of it while someone fast is about to pass through it — never
     /// pull out in front of a racer;</item>
-    /// <item>something standing in its lane: stop behind it, pulled over; still there after 8 s (a racer is reset after 10),
+    /// <item>something standing in its lane: stop behind it, pulled over; still there after 5 s (a racer is reset after 10),
     /// turn round and leave (one waits, one goes: nobody waits for the other forever).</item>
     /// </list>
     /// </summary>
@@ -520,7 +520,7 @@ public partial class Traffic : Node3D
         car.Holding = hold;
         car.Yield = yield;
         car.Stale = blocked && car.Speed < 0.3f ? car.Stale + dt : 0f;
-        if (car.Stale > 8f && twoWay)
+        if (car.Stale > 5f && twoWay)
         {
             car.Stale = 0f;
             car.Route = new Route(edge, !car.Route.Forward, edge.Length - car.Route.Arc);
@@ -689,6 +689,18 @@ public partial class Traffic : Node3D
         _cars.Clear();
         _trains.Clear();
         _builtAround = null;
+    }
+
+    /// <summary>Removes the cars within <paramref name="radius"/> m of a point: a race grid is not lined up in the middle of the traffic.</summary>
+    public void ClearAround(Vector3 at, float radius)
+    {
+        for (int i = _cars.Count - 1; i >= 0; i--)
+        {
+            if (Flat(_cars[i].Head - at).Length() >= radius) continue;
+            foreach (var u in _cars[i].Units) _byBody.Remove(u.GetInstanceId());
+            _cars[i].Free();
+            _cars.RemoveAt(i);
+        }
     }
 
     public LaneGraph? Roads => _roads;

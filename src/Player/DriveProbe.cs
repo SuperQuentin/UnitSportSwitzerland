@@ -201,13 +201,22 @@ public partial class DriveProbe : Node
                     entry.Hits[what] = entry.Hits.GetValueOrDefault(what) + 1;
                     _log.Add($"{_t,5:F1}s {label}: impact ({what}) at {entry.Arc:F0} m ({entry.Player.Motion.Speed * 3.6f:F0} km/h){(entry.Pilot?.Seen is { Length: > 0 } seen ? $" — saw {seen}" : "")}");
                 };
-                player.Announced += (text, _) => _log.Add($"{_t,5:F1}s {label}: {text} (touching {HitKind(player)}{(entry.Pilot?.Seen is { Length: > 0 } seen ? $", saw {seen}" : "")})");
+                player.Announced += (text, _) =>
+                {
+                    _log.Add($"{_t,5:F1}s {label}: {text} (touching {HitKind(player)}{(entry.Pilot?.Seen is { Length: > 0 } seen ? $", saw {seen}" : "")})");
+                    if (entry.Pilot is { } p) foreach (var line in p.Trail) _log.Add($"        before: {line}");
+                };
                 _entries.Add(entry);
             }
             // the traffic yields to the local player only, and there is none here: without this it
             // drove through the race as if the cars were not there, and shunted them back up the pass
             if (FindTraffic(GetTree().Root) is { } traffic)
+            {
                 traffic.Obstacles = () => _entries.Where(e => !e.Out).Select(e => (e.Player.GlobalPosition, e.Player.WorldVelocity));
+                // traffic spawned on the grid before there was one (every run began with racers held
+                // up behind a car standing nose to nose with the front row, #85)
+                foreach (var e in _entries) traffic.ClearAround(e.Player.GlobalPosition, 100f);
+            }
             return;
         }
 
