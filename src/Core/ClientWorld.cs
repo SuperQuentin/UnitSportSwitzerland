@@ -642,6 +642,7 @@ public partial class ClientWorld : Node3D
         var race = World.RaceManager.CreateClient();
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
+        if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
 
         _chatUi = ChatUi.Create(_chat);
         AddChild(_chatUi);
