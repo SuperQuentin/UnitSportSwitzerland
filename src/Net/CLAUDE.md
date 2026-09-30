@@ -30,7 +30,11 @@ Client-authoritative transforms, terrain/asset streaming, chat, admin, RPC pitfa
   Without that argument `/login` is disabled entirely. `Net/ServerConsole` reads the dedicated
   server's own stdin on a background thread (`Console.ReadLine` blocks, so it cannot be on the
   main loop) and runs commands as peer id 0, which is always an operator — that is how the
-  first admin gets granted on a fresh server.
+  first admin gets granted on a fresh server. `PlayerInfo.AdminChanged` (any grant or loss: join,
+  `/login`, `/admin`) makes the server's `ChatManager` send that client `AdminStatus`, which sets
+  `Core/Permissions` so its menus can follow; `IsAdminPeer` exposes the check to other server
+  systems. `NameAssigned` fires when a peer's name is set, for the bank, whose accounts are keyed
+  by it.
 
 ## Commands
 

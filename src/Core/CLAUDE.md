@@ -21,10 +21,11 @@ Boot, game modes and menu, the input facade, settings, performance tools, telepo
   neutral while `UiFocus.TextEntryActive`, so callers no longer each check for typing. Pad layout:
   left stick move/steer, right stick look (squared response, `StickSensitivity`/`InvertY`),
   A jump, B slide, L3 sprint (latched until the stick is released), RT/LT throttle/brake (analog
-  straight into `RideInput`), X tuck/sprint, Y mount picker, R3 camera toggle, Start menu,
-  D-pad down fly/foot toggle. Menus call `PlayerInput.FocusFirst` on open so Godot's built-in
+  straight into `RideInput`), X tuck/sprint, Y interact (and the travel picker when there is
+  nothing to interact with), R3 camera toggle, Start menu, D-pad down fly/foot toggle. Menus call
+  `PlayerInput.FocusFirst` on open so Godot's built-in
   `ui_*` actions drive them with the D-pad, and `MainMenu` holds `UiFocus` while open or the
-  stick navigating it would also walk the player. Tab (place search) stays keyboard-only: a pad
+  stick navigating it would also walk the player. M (place search) stays keyboard-only: a pad
   can't type in it. The facade is the seam an OpenXR backend plugs into later.
   Godot's built-in `ui_accept`/`ui_cancel` have **no** face buttons by default (the D-pad moved
   focus but A pressed nothing), so `RegisterActions` adds A/B and the left stick to the `ui_*`
@@ -32,6 +33,25 @@ Boot, game modes and menu, the input facade, settings, performance tools, telepo
   camera, X snap, RB next runner, LB hide UI, D-pad ←/→ seek 10 s, ↑/↓ speed; right stick looks
   in Free), read in `_Input` rather than `_UnhandledInput` because a HUD button left focused by a
   mouse click would otherwise swallow A and the D-pad.
+  **Keyboard layout (issue #32)**: E only interacts (get in/out, search, door) — it used to fall
+  back to the travel picker, which then popped up one step too far from a car; the picker is **R**.
+  Inventory **I / Tab**, place search **M**, engine **Z**, controls **F1**. `PlayerInput.DeviceChanged`
+  fires when the player switches between keyboard and pad.
+- **Key hints** (`Core/InputHints`): never type a key into a UI string. `Label(action)` names the
+  binding for the device in hand — keyboard keys through `DisplayServer.KeyboardGetLabelFromPhysical`,
+  so the physical-Z engine key prints **Y** on a Swiss QWERTZ keyboard and **W** on AZERTY; Xbox
+  names on a pad. `Format("{use_item} to eat")` fills `{action}` placeholders, which is how item,
+  mount and car blurbs name their controls. `PromptBar` (bottom right) asks `ClientWorld.Prompts` a
+  few times a second what applies *now* ("Get in the helicopter [E]", "Travel [R]", fly-camera keys),
+  resolving the player from the camera so probes get it too. `ControlsHelp` (**F1**, main menu
+  Controls) lists every action with a keyboard and a pad column from the live `InputMap`; it reads
+  input in `_Input` because it opens over the main menu, which would otherwise take its Esc.
+  `--controls` opens it for a screenshot.
+- **Permissions** (`Core/Permissions`): what the menus may offer. Offline everything; online,
+  spawning a vehicle from the travel menu is an admin's (it is left in the shared world), while
+  equipment, getting into a vehicle already there, the place-search teleport (`/city` is a
+  non-admin command anyway) and the fly camera stay free. The admin flag comes from the server
+  (`ChatManager.AdminStatus`); the server re-checks for itself (`VehicleManager.MayPark`).
 - **Settings** (`Core/GameSettings`, `Core/SettingsMenu`, `user://settings.json`): render distance
   in tile rings (6..40, default **15**), detail preset (Low/Medium/High = inner ring table + road/
   building reach, `LodPolicy.Create`), horizon km, fog on/off (**off by default** — the shaders keep

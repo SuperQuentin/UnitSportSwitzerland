@@ -18,7 +18,7 @@ Machines left in the world, damage, wrecks and their network sync.
   the mountain in five seconds. `FootPlayer.FindExit` stands the pedestrian on the *ground* beside
   the seat — measuring the uphill side at seat height read it as blocked and put the player on
   the vehicle's roof, which pushed the vehicle through the terrain.
-  - **Engine** (`engine_toggle`, **I / D-pad ↑**, `FlightInput.Engine`): helicopter off → rotor spools
+  - **Engine** (`engine_toggle`, **Z / D-pad ↑** — prints as the local key, Y on QWERTZ, `FlightInput.Engine`): helicopter off → rotor spools
     down (0.18/s), lift fades below spool 0.6 into autorotation (9 m/s sink); on → ~3 s to lift.
     Plane off → zero thrust, it glides. Entering starts the engine.
   - **Damage**: vehicle HP (`FootPlayer.VehicleHealth`, `VehicleBody.Health`) loses `(impact−4)×10`
@@ -33,6 +33,11 @@ Machines left in the world, damage, wrecks and their network sync.
     authority (it simulates, the server has no collision). `RequestClaim` is granted once — the
     server frees the node everywhere and returns its state — so two players cannot take one
     vehicle. A leaving peer's vehicles are removed. Untested with two real clients.
+    **Only an admin conjures vehicles online** (issue #32): the server counts the vehicles each peer
+    has claimed and not yet parked (`_driving`); a park beyond that is a vehicle spawned from the
+    travel menu and is allowed only if `MayPark` says so — wired in `ServerWorld` to "admin, or the
+    car a race issued you" (`RaceManager.IssuedCars`, one per entrant, consumed on park). A refusal
+    is `ParkRefused` -> `VehicleManager.Refused` -> a toast; the vehicle is simply not left.
   - Check: `<godot> --path . -- --vehiclecheck[,out.png] --at 2585000,1110000` — 24 checks:
     helicopter up, bail out mid-air into wingsuit and canopy, empty helicopter falls and explodes;
     bike parked, stays, re-entered; plane engine off/on; plane crashed with the player in it.
