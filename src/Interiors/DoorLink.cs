@@ -21,10 +21,12 @@ namespace UnitSport.Interiors;
 public sealed class DoorLink
 {
     /// <summary>
-    /// How far out from the facade the portal quad stands: in front of the door leaf baked into the
-    /// facade and its handle (11 cm out), or the handle stays hanging in the open doorway.
+    /// How far out from the facade the portal quad stands: just proud of the wall, which has no
+    /// hole in it. The closed leaf and handle baked in front of it (6..11 cm) are dropped by the
+    /// building shader while the portal shows (<see cref="DoorPortals.OpenDoors"/>), and the frame
+    /// round the opening stands in front of it like a real one.
     /// </summary>
-    public const float OutsideQuadOffset = 0.12f;
+    public const float OutsideQuadOffset = 0.02f;
     /// <summary>Where the interior doorway's portal quad stands: at the reveal, just inside the room.</summary>
     public const float InsideQuadOffset = -0.005f;
     /// <summary>

@@ -69,7 +69,7 @@ public partial class DoorPortals : Node3D
     /// <summary>Within this of an open doorway, the screen's camera gets <see cref="DoorwayNear"/>.</summary>
     private const float NearZone = 1f;
     /// <summary>
-    /// The near plane by a doorway: small enough that the jump across it is ~15 cm, not ~55 cm as
+    /// The near plane by a doorway: small enough that the jump across it is ~5 cm, not ~45 cm as
     /// with the usual 8 cm. The reversed depth buffer keeps the far distance sharp.
     /// </summary>
     private const float DoorwayNear = 0.005f;
@@ -84,6 +84,15 @@ public partial class DoorPortals : Node3D
         public View? Nested { get; init; }
         public DoorLink? Link { get; set; }
     }
+
+    /// <summary>
+    /// Takes the doors whose portal shows (see <c>open_door_box</c> in <c>ps1_building.gdshader</c>),
+    /// nearest the screen's camera first, at most <see cref="MaxOpenDoors"/>: their baked leaf and
+    /// handle are not drawn. Called when the list changes.
+    /// </summary>
+    public Action<Vector4[], Vector4[], int>? OpenDoors { get; set; }
+    public const int MaxOpenDoors = 16;
+    private string _openKey = "";
 
     public DoorPortals(Func<IEnumerable<DoorLink>> links, Func<Vector3, string?> planAt)
     {
@@ -135,6 +144,7 @@ public partial class DoorPortals : Node3D
 
     public override void _ExitTree()
     {
+        OpenDoors?.Invoke(new Vector4[MaxOpenDoors], new Vector4[MaxOpenDoors], 0);
         RenderingServer.FramePostDraw -= PutCameraBack;
         PutCameraBack();
         for (int slot = 0; slot < 2 * Width; slot++) SetClip(slot, null, null, false);
@@ -227,6 +237,7 @@ public partial class DoorPortals : Node3D
         _shown.Clear();
 
         var cam = GetViewport().GetCamera3D();
+        SendOpenDoors(links, cam);
         if (cam != null)
         {
             // first: which side it ends up on decides everything below
@@ -301,6 +312,31 @@ public partial class DoorPortals : Node3D
             cam.GlobalTransform = moved;
             return;
         }
+    }
+
+    /// <summary>
+    /// The doors whose quads show, for the building shader to drop their baked leaf: the same
+    /// test as the quads' own (a swing started), so the leaf and the quad change over together.
+    /// </summary>
+    private void SendOpenDoors(List<DoorLink> links, Camera3D? cam)
+    {
+        if (OpenDoors == null) return;
+        var eye = cam?.GlobalPosition ?? Vector3.Zero;
+        var open = links.Where(l => l.Swing > 0.001f)
+            .OrderBy(l => l.Outside.Origin.DistanceSquaredTo(eye))
+            .Take(MaxOpenDoors).ToList();
+        string key = string.Join(";", open.Select(l => l.Door).Order());
+        if (key == _openKey) return;
+        _openKey = key;
+        var boxes = new Vector4[MaxOpenDoors];
+        var axes = new Vector4[MaxOpenDoors];
+        for (int i = 0; i < open.Count; i++)
+        {
+            var o = open[i].Outside;
+            boxes[i] = new Vector4(o.Origin.X, o.Origin.Y, o.Origin.Z, open[i].OutsideWidth / 2);
+            axes[i] = new Vector4(o.Basis.Z.X, o.Basis.Z.Z, open[i].OutsideHeight, 0);
+        }
+        OpenDoors(boxes, axes, open.Count);
     }
 
     /// <summary>Whether a point in a doorway frame is within the slab, and the opening widened by <paramref name="margin"/>.</summary>

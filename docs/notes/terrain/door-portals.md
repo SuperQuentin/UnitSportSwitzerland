@@ -63,7 +63,7 @@ changed is how you get there.
   (both quads plus how far the near plane's corners reach, ~1.3 cm), inside the opening widened as
   much, the near plane would cut the quad: the view went black or showed the wall behind.
   `DoorPortals.KeepOutOfDoorways` snaps it to the nearer side (through the map only within the
-  opening): a ~15 cm jump, most of it the gap between the quads (`OutsideQuadOffset`). Both for
+  opening): a ~5 cm jump, the gap between the quads (`OutsideQuadOffset`, 2 cm) and the margin. Both for
   the drawn frame only: `RenderingServer.FramePostDraw` puts them back, since a first-person
   camera is a child of a body that turns in `_Process` without a physics tick. So
   `door_portal.gdshader` drops a quad for any camera behind it: its old 30 cm slack (for a lens
@@ -85,10 +85,16 @@ changed is how you get there.
   drew the whole landscape 3 km above, behind the ceiling.
 - **Leaves.** `DoorLeaf`, one per entrance, in the interior node, swinging into the room, 90° and no
   more: a house door can stand 0.2 m from the stair core's side wall.
-  Solid only while shut. The facade still has its baked closed leaf, hidden by the tunnel mouth.
-  The leaf hinges on the doorway frame's -X jamb, so the baked handle is on +X (`-t` along the
-  facade in `AppendDoor`). The mouth (`OutsideQuadOffset`) stands in front of that handle;
-  otherwise the handle stays hanging in the open doorway. The leaf carries the same handle on its
+  Solid only while shut. The facade still has its baked closed leaf and handle (6..11 cm proud),
+  but while a door's portal shows, `ps1_building` drops them (#93): `DoorPortals.OpenDoors` sends
+  the nearest 16 such doors (sill origin, half width, outward, height) through
+  `ChunkManager.SetOpenDoors`, the same way as the occupancy boxes, and the shader discards what
+  is 4.5..12.5 cm out, inside the opening, above the 12 cm doorstep. Frame, lintel and step stay.
+  So the mouth (`OutsideQuadOffset`) stands 2 cm off the wall (not 0: the wall has no hole and
+  would z-fight), behind the frame like a real door; it used to stand 12 cm out, in front of the
+  handle, and the camera's jump across the doorway was ~15 cm. Leaf and mouth change over on the
+  same test (`Swing > 0.001`). The leaf hinges on the doorway frame's -X jamb, so the baked handle
+  is on +X (`-t` along the facade in `AppendDoor`). The leaf carries the same handle on its
   street face and the facade's leaf colour (`BuildingFootprint.DoorLeafColorFor`, the kind from
   `InteriorLayout.DressedKind`), so the leaf seen swinging through the portal is the facade's door.
 - **Occupancy cues (G).** Buildings other players are in, except those with a door open near us:
