@@ -71,6 +71,7 @@ public partial class UseAnimProbe : Node
         inv.Put(2, new ItemStack(ItemId.Gps, 1));
         inv.Put(3, new ItemStack(ItemId.WitchHat, 1));
         Expect(await Heard("B", "ready", 150), "B joined");
+        me.Heal(FootPlayer.MaxHealth);   // a spawn fall may have hurt it: start full so 60 damage never knocks it out
         me.TakeDamage(60f);
         inv.Select(0);
         await Seconds(1.0);
