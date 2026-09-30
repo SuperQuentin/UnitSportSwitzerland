@@ -63,8 +63,10 @@ say "Preflight ($DEPLOY_HOST)"
 "${SSH[@]}" -o BatchMode=yes -o ConnectTimeout=10 "$DEPLOY_HOST" true \
   || die "ssh $DEPLOY_HOST failed with key auth. Run: ssh-keygen (once), then ssh-copy-id -p $DEPLOY_PORT_SSH $DEPLOY_HOST"
 echo "  ssh    OK ($(rq 'uname -srm; . /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-}"' | tr '\n' ' '))"
+SUDO=sudo
 if rq 'sudo -n true' 2>/dev/null; then SUDO_TTY=(); echo "  sudo   OK (passwordless)"
 elif [ -t 0 ]; then SUDO_TTY=(-t); echo "  sudo   will ask for your password"
+elif [ $DRY = 1 ]; then SUDO_TTY=(); SUDO=; echo "  sudo   needs a password and there is no terminal: reporting without root"
 else die "sudo on $DEPLOY_HOST needs a password but there is no terminal to type it"; fi
 
 # --- 2. build (Linux x64, dedicated server) -------------------------------------------
@@ -136,7 +138,7 @@ if [ $S_SETUP = 1 ]; then
   envs+=" SSH_PORT=$DEPLOY_PORT_SSH WEB_PORTS=$(qd "$WEB_PORTS") MDNS_NAME=$(qd "$MDNS_NAME") VERSION=$(qd "$VERSION")"
   envs+=" DOTNET_MAJOR=$DOTNET_MAJOR NEED_DOTNET=$NEED_DOTNET HERE=$rdir"
   set +e
-  "${SSH[@]}" "${SUDO_TTY[@]}" "$DEPLOY_HOST" "sudo env $envs bash $rdir/remote-setup.sh; rc=\$?; rm -rf $rdir; exit \$rc"
+  "${SSH[@]}" "${SUDO_TTY[@]}" "$DEPLOY_HOST" "$SUDO env $envs bash $rdir/remote-setup.sh; rc=\$?; rm -rf $rdir; exit \$rc"
   rc=$?; set -e
   [ $rc = 0 ] || { [ $CHECK = 1 ] && echo "  (some items FAIL, see above)" || die "host setup failed (items marked FAIL above)"; }
 fi

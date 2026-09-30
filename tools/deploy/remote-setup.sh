@@ -4,9 +4,11 @@
 # Inputs (env): DRY TARGET_USER DEPLOY_DIR CHUNKS_DIR GAME_PORT SSH_PORT WEB_PORTS MDNS_NAME VERSION
 #               DOTNET_MAJOR NEED_DOTNET HERE (dir holding unitsport.service.xml)
 set -uo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin   # ldconfig and ufw live in sbin
 FAIL=0
 ok()   { printf '  %-28s OK %s\n' "$1" "${2:-}"; }
-inst() { printf '  %-28s INSTALLED %s\n' "$1" "${2:-}"; }
+inst() { printf '  %-28s %s %s\n' "$1" "$([ "$DRY" = 1 ] && echo 'MISSING, would install' || echo INSTALLED)" "${2:-}"; }
+did()  { if [ "$DRY" = 1 ]; then printf '  %-28s WOULD SET %s\n' "$1" "${2:-}"; else ok "$@"; fi; }
 bad()  { printf '  %-28s FAIL %s\n' "$1" "${2:-}"; FAIL=1; }
 act()  { if [ "$DRY" = 1 ]; then echo "  [dry] $*"; else "$@"; fi; }
 export DEBIAN_FRONTEND=noninteractive
@@ -66,7 +68,7 @@ fi
 
 # --- directories ------------------------------------------------------------
 act mkdir -p "$DEPLOY_DIR/releases" "$CHUNKS_DIR" && act chown "$TARGET_USER": "$DEPLOY_DIR" "$DEPLOY_DIR/releases" "$CHUNKS_DIR" \
-  && ok "dirs" "$DEPLOY_DIR, $CHUNKS_DIR (owner $TARGET_USER)" || bad "dirs"
+  && did "dirs" "$DEPLOY_DIR, $CHUNKS_DIR (owner $TARGET_USER)" || bad "dirs"
 
 # --- mDNS -------------------------------------------------------------------
 esc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' <<< "$1"; }
@@ -76,21 +78,23 @@ new=${new//@MDNS_NAME@/"$name"}; new=${new//@GAME_PORT@/"$GAME_PORT"}; new=${new
 if [ "$DRY" = 1 ]; then echo "  [dry] write $svc (_unitsport._udp port $GAME_PORT, name '$MDNS_NAME')"
 elif [ "$(cat "$svc" 2>/dev/null)" != "$new" ]; then printf '%s\n' "$new" > "$svc"; fi
 act systemctl enable --now avahi-daemon >/dev/null 2>&1; act systemctl reload-or-restart avahi-daemon
-systemctl is-active -q avahi-daemon && ok "mdns" "_unitsport._udp '$MDNS_NAME' port $GAME_PORT" \
-  || { [ "$DRY" = 1 ] || bad "mdns" "avahi-daemon not running"; }
+if [ "$DRY" = 1 ]; then did "mdns" "_unitsport._udp '$MDNS_NAME' port $GAME_PORT"
+elif systemctl is-active -q avahi-daemon; then ok "mdns" "_unitsport._udp '$MDNS_NAME' port $GAME_PORT"
+else bad "mdns" "avahi-daemon not running"; fi
 
 # --- firewall: ssh first so enabling ufw never locks us out -----------------
 act ufw allow "$SSH_PORT/tcp" comment 'ssh' >/dev/null
 for p in $WEB_PORTS; do act ufw allow "$p/tcp" comment 'web' >/dev/null; done
 act ufw allow "$GAME_PORT/udp" comment 'unitsport game' >/dev/null
 act ufw allow 5353/udp comment 'mdns' >/dev/null
-if act ufw --force enable >/dev/null; then ok "firewall" "ssh $SSH_PORT/tcp, web ${WEB_PORTS// /,}/tcp, game $GAME_PORT/udp, mdns 5353/udp"
+if act ufw --force enable >/dev/null; then did "firewall" "ssh $SSH_PORT/tcp, web ${WEB_PORTS// /,}/tcp, game $GAME_PORT/udp, mdns 5353/udp"
 else bad "firewall" "ufw enable failed (no iptables/nftables in this host?)"; fi
 
 # --- autostart ----------------------------------------------------------------
 act systemctl enable --now cron >/dev/null 2>&1
 line="@reboot $DEPLOY_DIR/start-server.sh >> $DEPLOY_DIR/cron.log 2>&1"
-if crontab -u "$TARGET_USER" -l 2>/dev/null | grep -qxF "$line"; then ok "cron" "$line"
+cronu=(-u "$TARGET_USER"); [ "$(id -un)" = "$TARGET_USER" ] && cronu=()   # -u needs root, even for yourself
+if crontab "${cronu[@]}" -l 2>/dev/null | grep -qxF "$line"; then ok "cron" "$line"
 else
   if [ "$DRY" = 1 ]; then echo "  [dry] crontab -u $TARGET_USER: $line"
   else { crontab -u "$TARGET_USER" -l 2>/dev/null | grep -v 'start-server.sh'; echo "$line"; } | crontab -u "$TARGET_USER" - && inst "cron" "$line" || bad "cron"; fi
