@@ -1,8 +1,9 @@
 # Generated terrain fill: generated and real tiles side by side
 
-Status: **in progress** (issue #27, branch `feat/27-generated-terrain-fill`). Phase 1 is done;
-notes on it and a blend-quality follow-up are at the end of this file. Builds on `84f5ebf`
-(generated fallback world, all-or-nothing).
+Status: **done** (issue #27, branch `feat/27-generated-terrain-fill`): phases 1–5 and the
+blend-quality follow-up. Where the build departs from this design is recorded at the end of the
+file, most importantly: **the blend is a convex mix, not `G + S + D`** (the additive form dug
+trenches on real data). Builds on `84f5ebf` (generated fallback world, all-or-nothing).
 
 ## Goal
 
@@ -431,3 +432,75 @@ Instead:
   variance of the blended height minus that of generated ground alone. Extruded real detail shows
   as excess variance at the real tile's wavelengths. Fix A should drive it near zero past ~1 km.
 - Every phase-1 check stays green, `blend = null` included.
+
+## Phases 2–5 and the follow-up as built
+
+### The blend is a convex mix: `h = (1 − W)·G + W·R + D`
+
+The additive `G + S + D` of §3 passed every synthetic check and still failed on real tiles at
+Riddes: where a steep generated flank (2,600 m) met the real valley floor (477 m), it kept the
+flank's fall away from the seam at full size, and 200 m from the border the ground was **150 m
+below the Rhône** (a `--ride bike` rode down into the trench). `(1 − W)·G + W·R` always lies
+between the two surfaces. `R` is the inverse-distance real low-pass of §3 without the generator's
+knots (`Gs` and `GKnots` are gone), `W = 1 − smoothstep(reach / Band)`. `W` and `W·R` share the
+10 m lattice, so every invariant of §4 holds as designed. BlendCheck gained "blended ground past
+both surfaces" (3.5 m on the synthetic blocks, inside their 10 m roughness).
+
+### Follow-up fixes, adapted to the convex mix
+
+- **Fix A as planned, on `R` instead of `Rs − Gs`**: a pyramid per real tile (knots, tent averages
+  on 200 m / 500 m / 1 km, the mean), read at a spacing of ~d/2 with a log-distance smoothstep
+  between levels.
+- **Also: Catmull-Rom, not bilinear**, for every level. The pyramid alone left the 100 m creases
+  (the renders' strips); a C1 interpolant that is exact on a node removes them and keeps knots
+  exact. D's residual uses the same interpolant, so the seam still reconstructs `R`.
+- **Also: `W` from a soft minimum of the distances** (150 m, each term faded by its own distance).
+  The hard minimum creased on the medial axis: an X across the one-tile hole. Unfaded, the soft
+  minimum jumped when a tile left the band (0.8 m of "streak" at 2.9 km).
+- **Fix B as planned, with two changes.** The continued slope is of `R` itself, not of the
+  residual: beyond the edge the low-pass is flat along the normal, so the residual's slope alone
+  leaves a crease. And the slope term is faded out within the first 10 m (`SlopeFade`), not over the
+  whole 40 m band: carried 40 m, a steep 1 m slope was extrapolated up to 3.8 m, and a coarse tile
+  (10 m slope) then differed from the decimated full one (1 m slope) by as much. Faded within one
+  coarse cell it is zero at every 10 m point, so coarse = decimated full holds exactly. 1 m slope on
+  full grids, 10 m at a real corner (the only point two tiles share) and on coarse grids.
+- Anti-aliasing the knots themselves (a tent average of the real grid instead of `horizon.bin`'s
+  point samples) was tried and dropped: no gain on the streak measure, and it breaks horizon = grid.
+
+### Measured
+
+`dotnet run --project tools/BlendCheck -c Release [-- --render]`, all green: seams generated|real and
+generated|generated at both resolutions 0, coarse = decimated full 0, horizon = grid 0, point path
+= grid path 0; seam kink mean 0.012 m (the ground's own one row in: 0.053 m); streaks 0.13 m RMS at
+500 m, 0.06 m at 1 km, 0.02 m at 2 km against the generated ground's own 3–4 m (a single level:
+0.28 / 0.18 / 0.04 m); the source chain end to end (invalidation, horizon.bin knots = tile knots,
+the fill switched off). Renders in `test_output/blend/`.
+
+In game, on 87 real tiles round Riddes from the stream cache (`test_output/region`):
+- border views from above and at eye level: continuous; the real Rhône, village and slopes run into
+  generated forest and pasture;
+- standing on seams: generated side 0.00 m clearance; the real side's own edge collision reads the
+  same with the fill off (road-blended floor), so the fill does not touch it;
+- dedicated server + a client with no terrain spawning elsewhere: rebase through `ResetAll`, 87 tiles
+  merged in 6 ms, `horizon.bin` streamed then blended (299 tiles); the server holds the generated
+  ground under the player and agrees with the client (1451.9 m);
+- `--generated-world` server with no terrain: clients adopt its origin; ground agrees (520.0 m);
+- interiors of generated houses: `--interiorcheck` offline all green (96 plans valid, enter, stairs,
+  loot, leave). Connected, the probe cannot run (it drives its own non-networked player);
+- quit with builds in flight, 3 runs: exit 0.
+
+### Not verified / open
+
+- **`--fly` across the border**: 3 of 7 runs had one frame over 33 ms (33, 50, 62 ms), classified
+  "other" by the perf log (no slow commit, GC or GPU frame); over unblended generated ground 0 in 2.
+  Suspected: blend maths on 16 workers starving the main thread. Not resolved.
+- An interior entered in a generated house by two real clients.
+- The Settings toggle switched live (`SetFallbackEnabled`): same unload path as a merge, not driven.
+- Real ground's sub-100 m detail aliases in `horizon.bin`'s point-sampled knots; the pyramid and a
+  40 m detail band keep it from showing far, but a faint change of texture at the seam remains.
+
+### Open questions, as decided
+
+1. `--generated-world` implemented; an empty server still refuses by default.
+2. `GameSettings.GeneratedFill` implemented (Settings → World → Generated terrain), live.
+3. A HUD note only (`Core/GeneratedTerrainNote`, bottom left, faint).

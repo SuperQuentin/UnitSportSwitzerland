@@ -85,7 +85,8 @@ Several people work on this repo in parallel, so every new feature follows these
   never imports it): soundcheck WAVs, `--shot`/`--ride`/`--flycheck` screenshots, test exports.
   Never write them to the project root or a temp path that can end up inside the repo.
 - Build game: `dotnet build UnitSportSwitzerland.csproj`
-- Dedicated server: `<godot> --headless --path . -- --server [--port N]`
+- Dedicated server: `<godot> --headless --path . -- --server [--port N]` (`--generated-world` to run
+  one with no terrain at all, on generated ground)
 - Client: `<godot> --path . -- --connect 127.0.0.1` (no args = offline, T toggles
   spectator/on-foot)
 - Godot exe: `C:\ProgramData\chocolatey\lib\godot-mono\tools\godot_v4.7.1-stable_mono_win64\godot_v4.7.1-stable_mono_win64_console.exe`

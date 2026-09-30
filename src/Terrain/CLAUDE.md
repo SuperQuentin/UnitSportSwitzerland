@@ -135,6 +135,12 @@ Chunk streaming, LOD rings, mesh builders, collision, horizon, cover/pattern sha
 ## Commands
 
 - Tunnel collision check: `<godot> --path . -- --probe lv95E,lv95N,seconds`
+- Generated fill check (no Godot): `dotnet run --project tools/BlendCheck -c Release` — synthetic real
+  blocks beside the generator, then the real `FallbackChunkSource` + `CachingChunkSource` chain:
+  seams generated|real and generated|generated at both resolutions, coarse = decimated full, horizon =
+  grid, point path = grid path, no cliff, no trench, invalidation, horizon.bin knots = tile knots,
+  the fill switched off. Non-zero exit on any failure. In game: `--chunks <partial region>
+  --generated on|off`; a server with no terrain: `--server --generated-world`.
 - Streaming smoothness: `<godot> --path . -- --fly x,y,z,yawDeg,speedMps,seconds [--rings N --horizon km --builds N]`
   — flies straight at that speed and prints the frame-time distribution; exits non-zero on any
   frame over 33 ms. The way to check a loader change, since a hitch never shows in a `--shot`.
@@ -218,7 +224,7 @@ Chunk streaming, LOD rings, mesh builders, collision, horizon, cover/pattern sha
   it has been asked for.
 - **A fresh clone has NO terrain** — the generated data is gitignored — so a missing
   `manifest.json` is an ordinary state, not an error. `LocalChunkSource` returns an empty
-  manifest and the client boots into the generated fallback world with a message; it used to
+  manifest and the client boots into generated terrain with a message; it used to
   throw `FileNotFoundException` out of `ClientWorld._Ready` and take the game down. A *server*
   still fails fast, because it is the authority on where the world is and has nothing to serve.
 - **Publish the terrain before the things that stand on it.** A tile build fetches chunk →
@@ -251,29 +257,105 @@ Chunk streaming, LOD rings, mesh builders, collision, horizon, cover/pattern sha
   nearest-first ordering in `EvaluateRings` fixes it: measured 175k prims after 55 s before,
   **4.34 M after 15 s** after. Neither change affects local loading, where the per-frame commit
   budget is the limiter — measured byte-identical at caps of 6 and 24.
-- **Generated fallback world** (`Terrain/ProceduralWorld`, `Terrain/FallbackChunkSource`): a client
-  with no tiles at all (a fresh clone) gets a stand-in instead of a void — an alpine valley through
-  the spawn point with a river on a flat bed (water from the cover raster, like the real one), a
-  road and a railway along the floor, villages with side streets and a church every ~2.6 km, farms
-  and alpine huts, forest to a wandering tree line, rock, scree, glacier, vineyards on the sunny
-  side, orchards, a 100 km horizon. 81 x 81 tiles, all in the **ordinary formats**, served through
-  the ordinary `IChunkSource` seam under `CachingChunkSource`, so roads, traffic, trains, doors,
-  interiors, collision and gathering all work on it unchanged. Everything is a pure function of
-  LV95 position, so seams are bit-identical and the stride-10 grid equals the decimated full one
-  (both checked). Noise is sampled on a **world-anchored 5 m lattice** and interpolated: evaluated
-  per vertex it cost 320 ms a tile; now ~30-40 ms, cover ~10 ms (classified from 10 m samples, since
-  every tile in the rings asks for cover), horizon 0.2 s. The origin goes on the spawn point.
-  **Real tiles replace it**: `ChunkManager.MergeAvailableTiles` calls `RetireFallback` first, which
-  unloads every generated tile, switches the source off, flushes the cache (`CachingChunkSource.Clear`
-  bumps an epoch so a fetch straddling it is not cached), clears the horizon, and raises
-  `TerrainReplaced` for the systems that keep their own tile caches (`Surfaces`, `Ambience`,
-  `Gathering`, `Traffic`). Joining a server retires it **before** adopting the server's origin
-  (`ClientTerrainSync.Adopt`, run on the main thread). Test it with `--chunks <empty dir> --cache
-  <empty dir>`; a server still refuses to start without real terrain.
+- **Generated fill** (`Terrain/ProceduralWorld`, `ProceduralWorld.Blend`, `Terrain/FallbackChunkSource`,
+  issue #27): every tile with no real data is generated, and generated tiles sit **beside** real
+  ones with no visible seam — round a MapSetup zone, a server streaming part of the country, a
+  download with holes, and everywhere on a fresh clone. The generator: an alpine valley running
+  east-west through its **anchor** with a river on a flat bed (water from the cover raster, like the
+  real one), a road and a railway along the floor, villages with side streets and a church every
+  ~2.6 km, farms and alpine huts, forest to a wandering tree line, rock, scree, glacier, vineyards on
+  the sunny side, orchards; high massif far from the valley. All in the **ordinary formats**, served
+  through the ordinary `IChunkSource` seam under `CachingChunkSource`, so roads, traffic, trains,
+  doors, interiors, collision and gathering all work on it unchanged. Everything is a pure function
+  of LV95 position, so seams are bit-identical and the stride-10 grid equals the decimated full one.
+  Noise is sampled on a **world-anchored 5 m lattice** and interpolated: evaluated per vertex it cost
+  320 ms a tile; now ~30-40 ms, cover ~10 ms (classified from 10 m samples).
+  **Ownership**: a tile is real if it is in `ChunkManager._available` (manifest + anything merged),
+  generated if not real and inside the **fill domain** — the spawn tile's box and the real set's
+  bounding box, each grown by 40 tiles (`FallbackChunkSource.FillRadiusTiles`); it only grows.
+  `FallbackChunkSource` holds an immutable `Snapshot` (real set, domain, version) swapped by `SetReal`
+  and read lock-free; the rings ask `IsAvailable = _available || Covers`. `_available`,
+  `AvailableTiles` and `AvailableTileCount` stay **real only** — corridor surveys must never request
+  a generated tile over the network, and "does this client have a world of its own" means real.
+  **Anchor**: the generator is centred on `SpawnPoint.DefaultLv95E/N` (Riddes) on every peer and the
+  server, not on this run's spawn, so everyone generates the same world. The origin with no local
+  terrain is still this run's spawn point.
+  **The blend** (`ProceduralWorld.Blend`): `h = (1 − W)·G + W·R + D`, a convex mix, so blended ground
+  always lies between the generated and the real (see the trench gotcha). R is the real low-pass
+  carried outward: each real tile within 3 km (`Band`) contributes its **100 m knots** (the
+  `horizon.bin` lattice) at its nearest point, weighted by inverse distance — continuous where
+  nearest-edge extrusion jumps on the medial axis of a hole or a notch. Carried d metres, the knots
+  are read from a **pyramid** (`RealTile.Levels`: knots, then tent area-averages on 200 m / 500 m /
+  1 km lattices, then the mean) at a spacing of ~d/2, blended across levels by a smoothstep in
+  log-distance: the nearest point is constant along every line across the edge, so at one spacing
+  real relief was extruded as 3 km streaks. Every lattice is interpolated **Catmull-Rom** (C1, exact on
+  a node), not bilinear, whose slope break at each node became a 100 m crease carried across the
+  band. W = 1 − smoothstep(reach / 3 km), reach a **soft minimum** (150 m) of the distances with each
+  tile's term faded by its own distance — a hard minimum creased on the medial axis (an X across a
+  one-tile hole), an unfaded soft one jumped when a tile left the band. D, within 40 m
+  (`DetailBand`, which must stay under 100 m or horizon = grid breaks), continues the real surface
+  to first order from the edge neighbours' grids: residual `R − L0` plus the real slope across the
+  edge, the slope over 1 m on a full grid (10 m at a real corner, the only point two tiles share)
+  and faded out within the first 10 m (`SlopeFade`), so it is zero at every 10 m point. That makes the
+  seam **C1** (BlendCheck: kink 0.012 m against the ground's own 0.053 m) while a coarse tile stays
+  exactly the decimation of the full one. W and W·R live on a world-anchored **10 m lattice**, so
+  coarse tiles and the horizon read stored values; a generated vertex on a real edge **copies** the
+  real quantised height (bit-identical seam; the mix alone is within 11 cm, the 10 m lattice's
+  interpolation of a cubic). Rivers are not drawn where the blend tilts the bed past 1.5%.
+  `FallbackChunkSource.BlendFor(tile, full)` loads the real neighbours through the cache above it
+  (`Neighbours`), shared per tile and LRU 24; full grids only for the four edge neighbours of a
+  full-resolution tile, coarse otherwise; knots from `horizon.bin` when loaded, else extracted from
+  the coarse grid — the same bits. Cover uses the coarse blend (identical at the 10 m points it
+  reads), so far tiles never read a real full grid.
+  **Merging real tiles** (`ChunkManager.MergeAvailableTiles`): `SetReal`, then the new ids and every
+  generated tile within 4 of them are **unloaded** (not rebuilt in place: a commit whose roads,
+  buildings or trees are null leaves the old ones standing), dropped from the cache
+  (`CachingChunkSource.Invalidate(predicate)`, which bumps the epoch so a straddling fetch is not
+  cached), the horizon reloads, and `TerrainReplaced(affected)` fires — `ClientWorld` re-places the
+  player only if their own tile is affected. 87 tiles merge in 6 ms. `ResetAll(moveOrigin)` throws
+  everything away for a rebase (`ClientTerrainSync.Adopt`, when the client has no real tiles).
+  **Horizon**: `FallbackChunkSource.LoadHorizonAsync` merges the real index with generated samples for
+  the domain + 60 tiles (knots-only blend near real ground; unblended samples cached across reloads):
+  45k tiles in ~0.2 s. `HorizonLayer.Reload` queues a re-run asked for mid-load and keeps old blocks
+  drawn until their replacements commit, since every merge reloads it.
+  **Server**: `ServerWorld` runs the same source (and a cache), so its grid-only `ChunkManager`, the
+  interiors and loot see generated ground and houses; its status line prints the ground under each
+  player and whether it is generated. `--generated-world` starts a server with no terrain at all
+  (origin at the anchor, served as `ChunkStreamer.ManifestOverride`); without it an empty server
+  still refuses to start. **Off switch**: Settings → World → Generated terrain
+  (`GameSettings.GeneratedFill`, live via `ChunkManager.SetFallbackEnabled`), `--generated off` for
+  one run (also on a server). A faint "generated terrain" note (`Core/GeneratedTerrainNote`) shows
+  while the camera is over generated ground — a note, not a tint, since the blend exists so the
+  border cannot be seen. Cost: a blended full tile ~46 ms against ~24 ms plain. `--fly` across a
+  border at 150 m/s (992 tiles, 16 workers): 4 of 7 runs had no frame over 33 ms, the others one
+  each (33, 50, 62 ms), which the perf log files as "other" — no slow commit, GC or GPU frame
+  behind them; over purely generated ground, 0 in 2 runs. Suspected: blend maths on every core
+  starving the main thread. **Open.** Check: `dotnet run --project tools/BlendCheck -c
+  Release` (see Commands).
+- **Blend two terrains with a convex mix, never an additive correction.** The first blend was
+  `G + (Rs − Gs)`: keep the generator's relief, shift it to meet the real low-pass. Every synthetic
+  check passed — seams, resolutions, slope bound — and it still dug a **trench 150 m below the Rhône**
+  on real tiles at Riddes, found only because a `--ride bike` dropped from 539 m to 324 m. Where a
+  steep generated flank meets a real valley floor, the flank's fall away from the seam is kept at
+  full size, so the ground drops below both surfaces. `(1 − W)·G + W·R` always lies between them.
+  `tools/BlendCheck` now checks exactly that ("blended ground past both surfaces"), and the lesson
+  generalises: test a terrain blend on the worst mismatch, a steep generated slope meeting flat real
+  ground, not on offset copies of similar ground.
+- **Judge a terrain blend by shaded relief, and measure what the eye finds.** Every seam, resolution
+  and slope check passed while hillshades showed streaks, a comb along the edges and creases. Each
+  became a number in `tools/BlendCheck` (seam kink, streak RMS against the ground's own relief along
+  lines parallel to an edge) and `--render` writes the before/after hillshades to
+  `test_output/blend/`. Two traps in the measures themselves: a moving-average high-pass lets km-scale
+  relief through and reads it as streaks (use a local quadratic fit), and continuing a steep 1 m
+  slope across the whole detail band extrapolates metres — keep a continued slope to one coarse
+  cell.
+- **A saved `maxConcurrentBuilds: 1` makes the loader look broken.** A test run that loads one tile
+  at a time (3.8/s) shows a world full of holes that reads like a streaming bug. Check
+  `user://settings.json` first, or pass `--builds 0` (auto) to probes.
 - **A tile worker must not create a Godot object after the engine starts tearing down.** Workers
   make `ArrayMesh`/`MultiMesh` themselves, and one that did so during quit was `Fatal error.
   0xC0000005` in `ArrayMesh..ctor` — the process died on exit. It only showed once something was
-  always building at quit, which the generated fallback world is (3 of 3 fly probes crashed).
+  always building at quit, which a generated world is (3 of 3 fly probes crashed).
   `ChunkManager._ExitTree` cancels every build and waits up to 3 s for `_buildsInFlight` to reach
   0, and every worker checks its token right before each Godot call; either alone leaves a race.
   Related: `ClientTerrainSync` continues on the thread pool, so anything it raises that touches UI
