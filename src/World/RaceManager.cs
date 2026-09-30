@@ -833,6 +833,7 @@ public partial class RaceManager : Node
         _pilot = me.Vehicle is Car car ? new AutoPilot(r.Course.Route!, me, car.Spec) : AutoPilot.For(r.Course.Route!, me);
         if (_pilot == null) { GD.Print($"[race] #{r.RaceId} no autopilot for {me.Ride} yet"); return; }
         var pilot = _pilot;
+        pilot.Log = s => GD.Print($"[race] #{r.RaceId} {s}");
         me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, Others(me));
     }
 
@@ -844,7 +845,7 @@ public partial class RaceManager : Node
                 // every player, whatever race they are in: a race does not suspend the road.
                 // WorldVelocity, because a remote's Velocity is always zero — a pilot reading it
                 // took every other car on the road for a parked one
-                yield return new AutoPilot.Other(p.GlobalPosition, p.WorldVelocity.Length(), false);
+                yield return new AutoPilot.Other(p.GlobalPosition, p.WorldVelocity, false);
     }
 
     private void ShowHud(string? text)

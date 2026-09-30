@@ -2064,6 +2064,17 @@ public partial class FootPlayer : CharacterBody3D
             1f - Mathf.Exp(-3f * dt));
     }
 
+    /// <summary>The slipstream this vehicle rode last step, 0..<see cref="RideGround.MaxDraft"/>.</summary>
+    public float Draft { get; private set; }
+
+    /// <summary>Every other player on something, where it is and how it moves (a remote's replicated velocity).</summary>
+    private IEnumerable<(Vector3, Vector3)> OtherVehicles()
+    {
+        foreach (var node in GetTree().GetNodesInGroup(Group))
+            if (node is FootPlayer p && p != this && p.Ride != RideKind.OnFoot)
+                yield return (p.GlobalPosition, p.WorldVelocity);
+    }
+
     private void RidePhysics(float dt, bool onFloor)
     {
         // Triggers are analog, and the vehicles already take 0..1: half a trigger is half the
@@ -2118,7 +2129,10 @@ public partial class FootPlayer : CharacterBody3D
         // a motorbike's grip depends on what is under it (cached lookup: road, else cover)
         var surface = _ride is Motorbike && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
-        _ride!.Step(input, new RideGround(onFloor, grade, surface), dt, ref _motion);
+        // a tow behind another vehicle: less air to push (cars and motorbikes read it)
+        Draft = onFloor && _ride is Car or Motorbike && _motion.Speed > 10f
+            ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
+        _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
         // Game profile only; in Sim the watts are the rider's, and nothing else may add to them.

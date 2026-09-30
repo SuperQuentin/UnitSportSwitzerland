@@ -9,7 +9,9 @@
 #                             and must be refused (already racing)
 # Defaults: ground at the Col du Mollendruz over 1500 m; air from Mont-la-Ville to Montricher.
 # Each client gets its own --cache (a loopback run leaves the server manifest in the cache).
+# CHUNKS=<dir> passes --chunks <dir> to every process (a worktree has no terrain_chunks of its own).
 set -u
+CHUNKARGS=(); [ -n "${CHUNKS:-}" ] && CHUNKARGS=(--chunks "$CHUNKS")
 CLASS=${1:-car}
 OUT=test_output
 PORT=$((7790 + RANDOM % 100))
@@ -23,7 +25,7 @@ trap cleanup EXIT
 client() {   # client <log> <args...>
     local log=$1; shift
     local cache; cache=$(mktemp -d); CACHES+=("$cache")
-    timeout 400 godot --headless --path . -- --connect 127.0.0.1:$PORT --cache "$cache" --traffic 0 --raceauto "$@" \
+    timeout 400 godot --headless --path . -- "${CHUNKARGS[@]}" --connect 127.0.0.1:$PORT --cache "$cache" --traffic 0 --raceauto "$@" \
         > "$OUT/$log" 2>&1 &
     PIDS+=($!)
 }
@@ -49,7 +51,7 @@ case "$CLASS" in
     *) echo "unknown class $CLASS"; exit 2 ;;
 esac
 
-timeout 420 godot --headless --path . -- --server --port $PORT > $OUT/racecheck_server.log 2>&1 &
+timeout 420 godot --headless --path . -- "${CHUNKARGS[@]}" --server --port $PORT > $OUT/racecheck_server.log 2>&1 &
 PIDS+=($!)
 sleep 6
 

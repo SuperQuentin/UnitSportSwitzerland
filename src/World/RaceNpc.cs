@@ -61,6 +61,11 @@ public partial class RaceNpc : Node
         if (_route == null || _pilot != null || (_goIn -= delta) > 0) return;
         _pilot = AutoPilot.For(_route, _me);   // null until it is on its mount: tried again next step
         if (_pilot is not { } pilot) return;
+        // its own driver, the same every race: skill 0.8..1, aggression 0..1, from its id
+        var rng = new System.Random((int)(-Id % int.MaxValue));
+        pilot.Temperament(0.8f + 0.2f * (float)rng.NextDouble(), (float)rng.NextDouble(), (int)(-Id % int.MaxValue));
+        pilot.Log = s => GD.Print($"[npc] {_me.Name}: {s}");
+        GD.Print($"[npc] {_me.Name} drives, skill {pilot.Skill:F2} aggression {pilot.Aggression:F2}");
         _me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, RaceManager.Others(_me));
     }
 

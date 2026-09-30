@@ -417,7 +417,7 @@ public sealed class Car : Rideable, IEngined
             }
 
             // --- resistances and gravity along the grade ---
-            float drag = 0.5f * AirDensity * s.DragArea * u * Mathf.Abs(u);
+            float drag = 0.5f * AirDensity * s.DragArea * u * Mathf.Abs(u) * (1f - ground.Draft);
             float roll = RollingResistance * m * Gravity * sign;
             float cos = Mathf.Cos(delta), sin = Mathf.Sin(delta);
 
