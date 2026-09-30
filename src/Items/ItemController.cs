@@ -34,6 +34,14 @@ public partial class ItemController : Node
     private bool _forceAim;
     private bool _wasKnockedOut;
 
+    // camera zoom: 35 mm-equivalent focal length, kept across aims; wheel / D-pad change it while aiming
+    private const float FocalMin = 24f, FocalMax = 200f, ZoomStep = 1.12f;
+    private float _focalMm = 35f;
+    private bool _aimingPhoto;
+
+    /// <summary>Vertical FOV in degrees of a 35 mm-equivalent focal length (35 mm is about 38 degrees).</summary>
+    public static float FovFromFocal(float mm) => Mathf.RadToDeg(2f * Mathf.Atan(12f / mm));
+
     /// <summary>Fires the held gun (a shell already taken); set by the bird hunt, <c>Birds.BirdLife</c>.</summary>
     public Action<FootPlayer>? Fire { get; set; }
 
@@ -68,6 +76,11 @@ public partial class ItemController : Node
         if (at >= 0 && at + 1 < args.Length && Enum.TryParse<ItemId>(args[at + 1], true, out var hold))
             for (int i = 0; i < Inventory.HotbarSize; i++)
                 if (_inventory[i].Id == hold) _inventory.Select(i);
+        int zi = Array.IndexOf(args, "--zoom");   // "--zoom <mm>" starts the camera at that focal length
+        if (zi >= 0 && zi + 1 < args.Length
+            && float.TryParse(args[zi + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var zmm))
+            _focalMm = Mathf.Clamp(zmm, FocalMin, FocalMax);
     }
 
     /// <summary>The player if items can be used right now: on foot, on screen, not in a menu.</summary>
@@ -115,12 +128,14 @@ public partial class ItemController : Node
 
         // everything pushed onto the player is re-asserted every frame, so letting go of Aim,
         // switching item or getting on a bike all fall back to normal without a special case
-        player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f, ItemUse.Photo => 38f, _ => 50f } : null;
+        _aimingPhoto = aiming && def!.Use == ItemUse.Photo;
+        _ui.PhotoFocalMm = _focalMm;
+        player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f, ItemUse.Photo => FovFromFocal(_focalMm), _ => 50f } : null;
         player.ScopeView = aiming;
         player.ItemAction = aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
-        player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => 0.5f, _ => 0.6f } : 1f;
-        // held items stay visible while aiming: they are raised to a pose. Only binoculars
-        // (overlay covers the view, once at the eyes) and a photo in the making hide them.
+        player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => 0.6f } : 1f;
+        // held items stay visible while aiming: they are raised to a pose. Binoculars and the
+        // camera hide once at the eye (you look through them: the overlay is the view).
         bool poseSettled = visual?.PoseSettled ?? true;
         if (visual != null)
         {
@@ -129,7 +144,7 @@ public partial class ItemController : Node
                 ItemUse.Shoot => ViewPose.Aim,
                 _ => ViewPose.Eye,
             });
-            visual.Suppressed = _capturing || (aiming && def!.Use == ItemUse.Optic && poseSettled);
+            visual.Suppressed = _capturing || (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
         }
 
         // the viewfinder / binocular overlay appears once the item has been raised
@@ -148,6 +163,15 @@ public partial class ItemController : Node
         if (e.IsActionPressed(PlayerInput.UseItem))
         {
             UseHeld(player);
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_aimingPhoto && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
+        {
+            // aiming the camera, the wheel / D-pad zoom instead of cycling the hotbar: wheel up = in
+            bool next = e.IsActionPressed(PlayerInput.NextItem);
+            bool pad = e is InputEventJoypadButton;
+            if (pad && next && _focalMm >= FocalMax - 0.5f) _focalMm = FocalMin;   // the pad has one key: wrap
+            else _focalMm = Mathf.Clamp(_focalMm * (next == pad ? ZoomStep : 1f / ZoomStep), FocalMin, FocalMax);
             GetViewport().SetInputAsHandled();
         }
         else if (e.IsActionPressed(PlayerInput.NextItem))

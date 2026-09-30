@@ -21,7 +21,13 @@ public readonly record struct VehicleState(
     long Owner = 0,
     string Name = "",
     bool Headlights = false,
-    bool RoofOpen = false)
+    bool RoofOpen = false,
+    // a car's garage parts (CarTuning bits) and which of its doors stand open (CarRig bits):
+    // they belong to this car, so they go wherever it goes — parked, claimed, a late joiner's spawn
+    long Tuning = 0,
+    byte DoorsOpen = 0,
+    // a car's preset (CarSetups id, #40): it belongs to this car too
+    int Setup = 0)
 {
     public Godot.Collections.Dictionary ToDict() => new()
     {
@@ -38,6 +44,9 @@ public readonly record struct VehicleState(
         ["name"] = Name,
         ["lights"] = Headlights,
         ["roof"] = RoofOpen,
+        ["tune"] = Tuning,
+        ["doors"] = DoorsOpen,
+        ["setup"] = Setup,
     };
 
     public static VehicleState FromDict(Godot.Collections.Dictionary d) => new(
@@ -53,7 +62,18 @@ public readonly record struct VehicleState(
         d["owner"].AsInt64(),
         d["name"].AsString(),
         d.TryGetValue("lights", out var lights) && lights.AsBool(),
-        d.TryGetValue("roof", out var roof) && roof.AsBool());
+        d.TryGetValue("roof", out var roof) && roof.AsBool(),
+        // from another peer: parts past their options read as Stock
+        CarTuning.Unpack(d.TryGetValue("tune", out var tune) ? tune.AsInt64() : 0).Pack(),
+        (byte)((d.TryGetValue("doors", out var doors) ? doors.AsInt32() : 0) & (15 | DriverDoorShuts)),
+        // from another peer: out of range reads as Stock
+        d.TryGetValue("setup", out var setup) ? CarSetups.Clamp(setup.AsInt32()) : 0);
+
+    /// <summary>
+    /// In <see cref="DoorsOpen"/> of a car just got out of: the driver's door is only open because
+    /// they got out, and shuts behind them (<see cref="VehicleBody"/>). Not a door.
+    /// </summary>
+    public const byte DriverDoorShuts = 16;
 
     public static double Now => Time.GetUnixTimeFromSystem();
 }

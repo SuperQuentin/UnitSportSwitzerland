@@ -24,7 +24,11 @@ public readonly record struct BuildingKey(int TileE, int TileN, int Index)
 /// Where a building's front door is, in tile-local metres (X east, Y altitude, Z south — the
 /// frame the building triangles and the chunk node share). <see cref="Outward"/> is horizontal.
 /// </summary>
-public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outward, float Width, float Height);
+public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outward, float Width, float Height)
+{
+    /// <summary>The building's kind, so door consumers (garage doors) need not keep the tile.</summary>
+    public BuildingKind Kind { get; init; }
+}
 
 /// <summary>
 /// A building's plan-view box and its door, derived from nothing but its wall triangles. The
@@ -101,7 +105,7 @@ public static class BuildingFootprint
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
         var doors = new DoorSpot[tile.Buildings.Count];
         for (int i = 0; i < doors.Length; i++)
-            doors[i] = Compute(tile, i, roadIndex, grid)?.Door ?? default;
+            doors[i] = (Compute(tile, i, roadIndex, grid)?.Door ?? default) with { Kind = tile.Buildings[i].Kind };
         return doors;
     }
 

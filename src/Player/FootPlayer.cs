@@ -116,6 +116,23 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     [Export] public int RideKindId { get; set; }
 
+    /// <summary>
+    /// The preset on the car being driven (<see cref="CarSetups"/> id; 0 = stock, and 0 for anything
+    /// but a car). Replicated beside <see cref="RideKindId"/>, whose meaning it depends on, and reset
+    /// with it in <see cref="ApplyRide"/>; <see cref="SetCarSetup"/> changes it.
+    /// </summary>
+    [Export] public int CarSetupId { get; set; }
+
+    /// <summary>
+    /// The garage parts on the car being driven (<see cref="CarTuning"/> bits; 0 = stock, and 0 for
+    /// anything but a car). Replicated beside <see cref="RideKindId"/>, whose meaning it depends on,
+    /// and reset with it in <see cref="ApplyRide"/>: a new car comes stock.
+    /// </summary>
+    [Export] public long TuningBits { get; set; }
+
+    /// <summary>The car's open doors (<see cref="Avatar.CarRig.DoorLeft"/>..), replicated so everyone sees them swing.</summary>
+    [Export] public byte DoorsOpen { get; set; }
+
     // --- held item (see src/Items) ---
     /// <summary>
     /// What is in the player's hand, as an <see cref="Items.ItemId"/>. Replicated for the same
@@ -283,7 +300,7 @@ public partial class FootPlayer : CharacterBody3D
             Rotation = new Vector3(0, Rotation.Y, 0);
             if (kind != RideKind.OnFoot)
             {
-                ApplyRide(kind, NetVel);
+                ApplyRide(kind, NetVel, TuningBits, CarSetupId);
                 if (_ride is { IsVehicle: true } machine) { EngineOn = true; VehicleHealth = machine.MaxHealth; }
             }
             else { _ride = null; Velocity = NetVel; }
@@ -362,6 +379,18 @@ public partial class FootPlayer : CharacterBody3D
     private float _slipCam;
     private Node3D? _visual;
     private RideKind _visualKind = RideKind.OnFoot;
+    private int _visualSetup;
+    private long _visualTuning;
+    /// <summary>Owner: seconds until every door open while getting in (the driver's, any left open) shuts.</summary>
+    private float _shutDriverIn;
+    /// <summary>Doors shut by themselves above this speed, m/s (20 km/h).</summary>
+    private const float DoorsShutSpeed = 20f / 3.6f;
+
+    /// <summary>
+    /// The garage's orbit of the chase camera round the car, radians from behind it, or null for the
+    /// normal chase view. Set by <see cref="Vehicles.GarageUi"/> while it is open.
+    /// </summary>
+    public float? ShowroomYaw { get; set; }
 
     /// <summary>The replicated pose properties, in one place for the synchronizer and <c>--synccheck</c>.</summary>
     public static readonly string[] PoseProperties = { ".:BodyPose", ".:PoseKind", ".:Anim" };
@@ -806,6 +835,9 @@ public partial class FootPlayer : CharacterBody3D
         // What you are riding travels with where you are. Without it a remote client sees a
         // figure sprinting down a descent at 60 km/h in a running pose.
         replication.AddProperty(".:RideKindId");
+        replication.AddProperty(".:CarSetupId");
+        replication.AddProperty(".:TuningBits");
+        replication.AddProperty(".:DoorsOpen");
         replication.AddProperty(".:HeldItemId");
         replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
@@ -818,7 +850,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -923,7 +955,7 @@ public partial class FootPlayer : CharacterBody3D
             Terrain?.AddAnchor(this, collision: true);
             SetProcessUnhandledInput(false);
             // spawned here after a handoff (#50): the spawn state put the mount in RideKindId, not under the body
-            if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, NetVel);
+            if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, NetVel, TuningBits, CarSetupId);
         }
         else if (IsMultiplayerAuthority())
         {
@@ -989,13 +1021,16 @@ public partial class FootPlayer : CharacterBody3D
     private void RefreshVisual(bool force = false)
     {
         var kind = (RideKind)RideKindId;
-        if (!force && _visual != null && kind == _visualKind) return;
+        // a car is redrawn when its preset or garage parts change too (the garage's live preview, a remote tune)
+        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup) return;
 
         _visual?.QueueFree();
         _visual = null;
         _walker = null;
         HandLocal = null;
         _visualKind = kind;
+        _visualSetup = CarSetupId;
+        _visualTuning = TuningBits;
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
 
         // an NPC keeps its jersey whoever simulates it: the colours of the client that asked for it
@@ -1016,7 +1051,7 @@ public partial class FootPlayer : CharacterBody3D
         else
         {
             _walker = null;
-            _visual = (_ride ?? Rideable.Create(kind))?.BuildVisual(rider);
+            _visual = (_ride ?? CarSetups.Ride(kind, CarSetupId, TuningBits))?.BuildVisual(rider);
         }
 
         if (_visual != null)
@@ -1218,6 +1253,7 @@ public partial class FootPlayer : CharacterBody3D
         _visual.Transform = BodyPose;
         AlignHull();
         _remoteRide?.AnimateRemote(_visual, Anim, dt);
+        if (_visual is Avatar.CarRig rig) rig.DoorsOpen = DoorsOpen;
         SetRemoteEngine(_remoteRide as Flyer);
     }
 
@@ -1515,7 +1551,15 @@ public partial class FootPlayer : CharacterBody3D
         if (_sliding) EndSlide();
         GlobalPosition = state.Position;
         Rotation = new Vector3(0, state.Yaw, 0);
-        ApplyRide(state.Kind, state.Velocity);
+        // the same car: its preset, its garage parts and whatever doors were left open come with it; the
+        // driver's door opens to let them in, and once seated every door shuts (and stays shut:
+        // nobody drives with a door open, see TryToggleCarDoor)
+        ApplyRide(state.Kind, state.Velocity, state.Tuning, state.Setup);
+        if (_ride is Car)
+        {
+            DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor);
+            _shutDriverIn = 1f;
+        }
         _flight.Control = state.Throttle;
         EngineOn = true;
         VehicleHealth = state.Health;
@@ -1538,7 +1582,56 @@ public partial class FootPlayer : CharacterBody3D
         return new VehicleState((RideKind)RideKindId, GlobalPosition,
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
-            Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true });
+            Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
+            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId);
+    }
+
+    /// <summary>
+    /// Puts a preset (<see cref="CarSetups"/>) on the car being driven, at a standstill: the car is
+    /// rebuilt from the catalog with it, garage parts, lights and roof kept. False when not in a car or moving.
+    /// </summary>
+    public bool SetCarSetup(int id)
+    {
+        id = CarSetups.Clamp(id);
+        if (_ride is not Car old || CarCatalog.For(old.Kind) is null) return false;
+        if (id == CarSetupId) return true;
+        if (GroundSpeed > 2f) return false;
+        var car = (Car)CarSetups.Ride(old.Kind, id, TuningBits)!;   // the garage parts stay on
+        car.Headlights = old.Headlights;
+        car.RoofOpen = old.RoofOpen;
+        _ride = car;
+        CarSetupId = id;
+        RefreshVisual();
+        return true;
+    }
+
+    /// <summary>
+    /// The garage: puts these parts on the car being driven, at once (its live preview). The car is
+    /// rebuilt from the catalog with them — new tyres are new tyres, wear and all.
+    /// </summary>
+    public void SetTuning(CarTuning tuning)
+    {
+        if (_ride is not Car car || CarCatalog.For(car.Kind) is not { } stock) return;
+        _ride = new Car(CarSetups.For(CarSetupId).Apply(stock), tuning);   // over the preset (#40)
+        TuningBits = tuning.Pack();
+        RefreshVisual();
+    }
+
+    /// <summary>The garage parts on the car being driven; Stock when not in one.</summary>
+    public CarTuning Tuning => _ride is Car car ? car.Tuning : default;
+
+    /// <summary>
+    /// G / pad X: works a car door without getting in: on foot beside a parked car, the door nearest
+    /// you. Not from the seat — in a car the doors are shut. False when there is none in reach.
+    /// </summary>
+    public bool TryToggleCarDoor()
+    {
+        if (_ride != null || Indoors || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+            return false;
+        var (bit, distance) = rig.NearestDoor(GlobalPosition);
+        if (bit == 0 || distance > VehicleManager.DoorReach) return false;
+        Vehicles.ToggleDoor(vehicle, bit);
+        return true;
     }
 
     /// <summary>
@@ -1555,6 +1648,9 @@ public partial class FootPlayer : CharacterBody3D
         // clear of the whole machine — past the wing of a plane, not 2 m into it
         float side = Mathf.Max(vehicle.BodyRadius, vehicle.ParkedBox.Size.X * 0.5f) + BodyRadius + 0.5f;
         bool grounded = IsOnFloor();
+        // out of a car through the driver's door: it opens, and shuts behind (unless left open)
+        if (vehicle is Car && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
+            state = state with { DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor | VehicleState.DriverDoorShuts) };
 
         Vehicles?.Park(state);
 
@@ -1747,10 +1843,19 @@ public partial class FootPlayer : CharacterBody3D
     /// Switches what the player is travelling as, with no checks — <see cref="SetRide"/> does
     /// those for the picker; a base jump and a canopy opening call this directly mid-air.
     /// </summary>
-    private void ApplyRide(RideKind kind, Vector3 velocity)
+    /// <param name="tuning">Garage parts, for a car taken back from the world; 0 (stock) for a new one.</param>
+    /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
+    private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
-        _ride = Rideable.Create(kind);
+        _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         RideKindId = (int)kind;
+        // the parts and the doors belong to one car: changing car (the picker), getting out or a
+        // wreck leaves them with that car
+        TuningBits = _ride is Car car ? car.Tuning.Pack() : 0;
+        CarSetupId = _ride is Car withSetup ? withSetup.Spec.SetupId : 0;
+        DoorsOpen = 0;
+        _shutDriverIn = 0f;
+        ShowroomYaw = null;
         // The pose travels with the kind, and each kind reads Anim its own way: left as it was, the
         // next update would hand a bike its rider's stride phase as a crank angle (seen: 0.93 rad).
         Anim = default;
@@ -1816,6 +1921,13 @@ public partial class FootPlayer : CharacterBody3D
         {
             EngineOn = !EngineOn;
             EngineToggled?.Invoke(EngineOn);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // not consumed when there is no door: G held is also gathering
+        if (@event.IsActionPressed(PlayerInput.CarDoor) && !@event.IsEcho() && TryToggleCarDoor())
+        {
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -2485,13 +2597,22 @@ public partial class FootPlayer : CharacterBody3D
             ? -(heading.X * normal.X + heading.Z * normal.Z) / Mathf.Max(normal.Y, 0.15f)
             : 0f;
 
-        // a motorbike's grip depends on what is under it (cached lookup: road, else cover)
-        var surface = _ride is Motorbike && Terrain != null
+        // a motorbike's or a car's grip depends on what is under it (cached lookup: road, else cover).
+        // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
+        // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
+        var surface = (_ride is Motorbike || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
         _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
+        if (_ride is Car)
+        {
+            // doors: once seated every door shuts, sooner if the car pulls away before then
+            if (_shutDriverIn > 0f && ((_shutDriverIn -= dt) <= 0f || _motion.Speed > DoorsShutSpeed))
+                _shutDriverIn = 0f;
+            if (_shutDriverIn <= 0f) DoorsOpen = 0;
+        }
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
         // Game profile only; in Sim the watts are the rider's, and nothing else may add to them.
@@ -2665,6 +2786,7 @@ public partial class FootPlayer : CharacterBody3D
     private void PoseRideVisual()
     {
         if (_visual == null) return;
+        if (_visual is Avatar.CarRig rig) rig.DoorsOpen = DoorsOpen;
         // a bail lays the rider over on their side for as long as it lasts
         float roll = _bailTimer > 0 ? 1.35f : _motion.Lean;
         var basis = new Basis(Vector3.Up, _airSpin) * new Basis(Vector3.Right, _airPitch)
@@ -2683,7 +2805,7 @@ public partial class FootPlayer : CharacterBody3D
         // the free look springs back to centre, so letting go of the mouse puts the road ahead
         _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
 
-        if (!_thirdPerson)
+        if (!_thirdPerson && ShowroomYaw == null)
         {
             // From the rider's own eye, leaning with the machine: the eye point is in the
             // visual's frame, which rolls about Z by the lean, so it has to roll with it or the
@@ -2704,7 +2826,8 @@ public partial class FootPlayer : CharacterBody3D
         // road stays in view while the nose points at the inside verge. Not when reversing.
         float slip = Mathf.Wrap(_motion.Slip, -Mathf.Pi, Mathf.Pi);
         _slipCam = Mathf.Lerp(_slipCam, Mathf.Abs(slip) < 1.4f ? slip * _ride.ChaseFollowsTravel : 0f, 1f - Mathf.Exp(-4f * dt));
-        float orbit = _lookYaw + _turnLag + _slipCam;
+        // the garage walks the camera all the way round the car instead
+        float orbit = ShowroomYaw ?? _lookYaw + _turnLag + _slipCam;
 
         // both are local to the body, which is yaw-only, so the camera stays level
         var eye = new Vector3(0, _ride.EyeHeight, 0);

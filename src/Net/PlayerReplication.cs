@@ -44,8 +44,8 @@ public static class PlayerReplication
     /// <summary>The node name under <c>World/Players</c> of a player or an NPC entrant id.</summary>
     public static string NodeName(long id) => id < 0 ? $"npc_{NpcOwner(id)}_{-id % 1000}" : id.ToString();
 
-    public static Godot.Collections.Array NpcData(long owner, int n, int rideKind, Vector3 at, float yaw) =>
-        new() { owner, n, rideKind, at, yaw };
+    public static Godot.Collections.Array NpcData(long owner, int n, int rideKind, Vector3 at, float yaw, int setup = 0) =>
+        new() { owner, n, rideKind, at, yaw, setup };
 
     public static FootPlayer CreateNpc(Godot.Collections.Array d)
     {
@@ -60,7 +60,11 @@ public static class PlayerReplication
         };
         npc.SetMultiplayerAuthority((int)owner);
         // the driver: on every peer, active only on its current simulator (which can change, #50)
-        npc.AddChild(new World.RaceNpc { Name = World.RaceNpc.NodeName, Id = NpcId(owner, n), Kind = (RideKind)d[2].AsInt32() });
+        npc.AddChild(new World.RaceNpc
+        {
+            Name = World.RaceNpc.NodeName, Id = NpcId(owner, n), Kind = (RideKind)d[2].AsInt32(),
+            Setup = d.Count > 5 ? CarSetups.Clamp(d[5].AsInt32()) : 0,
+        });
         return npc;
     }
 }

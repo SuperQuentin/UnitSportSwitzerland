@@ -148,6 +148,30 @@ public partial class AvatarPreview : Node3D
             return;
         }
 
+        // "--carsetups [--car N] [--setups 0,3,2,4]": one car in several presets (#40), side by side
+        if (OS.GetCmdlineUserArgs().Contains("--carsetups"))
+        {
+            var args = OS.GetCmdlineUserArgs();
+            string? After(string flag) => Array.IndexOf(args, flag) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+            var car = Player.CarCatalog.All[int.TryParse(After("--car"), out int n) ? Mathf.Clamp(n, 0, Player.CarCatalog.All.Count - 1) : 0];
+            var setups = (After("--setups") ?? "0,3,2,4").Split(',').Select(w => Player.CarSetups.Parse(w) ?? Player.CarSetups.All[0]).ToArray();
+            for (int i = 0; i < setups.Length; i++)
+            {
+                var spec = setups[i].Apply(car);
+                var rig = CarRig.Create(spec.Body, spec.Wheelbase);
+                rig.Rotation = new Vector3(0, Mathf.Pi - (_viewDegrees == 90 ? 0.6f : Mathf.DegToRad(_viewDegrees)), 0);
+                Place((i - (setups.Length - 1) * 0.5f) * 3.6f, rig);
+                GD.Print($"[carsetups] {i + 1}. {car.Label} {setups[i].Name}: lift {spec.Body.Lift:F2} m, wheel {spec.Body.WheelRadius:F2} m, "
+                    + $"box {MeshBounds.Of(rig).Position} .. {MeshBounds.Of(rig).End}");
+            }
+            var carCam = new Camera3D { Position = new Vector3(0, 3.6f, 8f + 2.2f * setups.Length), Fov = 34 };
+            AddChild(carCam);
+            carCam.LookAt(new Vector3(0, 0.7f, 0), Vector3.Up);
+            carCam.Current = true;
+            _turntables.Clear();
+            return;
+        }
+
         if (!float.IsNaN(_stride))
         {
             const int steps = 6;
