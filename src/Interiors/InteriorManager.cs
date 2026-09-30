@@ -167,6 +167,7 @@ public partial class InteriorManager : Node3D
         _sounds = new BuildingSounds { Name = "Sounds" };
         AddChild(_sounds);
         AddChild(new DoorwayGhosts(() => _links.Values, PlanAt) { Name = "Ghosts" });
+        AddChild(new DoorLights(() => _links.Values) { Name = "DoorLights" });
     }
 
     public override void _ExitTree()

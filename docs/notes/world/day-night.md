@@ -19,3 +19,9 @@
   screen's camera (set each frame by `DayNight`) and each portal camera (`DoorPortals.Aim`), so a
   player seen through an open door from the street is room-lit and one seen out of a door from
   inside is night-lit.
+- **Open doors light the street at night** (`Interiors/DoorLights`): the four open doors nearest
+  the camera each get a lamp just inside the doorway, behind the facade's plane, scaled by swing ×
+  night. World shaders add `door_light(world_pos, n)` to `world_tint` (`door_light.gdshaderinc`,
+  globals `world_door_light_0..3`: xyz lamp, w strength), lighting only what faces the lamp: the
+  step, the ground in front, the jambs, not the facade beside the door. Avatars get the same light
+  from a real `OmniLight3D` per slot (7 m reach), so stepping out of a lit room fades into the dark.
