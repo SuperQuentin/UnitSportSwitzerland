@@ -33,6 +33,53 @@ public partial class Runner : Node3D
     private ChunkManager _chunks = null!;
     private MeshInstance3D? _body;
     private UnitSport.Avatar.Cyclist? _cyclist;
+    private UnitSport.Avatar.CarRig? _car;
+    private UnitSport.Avatar.HumanMeshBuilder.GaitMounts _carMounts;
+
+    /// <summary>
+    /// A car's own camera points, in the node frame (facing −Z, right is +X): the cinema's "eye"
+    /// is a bonnet camera just ahead of the windscreen, "head" the roof, "shoulders" the mirrors and
+    /// "feet" the outside of the front wheels. A rider's mounts put a helmet camera inside the roof
+    /// and an ankle camera in the tyre.
+    /// </summary>
+    /// <summary>
+    /// Moves a camera out of the car's body, if it is in it: the shots frame a runner, and "1.7 m
+    /// behind along the direction of travel" is inside a 4.2 m car drifting at 30°. Two boxes in the
+    /// car's own frame — the body to bonnet height, and the cabin to the roof — so the bonnet camera
+    /// over the hood stays where it is. Pushed out through the nearest side. A runner has no body
+    /// to keep out of; the point is returned untouched.
+    /// </summary>
+    public Vector3 KeepOutside(Vector3 world)
+    {
+        if (_car == null || CarCatalog.For(Track.Kind) is not { } car) return world;
+        var b = car.Body;
+        var frame = Avatar.GlobalTransform;
+        var p = frame.AffineInverse() * world;
+        const float Margin = 0.3f;
+        float hw = b.Width * 0.5f + Margin, hl = b.Length * 0.5f + Margin;
+        // cabin: from the windscreen base (a fifth of the length ahead of centre) to the tail
+        bool inBody = Mathf.Abs(p.X) < hw && Mathf.Abs(p.Z) < hl && p.Y < b.Height * 0.62f + Margin;
+        bool inCabin = Mathf.Abs(p.X) < hw && p.Z > -b.Length * 0.2f && p.Z < hl && p.Y < b.Height + Margin;
+        if (!inBody && !inCabin) return world;
+        // out through whichever side is nearest: left, right, front, back or over the roof
+        float toSide = hw - Mathf.Abs(p.X), toEnd = hl - Mathf.Abs(p.Z), toTop = b.Height + Margin - p.Y;
+        if (toSide <= toEnd && toSide <= toTop) p.X = Mathf.Sign(p.X == 0 ? 1 : p.X) * hw;
+        else if (toEnd <= toTop) p.Z = Mathf.Sign(p.Z == 0 ? 1 : p.Z) * hl;
+        else p.Y = b.Height + Margin;
+        return frame * p;
+    }
+
+    private static UnitSport.Avatar.HumanMeshBuilder.GaitMounts CarMounts(CarSpec car)
+    {
+        var b = car.Body;
+        float hw = b.Width * 0.5f, h = b.Height, l = b.Length;
+        var eye = new Vector3(0, h * 0.62f + 0.3f, -l * 0.2f);
+        var mirrorL = new Vector3(-hw - 0.1f, h * 0.65f, -l * 0.12f);
+        var mirrorR = mirrorL with { X = hw + 0.1f };
+        var wheelL = new Vector3(-hw - 0.35f, 0.35f, -car.Wheelbase * 0.5f);
+        return new(eye, new Vector3(0, h + 0.1f, 0.1f), new Vector3(0, h * 0.5f, 0), new Vector3(0, 0.5f, 0),
+            mirrorL, mirrorR, wheelL, wheelL with { X = -wheelL.X }, 0f, mirrorL, mirrorR);
+    }
     private UnitSport.Avatar.HumanPalette _palette = null!;
     private float _stridePhase;
     private Vector3 _smoothPos;
@@ -128,7 +175,14 @@ public partial class Runner : Node3D
         Avatar = new Node3D { Name = "Avatar" };
         AddChild(Avatar);
 
-        if (Track.Kind == RideKind.RoadBike)
+        if (CarCatalog.For(Track.Kind) is { } car)
+        {
+            // a car recorded by the drive check: the same rig the player drives
+            _car = UnitSport.Avatar.CarRig.Create(car.Body, car.Wheelbase);
+            _carMounts = CarMounts(car);
+            Avatar.AddChild(_car);
+        }
+        else if (Track.Kind == RideKind.RoadBike)
         {
             // The bike already exists — this is the same rig the player mounts with E, not a
             // second one built for GPX. A ghost recorded on a ride should look ridden, the same
@@ -156,6 +210,19 @@ public partial class Runner : Node3D
     }
 
     public override void _ExitTree() => _chunks.RemoveAnchor(Avatar);
+
+    /// <summary>
+    /// Where the course is at a race time, in world space, for cameras that plan ahead of the
+    /// subject (a drone cutting the corner it is about to take). Unsmoothed, unlike the avatar.
+    /// </summary>
+    public Vector3 CourseAt(double raceTime)
+    {
+        var course = Active;
+        var (e, n, ele, _, _) = course.Sample(raceTime);
+        var p = _origin.ToWorld(e, n, ele);
+        if (!course.ElevationIsSurface && _chunks.TryGetHeight(p, out float g)) p.Y = g;
+        return p;
+    }
 
     /// <summary>Places the avatar for the shared race time.</summary>
     public void UpdateTo(double raceTime, double clockSpeed, double delta)
@@ -227,9 +294,23 @@ public partial class Runner : Node3D
 
         // basis built by hand: LookAt raises a Godot error on degenerate input, and an
         // error from a C# callback can bring the runtime down
-        Avatar.GlobalTransform = new Transform3D(SafeBasis(Heading), pos);
+        // Heading stays the direction of TRAVEL (the cameras frame that); a car's body turns to the
+        // recorded yaw instead, which is where its nose pointed — sideways through a drift
+        var basis = SafeBasis(Heading);
+        if (_car != null && course.SampleYaw(raceTime) is { } yaw)
+        {
+            basis = new Basis(Vector3.Up, yaw);
+            float travelYaw = Mathf.Atan2(-Heading.X, -Heading.Z);
+            // counter-steer: the fronts point down the direction of travel, as far as the lock allows
+            _car.SteerAngle = Mathf.Clamp(Mathf.Wrap(travelYaw - yaw, -Mathf.Pi, Mathf.Pi), -0.6f, 0.6f);
+        }
+        Avatar.GlobalTransform = new Transform3D(basis, pos);
 
-        if (_cyclist != null)
+        if (_car != null)
+        {
+            if (delta > 0) _car.WheelSpin += (float)(Speed / 0.3 * delta * clockSpeed);
+        }
+        else if (_cyclist != null)
         {
             // Same formula Bicycle.cs drives the player's own cadence from: watts don't exist for
             // a recording, but speed does, and cadence is what makes the legs agree with it.
@@ -272,7 +353,8 @@ public partial class Runner : Node3D
         // A cyclist does not have a gait phase to mount from - the pose is fixed, the legs just
         // turn a crank around it - so this reads the same joint table the mesh itself is built
         // from (HumanPose.Cycling) rather than a running gait sampled with a meaningless speed.
-        var mounts = _cyclist != null
+        var mounts = _car != null ? _carMounts
+            : _cyclist != null
             ? UnitSport.Avatar.HumanMeshBuilder.MountsForPose(UnitSport.Avatar.HumanPose.Cycling)
             : UnitSport.Avatar.HumanMeshBuilder.MountsFor((float)Speed, _stridePhase);
         var frame = Avatar.GlobalTransform;

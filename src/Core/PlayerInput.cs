@@ -56,6 +56,8 @@ public partial class PlayerInput : Node
     public const string Trick = "trick";
     public const string LookBehind = "look_behind";
     public const string Boost = "boost";
+    /// <summary>Guns, in an armed craft (plane, helicopter): <see cref="Combat.CombatManager"/>.</summary>
+    public const string Fire = "fire";
 
     // --- free-fly camera ---
     public const string FlyUp = "fly_up";
@@ -79,6 +81,8 @@ public partial class PlayerInput : Node
     public const string QuickWheel = "quick_wheel";
     public const string NextItem = "next_item";
     public const string PrevItem = "prev_item";
+    /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
+    public const string BirdJournal = "bird_journal";
 
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;
@@ -214,6 +218,9 @@ public partial class PlayerInput : Node
         Bind(Trick, Keys(Key.F), Button(JoyButton.RightShoulder));
         Bind(LookBehind, Keys(Key.B));
         Bind(Boost, Keys(Key.Q), Button(JoyButton.LeftShoulder));
+        // Flying, the mouse button and RB mean nothing else: items are on foot only, and tricks
+        // and boost belong to the ground mounts.
+        Bind(Fire, Mouse(MouseButton.Left), Button(JoyButton.RightShoulder));
 
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));
@@ -239,6 +246,7 @@ public partial class PlayerInput : Node
         Bind(Gather, Keys(Key.G), Button(JoyButton.X));
         Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
         Bind(PrevItem, Mouse(MouseButton.WheelUp));
+        Bind(BirdJournal, Keys(Key.J));
 
         // Godot's built-in UI actions map the D-pad but not the face buttons, so a pad could
         // walk a menu's focus and never press anything. A confirms and B backs out, as on

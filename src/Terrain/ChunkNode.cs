@@ -121,9 +121,12 @@ public partial class ChunkNode : Node3D
         Swap(_buildingInstance, mesh);
     }
 
+    /// <summary>The buildings' collision shape — one place, so <c>--hitboxcheck</c> tests exactly what the world gets.</summary>
+    public static ConcavePolygonShape3D BuildingShape(Vector3[] faces) => new() { Data = faces };
+
     public void SetBuildingCollision(Vector3[] faces)
     {
-        var shape = new ConcavePolygonShape3D { Data = faces };
+        var shape = BuildingShape(faces);
         if (_buildingBody == null)
         {
             _buildingBody = new StaticBody3D { Name = "BuildingBody" };

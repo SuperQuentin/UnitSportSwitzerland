@@ -34,6 +34,9 @@ public static class GpxParser
     public static GpxTrack Parse(string path)
     {
         var lats = new List<double>();
+        // the nose's yaw per fix, when the recorder wrote one (drivecheck does): NaN otherwise
+        var yaws = new List<float>();
+        bool exact = false;
         var lons = new List<double>();
         var eles = new List<double>();
         var times = new List<DateTime?>();
@@ -60,6 +63,14 @@ public static class GpxParser
 
                 switch (reader.LocalName)
                 {
+                    // A track this game recorded (drivecheck) has no GPS noise: its fixes are the
+                    // simulated car's own positions, and smoothing them only cuts the corners,
+                    // putting the replay off the road the car actually stayed on.
+                    case "gpx":
+                        exact = reader.GetAttribute("creator")?.Contains("UnitSportSwitzerland") == true;
+                        reader.Read();
+                        break;
+
                     case "trk":
                     case "rte":
                         inTrack = true;
@@ -83,6 +94,7 @@ public static class GpxParser
                         inPoint = lat != null && lon != null;
                         if (inPoint)
                         {
+                            yaws.Add(float.NaN);
                             lats.Add(double.Parse(lat!, CultureInfo.InvariantCulture));
                             lons.Add(double.Parse(lon!, CultureInfo.InvariantCulture));
                         }
@@ -94,6 +106,12 @@ public static class GpxParser
                         if (double.TryParse(reader.ReadElementContentAsString(),
                                 NumberStyles.Float, CultureInfo.InvariantCulture, out double ev))
                             pendingEle = ev;
+                        break;
+
+                    case "yaw" when inPoint:
+                        if (float.TryParse(reader.ReadElementContentAsString(),
+                                NumberStyles.Float, CultureInfo.InvariantCulture, out float yv))
+                            yaws[^1] = yv;
                         break;
 
                     case "time" when inPoint:
@@ -115,7 +133,8 @@ public static class GpxParser
         if (lats.Count == 0)
             throw new InvalidDataException("No track or route points found in the GPX file");
 
-        return Build(Path.GetFileNameWithoutExtension(path), lats, lons, eles, times, ParseKind(activityType));
+        var track = Build(Path.GetFileNameWithoutExtension(path), lats, lons, eles, times, ParseKind(activityType), smooth: !exact);
+        return yaws.Any(y => !float.IsNaN(y)) ? track.WithYaw(yaws) : track;
     }
 
     /// <summary>
@@ -129,6 +148,9 @@ public static class GpxParser
     {
         if (string.IsNullOrEmpty(type)) return RideKind.OnFoot;
         string t = type.ToLowerInvariant();
+        // "car:N" — CarCatalog.All[N], as the drive check records it
+        if (t.StartsWith("car:") && int.TryParse(t[4..], out int car)
+            && CarCatalog.For((RideKind)(CarCatalog.First + car)) is { } spec) return spec.Kind;
         if (t.Contains("cycl") || t.Contains("bik") || t == "1") return RideKind.RoadBike;
         return RideKind.OnFoot;
     }
@@ -189,7 +211,7 @@ public static class GpxParser
     }
 
     private static GpxTrack Build(string name, List<double> lats, List<double> lons,
-        List<double> eles, List<DateTime?> times, RideKind kind)
+        List<double> eles, List<DateTime?> times, RideKind kind, bool smooth = true)
     {
         int n = lats.Count;
         var points = new List<TrackPoint>(n);
@@ -231,7 +253,7 @@ public static class GpxParser
             points.Add(new TrackPoint(e, nn, double.IsNaN(ele) ? 0 : ele, seconds, distance));
         }
 
-        Smooth(points);
+        if (smooth) Smooth(points);
 
         // recorded time can stall or jump backwards; force it to advance so binary search
         // over the timeline stays valid

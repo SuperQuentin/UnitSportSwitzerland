@@ -12,6 +12,9 @@ public enum CameraMode
 
     /// <summary>Absolute Cinema: a director cuts between shots on its own.</summary>
     Cinema = 4,
+
+    /// <summary>Absolute Racing: the director with the car-battle shots (low, tilted, the chaser in frame).</summary>
+    Racing = 5,
 }
 
 /// <summary>
@@ -92,13 +95,24 @@ public partial class PlaybackCamera : Camera3D
     /// </summary>
     public void SetCinemaPlan(IReadOnlyList<Cinema.CinemaEvent> events, ulong seed)
     {
-        _director ??= NewDirector();
+        // kept, so a director made later (switching Cinema <-> Racing) starts from the same plan
+        _events = events;
+        _seed = seed;
+        _director ??= NewDirector(Mode == CameraMode.Racing);
         _director.Prepare(events, seed);
     }
 
-    private Cinema.Director NewDirector()
+    private IReadOnlyList<Cinema.CinemaEvent> _events = System.Array.Empty<Cinema.CinemaEvent>();
+    private ulong _seed;
+
+    private bool _directorIsRacing;
+
+    private Cinema.Director NewDirector(bool racing = false)
     {
-        var d = new Cinema.Director { Pacing = _pacing };
+        _directorIsRacing = racing;
+        var d = racing ? Cinema.Director.ForRacing() : new Cinema.Director();
+        d.Pacing = _pacing;
+        if (_events.Count > 0) d.Prepare(_events, _seed);
         d.SetForced(_forcedShot);
         return d;
     }
@@ -118,7 +132,7 @@ public partial class PlaybackCamera : Camera3D
 
     public void CycleMode()
     {
-        Mode = (CameraMode)(((int)Mode + 1) % 5);
+        Mode = (CameraMode)(((int)Mode + 1) % 6);
         ModeChanged?.Invoke();
         if (Mode == CameraMode.Cinematic) _sinceAnchorPick = double.MaxValue;
     }
@@ -158,7 +172,7 @@ public partial class PlaybackCamera : Camera3D
 
         // Cinema's shots each set their own FOV through ShotContext.Place; the hand-driven modes
         // have none, so the lens is applied to the base angle here instead.
-        if (Mode != CameraMode.Cinema) Fov = 70f * LensProfile.Current.FovBias;
+        if (Mode is not (CameraMode.Cinema or CameraMode.Racing)) Fov = 70f * LensProfile.Current.FovBias;
 
         switch (Mode)
         {
@@ -195,8 +209,12 @@ public partial class PlaybackCamera : Camera3D
             }
 
             case CameraMode.Cinema:
+            case CameraMode.Racing:
             {
-                _director ??= NewDirector();
+                bool racing = Mode == CameraMode.Racing;
+                if (racing && !_directorIsRacing) _director = null;
+                if (!racing && _directorIsRacing) _director = null;
+                _director ??= NewDirector(racing);
                 _shotContext ??= new Cinema.ShotContext
                 {
                     Runner = focused, Camera = this, Chunks = _chunks,
@@ -211,6 +229,9 @@ public partial class PlaybackCamera : Camera3D
                         Rng = _shotContext.Rng,
                     };
 
+                // the nearest other car or runner, for the battle shots
+                _shotContext.Rival = _race.Runners.Where(r => r != focused && r.Avatar != null)
+                    .OrderBy(r => r.Avatar.GlobalPosition.DistanceSquaredTo(target)).FirstOrDefault();
                 _shotContext.Time = _race.Time;
                 _shotContext.Dt = dt;
                 _shotContext.ClockSpeed = (float)_race.Speed;
@@ -255,7 +276,8 @@ public partial class PlaybackCamera : Camera3D
         // problem - the runner is somewhere on screen (or off it) too small to find.
         _bubble ??= ZoomBubble.Create(_chunks);
         if (_bubble.GetParent() == null) GetParent()?.AddChild(_bubble);
-        _bubble.Enabled = _bubbleEnabled;
+        // the racing drones never let the car get small, and the inset only covers the picture there
+        _bubble.Enabled = _bubbleEnabled && Mode != CameraMode.Racing;
 
         // A cut (a new Cinema shot, a camera-mode change, following another runner) has already
         // moved the camera this frame, so hide the bubble before it is drawn from the new view -

@@ -113,6 +113,10 @@ public sealed class GameSettings
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public RideProfile RideProfile { get; set; } = RideProfile.Game;
+    /// <summary>Cars' tyres wear with the sliding they do and lose grip (off by default).</summary>
+    public bool TyreWear { get; set; }
+    /// <summary>Cars' brakes heat up and fade, and their pads wear (off by default).</summary>
+    public bool BrakeWear { get; set; }
 
     // --- world ---
     /// <summary>Real minutes for a whole day; 0 stops the clock at <see cref="StartHour"/>.</summary>
@@ -131,7 +135,7 @@ public sealed class GameSettings
 
     // --- feel ---
     /// <summary>Sound effects volume, 0..1.</summary>
-    public float SfxVolume { get; set; } = 0.8f;
+    public float SfxVolume { get; set; } = 0.5f;
     /// <summary>Ambience volume, 0..1.</summary>
     public float AmbienceVolume { get; set; } = 0.7f;
 
@@ -249,6 +253,8 @@ public sealed class GameSettings
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
+                case "--tyrewear": TyreWear = v is "on" or "1" or "true"; break;
+                case "--brakewear": BrakeWear = v is "on" or "1" or "true"; break;
                 case "--voice":
                     EngineVoice = v.ToLowerInvariant() switch
                     {

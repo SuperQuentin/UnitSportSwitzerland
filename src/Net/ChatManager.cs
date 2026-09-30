@@ -198,6 +198,12 @@ public partial class ChatManager : Node
 
     // ---- commands ---------------------------------------------------------------------
 
+    /// <summary>A player's display name, for the other server-side systems (races).</summary>
+    public string NameOfPeer(long peerId) => NameOf(peerId);
+
+    /// <summary>Car races (<c>/race</c>), wired by ServerWorld.</summary>
+    public World.RaceManager? Race { get; set; }
+
     private string NameOf(long peerId) => peerId == ConsolePeerId
         ? "Console"
         : _registry?.Find(peerId)?.Name ?? $"Rider{peerId}";
@@ -260,6 +266,11 @@ public partial class ChatManager : Node
                     foreach (string line in occasions.RunCommand(parts[1..], IsAdmin(sender)))
                         ReplyTo(sender, line, ChatKind.Private);
                 return;
+            case "race":
+                if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
+                else if (sender == ConsolePeerId && !rest.StartsWith("cancel")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
+                else ReplyTo(sender, Race.Command(sender, rest), ChatKind.Private);
+                return;
         }
 
         // Everything past this point is privileged. One check, in one place.
@@ -289,7 +300,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /occasion", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|join|leave  /occasion", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);

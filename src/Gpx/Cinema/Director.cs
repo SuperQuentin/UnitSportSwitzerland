@@ -46,7 +46,7 @@ public sealed class Director
     /// <summary>Placements tried before falling back to the chase.</summary>
     private const int Attempts = 6;
 
-    private readonly Shot[] _shots =
+    private Shot[] _shots =
     {
         new StabilisedHead(), new HelmetPov(), new OverTheShoulder(), new AnkleCam(),
         new Handheld(), new DroneOrbit(), new DroneReveal(), new LockedOff(),
@@ -100,6 +100,9 @@ public sealed class Director
     /// held regardless of <see cref="Shot.StillGood"/>, the event timeline, or <see cref="Pacing"/>,
     /// none of which mean anything once a human has taken over the choice.
     /// </summary>
+    /// <summary>Absolute Racing: the same director, cutting between the car shots.</summary>
+    public static Director ForRacing() { var d = new Director(); d._shots = RacingShots.All(); return d; }
+
     public void SetForced(string? name)
     {
         _forced = name == null ? null : _shots.FirstOrDefault(s => s.Name == name);

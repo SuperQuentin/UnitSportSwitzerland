@@ -45,9 +45,12 @@ public partial class Cyclist : Node3D
         set => _cadenceRpm = Mathf.Max(0f, value);
     }
 
+    /// <summary>Where the cranks are, radians — replicated, so a remote rider's legs match the owner's.</summary>
+    public float CrankAngle => _crankAngle;
+
     /// <summary>
-    /// Parks the cranks at a fixed angle. Only for the preview: which way a crank turns cannot
-    /// be judged from a single frame, so checking it needs two chosen ones.
+    /// Puts the cranks at an angle: a remote rider taking the owner's replicated one, or the
+    /// preview parking them (which way a crank turns cannot be judged from a single frame).
     /// </summary>
     public void SetCrankAngle(float radians)
     {

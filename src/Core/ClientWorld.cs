@@ -46,6 +46,11 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(code);
                 return;
             }
+            if (Array.IndexOf(scArgs, "--driftcheck") >= 0)
+            {
+                GetTree().Quit(Player.DriftCheck.Run());
+                return;
+            }
         }
         if (Occasions.OccasionProbe.Requested)
         {
@@ -181,6 +186,10 @@ public partial class ClientWorld : Node3D
             return at;
         };
 
+        // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
+        var combat = Combat.CombatManager.Create(this, _chunks, server: false);
+        combat.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+
         // Building interiors: E at a front door. Same node path as the server's, which plans and
         // stores them; offline this client does both.
         var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
@@ -245,12 +254,17 @@ public partial class ClientWorld : Node3D
         // them for the height.
         bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
             || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || World.TreeCheck.ParseArgs().Requested || Gpx.Cinema.CinemaProbe.ParseArgs() != null
+            || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
+            || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
             || Loot.GatherProbe.ParseArgs().Requested
-            || World.TrafficProbe.ParseArgs().Requested;
+            || Birds.BirdProbe.ParseArgs().Requested
+            || World.TrafficProbe.ParseArgs().Requested
+            || Combat.CombatProbe.ParseArgs().Requested
+            || Birds.BirdStrikeProbe.ParseArgs().Requested
+            || SyncProbe.Requested() || HitboxProbe.Requested();
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -291,10 +305,14 @@ public partial class ClientWorld : Node3D
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);
+        // birds around the player, from the real land cover; the shotgun hunts them (J: journal)
+        var birds = new Birds.BirdLife(_chunks, origin, items);
+        AddChild(birds);
 
         // occasions: the treat / gift hunt (taken with the gather hold) and the seasonal hat
         AddChild(new Occasions.OccasionHunt());
         AddChild(new Occasions.OccasionHats(() => LocalPlayer, items.Inventory));
+
         // solid trunks around whatever asks for collision
         var trees = new World.TreeColliders(_chunks, origin);
         AddChild(trees);
@@ -329,6 +347,7 @@ public partial class ClientWorld : Node3D
         _menu.ModeChosen += EnterMode;
         _menu.QuitRequested += () => GetTree().Quit();
         AddChild(_menu);
+        if (MenuCheck.Requested()) AddChild(new MenuCheck(_menu));
 
         // "--settings" opens the settings panel straight away, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--settings") >= 0)
@@ -386,6 +405,13 @@ public partial class ClientWorld : Node3D
             return;
         }
 
+        if (Birds.BirdProbe.ParseArgs() is { Requested: true } bcheck)
+        {
+            _chunks.RemoveAnchor(_spectator);
+            AddChild(new Birds.BirdProbe(_chunks, origin, birds, items, bcheck.Shot));
+            return;
+        }
+
         if (Loot.LootProbe.ParseArgs() is { } lootEpochs)
         {
             // tables only: no terrain wanted, and quitting mid-stream races the tile workers
@@ -402,11 +428,41 @@ public partial class ClientWorld : Node3D
             return;
         }
 
+        if (Birds.BirdStrikeProbe.ParseArgs() is { Requested: true } scheck)
+        {
+            var (sE, sN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(sE, sN, 1200);
+            AddChild(new Birds.BirdStrikeProbe(_chunks, origin, birds, scheck.Shot));
+            return;
+        }
+
+        if (Combat.CombatProbe.ParseArgs() is { Requested: true } ccheck)
+        {
+            var (cE, cN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(cE, cN, 1200);
+            AddChild(new Combat.CombatProbe(_chunks, origin, ccheck.Shot));
+            return;
+        }
+
         if (FlightCheckProbe.ParseArgs() is { } flycheck)
         {
             var (fE, fN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(fE, fN, 1200);
             AddChild(new FlightCheckProbe(_chunks, origin, flycheck.Kind, flycheck.Shot));
+            return;
+        }
+
+        if (HitboxProbe.Requested())
+        {
+            AddChild(new HitboxProbe(_chunks, origin));
+            return;
+        }
+
+        if (SyncProbe.Requested())
+        {
+            var (sE, sN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(sE, sN, 1200);
+            AddChild(new SyncProbe(_chunks, origin));
             return;
         }
 
@@ -423,6 +479,14 @@ public partial class ClientWorld : Node3D
             var (checkE, checkN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(checkE, checkN, 1200);
             AddChild(new RoadStandProbe(_chunks, origin));
+            return;
+        }
+
+        if (DriveProbe.ParseArgs() is { Requested: true } drive)
+        {
+            var (driveE, driveN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(driveE, driveN, 1200);
+            AddChild(new DriveProbe(_chunks, origin, drive.Shot, drive.Car, drive.Seconds));
             return;
         }
 
@@ -573,6 +637,11 @@ public partial class ClientWorld : Node3D
         _chat = ChatManager.CreateClient();
         _chat.Teleporter = _teleporter;
         AddChild(_chat);
+
+        // World/Race on both sides; the client side puts this player on the grid and times the run
+        var race = World.RaceManager.CreateClient();
+        race.LocalPlayer = () => LocalPlayer;
+        AddChild(race);
 
         _chatUi = ChatUi.Create(_chat);
         AddChild(_chatUi);

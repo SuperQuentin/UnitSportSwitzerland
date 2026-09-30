@@ -113,6 +113,13 @@ public abstract class Flyer : Rideable
     /// <summary>Spinning parts — rotors, propellers. Per rendered frame.</summary>
     public virtual void AnimateFlight(Node3D visual, in FlightMotion m, float dt) { }
 
+    /// <summary>Spool and throttle: what spins the rotor or prop and what the engine sounds like.</summary>
+    public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
+        new(flight.Spool, flight.Control, 0, 0);
+
+    public override void AnimateRemote(Node3D visual, Vector4 pose, float dt) =>
+        AnimateFlight(visual, new FlightMotion { Spool = pose.X, Control = pose.Y }, dt);
+
     /// <summary>Places the visual at the craft's attitude, relative to the yaw-only body.</summary>
     public void Pose(Node3D visual, float bodyYaw, in FlightMotion m)
     {
@@ -351,7 +358,8 @@ public sealed class Helicopter : Flyer
     public override bool HasEngine => true;
     public override float BodyRadius => 1.0f;
     public override float BodyHeight => 2.6f;
-    public override (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 1.3f, 2.0f), new Vector3(2.0f, 2.6f, 8.4f));
+    /// <summary>The airframe measured from the mesh, rotor disc left out: a 10 m disc is not something the machine rests on.</summary>
+    public override (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual, "Rotor");
 
     /// <summary>
     /// Spool at which the rotor holds the machine up. Below it lift fades into autorotation:

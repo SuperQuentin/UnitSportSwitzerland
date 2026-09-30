@@ -57,6 +57,9 @@ public partial class ServerWorld : Node3D
         _vehicles = Vehicles.VehicleManager.Create(this, null);
         _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
 
+        // gunfire: clients send their rounds here to be relayed; the server flies none of them
+        Combat.CombatManager.Create(this, null, server: true);
+
         // building interiors: planned here on first entry, stored under user://interiors, and
         // handed to everyone who walks in afterwards
         _interiors = Interiors.InteriorManager.Create(this, source, origin);
@@ -75,6 +78,11 @@ public partial class ServerWorld : Node3D
         _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword());
         _chat = ChatManager.CreateServer(_registry, _players, origin, places);
         AddChild(_chat);
+
+        // car races between players: World/Race, like World/Chat, so the RPCs find it
+        var race = World.RaceManager.CreateServer(_chat, _players, source, origin);
+        AddChild(race);
+        _chat.Race = race;
 
         // The operator's own command line. This is how the first admin gets granted.
         AddChild(new ServerConsole(_chat));
