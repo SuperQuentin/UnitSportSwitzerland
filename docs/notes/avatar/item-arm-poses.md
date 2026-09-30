@@ -14,6 +14,7 @@
   remote copy snaps to its first received state instead of ramping, or `--synccheck`'s fresh-frame hand
   error is not 0.
 - ShoulderAim (#100): trigger hand at the cheek (neck height, 0.29 m ahead of the chest, butt in the shoulder pocket), support hand under the fore-end, crown tipped 4 cm forward onto the stock. `FootPlayer.BodyJolt` rocks the walker mesh about the hips on a Shot event.
+- Plant (#111): both hands on an upright pole in front (item hand low, support hand 0.3 m above, `HandDir` up), cloth seen edge-on from the side; held for the whole plant / pull-up stroke (`flag-plant`).
 - No view pitch is replicated, so aim poses follow body yaw only (barrel level); add a replicated pitch
   to tilt them.
 - `GaitMounts.HandBasis` / `FootPlayer.HandLocal` (a full transform) carry the item direction: the pose's

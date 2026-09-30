@@ -16,6 +16,7 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `cash-account` — Money is a counter, not an item: `Inventory.Cash`, lost when knocked out, claimed to the server-kept account...
 - `polaroid` — Camera prints photos: ItemId.Photo + ItemStack.Data, develop animation, album, sticking, PhotoTransfer image sharing, --photocheck
 - `item-net-events` — ItemEvents.Send (shot, photo flash relayed to others) and PlacedObjects (server-kept, saved flags/photos, kind factories)
+- `flag-plant` — Swiss flag: placement ghost (green/red, pick-up halo), raise-and-stab / pull-up strokes, replicated Plant arms, spawn thud + dirt
 - `smart-binoculars` — Optic item: pick a target item, see the loot chance (%) on buildings in view (LootTables.Chance)
 
 ## Commands
