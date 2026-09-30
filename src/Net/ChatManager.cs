@@ -300,7 +300,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|join|leave  /occasion", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|join|leave|npc|duel npc  /occasion", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);

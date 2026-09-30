@@ -451,6 +451,13 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public Func<RideInput>? RideControls { get; set; }
 
+    /// <summary>
+    /// A race NPC (<see cref="World.RaceNpc"/>), set before the node enters the tree. Its authority
+    /// copy is simulated like a player's (physics, replication, <see cref="RideControls"/>) but has
+    /// no camera, no feel layer and reads no input: the owner's keys drive the owner, not its NPCs.
+    /// </summary>
+    public bool Npc { get; set; }
+
     private Camera3D? _camera;
     private CollisionShape3D _body = null!;
     private CapsuleShape3D _capsule = null!;
@@ -617,7 +624,13 @@ public partial class FootPlayer : CharacterBody3D
 
         Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
 
-        if (IsMultiplayerAuthority())
+        if (IsMultiplayerAuthority() && Npc)
+        {
+            // no camera to anchor the streamer: the body asks for its own ground and trunks
+            Terrain?.AddAnchor(this, collision: true);
+            SetProcessUnhandledInput(false);
+        }
+        else if (IsMultiplayerAuthority())
         {
             _camera = new Camera3D
             {
@@ -677,7 +690,7 @@ public partial class FootPlayer : CharacterBody3D
 
         if (kind == RideKind.OnFoot)
         {
-            if (IsMultiplayerAuthority() && !_thirdPerson) return;   // first person: nothing to draw
+            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) return;   // first person: nothing to draw
             _walkPalette = Avatar.HumanPalette.ForRider(rider);
             _walker = new MeshInstance3D
             {
@@ -1390,6 +1403,14 @@ public partial class FootPlayer : CharacterBody3D
             return;
         }
 
+        if (Npc)
+        {
+            // thrown out of its car: it only falls and stands until it gets back in
+            Velocity = new Vector3(0, onFloor ? 0f : velocity.Y - Gravity * dt, 0);
+            MoveAndSlide();
+            return;
+        }
+
         var input = PlayerInput.Move;
         if (_stunTimer > 0)
         {
@@ -1910,7 +1931,7 @@ public partial class FootPlayer : CharacterBody3D
         if (!onFloor)
         {
             _rideAir += dt;
-            if (_rideAir > 0.15f && PlayerInput.Held(PlayerInput.Trick))
+            if (_rideAir > 0.15f && !Npc && PlayerInput.Held(PlayerInput.Trick))
             {
                 _airPitch += stick.Y * FlipRate * dt;     // stick forward: nose down, a front flip
                 _airSpin -= stick.X * SpinRate * dt;      // stick right: clockwise from above
@@ -1940,7 +1961,7 @@ public partial class FootPlayer : CharacterBody3D
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
         // Game profile only; in Sim the watts are the rider's, and nothing else may add to them.
         Boosting = Rideable.Arcade && _bailTimer <= 0 && BoostMeter > 0.01f
-            && PlayerInput.Held(PlayerInput.Boost);
+            && !Npc && PlayerInput.Held(PlayerInput.Boost);
         if (Boosting)
         {
             _motion.Speed += BoostAccel * dt;
@@ -1962,7 +1983,7 @@ public partial class FootPlayer : CharacterBody3D
         // Space hops: edge-triggered like the on-foot jump, so holding it does not bunny-hop
         // every frame, and only from the ground - there is nothing to push against in the air.
         // Speed and heading are untouched: a hop carries the bike's momentum, it does not add any.
-        bool spaceDown = PlayerInput.Held(PlayerInput.Jump);
+        bool spaceDown = !Npc && PlayerInput.Held(PlayerInput.Jump);
         bool hop = spaceDown && !_jumpHeld && onFloor && _ride.CanHop;
         _jumpHeld = spaceDown;
         if (hop) { velocity.Y = RideJumpVelocity; Jumped?.Invoke(); }

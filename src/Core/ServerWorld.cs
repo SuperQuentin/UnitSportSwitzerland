@@ -21,6 +21,7 @@ public partial class ServerWorld : Node3D
     private ChunkStreamer? _streamer;
     private Interiors.InteriorManager? _interiors;
     private Occasions.OccasionManager? _occasions;
+    private World.RaceNpcs? _npcs;
 
     public override async void _Ready()
     {
@@ -52,6 +53,8 @@ public partial class ServerWorld : Node3D
         AddChild(_players);
         _spawner = PlayerReplication.CreateSpawner();
         AddChild(_spawner);
+        // race NPCs: spawned here for everyone, simulated on the client that asked (issue #39)
+        AddChild(_npcs = World.RaceNpcs.CreateServer(_spawner, _players));
 
         // vehicles standing in the world; the server spawns and removes them for everyone
         _vehicles = Vehicles.VehicleManager.Create(this, null);
@@ -175,6 +178,7 @@ public partial class ServerWorld : Node3D
         _vehicles?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
+        _npcs?.ForgetOwner(id);
 
         if (_players!.GetNodeOrNull<Node3D>(id.ToString()) is { } player)
         {

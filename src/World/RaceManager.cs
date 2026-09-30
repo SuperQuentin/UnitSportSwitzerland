@@ -85,21 +85,16 @@ public partial class RaceManager : Node
         {
             case "start":
                 if (_phase != Phase.Idle) return "A race is already on. /race join to enter it.";
-                if (_players?.GetNodeOrNull<Node3D>(sender.ToString()) is not { } host) return "You have no position yet.";
                 float metres = parts.Length > 1 && float.TryParse(parts[1], System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out float m) ? Mathf.Clamp(m, 300f, 8000f) : 2000f;
-                _phase = Phase.Building;
-                _host = sender;
-                _entrants.Clear(); _checkpoint.Clear(); _finished.Clear();
-                _entrants.Add(sender);
-                var at = host.GlobalPosition;
-                var source = _source!; var origin = _origin!;
-                _ = System.Threading.Tasks.Task.Run(async () =>
-                {
-                    var route = await RaceRoute.BuildAsync(source, origin, at);
-                    Callable.From(() => Opened(route, metres)).CallDeferred();
-                });
-                return "Finding the road…";
+                return Open(sender, metres);
+            case "npc":
+            case "duel":
+                if (verb == "duel" && (parts.Length < 2 || parts[1].ToLowerInvariant() != "npc")) return "/race duel npc";
+                bool counted = verb == "npc" && parts.Length > 1 && int.TryParse(parts[1], out _);
+                int count = counted ? Mathf.Clamp(int.Parse(parts[1]), 1, RaceNpcs.PerOwner) : 1;
+                string car = string.Join(' ', parts.Skip(verb == "duel" || counted ? 2 : 1));
+                return AddNpcs(sender, count, car);
             case "join":
                 if (_phase != Phase.Entry) return _phase == Phase.Idle ? "No race open. /race start to open one." : "Too late to join this one.";
                 if (!_entrants.Contains(sender)) _entrants.Add(sender);
@@ -113,8 +108,68 @@ public partial class RaceManager : Node
                 Reset("cancelled");
                 return "Race cancelled.";
             default:
-                return "/race start [metres]  /race join  /race leave  /race cancel";
+                return "/race start [metres]  /race join  /race leave  /race cancel  /race npc [n] [car]  /race duel npc";
         }
+    }
+
+    private string Open(long sender, float metres)
+    {
+        if (_players?.GetNodeOrNull<Node3D>(sender.ToString()) is not { } host) return "You have no position yet.";
+        _phase = Phase.Building;
+        _host = sender;
+        _entrants.Clear(); _checkpoint.Clear(); _finished.Clear();
+        _entrants.Add(sender);
+        var at = host.GlobalPosition;
+        var source = _source!; var origin = _origin!;
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            var route = await RaceRoute.BuildAsync(source, origin, at);
+            Callable.From(() => Opened(route, metres)).CallDeferred();
+        });
+        return "Finding the road…";
+    }
+
+    // ---- NPC entrants (issue #39): spawned by World/Npcs, simulated on the sender's client ----
+
+    private RaceNpcs? Npcs => GetParent()?.GetNodeOrNull<RaceNpcs>(RaceNpcs.NodeName);
+
+    /// <summary><c>/race npc [n] [car]</c>, <c>/race duel npc</c>: NPCs into the open race (opening one if none).</summary>
+    private string AddNpcs(long sender, int count, string car)
+    {
+        if (_phase == Phase.Running) return "A race is on. Wait for it to finish.";
+        if (Npcs is not { } npcs || _players?.GetNodeOrNull<Node3D>(sender.ToString()) is not { } me) return "You have no position yet.";
+        var spec = car.Length == 0 ? CarCatalog.All[0]
+            : CarCatalog.All.FirstOrDefault(c => c.Label.Contains(car, System.StringComparison.OrdinalIgnoreCase));
+        if (spec == null) return $"No car called '{car}'.";
+        string opened = _phase == Phase.Idle ? Open(sender, 2000f) + " " : "";
+        npcs.ForgetOwner(sender, keep: _entrants);   // the last race's NPCs make way
+        var ids = npcs.Spawn(sender, count, spec.Kind, me.GlobalPosition, me.Rotation.Y);
+        EnterNpcs(sender, ids);
+        return opened + (ids.Count == 0 ? "No room for more NPCs." : $"{ids.Count} NPC(s) in.");
+    }
+
+    private void EnterNpcs(long sender, IEnumerable<long> ids)
+    {
+        foreach (long id in ids)
+        {
+            if (id >= 0 || PlayerReplication.NpcOwner(id) != sender || _entrants.Contains(id)) continue;
+            _entrants.Add(id);
+            _chat?.Broadcast($"[race] {Who(id)} joins ({_entrants.Count} in)", ChatKind.System);
+        }
+    }
+
+    /// <summary>Client → server: enter NPCs the sender owns (already spawned) into the open race.</summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestNpcEntrants(long[] npcIds)
+    {
+        if (_server && _phase is Phase.Building or Phase.Entry) EnterNpcs(Multiplayer.GetRemoteSenderId(), npcIds);
+    }
+
+    /// <summary>The sender speaks for itself and for the NPCs it owns.</summary>
+    private bool SpeaksFor(long entrant)
+    {
+        long peer = Multiplayer.GetRemoteSenderId();
+        return entrant == peer || entrant < 0 && PlayerReplication.NpcOwner(entrant) == peer;
     }
 
     private void Opened(RaceRoute? route, float metres)
@@ -146,7 +201,7 @@ public partial class RaceManager : Node
         if (_phase == Phase.Entry && _clock >= _entryEnds)
         {
             // drop entrants who left the server
-            _entrants.RemoveAll(p => _players?.GetNodeOrNull(p.ToString()) == null);
+            _entrants.RemoveAll(p => _players?.GetNodeOrNull(PlayerReplication.NodeName(p)) == null);
             if (_entrants.Count == 0) { Reset("nobody joined"); return; }
             _phase = Phase.Running;
             _startAt = _clock + Countdown;
@@ -159,7 +214,9 @@ public partial class RaceManager : Node
             for (int i = 0; i < _entrants.Count; i++)
             {
                 _checkpoint[_entrants[i]] = 0;
-                RpcId(_entrants[i], MethodName.Setup, centre, width, _finish, i, _entrants.Count, Countdown);
+                long e = _entrants[i];
+                if (e < 0) RpcId(PlayerReplication.NpcOwner(e), MethodName.NpcSetup, e, centre, width, _finish, i, _entrants.Count, Countdown);
+                else RpcId(e, MethodName.Setup, centre, width, _finish, i, _entrants.Count, Countdown);
             }
             _chat?.Broadcast($"[race] {_entrants.Count} on the grid: {string.Join(", ", _entrants.Select(Who))} — GO in {Countdown:0} s",
                 ChatKind.System);
@@ -188,19 +245,17 @@ public partial class RaceManager : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Checkpoint(int index)
+    private void Checkpoint(long peer, int index)
     {
-        if (!_server || _phase != Phase.Running) return;
-        long peer = Multiplayer.GetRemoteSenderId();
+        if (!_server || _phase != Phase.Running || !SpeaksFor(peer)) return;
         // in order only: a checkpoint skipped is a shortcut taken
         if (_checkpoint.TryGetValue(peer, out int next) && index == next) _checkpoint[peer] = next + 1;
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Crossed()
+    private void Crossed(long peer)
     {
-        if (!_server || _phase != Phase.Running) return;
-        long peer = Multiplayer.GetRemoteSenderId();
+        if (!_server || _phase != Phase.Running || !SpeaksFor(peer)) return;
         int needed = Mathf.FloorToInt(_finish / CheckpointEvery);
         if (!_checkpoint.TryGetValue(peer, out int passed) || _finished.ContainsKey(peer)) return;
         if (passed < needed)
@@ -213,10 +268,10 @@ public partial class RaceManager : Node
         _finished[peer] = time;
         int position = _finished.Count;
         _chat?.Broadcast($"[race] {Who(peer)} finishes P{position} in {Format(time)}", ChatKind.System);
-        RpcId(peer, MethodName.Result, position, time);
+        if (peer > 0) RpcId(peer, MethodName.Result, position, time);
     }
 
-    private string Who(long peer) => _chat?.NameOfPeer(peer) ?? $"#{peer}";
+    private string Who(long peer) => peer < 0 ? Npcs?.Label(peer) ?? $"NPC {peer}" : _chat?.NameOfPeer(peer) ?? $"#{peer}";
 
     private static string Format(double s) => $"{(int)(s / 60)}:{s % 60:00.00}";
 
@@ -236,6 +291,16 @@ public partial class RaceManager : Node
         _going = _done = false;
         _raceClock = 0;
         PlaceOnGrid();
+    }
+
+    /// <summary>The grid for one of this client's NPCs: handed to its driver, which reports through here.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void NpcSetup(long id, Vector3[] centre, float[] width, float finish, int slot, int count, double countdown)
+    {
+        if (GetParent()?.GetNodeOrNull<RaceNpc>($"Players/{PlayerReplication.NodeName(id)}/{RaceNpc.NodeName}") is not { } npc) return;
+        npc.Checkpoint = i => RpcId(1, MethodName.Checkpoint, id, i);
+        npc.Crossed = () => RpcId(1, MethodName.Crossed, id);
+        npc.OnRaceSetup(RaceRoute.FromPoints(centre, width), finish, slot, count, countdown);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -271,6 +336,8 @@ public partial class RaceManager : Node
     // ---- scripted players, for the loopback check: --racestart [m] opens, --racejoin enters ----
     private readonly string? _autoStart = Arg("--racestart");
     private readonly bool _autoJoin = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--racejoin") >= 0;
+    private readonly string? _autoNpc = Arg("--racenpc");   // --racenpc N: N NPCs into the race once it opens
+    private bool _npcAsked;
     private double _settled;
     private bool _asked;
 
@@ -291,6 +358,7 @@ public partial class RaceManager : Node
                 if (!line.Contains("[race]")) return;
                 GD.Print(line);
                 if (_autoJoin && !_asked && line.Contains("opens a")) { _asked = true; chat.Send("/race join"); }
+                if (_autoNpc != null && !_npcAsked && line.Contains("opens a")) { _npcAsked = true; chat.Send($"/race npc {_autoNpc}".Trim()); }
             };
     }
 
@@ -342,12 +410,12 @@ public partial class RaceManager : Node
         bool onRoute = Mathf.Sqrt(best) < CheckpointReach;
         while (onRoute && arc >= (_myNext + 1) * CheckpointEvery && (_myNext + 1) * CheckpointEvery <= _myFinish)
         {
-            RpcId(1, MethodName.Checkpoint, _myNext);
+            RpcId(1, MethodName.Checkpoint, (long)Multiplayer.GetUniqueId(), _myNext);
             _myNext++;
         }
         if (onRoute && arc >= _myFinish && !_done)
         {
-            RpcId(1, MethodName.Crossed);
+            RpcId(1, MethodName.Crossed, (long)Multiplayer.GetUniqueId());
             if (_pilot != null) _pilot.Finished = true;   // brake to a stop past the line
             _done = true;   // the server answers with the result
         }
