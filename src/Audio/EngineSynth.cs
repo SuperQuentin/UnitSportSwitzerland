@@ -103,7 +103,7 @@ public partial class EngineSynth : Node3D
     private readonly float[] _comb;
     private int _combPos;
     private float _intakeLp, _intakeHp, _bodyLp, _dc;
-    private float _propPhase, _whinePhase, _whine2Phase, _subPhase;
+    private float _propPhase, _whinePhase, _whine2Phase, _subPhase, _tipLp, _tipHp;
     private float _crackleEnv, _crackleRate;
 
     public EngineSynth(EngineProfile profile, bool spatial, int seed = 0)
@@ -269,12 +269,27 @@ public partial class EngineSynth : Node3D
         float exhaustNoise = _bodyLp * pulse * (0.6f + 0.8f * _load);
         f.Noise = Mathf.Clamp(0.25f + 0.35f * _throttle + 0.2f * _load, 0f, 1f);
 
-        // a propeller beats against the exhaust note at blade-pass rate (prop on the crank)
-        float prop = 1f;
+        // A propeller is its own voice, and the one that says "aeroplane". Only amplitude-
+        // modulating the exhaust at blade-pass rate made a slow 23-90 Hz throb — below what laptop
+        // speakers reproduce, and at low throttle the very chop of a helicopter rotor. A real prop
+        // is a harmonic-rich buzz at blade-pass frequency (a sawtooth: each blade's pressure pulse)
+        // plus the rasp of the tips, which climbs steeply with tip speed and blade loading.
+        float prop = 1f, propVoice = 0f;
         if (p.PropBlades > 0)
         {
-            _propPhase = (_propPhase + rpm / 60f * p.PropBlades / Dsp.Rate) % 1f;
-            prop = 1f + 0.25f * Mathf.Sin(Mathf.Tau * _propPhase);
+            float bpf = rpm / 60f * p.PropBlades;
+            _propPhase = (_propPhase + bpf / Dsp.Rate) % 1f;
+            prop = 1f + 0.08f * Mathf.Sin(Mathf.Tau * _propPhase);
+            // band-limited sawtooth: 8 harmonics reach ~700 Hz at cruise, where speakers live
+            float buzz = 0f;
+            for (int k = 1; k <= 8; k++) buzz += Mathf.Sin(Mathf.Tau * _propPhase * k) / k;
+            // tip noise, 700-3500 Hz, pulsing once per blade pass
+            _tipLp += Dsp.Coef(3500f) * (n - _tipLp);
+            _tipHp += Dsp.Coef(700f) * (_tipLp - _tipHp);
+            float tipSpeed = 0.25f + 0.75f * _rpm;
+            float tip = (_tipLp - _tipHp) * (0.55f + 0.45f * Mathf.Cos(Mathf.Tau * _propPhase))
+                * tipSpeed * tipSpeed * (0.45f + 0.55f * _load);
+            propVoice = buzz * (0.18f + 0.3f * _rpm) * (0.5f + 0.5f * _load) + tip * 2.2f;
         }
 
         // decel crackle: throttle snapped shut at high rpm pops in the exhaust
@@ -291,6 +306,7 @@ public partial class EngineSynth : Node3D
 
         float drive = 1.4f + 2.2f * _load;
         f.Core = Mathf.Tanh((x * 0.9f + exhaustNoise * 1.3f + intake) * drive) * 0.62f * prop + crackle * 0.35f;
+        if (p.PropBlades > 0) f.Core = Mathf.Tanh(f.Core * 0.75f + propVoice) * 0.85f;
     }
 
     private void Turbine(ref EngineFrame f)
