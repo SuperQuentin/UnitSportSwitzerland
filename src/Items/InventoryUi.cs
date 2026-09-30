@@ -97,6 +97,9 @@ public partial class InventoryUi : CanvasLayer
     /// <summary>Which optic overlay to draw, if Aim is held with one in hand.</summary>
     public ItemUse? Scope { get; set; }
 
+    /// <summary>The camera's 35 mm-equivalent focal length, shown in the viewfinder.</summary>
+    public float PhotoFocalMm { get => _viewfinder.FocalMm; set => _viewfinder.FocalMm = value; }
+
     /// <summary>Text for the GPS panel, or null to hide it.</summary>
     public string? Readout { get; set; }
 
@@ -1010,12 +1013,50 @@ public partial class WheelView : Control
     }
 }
 
-/// <summary>A camera's viewfinder: corner brackets, a centre mark and the rule-of-thirds grid.</summary>
+/// <summary>
+/// A camera's viewfinder: thirds grid, corner brackets, focal length readout with a zoom scale,
+/// an autofocus brace that hunts after every zoom change, and shots / time / battery at the corners.
+/// </summary>
 public partial class ViewfinderView : Control
 {
+    public const float Min = 24f, Max = 200f;
+    private float _focal = 35f;
+    private double _hunt;          // seconds of autofocus hunt left
+    private int _shots;
+    private double _recount = 99;
+
+    public float FocalMm
+    {
+        get => _focal;
+        set
+        {
+            if (Mathf.Abs(value - _focal) < 0.01f) return;
+            _focal = value;
+            _hunt = 0.35;
+            QueueRedraw();
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!IsVisibleInTree()) { _recount = 99; return; }
+        _hunt = System.Math.Max(0, _hunt - delta);
+        _recount += delta;
+        if (_recount > 1.0)
+        {
+            _recount = 0;
+            using var d = DirAccess.Open("user://photos");
+            _shots = d?.GetFiles().Length ?? 0;
+        }
+        QueueRedraw();   // the clock and the hunt animate
+    }
+
+    private static string Fmt(float v, string f) => v.ToString(f, System.Globalization.CultureInfo.InvariantCulture);
+
     public override void _Draw()
     {
         var s = Size;
+        var font = ThemeDB.FallbackFont;
         var line = new Color(1, 1, 1, 0.85f);
         var faint = new Color(1, 1, 1, 0.18f);
         float inset = s.Y * 0.08f, arm = s.Y * 0.07f;
@@ -1033,11 +1074,51 @@ public partial class ViewfinderView : Control
             DrawLine(new Vector2(x, y), new Vector2(x, y + arm * dy), line, 2f);
         }
 
+        // autofocus: the brace starts wide and shrinks onto the subject, green once locked
         var c = s * 0.5f;
-        DrawLine(c - new Vector2(10, 0), c + new Vector2(10, 0), line, 1.5f);
-        DrawLine(c - new Vector2(0, 10), c + new Vector2(0, 10), line, 1.5f);
-        DrawString(ThemeDB.FallbackFont, new Vector2(inset, s.Y - inset + 22), "Use to shoot",
-            HorizontalAlignment.Left, -1, 14, line);
+        float t = (float)(_hunt / 0.35);
+        bool locked = _hunt <= 0;
+        float half = 22f + (locked ? 0f : t * 26f * (0.6f + 0.4f * Mathf.Sin((float)Time.GetTicksMsec() * 0.04f)));
+        var af = locked ? new Color(0.35f, 1f, 0.35f, 0.95f) : new Color(1f, 0.85f, 0.3f, 0.95f);
+        float a = 9f;
+        foreach (var (sx, sy) in new[] { (-1f, -1f), (1f, -1f), (-1f, 1f), (1f, 1f) })
+        {
+            var p = c + new Vector2(sx * half, sy * half);
+            DrawLine(p, p + new Vector2(-sx * a, 0), af, 2f);
+            DrawLine(p, p + new Vector2(0, -sy * a), af, 2f);
+        }
+        DrawRect(new Rect2(c - Vector2.One, Vector2.One * 2f), line);
+
+        // focal length and relative zoom, top centre
+        DrawString(font, new Vector2(0, inset + 24), Fmt(_focal, "F0") + "mm   x" + Fmt(_focal / 24f, "F1"),
+            HorizontalAlignment.Center, s.X, 20, Colors.White);
+
+        // zoom scale down the right side: ticks at the classic stops, a marker at the focal length
+        float sx0 = s.X - inset - 40f, top = s.Y * 0.3f, bot = s.Y * 0.7f;
+        float Y(float mm) => bot - (bot - top) * Mathf.Log(mm / Min) / Mathf.Log(Max / Min);
+        DrawLine(new Vector2(sx0, top), new Vector2(sx0, bot), line, 1.5f);
+        foreach (float mm in new[] { 24f, 28f, 35f, 50f, 70f, 85f, 105f, 135f, 200f })
+        {
+            float y = Y(mm);
+            bool major = mm is 24f or 35f or 70f or 135f or 200f;
+            DrawLine(new Vector2(sx0, y), new Vector2(sx0 + (major ? 10 : 6), y), line, 1.5f);
+            if (major)
+                DrawString(font, new Vector2(sx0 + 14, y + 5), Fmt(mm, "F0"), HorizontalAlignment.Left, -1, 12, line);
+        }
+        float my = Y(Mathf.Clamp(_focal, Min, Max));
+        DrawColoredPolygon(new[] { new Vector2(sx0 - 2, my), new Vector2(sx0 - 12, my - 6), new Vector2(sx0 - 12, my + 6) }, af);
+
+        // bottom row: shots taken, time stamp, battery; key hint on top
+        float by = s.Y - inset + 22;
+        DrawString(font, new Vector2(inset, by), "SHOTS " + _shots, HorizontalAlignment.Left, -1, 14, line);
+        DrawString(font, new Vector2(0, by),
+            System.DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
+            HorizontalAlignment.Center, s.X, 14, line);
+        DrawString(font, new Vector2(inset, inset - 10), "Use: shoot   Wheel: zoom", HorizontalAlignment.Left, -1, 14, line);
+        var bat = new Rect2(s.X - inset - 30, by - 11, 26, 12);
+        DrawRect(bat, line, false, 1.5f);
+        DrawRect(new Rect2(bat.End.X, bat.Position.Y + 3, 3, 6), line);
+        for (int i = 0; i < 3; i++) DrawRect(new Rect2(bat.Position.X + 2 + i * 8, bat.Position.Y + 2, 6, 8), line);
     }
 
     public override void _Notification(int what)
