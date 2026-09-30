@@ -1,7 +1,8 @@
 # Generated terrain fill: generated and real tiles side by side
 
-Status: **phase 1 done** (issue #27, branch `feat/27-generated-terrain-fill`). Builds on `84f5ebf`
-(generated fallback world, all-or-nothing).
+Status: **phase 1 done, phase 1b (blend quality, at the end of this file) next** (issue #27,
+branch `feat/27-generated-terrain-fill`). Builds on `84f5ebf` (generated fallback world,
+all-or-nothing).
 
 ### Phase 1 as built (differs from the text below in three places)
 
@@ -344,3 +345,86 @@ and `SETUP.md`.
 3. **Visual treatment of the border.** A generated area looks different from swisstopo data
    (flat vertex colours, no surveyed buildings). Should generated tiles be marked, e.g. a faint
    tint or a HUD note ("generated terrain")? Recommendation: a HUD note only.
+
+## Phase 1b: blend quality (before phase 2)
+
+Phase 1 passes every numeric check, but shaded-relief renders of the BlendCheck world show three
+artefacts that no check measured. Renders: `test_output/blend/*_before_after.png` (left the
+generator alone, right blended), made by the phase-1 scratch harness. They are to be regenerated
+by BlendCheck itself (see below).
+
+### What the renders show
+
+1. **Streaks across the whole band.** `sm_k` is read at the nearest point of the real tile, so it
+   is constant along every line perpendicular to the edge. Real relief between ~100 m and ~1 km
+   (ridges, gullies) is therefore extruded straight out for the full 3 km, which shows as radial
+   smearing round the low block. The plan's claim that the 100 m knot lattice "stops real fine
+   detail being extruded as streaks" holds only for detail finer than 100 m.
+2. **A comb at the edge.** D extrudes the real residual the same way for 150 m, so the real
+   ground's fine ripple turns into parallel stripes running away from the seam.
+3. **Creases.** S is piecewise bilinear on the 100 m knots, so its slope jumps every 100 m. It
+   also jumps along the lines that continue a real tile's edges, where the nearest point switches
+   from an edge to a corner. Both show as straight folds in hillshade, carried outward for 3 km.
+
+The synthetic terrain exaggerates all three: it is pure sine waves, including a 4 m ripple at a
+9 m wavelength. Real ground would still show them, e.g. a gully extended 3 km into generated land.
+
+### Fix A: S smooths more the further it reaches
+
+The width of real detail S may carry grows with the distance it is carried, so a feature
+extruded d metres is never narrower than about d/2 and reads as broad shape, not a streak.
+
+- Per real tile, keep a **pyramid of `sm = Rs − Gs`** built from its 11×11 knot differences:
+  level 0 = the 100 m knots themselves, then area-averaged levels on 200 m (6×6), 500 m (3×3) and
+  1000 m (2×2, the corners) lattices, and a last level holding the tile's mean (one value).
+  Area-average (trapezoid weights over the 100 m knots), never decimate: decimating aliases, which
+  is the streak again at a coarser pitch.
+- At distance d, sample `sm_k(q)` from the level whose spacing is about `max(100, d/2)`: 100 m up
+  to d = 200 m, then 200 m at 400 m, 500 m at 1 km, 1000 m at 2 km, the mean at 3 km. Interpolate
+  between the two adjacent levels with a smoothstep in log-distance, so no level switch is a step.
+- At d = 0 this is exactly level 0, i.e. **today's S at the seam**. The vertex copy, D and every
+  seam invariant are untouched.
+- Creases fade with distance for the same reason: the coarse levels are nearly planar, so both
+  their 100 m kinks and the jump where the nearest point turns a corner shrink as d grows. Within
+  ~300 m of the seam, level 0 still creases, but there the real texture that D carries dominates.
+- The 10 m S lattice stays, so coarse = decimated full and horizon = grid still hold by
+  construction. The pyramid depends only on the real tile and the generator, so it is cached with
+  `GKnots`. Cost: two level lookups per (point, tile) instead of one, lattice ~1.8 → ~4 ms.
+
+### Fix B: carry real detail across the seam smoothly, and not far
+
+The earlier idea, **mirroring** the real texture (take D at `m = 2q − p`, as far inside the real
+tile as p is outside it), is **rejected**. It keeps the seam exact and avoids stripes, but a
+mirror flips the slope: a residual rising toward the edge falls away beyond it, so every seam
+would carry a ridge or a gully (C0, not C1). Its anti-symmetric variant, `2·det(q) − det(m)`,
+fixes the slope but doubles the extruded `det(q)`, which is the streak again.
+
+Instead:
+
+- **Continue the real residual to first order and fade it quickly**:
+  `D = Σ w'·fd·(det(q) + d·∂det/∂n(q)) / Σ w'`, with `∂det/∂n` the outward normal derivative of
+  `det` at q, a one-sided difference on the real grid (1 m for edge neighbours, the corner
+  vertex's 10 m difference for diagonals). With a smoothstep fade, value and slope both match
+  the real side, so the seam is C1 and neither ridged nor creased.
+- **`DetailBand` 150 → ~40 m.** The comb is extrusion, and a short fade leaves it no length to
+  show. Past ~40 m the generator's own texture has fully taken over. Tune it by render: the
+  shortest band that does not show a change of texture along the seam.
+- `det(q)` and `∂det/∂n(q)` depend only on q, which from inside the tile is always a whole metre
+  of its own boundary, so the per-edge memo stays and D gets cheaper, not dearer.
+- The horizon still needs no real grid, **as long as `DetailBand` stays under 100 m**. Real tile
+  edges lie on the 100 m lattice, so a 100 m point is either on a real edge (d = 0, where D is
+  `det(q) = 0` at a knot and the vertex copy applies anyway) or at least 100 m from every real
+  tile, where the fade is already zero. The slope term never gets a 100 m point to act on.
+  Pin this with a comment on the constant: a band of 100 m or more breaks horizon = grid.
+
+### Verification additions (BlendCheck)
+
+- `--render` writes the three before/after hillshades to `test_output/blend/` (the overview, the
+  one-tile hole and a block corner), so every change to the blend is judged by eye as well.
+- **Seam kink**: at every generated|real edge, the change of slope across the seam,
+  `|(h₁ − h₀) − (h₀ − h₋₁)|`, compared with the same measure one row in on either side. Mirroring
+  would fail it; Fix B must pass it.
+- **Streak metric**: along lines parallel to a real edge, 500 m to 3 km out, the high-pass
+  variance of the blended height minus that of generated ground alone. Extruded real detail shows
+  as excess variance at the real tile's wavelengths. Fix A should drive it near zero past ~1 km.
+- Every phase-1 check stays green, `blend = null` included.
