@@ -143,9 +143,11 @@ public partial class InterestService : Node
             }
 
             if (_changed.Count == 0 && !first) continue;
-            // the server's copy of each changed target decides whether it exists on the viewer
-            foreach (var target in _changed)
-                if (Players.GetNodeOrNull<FootPlayer>(target.ToString()) is { } t) t.RefreshNetVisibility(viewer);
+            // the server's copy of each changed target decides whether it exists on the viewer —
+            // and so do the target's race NPCs, which are shown to whoever sees their owner
+            foreach (var child in Players.GetChildren())
+                if (child is FootPlayer t && FootPlayer.NetOwner(t.Name) is long owner && _changed.Contains(owner))
+                    t.RefreshNetVisibility(viewer);
             var ids = new long[set.Count];
             set.CopyTo(ids);
             RpcId(viewer, MethodName.SetRelevant, ids);
