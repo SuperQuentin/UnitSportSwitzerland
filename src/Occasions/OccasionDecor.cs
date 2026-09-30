@@ -205,6 +205,8 @@ public partial class OccasionDecor : Node
                 + $", {into.Patches.Count} patches, {into.Spots.Count} hunt spots; first at {first.Origin + tileOrigin}"
                 + $" facing {(-first.Basis.Z).Normalized()}"
                 + (into.Patches.Count > 0 ? $"; patch at {tileOrigin + new Vector3(into.Patches[0].GetCenter().X, 0, into.Patches[0].GetCenter().Y)}" : ""));
+            foreach (var s in into.Spots)
+                GD.Print($"[decor]   hunt {s.Key} at {tileOrigin + s.Local}");
         }
         if (into.Instances.Count == 0 && into.Meshes.Count == 0) return;
 
