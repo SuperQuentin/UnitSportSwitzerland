@@ -56,7 +56,8 @@ public static partial class InteriorGenerator
             DoorWidth = fp.Door.Width,
             StoreyHeight = h,
             EntryX = fp.EntryX,
-            EntryWidth = Math.Min(fp.Door.Width, 1.8f),
+            // a barn's hall opens as wide as its door; elsewhere a door leads into a hall or a core
+            EntryWidth = b.Kind == BuildingKind.Agricultural ? fp.Door.Width : Math.Min(fp.Door.Width, 1.8f),
         };
 
         bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
@@ -114,7 +115,8 @@ public static partial class InteriorGenerator
         room.Openings.Add(new OpeningPlan
         {
             Side = Side.Front, Center = l.EntryX, Width = l.EntryWidth, Bottom = 0,
-            Top = Math.Min(kind is BuildingKind.Agricultural or BuildingKind.Industrial ? 2.8f : 2.1f, clear - 0.15f),
+            Top = kind == BuildingKind.Agricultural ? BuildingFootprint.DoorHeightFor(kind, clear)
+                : Math.Min(kind == BuildingKind.Industrial ? 2.8f : 2.1f, clear - 0.15f),
             Kind = OpeningKind.Entry,
         });
         var floor = new FloorPlan();
