@@ -103,7 +103,201 @@ public sealed class RoadSegment
     public float Width { get; init; }
     public required float[] Points { get; init; } // xyz triples
 
+    /// <summary>v3 per-segment attributes. All zero (the default) in v1/v2 files.</summary>
+    public RoadAttributes Attributes { get; init; }
+
     public int PointCount => Points.Length / 3;
+}
+
+/// <summary>v3 attribute flags: the second flags word <see cref="RoadFlags"/> had no room for.</summary>
+[Flags]
+public enum RoadAttrFlags : ushort
+{
+    None = 0,
+    Urban = 1 << 0,        // a street: kerbs and sidewalks (#119)
+    Roundabout = 1 << 1,   // part of a roundabout ring (TLM kreisel, OSM junction=roundabout)
+    Osm = 1 << 2,          // some attribute came from the OpenStreetMap overlay (ODbL)
+    Tram = 1 << 3,         // tram rails run along the carriageway (OSM)
+    YieldAtStart = 1 << 4, // traffic leaving this segment at its first point gives way (#121)
+    YieldAtEnd = 1 << 5,   // ... at its last point
+    OwnerFederal = 1 << 6, // TLM eigentuemer = Bund
+    OwnerCanton = 1 << 7,  // TLM eigentuemer = Kanton
+}
+
+/// <summary>Bike provision on one side of a carriageway (#120).</summary>
+public enum BikeKind : byte
+{
+    None = 0,
+    Lane = 1,    // painted lane on the carriageway (yellow dashes)
+    Track = 2,   // separated path beside it
+    Shared = 3,  // shared lane, symbol only
+}
+
+/// <summary>
+/// Cross-section of one side of a carriageway, outward from its edge. Left and right are in the
+/// segment's drawing direction. Widths in decimetres, kerb height in centimetres; 0 = none.
+/// </summary>
+public readonly record struct RoadSide(
+    byte SidewalkDm = 0, BikeKind Bike = BikeKind.None, byte BikeDm = 0, byte KerbCm = 0, byte VergeDm = 0);
+
+/// <summary>
+/// The v3 per-segment attribute record (24 bytes on disk). Everything zero means "not decided":
+/// two-way (or unknown), lanes and width from the class, no sidewalk, rural.
+/// </summary>
+public readonly record struct RoadAttributes(
+    RoadAttrFlags Flags = RoadAttrFlags.None,
+    // +1 traffic only in drawing order, -1 only against it, 0 both ways (or unknown).
+    sbyte OneWay = 0,
+    // Grade level: 0 ground, positive above (bridges), negative below. TLM <c>stufe</c>.
+    sbyte Layer = 0,
+    // Lanes in drawing direction / against it; 0 = unknown, the class decides.
+    byte LanesForward = 0,
+    byte LanesBackward = 0,
+    // higher wins at a junction, see RoadFormat.PriorityFor
+    byte Priority = 0,
+    // Carriageway width in centimetres (TLM nominal class width or OSM width); 0 = unknown.
+    ushort WidthCm = 0,
+    RoadSide Left = default,
+    RoadSide Right = default)
+{
+    public const int RecordSize = 24;
+    public bool Has(RoadAttrFlags f) => (Flags & f) != 0;
+}
+
+/// <summary>Header flags word (0 in v1/v2).</summary>
+[Flags]
+public enum RoadTileFlags : ushort
+{
+    None = 0,
+    /// <summary>Built with the OpenStreetMap overlay: the tile is an ODbL derived database.</summary>
+    Osm = 1 << 0,
+    /// <summary>
+    /// Written by the road network stage (RoadGen). Its absence on a v3 tile marks raw extractor
+    /// output, the only safe input for the stage: a second pass would trim trimmed roads.
+    /// </summary>
+    Network = 1 << 1,
+}
+
+/// <summary>Road paint (#116). Colour is stored separately, so a type does not fix it.</summary>
+public enum PaintType : byte
+{
+    None = 0,
+    WhiteSolid = 1,
+    WhiteDashed = 2,
+    YellowDashed = 3,
+    YellowSolid = 4,
+    SharkTooth = 5,
+    Arrow = 6,        // Variant: PaintArrow bits
+    BikeSymbol = 7,
+    StopLine = 8,
+    GiveWayLine = 9,
+    RailGroove = 10,
+    Hatch = 11,
+}
+
+/// <summary><see cref="PaintType.Arrow"/> variant bits; combine for a combined arrow.</summary>
+[Flags]
+public enum PaintArrow : byte { None = 0, Left = 1, Straight = 2, Right = 4 }
+
+public enum PaintShape : byte
+{
+    /// <summary>A centreline, ribboned at runtime to <see cref="RoadPaint.Width"/>, dashed by Dash/Gap.</summary>
+    Polyline = 0,
+    /// <summary>A triangle list (teeth, arrows, symbols, hatching), drawn as given.</summary>
+    Triangles = 1,
+}
+
+/// <summary>One paint primitive, tile-local, heights already on the surface it is painted on.</summary>
+public sealed class RoadPaint
+{
+    public PaintShape Shape { get; init; }
+    public PaintType Type { get; init; }
+    public byte Variant { get; init; }
+    /// <summary>RGBA8, R in the high byte.</summary>
+    public uint Rgba { get; init; }
+    /// <summary>Line width in metres (polyline only).</summary>
+    public float Width { get; init; }
+    /// <summary>Dash and gap length in metres; Dash 0 = solid (polyline only).</summary>
+    public float Dash { get; init; }
+    public float Gap { get; init; }
+    /// <summary>xyz triples, same frame as <see cref="RoadSegment.Points"/>.</summary>
+    public required float[] Vertices { get; init; }
+    /// <summary>Triangle list for <see cref="PaintShape.Triangles"/>; empty for a polyline.</summary>
+    public ushort[] Indices { get; init; } = [];
+}
+
+public enum PointPropType : byte
+{
+    None = 0,
+    YieldSign = 1,       // Swiss "Kein Vortritt", inverted triangle (#121)
+    RoundaboutSign = 2,  // Swiss 2.41.1 (#122)
+}
+
+/// <summary>A prop at one point: a sign on a pole. Y is its foot on the ground.</summary>
+public readonly record struct RoadPointProp(
+    PointPropType Type, byte Variant, PropFlags Flags, float X, float Y, float Z,
+    // Radians about +Y; 0 faces -Z (north), matching Godot's forward.
+    float Heading,
+    // Overall height in metres (pole plus sign).
+    float Height)
+{
+    public const int RecordSize = 24;
+}
+
+public enum LinearPropType : byte
+{
+    None = 0,
+    RetainingWallFill = 1, // supports the road on the downhill side (#125)
+    RetainingWallCut = 2,  // holds the slope back on the uphill side (#125)
+    Guardrail = 3,         // steel W-beam on posts (#126)
+    Fence = 4,             // simple rail, on walls and in towns (#126)
+    MedianDouble = 5,      // double guardrail between two carriageways (#126)
+}
+
+/// <summary>Bits of <see cref="RoadLinearProp.Flags"/> and <see cref="RoadAreaProp.Flags"/>.</summary>
+[Flags]
+public enum PropFlags : ushort
+{
+    None = 0,
+    Solid = 1 << 0,  // gets collision
+}
+
+/// <summary>
+/// A prop along a line: a wall run or a railing. <see cref="Points"/> is its foot line and each
+/// point carries its own height, extruded straight up.
+/// </summary>
+public sealed class RoadLinearProp
+{
+    public LinearPropType Type { get; init; }
+    public byte Variant { get; init; }
+    public PropFlags Flags { get; init; }
+    /// <summary>Thickness in metres.</summary>
+    public float Thickness { get; init; }
+    /// <summary>Type-specific parameter (e.g. post spacing for a railing); 0 = type default.</summary>
+    public float Param { get; init; }
+    /// <summary>x, y, z, height quadruples, tile-local.</summary>
+    public required float[] Points { get; init; }
+    public int PointCount => Points.Length / 4;
+}
+
+public enum AreaPropType : byte
+{
+    None = 0,
+    Island = 1,       // roundabout centre island (#122)
+    SplitterIsland = 2, // raised island at a roundabout entry (#122)
+    Sidewalk = 3,     // a sidewalk patch not carried by a segment, e.g. a junction corner (#119)
+}
+
+/// <summary>A raised surface: a triangulated polygon lifted by <see cref="Height"/> with a kerb face.</summary>
+public sealed class RoadAreaProp
+{
+    public AreaPropType Type { get; init; }
+    public byte Variant { get; init; }
+    public PropFlags Flags { get; init; }
+    /// <summary>Metres above <see cref="Vertices"/> (the carriageway surface), e.g. a 12 cm kerb.</summary>
+    public float Height { get; init; }
+    public required float[] Vertices { get; init; }
+    public required ushort[] Indices { get; init; }
 }
 
 /// <summary>
@@ -143,6 +337,17 @@ public sealed class RoadTile
 
     /// <summary>Empty in v1 files, which stay readable.</summary>
     public List<RoadJunction> Junctions { get; init; } = new();
+
+    /// <summary>Version the tile was decoded from (the current one for a new tile).</summary>
+    public ushort Version { get; init; } = RoadFormat.Version;
+
+    public RoadTileFlags Flags { get; set; }
+
+    // v3 layers, empty in v1/v2 files
+    public List<RoadPaint> Paint { get; init; } = new();
+    public List<RoadPointProp> PointProps { get; init; } = new();
+    public List<RoadLinearProp> LinearProps { get; init; } = new();
+    public List<RoadAreaProp> AreaProps { get; init; } = new();
 }
 
 public static class RoadFormat
@@ -155,8 +360,13 @@ public static class RoadFormat
     /// previously reserved word, so the header size and every v1 offset are unchanged and
     /// <see cref="RoadCodec.Decode"/> still reads v1 files — an already-built region keeps
     /// working until it is rewritten.
+    ///
+    /// 3 keeps every v2 byte and appends tagged sections after the junctions (see
+    /// <see cref="RoadCodec"/>): per-segment attributes, paint, point/linear/area props. Unknown
+    /// section tags are skipped, so later issues add sections without another version bump.
+    /// Layout: docs/notes/tools/road-format-v3.md.
     /// </summary>
-    public const ushort Version = 2;
+    public const ushort Version = 3;
     public const ushort MinReadableVersion = 1;
     public const int HeaderSize = 24;
 
@@ -386,6 +596,59 @@ public static class RoadFormat
         "Natur" => RoadSurface.Natural,
         _ => RoadSurface.Unknown,
     };
+
+    /// <summary>
+    /// Junction priority: high nibble the TLM <c>verkehrsbedeutung</c> rank (0 k_W, 1
+    /// Verbindungsstrasse, 2 Durchgangsstrasse, 3 Hochleistungsstrasse), low nibble 12 - class for
+    /// the ordered road classes (0 for the rest). Sorts importance first, then width class.
+    /// </summary>
+    public static byte PriorityFor(RoadClass c, string? verkehrsbedeutung)
+    {
+        int importance = verkehrsbedeutung switch
+        {
+            "Hochleistungsstrasse" => 3,
+            "Durchgangsstrasse" => 2,
+            "Verbindungsstrasse" => 1,
+            _ => 0,
+        };
+        int rank = c <= RoadClass.Unknown ? 12 - (int)c : 0;
+        return (byte)(importance << 4 | rank);
+    }
+
+    /// <summary>
+    /// Nominal carriageway width in centimetres from the TLM <c>objektart</c> width class, which
+    /// <see cref="ParseClass"/> collapses (10m and 8m are both Major). 0 where TLM names none.
+    /// </summary>
+    public static ushort NominalWidthCm(string? objektart) => objektart switch
+    {
+        "10m Strasse" => 1000,
+        "8m Strasse" => 800,
+        "6m Strasse" => 600,
+        "4m Strasse" => 400,
+        "3m Strasse" => 300,
+        "2m Weg" or "2m Wegfragment" => 200,
+        "1m Weg" or "1m Wegfragment" => 100,
+        _ => 0,
+    };
+
+    /// <summary>TLM <c>stufe</c> (grade level, "k_W" when unknown) or, failing that, the structure flags.</summary>
+    public static sbyte LayerFor(string? stufe, RoadFlags flags)
+    {
+        if (int.TryParse(stufe, System.Globalization.NumberStyles.AllowLeadingSign,
+                System.Globalization.CultureInfo.InvariantCulture, out int level))
+            return (sbyte)Math.Clamp(level, sbyte.MinValue, sbyte.MaxValue);
+        return (flags & RoadFlags.Bridge) != 0 ? (sbyte)1 : (flags & RoadFlags.Tunnel) != 0 ? (sbyte)-1 : (sbyte)0;
+    }
+
+    /// <summary>TLM attributes that go into <see cref="RoadAttributes"/> as flags.</summary>
+    public static RoadAttrFlags ParseAttrFlags(string? kreisel, string? eigentuemer)
+    {
+        var f = RoadAttrFlags.None;
+        if (kreisel is "Wahr") f |= RoadAttrFlags.Roundabout;
+        if (eigentuemer is "Bund") f |= RoadAttrFlags.OwnerFederal;
+        else if (eigentuemer is "Kanton") f |= RoadAttrFlags.OwnerCanton;
+        return f;
+    }
 
     public static RoadFlags ParseFlags(string? wanderwege, string? kunstbaute,
         string? verkehrsbeschraenkung, string? richtungsgetrennt)

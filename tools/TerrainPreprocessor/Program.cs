@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using UnitSport.Terrain.Format;
 using UnitSport.Tools.Preprocessor;
+using UnitSport.Tools.RoadGen.Rewrite;
 
 // swissALTI3D XYZ zips -> .terr chunk files + manifest.json
 // Usage:
@@ -18,7 +19,7 @@ bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false,
 // to a built country does not re-extract every road in it
 string? tilesFile = null;
 // hand-traced cover TLM lacks (see docs/notes/tools/land-cover.md); --cover-only skips the road
-// stage, which would otherwise strip the junction polygons RoadGen --rewrite added
+// stage and the network stage after it
 string? coverOverrides = File.Exists("docs/data/cover_overrides.json") ? "docs/data/cover_overrides.json" : null;
 bool coverOnly = false;
 bool coarseOnly = false, horizonOnly = false;
@@ -46,8 +47,7 @@ for (int i = 0; i < args.Length; i++)
         case "--cover-only": doCover = coverOnly = featuresOnly = true; break;
         case "--cover-overrides": coverOverrides = args[++i]; break;
         case "--places": doPlaces = true; break;
-        // the place index alone: --places with --tlm (for summits) would otherwise re-run roads,
-        // which strips the junction polygons RoadGen --rewrite added
+        // the place index alone: --places with --tlm (for summits) would otherwise re-run roads
         case "--places-only": doPlaces = placesOnly = true; featuresOnly = true; break;
         case "--tiles-file": tilesFile = args[++i]; break;
         case "--roads-only": roadsOnly = true; break;
@@ -334,7 +334,7 @@ int RunFeatures(TerrainManifest existing)
 
         if (tlmGpkg != null && !coverOnly)
         {
-            int rc = RoadStage.Run(tlmGpkg, routeKeys, outDir!, batch);
+            int rc = RoadStage.Run(tlmGpkg, routeKeys, outDir!, tempDir!, batch);
             if (rc != 0) return rc;
         }
         if (doCover)
@@ -344,7 +344,7 @@ int RunFeatures(TerrainManifest existing)
                 Console.Error.WriteLine("--cover requires --tlm <swisstlm3d .gpkg>");
                 return 2;
             }
-            int rc = CoverStage.Run(tlmGpkg, outDir!, batch, coverOverrides);
+            int rc = CoverStage.Run(tlmGpkg, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!));
             if (rc != 0) return rc;
         }
         if (buildingsGpkg != null)
@@ -353,6 +353,10 @@ int RunFeatures(TerrainManifest existing)
             if (rc != 0) return rc;
         }
     }
+
+    // the road network stage sees every batch at once: a junction on a batch seam needs both sides
+    if (tlmGpkg != null && !coverOnly)
+        return RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
     return 0;
 }
 

@@ -18,8 +18,9 @@ public sealed class LaneEdge
 
     /// <summary>
     /// Which way traffic may use it: +1 only in drawing order, −1 only against it, 0 both.
-    /// Set for one carriageway of a divided road from where its partner lies (see
-    /// <see cref="LaneGraph.OrientDivided"/>); everything else is two-way.
+    /// Read from the tile (v3 <see cref="RoadAttributes.OneWay"/>); a divided carriageway the
+    /// tile gives no direction (v1/v2) gets one from where its partner lies (see
+    /// <see cref="LaneGraph.OrientDivided"/>).
     /// </summary>
     public int OneWay { get; set; }
 
@@ -93,6 +94,7 @@ public sealed class LaneGraph
                 {
                     Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags,
                     Width = seg.Width, KeyStart = KeyOf(pts[0]), KeyEnd = KeyOf(pts[^1]),
+                    OneWay = seg.Attributes.OneWay,
                 };
                 g.Edges.Add(edge);
                 g.Link(edge.KeyStart, edge, true);
@@ -145,6 +147,7 @@ public sealed class LaneGraph
 
         foreach (var e in divided)
         {
+            if (e.OneWay != 0) continue;   // stored in the tile (v3): the build already decided
             var (mid, t) = e.Sample(e.Length * 0.5f);
             var right = new Vector3(-t.Z, 0, t.X).Normalized();
             float votes = 0;
