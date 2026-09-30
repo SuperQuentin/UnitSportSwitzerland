@@ -135,15 +135,27 @@ public static class Surfaces
     /// </summary>
     private static bool Walkable(RoadSegment s) => s.Class <= RoadClass.Railway && s.Class != RoadClass.Unknown;
 
+    private static int _epoch;
+
+    /// <summary>Drops the cached road tiles, for when the world under them is replaced.</summary>
+    public static void Forget()
+    {
+        _epoch++;
+        Roads.Clear();
+        Loading.Clear();
+        _cachedAt = new Vector3(float.NaN, 0, 0);
+    }
+
     private static async void Load(IChunkSource source, TileId tile)
     {
+        int epoch = _epoch;
         try
         {
             var roads = await source.LoadRoadsAsync(tile);
-            Roads[tile] = roads?.Segments.Where(Walkable).ToList();
+            if (epoch == _epoch) Roads[tile] = roads?.Segments.Where(Walkable).ToList();
         }
-        catch { Roads[tile] = null; }
-        finally { Loading.Remove(tile); }
+        catch { if (epoch == _epoch) Roads[tile] = null; }
+        finally { if (epoch == _epoch) Loading.Remove(tile); }
     }
 
     // ------------------------------------------------------------------------------------

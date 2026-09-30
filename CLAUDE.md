@@ -258,6 +258,22 @@ Several people work on this repo in parallel, so every new feature follows these
   view-space shader maths, so on foot, the ride chase cam, free fly and the replay cameras all
   get it with no C# per frame.
   Current region: ~40 M trees, of which 0.87 M planted and 1.65 M surveyed.
+- **Trees are solid** (`World/TreeColliders`, issue #14): no per-tile tree collision — 100k+ trees
+  a forest tile. A **pool** of `StaticBody3D` + `CylinderShape3D` trunks is laid out only around
+  `ChunkManager.CollisionAnchors` (the local `FootPlayer`, a moving `VehicleBody`), 45 m round the
+  anchor and round a point 1.2 s ahead along its velocity (capped at 40 m), from the same `.trees`
+  files in 10 m world cells. Cells are handed out / taken back as the anchor moves (a released body
+  is `ProcessMode.Disabled`, which removes it from the space, and reused), at most 64 trunks placed
+  a frame. Trunk radius = the drawn trunk (0.10 × crown radius, clamped 0.12–0.5 m), height = the
+  whole tree; shrubs (kind 1) stay walk-through; no crown shape, so a plane only hits a treetop's
+  axis. **Layer 2** (`TreeColliders.Layer`): `FootPlayer`/`VehicleBody` add it to their mask, the
+  camera pull-in rays (`FootPlayer.CameraMask`) leave it out so a chase camera is never shoved in by
+  a trunk; combat rays use the default all-layers mask and hit trunks. Measured at the Col du
+  Mollendruz (51% forest): 146–330 trunks live, **0.86 ms/frame max while riding**, ~3.8 ms the
+  frame the pool first grows its bodies. Check: `<godot> --path . -- --treecheck[,out.png]
+  [--at E,N]` rides a bike at a real trunk 25 m away; non-zero exit if it gets through or no
+  impact registers. Loaded tree tiles are never evicted (~5 MB a forest tile) — the ceiling on a
+  very long drive.
 - **Water**: built at runtime from the Water cover class, not a separate file —
   swissALTI3D already models lakes/rivers as flat surfaces at water level, so the terrain
   height at a water cell *is* the water level, and rivers keep their downstream gradient
@@ -643,6 +659,25 @@ Several people work on this repo in parallel, so every new feature follows these
   bends (2.5 m/s² lateral) and for the car or player ahead. Density: Settings → Time of day (`TrafficCars`,
   35, ~half at night; `Trains`); `--traffic N`. Check: `<godot> --path . -- --trafficcheck[,out.png]
   [--time h]` — 40 s over the nearest motorway, chases a car then a train, fails if nothing moved.
+- **Cars and drifting** (`Player/Car.cs`, `CarSpec`, `RideKind` 8–10: Coupe 86, Rotary FD, Rally 4WD;
+  issue #1). A car is the one mount that does not go where it points, so `RideMotion` gained **`Slip`**
+  (travel minus nose, rad, + = left; π reversing) and `FootPlayer.RidePhysics` moves the body along
+  `Yaw + Slip` — zero for every other mount, which is why nothing else changed. The model is a planar
+  bicycle model in `RideMotion` alone (speed, slip, yaw rate), so a wall, boost or a sloppy landing that
+  edits `Speed` applies to the car too: slip angles through `sin(C·atan(B·α))` (peak ~0.15 rad), each
+  axle's side force limited to what its **friction circle** leaves after drive/brake force, load
+  transfer from the last step's acceleration, 5-speed auto box, 4 substeps. Every way into a drift
+  falls out of that: **handbrake** (Space / A — `Rideable.CanHop` false, `RideInput.Handbrake`) collapses
+  the rear circle, power-over eats it, and braking into a turn unloads the rear (feint). Game adds grip,
+  power, a counter-steer assist and a **yaw moment that catches the car past ~35°** (the fronts are on
+  the lock stop by then, so steering alone cannot); Sim has none of it. Two traps found by the check:
+  the low-speed kinematic blend must key on TOTAL speed (keyed on forward speed it zeroed the sideways
+  speed at 70° of angle, 50 km/h gone in 0.3 s), and speed-scaled steering lock must lift in a slide or
+  there is not enough counter-steer to catch anything. The chase camera swings ~55% toward the travel.
+  Known limits: the body is still the player capsule (radius 0.85 m), and there is no per-surface grip,
+  so the 4WD does not yet get its gravel advantage. Check: `<godot> --headless --path . -- --driftcheck
+  [--trace]` — flat ground, no world: launch, handbrake entry, 4 s hold, recovery for every car in both
+  profiles; non-zero exit on a spin, no drift, or no recovery.
 - **Mantle** (on foot): pushing into a wall whose top is 0.45–2.1 m above the feet, with open air
   over it and standing room on it, pulls you up (automatic in the air, needs Jump on the ground so
   walking into garden walls does not vault them). Jump + mantle therefore reaches ~3 m. Moved
@@ -858,6 +893,25 @@ Several people work on this repo in parallel, so every new feature follows these
   `ChunkManager._available` — without that merge the LOD rings skip unknown tiles and nothing
   is ever requested. It also saves that index to the cache, so tiles streamed in an earlier
   session are reachable offline.
+- **Generated fallback world** (`Terrain/ProceduralWorld`, `Terrain/FallbackChunkSource`): a client
+  with no tiles at all (a fresh clone) gets a stand-in instead of a void — an alpine valley through
+  the spawn point with a river on a flat bed (water from the cover raster, like the real one), a
+  road and a railway along the floor, villages with side streets and a church every ~2.6 km, farms
+  and alpine huts, forest to a wandering tree line, rock, scree, glacier, vineyards on the sunny
+  side, orchards, a 100 km horizon. 81 x 81 tiles, all in the **ordinary formats**, served through
+  the ordinary `IChunkSource` seam under `CachingChunkSource`, so roads, traffic, trains, doors,
+  interiors, collision and gathering all work on it unchanged. Everything is a pure function of
+  LV95 position, so seams are bit-identical and the stride-10 grid equals the decimated full one
+  (both checked). Noise is sampled on a **world-anchored 5 m lattice** and interpolated: evaluated
+  per vertex it cost 320 ms a tile; now ~30-40 ms, cover ~10 ms (classified from 10 m samples, since
+  every tile in the rings asks for cover), horizon 0.2 s. The origin goes on the spawn point.
+  **Real tiles replace it**: `ChunkManager.MergeAvailableTiles` calls `RetireFallback` first, which
+  unloads every generated tile, switches the source off, flushes the cache (`CachingChunkSource.Clear`
+  bumps an epoch so a fetch straddling it is not cached), clears the horizon, and raises
+  `TerrainReplaced` for the systems that keep their own tile caches (`Surfaces`, `Ambience`,
+  `Gathering`, `Traffic`). Joining a server retires it **before** adopting the server's origin
+  (`ClientTerrainSync.Adopt`, run on the main thread). Test it with `--chunks <empty dir> --cache
+  <empty dir>`; a server still refuses to start without real terrain.
 - **Chat and commands** (`Net/ChatManager`, `Core/ChatUi`): one class runs on both sides at
   `World/Chat` — the path must match, because Godot routes RPCs by node path. Clients only
   submit text and render replies; **every** decision (permissions, names, teleport
@@ -879,6 +933,19 @@ Several people work on this repo in parallel, so every new feature follows these
 - **Output of any check or probe goes in `test_output/`** (gitignored, with a `.gdignore` so Godot
   never imports it): soundcheck WAVs, `--shot`/`--ride`/`--flycheck` screenshots, test exports.
   Never write them to the project root or a temp path that can end up inside the repo.
+- **Region setup wizard**: `dotnet run --project tools/MapSetup` (`tools/MapSetup/`, Spectre.Console).
+  Terminal map of CH (raw 24-bit ANSI, half-block pixels) to select tiles (rectangle, brush, town +
+  radius, canton), an estimate table (download / disk / time per step), then it chains the whole
+  pipeline below as subprocesses. Every step skips when its output exists, and the state lives in
+  `terrain_chunks_temp/mapsetup*.json`. The map comes from the committed
+  `tools/MapSetup/switzerland.bin` (per-km tile: zip size, survey year, canton, max elevation;
+  places; buildings sheets; nationwide file sizes). `--bake` rebuilds it from STAC +
+  swissBOUNDARIES3D. Non-interactive: `--town X --radius km | --canton VS | --bbox E0,N0,E1,N1 |
+  --tiles-file f | --resume`, `--layers`, `--plan-only`, `--yes`. The tile-list plumbing it relies
+  on: `swiss_data.py --tiles-file/--progress-json`, TerrainPreprocessor
+  `--features-only --tiles-file` and `--places-only` (places without re-running roads, which
+  would strip junctions), RoadGen `--tiles-file --skip-rewritten`, and `export_buildings.py --src`
+  (per-sheet zips).
 - Preprocess: `dotnet run --project tools/TerrainPreprocessor -c Release -- --in ressources/data/swiss_chunks --out terrain_chunks --verify --dump-png terrain_chunks_png`
   `--in` is recursive and repeatable (sources on any drive/share), `--jobs` defaults to all cores,
   `--io-jobs` (4) caps concurrent source reads. **One pass, no parse cache**: `TerrainBuild`
@@ -1381,15 +1448,25 @@ Several people work on this repo in parallel, so every new feature follows these
   it has been asked for.
 - **A fresh clone has NO terrain** — the generated data is gitignored — so a missing
   `manifest.json` is an ordinary state, not an error. `LocalChunkSource` returns an empty
-  manifest and the client boots into an empty world with a message; it used to throw
-  `FileNotFoundException` out of `ClientWorld._Ready` and take the game down. A *server* still
-  fails fast, because it is the authority on where the world is and has nothing to serve.
+  manifest and the client boots into the generated fallback world with a message; it used to
+  throw `FileNotFoundException` out of `ClientWorld._Ready` and take the game down. A *server*
+  still fails fast, because it is the authority on where the world is and has nothing to serve.
 - **Never default the world origin to LV95 0/0.** Switzerland is 2.6 million metres from
-  there, so float precision collapses the moment real data arrives. With no manifest,
-  `WorldOrigin.SwissDefault()` is used, and a client with zero tiles then *adopts* the
-  server's origin via `Rebase` rather than refusing the mismatch — refusing is right when two
-  populated worlds disagree, wrong when you have no world at all. Rebasing changes what every
-  world coordinate means, so `ClientWorld.RespawnAfterRebase` puts the player down again.
+  there, so float precision collapses the moment real data arrives. With no manifest the origin
+  is the spawn point (where the fallback world is built), and a client whose only world is
+  generated then *adopts* the server's origin via `Rebase` rather than refusing the mismatch —
+  refusing is right when two populated worlds disagree, wrong when you have no real world at all.
+  `FallbackActive` must be checked alongside `AvailableTileCount`, which counts generated tiles.
+  Rebasing changes what every world coordinate means, so `ClientWorld.RespawnAfterRebase` puts
+  the player down again.
+- **A tile worker must not create a Godot object after the engine starts tearing down.** Workers
+  make `ArrayMesh`/`MultiMesh` themselves, and one that did so during quit was `Fatal error.
+  0xC0000005` in `ArrayMesh..ctor` — the process died on exit. It only showed once something was
+  always building at quit, which the generated fallback world is (3 of 3 fly probes crashed).
+  `ChunkManager._ExitTree` cancels every build and waits up to 3 s for `_buildsInFlight` to reach
+  0, and every worker checks its token right before each Godot call; either alone leaves a race.
+  Related: `ClientTerrainSync` continues on the thread pool, so anything it raises that touches UI
+  or nodes must be marshalled (`Status` is deferred; the rebase/merge runs via `OnMainThread`).
 - **`places.json` is the one asset the UI reads, not the streamer** — so it was silently left
   out of `AssetKind` and a streaming client connected fine, pulled terrain fine, and showed an
   empty Tab search. It is now `AssetKind.Places`, fetched during sync into the cache, and
@@ -1438,3 +1515,13 @@ Several people work on this repo in parallel, so every new feature follows these
 - godot-ai MCP: `game_eval` needs `Engine.get_main_loop().root` (no bare `root`) and
   TAB indentation; `editor_manage monitors_get` reads the EDITOR process, not the game —
   use `Performance.get_monitor` inside `game_eval` for game metrics.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

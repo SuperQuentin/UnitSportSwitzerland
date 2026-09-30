@@ -580,22 +580,34 @@ public partial class Ambience : Node
         LoadWater(source, tile);
     }
 
+    private int _waterEpoch;
+
+    /// <summary>Drops the cached stream lines, for when the world under them is replaced.</summary>
+    public void ForgetTiles()
+    {
+        _waterEpoch++;
+        _water.Clear();
+        _waterLoading.Clear();
+    }
+
     private async void LoadWater(IChunkSource source, TileId tile)
     {
+        int epoch = _waterEpoch;
         try
         {
             var roads = await source.LoadRoadsAsync(tile);
             // same filter as Gathering: a tunnelled channel is under a mountain, not beside you
-            _water[tile] = roads?.Segments
-                .Where(s => s.Class is RoadClass.Watercourse or RoadClass.Bisse && (s.Flags & RoadFlags.Tunnel) == 0)
-                .ToList();
+            if (epoch == _waterEpoch)
+                _water[tile] = roads?.Segments
+                    .Where(s => s.Class is RoadClass.Watercourse or RoadClass.Bisse && (s.Flags & RoadFlags.Tunnel) == 0)
+                    .ToList();
         }
         catch (Exception ex)
         {
             GD.PushWarning($"[ambience] water tile {tile}: {ex.Message}");
-            _water[tile] = null;
+            if (epoch == _waterEpoch) _water[tile] = null;
         }
-        finally { _waterLoading.Remove(tile); }
+        finally { if (epoch == _waterEpoch) _waterLoading.Remove(tile); }
     }
 
     private void PumpBrook(double delta, Vector3 ears)

@@ -119,9 +119,22 @@ public partial class BirdProbe : Node
         // (3) a crow 25 m ahead, shot directly
         var crowSpecies = BirdCatalog.ByName("Carrion Crow")!;
         if (terrain) standAt = player.GlobalPosition;
+        // Trunks are solid now and a pellet does not go through one: pick, of 16 headings, one with
+        // a clear line to where the crow will sit, or the check tests the forest instead of the gun
         var forward = Vector3.Forward;
         var at = standAt + forward * 25f;
         at.Y = _birds.Ground(at);
+        var space = player.GetWorld3D().DirectSpaceState;
+        for (int k = 0; k < 16; k++)
+        {
+            var dir = new Basis(Vector3.Up, k * Mathf.Tau / 16f) * Vector3.Forward;
+            var spot = standAt + dir * 25f;
+            spot.Y = _birds.Ground(spot);
+            var eyeAt = player.GlobalPosition + Vector3.Up * 1.6f;
+            var q = PhysicsRayQueryParameters3D.Create(eyeAt, spot + Vector3.Up * 0.3f, uint.MaxValue,
+                new Godot.Collections.Array<Rid> { player.GetRid() });
+            if (space.IntersectRay(q).Count == 0) { forward = dir; at = spot; break; }
+        }
         var crow = _birds.Spawn(crowSpecies, at, Bird.Mode.Ground);
         await Frame();
 

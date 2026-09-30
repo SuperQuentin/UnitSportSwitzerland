@@ -24,6 +24,10 @@ public partial class RideUi : CanvasLayer
     private PanelContainer _panel = null!;
     private Label _status = null!;
     private readonly List<(RideKind Kind, Button Button)> _entries = new();
+    /// <summary>Entries reachable by number key: the mounts, not the car list.</summary>
+    private int _shortcuts;
+    private ScrollContainer _cars = null!;
+    private Button _carsButton = null!;
 
     /// <summary>Resolved per press, never captured: in multiplayer the player node is respawned.</summary>
     public Func<FootPlayer?>? ActivePlayer { get; set; }
@@ -71,12 +75,36 @@ public partial class RideUi : CanvasLayer
         int number = 2;
         foreach (var ride in Rideable.All)
             Entry(rows, number++, ride.Kind, ride.Label, ride.Blurb);
+        _shortcuts = _entries.Count;
+
+        // The cars are a roster, not a line each: one button folds a scrolling list open, so the
+        // mounts above stay on screen and in reach of the number keys.
+        var carsButton = new Button { Text = $"{number}.  Cars  ({CarCatalog.All.Count})  ▸", CustomMinimumSize = new Vector2(0, 32) };
+        carsButton.Alignment = HorizontalAlignment.Left;
+        rows.AddChild(carsButton);
+        _cars = new ScrollContainer { CustomMinimumSize = new Vector2(0, 380), Visible = false };
+        _cars.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        var carRows = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        carRows.AddThemeConstantOverride("separation", 6);
+        _cars.AddChild(carRows);
+        rows.AddChild(_cars);
+        foreach (var car in CarCatalog.All)
+            Entry(carRows, 0, car.Kind, car.Label, car.Blurb);
+        carsButton.Pressed += () =>
+        {
+            _cars.Visible = !_cars.Visible;
+            // the list takes the mounts' place, or the panel outgrows a 648 px screen
+            for (int i = 0; i < _shortcuts; i++) _entries[i].Button.GetParent<Control>().Visible = !_cars.Visible;
+            carsButton.Text = $"{number}.  Cars  ({CarCatalog.All.Count})  {(_cars.Visible ? "▾" : "▸")}";
+            if (_cars.Visible) PlayerInput.FocusFirst(_cars);
+        };
+        _carsButton = carsButton;
 
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _status.AddThemeColorOverride("font_color", new Color(0.92f, 0.55f, 0.35f));
         rows.AddChild(_status);
 
-        var hint = new Label { Text = "E / (Y) closes. Bike, helicopter and plane are left where you get off (E / Y); E next to one gets back in" };
+        var hint = new Label { Text = "E / (Y) closes. Bikes, cars, helicopter and plane are left where you get off (E / Y); E next to one gets back in" };
         hint.AddThemeFontSizeOverride("font_size", 12);
         hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
         rows.AddChild(hint);
@@ -87,7 +115,7 @@ public partial class RideUi : CanvasLayer
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 0);
 
-        var button = new Button { Text = $"{number}.  {label}", CustomMinimumSize = new Vector2(0, 32) };
+        var button = new Button { Text = number > 0 ? $"{number}.  {label}" : label, CustomMinimumSize = new Vector2(0, 32) };
         button.Alignment = HorizontalAlignment.Left;
         button.Pressed += () => Choose(kind);
         box.AddChild(button);
@@ -173,7 +201,8 @@ public partial class RideUi : CanvasLayer
         // Key.Key1 is the physical "1", so the shortcuts land in the same place on an AZERTY
         // keyboard as on a QWERTY one — the same reason the movement keys are read physically.
         int index = (int)key.PhysicalKeycode - (int)Key.Key1;
-        if (index < 0 || index >= _entries.Count) return;
+        if (index == _shortcuts) { _carsButton.EmitSignal(BaseButton.SignalName.Pressed); GetViewport().SetInputAsHandled(); return; }
+        if (index < 0 || index >= _shortcuts) return;
 
         Choose(_entries[index].Kind);
         GetViewport().SetInputAsHandled();
