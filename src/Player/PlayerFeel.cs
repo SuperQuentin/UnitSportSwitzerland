@@ -29,6 +29,9 @@ public partial class PlayerFeel : Node3D
     // --- audio ---
     private AudioStreamPlayer _hiss = null!, _tyre = null!, _scrape = null!;
     private EngineSynth _rotor = null!, _engine = null!;
+    private AudioStreamPlayer _squeal = null!;
+    private EngineSynth? _carEngine;
+    private CarSpec? _carEngineSpec;
     private float _proximity;
     private readonly AudioStreamPlayer[] _voices = new AudioStreamPlayer[8];
     private int _nextVoice;
@@ -47,7 +50,9 @@ public partial class PlayerFeel : Node3D
     private ColorRect _linesRect = null!;
     private CanvasLayer _screen = null!;
     private Label _speedLabel = null!, _popup = null!;
-    private ProgressBar _boostBar = null!, _healthBar = null!;
+    private ProgressBar _boostBar = null!, _healthBar = null!, _rpmBar = null!;
+    private Label _driftLabel = null!;
+    private StyleBoxFlat _rpmFill = null!;
     private Label _engineLabel = null!, _hint = null!;
     private float _hintPulse;
     private ColorRect _hurtFlash = null!;
@@ -57,6 +62,13 @@ public partial class PlayerFeel : Node3D
     // --- particles ---
     private GpuParticles3D _spray = null!, _dust = null!;
     private ParticleProcessMaterial _sprayMat = null!;
+    private GpuParticles3D _smoke = null!;
+
+    // --- drift score ---
+    private const float DriftMinSlip = 0.26f, DriftMaxSlip = 1.4f, DriftMinSpeed = 8f;
+    private const float DriftPointsPerRadMetre = 10f, DriftComboSeconds = 1.5f, DriftEndGrace = 0.6f;
+    private bool _drifting;
+    private float _driftScore, _driftTime, _driftGrace;
 
     private float _airTime;
     private bool _wasGrounded = true;
@@ -75,6 +87,7 @@ public partial class PlayerFeel : Node3D
         _hiss = Loop(SfxSynth.Hiss);
         _tyre = Loop(SfxSynth.Tyre);
         _scrape = Loop(SfxSynth.Scrape);
+        _squeal = Loop(SfxSynth.Squeal);
         _rotor = new EngineSynth(EngineProfile.Turboshaft, spatial: false, seed: 1);
         _engine = new EngineSynth(EngineProfile.PistonAero, spatial: false, seed: 2);
         AddChild(_rotor);
@@ -90,6 +103,16 @@ public partial class PlayerFeel : Node3D
         _sprayMat = (ParticleProcessMaterial)_spray.ProcessMaterial;
         _dust = Emitter("Dust", 40, 0.8f, 0.10f);
         ((ParticleProcessMaterial)_dust.ProcessMaterial).Color = Dirt;
+        // tyre smoke: big, slow white puffs that drift up from behind the rear wheels
+        _smoke = Emitter("TyreSmoke", 70, 1.2f, 0.7f);
+        _smoke.Position = new Vector3(0, 0.15f, 1.3f);
+        var smokeMat = (ParticleProcessMaterial)_smoke.ProcessMaterial;
+        smokeMat.Color = new Color(0.95f, 0.95f, 0.95f);
+        smokeMat.EmissionSphereRadius = 0.7f;
+        smokeMat.Gravity = new Vector3(0, 0.8f, 0);
+        smokeMat.InitialVelocityMin = 0.3f;
+        smokeMat.InitialVelocityMax = 1.2f;
+        smokeMat.ScaleMax = 2.2f;
 
         _player.Landed += OnLanded;
         _player.Jumped += () => Play(SfxSynth.WhooshBank, 0.30f, 1.25f);
@@ -128,6 +151,11 @@ public partial class PlayerFeel : Node3D
         };
         _player.Impacted += lost =>
         {
+            if (_drifting && lost > 2f)
+            {
+                _drifting = false;
+                Popup("CRASHED", false);
+            }
             Play(SfxSynth.ImpactBank, Mathf.Clamp(lost * 0.12f, 0.25f, 1f), 1f);
             AddTrauma(Mathf.Clamp(lost * 0.12f, 0.15f, 0.8f));
         };
@@ -141,9 +169,9 @@ public partial class PlayerFeel : Node3D
         if (!viewing)
         {
             // someone else's camera is on screen (the fly camera): nothing of this belongs there
-            SetLoop(_hiss, 0, 1); SetLoop(_tyre, 0, 1); SetLoop(_scrape, 0, 1);
-            _rotor.Set(0, 0, 0, 0); _engine.Set(0, 0, 0, 0);
-            _spray.Emitting = _dust.Emitting = false;
+            SetLoop(_hiss, 0, 1); SetLoop(_tyre, 0, 1); SetLoop(_scrape, 0, 1); SetLoop(_squeal, 0, 1);
+            _rotor.Set(0, 0, 0, 0); _engine.Set(0, 0, 0, 0); _carEngine?.Set(0, 0, 0, 0);
+            _spray.Emitting = _dust.Emitting = _smoke.Emitting = false;
             return;
         }
 
@@ -156,6 +184,7 @@ public partial class PlayerFeel : Node3D
 
         UpdateAir(dt, grounded);
         UpdateAudio(dt, ride, grounded, speed);
+        UpdateDrift(dt, grounded, speed);
         UpdateParticles(ride, grounded, speed);
         UpdateShake(dt, ride, grounded, excite);
         UpdateHud(dt, ride, speed);
@@ -182,6 +211,7 @@ public partial class PlayerFeel : Node3D
         {
             RideKind.RoadBike => (9f, 18f),    // 32 → 65 km/h
             RideKind.Skis => (9f, 22f),        // 32 → 80 km/h
+            _ when CarCatalog.IsCar(ride) => (15f, 40f),   // 54 → 144 km/h
             _ => (4.8f, 9f),                   // above a run: only slides and launches get here
         };
         return Mathf.Clamp((speed - calm) / (fast - calm), 0f, 1.5f);
@@ -217,8 +247,11 @@ public partial class PlayerFeel : Node3D
 
         // tyres: roar with speed, only while they touch something
         bool bike = ride == RideKind.RoadBike;
-        SetLoop(_tyre, bike && grounded ? Mathf.Clamp(speed / 14f, 0f, 1f) * 0.55f : 0f,
-            0.55f + speed / 22f);
+        var car = _player.Vehicle as Car;
+        SetLoop(_tyre, bike && grounded ? Mathf.Clamp(speed / 14f, 0f, 1f) * 0.55f
+            : car != null && grounded ? Mathf.Clamp(speed / 30f, 0f, 1f) * 0.5f : 0f,
+            0.55f + speed / (car != null ? 40f : 22f));
+        UpdateCarAudio(car, grounded, speed);
 
         // freewheel: the pawls tick when the wheel turns and the legs do not
         if (bike && grounded && speed > 1.5f && input.Throttle < 0.05f)
@@ -275,6 +308,69 @@ public partial class PlayerFeel : Node3D
         }
         else _stepAccum = 0.6f;   // the first step after stopping lands promptly
     }
+
+    /// <summary>The car's engine from its rpm and pedal, and the squeal from how hard the tyres slide.</summary>
+    private void UpdateCarAudio(Car? car, bool grounded, float speed)
+    {
+        if (car == null)
+        {
+            _carEngine?.Set(0, 0, 0, 0);
+            SetLoop(_squeal, 0, 1);
+            return;
+        }
+        if (_carEngine == null || _carEngineSpec != car.Spec)
+        {
+            _carEngine?.QueueFree();
+            _carEngineSpec = car.Spec;
+            _carEngine = new EngineSynth(EngineProfile.For(car.Spec.Engine, car.Spec.IdleRpm, car.Spec.Redline), spatial: false, seed: 3);
+            AddChild(_carEngine);
+        }
+        _carEngine.Set(car.Rpm01, car.Throttle, Mathf.Clamp(car.Throttle * 0.8f + 0.2f * car.Rpm01, 0f, 1f),
+            // half what it was: at 0.75 a car at redline drowned every other sound in the game
+            _player.EngineOn ? 0.15f + 0.22f * car.Rpm01 : 0f);
+
+        // a squeal is a note, not a hiss: it appears past a threshold and climbs with the slide
+        float slide = grounded ? Mathf.SmoothStep(0.15f, 0.9f, car.TyreSlide) : 0f;
+        SetLoop(_squeal, slide * Mathf.Clamp(speed / 10f, 0f, 1f) * 0.35f, 0.8f + 0.3f * car.TyreSlide + speed / 90f);
+    }
+
+    /// <summary>
+    /// Drift score: hold a slip angle above 0.26 rad at speed and points pile up as angle x speed x
+    /// time, with the multiplier climbing every 1.5 s. It ends after 0.6 s under the threshold (the
+    /// score is banked through the ordinary announce path) or instantly on a crash (see Impacted).
+    /// </summary>
+    private void UpdateDrift(float dt, bool grounded, float speed)
+    {
+        if (_player.Vehicle is not Car)
+        {
+            _drifting = false;
+            _driftLabel.Visible = false;
+            return;
+        }
+        float slip = Mathf.Abs(Mathf.Wrap(_player.Motion.Slip, -Mathf.Pi, Mathf.Pi));
+        bool valid = grounded && speed > DriftMinSpeed && slip > DriftMinSlip && slip < DriftMaxSlip;
+        if (valid)
+        {
+            if (!_drifting) { _drifting = true; _driftScore = 0; _driftTime = 0; }
+            _driftGrace = 0;
+            _driftTime += dt;
+            _driftScore += slip * speed * dt * DriftPointsPerRadMetre * DriftMultiplier;
+        }
+        else if (_drifting)
+        {
+            _driftGrace += dt;
+            if (_driftGrace > DriftEndGrace)
+            {
+                _drifting = false;
+                if (_driftScore >= 100f) _player.Announce($"NICE DRIFT  {_driftScore.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)}", true);
+            }
+        }
+        _driftLabel.Visible = _drifting;
+        if (_drifting)
+            _driftLabel.Text = $"DRIFT  {_driftScore.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)}" + (DriftMultiplier > 1 ? $"   x{DriftMultiplier}" : "");
+    }
+
+    private int DriftMultiplier => 1 + (int)(_driftTime / DriftComboSeconds);
 
     private AudioStreamPlayer Loop(AudioStream stream)
     {
@@ -422,6 +518,11 @@ public partial class PlayerFeel : Node3D
             _sprayMat.Color = Snow;
         }
 
+        // white smoke off the rear tyres once they are properly sliding
+        float tyreSlide = _player.Vehicle is Car car ? car.TyreSlide : 0f;
+        _smoke.Emitting = grounded && tyreSlide > 0.35f;
+        if (_smoke.Emitting) _smoke.AmountRatio = Mathf.Clamp((tyreSlide - 0.3f) / 0.7f, 0.15f, 1f);
+
         // dust behind a slide, or a skidding back wheel
         bool slide = ride == RideKind.OnFoot && _player.IsSliding && grounded;
         bool skid = ride == RideKind.RoadBike && grounded && input.Brake > 0.5f && speed > 4f;
@@ -562,6 +663,29 @@ public partial class PlayerFeel : Node3D
         _boostBar.AddThemeStyleboxOverride("background", back);
         _screen.AddChild(_boostBar);
 
+        _rpmBar = new ProgressBar
+        {
+            MinValue = 0, MaxValue = 1, Step = 0.001, ShowPercentage = false,
+            CustomMinimumSize = new Vector2(220, 8),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Visible = false,
+        };
+        _rpmBar.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
+        _rpmBar.OffsetLeft = -110; _rpmBar.OffsetRight = 110;
+        _rpmBar.OffsetTop = -14; _rpmBar.OffsetBottom = -6;
+        _rpmFill = new StyleBoxFlat { BgColor = new Color(1f, 0.85f, 0.25f) };
+        _rpmBar.AddThemeStyleboxOverride("fill", _rpmFill);
+        _rpmBar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.5f) });
+        _screen.AddChild(_rpmBar);
+
+        _driftLabel = HudLabel(30);
+        _driftLabel.SetAnchorsPreset(Control.LayoutPreset.CenterTop);
+        _driftLabel.GrowHorizontal = Control.GrowDirection.Both;
+        _driftLabel.OffsetTop = 150;
+        _driftLabel.AddThemeColorOverride("font_color", new Color(0.55f, 0.9f, 1f));
+        _driftLabel.Visible = false;
+        _screen.AddChild(_driftLabel);
+
         _healthBar = new ProgressBar
         {
             MinValue = 0, MaxValue = FootPlayer.MaxHealth, ShowPercentage = false,
@@ -621,7 +745,17 @@ public partial class PlayerFeel : Node3D
             _speedLabel.Text = _player.IsFlying
                 ? $"{speed * 3.6f:0} km/h    {_player.Clearance:0} m"
                 + (ride == RideKind.Plane ? $"    {_player.Flight.Control * 100:0}%" : "")
-                : $"{speed * 3.6f:0} km/h";
+                : _player.Vehicle is Car c
+                    ? $"{speed * 3.6f:0} km/h    {(c.Gear < 0 ? "R" : c.Gear.ToString())}    {c.Rpm:0} rpm"
+                    : $"{speed * 3.6f:0} km/h";
+
+        // the rev counter, amber turning red toward the limit
+        _rpmBar.Visible = _player.Vehicle is Car;
+        if (_player.Vehicle is Car rev)
+        {
+            _rpmBar.Value = rev.Rpm01;
+            _rpmFill.BgColor = new Color(1f, 0.85f, 0.25f).Lerp(new Color(1f, 0.2f, 0.15f), Mathf.Clamp((rev.Rpm01 - 0.8f) / 0.15f, 0f, 1f));
+        }
 
         // health only when it is not full: a bar that is always full is clutter
         _healthBar.Visible = _player.Health < FootPlayer.MaxHealth - 0.5f;

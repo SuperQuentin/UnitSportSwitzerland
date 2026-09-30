@@ -183,7 +183,7 @@ public partial class MainMenu : CanvasLayer
         if (open)
         {
             _status.Text = Current == null
-                ? "Pick a mode to begin"
+                ? "Pick a mode to begin (Esc: explore)"
                 : $"Currently: {Describe(Current.Value)}";
             _resume.Visible = Current != null;
             Input.MouseMode = Input.MouseModeEnum.Visible;
@@ -217,10 +217,11 @@ public partial class MainMenu : CanvasLayer
             PlayerInput.FocusFirst(_panel);
             GetViewport().SetInputAsHandled();
         }
-        else if (Current != null)
-        {
-            Close();
-            GetViewport().SetInputAsHandled();
-        }
+        else if (Current != null) Close();
+        // At boot no mode is running yet, and this branch used to do nothing and leave the event
+        // unhandled — so it reached ClientWorld, which re-opened the menu: Esc could never close
+        // it. With nothing to resume, Esc starts the default, offline exploring.
+        else Choose(GameMode.Explore);
+        GetViewport().SetInputAsHandled();
     }
 }

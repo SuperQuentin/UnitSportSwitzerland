@@ -13,13 +13,15 @@ public static class Soundcheck
         var banks = new[]
         {
             SfxSynth.StepsBank, SfxSynth.LandingBank, SfxSynth.WhooshBank, SfxSynth.TickBank,
-            SfxSynth.ImpactBank, SfxSynth.ChimeBank, SfxSynth.BoomBank,
+            SfxSynth.ImpactBank, SfxSynth.ChimeBank, SfxSynth.BoomBank, SfxSynth.GunBank,
         };
+        bad += Save(System.IO.Path.Combine(outDir, "tyre_squeal.wav"), Decode(SfxSynth.Squeal));
         foreach (var bank in banks)
             for (int i = 0; i < bank.Variants.Length; i++)
                 bad += Save(System.IO.Path.Combine(outDir, $"{bank.Name}_{i}.wav"), Decode(bank.Variants[i]));
 
-        var profiles = new (string name, EngineProfile p)[] { ("plane", EngineProfile.PistonAero), ("heli", EngineProfile.Turboshaft) };
+        var profiles = new (string name, EngineProfile p)[] { ("plane", EngineProfile.PistonAero), ("heli", EngineProfile.Turboshaft),
+            ("inline4", EngineProfile.Inline4Na), ("rotary", EngineProfile.Rotary), ("boxer", EngineProfile.Boxer4Turbo) };
         foreach (var (pname, profile) in profiles)
             foreach (EngineVoice voice in Enum.GetValues<EngineVoice>())
             {

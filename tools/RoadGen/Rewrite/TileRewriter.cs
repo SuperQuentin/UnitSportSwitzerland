@@ -434,7 +434,7 @@ public static class TileRewriter
     }
 
     /// <summary>Reads only the 24-byte header — a pre-scan of 6,699 tiles must not decode them all.</summary>
-    private static bool HasJunctions(string chunkDir, TileId id)
+    public static bool HasJunctions(string chunkDir, TileId id)
     {
         string path = Path.Combine(chunkDir, RoadFormat.FileName(id));
         if (!File.Exists(path)) return false;

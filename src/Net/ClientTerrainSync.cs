@@ -91,34 +91,10 @@ public sealed partial class ClientTerrainSync : Node
             return;
         }
 
-        double de = Math.Abs(manifest.SuggestedOriginLv95.E - _origin.E);
-        double dn = Math.Abs(manifest.SuggestedOriginLv95.N - _origin.N);
-
-        // A client with no terrain of its own has no world to contradict, so it adopts the
-        // server's anchor instead of refusing. This is the fresh-clone path: nothing has been
-        // placed yet, so there is nothing for a rebase to invalidate, and the whole world then
-        // streams in. Refusing here would make a clone with no data unable to play at all.
-        if ((de > 0.5 || dn > 0.5) && _chunks.AvailableTileCount == 0)
-        {
-            _origin.Rebase(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
-            de = dn = 0;
-            Rebased?.Invoke();
-        }
-
-        if (de > 0.5 || dn > 0.5)
-        {
-            string message =
-                $"World origin mismatch: server is at LV95 {manifest.SuggestedOriginLv95.E:F0}/"
-                + $"{manifest.SuggestedOriginLv95.N:F0}, this client at {_origin.E:F0}/{_origin.N:F0}. "
-                + "Every position would be offset by the difference, so terrain streaming is off.";
-
-            GD.PushError($"[stream] {message}");
-            Status?.Invoke(message);
-            OriginMismatch?.Invoke(message);
-            return;
-        }
-
-        int added = _chunks.MergeAvailableTiles(manifest.Tiles.Select(t => t.Id));
+        // The continuation above runs on the thread pool, and what follows moves the origin and
+        // (when the generated fallback world retires) frees nodes: main thread only.
+        int added = await OnMainThread(() => Adopt(manifest)).ConfigureAwait(false);
+        if (added < 0) return;
         Synced = true;
 
         // Persist it beside the cache. Without this the cached tiles are unreachable offline:
@@ -135,6 +111,57 @@ public sealed partial class ClientTerrainSync : Node
 
         await SyncPlacesAsync(ct).ConfigureAwait(false);
         await SyncHorizonAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Checks the server's origin against ours and merges its tile list. Returns how many tiles
+    /// were new, or -1 when the worlds disagree and streaming stays off.
+    /// </summary>
+    private int Adopt(TerrainManifest manifest)
+    {
+        double de = Math.Abs(manifest.SuggestedOriginLv95.E - _origin.E);
+        double dn = Math.Abs(manifest.SuggestedOriginLv95.N - _origin.N);
+
+        // A client with no terrain of its own has no world to contradict, so it adopts the
+        // server's anchor instead of refusing. This is the fresh-clone path: the whole world then
+        // streams in, and refusing here would make a clone with no data unable to play at all.
+        // A generated stand-in world counts as none — it is retired before the origin moves, so
+        // nothing placed against the old anchor survives the rebase.
+        bool noWorldOfOurOwn = _chunks.AvailableTileCount == 0
+            || (_chunks.FallbackActive && manifest.Tiles.Count > 0);
+        if ((de > 0.5 || dn > 0.5) && noWorldOfOurOwn)
+        {
+            _chunks.RetireFallback();
+            _origin.Rebase(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
+            de = dn = 0;
+            Rebased?.Invoke();
+        }
+
+        if (de > 0.5 || dn > 0.5)
+        {
+            string message =
+                $"World origin mismatch: server is at LV95 {manifest.SuggestedOriginLv95.E:F0}/"
+                + $"{manifest.SuggestedOriginLv95.N:F0}, this client at {_origin.E:F0}/{_origin.N:F0}. "
+                + "Every position would be offset by the difference, so terrain streaming is off.";
+
+            GD.PushError($"[stream] {message}");
+            Status?.Invoke(message);
+            OriginMismatch?.Invoke(message);
+            return -1;
+        }
+
+        return _chunks.MergeAvailableTiles(manifest.Tiles.Select(t => t.Id));
+    }
+
+    private static Task<T> OnMainThread<T>(Func<T> work)
+    {
+        var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Callable.From(() =>
+        {
+            try { done.SetResult(work()); }
+            catch (Exception e) { done.SetException(e); }
+        }).CallDeferred();
+        return done.Task;
     }
 
     /// <summary>

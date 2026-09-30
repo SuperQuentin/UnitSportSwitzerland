@@ -69,8 +69,8 @@ public partial class SyncProbe : Node
         ProcessPriority = 1;
     }
 
-    private static readonly string[] Stages = { "walk", "sprint", "jump", "slide", "stand", "bike", "brake", "heli", "plane" };
-    private static readonly double[] StageEnd = { 3, 5, 6.5, 8, 9.5, 15.5, 18.5, 24.5, 31.5 };
+    private static readonly string[] Stages = { "walk", "sprint", "jump", "slide", "stand", "bike", "brake", "car", "heli", "plane" };
+    private static readonly double[] StageEnd = { 3, 5, 6.5, 8, 9.5, 15.5, 18.5, 25.5, 31.5, 38.5 };
     private double _stageStart;
     private int _ownerPoseKind;
 
@@ -114,7 +114,8 @@ public partial class SyncProbe : Node
             // frame of cadence apart (more across a hitch frame); only what is beyond that counts.
             float turnedOn = _ownerCadence / 60f * Mathf.Tau * (float)Math.Max(delta, _lastDelta);
             float ce = _ownerCrank is { } oc && mv is Avatar.Cyclist mc
-                ? Math.Max(0f, Mathf.Abs(Mathf.AngleDifference(oc, mc.CrankAngle)) - turnedOn) : 0f;
+                ? Math.Max(0f, Mathf.Abs(Mathf.AngleDifference(oc, mc.CrankAngle)) - turnedOn)
+                : _ownerCrank is { } os && mv is Avatar.CarRig mr ? Mathf.Abs(os - mr.SteerAngle) : 0f;
             var name = Stages[Math.Max(0, _stage)];
             var s = _byStage.GetValueOrDefault(name);
             _byStage[name] = (Math.Max(s.Basis, be), Math.Max(s.Hand, he), Math.Max(s.Crank, ce), s.N + 1,
@@ -139,7 +140,12 @@ public partial class SyncProbe : Node
         _ownerPoseKind = _owner.PoseKind;
         _ownerPose = _owner.Visual?.Transform;
         _ownerHand = _owner.HandLocal;
-        _ownerCrank = _owner.Visual is Avatar.Cyclist c ? c.CrankAngle : null;
+        _ownerCrank = _owner.Visual switch
+        {
+            Avatar.Cyclist c => c.CrankAngle,
+            Avatar.CarRig r => r.SteerAngle,   // a car's moving part: the front wheels
+            _ => null,
+        };
         _ownerCadence = _owner.Visual is Avatar.Cyclist cc ? cc.CadenceRpm : 0f;
 
         // 3. the network: exactly the replicated properties, at 20 Hz
@@ -193,6 +199,13 @@ public partial class SyncProbe : Node
                 break;
             case "brake":
                 _owner!.RideControls = () => new RideInput(0f, 1f, 0f, false);
+                break;
+            case "car":
+                // a drift car sliding: throttle, a weaving wheel and handbrake stabs
+                Mount(RideKind.OnFoot);
+                Mount((RideKind)CarCatalog.First);
+                _owner!.RideControls = () => new RideInput(1f, 0f, Mathf.Sin((float)_t * 1.1f) * 0.8f, false,
+                    Handbrake: _t % 2.5 < 0.35);
                 break;
             case "heli":
                 _owner!.RideControls = null;
