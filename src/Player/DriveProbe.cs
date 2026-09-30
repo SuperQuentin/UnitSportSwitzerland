@@ -332,6 +332,7 @@ public partial class DriveProbe : Node
                 + $"avg {(en.FinishTime >= 0 ? _finish : en.Arc) / Mathf.Max((float)(en.FinishTime >= 0 ? en.FinishTime : _t), 1f) * 3.6f:F0} km/h, top {en.Top * 3.6f:F0}, "
                 + $"{pilot?.Drifts ?? 0} held drifts (best {pilot?.BestDrift ?? 0:F0}°), {pilot?.Plans ?? 0} corners planned / {pilot?.Feasible ?? 0} feasible, "
                 + $"off road {en.OffRoad:F1} s, {en.Impacts} impacts, {en.Contacts / 60f:F1} s in contact"
+                + (pilot?.Resets > 0 ? $", {pilot.Resets} reset(s) to the line" : "")
                 + (GameSettings.Current.TyreWear && pilot?.Car is { } c1 ? $", tyres F {(1f - c1.TyreWearFront) * 100:F0}% R {(1f - c1.TyreWearRear) * 100:F0}%" : "")
                 + (GameSettings.Current.BrakeWear && pilot?.Car is { } c2 ? $", brakes peaked {en.PeakBrake:F0}°C, pads {(1f - c2.PadWear) * 100:F0}%" : ""));
             if (_record != null)

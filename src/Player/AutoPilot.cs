@@ -22,6 +22,11 @@ public sealed class AutoPilot
     /// <summary>Only corners tighter than this radius, m, are considered for a drift.</summary>
     private const float DriftRadius = 70f;
     private const float PlanSeconds = 3.5f, SimDt = 1f / 60f;
+    /// <summary>
+    /// The drift angle held through a corner, rad (~30°). Tried 22° to sweep less of a 6 m road:
+    /// no more corners came out feasible and the cars left the road more often, so it stays.
+    /// </summary>
+    private const float HoldAngle = 0.52f;
 
     /// <summary>Everything the driver decides from, so the same policy drives the car and its simulations.</summary>
     public struct State
@@ -32,6 +37,8 @@ public sealed class AutoPilot
         public float PeakSlip, DriftTime;
         /// <summary>Seconds stopped off the road, and the reverse manoeuvre that gets out of it.</summary>
         public float Stuck, Reversing;
+        /// <summary>Seconds spent stuck off the road in total since the last time the tarmac was reached.</summary>
+        public float Lost;
     }
 
     /// <summary>Another car on the road, as this driver sees it.</summary>
@@ -72,6 +79,10 @@ public sealed class AutoPilot
         var motion = Player.Motion;
         bool wasDrifting = D.Drifting, wasPlanned = D.Planned;
         Traffic(dt, others);
+        // Wedged between trunks for 8 s with backing out not working (an AWD car can dig itself in
+        // spinning against a root): put it back on the line, the way a game resets a car to the
+        // track. Measured before this: three AWD grip cars out of 26 never reached the bottom.
+        if (D.Lost > 8f) ResetToLine();
         var input = Policy(ref D, Player.GlobalPosition, motion, dt);
         if (wasDrifting && !D.Drifting) EndDrift(wasPlanned);
         Plan(car, Player.GlobalPosition, motion, dt);
@@ -148,7 +159,9 @@ public sealed class AutoPilot
             // nose into a trunk or a bank: back out with the wheel the other way, then try again
             d.Stuck = v < 1.5f ? d.Stuck + dt : 0f;
             if (d.Stuck > 1.5f) { d.Reversing = 1.6f; d.Stuck = 0f; }
+            d.Lost += dt;
         }
+        else d.Lost = 0f;
         if (d.Reversing > 0f)
         {
             d.Reversing -= dt;
@@ -171,7 +184,7 @@ public sealed class AutoPilot
             float k = line.Curvature[d.Near];
             if (Mathf.Abs(k) > 0.002f) d.Bend = Mathf.Sign(k);
             float soon = MaxCurvature(s0, 0f, 24f);
-            float hold = d.Planned && soon > 1f / (DriftRadius * 1.6f) ? -d.Bend * 0.52f : 0f;
+            float hold = d.Planned && soon > 1f / (DriftRadius * 1.6f) ? -d.Bend * HoldAngle : 0f;
             if (handbrake) steer = -d.Bend * 0.9f;
             else if (d.Planned)
             {
@@ -189,6 +202,9 @@ public sealed class AutoPilot
             // ...and the gas holds the LINE: more gas slides wide, less lets the rears bite
             throttle = handbrake ? 0f : Mathf.Clamp(0.75f - 2.5f * angle * d.Bend + (want - v) * 0.03f, 0.15f, 1f);
             if (hold == 0f) throttle = d.Planned ? Mathf.Min(throttle, 0.4f) : 0.25f;
+            // the first second of a planned drift keeps the gas in: lift there and the rears bite
+            // before the car has rotated, and the "drift" peaks at 19° and counts for nothing
+            else if (d.Planned && d.Handbrake > -1f) throttle = Mathf.Max(throttle, 0.7f);
             d.PeakSlip = Mathf.Max(d.PeakSlip, Mathf.Abs(slip));
             if (Mathf.Abs(slip) > 0.26f) d.DriftTime += dt;
             if (d.Handbrake < -0.4f && Mathf.Abs(slip) < 0.08f) { d.Drifting = false; d.Planned = false; }
@@ -218,7 +234,9 @@ public sealed class AutoPilot
         if (m.Speed < 12f || MaxCurvature(s0, 10f, 40f) < 1f / DriftRadius) return;
 
         Plans++;
-        foreach (float factor in new[] { 1f, 0.85f, 0.7f })
+        // a tight corner is drifted slower rather than not at all: a slower entry is often the one
+        // that stays on a 6 m road, and it is how the series drives a hairpin
+        foreach (float factor in new[] { 1f, 0.85f, 0.7f, 0.6f, 0.5f })
         {
             var (ok, _, peak, _) = Simulate(car, pos, m, m.Speed * factor);
             if (!ok) continue;
@@ -227,7 +245,7 @@ public sealed class AutoPilot
             {
                 D.Drifting = true;
                 D.Planned = true;
-                D.Handbrake = 0.28f;
+                D.Handbrake = 0.4f;
                 Log?.Invoke($"{Spec.Label}: DRIFT at {s0:F0} m, {m.Speed * 3.6f:F0} km/h (sim peak {Mathf.RadToDeg(peak):F0}°)");
             }
             else D.Cap = m.Speed * factor;   // brake to the speed the simulation drifted at
@@ -247,7 +265,7 @@ public sealed class AutoPilot
         float maxOff = -100f, entryWait = 0;   // metres past the edge: negative is inside it
         for (float t = 0; t < PlanSeconds; t += SimDt)
         {
-            if (!entered && m.Speed <= cap + 0.5f) { entered = true; d.Drifting = true; d.Planned = true; d.Handbrake = 0.28f; }
+            if (!entered && m.Speed <= cap + 0.5f) { entered = true; d.Drifting = true; d.Planned = true; d.Handbrake = 0.4f; }
             if (!entered && (entryWait += SimDt) > 2f) break;
             var input = Policy(ref d, pos, m, SimDt);
             float s = Route.Line.Arc[d.Near];
@@ -263,6 +281,23 @@ public sealed class AutoPilot
         // put the car wider than a plan that allowed itself the whole road
         bool ok = entered && maxOff < -1.5f && d.PeakSlip > 0.35f;
         return (ok, maxOff, d.PeakSlip, entered);
+    }
+
+    public int Resets;
+
+    private void ResetToLine()
+    {
+        var line = Route.Line;
+        float s = Arc + 5f;
+        var at = line.PointAt(s);
+        var fwd = RaceRoute.Flat(line.PointAt(s + 2f) - line.PointAt(s - 2f)).Normalized();
+        Player.GlobalPosition = at + Vector3.Up * 1.2f;
+        Player.Rotation = new Vector3(0, Mathf.Atan2(-fwd.X, -fwd.Z), 0);
+        Player.Velocity = Vector3.Zero;
+        D.Lost = 0; D.Recovering = false; D.Reversing = 0; D.Stuck = 0; D.Drifting = false;
+        D.Near = line.IndexAt(s);
+        Resets++;
+        Log?.Invoke($"{Spec.Label}: stuck off the road, reset to the line at {s:F0} m");
     }
 
     private void EndDrift(bool planned)
