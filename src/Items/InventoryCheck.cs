@@ -125,7 +125,78 @@ public static class InventoryCheck
             Expect(inv.TakeCash(45) && inv.Cash == 0 && !inv.TakeCash(1), "claimed away, and no overdraft");
         });
 
-        GD.Print(_failures == 0 ? "[invcheck] RESULT: ok" : $"[invcheck] RESULT: FAILED ({_failures})");
+        // ---- per-instance data (photos: ItemStack.Data) ----
+        var photo = ItemId.Photo;           // does not stack; Data = which print
+
+        Case("photos with different data never merge", inv =>
+        {
+            inv.Put(0, new(photo, 1, "aaaaaaaaaaaaaaaa"));
+            inv.Put(1, new(photo, 1, "bbbbbbbbbbbbbbbb"));
+            inv.PrimaryClick(0);
+            inv.PrimaryClick(1);
+            Expect(inv[1].Data == "aaaaaaaaaaaaaaaa" && inv.Carried.Data == "bbbbbbbbbbbbbbbb" && inv.Carried.Count == 1,
+                "they swap, each keeps its print");
+            inv.ReturnCarried();
+            Expect(Enumerable.Range(0, Inventory.Size).Count(i => inv[i].Id == photo) == 2 && inv.Carried.IsEmpty,
+                "returned to a slot of its own, data kept");
+        });
+
+        Case("data keeps stackable items apart", inv =>
+        {
+            inv.Put(0, new(bar, 3, "x"));
+            inv.Put(1, new(bar, 3));
+            inv.PrimaryClick(0);
+            inv.PrimaryClick(1);
+            Expect(inv[1] == new ItemStack(bar, 3, "x") && inv.Carried == new ItemStack(bar, 3), "swapped, not merged");
+            inv.SecondaryClick(2);
+            Expect(inv[2] == new ItemStack(bar, 1) && inv.Carried.Count == 2, "one put down keeps (no) data");
+            inv.SecondaryClick(1);
+            Expect(inv[1] == new ItemStack(bar, 2) && inv.Carried == new ItemStack(bar, 3, "x"),
+                "right click on a different-data stack swaps");
+            var snap = inv.Snapshot();
+            inv.Distribute(new List<int> { 1, 5, 6 }, oneEach: true);
+            Expect(inv[1] == new ItemStack(bar, 2) && inv[5] == new ItemStack(bar, 1, "x") && inv[6] == new ItemStack(bar, 1, "x"),
+                "a spread skips the other stack and keeps the data");
+            inv.Restore(snap);
+            inv.Put(9, new(bar, 1, "x"));
+            inv.Collect();
+            Expect(inv.Carried == new ItemStack(bar, 4, "x") && inv[9].IsEmpty && inv[1].Count == 2 && inv[2].Count == 1,
+                "double-click gathers only the same data");
+        });
+
+        Case("add, room and shift-click respect data", inv =>
+        {
+            Expect(inv.Add(new ItemStack(photo, 1, "cccccccccccccccc")) == 0 && inv[0] == new ItemStack(photo, 1, "cccccccccccccccc"),
+                "added with its print");
+            inv.Put(1, new(bar, 9, "x"));
+            Expect(inv.Room(bar, "x") == 1 + (Inventory.Size - 2) * 10 && inv.Room(bar) == (Inventory.Size - 2) * 10,
+                $"room counts only same-data stacks ({inv.Room(bar, "x")}, {inv.Room(bar)})");
+            inv.Add(bar, 1);
+            Expect(inv[1].Count == 9 && inv[2] == new ItemStack(bar, 1), "a plain bar does not top up the 'x' stack");
+            inv.Put(Inventory.HotbarSize, new(bar, 5));
+            inv.QuickMove(1);
+            Expect(inv[Inventory.HotbarSize].Count == 5 && inv[Inventory.HotbarSize + 1] == new ItemStack(bar, 9, "x"),
+                "shift-click does not merge into a different-data stack");
+            inv.Put(4, new(bar, 2, "x"));
+            inv.Move(4, Inventory.HotbarSize + 1);
+            Expect(inv[Inventory.HotbarSize + 1].Count == 10 && inv[4] == new ItemStack(bar, 1, "x"), "move merges the same data");
+        });
+
+        Case("save and load keep data; old saves load", inv =>
+        {
+            inv.Put(0, new(photo, 1, "dddddddddddddddd"));
+            inv.Put(1, new(bar, 4));
+            var json = inv.ToJson();
+            Expect(json.Contains("dddddddddddddddd") && json.Split("\"Data\"").Length == 2, "only the photo writes data");
+            var back = Inventory.FromJson(json, persist: false);
+            Expect(back != null && back[0] == new ItemStack(photo, 1, "dddddddddddddddd") && back[1] == new ItemStack(bar, 4),
+                "round trip");
+            var old = Inventory.FromJson("{\"Worn\":\"\",\"Selected\":2,\"Cash\":5,\"Slots\":[{\"Slot\":3,\"Item\":\"EnergyBar\",\"Count\":7}]}",
+                persist: false);
+            Expect(old != null && old[3] == new ItemStack(bar, 7) && old[3].Data == null && old.Cash == 5, "a save without data");
+        });
+
+        GD.Print(_failures == 0 ? "[invcheck] RESULT: ok": $"[invcheck] RESULT: FAILED ({_failures})");
         return _failures == 0 ? 0 : 1;
     }
 

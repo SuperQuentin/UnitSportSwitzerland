@@ -16,3 +16,6 @@
   window, so every Haiku agent fails before its first step ("Prompt is too long"). Until fewer
   MCP servers are enabled for this project, send mechanical work to Sonnet instead.
 - Parallel agents share one session usage limit: fanning out 6+ agents at once can exhaust it and kill all of them together. Prefer 2-3 at a time.
+- Never kill processes by name or command-line pattern (`taskkill /im`, `Stop-Process` on a match,
+  `pkill`): parallel agents run godot at the same time, and a broad match once killed the user's
+  browser. Only kill the exact PIDs you launched yourself; prefer `timeout` wrappers so runs end alone.

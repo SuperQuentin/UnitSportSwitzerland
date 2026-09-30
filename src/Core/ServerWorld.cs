@@ -133,6 +133,8 @@ public partial class ServerWorld : Node3D
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here
         Items.ItemEvents.Create(this, server: true);
+        // stuck Polaroids' images: uploaded by their owner, kept here, served to the others
+        Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
         _chat.NameAssigned += bank.SendBalance;

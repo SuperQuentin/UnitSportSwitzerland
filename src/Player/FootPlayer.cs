@@ -696,7 +696,22 @@ public partial class FootPlayer : CharacterBody3D
     private CapsuleShape3D _capsule = null!;
     private CapsuleShape3D? _standProbe;
     private float _pitch;
+
+    /// <summary>Additive camera pitch (rad, + = up) from a recoil; decays on its own. Never enters <see cref="LookPitch"/>.</summary>
+    private float _punch;
+
+    /// <summary>Kicks the view up by <paramref name="radians"/>; it settles back in about a quarter of a second.</summary>
+    public void Punch(float radians) => _punch = Mathf.Min(_punch + radians, 0.16f);
+
+    private float _jolt;
+
+    /// <summary>The body rocks back from a shot fired by this figure (every peer runs it from the Shot event; decays on its own).</summary>
+    public void BodyJolt(float strength = 1f) => _jolt = Mathf.Clamp(strength, 0f, 1.5f);
+
+    /// <summary>Where the eyes are, world space: the origin of anything you fire (third person's camera is metres behind it).</summary>
+    public Vector3 EyePosition => GlobalPosition + Vector3.Up * EyeHeight;
     /// <summary>The view's pitch (radians, + up), clamped as the mouse would; for probes that aim.</summary>
+    public float LookYaw { get => _viewYaw; set => _viewYaw = value; }
     public float LookPitch { get => _pitch; set => _pitch = ClampPitch(value); }
     private bool _placed;
     private double _sinceSnapWarning = 99;
@@ -1158,6 +1173,8 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public override void _Process(double delta)
     {
+        _punch *= Mathf.Exp(-12f * (float)delta);
+        _jolt *= Mathf.Exp(-9f * (float)delta);
         if (IsMultiplayerAuthority())
         {
             NetPos = Position;
@@ -1190,7 +1207,7 @@ public partial class FootPlayer : CharacterBody3D
             {
                 // looking through something held to the eye: first person for as long as it lasts
                 Rotation = new Vector3(0, _viewYaw, 0);
-                _camera.Transform = new Transform3D(new Basis(Vector3.Right, _pitch),
+                _camera.Transform = new Transform3D(new Basis(Vector3.Right, _pitch + _punch),
                     new Vector3(0, EyeHeight + _landingDip, 0));
                 if (_walker != null) _walker.Visible = false;
                 HandLocal = null;
@@ -1389,6 +1406,13 @@ public partial class FootPlayer : CharacterBody3D
                 break;
         }
         _walker.Transform = BodyPose;
+        if (_jolt > 0.01f)
+        {
+            // rock back about the hips (positive X turns the head toward +Z, behind a figure that faces -Z)
+            var t = new Transform3D(new Basis(Vector3.Right, _jolt * 0.11f), Vector3.Zero);
+            var hip = new Vector3(0, 0.95f, 0);
+            _walker.Transform = BodyPose * new Transform3D(Basis.Identity, hip) * t * new Transform3D(Basis.Identity, -hip);
+        }
         PlaceHand(mounts);
     }
 
@@ -1413,7 +1437,7 @@ public partial class FootPlayer : CharacterBody3D
             : Mathf.Lerp(_pivotY, pivotTarget, 1f - Mathf.Exp(-10f * dt));
         var pivot = new Vector3(GlobalPosition.X, _pivotY, GlobalPosition.Z);
 
-        var view = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, _pitch);
+        var view = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, _pitch + _punch);
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
@@ -3035,7 +3059,7 @@ public partial class FootPlayer : CharacterBody3D
         if (!_thirdPerson)
         {
             _camera.Position = new Vector3(bobSide, eye + bobUp + _landingDip, 0);
-            _camera.Rotation = new Vector3(_pitch, 0, roll + lean);
+            _camera.Rotation = new Vector3(_pitch + _punch, 0, roll + lean);
         }
 
         // slight FOV widening while running reads as effort without inducing sickness;
