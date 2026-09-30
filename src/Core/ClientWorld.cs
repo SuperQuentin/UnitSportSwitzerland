@@ -467,8 +467,10 @@ public partial class ClientWorld : Node3D
         // "--settings" opens the settings panel straight away, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--settings") >= 0)
             Callable.From(() => _menu.OpenSettings()).CallDeferred();
+        // "--licenses" opens Settings > Licenses; after a delay, so joining a server (which closes
+        // the menu when the mode starts) does not hide it again before a shot
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--licenses") >= 0)
-            Callable.From(() => _menu.OpenLicenses()).CallDeferred();
+            GetTree().CreateTimer(3.0).Timeout += () => _menu.OpenLicenses();
 
         // "--menu" forces the picker open even when a mode was named on the command line,
         // which is also how the menu itself gets screenshotted with --shot.
