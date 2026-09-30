@@ -14,9 +14,9 @@
   can saturate the rear; 40% brake, no brake and a straight full stop must not (Game). Sim is the bare
   car with a fixed wheel for 4 s: it spins at 40% brake and even lifting (50°) — no driver corrects
   it — so only the full brake and the straight stop are judged there.
-- Measured (Game): 23 of 26 spin at 136-152 km/h, peak yaw 2.9-3.4 rad/s; the NSX, SW20 and ZZW30
+- Measured (Game): 23 of 26 spin, at 115-140 km/h (from 174-200 km/h), peak yaw up to 3.4 rad/s; the NSX, SW20 and ZZW30
   (mid-engined, 65/35 brakes against a heavy rear: brakes 10.3-11.1 < rear limit 11.2-11.9 m/s²) lock
   the fronts and plough on, 2-53° — accepted as the physics' answer. Sim: the same 23 spin at
-  121-163 km/h. `--driftcheck` still passes (every car drifts and recovers).
+  113-153 km/h (they would not in Game before: peak 45-66°). `--driftcheck` still passes (every car drifts and recovers).
 - The scripted pilot never floors the pedal (85% of the rear limit, eases off past 3° of slip), so its
   normal driving is untouched; a pilot's **mistake** (driver-skill note) does floor it.

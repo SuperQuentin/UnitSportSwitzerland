@@ -80,10 +80,31 @@ public static class DriftCheck
                 if (!ok) failures++;
             }
         }
+        // the tow (RideGround.Draft): 1 km flat out from 150 km/h alone and 10 m behind another car
+        foreach (int k in new[] { 0, 18 })
+        {
+            var spec = CarCatalog.All[k];
+            float alone = Tow(spec, 0f), towed = Tow(spec, RideGround.MaxDraft * (1f - 8f / 23f));
+            GD.Print($"[spin] slipstream {spec.Label}: {alone * 3.6f:F0} km/h alone after 1 km, {towed * 3.6f:F0} km/h 10 m behind another car");
+            if (towed <= alone) failures++;
+        }
         GameSettings.Current.RideProfile = was;
         GD.Print(failures == 0 ? "[spin] RESULT: a mismanaged brake spins every car, a managed one does not"
             : $"[spin] RESULT: FAILED ({failures})");
         return failures == 0 ? 0 : 1;
+    }
+
+    private static float Tow(CarSpec spec, float draft)
+    {
+        var car = new Car(spec);
+        var m = new RideMotion { Speed = 150f / 3.6f };
+        float x = 0f;
+        for (int i = 0; i < 60 * 120 && x < 1000f; i++)
+        {
+            car.Step(new RideInput(1f, 0f, 0f, false), new RideGround(true, 0f, Draft: draft), Dt, ref m);
+            x += m.Speed * Dt;
+        }
+        return m.Speed;
     }
 
     private static float TopSpeed(CarSpec spec)
