@@ -56,6 +56,29 @@ public sealed class ShotContext
     public Vector3 ShoulderRight => Runner.ShoulderRightWorld;
 
     public Vector3 Heading => Runner.Heading;
+
+    /// <summary>
+    /// The nearest other runner, for shots that frame a battle; null when racing alone or nobody is
+    /// within reach. Set per frame by the camera.
+    /// </summary>
+    public Runner? Rival { get; set; }
+
+    /// <summary>
+    /// Where the subject's NOSE points, flattened. For a runner that is the heading; for a drifting
+    /// car it is not — the body is sideways to its travel, which is the whole shot.
+    /// </summary>
+    public Vector3 Nose
+    {
+        get
+        {
+            var z = Runner.Avatar.GlobalBasis.Z;
+            var n = new Vector3(-z.X, 0, -z.Z);
+            return n.LengthSquared() > 1e-6f ? n.Normalized() : Heading;
+        }
+    }
+
+    /// <summary>Signed angle from the nose to the direction of travel, radians (+ = travelling left of the nose).</summary>
+    public float Slip => Mathf.Atan2(Nose.Z * Heading.X - Nose.X * Heading.Z, Nose.X * Heading.X + Nose.Z * Heading.Z);
     public float Speed => (float)Runner.Speed;
 
     /// <summary>The subject's right, in world space.</summary>
@@ -118,7 +141,8 @@ public sealed class ShotContext
     }
 
     /// <summary>Points the camera, always with a proper (determinant +1) basis.</summary>
-    public void Place(Vector3 position, Vector3 target, float fov = 70f)
+    /// <param name="roll">Dutch tilt, radians: the horizon leans, as the anime's battle shots do.</param>
+    public void Place(Vector3 position, Vector3 target, float fov = 70f, float roll = 0f)
     {
         position = MakeSafe(Runner.KeepOutside(position));
         Camera.GlobalPosition = position;
@@ -134,7 +158,10 @@ public sealed class ShotContext
 
         var up = Mathf.Abs(dir.Dot(Vector3.Up)) > 0.999f ? Vector3.Forward : Vector3.Up;
         var right = dir.Cross(up).Normalized();          // forward x up, never up x forward
-        Camera.GlobalBasis = new Basis(right, right.Cross(dir).Normalized(), -dir);
+        var basis = new Basis(right, right.Cross(dir).Normalized(), -dir);
+        // rolled about the line of sight: still a rotation, so the handedness rule holds
+        if (roll != 0f) basis = new Basis(dir, roll) * basis;
+        Camera.GlobalBasis = basis;
     }
 
     /// <summary>Terrain height, or null where the tile has not streamed in.</summary>
@@ -182,7 +209,9 @@ public sealed class ShotContext
     public bool CanSee(Vector3 from)
     {
         var space = Camera.GetWorld3D().DirectSpaceState;
-        var query = PhysicsRayQueryParameters3D.Create(from, Head);
+        // Trunks are left out: the sightline cut dissolves whatever trees stand between the lens
+        // and the subject, so a forest must not veto a vantage it will not actually block.
+        var query = PhysicsRayQueryParameters3D.Create(from, Head, ~World.TreeColliders.Layer);
         return space.IntersectRay(query).Count == 0;
     }
 }

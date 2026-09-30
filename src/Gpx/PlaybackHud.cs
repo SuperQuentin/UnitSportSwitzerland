@@ -354,9 +354,12 @@ public partial class PlaybackHud : CanvasLayer
         _speedButton.Text = SpeedSteps[_speedIndex] < 1
             ? $"{SpeedSteps[_speedIndex]:0.##}x"
             : $"{SpeedSteps[_speedIndex]:0}x";
-        _cameraButton.Text = _camera.Mode == CameraMode.Cinema
-            ? $"Absolute Cinema — {_camera.CinemaShot}"
-            : $"Cam: {_camera.Mode}";
+        _cameraButton.Text = _camera.Mode switch
+        {
+            CameraMode.Cinema => $"Absolute Cinema — {_camera.CinemaShot}",
+            CameraMode.Racing => $"Absolute Racing — {_camera.CinemaShot}",
+            _ => $"Cam: {_camera.Mode}",
+        };
         // Fixed at the width of the longest shot name. The size used to be recomputed from the
         // text on every refresh, which was harmless only while the label was stale — now that it
         // updates on every cut, a width that tracked the text would reflow the whole flow
