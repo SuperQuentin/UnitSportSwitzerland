@@ -10,7 +10,7 @@ namespace UnitSport.Interiors;
 /// </summary>
 public static class DoorIndex
 {
-    public readonly record struct Entry(BuildingKey Key, Vector3 World, Vector3 Outward, float Width);
+    public readonly record struct Entry(BuildingKey Key, Vector3 World, Vector3 Outward, float Width, BuildingKind Kind);
 
     private static readonly Dictionary<TileId, Entry[]> Tiles = new();
 
@@ -19,7 +19,7 @@ public static class DoorIndex
         var list = new List<Entry>(doors.Length);
         foreach (var d in doors)
             if (d.Width > 0)
-                list.Add(new Entry(new BuildingKey(id.E, id.N, d.Index), tileOrigin + d.Position, d.Outward, d.Width));
+                list.Add(new Entry(new BuildingKey(id.E, id.N, d.Index), tileOrigin + d.Position, d.Outward, d.Width, d.Kind));
         Tiles[id] = list.ToArray();
     }
 
@@ -32,13 +32,19 @@ public static class DoorIndex
     /// than its centre line, and only from the outside: a player standing behind a wall must not
     /// open the door on its far side.
     /// </summary>
-    public static Entry? Nearest(Vector3 at, float reach)
+    public static Entry? Nearest(Vector3 at, float reach) => Nearest(at, reach, null);
+
+    /// <summary>As <see cref="Nearest(Vector3, float)"/>, only doors of buildings of one kind.</summary>
+    public static Entry? Nearest(Vector3 at, float reach, BuildingKind kind) => Nearest(at, reach, (BuildingKind?)kind);
+
+    private static Entry? Nearest(Vector3 at, float reach, BuildingKind? kind)
     {
         Entry? best = null;
         float bestD = reach;
         foreach (var doors in Tiles.Values)
             foreach (var e in doors)
             {
+                if (kind is { } k && e.Kind != k) continue;
                 var rel = at - e.World;
                 if (Mathf.Abs(rel.Y) > 2.5f) continue;
                 float outward = rel.X * e.Outward.X + rel.Z * e.Outward.Z;

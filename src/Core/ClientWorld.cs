@@ -218,6 +218,8 @@ public partial class ClientWorld : Node3D
         Occasions.OccasionManager.Create(this);
         // their props, dressed onto each tile as its buildings load
         AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
+        // garage roll-up doors, opening for any car in front of them
+        AddChild(new Vehicles.GarageDoors(_chunks, origin));
         // …the creatures in the air around the camera, and their sounds
         AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
         AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
