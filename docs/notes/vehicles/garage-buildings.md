@@ -29,7 +29,9 @@
 - **Roll-up door**: the facade bakes the shut slatted door in the leaf's own plane (6 cm out), which
   `ps1_building` drops at every height while the portal shows; the live one is
   `DoorLeaf.CreateRollUp`, on `DoorLink.Outside` like a barn's pair (`DoorLeaf.OnFacade`), hung from
-  the lintel and squashed up into it by the shared door swing. Never solid: shut, the facade is.
+  the lintel and squashed up into it by the shared door swing (1 s, `RollSeconds`). Never solid:
+  shut, the facade is; from inside, a slatted `DoorLeaf.CreateShutter` is shown and solid while shut,
+  as for a barn's pair (a shut door was a hole you walked or drove out through).
   The step is flush (a car would hit a kerb). The old client-side `GarageDoors` node is gone.
 - **Opening**: on foot, E like any door. Mounted, `InteriorManager.OpenForVehicle` asks the server
   to open a garage's or barn's door the vehicle heads at (outside within 10 m and 0.6 rad of
