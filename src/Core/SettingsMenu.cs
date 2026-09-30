@@ -127,6 +127,17 @@ public partial class SettingsMenu : PanelContainer
         ToggleRow(rows, "Invert look Y", s.InvertY, on => GameSettings.Current.InvertY = on);
         ToggleRow(rows, "Controller vibration", s.Vibration, on => GameSettings.Current.Vibration = on);
 
+        Section(rows, "Steering wheel");
+        var wheel = new WheelPanel { Name = "WheelPanel" };
+        rows.AddChild(wheel);
+        // "--settings wheel" scrolls to it, for screenshotting it
+        int arg = Array.IndexOf(OS.GetCmdlineUserArgs(), "--settings");
+        if (arg >= 0 && arg + 1 < OS.GetCmdlineUserArgs().Length && OS.GetCmdlineUserArgs()[arg + 1] == "wheel")
+            VisibilityChanged += () =>
+            {
+                if (Visible) GetTree().CreateTimer(0.3).Timeout += () => scroll.ScrollVertical = (int)wheel.Position.Y - 40;
+            };
+
         Section(rows, "Performance");
         SliderRow(rows, "Parallel tile builds", 0, GameSettings.MaxBuildsCap, 1, s.MaxConcurrentBuilds,
             v => GameSettings.Current.MaxConcurrentBuilds = (int)v,
@@ -221,7 +232,7 @@ public partial class SettingsMenu : PanelContainer
         into.AddChild(label);
     }
 
-    private static Label SliderRow(Container into, string name, double min, double max, double step,
+    internal static Label SliderRow(Container into, string name, double min, double max, double step,
         double value, Action<double> set, Func<double, string> describe)
     {
         var box = new VBoxContainer();
@@ -270,7 +281,7 @@ public partial class SettingsMenu : PanelContainer
         into.AddChild(row);
     }
 
-    private static void ToggleRow(Container into, string name, bool on, Action<bool> set)
+    internal static void ToggleRow(Container into, string name, bool on, Action<bool> set)
     {
         var row = new HBoxContainer();
         row.AddChild(new Label { Text = name, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });

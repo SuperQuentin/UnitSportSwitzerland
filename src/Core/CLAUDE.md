@@ -8,6 +8,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 ## Architecture
 
 - `modes` — Modes: (`Core/MainMenu`, `GameMode`): Explore / GpxReplay / Multiplayer. `ClientWorld` owns the switching; Esc opens...
+- `steering-wheel` — Steering wheel: (`Core/SteeringWheel`, #68): SDL3 wheel and pedals, 1:1 direct car steering, Godot's copy of the device ignored, presets + assign panel
 - `input` — Input: (`Core/PlayerInput`): every gameplay control is a named `InputMap` action registered in code at boot...
 - `settings` — Settings: (`Core/GameSettings`, `Core/SettingsMenu`, `user://settings.json`): render distance in tile rings (6..40,...
 - `performance-overlay` — Performance overlay: (`Core/PerfOverlay`, F3 cycles Off / FPS / Detailed, saved as `GameSettings.PerfOverlay`, also...
@@ -18,7 +19,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 ## Commands
 
-- `commands` — Commands: --at, --chatcheck, --goto, --menu, --path, --probe, --shot, --title
+- `commands` — Commands: --at, --chatcheck, --fakewheel, --goto, --menu, --path, --probe, --settings wheel, --shot, --title, --wheelcheck, --wheelwatch
 
 ## Gotchas
 

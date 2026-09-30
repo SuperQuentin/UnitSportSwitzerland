@@ -17,3 +17,10 @@
 - `--nocapture`: never grab the mouse (`Core/MouseCapture`). Every probe and tool run implies it,
   so a check running in a window leaves the pointer to whoever is using the machine.
 - `--chatcheck`: chat tab completion and `/spawn` parsing, headless, RESULT PASS/FAIL (`Core/ChatCheck`).
+- Steering wheel (`steering-wheel`): `--wheelcheck`, headless, RESULT PASS/FAIL — direct steering for
+  every car in both profiles, range stretch, pedal read-out, pad bindings off an ignored joypad and back,
+  SDL3 loads. Loopback: server `--server --port P --generated-world`, then clients
+  `--connect 127.0.0.1:P --wheelwatch B` and `--connect 127.0.0.1:P --wheelwatch A --fakewheel` (A drives
+  a car on a swept simulated wheel, B must see it steer both ways). `--fakewheel` alone plays with that
+  wheel; `--wheel on|off`, `--wheelrange deg` override for one run; `--settings wheel` opens Settings
+  scrolled to the wheel panel.

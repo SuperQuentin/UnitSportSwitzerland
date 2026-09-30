@@ -149,17 +149,42 @@ public partial class PlayerInput : Node
         }
     }
 
-    /// <summary>Held, for buttons. For an axis-bound action it means past the deadzone.</summary>
-    public static bool Held(string action) => !Blocked && Input.IsActionPressed(action);
+    /// <summary>Held, for buttons. For an axis-bound action it means past the deadzone (a wheel's pedal: half way).</summary>
+    public static bool Held(string action) =>
+        !Blocked && (Input.IsActionPressed(action) || SteeringWheel.Strength(action) > 0.5f);
 
-    /// <summary>0..1 — a trigger's travel, or 1 for a pressed key.</summary>
-    public static float Strength(string action) => Blocked ? 0f : Input.GetActionStrength(action);
+    /// <summary>0..1 — a trigger's or a pedal's travel, or 1 for a pressed key.</summary>
+    public static float Strength(string action) =>
+        Blocked ? 0f : Mathf.Max(Input.GetActionStrength(action), SteeringWheel.Strength(action));
 
     /// <summary>
-    /// Steering axis −1 left .. +1 right, from the left stick or A/D. Kept separate from
-    /// <see cref="Move"/> because a vehicle only wants the one axis, unnormalised.
+    /// Steering axis −1 left .. +1 right, from the left stick or A/D, else a steering wheel turned
+    /// ±<see cref="SteeringWheel.PlainSpanDeg"/>. Kept separate from <see cref="Move"/> because a
+    /// vehicle only wants the one axis, unnormalised.
     /// </summary>
-    public static float Steer => Blocked ? 0f : Input.GetAxis(MoveLeft, MoveRight);
+    public static float Steer
+    {
+        get
+        {
+            if (Blocked) return 0f;
+            float keys = Input.GetAxis(MoveLeft, MoveRight);
+            if (keys != 0f || !SteeringWheel.Active) return keys;
+            return Mathf.Clamp(SteeringWheel.Angle / Mathf.DegToRad(SteeringWheel.PlainSpanDeg), -1f, 1f);
+        }
+    }
+
+    /// <summary>
+    /// The steering wheel's angle for a vehicle whose wheel turns <paramref name="lockToLock"/>
+    /// radians lock to lock (<see cref="SteeringWheel.GameAngle"/>), + right; NaN without a wheel, or
+    /// while the keys or the stick are steering, so they still can.
+    /// </summary>
+    public static float WheelAngle(float lockToLock) =>
+        Blocked || !SteeringWheel.Active || Input.GetAxis(MoveLeft, MoveRight) != 0f
+            ? float.NaN
+            : SteeringWheel.GameAngle(lockToLock);
+
+    /// <summary>The wheel's handbrake lever (or the button bound to it), 0..1.</summary>
+    public static float WheelHandbrake => Blocked || !SteeringWheel.Active ? 0f : SteeringWheel.Handbrake;
 
     /// <summary>
     /// Rumble on every connected pad. Silently nothing on keyboard, or when vibration is off in
@@ -173,12 +198,13 @@ public partial class PlayerInput : Node
             Input.StartJoyVibration(pad, Mathf.Clamp(weak, 0, 1), Mathf.Clamp(strong, 0, 1), seconds);
     }
 
-    /// <summary>Adds the tracker node and registers the default bindings. Idempotent.</summary>
+    /// <summary>Adds the tracker node and the steering wheel reader, and registers the default bindings. Idempotent.</summary>
     public static void Install(Node root)
     {
         RegisterActions();
         if (root.GetNodeOrNull("PlayerInput") == null)
             root.AddChild(new PlayerInput { Name = "PlayerInput" });
+        SteeringWheel.Install(root);
     }
 
     public override void _Ready()
@@ -192,6 +218,8 @@ public partial class PlayerInput : Node
 
     public override void _Input(InputEvent e)
     {
+        // the steering wheel is read through SDL; Godot's copy of it is not a pad
+        if (e is InputEventJoypadButton or InputEventJoypadMotion && _ignoredPads.Contains(e.Device)) return;
         switch (e)
         {
             case InputEventJoypadButton:
@@ -214,6 +242,61 @@ public partial class PlayerInput : Node
         float dz = GameSettings.Current.StickDeadzone;
         foreach (var a in new[] { MoveForward, MoveBack, MoveLeft, MoveRight, LookLeft, LookRight, LookUp, LookDown })
             if (InputMap.HasAction(a)) InputMap.ActionSetDeadzone(a, dz);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // joypads left to SDL
+    // ------------------------------------------------------------------------------------
+
+    private static HashSet<int> _ignoredPads = new();
+    /// <summary>Each action's pad bindings as registered (device −1, every pad), kept while they are retargeted.</summary>
+    private static Dictionary<string, InputEvent[]>? _padBindings;
+
+    /// <summary>
+    /// Takes these Godot joypads out of every pad binding: the steering wheel, which
+    /// <see cref="SteeringWheel"/> reads itself. Godot binds a pad event to one device or to all,
+    /// so while any is ignored each pad binding is copied once per other connected pad; an empty
+    /// set puts the all-devices bindings back. Called again when a pad connects, so it gets its copies.
+    /// </summary>
+    public static void SetIgnoredJoypads(IReadOnlyCollection<int> pads)
+    {
+        // with a wheel ignored the per-pad copies follow every connection, so it always rebuilds
+        if (pads.Count == 0 && _ignoredPads.Count == 0) return;
+        _ignoredPads = new HashSet<int>(pads);
+        RetargetPads();
+    }
+
+    private static void RetargetPads()
+    {
+        if (_padBindings == null)
+        {
+            if (_ignoredPads.Count == 0) return;
+            _padBindings = new();
+            foreach (var action in InputMap.GetActions())
+            {
+                var pads = InputMap.ActionGetEvents(action)
+                    .Where(e => e is InputEventJoypadButton or InputEventJoypadMotion && e.Device == -1).ToArray();
+                if (pads.Length > 0) _padBindings[action] = pads;
+            }
+        }
+
+        int[] devices = _ignoredPads.Count == 0
+            ? new[] { -1 }
+            : Input.GetConnectedJoypads().Where(d => !_ignoredPads.Contains(d)).ToArray();
+        foreach (var (action, templates) in _padBindings)
+        {
+            if (!InputMap.HasAction(action)) continue;
+            foreach (var e in InputMap.ActionGetEvents(action))
+                if (e is InputEventJoypadButton or InputEventJoypadMotion) InputMap.ActionEraseEvent(action, e);
+            foreach (var template in templates)
+                foreach (int device in devices)
+                {
+                    var copy = (InputEvent)template.Duplicate();
+                    copy.Device = device;
+                    InputMap.ActionAddEvent(action, copy);
+                }
+        }
+        if (_ignoredPads.Count == 0) _padBindings = null;
     }
 
     // ------------------------------------------------------------------------------------

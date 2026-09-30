@@ -63,6 +63,11 @@ public sealed record CarSpec
 
     /// <summary>Road-wheel lock at full steer, radians.</summary>
     public float MaxSteer { get; init; } = 0.6f;
+    /// <summary>
+    /// Steering-wheel turns from lock to lock, as road tests publish it; with <see cref="MaxSteer"/> it
+    /// sets the steering ratio. 2.5 (900°) when not given.
+    /// </summary>
+    public float LockTurns { get; init; } = 2.5f;
     /// <summary>Drag area Cd·A, m².</summary>
     public float DragArea { get; init; } = 0.65f;
 
@@ -186,6 +191,11 @@ public sealed class Car : Rideable, IEngined
     public override bool HasEngine => true;
     public override bool CanHop => false;
     public override float MaxHealth => 160f;
+    public override float WheelLock => Spec.LockTurns * Mathf.Tau;
+    /// <summary>Steering-wheel radians per radian of road wheel.</summary>
+    public float SteeringRatio => WheelLock * 0.5f / Spec.MaxSteer;
+    /// <summary>The steering wheel's angle, radians, + left like <see cref="SteerAngle"/>: what a cockpit wheel shows.</summary>
+    public float SteeringWheelAngle => SteerAngle * SteeringRatio;
 
     // the driver's seat, in the visual's frame (faces −Z, so +X is the driver's right):
     // these are Japanese-market cars, right-hand drive
@@ -340,21 +350,33 @@ public sealed class Car : Rideable, IEngined
         Throttle = pedal;
         Braking = brake > 0.05f;
 
-        // Keyboard steering is ±1 in a frame; a rack takes a moment to wind on, and without it
-        // every tap is a flick that throws the car into a spin. Faster back to centre.
-        float steerTarget = input.Steer;
-        float rate = Mathf.Abs(steerTarget) < Mathf.Abs(_steer) || steerTarget * _steer < 0 ? 9f : 5f;
-        _steer = Mathf.MoveToward(_steer, steerTarget, rate * dt);
-        // at speed the same input asks for less lock, or 200 km/h would be twitchier than 20
-        // — but never in a slide: catching a drift needs the full lock, and at 60 km/h the speed
-        // scaling alone left 22° of it, which cannot catch anything
         float slipNow = Mathf.Wrap(motion.Slip, -Mathf.Pi, Mathf.Pi);
-        float lockScale = Mathf.Lerp(1f / (1f + Mathf.Max(u, 0f) / 28f), 1f, Mathf.Clamp(Mathf.Abs(slipNow) / 0.3f, 0f, 1f));
-        float delta = -_steer * s.MaxSteer * lockScale;   // +steer is right, + angle is left
-        // Game: the fronts point part of the way down the direction of travel and lean against
-        // the rotation, as a driver's hands would, so a drift is held rather than spun
-        if (arcade && u > 3f)
-            delta = Mathf.Clamp(delta + _help * (ArcadeAssist * slipNow - ArcadeYawDamp * motion.YawRate), -s.MaxSteer, s.MaxSteer);
+        float delta;
+        if (!float.IsNaN(input.WheelAngle))
+        {
+            // A steering wheel: the rack follows the driver's hands through the steering ratio, to
+            // the lock stop. None of the helpers below: the easing, the speed-scaled lock and the
+            // counter-steer assist all stand in for hands a wheel already has.
+            delta = Mathf.Clamp(-input.WheelAngle / SteeringRatio, -s.MaxSteer, s.MaxSteer);
+            _steer = -delta / s.MaxSteer;
+        }
+        else
+        {
+            // Keyboard steering is ±1 in a frame; a rack takes a moment to wind on, and without it
+            // every tap is a flick that throws the car into a spin. Faster back to centre.
+            float steerTarget = input.Steer;
+            float rate = Mathf.Abs(steerTarget) < Mathf.Abs(_steer) || steerTarget * _steer < 0 ? 9f : 5f;
+            _steer = Mathf.MoveToward(_steer, steerTarget, rate * dt);
+            // at speed the same input asks for less lock, or 200 km/h would be twitchier than 20
+            // — but never in a slide: catching a drift needs the full lock, and at 60 km/h the speed
+            // scaling alone left 22° of it, which cannot catch anything
+            float lockScale = Mathf.Lerp(1f / (1f + Mathf.Max(u, 0f) / 28f), 1f, Mathf.Clamp(Mathf.Abs(slipNow) / 0.3f, 0f, 1f));
+            delta = -_steer * s.MaxSteer * lockScale;   // +steer is right, + angle is left
+            // Game: the fronts point part of the way down the direction of travel and lean against
+            // the rotation, as a driver's hands would, so a drift is held rather than spun
+            if (arcade && u > 3f)
+                delta = Mathf.Clamp(delta + _help * (ArcadeAssist * slipNow - ArcadeYawDamp * motion.YawRate), -s.MaxSteer, s.MaxSteer);
+        }
         float rearLock = 0f;
         SteerAngle = delta;
 
