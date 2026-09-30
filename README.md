@@ -322,7 +322,8 @@ godot --path . -- --probe lv95E,lv95N,seconds
 
 ## Where the source data comes from
 
-All of it is swisstopo / federal open data, free to use with attribution.
+All of it is swisstopo / federal open data, free to use with attribution, except the optional
+OpenStreetMap overlay (ODbL, below).
 
 | Dataset                         | Contents                                                                                               | Source                                                      |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
@@ -331,6 +332,12 @@ All of it is swisstopo / federal open data, free to use with attribution.
 | **swissBUILDINGS3D 3.0**        | LoD2 building solids                                                                                   | STAC `ch.swisstopo.swissbuildings3d_3_0` (14 GB nationwide) |
 | **GWR / RegBL**                 | building register: year, floors, category                                                              | `https://public.madd.bfs.admin.ch/{canton}.zip`             |
 | **Veloland / Mountainbikeland** | cycle route networks                                                                                   | STAC `ch.astra.veloland`, `ch.astra.mountainbikeland`       |
+| **OpenStreetMap** (optional)    | one-way, lanes, width, sidewalks, cycleways, turn lanes on roads (`--layers osm`)                      | Geofabrik `switzerland-YYMMDD.osm.pbf`                      |
+
+The OpenStreetMap overlay is © OpenStreetMap contributors, available under the
+[Open Database License](https://www.openstreetmap.org/copyright) (ODbL). Road tiles built with it
+are a derived database: if they are ever distributed, they must be offered under the ODbL too
+(`docs/notes/tools/osm-odbl-licence.md`). The in-game **Settings > Licenses** page lists every source.
 
 Data lives under `ressources/data/` (spelling is deliberate — it is referenced throughout).
 Both that folder and `terrain_chunks/` carry a `.gdignore` so the Godot editor never tries
