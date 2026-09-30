@@ -225,7 +225,7 @@ public partial class MainMenu : CanvasLayer
             && _jingled.Add(top.Instance) && top.Content.Jingle() is { } samples)
         {
             _jingle.Stream = Audio.Dsp.Encode(Audio.Dsp.Normalise(samples, 0.8f));
-            _jingle.VolumeDb = -6 + Mathf.LinearToDb(Mathf.Max(GameSettings.Current.SfxVolume, 0.001f));
+            _jingle.VolumeDb = -6;   // the slider is on the Sfx bus
             _jingle.Play();
         }
     }

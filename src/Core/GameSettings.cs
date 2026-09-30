@@ -134,7 +134,9 @@ public sealed class GameSettings
     public Dictionary<string, UnitSport.Occasions.OccasionPreference> OccasionPreferences { get; set; } = new();
 
     // --- feel ---
-    /// <summary>Sound effects volume, 0..1.</summary>
+    /// <summary>Everything the game plays, 0..1 — the Master bus (see <see cref="Audio.SfxBus.ApplyVolumes"/>).</summary>
+    public float MasterVolume { get; set; } = 0.5f;
+    /// <summary>Sound effects volume, 0..1 — the Sfx bus. Sliders are perceptual, not linear.</summary>
     public float SfxVolume { get; set; } = 0.5f;
     /// <summary>Ambience volume, 0..1.</summary>
     public float AmbienceVolume { get; set; } = 0.7f;
@@ -222,6 +224,7 @@ public sealed class GameSettings
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
         RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
+        MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);
         DayLengthMinutes = Math.Clamp(DayLengthMinutes, 0f, 240f);
