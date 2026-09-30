@@ -611,6 +611,22 @@ public partial class FootPlayer : CharacterBody3D
     }
 
     /// <summary>
+    /// A teleport that also turns a mount: the body at <paramref name="at"/>, stopped, facing
+    /// <paramref name="yaw"/>, put down on the ground once it is there. Setting <c>Rotation</c> alone
+    /// does not turn a ridden vehicle: its step writes the rotation back from its own heading.
+    /// </summary>
+    public void PlaceAt(Vector3 at, float yaw)
+    {
+        RequestReplacement();
+        GlobalPosition = at;
+        Rotation = new Vector3(0, yaw, 0);
+        _motion.Yaw = yaw;
+        _motion.YawRate = 0f;
+        _motion.Slip = 0f;
+        _viewYaw = yaw;
+    }
+
+    /// <summary>
     /// A body is what needs ground under it, so it registers itself as a collision anchor
     /// rather than relying on whoever spawned it to remember - the ride probe did not.
     /// </summary>

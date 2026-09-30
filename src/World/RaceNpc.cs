@@ -31,6 +31,10 @@ public partial class RaceNpc : Node
     private RaceRoute? _route;
     private double _goIn;
     private AutoPilot? _pilot;
+    /// <summary>Driving in to its slot before GO (#51), and which race that is for.</summary>
+    private NpcArrival? _arrival;
+    private int _arrivalRace;
+    private bool _reported;
 
     private static RideInput Hold() => new(0f, 0f, 0f, false, Handbrake: true);
 
@@ -58,10 +62,38 @@ public partial class RaceNpc : Node
     {
         // on its mount, and back on it after being thrown off (the mount waits for the ground)
         if (_me.Ride != Kind && _me.IsOnFloor()) _me.SetRide(Kind);
+        if (_arrival == null && _pilot == null && _race?.TakeArrival(Id) is { } a) Arrive(a);
+        if (_arrival is { Staged: true } && !_reported)
+        {
+            _reported = true;
+            _race!.ReportStaged(_arrivalRace, Id);
+        }
         if (_route == null || _pilot != null || (_goIn -= delta) > 0) return;
         _pilot = AutoPilot.For(_route, _me);   // null until it is on its mount: tried again next step
         if (_pilot is not { } pilot) return;
+        _arrival = null;   // handed over at GO
         _me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, RaceManager.Others(_me));
+    }
+
+    /// <summary>Appeared out of sight on the race road: drive in to the (provisional) slot.</summary>
+    private void Arrive(RaceManager.Arrival a)
+    {
+        _arrivalRace = a.RaceId;
+        var arrival = _arrival = new NpcArrival(_me, a.Lane, a.Zero, a.Style, a.Variant, a.Slot, a.Count)
+        {
+            Log = line => GD.Print($"[npc] {_me.Name}: {line}"),
+        };
+        _me.RideControls = () => arrival.Drive((float)GetPhysicsProcessDeltaTime(), Bodies());
+        GD.Print($"[npc] {_me.Name} arriving {a.Style} for slot {a.Slot + 1} of {a.Count}");
+    }
+
+    /// <summary>Everyone else, for driving in: players, NPCs, parked or moving.</summary>
+    private List<NpcArrival.Body> Bodies()
+    {
+        var list = new List<NpcArrival.Body>();
+        foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
+            if (node is FootPlayer p && p != _me) list.Add(new NpcArrival.Body(p.GlobalPosition, p.WorldVelocity, p.Npc));
+        return list;
     }
 
     private void OnSetup(RaceManager.NpcGrid g)
@@ -70,10 +102,12 @@ public partial class RaceNpc : Node
         _route = route;
         _goIn = g.Countdown;
         _pilot = null;
-        _me.GlobalPosition = g.At + Vector3.Up * 1.2f;
-        _me.Rotation = new Vector3(0, Mathf.Atan2(-g.Forward.X, -g.Forward.Z), 0);
-        _me.RequestReplacement();   // stopped, and put down on the ground once it is there
-        _me.RideControls = Hold;
+        if (_arrival != null) _arrival.SetSlot(g.At, g.Countdown);   // it drives the rest of the way itself
+        else
+        {
+            _me.PlaceAt(g.At + Vector3.Up * 1.2f, Mathf.Atan2(-g.Forward.X, -g.Forward.Z));
+            _me.RideControls = Hold;
+        }
         _race!.TrackNpc(Id, () => _me.GlobalPosition);
         GD.Print($"[npc] {_me.Name} on the grid of race #{g.RaceId}");
     }
@@ -90,6 +124,7 @@ public partial class RaceNpc : Node
         if (id != Id) return;
         _route = null;
         _pilot = null;
+        _arrival = null;
         _me.RideControls = Hold;
     }
 }
@@ -114,7 +149,8 @@ public partial class RaceNpcs : Node
     public static RaceNpcs CreateClient() => new() { Name = NodeName };
 
     /// <summary>Server: spawns up to <paramref name="count"/> NPCs for <paramref name="owner"/> behind <paramref name="at"/>; returns their ids.</summary>
-    public List<long> Spawn(long owner, int count, RideKind kind, Vector3 at, float yaw)
+    /// <param name="place">Where the i-th one appears and its yaw (<see cref="NpcArrival.Plan"/>); null: behind <paramref name="at"/>.</param>
+    public List<long> Spawn(long owner, int count, RideKind kind, Vector3 at, float yaw, System.Func<int, (Vector3 At, float Yaw)>? place = null)
     {
         var ids = new List<long>();
         if (_spawner == null || !AutoPilot.Drives(kind)) return ids;
@@ -125,9 +161,9 @@ public partial class RaceNpcs : Node
         {
             long id = PlayerReplication.NpcId(owner, n);
             if (_live.ContainsKey(id)) continue;
-            var pos = at + back * (8f * (ids.Count + 1)) + Vector3.Up * 1.5f;
+            var (pos, facing) = place?.Invoke(ids.Count) ?? (at + back * (8f * (ids.Count + 1)) + Vector3.Up * 1.5f, yaw);
             _live[id] = kind;
-            _spawner.Spawn(PlayerReplication.NpcData(owner, n, (int)kind, pos, yaw));
+            _spawner.Spawn(PlayerReplication.NpcData(owner, n, (int)kind, pos, facing));
             ids.Add(id);
             GD.Print($"[npc] spawned {PlayerReplication.NodeName(id)} ({Label(id)}) for peer {owner}");
         }

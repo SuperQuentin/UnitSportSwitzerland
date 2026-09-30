@@ -21,6 +21,13 @@ public sealed class RaceRoute
     public readonly List<float> Width = new();
     public RaceLine Line = null!;
     public RoadClass Class;
+    /// <summary>
+    /// The road behind the start, from the start outward (the other way from the host, the walk
+    /// not kept): where a race NPC arriving "from behind" comes up from (<c>World/NpcArrival</c>).
+    /// Server-built routes only; empty on one rebuilt from points.
+    /// </summary>
+    public readonly List<Vector3> Behind = new();
+    public readonly List<float> BehindWidth = new();
 
     public float Length => Line.Length;
 
@@ -53,8 +60,10 @@ public sealed class RaceRoute
 
         var a = Walk(graph, best, true, bestS);
         var b = Walk(graph, best, false, best.Length - bestS);
-        var pts = a.Count >= b.Count ? a : b;
-        return FromPoints(pts.Select(p => p.P).ToList(), pts.Select(p => p.W).ToList(), best.Class);
+        var (pts, back) = a.Count >= b.Count ? (a, b) : (b, a);
+        var route = FromPoints(pts.Select(p => p.P).ToList(), pts.Select(p => p.W).ToList(), best.Class);
+        foreach (var (p, w) in back.Take(300)) { route.Behind.Add(p); route.BehindWidth.Add(w); }   // 600 m is plenty
+        return route;
     }
 
     /// <summary>A route from a centreline already known (sent by the race server, say).</summary>
