@@ -148,6 +148,54 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     [Export] public Vector4 Anim { get; set; }
 
+    // --- transform, replicated (see _Ready and Net/RemoteInterpolator) ---
+    // Not `position`/`rotation` themselves: a remote copy would snap to every packet, which at
+    // 150 km/h is a 0.7-2 m hop and a freeze-then-jump whenever one is late. The owner writes these
+    // with its own clock; a remote copy interpolates them, and the server's proxy copy applies them.
+
+    [Export] public Vector3 NetPos { get; set; }
+    [Export] public Vector3 NetVel { get; set; }
+    [Export] public float NetYaw { get; set; }
+
+    /// <summary>The owner's clock when <see cref="NetPos"/> was taken. Replicated LAST, so its
+    /// setter sees a complete state.</summary>
+    [Export]
+    public double NetTime
+    {
+        get => _netTime;
+        set { _netTime = value; OnNetState(); }
+    }
+    private double _netTime;
+
+    /// <summary>World velocity, for local and remote copies alike (a remote's <c>Velocity</c> is always zero).</summary>
+    public Vector3 WorldVelocity => IsMultiplayerAuthority() ? Velocity : NetVel;
+
+    /// <summary>The server's copy of a client's player: data only, never drawn or simulated.</summary>
+    public bool NetProxy { get; private set; }
+
+    private readonly Net.RemoteInterpolator _interp = new();
+    private MultiplayerSynchronizer? _sync, _vis;
+    private Net.InterestService? _interest;
+
+    private void OnNetState()
+    {
+        if (!IsInsideTree() || NetProxy)
+        {
+            // spawn state, or the server's proxy: exactly where the owner says, no smoothing
+            Position = NetPos;
+            Rotation = new Vector3(0, NetYaw, 0);
+            return;
+        }
+        if (IsMultiplayerAuthority()) return;
+        double now = Time.GetTicksUsec() / 1e6;
+        _interp.BeginCorrection(now);
+        _interp.Push(_netTime, now, NetPos, NetVel, NetYaw);
+        _interp.EndCorrection();
+    }
+
+    /// <summary>Server: re-evaluates whether this player exists on <paramref name="viewer"/>.</summary>
+    public void RefreshNetVisibility(long viewer) => _vis?.UpdateVisibility((int)viewer);
+
     public const int PoseStride = 0, PoseAir = 1, PoseTucked = 2;
 
     /// <summary>
@@ -555,6 +603,9 @@ public partial class FootPlayer : CharacterBody3D
     {
         Terrain?.RemoveAnchor(this);
         Explosion.Blast -= OnBlast;
+        if (_interest != null) _interest.Changed -= OnInterestChanged;
+        if (!IsMultiplayerAuthority() && !NetProxy)
+            GD.Print($"[net] player {Name} left view");
     }
 
     /// <summary>
@@ -569,14 +620,21 @@ public partial class FootPlayer : CharacterBody3D
         CollisionMask |= World.TreeColliders.Layer;   // trunks are solid (layer 2)
         // authority pushes its transform to everyone else (server relays)
         var replication = new SceneReplicationConfig();
-        replication.AddProperty(".:position");
-        replication.AddProperty(".:rotation");
+        replication.AddProperty(".:NetPos");
+        replication.AddProperty(".:NetVel");
+        replication.AddProperty(".:NetYaw");
         // What you are riding travels with where you are. Without it a remote client sees a
         // figure sprinting down a descent at 60 km/h in a running pose.
         replication.AddProperty(".:RideKindId");
         replication.AddProperty(".:HeldItemId");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
+        replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
+        // integers change a few times a minute: sent reliably when they change, not 30 times a second
+        foreach (var prop in new[] { ".:RideKindId", ".:HeldItemId", ".:PoseKind", ".:HeadwearId" })
+            replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
+        NetPos = Position;
+        NetYaw = Rotation.Y;
         var sync = new MultiplayerSynchronizer
         {
             // deterministic name: replication matches nodes by path across peers, and
@@ -584,17 +642,51 @@ public partial class FootPlayer : CharacterBody3D
             Name = "Sync",
             RootPath = new NodePath(".."),
             ReplicationConfig = replication,
+            // 30 Hz is plenty once the receiver interpolates; the frame rate was the old rate,
+            // which is 144 packets a second per viewer from a fast machine
+            ReplicationInterval = 1f / 30f,
         };
+        _sync = sync;
         // the synchronizer's own authority decides who sends; children added after the
         // parent's SetMultiplayerAuthority default to server authority
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
         // Interest management: this player's position goes only to peers in the same space —
         // the same interior, or both outdoors — plus the server, which relays and answers /tp.
         // The table is the server's (see InteriorManager), never this node's replicated state.
+        // Vision: the server tells every client whom it can see (Net/InterestService); the owner
+        // only sends to those, and the server's copy only exists on those.
+        _interest = GetNodeOrNull<Net.InterestService>("../../" + Net.InterestService.NodeName);
+        NetProxy = !IsMultiplayerAuthority() && Net.NetworkManager.DedicatedServer;
         if (IsMultiplayerAuthority())
+        {
             sync.AddVisibilityFilter(Callable.From((long peer) =>
-                peer == 1 || Interiors.InteriorManager.Instance?.SameSpaceAsLocal(peer) != false));
+                peer == 1 || (Interiors.InteriorManager.Instance?.SameSpaceAsLocal(peer) != false
+                    && _interest?.Sees(peer) != false)));
+            if (_interest != null) _interest.Changed += OnInterestChanged;
+        }
         AddChild(sync);
+
+        // Whether this player EXISTS on a peer is the spawner's call, and Godot only consults
+        // synchronizers the server has authority over for that (SceneReplicationInterface::
+        // _update_spawn_visibility skips the rest) — "Sync" above is the owner's. So a second,
+        // empty one, owned by the server, carries the vision decision: out of sight, the node is
+        // despawned on that peer, and spawned back with the owner's current state on return.
+        _vis = new MultiplayerSynchronizer
+        {
+            Name = "Vis",
+            RootPath = new NodePath(".."),
+            ReplicationConfig = new SceneReplicationConfig(),
+            // it carries no data: without this Godot would still ask its filter every frame
+            // for every peer, 30 000 managed calls a second at 32 players
+            ReplicationInterval = 3600f,
+            DeltaInterval = 3600f,
+        };
+        _vis.SetMultiplayerAuthority(1);
+        if (NetProxy && long.TryParse(Name, out long owner))
+            // peer 0 is Godot asking "visible to everyone?": the answer must be no, or it
+            // broadcasts and never asks per peer
+            _vis.AddVisibilityFilter(Callable.From((long peer) => peer != 0 && _interest?.ServerSees(peer, owner) != false));
+        AddChild(_vis);
 
         AddToGroup(Group);
 
@@ -647,11 +739,28 @@ public partial class FootPlayer : CharacterBody3D
             SetProcessUnhandledInput(false);
         }
 
+        if (NetProxy)
+        {
+            // the server relays and reads positions; it never draws or animates anyone
+            _body.Disabled = true;
+            SetProcess(false);
+            SetPhysicsProcess(false);
+            return;
+        }
+
+        if (!IsMultiplayerAuthority())
+            GD.Print($"[net] player {Name} came into view at {GlobalPosition.Round()}");
+
         RefreshVisual();
 
         // every copy draws what is in the hand; only the local one also has a viewmodel
         AddChild(new Items.HeldItemVisual(this) { Name = "HeldItem" });
+
+        if (IsMultiplayerAuthority() && _interest != null)
+            Callable.From(() => _interest.ReportView(Core.GameSettings.Current.CameraFar, BaseFov)).CallDeferred();
     }
+
+    private void OnInterestChanged() => _sync?.UpdateVisibility();
 
     /// <summary>
     /// Rebuilds the body mesh when the ride changes, or the view does.
@@ -672,6 +781,7 @@ public partial class FootPlayer : CharacterBody3D
         _walker = null;
         HandLocal = null;
         _visualKind = kind;
+        if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
 
         int rider = GetMultiplayerAuthority();
 
@@ -707,6 +817,18 @@ public partial class FootPlayer : CharacterBody3D
     }
 
     /// <summary>
+    /// Someone else's car must block like a car, not like the 0.3 m pedestrian capsule their node
+    /// started as: the owner resizes its own body in ApplyRide, which never runs on this copy.
+    /// </summary>
+    private void FitRemoteBody(RideKind kind)
+    {
+        if (_capsule == null) return;
+        var ride = kind == RideKind.OnFoot ? null : Rideable.Create(kind);
+        _capsule.Radius = ride?.BodyRadius ?? BodyRadius;
+        SetBodyHeight(ride?.BodyHeight ?? StandHeight);
+    }
+
+    /// <summary>
     /// Remote players get no physics, so the replicated ride kind has to be polled. It changes
     /// perhaps twice a minute; comparing an int per frame is cheaper than an RPC to announce it.
     /// </summary>
@@ -714,6 +836,10 @@ public partial class FootPlayer : CharacterBody3D
     {
         if (IsMultiplayerAuthority())
         {
+            NetPos = Position;
+            NetVel = Velocity;
+            NetYaw = Rotation.Y;
+            NetTime = Time.GetTicksUsec() / 1e6;
             float dt = (float)delta;
             ApplyStickLook(dt);
             if (_ride != null)
@@ -764,6 +890,12 @@ public partial class FootPlayer : CharacterBody3D
         }
         if (!here) return;
 
+        if (_interp.HasData)
+        {
+            var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
+            Position = p;
+            Rotation = new Vector3(0, yaw, 0);
+        }
         RefreshVisual();
         AnimateRemote((float)delta);
     }

@@ -12,6 +12,7 @@ namespace UnitSport.Core;
 /// </summary>
 public partial class ServerWorld : Node3D
 {
+    private InterestService? _interest;
     private ChunkManager? _chunks;
     private Node3D? _players;
     private MultiplayerSpawner? _spawner;
@@ -50,6 +51,12 @@ public partial class ServerWorld : Node3D
 
         _players = new Node3D { Name = "Players" };
         AddChild(_players);
+        // who may see whom: decided here for everyone, before any player node exists (each
+        // player's synchronizer looks it up in _Ready). Line of sight from the 100 m horizon lattice.
+        var horizon = await source.LoadHorizonAsync();
+        _interest = InterestService.CreateServer(this, _players,
+            horizon != null ? InterestService.HorizonGround(horizon, origin) : null);
+
         _spawner = PlayerReplication.CreateSpawner();
         AddChild(_spawner);
 
@@ -175,6 +182,7 @@ public partial class ServerWorld : Node3D
         _vehicles?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
+        _interest?.ForgetPeer(id);
 
         if (_players!.GetNodeOrNull<Node3D>(id.ToString()) is { } player)
         {

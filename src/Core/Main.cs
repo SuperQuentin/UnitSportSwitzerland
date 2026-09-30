@@ -10,6 +10,15 @@ public partial class Main : Node
 {
 	public override void _Ready()
 	{
+		// the network rules' own self-checks: vision interest and remote interpolation
+		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--interestcheck") >= 0)
+		{
+			bool ok = UnitSport.Net.Interest.SelfCheck() & UnitSport.Net.RemoteInterpolator.SelfCheck();
+			GD.Print(ok ? "[interestcheck] RESULT: ok" : "[interestcheck] RESULT: FAILED");
+			GetTree().Quit(ok ? 0 : 1);
+			return;
+		}
+
 		// A model turntable, before any world is built: the avatars are the subject, so
 		// there is no point streaming terrain to look at them.
 		if (UnitSport.Avatar.AvatarPreview.Requested(out double seconds, out string output))

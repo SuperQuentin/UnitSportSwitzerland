@@ -673,6 +673,8 @@ public partial class ClientWorld : Node3D
             Callable.From(() => _chunks?.Horizon?.Reload()).CallDeferred();
         AddChild(_terrainSync);
 
+        // before any player arrives: each one's synchronizer asks it whom to send to
+        InterestService.CreateClient(this);
         _players = new Node3D { Name = "Players" };
         _players.ChildEnteredTree += node =>
         {

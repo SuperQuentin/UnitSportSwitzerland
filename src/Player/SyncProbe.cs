@@ -163,7 +163,7 @@ public partial class SyncProbe : Node
         {
             var prop = path.GetConcatenatedSubNames();
             var value = _owner.Get(prop);
-            if (prop == "position") value = _owner.Position + MirrorOffset;
+            if (prop == "NetPos") value = _owner.Position + MirrorOffset;
             _mirror!.Set(prop, value);
         }
     }
