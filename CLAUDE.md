@@ -15,7 +15,8 @@ occasions, core, general. New knowledge goes in a new or existing note plus one 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
-`worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand).
+`worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
+`linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH).
 
 ## Rules
 

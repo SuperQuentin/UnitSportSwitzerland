@@ -37,6 +37,9 @@ public partial class MainMenu : CanvasLayer
     private Label _occasion = null!;
     private AudioStreamPlayer _jingle = null!;
     private readonly HashSet<string> _jingled = new();
+    // LAN servers found over mDNS, browsed only while the menu is open (Net/LanDiscovery.cs)
+    private readonly Net.LanDiscovery _lan = new();
+    private VBoxContainer _lanBox = null!;
 
     /// <summary>Server address typed into the multiplayer row.</summary>
     public string Host => string.IsNullOrWhiteSpace(_host.Text) ? "127.0.0.1" : _host.Text.Trim();
@@ -118,12 +121,16 @@ public partial class MainMenu : CanvasLayer
         hostRow.AddChild(new Label { Text = "Server" });
         _host = new LineEdit
         {
-            Text = "127.0.0.1",
+            Text = GameSettings.Current.LastHost,
             PlaceholderText = "host or host:port",
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
         hostRow.AddChild(_host);
         rows.AddChild(hostRow);
+
+        _lanBox = new VBoxContainer();
+        _lanBox.AddThemeConstantOverride("separation", 2);
+        rows.AddChild(_lanBox);
 
         rows.AddChild(new HSeparator());
 
@@ -167,6 +174,11 @@ public partial class MainMenu : CanvasLayer
 
     private void Choose(GameMode mode)
     {
+        if (mode == GameMode.Multiplayer && Host != GameSettings.Current.LastHost)
+        {
+            GameSettings.Current.LastHost = Host;
+            GameSettings.Current.Save();
+        }
         Current = mode;
         Close();
         ModeChosen?.Invoke(mode);
@@ -236,6 +248,47 @@ public partial class MainMenu : CanvasLayer
             _jingle.Stream = Audio.Dsp.Encode(Audio.Dsp.Normalise(samples, 0.8f));
             _jingle.VolumeDb = -6;   // the slider is on the Sfx bus
             _jingle.Play();
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        // Follows the setting live, so turning it off in the settings panel stops the queries at once.
+        bool want = IsOpen && GameSettings.Current.LanDiscovery;
+        if (want != _lan.Running)
+        {
+            if (want) _lan.Start(); else _lan.Stop();
+            ShowLanServers();
+        }
+        if (_lan.Running && _lan.Poll()) ShowLanServers();
+    }
+
+    public override void _ExitTree() => _lan.Dispose();
+
+    /// <summary>One button per server heard on the LAN: pressing it joins that server.</summary>
+    private void ShowLanServers()
+    {
+        foreach (var child in _lanBox.GetChildren()) child.QueueFree();
+        _lanBox.Visible = _lan.Running;
+        if (!_lan.Running) return;
+
+        var servers = _lan.Servers;
+        var title = new Label { Text = servers.Count == 0 ? "Servers on your network: searching..." : "Servers on your network" };
+        title.AddThemeFontSizeOverride("font_size", 12);
+        title.AddThemeColorOverride("font_color", new Color(0.55f, 0.59f, 0.65f));
+        _lanBox.AddChild(title);
+        foreach (var server in servers)
+        {
+            string version = server.Version.Length > 0 ? $"   v{server.Version}" : "";
+            var join = new Button
+            {
+                Text = $"{server.Name}   {server.Endpoint}{version}",
+                Alignment = HorizontalAlignment.Left,
+                CustomMinimumSize = new Vector2(0, 28),
+            };
+            string endpoint = server.Endpoint;
+            join.Pressed += () => { _host.Text = endpoint; Choose(GameMode.Multiplayer); };
+            _lanBox.AddChild(join);
         }
     }
 

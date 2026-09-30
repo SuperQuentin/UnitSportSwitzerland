@@ -127,6 +127,9 @@ public partial class SettingsMenu : PanelContainer
         ToggleRow(rows, "Invert look Y", s.InvertY, on => GameSettings.Current.InvertY = on);
         ToggleRow(rows, "Controller vibration", s.Vibration, on => GameSettings.Current.Vibration = on);
 
+        Section(rows, "Network");
+        ToggleRow(rows, "Find servers on your network", s.LanDiscovery, on => GameSettings.Current.LanDiscovery = on);
+
         Section(rows, "Performance");
         SliderRow(rows, "Parallel tile builds", 0, GameSettings.MaxBuildsCap, 1, s.MaxConcurrentBuilds,
             v => GameSettings.Current.MaxConcurrentBuilds = (int)v,

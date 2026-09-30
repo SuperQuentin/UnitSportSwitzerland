@@ -161,6 +161,13 @@ public sealed class GameSettings
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
 
+    // --- network ---
+    /// <summary>List the dedicated servers found on the LAN over mDNS in the main menu (<see cref="Net.LanDiscovery"/>).</summary>
+    public bool LanDiscovery { get; set; } = true;
+
+    /// <summary>The server last joined from the menu, so the field is not reset to localhost every launch.</summary>
+    public string LastHost { get; set; } = "127.0.0.1";
+
     /// <summary>Window size when windowed; 0 leaves whatever size the window already has.</summary>
     public int WindowWidth { get; set; }
     public int WindowHeight { get; set; }
