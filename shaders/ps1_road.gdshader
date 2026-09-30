@@ -78,6 +78,10 @@ void fragment() {
         }
     }
 
+    // Snow (a running occasion): carriageways are ploughed, so it lies only along the edges;
+    // ballast holds it between the sleepers.
+    col = occasion_snow_amount(col, s == 4 ? 0.65 : smoothstep(0.7, 1.0, abs(lat)) * 0.85 + 0.08);
+
     const float bayer[16] = float[16](
         0.0, 8.0, 2.0, 10.0,
         12.0, 4.0, 14.0, 6.0,

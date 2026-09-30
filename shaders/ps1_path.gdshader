@@ -49,6 +49,7 @@ void fragment() {
     // upward-facing triangles are the tread, steep ones are the kerb
     float flat_face = smoothstep(0.45, 0.85, n.y);
     vec3 col = mix(side_color, top_color, flat_face);
+    col = occasion_snow(col, n, 0.9);
 
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     col *= floor(ndl * 4.0) / 4.0 * 0.35 + 0.7;

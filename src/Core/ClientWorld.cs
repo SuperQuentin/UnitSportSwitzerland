@@ -207,6 +207,8 @@ public partial class ClientWorld : Node3D
         // …the creatures in the air around the camera, and their sounds
         AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
         AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
+        // …and snow falling round the camera, except indoors
+        AddChild(new Occasions.OccasionPrecip(() => LocalPlayer?.Indoors == true));
 
         // the clock: sun, light colour, sky and night for every shader and the environment
         var chunksForSky = _chunks;

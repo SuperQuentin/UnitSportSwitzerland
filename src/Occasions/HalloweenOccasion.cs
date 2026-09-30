@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Avatar;
 using UnitSport.Interiors;
 using UnitSport.Terrain.Format;
+using static UnitSport.Occasions.PropColors;
 
 namespace UnitSport.Occasions;
 
@@ -137,14 +138,8 @@ public sealed class HalloweenOccasion : Occasion
     private static readonly Color Orange = Matte(0.93f, 0.44f, 0.07f);
     private static readonly Color DarkOrange = Matte(0.72f, 0.30f, 0.05f);
     private static readonly Color Stalk = Matte(0.28f, 0.26f, 0.10f);
-    /// <summary>
-    /// A surface that is <i>not</i> a light. Vertex alpha is ps1_prop's glow mask, and a plain
-    /// <c>new Color(r, g, b)</c> has alpha 1 — which lit the whole pumpkin up at night.
-    /// </summary>
-    public static Color Matte(float r, float g, float b) => new(r, g, b, 0f);
-
     /// <summary>Alpha 1 marks a light source for ps1_prop: dark by day, this colour at night.</summary>
-    private static readonly Color Candle = new(1.0f, 0.62f, 0.16f, 1f);
+    private static readonly Color Candle = Lamp(1.0f, 0.62f, 0.16f);
 
     /// <summary>An octagonal pumpkin, 0.34 m wide, authored facing +Z (MeshScratch turns it to −Z).</summary>
     private static void Pumpkin(MeshScratch s, float width, float height, Color skin)

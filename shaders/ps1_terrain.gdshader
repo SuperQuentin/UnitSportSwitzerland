@@ -94,6 +94,9 @@ void fragment() {
         }
     }
 
+    // a running occasion's snow lies on whatever faces up; the rock test below still bares cliffs
+    col = occasion_snow(col, n, 1.0);
+
     // steep faces read as bare rock whatever the mapped cover says
     float rockiness = smoothstep(0.62, 0.38, n.y);
     col = mix(col, vec3(0.30, 0.28, 0.26), rockiness * 0.75);

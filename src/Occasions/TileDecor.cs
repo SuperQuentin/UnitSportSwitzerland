@@ -155,3 +155,17 @@ public sealed class DecorBuilder
     /// <summary>A pumpkin patch, tile-local XZ, so gathering can tell a patch from a meadow.</summary>
     public void AddPatch(Rect2 localXz) => Patches.Add(localXz);
 }
+
+/// <summary>
+/// Vertex colours for occasion props. <c>ps1_prop</c> reads vertex <b>alpha</b> as "this part is a
+/// light" (dark by day, its own colour at night), and a plain <c>new Color(r, g, b)</c> has alpha
+/// 1 — which lit the first jack-o'-lanterns up from stalk to base.
+/// </summary>
+public static class PropColors
+{
+    /// <summary>A surface that is not a light.</summary>
+    public static Color Matte(float r, float g, float b) => new(r, g, b, 0f);
+
+    /// <summary>A light: a candle, a bulb, a bauble catching the lights.</summary>
+    public static Color Lamp(float r, float g, float b) => new(r, g, b, 1f);
+}

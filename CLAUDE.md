@@ -865,6 +865,13 @@ Several people work on this repo in parallel, so every new feature follows these
   **gather hold** (G), not E — the spots stand beside doors, where E means "go in" — and claims
   are local (`user://occasions/claims.json`, per instance), like `Gathering` and the inventory.
   `ItemId` 37/38 are reserved by the bird-hunting PR (#7); occasions own 39-49.
+  **Christmas** is almost entirely shader-side: `world_snow` whitens up-facing terrain, roofs,
+  crowns and road *edges* (carriageways are ploughed), `world_lights` draws coloured bulbs along
+  the eaves in `ps1_building` (no geometry) and lights more windows; falling snow is one static
+  mesh of 4k quads that `ps1_snowfall.gdshader` drops and wraps round the camera in **world**
+  space (`OccasionPrecip`, zero CPU per frame, hidden indoors). Props are a 12 m fir per town
+  (`TreeSpot` nudges it off roads and doorsteps; tree and gifts agree by recomputing it) with
+  five hunt gifts under it, plus a gift at ~1 door in 20.
 
 ## Commands
 
@@ -1407,7 +1414,7 @@ Several people work on this repo in parallel, so every new feature follows these
   the player down again.
 - **`new Color(r, g, b)` has alpha 1, and `ps1_prop` reads vertex alpha as "this is a light".**
   The first jack-o'-lanterns glowed from stalk to base at night and were darkened to 18% by day.
-  Every non-emissive prop colour goes through `HalloweenOccasion.Matte` (alpha 0).
+  Every non-emissive prop colour goes through `PropColors.Matte` (alpha 0), lights through `Lamp`.
 - **A loopback server test leaves its manifest in the client's chunk cache.** `ClientTerrainSync`
   saves the server's index as `server-manifest.json`, and the next *offline* boot merges it,
   retires the generated world and loads a tile that does not exist — an empty world, `prims=4`.

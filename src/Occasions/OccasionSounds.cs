@@ -20,6 +20,9 @@ public static class OccasionSounds
         yield return ("wind", Dsp.Normalise(Wind(new Random(3)), 0.9f));
         yield return ("toll", Dsp.Normalise(Toll(new Random(4)), 0.9f));
         yield return ("jingle_halloween", Dsp.Normalise(HalloweenJingle(), 0.9f));
+        yield return ("sleigh", Dsp.Normalise(SleighBells(new Random(5)), 0.9f));
+        yield return ("carol", Dsp.Normalise(Carol(new Random(6)), 0.9f));
+        yield return ("jingle_christmas", Dsp.Normalise(ChristmasJingle(), 0.9f));
     }
 
     /// <summary>A tawny owl: "hoo … hu-hoooo", a soft tone near 450 Hz with a breathy edge.</summary>
@@ -102,6 +105,91 @@ public static class OccasionSounds
         for (int i = 0; i < s.Length; i++)
             s[i] = (i < a.Length ? a[i] : 0) + (i < b.Length ? b[i] * 0.8f : 0);
         return s;
+    }
+
+    /// <summary>
+    /// A sleigh passing: harness bells shaken about five times a second, each shake a handful of
+    /// small bells (three inharmonic partials between 2 and 6 kHz, gone in a tenth of a second),
+    /// swelling and fading as it goes by.
+    /// </summary>
+    public static float[] SleighBells(Random rng)
+    {
+        float dur = 3.4f;
+        var s = new float[(int)(dur * R)];
+        for (float shake = 0.05f; shake < dur - 0.2f; shake += 1f / (5.2f + (float)rng.NextDouble() * 0.8f))
+        {
+            float pass = Mathf.Pow(Mathf.Sin(Mathf.Pi * shake / dur), 1.5f);
+            for (int b = 0; b < 5; b++)
+            {
+                int o = (int)((shake + (float)rng.NextDouble() * 0.03f) * R);
+                float f0 = 2200f + (float)rng.NextDouble() * 1400f;
+                float[] ratios = [1f, 1.47f, 2.09f];
+                int n = (int)(0.12f * R);
+                for (int i = 0; i < n && o + i < s.Length; i++)
+                {
+                    float t = i / (float)R, env = Mathf.Exp(-t / 0.035f) * pass * 0.25f;
+                    float v = 0;
+                    foreach (float r in ratios) v += Mathf.Sin(Mathf.Tau * f0 * r * t) / r;
+                    s[o + i] += v * env;
+                }
+            }
+        }
+        return s;
+    }
+
+    /// <summary>
+    /// The chorus of "Jingle Bells" (Pierpont, 1857 — public domain) rung on a church bell: one
+    /// bell rendered once and resampled to each note's pitch, every note left to ring into the next.
+    /// </summary>
+    public static float[] Carol(Random rng)
+    {
+        var bell = AmbienceDsp.ChurchBell(rng, 329.6f);   // E4
+        (int Midi, float Beats)[] tune =
+        [
+            (64, 1), (64, 1), (64, 2), (64, 1), (64, 1), (64, 2),
+            (64, 1), (67, 1), (60, 1.5f), (62, 0.5f), (64, 4),
+            (65, 1), (65, 1), (65, 1.5f), (65, 0.5f), (65, 1), (64, 1), (64, 1), (64, 0.5f), (64, 0.5f),
+            (64, 1), (62, 1), (62, 1), (64, 1), (62, 2), (67, 2),
+        ];
+        const float beat = 0.5f;
+        float total = tune.Sum(n => n.Beats) * beat + bell.Length / (float)R;
+        var s = new float[(int)(total * R)];
+        float at = 0;
+        foreach (var (midi, beats) in tune)
+        {
+            float ratio = Mathf.Pow(2f, (midi - 64) / 12f);
+            int o = (int)(at * R);
+            for (int i = 0; o + i < s.Length; i++)
+            {
+                float src = i * ratio;
+                int k = (int)src;
+                if (k + 1 >= bell.Length) break;
+                s[o + i] += Mathf.Lerp(bell[k], bell[k + 1], src - k) * 0.5f;
+            }
+            at += beats * beat;
+        }
+        return s;
+    }
+
+    /// <summary>"Deck the Halls" (Welsh traditional, public domain), first line, on the chip.</summary>
+    public static float[] ChristmasJingle()
+    {
+        var N = ChipTune.N;
+        ChipTune.Note[] lead =
+        [
+            N(79, 1.5f), N(77, 0.5f), N(76, 1), N(74, 1),
+            N(72, 1), N(74, 1), N(76, 1), N(72, 1),
+            N(74, 0.5f), N(76, 0.5f), N(77, 0.5f), N(74, 0.5f), N(76, 1.5f), N(74, 0.5f),
+            N(72, 1), N(71, 1), N(72, 2),
+        ];
+        ChipTune.Note[] bass =
+        [
+            N(48, 2), N(43, 2),
+            N(45, 2), N(48, 2),
+            N(43, 2), N(48, 2),
+            N(43, 2), N(36, 2),
+        ];
+        return ChipTune.Render(lead, bass, 150f);
     }
 
     /// <summary>An original minor-key phrase in D, with the augmented step that says "spooky".</summary>

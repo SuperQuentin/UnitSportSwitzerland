@@ -99,7 +99,8 @@ void fragment() {
     vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     float light = floor(ndl * 3.0) / 3.0 * 0.45 + 0.6;
-    vec3 col = COLOR.rgb * light;
+    // snow settles on the upper faces of a crown (a running occasion's world_snow)
+    vec3 col = occasion_snow_amount(COLOR.rgb, smoothstep(0.25, 0.75, abs(n.y)) * 0.8) * light;
 
     const float bayer[16] = float[16](
         0.0, 8.0, 2.0, 10.0,

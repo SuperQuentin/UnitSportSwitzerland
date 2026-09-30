@@ -95,8 +95,8 @@ public partial class OccasionCreatures : Node3D
 
     // ---- meshes --------------------------------------------------------------------------------
 
-    private static readonly Color Leather = HalloweenOccasion.Matte(0.30f, 0.24f, 0.32f);
-    private static readonly Color Feather = HalloweenOccasion.Matte(0.06f, 0.06f, 0.07f);
+    private static readonly Color Leather = PropColors.Matte(0.30f, 0.24f, 0.32f);
+    private static readonly Color Feather = PropColors.Matte(0.06f, 0.06f, 0.07f);
 
     private static ArrayMesh Mesh(CritterKind kind)
     {

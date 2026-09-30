@@ -14,12 +14,15 @@ global uniform float world_lights;
 
 // Snow lies on what faces up. `hold` is how much of it this surface keeps (a road is cleared,
 // a crown holds less than a roof). Linear colour, applied before lighting.
-vec3 occasion_snow(vec3 col, vec3 n, float hold) {
+vec3 occasion_snow_amount(vec3 col, float amount) {
     if (world_snow <= 0.0) {
         return col;
     }
-    float lie = smoothstep(0.55, 0.85, n.y) * world_snow * hold;
-    return mix(col, vec3(0.80, 0.84, 0.90), lie);
+    return mix(col, vec3(0.80, 0.84, 0.90), clamp(amount, 0.0, 1.0) * world_snow);
+}
+
+vec3 occasion_snow(vec3 col, vec3 n, float hold) {
+    return occasion_snow_amount(col, smoothstep(0.55, 0.85, n.y) * hold);
 }
 
 // Mist that pools in the valley: thickens with distance, only below world_mist_top. Applied

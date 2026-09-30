@@ -35,6 +35,9 @@ public sealed record OccasionAtmosphere
 
     /// <summary>Metres above the ground under the camera where the mist thins out to nothing.</summary>
     public float MistHeight { get; init; } = 60f;
+
+    /// <summary>0..1: falling snow around the camera (<see cref="OccasionPrecip"/>); heavier at altitude.</summary>
+    public float Snowfall { get; init; }
 }
 
 /// <summary>
