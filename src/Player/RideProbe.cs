@@ -8,7 +8,7 @@ namespace UnitSport.Player;
 /// Verification helper: mounts a vehicle, holds the throttle, and reports what happened.
 ///
 /// <para>
-/// <c>godot --path . -- --ride bike|skis,seconds[,out.png] [--at E,N]</c>
+/// <c>godot --path . -- --ride bike|skis|car[:N],seconds[,out.png] [--at E,N]</c>
 /// </para>
 ///
 /// <para>
@@ -60,10 +60,14 @@ public partial class RideProbe : Node
             if (args[i] != "--ride") continue;
 
             var parts = args[i + 1].Split(',');
-            var kind = parts[0].ToLowerInvariant() switch
+            var name = parts[0].ToLowerInvariant();
+            var kind = name switch
             {
                 "bike" or "roadbike" => RideKind.RoadBike,
                 "skis" or "ski" => RideKind.Skis,
+                // car = the first in the roster, car:N = CarCatalog.All[N]
+                _ when name.StartsWith("car") => (RideKind)(CarCatalog.First
+                    + (name.Length > 4 && int.TryParse(name[4..], out int n) ? n : 0)),
                 _ => RideKind.OnFoot,
             };
             double seconds = 20;

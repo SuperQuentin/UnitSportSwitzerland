@@ -127,9 +127,28 @@ public partial class Traffic : Node3D
     private static bool IsRail(RoadSegment s) =>
         s.Class == RoadClass.Railway && (s.Flags & (RoadFlags.Disused | RoadFlags.Tramway)) == 0;
 
+    private int _epoch;
+
+    /// <summary>
+    /// Removes every car and train and forgets the lane graphs, for when the roads they were
+    /// built from are replaced (the generated fallback retiring). They rebuild on the next frame.
+    /// </summary>
+    public void Forget()
+    {
+        _epoch++;
+        foreach (var v in _cars) v.Free();
+        foreach (var v in _trains) v.Free();
+        _cars.Clear();
+        _trains.Clear();
+        _roads = _rails = null;
+        _builtAround = null;
+        _building = false;
+    }
+
     private void RebuildIfMoved(Vector3 focus)
     {
         if (_building || _chunks.Source is not { } source) return;
+        int epoch = _epoch;
         var (e, n) = _origin.ToLv95(focus);
         var here = TileId.FromLv95(e, n);
         if (_builtAround is { } b && b.E == here.E && b.N == here.N) return;
@@ -157,6 +176,7 @@ public partial class Traffic : Node3D
                 + $"carriageways oriented), {rails.Edges.Count} rail edges");
             Callable.From(() =>
             {
+                if (epoch != _epoch) return;   // built from the world that was replaced
                 _roads = roads;
                 _rails = rails;
                 _builtAround = here;

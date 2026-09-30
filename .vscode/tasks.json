@@ -1,0 +1,262 @@
+{
+    // Godot is taken from "godotTools.editorPath.godot4" in .vscode/settings.json.
+    // Every task that launches the game builds the C# first: launching Godot from the
+    // command line does not compile the assembly the way F5 in the editor does.
+    // Check and probe output goes to test_output/ (gitignored).
+    "version": "2.0.0",
+    "tasks": [
+        // ---------------------------------------------------------------- build
+        {
+            "label": "build",
+            "detail": "dotnet build the game, TerrainFormat and TerrainPreprocessor",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["build", "UnitSportSwitzerland.sln", "/property:GenerateFullPaths=true", "/consoleloggerparameters:NoSummary"],
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build: RoadGen",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["build", "tools/RoadGen", "-c", "Release", "/property:GenerateFullPaths=true", "/consoleloggerparameters:NoSummary"],
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "godot: import",
+            "detail": "First-time headless import (creates .godot/)",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--headless", "--path", ".", "--import"],
+            "problemMatcher": []
+        },
+
+        // ------------------------------------------------------------------ run
+        {
+            "label": "run: game",
+            "detail": "Offline, main menu",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", "."],
+            "dependsOn": "build",
+            "group": { "kind": "test", "isDefault": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "run: game at LV95",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--at", "${input:lv95}"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "run: game at town",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--goto", "${input:town}"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "run: GPX replay",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--gpx", "${input:gpx}"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "run: editor",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--editor"],
+            "dependsOn": "build",
+            "isBackground": true,
+            "problemMatcher": []
+        },
+
+        // ---------------------------------------------------------- multiplayer
+        {
+            "label": "mp: dedicated server",
+            "detail": "Headless server on port 7777; type /commands into this terminal",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--headless", "--path", ".", "--", "--server", "--admin-password", "${input:adminPassword}"],
+            "dependsOn": "build",
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "mp: client (localhost)",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--connect", "127.0.0.1", "--name", "${input:playerName}"],
+            "problemMatcher": []
+        },
+        {
+            "label": "mp: client (host)",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--connect", "${input:host}", "--name", "${input:playerName}"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+
+        // --------------------------------------------------------------- checks
+        {
+            "label": "check: smoke screenshot",
+            "detail": "SETUP.md step 3 - boots and writes test_output/smoke.png",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--shot", "0,300,0,-20,0,3,test_output/smoke.png"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: screenshot",
+            "detail": "--shot x,y,z,pitchDeg,yawDeg,seconds,out.png",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--shot", "${input:shot}"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: streaming smoothness (--fly)",
+            "detail": "Straight flight, prints frame-time distribution, fails on any frame > 33 ms",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--fly", "${input:fly}"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: ride",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--ride", "${input:rideKind},20,test_output/ride_${input:rideKind}.png"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: flight model",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--flycheck", "${input:craft},test_output/flycheck_${input:craft}.png"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: vehicles",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--vehiclecheck,test_output/vehiclecheck.png", "--at", "2585000,1110000"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: road collision",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--roadcheck"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: bridge collision",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--roadcheck", "--bridges"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: mantle",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--mantlecheck"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: traffic",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--trafficcheck,test_output/trafficcheck.png"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: gathering",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--gathercheck,test_output/gathercheck.png"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: loot stats",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--lootstats"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "check: sound",
+            "detail": "Writes every sound bank as WAV to test_output/soundcheck, fails on NaN/clipping",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--headless", "--path", ".", "--", "--soundcheck", "test_output/soundcheck"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+
+        // ----------------------------------------------------------- terrain data
+        {
+            "label": "data: coarse companions + horizon",
+            "detail": "Regenerate .terrc tiles and horizon.bin from existing .terr",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["run", "--project", "tools/TerrainPreprocessor", "-c", "Release", "--", "--out", "terrain_chunks", "--coarse", "--jobs", "8"],
+            "problemMatcher": []
+        },
+        {
+            "label": "data: far horizon",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["run", "--project", "tools/TerrainPreprocessor", "-c", "Release", "--", "--out", "terrain_chunks", "--horizon", "--jobs", "8"],
+            "problemMatcher": []
+        },
+        {
+            "label": "data: junctions dry run",
+            "detail": "RoadGen --rewrite --dry-run: measure without touching .road files",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["run", "--project", "tools/RoadGen", "-c", "Release", "--", "--rewrite", "--dry-run", "--chunks", "terrain_chunks"],
+            "problemMatcher": []
+        },
+        {
+            "label": "data: RoadGen demo",
+            "detail": "Four hand-built junction scenes, no data needed",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["run", "--project", "tools/RoadGen", "-c", "Release", "--", "--demo"],
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        { "id": "lv95", "type": "promptString", "description": "LV95 easting,northing", "default": "2583250,1113250" },
+        { "id": "town", "type": "promptString", "description": "Town or summit name", "default": "Riddes" },
+        { "id": "gpx", "type": "promptString", "description": "Path to a .gpx file" },
+        { "id": "host", "type": "promptString", "description": "Server host[:port]", "default": "127.0.0.1:7777" },
+        { "id": "playerName", "type": "promptString", "description": "Player name", "default": "player" },
+        { "id": "adminPassword", "type": "promptString", "description": "Operator password for /login", "password": true },
+        { "id": "shot", "type": "promptString", "description": "x,y,z,pitchDeg,yawDeg,seconds,out.png (world coords)", "default": "0,300,0,-20,0,6,test_output/shot.png" },
+        { "id": "fly", "type": "promptString", "description": "x,y,z,yawDeg,speedMps,seconds (world coords)", "default": "0,1200,0,90,150,12" },
+        { "id": "rideKind", "type": "pickString", "description": "Mount", "options": ["bike", "skis", "foot"], "default": "bike" },
+        { "id": "craft", "type": "pickString", "description": "Aircraft", "options": ["wingsuit", "glide", "paraglider", "heli", "plane"], "default": "wingsuit" }
+    ]
+}

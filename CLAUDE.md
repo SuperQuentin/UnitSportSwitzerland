@@ -258,6 +258,22 @@ Several people work on this repo in parallel, so every new feature follows these
   view-space shader maths, so on foot, the ride chase cam, free fly and the replay cameras all
   get it with no C# per frame.
   Current region: ~40 M trees, of which 0.87 M planted and 1.65 M surveyed.
+- **Trees are solid** (`World/TreeColliders`, issue #14): no per-tile tree collision — 100k+ trees
+  a forest tile. A **pool** of `StaticBody3D` + `CylinderShape3D` trunks is laid out only around
+  `ChunkManager.CollisionAnchors` (the local `FootPlayer`, a moving `VehicleBody`), 45 m round the
+  anchor and round a point 1.2 s ahead along its velocity (capped at 40 m), from the same `.trees`
+  files in 10 m world cells. Cells are handed out / taken back as the anchor moves (a released body
+  is `ProcessMode.Disabled`, which removes it from the space, and reused), at most 64 trunks placed
+  a frame. Trunk radius = the drawn trunk (0.10 × crown radius, clamped 0.12–0.5 m), height = the
+  whole tree; shrubs (kind 1) stay walk-through; no crown shape, so a plane only hits a treetop's
+  axis. **Layer 2** (`TreeColliders.Layer`): `FootPlayer`/`VehicleBody` add it to their mask, the
+  camera pull-in rays (`FootPlayer.CameraMask`) leave it out so a chase camera is never shoved in by
+  a trunk; combat rays use the default all-layers mask and hit trunks. Measured at the Col du
+  Mollendruz (51% forest): 146–330 trunks live, **0.86 ms/frame max while riding**, ~3.8 ms the
+  frame the pool first grows its bodies. Check: `<godot> --path . -- --treecheck[,out.png]
+  [--at E,N]` rides a bike at a real trunk 25 m away; non-zero exit if it gets through or no
+  impact registers. Loaded tree tiles are never evicted (~5 MB a forest tile) — the ceiling on a
+  very long drive.
 - **Water**: built at runtime from the Water cover class, not a separate file —
   swissALTI3D already models lakes/rivers as flat surfaces at water level, so the terrain
   height at a water cell *is* the water level, and rivers keep their downstream gradient
@@ -498,6 +514,34 @@ Several people work on this repo in parallel, so every new feature follows these
     helicopter up, bail out mid-air into wingsuit and canopy, empty helicopter falls and explodes;
     bike parked, stays, re-entered; plane engine off/on; plane crashed with the player in it.
     Location matters: at Riddes the engine-off plane glides into the mountainside.
+- **Aerial combat** (`src/Combat/`, `World/Combat` on server and clients — RPCs route by path):
+  **fire (LMB / RB)** in the plane (two wing guns fixed along the nose, fired alternately), the
+  helicopter (chin turret) or the **paraglider** (a gun in the pilot's hands). The turret and the
+  hand gun converge on **what the crosshair is on** (`CrosshairPoint`: first hit or target along the
+  camera ray, else 600 m) — converging on a fixed point 600 m out missed a wing 60 m away by 3 m,
+  because the chase camera sits 7 m above the gun. A paraglider's **wing** has no collider, so rounds
+  are also tested against a 10 × 2.2 × 2.6 m box 7.6 m over each paraglider pilot (`WingHit`) and a
+  wing hit hurts the pilot. `IsShooter`: offline every body shares the shooter's authority, so
+  "same authority = the shooter" made every other local body immune to our rounds. Items are on foot only and
+  tricks/boost ground-mount only, so those bindings are free in the air. Rounds are **ray-marched
+  tracers**, not bodies: 700 m/s + the craft's velocity, gravity, one ray per physics step from last
+  to next position (so nothing tunnels), 2.5 s life, one `MultiMesh` of unshaded streaks. 14 rounds/s,
+  7 damage, 500 rounds, rearmed on the ground. **Client-authoritative**: the shooter RPCs each
+  round (unreliable, relayed by the server, which flies none) and every peer flies every round, but a
+  peer damages only what it has authority over — its own player (`FootPlayer.ShotHit`: the vehicle
+  takes it for its occupant, 0 HP wrecks it via the existing path), vehicles it parked
+  (`VehicleBody.Health`/`Explode`), its own drones. The shooter id is the RPC sender, not a
+  parameter. **Target drones** (`TargetDrone`, `AnimatableBody3D` with `SyncToPhysics = false` —
+  synced, every transform write is reverted until the next physics frame and reads back stale):
+  offline only, three red planes on banked circuits ahead of the player, spawned the first time the
+  player opens fire, 60 HP, respawn after 8 s. HUD (`CombatHud`, layer 9): ring where the guns point,
+  lead diamond on the target nearest the line of fire (relative velocity × round flight time), hit X,
+  rounds left. Gun sound `SfxSynth.GunBank`. Check: `<godot> --path . -- --combatcheck[,out.png]
+  [--at E,N]` — plane 400 m up, a drone keeping station 150 m down the boresight, holds the real
+  `fire` action; non-zero exit unless it is hit and destroyed with the plane intact.
+  `--craft paraglider`: a paraglider pilot fires at a second pilot's wing 66 m out; passes when
+  rounds land and the target lost health. Works with no
+  terrain (flies over a stand-in pad after 20 s). Untested with two real clients.
 - **Inventory** (`src/Items/`): `Inventory` is pure data — a 6-slot hotbar plus an 18-slot pack,
   stacks, `Changed` — saved to `user://inventory.json` by item **name** (a starter kit when absent).
   Local only, never replicated; what is in the hand is, as `FootPlayer.HeldItemId`, so others see it.
@@ -544,6 +588,55 @@ Several people work on this repo in parallel, so every new feature follows these
   outranks rock underfoot. Check: `<godot> --path . -- --gathercheck[,out.png] [--at E,N]` finds a
   shore, a flat treeless rock patch and a tree near the spawn and harvests each (adds to the real
   inventory; steep scree slides the player off the spot, so the probe picks flat rock).
+- **Birds and hunting** (`src/Birds/`): `BirdCatalog` is ONE static table of **274 species**:
+  every species that occurs *regularly* in Switzerland (Vogelwarte checklist and breeding atlas,
+  IOC English names), i.e. 108 resident, 68 summer, 46 winter and 52 passage. Vagrants are left
+  out. Each row gives length/wingspan, back/belly/accent colours, a `BodyPlan` (12 archetypes),
+  a `FlightStyle`, `Habitat` flags, an altitude range, presence, an abundance weight, a flock
+  size and, for the **20 game species** of JSG Art. 5, the open-season months. Anything else is
+  protected. `BirdLife` (local and cosmetic like the traffic, ≤32 birds, removed past 240 m)
+  samples a point 35–150 m out every 0.4 s and maps `TryGetCover` + altitude to a habitat with
+  `HabitatAt`. Unmapped open ground is farm/meadow/alpine by altitude, because TLM has no
+  farmland. It then draws a species weighted by abundance × real calendar month (`--birdmonth N`)
+  × hour (owls at night) and spawns the whole flock. Woodland birds perch on real `.trees` tops,
+  waterfowl swim at the water line, soarers circle, kestrels hover and swifts hawk. A bird
+  closer than `5 + 18·√length` m flushes. `BirdMesh` builds each species once from `MeshScratch`,
+  with the wings as separate meshes that flap about the shoulder. **Hunting**: the **shotgun**
+  item (`ItemUse.Shoot`, `ItemId` 37–38 appended; Aim shoulders it at 50° FOV and shows a
+  crosshair, Use spends a shell through `ItemController.Fire`) casts a cone that opens to 1.4 m
+  across at 35 m, with hit chance fading from 30 to 55 m and a raycast so walls block. Every shot
+  flushes everything within 150 m. The field journal (**J**, `user://birds.json` by species
+  name) scores a game species in season by size and flight (+), a game species out of season
+  (−100) and a protected one (−250). A player with no shotgun is given one plus 25 shells on the
+  first run, existing saves included. Check: `<godot> --path . -- --birdcheck[,out.png]
+  [--at E,N]` builds every mesh, surveys 600 points (habitat → species), auto-spawns for 6 s,
+  then shoots a crow at 25 m and fires through the real item path. It writes to the real journal
+  and inventory. Without terrain it still tests the hunt and skips the survey and spawning.
+- **Bird strikes** (`BirdLife.CheckStrikes`/`SpawnAhead`/`TracerHit`, `FootPlayer.BirdStrike`, #8): the
+  local pilot's craft is a set of spheres (plane 4.5 m, helicopter rotor disc 5 m, canopy pilot 0.7 m +
+  wing 4 m, wingsuit 1 m); a live bird inside one dies (the normal fall + feathers) and hits the craft
+  with **½·m·v²** at the closing speed. Mass is **9·L³** from the species length (no mass column: a
+  sparrow 30 g, a goose 5 kg, capped at 12 kg because a swan would come out at 30). Damage is J/100 for a
+  vehicle (cap 70, through `ShotHit`, so 0 HP wrecks it the usual way) and J/20 for a person (cap 60).
+  **Over 1,500 J through the plane's nose half or anywhere into the helicopter stops the engine**
+  (`EngineOn = false` → the existing glide / autorotation), announced "BIRD STRIKE — ENGINE OUT"; a
+  banner only from 1 point of damage up. Measured: sparrow at 168 km/h 26 J → 0.3; greylag goose at
+  ~130 km/h 2–2.7 kJ → 20–27 + engine out. **Birds are where aircraft fly**: every 2.5 s a flying,
+  fast player gets one bird (or flock) 120–220 m ahead, within 60 m of the track, at the pilot's
+  height above ground clamped to the species' real ceiling (soarers 400 m, gulls/kites 200, swifts 150,
+  raptors/herons/waterfowl 150, the rest 50) — same 32-bird budget. Each airborne bird the craft will
+  reach within 1.2 s gets ONE dodge roll (88% for a sparrow down to 55% for an eagle). Measured with
+  `--survey 10` over Mollendruz, 60 m AGL at 160 km/h: **6 strikes per 10 min**, mostly tits and
+  thrushes, one buzzard, one raven. **Aircraft guns hit birds**: tracers are also tested against the
+  local bird list (segment vs `HitRadius` sphere); a round from THIS client bags the bird in the
+  journal, so a protected species shot from a plane costs the −250 it costs on foot. Birds are local
+  per client, so strikes are client-authoritative like the guns. Note the plane's wing guns fire
+  **parallel** to the nose 1.7 m either side — they do not converge — and birds past
+  `DespawnDistance` (240 m) do not exist, so a bird can only be shot inside that. Check:
+  `<godot> --path . -- --birdstrikecheck[,out.png] [--at E,N] [--survey <min>]` — sparrow then
+  goose on the nose line and a protected buzzard on a gun line; non-zero exit unless the struck birds
+  die, the goose costs >10× the sparrow and stops the engine, the buzzard falls to the rounds (not a
+  strike) with the penalty, and the plane still flies. Works with no terrain; `--survey` needs it.
 - **Day/night** (`World/DayNight`): four **global shader uniforms** declared in `project.godot`
   `[shader_globals]` — `world_sun_dir`, `world_tint`, `world_sky`, `world_night` — written once a
   frame reach every `ps1_*` world shader (each multiplies by the tint just before its Bayer
@@ -566,6 +659,25 @@ Several people work on this repo in parallel, so every new feature follows these
   bends (2.5 m/s² lateral) and for the car or player ahead. Density: Settings → Time of day (`TrafficCars`,
   35, ~half at night; `Trains`); `--traffic N`. Check: `<godot> --path . -- --trafficcheck[,out.png]
   [--time h]` — 40 s over the nearest motorway, chases a car then a train, fails if nothing moved.
+- **Cars and drifting** (`Player/Car.cs`, `CarSpec`, `RideKind` 8–10: Coupe 86, Rotary FD, Rally 4WD;
+  issue #1). A car is the one mount that does not go where it points, so `RideMotion` gained **`Slip`**
+  (travel minus nose, rad, + = left; π reversing) and `FootPlayer.RidePhysics` moves the body along
+  `Yaw + Slip` — zero for every other mount, which is why nothing else changed. The model is a planar
+  bicycle model in `RideMotion` alone (speed, slip, yaw rate), so a wall, boost or a sloppy landing that
+  edits `Speed` applies to the car too: slip angles through `sin(C·atan(B·α))` (peak ~0.15 rad), each
+  axle's side force limited to what its **friction circle** leaves after drive/brake force, load
+  transfer from the last step's acceleration, 5-speed auto box, 4 substeps. Every way into a drift
+  falls out of that: **handbrake** (Space / A — `Rideable.CanHop` false, `RideInput.Handbrake`) collapses
+  the rear circle, power-over eats it, and braking into a turn unloads the rear (feint). Game adds grip,
+  power, a counter-steer assist and a **yaw moment that catches the car past ~35°** (the fronts are on
+  the lock stop by then, so steering alone cannot); Sim has none of it. Two traps found by the check:
+  the low-speed kinematic blend must key on TOTAL speed (keyed on forward speed it zeroed the sideways
+  speed at 70° of angle, 50 km/h gone in 0.3 s), and speed-scaled steering lock must lift in a slide or
+  there is not enough counter-steer to catch anything. The chase camera swings ~55% toward the travel.
+  Known limits: the body is still the player capsule (radius 0.85 m), and there is no per-surface grip,
+  so the 4WD does not yet get its gravel advantage. Check: `<godot> --headless --path . -- --driftcheck
+  [--trace]` — flat ground, no world: launch, handbrake entry, 4 s hold, recovery for every car in both
+  profiles; non-zero exit on a spin, no drift, or no recovery.
 - **Mantle** (on foot): pushing into a wall whose top is 0.45–2.1 m above the feet, with open air
   over it and standing room on it, pulls you up (automatic in the air, needs Jump on the ground so
   walking into garden walls does not vault them). Jump + mantle therefore reaches ~3 m. Moved
@@ -781,6 +893,25 @@ Several people work on this repo in parallel, so every new feature follows these
   `ChunkManager._available` — without that merge the LOD rings skip unknown tiles and nothing
   is ever requested. It also saves that index to the cache, so tiles streamed in an earlier
   session are reachable offline.
+- **Generated fallback world** (`Terrain/ProceduralWorld`, `Terrain/FallbackChunkSource`): a client
+  with no tiles at all (a fresh clone) gets a stand-in instead of a void — an alpine valley through
+  the spawn point with a river on a flat bed (water from the cover raster, like the real one), a
+  road and a railway along the floor, villages with side streets and a church every ~2.6 km, farms
+  and alpine huts, forest to a wandering tree line, rock, scree, glacier, vineyards on the sunny
+  side, orchards, a 100 km horizon. 81 x 81 tiles, all in the **ordinary formats**, served through
+  the ordinary `IChunkSource` seam under `CachingChunkSource`, so roads, traffic, trains, doors,
+  interiors, collision and gathering all work on it unchanged. Everything is a pure function of
+  LV95 position, so seams are bit-identical and the stride-10 grid equals the decimated full one
+  (both checked). Noise is sampled on a **world-anchored 5 m lattice** and interpolated: evaluated
+  per vertex it cost 320 ms a tile; now ~30-40 ms, cover ~10 ms (classified from 10 m samples, since
+  every tile in the rings asks for cover), horizon 0.2 s. The origin goes on the spawn point.
+  **Real tiles replace it**: `ChunkManager.MergeAvailableTiles` calls `RetireFallback` first, which
+  unloads every generated tile, switches the source off, flushes the cache (`CachingChunkSource.Clear`
+  bumps an epoch so a fetch straddling it is not cached), clears the horizon, and raises
+  `TerrainReplaced` for the systems that keep their own tile caches (`Surfaces`, `Ambience`,
+  `Gathering`, `Traffic`). Joining a server retires it **before** adopting the server's origin
+  (`ClientTerrainSync.Adopt`, run on the main thread). Test it with `--chunks <empty dir> --cache
+  <empty dir>`; a server still refuses to start without real terrain.
 - **Chat and commands** (`Net/ChatManager`, `Core/ChatUi`): one class runs on both sides at
   `World/Chat` — the path must match, because Godot routes RPCs by node path. Clients only
   submit text and render replies; **every** decision (permissions, names, teleport
@@ -1323,15 +1454,25 @@ Several people work on this repo in parallel, so every new feature follows these
   it has been asked for.
 - **A fresh clone has NO terrain** — the generated data is gitignored — so a missing
   `manifest.json` is an ordinary state, not an error. `LocalChunkSource` returns an empty
-  manifest and the client boots into an empty world with a message; it used to throw
-  `FileNotFoundException` out of `ClientWorld._Ready` and take the game down. A *server* still
-  fails fast, because it is the authority on where the world is and has nothing to serve.
+  manifest and the client boots into the generated fallback world with a message; it used to
+  throw `FileNotFoundException` out of `ClientWorld._Ready` and take the game down. A *server*
+  still fails fast, because it is the authority on where the world is and has nothing to serve.
 - **Never default the world origin to LV95 0/0.** Switzerland is 2.6 million metres from
-  there, so float precision collapses the moment real data arrives. With no manifest,
-  `WorldOrigin.SwissDefault()` is used, and a client with zero tiles then *adopts* the
-  server's origin via `Rebase` rather than refusing the mismatch — refusing is right when two
-  populated worlds disagree, wrong when you have no world at all. Rebasing changes what every
-  world coordinate means, so `ClientWorld.RespawnAfterRebase` puts the player down again.
+  there, so float precision collapses the moment real data arrives. With no manifest the origin
+  is the spawn point (where the fallback world is built), and a client whose only world is
+  generated then *adopts* the server's origin via `Rebase` rather than refusing the mismatch —
+  refusing is right when two populated worlds disagree, wrong when you have no real world at all.
+  `FallbackActive` must be checked alongside `AvailableTileCount`, which counts generated tiles.
+  Rebasing changes what every world coordinate means, so `ClientWorld.RespawnAfterRebase` puts
+  the player down again.
+- **A tile worker must not create a Godot object after the engine starts tearing down.** Workers
+  make `ArrayMesh`/`MultiMesh` themselves, and one that did so during quit was `Fatal error.
+  0xC0000005` in `ArrayMesh..ctor` — the process died on exit. It only showed once something was
+  always building at quit, which the generated fallback world is (3 of 3 fly probes crashed).
+  `ChunkManager._ExitTree` cancels every build and waits up to 3 s for `_buildsInFlight` to reach
+  0, and every worker checks its token right before each Godot call; either alone leaves a race.
+  Related: `ClientTerrainSync` continues on the thread pool, so anything it raises that touches UI
+  or nodes must be marshalled (`Status` is deferred; the rebase/merge runs via `OnMainThread`).
 - **`places.json` is the one asset the UI reads, not the streamer** — so it was silently left
   out of `AssetKind` and a streaming client connected fine, pulled terrain fine, and showed an
   empty Tab search. It is now `AssetKind.Places`, fetched during sync into the cache, and
@@ -1380,3 +1521,13 @@ Several people work on this repo in parallel, so every new feature follows these
 - godot-ai MCP: `game_eval` needs `Engine.get_main_loop().root` (no bare `root`) and
   TAB indentation; `editor_manage monitors_get` reads the EDITOR process, not the game —
   use `Performance.get_monitor` inside `game_eval` for game metrics.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
