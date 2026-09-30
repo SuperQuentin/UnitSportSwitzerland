@@ -276,7 +276,8 @@ public partial class PlaybackCamera : Camera3D
         // problem - the runner is somewhere on screen (or off it) too small to find.
         _bubble ??= ZoomBubble.Create(_chunks);
         if (_bubble.GetParent() == null) GetParent()?.AddChild(_bubble);
-        _bubble.Enabled = _bubbleEnabled;
+        // the racing drones never let the car get small, and the inset only covers the picture there
+        _bubble.Enabled = _bubbleEnabled && Mode != CameraMode.Racing;
 
         // A cut (a new Cinema shot, a camera-mode change, following another runner) has already
         // moved the camera this frame, so hide the bubble before it is drawn from the new view -

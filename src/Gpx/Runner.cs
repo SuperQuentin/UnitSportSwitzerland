@@ -211,6 +211,19 @@ public partial class Runner : Node3D
 
     public override void _ExitTree() => _chunks.RemoveAnchor(Avatar);
 
+    /// <summary>
+    /// Where the course is at a race time, in world space, for cameras that plan ahead of the
+    /// subject (a drone cutting the corner it is about to take). Unsmoothed, unlike the avatar.
+    /// </summary>
+    public Vector3 CourseAt(double raceTime)
+    {
+        var course = Active;
+        var (e, n, ele, _, _) = course.Sample(raceTime);
+        var p = _origin.ToWorld(e, n, ele);
+        if (!course.ElevationIsSurface && _chunks.TryGetHeight(p, out float g)) p.Y = g;
+        return p;
+    }
+
     /// <summary>Places the avatar for the shared race time.</summary>
     public void UpdateTo(double raceTime, double clockSpeed, double delta)
     {
