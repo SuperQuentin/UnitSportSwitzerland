@@ -1052,7 +1052,7 @@ public partial class RaceManager : Node
     private readonly int _skip = int.TryParse(Arg("--raceskip"), out int k) ? k : -1;
     // --racenpc N: sends /race npc N once, when this client's own race opens
     private readonly string? _autoNpc = Arg("--racenpc");
-    // --chatafter "<seconds> <line>": sends a chat line that long after the first race's grid is
+    // --chatafter "<seconds> <line>[;<line>...]": sends chat lines that long after the first race's grid is
     // announced (spectators too) — e.g. "/city Riddes" to leave the NPCs' zone mid-race (#50)
     private string? _chatAfter = Arg("--chatafter");
     private int _myRace;
@@ -1085,7 +1085,7 @@ public partial class RaceManager : Node
                     && double.TryParse(secs, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double after))
                 {
                     _chatAfter = null;   // once
-                    GetTree().CreateTimer(after).Timeout += () => chat.Send(said);
+                    GetTree().CreateTimer(after).Timeout += () => { foreach (var one in said.Split(';')) chat.Send(one.Trim()); };
                 }
                 if (_autoNpc != null && _myRace > 0 && id == _myRace && line.Contains("opens a"))
                 {

@@ -29,7 +29,14 @@
   anyone runs an entrant. Announced: `[race] #N is now hosted by X`.
 - **Silent remote bodies are not solid** (`FootPlayer.SilentSeconds` = 1 s without a state): a
   crashed leader's frozen car mid-road stopped the whole field behind it until ENet timed out.
-- Check (scratch script, see PR): server + A (`--raceauto --racestart 3000 --racenpc 2`) + B at the
-  same spot, `kill -9` A mid-race; `--chatafter "<s> /city Riddes"` sends a chat line s seconds after
-  the grid is announced (teleports a client out of the zone mid-race). `--npccheck` prints every NPC
-  with `v`, `sim=` and `(here)` on its simulator.
+  "A state" = a new `NetTime`: the server relays repeat the last one at 30 Hz whatever the owner does.
+- Check (loopback, Col du Mollendruz 2518038,1167321, each client its own `--cache`): server + A
+  (`--raceauto --racestart <m> --racenpc 2`) + B. `--chatafter "<s> <line>[;<line>]"` sends chat
+  lines s seconds after the grid is announced (e.g. `"12 /race leave;/city La Motte"`: out of the
+  zone mid-race). `--npccheck` prints every NPC with `v`, `sim=` and `(here)` on its simulator.
+  Measured (#50): B racing, A `kill -9` or SIGTERM at GO+12 s → handed to B 2.5 s later, re-armed at
+  ~280 m / 115 km/h, classified 2nd/3rd, B made host. B a spectator mid-course (2518450,1166900),
+  1 km race, A killed → B simulates and hosts, NPCs P1/P2. B 6 km away → both retired, DNF. A leaves
+  and teleports 4 km → NPCs to B; B teleports too → retired, DNF.
+- Not solved here: a teleport across the course is accepted as a finish (every checkpoint on one
+  segment), and a pilot's reset-to-line can bring a teleported racer back onto the course.
