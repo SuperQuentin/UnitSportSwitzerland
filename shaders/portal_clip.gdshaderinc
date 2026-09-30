@@ -7,7 +7,7 @@
 // its doorway's plane), and an unused slot's eye is parked a long way off. Four slots: as many
 // portal cameras as DoorPortals renders at once. A portal camera can land exactly where the
 // screen's camera is (in at one door and out at another in line with it maps a camera onto
-// itself), so DoorPortals nudges each one 5 cm or more along its view, which no picture shows and
+// itself), so DoorPortals nudges each one 5 cm or more back along its view, which no picture shows and
 // this 2 cm test tells apart even tens of km from the origin, where a float step is ~2 mm.
 global uniform vec3 portal_clip_eye_0;
 global uniform vec4 portal_clip_plane_0; // xyz toward what is kept, w = dot(normal, a point on the plane)

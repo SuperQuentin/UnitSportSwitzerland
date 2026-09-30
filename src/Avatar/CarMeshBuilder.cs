@@ -44,9 +44,9 @@ public sealed record CarDoor(string Name, byte Bit, ArrayMesh Mesh, Vector3 Hing
 /// <para>
 /// Parts that move are built apart, each around its hinge (<see cref="MeshScratch.Build(Vector3)"/>):
 /// a roadster's soft top and side glass, which fold away over a cockpit, and the pop-up pods,
-/// authored raised. Nothing may be put away INSIDE the body: a box does not hide what is in it
-/// (see the note <c>meshscratch-boxes-render-inside-out</c>), so the pods fold flat onto the nose
-/// and the rig hides the lamps and the cockpit when they are put away.
+/// authored raised. The pods fold flat onto the nose and the rig hides the lamps and the cockpit
+/// when they are put away (from when boxes rendered inside out, the note
+/// <c>meshscratch-boxes-render-inside-out</c>; they need not be any more, but it is no worse).
 /// </para>
 /// </summary>
 public static class CarMeshBuilder
