@@ -206,7 +206,7 @@ public partial class MainMenu : CanvasLayer
             if (Current is GameMode.Explore or GameMode.Multiplayer)
             {
                 // hand the pointer back to the fly camera / player controller
-                Input.MouseMode = Input.MouseModeEnum.Captured;
+                MouseCapture.Capture();
             }
         }
     }

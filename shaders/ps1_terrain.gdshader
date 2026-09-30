@@ -8,6 +8,7 @@ global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
+#include "res://shaders/portal_clip.gdshaderinc"
 
 // PS1-style terrain: clip-space vertex snapping, flat shading from screen derivatives,
 // altitude/slope palette bands, quantized sun, Bayer-dithered posterization, distance fog.
@@ -50,6 +51,9 @@ void vertex() {
 
 
 void fragment() {
+    if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
+        discard;
+    }
     if (use_cover) {
         vec2 uv = (world_pos.xz - cover_origin) / cover_extent;
         if (uv == clamp(uv, vec2(0.0), vec2(1.0)) && texture(detail_cover, uv).r > 0.5) {

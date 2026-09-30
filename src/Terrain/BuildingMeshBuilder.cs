@@ -17,7 +17,12 @@ namespace UnitSport.Terrain;
 /// </summary>
 public static class BuildingMeshBuilder
 {
-    public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector2[] Uvs, Vector2[] Uv2s);
+    /// <summary>
+    /// <see cref="Frames"/> is CUSTOM0, four floats a vertex: the wall's horizontal tangent (x, z),
+    /// the storey height in metres, and 0. The facade shader needs the wall's own axes to cast
+    /// the fake rooms behind the windows, and the screen-space normal is too jittery for that.
+    /// </summary>
+    public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector2[] Uvs, Vector2[] Uv2s, float[] Frames);
 
     /// <summary>Faces steeper than this are walls; flatter ones are roof.</summary>
     private const float RoofNormalY = 0.45f;
@@ -43,17 +48,19 @@ public static class BuildingMeshBuilder
         var colors = new Color[n + v.Count];
         var uvs = new Vector2[n + v.Count];
         var uv2s = new Vector2[n + v.Count];
+        var frames = new float[(n + v.Count) * 4];
         Array.Copy(data.Vertices, vertices, n);
         Array.Copy(data.Colors, colors, n);
         Array.Copy(data.Uvs, uvs, n);
         Array.Copy(data.Uv2s, uv2s, n);
+        Array.Copy(data.Frames, frames, n * 4);
         for (int i = 0; i < v.Count; i++)
         {
             vertices[n + i] = v[i];
             colors[n + i] = c[i];
             uvs[n + i] = new Vector2(0f, -1f);
         }
-        return new MeshData(vertices, colors, uvs, uv2s);
+        return new MeshData(vertices, colors, uvs, uv2s, frames);
     }
 
     /// <summary>Frame, leaf and a doorstep, in the door's own frame (along the wall, out, up).</summary>
@@ -118,6 +125,7 @@ public static class BuildingMeshBuilder
         // uv2.x = number of whole storeys in the wall, so the shader can stop the window
         // grid at the wall plate instead of letting the roof slice the top row
         var uv2s = new Vector2[triangles * 3];
+        var frames = new float[triangles * 3 * 4];
         int v = 0;
 
         for (int bi = 0; bi < tile.Buildings.Count; bi++)
@@ -157,6 +165,7 @@ public static class BuildingMeshBuilder
                 // which turned the window grid into speckle. The triangle normal is exact
                 // and shared by coplanar faces, so u stays continuous across a wall.
                 Vector2 uvA, uvB, uvC;
+                var tangent = Vector3.Zero;
                 if (isRoof || storey <= 0f)
                 {
                     uvA = uvB = uvC = new Vector2(0f, -1f);
@@ -164,12 +173,19 @@ public static class BuildingMeshBuilder
                 else
                 {
                     var flat = new Vector3(normal.X, 0f, normal.Z);
-                    var tangent = flat.LengthSquared() > 1e-8f
+                    tangent = flat.LengthSquared() > 1e-8f
                         ? new Vector3(-flat.Z, 0f, flat.X).Normalized()
                         : Vector3.Right;
                     uvA = FacadeUv(a, tangent, b.MinY, storey);
                     uvB = FacadeUv(c, tangent, b.MinY, storey);
                     uvC = FacadeUv(d, tangent, b.MinY, storey);
+                }
+                for (int k = 0; k < 3; k++)
+                {
+                    int f = (v + k) * 4;
+                    frames[f] = tangent.X;
+                    frames[f + 1] = tangent.Z;
+                    frames[f + 2] = storey;
                 }
 
                 vertices[v] = a; colors[v] = color; uvs[v] = uvA; uv2s[v++] = uv2;
@@ -178,7 +194,7 @@ public static class BuildingMeshBuilder
             }
         }
 
-        return new MeshData(vertices, colors, uvs, uv2s);
+        return new MeshData(vertices, colors, uvs, uv2s, frames);
     }
 
     private static Vector2 FacadeUv(Vector3 p, Vector3 tangent, float baseY, float storey) =>

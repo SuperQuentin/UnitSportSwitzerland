@@ -134,6 +134,25 @@ public static class InteriorMeshBuilder
         return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
     }
 
+    /// <summary>
+    /// A front door's leaf, in its hinge's frame: x from the hinge across the opening, y up, z
+    /// 0..<paramref name="thickness"/> toward the street. Handle on the room side, near the free edge.
+    /// </summary>
+    public static MeshData Leaf(float width, float height, float thickness)
+    {
+        var s = new Scratch();
+        s.Box(new Vector3(0.01f, 0, 0), new Vector3(width - 0.01f, height - 0.01f, thickness), DoorWood, false);
+        // two raised panels, so it reads as a door and not a plank
+        var panel = DoorWood * 0.85f;
+        panel.A = 1;
+        float pw = width - 0.3f;
+        s.Box(new Vector3(0.15f, 0.2f, -0.01f), new Vector3(0.15f + pw, height * 0.45f, 0), panel, false);
+        s.Box(new Vector3(0.15f, height * 0.55f, -0.01f), new Vector3(0.15f + pw, height - 0.2f, 0), panel, false);
+        var knob = C(0.80f, 0.70f, 0.30f);
+        s.Box(new Vector3(width - 0.14f, 1.0f, -0.06f), new Vector3(width - 0.06f, 1.08f, 0), knob, false);
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
+    }
+
     // ---- rooms -------------------------------------------------------------------------------
 
     private static void Room(Scratch s, RoomPlan r, float y0, float clear, List<RectPlan> holes, List<RectPlan> ceilingHoles)
@@ -216,16 +235,7 @@ public static class InteriorMeshBuilder
                 s.Quad(R(s0, tr - 0.03f, depth - 0.01f), R(s1, tr - 0.03f, depth - 0.01f),
                     R(s1, tr + 0.03f, depth - 0.01f), R(s0, tr + 0.03f, depth - 0.01f), frame, false);
             }
-            else if (o.Kind == OpeningKind.Entry)
-            {
-                // the front door, shut: the way out is to use it, not to walk into the void
-                float d = depth - 0.02f;
-                s.Quad(R(s0, ob, d), R(s1, ob, d), R(s1, ot, d), R(s0, ot, d), DoorWood);
-                float hx = o.Center + (s1 - s0) * 0.35f;
-                var knob = C(0.80f, 0.70f, 0.30f);
-                s.Quad(R(hx - 0.04f, y0 + 1.0f, d - 0.03f), R(hx + 0.04f, y0 + 1.0f, d - 0.03f),
-                    R(hx + 0.04f, y0 + 1.08f, d - 0.03f), R(hx - 0.04f, y0 + 1.08f, d - 0.03f), knob, false);
-            }
+            // the front door's leaf is not baked: it swings (DoorLeaf, see Leaf below)
             cursor = s1;
         }
         Panel(cursor, b, y0, top);

@@ -53,7 +53,9 @@ public partial class ChunkNode : Node3D
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
         arrays[(int)Mesh.ArrayType.TexUV] = data.Uvs;
         arrays[(int)Mesh.ArrayType.TexUV2] = data.Uv2s;
-        return Finish(arrays, material);
+        arrays[(int)Mesh.ArrayType.Custom0] = data.Frames;
+        return Finish(arrays, material,
+            (Mesh.ArrayFormat)((long)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift));
     }
 
     public static ArrayMesh ToArrayMesh(WaterMeshBuilder.MeshData data, Material material)
@@ -77,10 +79,10 @@ public partial class ChunkNode : Node3D
         if (old != null && old != mesh) old.Dispose();
     }
 
-    private static ArrayMesh Finish(Godot.Collections.Array arrays, Material material)
+    private static ArrayMesh Finish(Godot.Collections.Array arrays, Material material, Mesh.ArrayFormat flags = 0)
     {
         var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
         mesh.SurfaceSetMaterial(0, material);
         return mesh;
     }
@@ -120,6 +122,9 @@ public partial class ChunkNode : Node3D
         }
         Swap(_buildingInstance, mesh);
     }
+
+    /// <summary>The tile's building collision, once built: a player in an open doorway is let through it.</summary>
+    public StaticBody3D? BuildingBody => _buildingBody;
 
     /// <summary>The buildings' collision shape — one place, so <c>--hitboxcheck</c> tests exactly what the world gets.</summary>
     public static ConcavePolygonShape3D BuildingShape(Vector3[] faces) => new() { Data = faces };

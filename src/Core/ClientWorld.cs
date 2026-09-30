@@ -62,6 +62,14 @@ public partial class ClientWorld : Node3D
         ApplyViewportSettings();
         GameSettings.Changed += ApplyViewportSettings;
 
+        // a hand-made street to show the door portals: no terrain, no server
+        if (Interiors.PortalDemo.ParseArgs() is { Requested: true } portalDemo)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
+            return;
+        }
+
         var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
         var manifest = await source.LoadManifestAsync();
 
@@ -184,15 +192,19 @@ public partial class ClientWorld : Node3D
         var combat = Combat.CombatManager.Create(this, _chunks, server: false);
         combat.LocalPlayer = () => _onFoot ? LocalPlayer : null;
 
-        // Building interiors: E at a front door. Same node path as the server's, which plans and
-        // stores them; offline this client does both.
+        // Building interiors: E opens a front door, and you walk through it. Same node path as the
+        // server's, which plans and stores them; offline this client does both.
         var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
         interiors.LocalPlayer = () => _onFoot ? LocalPlayer : null;
-        interiors.LocalInsideChanged += inside =>
+        var chunksForDoors = _chunks;
+        interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
+        interiors.OccupancySink = chunksForDoors.SetOccupancy;
+        interiors.OutsideShownChanged += shown =>
         {
-            // indoors, the whole outside world is overhead and out of sight: stop drawing it
-            if (_chunks != null) _chunks.Visible = !inside;
-            vehicles.Visible = !inside;
+            // indoors with the doors shut, the whole outside world is overhead and out of sight:
+            // stop drawing it. An open door shows it again, through the doorway.
+            if (_chunks != null) _chunks.Visible = shown;
+            vehicles.Visible = shown;
         };
 
         var environment = new Godot.Environment
@@ -238,10 +250,6 @@ public partial class ClientWorld : Node3D
             AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot));
         }
 
-        _spectator = new SpectatorCamera { Name = "SpectatorCamera" };
-        AddChild(_spectator);
-        _chunks.AddAnchor(_spectator);
-
         // Start somewhere with something to look at, not at the world origin — after a
         // large import that is usually empty space. "--at E,N" overrides it (LV95 metres).
         // --shot and --probe place the camera themselves, and a spawn drop would fight
@@ -252,13 +260,21 @@ public partial class ClientWorld : Node3D
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
-            || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
+            || Interiors.InteriorProbe.ParseArgs().Requested || Interiors.DoorWatchProbe.ParseArgs().Requested
+            || Loot.LootProbe.ParseArgs() != null
             || Loot.GatherProbe.ParseArgs().Requested
             || Birds.BirdProbe.ParseArgs().Requested
             || World.TrafficProbe.ParseArgs().Requested
             || Combat.CombatProbe.ParseArgs().Requested
             || Birds.BirdStrikeProbe.ParseArgs().Requested
             || SyncProbe.Requested() || HitboxProbe.Requested();
+        // a check running in a window must leave the pointer to whoever is using the machine
+        MouseCapture.Disabled |= placedByTool;
+
+        _spectator = new SpectatorCamera { Name = "SpectatorCamera" };
+        AddChild(_spectator);
+        _chunks.AddAnchor(_spectator);
+
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -430,6 +446,14 @@ public partial class ClientWorld : Node3D
             return;
         }
 
+        if (Interiors.DoorWatchProbe.ParseArgs() is { Requested: true } watch)
+        {
+            var (wE, wN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(wE, wN, 1200);
+            AddChild(new Interiors.DoorWatchProbe(_chunks, origin, watch.Shot));
+            return;
+        }
+
         if (Birds.BirdStrikeProbe.ParseArgs() is { Requested: true } scheck)
         {
             var (sE, sN) = SpawnPoint.ParseTarget();
@@ -584,7 +608,7 @@ public partial class ClientWorld : Node3D
             case GameMode.Explore:
                 if (_onFoot && LocalPlayer != null) LocalPlayer.Camera.Current = true;
                 else _spectator.Current = true;
-                Input.MouseMode = Input.MouseModeEnum.Captured;
+                MouseCapture.Capture();
                 break;
 
             case GameMode.GpxReplay:
@@ -595,7 +619,7 @@ public partial class ClientWorld : Node3D
 
             case GameMode.Multiplayer:
                 if (!_networked) StartNetworking(_menu!.Host);
-                Input.MouseMode = Input.MouseModeEnum.Captured;
+                MouseCapture.Capture();
                 break;
         }
 

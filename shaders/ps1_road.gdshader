@@ -8,6 +8,7 @@ global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
+#include "res://shaders/portal_clip.gdshaderinc"
 
 // Roads share the terrain's PS1 treatment (vertex snap, dither, fog) and take their base
 // colour from baked vertex colours, so one material covers every road class in a tile.
@@ -28,8 +29,10 @@ uniform vec3 sleeper_color : source_color = vec3(0.26, 0.21, 0.16);
 
 varying vec2 surf;   // along, lateral
 varying float style;
+varying vec3 world_pos;
 
 void vertex() {
+    world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     surf = UV;
     style = UV2.x;
     vec4 clip = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
@@ -43,6 +46,9 @@ void vertex() {
 }
 
 void fragment() {
+    if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
+        discard;
+    }
     vec3 col = COLOR.rgb;
     int s = int(style + 0.5);
     float along = surf.x;

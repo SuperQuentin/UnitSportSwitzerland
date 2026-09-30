@@ -8,6 +8,7 @@ global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
+#include "res://shaders/portal_clip.gdshaderinc"
 
 // Trees are MultiMesh instances sharing one cone; colour comes from the per-instance
 // colour, with the same snap/dither/fog treatment as everything else.
@@ -96,6 +97,9 @@ void vertex() {
 }
 
 void fragment() {
+    if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
+        discard;
+    }
     vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     float light = floor(ndl * 3.0) / 3.0 * 0.45 + 0.6;
