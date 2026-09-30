@@ -195,6 +195,15 @@ public sealed class NetworkChunkSource : IChunkSource
         string cachePath = Path.Combine(_cacheDirectory, AssetStream.FileNameFor(kind, id));
         byte[]? bytes = ReadCache(cachePath);
 
+        // The cache is keyed by filename only, so a .bldg fetched before a format bump would be
+        // served forever. v1 still decodes, it just files garages as Annex: refetch it.
+        if (bytes is not null && kind == AssetKind.Buildings && bytes.Length >= 6
+            && System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4)) < BuildingFormat.Version)
+        {
+            TryDelete(cachePath);
+            bytes = null;
+        }
+
         if (bytes is null)
         {
             // With no server there is nothing to fetch from, and the retry ladder cannot help.

@@ -23,6 +23,9 @@ uniform vec3 fog_color : source_color = vec3(0.72, 0.78, 0.86);
 uniform vec3 window_color : source_color = vec3(0.16, 0.19, 0.24);
 uniform vec3 window_lit : source_color = vec3(0.95, 0.82, 0.52);
 uniform float window_spacing = 3.2;
+// garages (BuildingMeshBuilder flags them in UV2.y): the sign and the chequered band under the
+// eave glow in this colour day and night, so a garage reads from a kilometre away
+uniform vec3 garage_neon : source_color = vec3(1.0, 0.18, 0.62);
 
 varying vec3 world_pos;
 
@@ -65,11 +68,13 @@ float sightline_keep(vec3 p) {
 
 varying vec2 facade;   // x = metres along the facade, y = storey coordinate (<0 = none)
 varying float storey_count; // whole storeys in the wall; grid stops below this
+varying float garage_flag;  // UV2.y: 0 plain, 1 neon sign, 2 garage wall (storey_count = eave m)
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     facade = UV;
     storey_count = UV2.x;
+    garage_flag = UV2.y;
     vec4 clip = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
     if (clip.w > 0.0) {
         vec2 half_res = snap_resolution * 0.5;
@@ -101,7 +106,8 @@ void fragment() {
     // stop a little below the wall plate so the eave never cuts a row in half
     float top = storey_count - 0.22;
     vec3 glow = vec3(0.0);
-    if (facade.y > 0.0 && facade.y < top && detail < 0.6) {
+    bool garage_wall = garage_flag > 1.5;
+    if (!garage_wall && facade.y > 0.0 && facade.y < top && detail < 0.6) {
         float u = facade.x;
         float wall_v = fract(facade.y);
         float col_u = fract(u / window_spacing);
@@ -126,7 +132,7 @@ void fragment() {
     // A string of bulbs along the eaves, just under the wall plate, on about 60% of the houses
     // that have a window grid. Drawn here rather than as geometry: every house in view gets them
     // for the cost of a few instructions, and they follow the facade frame the windows use.
-    if (world_lights > 0.0 && storey_count > 0.5 && detail < 0.6) {
+    if (!garage_wall && world_lights > 0.0 && storey_count > 0.5 && detail < 0.6) {
         float house = fract(sin(dot(floor(world_pos.xz / 24.0), vec2(41.3, 17.9))) * 9731.7);
         float eave = storey_count - 0.05;
         if (house < 0.6 && facade.y > eave - 0.08 && facade.y < eave) {
@@ -140,6 +146,21 @@ void fragment() {
                 glow = max(glow, bulb * legible * world_lights);
             }
         }
+    }
+
+    // --- garage neon: the sign face, and a chequered band under a garage's eave ---------
+    vec3 neon = vec3(0.0);
+    if (garage_flag > 0.5 && garage_flag < 1.5) {
+        neon = garage_neon;
+        col = garage_neon;
+    } else if (garage_wall && facade.y > storey_count - 0.9 && facade.y < storey_count - 0.1) {
+        // 0.4 m squares; past the resolution limit they merge into a solid neon line, which is
+        // what makes a garage stand out from across the valley
+        vec2 sq = floor(vec2(facade.x, facade.y - storey_count) / 0.4);
+        float on = mod(sq.x + sq.y, 2.0);
+        float legible = clamp(1.0 - fwidth(facade.x) / 0.4, 0.0, 1.0);
+        neon = garage_neon * mix(1.0, on, legible);
+        col = mix(col, vec3(0.03), (1.0 - on) * legible);
     }
 
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
@@ -165,6 +186,8 @@ void fragment() {
     col *= world_tint;
     // a lit window is its own light: at night it shines through the darkness around it
     col = max(col, glow * world_night);
+    // neon is its own light by day too
+    col = max(col, neon);
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
