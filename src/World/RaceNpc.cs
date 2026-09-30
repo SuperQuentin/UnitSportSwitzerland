@@ -62,6 +62,7 @@ public partial class RaceNpc : Node
     public override void _ExitTree()
     {
         if (_race == null) return;
+        _race.TrackNpc(Id, null);   // freed (retired): its position must not be asked for any more
         _race.NpcSetup -= OnSetup;
         _race.NpcFinished -= OnFinished;
         _race.NpcDropped -= OnDropped;
@@ -323,7 +324,10 @@ public partial class RaceNpcs : Node
             if (Npc(id) is not { } npc) continue;
             long sim = npc.GetMultiplayerAuthority();
             var simNode = _players!.GetNodeOrNull<FootPlayer>(sim.ToString());
-            if (simNode == null || Now - npc.LastNetState > StaleSeconds)
+            // silent counts from the handoff too: the new simulator's first state takes a moment, and
+            // judged by the old one's last state, a car just handed over was "silent" again a second
+            // later and retired (seen in the #85 loopback check: both NPCs gone mid-race)
+            if (simNode == null || Now - System.Math.Max(npc.LastNetState, _live[id].Since) > StaleSeconds)
             {
                 HandOff(id, sim, simNode == null ? "its simulator left" : "its simulator stopped sending");
                 continue;

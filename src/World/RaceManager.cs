@@ -938,7 +938,7 @@ public partial class RaceManager : Node
     public void ForgetNpc(long npcId) => _npcs.Remove(npcId);
 
     /// <summary>Hands the race an NPC's position, so its checkpoints are reported like the player's.</summary>
-    public void TrackNpc(long npcId, System.Func<Vector3> position)
+    public void TrackNpc(long npcId, System.Func<Vector3>? position)
     {
         if (_npcs.TryGetValue(npcId, out var r)) r.Where = position;
     }
@@ -953,6 +953,9 @@ public partial class RaceManager : Node
             Course = RaceCourse.FromWire(air, centre, width, gates, length, gridAltitude),
             StartArc = air ? 0f : RaceCourse.StartArc(slot, count),
         };
+        // the grid is not lined up in the middle of this client's traffic: the cars around it go (a car
+        // standing nose to nose with the front row held the whole field up at GO, #85)
+        if (!air && !resume) Traffic.Current?.ClearAround(r.Course.Slot(slot, count).Item1, 150f);
         if (entrant < 0)
         {
             _npcs[entrant] = r;
