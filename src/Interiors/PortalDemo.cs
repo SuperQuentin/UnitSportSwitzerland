@@ -135,7 +135,16 @@ public partial class PortalDemo : Node3D
             }
         }
 
-        var portals = new DoorPortals(() => _links, PlanAt) { Name = "Portals" };
+        var portals = new DoorPortals(() => _links, PlanAt)
+        {
+            Name = "Portals",
+            OpenDoors = (boxes, axes, count) =>
+            {
+                buildingMaterial.SetShaderParameter("open_door_box", boxes);
+                buildingMaterial.SetShaderParameter("open_door_axis", axes);
+                buildingMaterial.SetShaderParameter("open_door_count", count);
+            },
+        };
         AddChild(portals);
         foreach (var l in _links) portals.Attach(l);
         AddChild(new DoorwayGhosts(() => _links, PlanAt) { Name = "Ghosts" });

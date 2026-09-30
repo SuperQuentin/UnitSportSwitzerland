@@ -77,6 +77,8 @@ public partial class InteriorManager : Node3D
     public Func<TileId, StaticBody3D?>? BuildingBodies { get; set; }
     /// <summary>Client: where the facade shader's occupancy cues go (<c>ChunkManager.SetOccupancy</c>).</summary>
     public Action<Vector4[], Vector4[], int>? OccupancySink { get; set; }
+    /// <summary>Client: where the facade shader's open doors go (<c>ChunkManager.SetOpenDoors</c>, see <see cref="DoorPortals.OpenDoors"/>).</summary>
+    public Action<Vector4[], Vector4[], int>? OpenDoorsSink { get; set; }
 
     /// <summary>
     /// Raised on the client when the outside world has to be drawn (true) or may be hidden
@@ -158,7 +160,11 @@ public partial class InteriorManager : Node3D
         _prompt.Size = new Vector2(300, 30);
         _ui.AddChild(_prompt);
 
-        _portals = new DoorPortals(() => _links.Values, PlanAt) { Name = "Portals" };
+        _portals = new DoorPortals(() => _links.Values, PlanAt)
+        {
+            Name = "Portals",
+            OpenDoors = (boxes, axes, count) => OpenDoorsSink?.Invoke(boxes, axes, count),
+        };
         AddChild(_portals);
         _sounds = new BuildingSounds { Name = "Sounds" };
         AddChild(_sounds);
