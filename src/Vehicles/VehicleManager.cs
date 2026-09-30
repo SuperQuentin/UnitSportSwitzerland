@@ -75,6 +75,24 @@ public partial class VehicleManager : Node3D
         RpcId(1, MethodName.RequestPark, state.ToDict());
     }
 
+    /// <summary>
+    /// Puts a vehicle nobody parked into the world (a placed one, like the Africa Twin at Riddes):
+    /// the server spawns it for everyone with itself as the authority, offline it is simply added.
+    /// A client online does nothing — the server places those. Returns the node's name, or null.
+    /// </summary>
+    public string? Place(VehicleState state, string name)
+    {
+        state = state with { Owner = 0, Name = name, SpawnedAt = VehicleState.Now };
+        if (!Online)
+        {
+            AddChild(VehicleBody.Create(state, Terrain));
+            return name;
+        }
+        if (!Multiplayer.IsServer() || _spawner == null) return null;
+        _spawner.Spawn(state.ToDict());
+        return name;
+    }
+
     /// <summary>Asks for a vehicle to get into. <paramref name="granted"/> runs if it is still free.</summary>
     public void Claim(VehicleBody vehicle, Action<VehicleState> granted)
     {

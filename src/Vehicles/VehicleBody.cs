@@ -128,6 +128,16 @@ public partial class VehicleBody : CharacterBody3D
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
         AddChild(sync);
 
+        // Placed by the dedicated server itself (VehicleManager.Place): the server has no ground
+        // collision to simulate it on, so it stands exactly where it was put, asleep, until a
+        // player claims it. The hand's breadth above is for a body that falls onto the ground.
+        if (Net.NetworkManager.DedicatedServer && IsMultiplayerAuthority())
+        {
+            Position = s.Position;
+            _asleep = true;
+            sync.ReplicationInterval = 2f;
+        }
+
         if (!Headless)
         {
             _visual = Ride.BuildParkedVisual((int)Math.Max(1, Owner));

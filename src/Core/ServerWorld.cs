@@ -71,6 +71,8 @@ public partial class ServerWorld : Node3D
         // vehicles standing in the world; the server spawns and removes them for everyone
         _vehicles = Vehicles.VehicleManager.Create(this, null);
         _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
+        // an Africa Twin in front of one building at Riddes, put back each time its tile loads
+        AddChild(new World.AfricaTwinEgg(_chunks));
 
         // gunfire: clients send their rounds here to be relayed; the server flies none of them
         Combat.CombatManager.Create(this, null, server: true);

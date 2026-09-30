@@ -190,6 +190,9 @@ public partial class ClientWorld : Node3D
             if (GetViewport().GetCamera3D() is { } cam) at.Add(cam.GlobalPosition);
             return at;
         };
+        // the Africa Twin at Riddes: placed here offline, by the server online
+        AddChild(new World.AfricaTwinEgg(_chunks));
+        if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
         var combat = Combat.CombatManager.Create(this, _chunks, server: false);

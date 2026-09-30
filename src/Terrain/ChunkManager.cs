@@ -480,6 +480,9 @@ public partial class ChunkManager : Node3D
     /// </summary>
     public event Action<TileId, ChunkNode, Interiors.DoorSpot[]>? TileFurnished;
 
+    /// <summary>Main thread: a tile has just come into the streamed rings (nothing is built yet).</summary>
+    public event Action<TileId>? TileEntered;
+
     /// <summary>Main thread: a tile has been unloaded and its node freed.</summary>
     public event Action<TileId>? TileUnloaded;
 
@@ -946,7 +949,10 @@ public partial class ChunkManager : Node3D
         foreach (var (id, want) in _ordered)
         {
             if (!_chunks.TryGetValue(id, out var state))
+            {
                 _chunks[id] = state = new ChunkState();
+                TileEntered?.Invoke(id);
+            }
 
             bool needMesh = BuildMeshes && state.ActiveStride != want.Stride;
             bool needCollision = want.Collision && !state.PendingCollision
