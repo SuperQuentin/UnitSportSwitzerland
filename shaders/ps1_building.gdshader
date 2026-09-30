@@ -153,13 +153,14 @@ void fragment() {
     if (garage_flag > 0.5 && garage_flag < 1.5) {
         neon = garage_neon;
         col = garage_neon;
-    } else if (garage_wall && facade.y > storey_count - 0.6 && facade.y < storey_count - 0.1) {
-        // 0.25 m squares; past the resolution limit they average to a dimmer solid band
-        vec2 sq = floor(vec2(facade.x, facade.y - storey_count) / 0.25);
+    } else if (garage_wall && facade.y > storey_count - 0.9 && facade.y < storey_count - 0.1) {
+        // 0.4 m squares; past the resolution limit they merge into a solid neon line, which is
+        // what makes a garage stand out from across the valley
+        vec2 sq = floor(vec2(facade.x, facade.y - storey_count) / 0.4);
         float on = mod(sq.x + sq.y, 2.0);
-        float legible = clamp(1.0 - fwidth(facade.x) / 0.25, 0.0, 1.0);
-        neon = garage_neon * mix(0.5, on, legible);
-        col = mix(col, vec3(0.03), mix(0.5, 1.0 - on, legible));
+        float legible = clamp(1.0 - fwidth(facade.x) / 0.4, 0.0, 1.0);
+        neon = garage_neon * mix(1.0, on, legible);
+        col = mix(col, vec3(0.03), (1.0 - on) * legible);
     }
 
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);

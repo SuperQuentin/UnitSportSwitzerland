@@ -260,7 +260,7 @@ public static class BuildingMeshBuilder
             BuildingKind.Sacral => new Color(0.88f, 0.86f, 0.80f),       // pale stone
             BuildingKind.Civic => new Color(0.80f, 0.79f, 0.75f),
             BuildingKind.Annex => new Color(0.62f, 0.59f, 0.54f),
-            BuildingKind.Garage => new Color(0.26f, 0.27f, 0.30f),        // dark workshop grey
+            BuildingKind.Garage => new Color(0.60f, 0.64f, 0.72f),        // blue-grey workshop
             BuildingKind.UnderConstruction => new Color(0.70f, 0.69f, 0.66f),
             _ => new Color(0.72f, 0.70f, 0.66f),
         };
@@ -273,7 +273,7 @@ public static class BuildingMeshBuilder
         BuildingKind.Industrial => new Color(0.46f, 0.48f, 0.49f),
         BuildingKind.Sacral or BuildingKind.Civic => new Color(0.35f, 0.33f, 0.34f), // slate
         BuildingKind.Annex => new Color(0.44f, 0.40f, 0.36f),
-        BuildingKind.Garage => new Color(0.16f, 0.16f, 0.18f),
+        BuildingKind.Garage => new Color(0.36f, 0.37f, 0.41f),
         BuildingKind.UnderConstruction => new Color(0.60f, 0.59f, 0.57f),
         _ => new Color(0.50f, 0.30f, 0.23f), // the usual Swiss reddish-brown tile
     };
