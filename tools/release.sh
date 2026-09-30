@@ -62,6 +62,16 @@ dotnet build UnitSportSwitzerland.csproj -c Release
 "$GODOT" --headless --path . --export-release "Windows Desktop" build/windows/UnitSportSwitzerland.exe
 [ -f build/windows/UnitSportSwitzerland.exe ] || { echo "Export failed"; exit 1; }
 
+# yt-dlp + LGPL ffmpeg (CD burning, GPX video export) ship in bin/, cached between releases; delete the cache to refresh
+TOOLS="$REPO/$OUT/tools"; mkdir -p "$TOOLS" build/windows/bin
+[ -f "$TOOLS/yt-dlp.exe" ] || curl -fsSL -o "$TOOLS/yt-dlp.exe" https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
+if [ ! -f "$TOOLS/ffmpeg.exe" ]; then
+  curl -fsSL -o "$TOOLS/ffmpeg.zip" https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+  if command -v unzip >/dev/null; then unzip -qjo "$TOOLS/ffmpeg.zip" '*/bin/ffmpeg.exe' -d "$TOOLS"
+  else powershell -NoProfile -Command "Add-Type -A System.IO.Compression.FileSystem; \$z=[IO.Compression.ZipFile]::OpenRead('$TOOLS/ffmpeg.zip'); \$e=\$z.Entries|?{\$_.FullName -like '*/bin/ffmpeg.exe'}; [IO.Compression.ZipFileExtensions]::ExtractToFile(\$e,'$TOOLS/ffmpeg.exe',\$true); \$z.Dispose()"; fi
+fi
+cp "$TOOLS/yt-dlp.exe" "$TOOLS/ffmpeg.exe" build/windows/bin/
+
 ZIP="$REPO/$OUT/UnitSportSwitzerland-v$V-windows.zip"; rm -f "$ZIP"
 if command -v zip >/dev/null; then (cd build/windows && zip -qr "$ZIP" .)
 else powershell -NoProfile -Command "Compress-Archive -Path 'build/windows/*' -DestinationPath '$ZIP'"; fi

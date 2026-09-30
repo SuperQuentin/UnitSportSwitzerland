@@ -12,7 +12,7 @@ public partial class Main : Node
 	/// Names the window after what this run is (<c>--title "..."</c>, else its user args minus
 	/// the --chunks/--cache paths), so parallel test windows can be told apart.
 	/// </summary>
-	private static void SetWindowTitle()
+	private static void SetWindowTitle(Window window)
 	{
 		var args = OS.GetCmdlineUserArgs();
 		int t = System.Array.IndexOf(args, "--title");
@@ -27,12 +27,13 @@ public partial class Main : Node
 			what = string.Join(' ', shown);
 		}
 		if (what.Length > 100) what = what[..100] + "…";
-		if (what.Length > 0) DisplayServer.WindowSetTitle($"UnitSportSwitzerland — {what}");
+		// the root Window re-applies its own Title over DisplayServer.WindowSetTitle, so set it there
+		if (what.Length > 0) window.Title = $"UnitSportSwitzerland — {what}";
 	}
 
 	public override void _Ready()
 	{
-		SetWindowTitle();
+		SetWindowTitle(GetWindow());
 
 		// the network rules' own self-checks: vision interest and remote interpolation
 		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--interestcheck") >= 0)

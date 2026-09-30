@@ -16,8 +16,11 @@ public partial class DoorLeaf : Node3D
     /// house's door can stand 0.2 m from the stair core's side wall, and any more swings the leaf into it.
     /// </summary>
     private const float InwardAngle = Mathf.Pi / 2;
-    /// <summary>How far an outward leaf swings: back until it nearly lies on the facade.</summary>
-    private const float OutwardAngle = 2.97f; // 170°
+    /// <summary>
+    /// How far an outward leaf swings: a little past square, splayed. A barn's pair spans nearly
+    /// the whole wall, so there is no facade beside the jambs for a leaf to lie back against.
+    /// </summary>
+    private const float OutwardAngle = 1.75f; // 100°
     private const float Thickness = 0.04f;
     private const float OutwardThickness = 0.06f;
     /// <summary>
@@ -36,8 +39,23 @@ public partial class DoorLeaf : Node3D
     /// <summary>A pair on the facade, freed with its link, rather than a leaf of an interior.</summary>
     public bool Outward { get; private init; }
 
+    /// <summary>
+    /// A barn's pair as its interior sees it (<see cref="CreateShutter"/>): it never swings, only
+    /// shows, and stops the way out, while the door is shut.
+    /// </summary>
+    public bool Shutter { get; private init; }
+
     /// <summary>Whether a building's front door is an outward pair: barns, whose doors open onto the yard.</summary>
     public static bool SwingsOut(BuildingKind kind) => kind == BuildingKind.Agricultural;
+
+    /// <summary>A leaf's width: a barn's pair splits the opening, any other door is one leaf.</summary>
+    public static float LeafWidth(BuildingKind kind, float doorWidth) => SwingsOut(kind) ? doorWidth / 2 : doorWidth;
+
+    /// <summary>
+    /// How much deeper than usual an open door is in reach, on the side its leaves stand: a big
+    /// leaf is worked by its free edge, as far out as it sticks. Nothing for a house door's 1 m leaf.
+    /// </summary>
+    public static float OpenReach(BuildingKind kind, float doorWidth) => Math.Max(0f, LeafWidth(kind, doorWidth) - 1f);
 
     /// <summary>
     /// A leaf for an entrance, in the interior node's frame: <paramref name="doorway"/> is the
@@ -81,6 +99,30 @@ public partial class DoorLeaf : Node3D
         return leaf;
     }
 
+    /// <summary>
+    /// A barn's pair seen from inside, in the interior node's frame like <see cref="Create"/>: the
+    /// real pair hangs on the facade, out of the interior's world, so without this a shut barn
+    /// door was a bare hole from inside, and let anyone walk out through it. Shown and solid only
+    /// while the door is shut; open, or swinging, the portal shows the real leaves.
+    /// </summary>
+    public static DoorLeaf CreateShutter(string door, Transform3D doorway, float width, float height, BuildingKind kind, Material material)
+    {
+        var leaf = new DoorLeaf { Name = "Shutter_" + door, Transform = doorway, Shutter = true };
+        float half = width / 2, z = -InteriorGenerator.WallInset;
+        leaf.AddHinge(new Vector3(-half, 0, z), 0, InteriorMeshBuilder.Leaf(half, height, Thickness, kind), 0, material);
+        leaf.AddHinge(new Vector3(half, 0, z), 0, InteriorMeshBuilder.Leaf(half, height, Thickness, kind, mirrored: true), 0, material);
+
+        var body = new StaticBody3D { Name = "Body" };
+        leaf._shape = new CollisionShape3D
+        {
+            Shape = new BoxShape3D { Size = new Vector3(width, height, Thickness) },
+            Position = new Vector3(0, height / 2, z + Thickness / 2),
+        };
+        body.AddChild(leaf._shape);
+        leaf.AddChild(body);
+        return leaf;
+    }
+
     private Node3D AddHinge(Vector3 at, float sign, InteriorMeshBuilder.MeshData data, float back, Material material)
     {
         var hinge = new Node3D { Name = "Hinge" + _hinges.Count, Position = at };
@@ -105,5 +147,7 @@ public partial class DoorLeaf : Node3D
         foreach (var (hinge, sign) in _hinges)
             hinge.Rotation = new Vector3(0, sign * s * _angle, 0);
         if (_shape != null) _shape.Disabled = swing > 0.02f;
+        // from the first moment it opens, the portal behind shows the real pair swinging
+        if (Shutter) Visible = swing <= 0f;
     }
 }

@@ -66,7 +66,7 @@ public static partial class InteriorGenerator
             || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
 
         if (single || !TryCored(layout, fp, b.Kind, n, rng))
-            SingleRoom(layout, b.Kind, rng);
+            SingleRoom(layout, b.Kind, fp.Door.Height, rng);
 
         Furnish(layout, rng);
         return layout;
@@ -92,7 +92,7 @@ public static partial class InteriorGenerator
 
     // ---- single room -------------------------------------------------------------------
 
-    private static void SingleRoom(InteriorLayout l, BuildingKind kind, Random rng)
+    private static void SingleRoom(InteriorLayout l, BuildingKind kind, float doorHeight, Random rng)
     {
         l.Floors.Clear();
         float hw = l.Width / 2, hd = l.Depth / 2;
@@ -115,7 +115,8 @@ public static partial class InteriorGenerator
         room.Openings.Add(new OpeningPlan
         {
             Side = Side.Front, Center = l.EntryX, Width = l.EntryWidth, Bottom = 0,
-            Top = kind == BuildingKind.Agricultural ? BuildingFootprint.DoorHeightFor(kind, clear)
+            // a barn's as tall as its facade door, which the footprint kept under the eave
+            Top = kind == BuildingKind.Agricultural ? Math.Min(doorHeight, BuildingFootprint.DoorHeightFor(kind, clear))
                 : Math.Min(kind == BuildingKind.Industrial ? 2.8f : 2.1f, clear - 0.15f),
             Kind = OpeningKind.Entry,
         });

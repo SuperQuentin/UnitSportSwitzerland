@@ -386,7 +386,7 @@ public partial class VideoExporter : Node
 
         try
         {
-            var start = new System.Diagnostics.ProcessStartInfo("ffmpeg")
+            var start = new System.Diagnostics.ProcessStartInfo(UnitSport.Core.BundledTools.Resolve("ffmpeg"))
             {
                 RedirectStandardInput = true,
                 RedirectStandardError = true,
@@ -672,7 +672,7 @@ public partial class VideoExporter : Node
             return Phase.Finished;
         }
 
-        _encodePid = OS.CreateProcess("ffmpeg", arguments);
+        _encodePid = OS.CreateProcess(UnitSport.Core.BundledTools.Resolve("ffmpeg"), arguments);
         if (_encodePid <= 0)
         {
             GD.PushError("[export] could not start ffmpeg; the frames and encode.bat are still there");
@@ -764,7 +764,7 @@ public partial class VideoExporter : Node
     private static bool HasFfmpeg()
     {
         var output = new Godot.Collections.Array();
-        return OS.Execute("ffmpeg", new[] { "-version" }, output) == 0;
+        return OS.Execute(UnitSport.Core.BundledTools.Resolve("ffmpeg"), new[] { "-version" }, output) == 0;
     }
 
     /// <summary>
