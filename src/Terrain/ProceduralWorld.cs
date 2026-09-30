@@ -230,37 +230,64 @@ public sealed partial class ProceduralWorld
     /// The height grid of a tile at a stride. Stride 10 is the coarse companion; evaluated at the
     /// same points, it is exactly the decimation of the full grid, as the real one is.
     /// </summary>
-    public ChunkGrid BuildGrid(TileId id, int stride)
+    public ChunkGrid BuildGrid(TileId id, int stride, Blend? blend = null)
     {
+        CheckBlend(id, blend);
         int size = (ChunkFormat.GridSize - 1) / stride + 1;
         var heights = new ushort[size * size];
         double step = ChunkFormat.SpacingM * stride;
-        ushort min = ushort.MaxValue, max = 0;
         // coarse samples sit on lattice points: no reason to fill the whole lattice for them
         bool onLattice = step % LatticeM == 0;
         var lattice = onLattice ? null : LatticeFor(id);
+        if (blend != null && !onLattice) blend.PrepareLattice();
 
         var columns = new Column[size];
         for (int c = 0; c < size; c++) columns[c] = ColumnAt(id.MinE + c * step - CenterE);
+        // at stride 1 the blend is added a row at a time: the same numbers as Correction per point
+        var correction = blend != null && stride == 1 ? new double[size] : null;
 
         // row-major, so the writes and the lattice reads both walk memory in order
         for (int r = 0; r < size; r++)
         {
             double n = id.MaxN - r * step;
+            if (correction != null) blend!.CorrectionRow(n, correction);
             for (int c = 0; c < size; c++)
             {
                 double e = id.MinE + c * step;
                 var (massif, detail) = onLattice
                     ? OnLattice(e, n)
                     : SampleNoise(lattice, e, n);
-                ushort q = ChunkFormat.Quantize(HeightAt(e - CenterE, n - CenterN, columns[c], massif, detail));
-                heights[r * size + c] = q;
-                if (q < min) min = q;
-                if (q > max) max = q;
+                double h = HeightAt(e - CenterE, n - CenterN, columns[c], massif, detail);
+                if (correction != null) h += correction[c];
+                else if (blend != null) h += blend.Correction(e, n);
+                heights[r * size + c] = ChunkFormat.Quantize(h);
             }
+        }
+
+        // a vertex on a real tile's edge takes the real tile's height, to the bit
+        if (blend != null)
+            for (int r = 0; r < size; r++)
+            {
+                bool edgeRow = r == 0 || r == size - 1;
+                for (int c = 0; c < size; c += edgeRow ? 1 : size - 1)
+                    if (blend.TryRealVertex(id.MinE + c * step, id.MaxN - r * step, out ushort real))
+                        heights[r * size + c] = real;
+            }
+
+        ushort min = ushort.MaxValue, max = 0;
+        foreach (ushort q in heights)
+        {
+            if (q < min) min = q;
+            if (q > max) max = q;
         }
         return new ChunkGrid(id, heights,
             (float)ChunkFormat.Dequantize(min), (float)ChunkFormat.Dequantize(max), stride);
+    }
+
+    private static void CheckBlend(TileId id, Blend? blend)
+    {
+        if (blend != null && blend.Tile != id)
+            throw new ArgumentException($"Blend for {blend.Tile} used to build {id}");
     }
 
     /// <summary>The noise at a lattice point, which is exactly what interpolating there returns.</summary>
@@ -273,35 +300,52 @@ public sealed partial class ProceduralWorld
     /// <summary>The 100 m far-horizon lattice, well past the playable square.</summary>
     public HorizonIndex BuildHorizon()
     {
-        const int side = HorizonFormat.SamplesPerSide;
         var ids = new List<TileId>();
         for (int dn = -HorizonRadiusTiles; dn <= HorizonRadiusTiles; dn++)
             for (int de = -HorizonRadiusTiles; de <= HorizonRadiusTiles; de++)
                 ids.Add(new TileId(_center.E + de, _center.N + dn));
 
         var samples = new ushort[ids.Count][];
-        Parallel.For(0, ids.Count, t =>
-        {
-            var id = ids[t];
-            var tile = new ushort[HorizonFormat.SamplesPerTile];
-            for (int c = 0; c < side; c++)
-            {
-                double e = id.MinE + c * HorizonFormat.SpacingM;
-                var column = ColumnAt(e - CenterE);
-                for (int r = 0; r < side; r++)
-                {
-                    double n = id.MaxN - r * HorizonFormat.SpacingM;
-                    var (massif, detail) = OnLattice(e, n);
-                    tile[r * side + c] = ChunkFormat.Quantize(
-                        HeightAt(e - CenterE, n - CenterN, column, massif, detail));
-                }
-            }
-            samples[t] = tile;
-        });
+        Parallel.For(0, ids.Count, t => samples[t] = HorizonSamples(ids[t], null));
 
         var tiles = new Dictionary<TileId, ushort[]>(ids.Count);
         for (int t = 0; t < ids.Count; t++) tiles[ids[t]] = samples[t];
         return new HorizonIndex(tiles);
+    }
+
+    /// <summary>
+    /// One tile's 11x11 horizon samples. A blend needs only its real knots here: at a 100 m point
+    /// D is exactly zero, and a sample on a real tile's edge copies that tile's knot, so these are
+    /// the grid's own heights at those points.
+    /// </summary>
+    public ushort[] HorizonSamples(TileId id, Blend? blend)
+    {
+        CheckBlend(id, blend);
+        const int side = HorizonFormat.SamplesPerSide;
+        var tile = new ushort[HorizonFormat.SamplesPerTile];
+        for (int c = 0; c < side; c++)
+        {
+            double e = id.MinE + c * HorizonFormat.SpacingM;
+            var column = ColumnAt(e - CenterE);
+            for (int r = 0; r < side; r++)
+            {
+                double n = id.MaxN - r * HorizonFormat.SpacingM;
+                var (massif, detail) = OnLattice(e, n);
+                double h = HeightAt(e - CenterE, n - CenterN, column, massif, detail);
+                if (blend != null)
+                {
+                    bool edge = c == 0 || r == 0 || c == side - 1 || r == side - 1;
+                    if (edge && blend.TryRealKnot(e, n, out ushort real))
+                    {
+                        tile[r * side + c] = real;
+                        continue;
+                    }
+                    h += blend.Correction(e, n);
+                }
+                tile[r * side + c] = ChunkFormat.Quantize(h);
+            }
+        }
+        return tile;
     }
 
     public TerrainManifest BuildManifest() => new()
@@ -320,25 +364,28 @@ public sealed partial class ProceduralWorld
     /// </summary>
     private const int CoverStep = 2 * LatticeM;
 
-    private readonly Dictionary<TileId, byte[]> _covers = new();
-    private readonly Queue<TileId> _coverOrder = new();
+    // keyed by the blend's version too: the same tile blends differently once the real set changes
+    private readonly Dictionary<(TileId, long), byte[]> _covers = new();
+    private readonly Queue<(TileId, long)> _coverOrder = new();
 
     /// <summary>
     /// The cover raster, kept for a few tiles: the loader asks for cover and then for trees, and
     /// trees are scattered from it.
     /// </summary>
-    public byte[] BuildCover(TileId id)
+    public byte[] BuildCover(TileId id, Blend? blend = null)
     {
+        CheckBlend(id, blend);
+        var key = (id, blend?.Version ?? long.MinValue);
         lock (_covers)
-            if (_covers.TryGetValue(id, out var cached)) return cached;
+            if (_covers.TryGetValue(key, out var cached)) return cached;
 
-        var cells = ClassifyTile(id);
+        var cells = ClassifyTile(id, blend);
 
         lock (_covers)
         {
-            if (_covers.TryAdd(id, cells))
+            if (_covers.TryAdd(key, cells))
             {
-                _coverOrder.Enqueue(id);
+                _coverOrder.Enqueue(key);
                 while (_coverOrder.Count > 16) _covers.Remove(_coverOrder.Dequeue());
             }
         }
@@ -356,14 +403,16 @@ public sealed partial class ProceduralWorld
     /// the flat bed <see cref="HeightAt"/> carved, not near it.
     /// </para>
     /// </summary>
-    private byte[] ClassifyTile(TileId id)
+    private byte[] ClassifyTile(TileId id, Blend? blend)
     {
         const int size = CoverFormat.Size;
         const int lat = (size - 1) / CoverStep + 1;   // 101
         const int ext = lat + 2;                        // plus a border, for slopes at the edges
 
-        // heights at the samples, border included
+        // heights at the samples, border included; the border is exactly the blend's S lattice
+        blend?.PrepareLattice();
         var h = new double[ext * ext];
+        var corr = blend == null ? null : new double[ext * ext];
         var axis = new double[ext];
         var floor = new double[ext];
         for (int i = 0; i < ext; i++)
@@ -377,6 +426,12 @@ public sealed partial class ProceduralWorld
                 double n = id.MaxN - (j - 1) * CoverStep;
                 var (massif, detail) = OnLattice(e, n);
                 h[j * ext + i] = HeightAt(e - CenterE, n - CenterN, column, massif, detail);
+                if (blend != null)
+                {
+                    double c = blend.Correction(e, n);
+                    h[j * ext + i] += c;
+                    corr![j * ext + i] = c;
+                }
             }
         }
 
@@ -386,6 +441,7 @@ public sealed partial class ProceduralWorld
         var forest = new float[lat * lat];
         var crop = new float[lat * lat];
         var above = new float[lat * lat];
+        var tilt = new float[lat * lat];
         var classes = new byte[lat * lat];
         for (int j = 0; j < lat; j++)
             for (int i = 0; i < lat; i++)
@@ -401,8 +457,15 @@ public sealed partial class ProceduralWorld
                 forest[k] = (float)Noise.Fbm(x / 650, y / 650, 3, 51);
                 crop[k] = (float)Noise.Fbm(x / 420, y / 420, 2, 67);
                 above[k] = (float)(h[e] - floor[i + 1]);
+                // how steeply the blend leans the ground here, to keep water off tilted river beds
+                if (corr != null)
+                {
+                    double cx = (corr[e + 1] - corr[e - 1]) / (2 * CoverStep);
+                    double cy = (corr[e + ext] - corr[e - ext]) / (2 * CoverStep);
+                    tilt[k] = (float)Math.Sqrt(cx * cx + cy * cy);
+                }
                 classes[k] = (byte)Classify(alt[k], slope[k], forest[k], crop[k], above[k],
-                    y - axis[i + 1], Math.Abs(y - (axis[i + 1] + RiverOffset)));
+                    y - axis[i + 1], Math.Abs(y - (axis[i + 1] + RiverOffset)), Blend.WaterAllowed(tilt[k]));
             }
 
         var cells = new byte[size * size];
@@ -437,7 +500,8 @@ public sealed partial class ProceduralWorld
                         double y = id.MaxN - row - CenterN;
                         double ax = axis[i + 1] + (axis[i + 2] - axis[i + 1]) * u;
                         cells[row * size + col] = (byte)Classify(Lerp(alt), Lerp(slope), Lerp(forest),
-                            Lerp(crop), Lerp(above), y - ax, Math.Abs(y - (ax + RiverOffset)));
+                            Lerp(crop), Lerp(above), y - ax, Math.Abs(y - (ax + RiverOffset)),
+                            corr == null || Blend.WaterAllowed(Lerp(tilt)));
                     }
                 }
             }
@@ -445,10 +509,11 @@ public sealed partial class ProceduralWorld
     }
 
     /// <param name="fromRoad">Signed offset from the main road; positive is the north side.</param>
+    /// <param name="waterOk">False where a blend has tilted the river bed: no water on a slope.</param>
     private static CoverClass Classify(float alt, float slope, float forest, float crop, float above,
-        double fromRoad, double fromRiver)
+        double fromRoad, double fromRiver, bool waterOk)
     {
-        if (fromRiver < RiverHalf - 0.5) return CoverClass.Water;
+        if (fromRiver < RiverHalf - 0.5 && waterOk) return CoverClass.Water;
 
         if (alt > 2950 && slope < 30) return CoverClass.Glacier;
         if (alt > 2750 && slope < 22 && forest > 0.1f) return CoverClass.Snowfield;
@@ -486,12 +551,13 @@ public sealed partial class ProceduralWorld
     /// open floor — the same three kinds the preprocessor emits. Kept off roads and out of
     /// buildings by a mask stamped from both.
     /// </summary>
-    public List<TreeInstance> BuildTrees(TileId id)
+    public List<TreeInstance> BuildTrees(TileId id, Blend? blend = null)
     {
         const int size = CoverFormat.Size;
-        var cells = BuildCover(id);
-        var blocked = BuildTreeMask(id);
-        var lattice = LatticeFor(id);
+        var cells = BuildCover(id, blend);
+        blend?.PrepareLattice();
+        var site = new Site(LatticeFor(id), blend);
+        var blocked = BuildTreeMask(id, site);
         var trees = new List<TreeInstance>();
 
         for (int row = 0; row < size; row++)
@@ -519,7 +585,7 @@ public sealed partial class ProceduralWorld
                 if (cls == CoverClass.Open
                     && Math.Abs(Noise.Fbm((e - CenterE) / 90, (n - CenterN) / 90, 2, 97)) > 0.06)
                     continue;
-                double h = Height(lattice, e, n);
+                double h = Ground(site, e, n);
                 if (cls == CoverClass.Open && h > 1700) continue;
 
                 float r = (float)Noise.Hash01(ge, gn, 83);
@@ -544,7 +610,7 @@ public sealed partial class ProceduralWorld
                 int cell = row * size + col;
                 if ((CoverClass)cells[cell] != CoverClass.Orchard || blocked[cell]) continue;
                 float r = (float)Noise.Hash01((int)e, (int)n, 89);
-                trees.Add(new TreeInstance((float)(e - id.MinE), (float)Height(lattice, e, n), (float)(id.MaxN - n),
+                trees.Add(new TreeInstance((float)(e - id.MinE), (float)Ground(site, e, n), (float)(id.MaxN - n),
                     3.4f + r * 1.4f, KindFruit));
             }
 

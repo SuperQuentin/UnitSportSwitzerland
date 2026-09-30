@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Checks the generated-terrain blend (src/Terrain/ProceduralWorld.Blend.cs) against synthetic
+       real terrain, with no Godot: the generator is plain C# over TerrainFormat. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- the generator's doc comments cref game types this project does not compile -->
+    <NoWarn>CS1574;CS1584;CS1581;CS1580</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\Terrain\ProceduralWorld*.cs" Link="Generator\%(Filename)%(Extension)" />
+    <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
+  </ItemGroup>
+
+</Project>
