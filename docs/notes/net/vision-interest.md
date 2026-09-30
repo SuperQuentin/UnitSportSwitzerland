@@ -7,21 +7,24 @@
   over `horizon.bin` (100 m lattice, 12 m margin); always within 150 m and always for the same race
   (`Together`); hysteresis ×1.15 and at most one flip per pair per second. A newcomer sees nobody
   until its first round (0.5 s) instead of being sent everyone and having most taken back.
-- **Two synchronizers per player.** `Sync` (owner authority) carries the data; its filter sends
-  only to the owner's **audience** — the peers that can see it — which the server RPCs to it
-  (`SetAudience`). NOT the peers it can see: visibility is asymmetric (a plane is seen 8 km away,
-  a walker 0.9 km), and sending by "whom I see" left a plane spawned on a walker's screen and never
-  updated — found by the load test as a remote plane frozen at 1.5 km. `Vis` (server authority,
-  EMPTY config) carries only the decision: **Godot consults only server-authority synchronizers
-  for spawn visibility** (`SceneReplicationInterface::_update_spawn_visibility` skips the rest), so
-  without it the server can never despawn a client-owned node. Out of view the node is despawned on
-  that peer and respawned with current state when back.
+- **The server rebroadcasts; owners send once.** `Sync` (owner authority) goes to the server ONLY.
+  The server's proxy copy carries two server-owned relays with the same properties: `RelayNear`
+  (30 Hz, spawn state) for viewers within 300 m or in the same race, `RelayFar` (6 Hz) for viewers
+  further away who can still see the player. Filters read `InterestService.RelaysNear/RelaysFar`,
+  recomputed every round from the viewers' sets — the AUDIENCE of a target (who sees it), since
+  visibility is asymmetric (a plane is seen 8 km away, a walker 0.9 km). Owners used to send one
+  copy per viewer for the server to relay: N·(N−1) datagrams into one socket, which overflowed at
+  a 32-car race start (5k packets/s, thousands of drops); now ~N·30 in (877/s at 32, 0 drops).
+- `Vis` (server authority, EMPTY config) decides spawn visibility: **Godot consults only
+  server-authority synchronizers for spawn visibility** (`SceneReplicationInterface::
+  _update_spawn_visibility` skips the rest). Spawn visibility is the OR of Vis and the relays.
+  A target leaving a viewer's sight is despawned there after a 0.4-0.5 s grace (`_leaving`).
 - **Visibility filter gotchas** (both cost a debugging round): Godot also calls a filter with
   peer **0** = "everyone?" — answering true makes it broadcast; `ServerSees` must answer **true for
   the owner itself** or the owner loses its own player. `Vis` has `ReplicationInterval` 3600 s:
   empty or not, Godot asks its filter every frame for every peer otherwise.
 - Race NPCs (`npc_<owner>_<n>`) are shown to whoever sees their owner (`FootPlayer.NetOwner`).
-- Gunfire goes only to peers in the shooter's set (`CombatManager.SendShot`).
+- Gunfire goes to the server once and is relayed only to the peers who can see the shooter (`CombatManager.Shot` → `ShotFrom`).
 - Check: `<godot> --headless --path . -- --interestcheck` (rules + interpolation self-checks);
   loopback: two clients 100 m apart at the Mollendruz see each other, one at Riddes (70 km) never
   spawns them.

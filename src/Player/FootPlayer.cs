@@ -174,7 +174,32 @@ public partial class FootPlayer : CharacterBody3D
     public bool NetProxy { get; private set; }
 
     private readonly Net.RemoteInterpolator _interp = new();
-    private MultiplayerSynchronizer? _sync, _vis;
+    private MultiplayerSynchronizer? _sync, _relayNear, _relayFar, _vis;
+
+    /// <summary>A server-owned copy of <paramref name="source"/>'s properties, sent at <paramref name="interval"/>.</summary>
+    private static MultiplayerSynchronizer MakeRelay(string name, SceneReplicationConfig source, bool spawn, float interval)
+    {
+        var config = new SceneReplicationConfig();
+        foreach (var prop in source.GetProperties())
+        {
+            config.AddProperty(prop);
+            config.PropertySetSpawn(prop, spawn);
+            config.PropertySetReplicationMode(prop, source.PropertyGetReplicationMode(prop));
+        }
+        var relay = new MultiplayerSynchronizer
+        {
+            Name = name, RootPath = new NodePath(".."), ReplicationConfig = config, ReplicationInterval = interval,
+        };
+        relay.SetMultiplayerAuthority(1);
+        return relay;
+    }
+
+    /// <summary>Server: re-evaluates who gets this player's near and far streams.</summary>
+    public void RefreshRelays()
+    {
+        _relayNear?.UpdateVisibility();
+        _relayFar?.UpdateVisibility();
+    }
     private Net.InterestService? _interest;
 
     private void OnNetState()
@@ -646,7 +671,6 @@ public partial class FootPlayer : CharacterBody3D
     {
         Terrain?.RemoveAnchor(this);
         Explosion.Blast -= OnBlast;
-        if (_interest != null) _interest.Changed -= OnInterestChanged;
         if (!IsMultiplayerAuthority() && !NetProxy)
             GD.Print($"[net] player {Name} left view");
     }
@@ -693,21 +717,33 @@ public partial class FootPlayer : CharacterBody3D
         // the synchronizer's own authority decides who sends; children added after the
         // parent's SetMultiplayerAuthority default to server authority
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
-        // Interest management: this player's position goes only to peers in the same space —
-        // the same interior, or both outdoors — plus the server, which relays and answers /tp.
-        // The table is the server's (see InteriorManager), never this node's replicated state.
-        // Vision: the server tells every client whom it can see (Net/InterestService); the owner
-        // only sends to those, and the server's copy only exists on those.
         _interest = GetNodeOrNull<Net.InterestService>("../../" + Net.InterestService.NodeName);
         NetProxy = !IsMultiplayerAuthority() && Net.NetworkManager.DedicatedServer;
+
+        // The owner sends its state ONCE, to the server. It used to send one copy per viewer for
+        // the server to relay — N·(N−1) packets into the server's socket, which overflowed at a
+        // 32-car race start (thousands of UDP drops a second). The server rebroadcasts below.
         if (IsMultiplayerAuthority())
-        {
-            sync.AddVisibilityFilter(Callable.From((long peer) =>
-                peer == 1 || (Interiors.InteriorManager.Instance?.SameSpaceAsLocal(peer) != false
-                    && _interest?.SendsTo(peer) != false)));
-            if (_interest != null) _interest.Changed += OnInterestChanged;
-        }
+            sync.AddVisibilityFilter(Callable.From((long peer) => peer == 1));
         AddChild(sync);
+
+        // The server's two rebroadcasts of that state (Net/InterestService decides who gets
+        // which): viewers within 300 m or in the same race at 30 Hz, viewers further away who can
+        // still see this player at 6 Hz — at that distance nobody can tell once interpolated.
+        // Server-owned, so the server alone decides who is sent what, and the spawn and the
+        // stream can never disagree about whether a peer has this node.
+        _relayNear = MakeRelay("RelayNear", replication, spawn: true, 1f / 30f);
+        _relayFar = MakeRelay("RelayFar", replication, spawn: false, 1f / 6f);
+        if (NetProxy && NetOwner(Name) is long relayOwner)
+        {
+            // peer 0 = "everyone?": must be no, or Godot broadcasts; the owner has its own copy
+            _relayNear.AddVisibilityFilter(Callable.From((long peer) =>
+                peer != 0 && peer != relayOwner && _interest?.RelaysNear(peer, relayOwner) == true));
+            _relayFar.AddVisibilityFilter(Callable.From((long peer) =>
+                peer != 0 && peer != relayOwner && _interest?.RelaysFar(peer, relayOwner) == true));
+        }
+        AddChild(_relayNear);
+        AddChild(_relayFar);
 
         // Whether this player EXISTS on a peer is the spawner's call, and Godot only consults
         // synchronizers the server has authority over for that (SceneReplicationInterface::
@@ -809,7 +845,7 @@ public partial class FootPlayer : CharacterBody3D
             Callable.From(() => _interest.ReportView(Core.GameSettings.Current.CameraFar, BaseFov)).CallDeferred();
     }
 
-    private void OnInterestChanged() => _sync?.UpdateVisibility();
+
 
     /// <summary>
     /// Rebuilds the body mesh when the ride changes, or the view does.

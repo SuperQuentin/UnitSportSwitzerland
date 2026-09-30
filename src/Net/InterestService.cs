@@ -35,21 +35,6 @@ public partial class InterestService : Node
     /// <summary>A pair does not flip more often than this, whatever the distances do.</summary>
     private const double MinFlipSeconds = 1.0;
 
-    // ---- client side ----------------------------------------------------------------------
-
-    private HashSet<long>? _audience_;
-
-    /// <summary>Raised on a client when the server sends a new set.</summary>
-    public event Action? Changed;
-
-    /// <summary>
-    /// Whether this client should send its own state to <paramref name="peer"/>: whether that peer
-    /// can see this client. Until the first audience arrives (half a second after joining) only
-    /// the server: nobody has spawned this player yet, and a packet for a node a peer does not
-    /// have is an error there ("Node not found .../Sync").
-    /// </summary>
-    public bool SendsTo(long peer) => peer == 1 || (_audience_ != null && _audience_.Contains(peer));
-
     // ---- server side ----------------------------------------------------------------------
 
     /// <summary>Server: the players container (children named by peer id).</summary>
@@ -105,7 +90,10 @@ public partial class InterestService : Node
     {
         _views.Remove(peer);
         _sets.Remove(peer);
-        _audienceSent.Remove(peer);
+        _nearOf.Remove(peer);
+        _farOf.Remove(peer);
+        foreach (var set in _nearOf.Values) set.Remove(peer);
+        foreach (var set in _farOf.Values) set.Remove(peer);
         foreach (var key in new List<(long, long)>(_leaving.Keys))
             if (key.Item1 == peer || key.Item2 == peer) _leaving.Remove(key);
         foreach (var set in _sets.Values) set.Remove(peer);
@@ -173,29 +161,46 @@ public partial class InterestService : Node
             foreach (var child in Players.GetChildren())
                 if (child is FootPlayer t && FootPlayer.NetOwner(t.Name) is long owner && _changed.Contains(owner))
                     t.RefreshNetVisibility(viewer);
-            foreach (var target in _changed) _dirty.Add(target);
         }
 
-        // Each client is told its AUDIENCE — who can see it — because that is whom it must send
-        // to. Not whom it can see: visibility is not symmetric. A plane is visible 8 km away, a
-        // walker 0.9 km; sending by "whom I see" left the plane spawned on a walker's screen and
-        // never updated (measured: a frozen remote plane at 1.5 km in the load test).
-        foreach (var (target, _) in _scratch)
-            if (!_audienceSent.Contains(target)) _dirty.Add(target);
-        foreach (var target in _dirty)
+        // Who gets each player's state, and how often: every viewer whose set holds it, split by
+        // distance — within NearRadius (or racing it) the 30 Hz relay, beyond it the 6 Hz one.
+        // The SERVER rebroadcasts (FootPlayer's RelayNear/RelayFar); owners send only to it. The
+        // audience, not the set: visibility is asymmetric (a plane is seen 8 km away, a walker
+        // 0.9 km), so what counts is who sees the target, not whom the target sees.
+        foreach (var (target, targetNode) in _scratch)
         {
-            if (!_sets.ContainsKey(target)) continue;   // not a player (or gone)
-            _audience.Clear();
-            foreach (var (viewer, set) in _sets)
-                if (set.Contains(target)) _audience.Add(viewer);
-            RpcId(target, MethodName.SetAudience, _audience.ToArray());
-            _audienceSent.Add(target);
+            _near.Clear(); _far.Clear();
+            var at = targetNode.GlobalPosition;
+            _nearOf.TryGetValue(target, out var lastNear);
+            foreach (var (viewer, viewerNode) in _scratch)
+            {
+                if (viewer == target || !_sets.TryGetValue(viewer, out var set) || !set.Contains(target)) continue;
+                float radius = lastNear != null && lastNear.Contains(viewer) ? NearRadius * 1.2f : NearRadius;
+                bool near = Together?.Invoke(viewer, target) == true
+                    || viewerNode.GlobalPosition.DistanceSquaredTo(at) < radius * radius;
+                (near ? _near : _far).Add(viewer);
+            }
+            if (lastNear != null && _farOf.TryGetValue(target, out var lastFar)
+                && lastNear.SetEquals(_near) && lastFar.SetEquals(_far)) continue;
+            _nearOf[target] = new HashSet<long>(_near);
+            _farOf[target] = new HashSet<long>(_far);
+            foreach (var child in Players.GetChildren())
+                if (child is FootPlayer t && FootPlayer.NetOwner(t.Name) == target) t.RefreshRelays();
         }
-        _dirty.Clear();
     }
 
-    private readonly HashSet<long> _dirty = new(), _audienceSent = new();
-    private readonly List<long> _audience = new();
+    /// <summary>Server: whether <paramref name="viewer"/> gets <paramref name="target"/>'s 30 Hz stream.</summary>
+    public bool RelaysNear(long viewer, long target) => _nearOf.TryGetValue(target, out var s) && s.Contains(viewer);
+
+    /// <summary>Server: whether <paramref name="viewer"/> gets <paramref name="target"/>'s 6 Hz stream.</summary>
+    public bool RelaysFar(long viewer, long target) => _farOf.TryGetValue(target, out var s) && s.Contains(viewer);
+
+    /// <summary>Within this, a viewer gets the full-rate stream; beyond it the reduced one.</summary>
+    private const float NearRadius = 300f;
+
+    private readonly HashSet<long> _near = new(), _far = new();
+    private readonly Dictionary<long, HashSet<long>> _nearOf = new(), _farOf = new();
 
     private bool LineOfSight(Vector3 eye, Vector3 target) => Interest.Clear(eye, target, Ground!);
 
@@ -212,13 +217,6 @@ public partial class InterestService : Node
         if (!Multiplayer.IsServer()) return;
         // clamped: a client may not ask to be sent the whole country
         _views[Multiplayer.GetRemoteSenderId()] = new Interest.View(Mathf.Clamp(far, 500f, 150000f), Mathf.Clamp(fovDeg, 20f, 150f));
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void SetAudience(long[] peers)
-    {
-        _audience_ = new HashSet<long>(peers);
-        Changed?.Invoke();
     }
 
     /// <summary>A coarse ground function over <c>horizon.bin</c>'s 100 m lattice, for the server.</summary>

@@ -23,6 +23,9 @@
 
   Soak, 32 players × 30 min: working set 360 → 374 MB over the last 20 min (+3.9 %), heap flat
   ~150 MB, GC pause max 5.6 ms, steady-state frame max 17–28 ms, 0 drops, 0 disconnects.
+- **After the server relay** (owners send once; server rebroadcasts near 30 Hz / far 6 Hz): 32
+  players incl. the grouped race start — packets in 877/s peak (was ~5,000 with owner relaying to
+  audiences, 24,019 originally), 0 UDP drops, net in 106 KB/s, out 539 KB/s; observer 0 freezes.
 - The one frame spike left (~110 ms) is 31 bots joining in the same second at startup: a join costs
   < 0.6 ms on the server, the first one 30 ms (JIT of the cold paths).
 - **Relay was O(N²) before**: packets in tracked N·(N−1)·60 because every client sent every frame to

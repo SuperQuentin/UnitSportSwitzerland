@@ -232,16 +232,11 @@ public partial class CombatManager : Node3D
     private float Rand() => (float)_rng.NextDouble() * 2f - 1f;
 
     /// <summary>
-    /// A round goes to the players who can see the shooter (Net/InterestService), not to the whole
-    /// server: someone 60 km away has no tracer to draw and no bullet that can reach them.
+    /// A round goes to the server once; the server relays it to the players who can see the
+    /// shooter (Net/InterestService), not to the whole map — someone 60 km away has no tracer to
+    /// draw and no bullet that can reach them.
     /// </summary>
-    private void SendShot(Vector3 muzzle, Vector3 vel)
-    {
-        var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
-        if (interest == null) { Rpc(MethodName.Shot, muzzle, vel); return; }
-        foreach (int peer in Multiplayer.GetPeers())
-            if (peer != 1 && interest.SendsTo(peer)) RpcId(peer, MethodName.Shot, muzzle, vel);
-    }
+    private void SendShot(Vector3 muzzle, Vector3 vel) => RpcId(1, MethodName.Shot, muzzle, vel);
 
     /// <summary>
     /// What the crosshair is on: the first thing along the camera's line of sight — terrain or a
@@ -271,9 +266,17 @@ public partial class CombatManager : Node3D
         TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
     private void Shot(Vector3 origin, Vector3 velocity)
     {
-        if (_server) return;   // relayed on to the other clients; nothing to fly here
-        Spawn(origin, velocity, Multiplayer.GetRemoteSenderId());
+        if (!_server) return;
+        long shooter = Multiplayer.GetRemoteSenderId();
+        var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
+        foreach (int peer in Multiplayer.GetPeers())
+            if (peer != shooter && interest?.ServerSees(peer, shooter) != false)
+                RpcId(peer, MethodName.ShotFrom, shooter, origin, velocity);
     }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
+    private void ShotFrom(long shooter, Vector3 origin, Vector3 velocity) => Spawn(origin, velocity, shooter);
 
     private void Spawn(Vector3 origin, Vector3 velocity, long shooter)
     {
