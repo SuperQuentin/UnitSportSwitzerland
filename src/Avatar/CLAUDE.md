@@ -11,6 +11,7 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `riding-position-derived-from-bike` — A riding position is derived from the bike, never eyeballed
 - `judge-model-proportions-long-lens` — Judge model proportions with a long lens: The avatar preview's focus camera sits 9 m back at 13° FOV,...
 
+- `car-cabin` — Car cabin (#69): hollow body, glass as panes in a second surface, dash/dials/wheel/pedals/mirrors, the driver's seat derived from the body and the figure posed from it; `--cockpitcheck`
 - `item-arm-poses` — Held items pose the arms (ItemArmPose, replicated ItemAction) and the held mesh follows the hand basis
 
 ## Gotchas

@@ -386,6 +386,9 @@ public partial class FootPlayer : CharacterBody3D
 
     public bool IsFirstPerson => !_thirdPerson;
 
+    /// <summary>In a car's driver's seat, looking out through the windscreen (not the chase camera, not the garage's orbit).</summary>
+    public bool InCockpit => !_thirdPerson && _ride is Car && ShowroomYaw == null;
+
     private Rideable? _ride;
     private RideMotion _motion;
     private float _slipCam;
@@ -421,6 +424,10 @@ public partial class FootPlayer : CharacterBody3D
 
     /// <summary>Free look while riding. Steering owns the body's yaw, so the eyes get their own.</summary>
     private float _lookYaw;
+    /// <summary>Seconds since the mouse or the right stick last looked: the cockpit's look springs back only once they let go.</summary>
+    private float _lookIdle;
+    /// <summary>Cockpit: the head's sway from the car's accelerations, eased (node space: +X right, +Z back).</summary>
+    private Vector3 _headSway;
 
     // --- third person on foot ---
     /// <summary>
@@ -1564,10 +1571,22 @@ public partial class FootPlayer : CharacterBody3D
         _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
     }
 
-    /// <summary>Switches first/third person, rebuilding the local body and saving the choice.</summary>
+    /// <summary>
+    /// Switches first/third person, rebuilding the local body and saving the choice. At the wheel
+    /// of a car it is a cycle of three: chase camera, the cockpit with your own arms and legs,
+    /// the cockpit without them.
+    /// </summary>
     private void ToggleView()
     {
+        var settings = Core.GameSettings.Current;
+        if (_ride is Car && !_thirdPerson && settings.CockpitBody)
+        {
+            settings.CockpitBody = false;
+            settings.Save();
+            return;
+        }
         _thirdPerson = !_thirdPerson;
+        if (_ride is Car && !_thirdPerson) settings.CockpitBody = true;
         Core.GameSettings.Current.ThirdPerson = _thirdPerson;
         Core.GameSettings.Current.Save();
 
@@ -2090,6 +2109,7 @@ public partial class FootPlayer : CharacterBody3D
             // and letting the mouse turn it would mean looking over your shoulder steered you
             // into the ditch. The mouse gets its own yaw, which recentres itself.
             float rate = 0.0022f * LookScale;
+            _lookIdle = 0f;
             if (_ride != null && !LookSteersRide)
                 _lookYaw = Mathf.Clamp(_lookYaw - motion.Relative.X * rate, -2.4f, 2.4f);
             else
@@ -2107,6 +2127,7 @@ public partial class FootPlayer : CharacterBody3D
     {
         var look = PlayerInput.LookRate * LookScale;
         if (look == Vector2.Zero) return;
+        _lookIdle = 0f;
 
         if (_ride != null && !LookSteersRide)
             _lookYaw = Mathf.Clamp(_lookYaw - look.X * dt, -2.4f, 2.4f);
@@ -2122,6 +2143,8 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     private float ClampPitch(float pitch) => _ride is Flyer
         ? Mathf.Clamp(pitch, -1.2f, 1.2f)
+        : InCockpit
+        ? Mathf.Clamp(pitch, -0.9f, 0.7f)
         : _thirdPerson && _ride == null
         ? Mathf.Clamp(pitch, -1.25f, 0.9f)
         : Mathf.Clamp(pitch, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
@@ -3000,7 +3023,15 @@ public partial class FootPlayer : CharacterBody3D
     private void PoseRideVisual()
     {
         if (_visual == null) return;
-        if (_visual is Avatar.CarRig rig) rig.DoorsOpen = DoorsOpen;
+        if (_visual is Avatar.CarRig rig)
+        {
+            rig.DoorsOpen = DoorsOpen;
+            rig.EngineRunning = EngineOn;
+            var settings = Core.GameSettings.Current;
+            rig.View = !InCockpit ? Avatar.CockpitView.Outside
+                : settings.CockpitBody ? Avatar.CockpitView.Body : Avatar.CockpitView.Bare;
+            rig.MirrorsOn = settings.CockpitMirrors;
+        }
         // a bail lays the rider over on their side for as long as it lasts
         float roll = _bailTimer > 0 ? 1.35f : _motion.Lean;
         var basis = new Basis(Vector3.Up, _airSpin) * new Basis(Vector3.Right, _airPitch)
@@ -3015,6 +3046,13 @@ public partial class FootPlayer : CharacterBody3D
             PoseRideVisual();
 
         if (_camera == null || _ride == null) return;
+
+        _lookIdle += dt;
+        if (InCockpit && _visual is Avatar.CarRig cockpit)
+        {
+            UpdateCockpitCamera(cockpit, dt);
+            return;
+        }
 
         // the free look springs back to centre, so letting go of the mouse puts the road ahead
         _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
@@ -3103,6 +3141,47 @@ public partial class FootPlayer : CharacterBody3D
 
         ApplyRideFov(dt);
     }
+
+    /// <summary>
+    /// The driver's own eye (<see cref="Avatar.CarRig.EyeFrame"/>), on the car's body so the dash
+    /// stays put in the lens when the nose dips, moved by the seat settings. The head sways with
+    /// the accelerations on a soft spring, leans a little into a look over the shoulder, and keeps
+    /// half the body roll off the horizon. The look springs back only once the mouse or stick has
+    /// let go of it, so a glance to the side can be held.
+    /// </summary>
+    private void UpdateCockpitCamera(Avatar.CarRig rig, float dt)
+    {
+        if (_camera == null || _ride == null) return;
+        var settings = Core.GameSettings.Current;
+        if (_lookIdle > 0.6f)
+        {
+            float back = 1f - Mathf.Exp(-5f * dt);
+            _lookYaw = Mathf.Lerp(_lookYaw, 0f, back);
+            _pitch = Mathf.Lerp(_pitch, CockpitPitch, back);
+        }
+
+        var sway = Vector3.Zero;
+        if (settings.CockpitHeadMotion && _ride is Car car)
+            // thrown back by acceleration and forward by braking (+AccelX forward, the head to +Z),
+            // out of a bend (+AccelY left, the head to +X)
+            sway = new Vector3(Mathf.Clamp(car.AccelY * 0.006f, -0.06f, 0.06f), 0f,
+                Mathf.Clamp(car.AccelX * 0.005f, -0.05f, 0.05f));
+        _headSway = _headSway.Lerp(sway, 1f - Mathf.Exp(-6f * dt));
+        // looking over a shoulder, the head goes a little that way and forward, past the pillar
+        var lean = new Vector3(-Mathf.Sin(_lookYaw) * 0.07f, 0f, -Mathf.Abs(Mathf.Sin(_lookYaw)) * 0.05f);
+        var seat = new Vector3(0f, settings.SeatHeight, -settings.SeatForward);
+
+        var eye = rig.EyeFrame;
+        var head = new Basis(Vector3.Up, _lookYaw) * new Basis(Vector3.Right, _pitch)
+            * new Basis(Vector3.Back, -_motion.Lean * 0.5f - _headSway.X * 1.5f);
+        _camera.Transform = _visual!.Transform * new Transform3D(eye.Basis * head, eye.Origin + seat + _headSway + lean);
+
+        float t = Mathf.Clamp(_motion.Speed / _ride.FovSpeed, 0f, 1f);
+        _camera.Fov = Mathf.Lerp(_camera.Fov, settings.CockpitFov + 6f * t * t, 1f - Mathf.Exp(-3f * dt));
+    }
+
+    /// <summary>Resting look from the seat: a touch down, so the bonnet and the dials share the view with the road.</summary>
+    private const float CockpitPitch = -0.1f;
 
     /// <summary>FOV widens with speed — the cheapest, strongest sense of pace there is.</summary>
     private void ApplyRideFov(float dt)
