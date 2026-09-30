@@ -77,7 +77,7 @@ public partial class HeldItemVisual : Node3D
         {
             _inHand.Visible = true;
             // the wrist is the end of the arm, so the grip sits a hand's length past it
-            _inHand.Transform = new Transform3D(Basis.Identity, hand.Origin + new Vector3(0, -0.05f, -0.03f));
+            _inHand.Transform = new Transform3D(hand.Basis, hand.Origin + hand.Basis * new Vector3(0, -0.05f, -0.03f));
         }
         else _inHand.Visible = false;
 
