@@ -355,7 +355,8 @@ public partial class ClientWorld : Node3D
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null
-            || Items.PlacedProbe.Role != null || Items.ShotgunProbe.Role != null
+            || Items.PlacedProbe.Role != null || Items.PhotoProbe.Requested
+            || Items.ShotgunProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
         // the account claimed cash goes to: the server's online, this machine's offline. Made
@@ -370,6 +371,7 @@ public partial class ClientWorld : Node3D
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
+        if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
 
@@ -385,6 +387,8 @@ public partial class ClientWorld : Node3D
         // held-item events (shots, flashes) and placed objects (flags, photos): same node paths
         // as the server's, which relays the first and owns the second; offline this client does both
         Items.ItemEvents.Create(this, server: false);
+        // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
+        Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false);
 
         var loot = Loot.LootService.Create(this);

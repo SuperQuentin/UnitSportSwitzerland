@@ -66,6 +66,9 @@ public enum ItemId
     SantaHat = 48,
     ReindeerAntlers = 49,
 
+    // ---- the Polaroid camera (docs/notes/items/polaroid.md) ----
+    /// <summary>A printed photo; which one is <see cref="ItemStack.Data"/> (the photo id).</summary>
+    Photo = 50,
     // ---- optics (src/Items/SmartBinocularsHud) ----
     SmartBinoculars = 51,
 }
@@ -92,6 +95,8 @@ public enum ItemUse
     Shoot,
     /// <summary>Use puts it on, or takes it off (a hat — <see cref="Inventory.Worn"/>).</summary>
     Wear,
+    /// <summary>A printed photo: Use looks at it, Aim + Use (or the stick key) sticks it where you look.</summary>
+    Print,
 }
 
 /// <summary>
@@ -120,7 +125,7 @@ public static class ItemDefs
             ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN"),
         new(ItemId.SmartBinoculars, "Smart binoculars", "Hold {aim_item} to look through them. {use_item} picks a target item: buildings in view show the chance it drops from their containers.",
             ItemUse.Optic, 1, new Color(0.20f, 0.42f, 0.50f), "SB", 0, ItemCategory.Gear, 250f),
-        new(ItemId.Camera, "Camera", "Hold {aim_item} to frame, {use_item} to take a photo. Saved to user://photos.",
+        new(ItemId.Camera, "Camera", "A Polaroid. Hold {aim_item} to frame, {use_item} to take a photo: it prints, develops, and goes in your pack.",
             ItemUse.Photo, 1, new Color(0.18f, 0.18f, 0.20f), "CM"),
         new(ItemId.Gps, "GPS", "Shows your LV95 coordinates, altitude and heading while held.",
             ItemUse.Readout, 1, new Color(0.95f, 0.78f, 0.12f), "GP"),
@@ -183,6 +188,9 @@ public static class ItemDefs
         Hat(ItemId.PumpkinHead, "Pumpkin head", "#e07818", "PH"),
         Hat(ItemId.SantaHat, "Santa hat", "#c81e24", "SH"),
         Hat(ItemId.ReindeerAntlers, "Reindeer antlers", "#7a5230", "RA"),
+
+        new(ItemId.Photo, "Photo", "A Polaroid you took. {use_item} to look at it; {aim_item} + {use_item} sticks it on a wall or the ground, {use_item} on it again takes it back.",
+            ItemUse.Print, 1, new Color(0.96f, 0.95f, 0.90f), "PH"),
     };
 
     private static ItemDef Eat(ItemId id, string name, int stack, string tint, string glyph, float heal,
@@ -228,6 +236,14 @@ public static class ItemDefs
     public static StandardMaterial3D Material => _material ??= HumanMeshBuilder.Material();
 
     /// <summary>
+    /// The material a held item needs instead of the shared vertex-colour <see cref="Material"/>, or
+    /// null for that one: items drawn from a texture, which may depend on the stack's
+    /// <see cref="ItemStack.Data"/> (a photo shows its own print).
+    /// </summary>
+    public static Material? HandMaterial(ItemId id, string? data) =>
+        id == ItemId.Photo ? PhotoVisuals.Material(data) : null;
+
+    /// <summary>
     /// The item as held: origin at the grip, pointing forward (−Z once built, like every
     /// <see cref="MeshScratch"/> mesh). Real sizes — a 0.12 m camera, not a prop.
     /// </summary>
@@ -235,6 +251,9 @@ public static class ItemDefs
     {
         if (id == ItemId.None) return null;
         if (HandMeshes.TryGetValue(id, out var cached)) return cached;
+
+        // a textured card (its material: HandMaterial), not a vertex-coloured MeshScratch
+        if (id == ItemId.Photo) return HandMeshes[id] = PhotoVisuals.HeldCard;
 
         var s = new MeshScratch();
         switch (id)

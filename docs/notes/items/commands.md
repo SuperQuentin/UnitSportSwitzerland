@@ -11,4 +11,7 @@
 - `<godot> --headless --path . -- --iconsheet`: renders every item icon to `test_output/iconsheet.png` (see `pixel-icons`).
 - `GODOT=<exe> tools/gunshotcheck.sh [--gunside]`: server + A (shouldered shotgun, fires, rate limit) + B (screenshots A's body, counts Shot events); pictures `test_output/gunshot_*.png` (see `shotgun-feel`).
 - `GODOT=<exe> tools/placedcheck.sh [E,N]`: loopback server + three clients for item events and placed
-  objects (late join snapshot, owner-only photo removal, persistence across a server restart); see `item-net-events`.
+  objects (late join snapshot, owner-only photo removal, persistence across a server restart, a Polaroid
+  image fetched by hash); see `item-net-events`.
+- `<godot> --path . -- --ride foot,120 --view first --photocheck --photo-dir <abs dir>`: the Polaroid offline
+  with screenshots (see `polaroid`).

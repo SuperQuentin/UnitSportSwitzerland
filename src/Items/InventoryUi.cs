@@ -318,6 +318,11 @@ public partial class InventoryUi : CanvasLayer
         _handButton.Pressed += TakeInHand;
         right.AddChild(_handButton);
 
+        // the Polaroids: every photo in the pack and every one taken here (PhotoUi)
+        var albumButton = new Button { Text = "Photo album" };
+        albumButton.Pressed += () => _items.PhotoUi.OpenAlbum();
+        right.AddChild(albumButton);
+
         // the bin: drop a stack on it to throw it away; click it empty-handed to get it back
         var binRow = new HBoxContainer();
         binRow.AddThemeConstantOverride("separation", 10);
@@ -486,7 +491,7 @@ public partial class InventoryUi : CanvasLayer
         _infoBlurb.Text = def != null ? InputHints.Format(def.Blurb)
             : slot < Inventory.HotbarSize ? "Hotbar slot — whatever is here can be in your hand." : "Backpack slot.";
         _infoValue.Text = def is { Value: > 0 } ? $"Worth about {def.Value * stack.Count:0.#} CHF" : "";
-        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear);
+        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear or ItemUse.Print);
         _handButton.Disabled = def == null || slot == Inv.Selected;
     }
 
@@ -720,6 +725,7 @@ public partial class InventoryUi : CanvasLayer
 
     public override void _UnhandledInput(InputEvent e)
     {
+        if (_items.PhotoUi.Blocking) return;   // the album or a photo is over the panel
         if (IsOpen)
         {
             if (!e.IsPressed() || e.IsEcho()) return;
@@ -758,6 +764,7 @@ public partial class InventoryUi : CanvasLayer
 
     public override void _Input(InputEvent e)
     {
+        if (_items.PhotoUi.Blocking) return;
         if (IsOpen)
         {
             if (HandlePanelMouse(e)) GetViewport().SetInputAsHandled();
@@ -936,7 +943,14 @@ public static class SlotDrawing
         if (!stack.IsEmpty && ItemDefs.Get(stack.Id) is { } def)
         {
             var icon = ItemIcons.Get(stack.Id);
-            if (icon != null)
+            // a photo shows its own print, a thumbnail drawn 1:1
+            if (stack.Id == ItemId.Photo && PhotoStore.Thumbnail(stack.Data) is { } thumb)
+            {
+                var size = thumb.GetSize();
+                float k = Mathf.Min(1f, r.Size.Y * 0.86f / size.Y);
+                c.DrawTextureRect(thumb, new Rect2((r.GetCenter() - size * k * 0.5f).Round(), size * k), false);
+            }
+            else if (icon != null)
             {
                 if (c.TextureFilter != CanvasItem.TextureFilterEnum.Nearest)
                     c.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;

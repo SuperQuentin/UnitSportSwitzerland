@@ -95,7 +95,11 @@ public partial class PlacedProbe : Node
         placed.RequestPlace(PlacedKind.Flag, new Transform3D(Basis.Identity, me.GlobalPosition + new Vector3(40, 0, 0)), "", r => far = r);
         Expect(await Until(() => far != null, 5) && far!.Value.Refused == "Too far away.", $"a flag 40 m away is refused ({far?.Refused})");
 
-        Say($"planted {flag.Id} {photo?.Object?.Id ?? 0}");
+        // a real Polaroid: taken, developed into the pack, stuck on the ground through the item
+        // path, which uploads its image; B joins later and must fetch it by hash
+        string? shot = await TakeAndStickPhoto(me, placed);
+
+        Say($"planted {flag.Id} {photo?.Object?.Id ?? 0} {shot}");
         if (!await Heard("B", "ready", 150)) { Fail("B never joined"); return; }
 
         // the real path again: the shotgun, a shell spent, the event sent
@@ -118,6 +122,38 @@ public partial class PlacedProbe : Node
             placed.RequestRemove(card.Id, r => gone = r);
             Expect(await Until(() => gone != null, 5) && gone!.Value.Ok, "the owner removed its own photo");
         }
+        if (shot != null && placed.All.Values.FirstOrDefault(o => o.Payload == shot) is { } stuck)
+        {
+            _items.PickUpPhoto(stuck.Id);
+            Expect(await Until(() => !placed.All.ContainsKey(stuck.Id) && SlotOfPhoto(shot) >= 0, 5),
+                "the owner took its Polaroid back into the pack");
+        }
+    }
+
+    /// <summary>A: camera Use, wait for the print, then Aim + Use it onto the ground in front. The photo id.</summary>
+    private async Task<string?> TakeAndStickPhoto(FootPlayer me, PlacedObjects placed)
+    {
+        int cam = SlotOf(ItemId.Camera);
+        if (cam < 0) { Expect(false, "a camera in the scratch pack"); return null; }
+        me.LookPitch = 0.05f;
+        await Seconds(0.5);
+        string? shot = null;
+        _items.Printed += id => shot = id;
+        _items.UseSlot(me, cam);
+        Expect(await Until(() => shot != null && SlotOfPhoto(shot) >= 0, ItemController.DevelopSeconds + 5),
+            $"a photo was taken and developed into the pack ({shot})");
+        if (shot == null || SlotOfPhoto(shot) < 0) return null;
+
+        _items.Inventory.Move(SlotOfPhoto(shot), _items.Inventory.Selected);
+        me.LookPitch = -0.9f;
+        _items.ForceAim = true;
+        await Seconds(0.6);
+        _items.UseSlot(me, _items.Inventory.Selected);
+        _items.ForceAim = false;
+        Expect(await Until(() => placed.All.Values.Any(o => o.Kind == PlacedKind.Photo && o.Payload == shot), 5),
+            "the Polaroid is stuck on the ground (item path, image uploaded)");
+        GD.Print($"[placedcheck A] photo {shot}: {PhotoStore.Bytes(shot)?.Length ?? 0} bytes");
+        return shot;
     }
 
     private async Task RunB(FootPlayer me, PlacedObjects placed)
@@ -162,6 +198,35 @@ public partial class PlacedProbe : Node
         var dir = ProjectSettings.GlobalizePath("res://test_output");
         System.IO.Directory.CreateDirectory(dir);
         GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "placedcheck_b.png"));
+
+        // A's Polaroid: in the snapshot by id only; the image must come from the server, by hash
+        var polaroid = placed.All.Values.FirstOrDefault(o => o.Kind == PlacedKind.Photo && o.Owner == "PlacedA"
+                                                             && PhotoStore.IsValidId(o.Payload));
+        Expect(polaroid != null, "A's Polaroid arrived with the join snapshot");
+        if (polaroid != null)
+        {
+            string id = polaroid.Payload;
+            Expect(await Until(() => PhotoStore.Has(id), 15), $"its image {id} was fetched from the server");
+            var bytes = PhotoStore.Bytes(id);
+            Expect(bytes != null && PhotoStore.IdOf(bytes) == id, $"the bytes hash to the id ({bytes?.Length ?? 0} bytes)");
+            Expect(PhotoStore.PathOf(id)?.StartsWith(PhotoStore.CacheDir) == true, "kept in the photo cache, not taken here");
+            await Seconds(0.3);
+            var card = placed.GetNodeOrNull<MeshInstance3D>($"P{polaroid.Id}/Card");
+            Expect(card?.MaterialOverride is StandardMaterial3D sm && sm.AlbedoTexture != null && sm.AlbedoTexture != PhotoVisuals.Blank,
+                "the stuck card shows the image, not the blank");
+
+            // stand a metre back from it, looking down at it
+            var at = polaroid.WorldTransform(placed.Origin).Origin;
+            var fwd = -me.Camera.GlobalTransform.Basis.Z with { Y = 0 };
+            fwd = fwd.LengthSquared() > 1e-4f ? fwd.Normalized() : Vector3.Forward;
+            me.GlobalPosition = at - fwd * 0.75f + Vector3.Up * 0.5f;
+            me.Velocity = Vector3.Zero;
+            me.RequestReplacement();
+            await Until(() => me.IsOnFloor(), 10);
+            me.LookPitch = -1.1f;
+            await Seconds(1.0);
+            GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "placedcheck_b_photo.png"));
+        }
         Say("done");
     }
 
@@ -186,6 +251,12 @@ public partial class PlacedProbe : Node
     private int SlotOf(ItemId id)
     {
         for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].Id == id && !_items.Inventory[i].IsEmpty) return i;
+        return -1;
+    }
+
+    private int SlotOfPhoto(string? id)
+    {
+        for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].Id == ItemId.Photo && _items.Inventory[i].Data == id) return i;
         return -1;
     }
 

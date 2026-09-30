@@ -42,6 +42,12 @@ public partial class HeldItemVisual : Node3D
     private float _pumpT;                       // seconds into the pump; negative while it waits out its delay
     private bool _pumping;
     private ItemId _shown = ItemId.None;
+    private string? _shownData;
+
+    // a Polaroid print sliding out of the bottom of the camera viewmodel (ShowPrint)
+    private MeshInstance3D? _print;
+    private float _printT;
+    private static ArrayMesh? _printMesh;
 
     private Basis _lastCamera = Basis.Identity;
     private Vector3 _sway;
@@ -116,6 +122,41 @@ public partial class HeldItemVisual : Node3D
     /// <summary>Set while the item is at the eye (binoculars) or a photo is being taken: nothing to draw.</summary>
     public bool Suppressed { get; set; }
 
+    /// <summary>
+    /// Per-instance data of the held stack (a photo's id), for items drawn from it. Set by the
+    /// local <see cref="ItemController"/> only: remote copies see the item, not which one.
+    /// </summary>
+    public string? HeldData { get; set; }
+
+    /// <summary>The first-person viewmodel is on screen right now.</summary>
+    public bool ViewmodelShown => _viewmodel != null && IsInstanceValid(_viewmodel) && _viewmodel.Visible;
+
+    /// <summary>
+    /// A print slides out of the bottom of the viewmodel (the Polaroid camera) and hangs there,
+    /// drawn with <paramref name="material"/> (the caller animates its developing), until
+    /// <see cref="HidePrint"/> or the item changes. False if there is no viewmodel on screen.
+    /// </summary>
+    public bool ShowPrint(Material material)
+    {
+        if (!ViewmodelShown) return false;
+        HidePrint();
+        _printMesh ??= PhotoVisuals.BuildCard(Vector3.Zero);
+        _print = new MeshInstance3D
+        {
+            Name = "Print", Mesh = _printMesh, MaterialOverride = material,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Position = new Vector3(0, 0.03f, 0),
+        };
+        _viewmodel!.AddChild(_print);
+        _printT = 0f;
+        return true;
+    }
+
+    public void HidePrint()
+    {
+        if (_print != null && IsInstanceValid(_print)) _print.QueueFree();
+        _print = null;
+    }
     /// <summary>Seconds a shot takes to cycle: the pump starts this long after the shot (see <see cref="Pump"/>) and lasts <see cref="PumpTime"/>.</summary>
     public const float PumpDelay = 0.35f, PumpTime = 0.30f;
 
@@ -165,13 +206,24 @@ public partial class HeldItemVisual : Node3D
 
         var id = (ItemId)_player.HeldItemId;
         bool onFoot = _player.Ride == RideKind.OnFoot;
-        if (id != _shown)
+        if (id != _shown || HeldData != _shownData)
         {
+            if (id != _shown)
+            {
+                _raise = 0f;
+                HidePrint();
+            }
             _shown = id;
+            _shownData = HeldData;
             var mesh = ItemDefs.HandMesh(id);
+            var material = ItemDefs.HandMaterial(id, _shownData) ?? ItemDefs.Material;
             _inHand.Mesh = mesh;
-            if (_viewmodel != null) _viewmodel.Mesh = mesh;
-            _raise = 0f;
+            _inHand.MaterialOverride = material;
+            if (_viewmodel != null)
+            {
+                _viewmodel.Mesh = mesh;
+                _viewmodel.MaterialOverride = material;
+            }
         }
         bool any = id != ItemId.None && onFoot && !Suppressed;
 
@@ -262,6 +314,16 @@ public partial class HeldItemVisual : Node3D
         float rc = Recoil * Recoil;   // squared: a sharp hit that tails off
         _viewmodel.Position = (pos + _sway * swayScale + new Vector3(rc * 0.012f, -lowered + rc * 0.03f, Kick * 0.06f + rc * 0.13f)) * ViewScale;
         _viewmodel.Rotation = rot + new Vector3(Kick * 0.3f + rc * 0.22f, rc * 0.03f, rc * 0.07f);
+
+        if (_print != null && IsInstanceValid(_print))
+        {
+            // out of the slot in 0.8 s, easing to a stop, with a slight droop as it comes free
+            _printT += dt;
+            float u = Mathf.Clamp(_printT / 0.8f, 0f, 1f);
+            u = 1f - (1f - u) * (1f - u);
+            _print.Position = new Vector3(0, Mathf.Lerp(0.03f, -0.045f, u), 0.001f);
+            _print.Rotation = new Vector3(-0.12f * u, 0, 0);
+        }
     }
 
     private void EnsureViewmodel()
@@ -274,7 +336,7 @@ public partial class HeldItemVisual : Node3D
         {
             Name = "Viewmodel",
             Mesh = ItemDefs.HandMesh(_shown),
-            MaterialOverride = ItemDefs.Material,
+            MaterialOverride = ItemDefs.HandMaterial(_shown, _shownData) ?? ItemDefs.Material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
         camera.AddChild(_viewmodel);

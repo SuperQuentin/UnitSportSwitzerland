@@ -40,6 +40,14 @@ public partial class ItemController : Node
     private float _focalMm = 35f;
     private bool _aimingPhoto;
 
+    // the Polaroid: the print coming out and developing (DevelopSeconds), then the Photo item
+    public const float DevelopSeconds = 3f;
+    private PhotoUi _photoUi = null!;
+    private string? _developing;
+    private float _developT;
+    private ShaderMaterial? _develop3D;
+    private MeshInstance3D? _ghost;
+
     /// <summary>Vertical FOV in degrees of a 35 mm-equivalent focal length (35 mm is about 38 degrees).</summary>
     public static float FovFromFocal(float mm) => Mathf.RadToDeg(2f * Mathf.Atan(12f / mm));
 
@@ -51,6 +59,16 @@ public partial class ItemController : Node
 
     public Inventory Inventory => _inventory;
     public InventoryUi Ui => _ui;
+    public PhotoUi PhotoUi => _photoUi;
+
+    /// <summary>Holds Aim down as if pressed ("--aim", and the photo probes).</summary>
+    public bool ForceAim { get => _forceAim; set => _forceAim = value; }
+
+    /// <summary>The photo id being developed right now (it becomes an item when done), or null.</summary>
+    public string? Developing => _developing;
+
+    /// <summary>Raised when a developed print goes into the pack (or would not fit): the photo id.</summary>
+    public event Action<string>? Printed;
 
     public ItemController(Inventory inventory, WorldOrigin origin)
     {
@@ -67,6 +85,8 @@ public partial class ItemController : Node
         AddChild(_sfx);
         _ui = new InventoryUi(this) { Name = "InventoryUi" };
         AddChild(_ui);
+        _photoUi = new PhotoUi(this) { Name = "PhotoUi" };
+        AddChild(_photoUi);
         _smart = new SmartBinocularsHud();
         AddChild(_smart);
 
@@ -112,7 +132,12 @@ public partial class ItemController : Node
         var player = CurrentPlayer();
         _ui.PlayerPresent = player is { IsViewing: true };
         _ui.ItemsActive = UsablePlayer != null;
-        if (player == null) return;
+        UpdateDevelop((float)delta);
+        if (player == null)
+        {
+            ShowGhost(null);
+            return;
+        }
 
         // cash you carry is lost when you go down; what you claimed to the account is not
         if (player.KnockedOut && !_wasKnockedOut && _inventory.Cash > 0)
@@ -125,6 +150,7 @@ public partial class ItemController : Node
 
         player.HeldItemId = (int)_inventory.HeldId;
         var visual = player.GetNodeOrNull<HeldItemVisual>("HeldItem");
+        if (visual != null) visual.HeldData = _inventory.Held.Data;
 
         var def = ItemDefs.Get(_inventory.HeldId);
         bool usable = UsablePlayer != null;
@@ -144,6 +170,10 @@ public partial class ItemController : Node
         // held items stay visible while aiming: they are raised to a pose. Binoculars and the
         // camera hide once at the eye (you look through them: the overlay is the view).
         bool poseSettled = visual?.PoseSettled ?? true;
+        // a photo in hand with Aim held: a ghost where it would stick (the print stays low, out of the way)
+        bool sticking = usable && !UiFocus.TextEntryActive && def?.Use == ItemUse.Print
+                        && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+        ShowGhost(sticking ? StickTarget(player).At : null);
         if (visual != null)
         {
             visual.SetPose(!aiming ? ViewPose.Rest : def!.Use switch
@@ -219,7 +249,16 @@ public partial class ItemController : Node
     // using things
     // ------------------------------------------------------------------------------------
 
-    private void UseHeld(FootPlayer player) => UseSlot(player, _inventory.Selected);
+    private void UseHeld(FootPlayer player)
+    {
+        // an empty hand takes back a photo of yours you are looking at
+        if (_inventory.Held.IsEmpty)
+        {
+            if (StickTarget(player).PhotoId is long id) PickUpPhoto(id);
+            return;
+        }
+        UseSlot(player, _inventory.Selected);
+    }
 
     /// <summary>Uses whatever is in <paramref name="slot"/>; the inventory panel calls this for "Use" on any slot.</summary>
     public void UseSlot(FootPlayer? player, int slot)
@@ -291,6 +330,19 @@ public partial class ItemController : Node
             case ItemUse.Material:
                 _ui.Toast($"{def.Name}: keep it for trading or building.");
                 break;
+
+            case ItemUse.Print:
+                // Aim + Use sticks it (or takes back a stuck one); Use alone looks at it
+                if (slot == _inventory.Selected && !_ui.IsOpen
+                    && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim))
+                    StickOrPickUpPhoto(player, slot);
+                else
+                {
+                    if (slot == _inventory.Selected && player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } hv)
+                        hv.PlayOneShot(ViewPose.Inspect, 0.25f, 0.6f, 0.3f);
+                    _photoUi.Inspect(stack.Data);
+                }
+                break;
         }
     }
 
@@ -329,12 +381,19 @@ public partial class ItemController : Node
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
 
         string path = "";
+        string? photo = null;
         try
         {
             var image = GetViewport().GetTexture().GetImage();
             DirAccess.MakeDirRecursiveAbsolute("user://photos");
             path = $"user://photos/photo_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
             image.SavePng(path);
+            // the Polaroid print: square crop on the white card, named by its hash, with where and when
+            if (IsInstanceValid(player))
+            {
+                var (e, n) = _origin.ToLv95(player.GlobalPosition);
+                photo = PhotoStore.Save(image, e, n, player.GlobalPosition.Y, _focalMm, path);
+            }
         }
         catch (Exception e)
         {
@@ -350,7 +409,171 @@ public partial class ItemController : Node
         Kick(player);
         Play(SfxSynth.Tick, 0.6f);
         _ui.Flash();
-        _ui.Toast(path.Length > 0 ? $"Photo saved: {ProjectSettings.GlobalizePath(path)}" : "Photo failed.");
+        if (photo == null)
+        {
+            _ui.Toast("Photo failed.");
+            return;
+        }
+        // two frames for the camera hidden during the capture to be drawn again, so the print
+        // knows whether it can come out of it
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (IsInstanceValid(player)) StartDevelop(player, photo);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // the Polaroid: printing, sticking, taking back
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The print comes out: from the bottom of the camera when it is on screen in first person,
+    /// else as a card rising at the bottom of the screen (the camera is at the eye then). It
+    /// develops over <see cref="DevelopSeconds"/>, then goes in the pack. Film is unlimited.
+    /// </summary>
+    private void StartDevelop(FootPlayer player, string photo)
+    {
+        if (_developing != null) FinishDevelop();   // a quick second shot: the first is done
+        var tex = PhotoStore.Texture(photo) ?? PhotoVisuals.Blank;
+        _developing = photo;
+        _developT = 0f;
+        _develop3D = PhotoVisuals.Developing3D(tex);
+        var visual = player.GetNodeOrNull<HeldItemVisual>("HeldItem");
+        if (visual == null || !visual.ShowPrint(_develop3D)) _photoUi.StartDevelop(tex);
+        Play(SfxSynth.Whoosh, 2.2f);   // the motor pushing the print out
+    }
+
+    private void UpdateDevelop(float dt)
+    {
+        if (_developing == null) return;
+        _developT += dt;
+        float t = Mathf.Clamp(_developT / DevelopSeconds, 0f, 1f);
+        _develop3D?.SetShaderParameter("develop", t);
+        _photoUi.SetDevelop(t);
+        if (_developT >= DevelopSeconds + 0.3f) FinishDevelop();
+    }
+
+    private void FinishDevelop()
+    {
+        if (_developing is not { } photo) return;
+        _developing = null;
+        _photoUi.EndDevelop();
+        if (CurrentPlayer()?.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v) v.HidePrint();
+        if (_inventory.Add(new ItemStack(ItemId.Photo, 1, photo)) > 0)
+            _ui.Toast("Pack full: the photo is only in your album.");
+        else
+        {
+            Play(SfxSynth.Chime, 1.5f);
+            _ui.Toast("Photo developed: in your pack.");
+        }
+        Printed?.Invoke(photo);
+    }
+
+    /// <summary>What Aim + Use would do with a photo right now: stick it at <c>At</c>, or take back placed photo <c>PhotoId</c>.</summary>
+    private (Transform3D? At, long? PhotoId, string? Why) StickTarget(FootPlayer player)
+    {
+        var camera = player.Camera;
+        var from = camera.GlobalPosition;
+        var forward = -camera.GlobalTransform.Basis.Z;
+        float reach = PlaceReach + from.DistanceTo(player.GlobalPosition + Vector3.Up * 1.6f);
+        var query = PhysicsRayQueryParameters3D.Create(from, from + forward * reach,
+            uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() });
+        var hit = player.GetWorld3D().DirectSpaceState.IntersectRay(query);
+        if (hit.Count == 0) return (null, null, "Nothing in reach to stick it on.");
+        if (PlacedObjects.IdOf(hit["collider"].AsGodotObject() as Node) is long id
+            && PlacedObjects.Instance?.All.TryGetValue(id, out var o) == true && o.Kind == PlacedKind.Photo)
+            return (null, id, null);
+        var point = hit["position"].AsVector3();
+        if (point.DistanceTo(player.GlobalPosition) > PlaceReach) return (null, null, "Too far away.");
+        return (PhotoVisuals.StickTransform(point, hit["normal"].AsVector3(), forward), null, null);
+    }
+
+    /// <summary>Aim + Use with a photo: sticks it where you look, or takes back the stuck photo you look at.</summary>
+    public void StickOrPickUpPhoto(FootPlayer player, int slot)
+    {
+        if (PlacedObjects.Instance is not { } placed) return;
+        var target = StickTarget(player);
+        if (target.PhotoId is long id)
+        {
+            PickUpPhoto(id);
+            return;
+        }
+        if (target.At is not { } at)
+        {
+            _ui.Toast(target.Why ?? "Cannot stick it there.");
+            return;
+        }
+        var stack = _inventory[slot];
+        if (stack.Id != ItemId.Photo || !PhotoStore.IsValidId(stack.Data) || !PhotoStore.Has(stack.Data!))
+        {
+            _ui.Toast("This print has no image to stick.");
+            return;
+        }
+        // the image goes to the server first, so the others can fetch it once the photo is up
+        PhotoTransfer.Instance?.Upload(stack.Data!);
+        _inventory.TakeOne(slot);
+        Kick(player);
+        placed.RequestPlace(PlacedKind.Photo, at, stack.Data!, r =>
+        {
+            if (!r.Ok)
+            {
+                _inventory.Add(stack with { Count = 1 });   // refused: the print comes back
+                _ui.Toast($"Cannot stick it here: {r.Refused}");
+                return;
+            }
+            Play(SfxSynth.Tick, 1.8f);
+            _ui.Toast("Photo stuck. Use on it with an empty hand to take it back.");
+        });
+    }
+
+    /// <summary>Takes a stuck photo back into the pack (the server only lets its owner).</summary>
+    public void PickUpPhoto(long id)
+    {
+        if (PlacedObjects.Instance is not { } placed || !placed.All.TryGetValue(id, out var o)) return;
+        if (_inventory.Room(ItemId.Photo, o.Payload) < 1)
+        {
+            _ui.Toast("No room in your pack.");
+            return;
+        }
+        placed.RequestRemove(id, r =>
+        {
+            if (!r.Ok)
+            {
+                _ui.Toast($"Cannot take it: {r.Refused}");
+                return;
+            }
+            if (_inventory.Add(new ItemStack(ItemId.Photo, 1, o.Payload)) > 0) _ui.Toast("No room in your pack: the photo is lost.");
+            else _ui.Toast("Photo taken back.");
+            Play(SfxSynth.Whoosh, 1.6f);
+        });
+    }
+
+    /// <summary>A see-through card where the held photo would stick, while Aim is held; null hides it.</summary>
+    private void ShowGhost(Transform3D? at)
+    {
+        if (at == null)
+        {
+            if (_ghost != null && IsInstanceValid(_ghost)) _ghost.Visible = false;
+            return;
+        }
+        if (_ghost == null || !IsInstanceValid(_ghost))
+        {
+            _ghost = new MeshInstance3D
+            {
+                Name = "PhotoGhost", Mesh = PhotoVisuals.Card, TopLevel = true,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            };
+            AddChild(_ghost);
+        }
+        var tex = PhotoStore.Texture(_inventory.Held.Data) ?? PhotoVisuals.Blank;
+        if (_ghost.MaterialOverride is not StandardMaterial3D m || m.AlbedoTexture != tex)
+            _ghost.MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoTexture = tex, AlbedoColor = new Color(1, 1, 1, 0.55f),
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            };
+        _ghost.GlobalTransform = at.Value;
+        _ghost.Visible = true;
     }
 
     /// <summary>
