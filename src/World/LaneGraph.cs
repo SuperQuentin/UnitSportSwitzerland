@@ -108,6 +108,9 @@ public sealed class LaneGraph
         list.Add((edge, atStart));
     }
 
+    /// <summary>How many edge ends meet at a point: 2 is a road carrying on (a tile seam, a split line), 3 or more a junction.</summary>
+    public int Degree(long key) => _incident.TryGetValue(key, out var list) ? list.Count : 0;
+
     /// <summary>Everything leaving a junction that may be driven away from it.</summary>
     public IEnumerable<(LaneEdge Edge, bool Forward)> Leaving(long key)
     {

@@ -154,6 +154,9 @@ public partial class DriveProbe : Node
                     GD.Print($"[drive] route: {route.Class}, {route.Arc[^1]:F0} m, racing line {route.Length:F0} m "
                         + $"(max {route.Line.RoomLeft.Concat(route.Line.RoomRight).DefaultIfEmpty(0).Max():F1} m of room to a side)");
                     PrintVerge(route);
+                    // where the route runs, to find a spot again (LV95 every 500 m)
+                    GD.Print("[drive] route LV95: " + string.Join(", ", Enumerable.Range(0, (int)(route.Length / 500f) + 1)
+                        .Select(k => { var (e, n) = _origin.ToLv95(route.Line.PointAt(k * 500f)); return $"{k * 500} m {e:F0},{n:F0}"; })));
                 }).CallDeferred();
             });
             return;
@@ -198,13 +201,13 @@ public partial class DriveProbe : Node
                     entry.Hits[what] = entry.Hits.GetValueOrDefault(what) + 1;
                     _log.Add($"{_t,5:F1}s {label}: impact ({what}) at {entry.Arc:F0} m ({entry.Player.Motion.Speed * 3.6f:F0} km/h){(entry.Pilot?.Seen is { Length: > 0 } seen ? $" — saw {seen}" : "")}");
                 };
-                player.Announced += (text, _) => _log.Add($"{_t,5:F1}s {label}: {text}");
+                player.Announced += (text, _) => _log.Add($"{_t,5:F1}s {label}: {text} (touching {HitKind(player)}{(entry.Pilot?.Seen is { Length: > 0 } seen ? $", saw {seen}" : "")})");
                 _entries.Add(entry);
             }
             // the traffic yields to the local player only, and there is none here: without this it
             // drove through the race as if the cars were not there, and shunted them back up the pass
             if (FindTraffic(GetTree().Root) is { } traffic)
-                traffic.Obstacles = () => _entries.Where(e => !e.Out).Select(e => e.Player.GlobalPosition);
+                traffic.Obstacles = () => _entries.Where(e => !e.Out).Select(e => (e.Player.GlobalPosition, e.Player.WorldVelocity));
             return;
         }
 
@@ -262,7 +265,8 @@ public partial class DriveProbe : Node
             {
                 en.Out = true;
                 en.Wreck = en.Player.GlobalPosition;
-                _log.Add($"{_t,5:F1}s {en.Label} is OUT (crashed at {en.Arc:F0} m)");
+                var (outE, outN) = _origin.ToLv95(en.Player.GlobalPosition);
+                _log.Add($"{_t,5:F1}s {en.Label} is OUT (crashed at {en.Arc:F0} m, LV95 {outE:F0},{outN:F0})");
             }
             RecordFix(en, delta);
             CountPasses(en);
@@ -487,7 +491,7 @@ public partial class DriveProbe : Node
             switch (p.GetSlideCollision(i).GetCollider())
             {
                 case FootPlayer: return "car";
-                case AnimatableBody3D: kind = "traffic"; break;
+                case AnimatableBody3D a: kind = a.Name.ToString().Contains("Train") ? "train" : "traffic"; break;
                 case CollisionObject3D c when (c.CollisionLayer & World.TreeColliders.Layer) != 0 && kind == "other": kind = "tree"; break;
             }
         return kind;
