@@ -19,7 +19,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 ## Commands
 
-- `commands` — Commands: --at, --goto, --licenses, --menu, --path, --probe, --shot
+- `commands` — Commands: --at, --chatcheck, --goto, --licenses, --menu, --path, --probe, --shot, --title
 
 ## Gotchas
 

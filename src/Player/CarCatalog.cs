@@ -18,7 +18,7 @@ namespace UnitSport.Player;
 ///
 /// <para>
 /// Names are the chassis code plus what it is ("AE86 hatch"), not brand or model names, and the
-/// blurb says who drives it in the series.
+/// blurb describes the real car: model, era, engine and drivetrain, what it is known for.
 /// </para>
 /// </summary>
 public static class CarCatalog
@@ -35,7 +35,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "AE86 hatch",
-            Blurb = "Tofu delivery panda: light, rear drive, a 4A-GE that revs to 7,800. {throttle} gas, {brake} brake, {jump} handbrake",
+            Blurb = "1983 Toyota Sprinter Trueno: light, rear drive, a 4A-GE twin-cam that revs to 7,800, a drift and hill-climb icon. {throttle} gas, {brake} brake, {jump} handbrake",
             Body = new CarBody
             {
                 Shape = BodyShape.Hatchback, Length = 4.2f, Width = 1.63f, Height = 1.34f, WheelRadius = 0.29f,
@@ -54,7 +54,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "FD3S",
-            Blurb = "Yellow twin-turbo rotary, rear drive, 280 hp. Snappy: throttle alone breaks the rear loose",
+            Blurb = "1990s Mazda RX-7: sequential twin-turbo 13B rotary, rear drive, 280 PS. Snappy: throttle alone breaks the rear loose",
             Body = new CarBody
             {
                 Shape = BodyShape.Fastback, Length = 4.3f, Width = 1.76f, Height = 1.23f, WheelRadius = 0.31f,
@@ -73,7 +73,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "GC8 rally saloon",
-            Blurb = "Turbo boxer, four-wheel drive. Grips hard; drifts all four wheels on gravel",
+            Blurb = "1990s Subaru Impreza WRX STi: turbo boxer, four-wheel drive, born of the World Rally Championship. Grips hard; drifts all four wheels on gravel",
             Body = new CarBody
             {
                 Shape = BodyShape.Sedan, Length = 4.4f, Width = 1.74f, Height = 1.43f, WheelRadius = 0.32f,
@@ -97,7 +97,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "FC3S",
-            Blurb = "Ryosuke Takahashi's white RX-7: the White Comet, a precise turbo rotary tuned for hill climbs",
+            Blurb = "Second-generation Mazda RX-7 (1985-92): a light, precise turbo rotary with rear drive and near-even balance",
             Body = new CarBody
             {
                 Shape = BodyShape.Fastback, Length = 4.3f, Width = 1.69f, Height = 1.27f, WheelRadius = 0.31f,
@@ -117,7 +117,7 @@ public static class CarCatalog
         {
             Label = "BNR32",
             Style = DriveStyle.Grip,
-            Blurb = "Takeshi Nakazato's Skyline GT-R: the Night Kid's twin-turbo six with AWD grip, heavy in the corners",
+            Blurb = "1989 Nissan Skyline GT-R: twin-turbo RB26 six and ATTESA four-wheel drive that dominated Group A touring cars. Heavy in the corners",
             Body = new CarBody
             {
                 Shape = BodyShape.Coupe, Length = 4.54f, Width = 1.755f, Height = 1.34f, WheelRadius = 0.316f,
@@ -138,7 +138,7 @@ public static class CarCatalog
         {
             Label = "EG6 hatch",
             Style = DriveStyle.Grip,
-            Blurb = "Shingo Shoji's Civic SiR-II: a front-drive VTEC screamer that wins on the climb",
+            Blurb = "1990s Honda Civic SiR-II: a light front-drive hatch with a 1.6 VTEC that revs past 8,000",
             Body = new CarBody
             {
                 Shape = BodyShape.Hatchback, Length = 4.0f, Width = 1.695f, Height = 1.34f, WheelRadius = 0.29f,
@@ -158,7 +158,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "S13 Silvia",
-            Blurb = "Koichiro Iketani's turbo coupe: the Akina Speed Stars' old-school drifter",
+            Blurb = "Late-1980s Nissan Silvia: turbo CA18 four, rear drive, the budget coupe that grew up with drifting",
             Body = new CarBody
             {
                 Shape = BodyShape.Coupe, Length = 4.44f, Width = 1.69f, Height = 1.29f, WheelRadius = 0.3f,
@@ -177,7 +177,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "RPS13 180SX",
-            Blurb = "Kenji's One-Eighty: a turbo SR20 fastback that drifts on the touge, a rival's dream",
+            Blurb = "Nissan 180SX: pop-up fastback with the turbo SR20, rear drive and long a favourite of drift grids",
             Body = new CarBody
             {
                 Shape = BodyShape.Fastback, Length = 4.5f, Width = 1.69f, Height = 1.29f, WheelRadius = 0.31f,
@@ -196,7 +196,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "PS13 Sileighty",
-            Blurb = "Mako Sato's Impact Blue: a 180SX with a Silvia face, a wild rear-drive turbo that leaves no time to think",
+            Blurb = "A 180SX wearing a Silvia front: a drift-scene favourite, later built as a limited run by a tuner. Turbo SR20, rear drive",
             Body = new CarBody
             {
                 Shape = BodyShape.Fastback, Length = 4.5f, Width = 1.69f, Height = 1.29f, WheelRadius = 0.31f,
@@ -215,7 +215,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "AE85 Levin",
-            Blurb = "Itsuki Takeuchi's little brother of the AE86: a 1.5 litre that is all about learning to drive",
+            Blurb = "Toyota Corolla Levin 1.5: the AE86's plain sister with a single-cam 3A engine. Rear drive and forgiving, a car to learn on",
             Body = new CarBody
             {
                 Shape = BodyShape.Coupe, Length = 4.2f, Width = 1.63f, Height = 1.31f, WheelRadius = 0.28f,
@@ -234,7 +234,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "AE86 coupe",
-            Blurb = "Two-door Trueno of Akina's rivals (Wataru Akiyama, Shinji Inui): same 4A-GE as the tofu hatch",
+            Blurb = "Two-door AE86 Sprinter Trueno: the same 4A-GE and rear drive as the hatch, a little lighter",
             Body = new CarBody
             {
                 Shape = BodyShape.Coupe, Length = 4.2f, Width = 1.63f, Height = 1.31f, WheelRadius = 0.29f,
@@ -255,7 +255,7 @@ public static class CarCatalog
         {
             Label = "CE9A Evo III",
             Style = DriveStyle.Grip,
-            Blurb = "Kyoichi Sudo's Emperor Evo: turbo four-wheel drive that pulls out of every corner",
+            Blurb = "1995 Mitsubishi Lancer Evolution III: turbo 4G63, four-wheel drive, a Group A rally weapon for the road",
             Body = new CarBody
             {
                 Shape = BodyShape.Sedan, Length = 4.31f, Width = 1.69f, Height = 1.42f, WheelRadius = 0.31f,
@@ -276,7 +276,7 @@ public static class CarCatalog
         {
             Label = "CN9A Evo IV",
             Style = DriveStyle.Grip,
-            Blurb = "Seiji Iwaki's Evo IV: active yaw control turns the AWD saloon into a scalpel",
+            Blurb = "1996 Mitsubishi Lancer Evolution IV: turbo four-wheel drive with Active Yaw Control that pulls the nose into the corner",
             Body = new CarBody
             {
                 Shape = BodyShape.Sedan, Length = 4.33f, Width = 1.7f, Height = 1.42f, WheelRadius = 0.315f,
@@ -297,7 +297,7 @@ public static class CarCatalog
         {
             Label = "CT9A Evo VII",
             Style = DriveStyle.Grip,
-            Blurb = "The Evo VII GSR that meets Project D in Final Stage: active centre diff, the last of the iron-block era",
+            Blurb = "2001 Mitsubishi Lancer Evolution VII: active centre diff and yaw control, the rally-bred turbo 4G63 still up front",
             Body = new CarBody
             {
                 Shape = BodyShape.Sedan, Length = 4.35f, Width = 1.7f, Height = 1.45f, WheelRadius = 0.32f,
@@ -319,7 +319,7 @@ public static class CarCatalog
         {
             Label = "NA1 NSX",
             Style = DriveStyle.Grip,
-            Blurb = "Go Hojo's Sidewinder NSX: mid-engined V6, the overwhelming car of Project D's Kanagawa run",
+            Blurb = "1990 Honda NSX: aluminium mid-engined V6 supercar developed with Ayrton Senna's input. Balanced and precise",
             Body = new CarBody
             {
                 Shape = BodyShape.Midship, Length = 4.43f, Width = 1.81f, Height = 1.17f, WheelRadius = 0.32f,
@@ -339,7 +339,7 @@ public static class CarCatalog
         {
             Label = "EK9 Type R",
             Style = DriveStyle.Grip,
-            Blurb = "A yellow Civic Type R: high-revving front drive that punishes any mistake in a hairpin",
+            Blurb = "1997 Honda Civic Type R: a stripped, high-revving front-drive hatch (B16B to 8,400) that punishes any mistake in a hairpin",
             Body = new CarBody
             {
                 Shape = BodyShape.Hatchback, Length = 4.1f, Width = 1.695f, Height = 1.35f, WheelRadius = 0.3f,
@@ -360,7 +360,7 @@ public static class CarCatalog
         {
             Label = "DC2 Type R",
             Style = DriveStyle.Grip,
-            Blurb = "A white Integra Type R (turbocharged in the series): the front-drive coupe with the sharpest nose",
+            Blurb = "Honda Integra Type R: seam-welded, lightened front-drive coupe with an 8,000 rpm VTEC and the sharpest nose of its era",
             Body = new CarBody
             {
                 Shape = BodyShape.Coupe, Length = 4.38f, Width = 1.695f, Height = 1.32f, WheelRadius = 0.3f,
@@ -382,7 +382,7 @@ public static class CarCatalog
         {
             Label = "SW20 MR2",
             Style = DriveStyle.Grip,
-            Blurb = "Kai Kogashiwa's MR2: mid-engine balance, sharp until it snaps",
+            Blurb = "Toyota MR2 (1989-99): affordable mid-engined coupe with near-perfect balance, sharp until it snaps",
             Body = new CarBody
             {
                 Shape = BodyShape.Midship, Length = 4.17f, Width = 1.7f, Height = 1.24f, WheelRadius = 0.3f,
@@ -402,7 +402,7 @@ public static class CarCatalog
         {
             Label = "ZZW30 MR-S",
             Style = DriveStyle.Grip,
-            Blurb = "Kai Kogashiwa's open two-seater in Kanagawa: featherweight and mid-engined",
+            Blurb = "Toyota MR2 Spyder (MR-S): featherweight open two-seater with the engine behind the seats",
             Body = new CarBody
             {
                 Shape = BodyShape.Roadster, Length = 3.89f, Width = 1.695f, Height = 1.24f, WheelRadius = 0.29f,
@@ -421,7 +421,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "JZA80 Supra",
-            Blurb = "Minagawa's Supra RZ in Kanagawa: a twin-turbo 2JZ with more power than the road can hold",
+            Blurb = "1990s Toyota Supra RZ: twin-turbo 2JZ straight six famed for taking huge tuning power. More grunt than the road can hold",
             Body = new CarBody
             {
                 Shape = BodyShape.Fastback, Length = 4.51f, Width = 1.81f, Height = 1.27f, WheelRadius = 0.33f,
@@ -441,7 +441,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "NA6CE Roadster",
-            Blurb = "Tohru's Roadster of Seven Star Leaf, the first MX-5: light, a tiny 1.6, pop-up eyes ({lights_toggle}) and a top that folds ({roof_toggle})",
+            Blurb = "1989 Mazda MX-5 (Eunos Roadster), the first one: light, a revvy 1.6, rear drive, pop-up eyes ({lights_toggle}) and a top that folds ({roof_toggle})",
             Body = new CarBody
             {
                 Shape = BodyShape.Roadster, Length = 3.95f, Width = 1.675f, Height = 1.235f, WheelRadius = 0.29f,
@@ -460,7 +460,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "NB8C Roadster",
-            Blurb = "Satoshi Omiya's Roadster of Team 246: the second-generation open car, cleanly balanced",
+            Blurb = "Second-generation Mazda MX-5 (1998-2005): 1.8, rear drive, cleanly balanced open car",
             Body = new CarBody
             {
                 Shape = BodyShape.Roadster, Length = 3.95f, Width = 1.68f, Height = 1.235f, WheelRadius = 0.3f,
@@ -479,7 +479,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "ER34 Skyline",
-            Blurb = "Atsuro Kawai's 25GT Turbo coupe: a rear-drive six that Seven Star Leaf uses as a heavy hammer",
+            Blurb = "Nissan Skyline 25GT Turbo (1998-2002): turbo RB25 straight six and rear drive, a heavy but willing coupe",
             Body = new CarBody
             {
                 Shape = BodyShape.Coupe, Length = 4.6f, Width = 1.72f, Height = 1.34f, WheelRadius = 0.32f,
@@ -499,7 +499,7 @@ public static class CarCatalog
         {
             Label = "BNR34",
             Style = DriveStyle.Grip,
-            Blurb = "Kozo Hoshino's God Foot R34 GT-R of Purple Shadow: AWD, twin turbo, brutally fast on the flat",
+            Blurb = "1999 Nissan Skyline GT-R V-spec II: twin-turbo RB26, ATTESA E-TS Pro four-wheel drive, brutally fast on the flat",
             Body = new CarBody
             {
                 Shape = BodyShape.Coupe, Length = 4.6f, Width = 1.785f, Height = 1.36f, WheelRadius = 0.32f,
@@ -520,7 +520,7 @@ public static class CarCatalog
         {
             Label = "Z33",
             Style = DriveStyle.Grip,
-            Blurb = "The Fairlady Z from Final Stage's line-up: a torquey V6 coupe, more grip than finesse",
+            Blurb = "2002 Nissan 350Z (Fairlady Z): a torquey 3.5 V6 rear-drive coupe, more grip than finesse",
             Body = new CarBody
             {
                 Shape = BodyShape.Coupe, Length = 4.31f, Width = 1.815f, Height = 1.31f, WheelRadius = 0.33f,
@@ -540,7 +540,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "ZN6",
-            Blurb = "The GT86, the AE86's modern heir and Kanata Rivington's car in MF Ghost: light, low and rear drive",
+            Blurb = "2012 Toyota GT86: the AE86's modern heir with a revvy flat-four, light, low and rear drive",
             Body = new CarBody
             {
                 Shape = BodyShape.Coupe, Length = 4.24f, Width = 1.775f, Height = 1.285f, WheelRadius = 0.32f,

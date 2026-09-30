@@ -244,7 +244,7 @@ public partial class CarRig : Node3D
             _windows.Scale = new Vector3(1f, Mathf.Max(1f - down, 0.01f), 1f);
             float fold = Mathf.SmoothStep(0f, 1f, Mathf.Clamp((_roof - FoldFrom) / (1f - FoldFrom), 0f, 1f));
             _top.Scale = new Vector3(1f, Mathf.Lerp(1f, FoldedHeight, fold), Mathf.Lerp(1f, FoldedLength, fold));
-            // the glass box around the seats does not hide them (boxes render inside out)
+            // put away with the top up: nobody sees the seats through the roof, so do not draw them
             _cockpit!.Visible = _roof > 0f;
         }
         if (_flaps != null && _flapLamps != null)

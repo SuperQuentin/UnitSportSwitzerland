@@ -77,6 +77,8 @@ public partial class InteriorManager : Node3D
     public Func<TileId, StaticBody3D?>? BuildingBodies { get; set; }
     /// <summary>Client: where the facade shader's occupancy cues go (<c>ChunkManager.SetOccupancy</c>).</summary>
     public Action<Vector4[], Vector4[], int>? OccupancySink { get; set; }
+    /// <summary>Client: where the facade shader's open doors go (<c>ChunkManager.SetOpenDoors</c>, see <see cref="DoorPortals.OpenDoors"/>).</summary>
+    public Action<Vector4[], Vector4[], int>? OpenDoorsSink { get; set; }
 
     /// <summary>
     /// Raised on the client when the outside world has to be drawn (true) or may be hidden
@@ -158,7 +160,11 @@ public partial class InteriorManager : Node3D
         _prompt.Size = new Vector2(300, 30);
         _ui.AddChild(_prompt);
 
-        _portals = new DoorPortals(() => _links.Values, PlanAt) { Name = "Portals" };
+        _portals = new DoorPortals(() => _links.Values, PlanAt)
+        {
+            Name = "Portals",
+            OpenDoors = (boxes, axes, count) => OpenDoorsSink?.Invoke(boxes, axes, count),
+        };
         AddChild(_portals);
         _sounds = new BuildingSounds { Name = "Sounds" };
         AddChild(_sounds);
@@ -265,7 +271,7 @@ public partial class InteriorManager : Node3D
                 return true;
             }
         }
-        else door = DoorIndex.Nearest(player.GlobalPosition, DoorReach)?.Key.ToString();
+        else door = DoorIndex.NearestEntrance(player.GlobalPosition, DoorReach)?.Key.ToString();
         if (door == null) return false;
         if (_requestingDoor != null) return true;
 
@@ -291,6 +297,8 @@ public partial class InteriorManager : Node3D
         {
             var layout = BuildingKey.TryParse(door, out _) ? await GetOrCreate(door) : null;
             if (layout == null || Origin == null) { Refuse(sender, "This door is locked."); return; }
+            // a garage is walked or driven into for real (GarageBay), never entered as an interior
+            if (layout.Kind == BuildingKind.Garage) { Refuse(sender, "A garage door opens for cars."); return; }
             if (!NearDoor(sender, layout, door, ServerDoorReach)) { Refuse(sender, "Too far from the door."); return; }
             // the plan first: the opener builds the interior while the door starts to swing
             if (open) SendPlan(sender, layout, door);
@@ -462,7 +470,9 @@ public partial class InteriorManager : Node3D
         foreach (var link in _links.Values.ToList())
         {
             link.Open = _doors.ContainsKey(link.Door);
-            bool gone = !link.Open && link.Swing <= 0f;
+            // a shut door of the building we are in stays linked: a leaf going solid on someone
+            // standing in the doorway can push them out through the hole, and that is a way out
+            bool gone = !link.Open && link.Swing <= 0f && link.Plan != inside;
             if (gone || !Wanted(link.Door, link.Plan)) DropLink(link);
         }
 
@@ -579,8 +589,12 @@ public partial class InteriorManager : Node3D
     {
         foreach (var link in _links.Values)
         {
-            if (!link.Passable) continue;
             bool inside = p.Indoors;
+            // Out is let through whatever the door is doing: swinging, its leaf is not solid yet
+            // but the door is not passable, and a leaf going solid can push someone standing in it
+            // out through the hole. Past the hole is only the void under the terrain. In, the
+            // facade's shell stops anyone the door does not let through.
+            if (!inside && !link.Passable) continue;
             if (inside && p.InteriorKey != link.Plan) continue;
             var frame = (inside ? link.Inside : link.Outside).AffineInverse();
             var a = frame * before;
@@ -588,7 +602,9 @@ public partial class InteriorManager : Node3D
             bool crossed = inside ? a.Z < 0 && b.Z >= 0 : a.Z >= 0 && b.Z < 0;
             if (!crossed) continue;
             var at = a.Lerp(b, a.Z / (a.Z - b.Z));
-            if (Mathf.Abs(at.X) > link.HalfPass || at.Y < -1.2f || at.Y > 1.2f) continue;
+            // out: anywhere through the hole, it has no other side
+            float half = inside ? link.InsideWidth / 2 : link.HalfPass;
+            if (Mathf.Abs(at.X) > half || at.Y < -1.2f || at.Y > 1.2f) continue;
             Cross(p, link, inward: !inside);
             return;
         }
@@ -830,7 +846,7 @@ public partial class InteriorManager : Node3D
                 door = ExitAt(p)?.Door;
                 if (door == null) text = Loot.LootService.Instance?.PromptFor(p);
             }
-            else if (!p.Indoors) door = DoorIndex.Nearest(p.GlobalPosition, DoorReach)?.Key.ToString();
+            else if (!p.Indoors) door = DoorIndex.NearestEntrance(p.GlobalPosition, DoorReach)?.Key.ToString();
             if (door != null)
                 text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
         }
