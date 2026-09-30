@@ -33,6 +33,15 @@ public sealed record CarBody
     public float Width { get; init; } = 1.7f;
     public float Height { get; init; } = 1.3f;
     public float WheelRadius { get; init; } = 0.3f;
+    // ---- a preset's look (Player/CarSetup, #40); the defaults are the catalog car ----
+    /// <summary>Body raised (+) or lowered (−) over the wheels, m.</summary>
+    public float Lift { get; init; }
+    /// <summary>Tyre tread: 0 smooth, 1 blocks, 2 big mud lugs.</summary>
+    public int Tread { get; init; }
+    /// <summary>A roof rack with a spare wheel and jerrycans.</summary>
+    public bool RoofRack { get; init; }
+    /// <summary>A tubular bumper bar over the nose.</summary>
+    public bool BullBar { get; init; }
     public Color Paint { get; init; } = new(0.9f, 0.9f, 0.9f);
     /// <summary>Two-tone: the lower body, sills and bumpers (the AE86 "panda" black). Null = paint.</summary>
     public Color? Lower { get; init; }
@@ -87,6 +96,10 @@ public partial class CarRig : Node3D
     {
         var rig = new CarRig { Name = "Car" };
         rig.Assemble(CarMeshBuilder.Build(body, wheelbase));
+        // a preset's ride height, tread and off-road kit: the body moves with everything on it,
+        // the wheels stay on the road (they are the rig's own children)
+        rig._body.Position += Vector3.Up * body.Lift;
+        CarKit.Fit(rig._body, body, wheelbase, rig._spin);
         return rig;
     }
 

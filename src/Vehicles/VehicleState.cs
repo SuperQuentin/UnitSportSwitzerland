@@ -21,7 +21,9 @@ public readonly record struct VehicleState(
     long Owner = 0,
     string Name = "",
     bool Headlights = false,
-    bool RoofOpen = false)
+    bool RoofOpen = false,
+    // a car's preset (CarSetups id, #40): it belongs to this car, parked or driven
+    int Setup = 0)
 {
     public Godot.Collections.Dictionary ToDict() => new()
     {
@@ -38,6 +40,7 @@ public readonly record struct VehicleState(
         ["name"] = Name,
         ["lights"] = Headlights,
         ["roof"] = RoofOpen,
+        ["setup"] = Setup,
     };
 
     public static VehicleState FromDict(Godot.Collections.Dictionary d) => new(
@@ -53,7 +56,9 @@ public readonly record struct VehicleState(
         d["owner"].AsInt64(),
         d["name"].AsString(),
         d.TryGetValue("lights", out var lights) && lights.AsBool(),
-        d.TryGetValue("roof", out var roof) && roof.AsBool());
+        d.TryGetValue("roof", out var roof) && roof.AsBool(),
+        // from another peer: out of range reads as Stock
+        d.TryGetValue("setup", out var setup) ? CarSetups.Clamp(setup.AsInt32()) : 0);
 
     public static double Now => Time.GetUnixTimeFromSystem();
 }

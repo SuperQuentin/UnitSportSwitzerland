@@ -11,14 +11,16 @@ namespace UnitSport.Player;
 ///
 /// <para>
 /// <c>--switchcheck driver</c> gets in the NA6CE once another player is there, presses O (top down)
-/// and L (lights, pop-ups up) through the real key actions, then gets out, leaving the car parked.
+/// and L (lights, pop-ups up) through the real key actions, puts the Rally-raid preset on it (#40),
+/// then gets out, leaving the car parked.
 /// </para>
 ///
 /// <para>
 /// <c>--switchcheck watch</c> (windowed: a headless client draws no parked vehicles) looks at the
 /// other player and prints what it sees change. Passes once it has seen the driver's car with its
 /// top down and its lights on, and then the parked car still that way, as the spawn data carried
-/// it; non-zero exit after two minutes otherwise.
+/// it — both times in the Rally-raid preset, raised on its big wheels; non-zero exit after two
+/// minutes otherwise. <c>--switchcheck watch out.png</c> saves what the watcher sees at the end.
 /// </para>
 /// </summary>
 public partial class CarSwitchCheck : Node
@@ -28,7 +30,8 @@ public partial class CarSwitchCheck : Node
     private readonly Func<Node?> _players;
     private double _t, _since = -1;
     private int _step;
-    private (bool Roof, bool Lights)? _seenDriving, _seenParked;
+    private (bool Roof, bool Lights, int Setup, float Lift)? _seenDriving, _seenParked;
+    private static int Preset => CarSetups.Parse("rally-raid")!.Id;
     private bool _drivingOk;
 
     private CarSwitchCheck(bool driver, Func<FootPlayer?> local, Func<Node?> players)
@@ -68,7 +71,16 @@ public partial class CarSwitchCheck : Node
     private void Drive()
     {
         if (_local() is not { } me || Other() == null || !me.IsOnFloor()) return;
-        if (_since < 0) { _since = _t; GD.Print("[switchcheck] driver: the watcher is here"); }
+        if (_since < 0)
+        {
+            _since = _t;
+            GD.Print("[switchcheck] driver: the watcher is here");
+            // --switchcheck driver <password>: an admin, whose conjured car the server lets it park
+            var args = OS.GetCmdlineUserArgs();
+            int i = Array.IndexOf(args, "--switchcheck");
+            if (i + 2 < args.Length && !args[i + 2].StartsWith("--"))
+                GetParent().GetNodeOrNull<Net.ChatManager>("Chat")?.Send($"/login {args[i + 2]}");
+        }
         double t = _t - _since;
 
         switch (_step)
@@ -84,8 +96,9 @@ public partial class CarSwitchCheck : Node
                 _step++;
                 break;
             case 2 when t > 6:
+                GD.Print($"[switchcheck] driver: preset {CarSetups.For(Preset).Name}: {(me.SetCarSetup(Preset) ? "ok" : "REFUSED")}");
                 var car = me.Visual as CarRig;
-                GD.Print($"[switchcheck] driver: own car roof open {car?.RoofOpen}, lights {car?.Headlights}");
+                GD.Print($"[switchcheck] driver: own car roof open {car?.RoofOpen}, lights {car?.Headlights}, preset {me.CarSetupId}, lift {Lift(car):F2}");
                 _step++;
                 break;
             case 3 when t > 12:
@@ -104,24 +117,40 @@ public partial class CarSwitchCheck : Node
         Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = false });
     }
 
+    /// <summary>How far the rig's body is raised over stock (0.5 m is its pivot): the preset, as drawn.</summary>
+    private static float Lift(CarRig? rig) => (rig?.GetNodeOrNull<Node3D>("Body")?.Position.Y ?? 0.5f) - 0.5f;
+
     private void Watch()
     {
-        if (Other()?.Visual is CarRig driving)
+        if (Other() is { Visual: CarRig driving } other)
         {
-            var now = (driving.RoofOpen, driving.Headlights);
-            if (now != _seenDriving) GD.Print($"[switchcheck] watch: the other player's car: roof open {now.Item1}, lights {now.Item2}");
+            var now = (driving.RoofOpen, driving.Headlights, other.CarSetupId, MathF.Round(Lift(driving), 2));
+            if (now != _seenDriving) GD.Print($"[switchcheck] watch: the other player's car: roof open {now.Item1}, lights {now.Item2}, preset {now.Item3}, lift {now.Item4:F2}");
             _seenDriving = now;
-            _drivingOk |= now is (true, true);
+            _drivingOk |= now.Item1 && now.Item2 && now.Item3 == Preset && now.Item4 > 0.1f;
         }
 
         foreach (var node in VehicleManager.Instance?.GetChildren() ?? new Godot.Collections.Array<Node>())
             if (node is VehicleBody body && body.GetNodeOrNull<CarRig>("Visual") is { } parked)
             {
-                var now = (parked.RoofOpen, parked.Headlights);
-                if (now != _seenParked) GD.Print($"[switchcheck] watch: parked car {body.Name}: roof open {now.Item1}, lights {now.Item2}");
+                int setup = body.Ride is Car c ? c.Spec.SetupId : -1;
+                var now = (parked.RoofOpen, parked.Headlights, setup, MathF.Round(Lift(parked), 2));
+                if (now != _seenParked) GD.Print($"[switchcheck] watch: parked car {body.Name}: roof open {now.Item1}, lights {now.Item2}, preset {now.Item3}, lift {now.Item4:F2}");
                 _seenParked = now;
-                if (_drivingOk && now is (true, true)) Finish(true, "saw it driven and parked with the top down and the lights on");
+                if (_drivingOk && now.Item1 && now.Item2 && now.Item3 == Preset && now.Item4 > 0.1f)
+                {
+                    Shot();
+                    Finish(true, "saw it driven and parked with the top down, the lights on and the Rally-raid preset");
+                }
             }
+    }
+
+    private void Shot()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int i = Array.IndexOf(args, "--switchcheck");
+        if (i + 2 >= args.Length || !args[i + 2].EndsWith(".png")) return;
+        GD.Print($"[switchcheck] watch: wrote {args[i + 2]}: {GetViewport().GetTexture().GetImage().SavePng(args[i + 2])}");
     }
 
     private void Finish(bool ok, string why)

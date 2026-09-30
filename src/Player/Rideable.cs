@@ -56,7 +56,7 @@ public readonly record struct RideInput(float Throttle, float Brake, float Steer
 /// </param>
 /// <param name="Surface">
 /// What the wheels are on (<see cref="Audio.Surfaces.At"/>: the road under them, else the cover).
-/// Only the motorbikes read it, for grip; the default is tarmac.
+/// The motorbikes and cars read it, for grip (cars also for how rough it is); the default is tarmac.
 /// </param>
 /// <param name="Draft">
 /// Share of the air drag taken away by a vehicle close ahead (slipstream, 0..<see cref="MaxDraft"/>);
@@ -217,21 +217,21 @@ public abstract class Rideable
     /// </summary>
     public virtual (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual);
 
-    private static readonly System.Collections.Generic.Dictionary<RideKind, (Vector3, Vector3)> _measured = new();
+    private static readonly System.Collections.Generic.Dictionary<object, (Vector3, Vector3)> _measured = new();
 
     /// <summary>
-    /// The bounds of a visual this mount builds, once per kind (a throwaway build, freed at once).
+    /// The bounds of a visual this mount builds, once per kind, or per key when one kind is drawn several ways (a car per preset); a throwaway build, freed at once.
     /// <paramref name="skip"/> names parts left out, such as a rotor disc nothing rests on.
     /// </summary>
-    protected static (Vector3 Centre, Vector3 Size) Measured(RideKind kind, System.Func<int, Node3D> build, params string[] skip)
+    protected static (Vector3 Centre, Vector3 Size) Measured(object key, System.Func<int, Node3D> build, params string[] skip)
     {
-        if (_measured.TryGetValue(kind, out var known)) return known;
+        if (_measured.TryGetValue(key, out var known)) return known;
         var visual = build(1);
         var box = Avatar.MeshBounds.Of(visual, skip);
         visual.Free();
         // nothing drawn (should not happen, meshes build headless too): the old generic box
         var result = box.Size.LengthSquared() > 1e-4f ? (box.GetCenter(), box.Size) : (new Vector3(0, 0.8f, 0), new Vector3(0.6f, 1.6f, 1.6f));
-        return _measured[kind] = result;
+        return _measured[key] = result;
     }
 
     /// <summary>Advances speed, heading and lean by one physics step.</summary>

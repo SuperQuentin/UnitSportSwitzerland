@@ -116,6 +116,13 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     [Export] public int RideKindId { get; set; }
 
+    /// <summary>
+    /// The preset on the car being driven (<see cref="CarSetups"/> id; 0 = stock, and 0 for anything
+    /// but a car). Replicated beside <see cref="RideKindId"/>, whose meaning it depends on, and reset
+    /// with it in <see cref="ApplyRide"/>; <see cref="SetCarSetup"/> changes it.
+    /// </summary>
+    [Export] public int CarSetupId { get; set; }
+
     // --- held item (see src/Items) ---
     /// <summary>
     /// What is in the player's hand, as an <see cref="Items.ItemId"/>. Replicated for the same
@@ -283,7 +290,7 @@ public partial class FootPlayer : CharacterBody3D
             Rotation = new Vector3(0, Rotation.Y, 0);
             if (kind != RideKind.OnFoot)
             {
-                ApplyRide(kind, NetVel);
+                ApplyRide(kind, NetVel, CarSetupId);
                 if (_ride is { IsVehicle: true } machine) { EngineOn = true; VehicleHealth = machine.MaxHealth; }
             }
             else { _ride = null; Velocity = NetVel; }
@@ -348,6 +355,7 @@ public partial class FootPlayer : CharacterBody3D
     private float _slipCam;
     private Node3D? _visual;
     private RideKind _visualKind = RideKind.OnFoot;
+    private int _visualSetup;
 
     /// <summary>The replicated pose properties, in one place for the synchronizer and <c>--synccheck</c>.</summary>
     public static readonly string[] PoseProperties = { ".:BodyPose", ".:PoseKind", ".:Anim" };
@@ -790,6 +798,7 @@ public partial class FootPlayer : CharacterBody3D
         // What you are riding travels with where you are. Without it a remote client sees a
         // figure sprinting down a descent at 60 km/h in a running pose.
         replication.AddProperty(".:RideKindId");
+        replication.AddProperty(".:CarSetupId");
         replication.AddProperty(".:HeldItemId");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
@@ -801,7 +810,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:HeldItemId", ".:PoseKind", ".:HeadwearId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:HeldItemId", ".:PoseKind", ".:HeadwearId" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -906,7 +915,7 @@ public partial class FootPlayer : CharacterBody3D
             Terrain?.AddAnchor(this, collision: true);
             SetProcessUnhandledInput(false);
             // spawned here after a handoff (#50): the spawn state put the mount in RideKindId, not under the body
-            if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, NetVel);
+            if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, NetVel, CarSetupId);
         }
         else if (IsMultiplayerAuthority())
         {
@@ -972,13 +981,15 @@ public partial class FootPlayer : CharacterBody3D
     private void RefreshVisual(bool force = false)
     {
         var kind = (RideKind)RideKindId;
-        if (!force && _visual != null && kind == _visualKind) return;
+        // a car is redrawn when its preset changes too (a remote player picking another one)
+        if (!force && _visual != null && kind == _visualKind && CarSetupId == _visualSetup) return;
 
         _visual?.QueueFree();
         _visual = null;
         _walker = null;
         HandLocal = null;
         _visualKind = kind;
+        _visualSetup = CarSetupId;
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
 
         // an NPC keeps its jersey whoever simulates it: the colours of the client that asked for it
@@ -999,7 +1010,7 @@ public partial class FootPlayer : CharacterBody3D
         else
         {
             _walker = null;
-            _visual = (_ride ?? Rideable.Create(kind))?.BuildVisual(rider);
+            _visual = (_ride ?? CarSetups.Ride(kind, CarSetupId))?.BuildVisual(rider);
         }
 
         if (_visual != null)
@@ -1456,7 +1467,7 @@ public partial class FootPlayer : CharacterBody3D
         if (_sliding) EndSlide();
         GlobalPosition = state.Position;
         Rotation = new Vector3(0, state.Yaw, 0);
-        ApplyRide(state.Kind, state.Velocity);
+        ApplyRide(state.Kind, state.Velocity, state.Setup);
         _flight.Control = state.Throttle;
         EngineOn = true;
         VehicleHealth = state.Health;
@@ -1479,7 +1490,26 @@ public partial class FootPlayer : CharacterBody3D
         return new VehicleState((RideKind)RideKindId, GlobalPosition,
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
-            Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true });
+            Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true }, Setup: CarSetupId);
+    }
+
+    /// <summary>
+    /// Puts a preset (<see cref="CarSetups"/>) on the car being driven, at a standstill: the car is
+    /// rebuilt from the catalog with it, lights and roof kept. False when not in a car or moving.
+    /// </summary>
+    public bool SetCarSetup(int id)
+    {
+        id = CarSetups.Clamp(id);
+        if (_ride is not Car old || CarCatalog.For(old.Kind) is null) return false;
+        if (id == CarSetupId) return true;
+        if (GroundSpeed > 2f) return false;
+        var car = (Car)CarSetups.Ride(old.Kind, id)!;
+        car.Headlights = old.Headlights;
+        car.RoofOpen = old.RoofOpen;
+        _ride = car;
+        CarSetupId = id;
+        RefreshVisual();
+        return true;
     }
 
     /// <summary>
@@ -1688,10 +1718,13 @@ public partial class FootPlayer : CharacterBody3D
     /// Switches what the player is travelling as, with no checks — <see cref="SetRide"/> does
     /// those for the picker; a base jump and a canopy opening call this directly mid-air.
     /// </summary>
-    private void ApplyRide(RideKind kind, Vector3 velocity)
+    /// <param name="setup">A car's preset (<see cref="CarSetups"/>): the one it had, for a car taken back from the world.</param>
+    private void ApplyRide(RideKind kind, Vector3 velocity, int setup = 0)
     {
-        _ride = Rideable.Create(kind);
+        _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup));
         RideKindId = (int)kind;
+        // the preset belongs to this car: a new one (the picker) comes stock
+        CarSetupId = _ride is Car car ? car.Spec.SetupId : 0;
         // The pose travels with the kind, and each kind reads Anim its own way: left as it was, the
         // next update would hand a bike its rider's stride phase as a crank angle (seen: 0.93 rad).
         Anim = default;
@@ -2426,8 +2459,10 @@ public partial class FootPlayer : CharacterBody3D
             ? -(heading.X * normal.X + heading.Z * normal.Z) / Mathf.Max(normal.Y, 0.15f)
             : 0f;
 
-        // a motorbike's grip depends on what is under it (cached lookup: road, else cover)
-        var surface = _ride is Motorbike && Terrain != null
+        // a motorbike's or a car's grip depends on what is under it (cached lookup: road, else cover).
+        // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
+        // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
+        var surface = (_ride is Motorbike || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike && _motion.Speed > 10f

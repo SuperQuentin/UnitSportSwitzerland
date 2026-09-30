@@ -58,6 +58,11 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(Player.DriftCheck.Spin());
                 return;
             }
+            if (Array.IndexOf(scArgs, "--setupcheck") >= 0)
+            {
+                GetTree().Quit(Player.CarSetups.Check());
+                return;
+            }
             if (Array.IndexOf(scArgs, "--motocheck") >= 0)
             {
                 GetTree().Quit(Player.Motorbike.Check());

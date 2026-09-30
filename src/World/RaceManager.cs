@@ -66,6 +66,10 @@ public partial class RaceManager : Node
         public long Invited;
         public bool Air;
         public int Mount;
+        /// <summary>A car class (<see cref="CarSetups"/> id, #40) every car entrant races in, or −1: any.</summary>
+        public int Class = -1;
+        /// <summary>The preset NPCs asked for with <c>class=</c> get in a race of any class.</summary>
+        public int NpcSetup;
         public float Metres;
         public Phase Phase;
         public RaceRoute? Route;
@@ -93,7 +97,7 @@ public partial class RaceManager : Node
         public readonly List<(long Owner, int Count, int Mount, bool Duel)> PendingNpcs = new();
         /// <summary>Where it was opened: "near the race" before any entrant is placed.</summary>
         public Vector3 Spot;
-        public string What => $"{(Air ? "air " : "")}{MountName(Mount)} {(Invited != 0 ? "duel" : "race")}";
+        public string What => $"{(Air ? "air " : "")}{MountName(Mount)}{(Class >= 0 ? $" {CarSetups.Slug(CarSetups.For(Class))}" : "")} {(Invited != 0 ? "duel" : "race")}";
     }
 
     private bool _server;
@@ -153,9 +157,9 @@ public partial class RaceManager : Node
             "leave" => Leave(sender),
             "cancel" => Cancel(sender, id),
             "list" => List(),
-            _ => "/race start [metres] [mount|open]  /race start air <place|metres> [mount]  /race duel <player|npc> [...]  "
+            _ => "/race start [metres] [mount|open] [class=<preset>]  /race start air <place|metres> [mount]  /race duel <player|npc> [...]  "
                 + "/race npc [n] [metres] [mount]  /race join [id]  /race leave  /race cancel [id]  /race list — mounts: foot bike skis car <car> moto monster "
-                + "plane heli paraglider wingsuit",
+                + "plane heli paraglider wingsuit — classes: " + string.Join(' ', CarSetups.All.Skip(1).Select(CarSetups.Slug)),
         };
     }
 
@@ -176,6 +180,8 @@ public partial class RaceManager : Node
 
         bool air = args.Length > 0 && args[0].Equals("air", System.StringComparison.OrdinalIgnoreCase);
         var words = new List<string>(air ? args[1..] : args);
+        var (cls, classError) = TakeClass(words);
+        if (classError != null) return classError;
         int mount = air ? (int)RideKind.Plane : (int)CarCatalog.All[0].Kind;
         if (words.Count > 0 && ParseMount(words[^1]) is { } m) { mount = m; words.RemoveAt(words.Count - 1); }
         if (mount != Open && IsAirMount(mount) != air)
@@ -209,6 +215,7 @@ public partial class RaceManager : Node
         var race = new Race
         {
             Id = _nextId++, Host = sender, Invited = invited, Air = air, Mount = mount, Phase = Phase.Building, Spot = at,
+            Class = cls?.Id ?? -1, NpcSetup = cls?.Id ?? 0,
             Metres = air ? 0 : isNumber ? Mathf.Clamp(metres, 300f, 8000f) : 2000f,
         };
         _races[race.Id] = race;
@@ -231,6 +238,17 @@ public partial class RaceManager : Node
             }
         });
         return $"#{race.Id} {(air ? "plotting the gates" : "finding the road")}…";
+    }
+
+    /// <summary>Takes a <c>class=&lt;preset&gt;</c> word out of a command (#40): the preset, and an error for an unknown one.</summary>
+    private static (CarSetup? Class, string? Error) TakeClass(List<string> words)
+    {
+        int i = words.FindIndex(w => w.StartsWith("class=", System.StringComparison.OrdinalIgnoreCase));
+        if (i < 0) return (null, null);
+        string name = words[i][6..];
+        words.RemoveAt(i);
+        return CarSetups.Parse(name) is { } c ? (c, null)
+            : (null, $"No car class '{name}'. Classes: {string.Join(' ', CarSetups.All.Select(CarSetups.Slug))}");
     }
 
     private void Opened(int id, RaceRoute? route, RaceCourse? course, string why)
@@ -299,6 +317,10 @@ public partial class RaceManager : Node
         if (!duel && args.Length > 0 && int.TryParse(args[0], out int n) && n <= RaceNpcs.PerOwner) { count = Mathf.Max(1, n); args = args[1..]; }
         if (Npcs is not { } npcs || _players?.GetNodeOrNull<FootPlayer>(sender.ToString()) is not { } host) return "You have no position yet.";
         var race = _raceOf.TryGetValue(sender, out int id) ? _races.GetValueOrDefault(id) : null;
+        var argList = args.ToList();
+        var (cls, classError) = TakeClass(argList);
+        if (classError != null) return classError;
+        args = argList.ToArray();
         int? asked = args.Length > 0 ? ParseMount(args[^1]) : null;
         int mount = race is { Mount: not Open } ? race.Mount
             : asked is { } a and not Open ? a
@@ -314,11 +336,12 @@ public partial class RaceManager : Node
             if (duel) return $"You are already in race #{race.Id} — /race leave first.";
             if (race.Phase == Phase.Running || race.Invited != 0) return $"Race #{race.Id} is not open to NPCs.";
             reply = $"#{race.Id}";
+            if (cls != null && race.Class < 0) race.NpcSetup = cls.Id;
         }
         else
         {
             var words = asked != null ? args[..^1] : args;
-            reply = Start(sender, words.Append(MountName(mount)).ToArray(), 0);
+            reply = Start(sender, words.Append(MountName(mount)).Concat(cls != null ? new[] { $"class={cls.Id}" } : System.Array.Empty<string>()).ToArray(), 0);
             if (!_raceOf.TryGetValue(sender, out id)) return reply;   // refused
             race = _races[id];
         }
@@ -354,7 +377,7 @@ public partial class RaceManager : Node
                 race.Id * 7919 + (int)(owner % 100000) * 31 + race.Entrants.Count);
         }
         var ids = npcs.Spawn(owner, count, (RideKind)mount, host.GlobalPosition, host.Rotation.Y,
-            plan == null ? null : i => (plan[i].At, plan[i].Yaw));
+            plan == null ? null : i => (plan[i].At, plan[i].Yaw), race.Class >= 0 ? race.Class : race.NpcSetup);
         if (duel && ids.Count == 1) race.Invited = ids[0];   // before the course is built: Opened reads it
         foreach (long npc in ids)
         {
@@ -578,7 +601,7 @@ public partial class RaceManager : Node
         int slot = race.Entrants.IndexOf(e), count = race.Entrants.Count;
         RpcId(SimOf(e), MethodName.Setup, race.Id, e, race.Air, race.Centre, race.Width,
             race.Air ? course.Gates : System.Array.Empty<Vector3>(), course.Length, course.GridAltitude, slot, count,
-            race.Mount, resume ? race.StartAt - _clock : Countdown, race.Next.GetValueOrDefault(e), resume);
+            race.Mount, resume ? race.StartAt - _clock : Countdown, race.Next.GetValueOrDefault(e), resume, race.Class);
     }
 
     /// <summary>Server: an NPC changed simulator; the new one gets its race where it stands.</summary>
@@ -817,6 +840,8 @@ public partial class RaceManager : Node
         public long Id;
         public RaceCourse Course = null!;
         public int Slot, Count, Mount, Next;
+        /// <summary>The race's car class (<see cref="CarSetups"/> id), or −1: any.</summary>
+        public int Class = -1;
         public float StartArc;
         public double GoIn, Clock;
         public bool Going, Done, Placed, HasLast;
@@ -885,11 +910,11 @@ public partial class RaceManager : Node
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Setup(int raceId, long entrant, bool air, Vector3[] centre, float[] width, Vector3[] gates, float length,
-        float gridAltitude, int slot, int count, int mount, double countdown, int next, bool resume)
+        float gridAltitude, int slot, int count, int mount, double countdown, int next, bool resume, int carClass)
     {
         var r = new Runner
         {
-            RaceId = raceId, Id = entrant, Slot = slot, Count = count, Mount = mount, GoIn = countdown, Next = next,
+            RaceId = raceId, Id = entrant, Slot = slot, Count = count, Mount = mount, GoIn = countdown, Next = next, Class = carClass,
             Course = RaceCourse.FromWire(air, centre, width, gates, length, gridAltitude),
             StartArc = air ? 0f : RaceCourse.StartArc(slot, count),
         };
@@ -1041,6 +1066,9 @@ public partial class RaceManager : Node
                 me.Rotation = yaw;
                 Mount(me, (RideKind)r.Mount);
             }
+            // a class race: every car on the grid in the class's preset (at a standstill, on the grid)
+            if (r.Class >= 0 && me.Vehicle is Car && me.CarSetupId != r.Class && me.SetCarSetup(r.Class))
+                GD.Print($"[race] #{r.RaceId} class {CarSetups.For(r.Class).Name}: fitted");
             me.RideControls = me.Vehicle is Car ? () => new RideInput(0f, 0f, 0f, false, Handbrake: true)
                 : me.Vehicle != null ? () => new RideInput(0f, 1f, 0f, false) : null;
             if (me.Vehicle is not Car && RaceRoute.Flat(me.GlobalPosition - at).Length() > 1.5f)
@@ -1077,6 +1105,9 @@ public partial class RaceManager : Node
     {
         me.RideControls = null;
         if (!_auto || r.Course.Air) return;
+        // for the checks: the cars on the grid as this peer sees them, remote ones included
+        GD.Print($"[race] #{r.RaceId} GO, cars here: " + string.Join(", ", GetTree().GetNodesInGroup(FootPlayer.Group)
+            .OfType<FootPlayer>().Where(p => CarCatalog.IsCar(p.Ride)).Select(p => $"{p.Name} {CarSetups.For(p.CarSetupId).Name}")));
         _pilot = me.Vehicle is Car car ? new AutoPilot(r.Course.Route!, me, car.Spec) : AutoPilot.For(r.Course.Route!, me);
         if (_pilot == null) { GD.Print($"[race] #{r.RaceId} no autopilot for {me.Ride} yet"); return; }
         var pilot = _pilot;

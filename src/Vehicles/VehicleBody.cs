@@ -73,7 +73,7 @@ public partial class VehicleBody : CharacterBody3D
             Terrain = terrain,
             _initial = state,
             Kind = state.Kind,
-            Ride = Rideable.Create(state.Kind) ?? new Bicycle(),
+            Ride = CarSetups.Ride(state.Kind, state.Setup) ?? new Bicycle(),
             Wrecked = state.Wrecked,
             Health = state.Health,
             EngineOn = state.EngineOn,
@@ -198,7 +198,7 @@ public partial class VehicleBody : CharacterBody3D
     /// </remarks>
     public VehicleState Capture() => new(Kind, GlobalPosition,
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
-        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen);
+        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Setup);
 
     public override void _PhysicsProcess(double delta)
     {
