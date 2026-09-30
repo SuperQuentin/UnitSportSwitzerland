@@ -26,6 +26,7 @@ public partial class ServerWorld : Node3D
 
     public override async void _Ready()
     {
+        if (ServerStats.Requested) AddChild(new ServerStats { Name = "ServerStats" });
         string chunkDir = TerrainPaths.FindChunkDir();
         var source = new LocalChunkSource(chunkDir);
         var manifest = await source.LoadManifestAsync();

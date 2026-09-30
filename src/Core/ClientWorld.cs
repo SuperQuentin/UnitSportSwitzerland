@@ -684,6 +684,7 @@ public partial class ClientWorld : Node3D
         AddChild(_players);
         AddChild(PlayerReplication.CreateSpawner());
         AddChild(World.RaceNpcs.CreateClient());   // World/Npcs: the path its RPC routes by
+        if (NetSmoothProbe.ParseArgs() is { } smooth) AddChild(new NetSmoothProbe(_players, smooth.Seconds, smooth.Label));
         var net = new NetworkManager { Name = "Net" };
         AddChild(net);
         // Handles bare hosts, host:port, and bracketed IPv6 — a plain colon split breaks on

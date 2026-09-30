@@ -47,6 +47,13 @@ public partial class Main : Node
 			return;
 		}
 
+		// A load-test process: N headless bots on one connection each, no world of its own.
+		if (UnitSport.Net.Swarm.ParseArgs() is { } swarm)
+		{
+			AddChild(swarm);
+			return;
+		}
+
 		bool isServer = OS.HasFeature("dedicated_server")
 			|| OS.GetCmdlineUserArgs().Contains("--server");
 
