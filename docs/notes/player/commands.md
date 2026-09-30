@@ -9,3 +9,5 @@
   brake at 200 km/h must spin it and a managed one must not (`locked-rear-spins`).
 - `--drivecheck ... --skill S --aggression A` sets every driver's temperament (default: each its own,
   seeded by grid index); `--trace` prints inputs, lateral offset, cap and slipstream every 0.1 s.
+- Void rescue check: `<godot> --headless --path . -- --voidcheck [--at E,N]` — falls through the
+  world four ways, each must end back on the ground (`void-rescue`).

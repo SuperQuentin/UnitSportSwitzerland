@@ -277,12 +277,15 @@ public partial class VehicleManager : Node3D
         double step = _housekeeping;
         _housekeeping = 0;
 
-        var players = PlayerPositions?.Invoke().ToList() ?? new List<Vector3>();
+        // a car parked in a garage is 3 km under it: measured from up in the world
+        float? Ground(Vector3 at) => Terrain != null && Terrain.TryGetHeight(at, out float g) ? g : null;
+        var players = (PlayerPositions?.Invoke() ?? []).Select(p => Interiors.InteriorManager.SurfacePoint(p, Ground)).ToList();
         foreach (var node in GetChildren())
         {
             if (node is not VehicleBody v) continue;
             if (v.Wrecked && v.WreckAge > WreckLifetime) { v.QueueFree(); continue; }
-            bool near = players.Any(p => p.DistanceTo(v.GlobalPosition) < LonelyDistance);
+            var at = Interiors.InteriorManager.SurfacePoint(v.GlobalPosition, Ground);
+            bool near = players.Any(p => p.DistanceTo(at) < LonelyDistance);
             v.LonelyFor = near ? 0 : v.LonelyFor + step;
             if (v.LonelyFor > LonelyTime) v.QueueFree();
         }

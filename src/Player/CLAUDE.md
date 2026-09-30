@@ -19,6 +19,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `mounts` — Mounts: (`src/Player/Rideable.cs`): E opens a picker (`RideUi`) — On foot / Road bike / Skis. A vehicle is a table...
 - `car-setups` — Car presets by category (#40): Everyday/SUV/Road racing/Rally-raid/All-terrain/Supercar/Rally over any car's spec, tyre grip per surface for cars, rough-ground term, raised bodies and off-road kit, replicated `CarSetupId`, `/race ... class=`, `--setupcheck`
 - `motorbike` — Motorbikes: (`Motorbike`, `MotorbikeCatalog`, RideKind 64..95 append-only; #38, #41): R1, Monster and all 28 Honda Africa Twins (`docs/data/africa_twin_specs.json`), DCT, surface grip, wheelie/stoppie/friction-circle limits, `--motocheck`...
+- `void-rescue` — Falling through the world (under terrain, into unstreamed void, under an interior floor) puts you back on the ground; safe spot per space; `--voidcheck`
 
 - `trucks-buses` — Trucks and buses (#70): `HeavyCatalog` RideKind 96..119, trailers by code, a planar multi-body train (pins, per-axle tyres), sections as their own bodies, clutch/converter driveline in five shift modes, retarder, air, rollover, coupling, bus doors/kneel/destination, `--truckcheck`, `--truckprobe`, `--heavynet`
 

@@ -500,45 +500,6 @@ public static class TerrainMeshBuilder
     private static float BlendedHeight(float ground, RoadBlend blend, int k, double clearance) =>
         (float)(ground + (blend.Target[k] - clearance - ground) * blend.Weight[k]);
 
-    /// <summary>
-    /// Full-resolution vertex height (column, row) as the surface draws it with
-    /// <paramref name="blend"/> applied at <paramref name="clearance"/>: what geometry that has to
-    /// meet the terrain edge to edge (a garage's apron) stands on.
-    /// </summary>
-    public static Func<int, int, float> GroundHeights(ChunkGrid grid, RoadBlend? blend, double clearance)
-    {
-        grid.RequireFull(nameof(GroundHeights));
-        Dictionary<int, int>? at = null;
-        if (blend != null)
-        {
-            at = new Dictionary<int, int>(blend.Cells.Length);
-            for (int k = 0; k < blend.Cells.Length; k++) at[blend.Cells[k]] = k;
-        }
-        return (c, r) =>
-        {
-            float h = (float)grid.HeightMetersAt(c, r);
-            return at != null && at.TryGetValue(r * ChunkFormat.GridSize + c, out int k) ? BlendedHeight(h, blend!, k, clearance) : h;
-        };
-    }
-
-    /// <summary>
-    /// The full-resolution surface's own vertex colour (column, row), linear and opaque: geometry
-    /// standing in for carved ground (a garage's apron) takes it, so it reads as the same field.
-    /// </summary>
-    public static Func<int, int, Color> GroundColors(byte[]? cover, Func<int, int, float> height)
-    {
-        int last = ChunkFormat.GridSize - 1;
-        return (c, r) =>
-        {
-            float alt = height(c, r);
-            var col = (cover == null
-                ? CoverPalette.ColorFor(CoverClass.Open, alt, CoverPalette.Hash(c, r))
-                : BoundaryBlendedColor(cover, c, r, alt, 1, last)).SrgbToLinear();
-            col.A = 1f;
-            return col;
-        };
-    }
-
     /// <summary>Applies a blend to a full-resolution height map in place.</summary>
     public static void ApplyRoadBlend(float[] map, RoadBlend blend, double clearance)
     {

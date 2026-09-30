@@ -256,12 +256,18 @@ public partial class VehicleBody : CharacterBody3D
             });
         if (_asleep) return;
 
+        // Parked in a garage or a barn: down where the interiors are, on a floor that is only there
+        // while this peer has that interior built. Without it, hold still rather than fall; and the
+        // terrain overhead is not ground to be rescued onto.
+        bool inside = Interiors.InteriorManager.InInteriorSpace(GlobalPosition);
+        if (inside && Interiors.InteriorManager.Instance?.LayoutAt(GlobalPosition) == null) return;
+
         // hold still until the ground is there; a vehicle dropped over unstreamed terrain would
         // otherwise fall through the world before it arrived
-        if (Terrain != null && !Terrain.HasCollisionAt(GlobalPosition)) return;
+        if (!inside && Terrain != null && !Terrain.HasCollisionAt(GlobalPosition)) return;
 
         // the player's safety net, for vehicles: never under the terrain surface
-        if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f)
+        if (!inside && Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f)
         {
             GlobalPosition = GlobalPosition with { Y = ground + 0.2f };
             Velocity = Velocity with { Y = 0f };

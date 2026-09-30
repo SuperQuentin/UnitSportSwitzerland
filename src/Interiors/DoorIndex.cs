@@ -10,13 +10,7 @@ namespace UnitSport.Interiors;
 /// </summary>
 public static class DoorIndex
 {
-    public readonly record struct Entry(BuildingKey Key, Vector3 World, Vector3 Outward, float Width, float Height, BuildingKind Kind)
-    {
-        /// <summary>A garage's drive-in room (tile-local), null for every other door.</summary>
-        public GarageBay.Bay? Bay { get; init; }
-        /// <summary>The tile's origin in world space, to put <see cref="Bay"/> there.</summary>
-        public Vector3 TileOrigin { get; init; }
-    }
+    public readonly record struct Entry(BuildingKey Key, Vector3 World, Vector3 Outward, float Width, float Height, BuildingKind Kind);
 
     private static readonly Dictionary<TileId, Entry[]> Tiles = new();
 
@@ -25,8 +19,7 @@ public static class DoorIndex
         var list = new List<Entry>(doors.Length);
         foreach (var d in doors)
             if (d.Width > 0)
-                list.Add(new Entry(new BuildingKey(id.E, id.N, d.Index), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind)
-                    { Bay = d.Bay, TileOrigin = tileOrigin });
+                list.Add(new Entry(new BuildingKey(id.E, id.N, d.Index), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind));
         Tiles[id] = list.ToArray();
     }
 
@@ -57,27 +50,36 @@ public static class DoorIndex
     public static Entry? Nearest(Vector3 at, float reach, BuildingKind kind) => Nearest(at, reach, e => e.Kind == kind);
 
     /// <summary>
-    /// As <see cref="Nearest(Vector3, float, BuildingKind)"/>, and with <paramref name="orInside"/>
-    /// also a garage whose drive-in bay holds the point: a car parked inside is at that garage.
-    /// </summary>
-    public static Entry? Nearest(Vector3 at, float reach, BuildingKind kind, bool orInside) =>
-        orInside && GarageAround(at) is { } inside && inside.Kind == kind ? inside : Nearest(at, reach, kind);
-
-    /// <summary>
-    /// The nearest door a player on foot enters an interior by: every door but a garage's, which
-    /// is walked (or driven) into for real. <paramref name="deeper"/> gives a door extra reach
-    /// straight out in front, where its open leaves stand.
+    /// The nearest door a player on foot enters an interior by. <paramref name="deeper"/> gives a
+    /// door extra reach straight out in front, where its open leaves stand.
     /// </summary>
     public static Entry? NearestEntrance(Vector3 at, float reach, Func<Entry, float>? deeper = null) =>
-        Nearest(at, reach, e => e.Kind != BuildingKind.Garage, deeper);
+        Nearest(at, reach, _ => true, deeper);
 
-    /// <summary>The garage whose drive-in bay holds a world point, if any.</summary>
-    public static Entry? GarageAround(Vector3 at)
+    /// <summary>
+    /// The nearest door a vehicle drives through (<see cref="BuildingFootprint.VehicleDoor"/>)
+    /// within <paramref name="reach"/> in front of it, at most <paramref name="halfAngle"/>
+    /// radians off square: a vehicle heading at a garage or a barn, not driving past one.
+    /// </summary>
+    public static Entry? VehicleDoorAhead(Vector3 at, Vector3 heading, float reach, float halfAngle)
     {
-        foreach (var doors in Tiles.Values)
-            foreach (var e in doors)
-                if (e.Bay is { } bay && bay.Contains(at - e.TileOrigin, 0.3f)) return e;
-        return null;
+        var h = new Vector2(heading.X, heading.Z);
+        if (h.LengthSquared() < 1e-6f) return null;
+        h = h.Normalized();
+        float cos = Mathf.Cos(halfAngle);
+        return Nearest(at, reach, e =>
+        {
+            if (!BuildingFootprint.VehicleDoor(e.Kind)) return false;
+            var into = new Vector2(-e.Outward.X, -e.Outward.Z);
+            if (h.Dot(into) < cos) return false;
+            // and aimed at the opening, not at the wall beside it: where the heading meets the facade
+            var rel = new Vector2(at.X - e.World.X, at.Z - e.World.Z);
+            float outward = -rel.Dot(into);
+            if (outward < 0.5f) return false;
+            var t = new Vector2(-into.Y, into.X);
+            float along = rel.Dot(t) + outward / h.Dot(into) * h.Dot(t);
+            return Mathf.Abs(along) < e.Width / 2 + 1f;
+        });
     }
 
     private static Entry? Nearest(Vector3 at, float reach, Func<Entry, bool> wanted, Func<Entry, float>? deeper = null)

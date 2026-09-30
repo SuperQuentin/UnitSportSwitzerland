@@ -56,6 +56,12 @@ public partial class InteriorManager : Node3D
     private const float ExitReach = 1.8f;
     /// <summary>Server-side check: generous, since the player's position is a relayed copy.</summary>
     private const float ServerDoorReach = 7f;
+    /// <summary>A vehicle heading at a garage's or a barn's door this close opens it (<see cref="OpenForVehicle"/>)...</summary>
+    private const float VehicleOpenReach = 10f;
+    /// <summary>...and the server lets it, with the slack of a relayed copy moving at driving speed.</summary>
+    private const float ServerVehicleDoorReach = 16f;
+    /// <summary>At most this far off square to the door, radians: heading at it, not driving past.</summary>
+    private const float VehicleOpenAngle = 0.6f;
     /// <summary>A client builds the interior behind an open door within this distance, to show it through the doorway.</summary>
     private const float BuildRange = 45f;
     /// <summary>A door with nobody this close to either side of it...</summary>
@@ -115,6 +121,9 @@ public partial class InteriorManager : Node3D
     private double _maintain;
     private string? _requestingDoor;
     private double _requestTimer;
+    private double _vehicleCheck;
+    /// <summary>Doors a vehicle asked open, and when: a refused or ignored door is not asked again at once.</summary>
+    private readonly Dictionary<string, double> _vehicleAsked = new();
     private static ShaderMaterial? _material;
 
     // occupancy cues
@@ -182,6 +191,24 @@ public partial class InteriorManager : Node3D
     /// <summary>The door links built on this client (for probes).</summary>
     public IReadOnlyDictionary<string, DoorLink> Links => _links;
     public DoorPortals? Portals => _portals;
+
+    /// <summary>Whether a world point is down where the interiors are, not in the world above.</summary>
+    public static bool InInteriorSpace(Vector3 at) => at.Y < InteriorBaseY + 1000f;
+
+    /// <summary>
+    /// The same point up in the world, for distances: an interior lies straight under its
+    /// building, <see cref="InteriorBaseY"/> standing for the building's ground floor, which
+    /// <paramref name="ground"/> gives (the terrain height there, when known).
+    /// </summary>
+    public static Vector3 SurfacePoint(Vector3 at, Func<Vector3, float?>? ground = null)
+    {
+        if (!InInteriorSpace(at)) return at;
+        float floor = ground?.Invoke(at) ?? 0f;
+        return at with { Y = floor + (at.Y - InteriorBaseY) };
+    }
+
+    /// <summary>The built interior whose plan holds a point far underground, if any (none on a dedicated server).</summary>
+    public InteriorLayout? LayoutAt(Vector3 at) => InteriorNode.Containing(_built.Values, at)?.Layout;
 
     private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
         && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
@@ -273,13 +300,53 @@ public partial class InteriorManager : Node3D
         else door = OutsideDoorInReach(player.GlobalPosition);
         if (door == null) return false;
         if (_requestingDoor != null) return true;
+        AskDoor(door, !_doors.ContainsKey(door));
+        return true;
+    }
 
-        bool open = !_doors.ContainsKey(door);
+    private void AskDoor(string door, bool open)
+    {
         _requestingDoor = door;
         _requestTimer = 3;
         if (Online) RpcId(1, MethodName.RequestDoor, door, open);
         else _ = ServeDoor(MyId, door, open);
-        return true;
+    }
+
+    /// <summary>
+    /// A vehicle heading at a garage's or a barn's door, outside within <see cref="VehicleOpenReach"/>
+    /// or inside toward its doorway, asks it open, as a car driving up to a garage would have it.
+    /// Where it is going is where it moves, so reversing in opens the door behind.
+    /// </summary>
+    private void OpenForVehicle(double delta)
+    {
+        if ((_vehicleCheck -= delta) > 0) return;
+        _vehicleCheck = 0.2;
+        var p = LocalPlayer?.Invoke();
+        if (p == null || !IsInstanceValid(p) || p.DoorwayBox == null || _requestingDoor != null) return;
+        var velocity = p.Velocity with { Y = 0 };
+        var heading = velocity.LengthSquared() > 1f ? velocity : -p.GlobalTransform.Basis.Z;
+
+        string? door = null;
+        if (!p.Indoors) door = DoorIndex.VehicleDoorAhead(p.GlobalPosition, heading, VehicleOpenReach, VehicleOpenAngle)?.Key.ToString();
+        else if (_current != null && BuildingFootprint.VehicleDoor(_current.DressedKind()))
+        {
+            // inside, the room is the approach: any way out it is heading at
+            float cos = Mathf.Cos(VehicleOpenAngle);
+            foreach (var link in _links.Values)
+            {
+                if (link.Plan != _current.Key) continue;
+                var local = link.Inside.AffineInverse() * p.GlobalPosition;
+                var towards = (link.Inside.Basis.Inverse() * heading).Normalized();
+                if (local.Z < -VehicleOpenReach || towards.Z < cos || Math.Abs(local.X) > link.InsideWidth / 2 + 1f) continue;
+                door = link.Door;
+                break;
+            }
+        }
+        if (door == null || _doors.ContainsKey(door)) return;
+        double now = Time.GetTicksMsec() / 1000.0;
+        if (_vehicleAsked.TryGetValue(door, out double asked) && now - asked < 4) return;
+        _vehicleAsked[door] = now;
+        AskDoor(door, true);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -296,10 +363,11 @@ public partial class InteriorManager : Node3D
         {
             var layout = BuildingKey.TryParse(door, out _) ? await GetOrCreate(door) : null;
             if (layout == null || Origin == null) { Refuse(sender, "This door is locked."); return; }
-            // a garage is walked or driven into for real (GarageBay), never entered as an interior
-            if (layout.Kind == BuildingKind.Garage) { Refuse(sender, "A garage door opens for cars."); return; }
-            // measured to the door's centre, so a wide door, and its open leaves, reach further
-            if (!NearDoor(sender, layout, door, ServerDoorReach + layout.EntranceFor(door).Width)) { Refuse(sender, "Too far from the door."); return; }
+            // measured to the door's centre, so a wide door, and its open leaves, reach further; a
+            // garage or a barn opens for a vehicle driving up to it (OpenForVehicle), further off still
+            float reach = ServerDoorReach + layout.EntranceFor(door).Width;
+            if (BuildingFootprint.VehicleDoor(layout.DressedKind())) reach = Math.Max(reach, ServerVehicleDoorReach);
+            if (!NearDoor(sender, layout, door, reach)) { Refuse(sender, "Too far from the door."); return; }
             // the plan first: the opener builds the interior while the door starts to swing
             if (open) SendPlan(sender, layout, door);
             if (_doors.ContainsKey(door) != open) BroadcastDoor(door, layout.Key, open);
@@ -514,10 +582,10 @@ public partial class InteriorManager : Node3D
         link.Leaf = node.Leaf(door);
         link.Shutter = node.Shutter(door);
         link.Shutter?.SetSwing(link.Swing);
-        if (link.Leaf == null && DoorLeaf.SwingsOut(layout.DressedKind()))
+        if (link.Leaf == null && DoorLeaf.OnFacade(layout.DressedKind()))
         {
-            // a barn's pair hangs on the facade, and lives as long as the link
-            link.Leaf = DoorLeaf.CreateOutward(door, link.Outside, link.OutsideWidth, link.OutsideHeight,
+            // a barn's pair or a garage's roll-up door hangs on the facade, and lives as long as the link
+            link.Leaf = DoorLeaf.CreateOnFacade(door, link.Outside, link.OutsideWidth, link.OutsideHeight,
                 layout.DressedKind(), _material!);
             AddChild(link.Leaf);
             link.Leaf.SetSwing(link.Swing);
@@ -569,18 +637,23 @@ public partial class InteriorManager : Node3D
 
     /// <summary>
     /// Before the local player moves: standing in an open doorway outside, they are let through
-    /// the building's shell (which has no hole in it) so they can reach the sill.
+    /// the building's shell (which has no hole in it) so they can reach the sill. Mounted, only a
+    /// garage's or a barn's doorway, and only a vehicle that fits it (<see cref="Fits"/>).
     /// </summary>
     public void BeforeMove(FootPlayer p)
     {
         StaticBody3D? pass = null;
-        if (!p.Indoors && p.Ride == RideKind.OnFoot)
+        if (!p.Indoors)
             foreach (var link in _links.Values)
-                if (link.Passable && link.InOutsideDoorway(p.GlobalPosition, 0.32f))
-                {
-                    pass = BuildingBodies?.Invoke(link.Tile);
-                    break;
-                }
+            {
+                if (!link.Passable || !Fits(p, link)) continue;
+                bool inDoorway = p.DoorwayBox is { } box
+                    ? link.InOutsideDoorway(p.GlobalPosition, -p.GlobalTransform.Basis.Z, box.HalfWidth, box.HalfLength)
+                    : link.InOutsideDoorway(p.GlobalPosition, 0.32f);
+                if (!inDoorway) continue;
+                pass = BuildingBodies?.Invoke(link.Tile);
+                break;
+            }
         if (pass == _passing) return;
         if (_passing != null && IsInstanceValid(_passing)) p.RemoveCollisionExceptionWith(_passing);
         _passing = pass;
@@ -599,6 +672,7 @@ public partial class InteriorManager : Node3D
             // facade's shell stops anyone the door does not let through.
             if (!inside && !link.Passable) continue;
             if (inside && p.InteriorKey != link.Plan) continue;
+            if (!Fits(p, link)) continue;
             var frame = (inside ? link.Inside : link.Outside).AffineInverse();
             var a = frame * before;
             var b = frame * p.GlobalPosition;
@@ -612,6 +686,14 @@ public partial class InteriorManager : Node3D
             return;
         }
     }
+
+    /// <summary>
+    /// Whether the local player can pass a doorway as they are: on foot any, mounted a garage's or a
+    /// barn's with a vehicle lower than the opening (a flyer never).
+    /// </summary>
+    private static bool Fits(FootPlayer p, DoorLink link) =>
+        p.Ride == RideKind.OnFoot
+        || link.VehicleDoor && p.DoorwayBox is { } box && box.Height < link.PassHeight - 0.05f;
 
     private void Cross(FootPlayer p, DoorLink link, bool inward)
     {
@@ -698,7 +780,7 @@ public partial class InteriorManager : Node3D
             var rel = at - new Vector2(e.X, e.Z);
             float along = Math.Max(0, Math.Abs(rel.Dot(new Vector2(-inward.Y, inward.X))) - e.Width / 2);
             float into = rel.Dot(inward);
-            float deeper = !DoorLeaf.SwingsOut(kind) && _doors.ContainsKey(e.Door) ? DoorLeaf.OpenReach(kind, e.Width) : 0f;
+            float deeper = !DoorLeaf.OnFacade(kind) && _doors.ContainsKey(e.Door) ? DoorLeaf.OpenReach(kind, e.Width) : 0f;
             float depth = into < 0 ? -into : Math.Max(0, into - deeper);
             return Mathf.Sqrt(along * along + depth * depth);
         }
@@ -809,6 +891,7 @@ public partial class InteriorManager : Node3D
         if (!_presenting) return;
 
         if (_requestingDoor != null && (_requestTimer -= delta) <= 0) _requestingDoor = null;
+        OpenForVehicle(delta);
 
         // the leaves swing toward what the server says, a big one slower
         foreach (var link in _links.Values)
@@ -992,6 +1075,20 @@ public partial class InteriorNode : Node3D
         return best;
     }
 
+    /// <summary>The interior whose plan holds a point (half a metre of slack), if any.</summary>
+    public static InteriorNode? Containing(IEnumerable<InteriorNode> nodes, Vector3 at)
+    {
+        foreach (var node in nodes)
+        {
+            if (!node.IsInsideTree()) continue;
+            var local = node.ToLocal(at);
+            if (Math.Abs(local.X) <= node.Layout.Width / 2 + 0.5f && Math.Abs(local.Z) <= node.Layout.Depth / 2 + 0.5f
+                && local.Y > -1f && local.Y < node.Layout.StoreyHeight * Math.Max(1, node.Layout.Floors.Count) + 1f)
+                return node;
+        }
+        return null;
+    }
+
     /// <summary>The leaf of the door a given building key names, if this interior has that entrance.</summary>
     public DoorLeaf? Leaf(string door) => _leaves.TryGetValue(door, out var l) ? l : null;
     /// <summary>A barn door's pair as seen from in here (<see cref="DoorLeaf.CreateShutter"/>).</summary>
@@ -1026,8 +1123,9 @@ public partial class InteriorNode : Node3D
             var doorway = new Transform3D(new Basis(Vector3.Up.Cross(z), Vector3.Up, z), new Vector3(e.X, 0, e.Z));
             var (width, top) = layout.OpeningOf(e);
             var kind = layout.DressedKind();
-            // a barn's pair swings on the facade, with its link; in here only its shut face
-            bool pair = DoorLeaf.SwingsOut(kind);
+            // a barn's pair or a garage's roll-up door moves on the facade, with its link; in here
+            // only its shut face
+            bool pair = DoorLeaf.OnFacade(kind);
             var leaf = pair ? DoorLeaf.CreateShutter(e.Door, doorway, width, top, kind, material)
                 : DoorLeaf.Create(e.Door, doorway, width, top, kind, material);
             node.AddChild(leaf);

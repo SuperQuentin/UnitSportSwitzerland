@@ -59,11 +59,6 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(Player.GarageProbe.Check());
                 return;
             }
-            if (Array.IndexOf(scArgs, "--garagehole") >= 0)
-            {
-                GetTree().Quit(Interiors.GarageBay.Check());
-                return;
-            }
             if (Array.IndexOf(scArgs, "--meshcheck") >= 0)
             {
                 GetTree().Quit(Avatar.MeshScratch.Check());
@@ -287,8 +282,6 @@ public partial class ClientWorld : Node3D
         Occasions.OccasionManager.Create(this);
         // their props, dressed onto each tile as its buildings load
         AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
-        // garage roll-up doors, opening for any car in front of them
-        AddChild(new Vehicles.GarageDoors(_chunks, origin));
         // …the creatures in the air around the camera, and their sounds
         AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
         AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
@@ -328,7 +321,7 @@ public partial class ClientWorld : Node3D
             || FlightProbe.ParseArgs() != null
             || RideProbe.ParseArgs() != null || TruckProbe.Requested || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
-            || RoadStandProbe.Requested() || MantleProbe.Requested()
+            || RoadStandProbe.Requested() || MantleProbe.Requested() || VoidProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Interiors.DoorWatchProbe.ParseArgs().Requested
             || Loot.LootProbe.ParseArgs() != null
@@ -370,9 +363,11 @@ public partial class ClientWorld : Node3D
         _rides.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_rides);
 
-        // T in a stopped car at a garage: the tuning menu (GarageUi.GarageNear says where garages are)
+        // T in a stopped car at a garage: the tuning menu (GarageUi.GarageNear says where garages are):
+        // in front of one, or parked inside it
         Vehicles.GarageUi.GarageNear = pos =>
-            Interiors.DoorIndex.Nearest(pos, 8f, Terrain.Format.BuildingKind.Garage, orInside: true) != null;
+            Interiors.DoorIndex.Nearest(pos, 8f, Terrain.Format.BuildingKind.Garage) != null
+            || Interiors.InteriorManager.Instance?.LayoutAt(pos)?.DressedKind() == Terrain.Format.BuildingKind.Garage;
         _garage = Vehicles.GarageUi.Create();
         _garage.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_garage);
@@ -633,6 +628,14 @@ public partial class ClientWorld : Node3D
             var (mE, mN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(mE, mN, 1200);
             AddChild(new MantleProbe(_chunks, origin));
+            return;
+        }
+
+        if (VoidProbe.Requested())
+        {
+            var (vE, vN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(vE, vN, 1200);
+            AddChild(new VoidProbe(_chunks, origin));
             return;
         }
 

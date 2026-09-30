@@ -529,8 +529,7 @@ public partial class FootPlayer : CharacterBody3D
         GlobalPosition = at;
         _viewYaw = yaw;
         Rotation = new Vector3(0, yaw, 0);
-        _lastSafe = at;
-        _hasSafe = true;
+        RememberSafe(at);
     }
 
     /// <summary>
@@ -544,9 +543,10 @@ public partial class FootPlayer : CharacterBody3D
         GlobalPosition = at;
         Velocity = map * Velocity;
         _viewYaw += turn;
+        // mounted, the machine's heading is what sets the body's yaw every step
+        _motion.Yaw += turn;
         Rotation = new Vector3(Rotation.X, Rotation.Y + turn, Rotation.Z);
-        _lastSafe = at;
-        _hasSafe = true;
+        RememberSafe(at);
         _pivotY = float.NaN;
     }
 
@@ -559,8 +559,7 @@ public partial class FootPlayer : CharacterBody3D
         GlobalPosition = p;
         _viewYaw = yaw;
         Rotation = new Vector3(0, yaw, 0);
-        _lastSafe = p;
-        _hasSafe = true;
+        RememberSafe(p);
     }
 
     /// <summary>Downward speed while mounted and airborne, for the ride landing.</summary>
@@ -594,6 +593,16 @@ public partial class FootPlayer : CharacterBody3D
 
     /// <summary>The vehicle instance, for the feel layer to read its tuning (null on foot).</summary>
     public Rideable? Vehicle => _ride;
+
+    /// <summary>
+    /// Mounted on anything that rolls or slides, the box it passes a doorway with (a garage's or a
+    /// barn's, <see cref="Interiors.InteriorManager"/>): half its width and length and its height,
+    /// measured from its model. Null on foot, and flying: a craft never goes through a door.
+    /// </summary>
+    public (float HalfWidth, float HalfLength, float Height)? DoorwayBox =>
+        _ride is { } ride and not Flyer
+            ? (ride.ParkedBox.Size.X / 2, ride.ParkedBox.Size.Z / 2, Mathf.Max(ride.ParkedBox.Size.Y, ride.BodyHeight))
+            : null;
 
     /// <summary>
     /// For the flight probe: put an already-mounted craft in the air at a position and velocity,
@@ -659,6 +668,8 @@ public partial class FootPlayer : CharacterBody3D
     private const float EjectBlastCap = 55f;
     private Vector3 _lastSafe;
     private bool _hasSafe;
+    /// <summary>The space <see cref="_lastSafe"/> was recorded in: an interior key, or null outside.</summary>
+    private string? _safeSpace;
     private double _safeTimer;
     private float _deadTimer;
 
@@ -1623,9 +1634,15 @@ public partial class FootPlayer : CharacterBody3D
             return true;
         }
         // inside, E is the front door or nothing: no mount picker in a living room
-        // (or the cupboard in front of you: searching comes first, the door is by the door)
+        // (or the cupboard in front of you: searching comes first, the door is by the door),
+        // but a car parked in the garage is got into like anywhere else
         if (Indoors)
         {
+            if (_ride == null && !_mantling && _deadTimer <= 0 && Vehicles?.Nearest(GlobalPosition, EnterReach) is { } parked)
+            {
+                Vehicles.Claim(parked, EnterVehicle);
+                return true;
+            }
             var interiors = Interiors.InteriorManager.Instance;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             return interiors?.TryDoor(this) ?? true;
@@ -1744,7 +1761,7 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public bool TryToggleCarDoor()
     {
-        if (_ride != null || Indoors || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
             return false;
         var (bit, distance) = rig.NearestDoor(GlobalPosition);
         if (bit == 0 || distance > VehicleManager.DoorReach) return false;
@@ -1770,6 +1787,9 @@ public partial class FootPlayer : CharacterBody3D
         // beside the door, not the middle: a bus's front door is six metres ahead of it
         var door = vehicle.EntryPoint == Vector3.Zero ? state.Position : ToGlobal(new Vector3(0, 0, vehicle.EntryPoint.Z));
         bool grounded = IsOnFloor();
+        var ahead = -GlobalTransform.Basis.Z with { Y = 0 };
+        ahead = ahead.LengthSquared() > 1e-6f ? ahead.Normalized() : Vector3.Forward;
+        float end = vehicle.ParkedBox.Size.Z * 0.5f + BodyRadius + 0.3f;
         // out of a car through the driver's door: it opens, and shuts behind (unless left open)
         if (vehicle is Car && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
             state = state with { DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor | VehicleState.DriverDoorShuts) };
@@ -1777,23 +1797,25 @@ public partial class FootPlayer : CharacterBody3D
         Vehicles?.Park(state);
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
-        GlobalPosition = FindExit(door, right, side, grounded);
+        GlobalPosition = FindExit(door, right, side, ahead, end, grounded);
     }
 
     /// <summary>
-    /// A clear spot beside the vehicle: its right, else its left, else on top. In the air there
-    /// is nothing to stand on either side, so the right side it is.
+    /// A clear spot beside the vehicle: its right, else its left, else behind or in front of it (a
+    /// car in a garage one car wide), else on top. In the air there is nothing to stand on either
+    /// side, so the right side it is.
     /// </summary>
-    private Vector3 FindExit(Vector3 at, Vector3 right, float side, bool grounded)
+    private Vector3 FindExit(Vector3 at, Vector3 right, float side, Vector3 ahead, float end, bool grounded)
     {
         if (!grounded) return at + right * side;
         _standProbe ??= new CapsuleShape3D { Radius = BodyRadius - 0.03f, Height = StandHeight };
-        foreach (var raw in new[] { at + right * side, at - right * side, at + Vector3.Up * 2.8f })
+        foreach (var raw in new[] { at + right * side, at - right * side, at - ahead * end, at + ahead * end, at + Vector3.Up * 2.8f })
         {
             // on a slope the ground beside the seat is not at the seat's height: stand on it,
             // or the uphill side reads as blocked and the player is put on the vehicle's roof
+            // (indoors the terrain is 3 km overhead: the floor is at the seat's height)
             var candidate = raw;
-            if (raw.Y <= at.Y + 0.01f && Terrain != null && Terrain.TryGetHeight(raw, out float g))
+            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && Terrain.TryGetHeight(raw, out float g))
                 candidate = raw with { Y = Mathf.Max(raw.Y, g) };
             var query = new PhysicsShapeQueryParameters3D
             {
@@ -1905,10 +1927,23 @@ public partial class FootPlayer : CharacterBody3D
     private void Revive()
     {
         Health = MaxHealth;
-        if (_hasSafe) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
+        if (HasSafeHere) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
         Velocity = Vector3.Zero;
         RequestReplacement();
     }
+
+    private void RememberSafe(Vector3 at)
+    {
+        _lastSafe = at;
+        _hasSafe = true;
+        _safeSpace = InteriorKey;
+    }
+
+    /// <summary>
+    /// A safe spot in the space the player is in now: one recorded inside a house is not a place
+    /// to put someone who is outside (it is 3 km under the street), nor the reverse.
+    /// </summary>
+    private bool HasSafeHere => _hasSafe && _safeSpace == InteriorKey;
 
     /// <summary>Regeneration, the safe spot to wake up at, and the respawn countdown.</summary>
     private void TickHealth(float dt, bool onFloor)
@@ -1923,8 +1958,7 @@ public partial class FootPlayer : CharacterBody3D
             && Velocity.LengthSquared() < 40f)
         {
             _safeTimer = 0;
-            _lastSafe = GlobalPosition;
-            _hasSafe = true;
+            RememberSafe(GlobalPosition);
         }
 
         if (_deadTimer > 0)
@@ -2133,6 +2167,8 @@ public partial class FootPlayer : CharacterBody3D
             GlobalPosition = new Vector3(GlobalPosition.X, Mathf.Max(GlobalPosition.Y, g + 1f), GlobalPosition.Z);
             _placed = true;
         }
+        // before any path runs, so none of them (mantle, a thrown-out NPC) can skip it
+        if (RescueFromVoid(delta)) return;
 
         float dt = (float)delta;
         var velocity = Velocity;
@@ -2381,7 +2417,6 @@ public partial class FootPlayer : CharacterBody3D
 
         if (_thirdPerson) FaceTravel(dt, direction);
         UpdateCameraFeel(dt, running, onFloor);
-        ClampAboveTerrain(delta);
     }
 
     /// <summary>
@@ -2483,21 +2518,63 @@ public partial class FootPlayer : CharacterBody3D
         Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, target, 1f - Mathf.Exp(-rate * dt)), 0);
     }
 
-    /// <summary>Safety net: never end up under the terrain surface, on foot or mounted.</summary>
-    private void ClampAboveTerrain(double delta)
-    {
-        if (Indoors || Terrain == null || !Terrain.TryGetHeight(GlobalPosition, out float ground)
-            || GlobalPosition.Y >= ground - 2f) return;
+    /// <summary>
+    /// Outdoors with no terrain height known here, below this nothing is ground: the lowest in
+    /// Switzerland is 193 m, and interiors are at <see cref="Interiors.InteriorManager.InteriorBaseY"/>.
+    /// </summary>
+    private const float VoidY = -500f;
+    /// <summary>This far under an interior's ground floor, the player has fallen through it.</summary>
+    private const float InteriorFallDepth = 10f;
 
+    /// <summary>
+    /// Safety net for a player who glitched through the world, on foot, mounted or flying:
+    /// <list type="bullet">
+    /// <item>outdoors, more than 2 m under the terrain: straight up onto it;</item>
+    /// <item>outdoors, far below any ground and no height known here (the tile has not streamed, or
+    /// there is no data): back to the last safe spot outside, or held here until the ground arrives;</item>
+    /// <item>indoors, under the interior's floor: back where they last stood in it.</item>
+    /// </list>
+    /// Every rescue is a teleport (<see cref="RequestReplacement"/>): stopped, no fall charged, and
+    /// put down on the ground by the placement pass. True when it moved the player.
+    /// </summary>
+    private bool RescueFromVoid(double delta)
+    {
         _sinceSnapWarning += delta;
+        Vector3 to;
+        if (Indoors)
+        {
+            if (GlobalPosition.Y > Interiors.InteriorManager.InteriorBaseY - InteriorFallDepth) return false;
+            if (HasSafeHere) to = _lastSafe + Vector3.Up * 0.5f;
+            else
+            {
+                // nowhere known in here: out to the street above, and down onto it
+                Interiors.InteriorManager.Instance?.Leave(this);
+                InteriorKey = null;
+                to = GlobalPosition with { Y = 0f };
+            }
+        }
+        else if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground))
+        {
+            if (GlobalPosition.Y >= ground - 2f) return false;
+            to = GlobalPosition with { Y = ground + 1f };
+        }
+        else
+        {
+            if (GlobalPosition.Y > VoidY) return false;
+            to = HasSafeHere ? _lastSafe + Vector3.Up * 0.5f : GlobalPosition with { Y = 0f };
+        }
+
         if (_sinceSnapWarning > 2)
         {
             _sinceSnapWarning = 0;
-            GD.Print($"[player] {Name} below terrain ({GlobalPosition.Y:F1} < {ground:F1}), snapping up");
+            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}");
         }
-        GlobalPosition = new Vector3(GlobalPosition.X, ground + 1f, GlobalPosition.Z);
-        Velocity = Vector3.Zero;
-        _motion.Speed = 0f;
+        RequestReplacement();
+        _flight.Velocity = Vector3.Zero;
+        GlobalPosition = to;
+        // indoors the placement pass stands down: this is where the player stays
+        if (Indoors) _placed = true;
+        return true;
     }
 
     /// <summary>
@@ -2589,7 +2666,6 @@ public partial class FootPlayer : CharacterBody3D
 
         if (_visual != null) flyer.Pose(_visual, _flight.Yaw, _flight);
         UpdateFlightCamera(dt, flyer);
-        ClampAboveTerrain(dt);
     }
 
     /// <summary>
@@ -2780,7 +2856,12 @@ public partial class FootPlayer : CharacterBody3D
         LastRideInput = input;
 
         Velocity = velocity;
+        // a garage's or a barn's open doorway: let through the shell, then carried across the sill
+        var interiors = Interiors.InteriorManager.Instance;
+        var from = GlobalPosition;
+        interiors?.BeforeMove(this);
         MoveAndSlide();
+        interiors?.AfterMove(this, from);
         // the sections behind a truck's cab follow it, and report what they hit
         if (_ride is Truck train) StepSections(train, dt);
 
@@ -2848,7 +2929,6 @@ public partial class FootPlayer : CharacterBody3D
         _rideWasOnFloor = nowOnFloor;
 
         UpdateRideCamera(dt);
-        ClampAboveTerrain(dt);
     }
 
     /// <summary>
@@ -2985,16 +3065,36 @@ public partial class FootPlayer : CharacterBody3D
         var to = GlobalPosition + basis * back;
 
         float wanted = 1f;
-        var ignore = new Godot.Collections.Array<Rid> { GetRid() };
-        ExcludeTrain(ignore);
-        var query = PhysicsRayQueryParameters3D.Create(from, to, CameraMask, ignore);
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.Count > 0)
+        float span = Mathf.Max(0.01f, (to - from).Length());
+        var space = GetWorld3D().DirectSpaceState;
+        var exclude = new Godot.Collections.Array<Rid> { GetRid() };
+        ExcludeTrain(exclude);   // a truck's own trailer is not in the way
+        // An arm reaching back through an open doorway (a car in a garage, looking out) goes on in
+        // the space on the other side, as the third-person arm does: the lens ends up out there.
+        float through = 2f;
+        var across = Transform3D.Identity;
+        if (Interiors.InteriorManager.Instance?.ArmThroughDoor(this, from, to, out float t, out var map, out var shell) == true)
         {
-            float span = Mathf.Max(0.01f, (to - from).Length());
+            if (shell.IsValid) exclude.Add(shell);
+            var near = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, from.Lerp(to, t), CameraMask, exclude));
+            if (near.Count > 0)
+                wanted = Mathf.Clamp((near["position"].AsVector3() - from).Length() / span * 0.85f, 0.15f, 1f);
+            else
+            {
+                through = t;
+                across = map;
+                var far = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                    map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, CameraMask, exclude));
+                if (far.Count > 0)
+                    wanted = Mathf.Clamp((t * span + (far["position"].AsVector3() - map * from.Lerp(to, t)).Length()) / span * 0.85f, 0.15f, 1f);
+            }
+        }
+        else
+        {
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to, CameraMask, exclude));
             // 0.85 keeps the lens off the rock face it just found
-            wanted = Mathf.Clamp((hit["position"].AsVector3() - from).Length() / span * 0.85f,
-                0.15f, 1f);
+            if (hit.Count > 0)
+                wanted = Mathf.Clamp((hit["position"].AsVector3() - from).Length() / span * 0.85f, 0.15f, 1f);
         }
 
         // ease out, snap in: arriving late at a wall means a frame with the camera inside it
@@ -3009,6 +3109,7 @@ public partial class FootPlayer : CharacterBody3D
         // Rotated by the same orbit angle as its position, so it still looks straight through the
         // rider's axis and they stay centred while the view swings.
         _camera.Rotation = new Vector3(_pitch + _ride.ChasePitch, orbit, _motion.Lean * 0.35f);
+        if (_chaseBlend > through) _camera.GlobalTransform = across * _camera.GlobalTransform;
 
         ApplyRideFov(dt);
     }
