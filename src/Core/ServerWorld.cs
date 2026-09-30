@@ -46,7 +46,8 @@ public partial class ServerWorld : Node3D
             GD.PushError(
                 $"[server] no terrain data in {chunkDir}. A server has nothing to serve and no "
                 + "world origin to hand out. Generate the chunks first (see the README), point at "
-                + "an existing set with --chunks <dir>, or run a generated world with --generated-world.");
+                + "an existing set with --chunks <dir>, UNITSPORT_CHUNKS or the terrain_location.json "
+                + "MapSetup writes, or run a generated world with --generated-world.");
             GetTree().Quit(1);
             return;
         }
