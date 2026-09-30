@@ -9,8 +9,11 @@ namespace UnitSport.Interiors;
 /// </summary>
 public partial class DoorLeaf : Node3D
 {
-    /// <summary>How far it swings when fully open, radians.</summary>
-    private const float OpenAngle = 1.75f;
+    /// <summary>
+    /// How far it swings when fully open, radians: square to the wall, no further. A house's door
+    /// can stand 0.2 m from the stair core's side wall, and any more swings the leaf into it.
+    /// </summary>
+    private const float OpenAngle = Mathf.Pi / 2;
     private const float Thickness = 0.04f;
 
     private Node3D _hinge = null!;

@@ -80,6 +80,11 @@ public partial class ClientWorld : Node3D
             GetTree().Quit(Items.IconSheet.Run());
             return;
         }
+        if (Loot.LootChanceCheck.Requested)
+        {
+            GetTree().Quit(Loot.LootChanceCheck.Run());
+            return;
+        }
         if (Items.InventoryCheck.Requested)
         {
             GetTree().Quit(Items.InventoryCheck.Run());
