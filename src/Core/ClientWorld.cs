@@ -1033,6 +1033,32 @@ public partial class ClientWorld : Node3D
     }
 
     private (WindowMode Mode, int W, int H)? _appliedWindow;
+    private WindowMode _lastFullscreenMode = WindowMode.Borderless;
+
+    /// <summary>
+    /// F11 / Alt+Enter toggle fullscreen from anywhere, menus and chat box included. From _Input,
+    /// not _UnhandledInput: ChatUi takes Enter in _UnhandledKeyInput and would open on Alt+Enter.
+    /// Goes through the saved setting so the Settings panel agrees; windowed comes back to the
+    /// fullscreen kind (borderless or exclusive) that was last used.
+    /// </summary>
+    public override void _Input(InputEvent @event)
+    {
+        if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
+        bool altEnter = key.AltPressed && key.PhysicalKeycode is Key.Enter or Key.KpEnter;
+        if (key.PhysicalKeycode != Key.F11 && !altEnter) return;
+        if (DisplayServer.GetName() == "headless") return;
+
+        var s = GameSettings.Current;
+        if (s.WindowMode == WindowMode.Windowed)
+            s.WindowMode = _lastFullscreenMode;
+        else
+        {
+            _lastFullscreenMode = s.WindowMode;
+            s.WindowMode = WindowMode.Windowed;
+        }
+        s.Commit();
+        GetViewport().SetInputAsHandled();
+    }
 
     /// <summary>
     /// Window mode and size, touched only when those settings themselves changed: every other
