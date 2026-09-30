@@ -62,6 +62,14 @@ public partial class ClientWorld : Node3D
         ApplyViewportSettings();
         GameSettings.Changed += ApplyViewportSettings;
 
+        // a hand-made street to show the door portals: no terrain, no server
+        if (Interiors.PortalDemo.ParseArgs() is { Requested: true } portalDemo)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
+            return;
+        }
+
         var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
         var manifest = await source.LoadManifestAsync();
 

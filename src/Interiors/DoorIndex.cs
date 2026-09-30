@@ -36,6 +36,9 @@ public static class DoorIndex
 
     public static void Clear() => Tiles.Clear();
 
+    /// <summary>Every door currently drawn (for probes).</summary>
+    public static IEnumerable<Entry> All() => Tiles.Values.SelectMany(t => t);
+
     /// <summary>
     /// The nearest door within <paramref name="reach"/> of a point, measured to the doorway rather
     /// than its centre line, and only from the outside: a player standing behind a wall must not

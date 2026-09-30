@@ -99,9 +99,9 @@ public partial class DoorWatchProbe : Node
             _log = 1;
             var cam = GetViewport().GetCamera3D();
             GD.Print($"[watch]   link {(link != null ? $"swing {link.Swing:F2}" : "none")}, portal on "
-                + $"{interiors.Portals?.Active?.Door ?? "nothing"}, camera {cam?.Name} at {cam?.GlobalPosition:F0}");
+                + $"{(link != null && interiors.Portals?.IsShown(link) == true ? _key : "nothing")}, camera {cam?.Name} at {cam?.GlobalPosition:F0}");
         }
-        if (_sawOpen && link is { Swing: >= 1f } && interiors.Portals?.Active == link && !_sawPortal)
+        if (_sawOpen && link is { Swing: >= 1f } && interiors.Portals?.IsShown(link!) == true && !_sawPortal)
         {
             _sawPortal = true;
             GD.Print("[watch] the interior is built here and shown through the doorway");
@@ -117,7 +117,7 @@ public partial class DoorWatchProbe : Node
                 if (!_sawInside) GD.Print($"[watch] the other player is inside {space}, door open: visible {remote.Visible}");
                 _sawInside |= remote.Visible;
                 _seen += delta;
-                if (!_shotRemote && _seen > 0.3 && remote.Visible && interiors.Portals?.Active == link)
+                if (!_shotRemote && _seen > 0.3 && remote.Visible && interiors.Portals?.IsShown(link!) == true)
                 {
                     _shotRemote = true;
                     Save("_watch_remote");

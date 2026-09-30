@@ -9,26 +9,39 @@ changed is how you get there.
 - **Shared door state.** E at a front door (either side) asks the server to open or shut it
   (`RequestDoor`). The server plans the building if nobody has yet, sends the plan to the opener,
   and broadcasts `SetDoor(door, plan, open)`; new peers get the table in `SendTableTo`. A door
-  with nobody within 6 m of either side for 4 s shuts by itself (`TickDoors`, server or offline).
-- **What a client builds.** Every open door within 45 m of the local player (or free camera), and
-  every door of the building the player is in, gets its interior built here and a `DoorLink`.
+  with nobody within 6 m of either side for a minute shuts by itself (`TickDoors`, server or offline).
+- **What a client builds.** Every open door within 45 m of the local player (or free camera),
+  every door of the building the player is in, and from inside, every open door within 45 m of
+  one of its open doorways (seen through it) gets its interior built here and a `DoorLink`.
   Other clients ask for the plan with `RequestPlan`. Interiors nobody can see are freed.
 - **`DoorLink` = two frames and a map.** The facade doorway (origin on the sill at the facade,
   Z out of the building) and the interior doorway (at the outer end of the 6 cm reveal, i.e. the
   plan box edge). `ToInside = Inside * Outside⁻¹`, and back. Rigid: the 3 km drop plus the small
   turn and shift between the facade the door was found on and the plan box. The portal camera,
   the step over the sill and the camera arm all use it.
-- **The view (`DoorPortals`).** Each open link has a doorway "tunnel" on both sides (a quad plus a
-  short box behind it, so the near plane clipping the mouth while stepping through still shows the
-  other side). The nearest one in view, on the camera's side, gets the one portal: a camera at
+- **The views (`DoorPortals`).** Each open link has a doorway "tunnel" on both sides (a quad plus
+  a short box behind it, so the near plane clipping the mouth while stepping through still shows
+  the other side). The two nearest in view, on the camera's side, get a portal each: a camera at
   `map * mainCamera`, half resolution, in a `SubViewport` sampled in screen space
-  (`door_portal.gdshader`, `source_color`). Others show a dark hall. Quads are on visual layer 20,
-  which the portal camera does not draw.
-- **Looking out needs a clip.** The portal camera then stands inside the building's closed shell.
-  Global uniforms `portal_clip_eye` / `portal_clip_plane` (`portal_clip.gdshaderinc`): every
-  world shader (building, terrain, tree, prop, road, water) discards fragments behind the doorway
-  plane, but only when `CAMERA_POSITION_WORLD` is that camera's. Avatars and vehicles (standard
-  materials) are not clipped.
+  (`door_portal.gdshader`, `source_color`). Each of those can see one more doorway through its
+  own, which gets a nested portal: through a house with two doors, or out of one door and into
+  the house across the street. Past that, a doorway shows a dark hall.
+- **Depth layers.** A doorway has one quad per depth (visual layers 18, 19, 20). The screen's
+  camera draws depth 0 (`DoorPortals` sets its cull mask), portal cameras depth 1, nested ones
+  depth 2 (always dark). A nested `SubViewport` is a child of its outer one, so Godot renders it
+  first. A quad seen from well behind draws nothing: that camera looks out through that doorway.
+- **Every portal camera clips its own side.** Looking out, it stands inside the building's closed
+  shell; looking in, it stands in the space under the terrain that all interiors share, often
+  inside another building's rooms. Four slots of global uniforms `portal_clip_eye_N` /
+  `portal_clip_plane_N` (`portal_clip.gdshaderinc`): the world shaders, `ps1_interior` and the
+  doorway quads discard what is on the camera's side of its doorway, but only when
+  `CAMERA_POSITION_WORLD` is that camera's. Through two doors in line the map can land a portal
+  camera exactly on the screen's camera, so each is nudged 5 cm per slot along its view, and the
+  match is 2 cm (floats are ~2 mm steps tens of km out). Avatars and vehicles (standard materials)
+  are not clipped.
+- **Which interior a camera is in.** `InteriorNode.PlanAt`: the one whose plan contains it, else
+  the nearest. Just outside a doorway, the house across the street can be nearer. A camera sent in
+  through a door is in that door's building, and the nested view is told so.
 - **Walking through.** The facade has no hole, so while a player on foot stands in an open
   facade doorway, `BeforeMove` adds a collision exception with the tile's building body
   (`ChunkManager.BuildingBodyAt`). `AfterMove` checks the step against the doorway plane and
@@ -62,7 +75,14 @@ changed is how you get there.
 - **Checks.** `--interiorcheck[,shot.png]` opens, walks in, out, and checks the auto-close. Online
   (`--connect`), it drives the networked player. `--doorwatch[,shot.png]` on a second client
   watches the same door from 8 m: door state, portal, the other player visible through it.
-  `--film` (with a shot path) saves every frame of each walk-through.
+  `--film` (with a shot path) saves every frame of each walk-through. After the church, it opens
+  both church doors and checks both show at once from inside, then finds two neighbours' doors
+  and two facing each other across a street, when the generated village has them.
+- **Demo.** `--portaldemo[,out.png]` (`PortalDemo`): a hand-laid street with no terrain and no
+  server. Two houses side by side, a house with a front and a back door (seen through, to a red
+  car in the backyard), a house across the street (seen from inside it), a figure walking in.
+  With a path it saves each view and quits; without, it cycles them.
   A dedicated server needs terrain; with none, PR #46's `--generated-world`.
-- **Known limits.** One portal rendered at a time. Mounted players cannot pass. No shooting or throwing through.
+- **Known limits.** Two portals plus one nested in each; a third level is a dark hall. Mounted
+  players cannot pass. No shooting or throwing through.
   Exterior and interior windows do not line up (#60).

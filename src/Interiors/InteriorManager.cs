@@ -61,7 +61,7 @@ public partial class InteriorManager : Node3D
     /// <summary>A door with nobody this close to either side of it...</summary>
     private const float QuietRadius = 6f;
     /// <summary>...for this long shuts by itself.</summary>
-    private const double QuietSeconds = 4;
+    private const double QuietSeconds = 60;
     /// <summary>A door's swing, open or shut, in seconds.</summary>
     private const float SwingSeconds = 0.6f;
 
@@ -427,7 +427,8 @@ public partial class InteriorManager : Node3D
 
     /// <summary>
     /// Builds what can be seen: an interior and a link for every open door near the local
-    /// player (or of the building they are in), and drops what can no longer be.
+    /// player, every door of the building they are in, and, from inside, every open door near
+    /// one of its open doors (seen through it, across the street). Drops what can no longer be.
     /// </summary>
     private void Maintain()
     {
@@ -435,16 +436,24 @@ public partial class InteriorManager : Node3D
         var player = LocalPlayer?.Invoke();
         if (player != null && !IsInstanceValid(player)) player = null;
         string? inside = _current?.Key;
-        // the player, or the free camera when there is none (not one looking into an interior)
-        Vector3? here = player?.GlobalPosition;
-        if (here == null && GetViewport()?.GetCamera3D() is { } cam && cam.GlobalPosition.Y > InteriorBaseY + 1000f)
-            here = cam.GlobalPosition;
+        // where the outside is looked at from: the player, the free camera when there is none,
+        // or from inside, the building's own open doorways
+        var from = new List<Vector3>();
+        if (inside == null)
+        {
+            if (player != null) from.Add(player.GlobalPosition);
+            else if (GetViewport()?.GetCamera3D() is { } cam && cam.GlobalPosition.Y > InteriorBaseY + 1000f)
+                from.Add(cam.GlobalPosition);
+        }
+        else
+            foreach (var l in _links.Values)
+                if (l.Plan == inside && l.Swing > 0f) from.Add(l.Outside.Origin);
 
         bool Wanted(string door, string plan)
         {
             if (plan == inside) return true;
-            if (inside != null || here is not { } at) return false;
-            return BuildingKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d && d.World.DistanceTo(at) < BuildRange;
+            return BuildingKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d
+                && from.Any(at => d.World.DistanceTo(at) < BuildRange);
         }
 
         foreach (var (door, plan) in _doors)
@@ -532,18 +541,7 @@ public partial class InteriorManager : Node3D
     }
 
     /// <summary>The built interior a point far underground is in (nearest by plan position), if any.</summary>
-    public string? PlanAt(Vector3 at)
-    {
-        string? best = null;
-        float bestD = float.MaxValue;
-        foreach (var (plan, node) in _built)
-        {
-            var o = node.GlobalPosition;
-            float d = new Vector2(o.X - at.X, o.Z - at.Z).Length();
-            if (d < bestD) { bestD = d; best = plan; }
-        }
-        return best;
-    }
+    public string? PlanAt(Vector3 at) => InteriorNode.PlanAt(_built.Values, at);
 
     // ---- client: walking through ------------------------------------------------------------------
 
@@ -921,12 +919,36 @@ public partial class InteriorNode : Node3D
 {
     private readonly Dictionary<string, DoorLeaf> _leaves = new();
 
+    public InteriorLayout Layout { get; private init; } = null!;
+
+    /// <summary>
+    /// The interior a point far underground is in: the one whose plan contains it (a metre of
+    /// slack), else the nearest. Nearest alone is wrong just outside a doorway, where the
+    /// neighbour across the street can be closer.
+    /// </summary>
+    public static string? PlanAt(IEnumerable<InteriorNode> nodes, Vector3 at)
+    {
+        string? best = null;
+        float bestD = float.MaxValue;
+        foreach (var node in nodes)
+        {
+            if (!node.IsInsideTree()) continue;
+            var local = node.ToLocal(at);
+            if (Math.Abs(local.X) <= node.Layout.Width / 2 + 1f && Math.Abs(local.Z) <= node.Layout.Depth / 2 + 1f)
+                return node.Layout.Key;
+            var o = node.GlobalPosition;
+            float d = new Vector2(o.X - at.X, o.Z - at.Z).Length();
+            if (d < bestD) { bestD = d; best = node.Layout.Key; }
+        }
+        return best;
+    }
+
     /// <summary>The leaf of the door a given building key names, if this interior has that entrance.</summary>
     public DoorLeaf? Leaf(string door) => _leaves.TryGetValue(door, out var l) ? l : null;
 
     public static InteriorNode Create(InteriorLayout layout, InteriorMeshBuilder.MeshData data, Material material, Transform3D placement)
     {
-        var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement };
+        var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement, Layout = layout };
 
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);

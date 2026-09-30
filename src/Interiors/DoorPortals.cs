@@ -3,45 +3,71 @@ using Godot;
 namespace UnitSport.Interiors;
 
 /// <summary>
-/// The view through an open door. Client only.
+/// The views through open doors. Client only.
 ///
 /// <para>
-/// Each open door gets a quad in both of its doorways (<see cref="DoorLink"/>), and the one
-/// nearest the camera, in view and on the camera's own side, gets the portal: a second camera,
-/// moved through the door's map to where the viewer would stand on the other side, rendering at
-/// half resolution into a <see cref="SubViewport"/> that the quad shows in screen space. Other
-/// open doors show a dark hall. One render at most, and only while a door is open near someone.
+/// Each open door has a quad in both of its doorways (<see cref="DoorLink"/>). The doorways the
+/// camera sees get portals: a second camera, moved through the door's map to where the viewer
+/// would stand on the other side, rendering at reduced resolution into a <see cref="SubViewport"/>
+/// that the quad shows in screen space. Portals nest: a portal camera sees doorways too, and one
+/// of them gets a portal of its own, so a building with two doors open is seen through, from the
+/// street back out onto the street. Budget: <see cref="Width"/> doorways seen directly, each with
+/// one doorway seen through it. Beyond that a doorway shows a dark hall.
+/// </para>
+///
+/// <para>
+/// <b>Depth.</b> A quad has one picture, but the same doorway can be seen by cameras at different
+/// depths. So every doorway has one quad per depth, each on its own visual layer, and a camera
+/// draws only its own depth's quads: the view from the screen (depth 0), from a portal (1), from
+/// a portal in a portal (2, always dark). A view's cameras draw after the views nested in them,
+/// which is what makes their quads show this frame's picture and not the last one: Godot renders
+/// a <see cref="SubViewport"/> before the viewport it is a child of.
 /// </para>
 ///
 /// <para>
 /// Each quad is a short tunnel into the doorway, not a flat card: stepping through, the lens
-/// passes the quad's plane and the near plane clips it, and the tunnel's walls behind still
-/// show the other side. The quads live on their own visual layer, which the portal camera does
-/// not draw (it would see the doorway it is looking through from behind).
+/// passes the quad's plane and the near plane clips it, and the tunnel's walls behind still show
+/// the other side. Seen from well behind, a quad draws nothing (<c>door_portal.gdshader</c>): that
+/// is a portal camera looking out through that very doorway.
 /// </para>
 ///
 /// <para>
-/// Looking out from inside, the portal camera stands inside the building's closed shell. The
-/// world shaders drop everything behind the doorway's plane for that camera only
-/// (<c>portal_clip.gdshaderinc</c>): the shell's walls, the door leaf baked into the facade.
+/// Looking out from inside, a portal camera stands inside the building's closed shell. The world
+/// shaders drop everything behind that doorway's plane for that camera only
+/// (<c>portal_clip.gdshaderinc</c>, one slot per camera).
 /// </para>
 /// </summary>
 public partial class DoorPortals : Node3D
 {
-    /// <summary>Visual layer 20: doorway quads, which the portal camera must not see.</summary>
-    public const uint QuadLayer = 1u << 19;
-    /// <summary>A doorway further than this from the camera gets no portal.</summary>
+    /// <summary>Visual layers 18, 19, 20: doorway quads for depth 0, 1 and 2.</summary>
+    public static readonly uint[] QuadLayers = { 1u << 17, 1u << 18, 1u << 19 };
+    public const uint AllQuadLayers = (1u << 17) | (1u << 18) | (1u << 19);
+    private const uint WorldLayers = 0xFFFFFu & ~AllQuadLayers;
+
+    /// <summary>Doorways seen directly that get a portal each.</summary>
+    private const int Width = 2;
+    /// <summary>A doorway further than this from the camera looking at it gets no portal.</summary>
     private const float Range = 45f;
-    /// <summary>Resolution of the portal picture relative to the screen. Low is on-style.</summary>
-    private const float Scale = 0.5f;
+    /// <summary>Resolution of a portal picture relative to the screen, per depth. Low is on-style.</summary>
+    private static readonly float[] Scale = { 0.5f, 0.35f };
 
     private readonly Func<IEnumerable<DoorLink>> _links;
     private readonly Func<Vector3, string?> _planAt;
-    private SubViewport _view = null!;
-    private Camera3D _camera = null!;
-    private ShaderMaterial _live = null!, _dark = null!;
-    private DoorLink? _active;
-    private bool _clipping;
+    private readonly View[] _views = new View[Width];
+    private ShaderMaterial _darkMaterial = null!;
+    private Shader _shader = null!;
+    private readonly HashSet<DoorLink> _shown = new();
+
+    /// <summary>One portal camera and the viewport it renders into.</summary>
+    private sealed class View
+    {
+        public required SubViewport Port { get; init; }
+        public required Camera3D Camera { get; init; }
+        public required int Depth { get; init; }
+        public required int Slot { get; init; }
+        public View? Nested { get; init; }
+        public DoorLink? Link { get; set; }
+    }
 
     public DoorPortals(Func<IEnumerable<DoorLink>> links, Func<Vector3, string?> planAt)
     {
@@ -49,54 +75,84 @@ public partial class DoorPortals : Node3D
         _planAt = planAt;
     }
 
-    /// <summary>The door being looked through, if any (for probes).</summary>
-    public DoorLink? Active => _active;
+    /// <summary>Whether a door's doorway is shown with a live picture this frame (for probes).</summary>
+    public bool IsShown(DoorLink link) => _shown.Contains(link);
+
+    /// <summary>Whether a door is seen through another door this frame (for probes).</summary>
+    public bool IsShownThrough(DoorLink link) => _views.Any(v => v.Nested?.Link == link);
 
     public override void _Ready()
     {
         // after the player has placed its camera for this frame
         ProcessPriority = 1000;
-        _view = new SubViewport
+        _shader = GD.Load<Shader>("res://shaders/door_portal.gdshader");
+        _darkMaterial = new ShaderMaterial { Shader = _shader };
+        for (int i = 0; i < Width; i++)
         {
-            Name = "PortalView",
-            RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
-            Size = new Vector2I(320, 240),
-            HandleInputLocally = false,
-        };
-        AddChild(_view);
-        _camera = new Camera3D { Name = "PortalCamera", CullMask = 0xFFFFF & ~QuadLayer };
-        _view.AddChild(_camera);
-        _camera.MakeCurrent();
-
-        var shader = GD.Load<Shader>("res://shaders/door_portal.gdshader");
-        _live = new ShaderMaterial { Shader = shader };
-        _live.SetShaderParameter("view", _view.GetTexture());
-        _live.SetShaderParameter("live", true);
-        _dark = new ShaderMaterial { Shader = shader };
+            // the nested view is a child: it renders first, and the outer view's quad shows it
+            var outer = Port($"Portal{i}");
+            AddChild(outer);
+            var inner = Port($"Portal{i}Through");
+            outer.AddChild(inner);
+            var nested = new View { Port = inner, Camera = Lens(inner, 2), Depth = 2, Slot = Width + i };
+            _views[i] = new View { Port = outer, Camera = Lens(outer, 1), Depth = 1, Slot = i, Nested = nested };
+        }
     }
 
-    public override void _ExitTree() => SetClip(null);
+    private static SubViewport Port(string name) => new()
+    {
+        Name = name,
+        RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
+        Size = new Vector2I(320, 240),
+        HandleInputLocally = false,
+    };
 
-    /// <summary>Gives a link its two doorway quads.</summary>
+    /// <summary>A portal camera for a depth: the world, and that depth's doorway quads.</summary>
+    private static Camera3D Lens(SubViewport port, int depth)
+    {
+        var cam = new Camera3D { Name = "Camera", CullMask = WorldLayers | QuadLayers[depth] };
+        port.AddChild(cam);
+        cam.MakeCurrent();
+        return cam;
+    }
+
+    public override void _ExitTree()
+    {
+        for (int slot = 0; slot < 2 * Width; slot++) SetClip(slot, null, null, false);
+    }
+
+    /// <summary>Gives a link its doorway quads, one per depth on each side.</summary>
     public void Attach(DoorLink link)
     {
-        link.OutsideQuad = Quad(link.Outside, link.OutsideWidth, link.OutsideHeight, DoorLink.OutsideQuadOffset, -0.8f);
-        link.InsideQuad = Quad(link.Inside, link.InsideWidth, link.InsideHeight, -0.005f, 0.8f);
+        var outsideMesh = Tunnel(link.OutsideWidth, link.OutsideHeight, DoorLink.OutsideQuadOffset, -0.8f);
+        var insideMesh = Tunnel(link.InsideWidth, link.InsideHeight, -0.005f, 0.8f);
+        for (int d = 0; d < QuadLayers.Length; d++)
+        {
+            link.OutsideQuads[d] = Quad(outsideMesh, link.Outside, d, facing: link.Outside.Basis.Z);
+            link.InsideQuads[d] = Quad(insideMesh, link.Inside, d, facing: -link.Inside.Basis.Z);
+        }
     }
 
     public void Detach(DoorLink link)
     {
-        if (_active == link) _active = null;
-        link.OutsideQuad?.QueueFree();
-        link.InsideQuad?.QueueFree();
-        link.OutsideQuad = link.InsideQuad = null;
+        foreach (var v in _views)
+        {
+            if (v.Link == link) v.Link = null;
+            if (v.Nested?.Link == link) v.Nested.Link = null;
+        }
+        for (int d = 0; d < QuadLayers.Length; d++)
+        {
+            link.OutsideQuads[d]?.QueueFree();
+            link.InsideQuads[d]?.QueueFree();
+            link.OutsideQuads[d] = link.InsideQuads[d] = null;
+        }
     }
 
     /// <summary>
     /// A doorway-sized tunnel in a doorway frame: its mouth at <paramref name="front"/> on the
     /// viewer's side, running to <paramref name="back"/> on the far side.
     /// </summary>
-    private MeshInstance3D Quad(Transform3D frame, float width, float height, float front, float back)
+    private static ArrayMesh Tunnel(float width, float height, float front, float back)
     {
         float hw = width / 2;
         var v = new List<Vector3>();
@@ -114,12 +170,20 @@ public partial class DoorPortals : Node3D
         arrays[(int)Mesh.ArrayType.Vertex] = v.ToArray();
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        return mesh;
+    }
+
+    private MeshInstance3D Quad(ArrayMesh mesh, Transform3D frame, int depth, Vector3 facing)
+    {
+        // its own material: which picture it shows is decided per quad, every frame
+        var material = new ShaderMaterial { Shader = _shader };
+        material.SetShaderParameter("facing", new Vector4(facing.X, facing.Y, facing.Z, facing.Dot(frame.Origin)));
         var quad = new MeshInstance3D
         {
             Name = "Doorway",
             Mesh = mesh,
-            Layers = QuadLayer,
-            MaterialOverride = _dark,
+            Layers = QuadLayers[depth],
+            MaterialOverride = material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             TopLevel = true,
             Visible = false,
@@ -131,72 +195,126 @@ public partial class DoorPortals : Node3D
 
     public override void _Process(double delta)
     {
-        var cam = GetViewport().GetCamera3D();
-        DoorLink? best = null;
-        bool fromInside = false;
-        float bestD = Range;
-        if (cam != null)
-        {
-            var eye = cam.GlobalPosition;
-            fromInside = eye.Y < InteriorManager.InteriorBaseY + 1000f;
-            ClipFar(cam, fromInside);
-            string? plan = fromInside ? _planAt(eye) : null;
-            foreach (var l in _links())
+        var links = _links().ToList();
+        foreach (var l in links)
+            for (int d = 0; d < QuadLayers.Length; d++)
             {
                 bool shown = l.Swing > 0.001f;
-                if (l.OutsideQuad != null) l.OutsideQuad.Visible = shown;
-                if (l.InsideQuad != null) l.InsideQuad.Visible = shown;
-                if (!shown || (fromInside && l.Plan != plan)) continue;
-                var frame = fromInside ? l.Inside : l.Outside;
-                var local = frame.AffineInverse() * eye;
-                // on the doorway's own side (a little slack for a lens right in the doorway)
-                if (fromInside ? local.Z > 0.3f : local.Z < -0.3f) continue;
-                float d = local.Length();
-                if (d >= bestD || !InView(cam, frame, fromInside ? l.InsideWidth : l.OutsideWidth,
-                        fromInside ? l.InsideHeight : l.OutsideHeight, d)) continue;
-                bestD = d;
-                best = l;
+                if (l.OutsideQuads[d] is { } o) { o.Visible = shown; Show(o, null); }
+                if (l.InsideQuads[d] is { } i) { i.Visible = shown; Show(i, null); }
             }
-        }
+        _shown.Clear();
 
-        if (best != _active)
+        var cam = GetViewport().GetCamera3D();
+        if (cam != null)
         {
-            foreach (var l in _links())
+            // the screen's camera draws depth-0 quads only
+            if ((cam.CullMask & AllQuadLayers) != QuadLayers[0])
+                cam.CullMask = (cam.CullMask & ~AllQuadLayers) | QuadLayers[0];
+            ClipFar(cam, cam.GlobalPosition.Y < InteriorManager.InteriorBaseY + 1000f);
+        }
+        float far = cam == null ? 4000f : _shortened == cam ? _far : cam.Far;
+
+        var direct = cam != null ? Seen(cam, cam.GlobalTransform, links, null, Width) : new List<(DoorLink, bool)>();
+        var screen = GetViewport().GetVisibleRect().Size;
+        for (int i = 0; i < Width; i++)
+        {
+            var view = _views[i];
+            if (i < direct.Count && cam != null)
             {
-                if (l.OutsideQuad != null) l.OutsideQuad.MaterialOverride = l == best ? _live : _dark;
-                if (l.InsideQuad != null) l.InsideQuad.MaterialOverride = l == best ? _live : _dark;
+                var (link, fromInside) = direct[i];
+                var lens = (fromInside ? link.ToOutside : link.ToInside) * cam.GlobalTransform;
+                Aim(view, link, fromInside, lens, cam, far, screen);
+                // a camera sent in through a door is in that door's building, whatever is nearest
+                var through = Seen(view.Camera, lens, links, link, 1, fromInside ? null : link.Plan);
+                if (through.Count > 0)
+                {
+                    var (next, nextInside) = through[0];
+                    Aim(view.Nested!, next, nextInside, (nextInside ? next.ToOutside : next.ToInside) * lens, cam, far, screen);
+                }
+                else Idle(view.Nested!);
             }
-            _active = best;
-            _view.RenderTargetUpdateMode = best != null ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+            else
+            {
+                Idle(view);
+                Idle(view.Nested!);
+            }
         }
-        if (best == null || cam == null)
+    }
+
+    /// <summary>
+    /// The open doorways a camera at <paramref name="lens"/> sees on its own side, nearest first:
+    /// the door, and whether the camera is inside its building.
+    /// </summary>
+    private List<(DoorLink Link, bool Inside)> Seen(Camera3D cam, Transform3D lens, List<DoorLink> links, DoorLink? through, int max,
+        string? inPlan = null)
+    {
+        var eye = lens.Origin;
+        bool inside = eye.Y < InteriorManager.InteriorBaseY + 1000f;
+        string? plan = inside ? inPlan ?? _planAt(eye) : null;
+        var found = new List<(float D, DoorLink Link)>();
+        foreach (var l in links)
         {
-            SetClip(null);
-            return;
+            if (l == through || l.Swing <= 0.001f || (inside && l.Plan != plan)) continue;
+            var frame = inside ? l.Inside : l.Outside;
+            var local = frame.AffineInverse() * eye;
+            // on the doorway's own side (a little slack for a lens right in the doorway)
+            if (inside ? local.Z > 0.3f : local.Z < -0.3f) continue;
+            float d = local.Length();
+            if (d >= Range || !InView(cam, lens, frame, inside ? l.InsideWidth : l.OutsideWidth,
+                    inside ? l.InsideHeight : l.OutsideHeight, d)) continue;
+            found.Add((d, l));
         }
+        return found.OrderBy(f => f.D).Take(max).Select(f => (f.Link, inside)).ToList();
+    }
 
-        var map = fromInside ? best.ToOutside : best.ToInside;
-        _camera.GlobalTransform = map * cam.GlobalTransform;
-        _camera.Projection = cam.Projection;
-        _camera.Fov = cam.Fov;
-        _camera.Near = cam.Near;
-        _camera.Far = _shortened == cam ? _far : cam.Far;
-        _camera.KeepAspect = cam.KeepAspect;
-        _camera.HOffset = cam.HOffset;
-        _camera.VOffset = cam.VOffset;
-        var size = GetViewport().GetVisibleRect().Size * Scale;
+    /// <summary>Points a view through a doorway, and shows its picture in that doorway's quad of the depth above.</summary>
+    private void Aim(View view, DoorLink link, bool fromInside, Transform3D lens, Camera3D screenCam, float far, Vector2 screen)
+    {
+        view.Link = link;
+        var c = view.Camera;
+        // nudged along its view: through two doors in line, the map can put a portal camera
+        // exactly on the screen's, and the clip tells cameras apart by position (portal_clip)
+        c.GlobalTransform = lens.Translated(-lens.Basis.Z.Normalized() * 0.05f * (view.Slot + 1));
+        c.Projection = screenCam.Projection;
+        c.Fov = screenCam.Fov;
+        c.Near = screenCam.Near;
+        c.Far = far;
+        c.KeepAspect = screenCam.KeepAspect;
+        c.HOffset = screenCam.HOffset;
+        c.VOffset = screenCam.VOffset;
+        var size = screen * Scale[view.Depth - 1];
         var want = new Vector2I(Math.Max(16, (int)size.X), Math.Max(16, (int)size.Y));
-        if (_view.Size != want) _view.Size = want;
+        if (view.Port.Size != want) view.Port.Size = want;
+        view.Port.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
 
-        // looking out, the camera stands inside the facade's closed shell: cut it away
-        SetClip(fromInside ? best : null);
+        var quad = (fromInside ? link.InsideQuads : link.OutsideQuads)[view.Depth - 1];
+        if (quad != null) Show(quad, view.Port.GetTexture());
+        if (view.Depth == 1) _shown.Add(link);
+        // whatever is on the camera's side of the doorway it looks through is not in its picture:
+        // the facade's closed shell looking out, other interiors in the shared space looking in
+        SetClip(view.Slot, link, c, outward: fromInside);
+    }
+
+    private void Idle(View view)
+    {
+        view.Link = null;
+        view.Port.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+        SetClip(view.Slot, null, null, false);
+    }
+
+    private static void Show(MeshInstance3D quad, Texture2D? picture)
+    {
+        if (quad.MaterialOverride is not ShaderMaterial m) return;
+        m.SetShaderParameter("live", picture != null);
+        if (picture != null) m.SetShaderParameter("view", picture);
     }
 
     /// <summary>
     /// A lens inside an interior draws out to <see cref="InsideFar"/> only. The outside world stays
-    /// visible while a door is open, for the portal camera, and node visibility is the same for
+    /// visible while a door is open, for the portal cameras, and node visibility is the same for
     /// every viewport: without this the main camera drew the whole landscape 3 km overhead, behind
-    /// the ceiling. The portal camera keeps the real far distance.
+    /// the ceiling. The portal cameras keep the real far distance.
     /// </summary>
     private void ClipFar(Camera3D cam, bool inside)
     {
@@ -218,30 +336,54 @@ public partial class DoorPortals : Node3D
     private Camera3D? _shortened;
     private float _far;
 
-    private static bool InView(Camera3D cam, Transform3D frame, float width, float height, float distance)
+    /// <summary>
+    /// Whether a doorway is in a camera's view. <paramref name="lens"/> is where the camera is
+    /// about to be, which for a nested view is not where it was last frame.
+    /// </summary>
+    private static bool InView(Camera3D cam, Transform3D lens, Transform3D frame, float width, float height, float distance)
     {
         if (distance < 2f) return true;
+        var saved = cam.GlobalTransform;
+        cam.GlobalTransform = lens;
         float hw = width / 2;
+        bool seen = false;
         foreach (var p in new[] { new Vector3(0, height / 2, 0), new Vector3(-hw, 0, 0), new Vector3(hw, 0, 0),
                      new Vector3(-hw, height, 0), new Vector3(hw, height, 0) })
-            if (cam.IsPositionInFrustum(frame * p)) return true;
-        return false;
+            if (cam.IsPositionInFrustum(frame * p)) { seen = true; break; }
+        cam.GlobalTransform = saved;
+        return seen;
     }
 
-    private void SetClip(DoorLink? link)
+    private readonly bool[] _clipping = new bool[4];
+
+    /// <summary>
+    /// A portal camera's clip: the doorway it looks through, keeping what is beyond it. Looking
+    /// out, the plane is the facade, out past the leaf baked on it; looking in, the interior's
+    /// doorway, keeping the room (and its reveal).
+    /// </summary>
+    private void SetClip(int slot, DoorLink? link, Camera3D? cam, bool outward)
     {
-        if (link == null)
+        if (link == null || cam == null)
         {
-            if (!_clipping) return;
-            _clipping = false;
-            RenderingServer.GlobalShaderParameterSet("portal_clip_eye", new Vector3(0, 1e9f, 0));
+            if (!_clipping[slot]) return;
+            _clipping[slot] = false;
+            RenderingServer.GlobalShaderParameterSet($"portal_clip_eye_{slot}", new Vector3(0, 1e9f, 0));
             return;
         }
-        _clipping = true;
-        // behind the portal quad: the facade, and the leaf baked on it
-        var n = link.Outside.Basis.Z;
-        float w = n.Dot(link.Outside.Origin) + DoorLink.OutsideQuadOffset;
-        RenderingServer.GlobalShaderParameterSet("portal_clip_eye", _camera.GlobalPosition);
-        RenderingServer.GlobalShaderParameterSet("portal_clip_plane", new Vector4(n.X, n.Y, n.Z, w));
+        _clipping[slot] = true;
+        Vector3 n;
+        float w;
+        if (outward)
+        {
+            n = link.Outside.Basis.Z;
+            w = n.Dot(link.Outside.Origin) + DoorLink.OutsideQuadOffset;
+        }
+        else
+        {
+            n = -link.Inside.Basis.Z;
+            w = n.Dot(link.Inside.Origin) - 0.02f;
+        }
+        RenderingServer.GlobalShaderParameterSet($"portal_clip_eye_{slot}", cam.GlobalPosition);
+        RenderingServer.GlobalShaderParameterSet($"portal_clip_plane_{slot}", new Vector4(n.X, n.Y, n.Z, w));
     }
 }

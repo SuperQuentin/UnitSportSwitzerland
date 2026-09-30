@@ -178,7 +178,7 @@ public partial class InteriorProbe : Node
         if (_step < 0) return;
         _t += delta;
         _total += delta;
-        if (_total > 240) { Check(false, $"timed out in step {_step}"); Finish(); return; }
+        if (_total > 400) { Check(false, $"timed out in step {_step}"); Finish(); return; }
         var interiors = InteriorManager.Instance!;
 
         switch (_step)
@@ -373,7 +373,7 @@ public partial class InteriorProbe : Node
             case 10:
             {
                 bool open = interiors.IsOpen(_door.Key.ToString());
-                if (open && _t < 12) return;
+                if (open && _t < 75) return;
                 Check(!open, $"the door shut by itself with nobody near ({_t:F1} s)");
                 if (_church == null) { GD.Print("[interior] (no church nearby: churches not tested live)"); Finish(); }
                 else Next();
@@ -510,15 +510,251 @@ public partial class InteriorProbe : Node
                 if (_t < 1.0) return;
                 if (WalkThrough(interiors, _churchOut.Key.ToString(), inward: true, delta, null) is not { } done) return;
                 Check(done && interiors.Current?.Key == _churchKey, "the nave door leads into the same church");
+                Next();
+                break;
+            }
+
+            // ---- several doors at once, and one seen through another ----------------------------
+            case 18:
+                // the nave door is still open behind us; open the tower door from inside too
+                StandInside(interiors, _churchIn.Key.ToString());
+                Next();
+                break;
+
+            case 19:
+            {
+                if (_t < 0.5) return;
+                string tower = _churchIn.Key.ToString(), nave = _churchOut.Key.ToString();
+                if (!interiors.IsOpen(tower) && !_pressed) { _pressed = true; Check(_player!.TryInteract(), "E opens the tower door from inside"); }
+                if (!(interiors.Links.TryGetValue(tower, out var b) && b.Swing >= 1f
+                      && interiors.Links.TryGetValue(nave, out var a) && a.Swing >= 1f))
+                {
+                    if (_t > 12) { Check(false, "both church doors open"); Finish(); }
+                    return;
+                }
+                _demo = new Camera3D { Name = "DemoCamera", Fov = 75 };
+                AddChild(_demo);
+                if (SpotSeeing(interiors, a, b) is { } spot)
+                {
+                    _demo.GlobalTransform = spot;
+                    _demo.MakeCurrent();
+                }
+                else GD.Print("[interior] (no spot inside the church sees both doors: not shown)");
+                Next();
+                break;
+            }
+
+            case 20:
+            {
+                if (_t < 1.0) return;
+                if (_demo!.Current)
+                {
+                    var a = interiors.Links[_churchOut.Key.ToString()];
+                    var b = interiors.Links[_churchIn.Key.ToString()];
+                    Check(interiors.Portals!.IsShown(a) && interiors.Portals.IsShown(b), "from inside, both open church doors show the street at once");
+                    Save("_both_doors");
+                }
+                FindStreetPairs();
+                _queue.Clear();
+                foreach (var d in new[] { _same.A, _same.B, _facing.A, _facing.B })
+                    if (d is { } e && !_queue.Any(q => q.Key == e.Key)) _queue.Add(e);
+                GD.Print($"[interior] doors to open for the street scenes: {string.Join(", ", _queue.Select(q => q.Key))}");
+                _player!.Camera.Current = true;
+                Next();
+                break;
+            }
+
+            case 21:
+            {
+                // open each in turn, standing at it
+                if (_queueAt >= _queue.Count) { Next(); break; }
+                var d = _queue[_queueAt];
+                if (_t < 0.05) { StandOutside(d); _pressed = false; return; }
+                if (_t < 0.8) return;
+                if (!interiors.IsOpen(d.Key.ToString()) && !_pressed) { _pressed = true; _player!.TryInteract(); }
+                if (!(interiors.Links.TryGetValue(d.Key.ToString(), out var l) && l.Swing >= 1f))
+                {
+                    if (_t > 12) { Check(false, $"door {d.Key} opens"); _queueAt++; _t = 0; }
+                    return;
+                }
+                _queueAt++;
+                _t = 0;
+                break;
+            }
+
+            case 22:
+            {
+                // two neighbours' doors, open side by side, from across the street
+                if (_same.A is not { } s1 || _same.B is not { } s2)
+                {
+                    if (_t < 0.1) GD.Print("[interior] (no two doors side by side nearby: not shown)");
+                    Next();
+                    break;
+                }
+                var mid = (s1.World + s2.World) / 2;
+                if (_t < 0.05)
+                {
+                    if (StreetSpot(s1, s2) is not { } eye)
+                    {
+                        GD.Print("[interior] (no clear view of the two doors side by side: not shown)");
+                        _step = 23;
+                        _t = 0;
+                        return;
+                    }
+                    _player!.LeaveInterior(eye - Vector3.Up * 1.4f, 0);
+                    _demo!.GlobalTransform = Transform3D.Identity.Translated(eye).LookingAt(mid + Vector3.Up * 1.2f, Vector3.Up);
+                    _demo.MakeCurrent();
+                    return;
+                }
+                if (_t < 1.5) return;
+                Check(interiors.Portals!.IsShown(interiors.Links[s1.Key.ToString()]) && interiors.Portals.IsShown(interiors.Links[s2.Key.ToString()]),
+                    $"two neighbours' open doors, {s1.Key} and {s2.Key}, each show their own interior");
+                Save("_two_houses");
+                Next();
+                break;
+            }
+
+            case 23:
+            {
+                // from inside one house, out through its door and into the house across the street
+                if (_facing.A is not { } x || _facing.B is not { } y)
+                {
+                    GD.Print("[interior] (no two doors facing each other nearby: not shown)");
+                    Finish();
+                    return;
+                }
+                // back to that street: the links there were dropped while we stood elsewhere
+                if (_t < 0.05) { StandOutside(x); return; }
+                if (!interiors.Links.TryGetValue(x.Key.ToString(), out var lx) || !interiors.Links.TryGetValue(y.Key.ToString(), out var ly))
+                {
+                    if (_t > 12) { Check(false, $"the doors {x.Key} and {y.Key} are shown again"); Finish(); }
+                    return;
+                }
+                if (!_aimed)
+                {
+                    _aimed = true;
+                    _t = 0.1;
+                    var eye = lx.Inside * new Vector3(0, 1.6f, -1.8f);
+                    var target = lx.ToInside * (y.World + Vector3.Up * 1.1f);
+                    _demo!.GlobalTransform = Transform3D.Identity.Translated(eye).LookingAt(target, Vector3.Up);
+                    _demo.MakeCurrent();
+                    return;
+                }
+                if (_t < 1.5) return;
+                Check(interiors.Portals!.IsShown(lx) && interiors.Portals.IsShownThrough(ly),
+                    $"from inside {x.Key}, the house across the street ({y.Key}) is seen through both doors");
+                Save("_across_the_street");
                 Finish();
                 break;
             }
         }
     }
 
+    private void Save(string suffix)
+    {
+        if (_shot != null) GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", suffix + ".png"));
+    }
+
+    /// <summary>
+    /// A camera spot on the church's ground floor with a clear view of both doorways inside a
+    /// 70-degree cone, as far back as possible, looking between them.
+    /// </summary>
+    private Transform3D? SpotSeeing(InteriorManager interiors, DoorLink a, DoorLink b)
+    {
+        var l = interiors.Current!;
+        var node = interiors.CurrentNode!;
+        var space = node.GetWorld3D().DirectSpaceState;
+        var ta = a.Inside * new Vector3(0, 1.2f, -0.3f);
+        var tb = b.Inside * new Vector3(0, 1.2f, -0.3f);
+        Vector3? best = null;
+        float bestScore = 0;
+        foreach (var r in l.Floors[0].Rooms)
+            for (float x = r.X0 + 0.6f; x < r.X1 - 0.6f; x += 0.6f)
+                for (float z = r.Z0 + 0.6f; z < r.Z1 - 0.6f; z += 0.6f)
+                {
+                    var p = node.GlobalTransform * new Vector3(x, 1.6f, z);
+                    var da = ta - p;
+                    var db = tb - p;
+                    if (da.AngleTo(db) > Mathf.DegToRad(70)) continue;
+                    if (Blocked(space, p, ta) || Blocked(space, p, tb)) continue;
+                    float score = Math.Min(da.Length(), db.Length());
+                    if (score > bestScore) { bestScore = score; best = p; }
+                }
+        if (best is not { } eye) return null;
+        return Transform3D.Identity.Translated(eye).LookingAt((ta + tb) / 2, Vector3.Up);
+    }
+
+    /// <summary>A spot across the street with a clear view of two doors side by side, at eye height.</summary>
+    private Vector3? StreetSpot(DoorIndex.Entry a, DoorIndex.Entry b)
+    {
+        var space = _player!.GetWorld3D().DirectSpaceState;
+        var n = (a.Outward + b.Outward).Normalized();
+        var along = new Vector3(-n.Z, 0, n.X);
+        var mid = (a.World + b.World) / 2;
+        var ta = a.World + a.Outward * 0.3f + Vector3.Up * 1.2f;
+        var tb = b.World + b.Outward * 0.3f + Vector3.Up * 1.2f;
+        for (float dist = 6f; dist <= 22f; dist += 1f)
+            foreach (float side in new[] { 0f, 2f, -2f, 4f, -4f })
+            {
+                var at = mid + n * dist + along * side;
+                if (!_chunks.TryGetHeight(at, out float g)) continue;
+                var eye = new Vector3(at.X, g + 1.7f, at.Z);
+                if ((ta - eye).AngleTo(tb - eye) > Mathf.DegToRad(65)) continue;
+                if (!Blocked(space, eye, ta) && !Blocked(space, eye, tb)) return eye;
+            }
+        return null;
+    }
+
+    private bool Blocked(PhysicsDirectSpaceState3D space, Vector3 from, Vector3 to)
+    {
+        var q = PhysicsRayQueryParameters3D.Create(from, to);
+        q.Exclude = new Godot.Collections.Array<Rid> { _player!.GetRid() };
+        return space.IntersectRay(q).Count > 0;
+    }
+
+    /// <summary>
+    /// Doors near the player for the street scenes: two side by side on neighbouring buildings
+    /// (same way, 4-20 m apart), and two facing each other across a street (8-35 m, in the
+    /// open between them).
+    /// </summary>
+    private void FindStreetPairs()
+    {
+        // around the church: the player may be standing in it, 3 km down
+        var here = _churchOut.World;
+        var doors = DoorIndex.All().Where(d => d.World.DistanceTo(here) < 250f && d.Width > 0.7f).ToList();
+        var space = _player!.GetWorld3D().DirectSpaceState;
+        float bestSame = float.MaxValue, bestFacing = float.MaxValue;
+        foreach (var x in doors)
+            foreach (var y in doors)
+            {
+                if (x.Key.Index >= y.Key.Index && x.Key.Tile == y.Key.Tile) continue;
+                var d = y.World - x.World;
+                d.Y = 0;
+                float dist = d.Length();
+                if (dist < 4f || dist > 35f) continue;
+                var dir = d / dist;
+                float ahead = Mathf.Abs(d.Dot(x.Outward));
+                if (x.Outward.Dot(y.Outward) > Mathf.Cos(Mathf.DegToRad(15)) && ahead < 3f && dist < 20f && dist < bestSame)
+                {
+                    bestSame = dist;
+                    _same = (x, y);
+                }
+                if (dist >= 8f && x.Outward.Dot(dir) > Mathf.Cos(Mathf.DegToRad(25)) && y.Outward.Dot(-dir) > Mathf.Cos(Mathf.DegToRad(35))
+                    && dist < bestFacing
+                    && !Blocked(space, x.World + x.Outward * 1f + Vector3.Up * 1.5f, y.World + y.Outward * 1f + Vector3.Up * 1.5f))
+                {
+                    bestFacing = dist;
+                    _facing = (x, y);
+                }
+            }
+        GD.Print($"[interior] side by side: {_same.A?.Key} / {_same.B?.Key}; facing: {_facing.A?.Key} / {_facing.B?.Key}");
+    }
+
     /// <summary>Puts the player on the street 1.2 m out from a door, facing it.</summary>
     private void StandOutside(DoorIndex.Entry d)
     {
+        // out of the interior the manager knows about, not just the body moved
+        if (_player!.Indoors) InteriorManager.Instance?.Leave(_player);
         var face = -d.Outward;
         _player!.LeaveInterior(d.World + d.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-face.X, -face.Z));
         _player.Velocity = Vector3.Zero;
@@ -537,6 +773,11 @@ public partial class InteriorProbe : Node
     }
 
     private int _walk, _frame;
+    private Camera3D? _demo;
+    private bool _pressed, _aimed;
+    private readonly List<DoorIndex.Entry> _queue = new();
+    private int _queueAt;
+    private (DoorIndex.Entry? A, DoorIndex.Entry? B) _same, _facing;
     private double _crossedAt = -1;
     private double _walkT;
 
@@ -567,7 +808,7 @@ public partial class InteriorProbe : Node
                 Check(true, $"the door {door} swung open ({_walkT:F1} s)");
                 if (_shot != null && shot != null)
                 {
-                    Check(interiors.Portals?.Active == link, "the doorway shows the other side");
+                    Check(interiors.Portals?.IsShown(link) == true, "the doorway shows the other side");
                     GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", shot + ".png"));
                 }
                 Input.ActionPress(PlayerInput.MoveForward);

@@ -89,7 +89,7 @@ public partial class DoorwayGhosts : Node3D
     {
         foreach (var child in node.GetChildren())
         {
-            if (child is MeshInstance3D m && m.Visible && m.Mesh != null && (m.Layers & DoorPortals.QuadLayer) == 0)
+            if (child is MeshInstance3D m && m.Visible && m.Mesh != null && (m.Layers & DoorPortals.AllQuadLayers) == 0)
                 into.Add(m);
             if (child is Node3D { Visible: false }) continue;
             Collect(child, into);

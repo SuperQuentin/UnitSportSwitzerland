@@ -47,8 +47,9 @@ public sealed class DoorLink
     /// <summary>Open wide enough to walk through, and to see through.</summary>
     public bool Passable => Open && Swing > 0.6f;
 
-    public MeshInstance3D? OutsideQuad { get; set; }
-    public MeshInstance3D? InsideQuad { get; set; }
+    /// <summary>The doorway quads on each side, one per portal depth (see <see cref="DoorPortals"/>).</summary>
+    public MeshInstance3D?[] OutsideQuads { get; } = new MeshInstance3D?[3];
+    public MeshInstance3D?[] InsideQuads { get; } = new MeshInstance3D?[3];
     public DoorLeaf? Leaf { get; set; }
 
     public static DoorLink Create(InteriorLayout layout, EntrancePlan e, WorldOrigin origin, float? outsideWidth)
