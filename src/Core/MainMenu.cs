@@ -32,6 +32,9 @@ public partial class MainMenu : CanvasLayer
     private Label _status = null!;
     private Button _resume = null!;
     private SettingsMenu _settings = null!;
+    private Label _occasion = null!;
+    private AudioStreamPlayer _jingle = null!;
+    private readonly HashSet<string> _jingled = new();
 
     /// <summary>Server address typed into the multiplayer row.</summary>
     public string Host => string.IsNullOrWhiteSpace(_host.Text) ? "127.0.0.1" : _host.Text.Trim();
@@ -84,6 +87,13 @@ public partial class MainMenu : CanvasLayer
         _status = new Label { Text = "" };
         _status.AddThemeColorOverride("font_color", new Color(0.62f, 0.66f, 0.72f));
         rows.AddChild(_status);
+
+        // the running occasion, if any (#18): a line under the title, and its jingle on first open
+        _occasion = new Label { Text = "", Visible = false };
+        _occasion.AddThemeColorOverride("font_color", new Color(0.95f, 0.55f, 0.18f));
+        rows.AddChild(_occasion);
+        _jingle = new AudioStreamPlayer { Bus = Audio.SfxBus.Name, VolumeDb = -6 };
+        AddChild(_jingle);
 
         rows.AddChild(new HSeparator());
 
@@ -186,13 +196,37 @@ public partial class MainMenu : CanvasLayer
                 ? "Pick a mode to begin (Esc: explore)"
                 : $"Currently: {Describe(Current.Value)}";
             _resume.Visible = Current != null;
+            ShowOccasion();
             Input.MouseMode = Input.MouseModeEnum.Visible;
             PlayerInput.FocusFirst(_panel);
         }
+        if (!open) _jingle.Stop();
         else if (Current is GameMode.Explore or GameMode.Multiplayer)
         {
             // hand the pointer back to the fly camera / player controller
             Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+    }
+
+    /// <summary>
+    /// Names the running occasions under the title and, the first time the menu opens while one
+    /// runs, plays its chip-tune jingle (the Audio facet, so a player who turned it off hears none).
+    /// </summary>
+    private void ShowOccasion()
+    {
+        var active = Occasions.OccasionManager.Instance?.Active
+            .Where(a => a.Has(Occasions.OccasionFacets.Decorations) || a.Has(Occasions.OccasionFacets.Atmosphere))
+            .ToList();
+        _occasion.Visible = active is { Count: > 0 };
+        if (active is { Count: > 0 })
+            _occasion.Text = string.Join("  ·  ", active.Select(a => $"{a.Content.Title} is on"));
+
+        if (Occasions.OccasionManager.Instance?.Top(Occasions.OccasionFacets.Audio) is { } top
+            && _jingled.Add(top.Instance) && top.Content.Jingle() is { } samples)
+        {
+            _jingle.Stream = Audio.Dsp.Encode(Audio.Dsp.Normalise(samples, 0.8f));
+            _jingle.VolumeDb = -6 + Mathf.LinearToDb(Mathf.Max(GameSettings.Current.SfxVolume, 0.001f));
+            _jingle.Play();
         }
     }
 

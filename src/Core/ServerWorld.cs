@@ -20,6 +20,7 @@ public partial class ServerWorld : Node3D
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
     private Interiors.InteriorManager? _interiors;
+    private Occasions.OccasionManager? _occasions;
 
     public override async void _Ready()
     {
@@ -66,6 +67,9 @@ public partial class ServerWorld : Node3D
 
         // loot in those interiors: the server rolls it and remembers what was taken
         Loot.LootService.Create(this);
+
+        // occasions run on the server's calendar and are replicated, so every player shares one
+        _occasions = Occasions.OccasionManager.Create(this);
 
         // The server owns the place index too, so /city and /tpall resolve against the same
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
@@ -161,6 +165,7 @@ public partial class ServerWorld : Node3D
         if (node is Node3D player)
             _chunks!.AddAnchor(player);
         _interiors?.SendTableTo(id);
+        _occasions?.SendTo(id);
     }
 
     private void OnPeerDisconnected(long id)

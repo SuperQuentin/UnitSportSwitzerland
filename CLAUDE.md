@@ -6,11 +6,11 @@ on foot, mounted, driving or flying, over ENet multiplayer.
 
 ## Notes: read on demand, never up front
 
-Knowledge lives in ~170 micro notes, `docs/notes/<area>/<name>.md`, one topic each. Each code
+Knowledge lives in ~180 micro notes, `docs/notes/<area>/<name>.md`, one topic each. Each code
 directory's `CLAUDE.md` (auto-loaded when you touch files there) is only an **index**: one line per
 note. Read a note only when the task needs it; find one with `grep -ril <word> docs/notes`.
 Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, world, combat, birds, items, loot,
-core, general. New knowledge goes in a new or existing note plus one index line — never in this file.
+occasions, core, general. New knowledge goes in a new or existing note plus one index line — never in this file.
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,

@@ -27,3 +27,4 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `places-json-one-asset-ui` — `places.json` is the one asset the UI reads, not the streamer
 - `client-needs-own-request-budget` — The client needs its own request budget, not just the server's
 - `multiplayersynchronizer-s-own-authority-decides` — A MultiplayerSynchronizer's own authority decides who sends
+- `loopback-server-test-leaves-manifest` — A loopback server test leaves its manifest in the client's chunk cache

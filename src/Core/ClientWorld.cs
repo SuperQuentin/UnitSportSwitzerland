@@ -52,6 +52,11 @@ public partial class ClientWorld : Node3D
                 return;
             }
         }
+        if (Occasions.OccasionProbe.Requested)
+        {
+            GetTree().Quit(Occasions.OccasionProbe.Run());
+            return;
+        }
         // after Load, so the saved stick deadzone is what the actions start with
         PlayerInput.Install(this);
         ApplyViewportSettings();
@@ -150,8 +155,11 @@ public partial class ClientWorld : Node3D
             {
                 fallback.Active = false;
                 cache.Clear();
+                Occasions.OccasionTowns.UseGenerated(null);
             });
         }
+        // the towns occasion props go in: places.json, or the generated villages while they stand in
+        Occasions.OccasionTowns.UseGenerated(fallback?.World);
 
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
@@ -200,8 +208,23 @@ public partial class ClientWorld : Node3D
         };
         AddChild(new WorldEnvironment { Environment = environment });
 
+        // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
+        // word online. Before the clock, which reads its sun and sky from it.
+        Occasions.OccasionManager.Create(this);
+        // their props, dressed onto each tile as its buildings load
+        AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
+        // …the creatures in the air around the camera, and their sounds
+        AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
+        AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
+        // …and snow falling round the camera, except indoors
+        AddChild(new Occasions.OccasionPrecip(() => LocalPlayer?.Indoors == true));
+
         // the clock: sun, light colour, sky and night for every shader and the environment
-        AddChild(new World.DayNight(environment));
+        var chunksForSky = _chunks;
+        AddChild(new World.DayNight(environment)
+        {
+            GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
+        });
 
         // cars on the roads and trains on the railway, around wherever the view is
         _traffic = new World.Traffic(_chunks, origin)
@@ -285,6 +308,10 @@ public partial class ClientWorld : Node3D
         // birds around the player, from the real land cover; the shotgun hunts them (J: journal)
         var birds = new Birds.BirdLife(_chunks, origin, items);
         AddChild(birds);
+
+        // occasions: the treat / gift hunt (taken with the gather hold) and the seasonal hat
+        AddChild(new Occasions.OccasionHunt());
+        AddChild(new Occasions.OccasionHats(() => LocalPlayer, items.Inventory));
 
         // solid trunks around whatever asks for collision
         var trees = new World.TreeColliders(_chunks, origin);
@@ -634,7 +661,12 @@ public partial class ClientWorld : Node3D
 
         // The town index arrives after this UI was built, so it has to be told to re-read.
         _terrainSync.PlacesReceived += () =>
-            Callable.From(() => { _places?.ReloadIndex(); _ambience?.ReloadPlaces(); }).CallDeferred();
+            Callable.From(() =>
+            {
+                _places?.ReloadIndex();
+                _ambience?.ReloadPlaces();
+                Occasions.OccasionTowns.Reload();
+            }).CallDeferred();
 
         // Same for the horizon: a client that shipped without one gets it during sync.
         _terrainSync.HorizonReceived += () =>

@@ -7,6 +7,7 @@ global uniform vec3 world_sun_dir;
 global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
+#include "res://shaders/world_occasion.gdshaderinc"
 
 // PS1-style terrain: clip-space vertex snapping, flat shading from screen derivatives,
 // altitude/slope palette bands, quantized sun, Bayer-dithered posterization, distance fog.
@@ -93,6 +94,9 @@ void fragment() {
         }
     }
 
+    // a running occasion's snow lies on whatever faces up; the rock test below still bares cliffs
+    col = occasion_snow(col, n, 1.0);
+
     // steep faces read as bare rock whatever the mapped cover says
     float rockiness = smoothstep(0.62, 0.38, n.y);
     col = mix(col, vec3(0.30, 0.28, 0.26), rockiness * 0.75);
@@ -110,6 +114,8 @@ void fragment() {
         3.0, 11.0, 1.0, 9.0,
         15.0, 7.0, 13.0, 5.0);
     col *= world_tint;
+    // valley mist of a running occasion; a no-op on an ordinary day
+    col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
     float dith = (bayer[bi] / 16.0 - 0.5) / color_levels;
     col = floor((col + dith) * color_levels + 0.5) / color_levels;

@@ -7,6 +7,7 @@ global uniform vec3 world_sun_dir;
 global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
+#include "res://shaders/world_occasion.gdshaderinc"
 
 // Buildings take their base colour from baked vertex colours (kind + roof/wall + age)
 // and get the same PS1 treatment as the terrain: vertex snap, quantised sun from a
@@ -87,6 +88,8 @@ void fragment() {
     }
 
     vec3 col = COLOR.rgb;
+    // a running occasion's snow on the roofs (walls are vertical and stay clear)
+    col = occasion_snow(col, n, 1.0);
 
     // --- windows -------------------------------------------------------------------
     // Storey height comes from the GWR floor count (baked into UV.y; 0 opts out, and
@@ -110,12 +113,32 @@ void fragment() {
             vec2 cell = vec2(floor(u / window_spacing), floor(facade.y));
             float r = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
             // a few lit windows by day, most of a village at night
-            bool lit = r > mix(0.86, 0.35, world_night);
+            bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night);
             vec3 win = lit ? window_lit : window_color;
             // fade the pattern out as it approaches the resolution limit
             float legible = clamp(1.0 - detail / 0.6, 0.0, 1.0);
             col = mix(col, win, legible);
             if (lit) glow = window_lit * legible;
+        }
+    }
+
+    // --- festive lights (a running occasion's world_lights) ---------------------------
+    // A string of bulbs along the eaves, just under the wall plate, on about 60% of the houses
+    // that have a window grid. Drawn here rather than as geometry: every house in view gets them
+    // for the cost of a few instructions, and they follow the facade frame the windows use.
+    if (world_lights > 0.0 && storey_count > 0.5 && detail < 0.6) {
+        float house = fract(sin(dot(floor(world_pos.xz / 24.0), vec2(41.3, 17.9))) * 9731.7);
+        float eave = storey_count - 0.05;
+        if (house < 0.6 && facade.y > eave - 0.08 && facade.y < eave) {
+            float f = fract(facade.x / 0.5);
+            if (f > 0.35 && f < 0.65) {
+                int k = int(mod(floor(facade.x / 0.5), 4.0));
+                vec3 bulb = k == 0 ? vec3(1.0, 0.12, 0.08) : k == 1 ? vec3(0.10, 0.90, 0.20)
+                          : k == 2 ? vec3(0.20, 0.40, 1.00) : vec3(1.00, 0.80, 0.30);
+                float legible = clamp(1.0 - detail / 0.6, 0.0, 1.0);
+                col = mix(col, bulb * 0.35, legible);
+                glow = max(glow, bulb * legible * world_lights);
+            }
         }
     }
 
@@ -142,6 +165,8 @@ void fragment() {
     col *= world_tint;
     // a lit window is its own light: at night it shines through the darkness around it
     col = max(col, glow * world_night);
+    // valley mist of a running occasion; a no-op on an ordinary day
+    col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
     float dith = (bayer[bi] / 16.0 - 0.5) / color_levels;
     col = floor((col + dith) * color_levels + 0.5) / color_levels;

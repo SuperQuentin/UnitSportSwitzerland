@@ -27,7 +27,7 @@ namespace UnitSport.Loot;
 /// </summary>
 public partial class Gathering : Node
 {
-    public enum Resource { None, Stone, Water, TreeWood, Deadwood }
+    public enum Resource { None, Stone, Water, TreeWood, Deadwood, Pumpkin, Treat }
 
     private const double RegrowSeconds = 20 * 60;
     private const float TreeReach = 2.3f;
@@ -141,7 +141,9 @@ public partial class Gathering : Node
             return;
         }
 
-        string what = Label(_target.Kind);
+        string what = _target.Kind == Resource.Treat
+            ? Occasions.OccasionHunt.Instance?.LabelFor(_target.Spot) ?? "it"
+            : Label(_target.Kind);
         bool depleted = Remaining(_target) <= 0;
         _prompt.Visible = _progress <= 0;
         string key = PlayerInput.LastDevice == InputDevice.Gamepad ? "[X]" : "[G]";
@@ -187,6 +189,13 @@ public partial class Gathering : Node
     {
         var target = _target;
         Cancel();
+        if (target.Kind == Resource.Treat)
+        {
+            // an occasion hunt spot: claimed once per player per occasion, and the reward is its own
+            Occasions.OccasionHunt.Instance?.Claim(target.Spot, _items);
+            Play(SfxSynth.Chime, 1.5f);
+            return;
+        }
         var (id, count) = Yield(target);
         int fit = Math.Min(count, _items.Inventory.Room(id));
         if (fit <= 0)
@@ -219,6 +228,7 @@ public partial class Gathering : Node
         Resource.Stone => "stones",
         Resource.Water => "water",
         Resource.TreeWood => "firewood",
+        Resource.Pumpkin => "a pumpkin",
         _ => "dead wood",
     };
 
@@ -226,6 +236,8 @@ public partial class Gathering : Node
     {
         Resource.Water => "fill up with",
         Resource.TreeWood => "chop",
+        Resource.Pumpkin => "pick",
+        Resource.Treat => "take",
         _ => "gather",
     };
 
@@ -234,6 +246,8 @@ public partial class Gathering : Node
         Resource.Water => 1.2,
         Resource.Stone => 1.6,
         Resource.TreeWood => 2.2,
+        Resource.Pumpkin => 1.0,
+        Resource.Treat => 0.6,
         _ => 1.4,
     };
 
@@ -243,6 +257,8 @@ public partial class Gathering : Node
         Resource.Water => int.MaxValue,
         Resource.Stone => 4,
         Resource.TreeWood => 2,
+        Resource.Pumpkin => 3,
+        Resource.Treat => 1,
         _ => 2,
     };
 
@@ -262,6 +278,8 @@ public partial class Gathering : Node
                 return (ItemId.Firewood, _rng.Next(2, 5));
             case Resource.Deadwood:
                 return (ItemId.Firewood, _rng.Next(1, 3));
+            case Resource.Pumpkin:
+                return (ItemId.Pumpkin, 1);
             default:
                 // loose ground gives gravel as well as stones; a quarry gives the most
                 bool loose = t.Cover is CoverClass.Scree or CoverClass.LooseScree or CoverClass.LooseRock or CoverClass.Quarry;
@@ -297,6 +315,12 @@ public partial class Gathering : Node
                 return (Resource.Water, "water", c);
         }
         if (NearStream(tile, feet, ahead)) return (Resource.Water, "water", CoverClass.Water);
+
+        // a running occasion: its hunt spot by a door, or a pumpkin patch underfoot
+        if (Occasions.OccasionHunt.Instance?.SpotNear(feet, ahead) is { } hunt)
+            return (Resource.Treat, hunt, CoverClass.Open);
+        if (Occasions.OccasionDecor.Instance is { } decor && (decor.InPatch(ahead) || decor.InPatch(feet)))
+            return (Resource.Pumpkin, Spot("pumpkin", ahead), CoverClass.Open);
 
         // a tree in reach, the nearest one
         if (NearestTree(tile, feet, ahead) is { } tree)

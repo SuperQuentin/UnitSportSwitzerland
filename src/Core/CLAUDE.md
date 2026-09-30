@@ -25,3 +25,4 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `mode-owns-screen-drop-anchors` — A mode that owns the screen must drop the anchors of the mode it replaced
 - `never-default-world-origin-lv95` — Never default the world origin to LV95 0/0: Switzerland is 2.6 million metres from there, so float precision...
 - `menu-refuses-close-still-consume` — A menu that refuses to close must still CONSUME the key
+- `driving-settings-panel-through-godot` — Driving the Settings panel through the godot-ai MCP changes real settings

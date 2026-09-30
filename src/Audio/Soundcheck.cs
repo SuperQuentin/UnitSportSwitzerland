@@ -20,6 +20,10 @@ public static class Soundcheck
             for (int i = 0; i < bank.Variants.Length; i++)
                 bad += Save(System.IO.Path.Combine(outDir, $"{bank.Name}_{i}.wav"), Decode(bank.Variants[i]));
 
+        // the occasions' sounds (#18): owl, howl, wind, toll, jingles
+        foreach (var (name, samples) in Occasions.OccasionSounds.All())
+            bad += Save(System.IO.Path.Combine(outDir, $"occasion_{name}.wav"), samples);
+
         var profiles = new (string name, EngineProfile p)[] { ("plane", EngineProfile.PistonAero), ("heli", EngineProfile.Turboshaft),
             ("inline4", EngineProfile.Inline4Na), ("rotary", EngineProfile.Rotary), ("boxer", EngineProfile.Boxer4Turbo) };
         foreach (var (pname, profile) in profiles)
