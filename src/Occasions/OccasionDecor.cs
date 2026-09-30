@@ -140,10 +140,19 @@ public partial class OccasionDecor : Node
 
     private void OnUnloaded(TileId id) => _tiles.Remove(id);   // the props went with the tile's node
 
-    private void OnReplaced()
+    private void OnReplaced(Func<TileId, bool>? affected)
     {
-        _epoch++;
-        _tiles.Clear();
+        // a rebase: everything goes, and anything still waiting on a tile's roads is stale
+        if (affected == null)
+        {
+            _epoch++;
+            _tiles.Clear();
+            return;
+        }
+        // real tiles merged into the generated fill: only the tiles whose ground changed were
+        // unloaded (TileUnloaded has dropped them already); a decoration still waiting for one
+        // finds its entry gone and gives up, the rest carry on
+        foreach (var id in _tiles.Keys.Where(affected).ToList()) _tiles.Remove(id);
     }
 
     private void RedecorateAll()

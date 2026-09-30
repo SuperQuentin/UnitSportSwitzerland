@@ -435,38 +435,72 @@ public partial class ChunkManager : Node3D
     /// with. Merging the server's list is what turns "there is nothing there" into "ask the
     /// server for it"; without it the streamer would never even try, because the LOD rings
     /// skip any tile that is not in <c>_available</c>.
+    ///
+    /// <para>
+    /// With a generated fill, the new tiles stop being generated and the generated tiles round
+    /// them blend differently, so those are unloaded — not rebuilt in place: a commit whose roads,
+    /// buildings or trees are null leaves the old ones standing, which would put generated houses
+    /// on real ground — their cached assets dropped, and <see cref="TerrainReplaced"/> raised
+    /// for them. Main thread only.
+    /// </para>
     /// </summary>
     /// <returns>How many tiles were new.</returns>
     public int MergeAvailableTiles(IEnumerable<TileId> tiles)
     {
-        var list = tiles as ICollection<TileId> ?? tiles.ToList();
-        // real tiles have arrived: the generated stand-in world goes, all of it, first
-        if (FallbackActive && list.Count > 0) RetireFallback();
+        var added = new HashSet<TileId>();
+        foreach (var id in tiles)
+            if (_available.Add(id)) added.Add(id);
+        if (added.Count == 0) return 0;
 
-        int added = 0;
-        foreach (var id in list)
-            if (_available.Add(id)) added++;
-        if (added > 0) FitHorizonCoverage();
-        return added;
+        if (_fallback != null)
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            _fallback.SetReal(_available);
+            // a tile whose blend window holds a new real tile: ProceduralWorld.BlendWindow's reach
+            bool Affected(TileId id)
+            {
+                if (added.Contains(id)) return true;
+                if (_available.Contains(id)) return false;   // real before, and unchanged
+                for (int dn = -BlendReachTiles; dn <= BlendReachTiles; dn++)
+                    for (int de = -BlendReachTiles; de <= BlendReachTiles; de++)
+                        if (added.Contains(new TileId(id.E + de, id.N + dn))) return true;
+                return false;
+            }
+            ReplaceTiles(Affected);
+            GD.Print($"[terrain] {added.Count} real tile(s) merged into the generated fill "
+                + $"in {clock.Elapsed.TotalMilliseconds:F0} ms");
+        }
+        else
+        {
+            _worldVersion++;
+            FitHorizonCoverage();
+        }
+        return added.Count;
     }
 
-    // ---- the generated fallback world --------------------------------------------------------
+    // ---- the generated fill ------------------------------------------------------------------
 
-    private HashSet<TileId>? _fallbackTiles;
-    private Action? _onFallbackRetired;
+    /// <summary>Tiles either side a generated tile's blend looks at (<see cref="ProceduralWorld.BlendWindow"/>).</summary>
+    private const int BlendReachTiles = 4;
+
+    private FallbackChunkSource? _fallback;
+    private Action<Func<TileId, bool>?>? _invalidate;
+
+    /// <summary>Bumped whenever the set of tiles that exist changes; part of the ring evaluator's key.</summary>
+    private long _worldVersion;
+
+    /// <summary>The generated fill, when there is one (<c>--generated off</c> leaves it null).</summary>
+    public FallbackChunkSource? Fallback => _fallback;
+
+    /// <summary>Whether a tile is drawn from generated rather than real data, as of now.</summary>
+    public bool IsGenerated(TileId id) => _fallback?.Covers(id) == true;
 
     /// <summary>
-    /// True while the world on screen is <see cref="ProceduralWorld"/>'s stand-in rather than
-    /// real terrain. <see cref="AvailableTileCount"/> counts its tiles, so a caller asking "does
-    /// this client have a world of its own?" must check this too.
+    /// Raised on the main thread after tiles were unloaded because the world under them changed,
+    /// for anything that cached what it read from them (road surfaces, streams, trees to gather,
+    /// lane graphs). The argument selects the affected tiles; null means all of them.
     /// </summary>
-    public bool FallbackActive => _fallbackTiles != null;
-
-    /// <summary>
-    /// Raised on the main thread once the fallback's tiles have been unloaded, for anything that
-    /// cached what it read from them (road surfaces, streams, trees to gather, lane graphs).
-    /// </summary>
-    public event Action? TerrainReplaced;
+    public event Action<Func<TileId, bool>?>? TerrainReplaced;
 
     /// <summary>
     /// Main thread: a tile's buildings, doors and trees have just committed, for systems that
@@ -479,64 +513,111 @@ public partial class ChunkManager : Node3D
     public event Action<TileId>? TileUnloaded;
 
     /// <summary>
-    /// Makes generated tiles available when there are no real ones. <paramref name="retire"/>
-    /// is called when they are thrown away — the host switches the source off there and flushes
-    /// any cache above it, since this class does not know the chain it was handed.
+    /// Generates every tile the real set does not have, inside the fallback's domain.
+    /// <paramref name="invalidate"/> drops the selected tiles (all when null) from whatever cache
+    /// sits above the source, since this class does not know the chain it was handed.
     /// </summary>
-    public void UseFallback(IEnumerable<TileId> tiles, Action retire)
+    public void UseFallback(FallbackChunkSource fallback, Action<Func<TileId, bool>?> invalidate)
     {
-        _fallbackTiles = tiles.ToHashSet();
-        _onFallbackRetired = retire;
-        _available.UnionWith(_fallbackTiles);
+        _fallback = fallback;
+        _invalidate = invalidate;
+        var snap = fallback.SetReal(_available);
+        _worldVersion++;
+        _sinceEval = double.MaxValue;
         FitHorizonCoverage();
-        _orderedKey = "";
-        GD.Print($"[terrain] no real terrain: {_fallbackTiles.Count} generated tiles stand in for it");
+        // Initialize only deferred the horizon's first read: this is it, now with the fill
+        Horizon?.Reload();
+        GD.Print($"[terrain] generated fill {(snap.Enabled ? "on" : "off")}: "
+            + $"{_available.Count} real tiles, domain {snap.Bounds}");
     }
 
     /// <summary>
-    /// Throws the generated world away: every one of its tiles unloaded (builds in flight
-    /// cancelled), the source switched off, the horizon rebuilt from whatever the source now has.
-    /// Main thread only — it frees nodes. Called by <see cref="MergeAvailableTiles"/> the moment
-    /// real tiles arrive, before they are added, so a real tile that shares an id with a
-    /// generated one is always built fresh.
+    /// Switches the generated fill on or off while running: every generated tile is unloaded (or
+    /// every missing one starts generating) and the horizon is rebuilt.
     /// </summary>
-    public void RetireFallback()
+    public void SetFallbackEnabled(bool enabled)
     {
-        if (_fallbackTiles == null) return;
+        if (_fallback == null || _fallback.Current.Enabled == enabled) return;
+        _fallback.SetReal(_available, enabled);
+        ReplaceTiles(id => !_available.Contains(id));
+        GD.Print($"[terrain] generated fill {(enabled ? "on" : "off")}");
+    }
 
-        foreach (var id in _fallbackTiles)
-        {
-            _available.Remove(id);
-            if (_chunks.ContainsKey(id)) UnloadTile(id);
-        }
-        _fallbackTiles = null;
+    /// <summary>Unloads, uncaches and re-announces the tiles <paramref name="affected"/> selects.</summary>
+    private void ReplaceTiles(Func<TileId, bool> affected)
+    {
+        foreach (var id in _chunks.Keys.Where(affected).ToList()) UnloadTile(id);
+        _invalidate?.Invoke(affected);
+        _worldVersion++;
+        _sinceEval = double.MaxValue;
+        FitHorizonCoverage();
+        Horizon?.Reload();
+        TerrainReplaced?.Invoke(affected);
+    }
+
+    /// <summary>
+    /// Throws the whole world away — every tile, every cached asset and blend, the horizon — for
+    /// a rebase, which changes what every world coordinate means. <paramref name="moveOrigin"/>
+    /// runs once nothing placed against the old origin is left; the rings then rebuild everything
+    /// round the new one. Main thread only.
+    /// </summary>
+    public void ResetAll(Action? moveOrigin = null)
+    {
+        foreach (var id in _chunks.Keys.ToList()) UnloadTile(id);
         _desired.Clear();
         _ordered.Clear();
         _orderedKey = "";
+        _worldVersion++;
         _sinceEval = double.MaxValue;
-
-        var retire = _onFallbackRetired;
-        _onFallbackRetired = null;
-        retire?.Invoke();
-
+        _invalidate?.Invoke(null);
+        _fallback?.ClearBlends();
         Horizon?.Clear();
+        moveOrigin?.Invoke();
+        // the coverage texture is placed in world space: after the move, not before
+        FitHorizonCoverage();
         Horizon?.Reload();
-        GD.Print("[terrain] generated fallback world retired");
-        TerrainReplaced?.Invoke();
+        GD.Print("[terrain] world reset");
+        TerrainReplaced?.Invoke(null);
     }
 
+    /// <summary>
+    /// Sizes the horizon's coverage texture to every tile that can be drawn: the real set and the
+    /// generated fill's domain.
+    /// </summary>
     private void FitHorizonCoverage()
     {
-        if (Horizon == null || _available.Count == 0) return;
-        Horizon.EnsureCoverage(_available.Min(t => t.E), _available.Max(t => t.E),
-            _available.Min(t => t.N), _available.Max(t => t.N));
+        if (Horizon == null) return;
+        int minE = int.MaxValue, minN = int.MaxValue, maxE = int.MinValue, maxN = int.MinValue;
+        foreach (var t in _available)
+        {
+            minE = Math.Min(minE, t.E);
+            maxE = Math.Max(maxE, t.E);
+            minN = Math.Min(minN, t.N);
+            maxN = Math.Max(maxN, t.N);
+        }
+        if (_fallback?.Current is { Enabled: true } snap)
+        {
+            var b = snap.Bounds;
+            minE = Math.Min(minE, b.MinE);
+            maxE = Math.Max(maxE, b.MaxE);
+            minN = Math.Min(minN, b.MinN);
+            maxN = Math.Max(maxN, b.MaxN);
+        }
+        if (minE > maxE) return;
+        Horizon.EnsureCoverage(minE, maxE, minN, maxN);
     }
 
-    /// <summary>Tiles this client believes exist, from local data plus anything merged in.</summary>
+    /// <summary>Real or generated: whether the rings may ask for a tile.</summary>
+    private bool IsAvailable(TileId id) => _available.Contains(id) || _fallback?.Covers(id) == true;
+
+    /// <summary>
+    /// Real tiles this client believes exist, from local data plus anything merged in. Generated
+    /// ones are not counted: this answers "does this client have a world of its own?".
+    /// </summary>
     public int AvailableTileCount => _available.Count;
 
     /// <summary>
-    /// Tiles known to exist. Passed to a corridor survey so it never requests one that does not:
+    /// Real tiles known to exist. Passed to a corridor survey so it never requests one that does not:
     /// a missing asset costs 7.3 s of retries over the network source before it gives up.
     /// </summary>
     public IReadOnlySet<TileId> AvailableTiles => _available;
@@ -929,7 +1010,7 @@ public partial class ChunkManager : Node3D
         foreach (var anchor in _anchors)
             keyBuilder.Append(_origin!.TileAt(anchor.GlobalPosition)).Append(_collisionAnchors.Contains(anchor) ? 'p' : 'c').Append(';');
         keyBuilder.Append('|').Append(Lod.GetHashCode()).Append('|').Append(sector)
-            .Append('|').Append(_available.Count).Append('|').Append(BuildMeshes);
+            .Append('|').Append(_worldVersion).Append('|').Append(BuildMeshes);
         string key = keyBuilder.ToString();
 
         if (key != _orderedKey)
@@ -998,7 +1079,7 @@ public partial class ChunkManager : Node3D
                 for (int dn = -radius; dn <= radius; dn++)
                 {
                     var id = new TileId(center.E + de, center.N + dn);
-                    if (!_available.Contains(id)) continue;
+                    if (!IsAvailable(id)) continue;
                     int dist = Math.Max(Math.Abs(de), Math.Abs(dn));
                     int stride = BuildMeshes ? Lod.StrideFor(dist) : 0;
                     if (stride < 0) continue;

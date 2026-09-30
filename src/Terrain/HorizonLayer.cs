@@ -14,8 +14,8 @@ namespace UnitSport.Terrain;
 /// Everything comes from one file (<c>horizon.bin</c>, ~1.6 MB) read once, so the blocks cost
 /// no IO at all — only a worker meshing 101x101 vertices and one main-thread ArrayMesh per
 /// block. The real tiles draw on top of it; where they exist, the horizon is <c>discard</c>ed
-/// by the rectangle handed to the shader (<see cref="SetDetailRect"/>), so it never peeks
-/// through a tunnel floor or a carved portal.
+/// per tile by the coverage texture (<see cref="SetCovered"/>), so it never peeks through a
+/// tunnel floor or a carved portal.
 /// </para>
 /// </summary>
 public partial class HorizonLayer : Node3D
@@ -37,7 +37,7 @@ public partial class HorizonLayer : Node3D
 
     private readonly Dictionary<(int E, int N), MeshInstance3D?> _blocks = new();
     private readonly HashSet<(int E, int N)> _building = new();
-    private readonly ConcurrentQueue<((int E, int N) Key, int Epoch, TerrainMeshBuilder.MeshData? Mesh)> _ready = new();
+    private readonly ConcurrentQueue<((int E, int N) Key, int Epoch, int Generation, TerrainMeshBuilder.MeshData? Mesh)> _ready = new();
 
     /// <summary>Bumped by <see cref="Clear"/>; a block meshed from the old lattice is dropped.</summary>
     private int _epoch;
@@ -54,14 +54,26 @@ public partial class HorizonLayer : Node3D
         _origin = origin;
         _material = material;
         _anchors = anchors;
-        Reload();
+        // deferred, so a source configured right after (the generated fill) is read once, not
+        // twice: whoever reloads first this frame wins, and this then finds it loading
+        Callable.From(() => { if (_index == null && !_loading) Reload(); }).CallDeferred();
     }
 
-    /// <summary>(Re)reads horizon.bin — at boot, and again when a server streams one in.</summary>
+    /// <summary>
+    /// (Re)reads the lattice — at boot, when a server streams one in, and whenever real tiles
+    /// merge into the generated fill. A reload asked for while one is running runs again after
+    /// it, or a merge during boot would leave a lattice generated against the old real set.
+    /// </summary>
     public void Reload()
     {
-        if (_source == null || _loading) return;
+        if (_source == null) return;
+        if (_loading)
+        {
+            _reloadQueued = true;
+            return;
+        }
         _loading = true;
+        _reloadQueued = false;
         var source = _source;
         int epoch = _epoch;
         Task.Run(async () =>
@@ -74,30 +86,43 @@ public partial class HorizonLayer : Node3D
                 // a Clear since this started: the lattice is from the world being replaced
                 if (epoch != _epoch) return;
                 _loading = false;
-                if (index == null) return;
-                _index = index;
-                GD.Print($"[horizon] {index.Count} tiles at {HorizonFormat.SpacingM} m");
-                // rebuild whatever is on screen from the new data
-                foreach (var block in _blocks.Values) block?.QueueFree();
-                _blocks.Clear();
-                _sinceEval = double.MaxValue;
+                if (index != null)
+                {
+                    _index = index;
+                    _indexGeneration++;
+                    GD.Print($"[horizon] {index.Count} tiles at {HorizonFormat.SpacingM} m");
+                    // rebuild what is on screen from the new data, keeping each old block drawn
+                    // until its replacement commits: a merge would otherwise blank the horizon
+                    foreach (var key in _blocks.Keys) _stale.Add(key);
+                    _sinceEval = double.MaxValue;
+                }
+                if (_reloadQueued) Reload();
             }).CallDeferred();
         });
     }
 
+    private bool _reloadQueued;
+
+    /// <summary>Bumped per lattice read; a block meshed from an older one stays stale.</summary>
+    private int _indexGeneration;
+
+    /// <summary>Blocks on screen that were meshed from an older lattice.</summary>
+    private readonly HashSet<(int E, int N)> _stale = new();
+
     /// <summary>
     /// Drops the lattice, every block and the coverage texture — for when the world they were
-    /// built for is being replaced (the generated fallback retiring, possibly with the origin
-    /// moving under it). <see cref="Reload"/> then reads whatever the source now has.
+    /// built for is being replaced (a rebase: the origin moves under them). <see cref="Reload"/> then reads whatever the source now has.
     /// </summary>
     public void Clear()
     {
         _epoch++;
         _loading = false;
+        _reloadQueued = false;
         _index = null;
         foreach (var block in _blocks.Values) block?.QueueFree();
         _blocks.Clear();
         _building.Clear();
+        _stale.Clear();
         _coverImage = null;
         _coverTexture = null;
         _coverDirty = false;
@@ -175,7 +200,12 @@ public partial class HorizonLayer : Node3D
         if (_ready.TryDequeue(out var done))
         {
             _building.Remove(done.Key);
-            if (done.Epoch == _epoch && _blocks.ContainsKey(done.Key)) Commit(done.Key, done.Mesh);
+            if (done.Epoch == _epoch && _blocks.ContainsKey(done.Key))
+            {
+                Commit(done.Key, done.Mesh);
+                // meshed from a lattice that has since been replaced: drawn, and rebuilt again
+                if (done.Generation == _indexGeneration) _stale.Remove(done.Key);
+            }
         }
 
         _sinceEval += delta;
@@ -207,18 +237,19 @@ public partial class HorizonLayer : Node3D
 
         foreach (var (key, _) in wanted.OrderBy(kv => kv.Value))
         {
-            if (_blocks.ContainsKey(key)) continue;
+            if (_building.Contains(key) || (_blocks.ContainsKey(key) && !_stale.Contains(key))) continue;
             if (_building.Count >= MaxBuildsInFlight) break;
-            _blocks[key] = null;   // reserved; the mesh arrives on the queue
+            // reserved; the mesh arrives on the queue (a stale block stays drawn meanwhile)
+            _blocks.TryAdd(key, null);
             _building.Add(key);
             var index = _index!;
-            int epoch = _epoch;
+            int epoch = _epoch, generation = _indexGeneration;
             Task.Run(() =>
             {
                 TerrainMeshBuilder.MeshData? mesh = null;
                 try { mesh = TerrainMeshBuilder.BuildHorizonBlock(index, key.E, key.N); }
                 catch (Exception e) { GD.PushError($"[horizon] block {key} failed: {e}"); }
-                _ready.Enqueue((key, epoch, mesh));
+                _ready.Enqueue((key, epoch, generation, mesh));
             });
         }
 
@@ -237,6 +268,7 @@ public partial class HorizonLayer : Node3D
         }
         foreach (var key in drop)
         {
+            _stale.Remove(key);
             _blocks[key]?.QueueFree();
             _blocks.Remove(key);
         }
@@ -253,6 +285,9 @@ public partial class HorizonLayer : Node3D
 
     private void Commit((int E, int N) key, TerrainMeshBuilder.MeshData? data)
     {
+        // what this replaces, if it is a rebuild from a newer lattice
+        _blocks[key]?.QueueFree();
+        _blocks[key] = null;
         if (data == null) return;   // nothing built there; keep the key so it is not retried
 
         var arrays = new Godot.Collections.Array();

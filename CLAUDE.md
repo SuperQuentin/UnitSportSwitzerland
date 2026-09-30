@@ -37,7 +37,7 @@ occasions, core, general. New knowledge goes in a new or existing note plus one 
 ## Commands
 
 - Build: `dotnet build UnitSportSwitzerland.csproj`
-- Server: `<godot> --headless --path . -- --server [--port N]`; client: `<godot> --path . -- --connect 127.0.0.1`
+- Server: `<godot> --headless --path . -- --server [--port N] [--generated-world]`; client: `<godot> --path . -- --connect 127.0.0.1`
   (no args = offline). `<godot>` is `godot` on WSL; Windows path: `docs/notes/general/godot-exe.md`.
 - Area-specific commands and checks: the `commands` note of that area.
 
