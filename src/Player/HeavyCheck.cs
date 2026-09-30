@@ -45,6 +45,7 @@ public static class HeavyCheck
 
         foreach (var spec in HeavyCatalog.All) Performance(spec);
         PartThrottle();
+        HillHold();
         OffTracking();
         Jackknife();
         BusLaneChange();
@@ -177,6 +178,33 @@ public static class HeavyCheck
         var r = new Run2(Loaded(HeavyCatalog.All[0]));
         for (int i = 0; i < 10 * 60; i++) r.Step(new RideInput(0.5f, 0f, 1f, false));
         Check(r.Finite && r.U > 3f / 3.6f, $"{F(r.U * 3.6f)} km/h after 10 s in {r.T.GearLabel}, engine {F(r.T.Rpm, "F0")} rpm");
+        // and up a 5% slope, as the multiplayer check's spawn is
+        var s = new Run2(Loaded(HeavyCatalog.All[0])) { Grade = 0.05f };
+        for (int i = 0; i < 10 * 60; i++) s.Step(new RideInput(0.5f, 0f, 1f, false));
+        Check(s.Finite && s.U > 3f / 3.6f, $"up 5%: {F(s.U * 3.6f)} km/h after 10 s in {s.T.GearLabel}, engine {F(s.T.Rpm, "F0")} rpm");
+    }
+
+    /// <summary>Stopped on 10% with no pedal: the automatic holds itself; with the clutch pedal it is the driver's job.</summary>
+    private static void HillHold()
+    {
+        GD.Print("[truck] stopped on a 10% slope, no pedal, 10 s");
+        float Rolled(HeavyShift mode)
+        {
+            var t = new Truck(HeavyCatalog.All[0], TrailerCatalog.Code(0, 1f), 1f) { ShiftOverride = mode };
+            t.Box.Mode = mode;
+            t.Box.Reset(true);
+            var r = new Run2(t) { Grade = 0.1f };
+            for (int i = 0; i < 10 * 60; i++)
+            {
+                r.Step(new RideInput(0f, 0f, 0f, false));
+                if (_trace && i % 60 == 0)
+                    GD.Print($"[truck]     {mode} t {F(r.Time)} u {F(r.U, "F2")} gear {t.Gear} hold {t.HillHold} brake {F(t.Box.ServiceBrake, "F2")} springs {t.Box.SpringBrakes} clutch {F(t.Box.Clutch, "F2")} rpm {F(t.Rpm, "F0")}");
+            }
+            return r.P.Length();
+        }
+        float held = Rolled(HeavyShift.Automatic), manual = Rolled(HeavyShift.SequentialClutch);
+        Check(held < 0.3f, $"automatic: hill hold, rolled {F(held, "F2")} m");
+        Check(manual > 3f, $"sequential with the clutch: no hold, rolled {F(manual)} m back");
     }
 
     private static void OffTracking()

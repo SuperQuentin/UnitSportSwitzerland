@@ -41,7 +41,7 @@
   (`'` / `;`): 1 exhaust brake, 2–4 retarder thirds; the automatic blends it into the first third
   of the brake pedal. **Air**: chamber pressure lags the pedal (0.28 s on, 0.45 s off), each
   application draws the tank, the compressor refills it; under 4.5 bar the spring brakes come on.
-  Space holds the spring brakes. Game: brakes instant, tank never drains, +15% grip, ABS at 80%,
+  Space holds the spring brakes. The automatic backs up on a press of the brake once the truck is at rest with the pedal let go (never on a brake held down to the stop), and a stopped truck holds itself on its brakes (hill hold) until the throttle goes down; with the clutch pedal both are the driver's job. Game: brakes instant, tank never drains, +15% grip, ABS at 80%,
   the retarder limited to 45% of the drive axle's grip, stretch braking and a fold damper on a
   folding pivot, a yaw assist; rollover threshold ×1.6. Sim has none of it.
 - **Rollover**: each section's steady lateral acceleration (speed × yaw rate, lagged 0.35 s as a
@@ -50,7 +50,7 @@
   for 0.3 s the vehicle is wrecked ("ROLLED OVER!"). A drawbar trailer amplifies the tractor's
   lateral acceleration (rearward amplification): yanking the wheel with one loaded rolls it.
 - **Coupling** (`H` / D-pad ←): a tractor backs its fifth wheel under a lone trailer's kingpin
-  (within 0.9 m, yaw within ~35°; a drawbar eye within 0.9 m, ~60°), the trailer is claimed
+  (within 0.9 m, yaw within ~50°; a drawbar eye within 0.9 m, ~70°), the trailer is claimed
   through `VehicleManager` like getting into a vehicle. `H` again drops it where it stands (parked
   with its own angles). The picker's **Trailers** fold couples one at once behind a stopped truck
   that takes it, or leaves it 14 m ahead. Getting out parks the whole train (`VehicleState.Train`,

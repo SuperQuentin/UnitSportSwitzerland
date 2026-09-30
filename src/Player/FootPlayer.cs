@@ -1145,7 +1145,7 @@ public partial class FootPlayer : CharacterBody3D
         // measured at rest: the pose is applied per frame, so the visual's own transform is undone
         var pose = _visual!.Transform;
         _visual.Transform = Transform3D.Identity;
-        var (lower, upper) = Avatar.MeshBounds.Split(_visual, HullCut);
+        var (lower, upper) = ride!.HullBoxes ?? Avatar.MeshBounds.Split(_visual, HullCut);
         _visual.Transform = pose;
         _hullLeans = ride is not (Car or Truck);   // lean-steered: yaw and pitch only (see AlignHull)
         var parts = new[] { lower, upper };

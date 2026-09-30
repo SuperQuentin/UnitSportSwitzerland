@@ -220,6 +220,8 @@ public sealed class Truck : Rideable, IEngined
     /// <summary>Front road-wheel angle, rad, + left.</summary>
     public float SteerAngle { get; private set; }
     public bool Braking { get; private set; }
+    /// <summary>Stopped and held on the brakes by the box, waiting for the throttle.</summary>
+    public bool HillHold { get; private set; }
     public bool Reversing => Box.Gear < 0;
     public float TyreSlide => Train.TyreSlide;
     /// <summary>Accumulated wheel rotation of each section's wheels, rad.</summary>
@@ -235,6 +237,7 @@ public sealed class Truck : Rideable, IEngined
     };
 
     private float _steer;
+    private bool _reverseArmed = true;   // a truck taken at rest may back straight out
 
     public override RideKind Kind => Spec.Kind;
     public override string Label => Spec.Label;
@@ -284,6 +287,24 @@ public sealed class Truck : Rideable, IEngined
     public override float BodyHeight => 2.2f;
     public override float DismountSpeed => 1.5f;
     public override float HullLift => 0.6f;
+
+    /// <summary>
+    /// A tractor collides as its cab and, behind it, its chassis only up to the fifth wheel's
+    /// plate: cut by height, its lower box ran 2.2 m high to the back of the frame, and it could
+    /// neither back under a trailer's nose nor stand clear of one it had just dropped.
+    /// </summary>
+    public override (Aabb Lower, Aabb Upper)? HullBoxes
+    {
+        get
+        {
+            if (Spec.Class != HeavyClass.Tractor) return null;
+            var s = Spec.Sections[0];
+            float cg = Train.Bodies[0].CgAt, cab = 2.35f;
+            var chassis = new Aabb(new Vector3(-s.Width * 0.47f, 0f, cab - cg), new Vector3(s.Width * 0.94f, s.HitchHeight - 0.08f, s.Length - cab));
+            var cabin = new Aabb(new Vector3(-s.Width * 0.5f, 0f, -cg), new Vector3(s.Width, s.Height, cab));
+            return (chassis, cabin);
+        }
+    }
 
     /// <summary>The driver's door: a cab's on the left, a bus's front door on the right.</summary>
     public override Vector3 EntryPoint
@@ -349,16 +370,26 @@ public sealed class Truck : Rideable, IEngined
 
         // the automatic's pedals, as on the cars: the brake held at a standstill is reverse, and in
         // reverse the brake pedal drives
+        // Reverse is armed only once the truck is at rest with the brake let go (the hill hold keeps
+        // it there): a brake held down to a stop only stops it, or holding the pedal at a red light
+        // would back 40 t into whatever is behind — or down the hill it was crawling up.
+        if (Mathf.Abs(u) > 0.5f) _reverseArmed = false;
+        else if (Mathf.Abs(u) < 0.3f && input.Brake < 0.1f) _reverseArmed = true;
         if (mode == HeavyShift.Automatic)
         {
-            if (Box.Gear >= 0 && Mathf.Abs(u) < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f) Box.WantsReverse = true;
+            if (Box.Gear >= 0 && Mathf.Abs(u) < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f && _reverseArmed) Box.WantsReverse = true;
             else if (Box.Gear < 0 && u > -0.5f && input.Throttle > 0.3f) Box.WantsReverse = false;
         }
         bool swap = mode == HeavyShift.Automatic && Box.Gear < 0;
         float pedal = swap ? input.Brake : input.Throttle;
         float brake = swap ? input.Throttle : input.Brake;
         if (swap && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
-        Braking = brake > 0.05f;
+        // hill hold, as an automated box has it: stopped with no pedal down, the service brakes
+        // hold the truck until the throttle is pressed (with the clutch pedal, that is the driver's job)
+        HillHold = mode is HeavyShift.Automatic or HeavyShift.Sequential && Mathf.Abs(u) < 0.3f
+            && pedal < 0.02f && brake < 0.05f && ground.OnFloor;
+        if (HillHold) brake = 0.35f;
+        Braking = brake > 0.05f && !HillHold;
 
         // a heavy rack: slower to wind on than a car's, and far less lock asked for at speed
         float rate = Mathf.Abs(input.Steer) < Mathf.Abs(_steer) || input.Steer * _steer < 0 ? 3.2f : 1.9f;
@@ -399,7 +430,10 @@ public sealed class Truck : Rideable, IEngined
         float u2 = b0.V.Dot(b0.Forward), w2 = b0.V.Dot(b0.Left);
         AccelX = b0.Accel.X;
         motion.Speed = Mathf.Sqrt(u2 * u2 + w2 * w2);
-        motion.Slip = motion.Speed > 0.05f ? Mathf.Atan2(w2, u2) : (Box.Gear < 0 ? Mathf.Pi : 0f);
+        // the direction of travel down to any speed at all: taken as forward below a crawl (the
+        // car's rule), a truck starting to roll back down a hill was turned round every frame and
+        // never moved
+        motion.Slip = motion.Speed > 1e-4f ? Mathf.Atan2(w2, u2) : (Box.Gear < 0 ? Mathf.Pi : 0f);
         motion.YawRate = b0.W;
         motion.Yaw += b0.Psi;
         motion.Bank = 0f;

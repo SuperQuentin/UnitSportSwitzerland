@@ -216,6 +216,13 @@ public abstract class Rideable
     public virtual float BodyRadius => 0.32f;
     public virtual float BodyHeight => 1.78f;
 
+    /// <summary>
+    /// The two hull boxes in the visual's rest frame, when cutting the mesh by height would not do
+    /// (a tractor: its cab, and the chassis behind it only up to the fifth wheel, so it backs under
+    /// a trailer's nose). Null: measured from the mesh.
+    /// </summary>
+    public virtual (Aabb Lower, Aabb Upper)? HullBoxes => null;
+
     /// <summary>Bottom of the collision hull above the ground, m: bumps of the terrain lattice must not catch it.</summary>
     public virtual float HullLift => 0.45f;
 

@@ -268,6 +268,11 @@ public sealed class HeavyDriveline
     private float EngineStep(float speed, float throttle, bool exhaust, in DriveDemand d, float h)
     {
         float omega = EngineRpm * Mathf.Tau / 60f;
+        // an automated launch asks the engine for speed, not for a pedal's worth of fuel: while the
+        // clutch slips the engine is fuelled up to the launch speed (a diesel at 800 rpm on half a
+        // pedal would otherwise sit there, the clutch taking all it made)
+        if (AutoClutch && !Converter && !Locked && Gear != 0 && throttle > 0.02f && _shift <= 0f)
+            throttle = Mathf.Clamp(throttle + (LaunchRpm(throttle) - EngineRpm) / 150f, throttle, 1f);
         float engine = EngineTorque(EngineRpm, throttle, exhaust, d.EngineOn);
         float ratio = Ratio(Gear);
         float dir = Mathf.Sign(Gear);
@@ -333,6 +338,9 @@ public sealed class HeavyDriveline
         return transmitted * ratio * Driveline / _wheelRadius * dir;
     }
 
+    /// <summary>Where the automated clutch holds the engine while it slips: higher with more throttle, above the down-shift point.</summary>
+    private float LaunchRpm(float throttle) => _s.IdleRpm + throttle * (_s.Redline * 0.62f - _s.IdleRpm);
+
     /// <summary>The pedal as the clutch sees it: it bites between 65% and 25% of its travel.</summary>
     private float ClutchEngagement() => Mathf.SmoothStep(0f, 1f, Mathf.Clamp((0.65f - ClutchPedal) / 0.4f, 0f, 1f));
 
@@ -351,7 +359,7 @@ public sealed class HeavyDriveline
         }
         if (Locked && inRpm > _s.IdleRpm * 0.9f) return 1f;
         if (throttle < 0.02f && d.Brake > 0.05f && Mathf.Abs(d.Speed) < 1f) return 0f;
-        float launch = _s.IdleRpm + throttle * (_s.Redline * 0.62f - _s.IdleRpm);   // above the down-shift point
+        float launch = LaunchRpm(throttle);
         // it bites only as the engine nears the launch speed: biting from idle, it took everything
         // a diesel makes at 600 rpm and the engine never got up to where it pulls
         float from = throttle < 0.02f ? _s.IdleRpm * 0.75f : launch - 200f;

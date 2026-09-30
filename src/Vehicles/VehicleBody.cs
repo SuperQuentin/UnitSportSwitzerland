@@ -242,15 +242,19 @@ public partial class VehicleBody : CharacterBody3D
 
     public override void _PhysicsProcess(double delta)
     {
-        if (_asleep) return;
         float dt = (float)delta;
         _life += dt;
         if (_life > SettleTime && _ignoring.Count > 0)
-        {
-            foreach (var body in _ignoring)
-                if (IsInstanceValid(body)) RemoveCollisionExceptionWith(body);
-            _ignoring.Clear();
-        }
+            // a trailer just dropped stands over the truck that left it: it ignores it until that
+            // has driven clear, not for a second
+            _ignoring.RemoveAll(body =>
+            {
+                bool gone = !IsInstanceValid(body);
+                bool clear = gone || Ride is not ParkedTrailer || body.GlobalPosition.DistanceTo(GlobalPosition) > 22f;
+                if (clear && !gone) RemoveCollisionExceptionWith(body);
+                return clear;
+            });
+        if (_asleep) return;
 
         // hold still until the ground is there; a vehicle dropped over unstreamed terrain would
         // otherwise fall through the world before it arrived

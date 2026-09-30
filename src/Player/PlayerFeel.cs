@@ -771,7 +771,7 @@ public partial class PlayerFeel : Node3D
                     ? $"{speed * 3.6f:0} km/h    {t.GearLabel}    {t.Rpm:0} rpm"
                       + (t.Box.RetarderLevel > 0 ? $"    {(t.Box.RetarderLevel == 1 ? "EXH" : $"RET {t.Box.RetarderLevel - 1}")}" : "")
                       + $"    AIR {t.Box.AirTank:0.0} bar{(t.Box.AirTank < HeavyDriveline.AirLow ? " LOW" : "")}"
-                      + (t.Box.SpringBrakes ? "    PARK" : "")
+                      + (t.Box.SpringBrakes ? "    PARK" : t.HillHold ? "    HOLD" : "")
                       + (t.Box.ClutchPedal > 0.5f ? "    CLUTCH" : "")
                       + $"    {t.Train.Mass / 1000f:0.0} t"
                 : _player.Vehicle is Car c

@@ -339,7 +339,8 @@ public partial class FootPlayer
     {
         if (truck.Trailer != null || truck.Spec.Takes == Coupling.None) return null;
         var hitch = ToGlobal(truck.HitchNode with { Y = 0 });
-        float tolerance = truck.Spec.Takes == Coupling.Drawbar ? 1.1f : 0.6f;
+        // a fifth wheel's jaws take a kingpin at an angle; a drawbar eye swings on the hitch
+        float tolerance = truck.Spec.Takes == Coupling.Drawbar ? 1.2f : 0.9f;
         return Vehicles?.NearestTrailer(hitch, CoupleReach, v =>
             truck.Accepts(v.Trailer!.Spec)
             && Mathf.Abs(Mathf.Wrap(v.Rotation.Y - Rotation.Y, -Mathf.Pi, Mathf.Pi)) < tolerance);

@@ -97,12 +97,17 @@ public partial class HeavyNetProbe : Node
         if (at(3)) Log($"curtainsider from the picker: {me.SpawnTrailer(0, 1f)} -> {Train(me)}");
         // a slow bend to the right, so the trailer swings
         if (at(5)) { Input.ActionPress(PlayerInput.Throttle, 0.5f); Input.ActionPress(PlayerInput.MoveRight); }
-        if (at(9)) Log($"in the bend at {me.GroundSpeed * 3.6f:F0} km/h: {Train(me)}");
-        if (at(11)) { Input.ActionRelease(PlayerInput.Throttle); Input.ActionRelease(PlayerInput.MoveRight); Input.ActionPress(PlayerInput.Brake); }
-        if (at(16)) { Input.ActionRelease(PlayerInput.Brake); Log($"stopped at {me.GroundSpeed * 3.6f:F1} km/h: {Train(me)}"); }
+        if (at(8)) { Log($"in the bend at {me.GroundSpeed * 3.6f:F0} km/h: {Train(me)}"); Input.ActionRelease(PlayerInput.MoveRight); }
+        // straight on a while, so the trailer comes back in line before it is dropped
+        if (at(13)) Log($"straightening: {Train(me)}");
+        if (at(14)) { Input.ActionRelease(PlayerInput.Throttle); Input.ActionPress(PlayerInput.Brake); }
+        if (at(16.5)) { Input.ActionRelease(PlayerInput.Brake); Log($"stopped at {me.GroundSpeed * 3.6f:F1} km/h: {Train(me)}"); }
+        if (at(16.9) && me.GetNodeOrNull<Node3D>("Section1") is { } sec)
+            Log($"before the drop: section y {sec.GlobalPosition.Y:F2} (terrain {Height(sec.GlobalPosition):F2}), tractor y {me.GlobalPosition.Y:F2}");
         if (at(17)) { Press(PlayerInput.Couple); }
         if (at(18))
             Log($"uncoupled: {Train(me)}; lone trailers in the world: {VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().Count(v => v.Trailer != null)}");
+        if (at(19) || at(23.5)) LogKingpin(me);
         if (at(24)) { Press(PlayerInput.Couple); }
         if (at(26)) Log($"coupled again from where it stood: {Train(me)}");
         if (at(30)) { me.ExitVehicle(); Log($"got out: ride {me.Ride} trailer {me.TrailerCode}"); }
@@ -127,6 +132,23 @@ public partial class HeavyNetProbe : Node
         if (Mathf.PosMod(_t, 1.0) < GetPhysicsProcessDeltaTime() && me.Heavy is { } h)
             Log($"  drive: {me.GroundSpeed * 3.6f:F1} km/h floor {me.IsOnFloor()} {h.GearLabel} {h.Rpm:F0} rpm clutch {h.Box.Clutch:F2}{(h.Box.Locked ? " locked" : "")}"
                 + $" thr {h.Throttle:F2} in ({me.LastRideInput.Throttle:F2},{me.LastRideInput.Brake:F2},{me.LastRideInput.Steer:F2}) springs {h.Box.SpringBrakes} hits {me.SectionHits} at {me.GlobalPosition.Round()}");
+    }
+
+    private float Height(Vector3 p) =>
+        _local()?.Terrain is { } t && t.TryGetHeight(p, out float g) ? g : float.NaN;
+
+    /// <summary>Where each lone trailer's kingpin is from a's fifth wheel, and at what angle.</summary>
+    private void LogKingpin(FootPlayer me)
+    {
+        if (me.Heavy is not { } t) return;
+        var hitch = me.ToGlobal(t.HitchNode with { Y = 0 });
+        foreach (var v in VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().Where(x => x.Trailer != null) ?? Enumerable.Empty<VehicleBody>())
+        {
+            var pin = v.ToGlobal(v.Trailer!.PivotNode);
+            Log($"kingpin of {v.Name}: {new Vector2(pin.X - hitch.X, pin.Z - hitch.Z).Length():F2} m across, {pin.Y - hitch.Y:F2} m up, "
+                + $"{Mathf.RadToDeg(Mathf.Wrap(v.Rotation.Y - me.Rotation.Y, -Mathf.Pi, Mathf.Pi)):F0}°, moving {v.Velocity.Length():F2} m/s; candidate {me.CoupleCandidate(t)?.Name ?? "none"}"
+                + $"; tractor y {me.GlobalPosition.Y:F2} (terrain {Height(me.GlobalPosition):F2}), trailer y {v.GlobalPosition.Y:F2} (terrain {Height(v.GlobalPosition):F2}), asleep-ish {v.Velocity.Y:F2}");
+        }
     }
 
     private void Watch(FootPlayer me)
