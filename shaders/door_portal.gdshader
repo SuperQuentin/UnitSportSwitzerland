@@ -1,5 +1,7 @@
 shader_type spatial;
-render_mode unshaded, cull_disabled;
+render_mode unshaded, cull_disabled, fog_disabled;
+// fog_disabled: the portal camera's picture is already fogged; fogging the quad again made the
+// room seen through a doorway hazier than the same room seen from inside
 
 // An open doorway (Interiors/DoorPortals): what a portal camera sees on the other side of the
 // door, drawn in screen space so the picture lines up with the view through the hole. The portal

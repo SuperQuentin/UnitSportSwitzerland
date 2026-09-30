@@ -279,6 +279,8 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         if (cam != null) Seen(cam, cam.GlobalTransform, links, null, Width, direct);
         // the 3D's own pixels (the window's, at the render scale), not the UI canvas's
         var screen = (Vector2)GetWindow().Size * GetViewport().Scaling3DScale;
+        var main = GetViewport();
+        foreach (var v in _views) { Match(v.Port, main); Match(v.Nested!.Port, main); }
         for (int i = 0; i < Width; i++)
         {
             var view = _views[i];
@@ -563,6 +565,15 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         // whatever is on the camera's side of the doorway it looks through is not in its picture:
         // the facade's closed shell looking out, other interiors in the shared space looking in
         SetClip(view.Slot, link, c, outward: fromInside);
+    }
+
+    /// <summary>Same anti-aliasing and debanding as the screen, so the two pictures read alike.</summary>
+    private static void Match(SubViewport port, Viewport main)
+    {
+        if (port.Msaa3D != main.Msaa3D) port.Msaa3D = main.Msaa3D;
+        if (port.ScreenSpaceAA != main.ScreenSpaceAA) port.ScreenSpaceAA = main.ScreenSpaceAA;
+        if (port.UseTaa != main.UseTaa) port.UseTaa = main.UseTaa;
+        if (port.UseDebanding != main.UseDebanding) port.UseDebanding = main.UseDebanding;
     }
 
     private void Idle(View view)

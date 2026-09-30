@@ -70,6 +70,8 @@ public sealed class RectPlan
     public RectPlan(float x0, float z0, float x1, float z1) { X0 = x0; Z0 = z0; X1 = x1; Z1 = z1; }
     public bool Overlaps(RectPlan o, float eps = 0.01f) =>
         X0 < o.X1 - eps && o.X0 < X1 - eps && Z0 < o.Z1 - eps && o.Z0 < Z1 - eps;
+    /// <summary>The same rectangle, <paramref name="by"/> larger on every side.</summary>
+    public RectPlan Grow(float by) => new(X0 - by, Z0 - by, X1 + by, Z1 + by);
 }
 
 /// <summary>One straight flight from this floor to the next: lane X0..X1, bottom at ZBottom, top at ZTop.</summary>

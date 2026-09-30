@@ -22,7 +22,8 @@ changed is how you get there.
 - **The views (`DoorPortals`).** Each open link has a doorway "tunnel" on both sides (a quad plus
   a short box behind it, so the near plane clipping the mouth while stepping through still shows
   the other side). The two nearest in view, on the camera's side, get a portal each: a camera at
-  `map * mainCamera`, full resolution, in a `SubViewport` sampled in screen space
+  `map * mainCamera`, full resolution (the window's 3D pixels), with the screen's MSAA/FXAA/TAA copied,
+  in a `SubViewport` sampled in screen space
   (`door_portal.gdshader`, `source_color`). Each of those can see one more doorway through its
   own, which gets a nested portal: through a house with two doors, or out of one door and into
   the house across the street. Past that, a doorway shows a dark hall.

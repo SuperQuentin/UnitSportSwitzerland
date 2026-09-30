@@ -16,8 +16,11 @@ namespace UnitSport.Player;
 /// <param name="Engine">The engine is running. Off: a helicopter autorotates, a plane glides.</param>
 /// <param name="Piloted">Someone is at the controls. An empty helicopter does not autorotate —
 /// that takes a pilot working the collective — it falls.</param>
+/// <param name="ViewPitch">Where the camera looks up (+) or down (−), radians, for craft that
+/// follow the look in pitch too (the wingsuit). Null: no look pitch to follow (scripted pilots).</param>
 public readonly record struct FlightInput(Vector2 Stick, float Up, float Down, float LeverUp,
-    float LeverDown, bool Action, bool Effort, float ViewYaw, bool Engine = true, bool Piloted = true);
+    float LeverDown, bool Action, bool Effort, float ViewYaw, bool Engine = true, bool Piloted = true,
+    float? ViewPitch = null);
 
 /// <param name="OnFloor">Touching walkable ground.</param>
 /// <param name="Clearance">Height above the terrain surface, m (buildings not counted).</param>
@@ -181,7 +184,22 @@ public sealed class Wingsuit : Flyer
     /// <summary>Zero-lift drag and induced-drag factor: best glide ~2.9 at ~38 m/s.</summary>
     private const float Cd0 = 0.12f, InducedK = 0.25f;
     private const float ClDive = 0.12f, ClTrim = 0.7f, ClFlare = 1.3f;
-    private const float MaxBank = 1.0f;
+    private const float MaxBank = 1.1f;
+    /// <summary>Bank per radian between the heading and the look: 45° off gives the full bank.</summary>
+    private const float BankPerRadian = 1.4f;
+    /// <summary>Look pitch that holds the trim glide (~2.7:1 is ~20° down), and the dive and flare ends.</summary>
+    private const float LookTrim = -0.35f, LookDive = -0.9f, LookFlare = 0.05f;
+
+    /// <summary>Lift setting for a look pitch: trim along the glide, less below it, more above.</summary>
+    private static float LookLift(float? pitch) => pitch switch
+    {
+        null => ClTrim,
+        < LookTrim => Mathf.Lerp(ClTrim, ClDive, Mathf.Clamp((LookTrim - pitch.Value) / (LookTrim - LookDive), 0f, 1f)),
+        _ => Mathf.Lerp(ClTrim, ClFlare, Mathf.Clamp((pitch.Value - LookTrim) / (LookFlare - LookTrim), 0f, 1f)),
+    };
+
+    /// <summary>The look turns the suit: mouse and right stick are the heading, not an orbit.</summary>
+    public override bool LookSteers => true;
 
     public override float CrashSpeed => 12f;
     public override float LookBank => 0.6f;
@@ -212,12 +230,21 @@ public sealed class Wingsuit : Flyer
         if (env.OnFloor) return m.Velocity.Length() > CrashSpeed ? FlightEvent.Crashed : FlightEvent.Landed;
         if (input.Action) return FlightEvent.OpenCanopy;
 
-        // stick forward dives, back flares; the lift coefficient eases, so the suit does too
-        float cl = input.Stick.Y < 0
-            ? Mathf.Lerp(ClTrim, ClDive, -input.Stick.Y)
-            : Mathf.Lerp(ClTrim, ClFlare, input.Stick.Y);
+        // Look to fly. The mouse (or right stick) is where you want to go: its yaw is the heading
+        // the suit banks round to, and its pitch is how steeply you dive — look down the valley to
+        // dive, at the horizon to flare. The camera is that look, so what is in the middle of the
+        // screen is where you are going. The stick still flies it directly and wins when pushed.
+        float cl = LookLift(input.ViewPitch);
+        if (Mathf.Abs(input.Stick.Y) > 0.1f)
+            cl = input.Stick.Y < 0
+                ? Mathf.Lerp(ClTrim, ClDive, -input.Stick.Y)
+                : Mathf.Lerp(ClTrim, ClFlare, input.Stick.Y);
         m.Control = Approach(m.Control, cl, 3f, dt);
-        m.Bank = Approach(m.Bank, input.Stick.X * MaxBank, 3.5f, dt);
+        // positive bank turns right, and a right turn lowers the yaw
+        float toView = Mathf.AngleDifference(m.Yaw, input.ViewYaw);
+        float bank = input.ViewPitch == null ? 0f : Mathf.Clamp(-toView * BankPerRadian, -MaxBank, MaxBank);
+        bank = Mathf.Clamp(bank + input.Stick.X * MaxBank, -MaxBank, MaxBank);
+        m.Bank = Approach(m.Bank, bank, 5f, dt);
 
         var v = m.Velocity;
         float speed = v.Length();
@@ -234,8 +261,11 @@ public sealed class Wingsuit : Flyer
 
         float q = 0.5f * AirDensity * speed * speed * Area;
         float cd = Cd0 + InducedK * m.Control * m.Control;
+        // an arcade coordinated turn: the lift grows with the bank so a turn costs no more height
+        // than the glide it is in. Without it, every turn sank like a stone and felt like a stall.
+        float turnLift = Mathf.Min(1f / Mathf.Max(Mathf.Cos(m.Bank), 0.1f), 1.8f);
         var accel = Vector3.Down * Gravity
-            + liftDir * (q * m.Control / Mass)
+            + liftDir * (q * m.Control * turnLift / Mass)
             - flow * (q * cd / Mass);
 
         // Phugoid damping. A bare lift-and-drag point mass porpoises for ever — measured
