@@ -100,6 +100,11 @@ public partial class ClientWorld : Node3D
             GetTree().Quit(Items.InventoryCheck.Run());
             return;
         }
+        if (ChatCheck.Requested)
+        {
+            GetTree().Quit(ChatCheck.Run());
+            return;
+        }
         if (Occasions.OccasionProbe.Requested)
         {
             GetTree().Quit(Occasions.OccasionProbe.Run());
@@ -394,6 +399,23 @@ public partial class ClientWorld : Node3D
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
+
+        // Chat exists from boot, not only once connected: offline it runs its commands itself
+        // (/city, /spawn ...), and StartNetworking just keeps using it. World/Chat is also the
+        // path the server's node routes RPCs to, so the name cannot change between the two.
+        _chat = ChatManager.CreateClient();
+        _chat.Teleporter = _teleporter;
+        _chat.Inventory = inventory;
+        _chat.PlaceSearch = _places;
+        AddChild(_chat);
+        _chatUi = ChatUi.Create(_chat, new ChatCompleter
+        {
+            Places = (query, limit) => _places!.Search(query, limit).Select(p => p.Name),
+            Occasions = () => Occasions.OccasionManager.Instance?.Known.Select(e => e.Id) ?? [],
+            Players = () => _chat.PlayerNames,
+            PlayersWanted = _chat.RequestPlayerNames,
+        });
+        AddChild(_chatUi);
 
         // F1: every control, from the live bindings; bottom right: the ones that apply here
         _help = ControlsHelp.Create();
@@ -775,12 +797,8 @@ public partial class ClientWorld : Node3D
         if (_networked) return;
         _networked = true;
 
-        // Chat lives at World/Chat on both sides: Godot's high-level multiplayer routes RPCs
-        // by node path, so the names have to agree with ServerWorld exactly.
-        _chat = ChatManager.CreateClient();
-        _chat.Teleporter = _teleporter;
-        AddChild(_chat);
-        if (Items.EconomyProbe.Password != null && _items != null)
+        // The chat node (World/Chat, made at boot) is already where the server's RPCs route.
+        if (Items.EconomyProbe.Password != null && _items != null && _chat != null)
             AddChild(new Items.EconomyProbe(_chat, _items.Inventory));
 
         // World/Race on both sides; the client side puts this player on the grid and times the run
@@ -790,10 +808,7 @@ public partial class ClientWorld : Node3D
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
         if (RadioSyncCheck.Create(() => LocalPlayer, () => _players) is { } radioCheck) AddChild(radioCheck);
 
-        _chatUi = ChatUi.Create(_chat);
-        AddChild(_chatUi);
-
-        _chat.Kicked += reason => GD.Print($"[net] kicked: {reason}");
+        _chat!.Kicked += reason => GD.Print($"[net] kicked: {reason}");
 
         // Merges the server's tile list so tiles this client never shipped with become
         // streamable, and refuses to stream at all if the two worlds disagree on the origin.
