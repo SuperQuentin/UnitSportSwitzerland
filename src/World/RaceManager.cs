@@ -71,6 +71,11 @@ public partial class RaceManager : Node
         /// <summary>Waiting for another race's field to leave a shared start line.</summary>
         public bool Held;
         public double HoldUntil;
+        /// <summary>NPCs still driving to their slots (#51): GO waits for them, until <see cref="ArriveBy"/>.</summary>
+        public readonly HashSet<long> Arriving = new();
+        public double ArriveBy;
+        /// <summary>NPCs asked for while the road was still being found: spawned once it is.</summary>
+        public readonly List<(long Owner, int Count, int Mount, bool Duel)> PendingNpcs = new();
         public string What => $"{(Air ? "air " : "")}{MountName(Mount)} {(Invited != 0 ? "duel" : "race")}";
     }
 
@@ -205,6 +210,9 @@ public partial class RaceManager : Node
         }
         race.Route = route;
         race.Course = course;
+        // NPCs arrive along this road: they could not be placed before it was known (before the duel check: it reads Invited)
+        foreach (var (owner, n, mount, duel) in race.PendingNpcs) SpawnNpcs(race, owner, n, mount, duel);
+        race.PendingNpcs.Clear();
         race.Phase = Phase.Entry;
         race.EntryEnds = _clock + EntryWindow;
         float km = (race.Air ? course!.Length : Mathf.Min(race.Metres, RaceCourse.MaxLength(route!, MinEntrants))) / 1000f;
@@ -281,7 +289,39 @@ public partial class RaceManager : Node
             if (!_raceOf.TryGetValue(sender, out id)) return reply;   // refused
             race = _races[id];
         }
-        var ids = npcs.Spawn(sender, duel ? 1 : count, (RideKind)mount, host.GlobalPosition, host.Rotation.Y);
+        // they drive in along the race road (#51), so they wait for it to be found
+        if (race.Phase == Phase.Building)
+        {
+            race.PendingNpcs.Add((sender, duel ? 1 : count, mount, duel));
+            return reply + " NPCs on their way.";
+        }
+        int spawned = SpawnNpcs(race, sender, duel ? 1 : count, mount, duel);
+        return reply + (spawned == 0 ? " No room for more NPCs." : $" {spawned} NPC(s) on their way.");
+    }
+
+    /// <summary>Seconds GO waits at most for NPCs still driving to their slots.</summary>
+    private const double ArriveWithin = 75;
+
+    /// <summary>
+    /// Spawns NPCs out of sight on the race road and tells their owner how each arrives
+    /// (<see cref="NpcArrival"/>); without a road (never, on the ground) they appear behind the owner.
+    /// </summary>
+    private int SpawnNpcs(Race race, long owner, int count, int mount, bool duel)
+    {
+        if (Npcs is not { } npcs || _players?.GetNodeOrNull<FootPlayer>(owner.ToString()) is not { } host) return 0;
+        List<NpcArrival.Entry>? plan = null;
+        (Vector3[] Centre, float[] Width, float Zero) lane = default;
+        if (race.Route != null)
+        {
+            lane = NpcArrival.Lane(race.Route);
+            var road = RaceRoute.FromPoints(lane.Centre, lane.Width);
+            var all = _players.GetChildren().OfType<FootPlayer>().ToList();
+            plan = NpcArrival.Plan(road, lane.Zero, race.Entrants.Count, count, race.Entrants.Count + count,
+                all.Where(p => !p.Npc).Select(p => p.GlobalPosition).ToList(), all.Select(p => p.GlobalPosition).ToList(),
+                race.Id * 7919 + (int)(owner % 100000) * 31 + race.Entrants.Count);
+        }
+        var ids = npcs.Spawn(owner, count, (RideKind)mount, host.GlobalPosition, host.Rotation.Y,
+            plan == null ? null : i => (plan[i].At, plan[i].Yaw));
         if (duel && ids.Count == 1) race.Invited = ids[0];   // before the course is built: Opened reads it
         foreach (long npc in ids)
         {
@@ -289,7 +329,24 @@ public partial class RaceManager : Node
             Enter(race, npc);
             if (!duel) _chat?.Broadcast($"[race] #{race.Id} {Who(npc)} joins ({race.Entrants.Count} in)", ChatKind.System);
         }
-        return reply + (ids.Count == 0 ? " No room for more NPCs." : $" {ids.Count} NPC(s) in.");
+        if (plan == null) return ids.Count;
+        for (int i = 0; i < ids.Count; i++)
+        {
+            var e = plan[i];
+            race.Arriving.Add(ids[i]);
+            RpcId(owner, MethodName.NpcArrive, race.Id, ids[i], lane.Centre, lane.Width, lane.Zero, (int)e.Style, e.Variant, e.Slot, race.Entrants.Count);
+            GD.Print($"[npc] {Who(ids[i])} arrives {e.Style} for slot {e.Slot + 1}");
+        }
+        if (ids.Count > 0) race.ArriveBy = System.Math.Max(race.ArriveBy, _clock + ArriveWithin);
+        return ids.Count;
+    }
+
+    /// <summary>The owner: one of its NPCs is in its slot, so GO need not wait for it any longer.</summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void NpcStaged(int raceId, long npc)
+    {
+        if (!_server || OwnerOf(npc) != Multiplayer.GetRemoteSenderId() || !_races.TryGetValue(raceId, out var race)) return;
+        if (race.Arriving.Remove(npc)) GD.Print($"[npc] {Who(npc)} is in its slot");
     }
 
     private string Leave(long sender)
@@ -339,6 +396,7 @@ public partial class RaceManager : Node
                 else race.Entrants.Remove(e);
             }
             if (race.Phase == Phase.Entry && _clock >= race.HoldUntil
+                && (_clock >= race.ArriveBy || !race.Arriving.Any(race.Entrants.Contains))
                 && (_clock >= race.EntryEnds || (race.Invited != 0 && race.Entrants.Contains(race.Invited))))
                 Go(race);
             else if (race.Phase == Phase.Running
@@ -621,6 +679,20 @@ public partial class RaceManager : Node
     public event System.Action<long, int, double>? NpcFinished;
     /// <summary>An NPC's race ended or it was taken out.</summary>
     public event System.Action<long>? NpcDropped;
+
+    /// <summary>How one of this client's NPCs arrives (#51): the road, where the start is on it, its style and provisional slot.</summary>
+    public readonly record struct Arrival(int RaceId, RaceRoute Lane, float Zero, ArrivalStyle Style, int Variant, int Slot, int Count);
+    private readonly Dictionary<long, Arrival> _arrivals = new();
+
+    /// <summary>The arrival sent for an NPC, once (its driver may be created before or after it comes).</summary>
+    public Arrival? TakeArrival(long npc) => _arrivals.Remove(npc, out var a) ? a : null;
+
+    /// <summary>Tells the server an NPC is in its slot.</summary>
+    public void ReportStaged(int raceId, long npc) => RpcId(1, MethodName.NpcStaged, raceId, npc);
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void NpcArrive(int raceId, long npc, Vector3[] centre, float[] width, float zero, int style, int variant, int slot, int count) =>
+        _arrivals[npc] = new Arrival(raceId, RaceRoute.FromPoints(centre, width), zero, (ArrivalStyle)style, variant, slot, count);
 
     /// <summary>The latest race id this client saw opened, challenged or joined (from the chat).</summary>
     public int LastRaceSeen { get; private set; }

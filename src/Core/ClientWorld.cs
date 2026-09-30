@@ -259,7 +259,7 @@ public partial class ClientWorld : Node3D
         // them for the height.
         bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
             || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
+            || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
@@ -492,6 +492,14 @@ public partial class ClientWorld : Node3D
             var (driveE, driveN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(driveE, driveN, 1200);
             AddChild(new DriveProbe(_chunks, origin, drive.Shot, drive.Car, drive.Seconds));
+            return;
+        }
+
+        if (World.ArrivalProbe.ParseArgs() is { Requested: true } arrival)
+        {
+            var (arrE, arrN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(arrE, arrN, 1200);
+            AddChild(new World.ArrivalProbe(_chunks, origin, arrival.Prefix));
             return;
         }
 
