@@ -68,7 +68,16 @@ public partial class HitboxProbe : Node3D
                 parked = $"{s.X:F2}x{s.Y:F2}x{s.Z:F2}";
                 if (!Inside(box, drawn)) Fail($"{ride.Kind}: parked box {box} reaches outside the drawn {drawn}");
             }
-            var hs = hurt?.GetChild<CollisionShape3D>(0).Shape is BoxShape3D hb ? hb.Size : Vector3.Zero;
+            // the hurtbox is two boxes (body and cabin): together they must span what is drawn
+            Aabb? union = null;
+            if (hurt != null)
+                foreach (var child in hurt.GetChildren())
+                    if (child is CollisionShape3D { Shape: BoxShape3D hb } cs)
+                    {
+                        var part = new Aabb(cs.Position - hb.Size / 2, hb.Size);
+                        union = union is { } u ? u.Merge(part) : part;
+                    }
+            var hs = union?.Size ?? Vector3.Zero;
             if (hurt == null || (hs - drawn.Size).Length() > 0.01f) Fail($"{ride.Kind}: hurtbox {hs} is not the drawn {drawn.Size}");
             GD.Print($"[hitbox] {ride.Kind,-11} {drawn.Size.X,5:F2} x {drawn.Size.Y,5:F2} x {drawn.Size.Z,5:F2}   "
                 + $"{ride.BodyRadius:F2}, {ride.BodyHeight:F2}      {parked,-20}  {hs.X:F2}x{hs.Y:F2}x{hs.Z:F2}");

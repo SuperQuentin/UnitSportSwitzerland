@@ -57,6 +57,7 @@ public partial class VehicleBody : CharacterBody3D
     private float _bikeRoll;
     private float _restTime;
     private bool _asleep;
+    private MultiplayerSynchronizer? _sync;
     private bool _anchored;
     private bool _charred;
     private bool _wasWrecked;
@@ -117,9 +118,27 @@ public partial class VehicleBody : CharacterBody3D
         var replication = new SceneReplicationConfig();
         foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool" })
             replication.AddProperty(prop);
-        var sync = new MultiplayerSynchronizer { Name = "Sync", RootPath = new NodePath(".."), ReplicationConfig = replication };
+        // states that change a few times per life of a vehicle go reliably on change; the motion
+        // at 20 Hz while it moves (every frame before, for a bike standing in a field for hours)
+        foreach (var prop in new[] { ".:Wrecked", ".:Health", ".:EngineOn" })
+            replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
+        var sync = _sync = new MultiplayerSynchronizer
+        {
+            Name = "Sync", RootPath = new NodePath(".."), ReplicationConfig = replication,
+            ReplicationInterval = 0.05f,
+        };
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
         AddChild(sync);
+
+        // Placed by the dedicated server itself (VehicleManager.Place): the server has no ground
+        // collision to simulate it on, so it stands exactly where it was put, asleep, until a
+        // player claims it. The hand's breadth above is for a body that falls onto the ground.
+        if (Net.NetworkManager.DedicatedServer && IsMultiplayerAuthority())
+        {
+            Position = s.Position;
+            _asleep = true;
+            sync.ReplicationInterval = 2f;
+        }
 
         if (!Headless)
         {
@@ -127,9 +146,9 @@ public partial class VehicleBody : CharacterBody3D
             _visual.Name = "Visual";
             AddChild(_visual);
             Hurtbox.Fit(_visual);
-            if (Ride is Helicopter or Plane or Car)
+            if (Ride is Helicopter or Plane or IEngined)
             {
-                var profile = Ride is Car parkedCar ? EngineProfile.For(parkedCar.Spec.Engine, parkedCar.Spec.IdleRpm, parkedCar.Spec.Redline)
+                var profile = Ride is IEngined parked ? parked.Sound
                     : Ride is Helicopter ? EngineProfile.Turboshaft : EngineProfile.PistonAero;
                 _engineSound = new EngineSynth(profile, spatial: true, seed: (int)Math.Max(1, Owner));
                 AddChild(_engineSound);
@@ -217,6 +236,8 @@ public partial class VehicleBody : CharacterBody3D
         {
             _asleep = true;
             Velocity = Vector3.Zero;
+            // asleep it cannot move until someone claims it (a new node): a heartbeat is enough
+            if (_sync != null) _sync.ReplicationInterval = 2f;
             SetAnchored(false);
         }
     }
@@ -345,7 +366,7 @@ public partial class VehicleBody : CharacterBody3D
             rig.Headlights = _initial.Headlights && !Wrecked;
             rig.RoofOpen = _initial.RoofOpen;
         }
-        if (_engineSound != null && Ride is Car)
+        if (_engineSound != null && Ride is IEngined)
             // ticking over while it rolls; a car at rest is asleep and silent
             _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep ? 0.1f : 0f);
         else if (_engineSound != null)

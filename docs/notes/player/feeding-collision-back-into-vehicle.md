@@ -7,4 +7,6 @@
   for twelve seconds. (2) Clamping to `GetRealVelocity` every frame then killed the bike, because
   the ground is a 2 m lattice and crossing each bump costs a little forward motion *every frame*;
   compounded, that bled a bike from 107 m of riding to 11 m on flat ground. Only a shortfall
-  that **persists** (smoothed, and past `ImpactTolerance`) is an impact.
+  that **persists** (smoothed, and past `ImpactTolerance`) is an impact. The **shortfall** (commanded minus achieved speed) is what is smoothed, not the achieved speed:
+  a smoothed speed lags a launch by `a / ImpactResponse`, so every acceleration past 6 m/s² read
+  as a wall (a motorbike did 0-100 in 5.2 s instead of 3.3; #38).

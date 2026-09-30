@@ -94,12 +94,15 @@ public sealed class MeshScratch
         }
 
         // 0=---, 1=+--, 2=-+-, 3=++-, 4=--+, 5=+-+, 6=-++, 7=+++
-        Quad(start + 0, start + 2, start + 3, start + 1);   // back
-        Quad(start + 4, start + 5, start + 7, start + 6);   // front
-        Quad(start + 0, start + 4, start + 6, start + 2);   // left
-        Quad(start + 1, start + 3, start + 7, start + 5);   // right
-        Quad(start + 2, start + 6, start + 7, start + 3);   // top
-        Quad(start + 0, start + 1, start + 5, start + 4);   // bottom
+        // Clockwise seen from outside, which is Godot's front face. The order used to be the
+        // reverse, so every box was drawn inside out: from outside you saw its far inner walls,
+        // which passes on a plain block but shows a head straight through a helmet.
+        Quad(start + 0, start + 1, start + 3, start + 2);   // back
+        Quad(start + 4, start + 6, start + 7, start + 5);   // front
+        Quad(start + 0, start + 2, start + 6, start + 4);   // left
+        Quad(start + 1, start + 5, start + 7, start + 3);   // right
+        Quad(start + 2, start + 3, start + 7, start + 6);   // top
+        Quad(start + 0, start + 4, start + 5, start + 1);   // bottom
     }
 
     /// <summary>

@@ -62,7 +62,9 @@
   45k tiles in ~0.2 s. `HorizonLayer.Reload` queues a re-run asked for mid-load and keeps old blocks
   drawn until their replacements commit, since every merge reloads it.
   **Server**: `ServerWorld` runs the same source (and a cache), so its grid-only `ChunkManager`, the
-  interiors and loot see generated ground and houses; its status line prints the ground under each
+  interiors and loot see generated ground and houses. It holds only **coarse** grids (generated at
+  stride 10, blended from coarse neighbours) and generates roads/buildings only when an interior is
+  planned (issue #65, see `net/lean-dedicated-server.md`); its status line prints the ground under each
   player and whether it is generated. `--generated-world` starts a server with no terrain at all
   (origin at the anchor, served as `ChunkStreamer.ManifestOverride`); without it an empty server
   still refuses to start. **Off switch**: Settings → World → Generated terrain

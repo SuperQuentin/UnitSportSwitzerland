@@ -148,6 +148,170 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     [Export] public Vector4 Anim { get; set; }
 
+    // --- transform, replicated (see _Ready and Net/RemoteInterpolator) ---
+    // Not `position`/`rotation` themselves: a remote copy would snap to every packet, which at
+    // 150 km/h is a 0.7-2 m hop and a freeze-then-jump whenever one is late. The owner writes these
+    // with its own clock; a remote copy interpolates them, and the server's proxy copy applies them.
+
+    [Export] public Vector3 NetPos { get; set; }
+    [Export] public Vector3 NetVel { get; set; }
+    [Export] public float NetYaw { get; set; }
+
+    /// <summary>The owner's clock when <see cref="NetPos"/> was taken. Replicated LAST, so its
+    /// setter sees a complete state.</summary>
+    [Export]
+    public double NetTime
+    {
+        get => _netTime;
+        // a new state, not the server relaying the last one again (it does, at 30 Hz, whether or not
+        // the owner still sends): only that tells a live sender from a crashed one
+        set { if (value != _netTime) LastNetState = Time.GetTicksMsec() / 1000.0; _netTime = value; OnNetState(); }
+    }
+    private double _netTime;
+
+    /// <summary>World velocity, for local and remote copies alike (a remote's <c>Velocity</c> is always zero).</summary>
+    public Vector3 WorldVelocity => IsMultiplayerAuthority() ? Velocity : NetVel;
+
+    /// <summary>The server's copy of a client's player: data only, never drawn or simulated.</summary>
+    public bool NetProxy { get; private set; }
+
+    private readonly Net.RemoteInterpolator _interp = new();
+    private MultiplayerSynchronizer? _sync, _relayNear, _relayFar, _vis;
+
+    /// <summary>A server-owned copy of <paramref name="source"/>'s properties, sent at <paramref name="interval"/>.</summary>
+    private static MultiplayerSynchronizer MakeRelay(string name, SceneReplicationConfig source, bool spawn, float interval)
+    {
+        var config = new SceneReplicationConfig();
+        foreach (var prop in source.GetProperties())
+        {
+            config.AddProperty(prop);
+            config.PropertySetSpawn(prop, spawn);
+            config.PropertySetReplicationMode(prop, source.PropertyGetReplicationMode(prop));
+        }
+        var relay = new MultiplayerSynchronizer
+        {
+            Name = name, RootPath = new NodePath(".."), ReplicationConfig = config, ReplicationInterval = interval,
+        };
+        relay.SetMultiplayerAuthority(1);
+        return relay;
+    }
+
+    /// <summary>Server: re-evaluates who gets this player's near and far streams.</summary>
+    public void RefreshRelays()
+    {
+        _relayNear?.UpdateVisibility();
+        _relayFar?.UpdateVisibility();
+    }
+    private Net.InterestService? _interest;
+
+    private void OnNetState()
+    {
+        if (!IsInsideTree() || NetProxy)
+        {
+            // spawn state, or the server's proxy: exactly where the owner says, no smoothing
+            Position = NetPos;
+            Rotation = new Vector3(0, NetYaw, 0);
+            return;
+        }
+        if (IsMultiplayerAuthority()) return;
+        double now = Time.GetTicksUsec() / 1e6;
+        _interp.BeginCorrection(now);
+        _interp.Push(_netTime, now, NetPos, NetVel, NetYaw);
+        _interp.EndCorrection();
+    }
+
+    /// <summary>
+    /// What a player node stands for in interest and races: a peer id, or a race NPC's entrant id
+    /// (<c>npc_&lt;owner&gt;_&lt;n&gt;</c> → <c>-(owner * 1000 + n)</c>, negative). Null for anything else.
+    /// An NPC is its own interest target: who sees it depends on where IT is, not on whichever
+    /// client happens to simulate it (issue #50).
+    /// </summary>
+    public static long? NetId(string name)
+    {
+        if (long.TryParse(name, out long id)) return id;
+        var parts = name.Split('_');
+        return parts.Length == 3 && parts[0] == "npc" && long.TryParse(parts[1], out long owner)
+            && int.TryParse(parts[2], out int n) ? Net.PlayerReplication.NpcId(owner, n) : null;
+    }
+
+    /// <summary>
+    /// A race NPC's current simulator: the client that runs its physics and publishes its state,
+    /// which is simply this node's multiplayer authority. The server moves it from one client to
+    /// another (<see cref="World.RaceNpcs"/>, issue #50). A peer that spawns the NPC after a move
+    /// gets the current one in the spawn state (a spawn-only property of <c>Sync</c>): the spawn
+    /// data still names the client that asked for the NPC.
+    /// </summary>
+    [Export]
+    public int SimPeer
+    {
+        get => GetMultiplayerAuthority();
+        set { if (value > 0 && value != GetMultiplayerAuthority()) SetSimulator(value); }
+    }
+
+    /// <summary>Server: when the proxy last received a state from its simulator (seconds, engine clock).</summary>
+    public double LastNetState { get; private set; } = Time.GetTicksMsec() / 1000.0;
+
+    private bool _netUp;
+
+    /// <summary>
+    /// A remote copy that heard nothing for this long stops being solid (30 states a second are
+    /// expected): at racing speed the field behind reaches a frozen car within 2-3 s.
+    /// </summary>
+    private const double SilentSeconds = 1.0;
+
+    /// <summary>
+    /// Moves a race NPC to another simulator, on this peer. The node AND its <c>Sync</c> change
+    /// authority (children do not follow the parent). The peer that becomes the simulator takes
+    /// the body over from the last replicated state — where it is drawn right now, the replicated
+    /// velocity, the mount — so nothing jumps; a peer that stops being it turns the body into a
+    /// remote copy.
+    /// </summary>
+    public void SetSimulator(int peer)
+    {
+        bool was = IsMultiplayerAuthority();
+        SetMultiplayerAuthority(peer, false);
+        _sync?.SetMultiplayerAuthority(peer);
+        LastNetState = Time.GetTicksMsec() / 1000.0;   // the new simulator gets a fresh grace period
+        if (!_netUp || NetProxy) return;   // spawn state inside _Ready, or the server's data proxy
+        bool now = IsMultiplayerAuthority();
+        if (now == was) { _interp.NewSender(); return; }   // another remote sender: another clock
+        if (now)
+        {
+            var kind = (RideKind)RideKindId;
+            _remoteRide = null;
+            SetRemoteEngine(null);
+            Rotation = new Vector3(0, Rotation.Y, 0);
+            if (kind != RideKind.OnFoot)
+            {
+                ApplyRide(kind, NetVel);
+                if (_ride is { IsVehicle: true } machine) { EngineOn = true; VehicleHealth = machine.MaxHealth; }
+            }
+            else { _ride = null; Velocity = NetVel; }
+            RefreshVisual(force: true);   // the authority animates its own mount's visual
+            // it is on the ground already: no drop-onto-terrain pass, unless nothing is solid here yet
+            _placed = Terrain?.HasCollisionAt(GlobalPosition) != false;
+            _body.Disabled = false;
+            Visible = true;
+            SetPhysicsProcess(true);
+            Terrain?.AddAnchor(this, collision: true);
+            _sync?.UpdateVisibility();
+        }
+        else
+        {
+            RideControls = null;
+            _ride = null;
+            Velocity = Vector3.Zero;
+            SetPhysicsProcess(false);
+            Terrain?.RemoveAnchor(this);
+            _interp.NewSender();
+            FitRemoteBody((RideKind)RideKindId);
+        }
+        GD.Print($"[npc] {Name} now simulated by peer {peer}{(now ? " (here)" : "")}");
+    }
+
+    /// <summary>Server: re-evaluates whether this player exists on <paramref name="viewer"/>.</summary>
+    public void RefreshNetVisibility(long viewer) => _vis?.UpdateVisibility((int)viewer);
+
     public const int PoseStride = 0, PoseAir = 1, PoseTucked = 2;
 
     /// <summary>
@@ -248,6 +412,8 @@ public partial class FootPlayer : CharacterBody3D
 
     /// <summary>Smoothed real ground speed, for telling an impact from terrain roughness.</summary>
     private float _realSpeed;
+    /// <summary>Smoothed commanded-minus-achieved ground speed, m/s.</summary>
+    private float _shortfall;
 
     /// <summary>How fast the smoothed real speed follows the measured one, per second.</summary>
     private const float ImpactResponse = 6f;
@@ -468,6 +634,20 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public Func<RideInput>? RideControls { get; set; }
 
+    /// <summary>
+    /// A race NPC (<see cref="World.RaceNpc"/>), set before the node enters the tree. Its authority
+    /// copy is simulated like a player's (physics, replication, <see cref="RideControls"/>) but has
+    /// no camera, no feel layer and reads no input: the owner's keys drive the owner, not its NPCs.
+    /// </summary>
+    public bool Npc { get; set; }
+
+    /// <summary>
+    /// Replaces the move stick on foot, when set: a world-space wish (length up to 1) and whether to
+    /// run. The scripted runner (<see cref="AutoPilot"/>) walks through it, as a rider through
+    /// <see cref="RideControls"/>.
+    /// </summary>
+    public Func<(Vector3 Wish, bool Run)>? WalkControls { get; set; }
+
     private Camera3D? _camera;
     private CollisionShape3D _body = null!;
     private CapsuleShape3D _capsule = null!;
@@ -560,6 +740,22 @@ public partial class FootPlayer : CharacterBody3D
     }
 
     /// <summary>
+    /// A teleport that also turns a mount: the body at <paramref name="at"/>, stopped, facing
+    /// <paramref name="yaw"/>, put down on the ground once it is there. Setting <c>Rotation</c> alone
+    /// does not turn a ridden vehicle: its step writes the rotation back from its own heading.
+    /// </summary>
+    public void PlaceAt(Vector3 at, float yaw)
+    {
+        RequestReplacement();
+        GlobalPosition = at;
+        Rotation = new Vector3(0, yaw, 0);
+        _motion.Yaw = yaw;
+        _motion.YawRate = 0f;
+        _motion.Slip = 0f;
+        _viewYaw = yaw;
+    }
+
+    /// <summary>
     /// A body is what needs ground under it, so it registers itself as a collision anchor
     /// rather than relying on whoever spawned it to remember - the ride probe did not.
     /// </summary>
@@ -572,6 +768,8 @@ public partial class FootPlayer : CharacterBody3D
     {
         Terrain?.RemoveAnchor(this);
         Explosion.Blast -= OnBlast;
+        if (!IsMultiplayerAuthority() && !NetProxy)
+            GD.Print($"[net] player {Name} left view");
     }
 
     /// <summary>
@@ -586,14 +784,27 @@ public partial class FootPlayer : CharacterBody3D
         CollisionMask |= World.TreeColliders.Layer;   // trunks are solid (layer 2)
         // authority pushes its transform to everyone else (server relays)
         var replication = new SceneReplicationConfig();
-        replication.AddProperty(".:position");
-        replication.AddProperty(".:rotation");
+        replication.AddProperty(".:NetPos");
+        replication.AddProperty(".:NetVel");
+        replication.AddProperty(".:NetYaw");
         // What you are riding travels with where you are. Without it a remote client sees a
         // figure sprinting down a descent at 60 km/h in a running pose.
         replication.AddProperty(".:RideKindId");
         replication.AddProperty(".:HeldItemId");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
+        if (Npc)
+        {
+            // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
+            replication.AddProperty(".:SimPeer");
+            replication.PropertySetReplicationMode(".:SimPeer", SceneReplicationConfig.ReplicationMode.Never);
+        }
+        replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
+        // integers change a few times a minute: sent reliably when they change, not 30 times a second
+        foreach (var prop in new[] { ".:RideKindId", ".:HeldItemId", ".:PoseKind", ".:HeadwearId" })
+            replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
+        NetPos = Position;
+        NetYaw = Rotation.Y;
         var sync = new MultiplayerSynchronizer
         {
             // deterministic name: replication matches nodes by path across peers, and
@@ -601,17 +812,70 @@ public partial class FootPlayer : CharacterBody3D
             Name = "Sync",
             RootPath = new NodePath(".."),
             ReplicationConfig = replication,
+            // 30 Hz is plenty once the receiver interpolates; the frame rate was the old rate,
+            // which is 144 packets a second per viewer from a fast machine
+            ReplicationInterval = 1f / 30f,
         };
+        _sync = sync;
         // the synchronizer's own authority decides who sends; children added after the
         // parent's SetMultiplayerAuthority default to server authority
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
-        // Interest management: this player's position goes only to peers in the same space —
-        // the same interior, or both outdoors — plus the server, which relays and answers /tp.
-        // The table is the server's (see InteriorManager), never this node's replicated state.
-        if (IsMultiplayerAuthority())
-            sync.AddVisibilityFilter(Callable.From((long peer) =>
-                peer == 1 || Interiors.InteriorManager.Instance?.SameSpaceAsLocal(peer) != false));
+        _interest = GetNodeOrNull<Net.InterestService>("../../" + Net.InterestService.NodeName);
+        long netId = NetId(Name) ?? 0;
+
+        // The owner sends its state ONCE, to the server. It used to send one copy per viewer for
+        // the server to relay — N·(N−1) packets into the server's socket, which overflowed at a
+        // 32-car race start (thousands of UDP drops a second). The server rebroadcasts below.
+        // Added on every copy: it is only consulted while this peer is the authority, which a
+        // race NPC can become later (#50).
+        sync.AddVisibilityFilter(Callable.From((long peer) => peer == 1));
+        // a race NPC's spawn state may name another simulator than the spawn data: it is applied
+        // here (SimPeer), so everything below sees the current authority
         AddChild(sync);
+        NetProxy = !IsMultiplayerAuthority() && Net.NetworkManager.DedicatedServer;
+
+        // The server's two rebroadcasts of that state (Net/InterestService decides who gets
+        // which): viewers within 300 m or in the same race at 30 Hz, viewers further away who can
+        // still see this player at 6 Hz — at that distance nobody can tell once interpolated.
+        // Server-owned, so the server alone decides who is sent what, and the spawn and the
+        // stream can never disagree about whether a peer has this node.
+        _relayNear = MakeRelay("RelayNear", replication, spawn: true, 1f / 30f);
+        _relayFar = MakeRelay("RelayFar", replication, spawn: false, 1f / 6f);
+        if (NetProxy && netId != 0)
+        {
+            // peer 0 = "everyone?": must be no, or Godot broadcasts; the owner has its own copy —
+            // for a race NPC its CURRENT simulator, which the server can change (#50)
+            _relayNear.AddVisibilityFilter(Callable.From((long peer) =>
+                peer != 0 && peer != GetMultiplayerAuthority() && _interest?.RelaysNear(peer, netId) == true));
+            _relayFar.AddVisibilityFilter(Callable.From((long peer) =>
+                peer != 0 && peer != GetMultiplayerAuthority() && _interest?.RelaysFar(peer, netId) == true));
+        }
+        AddChild(_relayNear);
+        AddChild(_relayFar);
+
+        // Whether this player EXISTS on a peer is the spawner's call, and Godot only consults
+        // synchronizers the server has authority over for that (SceneReplicationInterface::
+        // _update_spawn_visibility skips the rest) — "Sync" above is the owner's. So a second,
+        // empty one, owned by the server, carries the vision decision: out of sight, the node is
+        // despawned on that peer, and spawned back with the owner's current state on return.
+        _vis = new MultiplayerSynchronizer
+        {
+            Name = "Vis",
+            RootPath = new NodePath(".."),
+            ReplicationConfig = new SceneReplicationConfig(),
+            // it carries no data: without this Godot would still ask its filter every frame
+            // for every peer, 30 000 managed calls a second at 32 players
+            ReplicationInterval = 3600f,
+            DeltaInterval = 3600f,
+        };
+        _vis.SetMultiplayerAuthority(1);
+        if (NetProxy && netId != 0)
+            // peer 0 is Godot asking "visible to everyone?": the answer must be no, or it
+            // broadcasts and never asks per peer. A race NPC always exists on its simulator.
+            _vis.AddVisibilityFilter(Callable.From((long peer) => peer != 0
+                && (peer == GetMultiplayerAuthority() || _interest?.ServerSees(peer, netId) != false)));
+        AddChild(_vis);
+        _netUp = true;
 
         AddToGroup(Group);
         // drawn on both sides of a doorway it is stepping through
@@ -636,7 +900,15 @@ public partial class FootPlayer : CharacterBody3D
 
         Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
 
-        if (IsMultiplayerAuthority())
+        if (IsMultiplayerAuthority() && Npc)
+        {
+            // no camera to anchor the streamer: the body asks for its own ground and trunks
+            Terrain?.AddAnchor(this, collision: true);
+            SetProcessUnhandledInput(false);
+            // spawned here after a handoff (#50): the spawn state put the mount in RideKindId, not under the body
+            if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, NetVel);
+        }
+        else if (IsMultiplayerAuthority())
         {
             _camera = new Camera3D
             {
@@ -666,11 +938,27 @@ public partial class FootPlayer : CharacterBody3D
             SetProcessUnhandledInput(false);
         }
 
+        if (NetProxy)
+        {
+            // the server relays and reads positions; it never draws or animates anyone
+            _body.Disabled = true;
+            SetProcess(false);
+            SetPhysicsProcess(false);
+            return;
+        }
+
+        if (!IsMultiplayerAuthority())
+            GD.Print($"[net] player {Name} came into view at {GlobalPosition.Round()}");
+
         RefreshVisual();
 
         // every copy draws what is in the hand; only the local one also has a viewmodel
         AddChild(new Items.HeldItemVisual(this) { Name = "HeldItem" });
+
+        if (IsMultiplayerAuthority() && !Npc && _interest != null)
+            Callable.From(() => _interest.ReportView(Core.GameSettings.Current.CameraFar, BaseFov)).CallDeferred();
     }
+
 
     /// <summary>
     /// Rebuilds the body mesh when the ride changes, or the view does.
@@ -691,12 +979,14 @@ public partial class FootPlayer : CharacterBody3D
         _walker = null;
         HandLocal = null;
         _visualKind = kind;
+        if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
 
-        int rider = GetMultiplayerAuthority();
+        // an NPC keeps its jersey whoever simulates it: the colours of the client that asked for it
+        int rider = Npc && NetId(Name) is long npcId && npcId < 0 ? (int)Net.PlayerReplication.NpcOwner(npcId) : GetMultiplayerAuthority();
 
         if (kind == RideKind.OnFoot)
         {
-            if (IsMultiplayerAuthority() && !_thirdPerson) return;   // first person: nothing to draw
+            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) return;   // first person: nothing to draw
             _walkPalette = Avatar.HumanPalette.ForRider(rider);
             _walker = new MeshInstance3D
             {
@@ -718,11 +1008,96 @@ public partial class FootPlayer : CharacterBody3D
             AddChild(_visual);
             // a machine is far bigger than the capsule it moves with; shots hit what is drawn
             if (kind != RideKind.OnFoot) Hurtbox.Fit(_visual);
+            FitHull(kind == RideKind.OnFoot ? null : _ride ?? Rideable.Create(kind));
             // a craft's mesh is not authored level (the wingsuit is an upright figure); pose it
             // level for a remote copy, which only receives position and yaw
             if (_ride == null && Rideable.Create(kind) is Flyer remoteFlyer)
                 remoteFlyer.Pose(_visual, 0f, default);
         }
+    }
+
+    /// <summary>
+    /// Someone else's car must block like a car, not like the 0.3 m pedestrian capsule their node
+    /// started as: the owner resizes its own body in ApplyRide, which never runs on this copy.
+    /// </summary>
+    private void FitRemoteBody(RideKind kind)
+    {
+        if (_capsule == null) return;
+        var ride = kind == RideKind.OnFoot ? null : Rideable.Create(kind);
+        _capsule.Radius = ride?.BodyRadius ?? BodyRadius;
+        SetBodyHeight(ride?.BodyHeight ?? StandHeight);
+    }
+
+    /// <summary>Bottom of a hull, above the ground: bumps of the 1 m lattice must not catch it.</summary>
+    private const float HullLift = 0.45f;
+
+    /// <summary>Where the hull splits into body and cabin (or frame and rider), as a share of the height.</summary>
+    private const float HullCut = 0.55f;
+
+    private readonly CollisionShape3D?[] _hull = new CollisionShape3D?[2];
+    private readonly Vector3[] _hullCentre = new Vector3[2];
+    private bool _hullLeans;
+
+    /// <summary>
+    /// A car or a motorbike collides as what is DRAWN, never as the capsule that carries it: the
+    /// user's rule is that nothing ever goes into another model. The capsule (radius 0.85 for a car)
+    /// rides the ground — it glides over the terrain lattice where a box would snag — but two
+    /// capsules only meet 1.7 m apart, and 4.2 m cars sank a third into each other.
+    ///
+    /// The hull is two boxes measured from the actual mesh of this very model (<see
+    /// cref="Avatar.MeshBounds.Split"/>): the body below the belt line and the cabin above it — or a
+    /// motorbike's frame and its rider — from <see cref="HullLift"/> up. Every model gets its own
+    /// size (an AE86 is not an NSX), and <see cref="AlignHull"/> moves the boxes with the body's
+    /// pose every frame. Built on the owner (its own physics, trees, walls) and on every remote copy
+    /// so others hit what they see.
+    /// </summary>
+    private void FitHull(Rideable? ride)
+    {
+        bool wants = ride is { IsVehicle: true } and not Flyer && _visual != null;
+        if (!wants)
+        {
+            for (int i = 0; i < 2; i++) { _hull[i]?.QueueFree(); _hull[i] = null; }
+            return;
+        }
+        // measured at rest: the pose is applied per frame, so the visual's own transform is undone
+        var pose = _visual!.Transform;
+        _visual.Transform = Transform3D.Identity;
+        var (lower, upper) = Avatar.MeshBounds.Split(_visual, HullCut);
+        _visual.Transform = pose;
+        _hullLeans = ride is not Car;   // lean-steered: yaw and pitch only (see AlignHull)
+        var parts = new[] { lower, upper };
+        for (int i = 0; i < 2; i++)
+        {
+            var box = parts[i];
+            float bottom = Mathf.Max(box.Position.Y, HullLift);
+            float top = box.End.Y;
+            if (top - bottom < 0.1f || box.Size.X < 0.05f) { _hull[i]?.QueueFree(); _hull[i] = null; continue; }
+            _hull[i] ??= new CollisionShape3D { Name = i == 0 ? "HullLow" : "HullHigh" };
+            _hull[i]!.Shape = new BoxShape3D { Size = new Vector3(box.Size.X, top - bottom, box.Size.Z) };
+            _hullCentre[i] = new Vector3(box.GetCenter().X, (top + bottom) / 2f, box.GetCenter().Z);
+            if (_hull[i]!.GetParent() == null) AddChild(_hull[i]);
+        }
+        AlignHull();
+    }
+
+    /// <summary>
+    /// Moves the hull with the body's pose (drift yaw, pitch over a crest, a flip). A leaning
+    /// two-wheeler keeps its hull upright: rolled 50° into a bend, a box starting at 0.45 m would
+    /// put its inside corner on the road and snag every corner.
+    /// </summary>
+    private void AlignHull()
+    {
+        if (_hull[0] == null && _hull[1] == null) return;
+        var pose = BodyPose;
+        if (_hullLeans)
+        {
+            var fwd = pose.Basis.Z;
+            float yaw = Mathf.Atan2(fwd.X, fwd.Z);
+            float pitch = -Mathf.Asin(Mathf.Clamp(fwd.Y, -1f, 1f));
+            pose = new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, 0)), pose.Origin);
+        }
+        for (int i = 0; i < 2; i++)
+            if (_hull[i] != null) _hull[i]!.Transform = pose * new Transform3D(Basis.Identity, _hullCentre[i]);
     }
 
     /// <summary>
@@ -733,6 +1108,10 @@ public partial class FootPlayer : CharacterBody3D
     {
         if (IsMultiplayerAuthority())
         {
+            NetPos = Position;
+            NetVel = Velocity;
+            NetYaw = Rotation.Y;
+            NetTime = Time.GetTicksUsec() / 1e6;
             float dt = (float)delta;
             ApplyStickLook(dt);
             if (_ride != null)
@@ -742,6 +1121,7 @@ public partial class FootPlayer : CharacterBody3D
                     if (_ride is Flyer f) f.AnimateFlight(_visual, _flight, dt);
                     else _ride.Animate(_visual, _motion, dt);
                     BodyPose = _visual.Transform;
+                    AlignHull();
                     Anim = _ride.WritePose(_visual, _motion, _flight);
                 }
                 return;
@@ -782,7 +1162,18 @@ public partial class FootPlayer : CharacterBody3D
             _body.Disabled = !here;
         }
         if (!here) return;
+        // A sender publishes 30 times a second, standing still or not: silent this long, it has
+        // crashed or frozen, and ENet takes up to 30 s to say so. Its body, frozen mid-road, must
+        // not be a wall the whole field piles into (#50: every car stopped on a crashed leader).
+        bool silent = Time.GetTicksMsec() / 1000.0 - LastNetState > SilentSeconds;
+        if (_body.Disabled != silent) _body.Disabled = silent;
 
+        if (_interp.HasData)
+        {
+            var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
+            Position = p;
+            Rotation = new Vector3(0, yaw, 0);
+        }
         RefreshVisual();
         AnimateRemote((float)delta);
     }
@@ -808,6 +1199,7 @@ public partial class FootPlayer : CharacterBody3D
         if (_visual == null) return;
         if (_remoteRide?.Kind != kind) _remoteRide = Rideable.Create(kind);
         _visual.Transform = BodyPose;
+        AlignHull();
         _remoteRide?.AnimateRemote(_visual, Anim, dt);
         SetRemoteEngine(_remoteRide as Flyer);
     }
@@ -1322,7 +1714,7 @@ public partial class FootPlayer : CharacterBody3D
         // a craft skimming the ground must not be snapped onto it
         // a car stays on its wheels over a crest the way a suspension keeps it there; 0.5 m let every
         // Jura hump launch it for a second at 100 km/h, and a car in the air cannot steer
-        FloorSnapLength = _ride switch { Flyer => 0.05f, Car => 1.2f, _ => 0.5f };
+        FloorSnapLength = _ride switch { Flyer => 0.05f, Car or Motorbike => 1.2f, _ => 0.5f };
 
         // the body is the machine's size while in it — a helicopter is not a 0.3 m person
         if (_capsule != null && !_sliding)
@@ -1337,6 +1729,7 @@ public partial class FootPlayer : CharacterBody3D
             SetBodyHeight(_ride?.BodyHeight ?? StandHeight);
         }
         _settle = SettleTime;
+        _shortfall = 0f;
         Velocity = velocity;
         _lookYaw = 0f;
         _turnLag = 0f;
@@ -1455,6 +1848,14 @@ public partial class FootPlayer : CharacterBody3D
             return;
         }
 
+        if (Npc)
+        {
+            // thrown out of its car: it only falls and stands until it gets back in
+            Velocity = new Vector3(0, onFloor ? 0f : velocity.Y - Gravity * dt, 0);
+            MoveAndSlide();
+            return;
+        }
+
         var input = PlayerInput.Move;
         if (_stunTimer > 0)
         {
@@ -1491,6 +1892,12 @@ public partial class FootPlayer : CharacterBody3D
         // relative to the view, which is the body in first person and the camera in third
         var view = new Basis(Vector3.Up, _viewYaw);
         var direction = (view * new Vector3(input.X, 0, input.Y)).Normalized();
+        if (WalkControls?.Invoke() is { } walk)
+        {
+            moveAmount = Mathf.Min(walk.Wish.Length(), 1f);
+            direction = moveAmount > 0.01f ? walk.Wish.Normalized() : Vector3.Zero;
+            running = walk.Run;
+        }
         if (_slideCooldown > 0) _slideCooldown -= dt;
 
         // Remember the last usable wall, and the last jump press, for a moment each. Contact
@@ -1954,6 +2361,17 @@ public partial class FootPlayer : CharacterBody3D
             1f - Mathf.Exp(-3f * dt));
     }
 
+    /// <summary>The slipstream this vehicle rode last step, 0..<see cref="RideGround.MaxDraft"/>.</summary>
+    public float Draft { get; private set; }
+
+    /// <summary>Every other player on something, where it is and how it moves (a remote's replicated velocity).</summary>
+    private IEnumerable<(Vector3, Vector3)> OtherVehicles()
+    {
+        foreach (var node in GetTree().GetNodesInGroup(Group))
+            if (node is FootPlayer p && p != this && p.Ride != RideKind.OnFoot)
+                yield return (p.GlobalPosition, p.WorldVelocity);
+    }
+
     private void RidePhysics(float dt, bool onFloor)
     {
         // Triggers are analog, and the vehicles already take 0..1: half a trigger is half the
@@ -1980,7 +2398,7 @@ public partial class FootPlayer : CharacterBody3D
         if (!onFloor)
         {
             _rideAir += dt;
-            if (_rideAir > 0.15f && PlayerInput.Held(PlayerInput.Trick))
+            if (_rideAir > 0.15f && !Npc && PlayerInput.Held(PlayerInput.Trick))
             {
                 _airPitch += stick.Y * FlipRate * dt;     // stick forward: nose down, a front flip
                 _airSpin -= stick.X * SpinRate * dt;      // stick right: clockwise from above
@@ -2005,12 +2423,18 @@ public partial class FootPlayer : CharacterBody3D
             ? -(heading.X * normal.X + heading.Z * normal.Z) / Mathf.Max(normal.Y, 0.15f)
             : 0f;
 
-        _ride!.Step(input, new RideGround(onFloor, grade), dt, ref _motion);
+        // a motorbike's grip depends on what is under it (cached lookup: road, else cover)
+        var surface = _ride is Motorbike && Terrain != null
+            ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
+        // a tow behind another vehicle: less air to push (cars and motorbikes read it)
+        Draft = onFloor && _ride is Car or Motorbike && _motion.Speed > 10f
+            ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
+        _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
         // Game profile only; in Sim the watts are the rider's, and nothing else may add to them.
         Boosting = Rideable.Arcade && _bailTimer <= 0 && BoostMeter > 0.01f
-            && PlayerInput.Held(PlayerInput.Boost);
+            && !Npc && PlayerInput.Held(PlayerInput.Boost);
         if (Boosting)
         {
             _motion.Speed += BoostAccel * dt;
@@ -2032,7 +2456,7 @@ public partial class FootPlayer : CharacterBody3D
         // Space hops: edge-triggered like the on-foot jump, so holding it does not bunny-hop
         // every frame, and only from the ground - there is nothing to push against in the air.
         // Speed and heading are untouched: a hop carries the bike's momentum, it does not add any.
-        bool spaceDown = PlayerInput.Held(PlayerInput.Jump);
+        bool spaceDown = !Npc && PlayerInput.Held(PlayerInput.Jump);
         bool hop = spaceDown && !_jumpHeld && onFloor && _ride.CanHop;
         _jumpHeld = spaceDown;
         if (hop) { velocity.Y = RideJumpVelocity; Jumped?.Invoke(); }
@@ -2054,9 +2478,14 @@ public partial class FootPlayer : CharacterBody3D
         // motion every single frame. Clamping to it directly compounds those dips — measured at
         // 107 m of riding down to 11 m on flat ground, a bike bled to walking pace by nothing
         // but the terrain's own roughness. Only a shortfall that persists is an impact.
+        //
+        // The SHORTFALL is what is smoothed, not the speed: a smoothed speed lags any hard
+        // acceleration by a/ImpactResponse, and past the tolerance that lag read as a wall — it
+        // capped every launch at 6 m/s² (a motorbike measured 0-100 in 5.2 s instead of 3.3).
         var real = GetRealVelocity();
         float achieved = new Vector2(real.X, real.Z).Length();
-        _realSpeed = Mathf.Lerp(_realSpeed, achieved, 1f - Mathf.Exp(-ImpactResponse * dt));
+        _shortfall = Mathf.Lerp(_shortfall, Mathf.Max(0f, _motion.Speed - achieved), 1f - Mathf.Exp(-ImpactResponse * dt));
+        _realSpeed = _motion.Speed - _shortfall;
         if (_realSpeed < _motion.Speed - ImpactTolerance)
         {
             float before = _motion.Speed;

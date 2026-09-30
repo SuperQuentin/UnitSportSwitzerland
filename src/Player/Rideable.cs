@@ -15,7 +15,26 @@ public enum RideKind
     Helicopter = 6,
     Plane = 7,
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
-    // The next non-car mount is 64.
+    // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too.
+    // The next other mount is 96.
+}
+
+/// <summary>
+/// A mount with a combustion engine and a gearbox (cars, motorbikes): what the engine sound, the
+/// rev counter and a parked machine's tick-over read.
+/// </summary>
+public interface IEngined
+{
+    /// <summary>Engine speed, rpm.</summary>
+    float Rpm { get; }
+    /// <summary>idle 0 .. redline 1, for <c>EngineSynth.Set</c>.</summary>
+    float Rpm01 { get; }
+    /// <summary>1-based forward gear, −1 reverse.</summary>
+    int Gear { get; }
+    /// <summary>Throttle actually applied, 0..1.</summary>
+    float Throttle { get; }
+    /// <summary>What it sounds like; the same instance every call, so a caller can compare it.</summary>
+    Audio.EngineProfile Sound { get; }
 }
 
 /// <summary>Controls as the vehicle sees them, already stripped of key bindings.</summary>
@@ -35,7 +54,44 @@ public readonly record struct RideInput(float Throttle, float Brake, float Steer
 /// slope of the terrain: a traverse across a 40% face is flat to a bicycle, and modelling it
 /// any other way would have a road that contours a hillside costing power to ride along.
 /// </param>
-public readonly record struct RideGround(bool OnFloor, float Grade);
+/// <param name="Surface">
+/// What the wheels are on (<see cref="Audio.Surfaces.At"/>: the road under them, else the cover).
+/// Only the motorbikes read it, for grip; the default is tarmac.
+/// </param>
+/// <param name="Draft">
+/// Share of the air drag taken away by a vehicle close ahead (slipstream, 0..<see cref="MaxDraft"/>);
+/// the cars and motorbikes read it. <see cref="DraftBehind"/> works it out.
+/// </param>
+public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surface Surface = Audio.Surface.Asphalt, float Draft = 0f)
+{
+    /// <summary>Drag taken away right behind another vehicle (2 m): a car in a tow loses 30-45%.</summary>
+    public const float MaxDraft = 0.45f;
+    /// <summary>The tow reaches this far back, m, and this far off the leader's axis, rad (±15°).</summary>
+    public const float DraftReach = 25f, DraftCone = 0.26f;
+
+    /// <summary>
+    /// The slipstream at <paramref name="me"/>, travelling along <paramref name="travel"/> (flat, unit):
+    /// the best of every vehicle between 2 and 25 m ahead within ±15° of the travel, level with it,
+    /// and going the same way at 10 m/s or more — falling off linearly with the gap. Positions and
+    /// velocities are what every peer has (a remote's replicated <c>WorldVelocity</c>).
+    /// </summary>
+    public static float DraftBehind(Vector3 me, Vector3 travel, IEnumerable<(Vector3 At, Vector3 Velocity)> others)
+    {
+        float best = 0f;
+        float cone = Mathf.Cos(DraftCone);
+        foreach (var (at, vel) in others)
+        {
+            var rel = at - me;
+            if (Mathf.Abs(rel.Y) > 3f) continue;
+            rel.Y = 0f;
+            float d = rel.Length();
+            if (d < 2f || d > DraftReach || rel.Dot(travel) < cone * d) continue;
+            if (vel.X * travel.X + vel.Z * travel.Z < 10f) continue;
+            best = Mathf.Max(best, MaxDraft * (1f - (d - 2f) / (DraftReach - 2f)));
+        }
+        return best;
+    }
+}
 
 /// <summary>
 /// The vehicle's own state between frames. Speed is a scalar along <see cref="Yaw"/> rather than
@@ -270,6 +326,10 @@ public abstract class Rideable
     /// The wingsuit and parachute are not here: nobody straps into a wingsuit on flat ground.
     /// They are a base jump — Jump while falling from height — see <c>FootPlayer</c>.
     /// </remarks>
+    /// <remarks>
+    /// Nor are the motorbikes: <see cref="MotorbikeCatalog"/> (the R1, the Monster, every Africa
+    /// Twin) folds open on its own page like the cars.
+    /// </remarks>
     public static readonly Rideable[] All =
         { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() };
 
@@ -292,6 +352,7 @@ public abstract class Rideable
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
+        _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ => null,
     };
 }
