@@ -10,7 +10,7 @@ namespace UnitSport.Interiors;
 /// </summary>
 public static class DoorIndex
 {
-    public readonly record struct Entry(BuildingKey Key, Vector3 World, Vector3 Outward, float Width, BuildingKind Kind)
+    public readonly record struct Entry(BuildingKey Key, Vector3 World, Vector3 Outward, float Width, float Height, BuildingKind Kind)
     {
         /// <summary>A garage's drive-in room (tile-local), null for every other door.</summary>
         public GarageBay.Bay? Bay { get; init; }
@@ -25,7 +25,7 @@ public static class DoorIndex
         var list = new List<Entry>(doors.Length);
         foreach (var d in doors)
             if (d.Width > 0)
-                list.Add(new Entry(new BuildingKey(id.E, id.N, d.Index), tileOrigin + d.Position, d.Outward, d.Width, d.Kind)
+                list.Add(new Entry(new BuildingKey(id.E, id.N, d.Index), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind)
                     { Bay = d.Bay, TileOrigin = tileOrigin });
         Tiles[id] = list.ToArray();
     }

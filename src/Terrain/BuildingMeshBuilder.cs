@@ -153,9 +153,19 @@ public static class BuildingMeshBuilder
             return;
         }
         Quad(P(-hw, 0, 0.03f), P(hw, 0, 0.03f), P(hw, h, 0.03f), P(-hw, h, 0.03f), leaf);
-        // handle, on the free edge: the doorway frame's X is -t, and DoorLeaf hinges on its -X jamb
-        float hx = -hw * 0.7f;
-        Box(hx - 0.04f, hx + 0.04f, 1.0f, 1.08f, 0.03f, 0.08f, BuildingFootprint.DoorHandleColor);
+        if (Interiors.DoorLeaf.SwingsOut(kind))
+        {
+            // a pair (DoorLeaf.CreateOutward): the seam where they meet, a handle each beside it
+            Quad(P(-0.015f, 0, 0.035f), P(0.015f, 0, 0.035f), P(0.015f, h, 0.035f), P(-0.015f, h, 0.035f), leaf * 0.6f);
+            foreach (float px in new[] { -hw * 0.15f, hw * 0.15f })
+                Box(px - 0.04f, px + 0.04f, 1.0f, 1.08f, 0.03f, 0.08f, BuildingFootprint.DoorHandleColor);
+        }
+        else
+        {
+            // handle, on the free edge: the doorway frame's X is -t, and DoorLeaf hinges on its -X jamb
+            float hx = -hw * 0.7f;
+            Box(hx - 0.04f, hx + 0.04f, 1.0f, 1.08f, 0.03f, 0.08f, BuildingFootprint.DoorHandleColor);
+        }
         // a doorstep: the cue that says "this is a way in" from across the street
         Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
     }

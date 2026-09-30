@@ -451,6 +451,18 @@ public partial class ChunkManager : Node3D
     }
 
     /// <summary>
+    /// Open doors whose portal shows (<c>Interiors.DoorPortals.OpenDoors</c>): the building shader
+    /// leaves out their baked closed leaf and handle.
+    /// </summary>
+    public void SetOpenDoors(Vector4[] boxes, Vector4[] axes, int count)
+    {
+        if (_buildingMaterial is not ShaderMaterial shader) return;
+        shader.SetShaderParameter("open_door_box", boxes);
+        shader.SetShaderParameter("open_door_axis", axes);
+        shader.SetShaderParameter("open_door_count", Math.Min(count, Interiors.DoorPortals.MaxOpenDoors));
+    }
+
+    /// <summary>
     /// Adds tiles the client did not know about, so they become streamable.
     ///
     /// A client with a partial copy of the world has a manifest listing only what it shipped

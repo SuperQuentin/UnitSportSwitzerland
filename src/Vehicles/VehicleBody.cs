@@ -78,8 +78,8 @@ public partial class VehicleBody : CharacterBody3D
             Terrain = terrain,
             _initial = state,
             Kind = state.Kind,
-            // the car with its garage parts on: they are part of the car
-            Ride = CarTuning.Ride(state.Kind, state.Tuning) ?? new Bicycle(),
+            // the car with its preset and its garage parts on: they are part of the car
+            Ride = CarSetups.Ride(state.Kind, state.Setup, state.Tuning) ?? new Bicycle(),
             Wrecked = state.Wrecked,
             DoorsOpen = (byte)(state.DoorsOpen & 15),
             Health = state.Health,
@@ -212,7 +212,7 @@ public partial class VehicleBody : CharacterBody3D
     /// </remarks>
     public VehicleState Capture() => new(Kind, GlobalPosition,
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
-        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning, DoorsOpen);
+        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning, DoorsOpen, _initial.Setup);
 
     /// <summary>Authority: seconds until the driver's door, open from getting out, shuts.</summary>
     private float _shutDriverIn;

@@ -4,9 +4,10 @@ mountain-biking networks, so the C# preprocessor can flag them without needing G
 The ASTRA Veloland / Mountainbikeland FileGDBs carry a TLM_ID field referencing
 swissTLM3D road segments, so this is a plain key export -- no spatial matching.
 
-Usage:  python tools/export_route_keys.py
-Output: ressources/data/routes/route_keys.sqlite  (table route_key: uuid, kind)
+Usage:  python tools/export_route_keys.py [--dir DIR]
+Output: DIR/route_keys.sqlite  (table route_key: uuid, kind); DIR defaults to ressources/data/routes
 """
+import argparse
 import os
 import sqlite3
 import zipfile
@@ -24,26 +25,30 @@ SOURCES = [
 ]
 
 
-def gdb_path(zip_name):
-    full = os.path.join(ROUTES, zip_name)
+def gdb_path(full):
     root = sorted({n.split("/")[0] for n in zipfile.ZipFile(full).namelist()})[0]
     return f"/vsizip/{full}/{root}"
 
 
 def main():
-    out = os.path.join(ROUTES, "route_keys.sqlite")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dir", default=ROUTES, help="folder holding the downloaded route zips; the output goes there too")
+    args = ap.parse_args()
+    routes = os.path.abspath(args.dir)
+    os.makedirs(routes, exist_ok=True)
+    out = os.path.join(routes, "route_keys.sqlite")
     if os.path.exists(out):
         os.remove(out)
     db = sqlite3.connect(out)
     db.execute("create table route_key (uuid text not null, kind text not null)")
 
     for zip_name, layer_name, kind in SOURCES:
-        path = os.path.join(ROUTES, zip_name)
+        path = os.path.join(routes, zip_name)
         if not os.path.exists(path):
             print(f"  skip {zip_name} (not downloaded)")
             continue
         # keep the DataSource referenced: if it is collected the layer becomes invalid
-        ds = ogr.Open(gdb_path(zip_name))
+        ds = ogr.Open(gdb_path(path))
         layer = ds.GetLayerByName(layer_name)
         seen = set()
         for feat in layer:

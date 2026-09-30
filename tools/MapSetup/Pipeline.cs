@@ -256,7 +256,7 @@ public static partial class Planner
             Detail = "route_keys.sqlite: which roads are on a signed route",
             Seconds = 20,
             Skip = !wantRoutes ? "routes layer off" : !c.Gdal ? "needs GDAL" : c.Local.RouteKeys ? "already exported" : null,
-            Run = r => r.Python("export route keys", [Path.Combine(p.Tools, "export_route_keys.py")], LineProgress.None),
+            Run = r => r.Python("export route keys", [Path.Combine(p.Tools, "export_route_keys.py"), "--dir", p.RoutesDir], LineProgress.None),
         });
 
         var bounds = c.Selection.Bounds();
@@ -279,7 +279,10 @@ public static partial class Planner
                     args.Add("--bbox");
                     args.AddRange(new[] { b.MinE, b.MinN, b.MaxE, b.MaxN }.Select(v => v.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)));
                 }
-                if (!haveNationwideZip)
+                // always explicit: the script's own default is the repo's ressources/data, not the data location
+                if (haveNationwideZip)
+                    args.AddRange(["--src", NationwideBuildingsZip(p)]);
+                else
                     foreach (var s in sheets)
                         if (Directory.EnumerateFiles(p.BuildingsDir, $"swissbuildings3d_3_0_*_{s.Key}_2056_5728.gdb.zip")
                                 .OrderByDescending(f => f, StringComparer.Ordinal).FirstOrDefault() is { } zip)

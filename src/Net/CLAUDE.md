@@ -15,6 +15,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `remote-interpolation` — Remote players are interpolated (NetPos/NetVel/NetTime at 30 Hz, Hermite, bounded extrapolation, smooth render clock)
 - `load-testing` — Load testing: --swarm bots, --serverstats, --netsmooth, tools/loadtest.sh; before/after numbers at 32 players and a 30-min soak
 - `lean-dedicated-server` — Dedicated server: proxy players, fps cap, coarse grids, asset prep off the main thread, throttled vehicles
+- `clock-sync` — One shared clock: `ClockSync.ServerNow` from min-RTT ping/pong samples; song position and beat phase are functions of it, never of anything local
 
 ## Commands
 

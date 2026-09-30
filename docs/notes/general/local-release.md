@@ -1,6 +1,6 @@
 # Local release: `tools/release.sh`
 
-- Automatic: once per clone run `git config core.hooksPath tools/hooks`; then every `git push` of `main` starts `tools/release.sh --after-push <sha>` in the background (log `test_output/release/last-run.log`). Docs/chore-only pushes release nothing.
+- Manual only: there is no push hook, nothing releases on its own. Run `tools/release.sh` when you want a release. Docs/chore-only ranges release nothing.
 - The build always runs in a temporary worktree of the released commit, so your working files are never touched.
 - Releases are built and uploaded from your own machine, no GitHub Actions. Run from Git Bash on a synced `main`.
 - `tools/release.sh --dry-run` prints the next version and changelog; `tools/release.sh` exports "Windows Desktop", zips it and runs `gh release create vX.Y.Z`.

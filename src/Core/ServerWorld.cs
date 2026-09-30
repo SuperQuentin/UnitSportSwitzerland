@@ -18,11 +18,13 @@ public partial class ServerWorld : Node3D
     private Node3D? _players;
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
+    private Items.RadioManager? _radios;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
+    private Items.PlacedObjects? _placed;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
 
@@ -44,7 +46,8 @@ public partial class ServerWorld : Node3D
             GD.PushError(
                 $"[server] no terrain data in {chunkDir}. A server has nothing to serve and no "
                 + "world origin to hand out. Generate the chunks first (see the README), point at "
-                + "an existing set with --chunks <dir>, or run a generated world with --generated-world.");
+                + "an existing set with --chunks <dir>, UNITSPORT_CHUNKS or the terrain_location.json "
+                + "MapSetup writes, or run a generated world with --generated-world.");
             GetTree().Quit(1);
             return;
         }
@@ -93,6 +96,11 @@ public partial class ServerWorld : Node3D
         // vehicles standing in the world; the server spawns and removes them for everyone
         _vehicles = Vehicles.VehicleManager.Create(this, null);
         _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
+        // radios thrown into the world, and the CDs they play; the clock everyone plays them by
+        _radios = Items.RadioManager.Create(this);
+        _radios.PlayerPositions = _vehicles.PlayerPositions;
+        Audio.Cd.CdLibrary.Create(this, server: true);
+        Net.ClockSync.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
         AddChild(new World.AfricaTwinEgg(_chunks));
 
@@ -128,6 +136,14 @@ public partial class ServerWorld : Node3D
         // claimed cash, kept per player name on this server
         var bank = Items.Bank.Create(this, null, server: true);
         bank.NameOf = _chat.NameOfPeer;
+
+        // held-item events (a shot, a flash) are relayed through here; placed objects (planted
+        // flags, stuck photos) are owned, checked and saved here
+        Items.ItemEvents.Create(this, server: true);
+        // stuck Polaroids' images: uploaded by their owner, kept here, served to the others
+        Items.PhotoTransfer.Create(this, server: true);
+        _placed = Items.PlacedObjects.Create(this, origin, server: true);
+        _placed.NameOf = _chat.NameOfPeer;
         _chat.NameAssigned += bank.SendBalance;
 
         // a vehicle out of nothing is an admin's, or the one a race put you on (Core/Permissions)
@@ -141,6 +157,7 @@ public partial class ServerWorld : Node3D
         // Serves generated terrain files to clients that lack them. Reads raw bytes straight
         // off disk, so it costs the server no decoding work.
         _streamer = ChunkStreamer.CreateServer(chunkDir);
+        _streamer.CdDirectory = Audio.Cd.CdLibrary.Directory;
         // no manifest.json to serve, but the clients still need the origin to adopt
         if (manifest.Tiles.Count == 0)
             _streamer.ManifestOverride = System.Text.Encoding.UTF8.GetBytes(new TerrainManifest
@@ -236,6 +253,7 @@ public partial class ServerWorld : Node3D
             _chunks!.AddAnchor(player);
         _interiors?.SendTableTo(id);
         _occasions?.SendTo(id);
+        _placed?.SendTo(id);
     }
 
     private void OnPeerDisconnected(long id)
@@ -243,6 +261,7 @@ public partial class ServerWorld : Node3D
         GD.Print($"[server] peer {id} disconnected");
         _chat?.ReportDisconnect(id);
         _vehicles?.ForgetOwner(id);
+        _radios?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);

@@ -64,9 +64,19 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(Interiors.GarageBay.Check());
                 return;
             }
+            if (Array.IndexOf(scArgs, "--meshcheck") >= 0)
+            {
+                GetTree().Quit(Avatar.MeshScratch.Check());
+                return;
+            }
             if (Array.IndexOf(scArgs, "--spincheck") >= 0)
             {
                 GetTree().Quit(Player.DriftCheck.Spin());
+                return;
+            }
+            if (Array.IndexOf(scArgs, "--setupcheck") >= 0)
+            {
+                GetTree().Quit(Player.CarSetups.Check());
                 return;
             }
             if (Array.IndexOf(scArgs, "--motocheck") >= 0)
@@ -78,6 +88,11 @@ public partial class ClientWorld : Node3D
         if (Items.IconSheet.Requested)
         {
             GetTree().Quit(Items.IconSheet.Run());
+            return;
+        }
+        if (Loot.LootChanceCheck.Requested)
+        {
+            GetTree().Quit(Loot.LootChanceCheck.Run());
             return;
         }
         if (Items.InventoryCheck.Requested)
@@ -220,6 +235,12 @@ public partial class ClientWorld : Node3D
             if (GetViewport().GetCamera3D() is { } cam) at.Add(cam.GlobalPosition);
             return at;
         };
+        // Radios thrown into the world and the CD library they play from, same paths as the
+        // server's; the clock the CDs run on (offline: this machine's own).
+        var radios = Items.RadioManager.Create(this);
+        radios.PlayerPositions = vehicles.PlayerPositions;
+        Audio.Cd.CdLibrary.Create(this, server: false);
+        Net.ClockSync.Create(this);
         // the Africa Twin at Riddes: placed here offline, by the server online
         AddChild(new World.AfricaTwinEgg(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
@@ -235,6 +256,7 @@ public partial class ClientWorld : Node3D
         var chunksForDoors = _chunks;
         interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
         interiors.OccupancySink = chunksForDoors.SetOccupancy;
+        interiors.OpenDoorsSink = chunksForDoors.SetOpenDoors;
         interiors.OutsideShownChanged += shown =>
         {
             // indoors with the doors shut, the whole outside world is overhead and out of sight:
@@ -350,7 +372,11 @@ public partial class ClientWorld : Node3D
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null
+            || Items.PlacedProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
+        if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
+        if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
         Items.Bank.Create(this, inventory);
@@ -362,6 +388,11 @@ public partial class ClientWorld : Node3D
         _items = items;
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
+        if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
+        if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));
+        if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
+        if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
+        if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
 
         // F1: every control, from the live bindings; bottom right: the ones that apply here
@@ -373,8 +404,18 @@ public partial class ClientWorld : Node3D
 
         // Scavenging: what the furniture in those interiors holds. Same node path as the server's,
         // which decides who gets what; offline this client does both.
+        // held-item events (shots, flashes) and placed objects (flags, photos): same node paths
+        // as the server's, which relays the first and owns the second; offline this client does both
+        Items.ItemEvents.Create(this, server: false);
+        // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
+        Items.PhotoTransfer.Create(this, server: false);
+        Items.PlacedObjects.Create(this, origin, server: false);
+
         var loot = Loot.LootService.Create(this);
         loot.Items = items;
+        // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
+        _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
+        AddChild(_radioUi);
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);
@@ -662,6 +703,7 @@ public partial class ClientWorld : Node3D
 
         var (spawnE, spawnN) = SpawnPoint.ParseTarget();
         _teleporter.TeleportTo(spawnE, spawnN, "spawn");
+        Items.PlacedObjects.Instance?.Reposition();
         _chatUi?.Append("Adopted the server's world; terrain will stream in.", ChatKind.System);
     }
 
@@ -746,6 +788,7 @@ public partial class ClientWorld : Node3D
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
+        if (RadioSyncCheck.Create(() => LocalPlayer, () => _players) is { } radioCheck) AddChild(radioCheck);
 
         _chatUi = ChatUi.Create(_chat);
         AddChild(_chatUi);
@@ -929,6 +972,10 @@ public partial class ClientWorld : Node3D
             }
             else if (!p.Indoors)
             {
+                if (Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
+                    yield return (PlayerInput.InteractMount, "Radio");
+                else if (Items.RadioManager.Instance?.NearestPlaying(p.GlobalPosition, Items.RadioManager.DanceRadius) != null)
+                    yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
                 if (Vehicles.VehicleManager.Instance?.Nearest(p.GlobalPosition, FootPlayer.EnterReach) is { } parked)
                     yield return (PlayerInput.InteractMount, $"Get in the {parked.Ride.Label.ToLowerInvariant()}");
                 yield return (PlayerInput.RideMenu, "Travel");
@@ -941,6 +988,7 @@ public partial class ClientWorld : Node3D
         yield return (PlayerInput.Help, "All controls");
     }
 
+    private Items.RadioUi? _radioUi;
     private double _sinceStatus;
 
     public override void _Process(double delta)

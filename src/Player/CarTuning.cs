@@ -150,7 +150,7 @@ public readonly record struct CarTuning(long Bits)
 
     /// <summary><see cref="Rideable.Create"/>, with these parts on it if it is a car.</summary>
     public static Rideable? Ride(RideKind kind, long bits) =>
-        bits != 0 && CarCatalog.For(kind) is { } spec ? new Car(spec, Unpack(bits)) : Rideable.Create(kind);
+        CarSetups.Ride(kind, 0, bits);
 
     /// <summary>
     /// Self-check, run by <c>--tuningcheck</c>: every slot round-trips through the wire form on its

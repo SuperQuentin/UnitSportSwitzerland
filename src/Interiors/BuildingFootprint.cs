@@ -80,11 +80,23 @@ public static class BuildingFootprint
     {
         BuildingKind.House or BuildingKind.Other => 1.0f,
         BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Civic or BuildingKind.Sacral => 1.8f,
-        _ => 2.8f, // barns, works, garages
+        BuildingKind.Agricultural => 4.0f, // a barn's double door, a hay wagon wide
+        _ => 2.8f, // works, garages
     };
 
-    public static float DoorHeightFor(BuildingKind kind) =>
-        DoorWidthFor(kind) > 2f ? 2.8f : kind == BuildingKind.Sacral ? 2.6f : 2.1f;
+    public static float DoorHeightFor(BuildingKind kind) => kind switch
+    {
+        BuildingKind.Agricultural => 4.0f,
+        _ => DoorWidthFor(kind) > 2f ? 2.8f : kind == BuildingKind.Sacral ? 2.6f : 2.1f,
+    };
+
+    /// <summary>
+    /// The door's height in a building whose ground floor has <paramref name="clear"/> metres of
+    /// headroom: a barn's as tall as its hall allows, others as <see cref="DoorHeightFor(BuildingKind)"/>.
+    /// The facade and the interior plan both ask, so the two openings match.
+    /// </summary>
+    public static float DoorHeightFor(BuildingKind kind, float clear) =>
+        kind == BuildingKind.Agricultural ? Math.Min(DoorHeightFor(kind), clear - 0.15f) : DoorHeightFor(kind);
 
     /// <summary>The front door's leaf, linear: the facade's baked leaf and the interior's swinging one.</summary>
     public static Color DoorLeafColorFor(BuildingKind kind) => (kind switch
@@ -187,7 +199,8 @@ public static class BuildingFootprint
             f.Spans.Add((Math.Min(u0, u1), Math.Max(u0, u1)));
         }
 
-        float doorW = DoorWidthFor(kind), doorH = DoorHeightFor(kind);
+        float doorW = DoorWidthFor(kind);
+        float doorH = DoorHeightFor(kind, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab);
         var roadTarget = roads.Streets.Nearest(center, 60f) ?? roads.Paths.Nearest(center, 40f);
 
         var ranked = new List<(float Score, DoorSpot Door)>();
@@ -196,7 +209,8 @@ public static class BuildingFootprint
             var (s0, s1) = f.LongestRun();
             float length = s1 - s0;
             if (length < 0.9f) continue;
-            float width = Math.Min(doorW, length - 0.3f);
+            // an outward pair needs a leaf's width of wall beside each jamb to lie back against
+            float width = Math.Min(doorW, DoorLeaf.SwingsOut(kind) ? (length - 0.6f) / 2 : length - 0.3f);
             var t = new Vector2(-f.Normal.Y, f.Normal.X);
             var xz = f.Normal * f.Offset + t * ((s0 + s1) * 0.5f);
             if (Covered(xz)) continue;
