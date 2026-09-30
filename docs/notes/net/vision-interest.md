@@ -23,7 +23,9 @@
   peer **0** = "everyone?" — answering true makes it broadcast; `ServerSees` must answer **true for
   the owner itself** or the owner loses its own player. `Vis` has `ReplicationInterval` 3600 s:
   empty or not, Godot asks its filter every frame for every peer otherwise.
-- Race NPCs (`npc_<owner>_<n>`) are shown to whoever sees their owner (`FootPlayer.NetOwner`).
+- Race NPCs (`npc_<owner>_<n>`, `FootPlayer.NetId` = their negative entrant id) are interest targets of
+  their own: seen and relayed from where the NPC is, whoever simulates it; their simulator (the node's
+  authority) never gets the relays, always has the node (`Vis`). See `docs/notes/world/npc-handoff.md`.
 - Gunfire goes to the server once and is relayed only to the peers who can see the shooter (`CombatManager.Shot` → `ShotFrom`).
 - Check: `<godot> --headless --path . -- --interestcheck` (rules + interpolation self-checks);
   loopback: two clients 100 m apart at the Mollendruz see each other, one at Riddes (70 km) never
