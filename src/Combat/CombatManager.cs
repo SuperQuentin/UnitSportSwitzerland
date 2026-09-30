@@ -306,6 +306,13 @@ public partial class CombatManager : Node3D
                 _tracers.RemoveAt(i);
                 continue;
             }
+            // this client's birds: no colliders, so a sphere test against the local list
+            if (Birds.BirdLife.Instance?.TracerHit(t.Pos, next, t.Shooter == LocalId) != null)
+            {
+                if (t.Shooter == LocalId) { Hits++; HitFlash = 0.15f; }
+                _tracers.RemoveAt(i);
+                continue;
+            }
             if (t.Age > Life) { _tracers.RemoveAt(i); continue; }
             t.Pos = next;
             _tracers[i] = t;

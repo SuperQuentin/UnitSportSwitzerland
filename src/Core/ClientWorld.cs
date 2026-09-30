@@ -237,8 +237,10 @@ public partial class ClientWorld : Node3D
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
             || Loot.GatherProbe.ParseArgs().Requested
+            || Birds.BirdProbe.ParseArgs().Requested
             || World.TrafficProbe.ParseArgs().Requested
-            || Combat.CombatProbe.ParseArgs().Requested;
+            || Combat.CombatProbe.ParseArgs().Requested
+            || Birds.BirdStrikeProbe.ParseArgs().Requested;
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -279,6 +281,10 @@ public partial class ClientWorld : Node3D
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);
+        // birds around the player, from the real land cover; the shotgun hunts them (J: journal)
+        var birds = new Birds.BirdLife(_chunks, origin, items);
+        AddChild(birds);
+
         // solid trunks around whatever asks for collision
         var trees = new World.TreeColliders(_chunks, origin);
         AddChild(trees);
@@ -370,6 +376,13 @@ public partial class ClientWorld : Node3D
             return;
         }
 
+        if (Birds.BirdProbe.ParseArgs() is { Requested: true } bcheck)
+        {
+            _chunks.RemoveAnchor(_spectator);
+            AddChild(new Birds.BirdProbe(_chunks, origin, birds, items, bcheck.Shot));
+            return;
+        }
+
         if (Loot.LootProbe.ParseArgs() is { } lootEpochs)
         {
             // tables only: no terrain wanted, and quitting mid-stream races the tile workers
@@ -383,6 +396,14 @@ public partial class ClientWorld : Node3D
             var (iE, iN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(iE, iN, 1200);
             AddChild(new Interiors.InteriorProbe(_chunks, origin, _cache, icheck.Shot));
+            return;
+        }
+
+        if (Birds.BirdStrikeProbe.ParseArgs() is { Requested: true } scheck)
+        {
+            var (sE, sN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(sE, sN, 1200);
+            AddChild(new Birds.BirdStrikeProbe(_chunks, origin, birds, scheck.Shot));
             return;
         }
 

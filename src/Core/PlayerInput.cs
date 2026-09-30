@@ -81,6 +81,8 @@ public partial class PlayerInput : Node
     public const string QuickWheel = "quick_wheel";
     public const string NextItem = "next_item";
     public const string PrevItem = "prev_item";
+    /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
+    public const string BirdJournal = "bird_journal";
 
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;
@@ -244,6 +246,7 @@ public partial class PlayerInput : Node
         Bind(Gather, Keys(Key.G), Button(JoyButton.X));
         Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
         Bind(PrevItem, Mouse(MouseButton.WheelUp));
+        Bind(BirdJournal, Keys(Key.J));
 
         // Godot's built-in UI actions map the D-pad but not the face buttons, so a pad could
         // walk a menu's focus and never press anything. A confirms and B backs out, as on
