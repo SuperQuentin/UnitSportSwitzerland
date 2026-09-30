@@ -246,6 +246,7 @@ public partial class ClientWorld : Node3D
         var chunksForDoors = _chunks;
         interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
         interiors.OccupancySink = chunksForDoors.SetOccupancy;
+        interiors.OpenDoorsSink = chunksForDoors.SetOpenDoors;
         interiors.OutsideShownChanged += shown =>
         {
             // indoors with the doors shut, the whole outside world is overhead and out of sight:
