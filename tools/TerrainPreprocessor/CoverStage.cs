@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Rewrite;
 
 namespace UnitSport.Tools.Preprocessor;
 
@@ -50,7 +51,8 @@ public static class CoverStage
         return mask;
     }
 
-    public static int Run(string tlmGpkg, string outDir, Dictionary<TileId, ChunkGrid> grids, string? overridesPath = null)
+    public static int Run(string tlmGpkg, string outDir, Dictionary<TileId, ChunkGrid> grids, string? overridesPath = null,
+        string? rawDir = null)
     {
         if (!File.Exists(tlmGpkg))
         {
@@ -63,10 +65,12 @@ public static class CoverStage
 
         var heightOf = TerrainSampler.For(grids);
 
-        // roads are written before this stage, so their corridors can be masked out
+        // roads are written before this stage, so their corridors can be masked out. The raw
+        // extractor output when kept: the same mask whether or not the network stage ran yet.
         foreach (var id in grids.Keys)
         {
-            string roadPath = Path.Combine(outDir, RoadFormat.FileName(id));
+            string roadPath = rawDir != null && File.Exists(RawRoads.RoadPath(rawDir, id))
+                ? RawRoads.RoadPath(rawDir, id) : Path.Combine(outDir, RoadFormat.FileName(id));
             if (!File.Exists(roadPath)) continue;
             using var fs = File.OpenRead(roadPath);
             extractor.RoadMask[id] = BuildRoadMask(RoadCodec.Decode(fs));
