@@ -60,6 +60,7 @@ public partial class VehicleBody : CharacterBody3D
     private FlightMotion _flight;
     private Node3D? _visual;
     private float _bikeRoll;
+    private float _heavySpin;
     private float _restTime;
     private bool _asleep;
     private MultiplayerSynchronizer? _sync;
@@ -78,8 +79,9 @@ public partial class VehicleBody : CharacterBody3D
             Terrain = terrain,
             _initial = state,
             Kind = state.Kind,
-            // the car with its preset and its garage parts on: they are part of the car
-            Ride = CarSetups.Ride(state.Kind, state.Setup, state.Tuning) ?? new Bicycle(),
+            // the car with its preset and its garage parts on, the truck with its trailer: they are
+            // part of it
+            Ride = state.CreateRide() ?? new Bicycle(),
             Wrecked = state.Wrecked,
             DoorsOpen = (byte)(state.DoorsOpen & 15),
             Health = state.Health,
@@ -111,6 +113,15 @@ public partial class VehicleBody : CharacterBody3D
 
         var box = Ride.ParkedBox;
         AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = box.Size }, Position = box.Centre });
+        // a parked train's trailer, a drawbar trailer's body: each section its own box, where it stands
+        int extra = 0;
+        foreach (var (pose, centre, size) in Ride.ExtraBoxes())
+            AddChild(new CollisionShape3D
+            {
+                Name = $"Section{++extra}",
+                Shape = new BoxShape3D { Size = size },
+                Transform = pose * new Transform3D(Basis.Identity, centre),
+            });
         FloorMaxAngle = Mathf.DegToRad(50f);
 
         _motion = new RideMotion { Speed = new Vector2(s.Velocity.X, s.Velocity.Z).Length(), Yaw = s.Yaw };
@@ -212,7 +223,11 @@ public partial class VehicleBody : CharacterBody3D
     /// </remarks>
     public VehicleState Capture() => new(Kind, GlobalPosition,
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
-        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning, DoorsOpen, _initial.Setup);
+        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning, DoorsOpen, _initial.Setup,
+        _initial.Train, _initial.Angles, _initial.Flags, _initial.Load);
+
+    /// <summary>A lone trailer standing here, waiting for a truck; null for anything else.</summary>
+    public ParkedTrailer? Trailer => Ride as ParkedTrailer;
 
     /// <summary>Authority: seconds until the driver's door, open from getting out, shuts.</summary>
     private float _shutDriverIn;
@@ -393,6 +408,19 @@ public partial class VehicleBody : CharacterBody3D
             // data is enough and nothing more is replicated
             rig.Headlights = _initial.Headlights && !Wrecked;
             rig.RoofOpen = _initial.RoofOpen;
+        }
+        if (_visual is HeavyRig heavy && Ride is Truck truck)
+        {
+            // parked as the driver left it: lamps, doors, the display; every section's wheels roll
+            truck.UnpackFlags(_initial.Flags);
+            _heavySpin += Velocity.Length() / truck.WheelRadius * dt;
+            foreach (var section in heavy.FindChildren("Section*", "", false, false).OfType<HeavyRig>().Prepend(heavy))
+            {
+                truck.Dress(section, 0, false);
+                section.BrakeLights = false;
+                section.Headlights = truck.Headlights && !Wrecked;
+                section.WheelSpin = _heavySpin;
+            }
         }
         if (_engineSound != null && Ride is IEngined)
             // ticking over while it rolls; a car at rest is asleep and silent

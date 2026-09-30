@@ -20,11 +20,15 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `car-setups` — Car presets by category (#40): Everyday/SUV/Road racing/Rally-raid/All-terrain/Supercar/Rally over any car's spec, tyre grip per surface for cars, rough-ground term, raised bodies and off-road kit, replicated `CarSetupId`, `/race ... class=`, `--setupcheck`
 - `motorbike` — Motorbikes: (`Motorbike`, `MotorbikeCatalog`, RideKind 64..95 append-only; #38, #41): R1, Monster and all 28 Honda Africa Twins (`docs/data/africa_twin_specs.json`), DCT, surface grip, wheelie/stoppie/friction-circle limits, `--motocheck`...
 
+- `trucks-buses` — Trucks and buses (#70): `HeavyCatalog` RideKind 96..119, trailers by code, a planar multi-body train (pins, per-axle tyres), sections as their own bodies, clutch/converter driveline in five shift modes, retarder, air, rollover, coupling, bus doors/kneel/destination, `--truckcheck`, `--truckprobe`, `--heavynet`
+
 ## Commands
 
 - `commands` — Commands: --at, --path, --ride, --ridemenu, --shot
 
 ## Gotchas
+
+- `launch-clutch-bites-near-launch` — An automated clutch must bite near the launch speed, not from idle: biting at 600 rpm a diesel never got up to pull
 
 - `player-scale-set-speed-size` — Player scale is set by speed, not by size: A 1.8 m capsule moving at 6-14 m/s reads as a giant next to 10 m...
 - `isonwall-flickers-between-adjacent-physics` — `IsOnWall()` flickers between adjacent physics frames

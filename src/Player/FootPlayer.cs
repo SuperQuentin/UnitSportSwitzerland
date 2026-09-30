@@ -405,7 +405,7 @@ public partial class FootPlayer : CharacterBody3D
     public float? ShowroomYaw { get; set; }
 
     /// <summary>The replicated pose properties, in one place for the synchronizer and <c>--synccheck</c>.</summary>
-    public static readonly string[] PoseProperties = { ".:BodyPose", ".:PoseKind", ".:Anim" };
+    public static readonly string[] PoseProperties = { ".:BodyPose", ".:PoseKind", ".:Anim", ".:TrainPose" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -865,6 +865,7 @@ public partial class FootPlayer : CharacterBody3D
         replication.AddProperty(".:CarSetupId");
         replication.AddProperty(".:TuningBits");
         replication.AddProperty(".:DoorsOpen");
+        replication.AddProperty(".:TrailerCode");
         replication.AddProperty(".:HeldItemId");
         replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
@@ -878,7 +879,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1050,7 +1051,7 @@ public partial class FootPlayer : CharacterBody3D
     {
         var kind = (RideKind)RideKindId;
         // a car is redrawn when its preset or garage parts change too (the garage's live preview, a remote tune)
-        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup) return;
+        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup && TrailerCode == _visualTrailer) return;
 
         _visual?.QueueFree();
         _visual = null;
@@ -1060,6 +1061,8 @@ public partial class FootPlayer : CharacterBody3D
         _visualSetup = CarSetupId;
         _visualTuning = TuningBits;
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
+        // the sections behind a truck's cab: their own bodies, whatever else is drawn
+        FitSections(kind);
 
         // an NPC keeps its jersey whoever simulates it: the colours of the client that asked for it
         int rider = Npc && NetId(Name) is long npcId && npcId < 0 ? (int)Net.PlayerReplication.NpcOwner(npcId) : GetMultiplayerAuthority();
@@ -1144,12 +1147,12 @@ public partial class FootPlayer : CharacterBody3D
         _visual.Transform = Transform3D.Identity;
         var (lower, upper) = Avatar.MeshBounds.Split(_visual, HullCut);
         _visual.Transform = pose;
-        _hullLeans = ride is not Car;   // lean-steered: yaw and pitch only (see AlignHull)
+        _hullLeans = ride is not (Car or Truck);   // lean-steered: yaw and pitch only (see AlignHull)
         var parts = new[] { lower, upper };
         for (int i = 0; i < 2; i++)
         {
             var box = parts[i];
-            float bottom = Mathf.Max(box.Position.Y, HullLift);
+            float bottom = Mathf.Max(box.Position.Y, ride!.HullLift);
             float top = box.End.Y;
             if (top - bottom < 0.1f || box.Size.X < 0.05f) { _hull[i]?.QueueFree(); _hull[i] = null; continue; }
             _hull[i] ??= new CollisionShape3D { Name = i == 0 ? "HullLow" : "HullHigh" };
@@ -1205,6 +1208,7 @@ public partial class FootPlayer : CharacterBody3D
                     BodyPose = _visual.Transform;
                     AlignHull();
                     Anim = _ride.WritePose(_visual, _motion, _flight);
+                    if (_ride is Truck heavy) PublishTrain(heavy);
                 }
                 return;
             }
@@ -1283,6 +1287,7 @@ public partial class FootPlayer : CharacterBody3D
         _visual.Transform = BodyPose;
         AlignHull();
         _remoteRide?.AnimateRemote(_visual, Anim, dt);
+        AnimateRemoteSections(dt);
         if (_visual is Avatar.CarRig rig) rig.DoorsOpen = DoorsOpen;
         SetRemoteEngine(_remoteRide as Flyer);
     }
@@ -1659,6 +1664,13 @@ public partial class FootPlayer : CharacterBody3D
         // driver's door opens to let them in, and once seated every door shuts (and stays shut:
         // nobody drives with a door open, see TryToggleCarDoor)
         ApplyRide(state.Kind, state.Velocity, state.Tuning, state.Setup);
+        if (HeavyCatalog.For(state.Kind) != null && state.CreateRide() is Truck train)
+        {
+            // the truck as it was left: its trailer, its angles, its doors and display, its load
+            _ride = train;
+            TrailerCode = train.TrailerCode;
+            RefreshVisual(force: true);
+        }
         if (_ride is Car)
         {
             DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor);
@@ -1687,7 +1699,9 @@ public partial class FootPlayer : CharacterBody3D
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
-            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId);
+            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId,
+            Train: _ride is Truck t ? t.TrailerCode : 0, Angles: _ride is Truck ta ? ta.Angles : default,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : 0, Load: _ride is Truck tl ? tl.Load : 0.5f);
     }
 
     /// <summary>
@@ -1749,8 +1763,12 @@ public partial class FootPlayer : CharacterBody3D
         var state = CaptureVehicle(wrecked: false);
         var right = GlobalTransform.Basis.X with { Y = 0 };
         right = right.LengthSquared() > 1e-6f ? right.Normalized() : Vector3.Right;
+        // a left-hand-drive cab: out of the left door
+        if (vehicle.ExitLeft) right = -right;
         // clear of the whole machine — past the wing of a plane, not 2 m into it
         float side = Mathf.Max(vehicle.BodyRadius, vehicle.ParkedBox.Size.X * 0.5f) + BodyRadius + 0.5f;
+        // beside the door, not the middle: a bus's front door is six metres ahead of it
+        var door = vehicle.EntryPoint == Vector3.Zero ? state.Position : ToGlobal(new Vector3(0, 0, vehicle.EntryPoint.Z));
         bool grounded = IsOnFloor();
         // out of a car through the driver's door: it opens, and shuts behind (unless left open)
         if (vehicle is Car && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
@@ -1759,7 +1777,7 @@ public partial class FootPlayer : CharacterBody3D
         Vehicles?.Park(state);
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
-        GlobalPosition = FindExit(state.Position, right, side, grounded);
+        GlobalPosition = FindExit(door, right, side, grounded);
     }
 
     /// <summary>
@@ -1952,6 +1970,8 @@ public partial class FootPlayer : CharacterBody3D
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
+        // a truck or bus from the picker comes with the load chosen there
+        if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
         RideKindId = (int)kind;
         // the parts and the doors belong to one car: changing car (the picker), getting out or a
         // wreck leaves them with that car
@@ -1960,6 +1980,8 @@ public partial class FootPlayer : CharacterBody3D
         DoorsOpen = 0;
         _shutDriverIn = 0f;
         ShowroomYaw = null;
+        TrailerCode = _ride is Truck fresh ? fresh.TrailerCode : 0;
+        _truckPitch = 0f;
         // The pose travels with the kind, and each kind reads Anim its own way: left as it was, the
         // next update would hand a bike its rider's stride phase as a crank angle (seen: 0.93 rad).
         Anim = default;
@@ -1985,7 +2007,7 @@ public partial class FootPlayer : CharacterBody3D
         // a craft skimming the ground must not be snapped onto it
         // a car stays on its wheels over a crest the way a suspension keeps it there; 0.5 m let every
         // Jura hump launch it for a second at 100 km/h, and a car in the air cannot steer
-        FloorSnapLength = _ride switch { Flyer => 0.05f, Car or Motorbike => 1.2f, _ => 0.5f };
+        FloorSnapLength = _ride switch { Flyer => 0.05f, Car or Motorbike or Truck => 1.2f, _ => 0.5f };
 
         // the body is the machine's size while in it — a helicopter is not a 0.3 m person
         if (_capsule != null && !_sliding)
@@ -2031,6 +2053,12 @@ public partial class FootPlayer : CharacterBody3D
 
         // not consumed when there is no door: G held is also gathering
         if (@event.IsActionPressed(PlayerInput.CarDoor) && !@event.IsEcho() && TryToggleCarDoor())
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_ride is Truck truck && HandleTruckInput(@event, truck))
         {
             GetViewport().SetInputAsHandled();
             return;
@@ -2704,12 +2732,14 @@ public partial class FootPlayer : CharacterBody3D
         // a motorbike's or a car's grip depends on what is under it (cached lookup: road, else cover).
         // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
-        var surface = (_ride is Motorbike || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
+        var surface = (_ride is Motorbike or Truck || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
-        Draft = onFloor && _ride is Car or Motorbike && _motion.Speed > 10f
+        Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
+        if (_ride is Truck driving) PrepareTruck(driving);
         _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
+        if (_ride is Truck driven && AfterTruckStep(driven)) return;
         if (_ride is Car)
         {
             // doors: once seated every door shuts, sooner if the car pulls away before then
@@ -2720,7 +2750,7 @@ public partial class FootPlayer : CharacterBody3D
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
         // Game profile only; in Sim the watts are the rider's, and nothing else may add to them.
-        Boosting = Rideable.Arcade && _bailTimer <= 0 && BoostMeter > 0.01f
+        Boosting = Rideable.Arcade && _ride is not Truck && _bailTimer <= 0 && BoostMeter > 0.01f
             && !Npc && PlayerInput.Held(PlayerInput.Boost);
         if (Boosting)
         {
@@ -2751,6 +2781,8 @@ public partial class FootPlayer : CharacterBody3D
 
         Velocity = velocity;
         MoveAndSlide();
+        // the sections behind a truck's cab follow it, and report what they hit
+        if (_ride is Truck train) StepSections(train, dt);
 
         // Hitting something has to cost the speed, or the vehicle grinds along the wall at
         // 50 km/h and shoots off the moment the wall ends.
@@ -2893,8 +2925,14 @@ public partial class FootPlayer : CharacterBody3D
         if (_visual is Avatar.CarRig rig) rig.DoorsOpen = DoorsOpen;
         // a bail lays the rider over on their side for as long as it lasts
         float roll = _bailTimer > 0 ? 1.35f : _motion.Lean;
-        var basis = new Basis(Vector3.Up, _airSpin) * new Basis(Vector3.Right, _airPitch)
+        var basis = new Basis(Vector3.Up, _airSpin) * new Basis(Vector3.Right, _airPitch + _truckPitch)
             * new Basis(Vector3.Back, roll);
+        // a truck pitches about its wheels on the ground, not about a rider's middle
+        if (_ride is Truck)
+        {
+            _visual.Transform = new Transform3D(basis, Vector3.Zero);
+            return;
+        }
         var pivot = Vector3.Up * (_bailTimer > 0 ? 0.3f : 0.9f);
         _visual.Transform = new Transform3D(basis, pivot - basis * pivot);
     }
@@ -2909,6 +2947,7 @@ public partial class FootPlayer : CharacterBody3D
         // the free look springs back to centre, so letting go of the mouse puts the road ahead
         _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
 
+        if (_visual is Avatar.HeavyRig cab) cab.ShellVisible = _thirdPerson || ShowroomYaw != null;
         if (!_thirdPerson && ShowroomYaw == null)
         {
             // From the rider's own eye, leaning with the machine: the eye point is in the
@@ -2931,7 +2970,7 @@ public partial class FootPlayer : CharacterBody3D
         float slip = Mathf.Wrap(_motion.Slip, -Mathf.Pi, Mathf.Pi);
         _slipCam = Mathf.Lerp(_slipCam, Mathf.Abs(slip) < 1.4f ? slip * _ride.ChaseFollowsTravel : 0f, 1f - Mathf.Exp(-4f * dt));
         // the garage walks the camera all the way round the car instead
-        float orbit = ShowroomYaw ?? _lookYaw + _turnLag + _slipCam;
+        float orbit = ShowroomYaw ?? _lookYaw + _turnLag + _slipCam + (_ride is Truck { } swing ? swing.ChaseSwing : 0f);
 
         // both are local to the body, which is yaw-only, so the camera stays level
         var eye = new Vector3(0, _ride.EyeHeight, 0);
@@ -2946,8 +2985,9 @@ public partial class FootPlayer : CharacterBody3D
         var to = GlobalPosition + basis * back;
 
         float wanted = 1f;
-        var query = PhysicsRayQueryParameters3D.Create(from, to,
-            CameraMask, new Godot.Collections.Array<Rid> { GetRid() });
+        var ignore = new Godot.Collections.Array<Rid> { GetRid() };
+        ExcludeTrain(ignore);
+        var query = PhysicsRayQueryParameters3D.Create(from, to, CameraMask, ignore);
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         if (hit.Count > 0)
         {

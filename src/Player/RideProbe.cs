@@ -74,6 +74,9 @@ public partial class RideProbe : Node
                 "monster" => (RideKind)(MotorbikeCatalog.First + 1),
                 // moto:N = MotorbikeCatalog.All[N]
                 _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => (RideKind)(MotorbikeCatalog.First + b),
+                // truck:N = HeavyCatalog.All[N]; --trailer M couples TrailerCatalog.All[M], full
+                _ when name.StartsWith("truck") => (RideKind)(HeavyCatalog.First
+                    + (name.Length > 6 && int.TryParse(name[6..], out int h) ? h : 0)),
                 // car = the first in the roster, car:N = CarCatalog.All[N]
                 _ when name.StartsWith("car") => (RideKind)(CarCatalog.First
                     + (name.Length > 4 && int.TryParse(name[4..], out int n) ? n : 0)),
@@ -133,8 +136,16 @@ public partial class RideProbe : Node
                 GD.Print(setup != null && _player.SetCarSetup(setup.Id) ? $"[ride] preset {setup.Name}" : "[ride] PRESET REFUSED");
             }
 
-            // full throttle, straight ahead — the probe measures the model, not the steering
-            _player.RideControls = () => new RideInput(1f, 0f, 0f, false);
+            var a = OS.GetCmdlineUserArgs();
+            int ti = System.Array.IndexOf(a, "--trailer");
+            if (_mounted && ti >= 0 && ti + 1 < a.Length && int.TryParse(a[ti + 1], out int trailer))
+                GD.Print(_player.SpawnTrailer(trailer, 1f) ? $"[ride] coupled {TrailerCatalog.All[trailer].Label}" : "[ride] TRAILER REFUSED");
+            // full throttle, straight ahead — the probe measures the model, not the steering —
+            // unless --steer asks for a turn (−1 left .. 1 right)
+            int st = System.Array.IndexOf(a, "--steer");
+            float steer = st >= 0 && st + 1 < a.Length && float.TryParse(a[st + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float s) ? s : 0f;
+            _player.RideControls = () => new RideInput(steer != 0f && _player.RideSpeed > 5f ? 0f : 1f, 0f, steer, false);
             return;
         }
 
@@ -159,6 +170,8 @@ public partial class RideProbe : Node
                 + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
                 + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
                 + (_player.Vehicle is Car car ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {car.Gear}" : "")
+                + (_player.Vehicle is Truck truck ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
+                    + $"  joints {string.Join(" ", truck.Articulation.Take(truck.SectionCount - 1).Select(j => $"{Mathf.RadToDeg(j):F0}°"))}" : "")
                 + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : ""));
         }
 

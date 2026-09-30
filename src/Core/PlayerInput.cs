@@ -62,6 +62,25 @@ public partial class PlayerInput : Node
     public const string LightsToggle = "lights_toggle";
     /// <summary>In an open car: soft top down/up (<see cref="Player.Car.RoofOpen"/>).</summary>
     public const string RoofToggle = "roof_toggle";
+    // --- trucks and buses (#70) ---
+    /// <summary>Couple or uncouple a trailer (<see cref="Player.Truck.Couple"/>).</summary>
+    public const string Couple = "couple";
+    /// <summary>A bus kneels (lowers its door side) or rises.</summary>
+    public const string Kneel = "kneel";
+    /// <summary>The next destination on a bus's display.</summary>
+    public const string Destination = "destination";
+    /// <summary>Sequential shift up / down; in the H-pattern, the splitter high / low.</summary>
+    public const string ShiftUp = "shift_up";
+    public const string ShiftDown = "shift_down";
+    /// <summary>Held: the clutch pedal down.</summary>
+    public const string Clutch = "clutch";
+    /// <summary>The H-pattern's gates, reverse and neutral.</summary>
+    public static readonly string[] Gates = { "gear_1", "gear_2", "gear_3", "gear_4", "gear_5", "gear_6" };
+    public const string GearReverse = "gear_r";
+    public const string GearNeutral = "gear_n";
+    /// <summary>The retarder stalk: 0 off, 1 exhaust brake, 2-4 the retarder.</summary>
+    public const string RetarderUp = "retarder_up";
+    public const string RetarderDown = "retarder_down";
 
     // --- free-fly camera ---
     public const string FlyUp = "fly_up";
@@ -250,6 +269,20 @@ public partial class PlayerInput : Node
         // The car's switches borrow the D-pad sides, which only mean something on foot (items).
         Bind(LightsToggle, Keys(Key.L), Button(JoyButton.DpadRight));
         Bind(RoofToggle, Keys(Key.O), Button(JoyButton.DpadLeft));
+        // A truck has no tricks, boost or hop: its shift paddles take the shoulders (and Shift / Ctrl,
+        // which only mean tuck and slide elsewhere), the clutch takes C / B, and the H-pattern's
+        // gates the number keys, which only pick hotbar slots on foot.
+        Bind(Couple, Keys(Key.H), Button(JoyButton.DpadLeft));
+        Bind(Kneel, Keys(Key.K));
+        Bind(Destination, Keys(Key.N));
+        Bind(ShiftUp, Keys(Key.Shift), Button(JoyButton.RightShoulder));
+        Bind(ShiftDown, Keys(Key.Ctrl), Button(JoyButton.LeftShoulder));
+        Bind(Clutch, Keys(Key.C), Button(JoyButton.B));
+        for (int g = 0; g < Gates.Length; g++) Bind(Gates[g], Keys(Key.Key1 + g));
+        Bind(GearReverse, Keys(Key.Quoteleft));
+        Bind(GearNeutral, Keys(Key.Key0));
+        Bind(RetarderUp, Keys(Key.Apostrophe));
+        Bind(RetarderDown, Keys(Key.Semicolon));
 
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));
