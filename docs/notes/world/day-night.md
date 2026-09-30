@@ -11,3 +11,11 @@
   displayed as 0.40. Buildings light far more windows at night and those glow through the dark.
   Settings → Time of day (start hour, day length, default 24 min, 0 = stopped); `--time <h>` fixes
   the hour for one run.
+- **Indoors** (#134): interior glass (`ps1_interior`, vertex alpha 0) is `world_sky * 1.3` plus a
+  dark moonlit blue at night, so a room's windows show noon, sunset, blue hour and night. Rooms
+  are lit, so characters in them are too: `DayNight` keeps a second environment (room daylight by
+  day, warm lamps at night, never dimmed) and `DayNight.EnvironmentAt(camera position)` hands it to
+  any camera in the interiors' band under the terrain. It goes by where the **camera** is: the
+  screen's camera (set each frame by `DayNight`) and each portal camera (`DoorPortals.Aim`), so a
+  player seen through an open door from the street is room-lit and one seen out of a door from
+  inside is night-lit.

@@ -401,6 +401,8 @@ public partial class DoorPortals : Node3D
         // Back, not forward: a lens by a doorway would put its portal camera through the far one,
         // in that doorway's tunnel, and its picture would be the tunnel's dark hall.
         c.GlobalTransform = lens.Translated(lens.Basis.Z.Normalized() * 0.05f * (view.Slot + 1));
+        // lit like the space it stands in: a view into a room shows its people lit by the room
+        c.Environment = World.DayNight.EnvironmentAt(c.GlobalPosition);
         c.Projection = screenCam.Projection;
         c.Fov = screenCam.Fov;
         c.Near = screenCam.Near;
