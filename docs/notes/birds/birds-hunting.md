@@ -15,7 +15,7 @@
   closer than `5 + 18·√length` m flushes. `BirdMesh` builds each species once from `MeshScratch`,
   with the wings as separate meshes that flap about the shoulder. **Hunting**: the **shotgun**
   item (`ItemUse.Shoot`, `ItemId` 37–38 appended; Aim shoulders it at 50° FOV and shows a
-  crosshair, Use spends a shell through `ItemController.Fire`) casts a cone that opens to 1.4 m
+  crosshair, Use spends a shell through `ItemController.Fire`) casts from the eye (`shotgun-feel`) a cone that opens to 1.4 m
   across at 35 m, with hit chance fading from 30 to 55 m and a raycast so walls block. Every shot
   flushes everything within 150 m. The field journal (**J**, `user://birds.json` by species
   name) scores a game species in season by size and flight (+), a game species out of season

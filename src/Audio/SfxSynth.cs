@@ -253,6 +253,27 @@ public static class SfxSynth
         return s;
     });
 
+    private static SfxBank? _pump;
+
+    /// <summary>A pump-action cycle: the slide racking back and the shell chambering, two metallic clacks 0.16 s apart.</summary>
+    public static SfxBank Pump => _pump ??= SfxBank.Build("pump", 4, 0.34f, 72, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        var hi = HighPass(Noise(rng, n), 0.25f);
+        var mid = LowPass(HighPass(Noise(rng, n), 0.05f), 0.35f);
+        float gap = 0.16f * J(), f = 190f * J();
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float t2 = t - gap;
+            float a = Mathf.Exp(-90f * t) * 0.9f + Mathf.Sin(Mathf.Tau * f * t) * Mathf.Exp(-45f * t) * 0.5f;
+            float b = t2 > 0f ? Mathf.Exp(-110f * t2) * 1.1f + Mathf.Sin(Mathf.Tau * f * 1.4f * t2) * Mathf.Exp(-55f * t2) * 0.45f : 0f;
+            s[i] = (hi[i] * 0.6f + mid[i] * 1.4f) * (a + b);
+        }
+        return s;
+    });
+
     /// <summary>
     /// The reward sound for a clean landing or trick: two bright bell partials a fifth apart,
     /// with a quick attack. Pure tones are the one thing here that is not noise, which is why
