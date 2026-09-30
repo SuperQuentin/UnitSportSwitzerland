@@ -108,7 +108,7 @@ public sealed class AutoPilot
     private float _planTimer, _cooldown, _gripUntil;
 
     /// <summary>
-    /// The driver: <see cref="Skill"/> 0.8..1 (how close to the car's limit it brakes and corners, and
+    /// The driver: <see cref="Skill"/> 0.8..1.1 (how close to the car's limit it brakes and corners, and
     /// how rarely it gets a braking point wrong under pressure), <see cref="Aggression"/> 0..1 (how
     /// late it brakes, how close it follows, whether it dives up the inside). Set with
     /// <see cref="Temperament"/>; the defaults are a calm, perfect driver.
@@ -122,10 +122,25 @@ public sealed class AutoPilot
     private bool _inZone;
     private float _backwards;
 
+    /// <summary>
+    /// A grid's skills: one drawn in each of <paramref name="count"/> equal bands of 0.8..1.1, shuffled —
+    /// levels that really differ, never a grid of 0.8s — and the best raised to an ace (≥ 1.05) if its
+    /// band did not already make one.
+    /// </summary>
+    public static float[] GridSkills(int count, System.Random rng)
+    {
+        var skills = new float[count];
+        for (int i = 0; i < count; i++) skills[i] = 0.8f + 0.3f * (i + (float)rng.NextDouble()) / count;
+        int best = count - 1;
+        skills[best] = Mathf.Max(skills[best], 1.05f + 0.05f * (float)rng.NextDouble());
+        for (int i = count - 1; i > 0; i--) { int j = rng.Next(i + 1); (skills[i], skills[j]) = (skills[j], skills[i]); }
+        return skills;
+    }
+
     /// <summary>Sets the driver (clamped) and recomputes its speed profile; <paramref name="seed"/> drives its mistakes.</summary>
     public void Temperament(float skill, float aggression, int seed)
     {
-        Skill = Mathf.Clamp(skill, 0.8f, 1f);
+        Skill = Mathf.Clamp(skill, 0.8f, 1.1f);
         Aggression = Mathf.Clamp(aggression, 0f, 1f);
         _rng = new System.Random(seed);
         Profile = ComputeProfile();
@@ -136,7 +151,7 @@ public sealed class AutoPilot
     /// ~10% at 0.8 and full aggression. At three times that, in a pack (always under pressure) the
     /// worst drivers blundered every other corner and half the field went into the trees.
     /// </summary>
-    private float MistakeChance => 0.35f * (1f - Skill) * (0.5f + Aggression);
+    private float MistakeChance => Mathf.Max(0f, 0.35f * (1f - Skill) * (0.5f + Aggression));   // none from skill 1 up
 
     /// <summary>A runner on foot waits for this (a vehicle gets it through <see cref="Drive"/>).</summary>
     public bool Go = true;
@@ -188,8 +203,10 @@ public sealed class AutoPilot
         {
             // a share of the tyre limit: a narrow road with camber and bumps is not a flat skidpad
             // a lesser driver corners and brakes a little short of the car; an aggressive one brakes later
+            // (an ace, skill 1.1, carries the trend on: ×1.03 corner and ×1.04 braking share, and the
+            // braking share never above 0.9 of the rear-lockup limit, whatever the temper)
             Mount.Car => line.SpeedProfile(S, Rideable.Arcade, (S.Style == DriveStyle.Grip ? 0.64f : 0.6f) * Mathf.Lerp(0.94f, 1f, (Skill - 0.8f) / 0.2f),
-                0.85f * Mathf.Lerp(0.92f, 1f, (Skill - 0.8f) / 0.2f) + 0.04f * Aggression),
+                Mathf.Min(0.9f, 0.85f * Mathf.Lerp(0.92f, 1f, (Skill - 0.8f) / 0.2f) + 0.04f * Aggression)),
             // v = √(g·R·tan φ): 65% of the lean it can hold (measured upright on the flat: braking
             // into a bend takes grip off the lean, and at 80% two R1s ran wide off a R 50 m bend at
             // 93 km/h on full lock), 85% of its brakes
@@ -386,14 +403,23 @@ public sealed class AutoPilot
         // a car's width (1.7 m) and 0.3 m beside a rival; 2.3 from one coming the other way
         const float Beside = 2.0f, Clear = 2.3f, CarLength = 4.5f;
 
+        // where the tightest bounds on each side come from (metres ahead): see the squeeze below
+        float loAt = float.MaxValue, hiAt = float.MaxValue, lastLo = lo, lastHi = hi, lastAhead = 0f;
+        void Note()
+        {
+            if (lo != lastLo) { loAt = lastAhead; lastLo = lo; }
+            if (hi != lastHi) { hiAt = lastAhead; lastHi = hi; }
+        }
         foreach (var q in others.Concat(Sensed(dt, fwd)))
         {
+            Note();
             // the traffic (a 1.8 m car, a 2 m van, boxed at its mesh bounds) gets more room than a racer:
             // at a racer's 2.0 / 2.3 m centre to centre the pack clipped traffic at 40-80 km/h (#85)
             float clear = q.Civil ? Clear + 0.3f : Clear, beside = q.Civil ? Beside + 0.4f : Beside;
             var rel = RaceRoute.Flat(q.Position - me);
             _around.Add(q.Position);
             float ahead = rel.Dot(fwd);
+            lastAhead = ahead;
             tailed |= ahead < 0f && ahead > -2.5f * CarLength && Mathf.Abs(rel.Dot(new Vector3(fwd.Z, 0, -fwd.X))) < 2.5f;
             float along = q.Velocity.X * fwd.X + q.Velocity.Z * fwd.Z;
             if (ahead > -3f && ahead < 40f && rel.Length() < nearest)
@@ -515,7 +541,10 @@ public sealed class AutoPilot
             if (ahead < 1f) continue;
             // the traffic brakes like traffic, for things a racer does not see: a longer gap behind it
             float followGap = Mathf.Lerp(10f, 5f, Aggression) + (q.Civil ? 4f : 0f);
-            float follow = along + StopWithin(ahead - followGap);
+            // (and one that may stop: traffic stops for things a racer does not see, so behind it the gap
+            // is one this car can stop in even if it stops too — racers ran into cars pulling over for them)
+            float follow = q.Civil ? Mathf.Sqrt(Mathf.Max(0f, 0.7f * along * Mathf.Abs(along) + 2f * EasyBrake * (ahead - followGap)))
+                : along + StopWithin(ahead - followGap);
             _ahead.Add((theirs, follow, beside));   // in the way or not: a pass may move into its lane
             // in the way where this car is headed, or where it still is (the car lags its target)
             if (Mathf.Min(Mathf.Abs(theirs - mine), Mathf.Abs(theirs - myLat)) > beside + 0.1f)
@@ -556,6 +585,12 @@ public sealed class AutoPilot
         }
         // a pass only with nothing coming the other way and nothing stopped in the road: pulling out
         // into the other lane with a car in it is how the traffic runs ended, head-on at 130 km/h
+        Note();
+        // no way through: bounds from both sides that cross, set by things close together ahead (a car
+        // coming, one standing on the other side): stop short of the nearer — at 90-100 km/h racers
+        // drove into such a gap because nothing but the corridor said it was shut (#85)
+        if (lo > hi + 0.1f && Mathf.Min(loAt, hiAt) > 3f && Mathf.Abs(loAt - hiAt) < 20f)
+            CapBy(StopWithin(Mathf.Min(loAt, hiAt) - 8f));
         // boxed in short of a traffic car, too close to steer round it: back off a little and try again —
         // not with a car right behind (a queue of racers backing into each other on the grid, #85)
         _boxed = boxed && !tailed && v < 0.5f ? _boxed + dt : 0f;

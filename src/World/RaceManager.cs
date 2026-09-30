@@ -76,6 +76,8 @@ public partial class RaceManager : Node
         public double EntryEnds, StartAt, Deadline;
         public readonly List<long> Entrants = new();
         public readonly Dictionary<long, int> Next = new();
+        /// <summary>Each NPC's driving skill this race (see <see cref="DrawSkills"/>).</summary>
+        public readonly Dictionary<long, float> Skill = new();
         /// <summary>Air: when each entrant flew through gate 0 — its own start.</summary>
         public readonly Dictionary<long, double> Started = new();
         /// <summary>When each entrant's last accepted checkpoint came in, for the pace check.</summary>
@@ -382,6 +384,23 @@ public partial class RaceManager : Node
         if (race.Arriving.Remove(npc)) GD.Print($"[npc] {Who(npc)} is in its slot");
     }
 
+    /// <summary>The simulator: one of its NPCs crashed out of the race — a DNF.</summary>
+    public void RetireNpc(int raceId, long npc)
+    {
+        if (_server) NpcRetired(raceId, npc, 1);
+        else RpcId(1, MethodName.NpcRetired, raceId, npc, 0);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void NpcRetired(int raceId, long npc, int local)
+    {
+        long sender = local == 1 ? SimOf(npc) : Multiplayer.GetRemoteSenderId();
+        if (!_server || SimOf(npc) != sender || !_races.TryGetValue(raceId, out var race) || race.Phase != Phase.Running
+            || !race.Entrants.Contains(npc) || race.Out.Contains(npc)) return;
+        Drop(race, npc);
+        _chat?.Broadcast($"[race] #{raceId} {Who(npc)} crashed out: retires", ChatKind.System);
+    }
+
     private string Leave(long sender)
     {
         if (!_raceOf.TryGetValue(sender, out int id) || !_races.TryGetValue(id, out var race)) return "You are not in a race.";
@@ -558,6 +577,7 @@ public partial class RaceManager : Node
         if (race.Mount != Open && Rideable.Create((RideKind)race.Mount) is { IsVehicle: true })
             foreach (long e in race.Entrants)
                 _issued[SimOf(e)] = _issued.GetValueOrDefault(SimOf(e)) + 1;
+        DrawSkills(race);
         foreach (long e in race.Entrants)
         {
             race.Next[e] = 0;
@@ -565,6 +585,20 @@ public partial class RaceManager : Node
         }
         _chat?.Broadcast($"[race] #{race.Id} {count} on the grid: {string.Join(", ", race.Entrants.Select(Who))} — "
             + $"{course.Length / 1000f:0.0} km, GO in {Countdown:0} s", ChatKind.System);
+    }
+
+    /// <summary>
+    /// The NPCs' drivers for this race, new every race: skills spread over 0.8..1.1 (see
+    /// <see cref="AutoPilot.GridSkills"/>: one per band, shuffled, so a grid is never all slow cars)
+    /// with an ace (≥ 1.05) in every grid. The server draws them so a handoff keeps the driver.
+    /// </summary>
+    private void DrawSkills(Race race)
+    {
+        var npcs = race.Entrants.Where(e => e < 0).ToList();
+        if (npcs.Count == 0) return;
+        var skills = AutoPilot.GridSkills(npcs.Count, new System.Random(race.Id * 7919 + (int)(_clock * 1000) % 7919));
+        for (int i = 0; i < npcs.Count; i++) race.Skill[npcs[i]] = skills[i];
+        GD.Print($"[race] #{race.Id} NPC skills: {string.Join(", ", npcs.Select(e => $"{Who(e)} {race.Skill[e]:F2}"))}");
     }
 
     /// <summary>
@@ -578,7 +612,7 @@ public partial class RaceManager : Node
         int slot = race.Entrants.IndexOf(e), count = race.Entrants.Count;
         RpcId(SimOf(e), MethodName.Setup, race.Id, e, race.Air, race.Centre, race.Width,
             race.Air ? course.Gates : System.Array.Empty<Vector3>(), course.Length, course.GridAltitude, slot, count,
-            race.Mount, resume ? race.StartAt - _clock : Countdown, race.Next.GetValueOrDefault(e), resume);
+            race.Mount, resume ? race.StartAt - _clock : Countdown, race.Next.GetValueOrDefault(e), resume, race.Skill.GetValueOrDefault(e, 1f));
     }
 
     /// <summary>Server: an NPC changed simulator; the new one gets its race where it stands.</summary>
@@ -843,7 +877,7 @@ public partial class RaceManager : Node
     /// <summary><c>Resume</c>: the NPC was handed to this client (#50) and is not on the grid — it
     /// reports from checkpoint <c>Next</c>.</summary>
     public readonly record struct NpcGrid(int RaceId, long NpcId, RaceCourse Course, Vector3 At, Vector3 Forward, int Mount, double Countdown,
-        int Next = 0, bool Resume = false);
+        int Next = 0, bool Resume = false, float Skill = 1f);
     public event System.Action<NpcGrid>? NpcSetup;
     /// <summary>An NPC finished: id, position, seconds.</summary>
     public event System.Action<long, int, double>? NpcFinished;
@@ -885,7 +919,7 @@ public partial class RaceManager : Node
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Setup(int raceId, long entrant, bool air, Vector3[] centre, float[] width, Vector3[] gates, float length,
-        float gridAltitude, int slot, int count, int mount, double countdown, int next, bool resume)
+        float gridAltitude, int slot, int count, int mount, double countdown, int next, bool resume, float skill)
     {
         var r = new Runner
         {
@@ -897,7 +931,7 @@ public partial class RaceManager : Node
         {
             _npcs[entrant] = r;
             var (at, fwd) = r.Course.Slot(slot, count);
-            NpcSetup?.Invoke(new NpcGrid(raceId, entrant, r.Course, at, fwd, mount, countdown, next, resume));
+            NpcSetup?.Invoke(new NpcGrid(raceId, entrant, r.Course, at, fwd, mount, countdown, next, resume, skill));
             return;
         }
         StopLocal();

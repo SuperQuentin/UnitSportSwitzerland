@@ -160,6 +160,11 @@ public partial class Traffic : Node3D
     public bool Yielding(ulong body) => _byBody.TryGetValue(body, out var v) && v.Yield;
     private readonly Dictionary<ulong, Vehicle> _byBody = new();
 
+    /// <summary>A traffic car's state in a few words (for crash logs).</summary>
+    public string? Describe(ulong body) => _byBody.TryGetValue(body, out var v)
+        ? $"{v.Speed * 3.6f:F0} km/h, {v.Route.Edge.Class} {v.Route.Edge.Width:F1} m, pull {v.Pull:F1}, hold {v.Holding}, yield {v.Yield}, startle {v.Startle > 0f}, alert {v.Alert:F1}, arc {v.Route.Arc:F0}/{v.Route.Edge.Length:F0}, end degree {_roads?.Degree(v.Route.Forward ? v.Route.Edge.KeyEnd : v.Route.Edge.KeyStart)}"
+        : null;
+
     private LaneGraph? _roads, _rails;
     private TileId? _builtAround;
     private bool _building;
@@ -237,11 +242,13 @@ public partial class Traffic : Node3D
                 }
             var near = tiles.Where(t => Math.Abs(t.Id.E - here.E) <= 2 && Math.Abs(t.Id.N - here.N) <= 2);
             var roads = LaneGraph.Build(near, origin, IsCarRoad);
+            int deadBefore = roads.DeadEnds;
+            roads.JoinTrimmedEnds();
             var rails = LaneGraph.Build(tiles, origin, IsRail);
             int divided = roads.Edges.Count(x => (x.Flags & RoadFlags.Divided) != 0);
             int oriented = roads.Edges.Count(x => (x.Flags & RoadFlags.Divided) != 0 && x.OneWay != 0);
             GD.Print($"[traffic] around {here}: {roads.Edges.Count} road edges ({oriented}/{divided} divided "
-                + $"carriageways oriented), {rails.Edges.Count} rail edges");
+                + $"carriageways oriented), {rails.Edges.Count} rail edges, dead ends {deadBefore} -> {roads.DeadEnds} joined across junctions");
             Callable.From(() =>
             {
                 if (epoch != _epoch) return;   // built from the world that was replaced

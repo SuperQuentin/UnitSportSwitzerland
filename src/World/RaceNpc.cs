@@ -32,6 +32,8 @@ public partial class RaceNpc : Node
     private RaceManager? _race;
     private RaceRoute? _route;
     private double _goIn;
+    private float _skill = 1f;
+    private int _raceId;
     private AutoPilot? _pilot;
     /// <summary>Driving in to its slot before GO (#51), and which race that is for.</summary>
     private NpcArrival? _arrival;
@@ -51,6 +53,7 @@ public partial class RaceNpc : Node
         _race.NpcSetup += OnSetup;
         _race.NpcFinished += OnFinished;
         _race.NpcDropped += OnDropped;
+        _me.Announced += OnAnnounced;
     }
 
     public override void _ExitTree()
@@ -88,9 +91,11 @@ public partial class RaceNpc : Node
         }
         _resumeCheckpoint = -1;
         _arrival = null;   // handed over at GO
-        // its own driver, the same every race: skill 0.8..1, aggression 0..1, from its id
+        // its driver: the skill the server drew for this race (0.8..1.1, an ace in every grid); a calm
+        // temper from its id, 0..0.3 — an NPC races to reach the finish, not to fight for places: no
+        // dives up the inside (above 0.3 only), a long follow gap, a pass only where it is clearly safe
         var rng = new System.Random((int)(-Id % int.MaxValue));
-        pilot.Temperament(0.8f + 0.2f * (float)rng.NextDouble(), (float)rng.NextDouble(), (int)(-Id % int.MaxValue));
+        pilot.Temperament(_skill, 0.3f * (float)rng.NextDouble(), (int)(-Id % int.MaxValue));
         pilot.Log = s => GD.Print($"[npc] {_me.Name}: {s}");
         GD.Print($"[npc] {_me.Name} drives, skill {pilot.Skill:F2} aggression {pilot.Aggression:F2}");
         _me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, RaceManager.Others(_me));
@@ -121,6 +126,8 @@ public partial class RaceNpc : Node
     {
         if (g.NpcId != Id || g.Course.Route is not { } route) return;
         _route = route;
+        _skill = g.Skill;
+        _raceId = g.RaceId;
         _goIn = g.Countdown;
         _pilot = null;
         _resumeCheckpoint = -1;
@@ -168,6 +175,18 @@ public partial class RaceNpc : Node
         if (id != Id) return;
         if (_pilot != null) _pilot.Finished = true;   // brake to a stop past the line
         GD.Print($"[npc] {_me.Name} finished P{position}");
+    }
+
+    /// <summary>
+    /// Thrown off or wrecked while racing: the car is out, the NPC retires (DNF) — no getting back on
+    /// and carrying on, no endless resets. A crash that ends a race is part of racing on open roads.
+    /// </summary>
+    private void OnAnnounced(string text, bool _)
+    {
+        if (_pilot == null || _pilot.Finished || !_me.IsMultiplayerAuthority() || text is not ("THROWN OFF!" or "WRECKED!")) return;
+        GD.Print($"[npc] {_me.Name} crashed out ({text}) at {_pilot.Arc:F0} m: retires");
+        _race?.RetireNpc(_raceId, Id);
+        OnDropped(Id);
     }
 
     private void OnDropped(long id)
