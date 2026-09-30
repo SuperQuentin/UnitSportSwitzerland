@@ -91,7 +91,11 @@ public partial class TreeCheck : Node
             }
             case 2:   // mount once settled
                 if (_t < 0.5 || !_player!.IsOnFloor()) return;
-                if (!_player.SetRide(RideKind.RoadBike)) { GD.Print("[treecheck] MOUNT REFUSED"); Finish(1); return; }
+                if (!_player.SetRide(_kind)) { GD.Print($"[treecheck] MOUNT REFUSED for {_kind}"); Finish(1); return; }
+                GD.Print($"[treecheck] {_kind} at the trunk");
+                // an aircraft is put in the air a few metres up and flown straight at the trunk
+                if (_player.IsFlying)
+                    _player.DebugLaunch(_player.GlobalPosition + Vector3.Up * 4f, _dir * (_kind == RideKind.Plane ? 32f : 14f));
                 _player.RideControls = () =>
                 {
                     // hold the line at the trunk
@@ -105,15 +109,28 @@ public partial class TreeCheck : Node
                 return;
             case 3:   // ride at it
             {
+                // a helicopter hovers hands-off: hold the stick forward, as a pilot would
+                if (_kind == RideKind.Helicopter)
+                {
+                    // hovers hands-off and settles without collective: stick forward, and hold
+                    // about 4 m of height with the collective (Space), as a pilot would
+                    Input.ActionPress(Core.PlayerInput.MoveForward);
+                    bool low = !_chunks.TryGetHeight(_player!.GlobalPosition, out float gh) || _player.GlobalPosition.Y < gh + 4f;
+                    if (low) Input.ActionPress(Core.PlayerInput.Jump); else Input.ActionRelease(Core.PlayerInput.Jump);
+                }
+                if (System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trace") >= 0 && (int)(_t * 2) != (int)((_t - delta) * 2))
+                    GD.Print($"[treecheck]   t={_t:F1} d={Flat(_player!.GlobalPosition - _tree).Length():F1} v={_player.Velocity} floor={_player.IsOnFloor()} wall={_player.IsOnWall()} ride={_player.Ride}");
                 var p = _player!.GlobalPosition;
                 _closest = Mathf.Min(_closest, Flat(p - _tree).Length());
                 _topSpeed = Mathf.Max(_topSpeed, _player.GroundSpeed);
                 if (_t < 9) return;
                 float past = Flat(p - _tree).Dot(_dir);   // > 0 once beyond the trunk
                 bool through = past > _radius + 0.3f;
-                bool ok = !through && _impact > 3f && _closest > _radius + 0.1f;
+                // a crash that ends the ride (thrown off, wreck) is the tree stopping it too
+                bool crashed = _player.Ride != _kind;
+                bool ok = !through && (_impact > 3f || crashed) && _closest > _radius + 0.1f;
                 GD.Print($"[treecheck] top {_topSpeed * 3.6f:F0} km/h, closest {_closest:F2} m to the axis (trunk r {_radius:F2}), "
-                    + $"{(through ? "WENT THROUGH" : "stopped short")}, impacts {_impact * 3.6f:F0} km/h in total, "
+                    + $"{(through ? "WENT THROUGH" : "stopped short")}{(crashed ? " (crashed)" : "")}, impacts {_impact * 3.6f:F0} km/h in total, "
                     + $"{pool!.LiveTrunks} trunks live, pool max {pool.MaxMs:F2} ms/frame");
                 GD.Print(ok ? "[treecheck] RESULT: the tree stopped the rider" : "[treecheck] RESULT: FAILED");
                 if (_shot != null && GetViewport().GetTexture().GetImage().SavePng(_shot) == Error.Ok)
@@ -135,6 +152,23 @@ public partial class TreeCheck : Node
     }
 
     private static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
+
+    /// <summary><c>--ride bike|car|heli|plane</c>: what to throw at the trunk (bike by default).</summary>
+    private static RideKind Kind()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int i = System.Array.IndexOf(args, "--ride");
+        string v = i >= 0 && i + 1 < args.Length ? args[i + 1] : "bike";
+        return v switch
+        {
+            "car" => (RideKind)Player.CarCatalog.First,
+            "heli" or "helicopter" => RideKind.Helicopter,
+            "plane" => RideKind.Plane,
+            _ => RideKind.RoadBike,
+        };
+    }
+
+    private readonly RideKind _kind = Kind();
 
     private void Finish(int code)
     {

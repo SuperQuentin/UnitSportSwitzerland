@@ -46,6 +46,11 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(code);
                 return;
             }
+            if (Array.IndexOf(scArgs, "--driftcheck") >= 0)
+            {
+                GetTree().Quit(Player.DriftCheck.Run());
+                return;
+            }
         }
         // after Load, so the saved stick deadzone is what the actions start with
         PlayerInput.Install(this);
@@ -222,7 +227,8 @@ public partial class ClientWorld : Node3D
         // them for the height.
         bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
             || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || World.TreeCheck.ParseArgs().Requested || Gpx.Cinema.CinemaProbe.ParseArgs() != null
+            || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
+            || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
@@ -396,6 +402,14 @@ public partial class ClientWorld : Node3D
             var (checkE, checkN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(checkE, checkN, 1200);
             AddChild(new RoadStandProbe(_chunks, origin));
+            return;
+        }
+
+        if (DriveProbe.ParseArgs() is { Requested: true } drive)
+        {
+            var (driveE, driveN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(driveE, driveN, 1200);
+            AddChild(new DriveProbe(_chunks, origin, drive.Shot, drive.Car, drive.Seconds));
             return;
         }
 
