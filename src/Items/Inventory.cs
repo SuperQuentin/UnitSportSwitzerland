@@ -150,8 +150,30 @@ public sealed class Inventory
     // persistence
     // ------------------------------------------------------------------------------------
 
+    // ---- worn -----------------------------------------------------------------------------------
+
+    /// <summary>The hat being worn (an <see cref="ItemUse.Wear"/> item still in the pack), or None.</summary>
+    public ItemId Worn => _worn != ItemId.None && Contains(_worn) ? _worn : ItemId.None;
+
+    private ItemId _worn;
+
+    public void SetWorn(ItemId id)
+    {
+        if (id == _worn) return;
+        _worn = id;
+        Notify();
+    }
+
+    public bool Contains(ItemId id)
+    {
+        for (int i = 0; i < Size; i++)
+            if (_slots[i].Id == id && !_slots[i].IsEmpty) return true;
+        return false;
+    }
+
     private sealed class SaveData
     {
+        public string Worn { get; set; } = "";
         public int Selected { get; set; }
         public List<SavedSlot> Slots { get; set; } = new();
     }
@@ -183,6 +205,7 @@ public sealed class Inventory
                             && ItemDefs.Get(id) is { } def && s.Count > 0)
                             inv._slots[s.Slot] = new ItemStack(id, Math.Min(s.Count, def.MaxStack));
                     inv.Selected = Math.Clamp(data.Selected, 0, HotbarSize - 1);
+                    if (Enum.TryParse<ItemId>(data.Worn, out var worn)) inv._worn = worn;
                     return inv;
                 }
             }
@@ -213,7 +236,7 @@ public sealed class Inventory
 
     private void Save()
     {
-        var data = new SaveData { Selected = Selected };
+        var data = new SaveData { Selected = Selected, Worn = _worn == ItemId.None ? "" : _worn.ToString() };
         for (int i = 0; i < Size; i++)
             if (!_slots[i].IsEmpty)
                 data.Slots.Add(new SavedSlot { Slot = i, Item = _slots[i].Id.ToString(), Count = _slots[i].Count });

@@ -151,6 +151,15 @@ public partial class FootPlayer : CharacterBody3D
     public const int PoseStride = 0, PoseAir = 1, PoseTucked = 2;
 
     /// <summary>
+    /// The hat on the figure, as an <see cref="Avatar.Headwear"/> (occasions, #18). Replicated like
+    /// <see cref="HeldItemId"/>; set on the owner by <c>Occasions.OccasionHats</c>.
+    /// </summary>
+    [Export] public int HeadwearId { get; set; }
+
+    private Avatar.Headwear Hat => (Avatar.Headwear)HeadwearId;
+    private Avatar.Headwear _poseHat;
+
+    /// <summary>
     /// The figure's right hand in this node's local space, or null when no figure is drawn
     /// (first person on foot, or mounted). Updated whenever the body mesh is posed.
     /// </summary>
@@ -567,6 +576,7 @@ public partial class FootPlayer : CharacterBody3D
         replication.AddProperty(".:RideKindId");
         replication.AddProperty(".:HeldItemId");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
+        replication.AddProperty(".:HeadwearId");
         var sync = new MultiplayerSynchronizer
         {
             // deterministic name: replication matches nodes by path across peers, and
@@ -672,7 +682,7 @@ public partial class FootPlayer : CharacterBody3D
             _walker = new MeshInstance3D
             {
                 Name = "Body",
-                Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f),
+                Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f, hat: Hat),
                 MaterialOverride = Avatar.HumanMeshBuilder.Material(),
             };
             _visual = _walker;
@@ -853,19 +863,21 @@ public partial class FootPlayer : CharacterBody3D
     private void ApplyFootPose()
     {
         if (_walker == null) return;
+        // the two held poses are cached, so a hat put on or taken off (#18) rebuilds them
+        if (_poseHat != Hat) { _slidePose = null; _airPose = null; _poseHat = Hat; }
         Avatar.HumanMeshBuilder.GaitMounts mounts;
         switch (PoseKind)
         {
             case PoseTucked:
-                _walker.Mesh = _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked);
+                _walker.Mesh = _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked, hat: Hat);
                 mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked);
                 break;
             case PoseAir:
-                _walker.Mesh = _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running);
+                _walker.Mesh = _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running, hat: Hat);
                 mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running);
                 break;
             default:
-                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase);
+                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase, hat: Hat);
                 mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase);
                 break;
         }

@@ -56,25 +56,41 @@ public partial class DayNight : Node
     public override void _Ready()
     {
         ProcessMode = ProcessModeEnum.Always;
-        Apply();
+        Apply(0);
     }
 
     public override void _Process(double delta)
     {
         float minutes = GameSettings.Current.DayLengthMinutes;
         if (minutes > 0) Hour = (Hour + delta * 24.0 / (minutes * 60.0)) % 24.0;
-        Apply();
+        Apply((float)delta);
     }
 
     /// <summary>"14:05", for the HUD and chat.</summary>
     public string Clock => $"{(int)Hour:00}:{(int)(Hour % 1 * 60):00}";
 
-    private void Apply()
+    /// <summary>Ground height at a world point, if loaded — for sitting an occasion's mist on the valley floor.</summary>
+    public Func<Vector3, float?>? GroundHeight { get; set; }
+
+    private void Apply(float delta)
     {
-        // azimuth measured clockwise from north; world +X is east and -Z is north
+        // A running occasion may move the sun (a short winter day) and re-grade the colours.
+        var occasion = Occasions.OccasionManager.Instance?.Atmosphere;
+        var atmo = occasion?.Atmosphere;
+        float rise = atmo?.Sunrise ?? 6f, set = atmo?.Sunset ?? 18f, noon = atmo?.NoonElevation ?? NoonElevation;
+        float dayLength = set - rise;
+
+        // How far round the sun is: 0 at sunrise, 1 at sunset, 2 at the next sunrise. Day and
+        // night each take half the circle however long they last, so the default 6 / 18 reduces to
+        // the old (h - 6) / 12 exactly.
         float h = (float)Hour;
-        float az = Mathf.DegToRad(90f + (h - 6f) * 15f);
-        SunElevationDeg = NoonElevation * Mathf.Sin((h - 6f) / 12f * Mathf.Pi);
+        float phase = h >= rise && h <= set
+            ? (h - rise) / dayLength
+            : 1f + Mathf.PosMod(h - set, 24f) / (24f - dayLength);
+
+        // azimuth measured clockwise from north; world +X is east and -Z is north
+        float az = Mathf.DegToRad(90f + phase * 180f);
+        SunElevationDeg = noon * Mathf.Sin(phase * Mathf.Pi);
         float el = Mathf.DegToRad(SunElevationDeg);
         var sun = new Vector3(Mathf.Sin(az) * Mathf.Cos(el), Mathf.Sin(el), -Mathf.Cos(az) * Mathf.Cos(el));
 
@@ -87,6 +103,7 @@ public partial class DayNight : Node
             shade = shade with { Y = Mathf.Max(shade.Y, 0.05f) };
 
         var (tint, sky) = Palette(SunElevationDeg);
+        if (occasion is { Owner: var owner }) (tint, sky) = owner.Grade(SunElevationDeg, tint, sky);
         Night = Mathf.SmoothStep(4f, -7f, SunElevationDeg);
 
         RenderingServer.GlobalShaderParameterSet("world_sun_dir", shade.Normalized());
@@ -98,6 +115,7 @@ public partial class DayNight : Node
         var skyLinear = sky.SrgbToLinear();
         RenderingServer.GlobalShaderParameterSet("world_sky", new Vector3(skyLinear.R, skyLinear.G, skyLinear.B));
         RenderingServer.GlobalShaderParameterSet("world_night", Night);
+        ApplyOccasionGlobals(atmo, tintLinear, delta);
 
         if (_environment != null)
         {
@@ -106,6 +124,66 @@ public partial class DayNight : Node
             _environment.AmbientLightColor = sky.Lerp(new Color(tint.R, tint.G, tint.B), 0.5f);
             _environment.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.55f, Night);
         }
+    }
+
+    // ---- occasion globals (shaders/world_occasion.gdshaderinc) ------------------------------------
+
+    private float _mistTop;
+    private bool _mistTopKnown;
+    private float _mistSampleIn;
+
+    /// <summary>
+    /// Snow, lights and valley mist. All zero with no occasion running, which the shader include
+    /// treats as "change nothing".
+    /// </summary>
+    private void ApplyOccasionGlobals(Occasions.OccasionAtmosphere? atmo, Color tintLinear, float delta)
+    {
+        RenderingServer.GlobalShaderParameterSet("world_snow", atmo?.Snow ?? 0f);
+        RenderingServer.GlobalShaderParameterSet("world_lights", atmo?.Lights ?? 0f);
+
+        float density = atmo == null ? 0f : Mathf.Lerp(atmo.MistDay, atmo.MistNight, Night);
+        if (density > 0f && TrackMistTop(atmo!.MistHeight, delta))
+        {
+            // the mist is lit like everything else, so it darkens with the evening
+            var mist = atmo.MistColor.SrgbToLinear();
+            RenderingServer.GlobalShaderParameterSet("world_mist_color",
+                new Vector3(mist.R * tintLinear.R, mist.G * tintLinear.G, mist.B * tintLinear.B));
+            RenderingServer.GlobalShaderParameterSet("world_mist_top", _mistTop);
+        }
+        else
+        {
+            density = 0f;
+        }
+        RenderingServer.GlobalShaderParameterSet("world_mist_density", density);
+    }
+
+    /// <summary>
+    /// Keeps the mist's ceiling a fixed height over the <i>lowest</i> ground within ~1.5 km of the
+    /// camera, so it pools in the valley rather than following the camera up a mountain. Sampled
+    /// twice a second and eased, so crossing a ridge lifts or drops it gently. False until a height
+    /// is known.
+    /// </summary>
+    private bool TrackMistTop(float height, float delta)
+    {
+        _mistSampleIn -= delta;
+        if (_mistSampleIn <= 0f && GroundHeight != null && GetViewport()?.GetCamera3D() is { } cam)
+        {
+            _mistSampleIn = 0.5f;
+            var c = cam.GlobalPosition;
+            float? lowest = null;
+            for (int i = -1; i < 8; i++)
+            {
+                var at = i < 0 ? c : c + new Vector3(Mathf.Cos(i * Mathf.Pi / 4f), 0, Mathf.Sin(i * Mathf.Pi / 4f)) * 1500f;
+                if (GroundHeight(at) is { } g && (lowest == null || g < lowest)) lowest = g;
+            }
+            if (lowest is { } floor)
+            {
+                float target = floor + height;
+                _mistTop = _mistTopKnown ? Mathf.Lerp(_mistTop, target, 0.25f) : target;
+                _mistTopKnown = true;
+            }
+        }
+        return _mistTopKnown;
     }
 
     /// <summary>

@@ -503,6 +503,16 @@ public partial class ChunkManager : Node3D
     public event Action<Func<TileId, bool>?>? TerrainReplaced;
 
     /// <summary>
+    /// Main thread: a tile's buildings, doors and trees have just committed, for systems that
+    /// dress a tile (occasion decorations). The node is the tile's own, so anything parented to it
+    /// unloads with it. Doors are tile-local, like <see cref="Interiors.DoorSpot.Position"/>.
+    /// </summary>
+    public event Action<TileId, ChunkNode, Interiors.DoorSpot[]>? TileFurnished;
+
+    /// <summary>Main thread: a tile has been unloaded and its node freed.</summary>
+    public event Action<TileId>? TileUnloaded;
+
+    /// <summary>
     /// Generates every tile the real set does not have, inside the fallback's domain.
     /// <paramref name="invalidate"/> drops the selected tiles (all when null) from whatever cache
     /// sits above the source, since this class does not know the chain it was handed.
@@ -942,6 +952,7 @@ public partial class ChunkManager : Node3D
                     EnsureNode(result.Id, state).SetBuildings(result.Buildings);
                 if (result.Doors != null)
                     Interiors.DoorIndex.SetTile(result.Id, _origin!.ToWorld(result.Id.MinE, result.Id.MaxN, 0), result.Doors);
+                TileFurnished?.Invoke(result.Id, EnsureNode(result.Id, state), result.Doors ?? []);
                 if (result.Trees != null)
                     EnsureNode(result.Id, state).SetTrees(result.Trees);
                 if (result.Water != null)
@@ -1134,6 +1145,7 @@ public partial class ChunkManager : Node3D
         _chunks.Remove(id);
         Horizon?.SetCovered(id, false);
         Interiors.DoorIndex.ClearTile(id);
+        TileUnloaded?.Invoke(id);
     }
 
     /// <summary>

@@ -52,6 +52,11 @@ public partial class ClientWorld : Node3D
                 return;
             }
         }
+        if (Occasions.OccasionProbe.Requested)
+        {
+            GetTree().Quit(Occasions.OccasionProbe.Run());
+            return;
+        }
         // after Load, so the saved stick deadzone is what the actions start with
         PlayerInput.Install(this);
         ApplyViewportSettings();
@@ -145,6 +150,10 @@ public partial class ClientWorld : Node3D
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
         _chunks.UseFallback(fallback, _cache.Invalidate);
         GameSettings.Changed += () => _chunks?.SetFallbackEnabled(GameSettings.Current.GeneratedFill);
+        // the towns occasion props go in: places.json's, plus the generated villages that stand
+        // on generated ground (re-read whenever real tiles replace some, below)
+        var fillChunks = _chunks;
+        Occasions.OccasionTowns.UseGenerated(generated, (e, n) => fillChunks.IsGenerated(UnitSport.Terrain.Format.TileId.FromLv95(e, n)));
 
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
@@ -156,9 +165,9 @@ public partial class ClientWorld : Node3D
         AddChild(new Audio.ReverbZones(() => GetViewport().GetCamera3D(), () => LocalPlayer?.Indoors == true, chunksForAudio)
             { Name = "ReverbZones" });
         _ambience = new Audio.Ambience(chunksForAudio, () => GetViewport().GetCamera3D())
-            { Name = "Ambience", Origin = origin, Volume = GameSettings.Current.AmbienceVolume };
+            { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
         AddChild(_ambience);
-        GameSettings.Changed += () => { if (_ambience != null) _ambience.Volume = GameSettings.Current.AmbienceVolume; };
+        GameSettings.Changed += () => { if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume); };
 
         // Vehicles left standing in the world. Same node path as on the server, so parking and
         // claiming work over the network; offline it just holds the nodes.
@@ -193,8 +202,23 @@ public partial class ClientWorld : Node3D
         };
         AddChild(new WorldEnvironment { Environment = environment });
 
+        // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
+        // word online. Before the clock, which reads its sun and sky from it.
+        Occasions.OccasionManager.Create(this);
+        // their props, dressed onto each tile as its buildings load
+        AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
+        // …the creatures in the air around the camera, and their sounds
+        AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
+        AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
+        // …and snow falling round the camera, except indoors
+        AddChild(new Occasions.OccasionPrecip(() => LocalPlayer?.Indoors == true));
+
         // the clock: sun, light colour, sky and night for every shader and the environment
-        AddChild(new World.DayNight(environment));
+        var chunksForSky = _chunks;
+        AddChild(new World.DayNight(environment)
+        {
+            GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
+        });
 
         // cars on the roads and trains on the railway, around wherever the view is
         _traffic = new World.Traffic(_chunks, origin)
@@ -279,6 +303,10 @@ public partial class ClientWorld : Node3D
         var birds = new Birds.BirdLife(_chunks, origin, items);
         AddChild(birds);
 
+        // occasions: the treat / gift hunt (taken with the gather hold) and the seasonal hat
+        AddChild(new Occasions.OccasionHunt());
+        AddChild(new Occasions.OccasionHats(() => LocalPlayer, items.Inventory));
+
         // solid trunks around whatever asks for collision
         var trees = new World.TreeColliders(_chunks, origin);
         AddChild(trees);
@@ -294,6 +322,7 @@ public partial class ClientWorld : Node3D
             gathering.Forget();
             _traffic?.Forget();
             trees.Forget();
+            Occasions.OccasionTowns.Reload();
             if (LocalPlayer is { } player
                 && (affected == null || affected(origin.TileAt(player.GlobalPosition))))
                 player.RequestReplacement();
@@ -634,7 +663,12 @@ public partial class ClientWorld : Node3D
 
         // The town index arrives after this UI was built, so it has to be told to re-read.
         _terrainSync.PlacesReceived += () =>
-            Callable.From(() => { _places?.ReloadIndex(); _ambience?.ReloadPlaces(); }).CallDeferred();
+            Callable.From(() =>
+            {
+                _places?.ReloadIndex();
+                _ambience?.ReloadPlaces();
+                Occasions.OccasionTowns.Reload();
+            }).CallDeferred();
 
         // Same for the horizon: a client that shipped without one gets it during sync.
         _terrainSync.HorizonReceived += () =>

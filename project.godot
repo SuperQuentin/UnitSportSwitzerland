@@ -60,3 +60,23 @@ world_night={
 "type": "float",
 "value": 0.0
 }
+world_snow={
+"type": "float",
+"value": 0.0
+}
+world_mist_color={
+"type": "vec3",
+"value": Vector3(0.5, 0.5, 0.5)
+}
+world_mist_density={
+"type": "float",
+"value": 0.0
+}
+world_mist_top={
+"type": "float",
+"value": 0.0
+}
+world_lights={
+"type": "float",
+"value": 0.0
+}

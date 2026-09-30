@@ -189,10 +189,26 @@ public static class LootTables
             found[ItemId.Francs] = (int)MathF.Round(rng.Next(c.FrancsMin, c.FrancsMax + 1) * scale);
         }
 
+        // A running occasion's treats (#18): one extra roll, drawn last, so with no occasion the
+        // stream — and every container's contents — is exactly what it always was, and a take
+        // mask saved before the occasion still lines up with the stacks before this one.
+        if (Seasonal?.Invoke(type) is { Items.Length: > 0 } treats && rng.NextDouble() < treats.Chance)
+        {
+            var id = treats.Items[rng.Next(treats.Items.Length)];
+            found[id] = found.GetValueOrDefault(id) + rng.Next(1, 4);
+        }
+
         foreach (var (id, count) in found)
             result.Add(new ItemStack(id, Math.Min(count, ItemDefs.Get(id)!.MaxStack)));
         return result;
     }
+
+    /// <summary>
+    /// The running occasions' extra roll for a kind of furniture — a chance and what it draws from
+    /// — or null. Set by <see cref="Occasions.OccasionManager"/>; stays null (no extra roll) with
+    /// no occasion running, which keeps this class free of Godot for <see cref="LootProbe"/>.
+    /// </summary>
+    public static Func<FurnitureType, (float Chance, ItemId[] Items)?>? Seasonal { get; set; }
 
     private static int Quantity(ItemId id, Random rng)
     {
