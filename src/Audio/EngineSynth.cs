@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Audio;
 
 /// <summary>A car engine's layout, which is most of what it sounds like.</summary>
-public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8, Crossplane4, VTwin90 }
+public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8, Crossplane4, VTwin90, ParallelTwin270, VTwin52 }
 
 /// <summary>How an engine is built, as far as its sound is concerned.</summary>
 public sealed record EngineProfile
@@ -62,6 +62,19 @@ public sealed record EngineProfile
         Firing = new[] { 270f, 450f },
     };
 
+    /// <summary>
+    /// A parallel twin with its crank pins 270° apart (Honda CRF1000L / CRF1100L Africa Twin): the
+    /// same 270-450 firing as a 90° V-twin, so it lopes like one; a longer 2-into-1 pipe.
+    /// </summary>
+    public static readonly EngineProfile ParallelTwin270 = VTwin90 with { PipeM = 1.05f, Unevenness = 1.1f };
+
+    /// <summary>
+    /// Honda's 52° V-twin with an offset dual-pin crank (XRV650 / XRV750 Africa Twin). Assumed: the
+    /// pins at the 76° usually quoted, which is the offset (180 − 2·52) that gives a 90° twin's
+    /// primary balance; the cylinders then fire 128° of crank apart, 232-488 — a wider lope than a 90°.
+    /// </summary>
+    public static readonly EngineProfile VTwin52 = VTwin90 with { PipeM = 1.0f, Unevenness = 1.3f, Firing = new[] { 232f, 488f } };
+
     /// <summary>A car's engine: the layout's voice, at that car's own idle and redline.</summary>
     public static EngineProfile For(EngineLayout layout, float idleRpm, float redline) => (layout switch
     {
@@ -73,6 +86,8 @@ public sealed record EngineProfile
         EngineLayout.V8 => Inline4Na with { Cylinders = 8, PipeM = 1.1f, Unevenness = 2f },
         EngineLayout.Crossplane4 => Crossplane4,
         EngineLayout.VTwin90 => VTwin90,
+        EngineLayout.ParallelTwin270 => ParallelTwin270,
+        EngineLayout.VTwin52 => VTwin52,
         _ => Inline4Na,
     }) with { IdleRpm = idleRpm, MaxRpm = redline };
 }

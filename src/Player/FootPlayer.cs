@@ -2102,7 +2102,10 @@ public partial class FootPlayer : CharacterBody3D
             ? -(heading.X * normal.X + heading.Z * normal.Z) / Mathf.Max(normal.Y, 0.15f)
             : 0f;
 
-        _ride!.Step(input, new RideGround(onFloor, grade), dt, ref _motion);
+        // a motorbike's grip depends on what is under it (cached lookup: road, else cover)
+        var surface = _ride is Motorbike && Terrain != null
+            ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
+        _ride!.Step(input, new RideGround(onFloor, grade, surface), dt, ref _motion);
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
         // Game profile only; in Sim the watts are the rider's, and nothing else may add to them.
