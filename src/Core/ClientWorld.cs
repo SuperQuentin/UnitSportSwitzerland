@@ -53,6 +53,16 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(Player.DriftCheck.Run());
                 return;
             }
+            if (Array.IndexOf(scArgs, "--spincheck") >= 0)
+            {
+                GetTree().Quit(Player.DriftCheck.Spin());
+                return;
+            }
+            if (Array.IndexOf(scArgs, "--motocheck") >= 0)
+            {
+                GetTree().Quit(Player.Motorbike.Check());
+                return;
+            }
         }
         if (Items.InventoryCheck.Requested)
         {
@@ -194,6 +204,9 @@ public partial class ClientWorld : Node3D
             if (GetViewport().GetCamera3D() is { } cam) at.Add(cam.GlobalPosition);
             return at;
         };
+        // the Africa Twin at Riddes: placed here offline, by the server online
+        AddChild(new World.AfricaTwinEgg(_chunks));
+        if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
         var combat = Combat.CombatManager.Create(this, _chunks, server: false);
@@ -263,7 +276,7 @@ public partial class ClientWorld : Node3D
         // them for the height.
         bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
             || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
+            || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
@@ -544,6 +557,14 @@ public partial class ClientWorld : Node3D
             return;
         }
 
+        if (World.ArrivalProbe.ParseArgs() is { Requested: true } arrival)
+        {
+            var (arrE, arrN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(arrE, arrN, 1200);
+            AddChild(new World.ArrivalProbe(_chunks, origin, arrival.Prefix));
+            return;
+        }
+
         if (World.TreeCheck.ParseArgs() is { Requested: true } treeCheck)
         {
             var (treeE, treeN) = SpawnPoint.ParseTarget();
@@ -730,6 +751,8 @@ public partial class ClientWorld : Node3D
             Callable.From(() => _chunks?.Horizon?.Reload()).CallDeferred();
         AddChild(_terrainSync);
 
+        // before any player arrives: each one's synchronizer asks it whom to send to
+        InterestService.CreateClient(this);
         _players = new Node3D { Name = "Players" };
         _players.ChildEnteredTree += node =>
         {
@@ -738,6 +761,8 @@ public partial class ClientWorld : Node3D
         };
         AddChild(_players);
         AddChild(PlayerReplication.CreateSpawner());
+        AddChild(World.RaceNpcs.CreateClient());   // World/Npcs: the path its RPC routes by
+        if (NetSmoothProbe.ParseArgs() is { } smooth) AddChild(new NetSmoothProbe(_players, smooth.Seconds, smooth.Label));
         var net = new NetworkManager { Name = "Net" };
         AddChild(net);
         // Handles bare hosts, host:port, and bracketed IPv6 — a plain colon split breaks on

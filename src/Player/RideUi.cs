@@ -30,8 +30,8 @@ public partial class RideUi : CanvasLayer
     private Label _hint = null!, _lockNote = null!;
     /// <summary>Entries reachable by number key: the mounts, not the car list.</summary>
     private int _shortcuts;
-    private ScrollContainer _cars = null!;
-    private Button _carsButton = null!;
+    /// <summary>The folded rosters (cars, motorbikes), on the number keys after the mounts.</summary>
+    private readonly List<(Button Button, ScrollContainer List)> _folds = new();
 
     /// <summary>Resolved per press, never captured: in multiplayer the player node is respawned.</summary>
     public Func<FootPlayer?>? ActivePlayer { get; set; }
@@ -87,29 +87,10 @@ public partial class RideUi : CanvasLayer
             Entry(rows, number++, ride.Kind, ride.Label, ride.Blurb, ride.IsVehicle);
         _shortcuts = _entries.Count;
 
-        // The cars are a roster, not a line each: one button folds a scrolling list open, so the
-        // mounts above stay on screen and in reach of the number keys.
-        var carsButton = new Button { Text = $"{number}.  Cars  ({CarCatalog.All.Count})  ▸", CustomMinimumSize = new Vector2(0, 32) };
-        carsButton.Alignment = HorizontalAlignment.Left;
-        rows.AddChild(carsButton);
-        _cars = new ScrollContainer { CustomMinimumSize = new Vector2(0, 380), Visible = false };
-        _cars.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
-        var carRows = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        carRows.AddThemeConstantOverride("separation", 6);
-        _cars.AddChild(carRows);
-        rows.AddChild(_cars);
-        foreach (var car in CarCatalog.All)
-            Entry(carRows, 0, car.Kind, car.Label, car.Blurb, true);
-        carsButton.Pressed += () =>
-        {
-            _cars.Visible = !_cars.Visible;
-            // the list takes the mounts' place, or the panel outgrows a 648 px screen
-            for (int i = 0; i < _shortcuts; i++) _entries[i].Button.GetParent<Control>().Visible = !_cars.Visible;
-            _lockNote.Visible = !Permissions.CanSpawnVehicles;
-            carsButton.Text = $"{number}.  Cars  ({CarCatalog.All.Count})  {(_cars.Visible ? "▾" : "▸")}";
-            if (_cars.Visible) PlayerInput.FocusFirst(_cars);
-        };
-        _carsButton = carsButton;
+        // The cars and the motorbikes are rosters, not a line each: one button folds a scrolling
+        // list open, so the mounts above stay on screen and in reach of the number keys.
+        Fold(rows, number, "Cars", CarCatalog.All.Select(c => (c.Kind, c.Label, c.Blurb)));
+        Fold(rows, number + 1, "Motorbikes", MotorbikeCatalog.All.Select(b => (b.Kind, b.Label, b.Blurb)));
 
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _status.AddThemeColorOverride("font_color", new Color(0.92f, 0.55f, 0.35f));
@@ -136,7 +117,7 @@ public partial class RideUi : CanvasLayer
     {
         if (_hint == null) return;
         _hint.Text = InputHints.Format(
-            "1-9 to pick, {ride_menu} / Esc closes. Bikes, cars, helicopter and plane are left where you get off "
+            "1-9 to pick, {ride_menu} / Esc closes. Bikes, cars, motorbikes, helicopter and plane are left where you get off "
             + "({interact_mount}); {interact_mount} next to one gets back in.");
         foreach (var (line, blurb) in _blurbs) line.Text = InputHints.Format(blurb);
 
@@ -151,6 +132,33 @@ public partial class RideUi : CanvasLayer
             button.Disabled = kind == current || (vehicle && locked);
             button.TooltipText = vehicle && locked ? "Admin only on this server" : "";
         }
+    }
+
+    private void Fold(Container rows, int number, string name, IEnumerable<(RideKind Kind, string Label, string Blurb)> items)
+    {
+        var list = items.ToList();
+        string Title(bool open) => $"{number}.  {name}  ({list.Count})  {(open ? "▾" : "▸")}";
+        var button = new Button { Text = Title(false), CustomMinimumSize = new Vector2(0, 32), Alignment = HorizontalAlignment.Left };
+        rows.AddChild(button);
+        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 380), Visible = false };
+        scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+        var into = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        into.AddThemeConstantOverride("separation", 6);
+        scroll.AddChild(into);
+        rows.AddChild(scroll);
+        foreach (var (kind, label, blurb) in list) Entry(into, 0, kind, label, blurb, vehicle: true);
+        button.Pressed += () =>
+        {
+            bool open = !scroll.Visible;
+            // one list at a time, in the mounts' place, or the panel outgrows a 648 px screen
+            foreach (var (b, l) in _folds) l.Visible = false;
+            scroll.Visible = open;
+            for (int i = 0; i < _shortcuts; i++) _entries[i].Button.GetParent<Control>().Visible = !open;
+            foreach (var (b, l) in _folds) b.Text = b == button ? Title(open) : b.Text.Replace("▾", "▸");
+            _lockNote.Visible = !Permissions.CanSpawnVehicles;
+            if (open) PlayerInput.FocusFirst(scroll);
+        };
+        _folds.Add((button, scroll));
     }
 
     private void Entry(Container into, int number, RideKind kind, string label, string blurb, bool vehicle)
@@ -249,7 +257,12 @@ public partial class RideUi : CanvasLayer
         // Key.Key1 is the physical "1", so the shortcuts land in the same place on an AZERTY
         // keyboard as on a QWERTY one — the same reason the movement keys are read physically.
         int index = (int)key.PhysicalKeycode - (int)Key.Key1;
-        if (index == _shortcuts) { _carsButton.EmitSignal(BaseButton.SignalName.Pressed); GetViewport().SetInputAsHandled(); return; }
+        if (index >= _shortcuts && index < _shortcuts + _folds.Count)
+        {
+            _folds[index - _shortcuts].Button.EmitSignal(BaseButton.SignalName.Pressed);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (index < 0 || index >= _shortcuts) return;
 
         Choose(_entries[index].Kind);

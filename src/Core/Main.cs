@@ -10,6 +10,15 @@ public partial class Main : Node
 {
 	public override void _Ready()
 	{
+		// the network rules' own self-checks: vision interest and remote interpolation
+		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--interestcheck") >= 0)
+		{
+			bool ok = UnitSport.Net.Interest.SelfCheck() & UnitSport.Net.RemoteInterpolator.SelfCheck();
+			GD.Print(ok ? "[interestcheck] RESULT: ok" : "[interestcheck] RESULT: FAILED");
+			GetTree().Quit(ok ? 0 : 1);
+			return;
+		}
+
 		// A model turntable, before any world is built: the avatars are the subject, so
 		// there is no point streaming terrain to look at them.
 		if (UnitSport.Avatar.AvatarPreview.Requested(out double seconds, out string output))
@@ -22,7 +31,8 @@ public partial class Main : Node
 				System.Globalization.CultureInfo.InvariantCulture, out view);
 			int focus = -1;
 			int fi = Array.IndexOf(a, "--focus");
-			if (fi >= 0 && fi + 1 < a.Length) int.TryParse(a[fi + 1], out focus);
+			if (fi >= 0 && fi + 1 < a.Length && !int.TryParse(a[fi + 1], out focus))
+				focus = a[fi + 1] switch { "r1" => 5, "monster" => 6, _ => -1 };
 			float crank = float.NaN;
 			int ci = Array.IndexOf(a, "--crank");
 			if (ci >= 0 && ci + 1 < a.Length) float.TryParse(a[ci + 1],
@@ -35,6 +45,13 @@ public partial class Main : Node
 				System.Globalization.CultureInfo.InvariantCulture, out stride);
 			AddChild(UnitSport.Avatar.AvatarPreview.Create(
 				seconds, output, view, focus, crank, stride));
+			return;
+		}
+
+		// A load-test process: N headless bots on one connection each, no world of its own.
+		if (UnitSport.Net.Swarm.ParseArgs() is { } swarm)
+		{
+			AddChild(swarm);
 			return;
 		}
 

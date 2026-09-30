@@ -1,6 +1,10 @@
 # Commands
 
-- Riding check: `<godot> --path . -- --ride bike|skis,seconds[,out.png] [--at E,N]` — mounts,
+- Riding check: `<godot> --path . -- --ride bike|skis|car:N|r1|monster|moto:N,seconds[,out.png] [--at E,N] [--heading deg]` — mounts,
   holds the throttle via `RideControls`, and prints speed/altitude/clearance every 2 s with a
   non-zero exit if the rider went nowhere or ended under the terrain. Riding is the one part
   that cannot be judged from a screenshot; add `--ridemenu` (with `--shot`) to capture the picker.
+- Spin check: `<godot> --headless --path . -- --spincheck` — every car, Game and Sim, a badly managed
+  brake at 200 km/h must spin it and a managed one must not (`locked-rear-spins`).
+- `--drivecheck ... --skill S --aggression A` sets every driver's temperament (default: each its own,
+  seeded by grid index); `--trace` prints inputs, lateral offset, cap and slipstream every 0.1 s.

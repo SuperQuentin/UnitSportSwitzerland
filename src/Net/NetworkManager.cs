@@ -9,6 +9,13 @@ public partial class NetworkManager : Node
     public const int MaxClients = 32;
 
     /// <summary>
+    /// This process is the dedicated server (the same test <c>Main</c> boots on). Not
+    /// <c>Multiplayer.IsServer()</c>: offline, Godot's default peer calls itself the server too.
+    /// </summary>
+    public static bool DedicatedServer { get; } = OS.HasFeature("dedicated_server")
+        || System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--server") >= 0;
+
+    /// <summary>
     /// Starts listening.
     /// </summary>
     /// <param name="port">UDP port. ENet is UDP — this is not a TCP listener.</param>

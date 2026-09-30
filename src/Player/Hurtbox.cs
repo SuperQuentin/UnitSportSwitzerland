@@ -10,7 +10,7 @@ namespace UnitSport.Player;
 /// terrain lattice, and a parked one starts inside the hillside (see <see cref="Plane.ParkedBox"/>).
 /// But a capsule 2.2 m across is not a plane with an 11 m wingspan, a rotor 10 m across or a bike
 /// 1.75 m long, and rounds through the wing went through nothing. So every drawn machine also
-/// carries one of these: a box fitted to its mesh (<see cref="Avatar.MeshBounds"/>), parented to
+/// carries one of these: two boxes fitted to its mesh (<see cref="Avatar.MeshBounds.Split"/>), parented to
 /// the VISUAL so it banks, pitches, flips and lands with it for free.
 /// </para>
 ///
@@ -32,8 +32,10 @@ public partial class Hurtbox : Area3D
     /// </summary>
     public static Hurtbox? Fit(Node3D visual)
     {
-        var box = Avatar.MeshBounds.Of(visual);
-        if (box.Size.LengthSquared() < 1e-4f) return null;
+        // the same two boxes the hull uses: body and cabin, frame and rider, wings and fuselage
+        // below and above the cut — a round passing over a car's bonnet beside the cabin misses
+        var (lower, upper) = Avatar.MeshBounds.Split(visual, 0.55f);
+        if (lower.Size.LengthSquared() < 1e-4f && upper.Size.LengthSquared() < 1e-4f) return null;
         var h = new Hurtbox
         {
             Name = "Hurtbox",
@@ -42,7 +44,9 @@ public partial class Hurtbox : Area3D
             Monitoring = false,
             Monitorable = true,
         };
-        h.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = box.Size }, Position = box.GetCenter() });
+        foreach (var box in new[] { lower, upper })
+            if (box.Size.X > 0.01f && box.Size.Y > 0.01f && box.Size.Z > 0.01f)
+                h.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = box.Size }, Position = box.GetCenter() });
         visual.AddChild(h);
         return h;
     }

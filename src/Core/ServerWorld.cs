@@ -13,6 +13,7 @@ namespace UnitSport.Core;
 /// </summary>
 public partial class ServerWorld : Node3D
 {
+    private InterestService? _interest;
     private ChunkManager? _chunks;
     private Node3D? _players;
     private MultiplayerSpawner? _spawner;
@@ -23,9 +24,11 @@ public partial class ServerWorld : Node3D
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Occasions.OccasionManager? _occasions;
+    private World.RaceNpcs? _npcs;
 
     public override async void _Ready()
     {
+        if (ServerStats.Requested) AddChild(new ServerStats { Name = "ServerStats" });
         string chunkDir = TerrainPaths.FindChunkDir();
         var local = new LocalChunkSource(chunkDir);
         var manifest = await local.LoadManifestAsync();
@@ -60,8 +63,14 @@ public partial class ServerWorld : Node3D
             new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N),
             SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N,
             enabled: generatedWorld || !GeneratedOff(args)) { Log = s => GD.Print(s) };
-        var source = new CachingChunkSource(fallback, 128L * 1024 * 1024);
+        // The server holds 5 KB coarse grids (ChunkManager, BuildMeshes off), plus whatever an
+        // interior plan reads lazily: 32 MB is thousands of tiles, and a fixed ceiling.
+        var source = new CachingChunkSource(fallback, 32L * 1024 * 1024);
         fallback.Neighbours = source;
+
+        // A headless server draws nothing, so nothing capped its loop: it spun as fast as a core
+        // allows. 60 matches the physics tick and every client's send rate is well under it.
+        Engine.MaxFps = 60;
 
         _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = false };
         _chunks.Initialize(source, origin, manifest, null);
@@ -70,12 +79,22 @@ public partial class ServerWorld : Node3D
 
         _players = new Node3D { Name = "Players" };
         AddChild(_players);
+        // who may see whom: decided here for everyone, before any player node exists (each
+        // player's synchronizer looks it up in _Ready). Line of sight from the 100 m horizon lattice.
+        var horizon = await source.LoadHorizonAsync();
+        _interest = InterestService.CreateServer(this, _players,
+            horizon != null ? InterestService.HorizonGround(horizon, origin) : null);
+
         _spawner = PlayerReplication.CreateSpawner();
         AddChild(_spawner);
+        // race NPCs: spawned here for everyone, simulated on the client that asked (issue #39)
+        AddChild(_npcs = World.RaceNpcs.CreateServer(_spawner, _players));
 
         // vehicles standing in the world; the server spawns and removes them for everyone
         _vehicles = Vehicles.VehicleManager.Create(this, null);
         _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
+        // an Africa Twin in front of one building at Riddes, put back each time its tile loads
+        AddChild(new World.AfricaTwinEgg(_chunks));
 
         // gunfire: clients send their rounds here to be relayed; the server flies none of them
         Combat.CombatManager.Create(this, null, server: true);
@@ -101,6 +120,8 @@ public partial class ServerWorld : Node3D
 
         // car races between players: World/Race, like World/Chat, so the RPCs find it
         var race = World.RaceManager.CreateServer(_chat, _players, source, origin);
+        // racers see each other however far apart the field spreads (Net/InterestService)
+        if (_interest != null) _interest.Together = race.SameRace;
         AddChild(race);
         _chat.Race = race;
 
@@ -109,9 +130,10 @@ public partial class ServerWorld : Node3D
         bank.NameOf = _chat.NameOfPeer;
         _chat.NameAssigned += bank.SendBalance;
 
-        // a vehicle out of nothing is an admin's, or the car a race issued (Core/Permissions)
-        _vehicles.MayPark = (peer, state) => _chat.IsAdminPeer(peer)
-            || (Player.CarCatalog.IsCar(state.Kind) && race.IssuedCars.Remove(peer));
+        // a vehicle out of nothing is an admin's, or the one a race put you on (Core/Permissions)
+        // (a wreck cannot be driven and burns out: no loophole, and race NPCs' wrecks park through
+        // the ordinary client simulating them)
+        _vehicles.MayPark = (peer, state) => state.Wrecked || _chat.IsAdminPeer(peer) || race.TakeIssued(peer);
 
         // The operator's own command line. This is how the first admin gets granted.
         AddChild(new ServerConsole(_chat));
@@ -223,6 +245,8 @@ public partial class ServerWorld : Node3D
         _vehicles?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
+        _interest?.ForgetPeer(id);
+        _npcs?.PeerLeft(id);   // its race NPCs go to someone near them, or retire
 
         if (_players!.GetNodeOrNull<Node3D>(id.ToString()) is { } player)
         {

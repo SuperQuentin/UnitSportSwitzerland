@@ -164,6 +164,96 @@ public static class HumanMeshBuilder
     /// </summary>
     public static GaitMounts MountsForPose(HumanPose pose) => MountsForRig(RigFor(pose));
 
+    /// <summary>
+    /// A seated rider (a motorbike) posed from the machine's three contact points, author space
+    /// (+Z forward): <paramref name="seat"/> the seat surface under the pelvis, <paramref name="grip"/>
+    /// the right grip (X is mirrored for the left), <paramref name="peg"/> the right footpeg.
+    /// </summary>
+    public static void AppendRider(MeshScratch scratch, HumanPalette palette, Vector3 seat, Vector3 grip, Vector3 peg)
+    {
+        var rig = RiderRig(seat, grip, peg);
+        AppendRig(scratch, palette, rig, includeLegs: true, helmet: false);
+        // a full-face helmet round the whole head, dark visor at the front (+Z); framed like
+        // AppendHat (side, up, forward), a right-handed basis, or the box renders inside out
+        var up = (rig.HeadTop - rig.HeadBase).Normalized();
+        var forward = (Vector3.Back - up * up.Dot(Vector3.Back)).Normalized();
+        var basis = new Basis(up.Cross(forward), up, forward);
+        var centre = (rig.HeadBase + rig.HeadTop) * 0.5f + up * 0.01f;
+        scratch.Box(centre, new Vector3(0.22f, 0.25f, 0.25f), palette.Helmet, basis);
+        scratch.Box(centre + forward * 0.13f + up * 0.02f, new Vector3(0.17f, 0.07f, 0.03f),
+            new Color(0.08f, 0.09f, 0.12f), basis);
+    }
+
+    /// <summary>Camera mounts for <see cref="AppendRider"/>'s figure, flipped to face −Z like the mesh.</summary>
+    public static GaitMounts MountsForRider(Vector3 seat, Vector3 grip, Vector3 peg) => MountsForRig(RiderRig(seat, grip, peg));
+
+    /// <summary>
+    /// The riding position is derived, never placed (see the cycling rig): with the pelvis on the
+    /// seat and the hands on the grips, the shoulder is the one point a torso of fixed length and an
+    /// arm bent to 88% of its reach can both get to — the upper of the two circle intersections in the
+    /// side plane. Low clip-ons far ahead fold the torso down onto the tank; a high wide bar sits it up.
+    /// The knees follow from the pegs by the same two-bone solve.
+    /// </summary>
+    private static Rig RiderRig(Vector3 seat, Vector3 grip, Vector3 peg)
+    {
+        const float torso = 0.48f, shoulderHalf = 0.175f;
+        var hip = seat + new Vector3(0, 0.09f, 0);   // the hip joint rides a pelvis above the seat foam
+        float reach = 0.8f * (UpperArmLength + ForearmLength);
+        float dx = Mathf.Abs(grip.X) - shoulderHalf;
+        float armPlanar = Mathf.Sqrt(Mathf.Max(0.01f, reach * reach - dx * dx));
+
+        // side plane (y, z): circle about the hip (torso) meets circle about the grip (arm)
+        var h = new Vector2(hip.Y, hip.Z);
+        var g = new Vector2(grip.Y, grip.Z);
+        var to = g - h;
+        float d = Mathf.Max(to.Length(), 1e-3f);
+        Vector2 shoulder;
+        if (d >= torso + armPlanar) shoulder = h + to / d * torso;   // out of reach: stretched toward the bars
+        else
+        {
+            float along = (d * d + torso * torso - armPlanar * armPlanar) / (2f * d);
+            float across = Mathf.Sqrt(Mathf.Max(0f, torso * torso - along * along));
+            var dir = to / d;
+            var normal = new Vector2(dir.Y, -dir.X);   // (y, z) turned a quarter: points up when the grip is ahead
+            if (normal.X < 0) normal = -normal;
+            shoulder = h + dir * along + normal * across;
+        }
+        var torsoDir = new Vector3(0, shoulder.X - hip.Y, shoulder.Y - hip.Z).Normalized();
+        Vector3 Along(float t) => new(0, hip.Y + torsoDir.Y * t, hip.Z + torsoDir.Z * t);
+
+        var neck = Along(torso + 0.08f);
+        // the head lifts to look down the road, whatever the back is doing
+        var headAxis = (torsoDir * 0.35f + Vector3.Up * 0.65f).Normalized();
+        var shoulderL = Along(torso) + new Vector3(-shoulderHalf, 0, 0);
+        var shoulderR = Along(torso) + new Vector3(shoulderHalf, 0, 0);
+        var wristR = grip with { X = Mathf.Abs(grip.X) };
+        var wristL = grip with { X = -Mathf.Abs(grip.X) };
+        // elbows out and down, as on any bike
+        var elbowL = Limb.Solve(shoulderL, wristL, UpperArmLength, ForearmLength, new Vector3(-0.6f, -0.6f, -0.2f));
+        var elbowR = Limb.Solve(shoulderR, wristR, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.6f, -0.2f));
+
+        (Vector3 Hip, Vector3 Knee, Vector3 Ankle, Vector3 Toe) Leg(float side)
+        {
+            var root = hip + new Vector3(side * 0.09f, 0, 0);
+            var ball = peg with { X = side * Mathf.Abs(peg.X) };
+            // ball of the foot on the peg: the ankle sits above and behind it
+            var ankle = ball + new Vector3(0, 0.06f, -0.08f);
+            var knee = Limb.Solve(root, ankle, ThighLength, ShinLength, new Vector3(side * 0.35f, 0.4f, 1f));
+            return (root, knee, ankle, ball + new Vector3(0, -0.01f, 0.07f));
+        }
+        var legL = Leg(-1f);
+        var legR = Leg(1f);
+
+        return new Rig(
+            HeadTop: neck + headAxis * 0.255f, HeadBase: neck + headAxis * 0.065f, Neck: neck,
+            Chest: Along(torso * 0.82f), Waist: Along(torso * 0.33f), Hip: hip,
+            ShoulderL: shoulderL, ElbowL: elbowL, WristL: wristL,
+            ShoulderR: shoulderR, ElbowR: elbowR, WristR: wristR,
+            HipL: legL.Hip, KneeL: legL.Knee, AnkleL: legL.Ankle, ToeL: legL.Toe,
+            HipR: legR.Hip, KneeR: legR.Knee, AnkleR: legR.Ankle, ToeR: legR.Toe,
+            TorsoLean: 0f);
+    }
+
     private static GaitMounts MountsForRig(Rig rig)
     {
         // the eye sits high in the head and forward of its centre, along the head's own axis

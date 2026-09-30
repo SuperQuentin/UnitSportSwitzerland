@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Audio;
 
 /// <summary>A car engine's layout, which is most of what it sounds like.</summary>
-public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8 }
+public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8, Crossplane4, VTwin90, ParallelTwin270, VTwin52 }
 
 /// <summary>How an engine is built, as far as its sound is concerned.</summary>
 public sealed record EngineProfile
@@ -24,6 +24,11 @@ public sealed record EngineProfile
     public float BladePassHz { get; init; } = 4.8f;
     /// <summary>How unlike each other the cylinders fire, 0 = identical, 1 = the default lope.</summary>
     public float Unevenness { get; init; } = 1f;
+    /// <summary>
+    /// Crank degrees from each firing to the next, summing to 720; null fires evenly. What makes a
+    /// crossplane four or a V-twin sound like one is the gaps, not the cylinder count.
+    /// </summary>
+    public float[]? Firing { get; init; }
 
     /// <summary>A light aircraft's flat-four with a two-blade prop.</summary>
     public static readonly EngineProfile PistonAero = new() { Cylinders = 4, IdleRpm = 700, MaxRpm = 2700, PipeM = 0.9f, PropBlades = 2 };
@@ -40,6 +45,36 @@ public sealed record EngineProfile
     /// <summary>A turbo flat-four with unequal-length headers: the uneven burble, 850 to 7,000 rpm.</summary>
     public static readonly EngineProfile Boxer4Turbo = new() { Cylinders = 4, IdleRpm = 850, MaxRpm = 7000, PipeM = 1.0f, Unevenness = 3.5f };
 
+    /// <summary>
+    /// Yamaha's crossplane inline four (R1): the crank pins sit at 90°, so it fires 270-180-90-180
+    /// like a V8 cut in half — the uneven, V-twin-ish growl of a four. 1,300 to 14,000 rpm.
+    /// </summary>
+    public static readonly EngineProfile Crossplane4 = new()
+    {
+        Cylinders = 4, IdleRpm = 1300, MaxRpm = 14000, PipeM = 0.75f, Unevenness = 0.6f,
+        Firing = new[] { 270f, 180f, 90f, 180f },
+    };
+
+    /// <summary>A 90° V-twin (Ducati Testastretta): fires 270-450, the potato-potato lope. 1,350 to 10,500 rpm.</summary>
+    public static readonly EngineProfile VTwin90 = new()
+    {
+        Cylinders = 2, IdleRpm = 1350, MaxRpm = 10500, PipeM = 0.9f, Unevenness = 1.2f,
+        Firing = new[] { 270f, 450f },
+    };
+
+    /// <summary>
+    /// A parallel twin with its crank pins 270° apart (Honda CRF1000L / CRF1100L Africa Twin): the
+    /// same 270-450 firing as a 90° V-twin, so it lopes like one; a longer 2-into-1 pipe.
+    /// </summary>
+    public static readonly EngineProfile ParallelTwin270 = VTwin90 with { PipeM = 1.05f, Unevenness = 1.1f };
+
+    /// <summary>
+    /// Honda's 52° V-twin with an offset dual-pin crank (XRV650 / XRV750 Africa Twin). Assumed: the
+    /// pins at the 76° usually quoted, which is the offset (180 − 2·52) that gives a 90° twin's
+    /// primary balance; the cylinders then fire 128° of crank apart, 232-488 — a wider lope than a 90°.
+    /// </summary>
+    public static readonly EngineProfile VTwin52 = VTwin90 with { PipeM = 1.0f, Unevenness = 1.3f, Firing = new[] { 232f, 488f } };
+
     /// <summary>A car's engine: the layout's voice, at that car's own idle and redline.</summary>
     public static EngineProfile For(EngineLayout layout, float idleRpm, float redline) => (layout switch
     {
@@ -49,6 +84,10 @@ public sealed record EngineProfile
         EngineLayout.Inline6Turbo => Inline4Na with { Cylinders = 6, PipeM = 0.9f, Unevenness = 0.5f },
         EngineLayout.V6 or EngineLayout.V6Turbo => Inline4Na with { Cylinders = 6, PipeM = 0.85f, Unevenness = 1.4f },
         EngineLayout.V8 => Inline4Na with { Cylinders = 8, PipeM = 1.1f, Unevenness = 2f },
+        EngineLayout.Crossplane4 => Crossplane4,
+        EngineLayout.VTwin90 => VTwin90,
+        EngineLayout.ParallelTwin270 => ParallelTwin270,
+        EngineLayout.VTwin52 => VTwin52,
         _ => Inline4Na,
     }) with { IdleRpm = idleRpm, MaxRpm = redline };
 }
@@ -244,7 +283,9 @@ public partial class EngineSynth : Node3D
             _cyl = (_cyl + 1) % _cylGain.Length;
             // combustion is not a clock: at idle and light load the spacing wanders
             float slop = 0.03f * (1f - _load) * (1.2f - _rpm);
-            _period = 1f + WhiteNoise() * slop;
+            // an uneven firing order stretches or shortens the gap to the next pulse
+            float gap = p.Firing is { } firing ? firing[_cyl % firing.Length] * p.Cylinders / 720f : 1f;
+            _period = gap * (1f + WhiteNoise() * slop);
             _cylAmp = _cylGain[_cyl] * (1f + WhiteNoise() * 0.06f);
             f.PulseStart = 1f;
         }
