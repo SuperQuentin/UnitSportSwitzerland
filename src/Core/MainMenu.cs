@@ -26,6 +26,8 @@ public partial class MainMenu : CanvasLayer
 {
     public event Action<GameMode>? ModeChosen;
     public event Action? QuitRequested;
+    /// <summary>The Controls button: every key and button (<see cref="ControlsHelp"/>).</summary>
+    public event Action? ControlsRequested;
 
     private PanelContainer _panel = null!;
     private LineEdit _host = null!;
@@ -101,7 +103,7 @@ public partial class MainMenu : CanvasLayer
         _resume.Visible = false;
 
         ModeButton(rows, "Explore",
-            "Fly the terrain, T to drop on foot, Tab to teleport to a town",
+            InputHints.Format("Fly the terrain, {toggle_mode} to drop on foot, {teleport} to search a town and go"),
             () => Choose(GameMode.Explore));
 
         ModeButton(rows, "GPX replay",
@@ -129,11 +131,15 @@ public partial class MainMenu : CanvasLayer
             "Render distance, detail, horizon, fog and performance",
             OpenSettings);
 
+        ModeButton(rows, $"Controls   {InputHints.Tag(PlayerInput.Help)}",
+            "Every key and button, as bound on your keyboard and pad",
+            () => ControlsRequested?.Invoke());
+
         var quit = new Button { Text = "Quit", CustomMinimumSize = new Vector2(0, 30) };
         quit.Pressed += () => QuitRequested?.Invoke();
         rows.AddChild(quit);
 
-        var hint = new Label { Text = "Esc / Start opens this menu at any time" };
+        var hint = new Label { Text = InputHints.Format("Esc / Start opens this menu at any time. {help}: all controls.") };
         hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
         rows.AddChild(hint);
     }
@@ -200,11 +206,14 @@ public partial class MainMenu : CanvasLayer
             Input.MouseMode = Input.MouseModeEnum.Visible;
             PlayerInput.FocusFirst(_panel);
         }
-        if (!open) _jingle.Stop();
-        else if (Current is GameMode.Explore or GameMode.Multiplayer)
+        else
         {
-            // hand the pointer back to the fly camera / player controller
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+            _jingle.Stop();
+            if (Current is GameMode.Explore or GameMode.Multiplayer)
+            {
+                // hand the pointer back to the fly camera / player controller
+                MouseCapture.Capture();
+            }
         }
     }
 
@@ -225,7 +234,7 @@ public partial class MainMenu : CanvasLayer
             && _jingled.Add(top.Instance) && top.Content.Jingle() is { } samples)
         {
             _jingle.Stream = Audio.Dsp.Encode(Audio.Dsp.Normalise(samples, 0.8f));
-            _jingle.VolumeDb = -6 + Mathf.LinearToDb(Mathf.Max(GameSettings.Current.SfxVolume, 0.001f));
+            _jingle.VolumeDb = -6;   // the slider is on the Sfx bus
             _jingle.Play();
         }
     }

@@ -1,4 +1,4 @@
-# MeshScratch winding: every face clockwise from outside
+# MeshScratch boxes render inside out (fixed): every face clockwise from outside
 
 - **Godot's front face is clockwise** as the viewer sees it; with the default back-face culling a
   face wound the other way is only seen from inside. A primitive wound inside out does not look
@@ -10,6 +10,8 @@
   minus its exact volume (a regular polygon, not a circle, for tubes and rings): one reversed face
   takes its share off twice, so a lone inverted cap fails it, which a mere sign test does not
   (the sides outweigh the caps).
-- The looks of figures and vehicles were tuned while boxes were inverted; workarounds from then
-  (e.g. `CarRig` squashing the pop-up pods into lids instead of sinking them into the nose) are
-  no longer needed but are still in place.
+- History (#48, before the fix reached it): `Box` wound its quads counter-clockwise, so every box
+  showed its far inner walls and a part tucked into the body showed through (a grille intake 5 mm
+  inside the bumper, a sunk pop-up lamp). The workarounds from then stay and are harmless:
+  `CarRig` folds the pods into lids on the nose instead of sinking them, and hides their lamps and
+  the roadster cockpit when put away (which also saves drawing them).

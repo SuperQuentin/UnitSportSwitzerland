@@ -213,7 +213,7 @@ public partial class EngineSynth : Node3D
         int frames = _playback.GetFramesAvailable();
         if (frames <= 0) return;
         if (_push.Length != frames) _push = new Vector2[frames];
-        float vol = GameSettings.Current.SfxVolume;
+        const float vol = 1f;   // the Sfx bus carries the slider (SfxBus.ApplyVolumes)
         for (int i = 0; i < frames; i++)
         {
             float s = NextSample(vol);
@@ -393,6 +393,36 @@ public static class SfxBus
     /// <summary>The bus's reverb, or null before <see cref="Ensure"/>.</summary>
     public static AudioEffectReverb? Reverb { get; private set; }
 
+    /// <summary>
+    /// A volume slider position as decibels. Hearing is logarithmic: a LINEAR 5 % is only -26 dB,
+    /// which still fills a room — that is why "even at 5 % it is too loud". Square law (40·log10)
+    /// puts 50 % at -12 dB and 5 % at -52 dB, and 0 is silence.
+    /// </summary>
+    public static float SliderDb(float v) => v <= 0.001f ? -80f : 40f * Mathf.Log(v) / Mathf.Log(10f);
+
+    /// <summary>The same curve as a linear gain, for the few sounds that scale themselves.</summary>
+    public static float SliderGain(float v) => v * v;
+
+    /// <summary>
+    /// The one place volume is applied: Master for everything, Sfx for the effects and ambience
+    /// routed through it. Per-sound code no longer multiplies by the settings, so nothing can
+    /// escape the slider or be scaled twice.
+    /// </summary>
+    public static void ApplyVolumes()
+    {
+        var s = Core.GameSettings.Current;
+        AudioServer.SetBusVolumeDb(0, SliderDb(s.MasterVolume));
+        AudioServer.SetBusMute(0, s.MasterVolume <= 0.001f);
+        int idx = AudioServer.GetBusIndex(Name);
+        if (idx >= 0)
+        {
+            AudioServer.SetBusVolumeDb(idx, SliderDb(s.SfxVolume));
+            AudioServer.SetBusMute(idx, s.SfxVolume <= 0.001f);
+        }
+    }
+
+    private static bool _subscribed;
+
     /// <summary>Creates the bus once (idempotent). Call before creating any player.</summary>
     public static void Ensure()
     {
@@ -410,5 +440,7 @@ public static class SfxBus
         }
         for (int e = 0; e < AudioServer.GetBusEffectCount(idx); e++)
             if (AudioServer.GetBusEffect(idx, e) is AudioEffectReverb r) Reverb = r;
+        ApplyVolumes();
+        if (!_subscribed) { _subscribed = true; Core.GameSettings.Changed += ApplyVolumes; }
     }
 }

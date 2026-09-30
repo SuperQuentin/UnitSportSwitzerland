@@ -30,8 +30,11 @@
   body behind them set in and dark. Styles Conventional (catalog default), Suicide, Scissor,
   Butterfly, Gull-wing; a four-door's rear doors only swing out. Each eases 0.4 s to its pose.
   Bits: 1 left, 2 right (**the driver's**: right-hand drive), 4/8 rear. G / pad X (`car_door`): on
-  foot, the nearest door of a parked car within 3 m; in a stopped car, the driver's own. Doors
-  shut themselves above 20 km/h. Getting in, the driver's door opens and shuts behind; getting
+  foot, the nearest door of a parked car within 3 m — never from the seat. **Getting in, every
+  door shuts** (owner requirement): the driver's opens to let them in, then all of them (any left
+  open on the parked car too) shut 1 s later, or as soon as the car passes 20 km/h, and stay shut
+  while driving — `DoorsOpen` is replicated, so remote copies never see a car driven with a door
+  open. The hull (`Car.ParkedBox`) is measured once per model from its stock body, doors shut. Getting
   out, the car is parked with it open plus `VehicleState.DriverDoorShuts` (16), and its authority
   shuts it 1 s later — unless the driver had left it open.
 - **Network**: `VehicleBody.DoorsOpen` is OnChange in its replication config; its authority (the
@@ -40,7 +43,7 @@
   a value set in `_Ready` is taken by the synchronizer as the spawn state and only later CHANGES
   are sent — a door opened in `_Ready` and shut a second later was never seen open by anyone.
   Hence the door comes open in the spawn data instead.
-- Check (loopback, windowed so the rigs exist): dedicated server + `--garagecheck a` (owner: tune,
-  doors at a stop, park, G on foot, re-enter, drive off, change car, wreck), `b` (watches, works a
+- Check (loopback, windowed so the rigs exist): dedicated server with `--admin-password <pw>` + `--garagecheck a <pw>` (owner, admin so it may park the car it conjured: tune,
+  a door from the seat (refused), park, G on foot, re-enter (doors shut), drive off, change car, wreck), `b` (watches, works a
   door of a's parked car through the server, screenshots) and `c` (late joiner), each
   `--connect 127.0.0.1:<port> --cache <own dir> --at 2518038,1167321`; read the `[garage]` lines.

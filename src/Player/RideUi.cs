@@ -4,11 +4,13 @@ using UnitSport.Core;
 namespace UnitSport.Player;
 
 /// <summary>
-/// The "what am I travelling as" picker, opened with E.
+/// The "what am I travelling as" picker, opened with R (pad: Y with nothing to interact with).
 ///
 /// <para>
 /// A menu rather than a cycle key, for two reasons: the list is meant to grow, and a refusal
-/// needs somewhere to be explained. You cannot get on a bike while airborne or step off skis at
+/// needs somewhere to be explained. On a server, the vehicles in it (anything left in the world
+/// when you get out) are an admin's to spawn — see <see cref="Permissions"/>; the rows stay
+/// listed, greyed, so the reason is visible rather than the vehicles simply missing. You cannot get on a bike while airborne or step off skis at
 /// 70 km/h, and a key that silently does nothing in those moments reads as a broken key — so the
 /// panel says why and stays open.
 /// </para>
@@ -23,7 +25,9 @@ public partial class RideUi : CanvasLayer
 {
     private PanelContainer _panel = null!;
     private Label _status = null!;
-    private readonly List<(RideKind Kind, Button Button)> _entries = new();
+    private readonly List<(RideKind Kind, Button Button, bool Vehicle)> _entries = new();
+    private readonly List<(Label Line, string Blurb)> _blurbs = new();
+    private Label _hint = null!, _lockNote = null!;
     /// <summary>Entries reachable by number key: the mounts, not the car list.</summary>
     private int _shortcuts;
     /// <summary>The folded rosters (cars, motorbikes), on the number keys after the mounts.</summary>
@@ -67,14 +71,20 @@ public partial class RideUi : CanvasLayer
         title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
         rows.AddChild(title);
 
+        _lockNote = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Visible = false };
+        _lockNote.AddThemeFontSizeOverride("font_size", 12);
+        _lockNote.AddThemeColorOverride("font_color", new Color(0.92f, 0.72f, 0.4f));
+        rows.AddChild(_lockNote);
+
         rows.AddChild(new HSeparator());
 
         Entry(rows, 1, RideKind.OnFoot, "On foot",
-            "WASD / stick, Shift or L3 run, Space / A jump, Ctrl / B slide, jump at a wall to kick off");
+            "{move_forward}{move_left}{move_back}{move_right} walk, {sprint} run, {jump} jump, {crouch_slide} slide, jump at a wall to kick off",
+            false);
 
         int number = 2;
         foreach (var ride in Rideable.All)
-            Entry(rows, number++, ride.Kind, ride.Label, ride.Blurb);
+            Entry(rows, number++, ride.Kind, ride.Label, ride.Blurb, ride.IsVehicle);
         _shortcuts = _entries.Count;
 
         // The cars and the motorbikes are rosters, not a line each: one button folds a scrolling
@@ -86,10 +96,42 @@ public partial class RideUi : CanvasLayer
         _status.AddThemeColorOverride("font_color", new Color(0.92f, 0.55f, 0.35f));
         rows.AddChild(_status);
 
-        var hint = new Label { Text = "E / (Y) closes. Bikes, cars, helicopter and plane are left where you get off (E / Y); E next to one gets back in" };
-        hint.AddThemeFontSizeOverride("font_size", 12);
-        hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
-        rows.AddChild(hint);
+        _hint = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        _hint.AddThemeFontSizeOverride("font_size", 12);
+        _hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
+        rows.AddChild(_hint);
+
+        Permissions.Changed += Relabel;
+        PlayerInput.DeviceChanged += Relabel;
+        Relabel();
+    }
+
+    public override void _ExitTree()
+    {
+        Permissions.Changed -= Relabel;
+        PlayerInput.DeviceChanged -= Relabel;
+    }
+
+    /// <summary>Everything that names a key or depends on being an admin, redone when either changes.</summary>
+    private void Relabel()
+    {
+        if (_hint == null) return;
+        _hint.Text = InputHints.Format(
+            "1-9 to pick, {ride_menu} / Esc closes. Bikes, cars, motorbikes, helicopter and plane are left where you get off "
+            + "({interact_mount}); {interact_mount} next to one gets back in.");
+        foreach (var (line, blurb) in _blurbs) line.Text = InputHints.Format(blurb);
+
+        bool locked = !Permissions.CanSpawnVehicles;
+        _lockNote.Text = InputHints.Format(
+            "Vehicles are spawned by an admin on this server. Walk up to one left in the world and press {interact_mount} to get in.");
+        _lockNote.Visible = locked;
+
+        var current = ActivePlayer?.Invoke()?.Ride ?? RideKind.OnFoot;
+        foreach (var (kind, button, vehicle) in _entries)
+        {
+            button.Disabled = kind == current || (vehicle && locked);
+            button.TooltipText = vehicle && locked ? "Admin only on this server" : "";
+        }
     }
 
     private void Fold(Container rows, int number, string name, IEnumerable<(RideKind Kind, string Label, string Blurb)> items)
@@ -104,7 +146,7 @@ public partial class RideUi : CanvasLayer
         into.AddThemeConstantOverride("separation", 6);
         scroll.AddChild(into);
         rows.AddChild(scroll);
-        foreach (var (kind, label, blurb) in list) Entry(into, 0, kind, label, blurb);
+        foreach (var (kind, label, blurb) in list) Entry(into, 0, kind, label, blurb, vehicle: true);
         button.Pressed += () =>
         {
             bool open = !scroll.Visible;
@@ -113,12 +155,13 @@ public partial class RideUi : CanvasLayer
             scroll.Visible = open;
             for (int i = 0; i < _shortcuts; i++) _entries[i].Button.GetParent<Control>().Visible = !open;
             foreach (var (b, l) in _folds) b.Text = b == button ? Title(open) : b.Text.Replace("▾", "▸");
+            _lockNote.Visible = !Permissions.CanSpawnVehicles;
             if (open) PlayerInput.FocusFirst(scroll);
         };
         _folds.Add((button, scroll));
     }
 
-    private void Entry(Container into, int number, RideKind kind, string label, string blurb)
+    private void Entry(Container into, int number, RideKind kind, string label, string blurb, bool vehicle)
     {
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 0);
@@ -128,13 +171,14 @@ public partial class RideUi : CanvasLayer
         button.Pressed += () => Choose(kind);
         box.AddChild(button);
 
-        var line = new Label { Text = blurb, AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        var line = new Label { Text = InputHints.Format(blurb), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         line.AddThemeFontSizeOverride("font_size", 12);
         line.AddThemeColorOverride("font_color", new Color(0.55f, 0.59f, 0.65f));
         box.AddChild(line);
+        _blurbs.Add((line, blurb));
 
         into.AddChild(box);
-        _entries.Add((kind, button));
+        _entries.Add((kind, button, vehicle));
     }
 
     private void Choose(RideKind kind)
@@ -142,7 +186,14 @@ public partial class RideUi : CanvasLayer
         var player = ActivePlayer?.Invoke();
         if (player == null)
         {
-            _status.Text = "Nothing to mount — press T to drop out of the fly camera first.";
+            _status.Text = InputHints.Format("Nothing to mount — press {toggle_mode} to drop out of the fly camera first.");
+            return;
+        }
+
+        // the server refuses to park one anyway; saying so here beats a vehicle that vanishes
+        if (_entries.Any(e => e.Kind == kind && e.Vehicle) && !Permissions.CanSpawnVehicles)
+        {
+            _status.Text = "Only an admin can spawn vehicles on this server.";
             return;
         }
 
@@ -168,12 +219,9 @@ public partial class RideUi : CanvasLayer
 
     public void Open()
     {
-        var player = ActivePlayer?.Invoke();
-        var current = player?.Ride ?? RideKind.OnFoot;
-
-        // mark what you are already on, so the panel answers "what am I riding" too
-        foreach (var (kind, button) in _entries)
-            button.Disabled = kind == current;
+        // marks what you are already on, so the panel answers "what am I riding" too, and greys
+        // the vehicles for a non-admin on a server
+        Relabel();
 
         _status.Text = "";
         _panel.Visible = true;
@@ -187,7 +235,7 @@ public partial class RideUi : CanvasLayer
     {
         _panel.Visible = false;
         UiFocus.Set(this, false);
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+        Core.MouseCapture.Capture();
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -196,8 +244,8 @@ public partial class RideUi : CanvasLayer
         // Y / B / Start have to close this the way E and Esc do.
         if (!IsOpen || !@event.IsPressed() || @event.IsEcho()) return;
 
-        if (@event.IsActionPressed(PlayerInput.InteractMount) || @event.IsActionPressed(PlayerInput.Menu)
-            || @event.IsActionPressed("ui_cancel"))
+        if (@event.IsActionPressed(PlayerInput.RideMenu) || @event.IsActionPressed(PlayerInput.InteractMount)
+            || @event.IsActionPressed(PlayerInput.Menu) || @event.IsActionPressed("ui_cancel"))
         {
             Close();
             GetViewport().SetInputAsHandled();

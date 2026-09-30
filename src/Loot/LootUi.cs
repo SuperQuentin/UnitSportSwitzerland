@@ -89,7 +89,7 @@ public partial class LootUi : CanvasLayer
         if (!IsOpen) return;
         _panel.Visible = false;
         UiFocus.Set(this, false);
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+        Core.MouseCapture.Capture();
     }
 
     public void Refresh()

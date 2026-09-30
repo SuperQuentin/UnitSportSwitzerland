@@ -193,7 +193,8 @@ public sealed class RaceLine
     /// corner and crest after it, from its own grip, power, drag and published braking.
     /// </summary>
     /// <param name="courage">Share of the tyre limit the driver uses in corners (0.8 careful, 0.95 on it).</param>
-    public float[] SpeedProfile(CarSpec car, bool arcade, float courage)
+    /// <param name="brakeShare">Share of the car's braking limit it plans with (0.85: a margin for the road).</param>
+    public float[] SpeedProfile(CarSpec car, bool arcade, float courage, float brakeShare = 0.85f)
     {
         float mu = car.Grip * (arcade ? 1.12f : 1f);
         float g = Rideable.Gravity;
@@ -208,7 +209,7 @@ public sealed class RaceLine
         // braking from 225 km/h). All of it at 110 km/h and below, 80% from 215 km/h, where a line
         // correction is enough to start the rear going, as a driver without ABS or ESC would.
         float rearSat = mu * g * car.FrontAxle / car.Wheelbase / (0.35f + mu * car.CgHeight / car.Wheelbase);
-        float Brake(float u) => 0.85f * Mathf.Min(Mathf.Min(brakes, 0.95f * mu * g),
+        float Brake(float u) => brakeShare * Mathf.Min(Mathf.Min(brakes, 0.95f * mu * g),
             rearSat * Mathf.Lerp(1f, 0.8f, Mathf.Clamp((u - 30f) / 30f, 0f, 1f)));
         // air and rolling resistance: they cap the straights and help every brake from high speed
         float Resist(float u) => 0.5f * 1.2f * car.DragArea * u * u / car.Mass + 0.013f * g;
@@ -273,7 +274,7 @@ public sealed class RaceLine
     /// <summary>How far past the edge the ground must not fall away, m: a car width.</summary>
     private const float DropReach = 1.8f;
     /// <summary>Extra clearance the line keeps from an edge with a drop beyond it, m.</summary>
-    private const float DropClearance = 0.5f;
+    private const float DropClearance = 0.9f;
 
     private readonly record struct Obstacle(Vector2 At, float Radius, Block Why);
 

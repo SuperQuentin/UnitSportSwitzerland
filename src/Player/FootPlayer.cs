@@ -359,7 +359,7 @@ public partial class FootPlayer : CharacterBody3D
     private Node3D? _visual;
     private RideKind _visualKind = RideKind.OnFoot;
     private long _visualTuning;
-    /// <summary>Owner: seconds until the driver's door, opened to get in, shuts again.</summary>
+    /// <summary>Owner: seconds until every door open while getting in (the driver's, any left open) shuts.</summary>
     private float _shutDriverIn;
     /// <summary>Doors shut by themselves above this speed, m/s (20 km/h).</summary>
     private const float DoorsShutSpeed = 20f / 3.6f;
@@ -499,6 +499,23 @@ public partial class FootPlayer : CharacterBody3D
         _hasSafe = true;
     }
 
+    /// <summary>
+    /// Steps through an open doorway into the space on the other side: the same stride carried
+    /// across by the door's map, so position, heading and momentum all come through, and nothing
+    /// resets the way a teleport does. <paramref name="interiorKey"/> is null going out.
+    /// </summary>
+    public void CrossDoor(string? interiorKey, Vector3 at, float turn, Basis map)
+    {
+        InteriorKey = interiorKey;
+        GlobalPosition = at;
+        Velocity = map * Velocity;
+        _viewYaw += turn;
+        Rotation = new Vector3(Rotation.X, Rotation.Y + turn, Rotation.Z);
+        _lastSafe = at;
+        _hasSafe = true;
+        _pivotY = float.NaN;
+    }
+
     /// <summary>Back outside; null <paramref name="at"/> just drops the state (a teleport is moving us anyway).</summary>
     public void LeaveInterior(Vector3? at, float yaw)
     {
@@ -616,7 +633,7 @@ public partial class FootPlayer : CharacterBody3D
     private const float SettleTime = 1f;
 
     /// <summary>How close a parked vehicle has to be to get into it, m.</summary>
-    private const float EnterReach = 3.5f;
+    public const float EnterReach = 3.5f;
 
     private const float FlipRate = 5.0f;         // rad/s: a backflip in ~1.3 s of air
     private const float SpinRate = 6.5f;         // rad/s: a 360 in ~1 s
@@ -884,6 +901,8 @@ public partial class FootPlayer : CharacterBody3D
         _netUp = true;
 
         AddToGroup(Group);
+        // drawn on both sides of a doorway it is stepping through
+        AddToGroup(Interiors.DoorwayGhosts.Group);
 
         // kept in a field: sliding shrinks it, so the player fits under things a standing
         // body does not, and standing back up has to be tested against the world first
@@ -1014,6 +1033,7 @@ public partial class FootPlayer : CharacterBody3D
             AddChild(_visual);
             // a machine is far bigger than the capsule it moves with; shots hit what is drawn
             if (kind != RideKind.OnFoot) Hurtbox.Fit(_visual);
+            FitHull(kind == RideKind.OnFoot ? null : _ride ?? Rideable.Create(kind));
             // a craft's mesh is not authored level (the wingsuit is an upright figure); pose it
             // level for a remote copy, which only receives position and yaw
             if (_ride == null && Rideable.Create(kind) is Flyer remoteFlyer)
@@ -1031,6 +1051,78 @@ public partial class FootPlayer : CharacterBody3D
         var ride = kind == RideKind.OnFoot ? null : Rideable.Create(kind);
         _capsule.Radius = ride?.BodyRadius ?? BodyRadius;
         SetBodyHeight(ride?.BodyHeight ?? StandHeight);
+    }
+
+    /// <summary>Bottom of a hull, above the ground: bumps of the 1 m lattice must not catch it.</summary>
+    private const float HullLift = 0.45f;
+
+    /// <summary>Where the hull splits into body and cabin (or frame and rider), as a share of the height.</summary>
+    private const float HullCut = 0.55f;
+
+    private readonly CollisionShape3D?[] _hull = new CollisionShape3D?[2];
+    private readonly Vector3[] _hullCentre = new Vector3[2];
+    private bool _hullLeans;
+
+    /// <summary>
+    /// A car or a motorbike collides as what is DRAWN, never as the capsule that carries it: the
+    /// user's rule is that nothing ever goes into another model. The capsule (radius 0.85 for a car)
+    /// rides the ground — it glides over the terrain lattice where a box would snag — but two
+    /// capsules only meet 1.7 m apart, and 4.2 m cars sank a third into each other.
+    ///
+    /// The hull is two boxes measured from the actual mesh of this very model (<see
+    /// cref="Avatar.MeshBounds.Split"/>): the body below the belt line and the cabin above it — or a
+    /// motorbike's frame and its rider — from <see cref="HullLift"/> up. Every model gets its own
+    /// size (an AE86 is not an NSX), and <see cref="AlignHull"/> moves the boxes with the body's
+    /// pose every frame. Built on the owner (its own physics, trees, walls) and on every remote copy
+    /// so others hit what they see.
+    /// </summary>
+    private void FitHull(Rideable? ride)
+    {
+        bool wants = ride is { IsVehicle: true } and not Flyer && _visual != null;
+        if (!wants)
+        {
+            for (int i = 0; i < 2; i++) { _hull[i]?.QueueFree(); _hull[i] = null; }
+            return;
+        }
+        // measured at rest: the pose is applied per frame, so the visual's own transform is undone
+        var pose = _visual!.Transform;
+        _visual.Transform = Transform3D.Identity;
+        var (lower, upper) = Avatar.MeshBounds.Split(_visual, HullCut);
+        _visual.Transform = pose;
+        _hullLeans = ride is not Car;   // lean-steered: yaw and pitch only (see AlignHull)
+        var parts = new[] { lower, upper };
+        for (int i = 0; i < 2; i++)
+        {
+            var box = parts[i];
+            float bottom = Mathf.Max(box.Position.Y, HullLift);
+            float top = box.End.Y;
+            if (top - bottom < 0.1f || box.Size.X < 0.05f) { _hull[i]?.QueueFree(); _hull[i] = null; continue; }
+            _hull[i] ??= new CollisionShape3D { Name = i == 0 ? "HullLow" : "HullHigh" };
+            _hull[i]!.Shape = new BoxShape3D { Size = new Vector3(box.Size.X, top - bottom, box.Size.Z) };
+            _hullCentre[i] = new Vector3(box.GetCenter().X, (top + bottom) / 2f, box.GetCenter().Z);
+            if (_hull[i]!.GetParent() == null) AddChild(_hull[i]);
+        }
+        AlignHull();
+    }
+
+    /// <summary>
+    /// Moves the hull with the body's pose (drift yaw, pitch over a crest, a flip). A leaning
+    /// two-wheeler keeps its hull upright: rolled 50° into a bend, a box starting at 0.45 m would
+    /// put its inside corner on the road and snag every corner.
+    /// </summary>
+    private void AlignHull()
+    {
+        if (_hull[0] == null && _hull[1] == null) return;
+        var pose = BodyPose;
+        if (_hullLeans)
+        {
+            var fwd = pose.Basis.Z;
+            float yaw = Mathf.Atan2(fwd.X, fwd.Z);
+            float pitch = -Mathf.Asin(Mathf.Clamp(fwd.Y, -1f, 1f));
+            pose = new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, 0)), pose.Origin);
+        }
+        for (int i = 0; i < 2; i++)
+            if (_hull[i] != null) _hull[i]!.Transform = pose * new Transform3D(Basis.Identity, _hullCentre[i]);
     }
 
     /// <summary>
@@ -1054,6 +1146,7 @@ public partial class FootPlayer : CharacterBody3D
                     if (_ride is Flyer f) f.AnimateFlight(_visual, _flight, dt);
                     else _ride.Animate(_visual, _motion, dt);
                     BodyPose = _visual.Transform;
+                    AlignHull();
                     Anim = _ride.WritePose(_visual, _motion, _flight);
                 }
                 return;
@@ -1131,6 +1224,7 @@ public partial class FootPlayer : CharacterBody3D
         if (_visual == null) return;
         if (_remoteRide?.Kind != kind) _remoteRide = Rideable.Create(kind);
         _visual.Transform = BodyPose;
+        AlignHull();
         _remoteRide?.AnimateRemote(_visual, Anim, dt);
         if (_visual is Avatar.CarRig rig) rig.DoorsOpen = DoorsOpen;
         SetRemoteEngine(_remoteRide as Flyer);
@@ -1261,18 +1355,44 @@ public partial class FootPlayer : CharacterBody3D
         // cast from the body's centre, not the shoulder, so a wall at the player's right does not
         // leave the lens behind it
         float want = 1f;
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            pivot, wanted, CameraMask, new Godot.Collections.Array<Rid> { GetRid() }));
-        if (hit.Count > 0)
+        float span = Mathf.Max(0.01f, (wanted - pivot).Length());
+        var space = GetWorld3D().DirectSpaceState;
+        // An arm reaching back through an open doorway goes on in the space on the other side:
+        // this side up to the sill (the building's shell there is the doorway, not a wall), then
+        // the rest carried across by the door's map, where the lens ends up if it gets that far.
+        float through = 2f;
+        var across = Transform3D.Identity;
+        if (Interiors.InteriorManager.Instance?.ArmThroughDoor(this, pivot, wanted, out float t, out var map, out var shell) == true)
         {
-            float span = Mathf.Max(0.01f, (wanted - pivot).Length());
-            want = Mathf.Clamp(((hit["position"].AsVector3() - pivot).Length() - 0.25f) / span, 0.1f, 1f);
+            var exclude = new Godot.Collections.Array<Rid> { GetRid() };
+            if (shell.IsValid) exclude.Add(shell);
+            var sill = pivot.Lerp(wanted, t);
+            var near = space.IntersectRay(PhysicsRayQueryParameters3D.Create(pivot, sill, CameraMask, exclude));
+            if (near.Count > 0)
+                want = Mathf.Clamp(((near["position"].AsVector3() - pivot).Length() - 0.25f) / span, 0.1f, 1f);
+            else
+            {
+                through = t;
+                across = map;
+                var far = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                    map * pivot.Lerp(wanted, Mathf.Min(1f, t + 0.1f / span)), map * wanted, CameraMask, exclude));
+                if (far.Count > 0)
+                    want = Mathf.Clamp((t * span + (far["position"].AsVector3() - map * sill).Length() - 0.25f) / span, 0.1f, 1f);
+            }
+        }
+        else
+        {
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                pivot, wanted, CameraMask, new Godot.Collections.Array<Rid> { GetRid() }));
+            if (hit.Count > 0)
+                want = Mathf.Clamp(((hit["position"].AsVector3() - pivot).Length() - 0.25f) / span, 0.1f, 1f);
         }
         // snap in, ease out: late at a wall is a frame with the lens inside it
         _armBlend = want < _armBlend ? want : Mathf.Lerp(_armBlend, want, 1f - Mathf.Exp(-5f * dt));
 
         var position = pivot.Lerp(wanted, _armBlend) + Vector3.Up * _landingDip * 0.5f;
-        _camera.GlobalTransform = new Transform3D(view, position);
+        var lens = new Transform3D(view, position);
+        _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
     }
 
     /// <summary>Switches first/third person, rebuilding the local body and saving the choice.</summary>
@@ -1345,13 +1465,13 @@ public partial class FootPlayer : CharacterBody3D
         {
             var interiors = Interiors.InteriorManager.Instance;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
-            return interiors?.TryExit(this) ?? true;
+            return interiors?.TryDoor(this) ?? true;
         }
         if (_ride != null || _mantling || _deadTimer > 0) return false;
 
         var vehicle = Vehicles?.Nearest(GlobalPosition, EnterReach);
         if (vehicle == null)
-            return IsOnFloor() && Interiors.InteriorManager.Instance?.TryEnter(this) == true;
+            return IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true;
         Vehicles!.Claim(vehicle, EnterVehicle);
         return true;
     }
@@ -1362,8 +1482,9 @@ public partial class FootPlayer : CharacterBody3D
         if (_sliding) EndSlide();
         GlobalPosition = state.Position;
         Rotation = new Vector3(0, state.Yaw, 0);
-        // the same car: its garage parts and whatever doors were left open come with it, and the
-        // driver's door opens to let them in and shuts behind them
+        // the same car: its garage parts and whatever doors were left open come with it; the
+        // driver's door opens to let them in, and once seated every door shuts (and stays shut:
+        // nobody drives with a door open, see TryToggleCarDoor)
         ApplyRide(state.Kind, state.Velocity, state.Tuning);
         if (_ride is Car)
         {
@@ -1373,6 +1494,11 @@ public partial class FootPlayer : CharacterBody3D
         _flight.Control = state.Throttle;
         EngineOn = true;
         VehicleHealth = state.Health;
+        if (_ride is Car car)
+        {
+            car.Headlights = state.Headlights;
+            car.RoofOpen = state.RoofOpen && car.HasSoftTop;
+        }
         _placed = true;
     }
 
@@ -1387,6 +1513,7 @@ public partial class FootPlayer : CharacterBody3D
         return new VehicleState((RideKind)RideKindId, GlobalPosition,
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
+            Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
             Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen);
     }
 
@@ -1406,18 +1533,11 @@ public partial class FootPlayer : CharacterBody3D
     public CarTuning Tuning => _ride is Car car ? car.Tuning : default;
 
     /// <summary>
-    /// G / pad X: works a car door without getting in. In a car at a standstill, the driver's own
-    /// door; on foot beside a parked car, the door nearest you. False when there is none in reach.
+    /// G / pad X: works a car door without getting in: on foot beside a parked car, the door nearest
+    /// you. Not from the seat — in a car the doors are shut. False when there is none in reach.
     /// </summary>
     public bool TryToggleCarDoor()
     {
-        if (_ride is Car)
-        {
-            if (GroundSpeed > 1f) return false;
-            DoorsOpen ^= Avatar.CarRig.DriverDoor;
-            _shutDriverIn = 0f;
-            return true;
-        }
         if (_ride != null || Indoors || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
             return false;
         var (bit, distance) = rig.NearestDoor(GlobalPosition);
@@ -1547,6 +1667,9 @@ public partial class FootPlayer : CharacterBody3D
         // a tit on the windscreen is a thud, not an event worth a banner
         else if (damage >= 1f) Announced?.Invoke("BIRD STRIKE", false);
     }
+
+    /// <summary>Down after losing all health, until revived a few seconds later.</summary>
+    public bool KnockedOut => _deadTimer > 0;
 
     /// <summary>Restores health (food, water). Returns false when there was nothing to restore.</summary>
     public bool Heal(float amount)
@@ -1715,6 +1838,20 @@ public partial class FootPlayer : CharacterBody3D
         // not consumed when there is no door: G held is also gathering
         if (@event.IsActionPressed(PlayerInput.CarDoor) && !@event.IsEcho() && TryToggleCarDoor())
         {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (@event.IsActionPressed(PlayerInput.LightsToggle) && !@event.IsEcho() && _ride is Car lit)
+        {
+            lit.Headlights = !lit.Headlights;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Car { HasSoftTop: true } open)
+        {
+            open.RoofOpen = !open.RoofOpen;
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -2009,7 +2146,12 @@ public partial class FootPlayer : CharacterBody3D
         }
 
         Velocity = velocity;
+        // an open doorway: let through the building's shell to the sill, then carried across it
+        var interiors = Interiors.InteriorManager.Instance;
+        var before = GlobalPosition;
+        interiors?.BeforeMove(this);
         MoveAndSlide();
+        interiors?.AfterMove(this, before);
 
         // a slide that ran into a wall has no speed left to give
         if (_sliding && new Vector2(Velocity.X, Velocity.Z).Length() < SlideMinSpeed * 0.5f)
@@ -2303,6 +2445,17 @@ public partial class FootPlayer : CharacterBody3D
             1f - Mathf.Exp(-3f * dt));
     }
 
+    /// <summary>The slipstream this vehicle rode last step, 0..<see cref="RideGround.MaxDraft"/>.</summary>
+    public float Draft { get; private set; }
+
+    /// <summary>Every other player on something, where it is and how it moves (a remote's replicated velocity).</summary>
+    private IEnumerable<(Vector3, Vector3)> OtherVehicles()
+    {
+        foreach (var node in GetTree().GetNodesInGroup(Group))
+            if (node is FootPlayer p && p != this && p.Ride != RideKind.OnFoot)
+                yield return (p.GlobalPosition, p.WorldVelocity);
+    }
+
     private void RidePhysics(float dt, bool onFloor)
     {
         // Triggers are analog, and the vehicles already take 0..1: half a trigger is half the
@@ -2359,12 +2512,16 @@ public partial class FootPlayer : CharacterBody3D
         // two wheels on the verge; give them the lookup once RaceLine plans with it.
         var surface = (_ride is Motorbike || _ride is Car && !Npc) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
-        _ride!.Step(input, new RideGround(onFloor, grade, surface), dt, ref _motion);
+        // a tow behind another vehicle: less air to push (cars and motorbikes read it)
+        Draft = onFloor && _ride is Car or Motorbike && _motion.Speed > 10f
+            ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
+        _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
         if (_ride is Car)
         {
-            // doors: the driver's shuts behind them once in; any left open shut themselves at speed
-            if (_shutDriverIn > 0f && (_shutDriverIn -= dt) <= 0f) DoorsOpen &= unchecked((byte)~Avatar.CarRig.DriverDoor);
-            if (DoorsOpen != 0 && _motion.Speed > DoorsShutSpeed) DoorsOpen = 0;
+            // doors: once seated every door shuts, sooner if the car pulls away before then
+            if (_shutDriverIn > 0f && ((_shutDriverIn -= dt) <= 0f || _motion.Speed > DoorsShutSpeed))
+                _shutDriverIn = 0f;
+            if (_shutDriverIn <= 0f) DoorsOpen = 0;
         }
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.

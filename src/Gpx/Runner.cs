@@ -309,6 +309,8 @@ public partial class Runner : Node3D
         if (_car != null)
         {
             if (delta > 0) _car.WheelSpin += (float)(Speed / 0.3 * delta * clockSpeed);
+            // the recording has no switches: lights (and pop-ups) come on at dusk, as a driver's would
+            _car.Headlights = (World.DayNight.Instance?.Night ?? 0f) > 0.35f;
         }
         else if (_cyclist != null)
         {

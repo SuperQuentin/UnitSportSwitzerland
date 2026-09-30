@@ -154,7 +154,7 @@ public sealed class Motorbike : Rideable, IEngined
         float brakeAccel = input.Brake * Mathf.Min(s.BrakeDecel * (arcade ? ArcadeBrake : 1f), Mathf.Min(stoppie, grip * Gravity));
         PitchUse = driveAccel > 0.01f ? driveAccel / WheelieAccel : -brakeAccel / StoppieDecel;
 
-        float drag = 0.5f * AirDensity * s.DragArea * v * v / m;
+        float drag = 0.5f * AirDensity * s.DragArea * v * v / m * (1f - ground.Draft);
         float roll = v > 0.05f ? RollingResistance * Gravity : 0f;
         float a = driveAccel - brakeAccel - drag - roll + SlopeAccel(ground.Grade);
         // stopped, it stays stopped: it does not roll backwards (a foot goes down)

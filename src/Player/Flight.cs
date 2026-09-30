@@ -167,7 +167,7 @@ public sealed class Wingsuit : Flyer
 {
     public override RideKind Kind => RideKind.Wingsuit;
     public override string Label => "Wingsuit";
-    public override string Blurb => "Jump off a cliff, then Jump again to fly";
+    public override string Blurb => "Jump off a cliff, then {jump} again to fly";
 
     private const float Mass = 85f, Area = 1.5f, AirDensity = 1.1f;
     /// <summary>Zero-lift drag and induced-drag factor: best glide ~2.9 at ~38 m/s.</summary>
@@ -265,8 +265,8 @@ public class Canopy : Flyer
     public override RideKind Kind => _paraglider ? RideKind.Paraglider : RideKind.Parachute;
     public override string Label => _paraglider ? "Paraglider" : "Parachute";
     public override string Blurb => _paraglider
-        ? "W run, Jump to launch; stick steers, back brakes, forward speed bar"
-        : "Stick steers, back brakes and flares";
+        ? "{move_forward} run, {jump} to launch; steer with {move_left}/{move_right}, {move_back} brakes, {move_forward} speed bar"
+        : "{move_left}/{move_right} steer, {move_back} brakes and flares";
 
     private float TrimSpeed => _paraglider ? 10.5f : 9f;
     private float TrimSink => _paraglider ? 1.15f : 4.2f;
@@ -348,7 +348,7 @@ public sealed class Helicopter : Flyer
 {
     public override RideKind Kind => RideKind.Helicopter;
     public override string Label => "Helicopter";
-    public override string Blurb => "Look to turn, stick to fly, Space/RT up, Ctrl/LT down, Shift fast";
+    public override string Blurb => "Look to turn, {move_forward}{move_left}{move_back}{move_right} to fly, {jump} up, {crouch_slide} down";
 
     private const float Cruise = 42f, Dash = 68f, Strafe = 16f, Climb = 9f;
     private const float Accel = 9f, VerticalAccel = 12f, YawRate = 1.8f;
@@ -455,7 +455,7 @@ public sealed class Plane : Flyer
 {
     public override RideKind Kind => RideKind.Plane;
     public override string Label => "Plane";
-    public override string Blurb => "Shift/RT throttle up, Ctrl/LT down; stick pitches and rolls";
+    public override string Blurb => "{sprint} throttle up, {crouch_slide} down; {move_forward}{move_left}{move_back}{move_right} pitch and roll";
 
     /// <summary>
     /// m/s² at full throttle — well under gravity, as for any light plane. At 11 (the first

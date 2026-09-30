@@ -7,12 +7,17 @@ render_mode unshaded, cull_disabled;
 // Vertex alpha < 0.5 marks glass, drawn as flat daylight so a window reads as a window even though
 // the interior floats in the dark under the terrain with nothing to see through it.
 
+#include "res://shaders/portal_clip.gdshaderinc"
+
 uniform vec2 snap_resolution = vec2(640.0, 480.0);
 uniform vec3 light_direction = vec3(0.35, 0.85, 0.4);
 uniform float light_levels = 5.0;
 uniform float color_levels = 16.0;
 
+varying vec3 world_pos;
+
 void vertex() {
+    world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     vec4 clip = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
     if (clip.w > 0.0) {
         vec2 half_res = snap_resolution * 0.5;
@@ -24,6 +29,10 @@ void vertex() {
 }
 
 void fragment() {
+    // a portal camera looking into this room from the shared space under the terrain
+    if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
+        discard;
+    }
     vec3 col = COLOR.rgb;
     if (COLOR.a >= 0.5) {
         // View-space derivatives, not world-space: interiors sit tens of km from the world

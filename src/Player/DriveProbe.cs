@@ -73,6 +73,11 @@ public partial class DriveProbe : Node
         public double LastHit = -1;
         public bool HitCounted;
         public float OffRoad, Top, PeakBrake, Arc;
+        /// <summary>Seconds racing, and of them at ≥ 95% of the profile's speed there; metres with the centre off the tarmac.</summary>
+        public float RaceTime, PaceTime, OffTarmac;
+        /// <summary>Counted knocks by what was hit (car, traffic, tree, other), and passes made.</summary>
+        public readonly Dictionary<string, int> Hits = new();
+        public int Passes;
         /// <summary>Where the top speed was reached, and where this entry started, m along the line.</summary>
         public float TopArc, StartArc = -1;
         /// <summary>Where it crashed out: the wreck stays on the road, and the others must go round it.</summary>
@@ -189,7 +194,9 @@ public partial class DriveProbe : Node
                     if (entry.HitCounted || entry.HitLoss < 2f || (entry.HitLoss < 5f && !TouchingSomething(player))) return;
                     entry.HitCounted = true;
                     entry.Impacts++;
-                    _log.Add($"{_t,5:F1}s {label}: impact at {entry.Arc:F0} m ({entry.Player.Motion.Speed * 3.6f:F0} km/h)");
+                    string what = HitKind(player);
+                    entry.Hits[what] = entry.Hits.GetValueOrDefault(what) + 1;
+                    _log.Add($"{_t,5:F1}s {label}: impact ({what}) at {entry.Arc:F0} m ({entry.Player.Motion.Speed * 3.6f:F0} km/h){(entry.Pilot?.Seen is { Length: > 0 } seen ? $" — saw {seen}" : "")}");
                 };
                 player.Announced += (text, _) => _log.Add($"{_t,5:F1}s {label}: {text}");
                 _entries.Add(entry);
@@ -213,6 +220,12 @@ public partial class DriveProbe : Node
                 en.Pilot = AutoPilot.For(_route, en.Player);
                 if (en.Pilot == null) { GD.Print($"[drive] no pilot for {en.Label}"); Finish(1); return; }
                 en.Pilot.Log = s => _log.Add($"{_t,5:F1}s {s}");
+                // every driver its own: skill 0.8..1 and aggression 0..1, the same each run
+                // (--skill / --aggression set them all)
+                var rng = new System.Random(1000 + _entries.IndexOf(en));
+                float skill = float.TryParse(ArgAfter("--skill"), NumberStyles.Float, CultureInfo.InvariantCulture, out float sk) ? sk : 0.8f + 0.2f * (float)rng.NextDouble();
+                float aggr = float.TryParse(ArgAfter("--aggression"), NumberStyles.Float, CultureInfo.InvariantCulture, out float ag) ? ag : (float)rng.NextDouble();
+                en.Pilot.Temperament(skill, aggr, 1000 + _entries.IndexOf(en));
                 en.Pilot.Go = false;
                 en.Player.RideControls = () => entry.Pilot!.Drive((float)GetPhysicsProcessDeltaTime(), _started && !entry.Out, Others(entry));
                 BeginGpx(en);
@@ -222,7 +235,7 @@ public partial class DriveProbe : Node
             if (_countdown > 0) return;
             _started = true;
             foreach (var en in _entries) en.Pilot!.Go = true;
-            GD.Print($"[drive] GO: {string.Join(", ", _entries.Select(e => e.Label + (e.Grip ? " (grip)" : "")))} "
+            GD.Print($"[drive] GO: {string.Join(", ", _entries.Select(e => e.Label + (e.Grip ? " (grip)" : "") + $" [skill {e.Pilot!.Skill:F2} aggr {e.Pilot.Aggression:F2}]"))} "
                 + $"over {_finish:F0} m of {line.Length:F0} m");
             return;
         }
@@ -236,7 +249,14 @@ public partial class DriveProbe : Node
             float speedNow = en.Kind == RideKind.OnFoot ? RaceRoute.Flat(en.Player.Velocity).Length() : en.Player.Motion.Speed;
             if (speedNow > en.Top) { en.Top = speedNow; en.TopArc = en.Arc; }
             if (en.Pilot.Car is { } car) en.PeakBrake = Mathf.Max(en.PeakBrake, car.BrakeTemp);
-            if (en.FinishTime < 0 && _route.Off(en.Player.GlobalPosition) - _route.HalfWidthAt(en.Player.GlobalPosition) > 1.5f) en.OffRoad += dt;
+            float past = _route.Off(en.Player.GlobalPosition) - _route.HalfWidthAt(en.Player.GlobalPosition);
+            if (en.FinishTime < 0 && past > 1.5f) en.OffRoad += dt;
+            if (en.FinishTime < 0)
+            {
+                en.RaceTime += dt;
+                if (speedNow >= 0.95f * en.Pilot.Profile[en.Pilot.D.Near]) en.PaceTime += dt;
+                if (past > 0f) en.OffTarmac += speedNow * dt;
+            }
             if (en.FinishTime < 0 && en.Arc >= _finish) { en.FinishTime = _t; en.Pilot.Finished = true; _log.Add($"{_t,5:F1}s {en.Label} FINISHES"); }
             if (en.Player.Ride != en.Kind)
             {
@@ -245,6 +265,7 @@ public partial class DriveProbe : Node
                 _log.Add($"{_t,5:F1}s {en.Label} is OUT (crashed at {en.Arc:F0} m)");
             }
             RecordFix(en, delta);
+            CountPasses(en);
             foreach (var q in _entries)
                 if (q != en && !q.Out && en.FinishTime < 0 && q.FinishTime < 0 && _entries.IndexOf(q) > _entries.IndexOf(en)
                     && RaceRoute.Flat(q.Player.GlobalPosition - en.Player.GlobalPosition).Length() < 2.1f)
@@ -253,18 +274,43 @@ public partial class DriveProbe : Node
                 }
         }
         Cinematic(dt);
-        if (Trace && (int)(_t * 2) != (int)((_t - delta) * 2))
+        if (Trace && (int)(_t * 10) != (int)((_t - delta) * 10))
             foreach (var en in _entries.Where(e => !e.Out))
             {
                 var m = en.Player.Motion;
                 GD.Print($"[drive]   t={_t,5:F1} {en.Label,-12} s={en.Arc,6:F0} v={m.Speed * 3.6f,4:F0}/{en.Pilot!.Profile[en.Pilot.D.Near] * 3.6f,4:F0} "
                     + $"slip={Mathf.RadToDeg(Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi)),4:F0} off={_route.Off(en.Player.GlobalPosition),4:F1} "
                     + $"R={1f / Mathf.Max(Mathf.Abs(_route.Line.Curvature[en.Pilot.D.Near]), 1e-4f),5:F0} drift={en.Pilot.D.Drifting}"
+                    + $" in={en.Player.LastRideInput.Throttle:F2}/{en.Player.LastRideInput.Brake:F2}/{en.Player.LastRideInput.Steer:F2}{(en.Player.LastRideInput.Handbrake ? " HB" : "")} lat={en.Pilot.D.Lateral:F2} cap={(en.Pilot.D.Cap < 1e9f ? en.Pilot.D.Cap * 3.6f : 0f):F0} draft={en.Player.Draft:F2}"
                     + (en.Player.GetSlideCollisionCount() > 0 && Enumerable.Range(0, en.Player.GetSlideCollisionCount())
                         .Select(i => en.Player.GetSlideCollision(i).GetCollider()).FirstOrDefault(c => c is not StaticBody3D || c is AnimatableBody3D) is Node hit
                         ? $" touching {hit.GetType().Name}" : ""));
             }
         if (_t >= _seconds || _entries.All(e => e.Out || e.FinishTime >= 0)) End();
+    }
+
+    private readonly Dictionary<(Entry, Entry), bool> _ahead = new();
+
+    /// <summary>
+    /// A pass: this entry was a car length behind a running rival and is now a car length ahead of
+    /// it, the two within 30 m (the band in between keeps two cars side by side from counting a
+    /// "pass" every time their nearest line points swap).
+    /// </summary>
+    private void CountPasses(Entry en)
+    {
+        foreach (var q in _entries)
+        {
+            if (q == en || q.Out || en.FinishTime >= 0 || q.FinishTime >= 0) continue;
+            float gap = en.Arc - q.Arc;
+            if (Mathf.Abs(gap) < 4.5f || Mathf.Abs(gap) > 30f) continue;
+            bool ahead = gap > 0f;
+            if (_ahead.TryGetValue((en, q), out bool was) && ahead && !was)
+            {
+                en.Passes++;
+                _log.Add($"{_t,5:F1}s {en.Label} passes {q.Label} at {en.Arc:F0} m ({en.Player.Motion.Speed * 3.6f:F0} km/h)");
+            }
+            _ahead[(en, q)] = ahead;
+        }
     }
 
     /// <summary>The other cars as a driver sees them: running ones and the wrecks left behind.</summary>
@@ -273,8 +319,8 @@ public partial class DriveProbe : Node
         foreach (var q in _entries)
         {
             if (q == me) continue;
-            if (q.Out) { if (q.Wreck is { } w) yield return new AutoPilot.Other(w, 0f, true); }
-            else yield return new AutoPilot.Other(q.Player.GlobalPosition, q.Player.Motion.Speed, false);
+            if (q.Out) { if (q.Wreck is { } w) yield return new AutoPilot.Other(w, Vector3.Zero, true); }
+            else yield return new AutoPilot.Other(q.Player.GlobalPosition, q.Player.WorldVelocity, false);
         }
     }
 
@@ -388,7 +434,9 @@ public partial class DriveProbe : Node
             GD.Print($"[drive]   {pos}. {en.Label,-14} {(en.Spec == null ? "     " : en.Grip ? "grip " : "drift")} {result,-14} "
                 + $"avg {(en.FinishTime >= 0 ? _finish : en.Arc) / Mathf.Max((float)(en.FinishTime >= 0 ? en.FinishTime : _t), 1f) * 3.6f:F0} km/h, top {en.Top * 3.6f:F0}{limit}, "
                 + $"{pilot?.Drifts ?? 0} held drifts (best {pilot?.BestDrift ?? 0:F0}°), {pilot?.Plans ?? 0} corners planned / {pilot?.Feasible ?? 0} feasible, "
-                + $"off road {en.OffRoad:F1} s, {en.Impacts} impacts, {en.Contacts / 60f:F1} s in contact, "
+                + $"off road {en.OffRoad:F1} s ({en.OffTarmac:F0} m off tarmac), at pace {(en.RaceTime > 0 ? en.PaceTime / en.RaceTime * 100f : 0):F0}%, "
+                + $"{en.Impacts} impacts{(en.Hits.Count > 0 ? $" ({string.Join(" ", en.Hits.Select(kv => $"{kv.Key} {kv.Value}"))})" : "")}, "
+                + $"{en.Passes} passes, {pilot?.Spins ?? 0} spins, {pilot?.Mistakes ?? 0} mistakes, {en.Contacts / 60f:F1} s in contact, "
                 + $"verge {pilot?.VergeMetres ?? 0:F0} m safe"
                 + (pilot?.VergeUnsafe.Count > 0 ? $" / {string.Join(" ", pilot.VergeUnsafe.Select(kv => $"{kv.Key} {kv.Value:F0} m"))} blocked (up to {pilot.UnsafeDepth:F2} m over, at {string.Join(",", pilot.UnsafeAt)} m)" : " / 0 m blocked")
                 + (pilot?.Resets > 0 ? $", {pilot.Resets} reset(s) to the line" : "")
@@ -402,6 +450,16 @@ public partial class DriveProbe : Node
                 GD.Print($"[drive]      recorded {file}");
             }
         }
+        // the race in one line, for before/after tables
+        var hits = new Dictionary<string, int>();
+        foreach (var en in _entries) foreach (var kv in en.Hits) hits[kv.Key] = hits.GetValueOrDefault(kv.Key) + kv.Value;
+        float race = _entries.Sum(e => e.RaceTime), pace = _entries.Sum(e => e.PaceTime);
+        GD.Print($"[drive] SUMMARY finishers {_entries.Count(e => e.FinishTime >= 0)}/{_entries.Count}, "
+            + $"at pace {(race > 0 ? pace / race * 100f : 0):F0}%, off tarmac {_entries.Sum(e => e.OffTarmac):F0} m, "
+            + $"blocked edge {_entries.Sum(e => e.Pilot?.VergeUnsafe.Values.Sum() ?? 0f):F0} m, "
+            + $"impacts {(hits.Count == 0 ? "0" : string.Join(" ", hits.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} {kv.Value}")))}, "
+            + $"passes {_entries.Sum(e => e.Passes)}, spins {_entries.Sum(e => e.Pilot?.Spins ?? 0)}, mistakes {_entries.Sum(e => e.Pilot?.Mistakes ?? 0)}, "
+            + $"resets {_entries.Sum(e => e.Pilot?.Resets ?? 0)}, out {_entries.Count(e => e.Out)}");
         bool anyFinish = _entries.Any(e => e.FinishTime >= 0);
         bool driftOk = _entries.All(e => e.Spec == null || e.Grip) || _entries.Any(e => e.Pilot?.Drifts > 0);
         bool ok = anyFinish && driftOk;
@@ -419,6 +477,20 @@ public partial class DriveProbe : Node
                 && (c is not StaticBody3D || c is AnimatableBody3D || (c.CollisionLayer & World.TreeColliders.Layer) != 0))
                 return true;
         return false;
+    }
+
+    /// <summary>What a knock was against: another racer, the traffic, a trunk, or anything else (terrain, a wall, a parked machine).</summary>
+    private static string HitKind(FootPlayer p)
+    {
+        string kind = "other";
+        for (int i = 0; i < p.GetSlideCollisionCount(); i++)
+            switch (p.GetSlideCollision(i).GetCollider())
+            {
+                case FootPlayer: return "car";
+                case AnimatableBody3D: kind = "traffic"; break;
+                case CollisionObject3D c when (c.CollisionLayer & World.TreeColliders.Layer) != 0 && kind == "other": kind = "tree"; break;
+            }
+        return kind;
     }
 
     private static World.Traffic? FindTraffic(Node node)

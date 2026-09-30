@@ -96,14 +96,30 @@ public static class BuildingFootprint
     public static Footprint? Compute(BuildingTile tile, int index, RoadTile? roads, ChunkGrid? grid) =>
         Compute(tile, index, (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true)), grid);
 
+    /// <summary>The street point a front door here would face, as <see cref="Compute"/> aims doors.</summary>
+    public static Vector2? StreetNear(RoadTile? roads, Vector2 at) =>
+        RoadPoints.Build(roads).Nearest(at, 60f) ?? RoadPoints.Build(roads, paths: true).Nearest(at, 40f);
+
     private static Footprint? Compute(BuildingTile tile, int index, (RoadPoints Streets, RoadPoints Paths) roads, ChunkGrid? grid)
     {
         var b = tile.Buildings[index];
         var key = new BuildingKey(tile.Id.E, tile.Id.N, index);
 
+        // ---- plan box, shared with type detection ------------------------------------------
+        var map = BuildingTypes.For(tile);
+        if (map.Boxes[index] is not { } box) return null;
+        Vector2 u = box.AxisU, center = box.Center;
+        float w = box.Width, dpt = box.Depth;
+        // a church's tower gets a church door, whatever kind the cadastre match made it
+        var group = map.GroupOf(index);
+        var kind = group?.Type == BuildingType.Church ? BuildingKind.Sacral : b.Kind;
+        // the other solids of the same building: a door on a wall one of them stands against
+        // would open into it
+        var fellows = group?.Members.Where(m => m != index && map.Boxes[m] != null).Select(m => map.Boxes[m]!.Value).ToList();
+        bool Covered(Vector2 xz) => fellows != null && fellows.Any(f => f.DistanceTo(xz) < 0.6f);
+
         // ---- wall triangles -------------------------------------------------------------
         var walls = new List<(Vector3 A, Vector3 B, Vector3 C, Vector2 N)>();
-        var pts = new List<Vector2>();
         for (int t = 0; t < b.TriangleCount; t++)
         {
             int o = t * 9;
@@ -116,40 +132,6 @@ public static class BuildingFootprint
             var flat = new Vector2(n.X, n.Z);
             if (flat.LengthSquared() < 1e-10f) continue;
             walls.Add((a, c, d, flat.Normalized()));
-            pts.Add(new Vector2(a.X, a.Z)); pts.Add(new Vector2(c.X, c.Z)); pts.Add(new Vector2(d.X, d.Z));
-        }
-        if (pts.Count < 3)
-            for (int t = 0; t < b.TriangleCount * 3; t++)
-                pts.Add(new Vector2(b.Triangles[t * 3], b.Triangles[t * 3 + 2]));
-        if (pts.Count < 3) return null;
-
-        // ---- minimum-area oriented rectangle (rotating calipers over the hull edges) -------
-        var hull = ConvexHull(pts);
-        float bestArea = float.MaxValue;
-        Vector2 u = Vector2.Right, center = hull[0];
-        float w = 0, dpt = 0;
-        for (int i = 0; i < hull.Count; i++)
-        {
-            var e = hull[(i + 1) % hull.Count] - hull[i];
-            if (e.LengthSquared() < 1e-6f) continue;
-            var ax = e.Normalized();
-            var ay = new Vector2(-ax.Y, ax.X);
-            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
-            foreach (var p in hull)
-            {
-                float x = p.Dot(ax), y = p.Dot(ay);
-                minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
-                minY = Math.Min(minY, y); maxY = Math.Max(maxY, y);
-            }
-            float area = (maxX - minX) * (maxY - minY);
-            if (area < bestArea - 1e-3f)
-            {
-                bestArea = area;
-                u = ax;
-                w = maxX - minX;
-                dpt = maxY - minY;
-                center = ax * ((minX + maxX) * 0.5f) + ay * ((minY + maxY) * 0.5f);
-            }
         }
 
         // ---- facade facets: coplanar wall triangles, merged along their wall line --------
@@ -180,7 +162,7 @@ public static class BuildingFootprint
             f.Spans.Add((Math.Min(u0, u1), Math.Max(u0, u1)));
         }
 
-        float doorW = DoorWidthFor(b.Kind), doorH = DoorHeightFor(b.Kind);
+        float doorW = DoorWidthFor(kind), doorH = DoorHeightFor(kind);
         var roadTarget = roads.Streets.Nearest(center, 60f) ?? roads.Paths.Nearest(center, 40f);
 
         var ranked = new List<(float Score, DoorSpot Door)>();
@@ -192,6 +174,7 @@ public static class BuildingFootprint
             float width = Math.Min(doorW, length - 0.3f);
             var t = new Vector2(-f.Normal.Y, f.Normal.X);
             var xz = f.Normal * f.Offset + t * ((s0 + s1) * 0.5f);
+            if (Covered(xz)) continue;
 
             float ground = grid != null
                 ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
@@ -226,7 +209,8 @@ public static class BuildingFootprint
             // a round tank or a many-sided silo: no flat run is door-wide, so stand the door on
             // whichever real piece of wall faces the street best
             var aim = roadTarget ?? center + new Vector2(0.3f, 0.95f) * 50f;
-            var cut = cuts.MaxBy(k => k.Normal.Dot((aim - k.Mid).Normalized()) - k.Mid.DistanceTo(aim) * 0.01f);
+            var open = cuts.Where(k => !Covered(k.Mid)).ToList();
+            var cut = (open.Count > 0 ? open : cuts).MaxBy(k => k.Normal.Dot((aim - k.Mid).Normalized()) - k.Mid.DistanceTo(aim) * 0.01f);
             var pos = new Vector3(cut.Mid.X + cut.Normal.X * 0.03f, cut.Ground, cut.Mid.Y + cut.Normal.Y * 0.03f);
             door = new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f), doorH);
             found = true;
@@ -250,7 +234,7 @@ public static class BuildingFootprint
         bool alongU = Mathf.Abs(axisU.Dot(u)) > 0.5f;
         float width2 = alongU ? w : dpt, depth2 = alongU ? dpt : w;
 
-        return new Footprint(key, b.Kind, center, axisU,
+        return new Footprint(key, kind, center, axisU,
             Mathf.Clamp(width2, MinSide, MaxSide), Mathf.Clamp(depth2, MinSide, MaxSide), door);
     }
 
@@ -327,28 +311,6 @@ public static class BuildingFootprint
             }
             return cur.Item2 - cur.Item1 > best.Item2 - best.Item1 ? cur : best;
         }
-    }
-
-    private static List<Vector2> ConvexHull(List<Vector2> points)
-    {
-        var p = points.Distinct().OrderBy(q => q.X).ThenBy(q => q.Y).ToList();
-        if (p.Count < 3) return p;
-        var h = new List<Vector2>();
-        static float Cross(Vector2 o, Vector2 a, Vector2 b) => (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
-        foreach (var q in p)
-        {
-            while (h.Count >= 2 && Cross(h[^2], h[^1], q) <= 0) h.RemoveAt(h.Count - 1);
-            h.Add(q);
-        }
-        int lower = h.Count + 1;
-        for (int i = p.Count - 2; i >= 0; i--)
-        {
-            var q = p[i];
-            while (h.Count >= lower && Cross(h[^2], h[^1], q) <= 0) h.RemoveAt(h.Count - 1);
-            h.Add(q);
-        }
-        h.RemoveAt(h.Count - 1);
-        return h;
     }
 
     /// <summary>Road vertices hashed into 20 m cells, so a tile's thousand buildings each find their street quickly.</summary>

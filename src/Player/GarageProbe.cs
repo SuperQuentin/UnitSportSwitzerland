@@ -6,11 +6,12 @@ using UnitSport.Vehicles;
 namespace UnitSport.Player;
 
 /// <summary>
-/// <c>--garagecheck a|b|c</c> on a client connected to a loopback server: the garage parts and the
+/// <c>--garagecheck a|b|c</c> on a client connected to a loopback server (a with the server's
+/// <c>--admin-password</c> after its role, so it may park the car it conjured): the garage parts and the
 /// car doors, seen from the OTHER peers.
 ///
 /// <list type="bullet">
-/// <item><b>a</b> (the owner) takes a car, tunes it, opens and shuts the driver's door at a stop,
+/// <item><b>a</b> (the owner) takes a car, tunes it, tries a door from the seat (refused: in a car they are shut),
 /// gets out (parks it), opens a door on foot, gets back in (the parts must still be there), drives
 /// off (doors shut above 20 km/h), changes car (stock again), then wrecks a tuned car;</item>
 /// <item><b>b</b> watches: every change to a's player and to parked cars (parts, doors, the rig's
@@ -75,8 +76,26 @@ public partial class GarageProbe : Node
         else Watch(me);
     }
 
+    /// <summary>
+    /// <c>--garagecheck a &lt;password&gt;</c>: the server's <c>--admin-password</c>. Online only an
+    /// admin may leave a conjured car in the world (the <c>admin-only-spawning</c> note), and a
+    /// parks it to work its doors on foot and get back in.
+    /// </summary>
+    private static string? Password
+    {
+        get
+        {
+            var args = OS.GetCmdlineUserArgs();
+            int i = Array.IndexOf(args, "--garagecheck");
+            return i >= 0 && i + 2 < args.Length && !args[i + 2].StartsWith("--") ? args[i + 2] : null;
+        }
+    }
+
     private void Act(FootPlayer me, Func<double, bool> at)
     {
+        if (at(0.5) && Password is { } pw && GetTree().Root.FindChild(Net.ChatManager.NodeName, true, false) is Net.ChatManager chat)
+            chat.Send($"/login {pw}");
+        if (at(1.8)) Log($"admin: {Permissions.IsAdmin}");
         if (at(2)) Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
         if (at(3)) { me.SetTuning(Tuned); Log($"tuned: bits {me.TuningBits:X}"); }
         // the menu itself, on the tuned car, for a look
@@ -85,8 +104,7 @@ public partial class GarageProbe : Node
         if (at(6.5) && DisplayServer.GetName() != "headless")
             GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath("res://test_output/garage_menu_a.png"));
         if (at(7)) garage?.Close();
-        if (at(8)) Log($"driver door at a stop: {me.TryToggleCarDoor()} -> doors {me.DoorsOpen}");
-        if (at(12)) Log($"driver door again: {me.TryToggleCarDoor()} -> doors {me.DoorsOpen}");
+        if (at(8)) Log($"door from the seat (must be refused): {me.TryToggleCarDoor()} -> doors {me.DoorsOpen}");
         if (at(15)) { me.ExitVehicle(); Log($"got out (parked); ride {me.Ride}, bits {me.TuningBits:X}"); }
         if (at(38))
         {
@@ -99,8 +117,8 @@ public partial class GarageProbe : Node
             Log($"parked before getting in: doors {v?.DoorsOpen} tune {(v?.Ride as Car)?.Tuning.Bits:X}");
             Log($"get back in: {me.TryInteract()}");
         }
-        if (at(73)) Log($"in again: ride {me.Ride}, bits {me.TuningBits:X} (same car: {me.TuningBits == Tuned.Pack()}), doors {me.DoorsOpen}");
-        if (at(76)) Log($"door open to drive off: {me.TryToggleCarDoor()} -> doors {me.DoorsOpen}");
+        if (at(70.3)) Log($"getting in: doors {me.DoorsOpen}");
+        if (at(73)) Log($"in again: ride {me.Ride}, bits {me.TuningBits:X} (same car: {me.TuningBits == Tuned.Pack()}), doors {me.DoorsOpen} (all shut: {me.DoorsOpen == 0})");
         // off down the road past 20 km/h, then stop again
         if (at(77)) { Input.ActionPress(PlayerInput.Throttle); _drive = 1; }
         if (_drive == 1 && me.GroundSpeed > 30f / 3.6f)

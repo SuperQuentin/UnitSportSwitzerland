@@ -73,6 +73,12 @@ public partial class ChunkStreamer : Node
     /// <summary>Raised on the client when a transfer completes, for progress display.</summary>
     public event Action<AssetKind, TileId, int>? AssetReceived;
 
+    /// <summary>
+    /// Served in place of <c>manifest.json</c>, for a server with no terrain files of its own
+    /// (<c>--generated-world</c>): an empty tile list, but the origin every client must adopt.
+    /// </summary>
+    public byte[]? ManifestOverride { get; set; }
+
     /// <summary>Builds the server half, serving raw files out of a directory.</summary>
     public static ChunkStreamer CreateServer(string chunkDirectory) => new()
     {
@@ -231,19 +237,24 @@ public partial class ChunkStreamer : Node
         // prepares it; the RPCs go out from _Process, because an RPC sent off the main thread
         // never arrives (see the net notes).
         queue.Preparing++;
-        System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(Prepare(peer, requestId, assetKind, path)));
+        var manifestOverride = ManifestOverride;   // read on the main thread
+        System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(Prepare(peer, requestId, assetKind, path, manifestOverride)));
     }
 
     private readonly System.Collections.Concurrent.ConcurrentQueue<Prepared> _prepared = new();
 
     private sealed record Prepared(long Peer, uint RequestId, byte[]? Wire, int RawLength, uint Crc, bool Compressed, bool Missing);
 
-    private static Prepared Prepare(long peer, uint requestId, AssetKind kind, string path)
+    private static Prepared Prepare(long peer, uint requestId, AssetKind kind, string path, byte[]? manifestOverride)
     {
         try
         {
-            if (!System.IO.File.Exists(path)) return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
-            var payload = System.IO.File.ReadAllBytes(path);
+            byte[] payload;
+            if (kind == AssetKind.Manifest && manifestOverride is { } manifest)
+                payload = manifest;
+            else if (!System.IO.File.Exists(path))
+                return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
+            else payload = System.IO.File.ReadAllBytes(path);
             uint crc = AssetStream.Crc32(payload);
             if (!AssetStream.IsAlreadyCompressed(kind) && AssetStream.TryCompress(payload) is { } smaller)
                 return new Prepared(peer, requestId, smaller, payload.Length, crc, true, false);

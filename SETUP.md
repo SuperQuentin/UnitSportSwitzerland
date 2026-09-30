@@ -56,8 +56,9 @@ godot --path .
 
 ## 3. Check that it works
 
-With no terrain yet, the game boots into a generated stand-in world and says so. That is the
-normal state of a fresh clone, not a failure; real terrain replaces it as soon as there is some:
+With no terrain yet, the game boots into generated terrain and says so. That is the normal
+state of a fresh clone, not a failure; real terrain takes over tile by tile as soon as there is
+some, and the generated ground round it stays and bends to meet it:
 
 ```bash
 godot --path . -- --shot 0,700,400,-15,0,5,test_output/smoke.png
@@ -66,8 +67,8 @@ godot --path . -- --shot 0,700,400,-15,0,5,test_output/smoke.png
 Expected output, and a screenshot of a valley village beside a river in `test_output/`:
 
 ```
-WARNING: [world] no terrain data found, showing a generated stand-in world. Generate the real one with ...
-[terrain] no real terrain: 6561 generated tiles stand in for it
+WARNING: [world] no terrain data found, showing generated terrain. Generate the real one with ...
+[terrain] generated fill on: 0 real tiles, domain TileRect { MinE = 2543, MinN = 1073, MaxE = 2623, MaxN = 1153 }
 [shot] wrote test_output/smoke.png (1152x648) at (0, 700, 400)
 [shot] fps=60 prims=8527444 draws=67 mem=158MB
 ```

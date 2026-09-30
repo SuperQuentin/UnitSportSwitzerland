@@ -25,6 +25,8 @@ public partial class ClientWorld : Node3D
     private RideUi? _rides;
     private Vehicles.GarageUi? _garage;
     private MainMenu? _menu;
+    private ControlsHelp? _help;
+    private Items.ItemController? _items;
     private Teleporter? _teleporter;
     private ChatManager? _chat;
     private ChatUi? _chatUi;
@@ -62,11 +64,21 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(Avatar.MeshScratch.Check());
                 return;
             }
+            if (Array.IndexOf(scArgs, "--spincheck") >= 0)
+            {
+                GetTree().Quit(Player.DriftCheck.Spin());
+                return;
+            }
             if (Array.IndexOf(scArgs, "--motocheck") >= 0)
             {
                 GetTree().Quit(Player.Motorbike.Check());
                 return;
             }
+        }
+        if (Items.InventoryCheck.Requested)
+        {
+            GetTree().Quit(Items.InventoryCheck.Run());
+            return;
         }
         if (Occasions.OccasionProbe.Requested)
         {
@@ -78,34 +90,38 @@ public partial class ClientWorld : Node3D
         ApplyViewportSettings();
         GameSettings.Changed += ApplyViewportSettings;
 
+        // a hand-made street to show the door portals: no terrain, no server
+        if (Interiors.PortalDemo.ParseArgs() is { Requested: true } portalDemo)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
+            return;
+        }
+
         var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
         var manifest = await source.LoadManifestAsync();
 
-        // A fresh clone has no terrain at all: the generated data is 5.3 GB and is not in the
-        // repository. That is not fatal. Until the preprocessor is run or a server is joined
-        // (which streams everything), a generated valley stands in around the spawn point, so
-        // there is something to walk, ride and fly over; real tiles replace it the moment they
-        // are available (ChunkManager.RetireFallback). The origin goes on the spawn point too,
-        // so the stand-in is not tens of kilometres out in float precision.
+        // Wherever there is no terrain data, it is generated (FallbackChunkSource) and blended
+        // into the real tiles beside it: round a partial region, and everywhere on a fresh clone,
+        // which has no terrain at all (the data is 5.3 GB and not in the repository). Real tiles
+        // take over tile by tile as they become available (ChunkManager.MergeAvailableTiles).
+        // The generator is anchored to the default spawn, not to wherever this run starts, so
+        // every client and the server generate the same world. With no local terrain the origin
+        // goes on the spawn point, so the ground is not tens of kilometres out in float precision.
         bool hasLocalTerrain = manifest.Tiles.Count > 0;
-        ProceduralWorld? generated = null;
-        WorldOrigin origin;
-        if (hasLocalTerrain)
-            origin = new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
-        else
-        {
-            var (spawnE, spawnN) = SpawnPoint.ParseTarget();
-            generated = new ProceduralWorld(spawnE, spawnN);
-            origin = new WorldOrigin(spawnE, spawnN);
-        }
+        var (startE, startN) = SpawnPoint.ParseTarget();
+        var generated = new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+        var origin = hasLocalTerrain
+            ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
+            : new WorldOrigin(startE, startN);
 
         _worldOrigin = origin;
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
 
         if (!hasLocalTerrain)
             GD.PushWarning(
-                "[world] no terrain data found, showing a generated stand-in world. Generate the "
-                + "real one with tools/TerrainPreprocessor, or join a server and it will stream in. "
+                "[world] no terrain data found, showing generated terrain. Generate the real one "
+                + "with tools/TerrainPreprocessor, or join a server and it will stream in. "
                 + "See the README.");
 
         var material = new ShaderMaterial
@@ -152,30 +168,28 @@ public partial class ClientWorld : Node3D
             source, TerrainPaths.FindChunkDir(), _streamer, TerrainPaths.FindCacheDir());
         _chunkSource = streamedSource;
 
-        // The generated stand-in answers only for its own tiles, and only until it is retired;
-        // it sits under the cache so a generated tile is not generated twice.
-        var fallback = generated != null ? new FallbackChunkSource(streamedSource, generated) : null;
+        // The generated fill answers for the tiles no real data exists for, above the network
+        // source so a client never asks a server for one, and under the cache so a generated tile
+        // is not generated twice. Built even when switched off, so the setting can turn it on.
+        var fallback = new FallbackChunkSource(streamedSource, generated, startE, startN,
+            GameSettings.Current.GeneratedFill) { Log = s => GD.Print(s) };
 
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
-        _cache = new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
+        _cache = new CachingChunkSource(fallback);
+        // the blend reads real neighbours through the cache, sharing what the loader decodes
+        fallback.Neighbours = _cache;
 
         _chunks = new ChunkManager { Name = "Terrain" };
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
-        if (fallback != null)
-        {
-            var cache = _cache;
-            _chunks.UseFallback(fallback.World.Tiles, retire: () =>
-            {
-                fallback.Active = false;
-                cache.Clear();
-                Occasions.OccasionTowns.UseGenerated(null);
-            });
-        }
-        // the towns occasion props go in: places.json, or the generated villages while they stand in
-        Occasions.OccasionTowns.UseGenerated(fallback?.World);
+        _chunks.UseFallback(fallback, _cache.Invalidate);
+        GameSettings.Changed += () => _chunks?.SetFallbackEnabled(GameSettings.Current.GeneratedFill);
+        // the towns occasion props go in: places.json's, plus the generated villages that stand
+        // on generated ground (re-read whenever real tiles replace some, below)
+        var fillChunks = _chunks;
+        Occasions.OccasionTowns.UseGenerated(generated, (e, n) => fillChunks.IsGenerated(UnitSport.Terrain.Format.TileId.FromLv95(e, n)));
 
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
@@ -187,9 +201,9 @@ public partial class ClientWorld : Node3D
         AddChild(new Audio.ReverbZones(() => GetViewport().GetCamera3D(), () => LocalPlayer?.Indoors == true, chunksForAudio)
             { Name = "ReverbZones" });
         _ambience = new Audio.Ambience(chunksForAudio, () => GetViewport().GetCamera3D())
-            { Name = "Ambience", Origin = origin, Volume = GameSettings.Current.AmbienceVolume };
+            { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
         AddChild(_ambience);
-        GameSettings.Changed += () => { if (_ambience != null) _ambience.Volume = GameSettings.Current.AmbienceVolume; };
+        GameSettings.Changed += () => { if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume); };
 
         // Vehicles left standing in the world. Same node path as on the server, so parking and
         // claiming work over the network; offline it just holds the nodes.
@@ -209,15 +223,19 @@ public partial class ClientWorld : Node3D
         var combat = Combat.CombatManager.Create(this, _chunks, server: false);
         combat.LocalPlayer = () => _onFoot ? LocalPlayer : null;
 
-        // Building interiors: E at a front door. Same node path as the server's, which plans and
-        // stores them; offline this client does both.
+        // Building interiors: E opens a front door, and you walk through it. Same node path as the
+        // server's, which plans and stores them; offline this client does both.
         var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
         interiors.LocalPlayer = () => _onFoot ? LocalPlayer : null;
-        interiors.LocalInsideChanged += inside =>
+        var chunksForDoors = _chunks;
+        interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
+        interiors.OccupancySink = chunksForDoors.SetOccupancy;
+        interiors.OutsideShownChanged += shown =>
         {
-            // indoors, the whole outside world is overhead and out of sight: stop drawing it
-            if (_chunks != null) _chunks.Visible = !inside;
-            vehicles.Visible = !inside;
+            // indoors with the doors shut, the whole outside world is overhead and out of sight:
+            // stop drawing it. An open door shows it again, through the doorway.
+            if (_chunks != null) _chunks.Visible = shown;
+            vehicles.Visible = shown;
         };
 
         var environment = new Godot.Environment
@@ -265,10 +283,6 @@ public partial class ClientWorld : Node3D
             AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot));
         }
 
-        _spectator = new SpectatorCamera { Name = "SpectatorCamera" };
-        AddChild(_spectator);
-        _chunks.AddAnchor(_spectator);
-
         // Start somewhere with something to look at, not at the world origin — after a
         // large import that is usually empty space. "--at E,N" overrides it (LV95 metres).
         // --shot and --probe place the camera themselves, and a spawn drop would fight
@@ -279,13 +293,21 @@ public partial class ClientWorld : Node3D
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
-            || Interiors.InteriorProbe.ParseArgs().Requested || Loot.LootProbe.ParseArgs() != null
+            || Interiors.InteriorProbe.ParseArgs().Requested || Interiors.DoorWatchProbe.ParseArgs().Requested
+            || Loot.LootProbe.ParseArgs() != null
             || Loot.GatherProbe.ParseArgs().Requested
             || Birds.BirdProbe.ParseArgs().Requested
             || World.TrafficProbe.ParseArgs().Requested
             || Combat.CombatProbe.ParseArgs().Requested
             || Birds.BirdStrikeProbe.ParseArgs().Requested
             || SyncProbe.Requested() || HitboxProbe.Requested();
+        // a check running in a window must leave the pointer to whoever is using the machine
+        MouseCapture.Disabled |= placedByTool;
+
+        _spectator = new SpectatorCamera { Name = "SpectatorCamera" };
+        AddChild(_spectator);
+        _chunks.AddAnchor(_spectator);
+
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -300,11 +322,11 @@ public partial class ClientWorld : Node3D
         };
         AddChild(_teleporter);
 
-        // Tab opens the teleport search over any town that has terrain
+        // M opens the teleport search over any town that has terrain
         _places = PlaceSearchUi.Create(_teleporter);
         AddChild(_places);
 
-        // E picks what you travel as. Same rule as the teleporter: the player node is resolved
+        // R picks what you travel as. Same rule as the teleporter: the player node is resolved
         // at the moment of the press, because in multiplayer it is spawned by the server and
         // replaced on a reconnect — holding one from startup would move a node nobody controls.
         _rides = RideUi.Create();
@@ -321,11 +343,28 @@ public partial class ClientWorld : Node3D
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
-        var items = new Items.ItemController(Items.Inventory.Load(), origin)
+        var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
+            || Loot.LootSyncProbe.Role != null
+            ? Items.Inventory.Scratch() : Items.Inventory.Load();
+        // the account claimed cash goes to: the server's online, this machine's offline. Made
+        // before the items, whose panel shows the balance from its first frame.
+        Items.Bank.Create(this, inventory);
+        var items = new Items.ItemController(inventory, origin)
         {
             ActivePlayer = () => _onFoot ? LocalPlayer : null,
         };
         AddChild(items);
+        _items = items;
+        if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
+        if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
+        Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
+
+        // F1: every control, from the live bindings; bottom right: the ones that apply here
+        _help = ControlsHelp.Create();
+        AddChild(_help);
+        var prompts = PromptBar.Create();
+        prompts.Source = Prompts;
+        AddChild(prompts);
 
         // Scavenging: what the furniture in those interiors holds. Same node path as the server's,
         // which decides who gets what; offline this client does both.
@@ -346,17 +385,25 @@ public partial class ClientWorld : Node3D
         var trees = new World.TreeColliders(_chunks, origin);
         AddChild(trees);
 
-        // Everything that kept what it read from the generated stand-in forgets it when real
-        // terrain replaces it. The player is put down again: the ground under them just went.
-        _chunks.TerrainReplaced += () =>
+        // Everything that kept what it read from tiles forgets it when the world under them
+        // changes: real terrain arriving where generated ground was, or a rebase. The player is
+        // put down again only if the ground under them is what went — this fires on every merge,
+        // and snapping someone mid-jump to the ground over a change 20 km away would be a bug.
+        _chunks.TerrainReplaced += affected =>
         {
             Audio.Surfaces.Forget();
             _ambience?.ForgetTiles();
             gathering.Forget();
             _traffic?.Forget();
             trees.Forget();
-            LocalPlayer?.RequestReplacement();
+            Occasions.OccasionTowns.Reload();
+            if (LocalPlayer is { } player
+                && (affected == null || affected(origin.TileAt(player.GlobalPosition))))
+                player.RequestReplacement();
         };
+
+        // says so when the ground in view is generated rather than surveyed
+        AddChild(new GeneratedTerrainNote(_chunks, origin));
         // "--inventory" opens the panel once the player exists, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--inventory") >= 0)
             GetTree().CreateTimer(1.5).Timeout += () => items.Ui.Open();
@@ -375,6 +422,10 @@ public partial class ClientWorld : Node3D
         _menu = MainMenu.Create();
         _menu.ModeChosen += EnterMode;
         _menu.QuitRequested += () => GetTree().Quit();
+        _menu.ControlsRequested += () => _help?.Open();
+        // "--controls" opens the F1 overlay, for screenshotting it
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--controls") >= 0)
+            GetTree().CreateTimer(1.5).Timeout += () => _help?.Open();
         AddChild(_menu);
         if (MenuCheck.Requested()) AddChild(new MenuCheck(_menu));
 
@@ -454,6 +505,14 @@ public partial class ClientWorld : Node3D
             var (iE, iN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(iE, iN, 1200);
             AddChild(new Interiors.InteriorProbe(_chunks, origin, _cache, icheck.Shot));
+            return;
+        }
+
+        if (Interiors.DoorWatchProbe.ParseArgs() is { Requested: true } watch)
+        {
+            var (wE, wN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(wE, wN, 1200);
+            AddChild(new Interiors.DoorWatchProbe(_chunks, origin, watch.Shot));
             return;
         }
 
@@ -619,7 +678,7 @@ public partial class ClientWorld : Node3D
             case GameMode.Explore:
                 if (_onFoot && LocalPlayer != null) LocalPlayer.Camera.Current = true;
                 else _spectator.Current = true;
-                Input.MouseMode = Input.MouseModeEnum.Captured;
+                MouseCapture.Capture();
                 break;
 
             case GameMode.GpxReplay:
@@ -630,7 +689,7 @@ public partial class ClientWorld : Node3D
 
             case GameMode.Multiplayer:
                 if (!_networked) StartNetworking(_menu!.Host);
-                Input.MouseMode = Input.MouseModeEnum.Captured;
+                MouseCapture.Capture();
                 break;
         }
 
@@ -674,11 +733,14 @@ public partial class ClientWorld : Node3D
         _chat = ChatManager.CreateClient();
         _chat.Teleporter = _teleporter;
         AddChild(_chat);
+        if (Items.EconomyProbe.Password != null && _items != null)
+            AddChild(new Items.EconomyProbe(_chat, _items.Inventory));
 
         // World/Race on both sides; the client side puts this player on the grid and times the run
         var race = World.RaceManager.CreateClient();
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
+        if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
 
         _chatUi = ChatUi.Create(_chat);
         AddChild(_chatUi);
@@ -744,7 +806,10 @@ public partial class ClientWorld : Node3D
 
         Multiplayer.ConnectionFailed += () => GD.PushError("[world] connection failed");
         Multiplayer.ServerDisconnected += () =>
+        {
             _chatUi?.Append("Disconnected from the server.", ChatKind.Error);
+            Permissions.Reset();
+        };
 
         _menu?.NoteMode(GameMode.Multiplayer);
     }
@@ -791,13 +856,25 @@ public partial class ClientWorld : Node3D
         }
         if (_places is { IsOpen: true }) return;
 
-        // RideUi consumes E / Y itself while open (from _UnhandledInput, which runs first on
-        // its deeper node), so reaching here means it is closed. In a vehicle E gets out, beside
-        // a parked one it gets in; only with neither does it open the picker.
+        // replay owns the screen and its own keys (R there snaps to roads)
+        if (_gpx is { Active: true }) return;
+
+        // RideUi consumes E / R / Y itself while open (from _UnhandledInput, which runs first on
+        // its deeper node), so reaching here means it is closed. E acts on what is in front of
+        // you: in a vehicle it gets out, beside a parked one it gets in. The picker is R's.
+        if (@event.IsActionPressed(PlayerInput.RideMenu))
+        {
+            _rides?.Open();
+            return;
+        }
         if (@event.IsActionPressed(PlayerInput.InteractMount))
         {
             if (_onFoot && LocalPlayer is { } lp && lp.TryInteract()) return;
-            _rides?.Open();
+            // A pad has no spare face button for the picker, so Y still opens it when there is
+            // nothing to act on. A keyboard player is told where it went instead of being
+            // surprised by a menu one step too far from a car.
+            if (@event is InputEventJoypadButton) _rides?.Open();
+            else if (_onFoot) _items?.Ui.Toast(InputHints.Format("Nothing to interact with here. {ride_menu} opens the travel menu."));
             return;
         }
         if (_rides is { IsOpen: true }) return;
@@ -809,6 +886,55 @@ public partial class ClientWorld : Node3D
     }
 
     private FootPlayer? LocalPlayer => _networked ? GetLocalNetPlayer() : _player;
+
+    /// <summary>
+    /// The hints for the prompt bar: what the buttons do in the situation the player is in now.
+    /// Short on purpose — the loot, door and gather prompts are already centred on screen, and
+    /// the whole list is one F1 away.
+    /// </summary>
+    private IEnumerable<(string, string)> Prompts()
+    {
+        if (_menu is { IsOpen: true } || _gpx is { Active: true } || _rides is { IsOpen: true }) yield break;
+
+        // whoever owns the camera on screen: the local player, or a body a probe made itself
+        var viewer = (_onFoot ? LocalPlayer : null) ?? GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
+        if (viewer == null && GetViewport().GetCamera3D() == _spectator)
+        {
+            yield return (PlayerInput.ToggleMode, "Walk");
+            yield return (PlayerInput.FlyUp, "Up");
+            yield return (PlayerInput.FlyDown, "Down");
+            yield return (PlayerInput.Teleport, "Map");
+        }
+        else if (viewer is { } p && IsInstanceValid(p))
+        {
+            if (p.Vehicle is { IsVehicle: true } vehicle)
+            {
+                // the engine and "get out" are on the vehicle readout in the same corner
+                yield return (PlayerInput.CameraToggle, "Camera");
+                if (vehicle is not Flyer && vehicle.CanHop)
+                {
+                    yield return (PlayerInput.Trick, "Trick (in the air)");
+                    if (Rideable.Arcade) yield return (PlayerInput.Boost, "Boost");
+                }
+            }
+            else if (p.Vehicle is { } gear)
+            {
+                if (p.IsOnFloor()) yield return (PlayerInput.RideMenu, $"Take off the {gear.Label.ToLowerInvariant()}");
+                if (gear is not Flyer && gear.CanHop) yield return (PlayerInput.Trick, "Trick (in the air)");
+            }
+            else if (!p.Indoors)
+            {
+                if (Vehicles.VehicleManager.Instance?.Nearest(p.GlobalPosition, FootPlayer.EnterReach) is { } parked)
+                    yield return (PlayerInput.InteractMount, $"Get in the {parked.Ride.Label.ToLowerInvariant()}");
+                yield return (PlayerInput.RideMenu, "Travel");
+                yield return (PlayerInput.Inventory, "Inventory");
+                yield return (PlayerInput.Teleport, "Map");
+                yield return (PlayerInput.ToggleMode, "Fly camera");
+            }
+            else yield return (PlayerInput.Inventory, "Inventory");
+        }
+        yield return (PlayerInput.Help, "All controls");
+    }
 
     private double _sinceStatus;
 

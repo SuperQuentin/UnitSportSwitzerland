@@ -189,7 +189,10 @@ public sealed class Car : Rideable, IEngined
     public override float BodyRadius => 0.85f;
     public override float BodyHeight => 1.7f;
     public override float DismountSpeed => 1.5f;
-    public override (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 0.65f, 0), new Vector3(1.7f, 1.3f, 4.2f));
+    // measured from this model's own mesh (Rideable.Measured): an AE86 is not an NSX. Cached per
+    // model, so always its stock look with the doors shut: garage parts and an open door are not hull
+    public override (Vector3 Centre, Vector3 Size) ParkedBox =>
+        Measured(Kind, _ => CarRig.Create((CarCatalog.For(Kind) ?? Spec).Body, Spec.Wheelbase));
 
     // ---- what the feel layer and the rig read ----
     /// <summary>Engine speed, rpm.</summary>
@@ -237,6 +240,12 @@ public sealed class Car : Rideable, IEngined
     /// <summary>Accumulated wheel rotation, radians, for the rig.</summary>
     public float WheelSpin { get; private set; }
     public bool Braking { get; private set; }
+    /// <summary>Headlights on (pop-ups raised), as the driver set them: L / D-pad right.</summary>
+    public bool Headlights { get; set; }
+    /// <summary>Soft top down, as the driver set it: O / D-pad left. Only ever true on a car that has one.</summary>
+    public bool RoofOpen { get; set; }
+    /// <summary>An open car: its top folds away.</summary>
+    public bool HasSoftTop => Spec.Body.Shape == BodyShape.Roadster;
     /// <summary>Longitudinal and lateral acceleration, m/s² (+ forward, + left), for body pitch and roll.</summary>
     public float AccelX { get; private set; }
     public float AccelY { get; private set; }
@@ -260,6 +269,14 @@ public sealed class Car : Rideable, IEngined
     private const int Substeps = 4;
 
     private float _steer;   // eased steering input, −1..1
+    /// <summary>
+    /// Game: how much of the arcade help is left, 1 all .. 0 none. The foot brake taking the whole
+    /// rear circle while the rear slides past its peak (a locked rear let go, last step) takes it away: the counter-steer assist, the yaw
+    /// damping and the catch past 35° held every car short of a spin however badly it was braked
+    /// (measured: 63° peak with the pedal floored and a sweeper's steer at 200 km/h). The handbrake
+    /// is not the foot brake, so a drift entry keeps all of it.
+    /// </summary>
+    private float _help = 1f;
     private float _shiftTimer;
 
     /// <summary>
@@ -309,7 +326,8 @@ public sealed class Car : Rideable, IEngined
         // Game: the fronts point part of the way down the direction of travel and lean against
         // the rotation, as a driver's hands would, so a drift is held rather than spun
         if (arcade && u > 3f)
-            delta = Mathf.Clamp(delta + ArcadeAssist * slipNow - ArcadeYawDamp * motion.YawRate, -s.MaxSteer, s.MaxSteer);
+            delta = Mathf.Clamp(delta + _help * (ArcadeAssist * slipNow - ArcadeYawDamp * motion.YawRate), -s.MaxSteer, s.MaxSteer);
+        float rearLock = 0f;
         SteerAngle = delta;
 
         float powerScale = arcade ? ArcadePower : 1f;
@@ -385,6 +403,11 @@ public sealed class Car : Rideable, IEngined
             float speed = Mathf.Max(Mathf.Abs(u), 1f);
             float alphaF = Mathf.Atan2(w + a * r, speed) - delta * sign;
             float alphaR = Mathf.Atan2(w - b * r, speed);
+            // the foot brake taking the whole rear circle AND the rear sliding sideways past its peak:
+            // a rear let go under braking. Both: a straight stop saturates the rear too, and with
+            // the help intact it stays straight, as a player braking in a line expects
+            rearLock = Mathf.Max(rearLock, Mathf.Clamp((brakeForce * 0.35f / capR - 0.85f) / 0.15f, 0f, 1f)
+                * Mathf.Clamp((Mathf.Abs(alphaR) - 0.08f) / 0.08f, 0f, 1f));
             float latF = Mathf.Sqrt(Mathf.Max(capF * capF - fxF * fxF, 0.01f * capF * capF));
             float latR = Mathf.Sqrt(Mathf.Max(capR * capR - fxR * fxR, 0.01f * capR * capR));
             if (input.Handbrake) latR *= Tyres.Handbrake;
@@ -413,7 +436,7 @@ public sealed class Car : Rideable, IEngined
             }
 
             // --- resistances and gravity along the grade ---
-            float drag = 0.5f * AirDensity * s.DragArea * u * Mathf.Abs(u);
+            float drag = 0.5f * AirDensity * s.DragArea * u * Mathf.Abs(u) * (1f - ground.Draft);
             float roll = RollingResistance * m * Gravity * sign;
             float cos = Mathf.Cos(delta), sin = Mathf.Sin(delta);
 
@@ -427,7 +450,7 @@ public sealed class Car : Rideable, IEngined
             {
                 float angle = Mathf.Atan2(w, Mathf.Abs(u));
                 float excess = angle - Mathf.Clamp(angle, -ArcadeMaxAngle, ArcadeMaxAngle);
-                if (excess != 0f) mz += m * a * b * (ArcadeCatch * excess - ArcadeCatchDamp * r);
+                if (excess != 0f) mz += _help * m * a * b * (ArcadeCatch * excess - ArcadeCatchDamp * r);
             }
 
             float ax = fx / m + SlopeAccel(ground.Grade);
@@ -450,6 +473,9 @@ public sealed class Car : Rideable, IEngined
             slideAccum += Mathf.Clamp(Mathf.Max(Mathf.Abs(alphaR), Mathf.Abs(alphaF) * 0.6f) * 3f
                 + wheelspin + (input.Handbrake && Mathf.Abs(u) > 2f ? 0.6f : 0f), 0f, 1f);
         }
+
+        // a locked rear takes the arcade help away within ~0.15 s; off the pedal it comes back as fast
+        _help = Mathf.MoveToward(_help, 1f - rearLock, 7f * dt);
 
         // automatic gearbox: up near the redline, down when it bogs; a brief cut of drive on each
         _shiftTimer = Mathf.Max(0f, _shiftTimer - dt);
@@ -475,10 +501,14 @@ public sealed class Car : Rideable, IEngined
     /// What another player needs to draw this car's moving parts: the body's slide already travels
     /// in the replicated transform, so these are the front-wheel angle, the wheels' spin RATE (each
     /// peer turns its own wheels by it — an accumulated angle would wrap and stutter), rpm for the
-    /// rev needle and engine note, and the brake lights.
+    /// rev needle and engine note, and the lamps and roof as bit flags in W (<see cref="PoseBrake"/>…):
+    /// small integers are exact in a float, and <c>Anim</c> is taken as-is, never blended.
     /// </summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01, Braking ? 1f : 0f);
+        new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01,
+            (Braking ? PoseBrake : 0) | (Headlights ? PoseHeadlights : 0) | (RoofOpen ? PoseRoof : 0));
+
+    private const int PoseBrake = 1, PoseHeadlights = 2, PoseRoof = 4;
 
     private float _remoteSpin;
 
@@ -488,7 +518,10 @@ public sealed class Car : Rideable, IEngined
         _remoteSpin += pose.Y * dt;
         rig.SteerAngle = pose.X;
         rig.WheelSpin = _remoteSpin;
-        rig.BrakeLights = pose.W > 0.5f;
+        int flags = Mathf.RoundToInt(pose.W);
+        rig.BrakeLights = (flags & PoseBrake) != 0;
+        rig.Headlights = (flags & PoseHeadlights) != 0;
+        rig.RoofOpen = (flags & PoseRoof) != 0;
         Rpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
     }
 
@@ -499,5 +532,7 @@ public sealed class Car : Rideable, IEngined
         rig.WheelSpin = WheelSpin;
         rig.BodyPitch = Mathf.Clamp(AccelX * 0.006f, -0.05f, 0.05f);
         rig.BrakeLights = Braking;
+        rig.Headlights = Headlights;
+        rig.RoofOpen = RoofOpen;
     }
 }

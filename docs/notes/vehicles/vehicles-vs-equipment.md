@@ -14,7 +14,7 @@
   the mountain in five seconds. `FootPlayer.FindExit` stands the pedestrian on the *ground* beside
   the seat — measuring the uphill side at seat height read it as blocked and put the player on
   the vehicle's roof, which pushed the vehicle through the terrain.
-  - **Engine** (`engine_toggle`, **I / D-pad ↑**, `FlightInput.Engine`): helicopter off → rotor spools
+  - **Engine** (`engine_toggle`, **Z / D-pad ↑** — printed as the local key, Y on QWERTZ, `FlightInput.Engine`): helicopter off → rotor spools
     down (0.18/s), lift fades below spool 0.6 into autorotation (9 m/s sink); on → ~3 s to lift.
     Plane off → zero thrust, it glides. Entering starts the engine.
   - **Damage**: vehicle HP (`FootPlayer.VehicleHealth`, `VehicleBody.Health`) loses `(impact−4)×10`

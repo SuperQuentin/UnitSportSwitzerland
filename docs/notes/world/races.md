@@ -33,6 +33,10 @@
     reports its checkpoints), drives `AutoPilot.For` at GO with `RaceManager.Others` (every player on the
     road, `WorldVelocity`), and brakes after `NpcFinished`. **They retire when their race ends**
     (`End` → `RaceNpcs.Retire`), and otherwise outlive whoever asked for them: handed to another client in their zone, or retired (`npc-handoff`). Cap 8
+    road, position and `WorldVelocity` vector), and brakes after `NpcFinished`. Each NPC has its own
+    skill (0.8-1) and aggression (0-1) from its id (`AutoPilot.Temperament`, printed `[npc] ... drives,
+    skill .. aggression ..`), and logs its spins, mistakes and resets (`driver-skill-mistakes`). **They retire when their race ends**
+    (`End` → `RaceNpcs.Retire`), and all of an owner's go when it disconnects (`ForgetOwner`). Cap 8
     per owner, 32 bodies. Classes: `AutoPilot.Drives` (cars only until the ground pilots land); other
     classes are refused with a message. **Air NPCs are refused**: `GatePilot` flies by pressing the
     input actions, which would fly the owner, not its NPC — it needs a `RideControls`-style seam first.
@@ -76,6 +80,13 @@
     a plane race at once, 4 clients; B must be refused the second race). Each client has its own
     `--cache`. Needs ~5 GB free (~9 GB for `two`). Scripting flags: `--racestart "<args>"`,
     `--racecmd "<args>"`, `--racejoin [host]`, `--raceskip N`, `--racenpc N`.
+  - `CHUNKS=<dir> tools/racecheck.sh ...` passes `--chunks` to every process (a worktree has no
+    `terrain_chunks`); a `--raceauto` client prints `[race] (auto) t .. left .. m, off .., km/h` every 2 s.
+    #52 fixed `moto` (both R1s ran wide off a R 50 m bend at 1.4 km and sat in a field: DNF) and `foot`
+    (both runners stalled at a RoadGen point gap 280 m from the line) — see `autopilot-raceroute`.
+    Measured after: car 1:02.61 / 1:02.80, bike 1:25.35 / 1:25.78, moto 0:48.05 / 0:48.25, foot
+    4:17.46 / 4:17.48; A with 3 NPC AE86s + B (`--npccheck`, solid=True): 1:03.06, 1:03.31, NPCs
+    1:07.02-1:07.16.
   - Measured: Col du Mollendruz 1.5 km AE86 1:05–1:14; Mont-la-Ville → Montricher 5.2 km plane
     1:30–1:32, heli 1:37; Haut du Mollendruz → Pétra Félix 1.9 km paraglider 2:12–2:14.
 

@@ -127,7 +127,7 @@ public partial class OccasionAmbience : Node
             p.Stream = stream;
             p.GlobalPosition = at;
             p.PitchScale = pitch;
-            p.VolumeDb = db + Mathf.LinearToDb(GameSettings.Current.AmbienceVolume);
+            p.VolumeDb = db + Audio.SfxBus.SliderDb(GameSettings.Current.AmbienceVolume);
             p.UnitSize = unit;
             p.MaxDistance = maxDistance;
             p.Play();

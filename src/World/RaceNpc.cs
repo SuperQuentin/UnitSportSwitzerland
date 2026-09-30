@@ -88,6 +88,11 @@ public partial class RaceNpc : Node
         }
         _resumeCheckpoint = -1;
         _arrival = null;   // handed over at GO
+        // its own driver, the same every race: skill 0.8..1, aggression 0..1, from its id
+        var rng = new System.Random((int)(-Id % int.MaxValue));
+        pilot.Temperament(0.8f + 0.2f * (float)rng.NextDouble(), (float)rng.NextDouble(), (int)(-Id % int.MaxValue));
+        pilot.Log = s => GD.Print($"[npc] {_me.Name}: {s}");
+        GD.Print($"[npc] {_me.Name} drives, skill {pilot.Skill:F2} aggression {pilot.Aggression:F2}");
         _me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, RaceManager.Others(_me));
     }
 

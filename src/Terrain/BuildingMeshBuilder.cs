@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Interiors;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain;
@@ -7,20 +8,31 @@ namespace UnitSport.Terrain;
 /// Turns building triangle soups into a single mesh per tile, colouring each triangle by
 /// building kind and whether the face is roof or wall. Worker-thread safe: produces plain
 /// arrays only.
+///
+/// <para>
+/// Detected <see cref="BuildingTypes"/> override the per-solid kind: every solid of a church is
+/// dressed as one, its nave with a single row of tall windows and its tower bare stone under a
+/// slate spire, whatever the cadastre match made each of them.
+/// </para>
 /// </summary>
 public static class BuildingMeshBuilder
 {
-    public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector2[] Uvs, Vector2[] Uv2s);
+    /// <summary>
+    /// <see cref="Frames"/> is CUSTOM0, four floats a vertex: the wall's horizontal tangent (x, z),
+    /// the storey height in metres, and 0. The facade shader needs the wall's own axes to cast
+    /// the fake rooms behind the windows, and the screen-space normal is too jittery for that.
+    /// </summary>
+    public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector2[] Uvs, Vector2[] Uv2s, float[] Frames);
 
     /// <summary>Faces steeper than this are walls; flatter ones are roof.</summary>
     private const float RoofNormalY = 0.45f;
 
     /// <summary>
-    /// UV2.y flags read by <c>ps1_building.gdshader</c>: 0 plain, <see cref="NeonFlag"/> a garage
-    /// sign (solid neon, lit day and night), <see cref="GarageWallFlag"/> a garage wall, whose UV is
-    /// (metres along, metres above the base) and UV2.x the eave height the chequered band runs under.
+    /// UV2.y flags read by <c>ps1_building.gdshader</c>: 0 plain, <see cref="SignFlag"/> a garage
+    /// sign's light face (lit at night), <see cref="GarageWallFlag"/> a garage wall, whose UV is
+    /// (metres along, metres above the base) and UV2.x the eave height the painted stripe runs under.
     /// </summary>
-    public const float NeonFlag = 1f, GarageWallFlag = 2f;
+    public const float SignFlag = 1f, GarageWallFlag = 2f;
 
     /// <summary>
     /// The building mesh plus a front door on each building. The doors are a few boxes appended
@@ -35,18 +47,21 @@ public static class BuildingMeshBuilder
         var v = new List<Vector3>(doors.Length * 120);
         var c = new List<Color>(doors.Length * 120);
         var f = new List<float>(doors.Length * 120); // UV2.y flag per vertex
+        var types = BuildingTypes.For(tile);
         foreach (var d in doors)
-            if (d.Width > 0) AppendDoor(v, c, f, d, tile.Buildings[d.Index].Kind);
+            if (d.Width > 0) AppendDoor(v, c, f, d, KindOf(tile.Buildings[d.Index], types.TypeOf(d.Index)));
 
         int n = data.Vertices.Length;
         var vertices = new Vector3[n + v.Count];
         var colors = new Color[n + v.Count];
         var uvs = new Vector2[n + v.Count];
         var uv2s = new Vector2[n + v.Count];
+        var frames = new float[(n + v.Count) * 4];
         Array.Copy(data.Vertices, vertices, n);
         Array.Copy(data.Colors, colors, n);
         Array.Copy(data.Uvs, uvs, n);
         Array.Copy(data.Uv2s, uv2s, n);
+        Array.Copy(data.Frames, frames, n * 4);
         for (int i = 0; i < v.Count; i++)
         {
             vertices[n + i] = v[i];
@@ -54,13 +69,13 @@ public static class BuildingMeshBuilder
             uvs[n + i] = new Vector2(0f, -1f);
             uv2s[n + i] = new Vector2(0f, f[i]);
         }
-        return new MeshData(vertices, colors, uvs, uv2s);
+        return new MeshData(vertices, colors, uvs, uv2s, frames);
     }
 
     /// <summary>
     /// Frame, leaf and a doorstep, in the door's own frame (along the wall, out, up). A garage gets
-    /// no leaf (its roll-up door is a node, <c>Vehicles.GarageDoors</c>) but a neon sign band over
-    /// the opening.
+    /// no leaf (its roll-up door is a node, <c>Vehicles.GarageDoors</c>) but a sign over the opening:
+    /// a coloured board with a light face.
     /// </summary>
     private static void AppendDoor(List<Vector3> v, List<Color> c, List<float> f, Interiors.DoorSpot d, BuildingKind kind)
     {
@@ -94,6 +109,7 @@ public static class BuildingMeshBuilder
             BuildingKind.Agricultural or BuildingKind.Annex => new Color(0.42f, 0.30f, 0.20f),
             BuildingKind.Industrial => new Color(0.46f, 0.50f, 0.54f),
             BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Civic => new Color(0.22f, 0.26f, 0.30f),
+            BuildingKind.Sacral => new Color(0.30f, 0.18f, 0.10f), // old oak
             _ => new Color(0.40f, 0.25f, 0.15f),
         }).SrgbToLinear();
         var step = new Color(0.62f, 0.61f, 0.58f).SrgbToLinear();
@@ -103,12 +119,12 @@ public static class BuildingMeshBuilder
         Box(-hw - 0.12f, hw + 0.12f, h, h + 0.12f, 0, 0.08f, frame);
         if (kind == BuildingKind.Garage)
         {
-            // the sign band: a dark board with a neon face, flagged so the shader lights it
-            Box(-hw - 0.35f, hw + 0.35f, h + 0.2f, h + 0.85f, 0, 0.12f, new Color(0.08f, 0.08f, 0.09f));
+            // the sign: a workshop-blue board, and on it a light face the shader lights at night
+            Box(-hw - 0.35f, hw + 0.35f, h + 0.2f, h + 0.85f, 0, 0.12f, new Color(0.16f, 0.30f, 0.58f).SrgbToLinear());
             int start = f.Count;
-            Quad(P(-hw - 0.25f, h + 0.3f, 0.13f), P(hw + 0.25f, h + 0.3f, 0.13f),
-                P(hw + 0.25f, h + 0.75f, 0.13f), P(-hw - 0.25f, h + 0.75f, 0.13f), Colors.White);
-            for (int i = start; i < f.Count; i++) f[i] = NeonFlag;
+            Quad(P(-hw - 0.22f, h + 0.3f, 0.13f), P(hw + 0.22f, h + 0.3f, 0.13f),
+                P(hw + 0.22f, h + 0.75f, 0.13f), P(-hw - 0.22f, h + 0.75f, 0.13f), Colors.White);
+            for (int i = start; i < f.Count; i++) f[i] = SignFlag;
             Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
             return;
         }
@@ -126,6 +142,7 @@ public static class BuildingMeshBuilder
         foreach (var b in tile.Buildings) triangles += b.TriangleCount;
         if (triangles == 0) return null;
 
+        var types = BuildingTypes.For(tile);
         var vertices = new Vector3[triangles * 3];
         var colors = new Color[triangles * 3];
         // uv.x = metres along the facade, uv.y = storey coordinate (<0 disables windows)
@@ -133,17 +150,30 @@ public static class BuildingMeshBuilder
         // uv2.x = number of whole storeys in the wall, so the shader can stop the window
         // grid at the wall plate instead of letting the roof slice the top row
         var uv2s = new Vector2[triangles * 3];
+        var frames = new float[triangles * 3 * 4];
         int v = 0;
 
-        foreach (var b in tile.Buildings)
+        for (int bi = 0; bi < tile.Buildings.Count; bi++)
         {
-            var wall = WallColor(b).SrgbToLinear();
-            var roof = RoofColor(b).SrgbToLinear();
-            var (storey, storeyCount) = Storeys(b);
+            var b = tile.Buildings[bi];
+            var part = types.PartOf(bi);
+            var kind = KindOf(b, types.TypeOf(bi));
+            var wall = WallColor(kind, b.YearBuilt).SrgbToLinear();
+            var roof = RoofColor(kind).SrgbToLinear();
+            var (storey, storeyCount) = part switch
+            {
+                // one tall storey: the shader's window row becomes a church window
+                BuildingPart.Nave => (Math.Max(3f, (types.Boxes[bi]?.Eave ?? b.MaxY) - b.MinY), 1),
+                // a tower's few openings are not a grid of flats
+                BuildingPart.Tower => (0f, 0),
+                _ => Storeys(b),
+            };
+            // a spire's faces are steep enough to count as wall; above the eave they are roof
+            float spireFrom = part == BuildingPart.Tower ? (types.Boxes[bi]?.Eave ?? b.MaxY) + 0.3f : float.MaxValue;
             var uv2 = new Vector2(storeyCount, 0f);
             if (b.Kind == BuildingKind.Garage)
             {
-                // the chequered band runs under the eave; a flat-roofed garage has its eave near
+                // the painted stripe runs under the eave; a flat-roofed garage has its eave near
                 // the top, a pitched one lower down (same 0.78 split Storeys uses)
                 float wallHeight = b.MaxY - b.MinY;
                 uv2 = new Vector2(Mathf.Max(wallHeight * 0.78f, Mathf.Min(wallHeight - 0.1f, 4f)), GarageWallFlag);
@@ -159,7 +189,8 @@ public static class BuildingMeshBuilder
 
                 var normal = (c - a).Cross(d - a);
                 float len = normal.Length();
-                bool isRoof = len > 1e-6f && Mathf.Abs(normal.Y / len) >= RoofNormalY;
+                bool isRoof = len > 1e-6f && Mathf.Abs(normal.Y / len) >= RoofNormalY
+                    || (a.Y + c.Y + d.Y) / 3f > spireFrom;
                 var color = isRoof ? roof : wall;
 
                 // Facade coordinates are baked here rather than derived in the shader:
@@ -167,6 +198,7 @@ public static class BuildingMeshBuilder
                 // which turned the window grid into speckle. The triangle normal is exact
                 // and shared by coplanar faces, so u stays continuous across a wall.
                 Vector2 uvA, uvB, uvC;
+                var tangent = Vector3.Zero;
                 if (isRoof || storey <= 0f)
                 {
                     uvA = uvB = uvC = new Vector2(0f, -1f);
@@ -174,12 +206,19 @@ public static class BuildingMeshBuilder
                 else
                 {
                     var flat = new Vector3(normal.X, 0f, normal.Z);
-                    var tangent = flat.LengthSquared() > 1e-8f
+                    tangent = flat.LengthSquared() > 1e-8f
                         ? new Vector3(-flat.Z, 0f, flat.X).Normalized()
                         : Vector3.Right;
                     uvA = FacadeUv(a, tangent, b.MinY, storey);
                     uvB = FacadeUv(c, tangent, b.MinY, storey);
                     uvC = FacadeUv(d, tangent, b.MinY, storey);
+                }
+                for (int k = 0; k < 3; k++)
+                {
+                    int f = (v + k) * 4;
+                    frames[f] = tangent.X;
+                    frames[f + 1] = tangent.Z;
+                    frames[f + 2] = storey;
                 }
 
                 vertices[v] = a; colors[v] = color; uvs[v] = uvA; uv2s[v++] = uv2;
@@ -188,7 +227,7 @@ public static class BuildingMeshBuilder
             }
         }
 
-        return new MeshData(vertices, colors, uvs, uv2s);
+        return new MeshData(vertices, colors, uvs, uv2s, frames);
     }
 
     private static Vector2 FacadeUv(Vector3 p, Vector3 tangent, float baseY, float storey) =>
@@ -248,9 +287,13 @@ public static class BuildingMeshBuilder
         return (height, count);
     }
 
-    private static Color WallColor(Building b)
+    /// <summary>The kind a building is dressed as: a church's every solid as a church.</summary>
+    private static BuildingKind KindOf(Building b, BuildingType type) =>
+        type == BuildingType.Church ? BuildingKind.Sacral : b.Kind;
+
+    private static Color WallColor(BuildingKind kind, ushort year)
     {
-        var baseColor = b.Kind switch
+        var baseColor = kind switch
         {
             BuildingKind.House => new Color(0.82f, 0.76f, 0.65f),        // rendered cream
             BuildingKind.Apartment => new Color(0.75f, 0.72f, 0.67f),
@@ -260,20 +303,20 @@ public static class BuildingMeshBuilder
             BuildingKind.Sacral => new Color(0.88f, 0.86f, 0.80f),       // pale stone
             BuildingKind.Civic => new Color(0.80f, 0.79f, 0.75f),
             BuildingKind.Annex => new Color(0.62f, 0.59f, 0.54f),
-            BuildingKind.Garage => new Color(0.60f, 0.64f, 0.72f),        // blue-grey workshop
+            BuildingKind.Garage => new Color(0.66f, 0.66f, 0.64f),        // sheet-metal workshop
             BuildingKind.UnderConstruction => new Color(0.70f, 0.69f, 0.66f),
             _ => new Color(0.72f, 0.70f, 0.66f),
         };
-        return ApplyAge(baseColor, b.YearBuilt);
+        return ApplyAge(baseColor, year);
     }
 
-    private static Color RoofColor(Building b) => b.Kind switch
+    private static Color RoofColor(BuildingKind kind) => kind switch
     {
         BuildingKind.Agricultural => new Color(0.42f, 0.36f, 0.30f),
         BuildingKind.Industrial => new Color(0.46f, 0.48f, 0.49f),
         BuildingKind.Sacral or BuildingKind.Civic => new Color(0.35f, 0.33f, 0.34f), // slate
         BuildingKind.Annex => new Color(0.44f, 0.40f, 0.36f),
-        BuildingKind.Garage => new Color(0.36f, 0.37f, 0.41f),
+        BuildingKind.Garage => new Color(0.46f, 0.47f, 0.48f),
         BuildingKind.UnderConstruction => new Color(0.60f, 0.59f, 0.57f),
         _ => new Color(0.50f, 0.30f, 0.23f), // the usual Swiss reddish-brown tile
     };

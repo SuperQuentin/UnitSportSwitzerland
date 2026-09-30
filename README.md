@@ -26,10 +26,13 @@ godot --path .
 ```
 
 > **A fresh clone has no terrain data.** The generated chunks are 5.3 GB and the source
-> geodata 155 GB, so neither is in the repository. The game starts anyway, into a **generated
-> stand-in world**: an alpine valley with a river, a road, a railway, villages, farms, forest,
-> rock and snow, built around the spawn point so everything can be tried. It is only a
-> fallback; real terrain replaces it the moment you get some:
+> geodata 155 GB, so neither is in the repository. The game starts anyway, on **generated
+> terrain**: an alpine valley with a river, a road, a railway, villages, farms, forest, rock and
+> snow, so everything can be tried. Wherever there is no real terrain it is generated, and it
+> bends to meet the real tiles beside it, so a partial region is surrounded by land rather than
+> void (a small "generated terrain" note says which ground you are on; Settings → Generated
+> terrain or `--generated off` turns it off). Real terrain takes over tile by tile as you get
+> some:
 >
 > - **join a server** and the whole world streams in and is cached (see *Terrain streaming*);
 > - **generate it yourself** by downloading the swisstopo data and running the preprocessor
@@ -57,7 +60,11 @@ godot --path . -- --at 2538000,1152000     # or by LV95 easting/northing
 - **WASD + mouse** — fly around. **Space** up, **Shift** down, **Ctrl** boost. Click to take the mouse back after a menu
 - **T** — drop onto the ground and walk. **T** again to fly
 - On foot: **Shift** run, **Space** jump, **Ctrl** slide, **Space** against a wall to wall jump
-- **Tab** — search for a town and teleport there (only places with terrain are listed)
+- **M** — search for a town and teleport there (only places with terrain are listed)
+- **R** — travel menu: bike, skis, paraglider and, offline or as a server admin, vehicles
+- **E** — interact: get in or out of a vehicle, search furniture, open a door
+- **I** / **Tab** — inventory (Minecraft-style: drag stacks, right-click halves, shift-click moves)
+- **F1** — every control, as bound on your keyboard and pad; the bottom-right hints show the ones that apply now
 - **G** — load one or more `.gpx` tracks and watch them race
 - **H** — hide the interface for a clean view (a small button top-right brings it back)
 - **Enter** — chat, when connected to a server (**/** for a command)
@@ -428,7 +435,7 @@ in Sion:
 | 30 s          | 5.06 M prims                                         |
 | 60 s          | 5.19 M prims, rings filled out to the horizon        |
 
-The town index (`places.json`) is sent too, so **Tab** search works on a client that shipped
+The town index (`places.json`) is sent too, so the **M** search works on a client that shipped
 without it. Revisiting somewhere already streamed fetches **0** new files.
 
 ### Chat
@@ -441,7 +448,7 @@ moment anything is said.
 | -------------------------------------------- | -------- | --------------------------------------------------- |
 | `/help` `/who`                               | anyone   | commands you can run; who is online                 |
 | `/name <name>`                               | anyone   | change your display name                            |
-| `/city <town>`                               | anyone   | teleport yourself, same index as the **Tab** search |
+| `/city <town>`                               | anyone   | teleport yourself, same index as the **M** search   |
 | `/me <action>`                               | anyone   | emote                                               |
 | `/login <password>`                          | anyone   | become an operator (needs `--admin-password`)       |
 | `/say <text>`                                | operator | server announcement                                 |

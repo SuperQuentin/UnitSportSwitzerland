@@ -5,7 +5,23 @@ namespace UnitSport.Avatar;
 /// <summary>The meshes a <see cref="CarRig"/> is assembled from, and where its wheels go.</summary>
 public sealed record CarParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, ArrayMesh Wheel,
     float WheelRadius, float FrontAxleZ, float RearAxleZ, float HalfTrack,
-    CarDoor[] Doors, float Drop, Color? Glow);
+    CarDoor[] Doors, float Drop, Color? Glow)
+{
+    /// <summary>A roadster's soft top (cloth, rear window, C-pillars), origin on its hinge behind the seats.</summary>
+    public HingedPart? Top { get; init; }
+    /// <summary>A roadster's side glass, origin on the belt line it winds down into.</summary>
+    public HingedPart? Windows { get; init; }
+    /// <summary>A roadster's cockpit (tub, dash, seats, wheel): only worth drawing with the top down.</summary>
+    public ArrayMesh? Cockpit { get; init; }
+    /// <summary>
+    /// Both pop-up headlight pods, raised, with the lamps in their faces as <see cref="HingedPart.Lamp"/>;
+    /// origin on the nose, where they fold down to lie as lids.
+    /// </summary>
+    public HingedPart? Flaps { get; init; }
+}
+
+/// <summary>A part that moves: its mesh (and lamp mesh, if it carries lights), origin on <see cref="Pivot"/> in node space.</summary>
+public sealed record HingedPart(ArrayMesh Mesh, Vector3 Pivot, ArrayMesh? Lamp = null);
 
 /// <summary>
 /// One door: its mesh, built around its hinge, where that hinge is and the rotation that opens
@@ -24,6 +40,14 @@ public sealed record CarDoor(string Name, byte Bit, ArrayMesh Mesh, Vector3 Hing
 /// no wedge primitive: the slab reads as a raked windscreen and the steps fill the gap beneath it
 /// (their corners poke through the slab, in the same colour, so nothing shows).
 /// </para>
+///
+/// <para>
+/// Parts that move are built apart, each around its hinge (<see cref="MeshScratch.Build(Vector3)"/>):
+/// a roadster's soft top and side glass, which fold away over a cockpit, and the pop-up pods,
+/// authored raised. The pods fold flat onto the nose and the rig hides the lamps and the cockpit
+/// when they are put away (from when boxes rendered inside out, the note
+/// <c>meshscratch-boxes-render-inside-out</c>; they need not be any more, but it is no worse).
+/// </para>
 /// </summary>
 public static class CarMeshBuilder
 {
@@ -33,6 +57,8 @@ public static class CarMeshBuilder
     private static readonly Color Head = new(1f, 0.96f, 0.8f);
     private static readonly Color Tail = new(1f, 0.12f, 0.09f);
     private static readonly Color Steel = new(0.55f, 0.56f, 0.6f);
+    private static readonly Color Cabin = new(0.14f, 0.13f, 0.13f);
+    private static readonly Color Amber = new(1f, 0.6f, 0.12f);
 
     private sealed record Dims(
         float Length, float Width, float Roof, float Wheelbase, float WheelR, float TyreW, float Track,
@@ -119,6 +145,10 @@ public static class CarMeshBuilder
         s.Box(new Vector3(0, (bot + d.Deck) * 0.5f, (d.RgBase - hl) * 0.5f), new Vector3(d.Width, d.Deck - bot, d.RgBase + hl), paint);
 
         // ---- greenhouse ----
+        // A roadster's side glass and soft top come off it (their own scratches, their own
+        // hinges); the windscreen and A-pillars stay with the body.
+        var win = open ? new MeshScratch() : s;
+        var top = open ? new MeshScratch() : s;
         float cw = d.Width - 0.2f;
         var glass = body.Glass ?? Glass;
         const int steps = 4;
@@ -127,35 +157,43 @@ public static class CarMeshBuilder
         {
             float t = (k + 0.5f) / steps;   // fraction up the slope, at the middle of the layer
             float zf = Mathf.Lerp(d.WsBase, d.WsTop, t), zr = Mathf.Lerp(d.RgBase, d.RgTop, t);
-            s.Box(new Vector3(0, d.Belt + h * (k + 0.5f), (zf + zr) * 0.5f), new Vector3(cw, h, zf - zr), glass);
+            win.Box(new Vector3(0, d.Belt + h * (k + 0.5f), (zf + zr) * 0.5f), new Vector3(cw, h, zf - zr), glass);
         }
         SlopedGlass(s, cw - 0.04f, d.Belt, d.WsBase, d.Roof, d.WsTop, glass);
-        SlopedGlass(s, cw - 0.04f, d.Belt, d.RgBase, d.Roof, d.RgTop, glass);
+        SlopedGlass(top, cw - 0.04f, d.Belt, d.RgBase, d.Roof, d.RgTop, glass);
         // a roadster's roof is its soft top, up: dark cloth rather than paint
-        s.Box(new Vector3(0, d.Roof - 0.025f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(cw + 0.02f, 0.05f, d.WsTop - d.RgTop), open ? Trim : paint);
-        // pillars: A, B (four doors only) and C
+        top.Box(new Vector3(0, d.Roof - 0.025f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(cw + 0.02f, 0.05f, d.WsTop - d.RgTop), open ? Trim : paint);
+        // pillars: A, B (four doors only) and C (cloth on a roadster)
         foreach (float sx in new[] { -1f, 1f })
         {
             float px = sx * (cw * 0.5f + 0.005f);
             s.Tube(new Vector3(px, d.Belt, d.WsBase), new Vector3(px, d.Roof, d.WsTop), 0.03f, paint, 4);
-            s.Tube(new Vector3(px, d.Belt, d.RgBase), new Vector3(px, d.Roof, d.RgTop), 0.035f, paint, 4);
+            top.Tube(new Vector3(px, d.Belt, d.RgBase), new Vector3(px, d.Roof, d.RgTop), 0.035f, open ? Trim : paint, 4);
             if (body.Shape == BodyShape.Sedan)
                 s.Box(new Vector3(px, (d.Belt + d.Roof) * 0.5f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(0.03f, d.Roof - d.Belt, 0.09f), paint);
             // mirrors (the doors themselves are separate meshes, below)
             s.Box(new Vector3(sx * (hw + 0.08f), d.Belt + 0.1f, d.WsBase - 0.1f), new Vector3(0.16f, 0.1f, 0.09f), body.Lower != null ? Trim : paint);
         }
+        var cockpit = open ? new MeshScratch() : null;
+        if (cockpit != null) Cockpit(cockpit, d, cw);
 
         // ---- per-car features ----
         var lampY = d.Hood - 0.02f;
+        MeshScratch? pods = null, podLamps = null;
         if (body.PopUps)
-            // pop-up headlights, raised: a pod on the bonnet edge with the lamp in its face
+        {
+            // pop-up headlights, raised: a pod on the bonnet edge with the lamp in its face.
+            // Closed, the rig folds them down onto the nose they stand on, as lids.
+            pods = new MeshScratch();
+            podLamps = new MeshScratch();
             foreach (float sx in new[] { -1f, 1f })
             {
                 float x = sx * (hw - 0.3f);
-                s.Box(new Vector3(x, d.Hood + 0.05f, noseZ + 0.1f), new Vector3(0.34f, 0.12f, 0.2f), body.Bonnet ?? paint);
-                head.Box(new Vector3(x, d.Hood + 0.05f, noseZ + 0.205f), new Vector3(0.28f, 0.09f, 0.02f), Head);
-                head.Box(new Vector3(sx * (hw - 0.22f), lampY - 0.12f, hl + 0.005f), new Vector3(0.2f, 0.06f, 0.02f), new Color(1f, 0.6f, 0.12f));   // indicators
+                pods.Box(new Vector3(x, d.Hood + 0.05f, noseZ + 0.1f), new Vector3(0.34f, 0.12f, 0.2f), body.Bonnet ?? paint);
+                podLamps.Box(new Vector3(x, d.Hood + 0.05f, noseZ + 0.205f), new Vector3(0.28f, 0.09f, 0.02f), Head);
+                s.Box(new Vector3(sx * (hw - 0.22f), lampY - 0.12f, hl + 0.005f), new Vector3(0.2f, 0.06f, 0.02f), Amber);   // indicators
             }
+        }
         else
             foreach (float sx in new[] { -1f, 1f })
                 head.Box(new Vector3(sx * (hw - 0.36f), d.Hood - 0.06f, hl + 0.005f), new Vector3(0.4f, 0.13f, 0.02f), Head);
@@ -202,8 +240,50 @@ public static class CarMeshBuilder
                 head.Box(new Vector3(sx * (hw - 0.12f), sillY0 - 0.01f, 0), new Vector3(0.05f, 0.02f, d.Wheelbase - 2 * arch), neon);
 
         var doorParts = doors.Select(span => BuildDoor(span, body, d, bot, cw, glass)).SelectMany(x => x).ToArray();
-        return new CarParts(s.Build(), head.Build(), tail.Build(), BuildWheel(d, body.Rim, body.RimSize, body.Slicks),
+        var parts = new CarParts(s.Build(), head.Build(), tail.Build(), BuildWheel(d, body.Rim, body.RimSize, body.Slicks),
             d.WheelR, axF, axR, d.Track * 0.5f, doorParts, body.Drop, body.Underglow);
+        if (open)
+        {
+            var topHinge = new Vector3(0, d.Belt, d.RgBase);
+            var belt = new Vector3(0, d.Belt, 0);
+            parts = parts with
+            {
+                Top = new HingedPart(top.Build(topHinge), Turned(topHinge)),
+                Windows = new HingedPart(win.Build(belt), Turned(belt)),
+                Cockpit = cockpit!.Build(),
+            };
+        }
+        if (pods != null)
+        {
+            // the nose top the pods stand on (it steps 6 cm down from the bonnet)
+            var hinge = new Vector3(0, d.Hood - 0.06f, noseZ);
+            parts = parts with { Flaps = new HingedPart(pods.Build(hinge), Turned(hinge), podLamps!.Build(hinge)) };
+        }
+        return parts;
+    }
+
+    /// <summary>An authored (+Z facing) point in node space, as <see cref="MeshScratch.Build()"/> turns it.</summary>
+    private static Vector3 Turned(Vector3 p) => new(-p.X, p.Y, -p.Z);
+
+    /// <summary>
+    /// What an open car shows with its top down: a dark tub over the body at the belt, a dash,
+    /// two seats and the wheel on the right (the Initial D cars are Japanese). All of it fits
+    /// inside the closed greenhouse, where the rig hides it.
+    /// </summary>
+    private static void Cockpit(MeshScratch s, Dims d, float cw)
+    {
+        float y = d.Belt;
+        s.Box(new Vector3(0, y + 0.005f, (d.WsBase + d.RgBase) * 0.5f), new Vector3(cw - 0.04f, 0.01f, d.WsBase - d.RgBase - 0.04f), Cabin);
+        s.Box(new Vector3(0, y + 0.04f, d.WsBase - 0.16f), new Vector3(cw - 0.06f, 0.07f, 0.24f), Cabin);
+        foreach (float sx in new[] { -1f, 1f })
+        {
+            float x = sx * 0.33f;
+            // seat back, reclined a little, and its headrest
+            s.Box(new Vector3(x, y + 0.1f, d.RgBase + 0.26f), new Vector3(0.44f, 0.36f, 0.1f), Trim, new Basis(Vector3.Right, -0.2f));
+            s.Box(new Vector3(x, y + 0.33f, d.RgBase + 0.22f), new Vector3(0.24f, 0.12f, 0.08f), Trim);
+        }
+        // −X authored is the right-hand side once turned to face −Z
+        s.Ring(new Vector3(-0.33f, y + 0.12f, d.WsBase - 0.3f), new Vector3(0, 0.35f, -1f).Normalized(), 0.15f, 0.18f, 0.03f, Trim, 12);
     }
 
     /// <summary>

@@ -5,11 +5,15 @@
   Riddes has 58. Rebuild: `--features-only --buildings <gpkg> --gwr <gwr data.sqlite>` — the GWR
   must be the canton's (`gwr_vs` for Riddes); the VD file matches 0 of 1,159 buildings and
   classifies everything Other. See `tools/gwr-classify-gklas-gkat`.
-- **Facade** (`BuildingMeshBuilder`, `ps1_building.gdshader`): blue-grey walls, no window grid, a
-  sign band over the door and a chequered band under the eave, both in `garage_neon` (magenta),
-  unlit and never darkened, day or night. Flags ride in UV2.y: 1 = neon face, 2 = garage wall
-  (then UV = metres along/up and UV2.x = eave height). Far off the chequer merges into one solid
-  neon line, which is what reads across the valley.
+- **Facade** (`BuildingMeshBuilder`, `ps1_building.gdshader`): sheet-metal grey walls (0.66, in
+  the range of the other kinds), no window grid, a **sign** over the door (a workshop-blue board
+  with a light face, `garage_sign`, plain paint by day and lit at night like a window) and a
+  0.5 m **painted stripe** under the eave (`garage_stripe`, rust red, shaded like the wall), which
+  still reads as a line across the valley. Flags ride in UV2.y: 1 = sign face, 2 = garage wall
+  (then UV = metres along/up and UV2.x = eave height).
+  **Never magenta, never a magenta/black chequer**: the first version (near-black wall, hot-pink
+  neon sign, pink/black chequer band) read in game exactly like an engine's missing-texture
+  pattern, and the owner took it for a bug.
 - **The output is not sRGB-encoded**: a vertex colour goes through `SrgbToLinear` and is shown
   as that linear value, so a "dark grey" 0.26 renders almost black. Pick building and prop
   colours by what they render as (0.6 for a mid grey), not by their sRGB value.
