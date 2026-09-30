@@ -16,24 +16,33 @@ namespace UnitSport.Interiors;
 /// as everything else. Real buildings do not overlap, so neither do their interiors; every peer
 /// computes the same place from the plan alone, so nothing has to allocate slots; there is one
 /// physics space for a hundred players; and the terrain keeps streaming around a player who is
-/// inside, so walking back out is instant. Only the interior the local player is in is ever built.
+/// inside. A client builds only the interiors it can see into: the one it is in, and those behind
+/// open doors near it.
 /// </para>
 ///
 /// <para>
-/// <b>The server generates and remembers.</b> The first player through a door makes the server
-/// plan that building (<see cref="InteriorGenerator"/>) and save the plan under
-/// <c>user://interiors/</c>; everyone who enters afterwards — including the same player, and
-/// including after a server restart — is sent that stored plan, so they all stand in the same
-/// house. Offline the client plays the server's part for itself.
+/// <b>Doors open, and you walk through them.</b> E at a front door asks the server to open it (or
+/// shut it); the server plans the building if nobody has yet, and tells everyone. While a door
+/// stands open, each nearby client builds the interior behind it, and the doorway on either side
+/// shows the other (<see cref="DoorPortals"/>). Stepping over the sill carries the player across
+/// by the door's map (<see cref="DoorLink"/>), with no fade and no pause. A door nobody is near
+/// shuts by itself after a few seconds, so no portal renders for an empty doorway.
 /// </para>
 ///
 /// <para>
-/// <b>Who is where</b> is a server table (<see cref="SetPlayerSpace"/>), broadcast to every client.
-/// Clients hide remote players who are not in their space, and each player's synchroniser only
-/// sends its position to peers in the same space — the interest management that keeps a hundred
-/// players from all streaming to all. The table comes from the server rather than from replicated
-/// player state because a filter driven by replicated state stops the very update that would lift
-/// it.
+/// <b>The server generates and remembers.</b> The first door opened on a building makes the server
+/// plan it (<see cref="InteriorGenerator"/>) and save the plan under <c>user://interiors/</c>;
+/// everyone afterwards is sent that stored plan, so they all stand in the same house. Offline the
+/// client plays the server's part for itself.
+/// </para>
+///
+/// <para>
+/// <b>Who is where</b> and <b>which doors are open</b> are server tables, broadcast to every client.
+/// Clients hide remote players they cannot see, and each player's synchroniser only sends its
+/// position to peers who can: the same space, or an interior and the outside while one of its
+/// doors is open (<see cref="Linked"/>). The tables come from the server rather than from
+/// replicated player state because a filter driven by replicated state stops the very update that
+/// would lift it.
 /// </para>
 /// </summary>
 public partial class InteriorManager : Node3D
@@ -47,6 +56,14 @@ public partial class InteriorManager : Node3D
     private const float ExitReach = 1.8f;
     /// <summary>Server-side check: generous, since the player's position is a relayed copy.</summary>
     private const float ServerDoorReach = 7f;
+    /// <summary>A client builds the interior behind an open door within this distance, to show it through the doorway.</summary>
+    private const float BuildRange = 45f;
+    /// <summary>A door with nobody this close to either side of it...</summary>
+    private const float QuietRadius = 6f;
+    /// <summary>...for this long shuts by itself.</summary>
+    private const double QuietSeconds = 60;
+    /// <summary>A door's swing, open or shut, in seconds.</summary>
+    private const float SwingSeconds = 0.6f;
 
     public static InteriorManager? Instance { get; private set; }
 
@@ -56,11 +73,26 @@ public partial class InteriorManager : Node3D
     public Node3D? Players { get; set; }
     /// <summary>Client: the player this client controls, resolved when asked.</summary>
     public Func<FootPlayer?>? LocalPlayer { get; set; }
+    /// <summary>Client: a tile's building collision, which a player in an open doorway is let through.</summary>
+    public Func<TileId, StaticBody3D?>? BuildingBodies { get; set; }
+    /// <summary>Client: where the facade shader's occupancy cues go (<c>ChunkManager.SetOccupancy</c>).</summary>
+    public Action<Vector4[], Vector4[], int>? OccupancySink { get; set; }
 
-    /// <summary>Raised on the client when the local player goes in (true) or comes out (false).</summary>
-    public event Action<bool>? LocalInsideChanged;
+    /// <summary>
+    /// Raised on the client when the outside world has to be drawn (true) or may be hidden
+    /// (false): hidden only while the local player is inside with every door of the building shut.
+    /// </summary>
+    public event Action<bool>? OutsideShownChanged;
 
+    // server tables, mirrored on every client
     private readonly Dictionary<long, string> _spaces = new();
+    /// <summary>Open doors: door key (the building the door is on) to the key its interior is planned under.</summary>
+    private readonly Dictionary<string, string> _doors = new();
+    /// <summary>Server: how long each open door has had nobody near it.</summary>
+    private readonly Dictionary<string, double> _quiet = new();
+    private double _serverTick;
+
+    // plans
     private readonly Dictionary<string, InteriorLayout> _cache = new();
     /// <summary>Door key to the key its plan is stored under, once looked up.</summary>
     private readonly Dictionary<string, string> _planKeys = new();
@@ -68,16 +100,31 @@ public partial class InteriorManager : Node3D
     private string _storeDir = "";
 
     // client state
+    private bool _presenting;
     private InteriorLayout? _current;
-    private InteriorNode? _currentNode;
-    private bool _requesting;
-    private FootPlayer? _entering;
+    private readonly Dictionary<string, InteriorNode> _built = new();
+    private readonly HashSet<string> _building = new();
+    /// <summary>Doors whose plan has been asked of the server and not yet received.</summary>
+    private readonly HashSet<string> _asked = new();
+    private readonly Dictionary<string, DoorLink> _links = new();
+    private DoorPortals? _portals;
+    private BuildingSounds? _sounds;
+    /// <summary>The building collision the local player is currently let through, standing in a doorway.</summary>
+    private StaticBody3D? _passing;
+    private bool _outsideShown = true;
+    private double _maintain;
+    private string? _requestingDoor;
+    private double _requestTimer;
     private static ShaderMaterial? _material;
 
-    // prompt + fade
+    // occupancy cues
+    private readonly Dictionary<string, BuildingSounds.Occupied?> _boxes = new();
+    private readonly List<BuildingSounds.Occupied> _occupied = new();
+    private string _occupancyKey = "";
+
+    // prompt
     private CanvasLayer? _ui;
     private Label? _prompt;
-    private ColorRect? _fade;
     private double _promptTimer;
     private double _hintTimer;
 
@@ -93,16 +140,10 @@ public partial class InteriorManager : Node3D
     {
         _storeDir = ProjectSettings.GlobalizePath("user://interiors");
         if (DisplayServer.GetName() == "headless" && Multiplayer.IsServer() && Online) return;
+        _presenting = true;
 
         _ui = new CanvasLayer { Name = "InteriorUi", Layer = 9 };
         AddChild(_ui);
-        _fade = new ColorRect
-        {
-            Color = new Color(0, 0, 0, 0),
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        };
-        _fade.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _ui.AddChild(_fade);
         _prompt = new Label
         {
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -116,6 +157,12 @@ public partial class InteriorManager : Node3D
         _prompt.Position = new Vector2(-150, -140);
         _prompt.Size = new Vector2(300, 30);
         _ui.AddChild(_prompt);
+
+        _portals = new DoorPortals(() => _links.Values, PlanAt) { Name = "Portals" };
+        AddChild(_portals);
+        _sounds = new BuildingSounds { Name = "Sounds" };
+        AddChild(_sounds);
+        AddChild(new DoorwayGhosts(() => _links.Values, PlanAt) { Name = "Ghosts" });
     }
 
     public override void _ExitTree()
@@ -126,19 +173,34 @@ public partial class InteriorManager : Node3D
 
     /// <summary>The interior the local player is in, and its node — for probes and tools.</summary>
     public InteriorLayout? Current => _current;
-    public InteriorNode? CurrentNode => _currentNode;
+    public InteriorNode? CurrentNode => _current != null && _built.TryGetValue(_current.Key, out var n) ? n : null;
+    /// <summary>The door links built on this client (for probes).</summary>
+    public IReadOnlyDictionary<string, DoorLink> Links => _links;
+    public DoorPortals? Portals => _portals;
 
     private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
         && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
 
     private long MyId => Multiplayer.MultiplayerPeer is { } p and not OfflineMultiplayerPeer ? Multiplayer.GetUniqueId() : 1;
 
+    /// <summary>This peer keeps the tables: the server, or a client playing offline.</summary>
+    private bool Authoritative => !Online || Multiplayer.IsServer();
+
     // ---- who is where ----------------------------------------------------------------------
 
     public string SpaceOf(long peer) => _spaces.TryGetValue(peer, out var k) ? k : "";
 
-    /// <summary>Whether a remote peer is somewhere this client can see: the same interior, or both outside.</summary>
-    public bool SameSpaceAsLocal(long peer) => SpaceOf(peer) == SpaceOf(MyId);
+    public bool IsOpen(string door) => _doors.ContainsKey(door);
+
+    /// <summary>
+    /// Whether players in two spaces can see each other: the same space, or an interior and the
+    /// outside while a door between them stands open.
+    /// </summary>
+    public bool Linked(string a, string b) =>
+        a == b || (a.Length == 0 && _doors.ContainsValue(b)) || (b.Length == 0 && _doors.ContainsValue(a));
+
+    /// <summary>Whether a remote peer is somewhere this client can see.</summary>
+    public bool SameSpaceAsLocal(long peer) => Linked(SpaceOf(peer), SpaceOf(MyId));
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void SetPlayerSpace(long peer, string key)
@@ -149,13 +211,14 @@ public partial class InteriorManager : Node3D
     private void Broadcast(long peer, string key)
     {
         SetPlayerSpace(peer, key);
-        Rpc(MethodName.SetPlayerSpace, peer, key);
+        if (Online) Rpc(MethodName.SetPlayerSpace, peer, key);
     }
 
-    /// <summary>Server: tells a newly joined client who is already inside where.</summary>
+    /// <summary>Server: tells a newly joined client who is already inside where, and which doors stand open.</summary>
     public void SendTableTo(long peer)
     {
         foreach (var (p, key) in _spaces) RpcId(peer, MethodName.SetPlayerSpace, p, key);
+        foreach (var (door, plan) in _doors) RpcId(peer, MethodName.SetDoor, door, plan, true);
     }
 
     /// <summary>Server: a player left; they are no longer inside anything.</summary>
@@ -164,43 +227,431 @@ public partial class InteriorManager : Node3D
         if (_spaces.ContainsKey(peer)) Broadcast(peer, "");
     }
 
-    // ---- client: entering and leaving ---------------------------------------------------------
+    // ---- doors: the shared state -------------------------------------------------------------
 
-    /// <summary>E at a door. False when there is no door in reach, so the caller can try other things.</summary>
-    public bool TryEnter(FootPlayer player)
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void SetDoor(string door, string plan, bool open)
     {
-        if (player.Indoors) return false;
-        if (DoorIndex.Nearest(player.GlobalPosition, DoorReach) is not { } door) return false;
-        if (_requesting) return true;
-        _requesting = true;
-        _entering = player;
-        string key = door.Key.ToString();
-        if (Online) RpcId(1, MethodName.RequestEnter, key);
-        else EnterOffline(key);
+        bool was = _doors.ContainsKey(door);
+        if (open) _doors[door] = plan; else _doors.Remove(door);
+        _quiet.Remove(door);
+        _planKeys[door] = plan;
+        if (_requestingDoor == door) _requestingDoor = null;
+        if (was != open && _presenting) DoorMoved(door, open);
+    }
+
+    private void BroadcastDoor(string door, string plan, bool open)
+    {
+        SetDoor(door, plan, open);
+        if (Online) Rpc(MethodName.SetDoor, door, plan, open);
+    }
+
+    /// <summary>
+    /// E at a door, from either side: opens it, or shuts it. False when there is no door in
+    /// reach outside, so the caller can try other things; inside it always consumes the press.
+    /// </summary>
+    public bool TryDoor(FootPlayer player)
+    {
+        string? door;
+        if (player.Indoors)
+        {
+            if (_current == null) return true;
+            door = ExitAt(player)?.Door;
+            if (door == null)
+            {
+                Hint(_current.AllEntrances().Count > 1
+                    ? "The ways out are the doors, on the ground floor."
+                    : "The way out is the front door, on the ground floor.");
+                return true;
+            }
+        }
+        else door = DoorIndex.Nearest(player.GlobalPosition, DoorReach)?.Key.ToString();
+        if (door == null) return false;
+        if (_requestingDoor != null) return true;
+
+        bool open = !_doors.ContainsKey(door);
+        _requestingDoor = door;
+        _requestTimer = 3;
+        if (Online) RpcId(1, MethodName.RequestDoor, door, open);
+        else _ = ServeDoor(MyId, door, open);
         return true;
     }
 
-    private async void EnterOffline(string door)
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestDoor(string door, bool open)
+    {
+        if (!Multiplayer.IsServer()) return;
+        _ = ServeDoor(Multiplayer.GetRemoteSenderId(), door, open);
+    }
+
+    /// <summary>Server (or offline): opens or shuts a door for a player standing at it.</summary>
+    private async Task ServeDoor(long sender, string door, bool open)
     {
         try
         {
-            var layout = await GetOrCreate(door);
-            if (layout == null) { Refused("This door is locked."); return; }
-            SetPlayerSpace(MyId, layout.Key);
-            await Arrive(layout, door);
+            var layout = BuildingKey.TryParse(door, out _) ? await GetOrCreate(door) : null;
+            if (layout == null || Origin == null) { Refuse(sender, "This door is locked."); return; }
+            if (!NearDoor(sender, layout, door, ServerDoorReach)) { Refuse(sender, "Too far from the door."); return; }
+            // the plan first: the opener builds the interior while the door starts to swing
+            if (open) SendPlan(sender, layout, door);
+            if (_doors.ContainsKey(door) != open) BroadcastDoor(door, layout.Key, open);
+            else if (sender == MyId) _requestingDoor = null;
+            else RpcId(sender, MethodName.SetDoor, door, layout.Key, open);
         }
         catch (Exception e)
         {
-            GD.PushError($"[interior] entering {door} failed: {e}");
-            Refused("This door is stuck.");
+            GD.PushError($"[interior] door {door} for peer {sender}: {e}");
+            Refuse(sender, "This door is stuck.");
         }
+    }
+
+    private void Refuse(long sender, string why)
+    {
+        if (sender == MyId) Refused(why);
+        else RpcId(sender, MethodName.DoorRefused, why);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void DoorRefused(string why) => Refused(why);
+
+    private void Refused(string why)
+    {
+        GD.Print($"[interior] refused: {why}");
+        _requestingDoor = null;
+        Hint(why);
+    }
+
+    /// <summary>Server: whether a player is within reach of either side of a door.</summary>
+    private bool NearDoor(long peer, InteriorLayout layout, string door, float reach)
+    {
+        var body = PlayerBody(peer);
+        if (body == null || Origin == null) return true;
+        var e = layout.EntranceFor(door);
+        var at = body.GlobalPosition;
+        return at.DistanceTo(OutsideDoorAt(layout, e)) <= reach || at.DistanceTo(InsideDoorAt(layout, e)) <= reach;
+    }
+
+    private Node3D? PlayerBody(long peer) =>
+        Players?.GetNodeOrNull<Node3D>(peer.ToString()) ?? (peer == MyId && !Online ? LocalPlayer?.Invoke() : null);
+
+    /// <summary>The door on the facade, world space.</summary>
+    public Vector3 OutsideDoorAt(InteriorLayout l, EntrancePlan e)
+    {
+        BuildingKey.TryParse(e.Door, out var k);
+        return Origin!.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0) + new Vector3(e.DoorX, e.DoorY, e.DoorZ);
+    }
+
+    /// <summary>The doorway in the interior's wall, world space.</summary>
+    public Vector3 InsideDoorAt(InteriorLayout l, EntrancePlan e) => PlacementFor(l, Origin!) * new Vector3(e.X, 0, e.Z);
+
+    /// <summary>Server (or offline): shuts every door nobody has been near for a while.</summary>
+    private void TickDoors(double delta)
+    {
+        _serverTick += delta;
+        if (_serverTick < 0.5 || _doors.Count == 0 || Origin == null) return;
+        double dt = _serverTick;
+        _serverTick = 0;
+
+        var bodies = new List<Vector3>();
+        if (Players != null)
+            foreach (var n in Players.GetChildren())
+                if (n is Node3D body) bodies.Add(body.GlobalPosition);
+        if (!Online && LocalPlayer?.Invoke() is { } me && IsInstanceValid(me)) bodies.Add(me.GlobalPosition);
+
+        foreach (var (door, plan) in _doors.ToList())
+        {
+            if (!_cache.TryGetValue(plan, out var l)) continue;
+            var e = l.EntranceFor(door);
+            var outside = OutsideDoorAt(l, e);
+            var inside = InsideDoorAt(l, e);
+            bool near = bodies.Any(p => p.DistanceTo(outside) < QuietRadius || p.DistanceTo(inside) < QuietRadius);
+            double quiet = near ? 0 : _quiet.GetValueOrDefault(door) + dt;
+            _quiet[door] = quiet;
+            if (quiet > QuietSeconds) BroadcastDoor(door, plan, false);
+        }
+    }
+
+    // ---- plans for doors other players opened -----------------------------------------------------
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private async void RequestPlan(string door)
+    {
+        if (!Multiplayer.IsServer()) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        try
+        {
+            if (BuildingKey.TryParse(door, out _) && await GetOrCreate(door) is { } layout)
+                SendPlan(sender, layout, door);
+        }
+        catch (Exception e) { GD.PushError($"[interior] plan for {door}, peer {sender}: {e}"); }
+    }
+
+    private void SendPlan(long peer, InteriorLayout layout, string door)
+    {
+        if (peer == MyId) ReceivePlan(layout, door);
+        else RpcId(peer, MethodName.PlanFor, layout.ToCompressed(), door);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void PlanFor(byte[] data, string door)
+    {
+        if (InteriorLayout.FromCompressed(data) is { } layout) ReceivePlan(layout, door);
+    }
+
+    private void ReceivePlan(InteriorLayout layout, string door)
+    {
+        _cache[layout.Key] = layout;
+        _planKeys[door] = layout.Key;
+        _planKeys[layout.Key] = layout.Key;
+        foreach (var e in layout.AllEntrances()) _planKeys[e.Door] = layout.Key;
+        _asked.Remove(door);
+        if (_presenting) Maintain();
+    }
+
+    // ---- client: what this client builds and shows ----------------------------------------------
+
+    /// <summary>A door opened or shut: its sound on both sides, and the interior behind it.</summary>
+    private void DoorMoved(string door, bool open)
+    {
+        var listener = GetViewport()?.GetCamera3D()?.GlobalPosition;
+        if (_links.TryGetValue(door, out var link))
+        {
+            _sounds?.Door(link.Outside.Origin + link.Outside.Basis.Z * 0.3f, open);
+            if (_current?.Key == link.Plan) _sounds?.Door(link.Inside.Origin - link.Inside.Basis.Z * 0.3f, open);
+        }
+        else if (listener is { } ear && BuildingKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d
+                 && d.World.DistanceTo(ear) < 60f)
+            _sounds?.Door(d.World, open);
+        Maintain();
+    }
+
+    /// <summary>
+    /// Builds what can be seen: an interior and a link for every open door near the local
+    /// player, every door of the building they are in, and, from inside, every open door near
+    /// one of its open doors (seen through it, across the street). Drops what can no longer be.
+    /// </summary>
+    private void Maintain()
+    {
+        if (!_presenting || Origin == null) return;
+        var player = LocalPlayer?.Invoke();
+        if (player != null && !IsInstanceValid(player)) player = null;
+        string? inside = _current?.Key;
+        // where the outside is looked at from: the player, the free camera when there is none,
+        // or from inside, the building's own open doorways
+        var from = new List<Vector3>();
+        if (inside == null)
+        {
+            if (player != null) from.Add(player.GlobalPosition);
+            else if (GetViewport()?.GetCamera3D() is { } cam && cam.GlobalPosition.Y > InteriorBaseY + 1000f)
+                from.Add(cam.GlobalPosition);
+        }
+        else
+            foreach (var l in _links.Values)
+                if (l.Plan == inside && l.Swing > 0f) from.Add(l.Outside.Origin);
+
+        bool Wanted(string door, string plan)
+        {
+            if (plan == inside) return true;
+            return BuildingKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d
+                && from.Any(at => d.World.DistanceTo(at) < BuildRange);
+        }
+
+        foreach (var (door, plan) in _doors)
+            if (!_links.ContainsKey(door) && Wanted(door, plan)) EnsureLink(door, plan);
+
+        foreach (var link in _links.Values.ToList())
+        {
+            link.Open = _doors.ContainsKey(link.Door);
+            bool gone = !link.Open && link.Swing <= 0f;
+            if (gone || !Wanted(link.Door, link.Plan)) DropLink(link);
+        }
+
+        foreach (var (plan, node) in _built.ToList())
+            if (plan != inside && !_links.Values.Any(l => l.Plan == plan))
+            {
+                node.QueueFree();
+                _built.Remove(plan);
+            }
+
+        bool shown = inside == null || _links.Values.Any(l => l.Plan == inside && (l.Open || l.Swing > 0f));
+        if (shown != _outsideShown)
+        {
+            _outsideShown = shown;
+            OutsideShownChanged?.Invoke(shown);
+        }
+
+        UpdateOccupancy();
+    }
+
+    private void EnsureLink(string door, string plan)
+    {
+        if (!_cache.TryGetValue(plan, out var layout))
+        {
+            if (!_asked.Add(door)) return;
+            if (Online) RpcId(1, MethodName.RequestPlan, door);
+            else LoadPlanOffline(door);
+            return;
+        }
+        if (!_built.TryGetValue(plan, out var node))
+        {
+            BuildInterior(layout);
+            return;
+        }
+        var e = layout.EntranceFor(door);
+        float? width = BuildingKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d ? d.Width : null;
+        var link = DoorLink.Create(layout, e, Origin!, width);
+        link.Open = _doors.ContainsKey(door);
+        link.Leaf = node.Leaf(door);
+        _portals?.Attach(link);
+        _links[door] = link;
+    }
+
+    private void DropLink(DoorLink link)
+    {
+        _portals?.Detach(link);
+        link.Leaf?.SetSwing(0);
+        _links.Remove(link.Door);
+    }
+
+    private async void LoadPlanOffline(string door)
+    {
+        try
+        {
+            if (await GetOrCreate(door) is { } layout) ReceivePlan(layout, door);
+        }
+        catch (Exception e) { GD.PushError($"[interior] plan for {door}: {e}"); }
+        finally { _asked.Remove(door); }
+    }
+
+    private async void BuildInterior(InteriorLayout layout)
+    {
+        if (!_building.Add(layout.Key) || Origin == null) return;
+        try
+        {
+            // mesh arrays off the main thread; a tall block is a few thousand boxes
+            var data = await Task.Run(() => InteriorMeshBuilder.Build(layout));
+            if (!IsInsideTree() || _built.ContainsKey(layout.Key)) return;
+            _material ??= new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_interior.gdshader") };
+            var node = InteriorNode.Create(layout, data, _material, PlacementFor(layout, Origin));
+            AddChild(node);
+            _built[layout.Key] = node;
+        }
+        finally { _building.Remove(layout.Key); }
+        Maintain();
+    }
+
+    /// <summary>The built interior a point far underground is in (nearest by plan position), if any.</summary>
+    public string? PlanAt(Vector3 at) => InteriorNode.PlanAt(_built.Values, at);
+
+    // ---- client: walking through ------------------------------------------------------------------
+
+    /// <summary>
+    /// Before the local player moves: standing in an open doorway outside, they are let through
+    /// the building's shell (which has no hole in it) so they can reach the sill.
+    /// </summary>
+    public void BeforeMove(FootPlayer p)
+    {
+        StaticBody3D? pass = null;
+        if (!p.Indoors && p.Ride == RideKind.OnFoot)
+            foreach (var link in _links.Values)
+                if (link.Passable && link.InOutsideDoorway(p.GlobalPosition, 0.32f))
+                {
+                    pass = BuildingBodies?.Invoke(link.Tile);
+                    break;
+                }
+        if (pass == _passing) return;
+        if (_passing != null && IsInstanceValid(_passing)) p.RemoveCollisionExceptionWith(_passing);
+        _passing = pass;
+        if (pass != null) p.AddCollisionExceptionWith(pass);
+    }
+
+    /// <summary>After the local player moved from <paramref name="before"/>: across a sill, into the other side.</summary>
+    public void AfterMove(FootPlayer p, Vector3 before)
+    {
+        foreach (var link in _links.Values)
+        {
+            if (!link.Passable) continue;
+            bool inside = p.Indoors;
+            if (inside && p.InteriorKey != link.Plan) continue;
+            var frame = (inside ? link.Inside : link.Outside).AffineInverse();
+            var a = frame * before;
+            var b = frame * p.GlobalPosition;
+            bool crossed = inside ? a.Z < 0 && b.Z >= 0 : a.Z >= 0 && b.Z < 0;
+            if (!crossed) continue;
+            var at = a.Lerp(b, a.Z / (a.Z - b.Z));
+            if (Mathf.Abs(at.X) > link.HalfPass || at.Y < -1.2f || at.Y > 1.2f) continue;
+            Cross(p, link, inward: !inside);
+            return;
+        }
+    }
+
+    private void Cross(FootPlayer p, DoorLink link, bool inward)
+    {
+        if (inward && !_cache.ContainsKey(link.Plan)) return;
+        var map = inward ? link.ToInside : link.ToOutside;
+        var at = map * p.GlobalPosition;
+        if (inward)
+        {
+            // a sill a little above the street: step up onto the floor, never into the slab under it
+            var local = link.Inside.AffineInverse() * at;
+            if (local.Y < 0.02f) at = link.Inside * new Vector3(local.X, 0.02f, local.Z);
+        }
+        var x = map.Basis.X;
+        float turn = Mathf.Atan2(-x.Z, x.X);
+        p.CrossDoor(inward ? link.Plan : null, at, turn, map.Basis);
+        _current = inward ? _cache[link.Plan] : null;
+
+        if (Online) RpcId(1, MethodName.RequestCross, link.Door, inward);
+        else SetPlayerSpace(MyId, inward ? link.Plan : "");
+        BeforeMove(p);
+        Maintain();
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestCross(string door, bool inward)
+    {
+        if (!Multiplayer.IsServer()) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        // through a door that is open, or has just shut behind them
+        if (!_planKeys.TryGetValue(door, out var plan)) return;
+        Broadcast(sender, inward ? plan : "");
+    }
+
+    /// <summary>
+    /// Whether a camera arm from <paramref name="from"/> to <paramref name="to"/>, in the player's
+    /// space, reaches through an open doorway: where along it (0..1), the map into the space on
+    /// the far side, and the building collision the arm must ignore at the sill.
+    /// </summary>
+    public bool ArmThroughDoor(FootPlayer p, Vector3 from, Vector3 to, out float t, out Transform3D map, out Rid pass)
+    {
+        t = 0;
+        map = Transform3D.Identity;
+        pass = default;
+        foreach (var link in _links.Values)
+        {
+            if (!link.Passable) continue;
+            bool inside = p.Indoors;
+            if (inside && p.InteriorKey != link.Plan) continue;
+            var frame = (inside ? link.Inside : link.Outside).AffineInverse();
+            var a = frame * from;
+            var b = frame * to;
+            if (!(inside ? a.Z < 0 && b.Z > 0 : a.Z > 0 && b.Z < 0)) continue;
+            float s = a.Z / (a.Z - b.Z);
+            var at = a.Lerp(b, s);
+            if (Mathf.Abs(at.X) > link.HalfPass || at.Y < 0.1f || at.Y > link.PassHeight - 0.1f) continue;
+            t = s;
+            map = inside ? link.ToOutside : link.ToInside;
+            pass = BuildingBodies?.Invoke(link.Tile)?.GetRid() ?? default;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>The entrance the player is standing at, on the ground floor, if any.</summary>
     private EntrancePlan? ExitAt(FootPlayer player)
     {
-        if (!player.Indoors || _current == null || _currentNode == null) return null;
-        var local = _currentNode.ToLocal(player.GlobalPosition);
+        if (!player.Indoors || _current == null || CurrentNode is not { } node) return null;
+        var local = node.ToLocal(player.GlobalPosition);
         if (local.Y > _current.StoreyHeight - 0.5f) return null;
         var at = new Vector2(local.X, local.Z);
         return _current.AllEntrances()
@@ -208,73 +659,24 @@ public partial class InteriorManager : Node3D
             .MinBy(e => at.DistanceTo(new Vector2(e.X, e.Z)));
     }
 
-    /// <summary>Whether the player is close enough to a way in to walk out (what the prompt calls "Leave").</summary>
+    /// <summary>Whether the player is inside, at a door (where E works the door, not a cupboard).</summary>
     public bool AtExit(FootPlayer player) => ExitAt(player) != null;
 
-    /// <summary>E while inside: out through the door they are at, otherwise a hint. Always consumes the press.</summary>
-    public bool TryExit(FootPlayer player)
+    /// <summary>Drops the player's indoor state without walking out: a teleport is moving them anyway.</summary>
+    public void Leave(FootPlayer player)
     {
-        if (!player.Indoors || _current == null || _currentNode == null) return player.Indoors;
-        if (ExitAt(player) == null)
-        {
-            Hint(_current.AllEntrances().Count > 1
-                ? "The ways out are the doors, on the ground floor."
-                : "The way out is the front door, on the ground floor.");
-            return true;
-        }
-        Leave(player, silent: false);
-        return true;
-    }
-
-    /// <summary>Takes the player out through the door they are at (else the main one), or just drops the state (a teleport).</summary>
-    public void Leave(FootPlayer player, bool silent)
-    {
-        var layout = _current;
-        if (!silent && layout != null && Origin != null)
-        {
-            var exit = ExitAt(player) ?? layout.AllEntrances()[0];
-            var tile = new TileId(0, 0);
-            BuildingKey.TryParse(layout.Key, out var key);
-            tile = key.Tile;
-            var tileOrigin = Origin.ToWorld(tile.MinE, tile.MaxN, 0);
-            var door = tileOrigin + new Vector3(exit.DoorX, exit.DoorY, exit.DoorZ);
-            var outward = new Vector3(exit.DoorOutX, 0, exit.DoorOutZ);
-            var at = door + outward * 1.1f + Vector3.Up * 0.3f;
-            float yaw = Mathf.Atan2(-outward.X, -outward.Z);
-            FadeThrough(() => player.LeaveInterior(at, yaw));
-        }
-        else player.LeaveInterior(null, 0);
-
+        player.LeaveInterior(null, 0);
         _current = null;
-        _currentNode?.QueueFree();
-        _currentNode = null;
         if (Online) RpcId(1, MethodName.RequestExit);
         else SetPlayerSpace(MyId, "");
-        LocalInsideChanged?.Invoke(false);
+        Maintain();
     }
 
-    private async Task Arrive(InteriorLayout layout, string door)
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestExit()
     {
-        var player = _entering;
-        _requesting = false;
-        _entering = null;
-        if (player == null || !IsInstanceValid(player) || Origin == null) return;
-
-        // mesh arrays off the main thread; a tall block is a few thousand boxes
-        var data = await Task.Run(() => InteriorMeshBuilder.Build(layout));
-        _material ??= new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_interior.gdshader") };
-
-        _currentNode?.QueueFree();
-        _current = layout;
-        _currentNode = InteriorNode.Create(layout, data, _material, PlacementFor(layout, Origin));
-        AddChild(_currentNode);
-
-        var way = layout.EntranceFor(door);
-        var entry = _currentNode.GlobalTransform * new Vector3(way.X + way.InX * 1.1f, 0.05f, way.Z + way.InZ * 1.1f);
-        var into = _currentNode.GlobalTransform.Basis * new Vector3(way.InX, 0, way.InZ);
-        float yaw = Mathf.Atan2(-into.X, -into.Z);
-        FadeThrough(() => player.EnterInterior(layout.Key, entry, yaw));
-        LocalInsideChanged?.Invoke(true);
+        if (!Multiplayer.IsServer()) return;
+        Broadcast(Multiplayer.GetRemoteSenderId(), "");
     }
 
     /// <summary>The interior's transform: under its building, turned so its front wall faces the street.</summary>
@@ -287,12 +689,63 @@ public partial class InteriorManager : Node3D
         return new Transform3D(new Basis(Vector3.Up, l.Yaw), new Vector3(at.X, InteriorBaseY, at.Z));
     }
 
-    private void Refused(string why)
+    // ---- client: occupancy cues ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Buildings other players are in, for the facade shader and the muffled sounds. A building
+    /// whose door stands open near us is left out: it is seen and heard for real, through the doorway.
+    /// </summary>
+    private void UpdateOccupancy()
     {
-        _requesting = false;
-        _entering = null;
-        Hint(why);
+        var counts = new Dictionary<string, int>();
+        long me = MyId;
+        foreach (var (peer, key) in _spaces)
+            if (peer != me && key.Length > 0) counts[key] = counts.GetValueOrDefault(key) + 1;
+        foreach (var l in _links.Values) counts.Remove(l.Plan);
+        if (_current != null) counts.Remove(_current.Key);
+
+        _occupied.Clear();
+        foreach (var (plan, n) in counts)
+        {
+            if (!_boxes.TryGetValue(plan, out var box)) { FetchBox(plan); continue; }
+            if (box is { } b) _occupied.Add(b with { Count = n });
+        }
+        var near = LocalPlayer?.Invoke() is { } p && IsInstanceValid(p) ? p.GlobalPosition : Vector3.Zero;
+        _occupied.Sort((x, y) => x.Center.DistanceSquaredTo(near).CompareTo(y.Center.DistanceSquaredTo(near)));
+
+        string key2 = string.Join(";", _occupied.Take(8).Select(o => $"{o.Center}:{o.Count}"));
+        if (key2 == _occupancyKey || OccupancySink == null) return;
+        _occupancyKey = key2;
+        var boxes = new Vector4[8];
+        var axes = new Vector4[8];
+        int count = Math.Min(8, _occupied.Count);
+        for (int i = 0; i < count; i++)
+        {
+            var o = _occupied[i];
+            boxes[i] = new Vector4(o.Center.X, o.Center.Z, o.HalfWidth, o.HalfDepth);
+            axes[i] = new Vector4(o.Axis.X, o.Axis.Y, Mathf.Clamp(0.5f + 0.25f * (o.Count - 1), 0f, 1f), 0);
+        }
+        OccupancySink(boxes, axes, count);
     }
+
+    private async void FetchBox(string plan)
+    {
+        _boxes[plan] = null;
+        if (Source == null || Origin == null || !BuildingKey.TryParse(plan, out var k)) return;
+        try
+        {
+            var tile = await Source.LoadBuildingsAsync(k.Tile);
+            if (tile == null || k.Index < 0 || k.Index >= tile.Buildings.Count
+                || BuildingTypes.For(tile).Boxes[k.Index] is not { } box) return;
+            var origin = Origin.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0);
+            var b = tile.Buildings[k.Index];
+            _boxes[plan] = new BuildingSounds.Occupied(origin + new Vector3(box.Center.X, b.MinY + 1.2f, box.Center.Y),
+                box.AxisU, box.Width / 2, box.Depth / 2, 0);
+        }
+        catch (Exception e) { GD.PushWarning($"[interior] box of {plan}: {e.Message}"); }
+    }
+
+    // ---- per frame ------------------------------------------------------------------------------------
 
     private void Hint(string text)
     {
@@ -302,17 +755,55 @@ public partial class InteriorManager : Node3D
         _hintTimer = 2.5;
     }
 
-    private void FadeThrough(Action swap)
+    public override void _Process(double delta)
     {
-        if (_fade == null) { swap(); return; }
-        var tween = CreateTween();
-        tween.TweenProperty(_fade, "color:a", 1f, 0.18f);
-        tween.TweenCallback(Callable.From(swap));
-        tween.TweenInterval(0.1f);
-        tween.TweenProperty(_fade, "color:a", 0f, 0.3f);
+        if (Authoritative) TickDoors(delta);
+        if (!_presenting) return;
+
+        if (_requestingDoor != null && (_requestTimer -= delta) <= 0) _requestingDoor = null;
+
+        // the leaves swing toward what the server says
+        float step = (float)delta / SwingSeconds;
+        foreach (var link in _links.Values)
+        {
+            float target = link.Open ? 1f : 0f;
+            if (link.Swing == target) continue;
+            link.Swing = Mathf.MoveToward(link.Swing, target, step);
+            link.Leaf?.SetSwing(link.Swing);
+            if (link.Swing <= 0f) Maintain();
+        }
+
+        _maintain -= delta;
+        if (_maintain <= 0)
+        {
+            _maintain = 0.25;
+            Maintain();
+        }
+
+        if (_sounds != null && GetViewport()?.GetCamera3D() is { } ear)
+            _sounds.Tick(delta, ear.GlobalPosition, _occupied, StreetSource(ear.GlobalPosition));
+
+        UpdatePrompt(delta);
     }
 
-    public override void _Process(double delta)
+    /// <summary>Inside, the way out nearest the listener, and how open it stands.</summary>
+    private (Vector3, float)? StreetSource(Vector3 listener)
+    {
+        if (_current == null || CurrentNode is not { } node) return null;
+        (Vector3, float)? best = null;
+        float bestD = 12f;
+        foreach (var e in _current.AllEntrances())
+        {
+            var at = node.GlobalTransform * new Vector3(e.X, 1.2f, e.Z);
+            float d = at.DistanceTo(listener);
+            if (d >= bestD) continue;
+            bestD = d;
+            best = (at, _links.TryGetValue(e.Door, out var l) ? l.Swing : 0f);
+        }
+        return best;
+    }
+
+    private void UpdatePrompt(double delta)
     {
         if (_prompt == null) return;
         if (_hintTimer > 0) { _hintTimer -= delta; return; }
@@ -324,73 +815,18 @@ public partial class InteriorManager : Node3D
         string? text = null;
         if (p != null && IsInstanceValid(p) && p.IsViewing && p.Ride == RideKind.OnFoot && !UiFocus.TextEntryActive)
         {
-            if (p.Indoors && _current != null && _currentNode != null)
+            string? door = null;
+            if (p.Indoors && _current != null)
             {
-                if (AtExit(p))
-                    text = "[E] Leave";
-                else text = Loot.LootService.Instance?.PromptFor(p);
+                door = ExitAt(p)?.Door;
+                if (door == null) text = Loot.LootService.Instance?.PromptFor(p);
             }
-            else if (!p.Indoors && DoorIndex.Nearest(p.GlobalPosition, DoorReach) != null)
-                text = "[E] Enter";
+            else if (!p.Indoors) door = DoorIndex.Nearest(p.GlobalPosition, DoorReach)?.Key.ToString();
+            if (door != null) text = _doors.ContainsKey(door) ? "[E] Close the door" : "[E] Open the door";
         }
         _prompt.Visible = text != null;
         if (text != null) _prompt.Text = text;
     }
-
-    // ---- server ----------------------------------------------------------------------------------
-
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private async void RequestEnter(string door)
-    {
-        if (!Multiplayer.IsServer()) return;
-        long sender = Multiplayer.GetRemoteSenderId();
-        try
-        {
-            var layout = BuildingKey.TryParse(door, out _) ? await GetOrCreate(door) : null;
-            if (layout == null || Origin == null) { RpcId(sender, MethodName.EnterRefused, "This door is locked."); return; }
-
-            // the request must come from the doorstep; the position is the server's relayed copy
-            if (Players?.GetNodeOrNull<Node3D>(sender.ToString()) is { } body)
-            {
-                BuildingKey.TryParse(layout.Key, out var k);
-                var way = layout.EntranceFor(door);
-                var at = Origin.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0) + new Vector3(way.DoorX, way.DoorY, way.DoorZ);
-                var d = body.GlobalPosition - at;
-                if (new Vector2(d.X, d.Z).Length() > ServerDoorReach)
-                {
-                    RpcId(sender, MethodName.EnterRefused, "Too far from the door.");
-                    return;
-                }
-            }
-            // the space is the interior's, so everyone in the church sees each other whichever
-            // door they came in by
-            Broadcast(sender, layout.Key);
-            RpcId(sender, MethodName.EnterGranted, layout.ToCompressed(), door);
-        }
-        catch (Exception e)
-        {
-            GD.PushError($"[interior] {door} for peer {sender}: {e}");
-            RpcId(sender, MethodName.EnterRefused, "This door is stuck.");
-        }
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestExit()
-    {
-        if (!Multiplayer.IsServer()) return;
-        Broadcast(Multiplayer.GetRemoteSenderId(), "");
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private async void EnterGranted(byte[] data, string door)
-    {
-        var layout = InteriorLayout.FromCompressed(data);
-        if (layout == null) { Refused("This door is stuck."); return; }
-        await Arrive(layout, door);
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void EnterRefused(string why) => Refused(why);
 
     // ---- plans: memory, disk, generator --------------------------------------------------------
 
@@ -478,12 +914,41 @@ public partial class InteriorManager : Node3D
     }
 }
 
-/// <summary>One built interior: its mesh and its collision, placed under its building.</summary>
+/// <summary>One built interior: its mesh, its collision and its front doors' leaves, placed under its building.</summary>
 public partial class InteriorNode : Node3D
 {
+    private readonly Dictionary<string, DoorLeaf> _leaves = new();
+
+    public InteriorLayout Layout { get; private init; } = null!;
+
+    /// <summary>
+    /// The interior a point far underground is in: the one whose plan contains it (a metre of
+    /// slack), else the nearest. Nearest alone is wrong just outside a doorway, where the
+    /// neighbour across the street can be closer.
+    /// </summary>
+    public static string? PlanAt(IEnumerable<InteriorNode> nodes, Vector3 at)
+    {
+        string? best = null;
+        float bestD = float.MaxValue;
+        foreach (var node in nodes)
+        {
+            if (!node.IsInsideTree()) continue;
+            var local = node.ToLocal(at);
+            if (Math.Abs(local.X) <= node.Layout.Width / 2 + 1f && Math.Abs(local.Z) <= node.Layout.Depth / 2 + 1f)
+                return node.Layout.Key;
+            var o = node.GlobalPosition;
+            float d = new Vector2(o.X - at.X, o.Z - at.Z).Length();
+            if (d < bestD) { bestD = d; best = node.Layout.Key; }
+        }
+        return best;
+    }
+
+    /// <summary>The leaf of the door a given building key names, if this interior has that entrance.</summary>
+    public DoorLeaf? Leaf(string door) => _leaves.TryGetValue(door, out var l) ? l : null;
+
     public static InteriorNode Create(InteriorLayout layout, InteriorMeshBuilder.MeshData data, Material material, Transform3D placement)
     {
-        var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement };
+        var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement, Layout = layout };
 
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
@@ -502,6 +967,18 @@ public partial class InteriorNode : Node3D
             Shape = new ConcavePolygonShape3D { Data = data.Collision, BackfaceCollision = true },
         });
         node.AddChild(body);
+
+        // the front doors, shut: the way out is to open one, not to walk into the void
+        foreach (var e in layout.AllEntrances())
+        {
+            var z = new Vector3(-e.InX, 0, -e.InZ).Normalized();
+            var doorway = new Transform3D(new Basis(Vector3.Up.Cross(z), Vector3.Up, z), new Vector3(e.X, 0, e.Z));
+            var (width, top) = layout.OpeningOf(e);
+            var leaf = DoorLeaf.Create(e.Door, doorway, width, top, material);
+            node.AddChild(leaf);
+            leaf.SetSwing(0);
+            node._leaves[e.Door] = leaf;
+        }
         return node;
     }
 }

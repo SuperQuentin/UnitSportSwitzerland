@@ -204,6 +204,33 @@ public sealed class InteriorLayout
         return all.FirstOrDefault(e => e.Door == door) ?? all[0];
     }
 
+    /// <summary>
+    /// Width and head height of the doorway an entrance arrives at: the ground-floor entry cut
+    /// nearest to it. The door leaf and the door portal are sized from it.
+    /// </summary>
+    public (float Width, float Top) OpeningOf(EntrancePlan e)
+    {
+        var at = new Godot.Vector2(e.X, e.Z);
+        (float Width, float Top) best = (e.Width, 2.1f);
+        float bestD = float.MaxValue;
+        if (Floors.Count == 0) return best;
+        foreach (var r in Floors[0].Rooms)
+            foreach (var o in r.Openings)
+            {
+                if (o.Kind != OpeningKind.Entry) continue;
+                var p = o.Side switch
+                {
+                    Side.Front => new Godot.Vector2(o.Center, r.Z0),
+                    Side.Back => new Godot.Vector2(o.Center, r.Z1),
+                    Side.Left => new Godot.Vector2(r.X0, o.Center),
+                    _ => new Godot.Vector2(r.X1, o.Center),
+                };
+                float d = p.DistanceTo(at);
+                if (d < bestD) { bestD = d; best = (o.Width, o.Top - o.Bottom); }
+            }
+        return best;
+    }
+
     /// <summary>Clear height of a room: its storeys less the slab under the floor above.</summary>
     public float ClearOf(RoomPlan r) => r.Span * StoreyHeight - InteriorGenerator.Slab;
 

@@ -11,3 +11,5 @@
   as an aerial one. `ShotRunner` also re-claims `Current` every frame — a mode entered from
   a deferred call (GPX replay) would otherwise steal the camera after the shot was set up.
   Add `--menu` to capture the mode picker.
+- `--nocapture`: never grab the mouse (`Core/MouseCapture`). Every probe and tool run implies it,
+  so a check running in a window leaves the pointer to whoever is using the machine.

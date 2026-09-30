@@ -433,6 +433,23 @@ public partial class ChunkManager : Node3D
         }
     }
 
+    /// <summary>A loaded tile's building collision body, if it has one.</summary>
+    public StaticBody3D? BuildingBodyAt(TileId id) =>
+        _chunks.TryGetValue(id, out var state) ? state.Node?.BuildingBody : null;
+
+    /// <summary>
+    /// The buildings with players inside, for the facade shader's occupancy cues (more lit
+    /// windows, figures behind the glass). Each box is (world x, world z, half width along the
+    /// axis, half depth across it); each axis (cos, sin, how busy 0..1, 0). At most 8.
+    /// </summary>
+    public void SetOccupancy(Vector4[] boxes, Vector4[] axes, int count)
+    {
+        if (_buildingMaterial is not ShaderMaterial shader) return;
+        shader.SetShaderParameter("occupied_box", boxes);
+        shader.SetShaderParameter("occupied_axis", axes);
+        shader.SetShaderParameter("occupied_count", Math.Min(count, 8));
+    }
+
     /// <summary>
     /// Adds tiles the client did not know about, so they become streamable.
     ///

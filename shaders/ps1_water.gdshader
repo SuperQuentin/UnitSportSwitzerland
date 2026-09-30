@@ -8,6 +8,7 @@ global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
+#include "res://shaders/portal_clip.gdshaderinc"
 
 // Water: banded blue with a slow dithered shimmer. No transparency or reflection —
 // PS1-era water was flat colour plus animated dither, which is also what reads best
@@ -38,6 +39,9 @@ void vertex() {
 }
 
 void fragment() {
+    if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
+        discard;
+    }
     // two drifting wave trains, quantised into bands
     float t = TIME * wave_speed;
     float w = sin(world_pos.x * 0.35 + t) * 0.5 + sin(world_pos.z * 0.27 - t * 0.8) * 0.5;

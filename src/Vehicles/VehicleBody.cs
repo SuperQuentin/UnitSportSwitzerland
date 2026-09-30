@@ -91,6 +91,8 @@ public partial class VehicleBody : CharacterBody3D
     {
         CollisionMask |= World.TreeColliders.Layer;   // a runaway car stops at a trunk
         AddToGroup(Group);
+        // parked across an open doorway, it is seen on both sides of it
+        AddToGroup(Interiors.DoorwayGhosts.Group);
         var s = _initial;
         // A hand's breadth up. The terrain collision is a one-sided heightfield, and a box whose
         // bottom starts exactly on it — a vehicle parked from where the rider stood — begins a

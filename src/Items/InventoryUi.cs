@@ -391,7 +391,7 @@ public partial class InventoryUi : CanvasLayer
         _panel.Visible = false;
         _picked = -1;
         UiFocus.Set(this, false);
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+        Core.MouseCapture.Capture();
         Refresh();
     }
 

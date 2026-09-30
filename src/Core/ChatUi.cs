@@ -154,7 +154,7 @@ public partial class ChatUi : CanvasLayer
         _input.ReleaseFocus();
         UiFocus.Set(this, false);
 
-        if (recaptureMouse) Input.MouseMode = Input.MouseModeEnum.Captured;
+        if (recaptureMouse) MouseCapture.Capture();
     }
 
     private void OnSubmitted(string text)
