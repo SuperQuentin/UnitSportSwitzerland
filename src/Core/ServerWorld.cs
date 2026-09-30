@@ -63,7 +63,9 @@ public partial class ServerWorld : Node3D
             new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N),
             SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N,
             enabled: generatedWorld || !GeneratedOff(args)) { Log = s => GD.Print(s) };
-        var source = new CachingChunkSource(fallback, 128L * 1024 * 1024);
+        // The server holds 5 KB coarse grids (ChunkManager, BuildMeshes off), plus whatever an
+        // interior plan reads lazily: 32 MB is thousands of tiles, and a fixed ceiling.
+        var source = new CachingChunkSource(fallback, 32L * 1024 * 1024);
         fallback.Neighbours = source;
 
         // A headless server draws nothing, so nothing capped its loop: it spun as fast as a core

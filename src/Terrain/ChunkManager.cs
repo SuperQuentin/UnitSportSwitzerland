@@ -1200,8 +1200,10 @@ public partial class ChunkManager : Node3D
         // approximation of it. Everything else — the horizon rings, which are 280 of the 361
         // tiles an anchor wants — renders one vertex in ten or twenty and can read the 5 KB
         // companion tile instead of the 490 KB original.
+        // A server (no meshes) builds at stride 0 and only answers height queries: the coarse
+        // companion does, real or generated. Reading full grids there cost 2 MB per tile held.
         bool needsFullGrid = wantCollision || wantRoads || wantBuildings
-            || stride < ChunkFormat.CoarseStride;
+            || (BuildMeshes && stride < ChunkFormat.CoarseStride);
 
         var cachedGrid = state.Grid;
         if (cachedGrid != null && needsFullGrid && cachedGrid.Stride != 1) cachedGrid = null;
