@@ -28,6 +28,9 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
 {
     /// <summary>The building's kind, so door consumers (garage doors) need not keep the tile.</summary>
     public BuildingKind Kind { get; init; }
+
+    /// <summary>A garage's drive-in room behind this door (<see cref="GarageBay"/>), null for every other door.</summary>
+    public GarageBay.Bay? Bay { get; init; }
 }
 
 /// <summary>
@@ -105,7 +108,13 @@ public static class BuildingFootprint
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
         var doors = new DoorSpot[tile.Buildings.Count];
         for (int i = 0; i < doors.Length; i++)
-            doors[i] = (Compute(tile, i, roadIndex, grid)?.Door ?? default) with { Kind = tile.Buildings[i].Kind };
+        {
+            var d = (Compute(tile, i, roadIndex, grid)?.Door ?? default) with { Kind = tile.Buildings[i].Kind };
+            // a bay needs the sill on the real ground: only with the full-resolution grid
+            if (grid != null && d.Kind == BuildingKind.Garage && GarageBay.Plan(tile, i, d) is (var fitted, { } bay))
+                d = fitted with { Bay = bay };
+            doors[i] = d;
+        }
         return doors;
     }
 

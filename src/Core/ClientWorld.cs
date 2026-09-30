@@ -59,6 +59,11 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(Player.GarageProbe.Check());
                 return;
             }
+            if (Array.IndexOf(scArgs, "--garagehole") >= 0)
+            {
+                GetTree().Quit(Interiors.GarageBay.Check());
+                return;
+            }
             if (Array.IndexOf(scArgs, "--spincheck") >= 0)
             {
                 GetTree().Quit(Player.DriftCheck.Spin());
