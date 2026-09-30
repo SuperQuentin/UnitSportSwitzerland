@@ -137,8 +137,8 @@ public partial class ItemController : Node
         player.ScopeView = aiming;
         player.ItemAction = aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
         player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => 0.6f } : 1f;
-        // held items stay visible while aiming: they are raised to a pose. Only binoculars
-        // (overlay covers the view, once at the eyes) and a photo in the making hide them.
+        // held items stay visible while aiming: they are raised to a pose. Binoculars and the
+        // camera hide once at the eye (you look through them: the overlay is the view).
         bool poseSettled = visual?.PoseSettled ?? true;
         if (visual != null)
         {
@@ -147,7 +147,7 @@ public partial class ItemController : Node
                 ItemUse.Shoot => ViewPose.Aim,
                 _ => ViewPose.Eye,
             });
-            visual.Suppressed = _capturing || (aiming && def!.Use == ItemUse.Optic && poseSettled);
+            visual.Suppressed = _capturing || (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
         }
 
         // the viewfinder / binocular overlay appears once the item has been raised
