@@ -22,3 +22,4 @@
   `ChunkManager.SetOccupancy`) light more windows of a building with players in it, and draw a
   figure walking about some of its rooms. See `door-portals`.
 - Exterior and interior windows do not line up yet: #60.
+- Windows seen from **inside** (the interiors' own glass) take the sky of the hour: see `day-night`.
