@@ -178,9 +178,9 @@ public partial class ClientWorld : Node3D
         AddChild(new Audio.ReverbZones(() => GetViewport().GetCamera3D(), () => LocalPlayer?.Indoors == true, chunksForAudio)
             { Name = "ReverbZones" });
         _ambience = new Audio.Ambience(chunksForAudio, () => GetViewport().GetCamera3D())
-            { Name = "Ambience", Origin = origin, Volume = GameSettings.Current.AmbienceVolume };
+            { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
         AddChild(_ambience);
-        GameSettings.Changed += () => { if (_ambience != null) _ambience.Volume = GameSettings.Current.AmbienceVolume; };
+        GameSettings.Changed += () => { if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume); };
 
         // Vehicles left standing in the world. Same node path as on the server, so parking and
         // claiming work over the network; offline it just holds the nodes.

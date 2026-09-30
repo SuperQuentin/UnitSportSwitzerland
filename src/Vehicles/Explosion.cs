@@ -61,7 +61,7 @@ public partial class Explosion : Node3D
             Stream = SfxSynth.Boom,
             UnitSize = 25f,
             MaxDistance = 3000f,
-            VolumeDb = Mathf.LinearToDb(Mathf.Max(0.01f, Core.GameSettings.Current.SfxVolume)),
+            VolumeDb = 0f,   // the slider is on the Sfx bus
             Autoplay = true,
             Bus = SfxBus.Name,
         };
