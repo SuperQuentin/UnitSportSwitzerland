@@ -46,13 +46,16 @@
   building's index moved). ~20 around spawn.
 - Checks (loopback, generated world, **`--traffic 0`**: a traffic car shoved the test car 7 m
   sideways off a barn's door): server `--server --port 7839 --generated-world --admin-password
-  pw139`; client `--traffic 0 --garagecheck watch --at 2583265.1,1113302.6`, then client
-  `--traffic 0 --garagecheck drive pw139 --at 2583262.8,1113298.6 --heading 80.1` (garage
-  2583_1113_76). The driver drives in, stops, gets out (car parked inside), back in, reverses out:
-  `RESULT: ok`; it traces its position against the door and what it hits. The watcher logs the
-  leaf and screenshots `test_output/garage_bay_entering_watch.png` / `garage_bay_inside_watch.png`
-  (the inside shot aims through the door's map). `--doorkind Agricultural` does a barn: watch `--at
-  2582990.1,1113187.0`, drive `--at 2582987.5,1113183.2 --heading 345` (barn 2582_1113_4). With no
-  `--at` the drive probe picks the nearest door and logs its LV95 and bearing, but online the
-  teleport there was undone ~0.4 s later (both clients, cause not found), so pass `--at`.
+  pw139`; client `--traffic 0 --garagecheck watch --heading 0 --at 2585068.1,1114176.0`, then client
+  `--traffic 0 --garagecheck drive pw139 --at 2585063.5,1114176.7 --heading 49.7` (garage
+  2585_1114_52, Village 699, since #138's relief). The driver drives in, stops, gets out (car
+  parked inside), back in, reverses out: `RESULT: ok`; it traces its position against the door and
+  what it hits. The watcher logs the leaf and screenshots `test_output/garage_bay_entering_watch.png`
+  / `garage_bay_inside_watch.png` (the inside shot aims through the door's map). `--doorkind
+  Agricultural` does a barn: watch `--heading 0 --at 2584777.2,1114135.5`, drive `--at
+  2584775.6,1114131.2 --heading 331.2` (barn 2584_1114_2). **Finding a door**: drive with no
+  `--heading` looks for the nearest door of the kind within 1.5 km for 25 s and logs its LV95 and
+  bearing (spawn near a village with `--at`; with none it lists the nearest villages). Online the
+  teleport to it is undone ~0.4 s later (both clients, cause not found), so rerun with the logged
+  position: driver 12 m out along the bearing, heading the bearing + 180.
   `--portaldemo` has a garage (F): open, rolling, shut, from inside.

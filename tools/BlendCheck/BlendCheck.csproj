@@ -21,4 +21,10 @@
     <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- the coarse heightmap the generated terrain is shaped on (tools/swiss_relief.py); LogicalName
+         and WithCulture because MSBuild otherwise reads ".bin"-like infixes as a culture -->
+    <EmbeddedResource Include="..\..\src\Terrain\swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
+  </ItemGroup>
+
 </Project>

@@ -2,17 +2,13 @@
 
 - **Generated fill** (`Terrain/ProceduralWorld`, `ProceduralWorld.Blend`, `Terrain/FallbackChunkSource`,
   issue #27): every tile with no real data is generated, and generated tiles sit **beside** real
-  ones with no visible seam — round a MapSetup zone, a server streaming part of the country, a
-  download with holes, and everywhere on a fresh clone. The generator: an alpine valley running
-  east-west through its **anchor** with a river on a flat bed (water from the cover raster, like the
-  real one), a road and a railway along the floor, villages with side streets and a church every
-  ~2.6 km, garages beside some houses (`vehicles/garage-buildings`), farms and alpine huts, forest to a wandering tree line, rock, scree, glacier, vineyards on
-  the sunny side, orchards; high massif far from the valley. All in the **ordinary formats**, served
+  ones with no visible seam — round a MapSetup zone, a server streaming part of the country —
+  and everywhere on a fresh clone. The generator (how the ground, rivers, roads and villages are
+  made: `generated-relief`) is shaped on a 500 m heightmap of the real country, so the fill looks
+  like the Switzerland around it. All in the **ordinary formats**, served
   through the ordinary `IChunkSource` seam under `CachingChunkSource`, so roads, traffic, trains,
   doors, interiors, collision and gathering all work on it unchanged. Everything is a pure function
   of LV95 position, so seams are bit-identical and the stride-10 grid equals the decimated full one.
-  Noise is sampled on a **world-anchored 5 m lattice** and interpolated: evaluated per vertex it cost
-  320 ms a tile; now ~30-40 ms, cover ~10 ms (classified from 10 m samples).
   **Ownership**: a tile is real if it is in `ChunkManager._available` (manifest + anything merged),
   generated if not real and inside the **fill domain** — the spawn tile's box and the real set's
   bounding box, each grown by 40 tiles (`FallbackChunkSource.FillRadiusTiles`); it only grows.
@@ -20,9 +16,9 @@
   and read lock-free; the rings ask `IsAvailable = _available || Covers`. `_available`,
   `AvailableTiles` and `AvailableTileCount` stay **real only** — corridor surveys must never request
   a generated tile over the network, and "does this client have a world of its own" means real.
-  **Anchor**: the generator is centred on `SpawnPoint.DefaultLv95E/N` (Riddes) on every peer and the
-  server, not on this run's spawn, so everyone generates the same world. The origin with no local
-  terrain is still this run's spawn point.
+  **Anchor**: every peer and the server pass `SpawnPoint.DefaultLv95E/N` (Riddes); the world itself
+  no longer depends on it (only the villages offered as occasion towns are bounded by it). The
+  origin with no local terrain is still this run's spawn point.
   **The blend** (`ProceduralWorld.Blend`): `h = (1 − W)·G + W·R + D`, a convex mix, so blended ground
   always lies between the generated and the real (see the trench gotcha). R is the real low-pass
   carried outward: each real tile within 3 km (`Band`) contributes its **100 m knots** (the
@@ -71,7 +67,7 @@
   (`GameSettings.GeneratedFill`, live via `ChunkManager.SetFallbackEnabled`), `--generated off` for
   one run (also on a server). A faint "generated terrain" note (`Core/GeneratedTerrainNote`) shows
   while the camera is over generated ground — a note, not a tint, since the blend exists so the
-  border cannot be seen. Cost: a blended full tile ~46 ms against ~24 ms plain. `--fly` across a
+  border cannot be seen. Cost: a blended full tile ~45 ms against ~19 ms plain (BlendCheck, Release, 8 in parallel). `--fly` across a
   border at 150 m/s (992 tiles, 16 workers): 4 of 7 runs had no frame over 33 ms, the others one
   each (33, 50, 62 ms), which the perf log files as "other" — no slow commit, GC or GPU frame
   behind them; over purely generated ground, 0 in 2 runs. Suspected: blend maths on every core

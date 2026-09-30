@@ -254,8 +254,8 @@ public partial class GarageProbe : Node
         Interiors.InteriorManager.InInteriorSpace(p.GlobalPosition)
         && Interiors.InteriorManager.Instance?.LayoutAt(p.GlobalPosition)?.DressedKind() == TargetKind;
 
-    /// <summary>With no <c>--at</c>, the probes pick the garage nearest where they spawned (a generated world has no fixed one).</summary>
-    private static bool AutoGarage => Array.IndexOf(OS.GetCmdlineUserArgs(), "--at") < 0;
+    /// <summary>With no <c>--heading</c>, the probes pick the garage nearest where they spawned (a generated world has no fixed one).</summary>
+    private static bool AutoGarage => Array.IndexOf(OS.GetCmdlineUserArgs(), "--heading") < 0;
 
     /// <summary>
     /// The garage nearest <paramref name="me"/>, and <paramref name="me"/> stood in front of its door:
@@ -263,7 +263,7 @@ public partial class GarageProbe : Node
     /// </summary>
     private Interiors.DoorIndex.Entry? StandAtGarage(FootPlayer me, float outward, float aside)
     {
-        if (Interiors.DoorIndex.Nearest(me.GlobalPosition, 400f, TargetKind) is not { } door) return null;
+        if (Interiors.DoorIndex.Nearest(me.GlobalPosition, 1500f, TargetKind) is not { } door) return null;
         var o = door.Outward;
         var at = door.World + o * outward + new Vector3(-o.Z, 0, o.X) * aside;
         if (me.Terrain != null && me.Terrain.TryGetHeight(at, out float g)) at.Y = g + 0.3f;
@@ -278,7 +278,7 @@ public partial class GarageProbe : Node
 
     /// <summary>
     /// <c>--garagecheck drive &lt;password&gt; [--at E,N --heading deg] [--drive-m m] [--brake-m m]</c>:
-    /// takes a car, faces the bearing (with no <c>--at</c>: lined up 12 m in front of the nearest
+    /// takes a car, faces the bearing (with no <c>--heading</c>: lined up 12 m in front of the nearest
     /// garage), holds the throttle for <c>--drive-m</c> metres, coasts, brakes from <c>--brake-m</c> to a
     /// stop; then gets out and back in (a car parked inside), and reverses out through the door.
     /// </summary>
@@ -286,20 +286,36 @@ public partial class GarageProbe : Node
     {
         if (at(0.5) && Password is { } pw && GetTree().Root.FindChild(Net.ChatManager.NodeName, true, false) is Net.ChatManager chat)
             chat.Send($"/login {pw}");
-        if (at(3))
+        // lined up at the door once it is found: with no --heading, the nearest door is looked for
+        // every second, as the tiles around draw theirs, for up to 25 s
+        if (_readyAt < 0 && _t >= 3 && (_searchIn -= GetPhysicsProcessDeltaTime()) <= 0)
         {
+            _searchIn = 1;
             if (!AutoGarage)
             {
                 me.PlaceAt(me.GlobalPosition, -Mathf.DegToRad(Arg("--heading") ?? 0f));
                 _target = Interiors.DoorIndex.Nearest(me.GlobalPosition, 20f, TargetKind);
+                _readyAt = _t;
             }
-            else if ((_target = StandAtGarage(me, 12f, 0f)) == null) { Log("RESULT: FAILED (no garage within 400 m)"); GetTree().Quit(); return; }
+            else if ((_target = StandAtGarage(me, 12f, 0f)) != null) _readyAt = _t;
+            else if (_t > 25)
+            {
+                // somewhere to look instead: the nearest villages (generated ones have garages)
+                if (me.Terrain?.Origin is { } o)
+                    foreach (var town in Occasions.OccasionTowns.All
+                                 .OrderBy(t => Math.Pow(t.E - (o.E + me.GlobalPosition.X), 2) + Math.Pow(t.N - (o.N - me.GlobalPosition.Z), 2)).Take(3))
+                        Log($"  village {town.Name} at LV95 {town.E:F0},{town.N:F0}");
+                Log($"RESULT: FAILED (no {TargetKind} within 1.5 km)");
+                GetTree().Quit();
+                return;
+            }
         }
-        if (at(6)) Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
+        if (_readyAt < 0) return;
+        if (at(_readyAt + 3)) Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
         // the watcher needs a moment to see the car before it moves
-        if (at(10)) { _from = me.GlobalPosition; Input.ActionPress(PlayerInput.Throttle); _drive = 1; Log($"throttle, {Where(me)}"); }
+        if (at(_readyAt + 7)) { _from = me.GlobalPosition; Input.ActionPress(PlayerInput.Throttle); _drive = 1; Log($"throttle, {Where(me)}"); }
         float gone = new Vector2(me.GlobalPosition.X - _from.X, me.GlobalPosition.Z - _from.Z).Length();
-        if (_target is { } tg && (_drive is 1 or 2 or 6 || _t < 10) && (_trace -= GetPhysicsProcessDeltaTime()) <= 0)
+        if (_target is { } tg && (_drive is 1 or 2 or 6 || _t < _readyAt + 7) && (_trace -= GetPhysicsProcessDeltaTime()) <= 0)
         {
             // where the car is against the door: metres out of the facade, along it, and its nose's bearing
             _trace = 0.25;
@@ -379,6 +395,7 @@ public partial class GarageProbe : Node
     private Interiors.DoorIndex.Entry? _watchedDoor;
     private bool _standing;
     private Interiors.DoorIndex.Entry? _target;
+    private double _readyAt = -1, _searchIn;
     private double _trace;
 
     /// <summary>

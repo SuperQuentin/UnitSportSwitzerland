@@ -19,6 +19,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `stutter-main-thread-commit-problem` — Stutter is a main-thread commit problem, and every commit is now cheap
 - `build-cancellation` — Build cancellation: (`ChunkState.Cts`/`Generation`): every `source.Load*Async` gets the tile's token and the worker...
 - `generated-fill` — Generated fill: every tile with no real data is generated and blended into the real tiles beside it (ownership, anchor, blend, merge, horizon, server, off switch)
+- `generated-relief` — The generator: 500 m heightmap of CH embedded, lakes, drainage -> rivers/roads/rails/villages, 25 m + 5 m field lattices, gotchas (carve only down, wall span)
 - `cachingchunksource` — `CachingChunkSource`: decorates the source chain with a byte-budgeted LRU of decoded tiles, so ground that is left...
 - `data-location` — Data location: `--chunks` > `UNITSPORT_CHUNKS` > `terrain_location.json` (MapSetup's drive picker) > `terrain_chunks/`; game and server alike
 
