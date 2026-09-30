@@ -249,6 +249,8 @@ public partial class ItemController : Node
 
             case ItemUse.Shoot:
             {
+                // the action has to be pumped before the next shell: no firing until it has cycled
+                if (Time.GetTicksMsec() < _nextShotMs) break;
                 int shells = -1;
                 for (int i = 0; i < Inventory.Size && shells < 0; i++)
                     if (_inventory[i].Id == ItemId.Shells && !_inventory[i].IsEmpty) shells = i;
@@ -259,7 +261,8 @@ public partial class ItemController : Node
                     break;
                 }
                 _inventory.TakeOne(shells);
-                Kick(player);
+                _nextShotMs = Time.GetTicksMsec() + (ulong)((HeldItemVisual.PumpDelay + HeldItemVisual.PumpTime + 0.1f) * 1000f);
+                Recoil(player);
                 Fire?.Invoke(player);
                 break;
             }
@@ -275,6 +278,20 @@ public partial class ItemController : Node
                 _ui.Toast($"{def.Name}: keep it for trading or building.");
                 break;
         }
+    }
+
+    private ulong _nextShotMs;
+
+    /// <summary>A shotgun's kick: the viewmodel jolts, the view punches up a few degrees, the action cycles.</summary>
+    private static void Recoil(FootPlayer player)
+    {
+        if (player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v)
+        {
+            v.Kick = 1f;
+            v.Recoil = 1f;
+            v.Pump();
+        }
+        player.Punch(Mathf.DegToRad(4.5f));
     }
 
     private static void Kick(FootPlayer player)

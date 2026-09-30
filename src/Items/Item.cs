@@ -205,6 +205,17 @@ public static class ItemDefs
     // ------------------------------------------------------------------------------------
 
     private static readonly Dictionary<ItemId, ArrayMesh> HandMeshes = new();
+    private static ArrayMesh? _foreEnd;
+
+    /// <summary>The shotgun's slide handle, origin where it sits at rest (the viewmodel and the hand slide it along Z to pump).</summary>
+    public static ArrayMesh ShotgunForeEnd()
+    {
+        if (_foreEnd != null) return _foreEnd;
+        var s = new MeshScratch();
+        s.Box(new Vector3(0, -0.01f, 0.24f), new Vector3(0.04f, 0.035f, 0.26f), new Color(0.40f, 0.26f, 0.15f));
+        return _foreEnd = s.Build();
+    }
+
     private static ArrayMesh? _plantedFlag;
     private static StandardMaterial3D? _material;
 
@@ -270,9 +281,11 @@ public static class ItemDefs
                 var steel = new Color(0.22f, 0.23f, 0.25f);
                 s.Box(new Vector3(0, -0.03f, -0.22f), new Vector3(0.04f, 0.09f, 0.34f), wood);      // stock
                 s.Box(new Vector3(0, 0.01f, 0.02f), new Vector3(0.045f, 0.06f, 0.16f), steel);     // action
-                s.Box(new Vector3(0, -0.01f, 0.24f), new Vector3(0.04f, 0.035f, 0.26f), wood);     // fore-end
+                // the fore-end is its own mesh (ShotgunForeEnd): it slides back and forth to pump
                 foreach (float x in new[] { -0.011f, 0.011f })
-                    s.Tube(new Vector3(x, 0.025f, 0.08f), new Vector3(x, 0.025f, 0.72f), 0.011f, steel, 6);
+                    s.Tube(new Vector3(x, 0.03f, 0.08f), new Vector3(x, 0.03f, 0.72f), 0.011f, steel, 6);
+                s.Box(new Vector3(0, 0.048f, 0.40f), new Vector3(0.012f, 0.006f, 0.64f), new Color(0.55f, 0.56f, 0.6f));   // rib between the barrels
+                s.Box(new Vector3(0, 0.056f, 0.70f), new Vector3(0.009f, 0.012f, 0.012f), new Color(1f, 0.85f, 0.25f));   // front bead
                 break;
             }
             default:

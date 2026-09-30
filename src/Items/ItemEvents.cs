@@ -147,7 +147,26 @@ public partial class ItemEvents : Node
         var (stream, pitch, db) = SfxSynth.Shotgun.Pick(_rng);
         Sound3D(e.Position, stream, pitch, db - 1f, unitSize: 18f, maxDistance: 1500f);
         LightPulse(e.Position, new Color(1f, 0.78f, 0.45f), energy: 6f, range: 7f, time: 0.07f);
-        Glow(e.Position, new Color(1f, 0.85f, 0.5f), size: 0.35f, time: 0.05f);
+        if (!e.Local) Glow(e.Position, new Color(1f, 0.85f, 0.5f), size: 0.35f, time: 0.05f);   // in the owner's own view it is a hard-edged square on the lens
+
+        // the shooter racks the next shell: its body rocks back now, the slide handle and its clack
+        // follow one cycle later. The owner's own viewmodel was already driven by ItemController.
+        var shooter = e.Local
+            ? GetViewport().GetCamera3D()?.GetParent() as Player.FootPlayer
+            : GetNodeOrNull<Player.FootPlayer>("../Players/" + e.Peer);
+        if (shooter != null)
+        {
+            shooter.BodyJolt();
+            if (!e.Local) shooter.GetNodeOrNull<HeldItemVisual>("HeldItem")?.Pump();
+        }
+        var at = e.Position;
+        GetTree().CreateTimer(HeldItemVisual.PumpDelay + 0.10f).Timeout += () =>
+        {
+            if (!IsInsideTree()) return;
+            var (stream, pitch, db) = SfxSynth.Pump.Pick(_rng);
+            Sound3D(shooter != null && IsInstanceValid(shooter) ? shooter.GlobalPosition + Vector3.Up * 1.3f : at,
+                stream, pitch, db - 4f, unitSize: 6f, maxDistance: 250f);
+        };
     }
 
     private void FlashEffect(ItemEvent e)
