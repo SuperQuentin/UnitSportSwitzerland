@@ -339,6 +339,20 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public Transform3D? HandLocal { get; private set; }
 
+    /// <summary>
+    /// What the item hand is doing with the held item: 0 idle, 1 aim, 2 use. Replicated next to
+    /// <see cref="HeldItemId"/>; written by the owner (<c>ItemController</c>). Every peer derives the
+    /// arm pose (<see cref="Avatar.ItemArmPose"/>) from it plus the held item's kind.
+    /// </summary>
+    [Export] public int ItemAction { get; set; }
+
+    /// <summary>The arm pose currently drawn and its 0..1 blend, eased in and out on every peer.</summary>
+    public Avatar.ItemArmPose DrawnArmPose => _itemArmCur;
+    public float DrawnArmBlend => _itemArmBlend;
+    private Avatar.ItemArmPose _itemArmCur;
+    private float _itemArmBlend;
+    private bool _itemArmInit;
+
     /// <summary>An item asking for a narrower view (binoculars, a camera's viewfinder); null for the normal FOV.</summary>
     public float? FovOverride { get; set; }
 
@@ -814,6 +828,7 @@ public partial class FootPlayer : CharacterBody3D
         replication.AddProperty(".:TuningBits");
         replication.AddProperty(".:DoorsOpen");
         replication.AddProperty(".:HeldItemId");
+        replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
         if (Npc)
@@ -824,7 +839,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:TuningBits", ".:DoorsOpen", ".:HeldItemId", ".:PoseKind", ".:HeadwearId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:TuningBits", ".:DoorsOpen", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1266,7 +1281,43 @@ public partial class FootPlayer : CharacterBody3D
         if (_walker == null) { HandLocal = null; return; }
         // mounts are already turned to face -Z, where the figure's right is +X
         var hand = mounts.HandL.X > mounts.HandR.X ? mounts.HandL : mounts.HandR;
-        HandLocal = _walker.Transform * new Transform3D(Basis.Identity, hand);
+        HandLocal = _walker.Transform * new Transform3D(mounts.HandBasis, hand);
+    }
+
+    /// <summary>The arm pose the held item and <see cref="ItemAction"/> call for, the same on every peer.</summary>
+    private Avatar.ItemArmPose TargetArmPose()
+    {
+        var def = Items.ItemDefs.Get((Items.ItemId)HeldItemId);
+        if (def == null) return Avatar.ItemArmPose.None;
+        bool aim = ItemAction == 1, use = ItemAction == 2;
+        return def.Use switch
+        {
+            Items.ItemUse.Optic or Items.ItemUse.Photo => aim || use ? Avatar.ItemArmPose.TwoHandEye : Avatar.ItemArmPose.Hold,
+            Items.ItemUse.Shoot => aim || use ? Avatar.ItemArmPose.ShoulderAim : Avatar.ItemArmPose.Hold,
+            Items.ItemUse.Consume => use ? Avatar.ItemArmPose.Mouth : Avatar.ItemArmPose.Hold,
+            Items.ItemUse.Place => use ? Avatar.ItemArmPose.Plant : Avatar.ItemArmPose.Hold,
+            _ => Avatar.ItemArmPose.Hold,
+        };
+    }
+
+    /// <summary>Eases the arm override toward the target pose: out of the old one, then into the new.</summary>
+    private void StepArmPose(float dt)
+    {
+        var want = Ride == RideKind.OnFoot ? TargetArmPose() : Avatar.ItemArmPose.None;
+        float target = want == Avatar.ItemArmPose.None ? 0f : 1f;
+        if (!_itemArmInit)
+        {
+            if (!IsMultiplayerAuthority() && _netTime == 0) return;   // nothing received yet: what it holds is unknown
+            // a peer that has only just started to draw this figure shows it as it is, not ramping up
+            _itemArmInit = true;
+            _itemArmCur = want;
+            _itemArmBlend = target;
+            return;
+        }
+        if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first
+        else if (want != _itemArmCur) _itemArmCur = want;
+        _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / 0.18f);
+        if (_itemArmBlend <= 0f && want == Avatar.ItemArmPose.None) _itemArmCur = Avatar.ItemArmPose.None;
     }
 
     /// <summary>
@@ -1302,20 +1353,26 @@ public partial class FootPlayer : CharacterBody3D
         if (_walker == null) return;
         // the two held poses are cached, so a hat put on or taken off (#18) rebuilds them
         if (_poseHat != Hat) { _slidePose = null; _airPose = null; _poseHat = Hat; }
+        StepArmPose((float)GetProcessDeltaTime());
+        var arm = _itemArmCur;
+        float blend = _itemArmBlend;
+        bool armed = arm != Avatar.ItemArmPose.None && blend > 0.001f;
         Avatar.HumanMeshBuilder.GaitMounts mounts;
         switch (PoseKind)
         {
             case PoseTucked:
-                _walker.Mesh = _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked, hat: Hat);
-                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked);
+                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(_walkPalette, Avatar.HumanPose.Tucked, arm, blend, Hat)
+                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked, hat: Hat);
+                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend);
                 break;
             case PoseAir:
-                _walker.Mesh = _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running, hat: Hat);
-                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running);
+                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(_walkPalette, Avatar.HumanPose.Running, arm, blend, Hat)
+                    : _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running, hat: Hat);
+                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend);
                 break;
             default:
-                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase, hat: Hat);
-                mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase);
+                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend);
+                mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend);
                 break;
         }
         _walker.Transform = BodyPose;

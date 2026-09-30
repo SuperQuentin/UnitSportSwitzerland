@@ -937,12 +937,26 @@ public static class SlotDrawing
 
         if (!stack.IsEmpty && ItemDefs.Get(stack.Id) is { } def)
         {
-            var inner = r.Grow(-r.Size.X * 0.18f);
-            c.DrawRect(inner, def.Tint);
-            c.DrawRect(inner, def.Tint.Lightened(0.4f), false, 1.5f);
-            int glyphSize = (int)(r.Size.Y * 0.30f);
-            c.DrawString(font, new Vector2(inner.Position.X, inner.GetCenter().Y + glyphSize * 0.36f), def.Glyph,
-                HorizontalAlignment.Center, inner.Size.X, glyphSize, Colors.White);
+            var icon = ItemIcons.Get(stack.Id);
+            if (icon != null)
+            {
+                if (c.TextureFilter != CanvasItem.TextureFilterEnum.Nearest)
+                    c.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+                float avail = Mathf.Min(r.Size.X, r.Size.Y) * 0.8f;
+                float px = avail >= ItemIcons.Size ? Mathf.Floor(avail / ItemIcons.Size) : avail / ItemIcons.Size;
+                var size = new Vector2(ItemIcons.Size, ItemIcons.Size) * px;
+                var at = (r.GetCenter() - size * 0.5f).Round();
+                c.DrawTextureRect(icon, new Rect2(at, size), false);
+            }
+            else
+            {
+                var inner = r.Grow(-r.Size.X * 0.18f);
+                c.DrawRect(inner, def.Tint);
+                c.DrawRect(inner, def.Tint.Lightened(0.4f), false, 1.5f);
+                int glyphSize = (int)(r.Size.Y * 0.30f);
+                c.DrawString(font, new Vector2(inner.Position.X, inner.GetCenter().Y + glyphSize * 0.36f), def.Glyph,
+                    HorizontalAlignment.Center, inner.Size.X, glyphSize, Colors.White);
+            }
             if (def.MaxStack > 1)
             {
                 int countSize = (int)(r.Size.Y * 0.26f);

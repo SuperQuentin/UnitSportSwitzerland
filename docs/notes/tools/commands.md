@@ -32,3 +32,8 @@
   stretch up the hillside, so the centroid of Riddes lands on the mountain above it.
 - French features for a box (needs the terrain built there already; merges into existing tiles):
   `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --france 6.21,46.26,6.27,46.30`
+- Cover only, for a few tiles (after editing `docs/data/cover_overrides.json`; run from the repo
+  root): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --cover-only --tlm <tlm.gpkg> --tiles-file tiles.txt`
+  (`tiles.txt`: one `E-N` per line). Skips the road stage, so the RoadGen junctions survive.
+  It rewrites the tile's `.trees` too, and a tile whose roads were rewritten by RoadGen after its
+  first cover pass gets a reshuffled (equally dense) scatter: the road mask changed under the RNG.
