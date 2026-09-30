@@ -309,11 +309,14 @@ public static class ItemDefs
         // the cloth hangs to the right of the pole, seen from the front
         float top = bottom + pole - 0.02f;
         var centre = new Vector3(-(cloth * 0.5f + 0.012f), top - cloth * 0.5f, 0);
-        s.Box(centre, new Vector3(cloth, cloth, 0.008f), red);
+        s.Box(centre, new Vector3(cloth, cloth, 0.006f), red);
 
+        // the cross stands ~1.2 cm proud of each face: at 2 mm it z-fought with the cloth and
+        // flickered away at distance (24-bit depth resolves ~4 mm at 60 m)
+        const float CrossDepth = 0.03f;
         // official proportions: on a flag 32 units square the cross spans 20, its arms 6 wide
         float arm = cloth * 6f / 32f, span = cloth * 20f / 32f;
-        s.Box(centre, new Vector3(span, arm, 0.012f), white);
-        s.Box(centre, new Vector3(arm, span, 0.012f), white);
+        s.Box(centre, new Vector3(span, arm, CrossDepth), white);
+        s.Box(centre, new Vector3(arm, span, CrossDepth), white);
     }
 }

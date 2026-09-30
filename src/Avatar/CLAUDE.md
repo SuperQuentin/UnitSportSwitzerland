@@ -17,4 +17,4 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `gait-solved-from-no-slip` — A gait is solved from the no-slip constraint, and the arithmetic has two traps
 - `avatar-meshes-authored-facing-z` — Avatar meshes are authored facing +Z; a Godot node faces −Z
 - `crank-turning-wrong-way-instantly` — A crank turning the wrong way is instantly obvious to anyone who rides
-- `meshscratch-boxes-render-inside-out` — `MeshScratch` boxes render inside out: nothing inside a box is hidden, so never put a moving part away inside the body
+- `meshscratch-boxes-render-inside-out` — boxes/tubes wind correctly now; overlays must stand ~1 cm proud or they z-fight at distance
