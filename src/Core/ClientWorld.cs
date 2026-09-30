@@ -611,6 +611,11 @@ public partial class ClientWorld : Node3D
         _chat.Teleporter = _teleporter;
         AddChild(_chat);
 
+        // World/Race on both sides; the client side puts this player on the grid and times the run
+        var race = World.RaceManager.CreateClient();
+        race.LocalPlayer = () => LocalPlayer;
+        AddChild(race);
+
         _chatUi = ChatUi.Create(_chat);
         AddChild(_chatUi);
 

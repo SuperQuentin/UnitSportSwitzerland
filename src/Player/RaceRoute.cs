@@ -134,6 +134,14 @@ public sealed class RaceRoute
 
     public float HalfWidthAt(Vector3 pos) => Width[NearestCentre(pos)] * 0.5f;
 
+    /// <summary>The centreline index at arc length s (clamped).</summary>
+    public int NearestCentreIndexAt(float s)
+    {
+        int i = Arc.BinarySearch(s);
+        if (i < 0) i = ~i;
+        return Mathf.Clamp(i, 0, Centre.Count - 1);
+    }
+
     /// <summary>Nearest centreline point: a coarse stride over the 2 m polyline, then a fine search around it.</summary>
     public int NearestCentre(Vector3 pos)
     {
