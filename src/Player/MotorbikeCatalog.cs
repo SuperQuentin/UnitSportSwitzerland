@@ -99,7 +99,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Sport bike (R1)",
-            Blurb = "998 cc crossplane four, 200 PS, 201 kg: W / RT gas, S / LT brake, A/D lean. Wheelies if you let it",
+            Blurb = "998 cc crossplane four, 200 PS, 201 kg: {throttle} gas, {brake} brake, {move_left}/{move_right} lean. Wheelies if you let it",
             Engine = EngineLayout.Crossplane4,
             Look = new MotoLook
             {
@@ -131,7 +131,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Naked bike (Monster)",
-            Blurb = "937 cc 90° V-twin, 111 hp, 188 kg, upright bars: W / RT gas, S / LT brake, A/D lean",
+            Blurb = "937 cc 90° V-twin, 111 hp, 188 kg, upright bars: {throttle} gas, {brake} brake, {move_left}/{move_right} lean",
             Engine = EngineLayout.VTwin90,
             Look = new MotoLook
             {

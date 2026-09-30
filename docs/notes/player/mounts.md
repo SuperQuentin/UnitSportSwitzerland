@@ -1,7 +1,9 @@
 # Mounts
 
-- **Mounts** (`src/Player/Rideable.cs`): **E** opens a picker (`RideUi`) — On foot / Road bike /
-  Skis. A vehicle is a table of numbers plus a mesh: everything touching the body, the network,
+- **Mounts** (`src/Player/Rideable.cs`): **R** opens a picker (`RideUi`) — On foot / Road bike /
+  Skis. (E interacts; on a pad Y opens the picker when there is nothing to interact with.) Online,
+  the vehicle rows are greyed for a non-admin (`Core/Permissions`, the core `permissions` note).
+  Blurbs name their controls with `{action}` placeholders, filled by `InputHints.Format`. A vehicle is a table of numbers plus a mesh: everything touching the body, the network,
   the camera and the UI lives once in `FootPlayer`, so adding one is a class plus a line in
   `Rideable.Create`. Both share one model — mass, a resistive force, `SlopeAccel` — and differ
   only in where propulsion comes from. Mounted, speed is a **scalar along a heading**, not a

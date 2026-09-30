@@ -109,6 +109,22 @@ public partial class RaceManager : Node
     private readonly Dictionary<long, string> _npcNames = new();
     private readonly Dictionary<long, string> _names = new();
 
+    /// <summary>
+    /// Server: vehicles races handed out, per simulating peer. Conjuring a vehicle is an admin's on a
+    /// server (<see cref="Core.Permissions"/>), but a race puts every entrant — player or NPC — on its
+    /// machine, so whoever runs it may leave that many in the world afterwards
+    /// (<see cref="Vehicles.VehicleManager.MayPark"/> takes one per park, <see cref="TakeIssued"/>).
+    /// </summary>
+    private readonly Dictionary<long, int> _issued = new();
+
+    /// <summary>Server: uses up one vehicle a race gave this peer. False if it has none left.</summary>
+    public bool TakeIssued(long peer)
+    {
+        if (_issued.GetValueOrDefault(peer) <= 0) return false;
+        _issued[peer]--;
+        return true;
+    }
+
     public static RaceManager CreateServer(ChatManager chat, Node3D players, IChunkSource source, WorldOrigin origin) => new()
     {
         Name = NodeName, _server = true, _chat = chat, _players = players, _source = source, _origin = origin,
@@ -539,6 +555,9 @@ public partial class RaceManager : Node
         race.Deadline = race.StartAt + (course.Length + RaceCourse.AirGridBack + 300f) / SlowPace(race.Mount) + 60f;
         race.Centre = centre;
         race.Width = width;
+        if (race.Mount != Open && Rideable.Create((RideKind)race.Mount) is { IsVehicle: true })
+            foreach (long e in race.Entrants)
+                _issued[SimOf(e)] = _issued.GetValueOrDefault(SimOf(e)) + 1;
         foreach (long e in race.Entrants)
         {
             race.Next[e] = 0;

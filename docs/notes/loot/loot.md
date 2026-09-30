@@ -15,4 +15,5 @@
   buildings around the spawn, prints per-kind averages, non-zero exit if an average house leaves
   its target: ~3.5 food, 1.5 drinks, 8 scrap, 1 mineral, 0.2 parts, 30 CHF). `--interiorcheck`
   also searches a container and takes everything (this adds items to the real inventory).
-  `--lootepoch N` pretends N restocks have passed. Multiplayer path is untested with two clients.
+  `--lootepoch N` pretends N restocks have passed. Francs found go to the cash counter, not a slot
+  (the items `cash-account` note). Two players on one container: the `two-players-one-container` note.

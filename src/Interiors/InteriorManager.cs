@@ -822,7 +822,8 @@ public partial class InteriorManager : Node3D
                 if (door == null) text = Loot.LootService.Instance?.PromptFor(p);
             }
             else if (!p.Indoors) door = DoorIndex.Nearest(p.GlobalPosition, DoorReach)?.Key.ToString();
-            if (door != null) text = _doors.ContainsKey(door) ? "[E] Close the door" : "[E] Open the door";
+            if (door != null)
+                text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
         }
         _prompt.Visible = text != null;
         if (text != null) _prompt.Text = text;

@@ -774,8 +774,8 @@ public partial class PlayerFeel : Node3D
         var vehicle = _player.Vehicle;
         _engineLabel.Visible = vehicle is { IsVehicle: true };
         if (_engineLabel.Visible)
-            _engineLabel.Text = (vehicle!.HasEngine ? (_player.EngineOn ? "ENGINE ON  (I / D-pad ↑)" : "ENGINE OFF  (I / D-pad ↑)") + "\n" : "")
-                + $"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%    E / (Y) get out";
+            _engineLabel.Text = (vehicle!.HasEngine ? (_player.EngineOn ? "ENGINE ON  " : "ENGINE OFF  ") + Core.InputHints.Tag(Core.PlayerInput.EngineToggle) + "\n" : "")
+                + $"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%    {Core.InputHints.Tag(Core.PlayerInput.InteractMount)} get out";
 
         UpdateHint(dt, ride);
 

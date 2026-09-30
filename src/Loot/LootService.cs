@@ -131,7 +131,7 @@ public partial class LootService : Node
         int i = NearestContainer(p, layout, node);
         if (i < 0) return null;
         string what = LootTables.Describe(layout.Furniture[i].Type);
-        string key = PlayerInput.LastDevice == InputDevice.Gamepad ? "[Y]" : "[E]";
+        string key = InputHints.Tag(PlayerInput.InteractMount);
         bool empty = _seenEmpty.TryGetValue((layout.Key, i), out long ep)
             && ep == LootTables.Epoch(layout.Key, Now);
         return empty ? $"{key} Search the {what} (empty)" : $"{key} Search the {what}";
@@ -241,7 +241,9 @@ public partial class LootService : Node
         {
             int left = Items.Inventory.Add((ItemId)id, count);
             var def = ItemDefs.Get((ItemId)id);
-            Items.Ui.Toast(id == (int)ItemId.Francs ? $"+{count - left} CHF" : $"+{count - left} {def?.Name}");
+            Items.Ui.Toast(id == (int)ItemId.Francs
+                ? InputHints.Format($"+{count} CHF cash — claim it to your account in the inventory ({{inventory}})")
+                : $"+{count - left} {def?.Name}");
             if (left > 0) GD.PushWarning($"[loot] {left} {(ItemId)id} did not fit and were lost");
         }
         Play(SfxSynth.Chime, 1.5f);
@@ -300,6 +302,23 @@ public partial class LootService : Node
         }
         SetMask(key, furniture, now, mask | (1 << index));
         Reply(peer, MethodName.Granted, key, furniture, index, (int)stacks[index].Id, stacks[index].Count);
+
+        // anyone else in this building may have the same container open: tell them it is gone,
+        // or their panel keeps offering it until they click it and are refused
+        if (!Online || InteriorManager.Instance is not { } interiors) return;
+        foreach (int other in Multiplayer.GetPeers())
+            if (other != peer && interiors.SpaceOf(other) == key)
+                RpcId(other, MethodName.Taken, key, furniture, now, mask | (1 << index));
+    }
+
+    /// <summary>Client: another player took from a container; if it is the one open here, drop those stacks.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Taken(string key, int furniture, long epoch, int mask)
+    {
+        if (_open is not { } open || open.Key != key || open.Furniture != furniture || epoch != _openEpoch) return;
+        _openMask |= mask;
+        if (!OpenContents().Any()) _seenEmpty[(key, furniture)] = epoch;
+        _ui?.Refresh();
     }
 
     private void Reply(long peer, StringName method, params Variant[] args)

@@ -24,7 +24,7 @@ public sealed class Skis : Rideable
 {
     public override RideKind Kind => RideKind.Skis;
     public override string Label => "Skis";
-    public override string Blurb => "Gravity only — A/D / stick carve to shed speed, Shift / X tuck, S / LT plough";
+    public override string Blurb => "Gravity only — {move_left}/{move_right} carve to shed speed, {tuck_boost} tuck, {brake} plough";
 
     private const float Mass = 82f;
 

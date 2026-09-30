@@ -12,7 +12,24 @@ public sealed class PlayerInfo
     public required string Name { get; set; }
 
     /// <summary>True when this peer has proved it is an operator this session.</summary>
-    public bool IsAdmin { get; set; }
+    public bool IsAdmin
+    {
+        get => _isAdmin;
+        set
+        {
+            if (_isAdmin == value) return;
+            _isAdmin = value;
+            AdminChanged?.Invoke(this);
+        }
+    }
+
+    private bool _isAdmin;
+
+    /// <summary>
+    /// Any peer gaining or losing operator rights, however it happened (join, /login, /admin).
+    /// The server's chat tells that client, which is how its menus learn what they may offer.
+    /// </summary>
+    public static event Action<PlayerInfo>? AdminChanged;
 
     public DateTimeOffset JoinedAt { get; } = DateTimeOffset.UtcNow;
 

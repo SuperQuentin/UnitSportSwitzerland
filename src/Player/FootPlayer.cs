@@ -612,7 +612,7 @@ public partial class FootPlayer : CharacterBody3D
     private const float SettleTime = 1f;
 
     /// <summary>How close a parked vehicle has to be to get into it, m.</summary>
-    private const float EnterReach = 3.5f;
+    public const float EnterReach = 3.5f;
 
     private const float FlipRate = 5.0f;         // rad/s: a backflip in ~1.3 s of air
     private const float SpinRate = 6.5f;         // rad/s: a 360 in ~1 s
@@ -1600,6 +1600,9 @@ public partial class FootPlayer : CharacterBody3D
         // a tit on the windscreen is a thud, not an event worth a banner
         else if (damage >= 1f) Announced?.Invoke("BIRD STRIKE", false);
     }
+
+    /// <summary>Down after losing all health, until revived a few seconds later.</summary>
+    public bool KnockedOut => _deadTimer > 0;
 
     /// <summary>Restores health (food, water). Returns false when there was nothing to restore.</summary>
     public bool Heal(float amount)

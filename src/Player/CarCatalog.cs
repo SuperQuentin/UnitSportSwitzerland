@@ -35,7 +35,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "AE86 hatch",
-            Blurb = "Tofu delivery panda: light, rear drive, a 4A-GE that revs to 7,800. W / RT gas, S / LT brake, Space / A handbrake",
+            Blurb = "Tofu delivery panda: light, rear drive, a 4A-GE that revs to 7,800. {throttle} gas, {brake} brake, {jump} handbrake",
             Body = new CarBody
             {
                 Shape = BodyShape.Hatchback, Length = 4.2f, Width = 1.63f, Height = 1.34f, WheelRadius = 0.29f,
@@ -441,7 +441,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "NA6CE Roadster",
-            Blurb = "Tohru's Roadster of Seven Star Leaf, the first MX-5: light, a tiny 1.6, pop-up eyes (L) and a top that folds (O)",
+            Blurb = "Tohru's Roadster of Seven Star Leaf, the first MX-5: light, a tiny 1.6, pop-up eyes ({lights_toggle}) and a top that folds ({roof_toggle})",
             Body = new CarBody
             {
                 Shape = BodyShape.Roadster, Length = 3.95f, Width = 1.675f, Height = 1.235f, WheelRadius = 0.29f,

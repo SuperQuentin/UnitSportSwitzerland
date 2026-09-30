@@ -29,6 +29,18 @@ public partial class VehicleManager : Node3D
     private int _counter;
     private Action<VehicleState>? _pendingClaim;
     private readonly HashSet<string> _claimed = new();
+    /// <summary>Server: vehicles each peer took out of the world and has not put back yet.</summary>
+    private readonly Dictionary<long, int> _driving = new();
+
+    /// <summary>
+    /// Server: may this peer put a vehicle into the world that it did not take out of it, i.e. one
+    /// it conjured from the travel menu? Null allows everything. Wired to "admin, or the race gave
+    /// you that car" by <c>ServerWorld</c>; see <see cref="Core.Permissions"/> for why.
+    /// </summary>
+    public Func<long, VehicleState, bool>? MayPark { get; set; }
+
+    /// <summary>Client: the server refused to park a vehicle this player spawned.</summary>
+    public static event Action<string>? Refused;
     private double _housekeeping;
 
     /// <summary>Wrecks are cleared this long after they burn.</summary>
@@ -130,7 +142,21 @@ public partial class VehicleManager : Node3D
     {
         if (!Multiplayer.IsServer() || _spawner == null) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        var state = VehicleState.FromDict(data) with
+        var parked = VehicleState.FromDict(data);
+
+        // A vehicle a player got out of is one they got into, and those are counted; anything
+        // beyond that was spawned from the menu, which the client only offers an admin. A client
+        // that offers it anyway is refused here, where the answer cannot be edited.
+        if (_driving.TryGetValue(sender, out int driving) && driving > 0)
+            _driving[sender] = driving - 1;
+        else if (MayPark != null && !MayPark(sender, parked))
+        {
+            GD.Print($"[vehicles] peer {sender} may not spawn a {parked.Kind}; not parked");
+            RpcId(sender, MethodName.ParkRefused, parked.Kind.ToString());
+            return;
+        }
+
+        var state = parked with
         {
             Owner = sender,
             Name = $"veh_{sender}_{++_counter}",
@@ -152,6 +178,7 @@ public partial class VehicleManager : Node3D
         var state = vehicle.Capture();
         vehicle.QueueFree();   // the spawner removes it on every client
         _claimed.Remove(name);
+        _driving[sender] = _driving.GetValueOrDefault(sender) + 1;
         RpcId(sender, MethodName.ClaimGranted, state.ToDict());
     }
 
@@ -166,9 +193,14 @@ public partial class VehicleManager : Node3D
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void ClaimRefused() => _pendingClaim = null;
 
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ParkRefused(string kind) =>
+        Refused?.Invoke($"Only an admin can spawn vehicles on this server; your {kind} was not left in the world.");
+
     /// <summary>Server: a player left, and nobody is simulating their vehicles any more.</summary>
     public void ForgetOwner(long peer)
     {
+        _driving.Remove(peer);
         foreach (var node in GetChildren())
             if (node is VehicleBody v && v.Owner == peer) v.QueueFree();
     }
