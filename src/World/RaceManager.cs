@@ -68,6 +68,9 @@ public partial class RaceManager : Node
         public readonly Dictionary<long, double> Finished = new();
         /// <summary>Left, disconnected, or crossed the line with checkpoints missed.</summary>
         public readonly HashSet<long> Out = new();
+        /// <summary>Waiting for another race's field to leave a shared start line.</summary>
+        public bool Held;
+        public double HoldUntil;
         public string What => $"{(Air ? "air " : "")}{MountName(Mount)} {(Invited != 0 ? "duel" : "race")}";
     }
 
@@ -281,13 +284,37 @@ public partial class RaceManager : Node
                 if (race.Phase == Phase.Running) race.Out.Add(e);
                 else race.Entrants.Remove(e);
             }
-            if (race.Phase == Phase.Entry
+            if (race.Phase == Phase.Entry && _clock >= race.HoldUntil
                 && (_clock >= race.EntryEnds || (race.Invited != 0 && race.Entrants.Contains(race.Invited))))
                 Go(race);
             else if (race.Phase == Phase.Running
                 && (_clock > race.Deadline || race.Entrants.All(e => race.Finished.ContainsKey(e) || race.Out.Contains(e))))
                 Results(race);
         }
+    }
+
+    /// <summary>Seconds after its GO a field is taken to have left its grid.</summary>
+    private const double GridClearSeconds = 12;
+
+    /// <summary>Grid slots of two races closer than this share tarmac.</summary>
+    private const float GridClearance = 25f;
+
+    /// <summary>A race still on (or just off) its grid whose slots overlap this one's, if any.</summary>
+    private Race? GridBlockedBy(Race race, RaceCourse course, int count)
+    {
+        foreach (var other in _races.Values)
+        {
+            if (other == race || other.Phase != Phase.Running || other.Course == null) continue;
+            if (_clock > other.StartAt + GridClearSeconds) continue;
+            int theirs = other.Entrants.Count;
+            for (int i = 0; i < count; i++)
+            {
+                var (a, _) = course.Slot(i, count);
+                for (int j = 0; j < theirs; j++)
+                    if (a.DistanceTo(other.Course.Slot(j, theirs).At) < GridClearance) return other;
+            }
+        }
+        return null;
     }
 
     private void Go(Race race)
@@ -308,6 +335,18 @@ public partial class RaceManager : Node
         }
         else gates = race.Course!.Gates;
         var course = race.Course!;
+
+        // Two races opened at the same spot would put both grids on the same tarmac: cars
+        // spawned inside each other. A race is not outside the world's rules — the later one
+        // waits until the earlier field has left the line, then lines up on the empty road.
+        if (GridBlockedBy(race, course, count) is { } other)
+        {
+            if (!race.Held)
+                _chat?.Broadcast($"[race] #{race.Id} waits for #{other.Id} to clear the start", ChatKind.System);
+            race.Held = true;
+            race.HoldUntil = other.StartAt + GridClearSeconds;
+            return;
+        }
 
         race.Phase = Phase.Running;
         race.StartAt = _clock + Countdown;
@@ -743,7 +782,10 @@ public partial class RaceManager : Node
     {
         foreach (var node in me.GetTree().GetNodesInGroup(FootPlayer.Group))
             if (node is FootPlayer p && p != me)
-                yield return new AutoPilot.Other(p.GlobalPosition, p.Velocity.Length(), false);
+                // every player, whatever race they are in: a race does not suspend the road.
+                // WorldVelocity, because a remote's Velocity is always zero — a pilot reading it
+                // took every other car on the road for a parked one
+                yield return new AutoPilot.Other(p.GlobalPosition, p.WorldVelocity.Length(), false);
     }
 
     private void ShowHud(string? text)
