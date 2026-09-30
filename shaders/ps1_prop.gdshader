@@ -8,6 +8,7 @@ global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
+#include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
 
 // Occasion props (src/Occasions/OccasionDecor): jack-o'-lanterns, treat bowls, pumpkins, lights,
@@ -55,7 +56,7 @@ void fragment() {
     // an unlit lamp by day is the dark hollow it really is
     vec3 col = COLOR.rgb * mix(1.0, 0.18, mask) * light;
     col = occasion_snow(col, n, 0.7);
-    col *= world_tint;
+    col *= world_tint + door_light(world_pos, n);
 
     float wobble = 0.82 + 0.18 * sin(TIME * (6.0 + seed * 5.0) + seed * 40.0) * sin(TIME * 2.3 + seed * 13.0);
     float glow = mask * glow_gain * world_night * mix(1.0, wobble, flicker);

@@ -8,8 +8,11 @@ namespace UnitSport.Player;
 /// Verification helper: mounts a vehicle, holds the throttle, and reports what happened.
 ///
 /// <para>
-/// <c>godot --path . -- --ride bike|skis|car[:N]|r1|monster,seconds[,out.png] [--at E,N] [--heading deg]</c>
-/// (<c>--heading</c>: compass bearing to ride along, 0 = north, 90 = east; <c>--setup name</c>: a car
+/// <c>godot --path . -- --ride bike|skis|car[:N]|r1|monster,seconds[,out.png] [--at E,N] [--heading deg]
+/// [--brake-at s] [--midshot s]</c>
+/// (<c>--heading</c>: compass bearing to ride along, 0 = north, 90 = east; <c>--brake-at</c>: let
+/// go of the throttle and brake from then on, to stop somewhere, say inside a garage;
+/// <c>--midshot</c>: one more screenshot then, next to out.png as out_mid.png; <c>--setup name</c>: a car
 /// preset, <see cref="CarSetups"/>)
 /// </para>
 ///
@@ -37,6 +40,16 @@ public partial class RideProbe : Node
     private Vector3 _start;
     private bool _mounted;
     private bool _done;
+    private bool _midShot;
+    private bool _stopped;
+
+    private static float? Arg(string name)
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int i = System.Array.IndexOf(args, name);
+        return i >= 0 && i + 1 < args.Length && float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : null;
+    }
     private readonly System.Collections.Generic.List<float> _reached = new();
     /// <summary>A motorbike's worst use of its wheelie / stoppie limit; 1 or more would be a flip.</summary>
     private float _worstPitch;
@@ -120,6 +133,18 @@ public partial class RideProbe : Node
             return;
         }
 
+        if (!_mounted && _kind == RideKind.OnFoot)
+        {
+            // "--ride foot": run straight ahead (and stand still from --brake-at on)
+            if (!_player.IsOnFloor()) return;
+            _mounted = true;
+            float stopAt = Arg("--brake-at") ?? float.MaxValue;
+            var ahead = -_player.GlobalBasis.Z with { Y = 0 };
+            _player.WalkControls = () => (_elapsed < stopAt ? ahead.Normalized() : Vector3.Zero, true);
+            GD.Print("[ride] on foot");
+            return;
+        }
+
         if (!_mounted)
         {
             // one frame of settling, or the mount is refused for being airborne
@@ -144,8 +169,15 @@ public partial class RideProbe : Node
             // unless --steer asks for a turn (−1 left .. 1 right)
             int st = System.Array.IndexOf(a, "--steer");
             float steer = st >= 0 && st + 1 < a.Length && float.TryParse(a[st + 1], System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out float s) ? s : 0f;
-            _player.RideControls = () => new RideInput(steer != 0f && _player.RideSpeed > 5f ? 0f : 1f, 0f, steer, false);
+                System.Globalization.CultureInfo.InvariantCulture, out float asked) ? asked : 0f;
+            float brakeAt = Arg("--brake-at") ?? float.MaxValue;
+            // (the brake, held at a standstill, would reverse: let go once stopped)
+            _player.RideControls = () =>
+            {
+                if (_elapsed < brakeAt) return new RideInput(steer != 0f && _player.RideSpeed > 5f ? 0f : 1f, 0f, steer, false);
+                _stopped |= Mathf.Abs(_player.RideSpeed) < 0.3f;
+                return new RideInput(0f, _stopped ? 0f : 1f, 0f, false, Handbrake: _stopped);
+            };
             return;
         }
 
@@ -160,8 +192,15 @@ public partial class RideProbe : Node
         if (_player.Vehicle is Motorbike moto)
             _worstPitch = Mathf.Max(_worstPitch, Mathf.Abs(moto.PitchUse));
 
+        if (_shot != null && Arg("--midshot") is { } mid && _elapsed >= mid && !_midShot)
+        {
+            _midShot = true;
+            string path = _shot.Replace(".png", "_mid.png");
+            GD.Print(GetViewport().GetTexture().GetImage().SavePng(path) == Error.Ok ? $"[ride] wrote {path}" : $"[ride] FAILED to write {path}");
+        }
+
         _sinceReport += delta;
-        if (_sinceReport >= 2.0)
+        if (_sinceReport >= 1.0)
         {
             _sinceReport = 0;
             var p = _player.GlobalPosition;
@@ -172,7 +211,9 @@ public partial class RideProbe : Node
                 + (_player.Vehicle is Car car ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {car.Gear}" : "")
                 + (_player.Vehicle is Truck truck ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
                     + $"  joints {string.Join(" ", truck.Articulation.Take(truck.SectionCount - 1).Select(j => $"{Mathf.RadToDeg(j):F0}°"))}" : "")
-                + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : ""));
+                + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : "")
+                + (Interiors.DoorIndex.GarageAround(p) is { } inG ? $"  inside garage {inG.Key}" : "")
+                + (_kind == RideKind.OnFoot && Interiors.DoorIndex.NearestEntrance(p, 1.6f) is { } door ? $"  [E] door {door.Key}" : ""));
         }
 
         if (_elapsed < _seconds) return;
@@ -181,6 +222,13 @@ public partial class RideProbe : Node
         var end = _player.GlobalPosition;
         float travelled = new Vector2(end.X - _start.X, end.Z - _start.Z).Length();
         bool underground = _chunks.TryGetHeight(end, out float endGround) && end.Y < endGround - 1.5f;
+        if (Interiors.DoorIndex.GarageAround(end) is { } garage)
+        {
+            // the terrain under a garage is carved away: the floor slab is the ground in there
+            underground = end.Y < garage.Bay!.Sill + garage.TileOrigin.Y - 1.5f;
+            GD.Print($"[ride] ended inside garage {garage.Key}, {end.Y - garage.Bay.Sill - garage.TileOrigin.Y:F2} m over its floor, "
+                + $"speed {_player.RideSpeed:F1} m/s");
+        }
 
         GD.Print($"[ride] {_kind}: {travelled:F0} m in {_seconds:F0} s, "
             + $"top {_topSpeed:F1} m/s ({_topSpeed * 3.6f:F1} km/h), "

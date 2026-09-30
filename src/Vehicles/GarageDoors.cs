@@ -15,14 +15,18 @@ namespace UnitSport.Vehicles;
 /// <para>
 /// The facade draws the frame, step and neon sign (<see cref="BuildingMeshBuilder"/>); this adds a
 /// node per garage door, <b>parented to the tile's own node</b> under a deterministic name, so it
-/// unloads with the tile. The bay is a few quads just in front of the wall, under the door: the
-/// building has no hole, the open door shows a tool wall and a neon strip instead of an interior.
+/// unloads with the tile. A garage with a drive-in bay (<see cref="GarageBay"/>) has a real hole
+/// and room behind the door: the leaf is solid while shut, the tool wall and neon hang on the
+/// room's walls, and the door stays up while anyone is inside. A garage too small for one keeps
+/// a few quads just in front of its wall and a leaf that is only drawn.
 /// </para>
 /// </summary>
 public partial class GarageDoors : Node
 {
     /// <summary>A car this close to the doorway, in front of it, opens the door.</summary>
     public const float OpenReach = 10f;
+    /// <summary>Someone on foot this close to a drive-in garage's doorway opens it (to walk in, or out).</summary>
+    public const float WalkReach = 2.5f;
     /// <summary>Seconds for a full roll up or down.</summary>
     private const float RollSeconds = 1f;
     /// <summary>How often the car positions are checked; the roll itself animates every frame.</summary>
@@ -31,7 +35,7 @@ public partial class GarageDoors : Node
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
     private readonly Dictionary<TileId, List<Door>> _tiles = new();
-    private readonly List<Vector3> _cars = new();
+    private readonly List<(Vector3 At, bool Car)> _bodies = new();
     private ShaderMaterial _material = null!;
     private double _sinceCheck = CheckEvery;
 
@@ -42,6 +46,9 @@ public partial class GarageDoors : Node
         public required Vector3 World;
         public required Vector3 Outward;
         public required float HalfWidth;
+        public GarageBay.Bay? Bay;
+        public Vector3 TileOrigin;
+        public CollisionShape3D? Shut;   // a drive-in garage's leaf, solid while down
         public float Open;   // 0 shut .. 1 rolled up
         public bool Wanted;
     }
@@ -98,6 +105,9 @@ public partial class GarageDoors : Node
                 World = tileOrigin + d.Position,
                 Outward = d.Outward,
                 HalfWidth = d.Width / 2,
+                Bay = d.Bay,
+                TileOrigin = tileOrigin,
+                Shut = root.GetNodeOrNull<CollisionShape3D>("Body/Shape"),
             });
         }
         if (list.Count > 0) _tiles[id] = list;
@@ -122,11 +132,11 @@ public partial class GarageDoors : Node
         if (_sinceCheck >= CheckEvery)
         {
             _sinceCheck = 0;
-            _cars.Clear();
+            _bodies.Clear();
             foreach (var n in GetTree().GetNodesInGroup(FootPlayer.Group))
-                if (n is FootPlayer p && CarCatalog.IsCar(p.Ride)) _cars.Add(p.GlobalPosition);
+                if (n is FootPlayer p) _bodies.Add((p.GlobalPosition, CarCatalog.IsCar(p.Ride)));
             foreach (var doors in _tiles.Values)
-                foreach (var d in doors) d.Wanted = CarInFront(d);
+                foreach (var d in doors) d.Wanted = Wanted(d);
         }
 
         float step = (float)delta / RollSeconds;
@@ -139,19 +149,27 @@ public partial class GarageDoors : Node
                 if (!IsInstanceValid(d.Leaf)) continue;
                 // rolls into the lintel: squash from the top, never quite to nothing
                 d.Leaf.Scale = new Vector3(1, Mathf.Max(0.03f, 1 - d.Open), 1);
+                // solid only fully down: a car under a rolling leaf is never pushed out
+                if (d.Shut != null && IsInstanceValid(d.Shut)) d.Shut.Disabled = d.Open > 0.02f;
             }
     }
 
-    private bool CarInFront(Door d)
+    /// <summary>
+    /// Up while a car is within <see cref="OpenReach"/> in front, and for a drive-in garage while
+    /// anyone is inside it or on foot at the doorway (whoever parked in there must get out).
+    /// </summary>
+    private bool Wanted(Door d)
     {
-        foreach (var c in _cars)
+        foreach (var (at, car) in _bodies)
         {
-            var rel = c - d.World;
+            if (d.Bay != null && d.Bay.Contains(at - d.TileOrigin, 0.3f)) return true;
+            var rel = at - d.World;
             if (Mathf.Abs(rel.Y) > 4f) continue;
             float outward = rel.X * d.Outward.X + rel.Z * d.Outward.Z;
             if (outward < -1f) continue;   // behind the wall: not this garage's business
             float along = Mathf.Abs(rel.X * -d.Outward.Z + rel.Z * d.Outward.X);
-            if (new Vector2(Mathf.Max(0, along - d.HalfWidth), outward).Length() <= OpenReach) return true;
+            float reach = car ? OpenReach : d.Bay != null ? WalkReach : 0f;
+            if (reach > 0 && new Vector2(Mathf.Max(0, along - d.HalfWidth), outward).Length() <= reach) return true;
         }
         return false;
     }
@@ -170,21 +188,14 @@ public partial class GarageDoors : Node
         float hw = d.Width / 2, h = d.Height;
 
         var bay = new Quads();
-        var back = new Color(0.72f, 0.74f, 0.78f); // colours are sRGB, linearised like the facade's
-        bay.Rect(-hw, hw, 0, h, 0.015f, back);
-        // tool wall: a pegboard with a few spanners and a red roll cab under it
-        bay.Rect(-hw * 0.85f, hw * 0.15f, 0.95f, 1.95f, 0.02f, new Color(0.80f, 0.66f, 0.46f));
-        for (int i = 0; i < 5; i++)
+        if (d.Bay is { } room) Furnish(bay, room);
+        else
         {
-            float x = -hw * 0.75f + i * hw * 0.18f;
-            bay.Rect(x, x + 0.05f, 1.2f + (i % 2) * 0.1f, 1.7f, 0.025f, new Color(0.92f, 0.93f, 0.95f));
+            // no room behind this one: a tool wall just in front of the facade, under the door
+            var back = new Color(0.72f, 0.74f, 0.78f); // colours are sRGB, linearised like the facade's
+            bay.Rect(-hw, hw, 0, h, 0.015f, back);
+            ToolWall(bay, -hw, hw, h, 0.02f);
         }
-        bay.Rect(hw * 0.3f, hw * 0.85f, 0, 0.95f, 0.02f, new Color(0.88f, 0.16f, 0.12f));
-        for (int i = 1; i < 4; i++)
-            bay.Rect(hw * 0.33f, hw * 0.82f, i * 0.23f, i * 0.23f + 0.03f, 0.025f, new Color(0.45f, 0.06f, 0.05f));
-        // a jack-stand stripe on the floor edge and the neon tube along the top
-        bay.Rect(-hw, hw, 0, 0.08f, 0.02f, new Color(0.85f, 0.70f, 0.05f));
-        bay.Rect(-hw * 0.9f, hw * 0.9f, h - 0.3f, h - 0.2f, 0.025f, Colors.White, BuildingMeshBuilder.SignFlag);
         root.AddChild(new MeshInstance3D { Name = "Bay", Mesh = bay.ToMesh(_material) });
 
         // the slatted leaf, hanging from the lintel so squashing it rolls it up
@@ -201,7 +212,59 @@ public partial class GarageDoors : Node
         }
         leaf.Rect(-hw, hw, -h, -h + 0.06f, 0.075f, new Color(0.2f, 0.2f, 0.22f)); // bottom rail
         root.AddChild(new MeshInstance3D { Name = "Leaf", Position = new Vector3(0, h, 0), Mesh = leaf.ToMesh(_material) });
+        if (d.Bay != null)
+        {
+            // there is a real hole behind this leaf: shut, it is a wall
+            var body = new StaticBody3D { Name = "Body" };
+            body.AddChild(new CollisionShape3D
+            {
+                Name = "Shape",
+                Shape = new BoxShape3D { Size = new Vector3(d.Width, h, 0.1f) },
+                Position = new Vector3(0, h / 2, 0.02f),
+            });
+            root.AddChild(body);
+        }
         return root;
+    }
+
+    /// <summary>
+    /// A pegboard with spanners, a red roll cab, a jack-stand stripe and a neon tube, on a wall
+    /// running along X from <paramref name="x0"/> to <paramref name="x1"/> at depth <paramref name="z"/>.
+    /// </summary>
+    private static void ToolWall(Quads q, float x0, float x1, float h, float z)
+    {
+        float mid = (x0 + x1) / 2, hw = (x1 - x0) / 2;
+        q.Rect(mid - hw * 0.85f, mid + hw * 0.15f, 0.95f, 1.95f, z, new Color(0.80f, 0.66f, 0.46f));
+        for (int i = 0; i < 5; i++)
+        {
+            float x = mid - hw * 0.75f + i * hw * 0.18f;
+            q.Rect(x, x + 0.05f, 1.2f + (i % 2) * 0.1f, 1.7f, z + 0.005f, new Color(0.92f, 0.93f, 0.95f));
+        }
+        q.Rect(mid + hw * 0.3f, mid + hw * 0.85f, 0, 0.95f, z, new Color(0.88f, 0.16f, 0.12f));
+        for (int i = 1; i < 4; i++)
+            q.Rect(mid + hw * 0.33f, mid + hw * 0.82f, i * 0.23f, i * 0.23f + 0.03f, z + 0.005f, new Color(0.45f, 0.06f, 0.05f));
+        q.Rect(x0, x1, 0, 0.08f, z, new Color(0.85f, 0.70f, 0.05f));
+        q.Rect(mid - hw * 0.9f, mid + hw * 0.9f, h - 0.3f, h - 0.2f, z + 0.005f, Colors.White, BuildingMeshBuilder.SignFlag);
+    }
+
+    /// <summary>
+    /// The drive-in room's fittings, in the door's frame (X along the wall, Y up from the sill,
+    /// Z out): the tool wall on the back wall, a neon tube and a stripe along each side wall.
+    /// </summary>
+    private static void Furnish(Quads q, GarageBay.Bay b)
+    {
+        float Z(float s) => s - (b.Facade + 0.03f);
+        float xa = -b.HalfA - b.Along, xb = b.HalfA - b.Along;   // the side walls
+        float zBack = Z(b.Back) + 0.02f, zFront = Z(b.Front);
+        float h = b.Ceiling - b.Sill;
+        // a tool wall at most 5 m wide, centred on the back wall
+        float mid = (xa + xb) / 2, half = Math.Min(2.5f, (xb - xa) / 2 - 0.2f);
+        ToolWall(q, mid - half, mid + half, h, zBack);
+        foreach (float x in new[] { xa + 0.02f, xb - 0.02f })
+        {
+            q.Side(x, zBack, zFront - 0.3f, h - 0.3f, h - 0.2f, Colors.White, BuildingMeshBuilder.SignFlag);
+            q.Side(x, zBack, zFront, 0, 0.08f, new Color(0.85f, 0.70f, 0.05f));
+        }
     }
 
     /// <summary>Double-sided quads with the facade's vertex layout (no windows, a UV2.y flag).</summary>
@@ -221,6 +284,10 @@ public partial class GarageDoors : Node
 
         public void Rect(float x0, float x1, float y0, float y1, float z, Color col, float flag = 0f) =>
             Quad(new(x0, y0, z), new(x1, y0, z), new(x1, y1, z), new(x0, y1, z), col, flag);
+
+        /// <summary>A quad in the plane X = <paramref name="x"/> (a side wall).</summary>
+        public void Side(float x, float z0, float z1, float y0, float y1, Color col, float flag = 0f) =>
+            Quad(new(x, y0, z0), new(x, y0, z1), new(x, y1, z1), new(x, y1, z0), col, flag);
 
         public ArrayMesh ToMesh(Material material)
         {

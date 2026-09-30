@@ -7,7 +7,7 @@
 - **Burning runs where the library is** (dedicated server, or the offline client), never on a client
   for someone else. `CdBurner`: `yt-dlp` (best audio stream as is, `--print title`/`after_move:filepath`)
   → `ffmpeg` to mono 22.05 kHz s16le on stdout for the analyser → `ffmpeg` to stereo Vorbis q2
-  (~80 kbit/s, ≤ 10 min, ~6 MB). Tools on PATH like the GPX export's ffmpeg; missing → a status
+  (~80 kbit/s, ≤ 10 min, ~6 MB). Tools from `bin/` next to the exe (shipped in releases), else PATH, like the GPX export's ffmpeg; missing → a status
   line, nothing else. Argument lists, never a shell string: the link is user input. Hosts are
   whitelisted (youtube.com, youtu.be, music.youtube.com); one burn at a time, one per player per
   minute; a local file path is accepted only from this process (`--cdfixture <wav>` for tests).

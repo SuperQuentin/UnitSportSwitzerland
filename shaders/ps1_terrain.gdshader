@@ -8,6 +8,7 @@ global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
+#include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
 
 // PS1-style terrain: clip-space vertex snapping, flat shading from screen derivatives,
@@ -117,7 +118,7 @@ void fragment() {
         12.0, 4.0, 14.0, 6.0,
         3.0, 11.0, 1.0, 9.0,
         15.0, 7.0, 13.0, 5.0);
-    col *= world_tint;
+    col *= world_tint + door_light(world_pos, n);
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));

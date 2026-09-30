@@ -8,8 +8,33 @@ namespace UnitSport.Core;
 /// </summary>
 public partial class Main : Node
 {
+	/// <summary>
+	/// Names the window after what this run is (<c>--title "..."</c>, else its user args minus
+	/// the --chunks/--cache paths), so parallel test windows can be told apart.
+	/// </summary>
+	private static void SetWindowTitle(Window window)
+	{
+		var args = OS.GetCmdlineUserArgs();
+		int t = System.Array.IndexOf(args, "--title");
+		string what;
+		if (t >= 0 && t + 1 < args.Length) what = args[t + 1];
+		else
+		{
+			var shown = new System.Collections.Generic.List<string>();
+			for (int i = 0; i < args.Length; i++)
+				if (args[i] is "--chunks" or "--cache") i++;
+				else shown.Add(args[i]);
+			what = string.Join(' ', shown);
+		}
+		if (what.Length > 100) what = what[..100] + "…";
+		// the root Window re-applies its own Title over DisplayServer.WindowSetTitle, so set it there
+		if (what.Length > 0) window.Title = $"UnitSportSwitzerland — {what}";
+	}
+
 	public override void _Ready()
 	{
+		SetWindowTitle(GetWindow());
+
 		// the network rules' own self-checks: vision interest and remote interpolation
 		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--interestcheck") >= 0)
 		{

@@ -8,7 +8,8 @@
   tile builds (0 = auto: `ProcessorCount` from local disk, 6 when `ChunkStreamer.ServerReachable`),
   mesh commit budget in **ms per frame** (replaces the fixed 2 meshes/frame: a stride-50 tile is 441
   vertices and a stride-1 one a million, so a count was sized for the wrong one), VSync, window
-  mode (windowed / borderless / exclusive fullscreen) and window size, and **3D resolution** — a
+  mode (windowed / borderless / exclusive fullscreen; **F11 / Alt+Enter** toggle it from anywhere, in
+  `ClientWorld._Input` so chat does not open on Alt+Enter, back to the last fullscreen kind) and window size, and **3D resolution** — a
   dropdown of `Scaling3DScale` presets 25–200% shown as the pixels they produce (864x486 = the 75%
   default). Resolution is deliberately NOT `Root.ContentScaleSize`: in `viewport` stretch mode the UI
   lays out in that same viewport, so changing it would shrink the HUD at 1080p and balloon it at
