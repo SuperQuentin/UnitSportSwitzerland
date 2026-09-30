@@ -160,14 +160,24 @@ public sealed class MeshScratch
     /// therefore the backface culling — is untouched.
     /// </para>
     /// </summary>
-    public ArrayMesh Build()
+    public ArrayMesh Build() => Build(Vector3.Zero);
+
+    /// <summary>
+    /// As <see cref="Build()"/>, with <paramref name="pivot"/> (authored space, facing +Z) as the
+    /// mesh's origin: for a part that swings on a hinge, authored in place with the rest of the
+    /// machine. Its node goes at the pivot turned the same way, <c>(−x, y, −z)</c>.
+    /// </summary>
+    public ArrayMesh Build(Vector3 pivot)
     {
         var mesh = new ArrayMesh();
         if (_indices.Count == 0) return mesh;
 
         var facing = new Vector3[_vertices.Count];
         for (int i = 0; i < _vertices.Count; i++)
-            facing[i] = new Vector3(-_vertices[i].X, _vertices[i].Y, -_vertices[i].Z);
+        {
+            var v = _vertices[i] - pivot;
+            facing[i] = new Vector3(-v.X, v.Y, -v.Z);
+        }
 
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);

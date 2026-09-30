@@ -2,7 +2,7 @@
 
 - **Loot** (`src/Loot/`): lootable furniture in every generated interior (fridge, wardrobe,
   nightstand, desk, shelf, crate/rack, workbench, car, shop counter, hay bale, altar). **E** facing
-  one indoors opens `LootUi`; E at the front door still leaves (`InteriorManager.AtExit` wins).
+  one indoors opens `LootUi`; E at a front door works the door (`InteriorManager.AtExit` wins).
   Items: food/water/medical (Consume), francs, scrap, minerals, vehicle parts (`ItemUse.Material`,
   `ItemCategory`, CHF `Value` for later trade) — `ItemId` 7–36, appended. **Contents are computed,
   never stored**: `LootTables.Roll` is seeded by building key + furniture index + restock epoch
@@ -15,4 +15,5 @@
   buildings around the spawn, prints per-kind averages, non-zero exit if an average house leaves
   its target: ~3.5 food, 1.5 drinks, 8 scrap, 1 mineral, 0.2 parts, 30 CHF). `--interiorcheck`
   also searches a container and takes everything (this adds items to the real inventory).
-  `--lootepoch N` pretends N restocks have passed. Multiplayer path is untested with two clients.
+  `--lootepoch N` pretends N restocks have passed. Francs found go to the cash counter, not a slot
+  (the items `cash-account` note). Two players on one container: the `two-players-one-container` note.

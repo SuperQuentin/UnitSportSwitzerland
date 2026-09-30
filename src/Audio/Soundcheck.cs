@@ -14,8 +14,10 @@ public static class Soundcheck
         {
             SfxSynth.StepsBank, SfxSynth.LandingBank, SfxSynth.WhooshBank, SfxSynth.TickBank,
             SfxSynth.ImpactBank, SfxSynth.ChimeBank, SfxSynth.BoomBank, SfxSynth.GunBank,
+            SfxSynth.DoorOpenBank, SfxSynth.DoorCloseBank,
         };
         bad += Save(System.IO.Path.Combine(outDir, "tyre_squeal.wav"), Decode(SfxSynth.Squeal));
+        bad += Save(System.IO.Path.Combine(outDir, "street.wav"), Decode(SfxSynth.Street));
         foreach (var bank in banks)
             for (int i = 0; i < bank.Variants.Length; i++)
                 bad += Save(System.IO.Path.Combine(outDir, $"{bank.Name}_{i}.wav"), Decode(bank.Variants[i]));

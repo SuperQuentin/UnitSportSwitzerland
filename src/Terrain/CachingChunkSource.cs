@@ -135,8 +135,9 @@ public sealed class CachingChunkSource : IChunkSource
 
         lock (_gate)
         {
-            // fetched from a source that has since been swapped out underneath (the generated
-            // fallback retiring): the caller may still use it, but it must not outlive the Clear
+            // fetched from a world that has since changed underneath (real tiles arriving where
+            // generated ones were): the caller may still use it, but it must not outlive the
+            // Clear or Invalidate
             if (epoch != _epoch) return value;
             long bytes = value == null ? 32 : weigh(value);
             if (_entries.TryGetValue(key, out var existing)) _bytes -= existing.Bytes;
@@ -164,7 +165,7 @@ public sealed class CachingChunkSource : IChunkSource
 
     /// <summary>
     /// Forgets everything, including whatever is still being fetched. For leaving a mode that
-    /// warmed the cache for its own route, and for the generated fallback world retiring.
+    /// warmed the cache for its own route, and for a world thrown away by a rebase.
     /// </summary>
     public void Clear()
     {
@@ -172,6 +173,27 @@ public sealed class CachingChunkSource : IChunkSource
         {
             _entries.Clear();
             _bytes = 0;
+            _epoch++;
+        }
+    }
+
+    /// <summary>
+    /// Forgets every asset of the tiles <paramref name="affected"/> selects (all of them when
+    /// null) — real tiles arriving where generated ones were cached, and the generated tiles
+    /// round them whose blend just changed. Nothing in flight is cached either, whichever tile it
+    /// is for: telling those apart would mean keeping the predicate for ever.
+    /// </summary>
+    public void Invalidate(Func<TileId, bool>? affected)
+    {
+        if (affected == null) { Clear(); return; }
+        lock (_gate)
+        {
+            var drop = _entries.Keys.Where(k => affected(k.Id)).ToList();
+            foreach (var key in drop)
+            {
+                _bytes -= _entries[key].Bytes;
+                _entries.Remove(key);
+            }
             _epoch++;
         }
     }

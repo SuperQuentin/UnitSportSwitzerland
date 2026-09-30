@@ -356,10 +356,20 @@ public sealed class NetworkChunkSource : IChunkSource
         try
         {
             // Write beside then move, so a crash mid-write cannot leave a truncated file that
-            // would be trusted on the next run.
-            string temp = path + ".part";
-            File.WriteAllBytes(temp, bytes);
-            File.Move(temp, path, overwrite: true);
+            // would be trusted on the next run. The temp name is unique per write: two fetches
+            // of the same asset (a coarse and a full load, or the rings and a blend) complete
+            // concurrently, and a shared ".part" was moved away by one under the other. The
+            // move replaces atomically, and both write the same bytes, so the last one wins.
+            string temp = $"{path}.{Guid.NewGuid():N}.part";
+            try
+            {
+                File.WriteAllBytes(temp, bytes);
+                File.Move(temp, path, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+            }
 
             lock (_gate) _cacheBytes += bytes.Length;
             EvictIfOversized();
@@ -401,6 +411,7 @@ public sealed class NetworkChunkSource : IChunkSource
         {
             var files = new DirectoryInfo(_cacheDirectory)
                 .EnumerateFiles()
+                .Where(f => f.Extension != ".part")   // another write's, still in flight
                 .OrderBy(f => f.LastWriteTimeUtc)
                 .ToList();
 

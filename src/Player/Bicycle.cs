@@ -25,7 +25,7 @@ public sealed class Bicycle : Rideable
 {
     public override RideKind Kind => RideKind.RoadBike;
     public override string Label => "Road bike";
-    public override string Blurb => "W / RT pedal, Shift / X sprint, S / LT brake, A/D / stick steer — climbs cost you";
+    public override string Blurb => "{throttle} pedal, {tuck_boost} sprint, {brake} brake, {move_left}/{move_right} steer — climbs cost you";
 
     // ---- the rider and the machine ----
     /// <summary>Rider, bike, bottles and kit.</summary>

@@ -106,7 +106,11 @@ public partial class GarageDoors : Node
 
     private void OnUnloaded(TileId id) => _tiles.Remove(id);   // the nodes went with the tile's node
 
-    private void OnReplaced() => _tiles.Clear();
+    private void OnReplaced(Func<TileId, bool>? affected)
+    {
+        if (affected == null) { _tiles.Clear(); return; }
+        foreach (var id in _tiles.Keys.Where(affected).ToList()) _tiles.Remove(id);
+    }
 
     // ---- opening ---------------------------------------------------------------------------------
 
@@ -223,7 +227,7 @@ public partial class GarageDoors : Node
             var uvs = new Vector2[_v.Count];
             Array.Fill(uvs, new Vector2(0, -1)); // no window grid
             return ChunkNode.ToArrayMesh(
-                new BuildingMeshBuilder.MeshData(_v.ToArray(), _c.ToArray(), uvs, _uv2.ToArray()), material);
+                new BuildingMeshBuilder.MeshData(_v.ToArray(), _c.ToArray(), uvs, _uv2.ToArray(), new float[_v.Count * 4]), material);
         }
     }
 }

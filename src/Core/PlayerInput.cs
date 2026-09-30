@@ -58,6 +58,10 @@ public partial class PlayerInput : Node
     public const string Boost = "boost";
     /// <summary>Guns, in an armed craft (plane, helicopter): <see cref="Combat.CombatManager"/>.</summary>
     public const string Fire = "fire";
+    /// <summary>In a car: headlights on/off, raising or folding pop-ups (<see cref="Player.Car.Headlights"/>).</summary>
+    public const string LightsToggle = "lights_toggle";
+    /// <summary>In an open car: soft top down/up (<see cref="Player.Car.RoofOpen"/>).</summary>
+    public const string RoofToggle = "roof_toggle";
 
     // --- free-fly camera ---
     public const string FlyUp = "fly_up";
@@ -75,6 +79,10 @@ public partial class PlayerInput : Node
     public const string Tune = "tune";
     /// <summary>Open or shut a car door without getting in (on foot beside a parked car, or the driver's own at a standstill).</summary>
     public const string CarDoor = "car_door";
+    /// <summary>The travel picker (<see cref="Player.RideUi"/>): mounts, equipment and, for an admin, vehicles.</summary>
+    public const string RideMenu = "ride_menu";
+    /// <summary>The controls overlay (<see cref="ControlsHelp"/>), built from the live bindings.</summary>
+    public const string Help = "help";
 
     // --- items (on foot) ---
     public const string UseItem = "use_item";
@@ -92,7 +100,21 @@ public partial class PlayerInput : Node
     public const float StickTurnRate = 3.0f;
 
     /// <summary>What the player touched last. Updated from raw events; a tiny stick drift does not count.</summary>
-    public static InputDevice LastDevice { get; private set; } = InputDevice.KeyboardMouse;
+    public static InputDevice LastDevice
+    {
+        get => _lastDevice;
+        private set
+        {
+            if (_lastDevice == value) return;
+            _lastDevice = value;
+            DeviceChanged?.Invoke();
+        }
+    }
+
+    private static InputDevice _lastDevice = InputDevice.KeyboardMouse;
+
+    /// <summary>Raised when the player switches between keyboard and pad, so on-screen key hints can follow.</summary>
+    public static event Action? DeviceChanged;
 
     /// <summary>True when the player cannot be steering, because a text field has the keyboard.</summary>
     private static bool Blocked => UiFocus.TextEntryActive;
@@ -225,31 +247,40 @@ public partial class PlayerInput : Node
         // Flying, the mouse button and RB mean nothing else: items are on foot only, and tricks
         // and boost belong to the ground mounts.
         Bind(Fire, Mouse(MouseButton.Left), Button(JoyButton.RightShoulder));
+        // The car's switches borrow the D-pad sides, which only mean something on foot (items).
+        Bind(LightsToggle, Keys(Key.L), Button(JoyButton.DpadRight));
+        Bind(RoofToggle, Keys(Key.O), Button(JoyButton.DpadLeft));
 
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));
         Bind(FlyBoost, Keys(Key.Ctrl), Button(JoyButton.LeftStick));
 
+        // E only ever acts on what is in front of you (get in or out, search, a door). The
+        // travel picker has its own key: sharing E made the picker pop up whenever you pressed
+        // it one step too far from a car. A pad has no spare face button, so there Y still opens
+        // the picker when there is nothing to interact with (ClientWorld).
         Bind(InteractMount, Keys(Key.E), Button(JoyButton.Y));
-        Bind(EngineToggle, Keys(Key.I), Button(JoyButton.DpadUp));
+        Bind(RideMenu, Keys(Key.R));
+        Bind(EngineToggle, Keys(Key.Z), Button(JoyButton.DpadUp));
         Bind(CameraToggle, Keys(Key.V), Button(JoyButton.RightStick));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
-        // The place search is a text box; a pad can open it but not type in it, so it stays
-        // keyboard-only rather than trapping a controller player in a field they cannot use.
-        Bind(Teleport, Keys(Key.Tab));
+        // The place search is a map in all but drawing, so it sits on M. A pad can open it but
+        // not type in it, so it stays keyboard-only rather than trapping a controller player.
+        Bind(Teleport, Keys(Key.M));
         Bind(Menu, Keys(Key.Escape), Button(JoyButton.Start));
         // Both share a key with something that cannot happen at the same moment: T drops to the
         // fly camera except in a stopped car at a garage, and G / X gathers only as a HOLD, where
         // a door is a tap beside a car.
         Bind(Tune, Keys(Key.T), Button(JoyButton.DpadDown));
         Bind(CarDoor, Keys(Key.G), Button(JoyButton.X));
+        Bind(Help, Keys(Key.F1));
 
         // Items are an on-foot thing, so they reuse the shoulders that only mean something
-        // mounted (RB trick, LB boost). K and X are unused; E and I, the usual inventory keys,
-        // already get in vehicles and start engines.
+        // mounted (RB trick, LB boost). The inventory is on the two keys players try first, I
+        // and Tab; E is taken by interacting, which is also why it is not Minecraft's E.
         Bind(UseItem, Mouse(MouseButton.Left), Button(JoyButton.RightShoulder));
         Bind(AimItem, Mouse(MouseButton.Right), Button(JoyButton.LeftShoulder));
-        Bind(Inventory, Keys(Key.K), Button(JoyButton.Back));
+        Bind(Inventory, Keys(Key.I, Key.Tab), Button(JoyButton.Back));
         Bind(QuickWheel, Keys(Key.X), Button(JoyButton.DpadLeft));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
         Bind(Gather, Keys(Key.G), Button(JoyButton.X));

@@ -387,7 +387,7 @@ public partial class PlayerFeel : Node3D
     /// <summary>Eases a loop toward a linear volume and a pitch, so nothing jumps between frames.</summary>
     private static void SetLoop(AudioStreamPlayer p, float volume, float pitch)
     {
-        float target = volume * GameSettings.Current.SfxVolume;
+        float target = volume;   // the slider is on the Sfx bus
         float now = Mathf.DbToLinear(p.VolumeDb);
         float eased = Mathf.Lerp(now, target, 0.12f);
         p.VolumeDb = eased < 0.001f ? -80f : Mathf.LinearToDb(eased);
@@ -421,7 +421,7 @@ public partial class PlayerFeel : Node3D
 
     private void Play(AudioStream stream, float volume, float pitch)
     {
-        float v = volume * GameSettings.Current.SfxVolume;
+        float v = volume;   // the slider is on the Sfx bus
         if (v < 0.005f) return;
         var voice = _voices[_nextVoice];
         _nextVoice = (_nextVoice + 1) % _voices.Length;
@@ -774,8 +774,8 @@ public partial class PlayerFeel : Node3D
         var vehicle = _player.Vehicle;
         _engineLabel.Visible = vehicle is { IsVehicle: true };
         if (_engineLabel.Visible)
-            _engineLabel.Text = (vehicle!.HasEngine ? (_player.EngineOn ? "ENGINE ON  (I / D-pad ↑)" : "ENGINE OFF  (I / D-pad ↑)") + "\n" : "")
-                + $"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%    E / (Y) get out";
+            _engineLabel.Text = (vehicle!.HasEngine ? (_player.EngineOn ? "ENGINE ON  " : "ENGINE OFF  ") + Core.InputHints.Tag(Core.PlayerInput.EngineToggle) + "\n" : "")
+                + $"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%    {Core.InputHints.Tag(Core.PlayerInput.InteractMount)} get out";
 
         UpdateHint(dt, ride);
 

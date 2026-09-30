@@ -20,6 +20,8 @@ public readonly record struct VehicleState(
     double SpawnedAt,
     long Owner = 0,
     string Name = "",
+    bool Headlights = false,
+    bool RoofOpen = false,
     // a car's garage parts (CarTuning bits) and which of its doors stand open (CarRig bits):
     // they belong to this car, so they go wherever it goes — parked, claimed, a late joiner's spawn
     long Tuning = 0,
@@ -38,6 +40,8 @@ public readonly record struct VehicleState(
         ["at"] = SpawnedAt,
         ["owner"] = Owner,
         ["name"] = Name,
+        ["lights"] = Headlights,
+        ["roof"] = RoofOpen,
         ["tune"] = Tuning,
         ["doors"] = DoorsOpen,
     };
@@ -54,9 +58,11 @@ public readonly record struct VehicleState(
         d["at"].AsDouble(),
         d["owner"].AsInt64(),
         d["name"].AsString(),
+        d.TryGetValue("lights", out var lights) && lights.AsBool(),
+        d.TryGetValue("roof", out var roof) && roof.AsBool(),
         // from another peer: parts past their options read as Stock
-        CarTuning.Unpack(d["tune"].AsInt64()).Pack(),
-        (byte)(d["doors"].AsInt32() & (15 | DriverDoorShuts)));
+        CarTuning.Unpack(d.TryGetValue("tune", out var tune) ? tune.AsInt64() : 0).Pack(),
+        (byte)((d.TryGetValue("doors", out var doors) ? doors.AsInt32() : 0) & (15 | DriverDoorShuts)));
 
     /// <summary>
     /// In <see cref="DoorsOpen"/> of a car just got out of: the driver's door is only open because

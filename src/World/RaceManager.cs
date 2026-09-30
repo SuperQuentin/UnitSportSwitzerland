@@ -109,6 +109,22 @@ public partial class RaceManager : Node
     private readonly Dictionary<long, string> _npcNames = new();
     private readonly Dictionary<long, string> _names = new();
 
+    /// <summary>
+    /// Server: vehicles races handed out, per simulating peer. Conjuring a vehicle is an admin's on a
+    /// server (<see cref="Core.Permissions"/>), but a race puts every entrant — player or NPC — on its
+    /// machine, so whoever runs it may leave that many in the world afterwards
+    /// (<see cref="Vehicles.VehicleManager.MayPark"/> takes one per park, <see cref="TakeIssued"/>).
+    /// </summary>
+    private readonly Dictionary<long, int> _issued = new();
+
+    /// <summary>Server: uses up one vehicle a race gave this peer. False if it has none left.</summary>
+    public bool TakeIssued(long peer)
+    {
+        if (_issued.GetValueOrDefault(peer) <= 0) return false;
+        _issued[peer]--;
+        return true;
+    }
+
     public static RaceManager CreateServer(ChatManager chat, Node3D players, IChunkSource source, WorldOrigin origin) => new()
     {
         Name = NodeName, _server = true, _chat = chat, _players = players, _source = source, _origin = origin,
@@ -539,6 +555,9 @@ public partial class RaceManager : Node
         race.Deadline = race.StartAt + (course.Length + RaceCourse.AirGridBack + 300f) / SlowPace(race.Mount) + 60f;
         race.Centre = centre;
         race.Width = width;
+        if (race.Mount != Open && Rideable.Create((RideKind)race.Mount) is { IsVehicle: true })
+            foreach (long e in race.Entrants)
+                _issued[SimOf(e)] = _issued.GetValueOrDefault(SimOf(e)) + 1;
         foreach (long e in race.Entrants)
         {
             race.Next[e] = 0;
@@ -952,6 +971,8 @@ public partial class RaceManager : Node
         }
         if (r.Done) { ShowHud(null); return; }
         r.Clock += delta;
+        if (_auto && (int)r.Clock != (int)(r.Clock - delta) && (int)r.Clock % 2 == 0)   // a --raceauto trace every 2 s: where the pilot is, for the loopback check
+            GD.Print($"[race] (auto) t {r.Clock:F0} left {(r.Course.Air ? 0 : r.Course.Remaining(r.Next, me.GlobalPosition, r.StartArc)):F0} m, off {(r.Course.Air ? 0 : r.Course.Route!.Off(me.GlobalPosition)):F1}, {me.Motion.Speed * 3.6f:F0} km/h, ride {me.Ride}, next {r.Next}, walk {(me.WalkControls != null)}");
         Progress(r, me.GlobalPosition);
         _gates?.Highlight(r.Next);
         string left = $"{r.Course.Remaining(r.Next, me.GlobalPosition, r.StartArc):F0} m";
@@ -1059,6 +1080,7 @@ public partial class RaceManager : Node
         _pilot = me.Vehicle is Car car ? new AutoPilot(r.Course.Route!, me, car.Spec) : AutoPilot.For(r.Course.Route!, me);
         if (_pilot == null) { GD.Print($"[race] #{r.RaceId} no autopilot for {me.Ride} yet"); return; }
         var pilot = _pilot;
+        pilot.Log = s => GD.Print($"[race] #{r.RaceId} {s}");
         me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, Others(me));
     }
 
@@ -1070,7 +1092,7 @@ public partial class RaceManager : Node
                 // every player, whatever race they are in: a race does not suspend the road.
                 // WorldVelocity, because a remote's Velocity is always zero — a pilot reading it
                 // took every other car on the road for a parked one
-                yield return new AutoPilot.Other(p.GlobalPosition, p.WorldVelocity.Length(), false);
+                yield return new AutoPilot.Other(p.GlobalPosition, p.WorldVelocity, false);
     }
 
     private void ShowHud(string? text)

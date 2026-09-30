@@ -78,7 +78,7 @@ public partial class BirdJournal : CanvasLayer
         _text.AddThemeFontSizeOverride("bold_font_size", 13);
         rows.AddChild(_text);
 
-        var hint = new Label { Text = "J / Esc closes. Green = game species (season in months), grey = protected." };
+        var hint = new Label { Text = Core.InputHints.Format("{bird_journal} / Esc closes. Green = game species (season in months), grey = protected.") };
         hint.AddThemeFontSizeOverride("font_size", 12);
         hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
         rows.AddChild(hint);
@@ -132,7 +132,7 @@ public partial class BirdJournal : CanvasLayer
     {
         _panel.Visible = false;
         UiFocus.Set(this, false);
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+        Core.MouseCapture.Capture();
     }
 
     public override void _UnhandledInput(InputEvent e)

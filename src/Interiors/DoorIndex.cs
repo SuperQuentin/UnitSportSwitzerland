@@ -25,7 +25,19 @@ public static class DoorIndex
 
     public static void ClearTile(TileId id) => Tiles.Remove(id);
 
+    /// <summary>A given building's door, if its tile is drawn and it has one.</summary>
+    public static Entry? Find(BuildingKey key)
+    {
+        if (!Tiles.TryGetValue(key.Tile, out var doors)) return null;
+        foreach (var e in doors)
+            if (e.Key == key) return e;
+        return null;
+    }
+
     public static void Clear() => Tiles.Clear();
+
+    /// <summary>Every door currently drawn (for probes).</summary>
+    public static IEnumerable<Entry> All() => Tiles.Values.SelectMany(t => t);
 
     /// <summary>
     /// The nearest door within <paramref name="reach"/> of a point, measured to the doorway rather

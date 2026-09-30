@@ -80,6 +80,44 @@ public partial class ChatManager : Node
     /// <summary>Builds the client half, which submits text and displays replies.</summary>
     public static ChatManager CreateClient() => new() { Name = NodeName };
 
+    public override void _Ready()
+    {
+        if (_registry != null) PlayerInfo.AdminChanged += OnAdminChanged;
+    }
+
+    public override void _ExitTree()
+    {
+        PlayerInfo.AdminChanged -= OnAdminChanged;
+        if (_registry == null) Permissions.Reset();
+    }
+
+    /// <summary>Server: tells a peer it gained or lost operator rights, so its menus can follow.</summary>
+    private void OnAdminChanged(PlayerInfo player)
+    {
+        if (player.PeerId == ConsolePeerId || _registry?.Find(player.PeerId) == null) return;
+        RpcId(player.PeerId, MethodName.AdminStatus, player.IsAdmin);
+    }
+
+    /// <summary>
+    /// Client: the server's word on whether this player is an operator. Only ever shapes what the
+    /// menus offer; every privileged action is still decided on the server.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void AdminStatus(bool isAdmin)
+    {
+        Permissions.SetAdmin(isAdmin);
+        LineReceived?.Invoke(isAdmin
+            ? "You are an admin: vehicles can be spawned from the travel menu."
+            : "You are no longer an admin.", ChatKind.System);
+    }
+
+    /// <summary>Server: a peer's name was set or changed — the key of its bank account.</summary>
+    public event Action<long>? NameAssigned;
+
+    /// <summary>Server: operator rights for the other server-side systems (vehicle spawning).</summary>
+    public bool IsAdminPeer(long peerId) => IsAdmin(peerId);
+
     // ---- client -> server ------------------------------------------------------------
 
     /// <summary>Sends a line of chat, or a command when it starts with '/'.</summary>
@@ -120,6 +158,7 @@ public partial class ChatManager : Node
         long sender = Multiplayer.GetRemoteSenderId();
 
         string assigned = _registry.Rename(sender, name);
+        NameAssigned?.Invoke(sender);
         Broadcast($"{assigned} joined", ChatKind.System);
         ReplyTo(sender, "Type /help for commands.", ChatKind.Private);
     }
@@ -362,6 +401,7 @@ public partial class ChatManager : Node
         string previous = NameOf(sender);
         string assigned = _registry.Rename(sender, requested);
         if (assigned == previous) return;
+        NameAssigned?.Invoke(sender);
 
         Broadcast($"{previous} is now {assigned}", ChatKind.System);
     }
