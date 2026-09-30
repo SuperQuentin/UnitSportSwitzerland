@@ -306,7 +306,7 @@ public partial class GpxSession : Node
     /// </summary>
     private async void EnsureCinemaPlan()
     {
-        if (_camera.Mode != CameraMode.Cinema || _planning) return;
+        if (_camera.Mode is not (CameraMode.Cinema or CameraMode.Racing) || _planning) return;
 
         var focused = _race.Focused;
         var source = _chunks.Source;
@@ -446,6 +446,12 @@ public partial class GpxSession : Node
                 if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--cinemamode") >= 0)
                 {
                     _camera.Mode = CameraMode.Cinema;
+                    EnsureCinemaPlan();
+                }
+                // "--racingmode": Absolute Racing, the car-battle director
+                if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--racingmode") >= 0)
+                {
+                    _camera.Mode = CameraMode.Racing;
                     EnsureCinemaPlan();
                 }
 
