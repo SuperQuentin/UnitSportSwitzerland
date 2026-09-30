@@ -16,8 +16,11 @@ public partial class DoorLeaf : Node3D
     /// house's door can stand 0.2 m from the stair core's side wall, and any more swings the leaf into it.
     /// </summary>
     private const float InwardAngle = Mathf.Pi / 2;
-    /// <summary>How far an outward leaf swings: back until it nearly lies on the facade.</summary>
-    private const float OutwardAngle = 2.97f; // 170°
+    /// <summary>
+    /// How far an outward leaf swings: a little past square, splayed. A barn's pair spans nearly
+    /// the whole wall, so there is no facade beside the jambs for a leaf to lie back against.
+    /// </summary>
+    private const float OutwardAngle = 1.75f; // 100°
     private const float Thickness = 0.04f;
     private const float OutwardThickness = 0.06f;
     /// <summary>
