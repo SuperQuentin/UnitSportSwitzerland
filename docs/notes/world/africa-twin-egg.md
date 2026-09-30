@@ -15,8 +15,11 @@
   heartbeat, until someone claims it through the usual `RequestClaim` flow.
 - **The slot** (`FindSlots`, from the tile files through `ChunkManager.Source`, nothing kept): the
   building = the `.bldg` footprint under/nearest the point (plan triangles rasterised to 1 m). Parking
-  cells of the cover raster within 40 m first. **TLM maps no car park there** (nothing in
-  `tlm_areale_verkehrsareal` within 300 m), so the fallback is what the aerial photo shows: two rows of
+  cells of the cover raster within 40 m first, mid-bay (2.4 m+ off the aisle's asphalt). **TLM maps no
+  car park there** (nothing in `tlm_areale_verkehrsareal` within 300 m), so the two rows east of the
+  lane and the forecourt are hand-traced from the owner's aerial photo in
+  `docs/data/cover_overrides.json` (#84, see `docs/notes/tools/land-cover.md`); the bike now stands in
+  them. The fallback, kept for a cover file without them, guesses the same rows: two rows of
   bays on the far side of the access lane along the east facade, between lane and orchard. Bays every
   2.5 m along every drivable road within 25 m of the building (40 m of the point), on the side away from
   it, centre half a 5 m bay off the asphalt; free of buildings (2 m), trees (1.5 m), orchard/wood/water

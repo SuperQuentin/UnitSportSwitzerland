@@ -207,17 +207,25 @@ public partial class AfricaTwinEgg : Node
                 Mathf.Atan2(-faceX, -faceZ), parking));
         }
 
-        // 1. Parking the cover raster knows about (tlm_areale_verkehrsareal), near the building:
-        //    nose to the nearest road, as a car in a bay faces its aisle.
+        // 1. Parking the cover raster knows about (tlm_areale_verkehrsareal, or the rows traced from
+        //    the aerial photo in docs/data/cover_overrides.json), near the building: mid-bay, half a
+        //    5 m bay off the aisle's asphalt like the cars there, nose to the nearest road.
         if (cover != null)
             for (int z = z0; z <= z1; z++)
                 for (int x = x0; x <= x1; x++)
                 {
                     float fx = x + 0.5f, fz = z + 0.5f;
                     if (!CoverFormat.IsParking((CoverClass)cover[z * CoverFormat.Size + x])
-                        || NearestEdge(edge, fx, fz).Dist > MaxFromBuilding || !Free(fx, fz)) continue;
+                        || NearestEdge(edge, fx, fz).Dist > MaxFromBuilding || !Free(fx, fz)
+                        || RoadClearance(fx, fz) < BayDepth * 0.5f - 0.1f) continue;
                     var (qx, qz) = NearestRoadPoint(drivable, fx, fz);
-                    Add(fx, fz, qx - fx, qz - fz, parking: true);
+                    // Square to the row, not to the nearest asphalt: at a row's end that is the
+                    // cross street. The row's long axis is the principal axis of the parking cells
+                    // within 8 m; the bay faces across it, towards the road side.
+                    var (ax, az) = RowAxis(cover, x, z, 8);
+                    float nx = -az, nz = ax;
+                    if (nx * (qx - fx) + nz * (qz - fz) < 0) { nx = -nx; nz = -nz; }
+                    Add(fx, fz, nx, nz, parking: true);
                 }
 
         // 2. TLM maps no car park here (checked: nothing in tlm_areale_verkehrsareal within 300 m),
@@ -257,6 +265,23 @@ public partial class AfricaTwinEgg : Node
     }
 
     private const float BaySpacing = 2.5f, BayDepth = 5f;
+
+    /// <summary>Unit long axis (principal axis) of the parking cells within r of (x, z).</summary>
+    private static (float X, float Z) RowAxis(byte[] cover, int x, int z, int r)
+    {
+        double n = 0, sx = 0, sz = 0, sxx = 0, szz = 0, sxz = 0;
+        for (int dz = -r; dz <= r; dz++)
+            for (int dx = -r; dx <= r; dx++)
+            {
+                int cx = x + dx, cz = z + dz;
+                if (dx * dx + dz * dz > r * r || (uint)cx >= CoverFormat.Size || (uint)cz >= CoverFormat.Size
+                    || !CoverFormat.IsParking((CoverClass)cover[cz * CoverFormat.Size + cx])) continue;
+                n++; sx += dx; sz += dz; sxx += dx * dx; szz += dz * dz; sxz += dx * dz;
+            }
+        double cxx = sxx / n - (sx / n) * (sx / n), czz = szz / n - (sz / n) * (sz / n), cxz = sxz / n - (sx / n) * (sz / n);
+        double angle = 0.5 * Math.Atan2(2 * cxz, cxx - czz);   // major axis of the 2x2 covariance
+        return ((float)Math.Cos(angle), (float)Math.Sin(angle));
+    }
 
     private static (float X, float Z) NearestRoadPoint(List<RoadSegment> roads, float x, float z)
     {
