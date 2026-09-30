@@ -201,8 +201,13 @@ public partial class ChatManager : Node
     /// <summary>A player's display name, for the other server-side systems (races).</summary>
     public string NameOfPeer(long peerId) => NameOf(peerId);
 
-    /// <summary>Car races (<c>/race</c>), wired by ServerWorld.</summary>
+    /// <summary>Races (<c>/race</c>), wired by ServerWorld.</summary>
     public World.RaceManager? Race { get; set; }
+
+    /// <summary>For races: the place index (air courses to a town), a player by name, a private line.</summary>
+    public PlaceIndex? Places => _places;
+    public long PeerByName(string name) => _registry?.FindByName(name)?.PeerId ?? -1;
+    public void Tell(long peerId, string line, ChatKind kind) => ReplyTo(peerId, line, kind);
 
     private string NameOf(long peerId) => peerId == ConsolePeerId
         ? "Console"
@@ -268,7 +273,7 @@ public partial class ChatManager : Node
                 return;
             case "race":
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
-                else if (sender == ConsolePeerId && !rest.StartsWith("cancel")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
+                else if (sender == ConsolePeerId && !rest.StartsWith("cancel") && !rest.StartsWith("list")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
                 else ReplyTo(sender, Race.Command(sender, rest), ChatKind.Private);
                 return;
         }
@@ -300,7 +305,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|join|leave  /occasion", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list  /occasion", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);

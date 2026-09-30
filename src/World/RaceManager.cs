@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Net;
@@ -7,63 +8,81 @@ using UnitSport.Terrain;
 namespace UnitSport.World;
 
 /// <summary>
-/// Car races between connected players. One class on both sides at <c>World/Race</c> — Godot routes
-/// RPCs by node path, like <c>World/Chat</c>.
+/// Races between connected players, in anything: on foot, bike, skis, a car, a motorbike, or in
+/// the air (plane, helicopter, paraglider, wingsuit). One class on both sides at <c>World/Race</c>
+/// — Godot routes RPCs by node path, like <c>World/Chat</c>.
 ///
 /// <para>
-/// <b>The server decides everything that matters</b>: the route (<see cref="RaceRoute"/> — the main
-/// road from where the host stands), who is in, the grid, the start instant and every finish time,
-/// which it measures itself from its own start, so a client cannot report a time. A client only
-/// reports which checkpoint it passed (every 200 m, in order — a shortcut across a hairpin misses
-/// one) and that it crossed the line. That is the same client-authoritative trust the rest of the
-/// game gives positions; the order check makes the obvious cheat not work.
+/// <b>Any number of races run at once</b> (<c>Dictionary&lt;int, Race&gt;</c> on the server), each
+/// with 2..32 entrants; an entrant is in at most one, and every RPC names the race. An entrant is
+/// a <c>long</c>: a peer id, or an NPC run by a client, <c>-(ownerPeer * 1000 + n)</c> — the owner
+/// reports its NPCs' checkpoints, and the server checks the id encodes the sender.
 /// </para>
 ///
 /// <para>
-/// Flow: <c>/race start [metres]</c> opens a 15 s entry window (the host is in), <c>/race join</c>
-/// enters, then everyone gets <see cref="Setup"/>: the route's centreline and widths up to just past
-/// the finish, their slot on a single-file grid, and a countdown in SECONDS (not a clock time —
-/// the two machines' clocks need not agree). The client puts its player on the grid in a car
-/// (the AE86 if it was on foot), holds the handbrake until GO, then hands the car back to the
-/// player — or, with <c>--raceauto</c>, to an <see cref="AutoPilot"/>.
+/// <b>The server decides everything that matters</b>: the course (<see cref="RaceCourse"/> — the
+/// main road from the host, or a line of gates it builds from its own terrain files), who is in,
+/// the grid, the start instant and every finish time, measured on its own clock. A client only
+/// reports which checkpoint it passed (accepted in order only — a shortcut misses one) and that it
+/// crossed the line. The countdown goes out in SECONDS, never a clock time: the machines' clocks
+/// need not agree.
 /// </para>
 /// </summary>
 public partial class RaceManager : Node
 {
     public const string NodeName = "Race";
+    public const int MinEntrants = 2, MaxEntrants = 32;
+    /// <summary>The mount value for "everyone keeps what they have".</summary>
+    public const int Open = -1;
     private const double EntryWindow = 15.0, Countdown = 5.0;
-    private const float CheckpointEvery = 200f, CheckpointReach = 30f;
 
-    // ---- server ----
+    private static bool IsAirMount(int k) => k is (int)RideKind.Plane or (int)RideKind.Helicopter
+        or (int)RideKind.Paraglider or (int)RideKind.Wingsuit;
+
+    /// <summary>The owning peer of an entrant: itself, or the client running that NPC.</summary>
+    public static long OwnerOf(long entrant) => entrant > 0 ? entrant : -entrant / 1000;
+
+    // ====================================================================================
+    // server
+    // ====================================================================================
+
+    private enum Phase { Building, Entry, Running }
+
+    private sealed class Race
+    {
+        public int Id;
+        public long Host;
+        /// <summary>A duel: the one peer who may join. 0 for an open race.</summary>
+        public long Invited;
+        public bool Air;
+        public int Mount;
+        public float Metres;
+        public Phase Phase;
+        public RaceRoute? Route;
+        public RaceCourse? Course;
+        public double EntryEnds, StartAt, Deadline;
+        public readonly List<long> Entrants = new();
+        public readonly Dictionary<long, int> Next = new();
+        /// <summary>Air: when each entrant flew through gate 0 — its own start.</summary>
+        public readonly Dictionary<long, double> Started = new();
+        public readonly Dictionary<long, double> Finished = new();
+        /// <summary>Left, disconnected, or crossed the line with checkpoints missed.</summary>
+        public readonly HashSet<long> Out = new();
+        public string What => $"{(Air ? "air " : "")}{MountName(Mount)} {(Invited != 0 ? "duel" : "race")}";
+    }
+
     private bool _server;
     private ChatManager? _chat;
     private Node3D? _players;
     private IChunkSource? _source;
     private WorldOrigin? _origin;
-    private enum Phase { Idle, Building, Entry, Running }
-    private Phase _phase;
-    private long _host;
-    private float _finish;
-    private RaceRoute? _route;
-    private double _clock, _entryEnds, _startAt, _deadline;
-    private readonly List<long> _entrants = new();
-    private readonly Dictionary<long, int> _checkpoint = new();
-    private readonly Dictionary<long, double> _finished = new();
-
-    // ---- client ----
-    /// <summary>The local player, resolved when needed (never captured: it is respawned).</summary>
-    public System.Func<FootPlayer?>? LocalPlayer { get; set; }
-    private RaceRoute? _myRoute;
-    private float _myFinish;
-    private int _mySlot, _myCount, _myNext;
-    private double _goIn = -1, _raceClock;
-    private bool _going, _done;
-    private AutoPilot? _pilot;
-    private Label? _hud;
-    private readonly bool _auto = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--raceauto") >= 0;
-
-    /// <summary>Raised on the client when this player finishes (for checks): position, seconds.</summary>
-    public event System.Action<int, double>? Finished;
+    private double _clock;
+    private int _nextId = 1;
+    private readonly Dictionary<int, Race> _races = new();
+    /// <summary>The race each entrant is in, while it is in one (not after its finish).</summary>
+    private readonly Dictionary<long, int> _raceOf = new();
+    private readonly Dictionary<long, string> _npcNames = new();
+    private readonly Dictionary<long, string> _names = new();
 
     public static RaceManager CreateServer(ChatManager chat, Node3D players, IChunkSource source, WorldOrigin origin) => new()
     {
@@ -72,67 +91,392 @@ public partial class RaceManager : Node
 
     public static RaceManager CreateClient() => new() { Name = NodeName };
 
-    // ------------------------------------------------------------------------------------
-    // server: commands
-    // ------------------------------------------------------------------------------------
+    /// <summary>Both are entrants of the same race, after its entry closed and before they finish.</summary>
+    public bool SameRace(long a, long b) =>
+        _raceOf.TryGetValue(a, out int ra) && _raceOf.TryGetValue(b, out int rb) && ra == rb
+        && _races.TryGetValue(ra, out var race) && race.Phase == Phase.Running;
 
     /// <summary><c>/race ...</c>, from the chat. Returns the reply for the sender.</summary>
     public string Command(long sender, string args)
     {
         var parts = args.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
         string verb = parts.Length > 0 ? parts[0].ToLowerInvariant() : "help";
-        switch (verb)
+        int? id = parts.Length > 1 && int.TryParse(parts[1].TrimStart('#'), out int n) ? n : null;
+        return "[race] " + verb switch
         {
-            case "start":
-                if (_phase != Phase.Idle) return "A race is already on. /race join to enter it.";
-                if (_players?.GetNodeOrNull<Node3D>(sender.ToString()) is not { } host) return "You have no position yet.";
-                float metres = parts.Length > 1 && float.TryParse(parts[1], System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out float m) ? Mathf.Clamp(m, 300f, 8000f) : 2000f;
-                _phase = Phase.Building;
-                _host = sender;
-                _entrants.Clear(); _checkpoint.Clear(); _finished.Clear();
-                _entrants.Add(sender);
-                var at = host.GlobalPosition;
-                var source = _source!; var origin = _origin!;
-                _ = System.Threading.Tasks.Task.Run(async () =>
-                {
-                    var route = await RaceRoute.BuildAsync(source, origin, at);
-                    Callable.From(() => Opened(route, metres)).CallDeferred();
-                });
-                return "Finding the road…";
-            case "join":
-                if (_phase != Phase.Entry) return _phase == Phase.Idle ? "No race open. /race start to open one." : "Too late to join this one.";
-                if (!_entrants.Contains(sender)) _entrants.Add(sender);
-                _chat?.Broadcast($"[race] {Who(sender)} joins ({_entrants.Count} in)", ChatKind.System);
-                return "You are in. Get in a car.";
-            case "leave":
-                _entrants.Remove(sender);
-                return "You are out of the race.";
-            case "cancel":
-                if (sender != _host && sender != 0) return "Only the host can cancel.";
-                Reset("cancelled");
-                return "Race cancelled.";
-            default:
-                return "/race start [metres]  /race join  /race leave  /race cancel";
+            "start" => Start(sender, parts[1..], 0),
+            "duel" => Duel(sender, parts),
+            "join" => Join(sender, id),
+            "leave" => Leave(sender),
+            "cancel" => Cancel(sender, id),
+            "list" => List(),
+            _ => "/race start [metres] [mount|open]  /race start air <place|metres> [mount]  /race duel <player> [...]  "
+                + "/race join [id]  /race leave  /race cancel [id]  /race list — mounts: foot bike skis car <car> moto monster "
+                + "plane heli paraglider wingsuit",
+        };
+    }
+
+    private string Duel(long sender, string[] parts)
+    {
+        if (parts.Length < 2) return "Usage: /race duel <player> [metres | air <place|metres>] [mount]";
+        long peer = _chat?.PeerByName(parts[1]) ?? -1;
+        if (peer <= 0) return $"No player matching '{parts[1]}'.";
+        if (peer == sender) return "You cannot duel yourself.";
+        if (_raceOf.TryGetValue(peer, out int busy)) return $"{Who(peer)} is already in race #{busy}.";
+        return Start(sender, parts[2..], peer);
+    }
+
+    private string Start(long sender, string[] args, long invited)
+    {
+        if (_raceOf.TryGetValue(sender, out int busy)) return $"You are already in race #{busy} — /race leave first.";
+        if (_players?.GetNodeOrNull<Node3D>(sender.ToString()) is not { } host) return "You have no position yet.";
+
+        bool air = args.Length > 0 && args[0].Equals("air", System.StringComparison.OrdinalIgnoreCase);
+        var words = new List<string>(air ? args[1..] : args);
+        int mount = air ? (int)RideKind.Plane : (int)CarCatalog.All[0].Kind;
+        if (words.Count > 0 && ParseMount(words[^1]) is { } m) { mount = m; words.RemoveAt(words.Count - 1); }
+        if (mount != Open && IsAirMount(mount) != air)
+            return air ? $"{MountName(mount)} is not an air mount." : $"For {MountName(mount)} use /race start air <place|metres> {MountName(mount)}.";
+        if (mount != Open && mount != (int)RideKind.OnFoot && Rideable.Create((RideKind)mount) == null)
+            return $"There is no {MountName(mount)} on this server yet.";
+
+        string rest = string.Join(' ', words);
+        bool isNumber = float.TryParse(rest, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float metres);
+        var at = host.GlobalPosition;
+        Vector3 target = default;
+        if (air)
+        {
+            if (rest.Length == 0) return "Usage: /race start air <place|metres> [mount]";
+            if (isNumber)
+            {
+                // along where the host is facing
+                var fwd = RaceRoute.Flat(-host.GlobalBasis.Z);
+                if (fwd.LengthSquared() < 1e-4f) fwd = Vector3.Forward;
+                target = at + fwd.Normalized() * Mathf.Clamp(metres, 800f, RaceCourse.MaxAirDistance);
+            }
+            else
+            {
+                var found = _chat?.Places?.Search(rest, limit: 1);
+                if (found == null || found.Count == 0) return $"No place matching '{rest}'.";
+                target = _origin!.ToWorld(found[0].E, found[0].N, at.Y);
+            }
+        }
+        else if (rest.Length > 0 && !isNumber) return $"Unknown mount or distance '{rest}'. /race help";
+
+        var race = new Race
+        {
+            Id = _nextId++, Host = sender, Invited = invited, Air = air, Mount = mount, Phase = Phase.Building,
+            Metres = air ? 0 : isNumber ? Mathf.Clamp(metres, 300f, 8000f) : 2000f,
+        };
+        _races[race.Id] = race;
+        Enter(race, sender);
+
+        var source = _source!;
+        var origin = _origin!;
+        int raceId = race.Id;
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            if (air)
+            {
+                var (course, why) = await RaceCourse.BuildAirAsync(source, origin, at, target, (RideKind)(mount == Open ? (int)RideKind.Plane : mount));
+                Callable.From(() => Opened(raceId, null, course, why)).CallDeferred();
+            }
+            else
+            {
+                var route = await RaceRoute.BuildAsync(source, origin, at);
+                Callable.From(() => Opened(raceId, route, null, "")).CallDeferred();
+            }
+        });
+        return $"#{race.Id} {(air ? "plotting the gates" : "finding the road")}…";
+    }
+
+    private void Opened(int id, RaceRoute? route, RaceCourse? course, string why)
+    {
+        if (!_races.TryGetValue(id, out var race) || race.Phase != Phase.Building) return;
+        if (race.Air ? course == null : route == null || RaceCourse.MaxLength(route, MinEntrants) < 300f)
+        {
+            End(race, race.Air ? why : "no road long enough here to race on", ChatKind.Error);
+            return;
+        }
+        race.Route = route;
+        race.Course = course;
+        race.Phase = Phase.Entry;
+        race.EntryEnds = _clock + EntryWindow;
+        float km = (race.Air ? course!.Length : Mathf.Min(race.Metres, RaceCourse.MaxLength(route!, MinEntrants))) / 1000f;
+        if (race.Invited != 0)
+        {
+            _chat?.Tell(race.Invited, $"[race] #{id} {Who(race.Host)} challenges you to a {km:0.0} km {race.What} — /race join {id} within {EntryWindow:0} s", ChatKind.System);
+            _chat?.Tell(race.Host, $"[race] #{id} waiting for {Who(race.Invited)} to accept", ChatKind.System);
+        }
+        else
+            _chat?.Broadcast($"[race] #{id} {Who(race.Host)} opens a {km:0.0} km {race.What} — /race join {id} within {EntryWindow:0} s",
+                ChatKind.System);
+    }
+
+    private string Join(long sender, int? id)
+    {
+        if (_raceOf.TryGetValue(sender, out int busy)) return $"You are already in race #{busy} — /race leave first.";
+        Race? race = id is { } i ? _races.GetValueOrDefault(i)
+            : _races.Values.Where(r => r.Phase != Phase.Running && (r.Invited == sender || r.Invited == 0))
+                .OrderByDescending(r => r.Invited == sender).ThenByDescending(r => r.Id).FirstOrDefault();
+        if (race == null) return id == null ? "No race open. /race start to open one." : $"There is no race #{id}.";
+        if (race.Phase == Phase.Running) return $"Race #{race.Id} has started.";
+        if (race.Invited != 0 && race.Invited != sender) return $"Race #{race.Id} is a duel between {Who(race.Host)} and {Who(race.Invited)}.";
+        if (race.Entrants.Count >= MaxEntrants) return $"Race #{race.Id} is full.";
+        Enter(race, sender);
+        _chat?.Broadcast($"[race] #{race.Id} {Who(sender)} joins ({race.Entrants.Count} in)", ChatKind.System);
+        return $"#{race.Id} you are in{(race.Mount == Open ? "" : $" — {MountName(race.Mount)}")}.";
+    }
+
+    private void Enter(Race race, long entrant)
+    {
+        _names[entrant] = Who(entrant);   // kept: a racer who disconnects still has a name in the results
+        race.Entrants.Add(entrant);
+        _raceOf[entrant] = race.Id;
+    }
+
+    private string Leave(long sender)
+    {
+        if (!_raceOf.TryGetValue(sender, out int id) || !_races.TryGetValue(id, out var race)) return "You are not in a race.";
+        Drop(race, sender);
+        return $"You are out of race #{id}.";
+    }
+
+    /// <summary>Takes an entrant out: off the grid before the start, DNF after it.</summary>
+    private void Drop(Race race, long entrant)
+    {
+        _raceOf.Remove(entrant);
+        if (race.Phase == Phase.Running) race.Out.Add(entrant);
+        else race.Entrants.Remove(entrant);
+        if (race.Phase == Phase.Running && Multiplayer.GetPeers().Contains((int)OwnerOf(entrant)))
+            RpcId(OwnerOf(entrant), MethodName.Dropped, race.Id, entrant);
+    }
+
+    private string Cancel(long sender, int? id)
+    {
+        var race = id is { } i ? _races.GetValueOrDefault(i)
+            : _races.Values.FirstOrDefault(r => r.Host == sender) ?? (sender == ChatManager.ConsolePeerId && _races.Count == 1 ? _races.Values.First() : null);
+        if (race == null) return id == null ? "You host no race. /race cancel <id>" : $"There is no race #{id}.";
+        if (sender != race.Host && sender != ChatManager.ConsolePeerId) return "Only the host can cancel.";
+        End(race, "cancelled", ChatKind.System);
+        return $"Race #{race.Id} cancelled.";
+    }
+
+    private string List()
+    {
+        if (_races.Count == 0) return "No races.";
+        return string.Join("  |  ", _races.Values.Select(r =>
+            $"#{r.Id} {Who(r.Host)}'s {r.What}, {r.Phase.ToString().ToLowerInvariant()}, {r.Entrants.Count} in"));
+    }
+
+    private void ServerTick(double delta)
+    {
+        _clock += delta;
+        foreach (var race in _races.Values.ToList())
+        {
+            // entrants whose player (or NPC owner) left the server
+            foreach (long e in race.Entrants.Where(e => !race.Out.Contains(e) && _players?.GetNodeOrNull(OwnerOf(e).ToString()) == null).ToList())
+            {
+                _raceOf.Remove(e);
+                if (race.Phase == Phase.Running) race.Out.Add(e);
+                else race.Entrants.Remove(e);
+            }
+            if (race.Phase == Phase.Entry
+                && (_clock >= race.EntryEnds || (race.Invited != 0 && race.Entrants.Contains(race.Invited))))
+                Go(race);
+            else if (race.Phase == Phase.Running
+                && (_clock > race.Deadline || race.Entrants.All(e => race.Finished.ContainsKey(e) || race.Out.Contains(e))))
+                Results(race);
         }
     }
 
-    private void Opened(RaceRoute? route, float metres)
+    private void Go(Race race)
     {
-        if (_phase != Phase.Building) return;
-        if (route == null || route.Length < 400f)
+        int count = race.Entrants.Count;
+        if (count < MinEntrants) { End(race, $"not enough racers ({MinEntrants} needed)", ChatKind.System); return; }
+        Vector3[] centre = System.Array.Empty<Vector3>(), gates = System.Array.Empty<Vector3>();
+        float[] width = System.Array.Empty<float>();
+        if (!race.Air)
         {
-            _chat?.Broadcast("[race] no road long enough here to race on", ChatKind.Error);
-            _phase = Phase.Idle;
+            var route = race.Route!;
+            float length = Mathf.Min(race.Metres, RaceCourse.MaxLength(route, count));
+            if (length < 300f) { End(race, $"the road is too short for {count} racers", ChatKind.System); return; }
+            race.Course = RaceCourse.Ground(route, length);
+            int last = route.NearestCentreIndexAt(RaceCourse.StartArc(0, count) + length + 60f);
+            centre = route.Centre.Take(last + 1).ToArray();
+            width = route.Width.Take(last + 1).ToArray();
+        }
+        else gates = race.Course!.Gates;
+        var course = race.Course!;
+
+        race.Phase = Phase.Running;
+        race.StartAt = _clock + Countdown;
+        // a generous limit: the whole distance at a slow pace for the class, plus the countdown
+        race.Deadline = race.StartAt + (course.Length + RaceCourse.AirGridBack + 300f) / SlowPace(race.Mount) + 60f;
+        for (int i = 0; i < count; i++)
+        {
+            long e = race.Entrants[i];
+            race.Next[e] = 0;
+            RpcId(OwnerOf(e), MethodName.Setup, race.Id, e, race.Air, centre, width, gates, course.Length,
+                course.GridAltitude, i, count, race.Mount, Countdown);
+        }
+        _chat?.Broadcast($"[race] #{race.Id} {count} on the grid: {string.Join(", ", race.Entrants.Select(Who))} — "
+            + $"{course.Length / 1000f:0.0} km, GO in {Countdown:0} s", ChatKind.System);
+    }
+
+    private static float SlowPace(int mount) => mount switch
+    {
+        (int)RideKind.OnFoot or (int)RideKind.Skis or Open => 2f,
+        (int)RideKind.RoadBike or (int)RideKind.Paraglider => 4f,
+        (int)RideKind.Plane => 25f,
+        (int)RideKind.Helicopter or (int)RideKind.Wingsuit => 15f,
+        _ => 10f,   // cars, motorbikes
+    };
+
+    private void Results(Race race)
+    {
+        var order = race.Finished.OrderBy(kv => kv.Value).ToList();
+        int pos = 0;
+        foreach (var (e, time) in order)
+            _chat?.Broadcast($"[race] #{race.Id} {++pos}. {Who(e)}  {Format(time)}", ChatKind.System);
+        var dnf = race.Entrants.Where(e => !race.Finished.ContainsKey(e)).ToList();
+        foreach (long e in dnf)
+            _chat?.Broadcast($"[race] #{race.Id} DNF {Who(e)}", ChatKind.System);
+        GD.Print($"[race] #{race.Id} {race.What} results: {string.Join(", ", order.Select((kv, i) => $"{i + 1}. {Who(kv.Key)} {Format(kv.Value)}"))}"
+            + (dnf.Count > 0 ? $"  DNF: {string.Join(", ", dnf.Select(Who))}" : ""));
+        End(race, null, ChatKind.System);
+    }
+
+    /// <summary>Frees the race and tells every client still holding a racer in it.</summary>
+    private void End(Race race, string? why, ChatKind kind)
+    {
+        if (why != null) _chat?.Broadcast($"[race] #{race.Id} {why}", kind);
+        foreach (long e in race.Entrants)
+        {
+            if (_raceOf.TryGetValue(e, out int r) && r == race.Id) _raceOf.Remove(e);
+            if (!_raceOf.ContainsKey(e)) _names.Remove(e);
+        }
+        if (race.Phase == Phase.Running)
+            foreach (long owner in race.Entrants.Select(OwnerOf).Distinct().Where(o => Multiplayer.GetPeers().Contains((int)o)))
+                RpcId(owner, MethodName.Dropped, race.Id, 0L);
+        _races.Remove(race.Id);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Checkpoint(int raceId, long entrant, int index)
+    {
+        if (!_server || !Valid(raceId, entrant, out var race)) return;
+        // in order only: a checkpoint skipped is a shortcut taken
+        if (!race.Next.TryGetValue(entrant, out int next) || index != next)
+        {
+            GD.Print($"[race] #{raceId} {Who(entrant)} reported checkpoint {index}, expected {next} — ignored");
             return;
         }
-        _route = route;
-        _finish = Mathf.Min(metres, route.Length - 40f);
-        _phase = Phase.Entry;
-        _entryEnds = _clock + EntryWindow;
-        _chat?.Broadcast($"[race] {Who(_host)} opens a {_finish / 1000f:0.0} km race on this road — /race join within {EntryWindow:0} s",
-            ChatKind.System);
+        race.Next[entrant] = next + 1;
+        if (race.Air && index == 0) race.Started[entrant] = _clock;
     }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Crossed(int raceId, long entrant)
+    {
+        if (!_server || !Valid(raceId, entrant, out var race) || race.Finished.ContainsKey(entrant)) return;
+        int needed = race.Course!.Checkpoints;
+        int passed = race.Next.GetValueOrDefault(entrant);
+        if (passed < needed)
+        {
+            _chat?.Broadcast($"[race] #{raceId} {Who(entrant)} crossed the line with {needed - passed} checkpoint(s) missed — not counted", ChatKind.Error);
+            _raceOf.Remove(entrant);
+            race.Out.Add(entrant);
+            return;
+        }
+        // the server's own clock: from its GO on the ground, from the entrant's own pass through gate 0 in the air
+        double time = _clock - (race.Air ? race.Started.GetValueOrDefault(entrant, race.StartAt) : race.StartAt);
+        race.Finished[entrant] = time;
+        _raceOf.Remove(entrant);
+        int position = race.Finished.Count(kv => kv.Value <= time);
+        _chat?.Broadcast($"[race] #{raceId} {Who(entrant)} finishes P{position} in {Format(time)}", ChatKind.System);
+        RpcId(OwnerOf(entrant), MethodName.Result, raceId, entrant, position, time);
+    }
+
+    /// <summary>A report about a running race's entrant, from the peer that owns it, after GO.</summary>
+    private bool Valid(int raceId, long entrant, out Race race)
+    {
+        race = null!;
+        long sender = Multiplayer.GetRemoteSenderId();
+        if (OwnerOf(entrant) != sender || !_races.TryGetValue(raceId, out var found)) return false;
+        race = found;
+        return race.Phase == Phase.Running && _clock >= race.StartAt && race.Entrants.Contains(entrant) && !race.Out.Contains(entrant);
+    }
+
+    /// <summary>
+    /// A client enters NPCs it runs into an open race. Each id must be <c>-(sender * 1000 + n)</c>,
+    /// n in 0..999. Name them first with <see cref="NameNpcEntrants"/>, or they race as "NPC n".
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestNpcEntrants(int raceId, long[] npcIds)
+    {
+        if (!_server) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        if (!_races.TryGetValue(raceId, out var race) || race.Phase == Phase.Running || race.Invited != 0)
+        {
+            _chat?.Tell(sender, $"[race] #{raceId} is not open to NPCs", ChatKind.Error);
+            return;
+        }
+        foreach (long id in npcIds.Distinct())
+        {
+            if (id >= 0 || OwnerOf(id) != sender || _raceOf.ContainsKey(id) || race.Entrants.Count >= MaxEntrants) continue;
+            Enter(race, id);
+            _chat?.Broadcast($"[race] #{raceId} {Who(id)} joins ({race.Entrants.Count} in)", ChatKind.System);
+        }
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void NameNpcEntrants(long[] npcIds, string[] names)
+    {
+        if (!_server) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        for (int i = 0; i < Mathf.Min(npcIds.Length, names.Length); i++)
+            if (npcIds[i] < 0 && OwnerOf(npcIds[i]) == sender)
+            {
+                _npcNames[npcIds[i]] = new string(names[i].Where(c => !char.IsControl(c)).Take(24).ToArray());
+                if (_names.ContainsKey(npcIds[i])) _names[npcIds[i]] = _npcNames[npcIds[i]];
+            }
+    }
+
+    private string Who(long e) => _names.TryGetValue(e, out var known) ? known : e < 0
+        ? _npcNames.GetValueOrDefault(e) ?? $"NPC {-e % 1000} ({Who(OwnerOf(e))})"
+        : _chat?.NameOfPeer(e) ?? $"#{e}";
+
+    private static string Format(double s) => $"{(int)(s / 60)}:{s % 60:00.00}";
+
+    /// <summary>A mount word: foot, bike, skis, car or a car's name, moto/r1, monster, plane, heli, paraglider, wingsuit, open.</summary>
+    public static int? ParseMount(string word)
+    {
+        switch (word.ToLowerInvariant())
+        {
+            case "open": return Open;
+            case "foot" or "run": return (int)RideKind.OnFoot;
+            case "bike": return (int)RideKind.RoadBike;
+            case "skis" or "ski": return (int)RideKind.Skis;
+            case "car": return (int)CarCatalog.All[0].Kind;
+            case "moto" or "r1" or "motorbike": return 64;   // the motorbikes (#38): 64 and 65
+            case "monster": return 65;
+            case "plane": return (int)RideKind.Plane;
+            case "heli" or "helicopter": return (int)RideKind.Helicopter;
+            case "paraglider" or "glider": return (int)RideKind.Paraglider;
+            case "wingsuit": return (int)RideKind.Wingsuit;
+        }
+        var car = CarCatalog.All.FirstOrDefault(c => c.Label.Split(' ')[0].Equals(word, System.StringComparison.OrdinalIgnoreCase));
+        return car != null ? (int)car.Kind : null;
+    }
+
+    public static string MountName(int k) => k switch
+    {
+        Open => "open",
+        (int)RideKind.OnFoot => "foot",
+        64 or 65 when Rideable.Create((RideKind)k) == null => k == 64 ? "motorbike" : "monster bike",
+        _ => CarCatalog.For((RideKind)k)?.Label.Split(' ')[0] ?? Rideable.Create((RideKind)k)?.Label.ToLowerInvariant() ?? $"#{k}",
+    };
 
     public override void _Process(double delta)
     {
@@ -140,218 +484,259 @@ public partial class RaceManager : Node
         else ClientTick(delta);
     }
 
-    private void ServerTick(double delta)
+    // ====================================================================================
+    // client
+    // ====================================================================================
+
+    /// <summary>One entrant this client runs: its player, or an NPC.</summary>
+    private sealed class Runner
     {
-        _clock += delta;
-        if (_phase == Phase.Entry && _clock >= _entryEnds)
+        public int RaceId;
+        public long Id;
+        public RaceCourse Course = null!;
+        public int Slot, Count, Mount, Next;
+        public float StartArc;
+        public double GoIn, Clock;
+        public bool Going, Done, Placed, HasLast;
+        public Vector3 Last;
+        /// <summary>An NPC's position, given by whoever drives it (<see cref="TrackNpc"/>).</summary>
+        public System.Func<Vector3>? Where;
+        public string Status = "";
+    }
+
+    /// <summary>The local player, resolved when needed (never captured: it is respawned).</summary>
+    public System.Func<FootPlayer?>? LocalPlayer { get; set; }
+    private Runner? _me;
+    private readonly Dictionary<long, Runner> _npcs = new();
+    private AutoPilot? _pilot;
+    private GatePilot? _air;
+    private RaceGates? _gates;
+    private Label? _hud;
+    private readonly bool _auto = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--raceauto") >= 0;
+
+    /// <summary>Raised on the client when this player finishes (for checks): position, seconds.</summary>
+    public event System.Action<int, double>? Finished;
+
+    /// <summary>Where an NPC this client entered starts, sent at the close of entry.</summary>
+    public readonly record struct NpcGrid(int RaceId, long NpcId, RaceCourse Course, Vector3 At, Vector3 Forward, int Mount, double Countdown);
+    public event System.Action<NpcGrid>? NpcSetup;
+    /// <summary>An NPC finished: id, position, seconds.</summary>
+    public event System.Action<long, int, double>? NpcFinished;
+    /// <summary>An NPC's race ended or it was taken out.</summary>
+    public event System.Action<long>? NpcDropped;
+
+    /// <summary>The latest race id this client saw opened, challenged or joined (from the chat).</summary>
+    public int LastRaceSeen { get; private set; }
+
+    /// <summary>Enters NPCs this client runs (ids <c>-(myPeer * 1000 + n)</c>) into an open race, with their display names.</summary>
+    public void EnterNpcs(int raceId, long[] npcIds, string[] names)
+    {
+        RpcId(1, MethodName.NameNpcEntrants, npcIds, names);
+        RpcId(1, MethodName.RequestNpcEntrants, raceId, npcIds);
+    }
+
+    /// <summary>Hands the race an NPC's position, so its checkpoints are reported like the player's.</summary>
+    public void TrackNpc(long npcId, System.Func<Vector3> position)
+    {
+        if (_npcs.TryGetValue(npcId, out var r)) r.Where = position;
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Setup(int raceId, long entrant, bool air, Vector3[] centre, float[] width, Vector3[] gates, float length,
+        float gridAltitude, int slot, int count, int mount, double countdown)
+    {
+        var r = new Runner
         {
-            // drop entrants who left the server
-            _entrants.RemoveAll(p => _players?.GetNodeOrNull(p.ToString()) == null);
-            if (_entrants.Count == 0) { Reset("nobody joined"); return; }
-            _phase = Phase.Running;
-            _startAt = _clock + Countdown;
-            // a generous time limit: the whole distance at 10 m/s, plus the countdown
-            _deadline = _startAt + _finish / 10f + 30f;
-            var route = _route!;
-            int last = route.NearestCentreIndexAt(_finish + 60f);
-            var centre = route.Centre.Take(last + 1).ToArray();
-            var width = route.Width.Take(last + 1).ToArray();
-            for (int i = 0; i < _entrants.Count; i++)
-            {
-                _checkpoint[_entrants[i]] = 0;
-                RpcId(_entrants[i], MethodName.Setup, centre, width, _finish, i, _entrants.Count, Countdown);
-            }
-            _chat?.Broadcast($"[race] {_entrants.Count} on the grid: {string.Join(", ", _entrants.Select(Who))} — GO in {Countdown:0} s",
-                ChatKind.System);
-        }
-        if (_phase == Phase.Running && (_clock > _deadline || _entrants.All(p => _finished.ContainsKey(p))))
-            Results();
-    }
-
-    private void Results()
-    {
-        var order = _finished.OrderBy(kv => kv.Value).ToList();
-        int pos = 0;
-        foreach (var (peer, time) in order)
-            _chat?.Broadcast($"[race] {++pos}. {Who(peer)}  {Format(time)}", ChatKind.System);
-        foreach (var peer in _entrants.Where(p => !_finished.ContainsKey(p)))
-            _chat?.Broadcast($"[race] DNF {Who(peer)}", ChatKind.System);
-        GD.Print($"[race] results: {string.Join(", ", order.Select((kv, i) => $"{i + 1}. {Who(kv.Key)} {Format(kv.Value)}"))}");
-        Reset(null);
-    }
-
-    private void Reset(string? why)
-    {
-        if (why != null) _chat?.Broadcast($"[race] {why}", ChatKind.System);
-        _phase = Phase.Idle;
-        _route = null;
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Checkpoint(int index)
-    {
-        if (!_server || _phase != Phase.Running) return;
-        long peer = Multiplayer.GetRemoteSenderId();
-        // in order only: a checkpoint skipped is a shortcut taken
-        if (_checkpoint.TryGetValue(peer, out int next) && index == next) _checkpoint[peer] = next + 1;
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Crossed()
-    {
-        if (!_server || _phase != Phase.Running) return;
-        long peer = Multiplayer.GetRemoteSenderId();
-        int needed = Mathf.FloorToInt(_finish / CheckpointEvery);
-        if (!_checkpoint.TryGetValue(peer, out int passed) || _finished.ContainsKey(peer)) return;
-        if (passed < needed)
+            RaceId = raceId, Id = entrant, Slot = slot, Count = count, Mount = mount, GoIn = countdown,
+            Course = RaceCourse.FromWire(air, centre, width, gates, length, gridAltitude),
+            StartArc = air ? 0f : RaceCourse.StartArc(slot, count),
+        };
+        if (entrant < 0)
         {
-            _chat?.Broadcast($"[race] {Who(peer)} crossed the line with {needed - passed} checkpoint(s) missed — not counted", ChatKind.Error);
+            _npcs[entrant] = r;
+            var (at, fwd) = r.Course.Slot(slot, count);
+            NpcSetup?.Invoke(new NpcGrid(raceId, entrant, r.Course, at, fwd, mount, countdown));
             return;
         }
-        // the server's own clock, from its own start: a client cannot send a time
-        double time = _clock - _startAt;
-        _finished[peer] = time;
-        int position = _finished.Count;
-        _chat?.Broadcast($"[race] {Who(peer)} finishes P{position} in {Format(time)}", ChatKind.System);
-        RpcId(peer, MethodName.Result, position, time);
-    }
-
-    private string Who(long peer) => _chat?.NameOfPeer(peer) ?? $"#{peer}";
-
-    private static string Format(double s) => $"{(int)(s / 60)}:{s % 60:00.00}";
-
-    // ------------------------------------------------------------------------------------
-    // client
-    // ------------------------------------------------------------------------------------
-
-    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Setup(Vector3[] centre, float[] width, float finish, int slot, int count, double countdown)
-    {
-        _myRoute = RaceRoute.FromPoints(centre, width);
-        _myFinish = finish;
-        _mySlot = slot;
-        _myCount = count;
-        _myNext = 0;
-        _goIn = countdown;
-        _going = _done = false;
-        _raceClock = 0;
-        PlaceOnGrid();
+        StopLocal();
+        _me = r;
+        if (air)
+        {
+            _gates = RaceGates.Build(r.Course.Gates, RaceCourse.GateRadius);
+            AddChild(_gates);
+        }
+        GD.Print($"[race] #{raceId} on the grid, slot {slot + 1} of {count}, {length:F0} m, {MountName(mount)}");
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Result(int position, double time)
+    private void Result(int raceId, long entrant, int position, double time)
     {
-        _done = true;
-        GD.Print($"[race] finished P{position} in {Format(time)}");
+        if (entrant < 0) { NpcFinished?.Invoke(entrant, position, time); return; }
+        GD.Print($"[race] #{raceId} finished P{position} in {Format(time)}");
         Finished?.Invoke(position, time);
         // an autopiloted car keeps its pilot, now only braking to a stop; a player just drives on
         if (_pilot == null && LocalPlayer?.Invoke() is { } me) me.RideControls = null;
     }
 
-    /// <summary>On the grid, in a car, facing down the road, holding the handbrake.</summary>
-    private void PlaceOnGrid()
+    /// <summary>The race ended (entrant 0: for everyone this client runs in it) or took this entrant out.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Dropped(int raceId, long entrant)
     {
-        if (LocalPlayer?.Invoke() is not { } me || _myRoute == null) return;
-        var line = _myRoute.Line;
-        float s = 12f + 15f * (_myCount - 1 - _mySlot);
-        var at = line.PointAt(s);
-        var fwd = RaceRoute.Flat(line.PointAt(s + 2f) - line.PointAt(s - 2f)).Normalized();
-        me.GlobalPosition = at + Vector3.Up * 1.2f;
-        me.Rotation = new Vector3(0, Mathf.Atan2(-fwd.X, -fwd.Z), 0);
-        me.Velocity = Vector3.Zero;
-        if (me.Vehicle is not Car)
+        foreach (var npc in _npcs.Values.Where(n => n.RaceId == raceId && (entrant == 0 || n.Id == entrant)).ToList())
         {
-            me.SetRide(RideKind.OnFoot);
-            if (!me.SetRide(CarCatalog.All[0].Kind)) me.DebugLaunch(me.GlobalPosition, Vector3.Zero);
+            _npcs.Remove(npc.Id);
+            NpcDropped?.Invoke(npc.Id);
         }
-        me.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
-        GD.Print($"[race] on the grid, slot {_mySlot + 1} of {_myCount}, {_myFinish:F0} m to go");
+        if (_me != null && _me.RaceId == raceId && (entrant == 0 || entrant == _me.Id)) StopLocal();
     }
 
-    // ---- scripted players, for the loopback check: --racestart [m] opens, --racejoin enters ----
-    private readonly string? _autoStart = Arg("--racestart");
-    private readonly bool _autoJoin = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--racejoin") >= 0;
-    private double _settled;
-    private bool _asked;
-
-    private static string? Arg(string flag)
+    /// <summary>Lets go of the local player: no hold, no pilot, no gates.</summary>
+    private void StopLocal()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, flag);
-        return i < 0 ? null : i + 1 < args.Length && !args[i + 1].StartsWith("--") ? args[i + 1] : "";
-    }
-
-    public override void _Ready()
-    {
-        if (_server) return;
-        // every race line goes to the log too, which is what the loopback check reads
-        if (GetParent()?.GetNodeOrNull<ChatManager>(ChatManager.NodeName) is { } chat)
-            chat.LineReceived += (line, _) =>
-            {
-                if (!line.Contains("[race]")) return;
-                GD.Print(line);
-                if (_autoJoin && !_asked && line.Contains("opens a")) { _asked = true; chat.Send("/race join"); }
-            };
-    }
-
-    private void AutoOpen(double delta)
-    {
-        if (_autoStart == null || _asked) return;
-        if (LocalPlayer?.Invoke() is not { } me || !me.IsOnFloor()) { _settled = 0; return; }
-        _settled += delta;
-        if (_settled < 4.0) return;
-        _asked = true;
-        GetParent()?.GetNodeOrNull<ChatManager>(ChatManager.NodeName)?.Send($"/race start {_autoStart}".Trim());
+        if (_me == null) return;
+        if (LocalPlayer?.Invoke() is { } me && (!_me.Going || _pilot != null)) me.RideControls = null;
+        if (_air != null) GatePilot.Release();
+        _air = null;
+        _pilot = null;
+        _gates?.QueueFree();
+        _gates = null;
+        _me = null;
+        ShowHud(null);
     }
 
     private void ClientTick(double delta)
     {
         AutoOpen(delta);
-        if (_myRoute == null || _done) { ShowHud(null); return; }
+        foreach (var npc in _npcs.Values)
+        {
+            npc.GoIn -= delta;
+            if (npc.GoIn <= 0 && npc.Where != null) Progress(npc, npc.Where());
+        }
+        if (_me == null) return;
+        var r = _me;
         var me = LocalPlayer?.Invoke();
         if (me == null) return;
 
-        if (!_going)
+        if (!r.Going)
         {
-            // a player not yet in a car (the mount waits for the ground) gets one as soon as it can
-            if (me.Vehicle is not Car && me.IsOnFloor()) me.SetRide(CarCatalog.All[0].Kind);
-            _goIn -= delta;
-            ShowHud(_goIn > 0.9 ? $"{Mathf.CeilToInt((float)_goIn)}" : "GO!");
-            if (_goIn > 0) return;
-            _going = true;
-            GD.Print("[race] GO");
-            if (_auto && me.Vehicle is Car car)
+            Hold(me, r);
+            r.GoIn -= delta;
+            ShowHud(r.Status.Length > 0 ? r.Status : r.GoIn > 0.9 ? $"{Mathf.CeilToInt((float)r.GoIn)}" : "GO!");
+            if (r.GoIn > 0) return;
+            r.Going = true;
+            GD.Print($"[race] #{r.RaceId} GO");
+            Release(me, r);
+        }
+        if (r.Done) { ShowHud(null); return; }
+        r.Clock += delta;
+        Progress(r, me.GlobalPosition);
+        _gates?.Highlight(r.Next);
+        string left = $"{r.Course.Remaining(r.Next, me.GlobalPosition, r.StartArc):F0} m";
+        ShowHud(r.Course.Air
+            ? $"{Format(r.Clock)}   GATE {Mathf.Min(r.Next + 1, r.Course.Gates.Length)}/{r.Course.Gates.Length}   {left}"
+            : $"{Format(r.Clock)}   CP {r.Next}/{r.Course.Checkpoints}   {left}");
+    }
+
+    public override void _PhysicsProcess(double delta)
+    {
+        // the air pilot presses input actions: once per physics step, so a one-step press (Jump) is never lost
+        if (_server || _air == null || _me == null) return;
+        if (!_me.Going) { _air.Prepare(); return; }
+        // each slot flies its own lane through the ring: two pilots aimed at its centre fly in
+        // formation until they touch (measured: two helicopters 9 m apart, one crashed)
+        var c = _me.Course;
+        var lane = c.Heading.Cross(Vector3.Up) * ((_me.Slot % 4) - 1.5f) * 10f + Vector3.Up * ((_me.Slot / 4 % 3) - 1) * 8f;
+        _air.Fly(c.Gates[Mathf.Min(_me.Next, c.Gates.Length - 1)] + lane, _me.Done);
+    }
+
+    /// <summary>Checkpoints in order, then the line, from the last position to this one.</summary>
+    private void Progress(Runner r, Vector3 at)
+    {
+        var from = r.HasLast ? r.Last : at;
+        r.Last = at;
+        r.HasLast = true;
+        while (!r.Done && r.Course.Reached(r.Next, from, at, r.StartArc))
+        {
+            if (r.Next < r.Course.Checkpoints)
             {
-                _pilot = new AutoPilot(_myRoute, me, car.Spec);
-                me.RideControls = () => _pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, Others(me));
+                if (r.Id > 0 && r.Next == _skip) GD.Print($"[race] (test) not reporting checkpoint {r.Next}");
+                else RpcId(1, MethodName.Checkpoint, r.RaceId, r.Id, r.Next);
+                if (r == _me) GD.Print($"[race] #{r.RaceId} checkpoint {r.Next + 1}/{r.Course.Checkpoints} at {r.Clock:F1} s, y {at.Y:F0}");
+                r.Next++;
+                continue;
             }
-            else me.RideControls = null;   // the player drives
+            RpcId(1, MethodName.Crossed, r.RaceId, r.Id);
+            r.Done = true;   // the server answers with the result
+            if (r == _me && _pilot != null) _pilot.Finished = true;   // brake to a stop past the line
+        }
+    }
+
+    /// <summary>
+    /// Until GO: on the grid, on the race's mount, held there. On the ground the player stands
+    /// in its slot (a car on the handbrake, a mount on the brake, anything that drifts put back);
+    /// in the air it mounts where it stands, then is held in the air at its slot, moving as
+    /// it will at GO — a plane at 45 m/s, a paraglider at trim, a helicopter hovering, a wingsuit
+    /// pilot standing on nothing, to base-jump at GO.
+    /// </summary>
+    private void Hold(FootPlayer me, Runner r)
+    {
+        var (at, fwd) = r.Course.Slot(r.Slot, r.Count);
+        var yaw = new Vector3(0, Mathf.Atan2(-fwd.X, -fwd.Z), 0);
+        r.Status = "";
+        if (!r.Course.Air)
+        {
+            if (!r.Placed)
+            {
+                r.Placed = true;
+                me.GlobalPosition = at + Vector3.Up * 1.2f;
+                me.Rotation = yaw;
+                me.Velocity = Vector3.Zero;
+            }
+            if (r.Mount != Open && me.Ride != (RideKind)r.Mount && me.IsOnFloor())
+            {
+                me.Rotation = yaw;
+                Mount(me, (RideKind)r.Mount);
+            }
+            me.RideControls = me.Vehicle is Car ? () => new RideInput(0f, 0f, 0f, false, Handbrake: true)
+                : me.Vehicle != null ? () => new RideInput(0f, 1f, 0f, false) : null;
+            if (me.Vehicle is not Car && RaceRoute.Flat(me.GlobalPosition - at).Length() > 1.5f)
+            {
+                me.GlobalPosition = at + Vector3.Up * 1.0f;
+                me.Velocity = Vector3.Zero;
+            }
+            return;
         }
 
-        _raceClock += delta;
-        // progress along the line, and the checkpoints in order
-        int near = _myRoute.Line.IndexAt(0);
-        float best = float.MaxValue;
-        var line = _myRoute.Line;
-        for (int i = 0; i < line.Points.Count; i += 2)
+        // a wingsuit is a base jump: the pilot is held on foot
+        var craft = r.Mount == Open ? me.Ride : r.Mount == (int)RideKind.Wingsuit ? RideKind.OnFoot : (RideKind)r.Mount;
+        if (me.Ride != craft)
         {
-            float d = RaceRoute.Flat(line.Points[i] - me.GlobalPosition).LengthSquared();
-            if (d < best) { best = d; near = i; }
+            if (!me.IsOnFloor()) { r.Status = $"Land to take the {MountName((int)craft)}"; return; }
+            me.Rotation = yaw;   // a craft starts on the body's heading
+            Mount(me, craft);
+            if (me.Ride != craft) return;
         }
-        float arc = line.Arc[near];
-        bool onRoute = Mathf.Sqrt(best) < CheckpointReach;
-        while (onRoute && arc >= (_myNext + 1) * CheckpointEvery && (_myNext + 1) * CheckpointEvery <= _myFinish)
-        {
-            RpcId(1, MethodName.Checkpoint, _myNext);
-            _myNext++;
-        }
-        if (onRoute && arc >= _myFinish && !_done)
-        {
-            RpcId(1, MethodName.Crossed);
-            if (_pilot != null) _pilot.Finished = true;   // brake to a stop past the line
-            _done = true;   // the server answers with the result
-        }
-        ShowHud($"{Format(_raceClock)}   CP {_myNext}/{Mathf.FloorToInt(_myFinish / CheckpointEvery)}   {Mathf.Max(0f, _myFinish - arc):F0} m");
+        _air ??= _auto ? new GatePilot(me) : null;
+        if (!me.IsFlying) me.Rotation = yaw;
+        float speed = me.Vehicle switch { Player.Plane => 45f, Canopy => 10.5f, _ => 0f };
+        me.DebugLaunch(at, fwd * speed);
+    }
+
+    private static void Mount(FootPlayer me, RideKind kind)
+    {
+        if (me.Vehicle is { IsVehicle: true } && me.Ride != kind) me.SetRide(RideKind.OnFoot);
+        me.SetRide(kind);   // refused off the ground: tried again next frame
+    }
+
+    /// <summary>GO: the player drives, or with <c>--raceauto</c> a pilot does.</summary>
+    private void Release(FootPlayer me, Runner r)
+    {
+        me.RideControls = null;
+        if (!_auto || r.Course.Air) return;
+        _pilot = me.Vehicle is Car car ? new AutoPilot(r.Course.Route!, me, car.Spec) : AutoPilot.For(r.Course.Route!, me);
+        if (_pilot == null) { GD.Print($"[race] #{r.RaceId} no autopilot for {me.Ride} yet"); return; }
+        var pilot = _pilot;
+        me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, Others(me));
     }
 
     private static IEnumerable<AutoPilot.Other> Others(FootPlayer me)
@@ -381,5 +766,51 @@ public partial class RaceManager : Node
         }
         _hud.Visible = true;
         _hud.Text = text;
+    }
+
+    // ---- scripted players, for the loopback check ----
+    // --racestart "<args>" sends /race start <args>; --racecmd "<args>" sends /race <args> (a duel);
+    // --racejoin [host] joins every race opened (by that host) or any duel it is challenged to;
+    // --raceskip N never reports checkpoint N (the server must refuse the finish)
+    private readonly string? _autoCmd = Arg("--racestart") is { } s ? $"start {s}".Trim() : Arg("--racecmd");
+    private readonly string? _autoJoin = Arg("--racejoin");
+    private readonly int _skip = int.TryParse(Arg("--raceskip"), out int k) ? k : -1;
+    private readonly HashSet<int> _joined = new();
+    private double _settled;
+    private bool _asked;
+    private static readonly Regex RaceId = new(@"#(\d+)");
+
+    private static string? Arg(string flag)
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int i = System.Array.IndexOf(args, flag);
+        return i < 0 ? null : i + 1 < args.Length && !args[i + 1].StartsWith("--") ? args[i + 1] : "";
+    }
+
+    public override void _Ready()
+    {
+        if (_server) return;
+        // every race line goes to the log too, which is what the loopback check reads
+        if (GetParent()?.GetNodeOrNull<ChatManager>(ChatManager.NodeName) is { } chat)
+            chat.LineReceived += (line, _) =>
+            {
+                if (!line.Contains("[race]")) return;
+                GD.Print(line);
+                if (RaceId.Match(line) is not { Success: true } m || !int.TryParse(m.Groups[1].Value, out int id)) return;
+                if (line.Contains("opens a") || line.Contains("challenges you") || line.Contains("you are in")) LastRaceSeen = id;
+                bool invite = line.Contains("opens a") || line.Contains("challenges you");
+                if (_autoJoin != null && invite && _joined.Add(id) && (_autoJoin.Length == 0 || line.Contains(_autoJoin)))
+                    chat.Send($"/race join {id}");
+            };
+    }
+
+    private void AutoOpen(double delta)
+    {
+        if (_autoCmd == null || _asked) return;
+        if (LocalPlayer?.Invoke() is not { } me || !me.IsOnFloor()) { _settled = 0; return; }
+        _settled += delta;
+        if (_settled < 4.0) return;
+        _asked = true;
+        GetParent()?.GetNodeOrNull<ChatManager>(ChatManager.NodeName)?.Send($"/race {_autoCmd}");
     }
 }
