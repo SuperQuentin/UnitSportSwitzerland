@@ -271,7 +271,7 @@ public partial class InteriorManager : Node3D
                 return true;
             }
         }
-        else door = DoorIndex.Nearest(player.GlobalPosition, DoorReach)?.Key.ToString();
+        else door = DoorIndex.NearestEntrance(player.GlobalPosition, DoorReach)?.Key.ToString();
         if (door == null) return false;
         if (_requestingDoor != null) return true;
 
@@ -297,6 +297,8 @@ public partial class InteriorManager : Node3D
         {
             var layout = BuildingKey.TryParse(door, out _) ? await GetOrCreate(door) : null;
             if (layout == null || Origin == null) { Refuse(sender, "This door is locked."); return; }
+            // a garage is walked or driven into for real (GarageBay), never entered as an interior
+            if (layout.Kind == BuildingKind.Garage) { Refuse(sender, "A garage door opens for cars."); return; }
             if (!NearDoor(sender, layout, door, ServerDoorReach)) { Refuse(sender, "Too far from the door."); return; }
             // the plan first: the opener builds the interior while the door starts to swing
             if (open) SendPlan(sender, layout, door);
@@ -844,7 +846,7 @@ public partial class InteriorManager : Node3D
                 door = ExitAt(p)?.Door;
                 if (door == null) text = Loot.LootService.Instance?.PromptFor(p);
             }
-            else if (!p.Indoors) door = DoorIndex.Nearest(p.GlobalPosition, DoorReach)?.Key.ToString();
+            else if (!p.Indoors) door = DoorIndex.NearestEntrance(p.GlobalPosition, DoorReach)?.Key.ToString();
             if (door != null)
                 text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
         }
