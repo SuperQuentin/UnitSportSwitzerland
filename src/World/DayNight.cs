@@ -37,14 +37,38 @@ public partial class DayNight : Node
 
     private Godot.Environment? _environment;
 
+    /// <summary>
+    /// The same, lit like a room: for any camera in the interiors' space under the terrain (see
+    /// <see cref="EnvironmentAt"/>). Null on a server, which has no environment.
+    /// </summary>
+    private Godot.Environment? _indoor;
+
     private const float NoonElevation = 62f;
+
+    /// <summary>Daylight through the windows, as seen: noon's outdoor ambient, whatever the hour.</summary>
+    private static readonly Color RoomDaylight = new(0.86f, 0.89f, 0.93f);
+
+    /// <summary>Ceiling lamps, as seen: what lights a character indoors at night.</summary>
+    private static readonly Color RoomLamp = new(0.96f, 0.90f, 0.78f);
 
     public DayNight(Godot.Environment? environment)
     {
         Name = "DayNight";
         _environment = environment;
+        _indoor = environment?.Duplicate() as Godot.Environment;
         Hour = GameSettings.Current.StartHour;
     }
+
+    /// <summary>
+    /// The environment a camera at this point sees by. Rooms are lit (<c>ps1_interior</c> never
+    /// darkens), so a character in one is too, by daylight through the windows or by the lamps at
+    /// night; avatars and vehicles are standard materials lit by the ambient alone. It goes by
+    /// where the <i>camera</i> is, not the character: a portal camera looking into a room from the
+    /// street stands in the interiors' space, one looking out of a room stands in the world. Null =
+    /// the world's own.
+    /// </summary>
+    public static Godot.Environment? EnvironmentAt(Vector3 at) =>
+        at.Y < Interiors.InteriorManager.InteriorBaseY + 1000f ? Instance?._indoor : null;
 
     public override void _EnterTree() => Instance = this;
 
@@ -64,6 +88,7 @@ public partial class DayNight : Node
         float minutes = GameSettings.Current.DayLengthMinutes;
         if (minutes > 0) Hour = (Hour + delta * 24.0 / (minutes * 60.0)) % 24.0;
         Apply((float)delta);
+        if (GetViewport()?.GetCamera3D() is { } cam) cam.Environment = EnvironmentAt(cam.GlobalPosition);
     }
 
     /// <summary>"14:05", for the HUD and chat.</summary>
@@ -123,6 +148,13 @@ public partial class DayNight : Node
             _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
             _environment.AmbientLightColor = sky.Lerp(new Color(tint.R, tint.G, tint.B), 0.5f);
             _environment.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.55f, Night);
+        }
+        if (_indoor != null)
+        {
+            _indoor.BackgroundColor = sky;
+            _indoor.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+            _indoor.AmbientLightColor = RoomDaylight.Lerp(RoomLamp, Night);
+            _indoor.AmbientLightEnergy = 1.0f;
         }
     }
 

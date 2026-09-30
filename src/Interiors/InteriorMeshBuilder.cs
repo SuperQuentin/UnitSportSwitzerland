@@ -17,7 +17,7 @@ namespace UnitSport.Interiors;
 ///
 /// <para>
 /// Colours go through <c>SrgbToLinear</c> (baked vertex colours are never converted by Godot).
-/// Alpha 0 marks glass: the shader draws it as flat daylight, unlit.
+/// Alpha 0 marks glass: the shader draws it as the sky of the hour (<c>world_sky</c>), unlit.
 /// </para>
 /// </summary>
 public static class InteriorMeshBuilder
