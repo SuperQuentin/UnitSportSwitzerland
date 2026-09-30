@@ -1,6 +1,28 @@
 # Generated terrain fill: generated and real tiles side by side
 
-Status: **plan, not started**. Builds on `84f5ebf` (generated fallback world, all-or-nothing).
+Status: **phase 1 done** (issue #27, branch `feat/27-generated-terrain-fill`). Builds on `84f5ebf`
+(generated fallback world, all-or-nothing).
+
+### Phase 1 as built (differs from the text below in three places)
+
+- **IDW softening is 0.01 m², not 1.** With `d² + 1` a second real tile 5 m away still took ~4% of
+  the weight at the seam, so a concave corner came out up to ~20 cm off the real edge one row in.
+  At 0.01 the weights interpolate: S + D is within **1.3 cm** of the real edge before the copy.
+- **Water is suppressed by the correction's gradient (> 1.5%), not its size (> 0.5 m).** S is
+  non-zero across the whole band, so the size test removed every river within 3 km of real ground,
+  flat beds included. The intent was "no water on a tilted bed"; 1.5% leans a 22 m bed 0.3 m.
+- **No G edge profile**: D memoises its whole `det` per whole metre of the tile's own boundary
+  (from inside the tile the nearest real point is always there), per detail tile, computed from
+  `Height(e, n)` itself, so bit-equality with `Raw` holds by construction.
+
+Checked by `dotnet run --project tools/BlendCheck -c Release` (synthetic real blocks up to 3,400 m
+off the generator): 0 mismatching vertices on generated|real and generated|generated seams at both
+resolutions, coarse = decimated full, horizon = grid at 100 m, point path = grid path on 1.3 M
+vertices; no step over the band's bound, none in the one-tile hole over generated ground; trees
+and roads within 1 m of the mesh. `blend = null` was checked byte-identical to `origin/main`
+(grids, cover, trees, roads, buildings on 16 tiles; all 40,401 horizon tiles) with a one-off
+harness. Cost: a blended full grid ~50 ms against ~23 ms unblended (single thread), coarse ~4 ms,
+a horizon tile 0.1 ms.
 
 ## Goal
 
