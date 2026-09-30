@@ -125,9 +125,9 @@ public partial class VehicleBody : CharacterBody3D
             _visual.Name = "Visual";
             AddChild(_visual);
             Hurtbox.Fit(_visual);
-            if (Ride is Helicopter or Plane or Car)
+            if (Ride is Helicopter or Plane or IEngined)
             {
-                var profile = Ride is Car parkedCar ? EngineProfile.For(parkedCar.Spec.Engine, parkedCar.Spec.IdleRpm, parkedCar.Spec.Redline)
+                var profile = Ride is IEngined parked ? parked.Sound
                     : Ride is Helicopter ? EngineProfile.Turboshaft : EngineProfile.PistonAero;
                 _engineSound = new EngineSynth(profile, spatial: true, seed: (int)Math.Max(1, Owner));
                 AddChild(_engineSound);
@@ -339,7 +339,7 @@ public partial class VehicleBody : CharacterBody3D
             rig.BodyPitch = 0f;
             rig.BrakeLights = false;
         }
-        if (_engineSound != null && Ride is Car)
+        if (_engineSound != null && Ride is IEngined)
             // ticking over while it rolls; a car at rest is asleep and silent
             _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep ? 0.1f : 0f);
         else if (_engineSound != null)

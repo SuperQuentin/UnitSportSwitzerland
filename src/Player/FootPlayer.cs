@@ -248,6 +248,8 @@ public partial class FootPlayer : CharacterBody3D
 
     /// <summary>Smoothed real ground speed, for telling an impact from terrain roughness.</summary>
     private float _realSpeed;
+    /// <summary>Smoothed commanded-minus-achieved ground speed, m/s.</summary>
+    private float _shortfall;
 
     /// <summary>How fast the smoothed real speed follows the measured one, per second.</summary>
     private const float ImpactResponse = 6f;
@@ -1271,7 +1273,7 @@ public partial class FootPlayer : CharacterBody3D
         // a craft skimming the ground must not be snapped onto it
         // a car stays on its wheels over a crest the way a suspension keeps it there; 0.5 m let every
         // Jura hump launch it for a second at 100 km/h, and a car in the air cannot steer
-        FloorSnapLength = _ride switch { Flyer => 0.05f, Car => 1.2f, _ => 0.5f };
+        FloorSnapLength = _ride switch { Flyer => 0.05f, Car or Motorbike => 1.2f, _ => 0.5f };
 
         // the body is the machine's size while in it — a helicopter is not a 0.3 m person
         if (_capsule != null && !_sliding)
@@ -1286,6 +1288,7 @@ public partial class FootPlayer : CharacterBody3D
             SetBodyHeight(_ride?.BodyHeight ?? StandHeight);
         }
         _settle = SettleTime;
+        _shortfall = 0f;
         Velocity = velocity;
         _lookYaw = 0f;
         _turnLag = 0f;
@@ -1984,9 +1987,14 @@ public partial class FootPlayer : CharacterBody3D
         // motion every single frame. Clamping to it directly compounds those dips — measured at
         // 107 m of riding down to 11 m on flat ground, a bike bled to walking pace by nothing
         // but the terrain's own roughness. Only a shortfall that persists is an impact.
+        //
+        // The SHORTFALL is what is smoothed, not the speed: a smoothed speed lags any hard
+        // acceleration by a/ImpactResponse, and past the tolerance that lag read as a wall — it
+        // capped every launch at 6 m/s² (a motorbike measured 0-100 in 5.2 s instead of 3.3).
         var real = GetRealVelocity();
         float achieved = new Vector2(real.X, real.Z).Length();
-        _realSpeed = Mathf.Lerp(_realSpeed, achieved, 1f - Mathf.Exp(-ImpactResponse * dt));
+        _shortfall = Mathf.Lerp(_shortfall, Mathf.Max(0f, _motion.Speed - achieved), 1f - Mathf.Exp(-ImpactResponse * dt));
+        _realSpeed = _motion.Speed - _shortfall;
         if (_realSpeed < _motion.Speed - ImpactTolerance)
         {
             float before = _motion.Speed;

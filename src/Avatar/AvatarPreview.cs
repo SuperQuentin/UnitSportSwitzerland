@@ -162,6 +162,11 @@ public partial class AvatarPreview : Node3D
             MaterialOverride = material,
         });
 
+        // 5, 6: the motorbikes with their riders (--focus r1 / monster)
+        // (5 + N: the catalog's Nth bike)
+        for (int i = 0; i < Player.MotorbikeCatalog.All.Count; i++)
+            subjects.Add(Motorcyclist.Create(Player.MotorbikeCatalog.All[i].Look, 1 + 2 * i));
+
         Camera3D camera;
         if (_focus >= 0 && _focus < subjects.Count)
         {

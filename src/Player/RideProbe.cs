@@ -8,7 +8,8 @@ namespace UnitSport.Player;
 /// Verification helper: mounts a vehicle, holds the throttle, and reports what happened.
 ///
 /// <para>
-/// <c>godot --path . -- --ride bike|skis|car[:N],seconds[,out.png] [--at E,N]</c>
+/// <c>godot --path . -- --ride bike|skis|car[:N]|r1|monster,seconds[,out.png] [--at E,N] [--heading deg]</c>
+/// (<c>--heading</c>: compass bearing to ride along, 0 = north, 90 = east)
 /// </para>
 ///
 /// <para>
@@ -35,6 +36,9 @@ public partial class RideProbe : Node
     private Vector3 _start;
     private bool _mounted;
     private bool _done;
+    private readonly System.Collections.Generic.List<float> _reached = new();
+    /// <summary>A motorbike's worst use of its wheelie / stoppie limit; 1 or more would be a flip.</summary>
+    private float _worstPitch;
 
     public RideProbe(ChunkManager chunks, WorldOrigin origin, RideKind kind, double seconds,
         string? shot = null)
@@ -65,6 +69,10 @@ public partial class RideProbe : Node
             {
                 "bike" or "roadbike" => RideKind.RoadBike,
                 "skis" or "ski" => RideKind.Skis,
+                "r1" => (RideKind)MotorbikeCatalog.First,
+                "monster" => (RideKind)(MotorbikeCatalog.First + 1),
+                // moto:N = MotorbikeCatalog.All[N]
+                _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => (RideKind)(MotorbikeCatalog.First + b),
                 // car = the first in the roster, car:N = CarCatalog.All[N]
                 _ when name.StartsWith("car") => (RideKind)(CarCatalog.First
                     + (name.Length > 4 && int.TryParse(name[4..], out int n) ? n : 0)),
@@ -93,6 +101,13 @@ public partial class RideProbe : Node
             if (!_chunks.TryGetHeight(at, out float ground)) return;
 
             _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            // --heading is a compass bearing: a node faces −Z (north) and +yaw turns it toward −X
+            // (west). Set before the node enters the tree, whose _Ready takes its view from it.
+            var args = OS.GetCmdlineUserArgs();
+            int hi = System.Array.IndexOf(args, "--heading");
+            if (hi >= 0 && hi + 1 < args.Length && float.TryParse(args[hi + 1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out float bearing))
+                _player.Rotation = new Vector3(0, -Mathf.DegToRad(bearing), 0);
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, ground + 1.5f, at.Z);
             _start = _player.GlobalPosition;
@@ -118,6 +133,14 @@ public partial class RideProbe : Node
 
         _elapsed += delta;
         _topSpeed = Mathf.Max(_topSpeed, _player.RideSpeed);
+        foreach (float kmh in new[] { 100f, 200f })
+            if (_player.RideSpeed * 3.6f >= kmh && !_reached.Contains(kmh))
+            {
+                _reached.Add(kmh);
+                GD.Print($"[ride] 0-{kmh:F0} km/h in {_elapsed:F2} s");
+            }
+        if (_player.Vehicle is Motorbike moto)
+            _worstPitch = Mathf.Max(_worstPitch, Mathf.Abs(moto.PitchUse));
 
         _sinceReport += delta;
         if (_sinceReport >= 2.0)
@@ -138,7 +161,8 @@ public partial class RideProbe : Node
 
         GD.Print($"[ride] {_kind}: {travelled:F0} m in {_seconds:F0} s, "
             + $"top {_topSpeed:F1} m/s ({_topSpeed * 3.6f:F1} km/h), "
-            + $"climbed {end.Y - _startAltitude:F1} m");
+            + $"climbed {end.Y - _startAltitude:F1} m"
+            + (_player.Vehicle is Motorbike ? $", worst pitch {_worstPitch:P0} of the wheelie/stoppie limit" : ""));
         GD.Print(travelled > 5 && !underground
             ? "[ride] RESULT: rode under its own power and stayed on the surface"
             : underground

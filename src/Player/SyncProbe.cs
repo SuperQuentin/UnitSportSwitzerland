@@ -69,8 +69,8 @@ public partial class SyncProbe : Node
         ProcessPriority = 1;
     }
 
-    private static readonly string[] Stages = { "walk", "sprint", "jump", "slide", "stand", "bike", "brake", "car", "heli", "plane" };
-    private static readonly double[] StageEnd = { 3, 5, 6.5, 8, 9.5, 15.5, 18.5, 25.5, 31.5, 38.5 };
+    private static readonly string[] Stages = { "walk", "sprint", "jump", "slide", "stand", "bike", "brake", "car", "moto", "heli", "plane" };
+    private static readonly double[] StageEnd = { 3, 5, 6.5, 8, 9.5, 15.5, 18.5, 25.5, 32.5, 38.5, 45.5 };
     private double _stageStart;
     private int _ownerPoseKind;
 
@@ -115,7 +115,8 @@ public partial class SyncProbe : Node
             float turnedOn = _ownerCadence / 60f * Mathf.Tau * (float)Math.Max(delta, _lastDelta);
             float ce = _ownerCrank is { } oc && mv is Avatar.Cyclist mc
                 ? Math.Max(0f, Mathf.Abs(Mathf.AngleDifference(oc, mc.CrankAngle)) - turnedOn)
-                : _ownerCrank is { } os && mv is Avatar.CarRig mr ? Mathf.Abs(os - mr.SteerAngle) : 0f;
+                : _ownerCrank is { } os && mv is Avatar.CarRig mr ? Mathf.Abs(os - mr.SteerAngle)
+                : _ownerCrank is { } om && mv is Avatar.Motorcyclist mm ? Mathf.Abs(om - mm.SteerAngle) : 0f;
             var name = Stages[Math.Max(0, _stage)];
             var s = _byStage.GetValueOrDefault(name);
             _byStage[name] = (Math.Max(s.Basis, be), Math.Max(s.Hand, he), Math.Max(s.Crank, ce), s.N + 1,
@@ -144,6 +145,7 @@ public partial class SyncProbe : Node
         {
             Avatar.Cyclist c => c.CrankAngle,
             Avatar.CarRig r => r.SteerAngle,   // a car's moving part: the front wheels
+            Avatar.Motorcyclist mb => mb.SteerAngle,
             _ => null,
         };
         _ownerCadence = _owner.Visual is Avatar.Cyclist cc ? cc.CadenceRpm : 0f;
@@ -207,6 +209,12 @@ public partial class SyncProbe : Node
                 _owner!.RideControls = () => new RideInput(1f, 0f, Mathf.Sin((float)_t * 1.1f) * 0.8f, false,
                     Handbrake: _t % 2.5 < 0.35);
                 break;
+            case "moto":
+                // a motorbike weaving: lean both ways, the bars and wheels on the mirror
+                Mount(RideKind.OnFoot);
+                Mount((RideKind)MotorbikeCatalog.First);
+                _owner!.RideControls = () => new RideInput(0.5f, 0f, Mathf.Sin((float)_t * 1.4f) * 0.8f, false);
+                break;
             case "heli":
                 _owner!.RideControls = null;
                 Mount(RideKind.Helicopter);
@@ -241,7 +249,7 @@ public partial class SyncProbe : Node
             + $"hand {_freshHand:F4} m (< {FreshErr}), crank {_freshCrank:F3} rad (< {FreshCrank})");
         bool ok = _samples > 200 && _basisErr < MaxBasisErr && _handErr < MaxHandErr && _crankErr < MaxCrankErr
             && _freshBasis < FreshErr && _freshHand < FreshErr && _freshCrank < FreshCrank
-            && _byStage.ContainsKey("bike") && _byStage.ContainsKey("plane");
+            && _byStage.ContainsKey("bike") && _byStage.ContainsKey("moto") && _byStage.ContainsKey("plane");
         GD.Print($"[synccheck] max pose {_basisErr:F3} (< {MaxBasisErr}), hand {_handErr:F3} m (< {MaxHandErr}), "
             + $"crank {_crankErr:F3} rad beyond a frame of cadence (< {MaxCrankErr}), {_samples} frames, {_kindMismatch} frames waiting on a ride change");
         GD.Print(ok ? "[synccheck] RESULT: ok" : "[synccheck] RESULT: FAILED");
