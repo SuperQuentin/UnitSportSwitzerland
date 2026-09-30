@@ -58,7 +58,7 @@ public static class PlayerReplication
         };
         npc.SetMultiplayerAuthority((int)owner);
         // the driver; frees itself on every peer but the owner
-        npc.AddChild(new World.RaceNpc { Name = World.RaceNpc.NodeName, Kind = (RideKind)d[2].AsInt32() });
+        npc.AddChild(new World.RaceNpc { Name = World.RaceNpc.NodeName, Id = NpcId(owner, n), Kind = (RideKind)d[2].AsInt32() });
         return npc;
     }
 }

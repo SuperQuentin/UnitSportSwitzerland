@@ -7,35 +7,29 @@ namespace UnitSport.World;
 /// <summary>
 /// The driver of a race NPC (issue #39): a child of an NPC <see cref="FootPlayer"/> that exists
 /// only on the NPC's owner. The NPC is a real racer — the same body, car and physics as a player,
-/// replicated by the same synchronizer, solid to everyone — simulated on the client that asked for
-/// it, and driven by an <see cref="AutoPilot"/> through <see cref="FootPlayer.RideControls"/>.
+/// replicated like one (NetPos from its owner), solid to everyone — simulated on the client that
+/// asked for it, and driven by an <see cref="AutoPilot"/> through <see cref="FootPlayer.RideControls"/>.
 ///
 /// <para>
-/// The race glue is the two marked methods: <see cref="OnRaceSetup"/> (grid slot, countdown) and
-/// <see cref="ReportProgress"/> (checkpoints and the line, reported through
-/// <see cref="Checkpoint"/> / <see cref="Crossed"/>, which the race manager wires to its RPCs).
+/// The race is <see cref="RaceManager"/>'s: it hands this NPC its grid slot
+/// (<see cref="RaceManager.NpcSetup"/>), reports its checkpoints from the position given to
+/// <see cref="RaceManager.TrackNpc"/>, and says when it finished or was dropped.
 /// </para>
 /// </summary>
 public partial class RaceNpc : Node
 {
     public const string NodeName = "Npc";
-    private const float CheckpointEvery = 200f, CheckpointReach = 30f;
 
-    /// <summary>The car it drives (a <see cref="CarCatalog"/> kind).</summary>
+    /// <summary>Its entrant id, <c>-(owner * 1000 + n)</c>.</summary>
+    public long Id { get; set; }
+
+    /// <summary>What it rides (a class <see cref="AutoPilot.Drives"/>).</summary>
     public RideKind Kind { get; set; }
 
-    /// <summary>Race glue: a checkpoint passed, in order.</summary>
-    public System.Action<int>? Checkpoint;
-
-    /// <summary>Race glue: the finish line crossed.</summary>
-    public System.Action? Crossed;
-
     private FootPlayer _me = null!;
+    private RaceManager? _race;
     private RaceRoute? _route;
-    private float _finish;
-    private int _next;
     private double _goIn;
-    private bool _going, _done;
     private AutoPilot? _pilot;
 
     private static RideInput Hold() => new(0f, 0f, 0f, false, Handbrake: true);
@@ -45,81 +39,65 @@ public partial class RaceNpc : Node
         _me = GetParent<FootPlayer>();
         if (!_me.IsMultiplayerAuthority()) { QueueFree(); return; }
         _me.RideControls = Hold;
+        _race = _me.GetParent()?.GetParent()?.GetNodeOrNull<RaceManager>(RaceManager.NodeName);
+        if (_race == null) return;
+        _race.NpcSetup += OnSetup;
+        _race.NpcFinished += OnFinished;
+        _race.NpcDropped += OnDropped;
+    }
+
+    public override void _ExitTree()
+    {
+        if (_race == null) return;
+        _race.NpcSetup -= OnSetup;
+        _race.NpcFinished -= OnFinished;
+        _race.NpcDropped -= OnDropped;
     }
 
     public override void _PhysicsProcess(double delta)
     {
-        // in its car, and back in it after being thrown out (the mount waits for the ground)
+        // on its mount, and back on it after being thrown off (the mount waits for the ground)
         if (_me.Ride != Kind && _me.IsOnFloor()) _me.SetRide(Kind);
-        if (_route == null || _done) return;
-        if (!_going)
-        {
-            _goIn -= delta;
-            if (_goIn > 0) return;
-            _going = true;
-            if (CarCatalog.For(Kind) is { } spec)
-            {
-                var pilot = _pilot = new AutoPilot(_route, _me, spec);
-                _me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, Others(_me));
-            }
-        }
-        ReportProgress();
+        if (_route == null || _pilot != null || (_goIn -= delta) > 0) return;
+        _pilot = AutoPilot.For(_route, _me);   // null until it is on its mount: tried again next step
+        if (_pilot is not { } pilot) return;
+        _me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, RaceManager.Others(_me));
     }
 
-    // ---- race glue ----
-
-    /// <summary>On the grid at <paramref name="slot"/> of <paramref name="count"/>, handbrake on, GO in <paramref name="countdown"/> s.</summary>
-    public void OnRaceSetup(RaceRoute route, float finish, int slot, int count, double countdown)
+    private void OnSetup(RaceManager.NpcGrid g)
     {
+        if (g.NpcId != Id || g.Course.Route is not { } route) return;
         _route = route;
-        _finish = finish;
-        _next = 0;
-        _goIn = countdown;
-        _going = _done = false;
+        _goIn = g.Countdown;
         _pilot = null;
-        var line = route.Line;
-        float s = 12f + 15f * (count - 1 - slot);   // same single-file grid as the players'
-        var fwd = RaceRoute.Flat(line.PointAt(s + 2f) - line.PointAt(s - 2f)).Normalized();
-        _me.GlobalPosition = line.PointAt(s) + Vector3.Up * 1.2f;
-        _me.Rotation = new Vector3(0, Mathf.Atan2(-fwd.X, -fwd.Z), 0);
+        _me.GlobalPosition = g.At + Vector3.Up * 1.2f;
+        _me.Rotation = new Vector3(0, Mathf.Atan2(-g.Forward.X, -g.Forward.Z), 0);
         _me.RequestReplacement();   // stopped, and put down on the ground once it is there
         _me.RideControls = Hold;
-        GD.Print($"[npc] {_me.Name} on the grid, slot {slot + 1} of {count}, {finish:F0} m to go");
+        _race!.TrackNpc(Id, () => _me.GlobalPosition);
+        GD.Print($"[npc] {_me.Name} on the grid of race #{g.RaceId}");
     }
 
-    /// <summary>Checkpoints in order, then the line, from the NPC's position along the route.</summary>
-    private void ReportProgress()
+    private void OnFinished(long id, int position, double time)
     {
-        var line = _route!.Line;
-        int near = 0;
-        float best = float.MaxValue;
-        for (int i = 0; i < line.Points.Count; i += 2)
-        {
-            float d = RaceRoute.Flat(line.Points[i] - _me.GlobalPosition).LengthSquared();
-            if (d < best) { best = d; near = i; }
-        }
-        float arc = line.Arc[near];
-        if (Mathf.Sqrt(best) >= CheckpointReach) return;
-        while (arc >= (_next + 1) * CheckpointEvery && (_next + 1) * CheckpointEvery <= _finish)
-            Checkpoint?.Invoke(_next++);
-        if (arc < _finish) return;
-        Crossed?.Invoke();
+        if (id != Id) return;
         if (_pilot != null) _pilot.Finished = true;   // brake to a stop past the line
-        _done = true;
-        GD.Print($"[npc] {_me.Name} crossed the line");
+        GD.Print($"[npc] {_me.Name} finished P{position}");
     }
 
-    private static IEnumerable<AutoPilot.Other> Others(FootPlayer me)
+    private void OnDropped(long id)
     {
-        foreach (var node in me.GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (node is FootPlayer p && p != me)
-                yield return new AutoPilot.Other(p.GlobalPosition, p.Velocity.Length(), false);
+        if (id != Id) return;
+        _route = null;
+        _pilot = null;
+        _me.RideControls = Hold;
     }
 }
 
 /// <summary>
-/// Race NPCs on the server, at <c>World/Npcs</c> on both sides (RPCs route by path): spawns them
-/// through the player spawner for everyone, caps them, and removes them with their owner.
+/// Race NPCs on the server, at <c>World/Npcs</c> on both sides: spawns them through the player
+/// spawner for everyone (for <see cref="RaceManager"/>'s <c>/race npc</c>), caps them, and removes
+/// them when their race ends or their owner leaves.
 /// </summary>
 public partial class RaceNpcs : Node
 {
@@ -135,24 +113,13 @@ public partial class RaceNpcs : Node
 
     public static RaceNpcs CreateClient() => new() { Name = NodeName };
 
-    /// <summary>Client → server: <paramref name="count"/> NPCs in <paramref name="rideKind"/> next to the sender.</summary>
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    public void RequestNpc(int count, int rideKind, Vector3 at, float headingYaw)
-    {
-        if (_spawner != null) Spawn(Multiplayer.GetRemoteSenderId(), count, (RideKind)rideKind, at, headingYaw);
-    }
-
-    /// <summary>Server: spawns up to <paramref name="count"/> NPCs for <paramref name="owner"/>; returns their ids.</summary>
+    /// <summary>Server: spawns up to <paramref name="count"/> NPCs for <paramref name="owner"/> behind <paramref name="at"/>; returns their ids.</summary>
     public List<long> Spawn(long owner, int count, RideKind kind, Vector3 at, float yaw)
     {
         var ids = new List<long>();
-        // a ground mount the AutoPilot can drive: cars, for now
-        if (_spawner == null || !CarCatalog.IsCar(kind)) return ids;
-        if (_players!.GetNodeOrNull<Node3D>(owner.ToString()) is not { } me) return ids;
-        // the position is the client's word: only next to its own player
-        if (me.GlobalPosition.DistanceTo(at) > 60f) at = me.GlobalPosition;
+        if (_spawner == null || !AutoPilot.Drives(kind)) return ids;
         int owned = _live.Keys.Count(id => PlayerReplication.NpcOwner(id) == owner);
-        count = Mathf.Min(count, Mathf.Min(PerOwner - owned, Total - _players.GetChildCount()));
+        count = Mathf.Min(count, Mathf.Min(PerOwner - owned, Total - _players!.GetChildCount()));
         var back = new Vector3(Mathf.Sin(yaw), 0, Mathf.Cos(yaw));   // behind: forward is -Z turned by yaw
         for (int n = 1; n <= 999 && ids.Count < count; n++)
         {
@@ -167,16 +134,19 @@ public partial class RaceNpcs : Node
         return ids;
     }
 
-    /// <summary>Server: removes <paramref name="owner"/>'s NPCs, except those in <paramref name="keep"/>.</summary>
-    public void ForgetOwner(long owner, ICollection<long>? keep = null)
+    /// <summary>Server: removes these NPCs for everyone.</summary>
+    public void Retire(IEnumerable<long> ids)
     {
-        foreach (long id in _live.Keys.Where(id => PlayerReplication.NpcOwner(id) == owner && keep?.Contains(id) != true).ToList())
+        foreach (long id in ids.ToList())
         {
-            _live.Remove(id);
+            if (!_live.Remove(id)) continue;
             _players?.GetNodeOrNull(PlayerReplication.NodeName(id))?.QueueFree();
             GD.Print($"[npc] removed {PlayerReplication.NodeName(id)}");
         }
     }
+
+    /// <summary>Server: removes every NPC of <paramref name="owner"/>.</summary>
+    public void ForgetOwner(long owner) => Retire(_live.Keys.Where(id => PlayerReplication.NpcOwner(id) == owner));
 
     // ---- --npccheck (loopback test, on a client that does not own the NPCs): are they solid here? ----
     private readonly bool _check = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--npccheck") >= 0;
@@ -203,7 +173,7 @@ public partial class RaceNpcs : Node
         }
     }
 
-    /// <summary>The car an NPC drives, as its display name.</summary>
+    /// <summary>An NPC's display name: "NPC", what it rides, its number.</summary>
     public string Label(long id) =>
-        $"NPC {(_live.TryGetValue(id, out var kind) ? CarCatalog.For(kind)?.Label : null)} #{-id % 1000}";
+        $"NPC {(_live.TryGetValue(id, out var kind) ? RaceManager.MountName((int)kind) : null)} #{-id % 1000}";
 }
