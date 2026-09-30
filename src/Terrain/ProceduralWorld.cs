@@ -232,14 +232,14 @@ public sealed partial class ProceduralWorld
 
         var columns = new Column[size];
         for (int c = 0; c < size; c++) columns[c] = ColumnAt(id.MinE + c * step - CenterE);
-        // at stride 1 the blend is added a row at a time: the same numbers as Correction per point
-        var correction = blend != null && stride == 1 ? new double[size] : null;
+        // at stride 1 the blend is applied a row at a time: the same numbers as Correction per point
+        var row = new double[size];
+        bool byRow = blend != null && stride == 1;
 
         // row-major, so the writes and the lattice reads both walk memory in order
         for (int r = 0; r < size; r++)
         {
             double n = id.MaxN - r * step;
-            if (correction != null) blend!.CorrectionRow(n, correction);
             for (int c = 0; c < size; c++)
             {
                 double e = id.MinE + c * step;
@@ -247,10 +247,11 @@ public sealed partial class ProceduralWorld
                     ? OnLattice(e, n)
                     : SampleNoise(lattice, e, n);
                 double h = HeightAt(e - CenterE, n - CenterN, columns[c], massif, detail);
-                if (correction != null) h += correction[c];
-                else if (blend != null) h += blend.Correction(e, n);
-                heights[r * size + c] = ChunkFormat.Quantize(h);
+                if (blend != null && !byRow) h += blend.Correction(e, n, h);
+                row[c] = h;
             }
+            if (byRow) blend!.BlendRow(n, row);
+            for (int c = 0; c < size; c++) heights[r * size + c] = ChunkFormat.Quantize(row[c]);
         }
 
         // a vertex on a real tile's edge takes the real tile's height, to the bit
@@ -313,7 +314,7 @@ public sealed partial class ProceduralWorld
                         tile[r * side + c] = real;
                         continue;
                     }
-                    h += blend.Correction(e, n);
+                    h += blend.Correction(e, n, h);
                 }
                 tile[r * side + c] = ChunkFormat.Quantize(h);
             }
@@ -376,7 +377,7 @@ public sealed partial class ProceduralWorld
         const int lat = (size - 1) / CoverStep + 1;   // 101
         const int ext = lat + 2;                        // plus a border, for slopes at the edges
 
-        // heights at the samples, border included; the border is exactly the blend's S lattice
+        // heights at the samples, border included; the border is exactly the blend's lattice
         blend?.PrepareLattice();
         var h = new double[ext * ext];
         var corr = blend == null ? null : new double[ext * ext];
@@ -395,7 +396,7 @@ public sealed partial class ProceduralWorld
                 h[j * ext + i] = HeightAt(e - CenterE, n - CenterN, column, massif, detail);
                 if (blend != null)
                 {
-                    double c = blend.Correction(e, n);
+                    double c = blend.Correction(e, n, h[j * ext + i]);
                     h[j * ext + i] += c;
                     corr![j * ext + i] = c;
                 }

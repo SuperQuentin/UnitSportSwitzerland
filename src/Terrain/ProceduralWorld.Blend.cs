@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain;
@@ -9,14 +8,20 @@ public sealed partial class ProceduralWorld
     //
     // A generated tile next to real ones bends its ground to meet them:
     //
-    //     h(p) = G(p) + S(p) + D(p)
+    //     h(p) = (1 - W(p)) G(p) + W(p) R(p) + D(p)
     //
-    // G is the generator's own height. S swaps the generator's low-pass (Gs, G bilinear through a
-    // real tile's 100 m knot points) for the real one (Rs, the real tile's horizon knots), weighted
-    // by inverse distance over every real tile within Band and faded out across it. D, within
-    // DetailBand only, swaps the generator's residual (G - Gs) for the real one (R - Rs), so the
-    // real ground's roughness carries across the seam and dies out 150 m in. At a real edge
-    // h = G + (Rs - Gs) + (R - Rs) - (G - Gs) = R.
+    // G is the generator's own height. R is the real ground's low-pass carried outward: over every
+    // real tile within Band, the bilinear of its 100 m knots (Rs) at the tile's nearest point,
+    // weighted by inverse distance. W = 1 - smoothstep(0, Band, distance to the nearest real tile)
+    // hands the ground from one to the other. D, within DetailBand only, adds the real residual
+    // (R - Rs at the nearest point), so the real ground's roughness carries across the seam and
+    // dies out 150 m in. At a real edge W = 1, and h = Rs + (R - Rs) = R.
+    //
+    // A convex mix, not an additive correction. The first version added (Rs - Gs) to G — keeping
+    // the generator's relief and moving it to meet the real low-pass — and it dug trenches: where
+    // a steep generated flank met a real valley floor, the flank's fall away from the seam was kept
+    // at full size, and measured on real tiles at Riddes it put the ground 150 m BELOW the Rhone
+    // 200 m from the border. A mix of two heights always lies between them.
     //
     // Inverse distance, not "extrude the nearest edge": the nearest edge jumps on the medial axis
     // (a one-tile hole in a real region, a notch), which would be a cliff; IDW is continuous
@@ -24,15 +29,16 @@ public sealed partial class ProceduralWorld
     // as streaks.
     //
     // What keeps it seamless without any coordination between tiles:
-    //  - S at a point is a pure function of the point and the real tiles within Band of it, summed
-    //    in (N, E) order. Two generated tiles sharing an edge see the same real tiles there, so
-    //    they compute the same bits. S is sampled on a world-anchored 10 m lattice and interpolated,
-    //    so a stride-10 grid and the 100 m horizon land on lattice points and read the stored value
-    //    unchanged: coarse = decimated full, as with the noise lattice.
+    //  - W and W R at a point are pure functions of the point and the real tiles within Band of
+    //    it, summed in (N, E) order. Two generated tiles sharing an edge see the same real tiles
+    //    there, so they compute the same bits. Both are sampled on a world-anchored 10 m lattice
+    //    and interpolated, so a stride-10 grid and the 100 m horizon land on lattice points and
+    //    read the stored values unchanged: coarse = decimated full, as with the noise lattice. G
+    //    is exact per point on every path, and they all combine the three the same way (Mix).
     //  - D is exact per point, and at a 100 m point the nearest point on every real tile is one of
-    //    its knots, where R - Rs = 0 and G - Gs = 0 exactly. So the horizon needs no real grid.
+    //    its knots, where R - Rs = 0 exactly. So the horizon needs no real grid.
     //  - A generated vertex on a real tile's edge copies that tile's quantised height, which makes
-    //    the seam bit-identical where S + D only gets within millimetres.
+    //    the seam bit-identical where the mix only gets within millimetres.
 
     /// <summary>Width of the band across which generated ground bends to meet real ground.</summary>
     public const double Band = 3000;
@@ -52,14 +58,14 @@ public sealed partial class ProceduralWorld
     /// </summary>
     private const double Soften = 0.01;
 
-    /// <summary>Spacing of the S lattice; a divisor of the coarse stride and of the horizon's 100 m.</summary>
+    /// <summary>Spacing of the W / W R lattice; a divisor of the coarse stride and of the horizon's 100 m.</summary>
     private const int SStep = 10;
     private const int SBorder = 1;
     private const int SSide = (int)(ChunkFormat.TileSizeM / SStep) + 1 + 2 * SBorder;
 
     /// <summary>
     /// Steepest a blend may tilt a river bed and keep it water (a grade). The test is on the
-    /// correction's gradient, not its size: S is non-zero across the whole band, so "moved by more
+    /// correction's gradient, not its size: it is non-zero across the whole band, so "moved by more
     /// than half a metre" took every river within 3 km of real ground, flat beds included. At 1.5%
     /// a 22 m bed leans 0.3 m bank to bank, and a river's own grade stays plausible.
     /// </summary>
@@ -128,35 +134,10 @@ public sealed partial class ProceduralWorld
         var near = reals
             .Where(r => r.Id != tile && SquareGap(tile, r.Id) <= NearReach)
             .OrderBy(r => r.Id.N).ThenBy(r => r.Id.E)
-            .Select(r => new Blend.Entry(r, GKnots(r.Id)))
+            .Select(r => new Blend.Entry(r))
             .ToArray();
         return near.Length == 0 ? null : new Blend(this, tile, version, near);
     }
-
-    private readonly ConcurrentDictionary<TileId, double[]> _gKnots = new();
-
-    /// <summary>
-    /// The generator's height at a real tile's knot points: the arithmetic of
-    /// <see cref="HorizonSamples"/> unquantised, which is also exactly what the grid path computes
-    /// at those points. Depends on nothing but the generator, so it is kept for good.
-    /// </summary>
-    private double[] GKnots(TileId k) => _gKnots.GetOrAdd(k, id =>
-    {
-        const int side = HorizonFormat.SamplesPerSide;
-        var g = new double[HorizonFormat.SamplesPerTile];
-        for (int c = 0; c < side; c++)
-        {
-            double e = id.MinE + c * HorizonFormat.SpacingM;
-            var column = ColumnAt(e - CenterE);
-            for (int r = 0; r < side; r++)
-            {
-                double n = id.MaxN - r * HorizonFormat.SpacingM;
-                var (massif, detail) = OnLattice(e, n);
-                g[r * side + c] = HeightAt(e - CenterE, n - CenterN, column, massif, detail);
-            }
-        }
-        return g;
-    });
 
     /// <summary>Bilinear through a tile's 11x11 knots. Exactly the knot on a knot, edges included.</summary>
     private static double KnotAt(double[] knots, TileId k, double e, double n)
@@ -195,13 +176,14 @@ public sealed partial class ProceduralWorld
 
     public sealed class Blend
     {
-        internal sealed record Entry(RealTile Real, double[] GKnots);
+        internal sealed record Entry(RealTile Real);
 
         private readonly ProceduralWorld _world;
         private readonly Entry[] _near;
         private readonly Entry[] _details;
+        /// <summary>The W lattice and the W R lattice, interleaved: one reference, so a race cannot tear them.</summary>
         private double[]? _s;
-        private readonly long _i0, _j0;   // lattice index of the S lattice's first point
+        private readonly long _i0, _j0;   // lattice index of the lattice's first point
 
         /// <summary>
         /// Per detail tile, its det at every whole metre of this tile's four edges (NaN until
@@ -243,28 +225,46 @@ public sealed partial class ProceduralWorld
             }
         }
 
-        /// <summary>S + D at an LV95 point: what to add to the generated height there.</summary>
-        public double Correction(double e, double n) => S(e, n) + D(e, n);
-
-        // ---- S -------------------------------------------------------------------------------
+        /// <summary>
+        /// What to add to the generated height <paramref name="g"/> at an LV95 point: the ground
+        /// there is <c>g + Correction(e, n, g)</c>, on every path.
+        /// </summary>
+        public double Correction(double e, double n, double g)
+        {
+            var (w, wr) = S(e, n);
+            return Mix(g, w, wr, D(e, n));
+        }
 
         /// <summary>
-        /// Fills the tile's S lattice, for the builds that ask for S at most points of the tile.
-        /// A stride-10 grid or the horizon reads a few thousand lattice points and computes them
-        /// on the spot; either way the value is the same function of the point.
+        /// The one place the parts combine: (1 - W) G + W R + D, as a correction to G. The row
+        /// path and the point path both come through here, so they agree to the bit.
+        /// </summary>
+        private static double Mix(double g, double w, double wr, double d) => wr - w * g + d;
+
+        // ---- W and W R ------------------------------------------------------------------------
+
+        /// <summary>
+        /// Fills the tile's lattice, for the builds that ask at most points of the tile. A stride-10
+        /// grid or the horizon reads a few thousand lattice points and computes them on the spot;
+        /// either way the value is the same function of the point.
         /// </summary>
         public void PrepareLattice()
         {
             if (_s != null) return;
-            var s = new double[SSide * SSide];
+            var s = new double[2 * SSide * SSide];
             for (int lj = 0; lj < SSide; lj++)
                 for (int li = 0; li < SSide; li++)
-                    s[lj * SSide + li] = ExactS((_i0 + li) * (double)SStep, (_j0 + lj) * (double)SStep);
+                {
+                    var (w, wr) = Exact((_i0 + li) * (double)SStep, (_j0 + lj) * (double)SStep);
+                    int k = 2 * (lj * SSide + li);
+                    s[k] = w;
+                    s[k + 1] = wr;
+                }
             // a race only computes the same numbers twice
             _s = s;
         }
 
-        private double S(double e, double n)
+        private (double W, double WR) S(double e, double n)
         {
             double ci = Math.Floor(e / SStep), cj = Math.Floor(n / SStep);
             double u = (e - ci * SStep) / SStep, v = (n - cj * SStep) / SStep;
@@ -274,27 +274,39 @@ public sealed partial class ProceduralWorld
             if (s != null && li >= 0 && lj >= 0 && li + 1 < SSide && lj + 1 < SSide)
             {
                 int k = (int)(lj * SSide + li);
-                return Bilerp(s[k], s[k + 1], s[k + SSide], s[k + SSide + 1], u, v);
+                return Interpolate(s, k, u, v);
             }
-            if (u == 0 && v == 0) return SAt(i, j);
-            return Bilerp(SAt(i, j), SAt(i + 1, j), SAt(i, j + 1), SAt(i + 1, j + 1), u, v);
+            if (u == 0 && v == 0) return At(i, j);
+            var (a, b, c, d) = (At(i, j), At(i + 1, j), At(i, j + 1), At(i + 1, j + 1));
+            return (Bilerp(a.W, b.W, c.W, d.W, u, v), Bilerp(a.WR, b.WR, c.WR, d.WR, u, v));
         }
 
-        private double SAt(long i, long j)
+        /// <summary>Both lattices at a cell: the same Bilerp the corner-by-corner path does.</summary>
+        private static (double W, double WR) Interpolate(double[] s, int k, double u, double v)
+        {
+            int a = 2 * k, b = 2 * (k + 1), c = 2 * (k + SSide), d = 2 * (k + SSide + 1);
+            return (Bilerp(s[a], s[b], s[c], s[d], u, v), Bilerp(s[a + 1], s[b + 1], s[c + 1], s[d + 1], u, v));
+        }
+
+        private (double W, double WR) At(long i, long j)
         {
             var s = _s;
             long li = i - _i0, lj = j - _j0;
-            if (s != null && li >= 0 && lj >= 0 && li < SSide && lj < SSide) return s[lj * SSide + li];
-            return ExactS(i * (double)SStep, j * (double)SStep);
+            if (s != null && li >= 0 && lj >= 0 && li < SSide && lj < SSide)
+            {
+                int k = (int)(2 * (lj * SSide + li));
+                return (s[k], s[k + 1]);
+            }
+            return Exact(i * (double)SStep, j * (double)SStep);
         }
 
         /// <summary>
-        /// The smooth correction at a point: inverse-distance weighted real-minus-generated
-        /// low-pass over every real tile within Band, faded out by distance to the nearest.
+        /// W, how much of the ground here is real, and W R: the real low-pass carried outward,
+        /// inverse-distance weighted over every real tile within Band, times W.
         /// </summary>
-        private double ExactS(double e, double n)
+        private (double W, double WR) Exact(double e, double n)
         {
-            double sw = 0, swsm = 0, minD = double.MaxValue;
+            double sw = 0, swr = 0, minD = double.MaxValue;
             foreach (var x in _near)
             {
                 var k = x.Real.Id;
@@ -302,12 +314,12 @@ public sealed partial class ProceduralWorld
                 if (d >= Band) continue;
                 if (d < minD) minD = d;
                 double w = (1 - SmoothStep(0, Band, d)) / (d * d + Soften);
-                double sm = KnotAt(x.Real.Knots, k, qe, qn) - KnotAt(x.GKnots, k, qe, qn);
                 sw += w;
-                swsm += w * sm;
+                swr += w * KnotAt(x.Real.Knots, k, qe, qn);
             }
-            if (sw == 0) return 0;
-            return (1 - SmoothStep(0, Band, minD)) * swsm / sw;
+            if (sw == 0) return (0, 0);
+            double weight = 1 - SmoothStep(0, Band, minD);
+            return (weight, weight * (swr / sw));
         }
 
         // ---- D -------------------------------------------------------------------------------
@@ -335,8 +347,8 @@ public sealed partial class ProceduralWorld
         }
 
         /// <summary>
-        /// The real residual minus the generated one at a detail tile's point: what D carries
-        /// across the seam. Zero at a knot, where both residuals are exactly zero.
+        /// The real residual at a detail tile's point — the ground's roughness the 100 m knots do not
+        /// hold, which D carries across the seam. Zero at a knot.
         /// </summary>
         private double Det(int detail, double qe, double qn)
         {
@@ -346,9 +358,7 @@ public sealed partial class ProceduralWorld
 
             var x = _details[detail];
             var k = x.Real.Id;
-            double real = RealAt(x.Real.Grid!, qe, qn) - KnotAt(x.Real.Knots, k, qe, qn);
-            double gen = _world.Height(qe, qn) - KnotAt(x.GKnots, k, qe, qn);
-            double det = real - gen;
+            double det = RealAt(x.Real.Grid!, qe, qn) - KnotAt(x.Real.Knots, k, qe, qn);
             // a race only stores the same number twice
             if (slot >= 0) memo[slot] = det;
             return det;
@@ -372,12 +382,13 @@ public sealed partial class ProceduralWorld
 
         /// <summary>
         /// <see cref="Correction"/> along one row of a stride-1 grid, to the bit, without redoing
-        /// per vertex what only changes per row or per column. Needs <see cref="PrepareLattice"/>.
+        /// per vertex what only changes per row or per column: <paramref name="g"/> holds the
+        /// generated heights of the row, and receives the blended ones. Needs <see cref="PrepareLattice"/>.
         /// </summary>
-        internal void CorrectionRow(double n, double[] into)
+        internal void BlendRow(double n, double[] g)
         {
-            var s = _s ?? throw new InvalidOperationException("CorrectionRow before PrepareLattice");
-            if (into.Length != ChunkFormat.GridSize) throw new ArgumentException("CorrectionRow is for stride-1 rows");
+            var s = _s ?? throw new InvalidOperationException("BlendRow before PrepareLattice");
+            if (g.Length != ChunkFormat.GridSize) throw new ArgumentException("BlendRow is for stride-1 rows");
 
             // the same u, v and cells S computes, so the same Bilerp on the same numbers
             var cells = _rowCells ??= ColumnCells();
@@ -388,12 +399,11 @@ public sealed partial class ProceduralWorld
             int rowK = (int)(((long)cj - _j0) * SSide);
             bool nearRowEdge = _details.Length > 0 && Math.Min(n - _minN, _maxN - n) < DetailBand;
 
-            for (int c = 0; c < into.Length; c++)
+            for (int c = 0; c < g.Length; c++)
             {
-                int k = rowK + colK[c];
-                double sv = Bilerp(s[k], s[k + 1], s[k + SSide], s[k + SSide + 1], colU[c], v);
+                var (w, wr) = Interpolate(s, rowK + colK[c], colU[c], v);
                 bool nearEdge = nearRowEdge || (_details.Length > 0 && (c < DetailBand || c > ChunkFormat.TileSizeM - DetailBand));
-                into[c] = sv + (nearEdge ? D(_minE + c, n) : 0);
+                g[c] += Mix(g[c], w, wr, nearEdge ? D(_minE + c, n) : 0);
             }
         }
 
@@ -458,8 +468,9 @@ public sealed partial class ProceduralWorld
         internal bool WaterAllowed(double e, double n)
         {
             const double d = CoverStep;
-            double gx = (Correction(e + d, n) - Correction(e - d, n)) / (2 * d);
-            double gy = (Correction(e, n + d) - Correction(e, n - d)) / (2 * d);
+            double C(double pe, double pn) => Correction(pe, pn, _world.Height(pe, pn));
+            double gx = (C(e + d, n) - C(e - d, n)) / (2 * d);
+            double gy = (C(e, n + d) - C(e, n - d)) / (2 * d);
             return WaterAllowed(Math.Sqrt(gx * gx + gy * gy));
         }
 
@@ -478,6 +489,6 @@ public sealed partial class ProceduralWorld
     private double Ground(in Site site, double e, double n)
     {
         double h = Height(site.Noise, e, n);
-        return site.Blend is { } b ? h + b.Correction(e, n) : h;
+        return site.Blend is { } b ? h + b.Correction(e, n, h) : h;
     }
 }

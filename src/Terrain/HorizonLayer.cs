@@ -54,7 +54,9 @@ public partial class HorizonLayer : Node3D
         _origin = origin;
         _material = material;
         _anchors = anchors;
-        Reload();
+        // deferred, so a source configured right after (the generated fill) is read once, not
+        // twice: whoever reloads first this frame wins, and this then finds it loading
+        Callable.From(() => { if (_index == null && !_loading) Reload(); }).CallDeferred();
     }
 
     /// <summary>

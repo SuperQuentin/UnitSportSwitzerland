@@ -176,7 +176,8 @@ foreach (var t in gen.Where(t => real.Any(k => Math.Abs(k.E - t.E) <= 1 && Math.
         {
             double e = t.MinE + c, n = t.MaxN - r;
             pChecked++;
-            if (ChunkFormat.Quantize(world.Height(e, n) + fb.Correction(e, n)) != g.HeightAt(c, r)) pBad++;
+            double gh = world.Height(e, n);
+            if (ChunkFormat.Quantize(gh + fb.Correction(e, n, gh)) != g.HeightAt(c, r)) pBad++;
         }
 }
 Check($"vertices where the point path differs from the grid ({pChecked} checked)", pBad);
@@ -225,11 +226,48 @@ foreach (var t in gen)
         {
             double e = de == -1 ? t.MinE : de == 1 ? t.MinE + 1000 : t.MinE + i;
             double n = dn == 1 ? t.MaxN : dn == -1 ? t.MinN : t.MaxN - i;
-            preMax = Math.Max(preMax, Math.Abs(world.Height(e, n) + fb.Correction(e, n) - realFull[k].SampleMeshHeight(e, n)));
+            double gh = world.Height(e, n);
+            preMax = Math.Max(preMax, Math.Abs(gh + fb.Correction(e, n, gh) - realFull[k].SampleMeshHeight(e, n)));
         }
     }
 }
-WriteLine($"  S + D at real edges before the vertex copy: within {preMax * 100:F1} cm");
+WriteLine($"  the blend at real edges before the vertex copy: within {preMax * 100:F1} cm");
+
+// Blended ground lies between the generated and the real: never past both. The first, additive
+// blend kept the generator's relief at full size and dug a trench 150 m below both where a steep
+// generated flank met a real valley floor. Measured against the lowest and highest real knot the
+// tile's blend can see, plus the real residual D carries (the synthetic ground's own roughness).
+double residual = 0;
+foreach (var k in real)
+    for (int r = 0; r < ChunkFormat.GridSize; r += 7)
+        for (int c = 0; c < ChunkFormat.GridSize; c += 7)
+        {
+            double e = k.MinE + c, n = k.MaxN - r;
+            double u = c / (double)HorizonFormat.Stride, v = r / (double)HorizonFormat.Stride;
+            int kc = Math.Min((int)u, HorizonFormat.SamplesPerSide - 2), kr = Math.Min((int)v, HorizonFormat.SamplesPerSide - 2);
+            double K(int cc, int rr) => ChunkFormat.Dequantize(knots[k][rr * HorizonFormat.SamplesPerSide + cc]);
+            double fu = u - kc, fv = v - kr;
+            double rs = (K(kc, kr) * (1 - fu) + K(kc + 1, kr) * fu) * (1 - fv) + (K(kc, kr + 1) * (1 - fu) + K(kc + 1, kr + 1) * fu) * fv;
+            residual = Math.Max(residual, Math.Abs(realFull[k].HeightMetersAt(c, r) - rs));
+        }
+double excursion = 0;
+foreach (var t in gen)
+{
+    var near = ProceduralWorld.BlendWindow(t).Where(real.Contains).ToList();
+    if (near.Count == 0) continue;
+    double rmin = near.Min(k => knots[k].Min(q => ChunkFormat.Dequantize(q)));
+    double rmax = near.Max(k => knots[k].Max(q => ChunkFormat.Dequantize(q)));
+    var g = full[t];
+    for (int r = 0; r < g.Size; r += 3)
+        for (int c = 0; c < g.Size; c += 3)
+        {
+            double gh = world.Height(t.MinE + c, t.MaxN - r), h = g.HeightMetersAt(c, r);
+            double lo = Math.Min(gh, rmin), hi = Math.Max(gh, rmax);
+            excursion = Math.Max(excursion, Math.Max(lo - h, h - hi));
+        }
+}
+WriteLine($"  furthest blended ground strays past both surfaces: {excursion:F1} m (real residual up to {residual:F1} m)");
+Check("blended ground past both the generated and the real (a trench or a ridge)", excursion > residual + 1 ? 1 : 0);
 
 WriteLine("content:");
 double treeErr = 0, roadErr = 0;

@@ -515,7 +515,7 @@ public partial class ChunkManager : Node3D
         _worldVersion++;
         _sinceEval = double.MaxValue;
         FitHorizonCoverage();
-        // the horizon started loading in Initialize, before the fill existed
+        // Initialize only deferred the horizon's first read: this is it, now with the fill
         Horizon?.Reload();
         GD.Print($"[terrain] generated fill {(snap.Enabled ? "on" : "off")}: "
             + $"{_available.Count} real tiles, domain {snap.Bounds}");
