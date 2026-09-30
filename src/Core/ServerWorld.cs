@@ -18,6 +18,7 @@ public partial class ServerWorld : Node3D
     private Node3D? _players;
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
+    private Items.RadioManager? _radios;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
@@ -93,6 +94,11 @@ public partial class ServerWorld : Node3D
         // vehicles standing in the world; the server spawns and removes them for everyone
         _vehicles = Vehicles.VehicleManager.Create(this, null);
         _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
+        // radios thrown into the world, and the CDs they play; the clock everyone plays them by
+        _radios = Items.RadioManager.Create(this);
+        _radios.PlayerPositions = _vehicles.PlayerPositions;
+        Audio.Cd.CdLibrary.Create(this, server: true);
+        Net.ClockSync.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
         AddChild(new World.AfricaTwinEgg(_chunks));
 
@@ -141,6 +147,7 @@ public partial class ServerWorld : Node3D
         // Serves generated terrain files to clients that lack them. Reads raw bytes straight
         // off disk, so it costs the server no decoding work.
         _streamer = ChunkStreamer.CreateServer(chunkDir);
+        _streamer.CdDirectory = Audio.Cd.CdLibrary.Directory;
         // no manifest.json to serve, but the clients still need the origin to adopt
         if (manifest.Tiles.Count == 0)
             _streamer.ManifestOverride = System.Text.Encoding.UTF8.GetBytes(new TerrainManifest
@@ -243,6 +250,7 @@ public partial class ServerWorld : Node3D
         GD.Print($"[server] peer {id} disconnected");
         _chat?.ReportDisconnect(id);
         _vehicles?.ForgetOwner(id);
+        _radios?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);

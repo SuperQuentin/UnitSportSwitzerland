@@ -53,6 +53,13 @@ public enum AssetKind
     /// its rings too.
     /// </summary>
     Horizon = 9,
+
+    /// <summary>
+    /// <c>&lt;id&gt;.ogg</c>, a burnt CD (<c>Audio/Cd</c>). Not a terrain file: served out of the
+    /// server's CD directory, with the CD id carried in the tile's E field. Ogg is already
+    /// compressed, so it goes out as is.
+    /// </summary>
+    Cd = 10,
 }
 
 /// <summary>
@@ -98,6 +105,7 @@ public static class AssetStream
         AssetKind.Trees => TreeFormat.FileName(id),
         AssetKind.Buildings => BuildingFormat.FileName(id),
         AssetKind.Holes => HoleFormat.FileName(id),
+        AssetKind.Cd => $"{id.E}.ogg",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -105,7 +113,7 @@ public static class AssetStream
     /// True for kinds whose format already compresses its own payload, so deflating again
     /// only burns CPU to add a few bytes.
     /// </summary>
-    public static bool IsAlreadyCompressed(AssetKind kind) => kind == AssetKind.Cover;
+    public static bool IsAlreadyCompressed(AssetKind kind) => kind is AssetKind.Cover or AssetKind.Cd;
 
     /// <summary>Deflates a payload, returning null when the result is not smaller.</summary>
     public static byte[]? TryCompress(byte[] payload)

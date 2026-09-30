@@ -65,6 +65,9 @@ public enum ItemId
     PumpkinHead = 47,
     SantaHat = 48,
     ReindeerAntlers = 49,
+
+    // ---- radio (src/Items/Radio*, src/Audio/Cd) ----
+    Radio = 50,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -89,6 +92,8 @@ public enum ItemUse
     Shoot,
     /// <summary>Use puts it on, or takes it off (a hat — <see cref="Inventory.Worn"/>).</summary>
     Wear,
+    /// <summary>Use throws it into the world, where it stays as a thing (<see cref="RadioManager"/>).</summary>
+    Throw,
 }
 
 /// <summary>
@@ -178,6 +183,10 @@ public static class ItemDefs
         Hat(ItemId.PumpkinHead, "Pumpkin head", "#e07818", "PH"),
         Hat(ItemId.SantaHat, "Santa hat", "#c81e24", "SH"),
         Hat(ItemId.ReindeerAntlers, "Reindeer antlers", "#7a5230", "RA"),
+
+        // radio (#104): thrown into the world, plays burned CDs for whoever stands near
+        new(ItemId.Radio, "Radio", "{use_item} throws it. Stand beside it and press {interact_mount} to play a CD or pick it up.",
+            ItemUse.Throw, 1, new Color(0.16f, 0.17f, 0.19f), "RD", 0, ItemCategory.Gear, 80f),
     };
 
     private static ItemDef Eat(ItemId id, string name, int stack, string tint, string glyph, float heal,
@@ -275,6 +284,10 @@ public static class ItemDefs
                     s.Tube(new Vector3(x, 0.025f, 0.08f), new Vector3(x, 0.025f, 0.72f), 0.011f, steel, 6);
                 break;
             }
+            case ItemId.Radio:
+                // the grip is the handle: the box hangs from the hand at its real 0.46 m
+                AppendRadio(s, new Vector3(0, -0.16f, 0));
+                break;
             default:
                 // no bespoke mesh: a thin card of the item's icon, one box per run of same-coloured pixels
                 AppendIconCard(s, id);
@@ -284,6 +297,34 @@ public static class ItemDefs
         var mesh = s.Build();
         HandMeshes[id] = mesh;
         return mesh;
+    }
+
+    /// <summary>
+    /// The boombox, shifted by <paramref name="offset"/>: a copy of <see cref="RadioBody.Mesh"/>'s
+    /// boxes (which is centred and cached for the thing lying in the world), so the held one can
+    /// hang from its handle instead.
+    /// </summary>
+    public static void AppendRadio(MeshScratch s, Vector3 offset)
+    {
+        const float w = 0.46f, h = 0.22f, d = 0.16f;
+        var shell = new Color(0.16f, 0.17f, 0.19f);
+        var grille = new Color(0.08f, 0.08f, 0.09f);
+        var chrome = new Color(0.72f, 0.74f, 0.76f);
+        var red = new Color(0.80f, 0.12f, 0.10f);
+        Vector3 P(float x, float y, float z) => new Vector3(x, y, z) + offset;
+        s.Box(P(0, 0, 0), new Vector3(w, h, d), shell);
+        foreach (float x in new[] { -0.14f, 0.14f })
+        {
+            s.Box(P(x, -0.01f, d * 0.5f + 0.004f), new Vector3(0.13f, 0.13f, 0.008f), grille);
+            s.Ring(P(x, -0.01f, d * 0.5f + 0.009f), Vector3.Back, 0.03f, 0.06f, 0.004f, chrome, 12);
+        }
+        s.Box(P(0, -0.03f, d * 0.5f + 0.004f), new Vector3(0.11f, 0.06f, 0.008f), grille);
+        for (int i = 0; i < 4; i++)
+            s.Box(P(-0.045f + i * 0.03f, 0.06f, d * 0.5f + 0.006f), new Vector3(0.02f, 0.015f, 0.012f), i == 3 ? red : chrome);
+        s.Tube(P(-0.15f, h * 0.5f, 0), P(-0.15f, h * 0.5f + 0.05f, 0), 0.008f, chrome);
+        s.Tube(P(0.15f, h * 0.5f, 0), P(0.15f, h * 0.5f + 0.05f, 0), 0.008f, chrome);
+        s.Tube(P(-0.15f, h * 0.5f + 0.05f, 0), P(0.15f, h * 0.5f + 0.05f, 0), 0.008f, chrome);
+        s.Tube(P(0.20f, h * 0.5f, -0.04f), P(0.28f, h * 0.5f + 0.30f, -0.06f), 0.004f, chrome);
     }
 
     /// <summary>

@@ -9,3 +9,5 @@
   server account. Leaves its test deposit in the server's accounts file.
 - `--invuicheck`/`--econcheck` use a scratch inventory (`Inventory.Scratch`, `Persist = false`).
 - `<godot> --headless --path . -- --iconsheet`: renders every item icon to `test_output/iconsheet.png` (see `pixel-icons`).
+- `tools/radiocheck.sh` (`CHUNKS=<terrain_chunks dir>` from a worktree): dedicated server with `--cdfixture <wav>`,
+  `--radiocheck thrower` (headless) and `--radiocheck watch` (windowed) on loopback; see `radio`.

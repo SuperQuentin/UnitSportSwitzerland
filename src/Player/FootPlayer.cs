@@ -336,12 +336,24 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     [Export] public int ItemAction { get; set; }
 
+    /// <summary>
+    /// 0 not dancing, 1 dancing to the nearest playing radio. Replicated like <see cref="ItemAction"/>;
+    /// toggled by the owner with E beside a radio (<see cref="TryInteract"/>). The beat itself is
+    /// never replicated: every peer reads it off the radio and the shared clock
+    /// (<c>Items.RadioBody.BeatAt</c>), which is what keeps everyone on the same step.
+    /// </summary>
+    [Export] public int DanceId { get; set; }
+
     /// <summary>The arm pose currently drawn and its 0..1 blend, eased in and out on every peer.</summary>
     public Avatar.ItemArmPose DrawnArmPose => _itemArmCur;
     public float DrawnArmBlend => _itemArmBlend;
     private Avatar.ItemArmPose _itemArmCur;
     private float _itemArmBlend;
     private bool _itemArmInit;
+
+    /// <summary>The dance's 0..1 ease, and the radio it follows (kept through the ease-out).</summary>
+    private float _danceWeight;
+    private Items.RadioBody? _danceRadio;
 
     /// <summary>An item asking for a narrower view (binoculars, a camera's viewfinder); null for the normal FOV.</summary>
     public float? FovOverride { get; set; }
@@ -808,6 +820,7 @@ public partial class FootPlayer : CharacterBody3D
         replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
+        replication.AddProperty(".:DanceId");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -816,7 +829,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1302,6 +1315,9 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     private void PublishFootPose(float dt)
     {
+        // The owner decides when the dance is over: out of earshot, or doing anything else.
+        // Remotes only ease out on what they receive.
+        if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
 
@@ -1321,15 +1337,63 @@ public partial class FootPlayer : CharacterBody3D
             new Vector3(0, Mathf.Abs(_downRot) * 0.12f, 0));
     }
 
+    /// <summary>
+    /// Whether the owner may go on dancing: on foot, upright, outdoors, and a radio still playing
+    /// within a little more than the radius that let it start (hysteresis, so the edge of
+    /// earshot does not flicker).
+    /// </summary>
+    private bool DanceAllowed() =>
+        Ride == RideKind.OnFoot && !KnockedOut && !_sliding && !Indoors
+        && Items.RadioManager.Instance?.NearestPlaying(GlobalPosition, Items.RadioManager.DanceRadius * 1.15f) != null;
+
+    /// <summary>
+    /// The beat-driven pose for this frame, or null. Everything comes off the replicated
+    /// <see cref="DanceId"/>, the nearest playing radio and the shared clock, so the owner and every
+    /// remote copy compute the same move on the same beat with nothing else replicated. The
+    /// figure eases in and out over a quarter second, and keeps the last radio through the ease-out.
+    /// </summary>
+    private Avatar.DanceParams? StepDance(float dt)
+    {
+        Items.RadioBody? radio = null;
+        bool want = DanceId != 0 && Ride == RideKind.OnFoot && !KnockedOut && !_sliding;
+        if (want)
+        {
+            // a remote copy tolerates a wider ring: its position lags the owner's a little
+            radio = Items.RadioManager.Instance?.NearestPlaying(GlobalPosition, Items.RadioManager.DanceRadius * 1.3f);
+            want = radio != null;
+        }
+        _danceWeight = Mathf.MoveToward(_danceWeight, want ? 1f : 0f, dt * 4f);
+        if (radio != null) _danceRadio = radio;
+        if (_danceWeight <= 0.001f || _danceRadio == null || !IsInstanceValid(_danceRadio) || !_danceRadio.IsInsideTree()
+            || !_danceRadio.BeatAt(Net.ClockSync.ServerNow, out float phase, out int beat, out int bar, out var style))
+        {
+            _danceRadio = null;
+            _danceWeight = 0f;
+            return null;
+        }
+        // The move changes every couple of bars, the same one on every peer: a hash of the bar
+        // slot and the style, so a figure that joins mid-song lands on the move the others are on.
+        int slot = Mathf.FloorToInt(bar / (float)Avatar.HumanMeshBuilder.BarsPerMove);
+        uint h = (uint)slot * 2654435761u ^ (uint)style * 40503u;
+        h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
+        int move = (int)(h % (uint)Avatar.HumanMeshBuilder.MoveCount(style));
+        float barPhase = (beat - bar * 4 + phase) / 4f;
+        return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight);
+    }
+
     /// <summary>Draws the on-foot figure from the published pose — the same code for the owner and every remote copy.</summary>
     private void ApplyFootPose()
     {
         if (_walker == null) return;
         // the two held poses are cached, so a hat put on or taken off (#18) rebuilds them
         if (_poseHat != Hat) { _slidePose = null; _airPose = null; _poseHat = Hat; }
-        StepArmPose((float)GetProcessDeltaTime());
+        float dt = (float)GetProcessDeltaTime();
+        StepArmPose(dt);
+        var dance = StepDance(dt);
         var arm = _itemArmCur;
         float blend = _itemArmBlend;
+        // dancing, the hands are the dance's, unless the item is actually being aimed or used
+        if (dance != null && ItemAction == 0) { arm = Avatar.ItemArmPose.None; blend = 0f; }
         bool armed = arm != Avatar.ItemArmPose.None && blend > 0.001f;
         Avatar.HumanMeshBuilder.GaitMounts mounts;
         switch (PoseKind)
@@ -1345,8 +1409,8 @@ public partial class FootPlayer : CharacterBody3D
                 mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend);
                 break;
             default:
-                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend);
-                mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend);
+                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend, dance: dance);
+                mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance);
                 break;
         }
         _walker.Transform = BodyPose;
@@ -1500,9 +1564,24 @@ public partial class FootPlayer : CharacterBody3D
         }
         if (_ride != null || _mantling || _deadTimer > 0) return false;
 
+        // a radio within reach: its panel (play a CD, burn one, pick it up)
+        if (Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach) is { } radio)
+        {
+            Items.RadioUi.Instance?.Open(radio);
+            return true;
+        }
+
         var vehicle = Vehicles?.Nearest(GlobalPosition, EnterReach);
         if (vehicle == null)
+        {
+            // music in earshot: E starts or stops the dance
+            if (Items.RadioManager.Instance?.NearestPlaying(GlobalPosition, Items.RadioManager.DanceRadius) != null)
+            {
+                DanceId = DanceId == 0 ? 1 : 0;
+                return true;
+            }
             return IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true;
+        }
         Vehicles!.Claim(vehicle, EnterVehicle);
         return true;
     }

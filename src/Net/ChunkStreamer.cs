@@ -79,6 +79,12 @@ public partial class ChunkStreamer : Node
     /// </summary>
     public byte[]? ManifestOverride { get; set; }
 
+    /// <summary>
+    /// Server: where burnt CDs live (<c>Audio/Cd</c>). <see cref="AssetKind.Cd"/> requests are
+    /// served from here instead of the chunk directory; null means no CDs can be served.
+    /// </summary>
+    public string? CdDirectory { get; set; }
+
     /// <summary>Builds the server half, serving raw files out of a directory.</summary>
     public static ChunkStreamer CreateServer(string chunkDirectory) => new()
     {
@@ -229,8 +235,8 @@ public partial class ChunkStreamer : Node
             return;
         }
 
-        string path = System.IO.Path.Combine(
-            _serveDirectory!, AssetStream.FileNameFor(assetKind, tile));
+        string directory = assetKind == AssetKind.Cd ? CdDirectory ?? "" : _serveDirectory!;
+        string path = System.IO.Path.Combine(directory, AssetStream.FileNameFor(assetKind, tile));
 
         // Reading, checksumming and deflating half a megabyte is milliseconds of work, and on
         // the main thread it stalled every player's relay behind one client's download. A worker
