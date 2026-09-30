@@ -108,13 +108,15 @@ public partial class RaceManager : Node
         return "[race] " + verb switch
         {
             "start" => Start(sender, parts[1..], 0),
+            "duel" when parts.Length > 1 && parts[1].Equals("npc", System.StringComparison.OrdinalIgnoreCase) => Npc(sender, parts[2..], duel: true),
             "duel" => Duel(sender, parts),
+            "npc" => Npc(sender, parts[1..], duel: false),
             "join" => Join(sender, id),
             "leave" => Leave(sender),
             "cancel" => Cancel(sender, id),
             "list" => List(),
-            _ => "/race start [metres] [mount|open]  /race start air <place|metres> [mount]  /race duel <player> [...]  "
-                + "/race join [id]  /race leave  /race cancel [id]  /race list — mounts: foot bike skis car <car> moto monster "
+            _ => "/race start [metres] [mount|open]  /race start air <place|metres> [mount]  /race duel <player|npc> [...]  "
+                + "/race npc [n] [metres] [mount]  /race join [id]  /race leave  /race cancel [id]  /race list — mounts: foot bike skis car <car> moto monster "
                 + "plane heli paraglider wingsuit",
         };
     }
@@ -206,7 +208,9 @@ public partial class RaceManager : Node
         race.Phase = Phase.Entry;
         race.EntryEnds = _clock + EntryWindow;
         float km = (race.Air ? course!.Length : Mathf.Min(race.Metres, RaceCourse.MaxLength(route!, MinEntrants))) / 1000f;
-        if (race.Invited != 0)
+        if (race.Invited < 0)
+            _chat?.Tell(race.Host, $"[race] #{id} {km:0.0} km {race.What} against {Who(race.Invited)}", ChatKind.System);
+        else if (race.Invited != 0)
         {
             _chat?.Tell(race.Invited, $"[race] #{id} {Who(race.Host)} challenges you to a {km:0.0} km {race.What} — /race join {id} within {EntryWindow:0} s", ChatKind.System);
             _chat?.Tell(race.Host, $"[race] #{id} waiting for {Who(race.Invited)} to accept", ChatKind.System);
@@ -236,6 +240,56 @@ public partial class RaceManager : Node
         _names[entrant] = Who(entrant);   // kept: a racer who disconnects still has a name in the results
         race.Entrants.Add(entrant);
         _raceOf[entrant] = race.Id;
+    }
+
+    // ---- NPC entrants (issue #39): spawned by World/Npcs next to their owner, simulated on its client ----
+
+    private RaceNpcs? Npcs => GetParent()?.GetNodeOrNull<RaceNpcs>(RaceNpcs.NodeName);
+
+    /// <summary>
+    /// <c>/race npc [n] [metres] [mount]</c>: n NPCs into the race the sender has open, or a new
+    /// race with them. <c>/race duel npc [metres] [mount]</c>: a duel against one NPC. The mount is
+    /// the race's, else the one asked for, else the sender's car, else the AE86.
+    /// </summary>
+    private string Npc(long sender, string[] args, bool duel)
+    {
+        int count = 1;
+        // a small number is a count; a large one is the distance
+        if (!duel && args.Length > 0 && int.TryParse(args[0], out int n) && n <= RaceNpcs.PerOwner) { count = Mathf.Max(1, n); args = args[1..]; }
+        if (Npcs is not { } npcs || _players?.GetNodeOrNull<FootPlayer>(sender.ToString()) is not { } host) return "You have no position yet.";
+        var race = _raceOf.TryGetValue(sender, out int id) ? _races.GetValueOrDefault(id) : null;
+        int? asked = args.Length > 0 ? ParseMount(args[^1]) : null;
+        int mount = race is { Mount: not Open } ? race.Mount
+            : asked is { } a and not Open ? a
+            : CarCatalog.IsCar(host.Ride) ? (int)host.Ride : (int)CarCatalog.All[0].Kind;
+        // GatePilot flies by pressing the input actions: it would fly the owner, not its NPC
+        if (race?.Air == true || IsAirMount(mount) || args.Any(w => w.Equals("air", System.StringComparison.OrdinalIgnoreCase)))
+            return "NPCs cannot fly yet: the air pilot steers through the owner's own keys.";
+        if (!AutoPilot.Drives((RideKind)mount)) return $"No NPC pilot for {MountName(mount)} yet.";
+
+        string reply;
+        if (race != null)
+        {
+            if (duel) return $"You are already in race #{race.Id} — /race leave first.";
+            if (race.Phase == Phase.Running || race.Invited != 0) return $"Race #{race.Id} is not open to NPCs.";
+            reply = $"#{race.Id}";
+        }
+        else
+        {
+            var words = asked != null ? args[..^1] : args;
+            reply = Start(sender, words.Append(MountName(mount)).ToArray(), 0);
+            if (!_raceOf.TryGetValue(sender, out id)) return reply;   // refused
+            race = _races[id];
+        }
+        var ids = npcs.Spawn(sender, duel ? 1 : count, (RideKind)mount, host.GlobalPosition, host.Rotation.Y);
+        if (duel && ids.Count == 1) race.Invited = ids[0];   // before the course is built: Opened reads it
+        foreach (long npc in ids)
+        {
+            _npcNames[npc] = npcs.Label(npc);
+            Enter(race, npc);
+            if (!duel) _chat?.Broadcast($"[race] #{race.Id} {Who(npc)} joins ({race.Entrants.Count} in)", ChatKind.System);
+        }
+        return reply + (ids.Count == 0 ? " No room for more NPCs." : $" {ids.Count} NPC(s) in.");
     }
 
     private string Leave(long sender)
@@ -398,6 +452,10 @@ public partial class RaceManager : Node
         if (race.Phase == Phase.Running)
             foreach (long owner in race.Entrants.Select(OwnerOf).Distinct().Where(o => Multiplayer.GetPeers().Contains((int)o)))
                 RpcId(owner, MethodName.Dropped, race.Id, 0L);
+        // its NPCs retire with it: a new race spawns fresh ones where their owner stands
+        var npcs = race.Entrants.Where(e => e < 0).ToList();
+        Npcs?.Retire(npcs);
+        npcs.ForEach(e => _npcNames.Remove(e));
         _races.Remove(race.Id);
     }
 
@@ -778,7 +836,8 @@ public partial class RaceManager : Node
         me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, Others(me));
     }
 
-    private static IEnumerable<AutoPilot.Other> Others(FootPlayer me)
+    /// <summary>Everyone else on the road, for a pilot (a player's or an NPC's).</summary>
+    internal static IEnumerable<AutoPilot.Other> Others(FootPlayer me)
     {
         foreach (var node in me.GetTree().GetNodesInGroup(FootPlayer.Group))
             if (node is FootPlayer p && p != me)
@@ -817,6 +876,9 @@ public partial class RaceManager : Node
     private readonly string? _autoCmd = Arg("--racestart") is { } s ? $"start {s}".Trim() : Arg("--racecmd");
     private readonly string? _autoJoin = Arg("--racejoin");
     private readonly int _skip = int.TryParse(Arg("--raceskip"), out int k) ? k : -1;
+    // --racenpc N: sends /race npc N once, when this client's own race opens
+    private readonly string? _autoNpc = Arg("--racenpc");
+    private int _myRace;
     private readonly HashSet<int> _joined = new();
     private double _settled;
     private bool _asked;
@@ -840,6 +902,12 @@ public partial class RaceManager : Node
                 GD.Print(line);
                 if (RaceId.Match(line) is not { Success: true } m || !int.TryParse(m.Groups[1].Value, out int id)) return;
                 if (line.Contains("opens a") || line.Contains("challenges you") || line.Contains("you are in")) LastRaceSeen = id;
+                if (line.Contains("finding the road") || line.Contains("plotting the gates")) _myRace = id;
+                if (_autoNpc != null && _myRace > 0 && id == _myRace && line.Contains("opens a"))
+                {
+                    _myRace = -1;   // once
+                    chat.Send($"/race npc {_autoNpc}".TrimEnd());
+                }
                 bool invite = line.Contains("opens a") || line.Contains("challenges you");
                 if (_autoJoin != null && invite && _joined.Add(id) && (_autoJoin.Length == 0 || line.Contains(_autoJoin)))
                     chat.Send($"/race join {id}");

@@ -330,4 +330,7 @@ public sealed class AutoPilot
 
     /// <summary>A pilot for whatever the player is riding, or null when that class has none yet.</summary>
     public static AutoPilot? For(RaceRoute route, FootPlayer player) => player.Vehicle is Car c ? new AutoPilot(route, player, c.Spec) : null;
+
+    /// <summary>Whether <see cref="For"/> has a pilot for this class (the server asks it before spawning an NPC in it).</summary>
+    public static bool Drives(RideKind kind) => CarCatalog.IsCar(kind);
 }

@@ -10,7 +10,7 @@
   - **Commands**: `/race start [metres] [mount|open]`, `/race start air <place|metres> [mount]`,
     `/race duel <player> [same args]` (a private challenge; the race starts the moment it is accepted
     with `/race join`), `/race join [id]` (no id: the duel you were challenged to, else the newest open
-    race), `/race leave`, `/race cancel [id]` (host or console), `/race list`. Mounts: `foot bike skis
+    race), `/race leave`, `/race cancel [id]` (host or console), `/race list`, `/race npc [n] [metres] [mount]`, `/race duel npc` (NPC opponents, below). Mounts: `foot bike skis
     car <car name> moto|r1 monster plane heli paraglider wingsuit`, or `open` (everyone keeps theirs).
     Default: the AE86 on the ground, the plane in the air. A class whose `Rideable.Create` is null (the
     motorbikes, `RideKind` 64/65, before #38 lands) is refused with a message.
@@ -19,7 +19,28 @@
     `NameNpcEntrants(ids, names)`); the server checks each id encodes the sender, and accepts
     `Checkpoint`/`Crossed` for an entrant only from its owner. At the close of entry the owner gets
     `NpcSetup` (course, slot, mount); `TrackNpc(id, () => position)` lets the race report that NPC's
-    checkpoints like the player's. Not in duels.
+    checkpoints like the player's. Not in duels (except `/race duel npc`, below).
+  - **NPC opponents** (`World/RaceNpc`, `World/Npcs`): `/race npc [n] [metres] [mount]` puts n (≤ 8) NPCs
+    into the sender's open race, or opens one with them (a count ≤ 8, a larger number is metres);
+    `/race duel npc [metres] [mount]` is a duel against one (the race's `Invited` is the NPC id, so it
+    starts as soon as the course is built). Mount: the race's, else the one asked, else the sender's car,
+    else the AE86. The **server** spawns them 8 m apart behind the sender (`RaceNpcs.Spawn`, spawn data
+    `[owner, n, kind, pos, yaw]`, node `npc_<owner>_<n>`, named "NPC <mount> #n") and enters them itself —
+    it already knows the ids, so the client-side `EnterNpcs` path is not used by `/race npc`. An NPC is a
+    `FootPlayer` with `Npc = true` and the **owner client** as authority: it publishes NetPos like any
+    authority player, is shown to whoever sees its owner, is its own collision anchor, has no camera, feel
+    or input. Its `RaceNpc` driver takes `NpcSetup` (grid slot), `TrackNpc`s its position (RaceManager
+    reports its checkpoints), drives `AutoPilot.For` at GO with `RaceManager.Others` (every player on the
+    road, `WorldVelocity`), and brakes after `NpcFinished`. **They retire when their race ends**
+    (`End` → `RaceNpcs.Retire`), and all of an owner's go when it disconnects (`ForgetOwner`). Cap 8
+    per owner, 32 bodies. Classes: `AutoPilot.Drives` (cars only until the ground pilots land); other
+    classes are refused with a message. **Air NPCs are refused**: `GatePilot` flies by pressing the
+    input actions, which would fly the owner, not its NPC — it needs a `RideControls`-style seam first.
+    Check: dedicated server + A (`--raceauto --racestart 1000 --racenpc 2 --at E,N`: `--racenpc N` sends
+    `/race npc N` when A's own race opens) + B (`--npccheck`: a shape query on each remote NPC every 5 s,
+    prints `solid=`), each with its own `--cache`. Measured at the Col du Mollendruz, 1 km: Takumi 0:37.8,
+    NPC #1 0:40.2, NPC #2 0:40.6, solid on B throughout, removed at the results; a duel vs one NPC with A
+    killed mid-race: the NPC removed on the server and B at once.
   - **Courses** (`RaceCourse`): ordered checkpoints + a line for progress. Ground (foot, bike, skis,
     car, moto): `RaceRoute` from the host, a checkpoint every 200 m. Air: a straight line of gates to a
     `places.json` place (the same `PlaceIndex.Search` as `/city`) or that far along the host's heading,
@@ -54,6 +75,6 @@
     [metres|place]`, `skip` (plane race, B never reports gate 1: must be refused), `two` (a car duel and
     a plane race at once, 4 clients; B must be refused the second race). Each client has its own
     `--cache`. Needs ~5 GB free (~9 GB for `two`). Scripting flags: `--racestart "<args>"`,
-    `--racecmd "<args>"`, `--racejoin [host]`, `--raceskip N`.
+    `--racecmd "<args>"`, `--racejoin [host]`, `--raceskip N`, `--racenpc N`.
   - Measured: Col du Mollendruz 1.5 km AE86 1:05–1:14; Mont-la-Ville → Montricher 5.2 km plane
     1:30–1:32, heli 1:37; Haut du Mollendruz → Pétra Félix 1.9 km paraglider 2:12–2:14.
