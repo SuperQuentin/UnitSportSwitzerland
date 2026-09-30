@@ -77,10 +77,23 @@ public sealed record CarBody
     public bool Slicks { get; init; }
 }
 
+/// <summary>What the local driver sees of their own figure from the seat (<see cref="CarRig.View"/>).</summary>
+public enum CockpitView
+{
+    /// <summary>Not in the seat's eye: everything is drawn (every remote copy, every chase camera).</summary>
+    Outside,
+    /// <summary>First person with a body: arms on the wheel, legs on the pedals, no head in the lens.</summary>
+    Body,
+    /// <summary>First person without one: the wheel and the pedals alone.</summary>
+    Bare,
+}
+
 /// <summary>
 /// A drivable car's visual: body, four wheels that turn and steer, brake lights, headlights, doors
 /// on hinges that swing open (<see cref="DoorsOpen"/>), and on the cars that have them a soft top
-/// that folds and pop-up headlights. Origin on the
+/// that folds and pop-up headlights. Inside, behind translucent glass, the cabin
+/// (<see cref="CarCabin"/>): a steering wheel that turns with the front wheels, working dials,
+/// a gear digit, warning lamps, pedals, and the driver at the wheel when there is one. Origin on the
 /// ground under the middle of the wheelbase, facing −Z like every node (built +Z, turned by
 /// <see cref="MeshScratch.Build()"/>). The owner sets the properties; the rig applies them in
 /// <c>_Process</c>, the roof and the pods moving there over a moment rather than snapping —
@@ -90,6 +103,8 @@ public partial class CarRig : Node3D
 {
     /// <summary>Front road-wheel angle, radians, + = left.</summary>
     public float SteerAngle { get; set; }
+    /// <summary>The steering wheel's turn, radians, + = anticlockwise from the seat (a left turn): the road-wheel angle times the steering ratio.</summary>
+    public float WheelTurn { get; set; }
     /// <summary>Accumulated wheel rotation, radians; positive rolls forward.</summary>
     public float WheelSpin { get; set; }
     /// <summary>Body pitch, radians, + = nose up (squat under power, dive under braking is −).</summary>
@@ -97,6 +112,23 @@ public partial class CarRig : Node3D
     public bool BrakeLights { get; set; }
     /// <summary>Which doors are open, one bit each (<see cref="DoorLeft"/> .. <see cref="DoorRearRight"/>); each eases there.</summary>
     public byte DoorsOpen { get; set; }
+
+    // ---- what the pedals, dials and lamps show ----
+    /// <summary>Pedals, 0..1: they swing on their hinges and the driver's right foot presses them.</summary>
+    public float Throttle { get; set; }
+    public float Brake { get; set; }
+    public bool Handbrake { get; set; }
+    public float SpeedKmh { get; set; }
+    public float Rpm { get; set; }
+    /// <summary>1-based forward gear, −1 reverse, 0 neutral.</summary>
+    public int Gear { get; set; } = 1;
+    /// <summary>Off, the dials drop to zero and the engine lamp lights.</summary>
+    public bool EngineRunning { get; set; } = true;
+
+    /// <summary>The local driver's view from the seat: what of their own figure is drawn. Outside on every other copy.</summary>
+    public CockpitView View { get; set; }
+    /// <summary>Draw the mirrors (local driver, first person, the setting on): each a small extra render.</summary>
+    public bool MirrorsOn { get; set; }
 
     public const byte DoorLeft = 1, DoorRight = 2, DoorRearLeft = 4, DoorRearRight = 8;
     /// <summary>These are right-hand-drive cars: the driver gets in and out on the right.</summary>
@@ -117,6 +149,9 @@ public partial class CarRig : Node3D
     /// <summary>What is left of a pod's height folded onto the nose: a lid about a centimetre thick.</summary>
     private const float FoldedPod = 0.08f;
 
+    /// <summary>The shell hangs this far below the body's pitch pivot (roughly the centre of mass).</summary>
+    private static readonly Vector3 ShellOffset = new(0, -0.5f, 0);
+
     private Node3D _body = null!;
     private CarDoor[] _doors = System.Array.Empty<CarDoor>();
     private Node3D[] _doorPivots = System.Array.Empty<Node3D>();
@@ -124,14 +159,34 @@ public partial class CarRig : Node3D
     private readonly Node3D[] _steer = new Node3D[4];   // FL, FR, RL, RR
     private readonly Node3D[] _spin = new Node3D[4];
     private StandardMaterial3D _tailMaterial = null!, _headMaterial = null!;
-    private Node3D? _top, _windows, _cockpit, _flaps, _flapLamps;
+    private Node3D? _top, _windows, _flaps, _flapLamps;
     private float _roof, _pods;   // 0 closed .. 1 open
     private bool _settled;
 
-    public static CarRig Create(CarBody body, float wheelbase)
+    private CarCabin _cabin = null!;
+    private Node3D _wheel = null!, _tach = null!, _speedo = null!;
+    private MeshInstance3D _digit = null!;
+    private MeshInstance3D[] _lamps = System.Array.Empty<MeshInstance3D>();
+    private Node3D[] _pedals = System.Array.Empty<Node3D>();
+    private HumanPalette? _driverPalette;
+    private MeshInstance3D? _driverBody, _driverHead;
+    private (int Turn, int Throttle, int Brake) _driverPose = (int.MinValue, 0, 0);
+    private float _rpmShown, _speedShown;
+    private Mirror[]? _mirrors;
+    private int _mirrorTurn;
+    private StandardMaterial3D _glass = null!;
+    /// <summary>
+    /// How much of the glass's tint the driver sees from the seat: a real windscreen is all but
+    /// clear from inside, while from outside the same glass reads as glass only with a tint.
+    /// </summary>
+    private const float GlassFromSeat = 0.35f;
+
+    /// <param name="gauges">The dials' full scales; the default suits a sports car.</param>
+    /// <param name="driver">The figure at the wheel, in its colours; null for an empty car (parked, previewed).</param>
+    public static CarRig Create(CarBody body, float wheelbase, CarGauges? gauges = null, HumanPalette? driver = null)
     {
-        var rig = new CarRig { Name = "Car" };
-        rig.Assemble(CarMeshBuilder.Build(body, wheelbase));
+        var rig = new CarRig { Name = "Car", _driverPalette = driver };
+        rig.Assemble(CarMeshBuilder.Build(body, wheelbase, gauges));
         // a preset's ride height, tread and off-road kit: the body moves with everything on it,
         // the wheels stay on the road (they are the rig's own children)
         rig._body.Position += Vector3.Up * body.Lift;
@@ -139,18 +194,34 @@ public partial class CarRig : Node3D
         return rig;
     }
 
+    /// <summary>Translucent, a little glossy: glass the cabin shows through and the sun glints off.</summary>
+    public static StandardMaterial3D GlassMaterial() => new()
+    {
+        VertexColorUseAsAlbedo = true,
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
+        Roughness = 0.2f,
+    };
+
     private void Assemble(CarParts p)
     {
         var body = HumanMeshBuilder.Material();
+        var glass = _glass = GlassMaterial();
         _headMaterial = TrafficMeshBuilder.LampMaterial();
         _tailMaterial = TrafficMeshBuilder.LampMaterial();
+        MeshInstance3D Part(string name, ArrayMesh mesh, Vector3 at)
+        {
+            var part = new MeshInstance3D { Name = name, Mesh = mesh, Position = at };
+            MeshScratch.Paint(part, body, glass);
+            return part;
+        }
 
         // pitch about the middle of the car at roughly the centre of mass height
         // (lowered: the whole body drops, the wheels stay on the road)
         _body = new Node3D { Name = "Body", Position = new Vector3(0, 0.5f - p.Drop, 0) };
         AddChild(_body);
-        var offset = new Vector3(0, -0.5f, 0);
-        _body.AddChild(new MeshInstance3D { Name = "Shell", Mesh = p.Body, MaterialOverride = body, Position = offset });
+        var offset = ShellOffset;
+        _body.AddChild(Part("Shell", p.Body, offset));
         _body.AddChild(new MeshInstance3D { Name = "Headlamps", Mesh = p.Head, MaterialOverride = _headMaterial, Position = offset });
         _body.AddChild(new MeshInstance3D { Name = "Taillamps", Mesh = p.Tail, MaterialOverride = _tailMaterial, Position = offset });
         if (p.Glow is { } glow)
@@ -168,18 +239,16 @@ public partial class CarRig : Node3D
         for (int i = 0; i < _doors.Length; i++)
         {
             var pivot = new Node3D { Name = _doors[i].Name, Position = _doors[i].Hinge + offset };
-            pivot.AddChild(new MeshInstance3D { Mesh = _doors[i].Mesh, MaterialOverride = body });
+            pivot.AddChild(Part("Panel", _doors[i].Mesh, Vector3.Zero));
             _body.AddChild(pivot);
             _doorPivots[i] = pivot;
         }
         if (p.Top is { } top)
         {
-            _top = new MeshInstance3D { Name = "SoftTop", Mesh = top.Mesh, MaterialOverride = body, Position = top.Pivot + offset };
-            _windows = new MeshInstance3D { Name = "SideGlass", Mesh = p.Windows!.Mesh, MaterialOverride = body, Position = p.Windows.Pivot + offset };
-            _cockpit = new MeshInstance3D { Name = "Cockpit", Mesh = p.Cockpit, MaterialOverride = body, Position = offset };
+            _top = Part("SoftTop", top.Mesh, top.Pivot + offset);
+            _windows = Part("SideGlass", p.Windows!.Mesh, p.Windows.Pivot + offset);
             _body.AddChild(_top);
             _body.AddChild(_windows);
-            _body.AddChild(_cockpit);
         }
         if (p.Flaps is { } flaps)
         {
@@ -189,6 +258,7 @@ public partial class CarRig : Node3D
             _flaps.AddChild(_flapLamps);
             _body.AddChild(_flaps);
         }
+        AssembleCabin(p.Cabin, body, glass);
 
         string[] names = { "FL", "FR", "RL", "RR" };
         for (int i = 0; i < 4; i++)
@@ -210,13 +280,66 @@ public partial class CarRig : Node3D
         ApplyLamps();
     }
 
+    /// <summary>The cabin's meshes and moving parts, and the driver if there is one.</summary>
+    private void AssembleCabin(CarCabin cabin, Material body, Material glass)
+    {
+        _cabin = cabin;
+        var offset = ShellOffset;
+        // the dials are backlit: unshaded, so they read at night and in a tunnel
+        var lit = TrafficMeshBuilder.LampMaterial();
+        var interior = new MeshInstance3D { Name = "Cabin", Mesh = cabin.Interior, Position = offset };
+        MeshScratch.Paint(interior, body, glass);
+        _body.AddChild(interior);
+        _body.AddChild(new MeshInstance3D { Name = "Instruments", Mesh = cabin.Instruments, MaterialOverride = lit, Position = offset });
+
+        _wheel = new Node3D { Name = "SteeringWheel", Position = cabin.SteeringWheel.Pivot + offset };
+        _wheel.AddChild(new MeshInstance3D { Mesh = cabin.SteeringWheel.Mesh, MaterialOverride = body });
+        _body.AddChild(_wheel);
+        Node3D NeedleNode(string name, CarNeedle needle)
+        {
+            var node = new Node3D { Name = name, Position = needle.Pivot + offset };
+            node.AddChild(new MeshInstance3D { Mesh = needle.Mesh, MaterialOverride = lit });
+            _body.AddChild(node);
+            return node;
+        }
+        _tach = NeedleNode("Tach", cabin.Tach);
+        _speedo = NeedleNode("Speedo", cabin.Speedo);
+        _digit = new MeshInstance3D { Name = "Gear", MaterialOverride = lit, Position = offset };
+        _body.AddChild(_digit);
+        _lamps = cabin.Lamps.Select((mesh, i) => new MeshInstance3D { Name = $"Lamp{i}", Mesh = mesh, MaterialOverride = lit, Position = offset, Visible = false }).ToArray();
+        foreach (var lamp in _lamps) _body.AddChild(lamp);
+        _pedals = cabin.Pedals.Select((pedal, i) =>
+        {
+            var node = new Node3D { Name = $"Pedal{i}", Position = pedal.Pivot + offset };
+            node.AddChild(new MeshInstance3D { Mesh = pedal.Mesh, MaterialOverride = body });
+            _body.AddChild(node);
+            return node;
+        }).ToArray();
+
+        if (_driverPalette is { } palette)
+        {
+            _driverBody = new MeshInstance3D { Name = "Driver", MaterialOverride = body, Position = offset };
+            var head = new MeshScratch();
+            HumanMeshBuilder.AppendDriver(head, palette, cabin.Seat, 0f, 0f, 0f, body: false);
+            _driverHead = new MeshInstance3D { Name = "DriverHead", Mesh = head.Build(), MaterialOverride = body, Position = offset };
+            _body.AddChild(_driverBody);
+            _body.AddChild(_driverHead);
+        }
+    }
+
+    /// <summary>
+    /// The driver's eye, where the first-person camera goes, in the rig's own frame: on the body,
+    /// so it pitches with it and the dash stays put in the lens.
+    /// </summary>
+    public Transform3D EyeFrame => _body.Transform * new Transform3D(Basis.Identity, _cabin.Eye + ShellOffset);
+
     /// <summary>The bit of the door whose middle is nearest a world point, and how far it is.</summary>
     public (byte Bit, float Distance) NearestDoor(Vector3 point)
     {
         (byte Bit, float Distance) best = (0, float.MaxValue);
         foreach (var door in _doors)
         {
-            float dist = _body.ToGlobal(door.Centre + new Vector3(0, -0.5f, 0)).DistanceTo(point);
+            float dist = _body.ToGlobal(door.Centre + ShellOffset).DistanceTo(point);
             if (dist < best.Distance) best = (door.Bit, dist);
         }
         return best;
@@ -244,8 +367,6 @@ public partial class CarRig : Node3D
             _windows.Scale = new Vector3(1f, Mathf.Max(1f - down, 0.01f), 1f);
             float fold = Mathf.SmoothStep(0f, 1f, Mathf.Clamp((_roof - FoldFrom) / (1f - FoldFrom), 0f, 1f));
             _top.Scale = new Vector3(1f, Mathf.Lerp(1f, FoldedHeight, fold), Mathf.Lerp(1f, FoldedLength, fold));
-            // put away with the top up: nobody sees the seats through the roof, so do not draw them
-            _cockpit!.Visible = _roof > 0f;
         }
         if (_flaps != null && _flapLamps != null)
         {
@@ -254,16 +375,52 @@ public partial class CarRig : Node3D
         }
     }
 
+    /// <summary>
+    /// Wheel, needles, digit, lamps and pedals from the properties, and the driver re-posed when
+    /// what they hold or press has moved enough to see (the figure is one mesh, rebuilt).
+    /// </summary>
+    private void ApplyCabin(float dt)
+    {
+        _wheel.Basis = new Basis(_cabin.ColumnAxis, WheelTurn);
+        // needles swing to a reading rather than jump to it, like a real movement's damping
+        float rpm = EngineRunning ? Rpm : 0f;
+        float ease = 1f - Mathf.Exp(-14f * dt);
+        _rpmShown = Mathf.Lerp(_rpmShown, rpm, ease);
+        _speedShown = Mathf.Lerp(_speedShown, Mathf.Abs(SpeedKmh), ease);
+        _tach.Basis = new Basis(_cabin.Tach.Axis, CarNeedle.Angle(_rpmShown / _cabin.Gauges.TachRpm));
+        _speedo.Basis = new Basis(_cabin.Speedo.Axis, CarNeedle.Angle(_speedShown / _cabin.Gauges.SpeedoKmh));
+        _digit.Mesh = _cabin.GearDigits[CarCabin.DigitFor(Gear)];
+        _lamps[CarCabin.LampHandbrake].Visible = Handbrake;
+        _lamps[CarCabin.LampLights].Visible = Headlights;
+        _lamps[CarCabin.LampEngine].Visible = !EngineRunning;
+        _pedals[CarCabin.PedalThrottle].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Throttle, 0f, 1f));
+        _pedals[CarCabin.PedalBrake].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Brake, 0f, 1f));
+
+        _glass.AlbedoColor = Colors.White with { A = View == CockpitView.Outside ? 1f : GlassFromSeat };
+
+        if (_driverBody == null || _driverHead == null || _driverPalette is not { } palette) return;
+        _driverBody.Visible = View != CockpitView.Bare;
+        _driverHead.Visible = View == CockpitView.Outside;
+        if (!_driverBody.Visible) return;
+        var pose = (Mathf.RoundToInt(WheelTurn / 0.03f), Mathf.RoundToInt(Throttle * 8f), Mathf.RoundToInt(Brake * 8f));
+        if (pose == _driverPose) return;
+        _driverPose = pose;
+        var s = new MeshScratch();
+        HumanMeshBuilder.AppendDriver(s, palette, _cabin.Seat, WheelTurn, Throttle, Brake, head: false);
+        _driverBody.Mesh = s.Build();
+    }
+
     public override void _Process(double delta)
     {
         if (_body == null) return;
+        float dt = (float)delta;
         _body.Rotation = new Vector3(BodyPitch, 0, 0);   // + rotates −Z (the nose) up
         for (int i = 0; i < 4; i++)
         {
             _steer[i].Rotation = new Vector3(0, i < 2 ? SteerAngle : 0f, 0);   // + yaw turns −Z toward −X: left
             _spin[i].Rotation = new Vector3(-WheelSpin, 0, 0);                  // top edge moves toward −Z, forward
         }
-        float step = (float)delta / DoorTime;
+        float step = dt / DoorTime;
         for (int i = 0; i < _doors.Length; i++)
         {
             float target = (DoorsOpen & _doors[i].Bit) != 0 ? 1f : 0f;
@@ -271,7 +428,142 @@ public partial class CarRig : Node3D
             _doorOpen[i] = Mathf.MoveToward(_doorOpen[i], target, step);
             _doorPivots[i].Quaternion = Quaternion.Identity.Slerp(_doors[i].Open, Mathf.SmoothStep(0f, 1f, _doorOpen[i]));
         }
-        ApplyMovingParts((float)delta);
+        ApplyMovingParts(dt);
         ApplyLamps();
+        ApplyCabin(dt);
+        UpdateMirrors();
+    }
+
+    // ---- mirrors ----------------------------------------------------------------------------
+
+    /// <summary>One mirror: a small viewport rendering the world from the eye's reflection, shown on a quad on the glass.</summary>
+    private sealed class Mirror
+    {
+        public required CarMirror Mount;
+        public required SubViewport Port;
+        public required Camera3D Camera;
+        public required MeshInstance3D Face;
+    }
+
+    /// <summary>Pixels across a mirror's height: low, like everything else on screen (and cheap).</summary>
+    private const int MirrorPixels = 48;
+    /// <summary>What a mirror bothers to draw: nothing past this, m.</summary>
+    private const float MirrorFar = 400f;
+    /// <summary>What a mirror's camera sees: the world, without the held-item viewmodel or door portals' quads.</summary>
+    private const uint MirrorCull = 0xFFFFFu & ~Items.HeldItemVisual.ViewmodelLayer & ~Interiors.DoorPortals.AllQuadLayers;
+
+    private void UpdateMirrors()
+    {
+        if (View != CockpitView.Outside) MeasureMirrors();
+        bool wanted = (MirrorPerf ? _perfOn : MirrorsOn) && View != CockpitView.Outside && DisplayServer.GetName() != "headless";
+        if (!wanted)
+        {
+            if (_mirrors != null)
+                foreach (var m in _mirrors) { m.Face.Visible = false; m.Port.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled; }
+            return;
+        }
+        _mirrors ??= BuildMirrors();
+        var eye = GetViewport().GetCamera3D();
+        if (eye == null) return;
+        // one mirror re-rendered a frame, in turn: each at a third of the frame rate still moves
+        // smoothly enough in a PS1 frame, for the cost of one small extra render
+        _mirrorTurn = (_mirrorTurn + 1) % _mirrors.Length;
+        for (int i = 0; i < _mirrors.Length; i++)
+        {
+            var m = _mirrors[i];
+            m.Face.Visible = true;
+            if (i != _mirrorTurn) continue;
+            Aim(m, eye.GlobalPosition);
+            m.Port.RenderTargetUpdateMode = SubViewport.UpdateMode.Once;
+        }
+    }
+
+    /// <summary>
+    /// Puts a mirror's camera at the eye's reflection in its plane, looking through it: what that
+    /// camera sees, flipped left for right (the face's UVs), is what the mirror shows. The near
+    /// plane sits at the glass, so the reflection of the car in front of it is not drawn.
+    /// </summary>
+    private static void Aim(Mirror m, Vector3 eye)
+    {
+        var face = m.Face.GlobalTransform;
+        var centre = face.Origin;
+        var normal = face.Basis.Z.Normalized();
+        var image = eye - 2f * (eye - centre).Dot(normal) * normal;
+        var look = centre - image;
+        float distance = look.Length();
+        if (distance < 0.05f) return;
+        var up = face.Basis.Y.Normalized();
+        m.Camera.GlobalTransform = new Transform3D(Basis.LookingAt(look / distance, up), image);
+        m.Camera.Fov = Mathf.RadToDeg(2f * Mathf.Atan(m.Mount.Size.Y * 0.5f / distance)) * 1.15f;
+        m.Camera.Near = distance * 0.95f;
+    }
+
+    /// <summary>
+    /// <c>--mirrorperf</c> (with <c>--vsync off</c>): what the mirrors cost. They are switched on and
+    /// off every 3 s, whatever the setting, and each span's mean frame time and draw calls logged,
+    /// so the two halves see the same stretch of road.
+    /// </summary>
+    private static readonly bool MirrorPerf = OS.GetCmdlineUserArgs().Contains("--mirrorperf");
+    private bool _perfOn = true;
+    private double _perfWall, _perfDraws;
+    private int _perfFrames;
+
+    private void MeasureMirrors()
+    {
+        if (!MirrorPerf) return;
+        _perfFrames++;
+        _perfWall += GetProcessDeltaTime();
+        _perfDraws += Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
+        if (_perfWall < 3.0) return;
+        double n = _perfFrames;
+        GD.Print($"[mirrorperf] mirrors {(_perfOn ? "on " : "off")}: {n / _perfWall:F0} fps, {_perfWall / n * 1000:F2} ms a frame, "
+            + $"{_perfDraws / n:F0} draw calls");
+        _perfWall = _perfDraws = 0;
+        _perfFrames = 0;
+        _perfOn = !_perfOn;
+    }
+
+    private Mirror[] BuildMirrors()
+    {
+        var mirrors = new Mirror[_cabin.Mirrors.Length];
+        for (int i = 0; i < mirrors.Length; i++)
+        {
+            var mount = _cabin.Mirrors[i];
+            var port = new SubViewport
+            {
+                Name = mount.Name + "View",
+                Size = new Vector2I(Mathf.RoundToInt(MirrorPixels * mount.Size.X / mount.Size.Y), MirrorPixels),
+                RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
+                HandleInputLocally = false,
+                Msaa3D = Viewport.Msaa.Disabled,
+            };
+            AddChild(port);
+            var camera = new Camera3D { Name = "Camera", CullMask = MirrorCull, Far = MirrorFar };
+            port.AddChild(camera);
+            camera.MakeCurrent();
+            // the reflecting face faces along the mount's normal: a quad's front is +Z
+            var z = mount.Normal.Normalized();
+            var x = Vector3.Up.Cross(z).Normalized();
+            var face = new MeshInstance3D
+            {
+                Name = mount.Name,
+                Mesh = new QuadMesh { Size = mount.Size },
+                Transform = new Transform3D(new Basis(x, z.Cross(x), z), mount.Centre + ShellOffset),
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                MaterialOverride = new StandardMaterial3D
+                {
+                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                    AlbedoTexture = port.GetTexture(),
+                    AlbedoColor = new Color(0.86f, 0.88f, 0.92f),
+                    TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+                    // a mirror shows the world left for right
+                    Uv1Scale = new Vector3(-1f, 1f, 1f),
+                    Uv1Offset = new Vector3(1f, 0f, 0f),
+                },
+            };
+            _body.AddChild(face);
+            mirrors[i] = new Mirror { Mount = mount, Port = port, Camera = camera, Face = face };
+        }
+        return mirrors;
     }
 }
