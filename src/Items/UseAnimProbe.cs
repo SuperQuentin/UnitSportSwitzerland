@@ -35,8 +35,21 @@ public partial class UseAnimProbe : Node
     private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
 
     private FootPlayer? Other() =>
-        GetTree().Root.FindChildren("*", "FootPlayer", true, false).OfType<FootPlayer>()
-            .FirstOrDefault(p => p != Me && !p.IsMultiplayerAuthority());
+        Find(GetTree().Root);
+
+    private FootPlayer? Find(Node n)
+    {
+        if (n is FootPlayer p && p != Me && !p.IsMultiplayerAuthority()) return p;
+        foreach (var c in n.GetChildren())
+            if (Find(c) is { } f) return f;
+        return null;
+    }
+
+    /// <summary>A burst of frames, for picking the moment and the pose.</summary>
+    private async Task Burst(string name, int n, double every)
+    {
+        for (int i = 0; i < n; i++) { Shot($"{name}_{i}"); await Seconds(every); }
+    }
 
     public override async void _Ready()
     {
@@ -65,22 +78,22 @@ public partial class UseAnimProbe : Node
 
         _items.UseSlot(me, 0);
         Say("drinking");
+        await Burst("drink_1p", 8, 0.16);
         await Seconds(0.5);
-        Shot("drink_1p");
-        await Seconds(1.5);
         Expect(me.Health > hp, $"drinking healed ({hp:F0} -> {me.Health:F0})");
         Expect(inv[0].Count == 1, "one bottle was used up");
 
         inv.Select(1);
         await Seconds(0.8);
+        me.TakeDamage(30f);
         _items.UseSlot(me, 1);
-        await Seconds(0.45);
-        Shot("eat_1p");
-        await Seconds(1.5);
+        await Burst("eat_1p", 4, 0.2);
+        await Seconds(1.0);
 
         // a second use while the first runs is ignored
         inv.Select(0);
         await Seconds(0.8);
+        me.TakeDamage(40f);
         hp = me.Health;
         _items.UseSlot(me, 0);
         await Seconds(0.1);
@@ -110,9 +123,8 @@ public partial class UseAnimProbe : Node
         Shot("hat_hand_1p");
         _items.UseSlot(me, 3);
         Say("hat");
-        await Seconds(0.35);
-        Shot("hat_up_1p");
-        await Seconds(1.5);
+        await Burst("hat_up_1p", 6, 0.12);
+        await Seconds(1.0);
         Expect(inv.Worn == ItemId.WitchHat, "the hat is worn");
         Say("done");
         await Heard("B", "done", 30);

@@ -156,17 +156,20 @@ public partial class HeldItemVisual : Node3D
             ViewPose.Eye when use == ItemUse.Optic => (new Vector3(0f, -0.03f, -0.20f), Vector3.Zero),
             ViewPose.Eye => (new Vector3(0f, -0.12f, -0.38f), Vector3.Zero),
             // a bottle is upright in the hand: tipped ~70 degrees so its neck comes to the mouth; food jabs up and in
-            ViewPose.Mouth when _shown == ItemId.WaterBottle => (new Vector3(0.0f, -0.17f, -0.24f), new Vector3(1.25f, 0, 0)),
-            ViewPose.Mouth => (new Vector3(0.0f, -0.16f, -0.24f), new Vector3(0.45f, 0, 0)),
+            ViewPose.Mouth when _shown == ItemId.WaterBottle => (new Vector3(0.02f, -0.05f, -0.32f), new Vector3(0.95f, 0, 0)),
+            ViewPose.Mouth => (new Vector3(0.0f, -0.10f, -0.26f), new Vector3(0.45f, 0, 0)),
             // GPS held up: low centre, top tipped away so the screen faces the eye
             ViewPose.Read => (new Vector3(0.0f, -0.16f, -0.30f), new Vector3(-0.65f, 0, 0)),
             // a hat lifted above the eye line, about to go on
-            ViewPose.Head => (new Vector3(0.0f, 0.09f, -0.26f), new Vector3(0.6f, 0, 0)),
+            ViewPose.Head => (new Vector3(0.0f, 0.06f, -0.30f), new Vector3(0.3f, 0, 0)),
             ViewPose.Plant => (new Vector3(0.10f, -0.42f, -0.50f), new Vector3(-0.9f, 0.1f, 0)),
             ViewPose.Inspect => (new Vector3(0.02f, -0.06f, -0.36f), new Vector3(0.3f, 0.6f, 0.1f)),
             _ => (ViewmodelRest, new Vector3(0, 0.12f, 0)),
         };
     }
+
+    /// <summary>Hats are drawn at their worn size, which is too big to hold up: shrunk in the hand.</summary>
+    private float ItemScale => ItemDefs.Get(_shown)?.Use == ItemUse.Wear ? 0.55f : 1f;
 
     /// <summary>Set while the item is at the eye (binoculars) or a photo is being taken: nothing to draw.</summary>
     public bool Suppressed { get; set; }
@@ -298,6 +301,7 @@ public partial class HeldItemVisual : Node3D
         {
             _inHand.Visible = true;
             // the wrist is the end of the arm, so the grip sits a hand's length past it
+            _inHand.Scale = Vector3.One * ItemScale;
             _inHand.Transform = new Transform3D(hand.Basis, hand.Origin + hand.Basis * new Vector3(0, -0.05f, -0.03f));
         }
         else _inHand.Visible = false;
@@ -351,7 +355,7 @@ public partial class HeldItemVisual : Node3D
         // less sway once the item is raised to a pose
         float swayScale = _pose == ViewPose.Rest ? 1f : 0.25f;
         UpdateScreen();
-        _viewmodel.Scale = Vector3.One * ViewScale;
+        _viewmodel.Scale = Vector3.One * ViewScale * ItemScale;
         Recoil = Mathf.MoveToward(Recoil, 0f, dt * 4.5f);
         float rc = Recoil * Recoil;   // squared: a sharp hit that tails off
         _viewmodel.Position = (pos + _sway * swayScale + new Vector3(rc * 0.012f, -lowered + rc * 0.03f, Kick * 0.06f + rc * 0.13f)) * ViewScale;
