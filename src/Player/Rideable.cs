@@ -15,7 +15,26 @@ public enum RideKind
     Helicopter = 6,
     Plane = 7,
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
-    // The next non-car mount is 64.
+    // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too.
+    // The next other mount is 96.
+}
+
+/// <summary>
+/// A mount with a combustion engine and a gearbox (cars, motorbikes): what the engine sound, the
+/// rev counter and a parked machine's tick-over read.
+/// </summary>
+public interface IEngined
+{
+    /// <summary>Engine speed, rpm.</summary>
+    float Rpm { get; }
+    /// <summary>idle 0 .. redline 1, for <c>EngineSynth.Set</c>.</summary>
+    float Rpm01 { get; }
+    /// <summary>1-based forward gear, −1 reverse.</summary>
+    int Gear { get; }
+    /// <summary>Throttle actually applied, 0..1.</summary>
+    float Throttle { get; }
+    /// <summary>What it sounds like; the same instance every call, so a caller can compare it.</summary>
+    Audio.EngineProfile Sound { get; }
 }
 
 /// <summary>Controls as the vehicle sees them, already stripped of key bindings.</summary>
@@ -270,8 +289,13 @@ public abstract class Rideable
     /// The wingsuit and parachute are not here: nobody straps into a wingsuit on flat ground.
     /// They are a base jump — Jump while falling from height — see <c>FootPlayer</c>.
     /// </remarks>
-    public static readonly Rideable[] All =
-        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() };
+    /// <remarks>
+    /// Every motorbike in <see cref="MotorbikeCatalog"/> follows, one line each (a longer roster
+    /// wants a folded page like the cars'; the picker is being reworked).
+    /// </remarks>
+    public static readonly Rideable[] All = new Rideable[]
+        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() }
+        .Concat(MotorbikeCatalog.All.Select(bike => (Rideable)new Motorbike(bike))).ToArray();
 
     /// <summary>
     /// A fresh instance for one rider.
@@ -292,6 +316,7 @@ public abstract class Rideable
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
+        _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ => null,
     };
 }

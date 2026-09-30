@@ -148,7 +148,7 @@ public sealed record CarSpec
 /// Game adds grip, power and a counter-steer assist on the same equations; Sim has none of them.
 /// </para>
 /// </summary>
-public sealed class Car : Rideable
+public sealed class Car : Rideable, IEngined
 {
     public CarSpec Spec { get; }
 
@@ -184,6 +184,8 @@ public sealed class Car : Rideable
     // ---- what the feel layer and the rig read ----
     /// <summary>Engine speed, rpm.</summary>
     public float Rpm { get; private set; }
+    public EngineProfile Sound => _sound ??= EngineProfile.For(Spec.Engine, Spec.IdleRpm, Spec.Redline);
+    private EngineProfile? _sound;
     /// <summary>idle 0 .. redline 1, for <c>EngineSynth.Set</c>.</summary>
     public float Rpm01 => Mathf.Clamp((Rpm - Spec.IdleRpm) / (Spec.Redline - Spec.IdleRpm), 0f, 1f);
     /// <summary>1-based forward gear, −1 reverse.</summary>

@@ -31,7 +31,8 @@ public partial class Main : Node
 				System.Globalization.CultureInfo.InvariantCulture, out view);
 			int focus = -1;
 			int fi = Array.IndexOf(a, "--focus");
-			if (fi >= 0 && fi + 1 < a.Length) int.TryParse(a[fi + 1], out focus);
+			if (fi >= 0 && fi + 1 < a.Length && !int.TryParse(a[fi + 1], out focus))
+				focus = a[fi + 1] switch { "r1" => 5, "monster" => 6, _ => -1 };
 			float crank = float.NaN;
 			int ci = Array.IndexOf(a, "--crank");
 			if (ci >= 0 && ci + 1 < a.Length) float.TryParse(a[ci + 1],

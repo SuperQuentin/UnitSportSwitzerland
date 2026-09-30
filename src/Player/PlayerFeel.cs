@@ -31,7 +31,6 @@ public partial class PlayerFeel : Node3D
     private EngineSynth _rotor = null!, _engine = null!;
     private AudioStreamPlayer _squeal = null!;
     private EngineSynth? _carEngine;
-    private CarSpec? _carEngineSpec;
     private float _proximity;
     private readonly AudioStreamPlayer[] _voices = new AudioStreamPlayer[8];
     private int _nextVoice;
@@ -212,6 +211,7 @@ public partial class PlayerFeel : Node3D
             RideKind.RoadBike => (9f, 18f),    // 32 → 65 km/h
             RideKind.Skis => (9f, 22f),        // 32 → 80 km/h
             _ when CarCatalog.IsCar(ride) => (15f, 40f),   // 54 → 144 km/h
+            _ when MotorbikeCatalog.IsMotorbike(ride) => (15f, 45f),   // 54 → 162 km/h
             _ => (4.8f, 9f),                   // above a run: only slides and launches get here
         };
         return Mathf.Clamp((speed - calm) / (fast - calm), 0f, 1.5f);
@@ -248,9 +248,10 @@ public partial class PlayerFeel : Node3D
         // tyres: roar with speed, only while they touch something
         bool bike = ride == RideKind.RoadBike;
         var car = _player.Vehicle as Car;
+        bool motor = _player.Vehicle is IEngined;
         SetLoop(_tyre, bike && grounded ? Mathf.Clamp(speed / 14f, 0f, 1f) * 0.55f
-            : car != null && grounded ? Mathf.Clamp(speed / 30f, 0f, 1f) * 0.5f : 0f,
-            0.55f + speed / (car != null ? 40f : 22f));
+            : motor && grounded ? Mathf.Clamp(speed / 30f, 0f, 1f) * 0.5f : 0f,
+            0.55f + speed / (motor ? 40f : 22f));
         UpdateCarAudio(car, grounded, speed);
 
         // freewheel: the pawls tick when the wheel turns and the legs do not
@@ -312,22 +313,26 @@ public partial class PlayerFeel : Node3D
     /// <summary>The car's engine from its rpm and pedal, and the squeal from how hard the tyres slide.</summary>
     private void UpdateCarAudio(Car? car, bool grounded, float speed)
     {
+        // the engine: any car or motorbike, from its rpm and throttle
+        if (_player.Vehicle is IEngined engine)
+        {
+            if (_carEngine == null || _carEngine.Profile != engine.Sound)
+            {
+                _carEngine?.QueueFree();
+                _carEngine = new EngineSynth(engine.Sound, spatial: false, seed: 3);
+                AddChild(_carEngine);
+            }
+            _carEngine.Set(engine.Rpm01, engine.Throttle, Mathf.Clamp(engine.Throttle * 0.8f + 0.2f * engine.Rpm01, 0f, 1f),
+                // half what it was: at 0.75 a car at redline drowned every other sound in the game
+                _player.EngineOn ? 0.15f + 0.22f * engine.Rpm01 : 0f);
+        }
+        else _carEngine?.Set(0, 0, 0, 0);
+
         if (car == null)
         {
-            _carEngine?.Set(0, 0, 0, 0);
             SetLoop(_squeal, 0, 1);
             return;
         }
-        if (_carEngine == null || _carEngineSpec != car.Spec)
-        {
-            _carEngine?.QueueFree();
-            _carEngineSpec = car.Spec;
-            _carEngine = new EngineSynth(EngineProfile.For(car.Spec.Engine, car.Spec.IdleRpm, car.Spec.Redline), spatial: false, seed: 3);
-            AddChild(_carEngine);
-        }
-        _carEngine.Set(car.Rpm01, car.Throttle, Mathf.Clamp(car.Throttle * 0.8f + 0.2f * car.Rpm01, 0f, 1f),
-            // half what it was: at 0.75 a car at redline drowned every other sound in the game
-            _player.EngineOn ? 0.15f + 0.22f * car.Rpm01 : 0f);
 
         // a squeal is a note, not a hiss: it appears past a threshold and climbs with the slide
         float slide = grounded ? Mathf.SmoothStep(0.15f, 0.9f, car.TyreSlide) : 0f;
@@ -749,11 +754,13 @@ public partial class PlayerFeel : Node3D
                     ? $"{speed * 3.6f:0} km/h    {(c.Gear < 0 ? "R" : c.Gear.ToString())}    {c.Rpm:0} rpm"
                       + (Core.GameSettings.Current.TyreWear ? $"    tyres F {(1f - c.TyreWearFront) * 100:0}% R {(1f - c.TyreWearRear) * 100:0}%" : "")
                       + (Core.GameSettings.Current.BrakeWear ? $"    brakes {c.BrakeTemp:0}°C{(c.BrakeFactor < 0.95f ? " FADE" : "")}" : "")
-                    : $"{speed * 3.6f:0} km/h";
+                    : _player.Vehicle is IEngined e
+                        ? $"{speed * 3.6f:0} km/h    {e.Gear}    {e.Rpm:0} rpm"
+                        : $"{speed * 3.6f:0} km/h";
 
         // the rev counter, amber turning red toward the limit
-        _rpmBar.Visible = _player.Vehicle is Car;
-        if (_player.Vehicle is Car rev)
+        _rpmBar.Visible = _player.Vehicle is IEngined;
+        if (_player.Vehicle is IEngined rev)
         {
             _rpmBar.Value = rev.Rpm01;
             _rpmFill.BgColor = new Color(1f, 0.85f, 0.25f).Lerp(new Color(1f, 0.2f, 0.15f), Mathf.Clamp((rev.Rpm01 - 0.8f) / 0.15f, 0f, 1f));
