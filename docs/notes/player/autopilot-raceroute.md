@@ -17,9 +17,12 @@
 - **No speed cap**: the old `MaxSpeed = 42 m/s` (every car "top 151") is gone. The profile's straights
   are what the car's power, drag and rolling resistance allow, its braking is the car's published
   `BrakeDecel` (never more than the tyres), shared with the turn (friction circle), plus drag. Top
-  speed then comes from the car model itself (gearing, rev limit, drag). Throttle gain rises to 1 above
-  ~55 km/h: a soft pedal only lags a profile that already is the car's power limit. The steering
-  look-ahead is 0.7 s up to 70 m (30 m at 250 km/h is a third of a second, and the hands saw).
+  speed then comes from the car model itself (gearing, rev limit, drag). Throttle gain rises from 0.35 at
+  100 km/h to 1 at 170 km/h: a soft pedal only lags a profile that already is the car's power limit,
+  and a firm one lower down power-overs an FD out of a bend. The steering
+  look-ahead is 0.7 s up to 70 m (30 m at 250 km/h is a third of a second, and the hands saw), and
+  aims wide of the line by the chord's sagitta `L²κ/8` (`AutoPilot.Aim`): pure pursuit cuts every
+  bend by ~0.4 m at corner speed, which put wheels over the inside edge at apexes beside a drop.
 - **Traffic**: besides the race's cars, `Traffic()` sweeps car-sized boxes along the line ahead
   (`IntersectShape`, ~2.5 s) and treats any non-static body as another vehicle — the local traffic
   (`AnimatableBody3D`), parked machines. A body coming the other way is let past on whichever side

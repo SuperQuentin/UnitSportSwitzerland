@@ -90,6 +90,9 @@ public sealed class AutoPilot
     /// </summary>
     public float VergeMetres;
     public readonly Dictionary<RaceLine.Block, float> VergeUnsafe = new();
+    /// <summary>Where (100 m bins along the line) and how far (m of the body past the edge) that happened.</summary>
+    public readonly SortedSet<int> UnsafeAt = new();
+    public float UnsafeDepth;
     private float _planTimer, _cooldown, _gripUntil;
 
     /// <summary>A runner on foot waits for this (a vehicle gets it through <see cref="Drive"/>).</summary>
@@ -247,6 +250,8 @@ public sealed class AutoPilot
         {
             var why = lat > 0 ? line.WhyLeft[i] : line.WhyRight[i];
             VergeUnsafe[why] = VergeUnsafe.GetValueOrDefault(why) + ds;
+            UnsafeAt.Add((int)(Arc / 100f) * 100);
+            UnsafeDepth = Mathf.Max(UnsafeDepth, beyond);
         }
     }
 
@@ -358,6 +363,25 @@ public sealed class AutoPilot
         foreach (var kv in _sensedNow) _sensedAt[kv.Key] = kv.Value;
     }
 
+    /// <summary>
+    /// The point to steer at, <paramref name="look"/> m ahead on the line plus a sideways offset (+
+    /// left). Pure pursuit cuts every bend by the chord's sagitta, <c>L²κ/8</c> — ~0.4 m at corner
+    /// speed whatever the radius, 0.6 m in a hairpin — which put a wheel over the inside edge at the
+    /// apexes; aiming that much wide of the line puts the car back on it.
+    /// </summary>
+    private Vector3 Aim(float s0, float look, float lateral)
+    {
+        var line = Route.Line;
+        var t = RaceRoute.Flat(line.PointAt(s0 + look + 2f) - line.PointAt(s0 + look - 2f)).Normalized();
+        float k = line.Curvature[line.IndexAt(s0 + look * 0.5f)];
+        float sagitta = Mathf.Clamp(look * look * k / 8f, -1.5f, 1.5f);
+        // an overtaking offset never takes the car past the room where it is aimed (tarmac + safe
+        // verge): chosen against the line's offset beside the rival, it overshot where the line moved
+        int ai = line.IndexAt(s0 + look);
+        lateral = Mathf.Clamp(lateral, -line.RoomRight[ai] - line.Offset[ai], line.RoomLeft[ai] - line.Offset[ai]);
+        return line.PointAt(s0 + look) + new Vector3(t.Z, 0, -t.X) * (lateral - sagitta);
+    }
+
     private RideInput Policy(ref State d, Vector3 pos, in RideMotion m, float dt)
     {
         var line = Route.Line;
@@ -370,12 +394,7 @@ public sealed class AutoPilot
         // steer the TRAVEL toward a point ahead on the line (plus any overtaking offset); ~0.7 s
         // ahead, and further at motorway speed, where 30 m is a third of a second and the hands saw
         float look = Mathf.Clamp(v * 0.7f, 7f, 70f);
-        var ahead = line.PointAt(s0 + look);
-        if (d.Lateral != 0f)
-        {
-            var t = RaceRoute.Flat(line.PointAt(s0 + look + 2f) - line.PointAt(s0 + look - 2f)).Normalized();
-            ahead += new Vector3(t.Z, 0, -t.X) * d.Lateral;
-        }
+        var ahead = Aim(s0, look, d.Lateral);
         var travel = new Basis(Vector3.Up, m.Yaw + m.Slip) * Vector3.Forward;
         float angle = RaceRoute.SignedAngle(RaceRoute.Flat(travel), RaceRoute.Flat(ahead - pos));
         // gentler hands at speed: full lock at 90 km/h to fix a metre of line is what starts a slide
@@ -449,7 +468,7 @@ public sealed class AutoPilot
         {
             // gentle on the gas out of a slow corner (power-over), flat out at speed: the profile's
             // straights are what the car's power allows, so a soft pedal there only ever lags it
-            float gain = Mathf.Lerp(0.35f, 1f, Mathf.Clamp((v - 15f) / 25f, 0f, 1f));
+            float gain = Mathf.Lerp(0.35f, 1f, Mathf.Clamp((v - 28f) / 20f, 0f, 1f));
             throttle = Mathf.Clamp((want - v) * gain, 0f, 1f);
             // trail off the brake as the wheel turns in: braking hard in a bend unloads the rear
             brake = Mathf.Clamp((v - want) * 0.3f, 0f, 1f) * (1f - 0.7f * Mathf.Abs(steer));
@@ -479,7 +498,7 @@ public sealed class AutoPilot
         CountVerge(dt);
         var line = Route.Line;
         float look = Mathf.Clamp(v * 0.8f, 5f, 60f);
-        var ahead = line.PointAt(s0 + look);
+        var ahead = Aim(s0, look, 0f);
         var travel = RaceRoute.Flat(new Basis(Vector3.Up, m.Yaw) * Vector3.Forward);
         var to = RaceRoute.Flat(ahead - pos);
         float alpha = RaceRoute.SignedAngle(travel, to);

@@ -377,7 +377,7 @@ public partial class DriveProbe : Node
                 + $"{pilot?.Drifts ?? 0} held drifts (best {pilot?.BestDrift ?? 0:F0}°), {pilot?.Plans ?? 0} corners planned / {pilot?.Feasible ?? 0} feasible, "
                 + $"off road {en.OffRoad:F1} s, {en.Impacts} impacts, {en.Contacts / 60f:F1} s in contact, "
                 + $"verge {pilot?.VergeMetres ?? 0:F0} m safe"
-                + (pilot?.VergeUnsafe.Count > 0 ? $" / {string.Join(" ", pilot.VergeUnsafe.Select(kv => $"{kv.Key} {kv.Value:F0} m"))} unsurveyed-or-blocked" : " / 0 m blocked")
+                + (pilot?.VergeUnsafe.Count > 0 ? $" / {string.Join(" ", pilot.VergeUnsafe.Select(kv => $"{kv.Key} {kv.Value:F0} m"))} blocked (up to {pilot.UnsafeDepth:F2} m over, at {string.Join(",", pilot.UnsafeAt)} m)" : " / 0 m blocked")
                 + (pilot?.Resets > 0 ? $", {pilot.Resets} reset(s) to the line" : "")
                 + (GameSettings.Current.TyreWear && pilot?.Car is { } c1 ? $", tyres F {(1f - c1.TyreWearFront) * 100:F0}% R {(1f - c1.TyreWearRear) * 100:F0}%" : "")
                 + (GameSettings.Current.BrakeWear && pilot?.Car is { } c2 ? $", brakes peaked {en.PeakBrake:F0}°C, pads {(1f - c2.PadWear) * 100:F0}%" : ""));

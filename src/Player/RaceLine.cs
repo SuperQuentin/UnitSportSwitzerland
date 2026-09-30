@@ -271,7 +271,7 @@ public sealed class RaceLine
     /// <summary>How far past the edge the ground must not fall away, m: a car width.</summary>
     private const float DropReach = 1.8f;
     /// <summary>Extra clearance the line keeps from an edge with a drop beyond it, m.</summary>
-    private const float DropClearance = 0.3f;
+    private const float DropClearance = 0.5f;
 
     private readonly record struct Obstacle(Vector2 At, float Radius, Block Why);
 
@@ -375,7 +375,8 @@ public sealed class RaceLine
             // neighbour within a car length
             var sl = Worst(ml, wl, out var swl);
             var sr = Worst(mr, wr, out var swr);
-            // beside a drop the line keeps a further 0.3 m in: tracking error is a wheel over the edge
+            // beside a drop the line keeps a further 0.5 m in: tracking error (S-bends, a pack, a drift)
+            // put a wheel up to 0.25 m over the edge with 0.3
             for (int i = 0; i < n; i++)
             {
                 if (sl[i] == 0f && swl[i] == Block.Drop) sl[i] = -DropClearance;

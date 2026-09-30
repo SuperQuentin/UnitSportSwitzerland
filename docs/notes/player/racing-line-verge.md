@@ -8,7 +8,8 @@
   is margin 0), trunks from `.trees` (same radius as `TreeColliders`, 0.5 m clearance, within a car
   length along), walls, railways and watercourses from `.road`, water/wetland/glacier cover, building
   footprints. Each side is only as good as its worst neighbour within ±2 points (a car length). Any
-  missing data is margin 0. The speed profile takes a quarter of the grip off where the line runs on
+  missing data is margin 0. Beside a drop the line keeps a further 0.5 m inside the tarmac: with 0.3
+  a car's tracking error (S-bends, running in a pack, a drift) still put a wheel 0.25 m over. The speed profile takes a quarter of the grip off where the line runs on
   the verge. The survey runs off the main thread when a pilot is made (or before GO in `--drivecheck`)
   and swaps `route.Line` for the widened one (same point count, so indices stay valid).
   Mollendruz (8.4 km): 12.0 of 16.7 km of edge usable, blocked by Drop 4.3 km, Bank 0.3 km; the line
