@@ -154,14 +154,47 @@ public abstract class Rideable
     public virtual float BodyRadius => 0.32f;
     public virtual float BodyHeight => 1.78f;
 
-    /// <summary>Collision box of the vehicle standing empty in the world: centre and size, node space.</summary>
-    public virtual (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 0.8f, 0), new Vector3(0.6f, 1.6f, 1.6f));
+    /// <summary>
+    /// Collision box of the vehicle standing empty in the world: centre and size, node space.
+    /// Measured from the parked mesh by default, so it cannot drift from what is drawn — the
+    /// bike's hand-typed box was 1.1 m tall and centred 0.55 m up while the bike stands 1.0 m.
+    /// </summary>
+    public virtual (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual);
+
+    private static readonly System.Collections.Generic.Dictionary<RideKind, (Vector3, Vector3)> _measured = new();
+
+    /// <summary>
+    /// The bounds of a visual this mount builds, once per kind (a throwaway build, freed at once).
+    /// <paramref name="skip"/> names parts left out, such as a rotor disc nothing rests on.
+    /// </summary>
+    protected static (Vector3 Centre, Vector3 Size) Measured(RideKind kind, System.Func<int, Node3D> build, params string[] skip)
+    {
+        if (_measured.TryGetValue(kind, out var known)) return known;
+        var visual = build(1);
+        var box = Avatar.MeshBounds.Of(visual, skip);
+        visual.Free();
+        // nothing drawn (should not happen, meshes build headless too): the old generic box
+        var result = box.Size.LengthSquared() > 1e-4f ? (box.GetCenter(), box.Size) : (new Vector3(0, 0.8f, 0), new Vector3(0.6f, 1.6f, 1.6f));
+        return _measured[kind] = result;
+    }
 
     /// <summary>Advances speed, heading and lean by one physics step.</summary>
     public abstract void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion);
 
     /// <summary>Per-frame visual update — spinning cranks, and so on. Called on the render thread.</summary>
     public virtual void Animate(Node3D visual, in RideMotion motion, float dt) { }
+
+    // ---- what other players see ---------------------------------------------------------
+    // The visual's whole transform (lean, tricks, a craft's attitude) is replicated by FootPlayer
+    // as BodyPose. These two carry the moving PARTS: whatever drives them beyond that transform,
+    // packed into four floats the owner writes and every remote copy reads back. Cars: slip,
+    // steer angle, wheel spin, rpm.
+
+    /// <summary>On the rider's own peer, after <see cref="Animate"/>: the state remote copies need to animate the parts.</summary>
+    public virtual Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) => default;
+
+    /// <summary>On every other peer, each frame: animates the parts from what <see cref="WritePose"/> sent.</summary>
+    public virtual void AnimateRemote(Node3D visual, Vector4 pose, float dt) { }
 
     /// <summary>
     /// Gravity's component along the direction of travel, m/s². Negative when climbing.

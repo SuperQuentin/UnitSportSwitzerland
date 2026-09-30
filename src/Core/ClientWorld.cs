@@ -240,7 +240,8 @@ public partial class ClientWorld : Node3D
             || Birds.BirdProbe.ParseArgs().Requested
             || World.TrafficProbe.ParseArgs().Requested
             || Combat.CombatProbe.ParseArgs().Requested
-            || Birds.BirdStrikeProbe.ParseArgs().Requested;
+            || Birds.BirdStrikeProbe.ParseArgs().Requested
+            || SyncProbe.Requested() || HitboxProbe.Requested();
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget();
@@ -421,6 +422,20 @@ public partial class ClientWorld : Node3D
             var (fE, fN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(fE, fN, 1200);
             AddChild(new FlightCheckProbe(_chunks, origin, flycheck.Kind, flycheck.Shot));
+            return;
+        }
+
+        if (HitboxProbe.Requested())
+        {
+            AddChild(new HitboxProbe(_chunks, origin));
+            return;
+        }
+
+        if (SyncProbe.Requested())
+        {
+            var (sE, sN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(sE, sN, 1200);
+            AddChild(new SyncProbe(_chunks, origin));
             return;
         }
 

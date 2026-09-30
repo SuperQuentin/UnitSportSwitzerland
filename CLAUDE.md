@@ -786,6 +786,45 @@ Several people work on this repo in parallel, so every new feature follows these
 - **Multiplayer**: client-authoritative transforms, MultiplayerSpawner + Synchronizer,
   ENet port 7777. Server runs ChunkManager with BuildMeshes=false (grid-only, for
   height queries around players).
+- **What others see is what the owner sees** (`FootPlayer` pose sync, issue #9). A remote copy
+  used to get position, yaw and ride kind only, so nobody else ever saw a lean, a trick, a bail, a
+  craft's attitude (it was posed level), a turning rotor or crank, a slide, a jump or a stunned
+  body, and every peer ran its own gait phase. Three more synced properties now carry it:
+  **`BodyPose`** (the visual's local transform — lean, bank, flips/spins, bails, flight attitude,
+  landing squash, stun all in one value, applied as-is), **`PoseKind`** (stride / air / tucked) and
+  **`Anim`** (a `Vector4`: on foot speed + gait phase; mounted whatever the `Rideable` writes in
+  `WritePose` and reads in `AnimateRemote` — bike cadence + crank angle, craft spool + throttle).
+  Owner and remote draw the on-foot figure through the same `ApplyFootPose`; a fresh gait phase or
+  crank angle is taken as-is and only integrated between updates. **A new mount with moving parts
+  plugs into `WritePose`/`AnimateRemote` and never touches the sync code** — the drift cars'
+  slip, steer angle, wheel spin and rpm go there. The pose is reset on every ride change (see the
+  gotcha). Remote helicopters and planes are heard (spatial `EngineSynth` from `Anim`), and a
+  parked craft's rotor follows the synced `VehicleBody.Spool` instead of a guess from `EngineOn`.
+  Check: `<godot> --path . -- --synccheck [--at E,N]` — an owner runs walk, sprint, jump, slide, a
+  leaning bike ride, a helicopter climb and a rolling plane while a MIRROR (foreign authority, so
+  it takes the remote path) is fed the owner's real `ReplicationConfig` properties at 20 Hz of
+  wall time; non-zero exit if the mirror differs the frame after an update (must be 0: that is
+  state not replicated) or drifts between updates past one interval. Measured: 0.0000 fresh on
+  pose, hand and crank; with the old replication set, plane attitude off by 3.0, crank 3 rad,
+  bike lean 0.6, hand 0.64 m. One process, no sockets: it tests that the state is complete and
+  both sides derive the same picture, not ENet.
+- **Hitboxes are measured, never typed** (`Avatar/MeshBounds`, `Player/Hurtbox`). Movement keeps
+  its capsule (a rigid 11 m box would snag every slope of the 1 m lattice), but every drawn
+  machine — mounted player or parked `VehicleBody` — also carries a **`Hurtbox`**: an `Area3D`
+  fitted to its mesh bounds, parented to the VISUAL so it banks and flips with it, alone on
+  physics layer 8 (`Hurtbox.Layer`), monitorable, not monitoring — no movement changes. A shot that
+  wants it sets `CollideWithAreas = true` with `Hurtbox.Layer` in its mask and resolves the hit
+  with `Hurtbox.BodyOf` (combat, PR #6, needs that one-line change to hit wings and rotors).
+  `Rideable.ParkedBox` defaults to the parked mesh's bounds (`Measured`, once per kind; the
+  helicopter leaves its "Rotor" out; the plane keeps a documented fuselage-only box, checked to lie
+  inside its mesh), and traffic units take their mesh's own AABB. Before: bike parked box 1.10 m
+  tall for a 0.91 m bike, traffic car/van boxes 15/20 cm over the roof, carriages 30 cm short.
+  Check: `<godot> --path . -- --hitboxcheck [--at E,N]` — per mount: drawn bounds, capsule, parked
+  box, hurtbox; live rays through a wingtip and a rotor rim; and with `--at` in a town, a ray from
+  outside at up to 5,000 faces of the real `.bldg` tiles through `ChunkNode.BuildingShape` (the
+  building collision is one-sided `ConcavePolygonShape3D` with the render's raw winding — this is
+  the raycast verification the bridge-deck gotcha asked for; not yet run on a region with
+  buildings).
 - **Coarse tiles**: every `.terr` has a `.terrc` companion — the same grid **point-decimated at
   stride 10** (51x51, **5.2 KB** against 490 KB). The LOD rings render one vertex in ten or twenty
   past ring 4, so 280 of the 361 tiles an anchor wants were reading a 490 KB file to use 5 KB of
@@ -1514,6 +1553,17 @@ Several people work on this repo in parallel, so every new feature follows these
   `NetworkChunkSource` took the same window to 226 MB at the full bandwidth cap.
 - **A MultiplayerSynchronizer's own authority decides who sends.** Children added after
   the parent's `SetMultiplayerAuthority` default to server authority — set it explicitly.
+- **A replicated value whose MEANING depends on another replicated value must be reset when that
+  one changes.** `Anim` means gait speed + phase on foot and cadence + crank angle on a bike; the
+  ride kind and `Anim` arrive in the same update, but the owner had not rewritten `Anim` yet on the
+  frame the ride changed, so the bike read the rider's stride phase as a crank angle (0.93 rad, an
+  instant snap). `ApplyRide` zeroes `Anim`/`BodyPose`/`PoseKind` with the kind.
+- **Simulate a network's rate in wall time, not frames.** `--synccheck` first copied every third
+  frame; at WSL's 33 fps that is 11 Hz, and a plane rolling at 2.2 rad/s legitimately drifted
+  0.26 rad between updates — a failure that was the probe's, not the sync's.
+- **Headless runs of several checks exit 139 (segfault) after printing their result** —
+  `--mantlecheck` on main does it too, so it predates the sync/hitbox work. Read the RESULT line,
+  or run them windowed (exit code 0).
 - `ressources/` (sic) and `terrain_chunks/` have `.gdignore` so the editor never imports
   them; don't move data without keeping those.
 - French locale machine: never parse/format floats without InvariantCulture (preprocessor

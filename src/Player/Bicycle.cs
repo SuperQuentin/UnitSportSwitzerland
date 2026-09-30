@@ -101,7 +101,6 @@ public sealed class Bicycle : Rideable
         MaterialOverride = HumanMeshBuilder.Material(),
     };
 
-    public override (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 0.55f, 0), new Vector3(0.45f, 1.1f, 1.75f));
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
@@ -154,5 +153,19 @@ public sealed class Bicycle : Rideable
     public override void Animate(Node3D visual, in RideMotion motion, float dt)
     {
         if (visual is Cyclist cyclist) cyclist.CadenceRpm = _cadence;
+    }
+
+    /// <summary>Cadence, and the crank angle itself so a remote rider's legs are where the owner's are.</summary>
+    public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
+        visual is Cyclist c ? new Vector4(c.CadenceRpm, c.CrankAngle, 0, 0) : default;
+
+    private float _seenCrank = float.NaN;
+
+    public override void AnimateRemote(Node3D visual, Vector4 pose, float dt)
+    {
+        if (visual is not Cyclist cyclist) return;
+        cyclist.CadenceRpm = pose.X;
+        // a fresh angle is taken as-is; between updates the cadence turns it
+        if (pose.Y != _seenCrank) cyclist.SetCrankAngle(_seenCrank = pose.Y);
     }
 }

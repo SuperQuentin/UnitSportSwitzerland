@@ -409,6 +409,27 @@ public sealed class Car : Rideable
         motion.Lean = Mathf.Clamp(-AccelY * 0.012f, -0.09f, 0.09f);
     }
 
+    /// <summary>
+    /// What another player needs to draw this car's moving parts: the body's slide already travels
+    /// in the replicated transform, so these are the front-wheel angle, the wheels' spin RATE (each
+    /// peer turns its own wheels by it — an accumulated angle would wrap and stutter), rpm for the
+    /// rev needle and engine note, and the brake lights.
+    /// </summary>
+    public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
+        new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01, Braking ? 1f : 0f);
+
+    private float _remoteSpin;
+
+    public override void AnimateRemote(Node3D visual, Vector4 pose, float dt)
+    {
+        if (visual is not CarRig rig) return;
+        _remoteSpin += pose.Y * dt;
+        rig.SteerAngle = pose.X;
+        rig.WheelSpin = _remoteSpin;
+        rig.BrakeLights = pose.W > 0.5f;
+        Rpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
+    }
+
     public override void Animate(Node3D visual, in RideMotion motion, float dt)
     {
         if (visual is not CarRig rig) return;
