@@ -120,6 +120,7 @@ public partial class ItemController : Node
         // switching item or getting on a bike all fall back to normal without a special case
         player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f, ItemUse.Photo => 38f, _ => 50f } : null;
         player.ScopeView = aiming;
+        player.ItemAction = aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
         player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => 0.5f, _ => 0.6f } : 1f;
         // held items stay visible while aiming: they are raised to a pose. Only binoculars
         // (overlay covers the view, once at the eyes) and a photo in the making hide them.
