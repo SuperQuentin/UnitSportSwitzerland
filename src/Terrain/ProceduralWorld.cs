@@ -333,6 +333,7 @@ public sealed partial class ProceduralWorld
     private const int CoverStep = 2 * LatticeM;
 
     // keyed by the blend's version too: the same tile blends differently once the real set changes
+    // (the full and the coarse blend classify alike: the raster reads 10 m points only)
     private readonly Dictionary<(TileId, long), byte[]> _covers = new();
     private readonly Queue<(TileId, long)> _coverOrder = new();
 

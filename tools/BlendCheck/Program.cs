@@ -301,6 +301,116 @@ WriteLine($"  {trees} trees, {buildings} buildings, {water} water cells ({plainW
 Check("trees more than 1 m off the ground mesh", treeErr > 1 ? 1 : 0);
 Check("road vertices more than 1 m off the ground mesh", roadErr > 1 ? 1 : 0);
 
+// ---- quality: what the renders showed and no earlier number measured ---------------------------
+WriteLine("quality:");
+
+// the height of the world vertex at whole metres (e, n), from whichever full grid holds it
+double VertexAt(double e, double n)
+{
+    var id = TileId.FromLv95(e, n);
+    var g = real.Contains(id) ? realFull[id] : full[id];
+    return g.HeightMetersAt((int)(e - id.MinE), (int)(id.MaxN - n));
+}
+
+// Seam kink: the change of slope across a generated|real edge, against the same measure one row in
+// on either side. A seam that is C0 but not C1 (a ridge or a crease) stands out here.
+var kSeam = new List<double>();
+var kInside = new List<double>();
+foreach (var t in gen)
+    foreach (var (de, dn) in around.Take(4))
+    {
+        var k = new TileId(t.E + de, t.N + dn);
+        if (!real.Contains(k)) continue;
+        // walk the shared edge; (ue, un) steps from the real side into the generated one
+        double ue = -de, un = -dn;
+        for (int i = 1; i < 1000; i++)
+        {
+            double e0 = de == -1 ? t.MinE : de == 1 ? t.MinE + 1000 : t.MinE + i;
+            double n0 = dn == 1 ? t.MaxN : dn == -1 ? t.MinN : t.MaxN - i;
+            double H(int s) => VertexAt(e0 + s * ue, n0 + s * un);
+            double hm2 = H(-2), hm1 = H(-1), h0 = H(0), h1 = H(1), h2 = H(2);
+            kSeam.Add(Math.Abs(h1 - 2 * h0 + hm1));
+            kInside.Add(Math.Abs(h0 - 2 * hm1 + hm2));   // one row into the real tile
+            kInside.Add(Math.Abs(h2 - 2 * h1 + h0));     // one row into the generated one
+        }
+    }
+double Mean(List<double> v) => v.Count == 0 ? 0 : v.Average();
+double P99(List<double> v) => v.Count == 0 ? 0 : v.OrderBy(x => x).ElementAt((int)(v.Count * 0.99));
+WriteLine($"  seam kink: mean {Mean(kSeam):F3} m, p99 {P99(kSeam):F3} m; one row in: mean {Mean(kInside):F3} m, p99 {P99(kInside):F3} m");
+Check("seams creased or ridged (kink over 1.5x the ground's own, mean or p99)",
+    Mean(kSeam) > 1.5 * Mean(kInside) || P99(kSeam) > 1.5 * P99(kInside) ? 1 : 0);
+
+// Streaks: along lines parallel to a real edge, the part of the ground the blend brought (W R + D,
+// i.e. h - (1 - W) G) high-passed over 600 m. Real detail extruded straight out shows up here;
+// read coarser the further it is carried, it should fade past a kilometre.
+// no lattice is prepared on these blends, so each point is computed afresh and the level switch applies
+var streakBlends = new Dictionary<TileId, ProceduralWorld.Blend?>();
+double StreakRms(IEnumerable<(double E, double N)> line)
+{
+    var q = new List<double>();
+    foreach (var (e, n) in line)
+    {
+        var id = TileId.FromLv95(e, n);
+        if (!streakBlends.TryGetValue(id, out var fb)) streakBlends[id] = fb = MakeBlend(id, 1);
+        if (fb == null) { q.Add(0); continue; }
+        double g = world.Height(e, n);
+        q.Add(fb.Correction(e, n, g) + fb.RealWeight(e, n) * g);
+    }
+    // a local quadratic fit over 150 m either side (Savitzky-Golay), not a moving average: the
+    // synthetic ground's own km-scale curvature leaks through an average and reads as streaks
+    const int half = 15;
+    double norm = (2.0 * half - 1) * (2 * half + 1) * (2 * half + 3);
+    double sum = 0;
+    int count = 0;
+    for (int i = half; i < q.Count - half; i++)
+    {
+        double fit = 0;
+        for (int j = -half; j <= half; j++) fit += (3.0 * (3 * half * half + 3 * half - 1) - 15.0 * j * j) / norm * q[i + j];
+        sum += (q[i] - fit) * (q[i] - fit);
+        count++;
+    }
+    return Math.Sqrt(sum / Math.Max(1, count));
+}
+// east of the high block, running north-south; south of the low block, running east-west
+double highEdge = (c0.E + 6) * 1000.0, lowEdge = (c0.N + 5) * 1000.0 - 1000;
+IEnumerable<(double, double)> EastLine(double d) =>
+    Enumerable.Range(0, 301).Select(i => (highEdge + d, (c0.N - 1) * 1000.0 - 1000 + i * 10.0));
+IEnumerable<(double, double)> SouthLine(double d) =>
+    Enumerable.Range(0, 501).Select(i => ((c0.E - 8) * 1000.0 + i * 10.0, lowEdge - d));
+// the scale to judge them by: the generated ground's own relief on the same lines, same filter
+double OwnRms(IEnumerable<(double E, double N)> line)
+{
+    var pts = line.ToList();
+    var q = pts.Select(p => world.Height(p.E, p.N)).ToList();
+    const int half = 15;
+    double norm = (2.0 * half - 1) * (2 * half + 1) * (2 * half + 3), sum = 0;
+    int count = 0;
+    for (int i = half; i < q.Count - half; i++)
+    {
+        double fit = 0;
+        for (int j = -half; j <= half; j++) fit += (3.0 * (3 * half * half + 3 * half - 1) - 15.0 * j * j) / norm * q[i + j];
+        sum += (q[i] - fit) * (q[i] - fit);
+        count++;
+    }
+    return Math.Sqrt(sum / count);
+}
+long streakBad = 0;
+foreach (double d in new[] { 250.0, 500, 1000, 2000, 2900 })
+{
+    ProceduralWorld.SingleLevelForChecks = true;
+    double before = (StreakRms(EastLine(d)) + StreakRms(SouthLine(d))) / 2;
+    ProceduralWorld.SingleLevelForChecks = false;
+    double after = (StreakRms(EastLine(d)) + StreakRms(SouthLine(d))) / 2;
+    double own = (OwnRms(EastLine(d)) + OwnRms(SouthLine(d))) / 2;
+    WriteLine($"  streaks {d,5:F0} m out: {after,5:F2} m RMS (a single level: {before,5:F2} m; the generated ground's own relief: {own,5:F2} m)");
+    // past a kilometre what the blend brings must be lost in the ground's own texture, and the
+    // pyramid must never make it worse than reading every distance at the knots
+    if ((d >= 1000 && after > 0.05 * own) || after > before + 0.005) streakBad++;
+}
+Check("distances where carried real detail shows as streaks", streakBad);
+
+if (args.Contains("--render")) Renders.Write(world, real, realFull, full, c0, hole);
+
 // ---- the source: FallbackChunkSource under CachingChunkSource, as the game chains them ----------
 WriteLine("source:");
 var inner = new SyntheticSource(real, realFull, realCoarse, knots);
@@ -414,4 +524,120 @@ sealed class SyntheticSource(IReadOnlySet<TileId> real, IReadOnlyDictionary<Tile
         Task.FromResult<List<TreeInstance>?>(null);
     public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default) =>
         Task.FromResult<HorizonIndex?>(new HorizonIndex(knots.ToDictionary(kv => kv.Key, kv => kv.Value)));
+}
+
+/// <summary>
+/// "--render": shaded-relief before/after pictures (left the generator alone, right the blended
+/// world) of the overview, the one-tile hole and a block corner, to test_output/blend. The numbers
+/// above are what gates a change; these are how a change is judged by eye.
+/// </summary>
+static class Renders
+{
+    public static void Write(ProceduralWorld world, HashSet<TileId> real, IReadOnlyDictionary<TileId, ChunkGrid> realFull,
+        IReadOnlyDictionary<TileId, ChunkGrid> blended, TileId c0, TileId hole)
+    {
+        string dir = Path.Combine(FindRepo(), "test_output", "blend");
+        Directory.CreateDirectory(dir);
+        double After(double e, double n)
+        {
+            var id = TileId.FromLv95(e, n);
+            var g = real.Contains(id) ? realFull[id] : blended.TryGetValue(id, out var b) ? b : null;
+            return g == null ? world.Height(e, n) : g.SampleMeshHeight(e, n);
+        }
+        void One(string name, double minE, double maxN, double sizeE, double sizeN, double metresPerPixel)
+        {
+            int w = (int)(sizeE / metresPerPixel), h = (int)(sizeN / metresPerPixel);
+            var pixels = new byte[h * w * 2];
+            Shade(pixels, w, h, 0, (x, y) => world.Height(minE + x * metresPerPixel, maxN - y * metresPerPixel), metresPerPixel);
+            Shade(pixels, w, h, w, (x, y) => After(minE + x * metresPerPixel, maxN - y * metresPerPixel), metresPerPixel);
+            string path = Path.Combine(dir, $"{name}_before_after.png");
+            Png.WriteGray(path, pixels, 2 * w, h);
+            Console.WriteLine($"  render: {path}");
+        }
+        One("overview", (c0.E - 12) * 1000.0, (c0.N + 13) * 1000.0, 22000, 18000, 20);
+        One("hole", (hole.E - 1) * 1000.0, (hole.N + 2) * 1000.0, 3000, 3000, 2);
+        One("corner", (c0.E + 5) * 1000.0, (c0.N + 3) * 1000.0, 2000, 2000, 2);
+    }
+
+    /// <summary>Hillshade, light from the north-west at 45 degrees, into one half of a double-width image.</summary>
+    private static void Shade(byte[] pixels, int w, int h, int x0, Func<int, int, double> height, double step)
+    {
+        var z = new double[(w + 2) * (h + 2)];
+        Parallel.For(0, h + 2, y => { for (int x = 0; x < w + 2; x++) z[y * (w + 2) + x] = height(x - 1, y - 1); });
+        double lx = -1 / Math.Sqrt(3), ly = -1 / Math.Sqrt(3), lz = 1 / Math.Sqrt(3);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = (y + 1) * (w + 2) + x + 1;
+                double gx = (z[i + 1] - z[i - 1]) / (2 * step), gy = (z[i + w + 2] - z[i - w - 2]) / (2 * step);
+                // image y runs south; normal of the surface h(x, y) with y pointing north
+                double nx = -gx, ny = gy, nz = 1, len = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+                double shade = Math.Max(0, (nx * lx + ny * -ly + nz * lz) / len);
+                pixels[y * 2 * w + x0 + x] = (byte)Math.Clamp(40 + 215 * shade, 0, 255);
+            }
+    }
+
+    private static string FindRepo()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (d != null && !File.Exists(Path.Combine(d.FullName, "project.godot"))) d = d.Parent;
+        return d?.FullName ?? Directory.GetCurrentDirectory();
+    }
+}
+
+/// <summary>An 8-bit greyscale PNG, no library: signature, IHDR, one zlib IDAT, IEND.</summary>
+static class Png
+{
+    public static void WriteGray(string path, byte[] pixels, int width, int height)
+    {
+        using var raw = new MemoryStream();
+        using (var z = new System.IO.Compression.ZLibStream(raw, System.IO.Compression.CompressionLevel.Optimal, true))
+            for (int y = 0; y < height; y++)
+            {
+                z.WriteByte(0);   // no filter
+                z.Write(pixels, y * width, width);
+            }
+        using var f = File.Create(path);
+        f.Write([137, 80, 78, 71, 13, 10, 26, 10]);
+        var ihdr = new byte[13];
+        BigEndian(ihdr, 0, (uint)width);
+        BigEndian(ihdr, 4, (uint)height);
+        ihdr[8] = 8;   // bit depth; colour type 0 (grey), default compression, filter, no interlace
+        Chunk(f, "IHDR", ihdr);
+        Chunk(f, "IDAT", raw.ToArray());
+        Chunk(f, "IEND", []);
+    }
+
+    private static void Chunk(Stream s, string type, byte[] data)
+    {
+        var head = new byte[8];
+        BigEndian(head, 0, (uint)data.Length);
+        for (int i = 0; i < 4; i++) head[4 + i] = (byte)type[i];
+        s.Write(head);
+        s.Write(data);
+        var crc = new byte[4];
+        BigEndian(crc, 0, Crc(head.AsSpan(4, 4), data));
+        s.Write(crc);
+    }
+
+    private static uint Crc(ReadOnlySpan<byte> type, byte[] data)
+    {
+        uint c = 0xFFFFFFFF;
+        void Feed(ReadOnlySpan<byte> bytes)
+        {
+            foreach (byte b in bytes)
+            {
+                c ^= b;
+                for (int k = 0; k < 8; k++) c = (c & 1) != 0 ? 0xEDB88320 ^ (c >> 1) : c >> 1;
+            }
+        }
+        Feed(type);
+        Feed(data);
+        return c ^ 0xFFFFFFFF;
+    }
+
+    private static void BigEndian(byte[] b, int at, uint v)
+    {
+        b[at] = (byte)(v >> 24); b[at + 1] = (byte)(v >> 16); b[at + 2] = (byte)(v >> 8); b[at + 3] = (byte)v;
+    }
 }
