@@ -17,3 +17,9 @@
   also searches a container and takes everything (this adds items to the real inventory).
   `--lootepoch N` pretends N restocks have passed. Francs found go to the cash counter, not a slot
   (the items `cash-account` note). Two players on one container: the `two-players-one-container` note.
+  **Exact odds**: `LootTables.Chance(kind, type, abundance, item)` / `ChanceFrancs` / `BuildingChance(layout, item)`
+  (= 1 - prod(1 - p_i), with a per-type breakdown) are the closed form of `Roll` (empty x abundance, roll count
+  incl. `RollFactor` random rounding, per-pick weight, seasonal roll; shared `Candidates`, so they cannot drift).
+  `--lootchancecheck` compares them with 200k sampled rolls per case (pass within 2 points; RESULT line). If you
+  change `Roll`, change `Chance`. Used by the smart binoculars (the items `smart-binoculars` note). Tip: seed
+  Monte-Carlo with hashed seeds, `new Random(i)` on consecutive ints correlates early draws.

@@ -25,7 +25,7 @@ public static class SfxSynth
     public const int Rate = Dsp.Rate;
 
     private static AudioStreamWav? _hiss, _tyre, _scrape;
-    private static SfxBank? _stepsBank, _landingBank, _whooshBank, _tickBank, _impactBank, _chimeBank, _boomBank;
+    private static SfxBank? _stepsBank, _landingBank, _whooshBank, _tickBank, _impactBank, _chimeBank, _boomBank, _gulpBank, _crunchBank;
 
     /// <summary>Looping edge hiss for skis: bright, high-passed noise.</summary>
     public static AudioStreamWav Hiss => _hiss ??= Loop(2.0f, 12, (rng, n) =>
@@ -233,6 +233,47 @@ public static class SfxSynth
 
     private static SfxBank? _gunBank;
 
+    private static SfxBank? _blast;
+
+    /// <summary>A shotgun report (the bird hunt, relayed as an item event): a sharp crack, a noise body and a low thump, then a short tail.</summary>
+    public static SfxBank Shotgun => _blast ??= SfxBank.Build("shotgun", 6, 1.2f, 71, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        var crack = HighPass(Noise(rng, n), 0.3f);
+        var body = LowPass(Noise(rng, n), 0.08f * J());
+        float d1 = 70f * J(), d2 = 11f * J(), d3 = 2.5f * J(), f = 55f * J();
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            s[i] = crack[i] * 2.5f * Mathf.Exp(-d1 * t) + body[i] * 7f * Mathf.Exp(-d2 * t)
+                 + Mathf.Sin(Mathf.Tau * f * t) * 0.9f * Mathf.Exp(-14f * t)
+                 + body[i] * 2.5f * Mathf.Exp(-d3 * t) * Mathf.Min(1f, t * 20f);
+        }
+        return s;
+    });
+
+    private static SfxBank? _pump;
+
+    /// <summary>A pump-action cycle: the slide racking back and the shell chambering, two metallic clacks 0.16 s apart.</summary>
+    public static SfxBank Pump => _pump ??= SfxBank.Build("pump", 4, 0.34f, 72, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        var hi = HighPass(Noise(rng, n), 0.25f);
+        var mid = LowPass(HighPass(Noise(rng, n), 0.05f), 0.35f);
+        float gap = 0.16f * J(), f = 190f * J();
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float t2 = t - gap;
+            float a = Mathf.Exp(-90f * t) * 0.9f + Mathf.Sin(Mathf.Tau * f * t) * Mathf.Exp(-45f * t) * 0.5f;
+            float b = t2 > 0f ? Mathf.Exp(-110f * t2) * 1.1f + Mathf.Sin(Mathf.Tau * f * 1.4f * t2) * Mathf.Exp(-55f * t2) * 0.45f : 0f;
+            s[i] = (hi[i] * 0.6f + mid[i] * 1.4f) * (a + b);
+        }
+        return s;
+    });
+
     /// <summary>
     /// The reward sound for a clean landing or trick: two bright bell partials a fifth apart,
     /// with a quick attack. Pure tones are the one thing here that is not noise, which is why
@@ -253,6 +294,39 @@ public static class SfxSynth
             float second = t > 0.07f ? Mathf.Exp(-dk * (t - 0.07f)) : 0f;
             s[i] = env * Mathf.Sin(Mathf.Tau * fa * t) * 0.6f
                  + second * Mathf.Min(1f, (t - 0.07f) * 400f) * Mathf.Sin(Mathf.Tau * fb * t) * 0.5f;
+        }
+        return s;
+    });
+
+    /// <summary>Three swallows: short low blips that fall in pitch, over a wet band of noise. Drinking.</summary>
+    public static SfxBank GulpBank => _gulpBank ??= SfxBank.Build("gulp", 4, 0.6f, 35, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        var s = BandPass(Noise(rng, n), 0.02f, 0.12f);
+        float f0 = 190f * J();
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float local = t % 0.19f;   // one swallow per 0.19 s
+            bool on = t < 0.57f;
+            float env = on ? Mathf.Min(1f, local * 250f) * Mathf.Exp(-local * 22f) : 0f;
+            float f = f0 * (1f - local * 2.2f);
+            s[i] = env * (Mathf.Sin(Mathf.Tau * f * local) * 0.8f + s[i] * 0.9f);
+        }
+        return s;
+    });
+
+    /// <summary>A bite of something dry: a few bursts of bright, fast-decaying noise.</summary>
+    public static SfxBank CrunchBank => _crunchBank ??= SfxBank.Build("crunch", 4, 0.5f, 36, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.15f;
+        var s = HighPass(Noise(rng, n), 0.25f * J());
+        float[] at = { 0f, 0.09f * J(), 0.2f * J(), 0.31f * J() };
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate, env = 0f;
+            foreach (float a in at) if (t >= a) env += Mathf.Exp(-(t - a) * 55f) * (0.5f + 0.5f * (float)rng.NextDouble());
+            s[i] *= 1.6f * env;
         }
         return s;
     });

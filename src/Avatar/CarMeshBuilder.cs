@@ -4,7 +4,8 @@ namespace UnitSport.Avatar;
 
 /// <summary>The meshes a <see cref="CarRig"/> is assembled from, and where its wheels go.</summary>
 public sealed record CarParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, ArrayMesh Wheel,
-    float WheelRadius, float FrontAxleZ, float RearAxleZ, float HalfTrack)
+    float WheelRadius, float FrontAxleZ, float RearAxleZ, float HalfTrack,
+    CarDoor[] Doors, float Drop, Color? Glow)
 {
     /// <summary>A roadster's soft top (cloth, rear window, C-pillars), origin on its hinge behind the seats.</summary>
     public HingedPart? Top { get; init; }
@@ -21,6 +22,13 @@ public sealed record CarParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, Ar
 
 /// <summary>A part that moves: its mesh (and lamp mesh, if it carries lights), origin on <see cref="Pivot"/> in node space.</summary>
 public sealed record HingedPart(ArrayMesh Mesh, Vector3 Pivot, ArrayMesh? Lamp = null);
+
+/// <summary>
+/// One door: its mesh, built around its hinge, where that hinge is and the rotation that opens
+/// it. <paramref name="Hinge"/> and <paramref name="Centre"/> (the closed door's middle, for
+/// "which door is this player at") are in node space, like the shell's vertices.
+/// </summary>
+public sealed record CarDoor(string Name, byte Bit, ArrayMesh Mesh, Vector3 Hinge, Quaternion Open, Vector3 Centre);
 
 /// <summary>
 /// Low-poly cars from <see cref="MeshScratch"/> boxes and tubes, at real dimensions. Authored
@@ -52,7 +60,7 @@ public static class CarMeshBuilder
     private static readonly Color Cabin = new(0.14f, 0.13f, 0.13f);
     private static readonly Color Amber = new(1f, 0.6f, 0.12f);
 
-    private sealed record Dims(
+    internal sealed record Dims(
         float Length, float Width, float Roof, float Wheelbase, float WheelR, float TyreW, float Track,
         float Belt, float Hood, float Deck,
         float WsBase, float WsTop, float RgTop, float RgBase);
@@ -61,7 +69,7 @@ public static class CarMeshBuilder
     // values are the base and top of the windscreen and rear glass. Heights in metres. Derived
     // from the body's real length and height by per-shape proportions, measured off the three
     // hand-built originals (AE86 hatch, FD, GC8) and extended to the other shapes.
-    private static Dims For(CarBody b, float wheelbase)
+    internal static Dims For(CarBody b, float wheelbase)
     {
         float hl = b.Length * 0.5f, h = b.Height;
         // fractions of the half-length: windscreen base, windscreen top, rear glass top, rear glass base
@@ -103,10 +111,34 @@ public static class CarMeshBuilder
         // dark splitter and diffuser under the bumpers
         s.Box(new Vector3(0, sillY0 + 0.02f, hl - 0.25f), new Vector3(d.Width - 0.1f, 0.05f, 0.5f), Trim);
         s.Box(new Vector3(0, sillY0 + 0.02f, -hl + 0.25f), new Vector3(d.Width - 0.1f, 0.05f, 0.5f), Trim);
+        // garage aero: a lip or a splitter with canards up front, fins in the diffuser, side skirts
+        if (body.FrontAero == 1)
+            s.Box(new Vector3(0, sillY0 - 0.015f, hl - 0.1f), new Vector3(d.Width - 0.12f, 0.03f, 0.3f), Trim);
+        else if (body.FrontAero == 2)
+        {
+            s.Box(new Vector3(0, sillY0 - 0.03f, hl - 0.05f), new Vector3(d.Width + 0.06f, 0.03f, 0.45f), Trim);
+            foreach (float sx in new[] { -1f, 1f })
+                s.Box(new Vector3(sx * (hw + 0.02f), sillCy, hl - 0.2f), new Vector3(0.05f, 0.03f, 0.26f), Trim);
+        }
+        if (body.Diffuser)
+            for (int i = -2; i <= 2; i++)
+                s.Box(new Vector3(i * 0.28f, sillY0 + 0.04f, -hl + 0.12f), new Vector3(0.03f, 0.16f, 0.42f), Trim);
+        if (body.Skirts)
+            foreach (float sx in new[] { -1f, 1f })
+                s.Box(new Vector3(sx * (hw + 0.015f), sillY0 - 0.02f, 0), new Vector3(0.05f, 0.1f, d.Wheelbase - 2 * arch), lower);
 
         // ---- upper body: boot, doors, bonnet ----
         float bot = sillY1;
-        s.Box(new Vector3(0, (bot + d.Belt) * 0.5f, (d.RgBase + d.WsBase) * 0.5f), new Vector3(d.Width, d.Belt - bot, d.WsBase - d.RgBase), paint);
+        // Where the doors are (see Doors), the body behind them is the dark cabin side, set in,
+        // so an open door shows a way in rather than more paint.
+        var doors = DoorSpans(body.Shape, d);
+        float open0 = doors.Min(x => x.Z0), open1 = doors.Max(x => x.Z1);
+        foreach (var (z0, z1, fill, width) in new[]
+                 {
+                     (d.RgBase, open0, paint, d.Width), (open0, open1, Trim, d.Width - 0.12f), (open1, d.WsBase, paint, d.Width),
+                 })
+            if (z1 - z0 > 0.01f)
+                s.Box(new Vector3(0, (bot + d.Belt) * 0.5f, (z0 + z1) * 0.5f), new Vector3(width, d.Belt - bot, z1 - z0), fill);
         float noseZ = hl - (hl - d.WsBase) * 0.3f;   // the nose is a little lower and narrower
         s.Box(new Vector3(0, (bot + d.Hood) * 0.5f, (d.WsBase + noseZ) * 0.5f), new Vector3(d.Width, d.Hood - bot, noseZ - d.WsBase), body.Bonnet ?? paint);
         s.Box(new Vector3(0, (bot + d.Hood - 0.06f) * 0.5f, (noseZ + hl) * 0.5f), new Vector3(d.Width - 0.1f, d.Hood - 0.06f - bot, hl - noseZ), paint);
@@ -118,16 +150,17 @@ public static class CarMeshBuilder
         var win = open ? new MeshScratch() : s;
         var top = open ? new MeshScratch() : s;
         float cw = d.Width - 0.2f;
+        var glass = body.Glass ?? Glass;
         const int steps = 4;
         float h = (d.Roof - d.Belt) / steps;
         for (int k = 0; k < steps; k++)
         {
             float t = (k + 0.5f) / steps;   // fraction up the slope, at the middle of the layer
             float zf = Mathf.Lerp(d.WsBase, d.WsTop, t), zr = Mathf.Lerp(d.RgBase, d.RgTop, t);
-            win.Box(new Vector3(0, d.Belt + h * (k + 0.5f), (zf + zr) * 0.5f), new Vector3(cw, h, zf - zr), Glass);
+            win.Box(new Vector3(0, d.Belt + h * (k + 0.5f), (zf + zr) * 0.5f), new Vector3(cw, h, zf - zr), glass);
         }
-        SlopedGlass(s, cw - 0.04f, d.Belt, d.WsBase, d.Roof, d.WsTop);
-        SlopedGlass(top, cw - 0.04f, d.Belt, d.RgBase, d.Roof, d.RgTop);
+        SlopedGlass(s, cw - 0.04f, d.Belt, d.WsBase, d.Roof, d.WsTop, glass);
+        SlopedGlass(top, cw - 0.04f, d.Belt, d.RgBase, d.Roof, d.RgTop, glass);
         // a roadster's roof is its soft top, up: dark cloth rather than paint
         top.Box(new Vector3(0, d.Roof - 0.025f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(cw + 0.02f, 0.05f, d.WsTop - d.RgTop), open ? Trim : paint);
         // pillars: A, B (four doors only) and C (cloth on a roadster)
@@ -138,10 +171,7 @@ public static class CarMeshBuilder
             top.Tube(new Vector3(px, d.Belt, d.RgBase), new Vector3(px, d.Roof, d.RgTop), 0.035f, open ? Trim : paint, 4);
             if (body.Shape == BodyShape.Sedan)
                 s.Box(new Vector3(px, (d.Belt + d.Roof) * 0.5f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(0.03f, d.Roof - d.Belt, 0.09f), paint);
-            // door shut lines and mirrors
-            float dz = (d.WsBase + d.RgBase) * 0.5f;
-            s.Box(new Vector3(sx * (hw + 0.002f), (bot + d.Belt) * 0.5f, dz + 0.55f), new Vector3(0.01f, d.Belt - bot - 0.05f, 0.02f), Trim);
-            s.Box(new Vector3(sx * (hw + 0.002f), (bot + d.Belt) * 0.5f, dz - 0.5f), new Vector3(0.01f, d.Belt - bot - 0.05f, 0.02f), Trim);
+            // mirrors (the doors themselves are separate meshes, below)
             s.Box(new Vector3(sx * (hw + 0.08f), d.Belt + 0.1f, d.WsBase - 0.1f), new Vector3(0.16f, 0.1f, 0.09f), body.Lower != null ? Trim : paint);
         }
         var cockpit = open ? new MeshScratch() : null;
@@ -204,8 +234,14 @@ public static class CarMeshBuilder
         s.Box(new Vector3(0, sillY1 + 0.03f, -hl - 0.005f), new Vector3(0.5f, 0.05f, 0.01f), Steel);   // number plate blanks
         s.Box(new Vector3(0, sillY1 + 0.03f, hl + 0.005f), new Vector3(0.5f, 0.05f, 0.01f), Steel);
 
-        var parts = new CarParts(s.Build(), head.Build(), tail.Build(), BuildWheel(d, body.Rim),
-            d.WheelR, axF, axR, d.Track * 0.5f);
+        // underglow: neon strips along both sills, in the unshaded lamp mesh so they glow
+        if (body.Underglow is { } neon)
+            foreach (float sx in new[] { -1f, 1f })
+                head.Box(new Vector3(sx * (hw - 0.12f), sillY0 - 0.01f, 0), new Vector3(0.05f, 0.02f, d.Wheelbase - 2 * arch), neon);
+
+        var doorParts = doors.Select(span => BuildDoor(span, body, d, bot, cw, glass)).SelectMany(x => x).ToArray();
+        var parts = new CarParts(s.Build(), head.Build(), tail.Build(), BuildWheel(d, body.Rim, body.RimSize, body.Slicks),
+            d.WheelR, axF, axR, d.Track * 0.5f, doorParts, body.Drop, body.Underglow);
         if (open)
         {
             var topHinge = new Vector3(0, d.Belt, d.RgBase);
@@ -250,29 +286,95 @@ public static class CarMeshBuilder
         s.Ring(new Vector3(-0.33f, y + 0.12f, d.WsBase - 0.3f), new Vector3(0, 0.35f, -1f).Normalized(), 0.15f, 0.18f, 0.03f, Trim, 12);
     }
 
+    /// <summary>
+    /// The doors along one side, front to back, as (Z0, Z1, Rear) spans between the pillars: one
+    /// long door on a two-door, a front and a rear door on a four-door.
+    /// </summary>
+    private static (float Z0, float Z1, bool Rear)[] DoorSpans(BodyShape shape, Dims d)
+    {
+        float dz = (d.WsBase + d.RgBase) * 0.5f;
+        return shape == BodyShape.Sedan
+            ? new[] { (dz, Mathf.Min(dz + 0.95f, d.WsBase), false), (Mathf.Max(dz - 0.85f, d.RgBase), dz, true) }
+            : new[] { (Mathf.Max(dz - 0.5f, d.RgBase), Mathf.Min(dz + 0.55f, d.WsBase), false) };
+    }
+
+    /// <summary>
+    /// A span's left and right doors: the panel from the sill to the belt and its window, built
+    /// around the hinge the style puts it on, plus the rotation that opens it (in node space,
+    /// where left is −X and the front −Z).
+    /// </summary>
+    private static IEnumerable<CarDoor> BuildDoor((float Z0, float Z1, bool Rear) span, CarBody body, Dims d, float bot, float cw, Color glass)
+    {
+        // rear doors only ever swing out: there is no room for them to go up past the front ones
+        var style = span.Rear && body.Doors is not (DoorStyle.Conventional or DoorStyle.Suicide) ? DoorStyle.Conventional : body.Doors;
+        float hw = d.Width * 0.5f, midY = (bot + d.Belt) * 0.5f, midZ = (span.Z0 + span.Z1) * 0.5f;
+        // the window, where the glass is at half height (the greenhouse narrows toward the roof)
+        float gz0 = Mathf.Max(span.Z0, Mathf.Lerp(d.RgBase, d.RgTop, 0.5f)) + 0.03f;
+        float gz1 = Mathf.Min(span.Z1, Mathf.Lerp(d.WsBase, d.WsTop, 0.5f)) - 0.03f;
+        foreach (float sx in new[] { 1f, -1f })   // authored +X is the node's −X: left first
+        {
+            bool left = sx > 0;
+            // authored frame (+Z forward); MeshScratch.Build turns it to the node's
+            var hinge = style switch
+            {
+                DoorStyle.Suicide => new Vector3(sx * hw, midY, span.Z0),
+                DoorStyle.GullWing => new Vector3(sx * cw * 0.5f, d.Roof, midZ),
+                _ => new Vector3(sx * hw, midY, span.Z1),
+            };
+            var m = new MeshScratch();
+            m.Box(new Vector3(sx * (hw - 0.03f), midY, midZ) - hinge, new Vector3(0.06f, d.Belt - bot, span.Z1 - span.Z0 - 0.02f), body.Paint);
+            m.Box(new Vector3(sx * (hw + 0.005f), midY + 0.1f, span.Z1 - 0.25f) - hinge, new Vector3(0.02f, 0.03f, 0.14f), Trim);   // handle
+            if (body.Shape != BodyShape.Roadster && gz1 > gz0)
+                m.Box(new Vector3(sx * (cw * 0.5f + 0.012f), (d.Belt + d.Roof - 0.04f) * 0.5f, (gz0 + gz1) * 0.5f) - hinge,
+                    new Vector3(0.02f, d.Roof - d.Belt - 0.06f, gz1 - gz0), glass);
+
+            float side = left ? -1f : 1f;   // the node-space X of the door's outside
+            var open = style switch
+            {
+                // about the vertical hinge, the free edge outward
+                DoorStyle.Conventional => new Basis(Vector3.Up, side * 1.15f),
+                DoorStyle.Suicide => new Basis(Vector3.Up, -side * 1.15f),
+                // about the lateral axis at the front hinge, tail up
+                DoorStyle.Scissor => new Basis(Vector3.Right, -1.25f),
+                DoorStyle.Butterfly => new Basis(Vector3.Up, side * 0.6f) * new Basis(Vector3.Right, -1.05f),
+                // about the roof line, bottom edge up and out
+                _ => new Basis(Vector3.Back, side * 1.9f),
+            };
+            string name = (span.Rear ? "DoorR" : "Door") + (left ? "L" : "R");
+            byte bit = span.Rear ? (left ? CarRig.DoorRearLeft : CarRig.DoorRearRight) : (left ? CarRig.DoorLeft : CarRig.DoorRight);
+            static Vector3 Node(Vector3 v) => new(-v.X, v.Y, -v.Z);
+            yield return new CarDoor(name, bit, m.Build(), Node(hinge), open.GetRotationQuaternion(),
+                Node(new Vector3(sx * hw, midY, midZ)));
+        }
+    }
+
     /// <summary>A thin glass slab from (y0, z0) to (y1, z1): the raked windscreen or hatch.</summary>
-    private static void SlopedGlass(MeshScratch s, float width, float y0, float z0, float y1, float z1)
+    private static void SlopedGlass(MeshScratch s, float width, float y0, float z0, float y1, float z1, Color glass)
     {
         float dy = y1 - y0, dz = z1 - z0;
         float len = Mathf.Sqrt(dy * dy + dz * dz);
         // a box's flat face lies in the XZ plane; tilting about X by atan(dy/dz) lays it along the slope
         float tilt = Mathf.Atan2(-dy, Mathf.Abs(dz)) * Mathf.Sign(dz);
-        s.Box(new Vector3(0, (y0 + y1) * 0.5f + 0.01f, (z0 + z1) * 0.5f), new Vector3(width, 0.03f, len), Glass,
+        s.Box(new Vector3(0, (y0 + y1) * 0.5f + 0.01f, (z0 + z1) * 0.5f), new Vector3(width, 0.03f, len), glass,
             new Basis(Vector3.Right, tilt));
     }
 
-    /// <summary>One wheel about the X axis, at the origin: tyre, dark disc, spokes in the rim colour.</summary>
-    private static ArrayMesh BuildWheel(Dims d, Color rim)
+    /// <summary>
+    /// One wheel about the X axis, at the origin: tyre, dark disc, spokes in the rim colour. A
+    /// bigger rim fills more of the same wheel (a thinner sidewall); slicks are wider.
+    /// </summary>
+    private static ArrayMesh BuildWheel(Dims d, Color rim, int rimSize, bool slicks)
     {
         var s = new MeshScratch();
-        float r = d.WheelR, w = d.TyreW;
-        s.Ring(Vector3.Zero, Vector3.Right, r - 0.12f, r, w, Rubber, 14);
-        s.Ring(Vector3.Zero, Vector3.Right, 0.03f, r - 0.115f, w * 0.7f, new Color(0.2f, 0.2f, 0.22f), 14);
+        float r = d.WheelR, w = d.TyreW * (slicks ? 1.35f : 1f);
+        float wall = 0.12f - 0.03f * rimSize;
+        s.Ring(Vector3.Zero, Vector3.Right, r - wall, r, w, Rubber, 14);
+        s.Ring(Vector3.Zero, Vector3.Right, 0.03f, r - wall + 0.005f, w * 0.7f, new Color(0.2f, 0.2f, 0.22f), 14);
         foreach (float sx in new[] { -1f, 1f })
             for (int i = 0; i < 5; i++)
             {
                 float a = Mathf.Tau * i / 5f;
-                var radial = new Vector3(0, Mathf.Cos(a), Mathf.Sin(a)) * (r - 0.12f);
+                var radial = new Vector3(0, Mathf.Cos(a), Mathf.Sin(a)) * (r - wall);
                 s.Tube(new Vector3(sx * w * 0.36f, 0, 0), new Vector3(sx * w * 0.36f, 0, 0) + radial, 0.035f, 0.03f, rim, 4);
             }
         return s.Build();

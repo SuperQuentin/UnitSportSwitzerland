@@ -66,8 +66,14 @@ public enum ItemId
     SantaHat = 48,
     ReindeerAntlers = 49,
 
+    // ---- the Polaroid camera (docs/notes/items/polaroid.md) ----
+    /// <summary>A printed photo; which one is <see cref="ItemStack.Data"/> (the photo id).</summary>
+    Photo = 50,
+    // ---- optics (src/Items/SmartBinocularsHud) ----
+    SmartBinoculars = 51,
+
     // ---- radio (src/Items/Radio*, src/Audio/Cd) ----
-    Radio = 50,
+    Radio = 52,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -92,6 +98,8 @@ public enum ItemUse
     Shoot,
     /// <summary>Use puts it on, or takes it off (a hat — <see cref="Inventory.Worn"/>).</summary>
     Wear,
+    /// <summary>A printed photo: Use looks at it, Aim + Use (or the stick key) sticks it where you look.</summary>
+    Print,
     /// <summary>Use throws it into the world, where it stays as a thing (<see cref="RadioManager"/>).</summary>
     Throw,
 }
@@ -120,7 +128,9 @@ public static class ItemDefs
     {
         new(ItemId.Binoculars, "Binoculars", "Hold {aim_item} to look through them. 8x.",
             ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN"),
-        new(ItemId.Camera, "Camera", "Hold {aim_item} to frame, {use_item} to take a photo. Saved to user://photos.",
+        new(ItemId.SmartBinoculars, "Smart binoculars", "Hold {aim_item} to look through them. {use_item} picks a target item: buildings in view show the chance it drops from their containers.",
+            ItemUse.Optic, 1, new Color(0.20f, 0.42f, 0.50f), "SB", 0, ItemCategory.Gear, 250f),
+        new(ItemId.Camera, "Camera", "A Polaroid. Hold {aim_item} to frame, {use_item} to take a photo: it prints, develops, and goes in your pack.",
             ItemUse.Photo, 1, new Color(0.18f, 0.18f, 0.20f), "CM"),
         new(ItemId.Gps, "GPS", "Shows your LV95 coordinates, altitude and heading while held.",
             ItemUse.Readout, 1, new Color(0.95f, 0.78f, 0.12f), "GP"),
@@ -184,6 +194,8 @@ public static class ItemDefs
         Hat(ItemId.SantaHat, "Santa hat", "#c81e24", "SH"),
         Hat(ItemId.ReindeerAntlers, "Reindeer antlers", "#7a5230", "RA"),
 
+        new(ItemId.Photo, "Photo", "A Polaroid you took. {use_item} to look at it; {aim_item} + {use_item} sticks it on a wall or the ground, {use_item} on it again takes it back.",
+            ItemUse.Print, 1, new Color(0.96f, 0.95f, 0.90f), "PH"),
         // radio (#104): thrown into the world, plays burned CDs for whoever stands near
         new(ItemId.Radio, "Radio", "{use_item} throws it. Stand beside it and press {interact_mount} to play a CD or pick it up.",
             ItemUse.Throw, 1, new Color(0.16f, 0.17f, 0.19f), "RD", 0, ItemCategory.Gear, 80f),
@@ -214,11 +226,30 @@ public static class ItemDefs
     // ------------------------------------------------------------------------------------
 
     private static readonly Dictionary<ItemId, ArrayMesh> HandMeshes = new();
+    private static ArrayMesh? _foreEnd;
+
+    /// <summary>The shotgun's slide handle, origin where it sits at rest (the viewmodel and the hand slide it along Z to pump).</summary>
+    public static ArrayMesh ShotgunForeEnd()
+    {
+        if (_foreEnd != null) return _foreEnd;
+        var s = new MeshScratch();
+        s.Box(new Vector3(0, -0.01f, 0.24f), new Vector3(0.04f, 0.035f, 0.26f), new Color(0.40f, 0.26f, 0.15f));
+        return _foreEnd = s.Build();
+    }
+
     private static ArrayMesh? _plantedFlag;
     private static StandardMaterial3D? _material;
 
     /// <summary>The same shaded vertex-colour material the figures use, so an item is lit like the hand holding it.</summary>
     public static StandardMaterial3D Material => _material ??= HumanMeshBuilder.Material();
+
+    /// <summary>
+    /// The material a held item needs instead of the shared vertex-colour <see cref="Material"/>, or
+    /// null for that one: items drawn from a texture, which may depend on the stack's
+    /// <see cref="ItemStack.Data"/> (a photo shows its own print).
+    /// </summary>
+    public static Material? HandMaterial(ItemId id, string? data) =>
+        id == ItemId.Photo ? PhotoVisuals.Material(data) : null;
 
     /// <summary>
     /// The item as held: origin at the grip, pointing forward (−Z once built, like every
@@ -228,6 +259,9 @@ public static class ItemDefs
     {
         if (id == ItemId.None) return null;
         if (HandMeshes.TryGetValue(id, out var cached)) return cached;
+
+        // a textured card (its material: HandMaterial), not a vertex-coloured MeshScratch
+        if (id == ItemId.Photo) return HandMeshes[id] = PhotoVisuals.HeldCard;
 
         var s = new MeshScratch();
         switch (id)
@@ -244,6 +278,19 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0.03f, 0.0f), new Vector3(0.05f, 0.018f, 0.05f), body);
                 break;
             }
+            case ItemId.SmartBinoculars:
+            {
+                var body = new Color(0.14f, 0.20f, 0.24f);
+                var glass = new Color(0.10f, 0.12f, 0.16f);
+                foreach (float x in new[] { -0.034f, 0.034f })
+                {
+                    s.Tube(new Vector3(x, 0.02f, -0.05f), new Vector3(x, 0.02f, 0.07f), 0.024f, 0.028f, body, 8);
+                    s.Tube(new Vector3(x, 0.02f, 0.07f), new Vector3(x, 0.02f, 0.078f), 0.026f, glass, 8);
+                }
+                s.Box(new Vector3(0, 0.03f, 0.0f), new Vector3(0.05f, 0.018f, 0.05f), body);
+                s.Box(new Vector3(0, 0.043f, -0.01f), new Vector3(0.04f, 0.006f, 0.03f), new Color(0.25f, 0.95f, 1.0f));   // the small screen
+                break;
+            }
             case ItemId.Camera:
             {
                 var body = new Color(0.12f, 0.12f, 0.13f);
@@ -255,10 +302,13 @@ public static class ItemDefs
             }
             case ItemId.Gps:
             {
+                // the screen faces +Z, toward the holder's camera (in first person a texture quad is drawn on top)
                 var body = new Color(0.95f, 0.78f, 0.12f);
-                s.Box(new Vector3(0, 0.06f, 0), new Vector3(0.058f, 0.11f, 0.026f), body);
-                s.Box(new Vector3(0, 0.075f, -0.0135f), new Vector3(0.044f, 0.05f, 0.002f), new Color(0.35f, 0.55f, 0.40f));
-                s.Tube(new Vector3(0.02f, 0.11f, 0), new Vector3(0.02f, 0.15f, 0), 0.006f, new Color(0.1f, 0.1f, 0.1f));
+                s.Box(new Vector3(0, 0.07f, 0), new Vector3(0.085f, 0.15f, 0.028f), body);
+                s.Box(new Vector3(0, 0.075f, 0.0145f), new Vector3(0.074f, 0.063f, 0.002f), new Color(0.35f, 0.55f, 0.40f));
+                foreach (float x in new[] { -0.02f, 0.02f })
+                    s.Box(new Vector3(x, 0.022f, 0.0145f), new Vector3(0.022f, 0.012f, 0.002f), new Color(0.15f, 0.15f, 0.15f));
+                s.Tube(new Vector3(0.03f, 0.145f, 0), new Vector3(0.03f, 0.19f, 0), 0.007f, new Color(0.1f, 0.1f, 0.1f));
                 break;
             }
             case ItemId.SwissFlag:
@@ -279,11 +329,17 @@ public static class ItemDefs
                 var steel = new Color(0.22f, 0.23f, 0.25f);
                 s.Box(new Vector3(0, -0.03f, -0.22f), new Vector3(0.04f, 0.09f, 0.34f), wood);      // stock
                 s.Box(new Vector3(0, 0.01f, 0.02f), new Vector3(0.045f, 0.06f, 0.16f), steel);     // action
-                s.Box(new Vector3(0, -0.01f, 0.24f), new Vector3(0.04f, 0.035f, 0.26f), wood);     // fore-end
+                // the fore-end is its own mesh (ShotgunForeEnd): it slides back and forth to pump
                 foreach (float x in new[] { -0.011f, 0.011f })
-                    s.Tube(new Vector3(x, 0.025f, 0.08f), new Vector3(x, 0.025f, 0.72f), 0.011f, steel, 6);
+                    s.Tube(new Vector3(x, 0.03f, 0.08f), new Vector3(x, 0.03f, 0.72f), 0.011f, steel, 6);
+                s.Box(new Vector3(0, 0.048f, 0.40f), new Vector3(0.012f, 0.006f, 0.64f), new Color(0.55f, 0.56f, 0.6f));   // rib between the barrels
+                s.Box(new Vector3(0, 0.056f, 0.70f), new Vector3(0.009f, 0.012f, 0.012f), new Color(1f, 0.85f, 0.25f));   // front bead
                 break;
             }
+            case ItemId.WitchHat or ItemId.PumpkinHead or ItemId.SantaHat or ItemId.ReindeerAntlers:
+                // the real hat, the one a figure wears
+                HumanMeshBuilder.AppendHat(s, UnitSport.Occasions.OccasionHats.ForItem(id), new Vector3(0, -0.02f, 0), Vector3.Up * 0.2f);
+                break;
             case ItemId.Radio:
                 // the grip is the handle: the box hangs from the hand at its real 0.46 m
                 AppendRadio(s, new Vector3(0, -0.16f, 0));
@@ -376,11 +432,14 @@ public static class ItemDefs
         // the cloth hangs to the right of the pole, seen from the front
         float top = bottom + pole - 0.02f;
         var centre = new Vector3(-(cloth * 0.5f + 0.012f), top - cloth * 0.5f, 0);
-        s.Box(centre, new Vector3(cloth, cloth, 0.008f), red);
+        s.Box(centre, new Vector3(cloth, cloth, 0.006f), red);
 
+        // the cross stands ~1.2 cm proud of each face: at 2 mm it z-fought with the cloth and
+        // flickered away at distance (24-bit depth resolves ~4 mm at 60 m)
+        const float CrossDepth = 0.03f;
         // official proportions: on a flag 32 units square the cross spans 20, its arms 6 wide
         float arm = cloth * 6f / 32f, span = cloth * 20f / 32f;
-        s.Box(centre, new Vector3(span, arm, 0.012f), white);
-        s.Box(centre, new Vector3(arm, span, 0.012f), white);
+        s.Box(centre, new Vector3(span, arm, CrossDepth), white);
+        s.Box(centre, new Vector3(arm, span, CrossDepth), white);
     }
 }

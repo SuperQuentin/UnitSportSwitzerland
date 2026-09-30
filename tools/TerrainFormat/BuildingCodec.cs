@@ -55,7 +55,7 @@ public static class BuildingCodec
         if (magic != BuildingFormat.Magic)
             throw new InvalidDataException($"Bad building magic 0x{magic:X8}");
         ushort version = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
-        if (version != BuildingFormat.Version)
+        if (version < BuildingFormat.MinVersion || version > BuildingFormat.Version)
             throw new InvalidDataException($"Unsupported building version {version}");
 
         var id = new TileId(
