@@ -110,7 +110,17 @@ changed is how you get there.
   `DoorLink.Outside`, built and freed with the link. Hinges on the jambs' faces, 1 cm in front of
   the mouth and the jambs, so the leaves swing out without cutting either (100°: no wall is left
   beside the jambs to lie back on), and lap the jambs so no chink of the portal shows when shut.
-  The baked facade door is a pair too (seam, two handles).
+  The baked facade door is a pair too (seam, two handles). Inside, the pair's shut face is a
+  `DoorLeaf.CreateShutter` (`InteriorNode.Shutter`, `DoorLink.Shutter`, swung by `SetLeaves`):
+  shown and solid only while shut, hidden from the first moment it opens so the portal shows the
+  real leaves. Without it a shut barn door was a bare hole from inside that let you walk out.
+- **Reach.** E works a door from outside within 1.6 m of its span (`OutsideDoorInReach`), inside
+  within 1.8 m of the doorway's span, not its centre (`ExitAt`). An open door reaches deeper on the
+  side its leaves stand by `DoorLeaf.OpenReach` (leaf width less 1 m: nothing for a house door, 4 m
+  out for a 10 m barn pair). The server allows `ServerDoorReach` plus the door's width.
+- **Check.** `--interiorcheck` also shuts the door from inside and walks into it (must stay in);
+  for a barn it asks for the door from where its open leaves' edges stand (in reach) and again shut
+  (not in reach).
 - **Occupancy cues (G).** Buildings other players are in, except those with a door open near us:
   facade shader boxes (`ChunkManager.SetOccupancy`: more lit windows, figures behind the glass)
   and `BuildingSounds`: muffled steps, knocks and inner doors on the wall nearest the listener.

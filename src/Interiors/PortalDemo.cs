@@ -133,13 +133,14 @@ public partial class PortalDemo : Node3D
                 link.Open = true;
                 link.Swing = 1f;
                 link.Leaf = node.Leaf(e.Door);
+                link.Shutter = node.Shutter(e.Door);
                 if (link.Leaf == null && DoorLeaf.SwingsOut(layout.DressedKind()))
                 {
                     link.Leaf = DoorLeaf.CreateOutward(e.Door, link.Outside, link.OutsideWidth, link.OutsideHeight,
                         layout.DressedKind(), interiorMaterial);
                     AddChild(link.Leaf);
                 }
-                link.Leaf?.SetSwing(1f);
+                link.SetLeaves(1f);
                 _links.Add(link);
             }
         }
@@ -194,6 +195,7 @@ public partial class PortalDemo : Node3D
         ("barn_swinging", 2.0),  // the same, half open
         ("barn_shut", 2.0),      // and shut: the pair over the facade's baked door, no flicker
         ("barn_inside", 2.0),    // from inside E, out through its door at the leaves
+        ("barn_inside_shut", 2.0), // and shut: the pair's inner face, not a hole
         ("crossing", 4.0),       // the figure walks in through A's front door
     };
 
@@ -252,7 +254,7 @@ public partial class PortalDemo : Node3D
         var b = _links.First(l => l.Plan == "0_0_1");
         var barn = _links.First(l => l.Plan == "0_0_4");
         Transform3D Look(Vector3 eye, Vector3 at) => Transform3D.Identity.Translated(eye).LookingAt(at, Vector3.Up);
-        barn.Leaf?.SetSwing(view == "barn_swinging" ? 0.45f : view == "barn_shut" ? 0f : 1f);
+        barn.SetLeaves(view == "barn_swinging" ? 0.45f : view is "barn_shut" or "barn_inside_shut" ? 0f : 1f);
         switch (view)
         {
             case "barn":
@@ -261,6 +263,7 @@ public partial class PortalDemo : Node3D
                 _camera.GlobalTransform = Look(new Vector3(-7.5f, 2.2f, 9f), new Vector3(-17f, 3f, -7f));
                 break;
             case "barn_inside":
+            case "barn_inside_shut":
                 _camera.GlobalTransform = Look(barn.Inside * new Vector3(1.2f, 1.7f, -5f), barn.Inside * new Vector3(0, 2f, 2f));
                 break;
             case "two_houses":
