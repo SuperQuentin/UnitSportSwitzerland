@@ -316,7 +316,7 @@ public partial class ClientWorld : Node3D
             || FlightProbe.ParseArgs() != null
             || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
-            || RoadStandProbe.Requested() || MantleProbe.Requested()
+            || RoadStandProbe.Requested() || MantleProbe.Requested() || VoidProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Interiors.DoorWatchProbe.ParseArgs().Requested
             || Loot.LootProbe.ParseArgs() != null
@@ -622,6 +622,14 @@ public partial class ClientWorld : Node3D
             var (mE, mN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(mE, mN, 1200);
             AddChild(new MantleProbe(_chunks, origin));
+            return;
+        }
+
+        if (VoidProbe.Requested())
+        {
+            var (vE, vN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(vE, vN, 1200);
+            AddChild(new VoidProbe(_chunks, origin));
             return;
         }
 
