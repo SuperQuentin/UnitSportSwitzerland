@@ -233,9 +233,9 @@ public partial class Swarm : Node
             foreach (var b in _bots.Where(b => b.Car != null))
             {
                 var t = _tracks[b.Region];
-                float top = b.Car!.RefTopKmh / 3.6f;
-                b.ProfileFwd = t.Fwd.Line.SpeedProfile(b.Car, false, 0.85f, top);
-                b.ProfileBack = t.Back.Line.SpeedProfile(b.Car, false, 0.85f, top);
+                // the top speed comes out of the car's own power, gearing and drag now
+                b.ProfileFwd = t.Fwd.Line.SpeedProfile(b.Car!, false, 0.85f);
+                b.ProfileBack = t.Back.Line.SpeedProfile(b.Car!, false, 0.85f);
             }
         }).CallDeferred();
     }
