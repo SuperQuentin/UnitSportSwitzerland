@@ -244,8 +244,8 @@ public partial class RaceManager : Node
         _done = true;
         GD.Print($"[race] finished P{position} in {Format(time)}");
         Finished?.Invoke(position, time);
-        if (LocalPlayer?.Invoke() is { } me) me.RideControls = null;
-        _pilot = null;
+        // an autopiloted car keeps its pilot, now only braking to a stop; a player just drives on
+        if (_pilot == null && LocalPlayer?.Invoke() is { } me) me.RideControls = null;
     }
 
     /// <summary>On the grid, in a car, facing down the road, holding the handbrake.</summary>
@@ -348,6 +348,7 @@ public partial class RaceManager : Node
         if (onRoute && arc >= _myFinish && !_done)
         {
             RpcId(1, MethodName.Crossed);
+            if (_pilot != null) _pilot.Finished = true;   // brake to a stop past the line
             _done = true;   // the server answers with the result
         }
         ShowHud($"{Format(_raceClock)}   CP {_myNext}/{Mathf.FloorToInt(_myFinish / CheckpointEvery)}   {Mathf.Max(0f, _myFinish - arc):F0} m");
