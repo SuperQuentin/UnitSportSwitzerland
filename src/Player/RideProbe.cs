@@ -199,8 +199,8 @@ public partial class RideProbe : Node
                 + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
                 + (_player.Vehicle is Car car ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {car.Gear}" : "")
                 + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : "")
-                + (Interiors.DoorIndex.GarageAround(p) is { } inG ? $"  inside garage {inG.Key}" : "")
-                + (_kind == RideKind.OnFoot && Interiors.DoorIndex.NearestEntrance(p, 1.6f) is { } door ? $"  [E] door {door.Key}" : ""));
+                + (Inside() is { } inside ? $"  inside {inside.DressedKind()} {inside.Key}" : "")
+                + (_kind == RideKind.OnFoot && Interiors.DoorIndex.Nearest(p, 1.6f) is { } door ? $"  [E] door {door.Key}" : ""));
         }
 
         if (_elapsed < _seconds) return;
@@ -209,11 +209,12 @@ public partial class RideProbe : Node
         var end = _player.GlobalPosition;
         float travelled = new Vector2(end.X - _start.X, end.Z - _start.Z).Length();
         bool underground = _chunks.TryGetHeight(end, out float endGround) && end.Y < endGround - 1.5f;
-        if (Interiors.DoorIndex.GarageAround(end) is { } garage)
+        if (Inside() is { } building)
         {
-            // the terrain under a garage is carved away: the floor slab is the ground in there
-            underground = end.Y < garage.Bay!.Sill + garage.TileOrigin.Y - 1.5f;
-            GD.Print($"[ride] ended inside garage {garage.Key}, {end.Y - garage.Bay.Sill - garage.TileOrigin.Y:F2} m over its floor, "
+            // driven in through the door's portal: the interior's floor is the ground in there
+            float floor = Interiors.InteriorManager.Instance?.CurrentNode?.GlobalPosition.Y ?? Interiors.InteriorManager.InteriorBaseY;
+            underground = end.Y < floor - 1.5f;
+            GD.Print($"[ride] ended inside {building.DressedKind()} {building.Key}, {end.Y - floor:F2} m over its floor, "
                 + $"speed {_player.RideSpeed:F1} m/s");
         }
 
@@ -238,4 +239,7 @@ public partial class RideProbe : Node
 
         GetTree().Quit(travelled > 5 && !underground ? 0 : 1);
     }
+
+    /// <summary>The interior the rider is in (walked or driven in through its door), if any.</summary>
+    private Interiors.InteriorLayout? Inside() => _player?.Indoors == true ? Interiors.InteriorManager.Instance?.Current : null;
 }

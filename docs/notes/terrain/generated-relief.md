@@ -21,7 +21,8 @@
   parent's flat floor**. Roads along rivers >= 45 km² (offset from the unmeandered axis, clear of
   the widest meander, pulled in on the inside of bends), railways along rivers >= 500 km² on the
   other side; each joins its parent's line by a straight link. Village slots every 2.6 km of road
-  (72% taken, below 1700 m, floor >= 70 m). 2077 rivers, ~1400 lines, ~7000 villages over the map.
+  (72% taken, below 1700 m, floor >= 70 m); side-street houses get a garage beside them half the
+  time (`vehicles/garage-buildings`). 2077 rivers, ~1400 lines, ~7000 villages over the map.
   1 km bucket indices for valleys (segments by reach), channels (bank + 2 lattice cells), lines
   (+400 m) and villages.
 - **Height** = two world-anchored lattices: **coarse, 25 m** — P, Q with h = P + Q f (macro +

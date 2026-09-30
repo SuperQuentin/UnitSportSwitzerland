@@ -165,6 +165,31 @@ public static class InteriorMeshBuilder
         return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
     }
 
+    /// <summary>
+    /// A garage's roll-up door, <paramref name="width"/> across and hanging <paramref name="height"/>
+    /// down from its top edge at the origin (so squashing Y rolls it into the lintel), between
+    /// <paramref name="z0"/> and <paramref name="z1"/>: sheet-metal slats, each a lit upper face over
+    /// a shaded lower one, and a dark bottom rail. The facade's baked shut door has the same slats.
+    /// </summary>
+    public static MeshData RollUpLeaf(float width, float height, float z0, float z1)
+    {
+        var s = new Scratch();
+        float hw = width / 2, mid = (z0 + z1) / 2;
+        var metal = C(0.80f, 0.82f, 0.85f);
+        var shade = metal * 0.8f;
+        shade.A = 1;
+        int slats = Math.Max(4, Mathf.RoundToInt(height / 0.22f));
+        float sh = height / slats;
+        for (int i = 0; i < slats; i++)
+        {
+            float top = -i * sh, split = top - sh * 0.35f, bottom = top - sh;
+            s.Box(new Vector3(-hw, split, z0), new Vector3(hw, top, z1), metal, false);
+            s.Box(new Vector3(-hw, bottom, z0), new Vector3(hw, split, mid), shade, false);
+        }
+        s.Box(new Vector3(-hw, -height, z0), new Vector3(hw, -height + 0.06f, z1 + 0.01f), C(0.2f, 0.2f, 0.22f), false);
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
+    }
+
     // ---- rooms -------------------------------------------------------------------------------
 
     private static void Room(Scratch s, RoomPlan r, float y0, float clear, List<RectPlan> holes, List<RectPlan> ceilingHoles)
