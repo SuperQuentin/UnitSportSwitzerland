@@ -50,6 +50,9 @@ public partial class InterestService : Node
     private readonly Dictionary<long, HashSet<long>> _sets = new();
     private readonly Dictionary<(long, long), double> _flipped = new();
     private readonly List<(long Id, FootPlayer Player)> _scratch = new();
+    /// <summary>Everything that can be seen: the players, and the race NPCs (negative ids).</summary>
+    private readonly List<(long Id, FootPlayer Player)> _targets = new();
+    private readonly Dictionary<long, FootPlayer> _byId = new();
     private readonly List<long> _changed = new();
     private double _timer;
 
@@ -117,14 +120,19 @@ public partial class InterestService : Node
         foreach (var (viewer, target) in _expired)
         {
             _leaving.Remove((viewer, target));
-            foreach (var child in Players!.GetChildren())
-                if (child is FootPlayer t && FootPlayer.NetOwner(t.Name) == target) t.RefreshNetVisibility(viewer);
+            if (_byId.GetValueOrDefault(target) is { } t && IsInstanceValid(t)) t.RefreshNetVisibility(viewer);
         }
 
         _scratch.Clear();
+        _targets.Clear();
+        _byId.Clear();
         foreach (var child in Players!.GetChildren())
-            if (child is FootPlayer p && long.TryParse(p.Name, out long id))
-                _scratch.Add((id, p));
+            if (child is FootPlayer p && FootPlayer.NetId(p.Name) is long id)
+            {
+                _targets.Add((id, p));
+                _byId[id] = p;
+                if (id > 0) _scratch.Add((id, p));
+            }
 
         foreach (var (viewer, viewerNode) in _scratch)
         {
@@ -136,7 +144,7 @@ public partial class InterestService : Node
             var eye = viewerNode.GlobalPosition + Vector3.Up * 1.7f;
             _changed.Clear();
 
-            foreach (var (target, targetNode) in _scratch)
+            foreach (var (target, targetNode) in _targets)
             {
                 if (target == viewer) continue;
                 bool was = set.Contains(target);
@@ -156,11 +164,8 @@ public partial class InterestService : Node
             }
 
             if (_changed.Count == 0) continue;
-            // the server's copy of each changed target decides whether it exists on the viewer —
-            // and so do the target's race NPCs, which are shown to whoever sees their owner
-            foreach (var child in Players.GetChildren())
-                if (child is FootPlayer t && FootPlayer.NetOwner(t.Name) is long owner && _changed.Contains(owner))
-                    t.RefreshNetVisibility(viewer);
+            // the server's copy of each changed target (a player or a race NPC) decides whether it exists on the viewer
+            foreach (var target in _changed) _byId[target].RefreshNetVisibility(viewer);
         }
 
         // Who gets each player's state, and how often: every viewer whose set holds it, split by
@@ -168,7 +173,8 @@ public partial class InterestService : Node
         // The SERVER rebroadcasts (FootPlayer's RelayNear/RelayFar); owners send only to it. The
         // audience, not the set: visibility is asymmetric (a plane is seen 8 km away, a walker
         // 0.9 km), so what counts is who sees the target, not whom the target sees.
-        foreach (var (target, targetNode) in _scratch)
+        // A race NPC is a target like a player (#50): relayed from where IT is, whoever simulates it.
+        foreach (var (target, targetNode) in _targets)
         {
             _near.Clear(); _far.Clear();
             var at = targetNode.GlobalPosition;
@@ -185,8 +191,7 @@ public partial class InterestService : Node
                 && lastNear.SetEquals(_near) && lastFar.SetEquals(_far)) continue;
             _nearOf[target] = new HashSet<long>(_near);
             _farOf[target] = new HashSet<long>(_far);
-            foreach (var child in Players.GetChildren())
-                if (child is FootPlayer t && FootPlayer.NetOwner(t.Name) == target) t.RefreshRelays();
+            targetNode.RefreshRelays();
         }
     }
 

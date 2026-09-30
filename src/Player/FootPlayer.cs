@@ -163,7 +163,9 @@ public partial class FootPlayer : CharacterBody3D
     public double NetTime
     {
         get => _netTime;
-        set { _netTime = value; OnNetState(); }
+        // a new state, not the server relaying the last one again (it does, at 30 Hz, whether or not
+        // the owner still sends): only that tells a live sender from a crashed one
+        set { if (value != _netTime) LastNetState = Time.GetTicksMsec() / 1000.0; _netTime = value; OnNetState(); }
     }
     private double _netTime;
 
@@ -219,14 +221,92 @@ public partial class FootPlayer : CharacterBody3D
     }
 
     /// <summary>
-    /// The peer a player node stands for: its own id, or for a race NPC (<c>npc_&lt;owner&gt;_&lt;n&gt;</c>)
-    /// the client that simulates it — an NPC is shown to whoever sees its owner.
+    /// What a player node stands for in interest and races: a peer id, or a race NPC's entrant id
+    /// (<c>npc_&lt;owner&gt;_&lt;n&gt;</c> → <c>-(owner * 1000 + n)</c>, negative). Null for anything else.
+    /// An NPC is its own interest target: who sees it depends on where IT is, not on whichever
+    /// client happens to simulate it (issue #50).
     /// </summary>
-    public static long? NetOwner(string name)
+    public static long? NetId(string name)
     {
         if (long.TryParse(name, out long id)) return id;
         var parts = name.Split('_');
-        return parts.Length == 3 && parts[0] == "npc" && long.TryParse(parts[1], out long owner) ? owner : null;
+        return parts.Length == 3 && parts[0] == "npc" && long.TryParse(parts[1], out long owner)
+            && int.TryParse(parts[2], out int n) ? Net.PlayerReplication.NpcId(owner, n) : null;
+    }
+
+    /// <summary>
+    /// A race NPC's current simulator: the client that runs its physics and publishes its state,
+    /// which is simply this node's multiplayer authority. The server moves it from one client to
+    /// another (<see cref="World.RaceNpcs"/>, issue #50). A peer that spawns the NPC after a move
+    /// gets the current one in the spawn state (a spawn-only property of <c>Sync</c>): the spawn
+    /// data still names the client that asked for the NPC.
+    /// </summary>
+    [Export]
+    public int SimPeer
+    {
+        get => GetMultiplayerAuthority();
+        set { if (value > 0 && value != GetMultiplayerAuthority()) SetSimulator(value); }
+    }
+
+    /// <summary>Server: when the proxy last received a state from its simulator (seconds, engine clock).</summary>
+    public double LastNetState { get; private set; } = Time.GetTicksMsec() / 1000.0;
+
+    private bool _netUp;
+
+    /// <summary>
+    /// A remote copy that heard nothing for this long stops being solid (30 states a second are
+    /// expected): at racing speed the field behind reaches a frozen car within 2-3 s.
+    /// </summary>
+    private const double SilentSeconds = 1.0;
+
+    /// <summary>
+    /// Moves a race NPC to another simulator, on this peer. The node AND its <c>Sync</c> change
+    /// authority (children do not follow the parent). The peer that becomes the simulator takes
+    /// the body over from the last replicated state — where it is drawn right now, the replicated
+    /// velocity, the mount — so nothing jumps; a peer that stops being it turns the body into a
+    /// remote copy.
+    /// </summary>
+    public void SetSimulator(int peer)
+    {
+        bool was = IsMultiplayerAuthority();
+        SetMultiplayerAuthority(peer, false);
+        _sync?.SetMultiplayerAuthority(peer);
+        LastNetState = Time.GetTicksMsec() / 1000.0;   // the new simulator gets a fresh grace period
+        if (!_netUp || NetProxy) return;   // spawn state inside _Ready, or the server's data proxy
+        bool now = IsMultiplayerAuthority();
+        if (now == was) { _interp.NewSender(); return; }   // another remote sender: another clock
+        if (now)
+        {
+            var kind = (RideKind)RideKindId;
+            _remoteRide = null;
+            SetRemoteEngine(null);
+            Rotation = new Vector3(0, Rotation.Y, 0);
+            if (kind != RideKind.OnFoot)
+            {
+                ApplyRide(kind, NetVel);
+                if (_ride is { IsVehicle: true } machine) { EngineOn = true; VehicleHealth = machine.MaxHealth; }
+            }
+            else { _ride = null; Velocity = NetVel; }
+            RefreshVisual(force: true);   // the authority animates its own mount's visual
+            // it is on the ground already: no drop-onto-terrain pass, unless nothing is solid here yet
+            _placed = Terrain?.HasCollisionAt(GlobalPosition) != false;
+            _body.Disabled = false;
+            Visible = true;
+            SetPhysicsProcess(true);
+            Terrain?.AddAnchor(this, collision: true);
+            _sync?.UpdateVisibility();
+        }
+        else
+        {
+            RideControls = null;
+            _ride = null;
+            Velocity = Vector3.Zero;
+            SetPhysicsProcess(false);
+            Terrain?.RemoveAnchor(this);
+            _interp.NewSender();
+            FitRemoteBody((RideKind)RideKindId);
+        }
+        GD.Print($"[npc] {Name} now simulated by peer {peer}{(now ? " (here)" : "")}");
     }
 
     /// <summary>Server: re-evaluates whether this player exists on <paramref name="viewer"/>.</summary>
@@ -696,6 +776,12 @@ public partial class FootPlayer : CharacterBody3D
         replication.AddProperty(".:HeldItemId");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
+        if (Npc)
+        {
+            // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
+            replication.AddProperty(".:SimPeer");
+            replication.PropertySetReplicationMode(".:SimPeer", SceneReplicationConfig.ReplicationMode.Never);
+        }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
         foreach (var prop in new[] { ".:RideKindId", ".:HeldItemId", ".:PoseKind", ".:HeadwearId" })
@@ -718,14 +804,18 @@ public partial class FootPlayer : CharacterBody3D
         // parent's SetMultiplayerAuthority default to server authority
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
         _interest = GetNodeOrNull<Net.InterestService>("../../" + Net.InterestService.NodeName);
-        NetProxy = !IsMultiplayerAuthority() && Net.NetworkManager.DedicatedServer;
+        long netId = NetId(Name) ?? 0;
 
         // The owner sends its state ONCE, to the server. It used to send one copy per viewer for
         // the server to relay — N·(N−1) packets into the server's socket, which overflowed at a
         // 32-car race start (thousands of UDP drops a second). The server rebroadcasts below.
-        if (IsMultiplayerAuthority())
-            sync.AddVisibilityFilter(Callable.From((long peer) => peer == 1));
+        // Added on every copy: it is only consulted while this peer is the authority, which a
+        // race NPC can become later (#50).
+        sync.AddVisibilityFilter(Callable.From((long peer) => peer == 1));
+        // a race NPC's spawn state may name another simulator than the spawn data: it is applied
+        // here (SimPeer), so everything below sees the current authority
         AddChild(sync);
+        NetProxy = !IsMultiplayerAuthority() && Net.NetworkManager.DedicatedServer;
 
         // The server's two rebroadcasts of that state (Net/InterestService decides who gets
         // which): viewers within 300 m or in the same race at 30 Hz, viewers further away who can
@@ -734,13 +824,14 @@ public partial class FootPlayer : CharacterBody3D
         // stream can never disagree about whether a peer has this node.
         _relayNear = MakeRelay("RelayNear", replication, spawn: true, 1f / 30f);
         _relayFar = MakeRelay("RelayFar", replication, spawn: false, 1f / 6f);
-        if (NetProxy && NetOwner(Name) is long relayOwner)
+        if (NetProxy && netId != 0)
         {
-            // peer 0 = "everyone?": must be no, or Godot broadcasts; the owner has its own copy
+            // peer 0 = "everyone?": must be no, or Godot broadcasts; the owner has its own copy —
+            // for a race NPC its CURRENT simulator, which the server can change (#50)
             _relayNear.AddVisibilityFilter(Callable.From((long peer) =>
-                peer != 0 && peer != relayOwner && _interest?.RelaysNear(peer, relayOwner) == true));
+                peer != 0 && peer != GetMultiplayerAuthority() && _interest?.RelaysNear(peer, netId) == true));
             _relayFar.AddVisibilityFilter(Callable.From((long peer) =>
-                peer != 0 && peer != relayOwner && _interest?.RelaysFar(peer, relayOwner) == true));
+                peer != 0 && peer != GetMultiplayerAuthority() && _interest?.RelaysFar(peer, netId) == true));
         }
         AddChild(_relayNear);
         AddChild(_relayFar);
@@ -761,11 +852,13 @@ public partial class FootPlayer : CharacterBody3D
             DeltaInterval = 3600f,
         };
         _vis.SetMultiplayerAuthority(1);
-        if (NetProxy && NetOwner(Name) is long owner)
+        if (NetProxy && netId != 0)
             // peer 0 is Godot asking "visible to everyone?": the answer must be no, or it
-            // broadcasts and never asks per peer
-            _vis.AddVisibilityFilter(Callable.From((long peer) => peer != 0 && _interest?.ServerSees(peer, owner) != false));
+            // broadcasts and never asks per peer. A race NPC always exists on its simulator.
+            _vis.AddVisibilityFilter(Callable.From((long peer) => peer != 0
+                && (peer == GetMultiplayerAuthority() || _interest?.ServerSees(peer, netId) != false)));
         AddChild(_vis);
+        _netUp = true;
 
         AddToGroup(Group);
 
@@ -793,6 +886,8 @@ public partial class FootPlayer : CharacterBody3D
             // no camera to anchor the streamer: the body asks for its own ground and trunks
             Terrain?.AddAnchor(this, collision: true);
             SetProcessUnhandledInput(false);
+            // spawned here after a handoff (#50): the spawn state put the mount in RideKindId, not under the body
+            if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, NetVel);
         }
         else if (IsMultiplayerAuthority())
         {
@@ -846,7 +941,6 @@ public partial class FootPlayer : CharacterBody3D
     }
 
 
-
     /// <summary>
     /// Rebuilds the body mesh when the ride changes, or the view does.
     ///
@@ -868,7 +962,8 @@ public partial class FootPlayer : CharacterBody3D
         _visualKind = kind;
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
 
-        int rider = GetMultiplayerAuthority();
+        // an NPC keeps its jersey whoever simulates it: the colours of the client that asked for it
+        int rider = Npc && NetId(Name) is long npcId && npcId < 0 ? (int)Net.PlayerReplication.NpcOwner(npcId) : GetMultiplayerAuthority();
 
         if (kind == RideKind.OnFoot)
         {
@@ -974,6 +1069,11 @@ public partial class FootPlayer : CharacterBody3D
             _body.Disabled = !here;
         }
         if (!here) return;
+        // A sender publishes 30 times a second, standing still or not: silent this long, it has
+        // crashed or frozen, and ENet takes up to 30 s to say so. Its body, frozen mid-road, must
+        // not be a wall the whole field piles into (#50: every car stopped on a crashed leader).
+        bool silent = Time.GetTicksMsec() / 1000.0 - LastNetState > SilentSeconds;
+        if (_body.Disabled != silent) _body.Disabled = silent;
 
         if (_interp.HasData)
         {

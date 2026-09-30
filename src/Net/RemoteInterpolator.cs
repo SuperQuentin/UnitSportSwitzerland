@@ -73,12 +73,33 @@ public sealed class RemoteInterpolator
         _yawError = 0;
     }
 
+    /// <summary>
+    /// Another peer sends this body from now on (a race NPC handed to another client, #50): its
+    /// clock has nothing to do with the last one, so the states and the clock estimate start
+    /// over. The picture does not: the first new sample eases from where it was drawn.
+    /// </summary>
+    public void NewSender()
+    {
+        _count = 0;
+        _offset = double.NaN;
+        _lag = double.NaN;
+        _rebase = _hasOut;
+    }
+
+    private bool _rebase;
+
     /// <summary>The position and yaw to draw at <paramref name="localTime"/>.</summary>
     public (Vector3 Position, float Yaw) Sample(double localTime, float dt)
     {
         if (_count == 0) return (_lastOut, _lastYaw);
         double t = RenderTime(localTime, dt);
         var (p, yaw) = Raw(t);
+        if (_rebase && _lastOut.DistanceTo(p) < TeleportMetres)
+        {
+            _error = _lastOut - p;
+            _yawError = Mathf.AngleDifference(yaw, _lastYaw);
+        }
+        _rebase = false;
         _hasOut = true;
         // the correction a late or surprising state caused (Begin/EndCorrection) bleeds away
         // over ~100 ms instead of showing as a jump

@@ -193,7 +193,7 @@ public partial class ServerWorld : Node3D
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);
-        _npcs?.ForgetOwner(id);
+        _npcs?.PeerLeft(id);   // its race NPCs go to someone near them, or retire
 
         if (_players!.GetNodeOrNull<Node3D>(id.ToString()) is { } player)
         {

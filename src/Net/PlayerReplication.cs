@@ -11,7 +11,9 @@ namespace UnitSport.Net;
 /// <para>
 /// Two kinds of spawn data: a player is its peer id (a long); a race NPC is an array
 /// <c>[ownerPeer, n, rideKind, position, yaw]</c> (<see cref="NpcData"/>). An NPC's authority is
-/// its owner on every peer: the owner's client simulates it, everyone else sees and hits it.
+/// its current simulator on every peer — first the client that asked for it, later whoever the
+/// server hands it to (<c>World/RaceNpcs</c>, #50; a later spawn learns it from the spawn state,
+/// <c>FootPlayer.SimPeer</c>): that client simulates it, everyone else sees and hits it.
 /// </para>
 /// </summary>
 public static class PlayerReplication
@@ -57,7 +59,7 @@ public static class PlayerReplication
             Rotation = new Vector3(0, d[4].AsSingle(), 0),
         };
         npc.SetMultiplayerAuthority((int)owner);
-        // the driver; frees itself on every peer but the owner
+        // the driver: on every peer, active only on its current simulator (which can change, #50)
         npc.AddChild(new World.RaceNpc { Name = World.RaceNpc.NodeName, Id = NpcId(owner, n), Kind = (RideKind)d[2].AsInt32() });
         return npc;
     }

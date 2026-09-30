@@ -39,8 +39,18 @@ public partial class RaceManager : Node
     private static bool IsAirMount(int k) => k is (int)RideKind.Plane or (int)RideKind.Helicopter
         or (int)RideKind.Paraglider or (int)RideKind.Wingsuit;
 
-    /// <summary>The owning peer of an entrant: itself, or the client running that NPC.</summary>
+    /// <summary>The peer an entrant id encodes: itself, or the client that asked for that NPC.</summary>
     public static long OwnerOf(long entrant) => entrant > 0 ? entrant : -entrant / 1000;
+
+    /// <summary>
+    /// Server: the peer that runs an entrant right now — itself, or the client currently simulating
+    /// that NPC, which the server moves between clients (<see cref="RaceNpcs"/>, #50). Reports about
+    /// an NPC are accepted from it alone, and its setup and result go to it.
+    /// </summary>
+    private long SimOf(long entrant) => entrant > 0 ? entrant : Npcs?.SimulatorOf(entrant) ?? OwnerOf(entrant);
+
+    /// <summary>Server: the race an entrant is in (0: none, or finished).</summary>
+    public int RaceOf(long entrant) => _raceOf.GetValueOrDefault(entrant);
 
     // ====================================================================================
     // server
@@ -60,6 +70,9 @@ public partial class RaceManager : Node
         public Phase Phase;
         public RaceRoute? Route;
         public RaceCourse? Course;
+        /// <summary>Ground: the road sent with every setup (kept to set up an NPC that changes simulator).</summary>
+        public Vector3[] Centre = System.Array.Empty<Vector3>();
+        public float[] Width = System.Array.Empty<float>();
         public double EntryEnds, StartAt, Deadline;
         public readonly List<long> Entrants = new();
         public readonly Dictionary<long, int> Next = new();
@@ -76,6 +89,8 @@ public partial class RaceManager : Node
         public double ArriveBy;
         /// <summary>NPCs asked for while the road was still being found: spawned once it is.</summary>
         public readonly List<(long Owner, int Count, int Mount, bool Duel)> PendingNpcs = new();
+        /// <summary>Where it was opened: "near the race" before any entrant is placed.</summary>
+        public Vector3 Spot;
         public string What => $"{(Air ? "air " : "")}{MountName(Mount)} {(Invited != 0 ? "duel" : "race")}";
     }
 
@@ -175,7 +190,7 @@ public partial class RaceManager : Node
 
         var race = new Race
         {
-            Id = _nextId++, Host = sender, Invited = invited, Air = air, Mount = mount, Phase = Phase.Building,
+            Id = _nextId++, Host = sender, Invited = invited, Air = air, Mount = mount, Phase = Phase.Building, Spot = at,
             Metres = air ? 0 : isNumber ? Mathf.Clamp(metres, 300f, 8000f) : 2000f,
         };
         _races[race.Id] = race;
@@ -345,7 +360,7 @@ public partial class RaceManager : Node
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void NpcStaged(int raceId, long npc)
     {
-        if (!_server || OwnerOf(npc) != Multiplayer.GetRemoteSenderId() || !_races.TryGetValue(raceId, out var race)) return;
+        if (!_server || SimOf(npc) != Multiplayer.GetRemoteSenderId() || !_races.TryGetValue(raceId, out var race)) return;
         if (race.Arriving.Remove(npc)) GD.Print($"[npc] {Who(npc)} is in its slot");
     }
 
@@ -353,6 +368,7 @@ public partial class RaceManager : Node
     {
         if (!_raceOf.TryGetValue(sender, out int id) || !_races.TryGetValue(id, out var race)) return "You are not in a race.";
         Drop(race, sender);
+        if (sender == race.Host) MigrateHost(race);
         return $"You are out of race #{id}.";
     }
 
@@ -362,8 +378,8 @@ public partial class RaceManager : Node
         _raceOf.Remove(entrant);
         if (race.Phase == Phase.Running) race.Out.Add(entrant);
         else race.Entrants.Remove(entrant);
-        if (race.Phase == Phase.Running && Multiplayer.GetPeers().Contains((int)OwnerOf(entrant)))
-            RpcId(OwnerOf(entrant), MethodName.Dropped, race.Id, entrant);
+        if (race.Phase == Phase.Running && Multiplayer.GetPeers().Contains((int)SimOf(entrant)))
+            RpcId(SimOf(entrant), MethodName.Dropped, race.Id, entrant);
     }
 
     private string Cancel(long sender, int? id)
@@ -386,10 +402,17 @@ public partial class RaceManager : Node
     private void ServerTick(double delta)
     {
         _clock += delta;
+        bool reviewHosts = (_hostReview += delta) >= 1.0;
+        if (reviewHosts) _hostReview = 0;
         foreach (var race in _races.Values.ToList())
         {
+            if (reviewHosts && (race.Host == 0 || _players?.GetNodeOrNull(race.Host.ToString()) == null))
+            {
+                MigrateHost(race);
+                if (!_races.ContainsKey(race.Id)) continue;   // ended: nobody to take it
+            }
             // entrants whose player (or NPC owner) left the server
-            foreach (long e in race.Entrants.Where(e => !race.Out.Contains(e) && _players?.GetNodeOrNull(OwnerOf(e).ToString()) == null).ToList())
+            foreach (long e in race.Entrants.Where(e => !race.Out.Contains(e) && _players?.GetNodeOrNull(PlayerReplication.NodeName(e)) == null).ToList())
             {
                 _raceOf.Remove(e);
                 if (race.Phase == Phase.Running) race.Out.Add(e);
@@ -403,6 +426,54 @@ public partial class RaceManager : Node
                 && (_clock > race.Deadline || race.Entrants.All(e => race.Finished.ContainsKey(e) || race.Out.Contains(e))))
                 Results(race);
         }
+    }
+
+    // ---- the host role (#50): a race belongs to nobody either ----
+
+    private double _hostReview;
+
+    /// <summary>
+    /// The host left (disconnected, or <c>/race leave</c>): the role passes to the nearest human
+    /// entrant still here, else to the nearest player within <see cref="RaceNpcs.Zone"/> of the race
+    /// (a spectator). A duel whose host leaves before GO ends. With nobody, a race not started yet
+    /// ends; a running one goes on without a host (the console can still cancel it) while someone
+    /// still runs an entrant — its NPCs retire with nobody near, and then it ends with its results.
+    /// A vacant role is offered again every second.
+    /// </summary>
+    private void MigrateHost(Race race)
+    {
+        long old = race.Host;
+        if (race.Invited != 0 && race.Phase != Phase.Running)
+        {
+            End(race, "the host left", ChatKind.System);
+            return;
+        }
+        // "near the race": its entrants still on course, else where it was opened
+        var field = race.Entrants.Where(e => e != old && !race.Out.Contains(e) && !race.Finished.ContainsKey(e))
+            .Select(e => _players?.GetNodeOrNull<Node3D>(PlayerReplication.NodeName(e))).OfType<Node3D>()
+            .Select(n => n.GlobalPosition).ToList();
+        if (field.Count == 0) field.Add(race.Spot);
+        long best = 0;
+        (int, float) bestKey = default;
+        foreach (var child in _players?.GetChildren() ?? new Godot.Collections.Array<Node>())
+        {
+            if (child is not FootPlayer { Npc: false } p || !long.TryParse(p.Name, out long peer) || peer == old) continue;
+            bool entrant = race.Entrants.Contains(peer) && !race.Out.Contains(peer);
+            float d = field.Min(f => RaceNpcs.Flat(f, p.GlobalPosition));
+            if (!entrant && d > RaceNpcs.Zone) continue;
+            var key = (entrant ? 0 : 1, d);
+            if (best == 0 || key.CompareTo(bestKey) < 0) { best = peer; bestKey = key; }
+        }
+        if (best != 0)
+        {
+            race.Host = best;
+            _chat?.Broadcast($"[race] #{race.Id} is now hosted by {Who(best)}", ChatKind.System);
+            GD.Print($"[race] #{race.Id} host {(old == 0 ? "vacant" : Who(old))} -> {Who(best)}");
+            return;
+        }
+        if (race.Phase != Phase.Running) { End(race, "the host left", ChatKind.System); return; }
+        if (old != 0) GD.Print($"[race] #{race.Id} has no host: nobody near the race");
+        race.Host = 0;
     }
 
     /// <summary>Seconds after its GO a field is taken to have left its grid.</summary>
@@ -464,15 +535,40 @@ public partial class RaceManager : Node
         race.StartAt = _clock + Countdown;
         // a generous limit: the whole distance at a slow pace for the class, plus the countdown
         race.Deadline = race.StartAt + (course.Length + RaceCourse.AirGridBack + 300f) / SlowPace(race.Mount) + 60f;
-        for (int i = 0; i < count; i++)
+        race.Centre = centre;
+        race.Width = width;
+        foreach (long e in race.Entrants)
         {
-            long e = race.Entrants[i];
             race.Next[e] = 0;
-            RpcId(OwnerOf(e), MethodName.Setup, race.Id, e, race.Air, centre, width, gates, course.Length,
-                course.GridAltitude, i, count, race.Mount, Countdown);
+            SendSetup(race, e, resume: false);
         }
         _chat?.Broadcast($"[race] #{race.Id} {count} on the grid: {string.Join(", ", race.Entrants.Select(Who))} — "
             + $"{course.Length / 1000f:0.0} km, GO in {Countdown:0} s", ChatKind.System);
+    }
+
+    /// <summary>
+    /// An entrant's grid slot and course, to whoever runs it. <paramref name="resume"/>: an NPC
+    /// that changed simulator (#50) — the new one reports from the checkpoint the server expects
+    /// next, with the countdown left (negative once running).
+    /// </summary>
+    private void SendSetup(Race race, long e, bool resume)
+    {
+        var course = race.Course!;
+        int slot = race.Entrants.IndexOf(e), count = race.Entrants.Count;
+        RpcId(SimOf(e), MethodName.Setup, race.Id, e, race.Air, race.Centre, race.Width,
+            race.Air ? course.Gates : System.Array.Empty<Vector3>(), course.Length, course.GridAltitude, slot, count,
+            race.Mount, resume ? race.StartAt - _clock : Countdown, race.Next.GetValueOrDefault(e), resume);
+    }
+
+    /// <summary>Server: an NPC changed simulator; the new one gets its race where it stands.</summary>
+    public void ResumeNpc(long id)
+    {
+        if (!_raceOf.TryGetValue(id, out int r) || !_races.TryGetValue(r, out var race)) return;
+        // still driving in to its slot (#51): the new simulator has no arrival plan — it waits
+        // where it is, GO does not wait for it, and GO's setup puts it in its slot
+        race.Arriving.Remove(id);
+        if (race.Phase == Phase.Running && !race.Out.Contains(id) && !race.Finished.ContainsKey(id))
+            SendSetup(race, id, resume: true);
     }
 
     private static float SlowPace(int mount) => mount switch
@@ -508,7 +604,7 @@ public partial class RaceManager : Node
             if (!_raceOf.ContainsKey(e)) _names.Remove(e);
         }
         if (race.Phase == Phase.Running)
-            foreach (long owner in race.Entrants.Select(OwnerOf).Distinct().Where(o => Multiplayer.GetPeers().Contains((int)o)))
+            foreach (long owner in race.Entrants.Select(SimOf).Distinct().Where(o => Multiplayer.GetPeers().Contains((int)o)))
                 RpcId(owner, MethodName.Dropped, race.Id, 0L);
         // its NPCs retire with it: a new race spawns fresh ones where their owner stands
         var npcs = race.Entrants.Where(e => e < 0).ToList();
@@ -550,7 +646,7 @@ public partial class RaceManager : Node
         _raceOf.Remove(entrant);
         int position = race.Finished.Count(kv => kv.Value <= time);
         _chat?.Broadcast($"[race] #{raceId} {Who(entrant)} finishes P{position} in {Format(time)}", ChatKind.System);
-        RpcId(OwnerOf(entrant), MethodName.Result, raceId, entrant, position, time);
+        RpcId(SimOf(entrant), MethodName.Result, raceId, entrant, position, time);
     }
 
     /// <summary>A report about a running race's entrant, from the peer that owns it, after GO.</summary>
@@ -558,7 +654,7 @@ public partial class RaceManager : Node
     {
         race = null!;
         long sender = Multiplayer.GetRemoteSenderId();
-        if (OwnerOf(entrant) != sender || !_races.TryGetValue(raceId, out var found)) return false;
+        if (SimOf(entrant) != sender || !_races.TryGetValue(raceId, out var found)) return false;
         race = found;
         return race.Phase == Phase.Running && _clock >= race.StartAt && race.Entrants.Contains(entrant) && !race.Out.Contains(entrant);
     }
@@ -673,7 +769,10 @@ public partial class RaceManager : Node
     public event System.Action<int, double>? Finished;
 
     /// <summary>Where an NPC this client entered starts, sent at the close of entry.</summary>
-    public readonly record struct NpcGrid(int RaceId, long NpcId, RaceCourse Course, Vector3 At, Vector3 Forward, int Mount, double Countdown);
+    /// <summary><c>Resume</c>: the NPC was handed to this client (#50) and is not on the grid — it
+    /// reports from checkpoint <c>Next</c>.</summary>
+    public readonly record struct NpcGrid(int RaceId, long NpcId, RaceCourse Course, Vector3 At, Vector3 Forward, int Mount, double Countdown,
+        int Next = 0, bool Resume = false);
     public event System.Action<NpcGrid>? NpcSetup;
     /// <summary>An NPC finished: id, position, seconds.</summary>
     public event System.Action<long, int, double>? NpcFinished;
@@ -704,6 +803,9 @@ public partial class RaceManager : Node
         RpcId(1, MethodName.RequestNpcEntrants, raceId, npcIds);
     }
 
+    /// <summary>This client no longer simulates that NPC (#50): it stops reporting it.</summary>
+    public void ForgetNpc(long npcId) => _npcs.Remove(npcId);
+
     /// <summary>Hands the race an NPC's position, so its checkpoints are reported like the player's.</summary>
     public void TrackNpc(long npcId, System.Func<Vector3> position)
     {
@@ -712,11 +814,11 @@ public partial class RaceManager : Node
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Setup(int raceId, long entrant, bool air, Vector3[] centre, float[] width, Vector3[] gates, float length,
-        float gridAltitude, int slot, int count, int mount, double countdown)
+        float gridAltitude, int slot, int count, int mount, double countdown, int next, bool resume)
     {
         var r = new Runner
         {
-            RaceId = raceId, Id = entrant, Slot = slot, Count = count, Mount = mount, GoIn = countdown,
+            RaceId = raceId, Id = entrant, Slot = slot, Count = count, Mount = mount, GoIn = countdown, Next = next,
             Course = RaceCourse.FromWire(air, centre, width, gates, length, gridAltitude),
             StartArc = air ? 0f : RaceCourse.StartArc(slot, count),
         };
@@ -724,7 +826,7 @@ public partial class RaceManager : Node
         {
             _npcs[entrant] = r;
             var (at, fwd) = r.Course.Slot(slot, count);
-            NpcSetup?.Invoke(new NpcGrid(raceId, entrant, r.Course, at, fwd, mount, countdown));
+            NpcSetup?.Invoke(new NpcGrid(raceId, entrant, r.Course, at, fwd, mount, countdown, next, resume));
             return;
         }
         StopLocal();
@@ -950,6 +1052,9 @@ public partial class RaceManager : Node
     private readonly int _skip = int.TryParse(Arg("--raceskip"), out int k) ? k : -1;
     // --racenpc N: sends /race npc N once, when this client's own race opens
     private readonly string? _autoNpc = Arg("--racenpc");
+    // --chatafter "<seconds> <line>[;<line>...]": sends chat lines that long after the first race's grid is
+    // announced (spectators too) — e.g. "/city Riddes" to leave the NPCs' zone mid-race (#50)
+    private string? _chatAfter = Arg("--chatafter");
     private int _myRace;
     private readonly HashSet<int> _joined = new();
     private double _settled;
@@ -975,6 +1080,13 @@ public partial class RaceManager : Node
                 if (RaceId.Match(line) is not { Success: true } m || !int.TryParse(m.Groups[1].Value, out int id)) return;
                 if (line.Contains("opens a") || line.Contains("challenges you") || line.Contains("you are in")) LastRaceSeen = id;
                 if (line.Contains("finding the road") || line.Contains("plotting the gates")) _myRace = id;
+                if (_chatAfter != null && line.Contains("on the grid:")
+                    && _chatAfter.Split(' ', 2) is [var secs, var said]
+                    && double.TryParse(secs, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double after))
+                {
+                    _chatAfter = null;   // once
+                    GetTree().CreateTimer(after).Timeout += () => { foreach (var one in said.Split(';')) chat.Send(one.Trim()); };
+                }
                 if (_autoNpc != null && _myRace > 0 && id == _myRace && line.Contains("opens a"))
                 {
                     _myRace = -1;   // once
