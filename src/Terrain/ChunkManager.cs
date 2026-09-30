@@ -72,6 +72,8 @@ public partial class ChunkManager : Node3D
     /// have loaded — can ask for it directly, and get the same shipped/cache/server tiering.
     /// </summary>
     public IChunkSource? Source => _source;
+    /// <summary>The LV95 origin of world space, once initialised.</summary>
+    public WorldOrigin? Origin => _origin;
     private WorldOrigin? _origin;
     private Material? _material;
     private HashSet<TileId> _available = new();

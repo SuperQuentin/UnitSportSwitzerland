@@ -451,6 +451,13 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public Func<RideInput>? RideControls { get; set; }
 
+    /// <summary>
+    /// Replaces the move stick on foot, when set: a world-space wish (length up to 1) and whether to
+    /// run. The scripted runner (<see cref="AutoPilot"/>) walks through it, as a rider through
+    /// <see cref="RideControls"/>.
+    /// </summary>
+    public Func<(Vector3 Wish, bool Run)>? WalkControls { get; set; }
+
     private Camera3D? _camera;
     private CollisionShape3D _body = null!;
     private CapsuleShape3D _capsule = null!;
@@ -1426,6 +1433,12 @@ public partial class FootPlayer : CharacterBody3D
         // relative to the view, which is the body in first person and the camera in third
         var view = new Basis(Vector3.Up, _viewYaw);
         var direction = (view * new Vector3(input.X, 0, input.Y)).Normalized();
+        if (WalkControls?.Invoke() is { } walk)
+        {
+            moveAmount = Mathf.Min(walk.Wish.Length(), 1f);
+            direction = moveAmount > 0.01f ? walk.Wish.Normalized() : Vector3.Zero;
+            running = walk.Run;
+        }
         if (_slideCooldown > 0) _slideCooldown -= dt;
 
         // Remember the last usable wall, and the last jump press, for a moment each. Contact
