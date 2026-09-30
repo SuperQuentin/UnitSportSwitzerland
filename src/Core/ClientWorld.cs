@@ -340,7 +340,7 @@ public partial class ClientWorld : Node3D
 
         // T in a stopped car at a garage: the tuning menu (GarageUi.GarageNear says where garages are)
         Vehicles.GarageUi.GarageNear = pos =>
-            Interiors.DoorIndex.Nearest(pos, 8f, Terrain.Format.BuildingKind.Garage) != null;
+            Interiors.DoorIndex.Nearest(pos, 8f, Terrain.Format.BuildingKind.Garage, orInside: true) != null;
         _garage = Vehicles.GarageUi.Create();
         _garage.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_garage);
