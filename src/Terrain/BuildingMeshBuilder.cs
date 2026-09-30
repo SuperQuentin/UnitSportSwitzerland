@@ -28,11 +28,11 @@ public static class BuildingMeshBuilder
     private const float RoofNormalY = 0.45f;
 
     /// <summary>
-    /// UV2.y flags read by <c>ps1_building.gdshader</c>: 0 plain, <see cref="NeonFlag"/> a garage
-    /// sign (solid neon, lit day and night), <see cref="GarageWallFlag"/> a garage wall, whose UV is
-    /// (metres along, metres above the base) and UV2.x the eave height the chequered band runs under.
+    /// UV2.y flags read by <c>ps1_building.gdshader</c>: 0 plain, <see cref="SignFlag"/> a garage
+    /// sign's light face (lit at night), <see cref="GarageWallFlag"/> a garage wall, whose UV is
+    /// (metres along, metres above the base) and UV2.x the eave height the painted stripe runs under.
     /// </summary>
-    public const float NeonFlag = 1f, GarageWallFlag = 2f;
+    public const float SignFlag = 1f, GarageWallFlag = 2f;
 
     /// <summary>
     /// The building mesh plus a front door on each building. The doors are a few boxes appended
@@ -74,8 +74,8 @@ public static class BuildingMeshBuilder
 
     /// <summary>
     /// Frame, leaf and a doorstep, in the door's own frame (along the wall, out, up). A garage gets
-    /// no leaf (its roll-up door is a node, <c>Vehicles.GarageDoors</c>) but a neon sign band over
-    /// the opening.
+    /// no leaf (its roll-up door is a node, <c>Vehicles.GarageDoors</c>) but a sign over the opening:
+    /// a coloured board with a light face.
     /// </summary>
     private static void AppendDoor(List<Vector3> v, List<Color> c, List<float> f, Interiors.DoorSpot d, BuildingKind kind)
     {
@@ -119,12 +119,12 @@ public static class BuildingMeshBuilder
         Box(-hw - 0.12f, hw + 0.12f, h, h + 0.12f, 0, 0.08f, frame);
         if (kind == BuildingKind.Garage)
         {
-            // the sign band: a dark board with a neon face, flagged so the shader lights it
-            Box(-hw - 0.35f, hw + 0.35f, h + 0.2f, h + 0.85f, 0, 0.12f, new Color(0.08f, 0.08f, 0.09f));
+            // the sign: a workshop-blue board, and on it a light face the shader lights at night
+            Box(-hw - 0.35f, hw + 0.35f, h + 0.2f, h + 0.85f, 0, 0.12f, new Color(0.16f, 0.30f, 0.58f).SrgbToLinear());
             int start = f.Count;
-            Quad(P(-hw - 0.25f, h + 0.3f, 0.13f), P(hw + 0.25f, h + 0.3f, 0.13f),
-                P(hw + 0.25f, h + 0.75f, 0.13f), P(-hw - 0.25f, h + 0.75f, 0.13f), Colors.White);
-            for (int i = start; i < f.Count; i++) f[i] = NeonFlag;
+            Quad(P(-hw - 0.22f, h + 0.3f, 0.13f), P(hw + 0.22f, h + 0.3f, 0.13f),
+                P(hw + 0.22f, h + 0.75f, 0.13f), P(-hw - 0.22f, h + 0.75f, 0.13f), Colors.White);
+            for (int i = start; i < f.Count; i++) f[i] = SignFlag;
             Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
             return;
         }
@@ -173,7 +173,7 @@ public static class BuildingMeshBuilder
             var uv2 = new Vector2(storeyCount, 0f);
             if (b.Kind == BuildingKind.Garage)
             {
-                // the chequered band runs under the eave; a flat-roofed garage has its eave near
+                // the painted stripe runs under the eave; a flat-roofed garage has its eave near
                 // the top, a pitched one lower down (same 0.78 split Storeys uses)
                 float wallHeight = b.MaxY - b.MinY;
                 uv2 = new Vector2(Mathf.Max(wallHeight * 0.78f, Mathf.Min(wallHeight - 0.1f, 4f)), GarageWallFlag);
@@ -303,7 +303,7 @@ public static class BuildingMeshBuilder
             BuildingKind.Sacral => new Color(0.88f, 0.86f, 0.80f),       // pale stone
             BuildingKind.Civic => new Color(0.80f, 0.79f, 0.75f),
             BuildingKind.Annex => new Color(0.62f, 0.59f, 0.54f),
-            BuildingKind.Garage => new Color(0.60f, 0.64f, 0.72f),        // blue-grey workshop
+            BuildingKind.Garage => new Color(0.66f, 0.66f, 0.64f),        // sheet-metal workshop
             BuildingKind.UnderConstruction => new Color(0.70f, 0.69f, 0.66f),
             _ => new Color(0.72f, 0.70f, 0.66f),
         };
@@ -316,7 +316,7 @@ public static class BuildingMeshBuilder
         BuildingKind.Industrial => new Color(0.46f, 0.48f, 0.49f),
         BuildingKind.Sacral or BuildingKind.Civic => new Color(0.35f, 0.33f, 0.34f), // slate
         BuildingKind.Annex => new Color(0.44f, 0.40f, 0.36f),
-        BuildingKind.Garage => new Color(0.36f, 0.37f, 0.41f),
+        BuildingKind.Garage => new Color(0.46f, 0.47f, 0.48f),
         BuildingKind.UnderConstruction => new Color(0.60f, 0.59f, 0.57f),
         _ => new Color(0.50f, 0.30f, 0.23f), // the usual Swiss reddish-brown tile
     };

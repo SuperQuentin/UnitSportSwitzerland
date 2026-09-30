@@ -35,9 +35,10 @@ uniform vec4 occupied_box[8];
 uniform vec4 occupied_axis[8];
 uniform int occupied_count = 0;
 
-// garages (BuildingMeshBuilder flags them in UV2.y): the sign and the chequered band under the
-// eave glow in this colour day and night, so a garage reads from a kilometre away
-uniform vec3 garage_neon : source_color = vec3(1.0, 0.18, 0.62);
+// garages (BuildingMeshBuilder flags them in UV2.y): the sign's light face over the door (lit
+// from behind at night), and a painted stripe under the eave that reads from across the valley
+uniform vec3 garage_sign : source_color = vec3(0.97, 0.95, 0.88);
+uniform vec3 garage_stripe : source_color = vec3(0.82, 0.24, 0.12);
 
 varying vec3 world_pos;
 
@@ -306,19 +307,14 @@ void fragment() {
         }
     }
 
-    // --- garage neon: the sign face, and a chequered band under a garage's eave ---------
-    vec3 neon = vec3(0.0);
+    // --- garage: the sign's light face, and a painted stripe under the eave -------------
+    // The face is a light box: plain paint by day, lit at night like a window. The stripe is
+    // paint, shaded like the wall, 0.5 m tall so it still reads as a line a kilometre off.
     if (garage_flag > 0.5 && garage_flag < 1.5) {
-        neon = garage_neon;
-        col = garage_neon;
-    } else if (garage_wall && facade.y > storey_count - 0.9 && facade.y < storey_count - 0.1) {
-        // 0.4 m squares; past the resolution limit they merge into a solid neon line, which is
-        // what makes a garage stand out from across the valley
-        vec2 sq = floor(vec2(facade.x, facade.y - storey_count) / 0.4);
-        float on = mod(sq.x + sq.y, 2.0);
-        float legible = clamp(1.0 - fwidth(facade.x) / 0.4, 0.0, 1.0);
-        neon = garage_neon * mix(1.0, on, legible);
-        col = mix(col, vec3(0.03), (1.0 - on) * legible);
+        col = garage_sign;
+        glow = max(glow, garage_sign);
+    } else if (garage_wall && facade.y > storey_count - 0.75 && facade.y < storey_count - 0.25) {
+        col = garage_stripe;
     }
 
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
@@ -344,8 +340,6 @@ void fragment() {
     col *= world_tint;
     // a lit window is its own light: at night it shines through the darkness around it
     col = max(col, glow * world_night);
-    // neon is its own light by day too
-    col = max(col, neon);
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
     int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
