@@ -39,6 +39,8 @@ public partial class VehicleBody : CharacterBody3D
     [Export] public Quaternion Tilt { get; set; } = Quaternion.Identity;
     /// <summary>Rotor / prop spool as the authority simulates it; a remote copy used to guess it from <see cref="EngineOn"/>.</summary>
     [Export] public float Spool { get; set; }
+    /// <summary>A car's open doors, one bit each (<see cref="CarRig.DoorLeft"/>..): left open for show, or by whoever just got out.</summary>
+    [Export] public byte DoorsOpen { get; set; }
 
     public ChunkManager? Terrain { get; set; }
 
@@ -49,6 +51,9 @@ public partial class VehicleBody : CharacterBody3D
     public double LonelyFor { get; set; }
 
     public long Owner { get; private set; }
+
+    /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
+    public CarRig? Rig => _visual as CarRig;
 
     private VehicleState _initial;
     private RideMotion _motion;
@@ -73,8 +78,10 @@ public partial class VehicleBody : CharacterBody3D
             Terrain = terrain,
             _initial = state,
             Kind = state.Kind,
-            Ride = Rideable.Create(state.Kind) ?? new Bicycle(),
+            // the car with its garage parts on: they are part of the car
+            Ride = CarTuning.Ride(state.Kind, state.Tuning) ?? new Bicycle(),
             Wrecked = state.Wrecked,
+            DoorsOpen = (byte)(state.DoorsOpen & 15),
             Health = state.Health,
             EngineOn = state.EngineOn,
             Owner = state.Owner,
@@ -114,11 +121,11 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         var replication = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool" })
+        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen" })
             replication.AddProperty(prop);
         // states that change a few times per life of a vehicle go reliably on change; the motion
         // at 20 Hz while it moves (every frame before, for a bike standing in a field for hours)
-        foreach (var prop in new[] { ".:Wrecked", ".:Health", ".:EngineOn" })
+        foreach (var prop in new[] { ".:Wrecked", ".:Health", ".:EngineOn", ".:DoorsOpen" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         var sync = _sync = new MultiplayerSynchronizer
         {
@@ -155,6 +162,13 @@ public partial class VehicleBody : CharacterBody3D
         if (!IsMultiplayerAuthority()) SetPhysicsProcess(false);
         else SetAnchored(true);
 
+        // Someone just got out of this car: it arrives with their door open (in the spawn state,
+        // so every peer starts with it open), and the authority shuts it behind them — unless they
+        // had left it open on purpose, when the state does not ask for it. Opening it here instead
+        // was never seen: the synchronizer only sends changes from the values it first sees.
+        if (IsMultiplayerAuthority() && (s.DoorsOpen & VehicleState.DriverDoorShuts) != 0 && VehicleState.Now - s.SpawnedAt < 3.0)
+            _shutDriverIn = 1f;
+
         // whoever just got out is right beside (or inside) the box: ignore them while they clear it
         foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
             if (node is PhysicsBody3D body && body.GlobalPosition.DistanceTo(Position) < 15f)
@@ -186,7 +200,18 @@ public partial class VehicleBody : CharacterBody3D
     /// </remarks>
     public VehicleState Capture() => new(Kind, GlobalPosition,
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
-        _flight.Control, VehicleState.Now, Owner, Name);
+        _flight.Control, VehicleState.Now, Owner, Name, _initial.Tuning, DoorsOpen);
+
+    /// <summary>Authority: seconds until the driver's door, open from getting out, shuts.</summary>
+    private float _shutDriverIn;
+
+    /// <summary>Opens or shuts one door. The authority's call: others ask <see cref="VehicleManager.ToggleDoor"/>.</summary>
+    public void ToggleDoor(byte bit)
+    {
+        if (Wrecked || Ride is not Car) return;
+        DoorsOpen ^= (byte)(bit & 15);
+        _shutDriverIn = 0f;   // a door someone chose to leave open stays open
+    }
 
     public override void _PhysicsProcess(double delta)
     {
@@ -325,7 +350,10 @@ public partial class VehicleBody : CharacterBody3D
         if (Wrecked && !_wasWrecked) { _wasWrecked = true; Char(); Detonate(); }
         if (Wrecked) WreckAge += delta;
 
+        if (_shutDriverIn > 0f && (_shutDriverIn -= dt) <= 0f) DoorsOpen &= unchecked((byte)~CarRig.DriverDoor);
+
         if (_visual == null) return;
+        if (_visual is CarRig doors) doors.DoorsOpen = DoorsOpen;
 
         if (!IsMultiplayerAuthority() && Ride is Flyer remoteFlyer)
             remoteFlyer.Pose(_visual, Rotation.Y, new FlightMotion { Attitude = new Basis(Tilt) });
