@@ -62,8 +62,6 @@ public partial class InteriorManager : Node3D
     private const float QuietRadius = 6f;
     /// <summary>...for this long shuts by itself.</summary>
     private const double QuietSeconds = 60;
-    /// <summary>A door's swing, open or shut, in seconds.</summary>
-    private const float SwingSeconds = 0.6f;
 
     public static InteriorManager? Instance { get; private set; }
 
@@ -787,13 +785,12 @@ public partial class InteriorManager : Node3D
 
         if (_requestingDoor != null && (_requestTimer -= delta) <= 0) _requestingDoor = null;
 
-        // the leaves swing toward what the server says
-        float step = (float)delta / SwingSeconds;
+        // the leaves swing toward what the server says, a big one slower
         foreach (var link in _links.Values)
         {
             float target = link.Open ? 1f : 0f;
             if (link.Swing == target) continue;
-            link.Swing = Mathf.MoveToward(link.Swing, target, step);
+            link.Swing = Mathf.MoveToward(link.Swing, target, (float)delta / link.SwingSeconds);
             link.Leaf?.SetSwing(link.Swing);
             if (link.Swing <= 0f) Maintain();
         }
