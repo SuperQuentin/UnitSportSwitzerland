@@ -31,6 +31,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 
 ## Commands
 
+- `swiss-relief` — `tools/swiss_relief.py`: rebuilds the generated terrain's 500 m heightmap from one swissALTIRegio overview (GDAL, ~5 s)
 - `region-setup-wizard` — Region setup wizard: `dotnet run --project tools/MapSetup` (`tools/MapSetup/`, Spectre.Console). Terminal map of CH...
 - `commands` — Commands: --bbox, --buildings, --chunks, --coarse, --cover, --dry-run, --dump-png, --features-only, --force, --france, --fresh, --gwr
 
