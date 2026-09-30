@@ -467,6 +467,8 @@ public partial class ClientWorld : Node3D
         // "--settings" opens the settings panel straight away, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--settings") >= 0)
             Callable.From(() => _menu.OpenSettings()).CallDeferred();
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--licenses") >= 0)
+            Callable.From(() => _menu.OpenLicenses()).CallDeferred();
 
         // "--menu" forces the picker open even when a mode was named on the command line,
         // which is also how the menu itself gets screenshotted with --shot.
