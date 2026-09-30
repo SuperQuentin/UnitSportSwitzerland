@@ -14,6 +14,7 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `shotgun-feel` — Shotgun ADS pose + bead reticle, recoil/camera punch, pump fore-end + sound, rate limit, eye-origin shots, remote jolt
 - `camera-zoom` — Camera focal-length zoom (wheel while aiming), LookScale, viewfinder readout + autofocus hunt, --zoom
 - `cash-account` — Money is a counter, not an item: `Inventory.Cash`, lost when knocked out, claimed to the server-kept account...
+- `radio` — Radio: a thrown RigidBody world item (thrower simulates the fall, server owns what plays), CDs from the shared library on the shared clock, E to dance; `tools/radiocheck.sh`
 - `polaroid` — Camera prints photos: ItemId.Photo + ItemStack.Data, develop animation, album, sticking, PhotoTransfer image sharing, --photocheck
 - `item-net-events` — ItemEvents.Send (shot, photo flash relayed to others) and PlacedObjects (server-kept, saved flags/photos, kind factories)
 - `flag-plant` — Swiss flag: placement ghost (green/red, pick-up halo), raise-and-stab / pull-up strokes, replicated Plant arms, spawn thud + dirt
@@ -21,4 +22,4 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 
 ## Commands
 
-- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh
+- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh, tools/radiocheck.sh, --cdfixture

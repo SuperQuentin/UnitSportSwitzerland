@@ -966,6 +966,23 @@ public static class ItemIcons
             "..kkkkkkkkkkkk..",
         };
 
+        // boombox: handle and aerial on top, two speakers either side of the tape deck
+        d[ItemId.Radio] = new[]
+        {
+            "............kw..",
+            "....kkkkkk.kw...",
+            "....kw..wk.kw...",
+            ".kkkkkkkkkkkkkk.",
+            ".kgwgwgRgggggdk.",
+            ".kGGGGGwwGGGGGk.",
+            ".kGkkkGkkGkkkGk.",
+            ".kGkwkGkkGkwkGk.",
+            ".kGkkkGggGkkkGk.",
+            ".kGGGGGggGGGGGk.",
+            ".kddddddddddddk.",
+            ".kkkkkkkkkkkkkk.",
+        };
+
         return d;
     }
 }

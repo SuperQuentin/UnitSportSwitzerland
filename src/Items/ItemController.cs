@@ -100,6 +100,9 @@ public partial class ItemController : Node
 
         _inventory.Changed += () => _ui.Refresh();
 
+        // a throw the server turned down (too many radios, say): the radio goes back in the pack
+        RadioManager.Refused += OnRadioRefused;
+
         // "--hold <item>" puts that item in the hand, for screenshotting the viewmodel
         var args = OS.GetCmdlineUserArgs();
         _forceAim = Array.IndexOf(args, "--aim") >= 0;   // and "--aim" holds Aim down
@@ -116,6 +119,14 @@ public partial class ItemController : Node
                 System.Globalization.CultureInfo.InvariantCulture, out var zmm))
             _focalMm = Mathf.Clamp(zmm, FocalMin, FocalMax);
     }
+
+    private void OnRadioRefused(string text)
+    {
+        _ui.Toast(text);
+        if (text.Contains("throw", StringComparison.OrdinalIgnoreCase)) _inventory.Add(ItemId.Radio, 1);
+    }
+
+    public override void _ExitTree() => RadioManager.Refused -= OnRadioRefused;
 
     /// <summary>The player if items can be used right now: on foot, on screen, not in a menu.</summary>
     public FootPlayer? UsablePlayer
@@ -363,6 +374,25 @@ public partial class ItemController : Node
                     _ui.Toast(on ? $"You put on the {def.Name.ToLowerInvariant()}." : $"You take off the {def.Name.ToLowerInvariant()}.");
                 });
                 break;
+
+            case ItemUse.Throw:
+            {
+                if (RadioManager.Instance is not { } radios)
+                {
+                    _ui.Toast("Nowhere to throw it.");
+                    break;
+                }
+                // from the eye, along the view: the body, not the chase camera, is the origin in third person
+                var forward = -player.Camera.GlobalTransform.Basis.Z;
+                var origin = player.GlobalPosition + Vector3.Up * 1.5f + forward * 0.6f;
+                float yaw = Mathf.Atan2(-forward.X, -forward.Z);
+                var velocity = forward * 8f + Vector3.Up * 3f + player.Velocity;
+                _inventory.TakeOne(slot);
+                radios.Throw(new RadioState("", 0, origin, yaw, velocity));
+                Kick(player);
+                Play(SfxSynth.Whoosh, 0.8f);
+                break;
+            }
 
             case ItemUse.Material:
                 _ui.Toast($"{def.Name}: keep it for trading or building.");

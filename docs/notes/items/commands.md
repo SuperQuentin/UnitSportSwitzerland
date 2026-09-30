@@ -10,6 +10,8 @@
 - `--invuicheck`/`--econcheck` use a scratch inventory (`Inventory.Scratch`, `Persist = false`).
 - `GODOT=<exe> tools/useanimcheck.sh`: loopback server + A (first person: drink, eat, GPS, hat) + B (remote: sees Mouth arm pose, hat); screenshots in `test_output/useanim_*.png`.
 - `<godot> --headless --path . -- --iconsheet`: renders every item icon to `test_output/iconsheet.png` (see `pixel-icons`).
+- `tools/radiocheck.sh` (`CHUNKS=<terrain_chunks dir>` from a worktree): dedicated server with `--cdfixture <wav>`,
+  `--radiocheck thrower` (headless) and `--radiocheck watch` (windowed) on loopback; see `radio`.
 - `GODOT=<exe> tools/gunshotcheck.sh [--gunside]`: server + A (shouldered shotgun, fires, rate limit) + B (screenshots A's body, counts Shot events); pictures `test_output/gunshot_*.png` (see `shotgun-feel`).
 - `GODOT=<exe> tools/plantcheck.sh`: server + A (flag ghost, plant, pull-up) + B (remote view, spawn effect count); see `flag-plant`.
 - `GODOT=<exe> tools/placedcheck.sh [E,N]`: loopback server + three clients for item events and placed

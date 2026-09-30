@@ -225,6 +225,12 @@ public partial class ClientWorld : Node3D
             if (GetViewport().GetCamera3D() is { } cam) at.Add(cam.GlobalPosition);
             return at;
         };
+        // Radios thrown into the world and the CD library they play from, same paths as the
+        // server's; the clock the CDs run on (offline: this machine's own).
+        var radios = Items.RadioManager.Create(this);
+        radios.PlayerPositions = vehicles.PlayerPositions;
+        Audio.Cd.CdLibrary.Create(this, server: false);
+        Net.ClockSync.Create(this);
         // the Africa Twin at Riddes: placed here offline, by the server online
         AddChild(new World.AfricaTwinEgg(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
@@ -396,6 +402,9 @@ public partial class ClientWorld : Node3D
 
         var loot = Loot.LootService.Create(this);
         loot.Items = items;
+        // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
+        _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
+        AddChild(_radioUi);
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);
@@ -768,6 +777,7 @@ public partial class ClientWorld : Node3D
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
+        if (RadioSyncCheck.Create(() => LocalPlayer, () => _players) is { } radioCheck) AddChild(radioCheck);
 
         _chatUi = ChatUi.Create(_chat);
         AddChild(_chatUi);
@@ -951,6 +961,10 @@ public partial class ClientWorld : Node3D
             }
             else if (!p.Indoors)
             {
+                if (Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
+                    yield return (PlayerInput.InteractMount, "Radio");
+                else if (Items.RadioManager.Instance?.NearestPlaying(p.GlobalPosition, Items.RadioManager.DanceRadius) != null)
+                    yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
                 if (Vehicles.VehicleManager.Instance?.Nearest(p.GlobalPosition, FootPlayer.EnterReach) is { } parked)
                     yield return (PlayerInput.InteractMount, $"Get in the {parked.Ride.Label.ToLowerInvariant()}");
                 yield return (PlayerInput.RideMenu, "Travel");
@@ -963,6 +977,7 @@ public partial class ClientWorld : Node3D
         yield return (PlayerInput.Help, "All controls");
     }
 
+    private Items.RadioUi? _radioUi;
     private double _sinceStatus;
 
     public override void _Process(double delta)

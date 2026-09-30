@@ -19,6 +19,15 @@ public partial class Main : Node
 			return;
 		}
 
+		// the CD beat analyser's self-test: synthetic clicks at known tempos
+		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--beatcheck") >= 0)
+		{
+			bool ok = UnitSport.Audio.Cd.BeatAnalyzer.SelfCheck();
+			GD.Print(ok ? "[beatcheck] RESULT: ok" : "[beatcheck] RESULT: FAILED");
+			GetTree().Quit(ok ? 0 : 1);
+			return;
+		}
+
 		// A model turntable, before any world is built: the avatars are the subject, so
 		// there is no point streaming terrain to look at them.
 		if (UnitSport.Avatar.AvatarPreview.Requested(out double seconds, out string output))
@@ -43,8 +52,20 @@ public partial class Main : Node
 			if (si >= 0 && si + 1 < a.Length) float.TryParse(a[si + 1],
 				System.Globalization.NumberStyles.Float,
 				System.Globalization.CultureInfo.InvariantCulture, out stride);
+			// --dance <style>,<move>: one standing and one walking figure dancing that move
+			(UnitSport.Audio.Cd.MusicStyle Style, int Move)? dance = null;
+			int di = Array.IndexOf(a, "--dance");
+			if (di >= 0 && di + 1 < a.Length)
+			{
+				var parts = a[di + 1].Split(',');
+				if (parts.Length == 2
+					&& Enum.TryParse<UnitSport.Audio.Cd.MusicStyle>(parts[0], true, out var danceStyle)
+					&& int.TryParse(parts[1], System.Globalization.NumberStyles.Integer,
+						System.Globalization.CultureInfo.InvariantCulture, out int danceMove))
+					dance = (danceStyle, danceMove);
+			}
 			AddChild(UnitSport.Avatar.AvatarPreview.Create(
-				seconds, output, view, focus, crank, stride));
+				seconds, output, view, focus, crank, stride, dance));
 			return;
 		}
 

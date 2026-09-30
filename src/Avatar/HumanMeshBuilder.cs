@@ -88,6 +88,13 @@ public enum Headwear
 }
 
 /// <summary>
+/// Beat-driven pose parameters for one frame of a dance (docs/notes/avatar/dance-moves.md).
+/// <paramref name="Bar"/> is the absolute 4-beat bar index (8-count moves use <c>Bar % 2</c>);
+/// <paramref name="Weight"/> (0..1) eases the dance in and out from the rest pose.
+/// </summary>
+public readonly record struct DanceParams(Audio.Cd.MusicStyle Style, int Move, float BeatPhase, float BarPhase, int Bar, float Weight);
+
+/// <summary>
 /// A low-poly human, built from tubes and boxes at roughly 1.78 m.
 ///
 /// <para>
@@ -143,12 +150,14 @@ public static class HumanMeshBuilder
     /// </para>
     /// </summary>
     /// <param name="phase">Gait cycle position, 0..1. Both feet complete one step each per cycle.</param>
+    /// <param name="dance">Beat-driven dance layer over the gait (<see cref="ApplyDance"/>); null = no dance.
+    /// The caller passes <c>arm = None</c> while dancing, the dance owns the arms.</param>
     public static ArrayMesh BuildStride(HumanPalette palette, float speed, float phase,
         bool helmet = false, Headwear hat = Headwear.None,
-        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f)
+        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null)
     {
         var scratch = new MeshScratch();
-        AppendRig(scratch, palette, ApplyArms(GaitRig(speed, phase), arm, armBlend), includeLegs: true, helmet, hat);
+        AppendRig(scratch, palette, ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), includeLegs: true, helmet, hat);
         return scratch.Build();
     }
 
@@ -243,8 +252,8 @@ public static class HumanMeshBuilder
     /// </para>
     /// </summary>
     public static GaitMounts MountsFor(float speed, float phase,
-        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f) =>
-        MountsForRig(ApplyArms(GaitRig(speed, phase), arm, armBlend));
+        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null) =>
+        MountsForRig(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend));
 
     /// <summary>
     /// Mounts for a fixed (non-gait) pose — a cyclist, who does not run, still needs a head to
@@ -842,4 +851,1038 @@ public static class HumanMeshBuilder
         SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
         Roughness = 1f,
     };
+
+    // =====================================================================================
+    // Dance layer. The spec (conventions, every move's joint formulas, moving variants) is
+    // docs/notes/avatar/dance-moves.md; this is its implementation, written so a frame costs
+    // a few hundred float operations and no allocations (it runs per visible figure per frame).
+    //
+    // Shape: a move fills a DanceCh (the channels: pelvis shift, lean/roll/twist, head, shrugs,
+    // arm aims, standing foot targets) for either the standing or the moving variant; Compose
+    // turns channels into a full Rig blended against the rest rig by the dance weight; when the
+    // figure is between standing and walking both variants are composed and the rigs mixed.
+    // =====================================================================================
+
+    /// <summary>How many bars a move lasts before the caller should pick the next one.</summary>
+    public const int BarsPerMove = 2;
+
+    private enum DanceMove : byte
+    {
+        SideStepClap, HipSway, ClapBackbeat, Carlton, Macarena, DiscoPoint, Floss, OrangeJustice,
+        GangnamStyle, Headbang, AirGuitar, FistPump, Bounce, ArmWave, RunningMan, TStep, Robot,
+        Sprinkler, ShoulderLean, Twerk, Dab, Griddy, Moonwalk, Sway, FolkClap, HandsOnHipsSkip,
+    }
+
+    /// <summary>The move table of the note, indexed by <see cref="Audio.Cd.MusicStyle"/> (its numeric order).</summary>
+    private static readonly DanceMove[][] DanceTable =
+    {
+        // Pop
+        new[] { DanceMove.SideStepClap, DanceMove.HipSway, DanceMove.ClapBackbeat, DanceMove.Carlton,
+            DanceMove.Macarena, DanceMove.DiscoPoint, DanceMove.Floss, DanceMove.OrangeJustice,
+            DanceMove.GangnamStyle },
+        // Rock
+        new[] { DanceMove.Headbang, DanceMove.AirGuitar, DanceMove.FistPump, DanceMove.Bounce,
+            DanceMove.ClapBackbeat, DanceMove.ArmWave },
+        // Electronic
+        new[] { DanceMove.Bounce, DanceMove.FistPump, DanceMove.RunningMan, DanceMove.TStep,
+            DanceMove.Robot, DanceMove.Sprinkler, DanceMove.ArmWave },
+        // HipHop
+        new[] { DanceMove.Bounce, DanceMove.ShoulderLean, DanceMove.Twerk, DanceMove.Dab,
+            DanceMove.Griddy, DanceMove.Moonwalk, DanceMove.RunningMan, DanceMove.Floss },
+        // Chill
+        new[] { DanceMove.Sway, DanceMove.HipSway, DanceMove.ArmWave, DanceMove.ClapBackbeat,
+            DanceMove.Moonwalk, DanceMove.Bounce },
+        // Folk
+        new[] { DanceMove.FolkClap, DanceMove.HandsOnHipsSkip, DanceMove.SideStepClap,
+            DanceMove.HipSway, DanceMove.ClapBackbeat, DanceMove.Macarena, DanceMove.GangnamStyle },
+    };
+
+    /// <summary>Number of moves a style has; <see cref="DanceParams.Move"/> is taken modulo this.</summary>
+    public static int MoveCount(Audio.Cd.MusicStyle style) => DanceTable[DanceStyleIndex(style)].Length;
+
+    private static int DanceStyleIndex(Audio.Cd.MusicStyle style)
+    {
+        int i = (int)style;
+        return (uint)i < (uint)DanceTable.Length ? i : 0;
+    }
+
+    // ---- the pipeline ------------------------------------------------------------------
+
+    /// <summary>The rig after the gait, before the item arms: the gait rig plus the beat-driven dance.</summary>
+    private static Rig GaitWithDance(float speed, float phase, in DanceParams? dance)
+    {
+        var rig = GaitRig(speed, phase);
+        if (dance is { } d && d.Weight > 0.001f)
+            rig = ApplyDance(rig, d, Mathf.Clamp(Mathf.Max(0f, speed) / 0.6f, 0f, 1f));
+        return rig;
+    }
+
+    /// <summary>
+    /// Lays the dance over the gait rig. <paramref name="moving"/> (0 standing, 1 walking) picks the
+    /// standing variant (legs dance, pelvis free) or the moving variant (legs keep the gait, upper
+    /// body only); in between both are composed and mixed, so a figure that starts walking mid-move
+    /// glides from one to the other.
+    /// </summary>
+    private static Rig ApplyDance(Rig rig, in DanceParams d, float moving)
+    {
+        if (d.Weight <= 0.001f) return rig;
+        var table = DanceTable[DanceStyleIndex(d.Style)];
+        var move = table[((d.Move % table.Length) + table.Length) % table.Length];
+        var beat = new Beat(d.BarPhase, d.Bar);
+        float we = DSm(d.Weight);
+        float m = DSm(moving);
+
+        if (m <= 0.001f) return DanceVariant(rig, move, beat, we, false);
+        if (m >= 0.999f) return DanceVariant(rig, move, beat, we, true);
+        return MixRigs(DanceVariant(rig, move, beat, we, false), DanceVariant(rig, move, beat, we, true), m);
+    }
+
+    private static Rig DanceVariant(in Rig rig, DanceMove move, in Beat t, float we, bool mv)
+    {
+        var ch = default(DanceCh);
+        ch.ArmBlend = 1f;
+        Planted(ref ch, 0.098f, 0f);
+        EvalMove(move, t, mv, ref ch);
+        return Compose(rig, ch, we, mv);
+    }
+
+    // ---- beat clock and small helpers ---------------------------------------------------
+
+    /// <summary>The note's count clock: c = 4r (0..4), k the beat index, b the phase inside it, D/E the two-beat alternators.</summary>
+    private readonly struct Beat
+    {
+        public readonly float C, B, R, D, E;
+        public readonly int K, Par;
+
+        public Beat(float barPhase, int bar)
+        {
+            R = barPhase - Mathf.Floor(barPhase);
+            C = R * 4f;
+            K = Mathf.Clamp((int)C, 0, 3);
+            B = C - K;
+            D = DSin(C * 0.5f);
+            E = DCos(C * 0.5f);
+            Par = bar & 1;
+        }
+    }
+
+    private static float DSin(float turns) => Mathf.Sin(Mathf.Tau * turns);
+    private static float DCos(float turns) => Mathf.Cos(Mathf.Tau * turns);
+    private static float DSm(float x) { x = Mathf.Clamp(x, 0f, 1f); return x * x * (3f - 2f * x); }
+    private static float DRamp(float x) => Mathf.Clamp(x, 0f, 1f);
+    private static float DDip(float b) => (1f + DCos(b)) * 0.5f;
+    private static float DHop(float b) => DSin(b * 0.5f);
+    private static float DSq(float x) => Mathf.Clamp(3f * x, -1f, 1f);
+    private static float DFrac(float x) => x - Mathf.Floor(x);
+    private static float DCl(float c) { float x = (1f - DCos(c * 0.5f)) * 0.5f; return x * x; }
+
+    private static float DSawNod(float b) => b < 0.75f
+        ? Mathf.Lerp(0.60f, -0.25f, DSm(b / 0.75f))
+        : Mathf.Lerp(-0.25f, 0.60f, DSm((b - 0.75f) / 0.25f));
+
+    // ---- channels ------------------------------------------------------------------------
+
+    private enum AimKind : byte { Gait, Shoulder, Chain, Knee }
+
+    /// <summary>Where one hand goes: an offset in the torso frame from the shoulder (or from the knee), or an ArmChain.</summary>
+    private struct ArmAim
+    {
+        public AimKind Kind;
+        public Vector3 Off, Hint;
+        public float A1, G1, A2, G2;
+    }
+
+    /// <summary>
+    /// Everything one move sets for one instant. Pelvis and torso channels are in the note's terms;
+    /// foot fields are absolute ankle targets and toe offsets from the ankle (standing variant only).
+    /// </summary>
+    private struct DanceCh
+    {
+        public float Px, Py, Pz, Tilt;
+        public float Theta, Phi, Psi, ThN, PhH, ShL, ShR;
+        public float ArmBlend;
+        public ArmAim ArmL, ArmR;
+        public Vector3 AnkleL, AnkleR, ToeL, ToeR;
+    }
+
+    private static DanceCh Mix(in DanceCh a, in DanceCh b, float t)
+    {
+        DanceCh r;
+        r.Px = Mathf.Lerp(a.Px, b.Px, t); r.Py = Mathf.Lerp(a.Py, b.Py, t);
+        r.Pz = Mathf.Lerp(a.Pz, b.Pz, t); r.Tilt = Mathf.Lerp(a.Tilt, b.Tilt, t);
+        r.Theta = Mathf.Lerp(a.Theta, b.Theta, t); r.Phi = Mathf.Lerp(a.Phi, b.Phi, t);
+        r.Psi = Mathf.Lerp(a.Psi, b.Psi, t); r.ThN = Mathf.Lerp(a.ThN, b.ThN, t);
+        r.PhH = Mathf.Lerp(a.PhH, b.PhH, t); r.ShL = Mathf.Lerp(a.ShL, b.ShL, t);
+        r.ShR = Mathf.Lerp(a.ShR, b.ShR, t); r.ArmBlend = Mathf.Lerp(a.ArmBlend, b.ArmBlend, t);
+        r.ArmL = MixArm(a.ArmL, b.ArmL, t); r.ArmR = MixArm(a.ArmR, b.ArmR, t);
+        r.AnkleL = a.AnkleL.Lerp(b.AnkleL, t); r.AnkleR = a.AnkleR.Lerp(b.AnkleR, t);
+        r.ToeL = a.ToeL.Lerp(b.ToeL, t); r.ToeR = a.ToeR.Lerp(b.ToeR, t);
+        return r;
+    }
+
+    private static ArmAim MixArm(in ArmAim a, in ArmAim b, float t)
+    {
+        if (a.Kind != b.Kind) return t < 0.5f ? a : b;
+        ArmAim r;
+        r.Kind = a.Kind;
+        r.Off = a.Off.Lerp(b.Off, t); r.Hint = a.Hint.Lerp(b.Hint, t);
+        r.A1 = Mathf.Lerp(a.A1, b.A1, t); r.G1 = Mathf.Lerp(a.G1, b.G1, t);
+        r.A2 = Mathf.Lerp(a.A2, b.A2, t); r.G2 = Mathf.Lerp(a.G2, b.G2, t);
+        return r;
+    }
+
+    /// <summary>The moving variant's common rule: torso and pelvis amplitudes scale by k, the arms blend over the gait arms.</summary>
+    private static void MovingScale(ref DanceCh ch, float k, float armBlend)
+    {
+        ch.Px *= k; ch.Py *= k; ch.Pz *= k; ch.Tilt *= k;
+        ch.Theta *= k; ch.Phi *= k; ch.Psi *= k; ch.ThN *= k; ch.PhH *= k; ch.ShL *= k; ch.ShR *= k;
+        ch.ArmBlend = armBlend;
+    }
+
+    // ---- arm aims ------------------------------------------------------------------------
+
+    private static Vector3 HLow(float s) => new(s * 0.6f, -0.6f, -0.2f);
+    private static Vector3 HOut(float s) => new(s, 0f, -0.3f);
+    private static Vector3 HUp(float s) => new(s * 0.5f, 0.9f, -0.2f);
+
+    /// <summary>The note's o(out, up, fwd): out mirrors per side.</summary>
+    private static void Aim(ref DanceCh ch, float s, float outward, float up, float fwd, Vector3 hint) =>
+        SetArm(ref ch, s, new Vector3(s * outward, up, fwd), hint);
+
+    /// <summary>The note's O(x, y, z): unmirrored, so both hands shift the same way.</summary>
+    private static void AimO(ref DanceCh ch, float s, float x, float y, float z, Vector3 hint) =>
+        SetArm(ref ch, s, new Vector3(x, y, z), hint);
+
+    /// <summary>The note's H(x, y, z), anchored at the hip: the same target as a shoulder offset.</summary>
+    private static void AimH(ref DanceCh ch, float s, float x, float y, float z, Vector3 hint) =>
+        SetArm(ref ch, s, new Vector3(x - s * 0.18f, y - 0.51f, z), hint);
+
+    private static void SetArm(ref DanceCh ch, float s, Vector3 off, Vector3 hint)
+    {
+        ref ArmAim a = ref (s < 0f ? ref ch.ArmL : ref ch.ArmR);
+        a.Kind = AimKind.Shoulder; a.Off = off; a.Hint = hint;
+    }
+
+    private static void AimKnee(ref DanceCh ch, float s, Vector3 off, Vector3 hint)
+    {
+        ref ArmAim a = ref (s < 0f ? ref ch.ArmL : ref ch.ArmR);
+        a.Kind = AimKind.Knee; a.Off = off; a.Hint = hint;
+    }
+
+    private static void AimChain(ref DanceCh ch, float s, float a1, float g1, float a2, float g2)
+    {
+        ref ArmAim a = ref (s < 0f ? ref ch.ArmL : ref ch.ArmR);
+        a.Kind = AimKind.Chain; a.A1 = a1; a.G1 = g1; a.A2 = a2; a.G2 = g2;
+    }
+
+    /// <summary>Hands on the hips, elbows flared.</summary>
+    private static void Akimbo(ref DanceCh ch, float s, float upExtra = 0f) =>
+        Aim(ref ch, s, 0.05f, -0.40f + upExtra, 0.06f, HOut(s));
+
+    private static readonly Vector3 AkimboOff = new(0.05f, -0.40f, 0.06f);   // x mirrored by the caller
+
+    private static void ClapArms(ref DanceCh ch, float cl)
+    {
+        Aim(ref ch, -1f, 0.20f - 0.35f * cl, -0.05f - 0.05f * cl, 0.30f, HLow(-1f));
+        Aim(ref ch, 1f, 0.20f - 0.35f * cl, -0.05f - 0.05f * cl, 0.30f, HLow(1f));
+    }
+
+    // ---- feet ----------------------------------------------------------------------------
+
+    private static void Foot(ref DanceCh ch, float s, float x, float y, float z, float turn, float lift)
+    {
+        var ankle = new Vector3(x, y, z);
+        var toe = new Vector3(s * 0.145f * Mathf.Sin(turn), -0.045f + 0.045f * lift, 0.145f * Mathf.Cos(turn));
+        if (s < 0f) { ch.AnkleL = ankle; ch.ToeL = toe; }
+        else { ch.AnkleR = ankle; ch.ToeR = toe; }
+    }
+
+    /// <summary>Both feet flat at half-stance <paramref name="w"/>, toes turned out by <paramref name="turn"/>.</summary>
+    private static void Planted(ref DanceCh ch, float w, float turn = 0.15f)
+    {
+        Foot(ref ch, -1f, -w, AnkleHeight, 0f, turn, 0f);
+        Foot(ref ch, 1f, w, AnkleHeight, 0f, turn, 0f);
+    }
+
+    /// <summary>Heel off the floor, ball of the foot stays down (the toe goes to the ground).</summary>
+    private static void HeelUp(ref DanceCh ch, float s, float h)
+    {
+        if (h <= 0f) return;
+        ref Vector3 a = ref (s < 0f ? ref ch.AnkleL : ref ch.AnkleR);
+        ref Vector3 toe = ref (s < 0f ? ref ch.ToeL : ref ch.ToeR);
+        a.Y += h;
+        toe = new Vector3(0f, 0.040f - a.Y, 0.13f);
+    }
+
+    /// <summary>The whole foot off the ground.</summary>
+    private static void Lift(ref DanceCh ch, float s, float dy)
+    {
+        ref Vector3 a = ref (s < 0f ? ref ch.AnkleL : ref ch.AnkleR);
+        a.Y += dy;
+    }
+
+    // ---- composition ---------------------------------------------------------------------
+
+    /// <summary>Torso rotation about the hip: pitch, then roll, then yaw scaled per joint (0.25 waist, 0.6 chest, 1 shoulders/neck).</summary>
+    private readonly struct Spine
+    {
+        private readonly float _ct, _st, _cp, _sp, _c0, _s0, _c1, _s1, _c2, _s2;
+
+        public Spine(float theta, float phi, float psi)
+        {
+            _ct = Mathf.Cos(theta); _st = Mathf.Sin(theta);
+            _cp = Mathf.Cos(phi); _sp = Mathf.Sin(phi);
+            _c0 = Mathf.Cos(psi * 0.25f); _s0 = Mathf.Sin(psi * 0.25f);
+            _c1 = Mathf.Cos(psi * 0.6f); _s1 = Mathf.Sin(psi * 0.6f);
+            _c2 = Mathf.Cos(psi); _s2 = Mathf.Sin(psi);
+        }
+
+        /// <summary>level 0 waist, 1 chest, 2 shoulders/neck/torso frame.</summary>
+        public Vector3 Pos(Vector3 v, int level)
+        {
+            float y1 = v.Y * _ct - v.Z * _st, z1 = v.Y * _st + v.Z * _ct;
+            float x2 = v.X * _cp + y1 * _sp, y2 = -v.X * _sp + y1 * _cp;
+            float cy = level == 0 ? _c0 : level == 1 ? _c1 : _c2;
+            float sy = level == 0 ? _s0 : level == 1 ? _s1 : _s2;
+            return new Vector3(x2 * cy + z1 * sy, y2, -x2 * sy + z1 * cy);
+        }
+
+        /// <summary>A direction or offset in the torso frame, to the world axes.</summary>
+        public Vector3 Rot(Vector3 v) => Pos(v, 2);
+    }
+
+    private static float FitY(Vector3 ankle, Vector3 hip, float s, float tilt)
+    {
+        float dx = ankle.X - (hip.X + s * 0.09f), dz = ankle.Z - hip.Z;
+        float r2 = 0.845f * 0.845f - dx * dx - dz * dz;
+        return ankle.Y - s * tilt + Mathf.Sqrt(Mathf.Max(r2, 0.0144f));
+    }
+
+    private static Rig Compose(in Rig rig, in DanceCh ch, float we, bool mv)
+    {
+        Vector3 hip;
+        if (mv)
+            hip = rig.Hip + new Vector3(
+                Mathf.Clamp(ch.Px, -0.04f, 0.04f), Mathf.Clamp(ch.Py, -0.04f, 0.04f), Mathf.Clamp(ch.Pz, -0.04f, 0.04f)) * we;
+        else
+            hip = rig.Hip.Lerp(new Vector3(ch.Px, 0.935f + ch.Py, ch.Pz), we);
+        float tilt = mv ? 0f : ch.Tilt * we;
+
+        Vector3 hipL, kneeL, ankleL, toeL, hipR, kneeR, ankleR, toeR;
+        if (mv)
+        {
+            // legs stay on the gait; the pelvis shift is hidden by the round pelvis tube
+            hipL = rig.HipL; kneeL = rig.KneeL; ankleL = rig.AnkleL; toeL = rig.ToeL;
+            hipR = rig.HipR; kneeR = rig.KneeR; ankleR = rig.AnkleR; toeR = rig.ToeR;
+        }
+        else
+        {
+            ankleL = rig.AnkleL.Lerp(ch.AnkleL, we); toeL = rig.ToeL.Lerp(ch.AnkleL + ch.ToeL, we);
+            ankleR = rig.AnkleR.Lerp(ch.AnkleR, we); toeR = rig.ToeR.Lerp(ch.AnkleR + ch.ToeR, we);
+            // LegFit: never ask the legs for an ankle they cannot reach
+            hip.Y = Mathf.Min(hip.Y, Mathf.Min(FitY(ankleL, hip, -1f, tilt), FitY(ankleR, hip, 1f, tilt)));
+            hipL = new Vector3(hip.X - 0.09f, hip.Y - tilt, hip.Z);
+            hipR = new Vector3(hip.X + 0.09f, hip.Y + tilt, hip.Z);
+            kneeL = Limb.Solve(hipL, ankleL, ThighLength, ShinLength,
+                new Vector3(Mathf.Abs(ankleL.X) >= 0.2f ? -0.6f : -0.35f, 0f, 1f));
+            kneeR = Limb.Solve(hipR, ankleR, ThighLength, ShinLength,
+                new Vector3(Mathf.Abs(ankleR.X) >= 0.2f ? 0.6f : 0.35f, 0f, 1f));
+        }
+
+        float theta = mv ? rig.TorsoLean + we * ch.Theta : Mathf.Lerp(rig.TorsoLean, ch.Theta, we);
+        var sp = new Spine(theta, we * ch.Phi, we * ch.Psi);
+        var waist = hip + sp.Pos(new Vector3(0f, 0.155f, 0f), 0);
+        var chest = hip + sp.Pos(new Vector3(0f, 0.410f, 0f), 1);
+        var neck = hip + sp.Pos(new Vector3(0f, 0.590f, 0f), 2);
+        var shoulderL = hip + sp.Pos(new Vector3(-0.18f, 0.510f, 0f), 2) + new Vector3(0f, we * ch.ShL, 0f);
+        var shoulderR = hip + sp.Pos(new Vector3(0.18f, 0.510f, 0f), 2) + new Vector3(0f, we * ch.ShR, 0f);
+
+        float thH = 0.35f * theta + we * ch.ThN, phH = we * ch.PhH;
+        var u = new Vector3(Mathf.Sin(phH), Mathf.Cos(phH) * Mathf.Cos(thH), Mathf.Cos(phH) * Mathf.Sin(thH));
+
+        float bl = we * ch.ArmBlend;
+        SolveArm(ch.ArmL, -1f, sp, shoulderL, kneeL, rig.ShoulderL, rig.ElbowL, rig.WristL, bl,
+            out var elbowL, out var wristL);
+        SolveArm(ch.ArmR, 1f, sp, shoulderR, kneeR, rig.ShoulderR, rig.ElbowR, rig.WristR, bl,
+            out var elbowR, out var wristR);
+
+        return new Rig(
+            HeadTop: neck + u * 0.255f, HeadBase: neck + u * 0.065f, Neck: neck,
+            Chest: chest, Waist: waist, Hip: hip,
+            ShoulderL: shoulderL, ElbowL: elbowL, WristL: wristL,
+            ShoulderR: shoulderR, ElbowR: elbowR, WristR: wristR,
+            HipL: hipL, KneeL: kneeL, AnkleL: ankleL, ToeL: toeL,
+            HipR: hipR, KneeR: kneeR, AnkleR: ankleR, ToeR: toeR,
+            TorsoLean: theta, HandDir: rig.HandDir);
+    }
+
+    /// <summary>
+    /// Places one arm. The dance target is blended against the gait arm carried along by the moved
+    /// shoulder (so the two always have the same length), clamped to what the arm can reach, and the
+    /// elbow is re-solved toward the preferred bend, like <see cref="ApplyArms"/>.
+    /// </summary>
+    private static void SolveArm(in ArmAim aim, float s, in Spine sp, Vector3 shoulder, Vector3 knee,
+        Vector3 restShoulder, Vector3 restElbow, Vector3 restWrist, float bl,
+        out Vector3 elbow, out Vector3 wrist)
+    {
+        var restW = shoulder + (restWrist - restShoulder);
+        var restE = shoulder + (restElbow - restShoulder);
+        if (aim.Kind == AimKind.Gait || bl <= 0.001f) { elbow = restE; wrist = restW; return; }
+
+        Vector3 wd, ed;
+        if (aim.Kind == AimKind.Chain)
+        {
+            float c1 = Mathf.Cos(aim.A1), c2 = Mathf.Cos(aim.A2);
+            ed = shoulder + sp.Rot(new Vector3(s * c1 * Mathf.Cos(aim.G1), Mathf.Sin(aim.A1), c1 * Mathf.Sin(aim.G1))) * UpperArmLength;
+            wd = ed + sp.Rot(new Vector3(s * c2 * Mathf.Cos(aim.G2), Mathf.Sin(aim.A2), c2 * Mathf.Sin(aim.G2))) * ForearmLength;
+        }
+        else
+        {
+            wd = aim.Kind == AimKind.Knee ? knee + aim.Off : shoulder + sp.Rot(aim.Off);
+            var to = wd - shoulder;
+            float len = to.Length();
+            if (len > 0.50f) wd = shoulder + to * (0.50f / len);   // 0.515 m of arm, never ask for all of it
+            ed = Limb.Solve(shoulder, wd, UpperArmLength, ForearmLength, sp.Rot(aim.Hint));
+        }
+
+        wrist = restW.Lerp(wd, bl);
+        elbow = Limb.Solve(shoulder, wrist, UpperArmLength, ForearmLength, restE.Lerp(ed, bl) - shoulder);
+    }
+
+    private static Vector3 Mx(Vector3 a, Vector3 b, float t) => a.Lerp(b, t);
+
+    /// <summary>Mixes two composed rigs joint by joint, then re-solves the elbows and knees so the bones keep their length.</summary>
+    private static Rig MixRigs(in Rig a, in Rig b, float t)
+    {
+        var shL = Mx(a.ShoulderL, b.ShoulderL, t); var shR = Mx(a.ShoulderR, b.ShoulderR, t);
+        var wrL = Mx(a.WristL, b.WristL, t); var wrR = Mx(a.WristR, b.WristR, t);
+        var hipL = Mx(a.HipL, b.HipL, t); var hipR = Mx(a.HipR, b.HipR, t);
+        var anL = Mx(a.AnkleL, b.AnkleL, t); var anR = Mx(a.AnkleR, b.AnkleR, t);
+        return new Rig(
+            HeadTop: Mx(a.HeadTop, b.HeadTop, t), HeadBase: Mx(a.HeadBase, b.HeadBase, t),
+            Neck: Mx(a.Neck, b.Neck, t), Chest: Mx(a.Chest, b.Chest, t),
+            Waist: Mx(a.Waist, b.Waist, t), Hip: Mx(a.Hip, b.Hip, t),
+            ShoulderL: shL, ElbowL: Limb.Solve(shL, wrL, UpperArmLength, ForearmLength, Mx(a.ElbowL, b.ElbowL, t) - shL), WristL: wrL,
+            ShoulderR: shR, ElbowR: Limb.Solve(shR, wrR, UpperArmLength, ForearmLength, Mx(a.ElbowR, b.ElbowR, t) - shR), WristR: wrR,
+            HipL: hipL, KneeL: Limb.Solve(hipL, anL, ThighLength, ShinLength, Mx(a.KneeL, b.KneeL, t) - hipL),
+            AnkleL: anL, ToeL: Mx(a.ToeL, b.ToeL, t),
+            HipR: hipR, KneeR: Limb.Solve(hipR, anR, ThighLength, ShinLength, Mx(a.KneeR, b.KneeR, t) - hipR),
+            AnkleR: anR, ToeR: Mx(a.ToeR, b.ToeR, t),
+            TorsoLean: Mathf.Lerp(a.TorsoLean, b.TorsoLean, t), HandDir: a.HandDir);
+    }
+
+    // ---- the moves -----------------------------------------------------------------------
+
+    private static void EvalMove(DanceMove move, in Beat t, bool mv, ref DanceCh ch)
+    {
+        switch (move)
+        {
+            case DanceMove.SideStepClap: SideStepClap(ref ch, t, mv); break;
+            case DanceMove.HipSway: HipSway(ref ch, t, mv); break;
+            case DanceMove.ClapBackbeat: ClapBackbeat(ref ch, t, mv); break;
+            case DanceMove.Carlton: Carlton(ref ch, t, mv); break;
+            case DanceMove.Macarena: Macarena(ref ch, t, mv); break;
+            case DanceMove.DiscoPoint: DiscoPoint(ref ch, t, mv); break;
+            case DanceMove.Floss: Floss(ref ch, t, mv); break;
+            case DanceMove.OrangeJustice: OrangeJustice(ref ch, t, mv); break;
+            case DanceMove.GangnamStyle: GangnamStyle(ref ch, t, mv); break;
+            case DanceMove.Headbang: Headbang(ref ch, t, mv); break;
+            case DanceMove.AirGuitar: AirGuitar(ref ch, t, mv); break;
+            case DanceMove.FistPump: FistPump(ref ch, t, mv); break;
+            case DanceMove.Bounce: Bounce(ref ch, t, mv); break;
+            case DanceMove.ArmWave: ArmWave(ref ch, t, mv); break;
+            case DanceMove.RunningMan: RunningMan(ref ch, t, mv); break;
+            case DanceMove.TStep: TStep(ref ch, t, mv); break;
+            case DanceMove.Robot: Robot(ref ch, t, mv); break;
+            case DanceMove.Sprinkler: Sprinkler(ref ch, t, mv); break;
+            case DanceMove.ShoulderLean: ShoulderLean(ref ch, t, mv); break;
+            case DanceMove.Twerk: Twerk(ref ch, t, mv); break;
+            case DanceMove.Dab: Dab(ref ch, t, mv); break;
+            case DanceMove.Griddy: Griddy(ref ch, t, mv); break;
+            case DanceMove.Moonwalk: Moonwalk(ref ch, t, mv); break;
+            case DanceMove.Sway: Sway(ref ch, t, mv); break;
+            case DanceMove.FolkClap: FolkClap(ref ch, t, mv); break;
+            case DanceMove.HandsOnHipsSkip: HandsOnHipsSkip(ref ch, t, mv); break;
+        }
+    }
+
+    private static void Twerk(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float b = t.B;
+        float q = (1f + DCos(2f * b)) * 0.5f;          // 1 on the beat and the "&"
+        float a = 0.75f + 0.25f * DCos(b);             // the on-beat pump is the big one
+        float qa = q * a;
+        if (!mv)
+        {
+            ch.Py = -0.235f - 0.035f * qa;             // hips back and down, deeper on each pump
+            ch.Pz = -0.12f - 0.08f * qa;
+            ch.Tilt = 0.02f * t.E * a;
+            ch.Theta = 0.87f - 0.04f * qa;
+            ch.ThN = -0.45f;                           // looks forward, not at the floor
+            Planted(ref ch, 0.30f, 0.35f);
+            // hands on the knees of the same side, riding the pump
+            AimKnee(ref ch, -1f, new Vector3(0f, 0.09f, -0.02f), HOut(-1f));
+            AimKnee(ref ch, 1f, new Vector3(0f, 0.09f, -0.02f), HOut(1f));
+        }
+        else
+        {
+            ch.Py = -0.02f * qa; ch.Pz = -0.03f - 0.03f * qa;
+            ch.Theta = 0.35f; ch.ThN = -0.15f;
+            Akimbo(ref ch, -1f); Akimbo(ref ch, 1f);
+        }
+    }
+
+    private static void Dab(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float ramp = DSm(t.B / 0.25f);
+        // +1 toward +X on beats 1-2, -1 on beats 3-4, snapping over the first quarter beat
+        float sg = t.K == 0 ? Mathf.Lerp(-1f, 1f, ramp) : t.K == 1 ? 1f : t.K == 2 ? Mathf.Lerp(1f, -1f, ramp) : -1f;
+        ch.Px = -sg * 0.03f;
+        ch.Py = -0.07f - ((t.K & 1) == 1 ? 0.015f * DDip(t.B) : 0f);
+        ch.Theta = 0.20f; ch.Phi = sg * 0.10f; ch.Psi = sg * 0.25f;
+        ch.ThN = 0.50f; ch.PhH = sg * 0.25f;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            float u = (1f + s * sg) * 0.5f;            // 1 when this arm is the straight one
+            var straight = new Vector3(s * 0.35f, 0.33f, 0.05f);
+            var bent = new Vector3(s * -0.28f, 0.16f, 0.26f + 0.10f * 4f * u * (1f - u));   // crosses in front first
+            SetArm(ref ch, s, bent.Lerp(straight, u), new Vector3(s * 0.3f, 1.0f, 0.2f).Lerp(HOut(s), u));
+        }
+        Planted(ref ch, 0.17f, 0.15f);
+        if (mv) { MovingScale(ref ch, 0.8f, 1f); ch.Px = 0f; }
+    }
+
+    private static void Floss(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float ar = mv ? 0.7f : 1f;
+        ch.Px = mv ? -0.03f * t.D : -0.07f * t.D;
+        ch.Py = -0.06f - 0.02f * DDip(t.B);
+        ch.Theta = 0.05f; ch.Phi = 0.08f * t.D; ch.PhH = 0.05f * t.D;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            // an ellipse about the body axis, radius at least 0.29 m: the fists never enter the torso
+            AimH(ref ch, s, 0.20f * ar * t.D, 0.22f, s * 0.22f * ar * t.E, HLow(s));
+        }
+        Planted(ref ch, 0.15f, 0.15f);
+        for (int i = 0; i < 2; i++) { float s = i * 2f - 1f; HeelUp(ref ch, s, 0.02f * Mathf.Max(0f, -s * t.D)); }
+        if (mv) { float px = ch.Px; MovingScale(ref ch, 0.7f, 1f); ch.Px = px; }
+    }
+
+    private static void Carlton(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float c = t.C;
+        // A (beats 1-2) and B (beats 3-4) crossfade over a quarter beat at c = 2 and c = 4
+        float xw = c < 2f ? 1f - DSm(c / 0.25f) : DSm((c - 2f) / 0.25f);
+        DanceCh a = ch;
+        CarltonA(ref a, t, mv);
+        if (xw <= 0.0001f) { ch = a; return; }
+        DanceCh bb = ch;
+        CarltonB(ref bb, t, mv);
+        ch = xw >= 0.9999f ? bb : Mix(a, bb, xw);
+    }
+
+    private static void CarltonA(ref DanceCh a, in Beat t, bool mv)
+    {
+        float c = t.C, ar = mv ? 0.7f : 1f;
+        a.Px = 0.07f * t.D; a.Py = -0.04f - 0.02f * DDip(t.B);
+        a.Phi = 0.10f * DSin(c * 0.5f - 0.06f); a.Psi = 0.12f * t.D; a.Theta = 0.04f;
+        a.ThN = 0.05f * DDip(t.B); a.PhH = -0.10f * t.D;
+        float ang = 1.2f * DSin(c * 0.5f + 0.04f) * ar;
+        AimO(ref a, -1f, 0.42f * Mathf.Sin(ang), -0.42f * Mathf.Cos(ang), 0.24f, HLow(-1f));
+        AimO(ref a, 1f, 0.42f * Mathf.Sin(ang), -0.42f * Mathf.Cos(ang), 0.24f, HLow(1f));
+        // step sideways with the hips: the weight foot steps wide, the other closes in
+        float S = DSq(t.D);
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            Foot(ref a, s, s * 0.098f + s * 0.06f * (1f + s * S), AnkleHeight, 0f, 0.15f, 0f);
+            Lift(ref a, s, 0.03f * Mathf.Max(0f, -s * S) * DHop(t.B));
+        }
+        if (mv) { float px = a.Px; MovingScale(ref a, 0.7f, 1f); a.Px = px; }
+    }
+
+    private static void CarltonB(ref DanceCh bb, in Beat t, bool mv)
+    {
+        float cB = t.C < 1f ? t.C + 4f : t.C;          // the tail of beat 4 when crossfading into the next bar
+        bb.Py = -0.04f - 0.015f * DDip(t.B); bb.Theta = 0.04f; bb.ThN = 0.05f * DDip(t.B);
+        Planted(ref bb, 0.14f, 0.15f);
+        if (cB < 3f)
+        {
+            Aim(ref bb, -1f, -0.05f, 0.47f, 0.03f, HUp(-1f));
+            Aim(ref bb, 1f, -0.05f, 0.47f, 0.03f, HUp(1f));
+        }
+        else
+        {
+            var up = new Vector3(-0.05f, 0.47f, 0.03f);
+            float u = DSm(cB - 3f);
+            // rig-R flutters down from above the head to the middle of the chest
+            var chest = new Vector3(-0.14f, -0.12f + 0.012f * DSin(6f * cB), 0.26f);
+            SetArm(ref bb, 1f, new Vector3(up.X, up.Y, up.Z).Lerp(chest, u),
+                HUp(1f).Lerp(new Vector3(0.5f, -0.6f, -0.2f), u));
+            // rig-L drops its hand onto the hip
+            float v = DSm((cB - 3f) / 0.25f);
+            SetArm(ref bb, -1f, new Vector3(-up.X, up.Y, up.Z).Lerp(new Vector3(-AkimboOff.X, AkimboOff.Y, AkimboOff.Z), v),
+                HUp(-1f).Lerp(HOut(-1f), v));
+        }
+        if (mv) { MovingScale(ref bb, 0.7f, 1f); bb.ThN = 0.05f * 0.7f * DDip(t.B); }
+    }
+
+    private static void GangnamStyle(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float hop = DHop(t.B), c = t.C;
+        ch.Py = mv ? 0.02f * hop : -0.06f + 0.05f * hop;   // lands on the beat, airborne mid-beat
+        ch.Theta = 0.10f; ch.Phi = 0.04f * t.D; ch.Psi = 0.10f * t.D; ch.ThN = 0.05f;
+        // rig-L keeps the reins all bar; rig-R swaps them for the lasso on beats 3-4
+        float w = c < 2f ? 1f - DSm(c / 0.25f) : DSm((c - 2f) / 0.25f);
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            var reins = new Vector3(s * -0.12f, -0.22f + 0.04f * hop + 0.03f * s * t.D, 0.32f);
+            if (s > 0f)
+            {
+                float al = Mathf.Tau * c;
+                var lasso = new Vector3(0.15f * Mathf.Cos(al), 0.42f, 0.15f * Mathf.Sin(al));
+                SetArm(ref ch, s, reins.Lerp(lasso, w), HLow(s).Lerp(HUp(s), w));
+            }
+            else SetArm(ref ch, s, reins, HLow(s));
+            Foot(ref ch, s, s * 0.16f, AnkleHeight + 0.04f * hop, 0.12f * s * t.E, 0.1f, hop);   // the gallop, both feet hopping
+        }
+        if (mv) { float py = ch.Py; MovingScale(ref ch, 0.6f, 1f); ch.Py = py; }
+    }
+
+    // id: 0 OUT, 1 UP, 2 CROSS, 3 EAR, 4 HIP
+    private static readonly byte[] MacarenaL = { 0, 0, 1, 1, 2, 2, 3, 3 };
+    private static readonly byte[] MacarenaR = { 4, 0, 0, 1, 1, 2, 2, 3 };
+
+    private static void MacarenaTarget(int id, float s, out Vector3 off, out Vector3 hint)
+    {
+        switch (id)
+        {
+            case 0: off = new Vector3(s * -0.03f, 0f, 0.47f); hint = HLow(s); break;
+            case 1: off = new Vector3(s * -0.03f, 0.04f, 0.47f); hint = HLow(s); break;
+            case 2: off = new Vector3(s * -0.32f, -0.02f, s > 0f ? 0.27f : 0.22f); hint = new Vector3(0f, -1f, 0.3f); break;
+            case 3: off = new Vector3(s * -0.05f, 0.16f, -0.04f); hint = new Vector3(s, 0.3f, -0.3f); break;
+            default: off = new Vector3(s * 0.05f, -0.40f, 0.06f); hint = HOut(s); break;
+        }
+    }
+
+    private static void Macarena(ref DanceCh ch, in Beat t, bool mv)
+    {
+        // authentic speed: one gesture per beat, eight over two bars (bar parity picks the half)
+        int j = 4 * t.Par + t.K;
+        int prev = (j + 7) & 7;
+        float e = DSm(Mathf.Min(t.B / 0.45f, 1f));
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            var tab = s < 0f ? MacarenaL : MacarenaR;
+            MacarenaTarget(tab[prev], s, out var o0, out var h0);
+            MacarenaTarget(tab[j], s, out var o1, out var h1);
+            SetArm(ref ch, s, o0.Lerp(o1, e), h0.Lerp(h1, e));
+        }
+        Planted(ref ch, 0.13f, 0.15f);
+        for (int i = 0; i < 2; i++) { float s = i * 2f - 1f; HeelUp(ref ch, s, 0.02f * Mathf.Max(0f, -s * DSin(t.C * 0.5f))); }
+        ch.Px = 0.04f * DSin(t.C * 0.5f); ch.Py = -0.02f * DDip(t.B);
+        ch.Phi = -0.04f * DSin(t.C * 0.5f); ch.Psi = 0.08f * t.D;
+        ch.ThN = 0.04f * DDip(t.B); ch.PhH = 0.05f * t.D;
+        if (mv) { float px = ch.Px * 0.75f; MovingScale(ref ch, 0.6f, 1f); ch.Px = px; }
+    }
+
+    private static void OrangeJustice(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float c = t.C, ar = mv ? 0.7f : 1f;
+        float w1 = c >= 3f ? DSm((c - 3f) / 0.2f) : 0f;                       // pump -> shrug
+        float w2 = c >= 3.5f ? DSm((c - 3.5f) / 0.2f) : 0f;                   // shrug -> clap
+        float wc = c < 0.2f ? 1f - DSm(c / 0.2f) : 0f;                        // clap -> pump at the bar line
+        float clap = Mathf.Max(w2, wc);
+        ch.Py = -0.06f - 0.05f * DDip(t.B);
+        ch.Theta = 0.05f; ch.Phi = 0.04f * t.D; ch.Psi = 0.10f * t.D; ch.ThN = 0.05f * DDip(t.B);
+        ch.ShL = ch.ShR = 0.05f * w1 * (1f - clap);
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            var pump = new Vector3(-s * 0.18f * ar * t.D - s * 0.18f, 0.38f + 0.04f * DDip(t.B) - 0.51f,
+                (mv ? 0.27f : 0.30f) + 0.08f * s * t.E);
+            var shrug = new Vector3(s * 0.05f, -0.05f, 0.22f);
+            var clapO = new Vector3(s * -0.16f, 0.44f, 0.03f);
+            SetArm(ref ch, s, pump.Lerp(shrug, w1).Lerp(clapO, clap),
+                HLow(s).Lerp(HOut(s), w1).Lerp(HUp(s), clap));
+        }
+        Planted(ref ch, 0.15f, 0.15f);
+        HeelUp(ref ch, -1f, 0.03f * clap); HeelUp(ref ch, 1f, 0.03f * clap);
+        if (mv) MovingScale(ref ch, 0.7f, 1f);
+    }
+
+    private static void SideStepClap(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float sr = DSin(t.R), S = DSq(sr);
+        ch.Px = 0.06f * sr; ch.Py = -0.03f - 0.02f * DDip(t.B);
+        ch.Phi = -0.04f * sr; ch.Theta = 0.03f; ch.ThN = 0.03f * DDip(t.B);
+        ClapArms(ref ch, DCl(t.C));
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            // step-touch: the weight foot steps out, the free foot closes in and lifts between claps
+            Foot(ref ch, s, s * 0.098f + s * 0.06f * (1f + s * S), AnkleHeight, 0f, 0.15f, 0f);
+            if (s * S < 0f) Lift(ref ch, s, 0.05f * Mathf.Max(0f, t.D));
+        }
+        if (mv) { MovingScale(ref ch, 0.6f, 1f); ch.Px = 0.03f * sr; }
+    }
+
+    private static void HipSway(ref DanceCh ch, in Beat t, bool mv)
+    {
+        ch.Px = 0.06f * t.E; ch.Py = -0.02f; ch.Tilt = 0.015f * t.E;
+        ch.Phi = -0.07f * t.E; ch.Psi = 0.10f * t.D; ch.PhH = 0.05f * t.E;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            Aim(ref ch, s, 0.04f, -0.49f, 0.02f + 0.05f * s * t.D, HLow(s));   // HANG, hands counter-swinging
+        }
+        Planted(ref ch, 0.11f, 0.15f);
+        HeelUp(ref ch, -1f, 0.02f * Mathf.Max(0f, t.E)); HeelUp(ref ch, 1f, 0.02f * Mathf.Max(0f, -t.E));
+        if (mv) { MovingScale(ref ch, 0.5f, 0f); }
+    }
+
+    private static void ClapBackbeat(ref DanceCh ch, in Beat t, bool mv)
+    {
+        ch.Py = -0.02f * DDip(t.B); ch.Px = 0.03f * t.E;
+        ch.Phi = -0.03f * t.E; ch.Theta = 0.04f; ch.ThN = 0.04f * DDip(t.B);
+        ClapArms(ref ch, DCl(t.C));
+        Planted(ref ch, 0.11f, 0.15f);
+        if (mv) MovingScale(ref ch, 0.8f, 1f);
+    }
+
+    private static void DiscoPoint(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float ramp = DSm(t.B / 0.3f);
+        // pointing arm: rig-L (sigma -1) on beats 1-2, rig-R (+1) on beats 3-4
+        float sg = t.K == 0 ? Mathf.Lerp(1f, -1f, ramp) : t.K == 1 ? -1f : t.K == 2 ? Mathf.Lerp(-1f, 1f, ramp) : 1f;
+        float aw = (t.K & 1) == 0 ? ramp : 1f - ramp;        // weight of the up-diagonal count inside the pair
+        ch.Px = -sg * 0.05f; ch.Py = -0.04f; ch.Tilt = sg * 0.015f;
+        ch.Phi = sg * 0.10f; ch.Psi = sg * 0.10f; ch.PhH = -sg * 0.10f;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            float pw = (1f + s * sg) * 0.5f;                 // 1 when this arm points
+            var point = new Vector3(s * 0.30f, 0.38f, 0.05f).Lerp(new Vector3(s * -0.20f, -0.40f, 0.22f), 1f - aw);
+            SetArm(ref ch, s, new Vector3(s * 0.05f, -0.40f, 0.06f).Lerp(point, pw), HOut(s));
+        }
+        Planted(ref ch, 0.14f, 0.15f);
+        HeelUp(ref ch, -1f, 0.03f * (1f - (1f + sg) * 0.5f)); HeelUp(ref ch, 1f, 0.03f * ((1f + sg) * 0.5f));
+        if (mv) MovingScale(ref ch, 0.7f, 1f);
+    }
+
+    private static void Headbang(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float dip = DDip(t.B);
+        ch.Py = -0.08f - 0.03f * dip;
+        ch.Theta = 0.20f + 0.15f * dip; ch.Phi = 0.04f * t.D;
+        ch.ThN = DSawNod(t.B); ch.PhH = 0.10f * t.D;          // head lowest exactly on the beat
+        Aim(ref ch, -1f, 0f, -0.30f - 0.06f * dip, 0.28f, HLow(-1f));
+        Aim(ref ch, 1f, 0f, -0.30f - 0.06f * dip, 0.28f, HLow(1f));
+        Planted(ref ch, 0.22f, 0.2f);
+        Lift(ref ch, -1f, 0.015f * (1f - dip)); Lift(ref ch, 1f, 0.015f * (1f - dip));
+        if (mv)
+        {
+            float nod = ch.ThN, ph = ch.PhH;
+            MovingScale(ref ch, 0.7f, 0.5f);
+            ch.ThN = nod;                                      // the nod stays full size, the clearest read at a run
+            ch.PhH = ph * 0.7f;
+            ch.Theta = 0.12f + 0.08f * dip;
+        }
+    }
+
+    private static void AirGuitar(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float c = t.C, dip = DDip(t.B);
+        ch.Py = -0.09f - 0.03f * dip;
+        ch.Theta = 0.12f + 0.05f * dip; ch.Psi = 0.15f; ch.Phi = -0.05f;
+        ch.ThN = 0.25f * dip; ch.PhH = 0.08f * t.D;
+        Aim(ref ch, 1f, 0.12f, -0.08f, 0.42f + 0.05f * t.D, HLow(1f));          // the fretting hand slides
+        // the strumming hand pumps low on the beat and the "&", and windmills once on beat 4
+        var strum = new Vector3(0.18f, -0.36f - 0.06f * DCos(2f * t.B), 0.26f);   // s = -1 mirrors o(-0.18, ...)
+        float wm = 0f;
+        if (!mv && t.K == 3) wm = DSm(t.B / 0.15f) * (1f - DSm((t.B - 0.85f) / 0.15f));
+        float al = Mathf.Tau * (c - 3f);
+        var windmill = new Vector3(-0.05f, -0.46f * Mathf.Cos(al), 0.46f * Mathf.Sin(al));
+        SetArm(ref ch, -1f, strum.Lerp(windmill, wm), HLow(-1f));
+        Planted(ref ch, 0.25f, 0.15f);
+        Foot(ref ch, 1f, 0.25f, AnkleHeight, 0.15f, 0.15f, 0f);
+        Foot(ref ch, -1f, -0.25f, AnkleHeight, -0.10f, 0.15f, 0f);
+        if (mv) MovingScale(ref ch, 0.7f, 1f);
+    }
+
+    private static void FistPump(ref DanceCh ch, in Beat t, bool mv)
+    {
+        ch.Py = -0.04f * DDip(t.B);
+        ch.Theta = 0.05f; ch.Phi = -0.06f * t.E; ch.Psi = -0.12f * t.E; ch.ThN = 0.06f * DDip(t.B);
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            float c0 = s < 0f ? 0f : 1f;
+            float p = (1f + DCos((t.C - c0) * 0.5f)) * 0.5f;    // 1 while this fist is up
+            SetArm(ref ch, s, new Vector3(s * 0.10f, -0.05f, 0.25f).Lerp(new Vector3(s * 0.14f, 0.42f, 0.12f), p),
+                HLow(s).Lerp(HUp(s), p));
+        }
+        Planted(ref ch, 0.15f, 0.15f);
+        float heel = 0.015f * (1f - DDip(t.B));
+        Lift(ref ch, -1f, heel); Lift(ref ch, 1f, heel);
+        if (mv) MovingScale(ref ch, 0.6f, 1f);
+    }
+
+    private static void Bounce(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float dip = DDip(t.B);
+        ch.Py = -0.07f * dip;
+        ch.Theta = 0.05f + 0.05f * dip; ch.Phi = 0.03f * t.D; ch.ThN = 0.10f * dip; ch.PhH = 0.04f * t.D;
+        Aim(ref ch, -1f, 0.10f, -0.30f - 0.05f * dip, 0.22f, HLow(-1f));
+        Aim(ref ch, 1f, 0.10f, -0.30f - 0.05f * dip, 0.22f, HLow(1f));
+        Planted(ref ch, 0.13f, 0.15f);
+        Lift(ref ch, -1f, 0.03f * (1f - dip)); Lift(ref ch, 1f, 0.03f * (1f - dip));   // heels rise as the body rises
+        if (mv) { MovingScale(ref ch, 0.5f, 0.6f); ch.Py = -0.03f * dip; }
+    }
+
+    private static float Bump(float r, float node)
+    {
+        float d = Mathf.Abs(r - node);
+        d = Mathf.Min(d, 1f - d);
+        float x = d / 0.08f;
+        return Mathf.Exp(-x * x);
+    }
+
+    private static void ArmWave(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float r = t.R;
+        ch.Py = -0.01f * DDip(t.B); ch.Phi = 0.04f * DSin(r); ch.PhH = 0.05f * DSin(r);
+        // the crest leaves the rig-L hand, climbs elbow and shoulder, crosses the back, reaches the rig-R hand
+        float bhL = Bump(r, 0.05f), beL = Bump(r, 0.20f), bsL = Bump(r, 0.35f);
+        float bsR = Bump(r, 0.55f), beR = Bump(r, 0.70f), bhR = Bump(r, 0.85f);
+        AimChain(ref ch, -1f, 0.12f + 0.45f * beL, 0f, 0.12f + 0.60f * bhL - 0.35f * beL, 0f);
+        AimChain(ref ch, 1f, 0.12f + 0.45f * beR, 0f, 0.12f + 0.60f * bhR - 0.35f * beR, 0f);
+        ch.ShL = 0.035f * bsL; ch.ShR = 0.035f * bsR;
+        Planted(ref ch, 0.13f, 0.15f);
+        if (mv)
+        {
+            float sh0 = ch.ShL, sh1 = ch.ShR;
+            MovingScale(ref ch, 0.5f, 1f);
+            ch.ShL = sh0; ch.ShR = sh1;                        // arms only: the wave keeps its full size
+        }
+    }
+
+    // ArmChain poses (a1, g1, a2, g2) for [A goalposts, B, D tray, C] x [rig-L, rig-R]
+    private static readonly float[] RobotPoses =
+    {
+        // A: both goalposts
+        0f, 0f, 1.5708f, 0f,            0f, 0f, 1.5708f, 0f,
+        // B: rig-L upper arm forward + forearm up, rig-R upper arm down + forearm forward
+        0f, 1.5708f, 1.5708f, 0f,       -1.35f, 0f, 0f, 1.5708f,
+        // D: both trays
+        -1.35f, 0f, 0f, 1.5708f,        -1.35f, 0f, 0f, 1.5708f,
+        // C: mirror of B
+        -1.35f, 0f, 0f, 1.5708f,        0f, 1.5708f, 1.5708f, 0f,
+    };
+    private static readonly float[] RobotPsi = { 0f, 0.30f, 0f, -0.30f };
+    private static readonly float[] RobotHead = { 0f, 0.15f, 0f, -0.15f };
+
+    private static void Robot(ref DanceCh ch, in Beat t, bool mv)
+    {
+        int k = t.K, p = (k + 3) & 3;
+        float u = DRamp(t.B / 0.12f);                           // abrupt: a linear ramp in the first 0.12 beat, then hold
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            int o0 = p * 8 + i * 4, o1 = k * 8 + i * 4;
+            AimChain(ref ch, s,
+                Mathf.Lerp(RobotPoses[o0], RobotPoses[o1], u), Mathf.Lerp(RobotPoses[o0 + 1], RobotPoses[o1 + 1], u),
+                Mathf.Lerp(RobotPoses[o0 + 2], RobotPoses[o1 + 2], u), Mathf.Lerp(RobotPoses[o0 + 3], RobotPoses[o1 + 3], u));
+        }
+        ch.Py = 0f;
+        ch.Psi = Mathf.Lerp(RobotPsi[p], RobotPsi[k], u);
+        ch.PhH = Mathf.Lerp(RobotHead[p], RobotHead[k], u);
+        Planted(ref ch, 0.12f, 0.15f);
+        ch.Py = -0.02f;
+        if (mv)
+        {
+            float ph = ch.PhH;
+            MovingScale(ref ch, 0.8f, 1f);
+            ch.PhH = ph;
+        }
+    }
+
+    private static void RunningMan(ref DanceCh ch, in Beat t, bool mv)
+    {
+        ch.Py = -0.04f - 0.03f * DDip(t.B);
+        ch.Theta = 0.12f; ch.Psi = 0.10f * t.D;
+        float amp = mv ? 0.26f * 0.6f : 0.26f;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            float a = DSin(t.C * 0.5f + (s < 0f ? 0f : 0.5f));   // fists pump opposite to the legs
+            SetArm(ref ch, s, new Vector3(s * 0.03f, -0.25f, 0.05f + amp * a), new Vector3(s * 0.35f, -0.25f, -1f));
+            float ph = DFrac(t.C * 0.5f + (s > 0f ? 0f : 0.5f));
+            if (ph < 0.5f)
+            {
+                // the foot lifts and swings forward
+                float sw = DSin(ph);
+                Foot(ref ch, s, s * 0.10f, AnkleHeight + 0.22f * sw, Mathf.Lerp(-0.05f, 0.20f, DSm(2f * ph)), 0.05f, sw);
+            }
+            else
+            {
+                // planted, sliding back
+                Foot(ref ch, s, s * 0.10f, AnkleHeight, Mathf.Lerp(0.20f, -0.05f, 2f * (ph - 0.5f)), 0.05f, 0f);
+            }
+        }
+        if (mv) { float th = ch.Theta; MovingScale(ref ch, 0.6f, 1f); ch.Theta = th; }
+    }
+
+    private static void TStep(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float sr = DSin(t.R);
+        ch.Py = -0.05f - 0.015f * DDip(t.B); ch.Px = 0.04f * sr;
+        ch.Theta = 0.05f; ch.Psi = 0.10f * sr; ch.ThN = 0.04f * DDip(t.B);
+        AimO(ref ch, -1f, 0.12f * sr, -0.28f, 0.20f, HLow(-1f));
+        AimO(ref ch, 1f, 0.12f * sr, -0.28f, 0.20f, HLow(1f));
+        float e = DSin((t.C >= 2f ? t.C - 2f : t.C) / 4f);
+        float activeS = t.C < 2f ? 1f : -1f;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            if (s == activeS) Foot(ref ch, s, s * (0.098f + 0.17f * e), AnkleHeight, -0.04f * e, 1.2f * e, 0f);   // slides out, foot turns into a T
+            else Foot(ref ch, s, s * 0.098f, AnkleHeight, 0f, 0f, 0f);
+        }
+        if (mv) MovingScale(ref ch, 0.6f, 1f);
+    }
+
+    private static void Sprinkler(ref DanceCh ch, in Beat t, bool mv)
+    {
+        ch.Py = -0.12f - 0.01f * DDip(t.B);
+        ch.Theta = 0.25f;
+        // the arc, as chest twist: three jerks across, one smooth sweep back
+        ch.Psi = t.C < 3f ? -0.9f + 0.6f * (t.K + DSm(Mathf.Min(t.B / 0.35f, 1f))) : Mathf.Lerp(0.9f, -0.9f, DSm(t.B));
+        Aim(ref ch, 1f, 0.50f, 0f, 0.02f, HOut(1f));
+        Aim(ref ch, -1f, -0.05f, 0.16f, -0.06f, new Vector3(-1f, 0.2f, -0.3f));
+        Planted(ref ch, 0.14f, 0.15f);
+        if (mv) MovingScale(ref ch, 0.6f, 1f);
+    }
+
+    private static void ShoulderLean(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float dip = DDip(t.B);
+        ch.Px = -0.04f * t.E; ch.Py = -0.03f - 0.04f * dip;
+        ch.Phi = 0.18f * t.E; ch.Theta = 0.06f; ch.Psi = 0.05f * t.D;
+        ch.ShL = 0.02f * t.E; ch.ShR = -0.02f * t.E;           // the leaning side drops a little extra
+        ch.ThN = 0.08f * dip; ch.PhH = -0.10f * t.E;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            Aim(ref ch, s, 0.12f, -0.32f, 0.18f + 0.05f * s * t.D, HLow(s));
+        }
+        Planted(ref ch, 0.15f, 0.15f);
+        HeelUp(ref ch, -1f, 0.02f * Mathf.Max(0f, t.E)); HeelUp(ref ch, 1f, 0.02f * Mathf.Max(0f, -t.E));
+        if (mv) MovingScale(ref ch, 0.6f, 0.5f);
+    }
+
+    private static void Griddy(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float D = t.D;
+        ch.Px = mv ? -0.03f * D : -0.05f * D;
+        ch.Py = -0.12f - 0.02f * DDip(t.B);
+        ch.Theta = 0.12f; ch.Phi = 0.05f * D; ch.Psi = 0.10f * D; ch.ThN = 0.05f;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            float up = DSm((1f + s * D) * 0.5f);                // rig-R up while D > 0, rig-L while D < 0
+            SetArm(ref ch, s, new Vector3(s * 0.06f, -0.47f, -0.08f).Lerp(new Vector3(s * 0.10f, 0.38f, 0.05f), up),
+                new Vector3(s * 0.3f, -1f, -0.5f).Lerp(new Vector3(s, 0f, -0.5f), up));
+            float x = Mathf.Max(0f, s * D);                     // crossing foot: rig-R while D > 0
+            Foot(ref ch, s, s * (0.28f - 0.26f * x), AnkleHeight, -0.12f * x, 0.3f, 0f);
+        }
+        if (mv) { float px = ch.Px; MovingScale(ref ch, 0.7f, 1f); ch.Px = px; }
+    }
+
+    private static void Moonwalk(ref DanceCh ch, in Beat t, bool mv)
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            SetArm(ref ch, s, new Vector3(s * 0.10f, -0.30f + 0.03f * s * t.D, 0.12f + 0.08f * s * t.D), HLow(s));
+        }
+        if (mv)
+        {
+            // walking: no sliding feet; the Bounce moving variant with the lean back
+            Bounce(ref ch, t, true);
+            ch.Theta = -0.05f;
+            for (int i = 0; i < 2; i++)
+            {
+                float s = i * 2f - 1f;
+                SetArm(ref ch, s, new Vector3(s * 0.10f, -0.30f + 0.03f * s * t.D, 0.12f + 0.08f * s * t.D), HLow(s));
+            }
+            ch.ArmBlend = 0.6f;
+            return;
+        }
+        ch.Py = -0.03f; ch.Pz = -0.02f * t.D;
+        ch.Theta = -0.05f; ch.Phi = 0.03f * t.D; ch.Psi = 0.06f * t.D; ch.ThN = 0.04f * DDip(t.B);
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            float ph = DFrac(t.C * 0.5f + (s > 0f ? 0f : 0.5f));
+            if (ph < 0.5f)
+                Foot(ref ch, s, s * 0.10f, AnkleHeight, Mathf.Lerp(0.10f, -0.12f, 2f * ph), 0f, 0f);   // flat slide back
+            else
+            {
+                Foot(ref ch, s, s * 0.10f, AnkleHeight, Mathf.Lerp(-0.12f, 0.10f, DSm(2f * (ph - 0.5f))), 0f, 0f);
+                HeelUp(ref ch, s, 0.06f);                                                                 // drawn forward on the ball
+            }
+        }
+    }
+
+    private static void Sway(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float sw = DSin(t.R);
+        ch.Px = 0.07f * sw; ch.Py = -0.02f;
+        ch.Phi = -0.06f * sw; ch.Psi = 0.05f * sw; ch.PhH = 0.10f * sw; ch.ThN = -0.05f;
+        float ar = mv ? 0.6f : 1f;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            SetArm(ref ch, s, new Vector3(s * 0.06f + 0.10f * ar * DSin(t.R - 0.05f), 0.45f + 0.02f * DSin(2f * t.C), 0.04f), HUp(s));
+        }
+        Planted(ref ch, 0.14f, 0.15f);
+        HeelUp(ref ch, -1f, 0.02f * Mathf.Max(0f, sw)); HeelUp(ref ch, 1f, 0.02f * Mathf.Max(0f, -sw));
+        if (mv) { MovingScale(ref ch, 0.6f, 1f); }
+    }
+
+    private static void FolkClap(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float b = t.B;
+        float cl = DDip(b); cl = cl * cl * cl;
+        float hit = (1f - b) * (1f - b) * (1f - b);
+        ch.Py = -0.03f - 0.02f * hit; ch.Px = 0.03f * t.E;
+        ch.Theta = 0.05f; ch.Phi = -0.03f * t.E; ch.ThN = 0.04f * DDip(b);
+        ClapArms(ref ch, cl);
+        Planted(ref ch, 0.13f, 0.15f);
+        // the stamping foot lifts in the half beat before it lands: rig-R before beats 1 and 3, rig-L before 2 and 4
+        float stamp = 0.07f * Mathf.Max(0f, -DSin(b));
+        Lift(ref ch, (t.K & 1) == 1 ? 1f : -1f, stamp);
+        if (mv) MovingScale(ref ch, 0.8f, 1f);
+    }
+
+    private static void HandsOnHipsSkip(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float hop = DHop(t.B);
+        bool liftedR = (t.K & 1) == 0;                          // rig-R knee up on beats 1 and 3
+        ch.Py = 0.06f * hop - 0.04f; ch.Px = 0.02f * t.D;
+        ch.Theta = 0.04f; ch.Phi = 0.05f * t.D; ch.Psi = 0.10f * t.D;
+        Akimbo(ref ch, -1f, 0.02f * hop); Akimbo(ref ch, 1f, 0.02f * hop);
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            bool lifted = (s > 0f) == liftedR;
+            if (!lifted) Foot(ref ch, s, s * 0.11f, AnkleHeight + 0.04f * hop, 0f, 0.15f, 0f);
+            else Foot(ref ch, s, s * 0.11f, AnkleHeight + 0.14f * hop, 0.10f * hop, 0.15f, hop);
+        }
+        if (mv) MovingScale(ref ch, 0.5f, 1f);
+    }
 }
