@@ -70,7 +70,7 @@ public partial class PlacedObjects : Node
     private static readonly Dictionary<PlacedKind, Func<PlacedObject, Node3D>> Factories = new()
     {
         [PlacedKind.Flag] = _ => FlagVisual(),
-        [PlacedKind.Photo] = _ => PhotoPlaceholder(),
+        [PlacedKind.Photo] = PhotoVisuals.Placed,
     };
 
     /// <summary>
@@ -420,24 +420,6 @@ public partial class PlacedObjects : Node
             Shape = new BoxShape3D { Size = new Vector3(0.12f, 1.9f, 0.12f) },
             Position = new Vector3(0, 0.95f, 0),
         });
-        return body;
-    }
-
-    /// <summary>Stand-in for a stuck photo until it has its own factory: a 0.10 × 0.13 m white card facing +Z.</summary>
-    public static Node3D PhotoPlaceholder()
-    {
-        var body = new StaticBody3D();
-        body.AddChild(new MeshInstance3D
-        {
-            Mesh = new QuadMesh { Size = new Vector2(0.10f, 0.13f) },
-            MaterialOverride = new StandardMaterial3D
-            {
-                AlbedoColor = Colors.White,
-                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            },
-            Position = new Vector3(0, 0, 0.002f),
-        });
-        body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(0.10f, 0.13f, 0.01f) } });
         return body;
     }
 }

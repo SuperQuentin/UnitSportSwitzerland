@@ -43,8 +43,8 @@ another server origin; `o.WorldTransform(placed.Origin)` converts.
 - Visuals: `PlacedObjects.RegisterFactory(PlacedKind, Func<PlacedObject, Node3D>)` (replaces and
   redraws). The node is positioned for you, named `P<id>`, in group `placed_object`, tagged with meta
   `placed_id`; `PlacedObjects.IdOf(node)` walks up from any collider. Built-ins: `FlagVisual()`
-  (planted flag mesh + pole collider), `PhotoPlaceholder()` (0.10 × 0.13 m white card facing +Z with a
-  thin collider — to be replaced). A dedicated server builds no visuals.
+  (planted flag mesh + pole collider), `PhotoVisuals.Placed` (the Polaroid card facing +Z showing its
+  print, fetched through `PhotoTransfer`: the `polaroid` note). A dedicated server builds no visuals.
 - Persistence: `user://placed/server.json` (server), `user://placed/offline.json` (offline client;
   not loaded with `--connect`). System.Text.Json (culture-invariant), kind saved by name, written
   atomically on every change.

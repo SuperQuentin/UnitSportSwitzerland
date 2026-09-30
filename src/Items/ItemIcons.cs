@@ -941,6 +941,24 @@ public static class ItemIcons
             "kkkkkkkk",
         });
 
+        // a Polaroid: white frame, a small landscape (sky, sun, hills), the wide bottom margin
+        d[ItemId.Photo] = new[]
+        {
+            "..kkkkkkkkkkkk..",
+            "..kwwwwwwwwwwk..",
+            "..kwkkkkkkkkak..",
+            "..kwkccccyckak..",
+            "..kwkcccccckak..",
+            "..kwkceccEckak..",
+            "..kwkeeeEEEkak..",
+            "..kwkEEEEEEkak..",
+            "..kwkkkkkkkkak..",
+            "..kwwwwwwwwwak..",
+            "..kwwwwwwwwwak..",
+            "..kwaaaaaaaaak..",
+            "..kkkkkkkkkkkk..",
+        };
+
         return d;
     }
 }
