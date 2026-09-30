@@ -176,7 +176,7 @@ public sealed partial class ProceduralWorld
     }
 
     /// <summary>Farms and alpine huts on a jittered 350 m grid, wherever the ground allows.</summary>
-    private IEnumerable<Plan> FarmsNear(double minE, double minN, double maxE, double maxN)
+    private IEnumerable<Plan> FarmsNear(Site site, double minE, double minN, double maxE, double maxN)
     {
         const double cell = 350;
         for (int gi = (int)Math.Floor((minE - 60) / cell); gi <= (int)Math.Floor((maxE + 60) / cell); gi++)
@@ -197,9 +197,9 @@ public sealed partial class ProceduralWorld
 
                 double angle = Noise.Hash01(gi, gj, 109) * Math.PI;
                 var u = (Math.Cos(angle), Math.Sin(angle));
-                double alt = Height(e, n);
+                double alt = Ground(site, e, n);
                 if (alt > 2250) continue;
-                if (CoverAt(e, n) is not CoverClass.Open) continue;
+                if (CoverAt(site, e, n) is not CoverClass.Open) continue;
 
                 var rng = new Random(unchecked(gi * 92821 ^ gj * 68917));
                 if (alt > 1350)
@@ -218,26 +218,27 @@ public sealed partial class ProceduralWorld
     }
 
     /// <summary>Cover at one point, classified the way the raster is, for siting farms.</summary>
-    private CoverClass CoverAt(double e, double n)
+    private CoverClass CoverAt(Site site, double e, double n)
     {
         const double d = CoverStep;
-        double h = Height(e, n);
-        double gx = (Height(e + d, n) - Height(e - d, n)) / (2 * d);
-        double gy = (Height(e, n + d) - Height(e, n - d)) / (2 * d);
+        double h = Ground(site, e, n);
+        double gx = (Ground(site, e + d, n) - Ground(site, e - d, n)) / (2 * d);
+        double gy = (Ground(site, e, n + d) - Ground(site, e, n - d)) / (2 * d);
         double x = e - CenterE, y = n - CenterN;
         var column = ColumnAt(x);
+        bool waterOk = site.Blend == null || site.Blend.WaterAllowed(e, n);
         return Classify((float)h, (float)(Math.Atan(Math.Sqrt(gx * gx + gy * gy)) * 180 / Math.PI),
             (float)Noise.Fbm(x / 650, y / 650, 3, 51), (float)Noise.Fbm(x / 420, y / 420, 2, 67),
-            (float)(h - column.Floor), y - column.Axis, Math.Abs(y - (column.Axis + RiverOffset)));
+            (float)(h - column.Floor), y - column.Axis, Math.Abs(y - (column.Axis + RiverOffset)), waterOk);
     }
 
-    private IEnumerable<Plan> PlansNear(double minE, double minN, double maxE, double maxN)
+    private IEnumerable<Plan> PlansNear(Site site, double minE, double minN, double maxE, double maxN)
     {
         foreach (var v in VillagesNear(minE - CenterE, maxE - CenterE))
             foreach (var p in v.Buildings)
                 if (p.Rect.E >= minE && p.Rect.E < maxE && p.Rect.N >= minN && p.Rect.N < maxN)
                     yield return p;
-        foreach (var p in FarmsNear(minE, minN, maxE, maxN))
+        foreach (var p in FarmsNear(site, minE, minN, maxE, maxN))
             if (p.Rect.E >= minE && p.Rect.E < maxE && p.Rect.N >= minN && p.Rect.N < maxN)
                 yield return p;
     }
@@ -248,9 +249,9 @@ public sealed partial class ProceduralWorld
     private IEnumerable<(List<(double E, double N)> Points, RoadClass Class)> LinesNear(
         double minE, double minN, double maxE, double maxN)
     {
-        double limit = (RadiusTiles + 1) * ChunkFormat.TileSizeM;
-        double x0 = Math.Max(Math.Floor((minE - CenterE - 2 * RoadStep) / RoadStep) * RoadStep, -limit);
-        double x1 = Math.Min(Math.Ceiling((maxE - CenterE + 2 * RoadStep) / RoadStep) * RoadStep, limit);
+        // the valley runs on as far as the fill domain does: no end of its own
+        double x0 = Math.Floor((minE - CenterE - 2 * RoadStep) / RoadStep) * RoadStep;
+        double x1 = Math.Ceiling((maxE - CenterE + 2 * RoadStep) / RoadStep) * RoadStep;
         if (x1 > x0)
         {
             var road = new List<(double, double)>();
@@ -271,8 +272,10 @@ public sealed partial class ProceduralWorld
                 yield return (s.Points, s.Class);
     }
 
-    public RoadTile? BuildRoads(TileId id)
+    public RoadTile? BuildRoads(TileId id, Blend? blend = null)
     {
+        CheckBlend(id, blend);
+        var site = new Site(null, blend);
         double maxE = id.MinE + ChunkFormat.TileSizeM;
         var segments = new List<RoadSegment>();
         foreach (var (points, cls) in LinesNear(id.MinE, id.MinN, maxE, id.MaxN))
@@ -283,7 +286,7 @@ public sealed partial class ProceduralWorld
                 {
                     var (e, n) = piece[i];
                     xyz[i * 3] = (float)(e - id.MinE);
-                    xyz[i * 3 + 1] = (float)Height(e, n);
+                    xyz[i * 3 + 1] = (float)Ground(site, e, n);
                     xyz[i * 3 + 2] = (float)(id.MaxN - n);
                 }
                 segments.Add(new RoadSegment
@@ -346,11 +349,13 @@ public sealed partial class ProceduralWorld
 
     // ---- buildings ---------------------------------------------------------------------------
 
-    public BuildingTile? BuildBuildings(TileId id)
+    public BuildingTile? BuildBuildings(TileId id, Blend? blend = null)
     {
+        CheckBlend(id, blend);
+        var site = new Site(null, blend);
         var buildings = new List<Building>();
-        foreach (var plan in PlansNear(id.MinE, id.MinN, id.MinE + ChunkFormat.TileSizeM, id.MaxN))
-            if (Solid(plan, id) is { } b) buildings.Add(b);
+        foreach (var plan in PlansNear(site, id.MinE, id.MinN, id.MinE + ChunkFormat.TileSizeM, id.MaxN))
+            if (Solid(plan, id, site) is { } b) buildings.Add(b);
         return buildings.Count == 0 ? null : new BuildingTile { Id = id, Buildings = buildings };
     }
 
@@ -360,7 +365,7 @@ public sealed partial class ProceduralWorld
     /// wound by checking its normal against the side it must be seen from, not by bookkeeping
     /// the vertex order — the lesson from FranceBuildings' roofs.
     /// </summary>
-    private Building? Solid(Plan plan, TileId tile)
+    private Building? Solid(Plan plan, TileId tile, Site site)
     {
         var f = plan.Rect;
         var u = (E: f.UE, N: f.UN);
@@ -377,7 +382,7 @@ public sealed partial class ProceduralWorld
         double low = double.MaxValue, high = double.MinValue;
         foreach (var p in ring.Append((f.E, f.N)))
         {
-            double g = Height(p.Item1, p.Item2);
+            double g = Ground(site, p.Item1, p.Item2);
             low = Math.Min(low, g);
             high = Math.Max(high, g);
         }
@@ -474,7 +479,7 @@ public sealed partial class ProceduralWorld
     // ---- where trees may not grow ------------------------------------------------------------
 
     /// <summary>Cells under a road (plus a verge) or a building (plus a garden strip).</summary>
-    private bool[] BuildTreeMask(TileId id)
+    private bool[] BuildTreeMask(TileId id, Site site)
     {
         const int size = CoverFormat.Size;
         var blocked = new bool[size * size];
@@ -509,7 +514,7 @@ public sealed partial class ProceduralWorld
             }
         }
 
-        foreach (var p in PlansNear(id.MinE - margin, id.MinN - margin, maxE + margin, id.MaxN + margin))
+        foreach (var p in PlansNear(site, id.MinE - margin, id.MinN - margin, maxE + margin, id.MaxN + margin))
         {
             var f = p.Rect;
             double reach = Math.Sqrt(f.HalfLength * f.HalfLength + f.HalfWidth * f.HalfWidth) + 3;

@@ -9,6 +9,8 @@ public enum RoomType
 {
     Hall, Living, Kitchen, Dining, Bedroom, Bathroom, WC, Office, Shop, Storage,
     Classroom, Nave, Workshop, Barn, Garage, Lobby, Landing,
+    // stored plans hold these as numbers: new types go on the end
+    Porch, Belfry,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -42,6 +44,11 @@ public sealed class RoomPlan
     public RoomType Type { get; set; }
     /// <summary>Rooms sharing a unit id belong to one flat/office; −1 for circulation.</summary>
     public int Unit { get; set; } = -1;
+    /// <summary>
+    /// Storeys the room is tall: a nave rises through several while the tower beside it has a
+    /// floor per storey. The floors it reaches into must leave its rectangle empty.
+    /// </summary>
+    public int Span { get; set; } = 1;
     public List<OpeningPlan> Openings { get; set; } = new();
 
     public float Width => X1 - X0;
@@ -87,6 +94,7 @@ public enum FurnitureType
     Bed, SingleBed, Wardrobe, Nightstand, Sofa, CoffeeTable, Table, Chair, Counter, Fridge, Stove,
     Toilet, Sink, Bathtub, Desk, Shelf, ShopCounter, Rack, Crate, HayBale, Pew, Altar, Car,
     Blackboard, Tv, Rug, Workbench, Plant,
+    Bell, Lectern, Cross, Dais,
 }
 
 public sealed class FurniturePlan
@@ -100,6 +108,32 @@ public sealed class FurniturePlan
     public float W { get; set; }
     public float D { get; set; }
     public float H { get; set; }
+    /// <summary>Height of its base above the floor: an altar on the chancel step, a bell in its frame.</summary>
+    public float Lift { get; set; }
+}
+
+/// <summary>
+/// One way in: a real door outside and the doorway it arrives at inside. A church has one per
+/// solid (nave, tower), all opening into the same interior; a house has one.
+/// </summary>
+public sealed class EntrancePlan
+{
+    /// <summary>Key of the building whose door this is (what <see cref="DoorIndex"/> hands out).</summary>
+    public string Door { get; set; } = "";
+    /// <summary>Middle of the doorway on the inside wall line, interior-local, ground floor.</summary>
+    public float X { get; set; }
+    public float Z { get; set; }
+    /// <summary>Unit direction into the room, interior-local.</summary>
+    public float InX { get; set; }
+    public float InZ { get; set; }
+    public float Width { get; set; }
+
+    // the real door, tile-local
+    public float DoorX { get; set; }
+    public float DoorY { get; set; }
+    public float DoorZ { get; set; }
+    public float DoorOutX { get; set; }
+    public float DoorOutZ { get; set; }
 }
 
 /// <summary>
@@ -115,6 +149,9 @@ public sealed class InteriorLayout
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
     public BuildingKind Kind { get; set; }
+    public BuildingType Type { get; set; }
+    /// <summary><see cref="BuildingGroup.Fingerprint"/> of the group planned together, "" for one solid.</summary>
+    public string Group { get; set; } = "";
 
     // fingerprint of the source building: a rebuilt .bldg invalidates stored plans
     public int TriangleCount { get; set; }
@@ -143,10 +180,32 @@ public sealed class InteriorLayout
 
     public List<FloorPlan> Floors { get; set; } = new();
     public List<FurniturePlan> Furniture { get; set; } = new();
+    /// <summary>Every way in. Empty on single-door plans, which use the fields above instead.</summary>
+    public List<EntrancePlan> Entrances { get; set; } = new();
 
-    public bool Matches(Building b) =>
-        Version == CurrentVersion && TriangleCount == b.TriangleCount
+    public bool Matches(Building b, string group) =>
+        Version == CurrentVersion && TriangleCount == b.TriangleCount && Group == group
         && Math.Abs(MinY - b.MinY) < 0.01f && Math.Abs(MaxY - b.MaxY) < 0.01f;
+
+    /// <summary>The ways in; a single-door plan's one entrance is built from its front-door fields.</summary>
+    public IReadOnlyList<EntrancePlan> AllEntrances() => Entrances.Count > 0 ? Entrances : new[]
+    {
+        new EntrancePlan
+        {
+            Door = Key, X = EntryX, Z = -Depth / 2, InX = 0, InZ = 1, Width = EntryWidth,
+            DoorX = DoorX, DoorY = DoorY, DoorZ = DoorZ, DoorOutX = DoorOutX, DoorOutZ = DoorOutZ,
+        },
+    };
+
+    /// <summary>The entrance behind a given building's door, or the main one.</summary>
+    public EntrancePlan EntranceFor(string door)
+    {
+        var all = AllEntrances();
+        return all.FirstOrDefault(e => e.Door == door) ?? all[0];
+    }
+
+    /// <summary>Clear height of a room: its storeys less the slab under the floor above.</summary>
+    public float ClearOf(RoomPlan r) => r.Span * StoreyHeight - InteriorGenerator.Slab;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
 

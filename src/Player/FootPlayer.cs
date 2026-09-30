@@ -1415,6 +1415,11 @@ public partial class FootPlayer : CharacterBody3D
         _flight.Control = state.Throttle;
         EngineOn = true;
         VehicleHealth = state.Health;
+        if (_ride is Car car)
+        {
+            car.Headlights = state.Headlights;
+            car.RoofOpen = state.RoofOpen && car.HasSoftTop;
+        }
         _placed = true;
     }
 
@@ -1428,7 +1433,8 @@ public partial class FootPlayer : CharacterBody3D
             : heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Vector3.Up * Velocity.Y;
         return new VehicleState((RideKind)RideKindId, GlobalPosition,
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
-            wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now);
+            wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
+            Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true });
     }
 
     /// <summary>
@@ -1703,6 +1709,20 @@ public partial class FootPlayer : CharacterBody3D
         {
             EngineOn = !EngineOn;
             EngineToggled?.Invoke(EngineOn);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (@event.IsActionPressed(PlayerInput.LightsToggle) && !@event.IsEcho() && _ride is Car lit)
+        {
+            lit.Headlights = !lit.Headlights;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Car { HasSoftTop: true } open)
+        {
+            open.RoofOpen = !open.RoofOpen;
             GetViewport().SetInputAsHandled();
             return;
         }

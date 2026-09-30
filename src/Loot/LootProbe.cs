@@ -64,9 +64,13 @@ public partial class LootProbe : Node
                 layouts.AddRange(await Task.Run(() =>
                 {
                     var list = new List<InteriorLayout>();
+                    var types = BuildingTypes.For(tile);
                     for (int i = 0; i < tile.Buildings.Count; i++)
-                        if (BuildingFootprint.Compute(tile, i, roads, grid) is { } fp)
-                            list.Add(InteriorGenerator.Generate(fp, tile.Buildings[i]));
+                    {
+                        // a church is one interior, planned from its primary building
+                        if (types.GroupOf(i) is { } g && g.Primary != i) continue;
+                        if (InteriorGenerator.Generate(tile, i, roads, grid) is { } l) list.Add(l);
+                    }
                     return list;
                 }));
             }

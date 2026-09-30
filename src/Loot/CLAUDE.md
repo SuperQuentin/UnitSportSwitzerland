@@ -9,3 +9,7 @@ touches its topic; search with `grep -ril <word> docs/notes/loot`.
 
 - `loot` — Loot: (`src/Loot/`): lootable furniture in every generated interior (fridge, wardrobe, nightstand, desk, shelf,...
 - `gathering` — Gathering: (`src/Loot/Gathering.cs`, hold G / pad X on foot outdoors — pad X is only tuck/sprint when mounted): a...
+
+## Gotchas
+
+- `offline-take-all-needs-sync-layout` — Offline "take all" needs `InteriorManager.GetOrCreate` to answer synchronously on a known plan

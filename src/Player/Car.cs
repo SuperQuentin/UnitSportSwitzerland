@@ -228,6 +228,12 @@ public sealed class Car : Rideable, IEngined
     /// <summary>Accumulated wheel rotation, radians, for the rig.</summary>
     public float WheelSpin { get; private set; }
     public bool Braking { get; private set; }
+    /// <summary>Headlights on (pop-ups raised), as the driver set them: L / D-pad right.</summary>
+    public bool Headlights { get; set; }
+    /// <summary>Soft top down, as the driver set it: O / D-pad left. Only ever true on a car that has one.</summary>
+    public bool RoofOpen { get; set; }
+    /// <summary>An open car: its top folds away.</summary>
+    public bool HasSoftTop => Spec.Body.Shape == BodyShape.Roadster;
     /// <summary>Longitudinal and lateral acceleration, m/s² (+ forward, + left), for body pitch and roll.</summary>
     public float AccelX { get; private set; }
     public float AccelY { get; private set; }
@@ -483,10 +489,14 @@ public sealed class Car : Rideable, IEngined
     /// What another player needs to draw this car's moving parts: the body's slide already travels
     /// in the replicated transform, so these are the front-wheel angle, the wheels' spin RATE (each
     /// peer turns its own wheels by it — an accumulated angle would wrap and stutter), rpm for the
-    /// rev needle and engine note, and the brake lights.
+    /// rev needle and engine note, and the lamps and roof as bit flags in W (<see cref="PoseBrake"/>…):
+    /// small integers are exact in a float, and <c>Anim</c> is taken as-is, never blended.
     /// </summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01, Braking ? 1f : 0f);
+        new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01,
+            (Braking ? PoseBrake : 0) | (Headlights ? PoseHeadlights : 0) | (RoofOpen ? PoseRoof : 0));
+
+    private const int PoseBrake = 1, PoseHeadlights = 2, PoseRoof = 4;
 
     private float _remoteSpin;
 
@@ -496,7 +506,10 @@ public sealed class Car : Rideable, IEngined
         _remoteSpin += pose.Y * dt;
         rig.SteerAngle = pose.X;
         rig.WheelSpin = _remoteSpin;
-        rig.BrakeLights = pose.W > 0.5f;
+        int flags = Mathf.RoundToInt(pose.W);
+        rig.BrakeLights = (flags & PoseBrake) != 0;
+        rig.Headlights = (flags & PoseHeadlights) != 0;
+        rig.RoofOpen = (flags & PoseRoof) != 0;
         Rpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
     }
 
@@ -507,5 +520,7 @@ public sealed class Car : Rideable, IEngined
         rig.WheelSpin = WheelSpin;
         rig.BodyPitch = Mathf.Clamp(AccelX * 0.006f, -0.05f, 0.05f);
         rig.BrakeLights = Braking;
+        rig.Headlights = Headlights;
+        rig.RoofOpen = RoofOpen;
     }
 }

@@ -287,7 +287,7 @@ public partial class CombatManager : Node3D
         var (stream, pitch, db) = SfxSynth.GunBank.Pick(_rng);
         v.Stream = stream;
         v.PitchScale = pitch;
-        v.VolumeDb = db + Mathf.LinearToDb(Mathf.Max(0.01f, GameSettings.Current.SfxVolume)) - 4f;
+        v.VolumeDb = db - 4f;   // the slider is on the Sfx bus
         v.GlobalPosition = origin;
         v.Play();
     }

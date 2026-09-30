@@ -387,7 +387,7 @@ public partial class PlayerFeel : Node3D
     /// <summary>Eases a loop toward a linear volume and a pitch, so nothing jumps between frames.</summary>
     private static void SetLoop(AudioStreamPlayer p, float volume, float pitch)
     {
-        float target = volume * GameSettings.Current.SfxVolume;
+        float target = volume;   // the slider is on the Sfx bus
         float now = Mathf.DbToLinear(p.VolumeDb);
         float eased = Mathf.Lerp(now, target, 0.12f);
         p.VolumeDb = eased < 0.001f ? -80f : Mathf.LinearToDb(eased);
@@ -421,7 +421,7 @@ public partial class PlayerFeel : Node3D
 
     private void Play(AudioStream stream, float volume, float pitch)
     {
-        float v = volume * GameSettings.Current.SfxVolume;
+        float v = volume;   // the slider is on the Sfx bus
         if (v < 0.005f) return;
         var voice = _voices[_nextVoice];
         _nextVoice = (_nextVoice + 1) % _voices.Length;

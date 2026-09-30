@@ -66,6 +66,8 @@ public partial class SettingsMenu : PanelContainer
 
         ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on);
 
+        ToggleRow(rows, "Generated terrain", s.GeneratedFill, on => GameSettings.Current.GeneratedFill = on);
+
         Section(rows, "Display");
         OptionRow(rows, "Window", new[] { "Windowed", "Borderless fullscreen", "Fullscreen" }, (int)s.WindowMode,
             i => GameSettings.Current.WindowMode = (WindowMode)i);
@@ -105,6 +107,8 @@ public partial class SettingsMenu : PanelContainer
             i => GameSettings.Current.RideProfile = (RideProfile)i);
         ToggleRow(rows, "Tyre wear (cars)", s.TyreWear, on => GameSettings.Current.TyreWear = on);
         ToggleRow(rows, "Brake wear and fade (cars)", s.BrakeWear, on => GameSettings.Current.BrakeWear = on);
+        SliderRow(rows, "Master volume", 0, 1, 0.05, s.MasterVolume,
+            v => GameSettings.Current.MasterVolume = (float)v, v => v <= 0 ? "off" : $"{v * 100:F0} %");
         SliderRow(rows, "Sound effects", 0, 1, 0.05, s.SfxVolume,
             v => GameSettings.Current.SfxVolume = (float)v, v => v <= 0 ? "off" : $"{v * 100:F0} %");
         SliderRow(rows, "Ambience", 0, 1, 0.05, s.AmbienceVolume,

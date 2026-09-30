@@ -75,31 +75,27 @@ public partial class ClientWorld : Node3D
         var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
         var manifest = await source.LoadManifestAsync();
 
-        // A fresh clone has no terrain at all: the generated data is 5.3 GB and is not in the
-        // repository. That is not fatal. Until the preprocessor is run or a server is joined
-        // (which streams everything), a generated valley stands in around the spawn point, so
-        // there is something to walk, ride and fly over; real tiles replace it the moment they
-        // are available (ChunkManager.RetireFallback). The origin goes on the spawn point too,
-        // so the stand-in is not tens of kilometres out in float precision.
+        // Wherever there is no terrain data, it is generated (FallbackChunkSource) and blended
+        // into the real tiles beside it: round a partial region, and everywhere on a fresh clone,
+        // which has no terrain at all (the data is 5.3 GB and not in the repository). Real tiles
+        // take over tile by tile as they become available (ChunkManager.MergeAvailableTiles).
+        // The generator is anchored to the default spawn, not to wherever this run starts, so
+        // every client and the server generate the same world. With no local terrain the origin
+        // goes on the spawn point, so the ground is not tens of kilometres out in float precision.
         bool hasLocalTerrain = manifest.Tiles.Count > 0;
-        ProceduralWorld? generated = null;
-        WorldOrigin origin;
-        if (hasLocalTerrain)
-            origin = new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
-        else
-        {
-            var (spawnE, spawnN) = SpawnPoint.ParseTarget();
-            generated = new ProceduralWorld(spawnE, spawnN);
-            origin = new WorldOrigin(spawnE, spawnN);
-        }
+        var (startE, startN) = SpawnPoint.ParseTarget();
+        var generated = new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+        var origin = hasLocalTerrain
+            ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
+            : new WorldOrigin(startE, startN);
 
         _worldOrigin = origin;
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
 
         if (!hasLocalTerrain)
             GD.PushWarning(
-                "[world] no terrain data found, showing a generated stand-in world. Generate the "
-                + "real one with tools/TerrainPreprocessor, or join a server and it will stream in. "
+                "[world] no terrain data found, showing generated terrain. Generate the real one "
+                + "with tools/TerrainPreprocessor, or join a server and it will stream in. "
                 + "See the README.");
 
         var material = new ShaderMaterial
@@ -146,30 +142,28 @@ public partial class ClientWorld : Node3D
             source, TerrainPaths.FindChunkDir(), _streamer, TerrainPaths.FindCacheDir());
         _chunkSource = streamedSource;
 
-        // The generated stand-in answers only for its own tiles, and only until it is retired;
-        // it sits under the cache so a generated tile is not generated twice.
-        var fallback = generated != null ? new FallbackChunkSource(streamedSource, generated) : null;
+        // The generated fill answers for the tiles no real data exists for, above the network
+        // source so a client never asks a server for one, and under the cache so a generated tile
+        // is not generated twice. Built even when switched off, so the setting can turn it on.
+        var fallback = new FallbackChunkSource(streamedSource, generated, startE, startN,
+            GameSettings.Current.GeneratedFill) { Log = s => GD.Print(s) };
 
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
-        _cache = new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
+        _cache = new CachingChunkSource(fallback);
+        // the blend reads real neighbours through the cache, sharing what the loader decodes
+        fallback.Neighbours = _cache;
 
         _chunks = new ChunkManager { Name = "Terrain" };
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
-        if (fallback != null)
-        {
-            var cache = _cache;
-            _chunks.UseFallback(fallback.World.Tiles, retire: () =>
-            {
-                fallback.Active = false;
-                cache.Clear();
-                Occasions.OccasionTowns.UseGenerated(null);
-            });
-        }
-        // the towns occasion props go in: places.json, or the generated villages while they stand in
-        Occasions.OccasionTowns.UseGenerated(fallback?.World);
+        _chunks.UseFallback(fallback, _cache.Invalidate);
+        GameSettings.Changed += () => _chunks?.SetFallbackEnabled(GameSettings.Current.GeneratedFill);
+        // the towns occasion props go in: places.json's, plus the generated villages that stand
+        // on generated ground (re-read whenever real tiles replace some, below)
+        var fillChunks = _chunks;
+        Occasions.OccasionTowns.UseGenerated(generated, (e, n) => fillChunks.IsGenerated(UnitSport.Terrain.Format.TileId.FromLv95(e, n)));
 
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
@@ -181,9 +175,9 @@ public partial class ClientWorld : Node3D
         AddChild(new Audio.ReverbZones(() => GetViewport().GetCamera3D(), () => LocalPlayer?.Indoors == true, chunksForAudio)
             { Name = "ReverbZones" });
         _ambience = new Audio.Ambience(chunksForAudio, () => GetViewport().GetCamera3D())
-            { Name = "Ambience", Origin = origin, Volume = GameSettings.Current.AmbienceVolume };
+            { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
         AddChild(_ambience);
-        GameSettings.Changed += () => { if (_ambience != null) _ambience.Volume = GameSettings.Current.AmbienceVolume; };
+        GameSettings.Changed += () => { if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume); };
 
         // Vehicles left standing in the world. Same node path as on the server, so parking and
         // claiming work over the network; offline it just holds the nodes.
@@ -330,17 +324,25 @@ public partial class ClientWorld : Node3D
         var trees = new World.TreeColliders(_chunks, origin);
         AddChild(trees);
 
-        // Everything that kept what it read from the generated stand-in forgets it when real
-        // terrain replaces it. The player is put down again: the ground under them just went.
-        _chunks.TerrainReplaced += () =>
+        // Everything that kept what it read from tiles forgets it when the world under them
+        // changes: real terrain arriving where generated ground was, or a rebase. The player is
+        // put down again only if the ground under them is what went — this fires on every merge,
+        // and snapping someone mid-jump to the ground over a change 20 km away would be a bug.
+        _chunks.TerrainReplaced += affected =>
         {
             Audio.Surfaces.Forget();
             _ambience?.ForgetTiles();
             gathering.Forget();
             _traffic?.Forget();
             trees.Forget();
-            LocalPlayer?.RequestReplacement();
+            Occasions.OccasionTowns.Reload();
+            if (LocalPlayer is { } player
+                && (affected == null || affected(origin.TileAt(player.GlobalPosition))))
+                player.RequestReplacement();
         };
+
+        // says so when the ground in view is generated rather than surveyed
+        AddChild(new GeneratedTerrainNote(_chunks, origin));
         // "--inventory" opens the panel once the player exists, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--inventory") >= 0)
             GetTree().CreateTimer(1.5).Timeout += () => items.Ui.Open();
@@ -663,6 +665,7 @@ public partial class ClientWorld : Node3D
         var race = World.RaceManager.CreateClient();
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
+        if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
 
         _chatUi = ChatUi.Create(_chat);
         AddChild(_chatUi);
