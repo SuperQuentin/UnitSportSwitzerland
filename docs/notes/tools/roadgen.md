@@ -16,7 +16,8 @@
   raw input is refused (exit 3; `--skip-rewritten` leaves it, `--force` trims it twice). A fresh
   v1 tile is stashed into the raw dir first. The stage also stores each divided carriageway's
   direction (LaneGraph's partner rule, exact 3..30 m band instead of 30 m cells: 97.5 % get one
-  vs ~70 % at runtime) and applies the OSM overlay; it prints region stats (one-way, urban, OSM
+  vs ~70 % at runtime; Martigny-Sion: every one of the 109 motorway carriageways the runtime
+  rule orients on v2 is stored the same way, 616/619 over all divided roads) and applies the OSM overlay; it prints region stats (one-way, urban, OSM
   km, bytes per tile raw and deflated). `--compare-v2 V2DIR --chunks V3DIR` checks a v3 region
   against a v2 build: geometry, one-way agreement with the runtime inference, bytes.
   Old in-place `--rewrite` read neighbours it had already trimmed as halo context: 16 of 513

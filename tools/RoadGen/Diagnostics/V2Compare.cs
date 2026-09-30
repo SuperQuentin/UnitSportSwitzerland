@@ -64,6 +64,7 @@ public static class V2Compare
         // runtime inference on the v2 tiles, whole region at once
         var inferred = RuntimeOrient(v2Tiles, originE: 2582988, originN: 1113598);
         int total = 0, agree = 0, motorways = 0, motorwayAgree = 0, bothSet = 0, bothSetAgree = 0;
+        int motorwayRuntime = 0, motorwayRuntimeAgree = 0, storedOnly = 0;
         foreach (var (key, cls, oneWay) in inferred)
         {
             if (!stored.TryGetValue(key, out sbyte s)) continue;
@@ -71,10 +72,14 @@ public static class V2Compare
             if (s == oneWay) agree++;
             if (s != 0 && oneWay != 0) { bothSet++; if (s == oneWay) bothSetAgree++; }
             if (cls == RoadClass.Motorway) { motorways++; if (s == oneWay) motorwayAgree++; }
+            if (cls == RoadClass.Motorway && oneWay != 0) { motorwayRuntime++; if (s == oneWay) motorwayRuntimeAgree++; }
+            if (s != 0 && oneWay == 0) storedOnly++;
         }
         log(string.Create(c, $"one-way vs runtime inference on v2: {agree}/{total} divided carriageways agree ({100.0 * agree / Math.Max(1, total):F1}%), "
             + $"motorway {motorwayAgree}/{motorways} ({100.0 * motorwayAgree / Math.Max(1, motorways):F1}%), "
             + $"where both have a direction {bothSetAgree}/{bothSet} ({100.0 * bothSetAgree / Math.Max(1, bothSet):F1}%)"));
+        log(string.Create(c, $"  motorway carriageways the runtime oriented: {motorwayRuntimeAgree}/{motorwayRuntime} stored the same way "
+            + $"({100.0 * motorwayRuntimeAgree / Math.Max(1, motorwayRuntime):F1}%); stored where the runtime found no partner: {storedOnly}"));
         return sameGeometry == tiles ? 0 : 1;
     }
 
