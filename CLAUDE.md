@@ -1398,6 +1398,12 @@ Several people work on this repo in parallel, so every new feature follows these
 
 - **Networked nodes created in code need deterministic names** — auto names
   (`@MultiplayerSynchronizer@N`) differ per process and break replication by path.
+- **A menu that refuses to close must still CONSUME the key.** At boot the mode menu opens with no
+  mode running; `MainMenu._UnhandledInput` only closed when one was, and otherwise left Esc
+  unhandled — so the same event fell through to `ClientWorld._UnhandledInput`, whose Esc handler
+  re-opens the menu. Esc visibly did nothing and the menu could only be left with the mouse. With
+  nothing to resume, Esc / B now start Explore. Check: `<godot> --headless --path . -- --menucheck`
+  (boot menu, Esc, pad Start/B, Esc out of Settings; non-zero exit on the first failure).
 - **Never capture "the thing the player controls" at startup.** The teleport search held the
   spectator camera from `_Ready`, so in multiplayer — where you are an on-foot networked
   `FootPlayer` — Tab silently moved a camera that was not even current and nothing appeared to

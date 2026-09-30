@@ -319,6 +319,7 @@ public partial class ClientWorld : Node3D
         _menu.ModeChosen += EnterMode;
         _menu.QuitRequested += () => GetTree().Quit();
         AddChild(_menu);
+        if (MenuCheck.Requested()) AddChild(new MenuCheck(_menu));
 
         // "--settings" opens the settings panel straight away, for screenshotting it
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--settings") >= 0)
