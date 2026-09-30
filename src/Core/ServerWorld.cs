@@ -96,6 +96,8 @@ public partial class ServerWorld : Node3D
 
         // car races between players: World/Race, like World/Chat, so the RPCs find it
         var race = World.RaceManager.CreateServer(_chat, _players, source, origin);
+        // racers see each other however far apart the field spreads (Net/InterestService)
+        if (_interest != null) _interest.Together = race.SameRace;
         AddChild(race);
         _chat.Race = race;
 

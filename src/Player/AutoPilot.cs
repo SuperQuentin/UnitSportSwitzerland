@@ -327,4 +327,7 @@ public sealed class AutoPilot
     }
 
     private static float Wrap(float a) => Mathf.Wrap(a, -Mathf.Pi, Mathf.Pi);
+
+    /// <summary>A pilot for whatever the player is riding, or null when that class has none yet.</summary>
+    public static AutoPilot? For(RaceRoute route, FootPlayer player) => player.Vehicle is Car c ? new AutoPilot(route, player, c.Spec) : null;
 }
