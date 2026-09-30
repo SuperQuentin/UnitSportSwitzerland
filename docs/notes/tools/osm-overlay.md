@@ -3,8 +3,13 @@
 - **What**: optional build-time input for the road network stage (#115). OSM ways are conflated
   onto swissTLM3D road lines (`tlm_strassen_strasse`) and only their attributes are kept: one-way,
   lanes, width, sidewalks, cycleways, turn lanes, roundabout, tram. TLM geometry, heights,
-  bridges and tunnels are never touched. Nothing reads the file yet: without `--osm-overlay` (or
-  with no PBF) the build is exactly as before.
+  bridges and tunnels are never touched. The road network stage reads
+  `<temp>/osm_overlay.tsv` when it exists (`OsmOverlayReader`): per output segment it takes the
+  row overlapping its along-line interval most (>= half of it) and fills v3 one-way (only where
+  the divided-carriageway inference gave none), lanes, width, sidewalks (1.5 m), cycleways
+  (lane 1.5 m, track 2 m), roundabout, tram, and a placeholder Urban (sidewalk mapped, or
+  `highway` residential/living_street/pedestrian) until #119. Martigny-Sion: 32,808 of 38,386
+  road segments, 475 of 513 tiles flagged Osm. Without the file the build has no OSM data.
 - **Commands**:
   `TerrainPreprocessor --out <chunks> --tlm <gpkg> --osm-overlay <data>/osm/switzerland-YYMMDD.osm.pbf [--tiles-file f]`
   covers the manifest's tiles (or the tiles file) and writes `<chunks>_temp/osm_overlay.tsv` and

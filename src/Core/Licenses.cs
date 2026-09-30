@@ -27,7 +27,8 @@ public static class Licenses
             "https://opendata.swiss/en/terms-of-use#terms_by",
             "Source: Federal Roads Office FEDRO, cantons, SwitzerlandMobility Foundation"),
         new("OpenStreetMap",
-            "Optional: one-way streets, lanes, widths, sidewalks and cycleways on roads, when a region is built with the OSM layer",
+            "Optional: one-way streets, lanes, widths, sidewalks and cycleways on roads, when a region is built with the OSM layer. "
+            + "Road tiles built with it are a derived database under the ODbL and are provided on request",
             "Open Database License (ODbL) 1.0",
             "https://www.openstreetmap.org/copyright",
             "© OpenStreetMap contributors"),
