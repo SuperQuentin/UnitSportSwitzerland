@@ -91,14 +91,21 @@ public sealed class RaceLine
         }
         for (int i = 0; i < Points.Count; i++)
         {
-            // over ±8 m, like the drivers read it
-            var a = PointAt(Arc[i] - 8f); var b = Points[i]; var c = PointAt(Arc[i] + 8f);
-            var u = Flat(b - a); var v = Flat(c - b);
-            float k = u.LengthSquared() < 1f || v.LengthSquared() < 1f ? 0f
-                : Mathf.Atan2(u.Z * v.X - u.X * v.Z, u.X * v.X + u.Z * v.Z) / 16f;
-            Curvature.Add(k);
+            // over ±8 m, like the drivers read it — and over ±4 m, keeping whichever is sharper:
+            // RoadGen's junction gaps leave kinks of 15-20° in a few metres that the wider window
+            // smooths into a gentle bend, and the speed profile then arrives at them far too fast
+            float k8 = Bend(i, 8f), k4 = Bend(i, 4f);
+            Curvature.Add(Mathf.Abs(k4) > Mathf.Abs(k8) ? k4 : k8);
         }
         while (Room.Count < Points.Count) Room.Add(0f);
+    }
+
+    private float Bend(int i, float half)
+    {
+        var a = PointAt(Arc[i] - half); var b = Points[i]; var c = PointAt(Arc[i] + half);
+        var u = Flat(b - a); var v = Flat(c - b);
+        if (u.LengthSquared() < half * half * 0.25f || v.LengthSquared() < half * half * 0.25f) return 0f;
+        return Mathf.Atan2(u.Z * v.X - u.X * v.Z, u.X * v.X + u.Z * v.Z) / (2f * half);
     }
 
     public Vector3 PointAt(float s)
