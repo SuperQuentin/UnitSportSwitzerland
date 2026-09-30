@@ -23,6 +23,7 @@ public partial class ClientWorld : Node3D
     private GpxSession? _gpx;
     private PlaceSearchUi? _places;
     private RideUi? _rides;
+    private Vehicles.GarageUi? _garage;
     private MainMenu? _menu;
     private Teleporter? _teleporter;
     private ChatManager? _chat;
@@ -49,6 +50,11 @@ public partial class ClientWorld : Node3D
             if (Array.IndexOf(scArgs, "--driftcheck") >= 0)
             {
                 GetTree().Quit(Player.DriftCheck.Run());
+                return;
+            }
+            if (Array.IndexOf(scArgs, "--tuningcheck") >= 0)
+            {
+                GetTree().Quit(Player.GarageProbe.Check());
                 return;
             }
             if (Array.IndexOf(scArgs, "--motocheck") >= 0)
@@ -299,6 +305,14 @@ public partial class ClientWorld : Node3D
         _rides = RideUi.Create();
         _rides.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_rides);
+
+        // T in a stopped car at a garage: the tuning menu (GarageUi.GarageNear says where garages are)
+        Vehicles.GarageUi.GarageNear = pos =>
+            Interiors.DoorIndex.Nearest(pos, 8f, Terrain.Format.BuildingKind.Garage) != null;
+        _garage = Vehicles.GarageUi.Create();
+        _garage.ActivePlayer = () => _onFoot ? LocalPlayer : null;
+        AddChild(_garage);
+        if (Player.GarageProbe.ParseArgs() is { } garageRole) AddChild(new Player.GarageProbe(garageRole, () => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
@@ -782,6 +796,9 @@ public partial class ClientWorld : Node3D
             return;
         }
         if (_rides is { IsOpen: true }) return;
+
+        // T is also the fly camera: at a garage, in a stopped car, it tunes instead
+        if (@event.IsActionPressed(PlayerInput.Tune) && _garage?.TryOpen() == true) return;
 
         if (@event.IsActionPressed(PlayerInput.ToggleMode)) ToggleMode();
     }

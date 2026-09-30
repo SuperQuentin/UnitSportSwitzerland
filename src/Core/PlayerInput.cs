@@ -71,6 +71,10 @@ public partial class PlayerInput : Node
     public const string ToggleMode = "toggle_mode";
     public const string Teleport = "teleport";
     public const string Menu = "menu";
+    /// <summary>In a stopped car at a garage: open the tuning menu (<see cref="Vehicles.GarageUi"/>).</summary>
+    public const string Tune = "tune";
+    /// <summary>Open or shut a car door without getting in (on foot beside a parked car, or the driver's own at a standstill).</summary>
+    public const string CarDoor = "car_door";
 
     // --- items (on foot) ---
     public const string UseItem = "use_item";
@@ -234,6 +238,11 @@ public partial class PlayerInput : Node
         // keyboard-only rather than trapping a controller player in a field they cannot use.
         Bind(Teleport, Keys(Key.Tab));
         Bind(Menu, Keys(Key.Escape), Button(JoyButton.Start));
+        // Both share a key with something that cannot happen at the same moment: T drops to the
+        // fly camera except in a stopped car at a garage, and G / X gathers only as a HOLD, where
+        // a door is a tap beside a car.
+        Bind(Tune, Keys(Key.T), Button(JoyButton.DpadDown));
+        Bind(CarDoor, Keys(Key.G), Button(JoyButton.X));
 
         // Items are an on-foot thing, so they reuse the shoulders that only mean something
         // mounted (RB trick, LB boost). K and X are unused; E and I, the usual inventory keys,

@@ -1,28 +1,46 @@
-# Garage tuning (#56): garages and their doors
+# Garage tuning and car doors
 
-- **Data**: GWR GKLAS 1242 is `BuildingKind.Garage = 10` since `.bldg` v2 (same layout as v1,
-  decoders take both; `NetworkChunkSource` deletes and refetches a cached `.bldg` older than v2).
-  Riddes has 58. Rebuild: `--features-only --buildings <gpkg> --gwr <gwr data.sqlite>` — the GWR
-  must be the canton's (`gwr_vs` for Riddes); the VD file matches 0 of 1,159 buildings and
-  classifies everything Other. See `tools/gwr-classify-gklas-gkat`.
-- **Facade** (`BuildingMeshBuilder`, `ps1_building.gdshader`): blue-grey walls, no window grid, a
-  sign band over the door and a chequered band under the eave, both in `garage_neon` (magenta),
-  unlit and never darkened, day or night. Flags ride in UV2.y: 1 = neon face, 2 = garage wall
-  (then UV = metres along/up and UV2.x = eave height). Far off the chequer merges into one solid
-  neon line, which is what reads across the valley.
-- **The output is not sRGB-encoded**: a vertex colour goes through `SrgbToLinear` and is shown
-  as that linear value, so a "dark grey" 0.26 renders almost black. Pick building and prop
-  colours by what they render as (0.6 for a mid grey), not by their sRGB value.
-- **Roll-up door** (`src/Vehicles/GarageDoors.cs`, client only, created next to `OccasionDecor`
-  in `ClientWorld`): one `GarageDoor_<building index>` node per garage door, a child of the tile's
-  `ChunkNode` (unloads with it). `Leaf` = slatted door hung from the lintel, rolled up by
-  squashing its Y scale over 1 s; `Bay` = a few quads just in front of the wall behind it (tool
-  wall, red roll cab, neon tube) — the building has no hole. Opens while any `FootPlayer` whose
-  `Ride` is a car (local, remote or race NPC) is within 10 m in front of the doorway; checked
-  every 0.2 s. No RPC: every peer derives it from positions it already has.
-- **Door kind**: `DoorSpot.Kind` (set by `BuildingFootprint.ComputeDoors`) and
-  `DoorIndex.Entry.Kind`; `DoorIndex.Nearest(at, reach, BuildingKind.Garage)` finds a garage door.
-- Checks: `--ride car,2.2,test_output/garage_ride.png --at 2582988.73,1113598.81 --heading 311.3`
-  drives at a garage in Riddes and shoots the open door. Loopback (server 7801 + A with
-  `--raceauto --racestart 1500 --racenpc 2` + B on foot at the spawn): B saw GarageDoor_221 open
-  for A's remote cars and close after them.
+- **Tuning** (`Player/CarTuning`, `Vehicles/GarageUi`; #56). A car's garage parts are 15
+  independent slots (`TuneSlot`: tyres, wing, front/rear bumper, skirts, scoop, bonnet, paint,
+  two-tone lower, rim colour, rim size, ride height, tint, underglow, door style), 4 bits each in
+  one `long`. 0 in a slot is **Stock = the catalog look**, so 0 overall is the car as it came;
+  every car offers every slot. `CarTuning.Unpack` is the trust boundary: a slot past its options
+  decodes to Stock (`VehicleState.FromDict` and `CarTuning.Ride` both go through it).
+  `Car(spec, tuning)` keeps `Spec` = the tuned spec (`CarTuning.Apply`: same numbers, new
+  `CarBody`) and `Tyres` = the `TyreModel` that replaced the old `HandbrakeGrip`/tyre-C/sustain
+  consts. Free; the parts belong to the **car instance**: `FootPlayer.TuningBits` (replicated OnChange
+  beside `RideKindId`, so relays and late joiners get it) is reset by `ApplyRide` for any new car
+  (the picker, `SetRide`), kept by `EnterVehicle` from `VehicleState.Tuning`, and written back by
+  `CaptureVehicle` when parking. A wreck keeps its parts on the burnt shell but can never be
+  claimed again, so they are gone.
+- **Tyres**: Stock / Drift / Rally / Race / F1 slicks. Cars now get surface grip like the
+  motorbikes (`Motorbike.SurfaceGrip`; stock is a road tyre: 0.65 on gravel, 0.5 on grass) —
+  except race NPC cars, whose racing line assumes tarmac. `--tuningcheck` (pure numbers, Coupe 86,
+  Sim): tarmac peak 0.76 g Drift < 0.84 Rally < 0.92 Stock < 1.03 Race < 1.22 F1; gravel Rally
+  0.84 g vs ~0.6 for the rest; a Game drift held on 40% throttle averages 30° on Drift tyres, 20°
+  stock, 13° on slicks. Plus the wire form round-trip and clamp. `--driftcheck` is unchanged.
+- **Garage menu**: T / D-pad down in a stopped car (< 1 m/s) where `GarageUi.GarageNear(pos)`
+  says there is a garage opens it; `GarageUi.Open(player)` is the direct entry point.
+  `--tuning` allows it anywhere (tests, screenshots). Live preview (`FootPlayer.SetTuning`
+  rebuilds the car and its visual), Done / Revert / All stock, right-drag or right stick orbits
+  the chase camera all the way round (`FootPlayer.ShowroomYaw`). T keeps dropping to the fly
+  camera everywhere else.
+- **Doors** (`CarMeshBuilder.BuildDoor`, `CarRig.DoorsOpen`): the door panels and their windows
+  are their own meshes on hinge pivots `DoorL`/`DoorR` (+ `DoorRL`/`DoorRR` on a Sedan), with the
+  body behind them set in and dark. Styles Conventional (catalog default), Suicide, Scissor,
+  Butterfly, Gull-wing; a four-door's rear doors only swing out. Each eases 0.4 s to its pose.
+  Bits: 1 left, 2 right (**the driver's**: right-hand drive), 4/8 rear. G / pad X (`car_door`): on
+  foot, the nearest door of a parked car within 3 m; in a stopped car, the driver's own. Doors
+  shut themselves above 20 km/h. Getting in, the driver's door opens and shuts behind; getting
+  out, the car is parked with it open plus `VehicleState.DriverDoorShuts` (16), and its authority
+  shuts it 1 s later — unless the driver had left it open.
+- **Network**: `VehicleBody.DoorsOpen` is OnChange in its replication config; its authority (the
+  parker) flips it, anyone else asks `VehicleManager.RequestDoor`, which checks the asker's server
+  copy is within 3 m of the car's side and forwards to the authority (`DoorToggled`). **Gotcha**:
+  a value set in `_Ready` is taken by the synchronizer as the spawn state and only later CHANGES
+  are sent — a door opened in `_Ready` and shut a second later was never seen open by anyone.
+  Hence the door comes open in the spawn data instead.
+- Check (loopback, windowed so the rigs exist): dedicated server + `--garagecheck a` (owner: tune,
+  doors at a stop, park, G on foot, re-enter, drive off, change car, wreck), `b` (watches, works a
+  door of a's parked car through the server, screenshots) and `c` (late joiner), each
+  `--connect 127.0.0.1:<port> --cache <own dir> --at 2518038,1167321`; read the `[garage]` lines.

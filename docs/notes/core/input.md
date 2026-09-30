@@ -9,7 +9,8 @@
   left stick move/steer, right stick look (squared response, `StickSensitivity`/`InvertY`),
   A jump, B slide, L3 sprint (latched until the stick is released), RT/LT throttle/brake (analog
   straight into `RideInput`), X tuck/sprint, Y mount picker, R3 camera toggle, Start menu,
-  D-pad down fly/foot toggle. Menus call `PlayerInput.FocusFirst` on open so Godot's built-in
+  D-pad down fly/foot toggle (and `tune`, the garage menu, in a stopped car at a garage — T too),
+  G / X `car_door` (a tap at a car; G / X held is still gathering). Menus call `PlayerInput.FocusFirst` on open so Godot's built-in
   `ui_*` actions drive them with the D-pad, and `MainMenu` holds `UiFocus` while open or the
   stick navigating it would also walk the player. Tab (place search) stays keyboard-only: a pad
   can't type in it. The facade is the seam an OpenXR backend plugs into later.
