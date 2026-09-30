@@ -44,10 +44,11 @@ public partial class InterestService : Node
 
     /// <summary>
     /// Whether this client should send its own state to <paramref name="peer"/>: whether that peer
-    /// can see this client. Before the first audience arrives — and on servers without an
-    /// interest service — everyone is, which is exactly the old behaviour.
+    /// can see this client. Until the first audience arrives (half a second after joining) only
+    /// the server: nobody has spawned this player yet, and a packet for a node a peer does not
+    /// have is an error there ("Node not found .../Sync").
     /// </summary>
-    public bool SendsTo(long peer) => peer == 1 || _audience_ == null || _audience_.Contains(peer);
+    public bool SendsTo(long peer) => peer == 1 || (_audience_ != null && _audience_.Contains(peer));
 
     // ---- server side ----------------------------------------------------------------------
 
@@ -88,13 +89,25 @@ public partial class InterestService : Node
     /// most of them back is worse.
     /// </summary>
     public bool ServerSees(long viewer, long target) =>
-        viewer == 1 || viewer == target || (_sets.TryGetValue(viewer, out var set) && set.Contains(target));
+        viewer == 1 || viewer == target || (_sets.TryGetValue(viewer, out var set) && set.Contains(target))
+        || _leaving.ContainsKey((viewer, target));
+
+    /// <summary>
+    /// A target leaving a viewer's sight is despawned there a moment AFTER its owner hears the new
+    /// audience: despawn first and the owner's packets already in flight arrive for a node that is
+    /// gone ("Node not found .../Sync"). The owner stops sending within a round trip; this waits more.
+    /// </summary>
+    private const double DespawnDelay = 0.4;
+    private readonly Dictionary<(long Viewer, long Target), double> _leaving = new();
+    private readonly List<(long, long)> _expired = new();
 
     public void ForgetPeer(long peer)
     {
         _views.Remove(peer);
         _sets.Remove(peer);
         _audienceSent.Remove(peer);
+        foreach (var key in new List<(long, long)>(_leaving.Keys))
+            if (key.Item1 == peer || key.Item2 == peer) _leaving.Remove(key);
         foreach (var set in _sets.Values) set.Remove(peer);
         _flipped.Clear();   // cheap to rebuild; a stale pair would only delay one flip
     }
@@ -110,6 +123,16 @@ public partial class InterestService : Node
 
     private void Evaluate(double now)
     {
+        // despawns whose grace ran out (see DespawnDelay)
+        _expired.Clear();
+        foreach (var (pair, at) in _leaving) if (now >= at) _expired.Add(pair);
+        foreach (var (viewer, target) in _expired)
+        {
+            _leaving.Remove((viewer, target));
+            foreach (var child in Players!.GetChildren())
+                if (child is FootPlayer t && FootPlayer.NetOwner(t.Name) == target) t.RefreshNetVisibility(viewer);
+        }
+
         _scratch.Clear();
         foreach (var child in Players!.GetChildren())
             if (child is FootPlayer p && long.TryParse(p.Name, out long id))
@@ -139,7 +162,8 @@ public partial class InterestService : Node
                 // an edge case must not blink: each pair flips at most once a second
                 if (_flipped.TryGetValue((viewer, target), out double last) && now - last < MinFlipSeconds) continue;
                 _flipped[(viewer, target)] = now;
-                if (now_) set.Add(target); else set.Remove(target);
+                if (now_) { set.Add(target); _leaving.Remove((viewer, target)); }
+                else { set.Remove(target); _leaving[(viewer, target)] = now + DespawnDelay; }
                 _changed.Add(target);
             }
 
