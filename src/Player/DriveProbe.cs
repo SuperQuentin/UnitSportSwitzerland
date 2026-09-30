@@ -95,7 +95,7 @@ public partial class DriveProbe : Node
         /// <summary>Where it crashed out: the wreck stays on the road, and the others must go round it.</summary>
         public Vector3? Wreck;
         public int Drifts, Plans, Feasible, Impacts, Contacts;
-        public float BestDrift, OffRoad, Top;
+        public float BestDrift, OffRoad, Top, PeakBrake;
         public readonly StringBuilder Gpx = new();
         public double SinceFix;
         public float Arc;
@@ -222,6 +222,7 @@ public partial class DriveProbe : Node
             if (p.Out) continue;
             p.Arc = _line.Arc[p.D.Near];
             p.Top = Mathf.Max(p.Top, p.Player.Motion.Speed);
+            if (p.Car != null) p.PeakBrake = Mathf.Max(p.PeakBrake, p.Car.BrakeTemp);
             if (Off(p.Player.GlobalPosition) - HalfWidthAt(p.Player.GlobalPosition) > 1.5f) p.OffRoad += dt;
             if (p.FinishTime < 0 && p.Arc >= _finish) { p.FinishTime = _t; _log.Add($"{_t,5:F1}s {p.Spec.Label} FINISHES"); }
             if (p.Player.Ride != p.Spec.Kind)
@@ -691,7 +692,9 @@ public partial class DriveProbe : Node
             GD.Print($"[drive]   {pos}. {p.Spec.Label,-14} {(p.Spec.Style == DriveStyle.Grip ? "grip " : "drift")} {result,-14} "
                 + $"avg {(p.FinishTime >= 0 ? _finish : p.Arc) / Mathf.Max((float)(p.FinishTime >= 0 ? p.FinishTime : _t), 1f) * 3.6f:F0} km/h, top {p.Top * 3.6f:F0}, "
                 + $"{p.Drifts} held drifts (best {p.BestDrift:F0}°), {p.Plans} corners planned / {p.Feasible} feasible, "
-                + $"off road {p.OffRoad:F1} s, {p.Impacts} impacts, {p.Contacts / 60f:F1} s in contact");
+                + $"off road {p.OffRoad:F1} s, {p.Impacts} impacts, {p.Contacts / 60f:F1} s in contact"
+                + (Core.GameSettings.Current.TyreWear && p.Car != null ? $", tyres F {(1f - p.Car.TyreWearFront) * 100:F0}% R {(1f - p.Car.TyreWearRear) * 100:F0}%" : "")
+                + (Core.GameSettings.Current.BrakeWear && p.Car != null ? $", brakes peaked {p.PeakBrake:F0}°C, pads {(1f - p.Car.PadWear) * 100:F0}%" : ""));
             if (_record != null)
             {
                 p.Gpx.Append("</trkseg></trk></gpx>\n");

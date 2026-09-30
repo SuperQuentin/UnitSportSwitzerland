@@ -747,6 +747,8 @@ public partial class PlayerFeel : Node3D
                 + (ride == RideKind.Plane ? $"    {_player.Flight.Control * 100:0}%" : "")
                 : _player.Vehicle is Car c
                     ? $"{speed * 3.6f:0} km/h    {(c.Gear < 0 ? "R" : c.Gear.ToString())}    {c.Rpm:0} rpm"
+                      + (Core.GameSettings.Current.TyreWear ? $"    tyres F {(1f - c.TyreWearFront) * 100:0}% R {(1f - c.TyreWearRear) * 100:0}%" : "")
+                      + (Core.GameSettings.Current.BrakeWear ? $"    brakes {c.BrakeTemp:0}°C{(c.BrakeFactor < 0.95f ? " FADE" : "")}" : "")
                     : $"{speed * 3.6f:0} km/h";
 
         // the rev counter, amber turning red toward the limit
