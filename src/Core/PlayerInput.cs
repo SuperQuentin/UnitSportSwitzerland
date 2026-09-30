@@ -75,6 +75,10 @@ public partial class PlayerInput : Node
     public const string ToggleMode = "toggle_mode";
     public const string Teleport = "teleport";
     public const string Menu = "menu";
+    /// <summary>In a stopped car at a garage: open the tuning menu (<see cref="Vehicles.GarageUi"/>).</summary>
+    public const string Tune = "tune";
+    /// <summary>Open or shut a parked car's door without getting in (on foot beside it; never from the seat).</summary>
+    public const string CarDoor = "car_door";
     /// <summary>The travel picker (<see cref="Player.RideUi"/>): mounts, equipment and, for an admin, vehicles.</summary>
     public const string RideMenu = "ride_menu";
     /// <summary>The controls overlay (<see cref="ControlsHelp"/>), built from the live bindings.</summary>
@@ -264,6 +268,11 @@ public partial class PlayerInput : Node
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));
         Bind(Menu, Keys(Key.Escape), Button(JoyButton.Start));
+        // Both share a key with something that cannot happen at the same moment: T drops to the
+        // fly camera except in a stopped car at a garage, and G / X gathers only as a HOLD, where
+        // a door is a tap beside a car.
+        Bind(Tune, Keys(Key.T), Button(JoyButton.DpadDown));
+        Bind(CarDoor, Keys(Key.G), Button(JoyButton.X));
         Bind(Help, Keys(Key.F1));
 
         // Items are an on-foot thing, so they reuse the shoulders that only mean something

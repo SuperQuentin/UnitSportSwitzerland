@@ -150,9 +150,19 @@ public sealed record CarSpec
 /// </summary>
 public sealed class Car : Rideable, IEngined
 {
+    /// <summary>The car as tuned: the catalog's numbers under the garage's body (<see cref="CarTuning.Apply"/>).</summary>
     public CarSpec Spec { get; }
+    /// <summary>This car's garage parts. They belong to the car, not the player: a new car is Stock.</summary>
+    public CarTuning Tuning { get; }
+    /// <summary>The tyres on it, which replace the stock tyre curve, handbrake grip and throttle sustain.</summary>
+    public TyreModel Tyres { get; }
 
-    public Car(CarSpec spec) => Spec = spec;
+    public Car(CarSpec spec, CarTuning tuning = default)
+    {
+        Spec = tuning.Apply(spec);
+        Tuning = tuning;
+        Tyres = tuning.Tyres;
+    }
 
     public override RideKind Kind => Spec.Kind;
     public override string Label => Spec.Label;
@@ -179,8 +189,10 @@ public sealed class Car : Rideable, IEngined
     public override float BodyRadius => 0.85f;
     public override float BodyHeight => 1.7f;
     public override float DismountSpeed => 1.5f;
-    // measured from this model's own mesh (Rideable.Measured): an AE86 is not an NSX
-    public override (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual);
+    // measured from this model's own mesh (Rideable.Measured): an AE86 is not an NSX. Cached per
+    // model, so always its stock look with the doors shut: garage parts and an open door are not hull
+    public override (Vector3 Centre, Vector3 Size) ParkedBox =>
+        Measured(Kind, _ => CarRig.Create((CarCatalog.For(Kind) ?? Spec).Body, Spec.Wheelbase));
 
     // ---- what the feel layer and the rig read ----
     /// <summary>Engine speed, rpm.</summary>
@@ -253,8 +265,7 @@ public sealed class Car : Rideable, IEngined
     /// <summary>More for a front-driver, whose driven wheels pull it straight the moment the gas goes on.</summary>
     private const float ArcadeSustainFf = 0.55f;
     private const float ArcadePower = 1.35f, ArcadeGrip = 1.12f;
-    /// <summary>Rear side grip left while the handbrake locks them.</summary>
-    private const float HandbrakeGrip = 0.35f;
+    // rear side grip left under the handbrake: per tyre, TyreModel.Handbrake (stock 0.35)
     private const int Substeps = 4;
 
     private float _steer;   // eased steering input, −1..1
@@ -281,8 +292,9 @@ public sealed class Car : Rideable, IEngined
     {
         var s = Spec;
         bool arcade = Arcade;
-        float grip = s.Grip * (arcade ? ArcadeGrip : 1f);
-        float tyreC = arcade ? ArcadeTyreC : SimTyreC;
+        // the tyres on tarmac, and what the ground leaves of that off it (stock is a road tyre)
+        float grip = Motorbike.SurfaceGrip(ground.Surface, s.Grip * Tyres.Grip, Tyres.Offroad) * (arcade ? ArcadeGrip : 1f);
+        float tyreC = (arcade ? ArcadeTyreC : SimTyreC) * Tyres.CurveC;
 
         // planar state in the body frame: u forward, w to the left
         float u = motion.Speed * Mathf.Cos(motion.Slip);
@@ -398,12 +410,12 @@ public sealed class Car : Rideable, IEngined
                 * Mathf.Clamp((Mathf.Abs(alphaR) - 0.08f) / 0.08f, 0f, 1f));
             float latF = Mathf.Sqrt(Mathf.Max(capF * capF - fxF * fxF, 0.01f * capF * capF));
             float latR = Mathf.Sqrt(Mathf.Max(capR * capR - fxR * fxR, 0.01f * capR * capR));
-            if (input.Handbrake) latR *= HandbrakeGrip;
+            if (input.Handbrake) latR *= Tyres.Handbrake;
             // Game: once sideways, the gas keeps the rear sliding, whatever drives the wheels — so a
             // front-driver, a mid-engined car or a 90 hp roadster holds a drift on the throttle
             // exactly like the FR cars do. Sim leaves each car to its own layout and power.
             if (arcade)
-                latR *= 1f - (s.Drive == Drivetrain.Front ? ArcadeSustainFf : ArcadeSustain) * pedal
+                latR *= 1f - Mathf.Min(0.9f, (s.Drive == Drivetrain.Front ? ArcadeSustainFf : ArcadeSustain) * Tyres.Sustain) * pedal
                     // from 14°, not 7°: a bump in an ordinary bend reaches 7° and was tipping plain
                     // driving into a drift nobody asked for; a real drift passes 14° at once
                     * Mathf.Clamp((Mathf.Abs(slipNow) - 0.25f) / 0.2f, 0f, 1f);

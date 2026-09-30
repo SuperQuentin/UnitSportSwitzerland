@@ -120,6 +120,19 @@ public partial class VehicleManager : Node3D
         RpcId(1, MethodName.RequestClaim, vehicle.Name);
     }
 
+    /// <summary>
+    /// Opens or shuts one door of a parked car. Its authority (whoever parked it) does it at once;
+    /// anyone else asks the server, which checks they are standing at the car and passes it on.
+    /// </summary>
+    public void ToggleDoor(VehicleBody vehicle, byte bit)
+    {
+        if (vehicle.IsMultiplayerAuthority()) { vehicle.ToggleDoor(bit); return; }
+        if (Online) RpcId(1, MethodName.RequestDoor, vehicle.Name, bit);
+    }
+
+    /// <summary>How far from a car's side a player may be to work its doors, m.</summary>
+    public const float DoorReach = 3f;
+
     /// <summary>The nearest drivable vehicle within reach of a point, or null.</summary>
     public VehicleBody? Nearest(Vector3 point, float reach)
     {
@@ -192,6 +205,30 @@ public partial class VehicleManager : Node3D
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void ClaimRefused() => _pendingClaim = null;
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestDoor(string name, byte bit)
+    {
+        if (!Multiplayer.IsServer()) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car } vehicle) return;
+        // the server's copy of the asker: only someone standing at the car works its doors
+        var asker = GetTree().GetNodesInGroup(Player.FootPlayer.Group).OfType<Player.FootPlayer>()
+            .FirstOrDefault(p => p.Name == sender.ToString());
+        if (asker == null) return;
+        var gap = (asker.GlobalPosition - vehicle.GlobalPosition) with { Y = 0 };
+        if (gap.Length() - vehicle.Ride.ParkedBox.Size.X * 0.5f > DoorReach) return;
+        int authority = vehicle.GetMultiplayerAuthority();
+        if (authority == 1) vehicle.ToggleDoor(bit);
+        else RpcId(authority, MethodName.DoorToggled, name, bit);
+    }
+
+    /// <summary>On the car's authority: the server let someone else work one of its doors.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void DoorToggled(string name, byte bit)
+    {
+        if (GetNodeOrNull<VehicleBody>(name) is { } vehicle && vehicle.IsMultiplayerAuthority()) vehicle.ToggleDoor(bit);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void ParkRefused(string kind) =>

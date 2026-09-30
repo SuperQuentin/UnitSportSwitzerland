@@ -111,7 +111,7 @@ public static class LootTables
             ItemCategory.Mineral => 2f,
             _ => 1f,
         },
-        BuildingKind.Annex => c switch
+        BuildingKind.Annex or BuildingKind.Garage => c switch
         {
             ItemCategory.Food => 0f,
             ItemCategory.Water => 0.5f,
@@ -134,7 +134,7 @@ public static class LootTables
     private static float FrancsFactor(BuildingKind kind) => kind switch
     {
         BuildingKind.Commercial => 1.5f,
-        BuildingKind.UnderConstruction or BuildingKind.Annex => 0.3f,
+        BuildingKind.UnderConstruction or BuildingKind.Annex or BuildingKind.Garage => 0.3f,
         _ => 1f,
     };
 

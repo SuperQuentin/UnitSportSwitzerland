@@ -23,6 +23,13 @@ public enum BodyShape
 public enum WingSize { None, Lip, Small, Big, Gt }
 
 /// <summary>
+/// How the doors open: front-hinged and swinging out (every real car in the catalog), rear-hinged
+/// (suicide), up about the front hinge (scissor, the Lambo), up and out (butterfly), or up about
+/// the roof (gull-wing). A four-door's rear doors only ever swing out, front- or rear-hinged.
+/// </summary>
+public enum DoorStyle { Conventional, Suicide, Scissor, Butterfly, GullWing }
+
+/// <summary>
 /// Everything a <see cref="CarRig"/> needs to draw one car: shape, real dimensions and livery.
 /// Lengths in metres; colours authored in sRGB like every palette here.
 /// </summary>
@@ -42,11 +49,29 @@ public sealed record CarBody
     public bool PopUps { get; init; }
     public WingSize Wing { get; init; }
     public bool Scoop { get; init; }
+
+    // ---- garage parts (Player/CarTuning); the defaults are the catalog look ----
+    /// <summary>Under the front bumper: 0 nothing, 1 a lip, 2 a splitter.</summary>
+    public int FrontAero { get; init; }
+    public bool Diffuser { get; init; }
+    public bool Skirts { get; init; }
+    /// <summary>How much lower than stock the body sits, m; the wheels stay where they are.</summary>
+    public float Drop { get; init; }
+    /// <summary>Window glass. Null = the plain blue-grey glass.</summary>
+    public Color? Glass { get; init; }
+    /// <summary>Neon under the car. Null = none.</summary>
+    public Color? Underglow { get; init; }
+    public DoorStyle Doors { get; init; }
+    /// <summary>Bigger rims in the same rolling radius (a thinner sidewall): 0 stock, 1, 2.</summary>
+    public int RimSize { get; init; }
+    /// <summary>Wide, low racing slicks.</summary>
+    public bool Slicks { get; init; }
 }
 
 /// <summary>
-/// A drivable car's visual: body, four wheels that turn and steer, brake lights, headlights, and
-/// on the cars that have them a soft top that folds and pop-up headlights. Origin on the
+/// A drivable car's visual: body, four wheels that turn and steer, brake lights, headlights, doors
+/// on hinges that swing open (<see cref="DoorsOpen"/>), and on the cars that have them a soft top
+/// that folds and pop-up headlights. Origin on the
 /// ground under the middle of the wheelbase, facing −Z like every node (built +Z, turned by
 /// <see cref="MeshScratch.Build()"/>). The owner sets the properties; the rig applies them in
 /// <c>_Process</c>, the roof and the pods moving there over a moment rather than snapping —
@@ -61,6 +86,14 @@ public partial class CarRig : Node3D
     /// <summary>Body pitch, radians, + = nose up (squat under power, dive under braking is −).</summary>
     public float BodyPitch { get; set; }
     public bool BrakeLights { get; set; }
+    /// <summary>Which doors are open, one bit each (<see cref="DoorLeft"/> .. <see cref="DoorRearRight"/>); each eases there.</summary>
+    public byte DoorsOpen { get; set; }
+
+    public const byte DoorLeft = 1, DoorRight = 2, DoorRearLeft = 4, DoorRearRight = 8;
+    /// <summary>These are right-hand-drive cars: the driver gets in and out on the right.</summary>
+    public const byte DriverDoor = DoorRight;
+    /// <summary>Seconds for a door to swing fully open or shut.</summary>
+    private const float DoorTime = 0.4f;
     /// <summary>Headlights on. On a car with pop-ups this also raises them.</summary>
     public bool Headlights { get; set; }
     /// <summary>Soft top down (and side glass wound down). Nothing on a car with a fixed roof.</summary>
@@ -76,6 +109,9 @@ public partial class CarRig : Node3D
     private const float FoldedPod = 0.08f;
 
     private Node3D _body = null!;
+    private CarDoor[] _doors = System.Array.Empty<CarDoor>();
+    private Node3D[] _doorPivots = System.Array.Empty<Node3D>();
+    private float[] _doorOpen = System.Array.Empty<float>();
     private readonly Node3D[] _steer = new Node3D[4];   // FL, FR, RL, RR
     private readonly Node3D[] _spin = new Node3D[4];
     private StandardMaterial3D _tailMaterial = null!, _headMaterial = null!;
@@ -97,12 +133,32 @@ public partial class CarRig : Node3D
         _tailMaterial = TrafficMeshBuilder.LampMaterial();
 
         // pitch about the middle of the car at roughly the centre of mass height
-        _body = new Node3D { Name = "Body", Position = new Vector3(0, 0.5f, 0) };
+        // (lowered: the whole body drops, the wheels stay on the road)
+        _body = new Node3D { Name = "Body", Position = new Vector3(0, 0.5f - p.Drop, 0) };
         AddChild(_body);
         var offset = new Vector3(0, -0.5f, 0);
         _body.AddChild(new MeshInstance3D { Name = "Shell", Mesh = p.Body, MaterialOverride = body, Position = offset });
         _body.AddChild(new MeshInstance3D { Name = "Headlamps", Mesh = p.Head, MaterialOverride = _headMaterial, Position = offset });
         _body.AddChild(new MeshInstance3D { Name = "Taillamps", Mesh = p.Tail, MaterialOverride = _tailMaterial, Position = offset });
+        if (p.Glow is { } glow)
+            // the neon strip is in the lamp mesh; this is the pool of its colour on the road
+            _body.AddChild(new OmniLight3D
+            {
+                Name = "Underglow", LightColor = glow, LightEnergy = 1.5f, OmniRange = 2.6f,
+                Position = new Vector3(0, -0.3f, 0),
+            });
+
+        // each door on its own hinge, named like the wheels (deterministic, the same on every peer)
+        _doors = p.Doors;
+        _doorPivots = new Node3D[_doors.Length];
+        _doorOpen = new float[_doors.Length];
+        for (int i = 0; i < _doors.Length; i++)
+        {
+            var pivot = new Node3D { Name = _doors[i].Name, Position = _doors[i].Hinge + offset };
+            pivot.AddChild(new MeshInstance3D { Mesh = _doors[i].Mesh, MaterialOverride = body });
+            _body.AddChild(pivot);
+            _doorPivots[i] = pivot;
+        }
         if (p.Top is { } top)
         {
             _top = new MeshInstance3D { Name = "SoftTop", Mesh = top.Mesh, MaterialOverride = body, Position = top.Pivot + offset };
@@ -139,6 +195,18 @@ public partial class CarRig : Node3D
             _spin[i] = spin;
         }
         ApplyLamps();
+    }
+
+    /// <summary>The bit of the door whose middle is nearest a world point, and how far it is.</summary>
+    public (byte Bit, float Distance) NearestDoor(Vector3 point)
+    {
+        (byte Bit, float Distance) best = (0, float.MaxValue);
+        foreach (var door in _doors)
+        {
+            float dist = _body.ToGlobal(door.Centre + new Vector3(0, -0.5f, 0)).DistanceTo(point);
+            if (dist < best.Distance) best = (door.Bit, dist);
+        }
+        return best;
     }
 
     private void ApplyLamps()
@@ -181,6 +249,14 @@ public partial class CarRig : Node3D
         {
             _steer[i].Rotation = new Vector3(0, i < 2 ? SteerAngle : 0f, 0);   // + yaw turns −Z toward −X: left
             _spin[i].Rotation = new Vector3(-WheelSpin, 0, 0);                  // top edge moves toward −Z, forward
+        }
+        float step = (float)delta / DoorTime;
+        for (int i = 0; i < _doors.Length; i++)
+        {
+            float target = (DoorsOpen & _doors[i].Bit) != 0 ? 1f : 0f;
+            if (_doorOpen[i] == target) continue;
+            _doorOpen[i] = Mathf.MoveToward(_doorOpen[i], target, step);
+            _doorPivots[i].Quaternion = Quaternion.Identity.Slerp(_doors[i].Open, Mathf.SmoothStep(0f, 1f, _doorOpen[i]));
         }
         ApplyMovingParts((float)delta);
         ApplyLamps();
