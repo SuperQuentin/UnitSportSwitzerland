@@ -40,3 +40,4 @@
   and teleports 4 km → NPCs to B; B teleports too → retired, DNF.
 - Not solved here: a teleport across the course is accepted as a finish (every checkpoint on one
   segment), and a pilot's reset-to-line can bring a teleported racer back onto the course.
+- **#85 check** (`--npcwatch prefix[,before,after]`, `World/NpcWatch`, windowed B): chase-films the first NPC and saves the frames around its simulator change, logs `JUMP` where a drawn frame parts from velocity × dt. Found and fixed: silence was judged from the old simulator's last state, so the new one was "silent" a second after the handoff and both NPCs were retired mid-race; now it counts from the handoff too. Seen: the NPC stands still for the ~3 s before the handoff (A silent, by design), goes on at its speed after it, then drops to 0 within ~0.4 s and restarts (a visible stop, not a jump; not fixed). Pass `--title`.
