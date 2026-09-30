@@ -67,7 +67,9 @@ changed is how you get there.
   Solid only while shut. The facade still has its baked closed leaf, hidden by the tunnel mouth.
   The leaf hinges on the doorway frame's -X jamb, so the baked handle is on +X (`-t` along the
   facade in `AppendDoor`). The mouth (`OutsideQuadOffset`) stands in front of that handle;
-  otherwise the handle stays hanging in the open doorway.
+  otherwise the handle stays hanging in the open doorway. The leaf carries the same handle on its
+  street face and the facade's leaf colour (`BuildingFootprint.DoorLeafColorFor`, the kind from
+  `InteriorLayout.DressedKind`), so the leaf seen swinging through the portal is the facade's door.
 - **Occupancy cues (G).** Buildings other players are in, except those with a door open near us:
   facade shader boxes (`ChunkManager.SetOccupancy`: more lit windows, figures behind the glass)
   and `BuildingSounds`: muffled steps, knocks and inner doors on the wall nearest the listener.

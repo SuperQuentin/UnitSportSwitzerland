@@ -69,7 +69,7 @@ public sealed class DoorLink
         var inward = placement.Basis * new Vector3(e.InX, 0, e.InZ);
         var inside = Frame(placement * new Vector3(e.X, 0, e.Z), -inward.Normalized());
 
-        var kind = layout.Type == BuildingType.Church ? BuildingKind.Sacral : layout.Kind;
+        var kind = layout.DressedKind();
         var (width, top) = layout.OpeningOf(e);
         return new DoorLink
         {
