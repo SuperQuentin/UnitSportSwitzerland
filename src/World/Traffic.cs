@@ -282,7 +282,10 @@ public partial class Traffic : Node3D
         {
             var d = o - pos;
             float along = d.Dot(dir);
-            if (along < 0.5f || along > 30f || (d - dir * along).Length() > 2.6f) continue;
+            // in its lane, not merely on the road: yielding to anything within 2.6 m of its lane
+            // stopped it for a racer passing on the other half, the racer stopped for it, and the
+            // two waited for each other for good (#52)
+            if (along < 0.5f || along > 30f || (d - dir * along).Length() > 1.8f) continue;
             target = Mathf.Min(target, Mathf.Max(0f, (along - 6f) * 0.7f));
         }
 

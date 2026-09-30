@@ -196,7 +196,7 @@ public partial class DriveProbe : Node
                     entry.Impacts++;
                     string what = HitKind(player);
                     entry.Hits[what] = entry.Hits.GetValueOrDefault(what) + 1;
-                    _log.Add($"{_t,5:F1}s {label}: impact ({what}) at {entry.Arc:F0} m ({entry.Player.Motion.Speed * 3.6f:F0} km/h)");
+                    _log.Add($"{_t,5:F1}s {label}: impact ({what}) at {entry.Arc:F0} m ({entry.Player.Motion.Speed * 3.6f:F0} km/h){(entry.Pilot?.Seen is { Length: > 0 } seen ? $" — saw {seen}" : "")}");
                 };
                 player.Announced += (text, _) => _log.Add($"{_t,5:F1}s {label}: {text}");
                 _entries.Add(entry);
