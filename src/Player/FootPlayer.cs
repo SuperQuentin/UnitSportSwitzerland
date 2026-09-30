@@ -529,8 +529,7 @@ public partial class FootPlayer : CharacterBody3D
         GlobalPosition = at;
         _viewYaw = yaw;
         Rotation = new Vector3(0, yaw, 0);
-        _lastSafe = at;
-        _hasSafe = true;
+        RememberSafe(at);
     }
 
     /// <summary>
@@ -545,8 +544,7 @@ public partial class FootPlayer : CharacterBody3D
         Velocity = map * Velocity;
         _viewYaw += turn;
         Rotation = new Vector3(Rotation.X, Rotation.Y + turn, Rotation.Z);
-        _lastSafe = at;
-        _hasSafe = true;
+        RememberSafe(at);
         _pivotY = float.NaN;
     }
 
@@ -559,8 +557,7 @@ public partial class FootPlayer : CharacterBody3D
         GlobalPosition = p;
         _viewYaw = yaw;
         Rotation = new Vector3(0, yaw, 0);
-        _lastSafe = p;
-        _hasSafe = true;
+        RememberSafe(p);
     }
 
     /// <summary>Downward speed while mounted and airborne, for the ride landing.</summary>
@@ -659,6 +656,8 @@ public partial class FootPlayer : CharacterBody3D
     private const float EjectBlastCap = 55f;
     private Vector3 _lastSafe;
     private bool _hasSafe;
+    /// <summary>The space <see cref="_lastSafe"/> was recorded in: an interior key, or null outside.</summary>
+    private string? _safeSpace;
     private double _safeTimer;
     private float _deadTimer;
 
@@ -1887,10 +1886,23 @@ public partial class FootPlayer : CharacterBody3D
     private void Revive()
     {
         Health = MaxHealth;
-        if (_hasSafe) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
+        if (HasSafeHere) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
         Velocity = Vector3.Zero;
         RequestReplacement();
     }
+
+    private void RememberSafe(Vector3 at)
+    {
+        _lastSafe = at;
+        _hasSafe = true;
+        _safeSpace = InteriorKey;
+    }
+
+    /// <summary>
+    /// A safe spot in the space the player is in now: one recorded inside a house is not a place
+    /// to put someone who is outside (it is 3 km under the street), nor the reverse.
+    /// </summary>
+    private bool HasSafeHere => _hasSafe && _safeSpace == InteriorKey;
 
     /// <summary>Regeneration, the safe spot to wake up at, and the respawn countdown.</summary>
     private void TickHealth(float dt, bool onFloor)
@@ -1905,8 +1917,7 @@ public partial class FootPlayer : CharacterBody3D
             && Velocity.LengthSquared() < 40f)
         {
             _safeTimer = 0;
-            _lastSafe = GlobalPosition;
-            _hasSafe = true;
+            RememberSafe(GlobalPosition);
         }
 
         if (_deadTimer > 0)
@@ -2105,6 +2116,8 @@ public partial class FootPlayer : CharacterBody3D
             GlobalPosition = new Vector3(GlobalPosition.X, Mathf.Max(GlobalPosition.Y, g + 1f), GlobalPosition.Z);
             _placed = true;
         }
+        // before any path runs, so none of them (mantle, a thrown-out NPC) can skip it
+        if (RescueFromVoid(delta)) return;
 
         float dt = (float)delta;
         var velocity = Velocity;
@@ -2353,7 +2366,6 @@ public partial class FootPlayer : CharacterBody3D
 
         if (_thirdPerson) FaceTravel(dt, direction);
         UpdateCameraFeel(dt, running, onFloor);
-        ClampAboveTerrain(delta);
     }
 
     /// <summary>
@@ -2455,21 +2467,63 @@ public partial class FootPlayer : CharacterBody3D
         Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, target, 1f - Mathf.Exp(-rate * dt)), 0);
     }
 
-    /// <summary>Safety net: never end up under the terrain surface, on foot or mounted.</summary>
-    private void ClampAboveTerrain(double delta)
-    {
-        if (Indoors || Terrain == null || !Terrain.TryGetHeight(GlobalPosition, out float ground)
-            || GlobalPosition.Y >= ground - 2f) return;
+    /// <summary>
+    /// Outdoors with no terrain height known here, below this nothing is ground: the lowest in
+    /// Switzerland is 193 m, and interiors are at <see cref="Interiors.InteriorManager.InteriorBaseY"/>.
+    /// </summary>
+    private const float VoidY = -500f;
+    /// <summary>This far under an interior's ground floor, the player has fallen through it.</summary>
+    private const float InteriorFallDepth = 10f;
 
+    /// <summary>
+    /// Safety net for a player who glitched through the world, on foot, mounted or flying:
+    /// <list type="bullet">
+    /// <item>outdoors, more than 2 m under the terrain: straight up onto it;</item>
+    /// <item>outdoors, far below any ground and no height known here (the tile has not streamed, or
+    /// there is no data): back to the last safe spot outside, or held here until the ground arrives;</item>
+    /// <item>indoors, under the interior's floor: back where they last stood in it.</item>
+    /// </list>
+    /// Every rescue is a teleport (<see cref="RequestReplacement"/>): stopped, no fall charged, and
+    /// put down on the ground by the placement pass. True when it moved the player.
+    /// </summary>
+    private bool RescueFromVoid(double delta)
+    {
         _sinceSnapWarning += delta;
+        Vector3 to;
+        if (Indoors)
+        {
+            if (GlobalPosition.Y > Interiors.InteriorManager.InteriorBaseY - InteriorFallDepth) return false;
+            if (HasSafeHere) to = _lastSafe + Vector3.Up * 0.5f;
+            else
+            {
+                // nowhere known in here: out to the street above, and down onto it
+                Interiors.InteriorManager.Instance?.Leave(this);
+                InteriorKey = null;
+                to = GlobalPosition with { Y = 0f };
+            }
+        }
+        else if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground))
+        {
+            if (GlobalPosition.Y >= ground - 2f) return false;
+            to = GlobalPosition with { Y = ground + 1f };
+        }
+        else
+        {
+            if (GlobalPosition.Y > VoidY) return false;
+            to = HasSafeHere ? _lastSafe + Vector3.Up * 0.5f : GlobalPosition with { Y = 0f };
+        }
+
         if (_sinceSnapWarning > 2)
         {
             _sinceSnapWarning = 0;
-            GD.Print($"[player] {Name} below terrain ({GlobalPosition.Y:F1} < {ground:F1}), snapping up");
+            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}");
         }
-        GlobalPosition = new Vector3(GlobalPosition.X, ground + 1f, GlobalPosition.Z);
-        Velocity = Vector3.Zero;
-        _motion.Speed = 0f;
+        RequestReplacement();
+        _flight.Velocity = Vector3.Zero;
+        GlobalPosition = to;
+        // indoors the placement pass stands down: this is where the player stays
+        if (Indoors) _placed = true;
+        return true;
     }
 
     /// <summary>
@@ -2561,7 +2615,6 @@ public partial class FootPlayer : CharacterBody3D
 
         if (_visual != null) flyer.Pose(_visual, _flight.Yaw, _flight);
         UpdateFlightCamera(dt, flyer);
-        ClampAboveTerrain(dt);
     }
 
     /// <summary>
@@ -2816,7 +2869,6 @@ public partial class FootPlayer : CharacterBody3D
         _rideWasOnFloor = nowOnFloor;
 
         UpdateRideCamera(dt);
-        ClampAboveTerrain(dt);
     }
 
     /// <summary>
