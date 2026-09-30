@@ -350,6 +350,7 @@ public partial class ClientWorld : Node3D
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null
+            || Items.PlacedProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
@@ -362,6 +363,7 @@ public partial class ClientWorld : Node3D
         _items = items;
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
+        if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
 
         // F1: every control, from the live bindings; bottom right: the ones that apply here
@@ -373,6 +375,11 @@ public partial class ClientWorld : Node3D
 
         // Scavenging: what the furniture in those interiors holds. Same node path as the server's,
         // which decides who gets what; offline this client does both.
+        // held-item events (shots, flashes) and placed objects (flags, photos): same node paths
+        // as the server's, which relays the first and owns the second; offline this client does both
+        Items.ItemEvents.Create(this, server: false);
+        Items.PlacedObjects.Create(this, origin, server: false);
+
         var loot = Loot.LootService.Create(this);
         loot.Items = items;
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
@@ -662,6 +669,7 @@ public partial class ClientWorld : Node3D
 
         var (spawnE, spawnN) = SpawnPoint.ParseTarget();
         _teleporter.TeleportTo(spawnE, spawnN, "spawn");
+        Items.PlacedObjects.Instance?.Reposition();
         _chatUi?.Append("Adopted the server's world; terrain will stream in.", ChatKind.System);
     }
 

@@ -29,7 +29,6 @@ public partial class ItemController : Node
     private readonly Inventory _inventory;
     private readonly WorldOrigin _origin;
     private InventoryUi _ui = null!;
-    private Node3D _placed = null!;
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
     private bool _forceAim;
@@ -63,8 +62,6 @@ public partial class ItemController : Node
     public override void _Ready()
     {
         Name = "Items";
-        _placed = new Node3D { Name = "PlacedFlags" };
-        AddChild(_placed);
         _sfx = new AudioStreamPlayer { Name = "Sfx", VolumeDb = -8f, Bus = SfxBus.Name };
         AddChild(_sfx);
         _ui = new InventoryUi(this) { Name = "InventoryUi" };
@@ -316,6 +313,9 @@ public partial class ItemController : Node
         _ui.Visible = true;
         _capturing = false;
         if (!IsInstanceValid(player)) return;
+        // the flash others see (and a light pulse here) — after the capture, not in it
+        var look = -player.Camera.GlobalTransform.Basis.Z;
+        ItemEvents.Instance?.Send(ItemEventKind.PhotoFlash, ItemEvents.MuzzleOf(player, look, 0.1f), look, path);
         Kick(player);
         Play(SfxSynth.Tick, 0.6f);
         _ui.Flash();
@@ -325,10 +325,12 @@ public partial class ItemController : Node
     /// <summary>
     /// Plants a flag where the view meets the ground, or — if the view meets a planted flag —
     /// takes it back. Placing only on ground flat enough to stand on: a flag is planted, not
-    /// stuck to a cliff.
+    /// stuck to a cliff. Planted flags are <see cref="PlacedObjects"/>: the server keeps and saves
+    /// them, so the flag leaves the pack at once and comes back if the server refuses.
     /// </summary>
     private void PlaceOrPickUpFlag(FootPlayer player, int slot)
     {
+        if (PlacedObjects.Instance is not { } placed) return;
         var camera = player.Camera;
         var from = camera.GlobalPosition;
         var forward = -camera.GlobalTransform.Basis.Z;
@@ -344,16 +346,25 @@ public partial class ItemController : Node
             return;
         }
 
-        if (hit["collider"].AsGodotObject() is Node node && node.IsInGroup(FlagGroup))
+        if (PlacedObjects.IdOf(hit["collider"].AsGodotObject() as Node) is long id
+            && placed.All.TryGetValue(id, out var existing) && existing.Kind == PlacedKind.Flag)
         {
-            if (_inventory.Add(ItemId.SwissFlag, 1) > 0)
+            if (_inventory.Room(ItemId.SwissFlag) < 1)
             {
                 _ui.Toast("No room in your pack.");
                 return;
             }
-            node.QueueFree();
-            Play(SfxSynth.Whoosh, 1.3f);
-            _ui.Toast("Flag picked up.");
+            placed.RequestRemove(id, r =>
+            {
+                if (!r.Ok)
+                {
+                    _ui.Toast($"Cannot pick it up: {r.Refused}");
+                    return;
+                }
+                if (_inventory.Add(ItemId.SwissFlag, 1) > 0) _ui.Toast("No room in your pack: the flag is lost.");
+                else _ui.Toast("Flag picked up.");
+                Play(SfxSynth.Whoosh, 1.3f);
+            });
             return;
         }
 
@@ -373,32 +384,19 @@ public partial class ItemController : Node
         // the cloth faces whoever planted it
         var toPlayer = (player.GlobalPosition - point) with { Y = 0 };
         float yaw = toPlayer.LengthSquared() > 1e-4f ? Mathf.Atan2(toPlayer.X, toPlayer.Z) : 0f;
-        _placed.AddChild(CreatePlantedFlag(new Transform3D(new Basis(Vector3.Up, yaw), point)));
-
         _inventory.TakeOne(slot);
         Kick(player);
-        Play(SfxSynth.Landing, 1.5f);
-        _ui.Toast("Flag planted.");
-    }
-
-    public const string FlagGroup = "planted_flag";
-
-    private static StaticBody3D CreatePlantedFlag(Transform3D at)
-    {
-        var body = new StaticBody3D { Name = "Flag", Transform = at };
-        body.AddToGroup(FlagGroup);
-        body.AddChild(new MeshInstance3D
+        placed.RequestPlace(PlacedKind.Flag, new Transform3D(new Basis(Vector3.Up, yaw), point), "", r =>
         {
-            Mesh = ItemDefs.PlantedFlagMesh(),
-            MaterialOverride = ItemDefs.Material,
+            if (!r.Ok)
+            {
+                _inventory.Add(ItemId.SwissFlag, 1);   // the server said no: the flag comes back
+                _ui.Toast($"Cannot plant it here: {r.Refused}");
+                return;
+            }
+            Play(SfxSynth.Landing, 1.5f);
+            _ui.Toast("Flag planted.");
         });
-        // pole-thin, so it is something to aim at for picking up rather than a wall to walk into
-        body.AddChild(new CollisionShape3D
-        {
-            Shape = new BoxShape3D { Size = new Vector3(0.12f, 1.9f, 0.12f) },
-            Position = new Vector3(0, 0.95f, 0),
-        });
-        return body;
     }
 
     /// <summary>LV95 position, altitude and compass heading — what a hiking GPS shows.</summary>

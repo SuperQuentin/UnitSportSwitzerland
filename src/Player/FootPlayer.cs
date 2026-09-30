@@ -696,6 +696,8 @@ public partial class FootPlayer : CharacterBody3D
     private CapsuleShape3D _capsule = null!;
     private CapsuleShape3D? _standProbe;
     private float _pitch;
+    /// <summary>The view's pitch (radians, + up), clamped as the mouse would; for probes that aim.</summary>
+    public float LookPitch { get => _pitch; set => _pitch = ClampPitch(value); }
     private bool _placed;
     private double _sinceSnapWarning = 99;
 

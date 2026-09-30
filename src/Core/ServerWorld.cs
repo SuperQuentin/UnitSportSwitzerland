@@ -23,6 +23,7 @@ public partial class ServerWorld : Node3D
     private ChunkStreamer? _streamer;
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
+    private Items.PlacedObjects? _placed;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
 
@@ -128,6 +129,12 @@ public partial class ServerWorld : Node3D
         // claimed cash, kept per player name on this server
         var bank = Items.Bank.Create(this, null, server: true);
         bank.NameOf = _chat.NameOfPeer;
+
+        // held-item events (a shot, a flash) are relayed through here; placed objects (planted
+        // flags, stuck photos) are owned, checked and saved here
+        Items.ItemEvents.Create(this, server: true);
+        _placed = Items.PlacedObjects.Create(this, origin, server: true);
+        _placed.NameOf = _chat.NameOfPeer;
         _chat.NameAssigned += bank.SendBalance;
 
         // a vehicle out of nothing is an admin's, or the one a race put you on (Core/Permissions)
@@ -236,6 +243,7 @@ public partial class ServerWorld : Node3D
             _chunks!.AddAnchor(player);
         _interiors?.SendTableTo(id);
         _occasions?.SendTo(id);
+        _placed?.SendTo(id);
     }
 
     private void OnPeerDisconnected(long id)
