@@ -19,7 +19,9 @@ public readonly record struct VehicleState(
     float Throttle,
     double SpawnedAt,
     long Owner = 0,
-    string Name = "")
+    string Name = "",
+    bool Headlights = false,
+    bool RoofOpen = false)
 {
     public Godot.Collections.Dictionary ToDict() => new()
     {
@@ -34,6 +36,8 @@ public readonly record struct VehicleState(
         ["at"] = SpawnedAt,
         ["owner"] = Owner,
         ["name"] = Name,
+        ["lights"] = Headlights,
+        ["roof"] = RoofOpen,
     };
 
     public static VehicleState FromDict(Godot.Collections.Dictionary d) => new(
@@ -47,7 +51,9 @@ public readonly record struct VehicleState(
         d["throttle"].AsSingle(),
         d["at"].AsDouble(),
         d["owner"].AsInt64(),
-        d["name"].AsString());
+        d["name"].AsString(),
+        d.TryGetValue("lights", out var lights) && lights.AsBool(),
+        d.TryGetValue("roof", out var roof) && roof.AsBool());
 
     public static double Now => Time.GetUnixTimeFromSystem();
 }

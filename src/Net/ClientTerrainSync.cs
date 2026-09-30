@@ -92,7 +92,7 @@ public sealed partial class ClientTerrainSync : Node
         }
 
         // The continuation above runs on the thread pool, and what follows moves the origin and
-        // (when the generated fallback world retires) frees nodes: main thread only.
+        // unloads tiles (real ones replacing generated ground): main thread only.
         int added = await OnMainThread(() => Adopt(manifest)).ConfigureAwait(false);
         if (added < 0) return;
         Synced = true;
@@ -125,14 +125,14 @@ public sealed partial class ClientTerrainSync : Node
         // A client with no terrain of its own has no world to contradict, so it adopts the
         // server's anchor instead of refusing. This is the fresh-clone path: the whole world then
         // streams in, and refusing here would make a clone with no data unable to play at all.
-        // A generated stand-in world counts as none — it is retired before the origin moves, so
-        // nothing placed against the old anchor survives the rebase.
-        bool noWorldOfOurOwn = _chunks.AvailableTileCount == 0
-            || (_chunks.FallbackActive && manifest.Tiles.Count > 0);
+        // Generated ground counts as none (AvailableTileCount is real tiles only) — everything
+        // built against the old origin is thrown away before it moves, and the generated fill,
+        // anchored in LV95 rather than to the origin, comes back identical round the server's.
+        bool noWorldOfOurOwn = _chunks.AvailableTileCount == 0;
         if ((de > 0.5 || dn > 0.5) && noWorldOfOurOwn)
         {
-            _chunks.RetireFallback();
-            _origin.Rebase(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
+            _chunks.ResetAll(() =>
+                _origin.Rebase(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N));
             de = dn = 0;
             Rebased?.Invoke();
         }

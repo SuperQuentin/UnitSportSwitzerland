@@ -26,10 +26,13 @@ godot --path .
 ```
 
 > **A fresh clone has no terrain data.** The generated chunks are 5.3 GB and the source
-> geodata 155 GB, so neither is in the repository. The game starts anyway, into a **generated
-> stand-in world**: an alpine valley with a river, a road, a railway, villages, farms, forest,
-> rock and snow, built around the spawn point so everything can be tried. It is only a
-> fallback; real terrain replaces it the moment you get some:
+> geodata 155 GB, so neither is in the repository. The game starts anyway, on **generated
+> terrain**: an alpine valley with a river, a road, a railway, villages, farms, forest, rock and
+> snow, so everything can be tried. Wherever there is no real terrain it is generated, and it
+> bends to meet the real tiles beside it, so a partial region is surrounded by land rather than
+> void (a small "generated terrain" note says which ground you are on; Settings → Generated
+> terrain or `--generated off` turns it off). Real terrain takes over tile by tile as you get
+> some:
 >
 > - **join a server** and the whole world streams in and is cached (see *Terrain streaming*);
 > - **generate it yourself** by downloading the swisstopo data and running the preprocessor

@@ -58,6 +58,10 @@ public partial class PlayerInput : Node
     public const string Boost = "boost";
     /// <summary>Guns, in an armed craft (plane, helicopter): <see cref="Combat.CombatManager"/>.</summary>
     public const string Fire = "fire";
+    /// <summary>In a car: headlights on/off, raising or folding pop-ups (<see cref="Player.Car.Headlights"/>).</summary>
+    public const string LightsToggle = "lights_toggle";
+    /// <summary>In an open car: soft top down/up (<see cref="Player.Car.RoofOpen"/>).</summary>
+    public const string RoofToggle = "roof_toggle";
 
     // --- free-fly camera ---
     public const string FlyUp = "fly_up";
@@ -221,6 +225,9 @@ public partial class PlayerInput : Node
         // Flying, the mouse button and RB mean nothing else: items are on foot only, and tricks
         // and boost belong to the ground mounts.
         Bind(Fire, Mouse(MouseButton.Left), Button(JoyButton.RightShoulder));
+        // The car's switches borrow the D-pad sides, which only mean something on foot (items).
+        Bind(LightsToggle, Keys(Key.L), Button(JoyButton.DpadRight));
+        Bind(RoofToggle, Keys(Key.O), Button(JoyButton.DpadLeft));
 
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));

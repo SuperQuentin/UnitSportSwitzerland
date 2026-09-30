@@ -18,11 +18,12 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `far-horizon` — Far horizon: (`HorizonLayer`, `horizon.bin`, `tools/TerrainFormat/HorizonFormat.cs`): every tile decimated to a 100...
 - `stutter-main-thread-commit-problem` — Stutter is a main-thread commit problem, and every commit is now cheap
 - `build-cancellation` — Build cancellation: (`ChunkState.Cts`/`Generation`): every `source.Load*Async` gets the tile's token and the worker...
+- `generated-fill` — Generated fill: every tile with no real data is generated and blended into the real tiles beside it (ownership, anchor, blend, merge, horizon, server, off switch)
 - `cachingchunksource` — `CachingChunkSource`: decorates the source chain with a byte-budgeted LRU of decoded tiles, so ground that is left...
 
 ## Commands
 
-- `commands` — Commands: --builds, --fly, --horizon, --path, --probe, --rings, --shot
+- `commands` — Commands: --builds, --fly, --horizon, --path, --probe, --rings, --shot, BlendCheck, --generated
 
 ## Gotchas
 
@@ -42,5 +43,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `build-throws-release-tile` — A build that throws must release its tile: `PendingStride` is only cleared on commit, so an exception or a missing...
 - `commit-loop-gate-budget-result` — The commit loop must gate on the budget the result actually needs
 - `tile-loads-chains-unordered-concurrency` — Tile loads are CHAINS, and unordered concurrency starves them
-- `generated-fallback-world` — Generated fallback world: (`Terrain/ProceduralWorld`, `Terrain/FallbackChunkSource`): a client with no tiles at all...
 - `tile-worker-create-godot-object` — A tile worker must not create a Godot object after the engine starts tearing down
+- `blend-convex-not-additive` — Blend two terrains with a convex mix, never an additive correction: the additive one dug a trench 150 m below the Rhône
+- `judge-terrain-blend-shaded-relief` — Judge a terrain blend by shaded relief, and turn what the eye finds into a BlendCheck number
+- `saved-max-builds-one-looks-broken` — A saved `maxConcurrentBuilds: 1` makes the loader look broken: check settings.json, pass `--builds 0` to probes

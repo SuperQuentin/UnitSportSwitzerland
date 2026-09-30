@@ -200,11 +200,14 @@ public partial class MainMenu : CanvasLayer
             Input.MouseMode = Input.MouseModeEnum.Visible;
             PlayerInput.FocusFirst(_panel);
         }
-        if (!open) _jingle.Stop();
-        else if (Current is GameMode.Explore or GameMode.Multiplayer)
+        else
         {
-            // hand the pointer back to the fly camera / player controller
-            MouseCapture.Capture();
+            _jingle.Stop();
+            if (Current is GameMode.Explore or GameMode.Multiplayer)
+            {
+                // hand the pointer back to the fly camera / player controller
+                MouseCapture.Capture();
+            }
         }
     }
 
