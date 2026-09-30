@@ -240,7 +240,7 @@ public partial class CombatManager : Node3D
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
         if (interest == null) { Rpc(MethodName.Shot, muzzle, vel); return; }
         foreach (int peer in Multiplayer.GetPeers())
-            if (peer != 1 && interest.Sees(peer)) RpcId(peer, MethodName.Shot, muzzle, vel);
+            if (peer != 1 && interest.SendsTo(peer)) RpcId(peer, MethodName.Shot, muzzle, vel);
     }
 
     /// <summary>

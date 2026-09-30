@@ -8,7 +8,10 @@
   (`Together`); hysteresis ×1.15 and at most one flip per pair per second. A newcomer sees nobody
   until its first round (0.5 s) instead of being sent everyone and having most taken back.
 - **Two synchronizers per player.** `Sync` (owner authority) carries the data; its filter sends
-  only to the owner's set, which the server RPCs to it (`SetRelevant`). `Vis` (server authority,
+  only to the owner's **audience** — the peers that can see it — which the server RPCs to it
+  (`SetAudience`). NOT the peers it can see: visibility is asymmetric (a plane is seen 8 km away,
+  a walker 0.9 km), and sending by "whom I see" left a plane spawned on a walker's screen and never
+  updated — found by the load test as a remote plane frozen at 1.5 km. `Vis` (server authority,
   EMPTY config) carries only the decision: **Godot consults only server-authority synchronizers
   for spawn visibility** (`SceneReplicationInterface::_update_spawn_visibility` skips the rest), so
   without it the server can never despawn a client-owned node. Out of view the node is despawned on

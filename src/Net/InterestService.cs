@@ -12,7 +12,7 @@ namespace UnitSport.Net;
 ///
 /// <para>
 /// The server decides, a couple of times a second, which players each client could actually see
-/// (<see cref="Interest"/>) and sends every client its set. Two things follow from that set:
+/// (<see cref="Interest"/>) and sends every client its audience. Two things follow from that set:
 /// the owner's synchronizer only sends its position to peers in their set, and the server's copy
 /// of the player is only visible — so only spawned — on those peers. Out of sight, a player is
 /// not merely hidden on your screen: its node does not exist there, so it costs no packets, no
@@ -37,17 +37,17 @@ public partial class InterestService : Node
 
     // ---- client side ----------------------------------------------------------------------
 
-    private HashSet<long>? _relevant;
+    private HashSet<long>? _audience_;
 
     /// <summary>Raised on a client when the server sends a new set.</summary>
     public event Action? Changed;
 
     /// <summary>
-    /// Whether this client should send its own state to <paramref name="peer"/>. Before the first
-    /// set arrives — and on servers without an interest service — everyone is relevant, which is
-    /// exactly the old behaviour.
+    /// Whether this client should send its own state to <paramref name="peer"/>: whether that peer
+    /// can see this client. Before the first audience arrives — and on servers without an
+    /// interest service — everyone is, which is exactly the old behaviour.
     /// </summary>
-    public bool Sees(long peer) => peer == 1 || _relevant == null || _relevant.Contains(peer);
+    public bool SendsTo(long peer) => peer == 1 || _audience_ == null || _audience_.Contains(peer);
 
     // ---- server side ----------------------------------------------------------------------
 
@@ -94,6 +94,7 @@ public partial class InterestService : Node
     {
         _views.Remove(peer);
         _sets.Remove(peer);
+        _audienceSent.Remove(peer);
         foreach (var set in _sets.Values) set.Remove(peer);
         _flipped.Clear();   // cheap to rebuild; a stale pair would only delay one flip
     }
@@ -142,17 +143,35 @@ public partial class InterestService : Node
                 _changed.Add(target);
             }
 
-            if (_changed.Count == 0 && !first) continue;
+            if (_changed.Count == 0) continue;
             // the server's copy of each changed target decides whether it exists on the viewer —
             // and so do the target's race NPCs, which are shown to whoever sees their owner
             foreach (var child in Players.GetChildren())
                 if (child is FootPlayer t && FootPlayer.NetOwner(t.Name) is long owner && _changed.Contains(owner))
                     t.RefreshNetVisibility(viewer);
-            var ids = new long[set.Count];
-            set.CopyTo(ids);
-            RpcId(viewer, MethodName.SetRelevant, ids);
+            foreach (var target in _changed) _dirty.Add(target);
         }
+
+        // Each client is told its AUDIENCE — who can see it — because that is whom it must send
+        // to. Not whom it can see: visibility is not symmetric. A plane is visible 8 km away, a
+        // walker 0.9 km; sending by "whom I see" left the plane spawned on a walker's screen and
+        // never updated (measured: a frozen remote plane at 1.5 km in the load test).
+        foreach (var (target, _) in _scratch)
+            if (!_audienceSent.Contains(target)) _dirty.Add(target);
+        foreach (var target in _dirty)
+        {
+            if (!_sets.ContainsKey(target)) continue;   // not a player (or gone)
+            _audience.Clear();
+            foreach (var (viewer, set) in _sets)
+                if (set.Contains(target)) _audience.Add(viewer);
+            RpcId(target, MethodName.SetAudience, _audience.ToArray());
+            _audienceSent.Add(target);
+        }
+        _dirty.Clear();
     }
+
+    private readonly HashSet<long> _dirty = new(), _audienceSent = new();
+    private readonly List<long> _audience = new();
 
     private bool LineOfSight(Vector3 eye, Vector3 target) => Interest.Clear(eye, target, Ground!);
 
@@ -172,9 +191,9 @@ public partial class InterestService : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void SetRelevant(long[] peers)
+    private void SetAudience(long[] peers)
     {
-        _relevant = new HashSet<long>(peers);
+        _audience_ = new HashSet<long>(peers);
         Changed?.Invoke();
     }
 

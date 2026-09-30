@@ -681,7 +681,7 @@ public partial class FootPlayer : CharacterBody3D
         {
             sync.AddVisibilityFilter(Callable.From((long peer) =>
                 peer == 1 || (Interiors.InteriorManager.Instance?.SameSpaceAsLocal(peer) != false
-                    && _interest?.Sees(peer) != false)));
+                    && _interest?.SendsTo(peer) != false)));
             if (_interest != null) _interest.Changed += OnInterestChanged;
         }
         AddChild(sync);
