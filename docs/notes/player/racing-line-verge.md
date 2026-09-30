@@ -8,15 +8,16 @@
   is margin 0), trunks from `.trees` (same radius as `TreeColliders`, 0.5 m clearance, within a car
   length along), walls, railways and watercourses from `.road`, water/wetland/glacier cover, building
   footprints. Each side is only as good as its worst neighbour within ±2 points (a car length). Any
-  missing data is margin 0. Beside a drop the line keeps a further 0.5 m inside the tarmac: with 0.3
-  a car's tracking error (S-bends, running in a pack, a drift) still put a wheel 0.25 m over. The speed profile takes a quarter of the grip off where the line runs on
+  missing data is margin 0. Beside a drop the line keeps a further 0.9 m inside the tarmac (#52; 0.3 then 0.5
+  still let a pack's tracking error put wheels over), and the pilot's `EdgeGuard` holds the body off
+  any blocked edge (`racecraft`). The speed profile takes a quarter of the grip off where the line runs on
   the verge. The survey runs off the main thread when a pilot is made (or before GO in `--drivecheck`)
   and swaps `route.Line` for the widened one (same point count, so indices stay valid).
   Mollendruz (8.4 km): 12.0 of 16.7 km of edge usable, blocked by Drop 4.3 km, Bank 0.3 km; the line
   uses it over ~490 m. **Trees never block it here: the preprocessor keeps trunks ≥ 2.5 m off a road
   edge**, beyond the 1.5 m counted. `AutoPilot.VergeMetres` / `VergeUnsafe` count metres driven with a
   wheel off the tarmac where the survey allowed it / did not (by reason); `--drivecheck` prints both.
-- Overtaking uses the same room: a pass is taken only where the rival's offset plus 2.1 m (a car and
-  0.3 m) fits inside tarmac + safe verge on that side, the line's own 0.3 m off the edge given up (2.4 m
-  never fit on a 6 m road, and the field ran as a train), never with oncoming traffic or something
-  stopped ahead, and only through bends wider than R 150 m.
+- Overtaking uses the same room: a pass is taken only where the rival's offset plus 2.0 m fits inside
+  tarmac + safe verge on that side, the line's own 0.3 m off the edge given up only where the verge
+  beyond is safe (never at a blocked edge), never with oncoming traffic or something stopped ahead;
+  on straights, or as a dive up the inside (`racecraft`).

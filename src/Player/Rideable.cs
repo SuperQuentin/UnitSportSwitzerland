@@ -58,7 +58,40 @@ public readonly record struct RideInput(float Throttle, float Brake, float Steer
 /// What the wheels are on (<see cref="Audio.Surfaces.At"/>: the road under them, else the cover).
 /// Only the motorbikes read it, for grip; the default is tarmac.
 /// </param>
-public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surface Surface = Audio.Surface.Asphalt);
+/// <param name="Draft">
+/// Share of the air drag taken away by a vehicle close ahead (slipstream, 0..<see cref="MaxDraft"/>);
+/// the cars and motorbikes read it. <see cref="DraftBehind"/> works it out.
+/// </param>
+public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surface Surface = Audio.Surface.Asphalt, float Draft = 0f)
+{
+    /// <summary>Drag taken away right behind another vehicle (2 m): a car in a tow loses 30-45%.</summary>
+    public const float MaxDraft = 0.45f;
+    /// <summary>The tow reaches this far back, m, and this far off the leader's axis, rad (±15°).</summary>
+    public const float DraftReach = 25f, DraftCone = 0.26f;
+
+    /// <summary>
+    /// The slipstream at <paramref name="me"/>, travelling along <paramref name="travel"/> (flat, unit):
+    /// the best of every vehicle between 2 and 25 m ahead within ±15° of the travel, level with it,
+    /// and going the same way at 10 m/s or more — falling off linearly with the gap. Positions and
+    /// velocities are what every peer has (a remote's replicated <c>WorldVelocity</c>).
+    /// </summary>
+    public static float DraftBehind(Vector3 me, Vector3 travel, IEnumerable<(Vector3 At, Vector3 Velocity)> others)
+    {
+        float best = 0f;
+        float cone = Mathf.Cos(DraftCone);
+        foreach (var (at, vel) in others)
+        {
+            var rel = at - me;
+            if (Mathf.Abs(rel.Y) > 3f) continue;
+            rel.Y = 0f;
+            float d = rel.Length();
+            if (d < 2f || d > DraftReach || rel.Dot(travel) < cone * d) continue;
+            if (vel.X * travel.X + vel.Z * travel.Z < 10f) continue;
+            best = Mathf.Max(best, MaxDraft * (1f - (d - 2f) / (DraftReach - 2f)));
+        }
+        return best;
+    }
+}
 
 /// <summary>
 /// The vehicle's own state between frames. Speed is a scalar along <see cref="Yaw"/> rather than
