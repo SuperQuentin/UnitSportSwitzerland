@@ -726,6 +726,8 @@ public partial class RaceManager : Node
         }
         if (r.Done) { ShowHud(null); return; }
         r.Clock += delta;
+        if (_auto && (int)r.Clock != (int)(r.Clock - delta) && (int)r.Clock % 2 == 0)   // a --raceauto trace every 2 s: where the pilot is, for the loopback check
+            GD.Print($"[race] (auto) t {r.Clock:F0} left {(r.Course.Air ? 0 : r.Course.Remaining(r.Next, me.GlobalPosition, r.StartArc)):F0} m, off {(r.Course.Air ? 0 : r.Course.Route!.Off(me.GlobalPosition)):F1}, {me.Motion.Speed * 3.6f:F0} km/h, ride {me.Ride}, next {r.Next}, walk {(me.WalkControls != null)}");
         Progress(r, me.GlobalPosition);
         _gates?.Highlight(r.Next);
         string left = $"{r.Course.Remaining(r.Next, me.GlobalPosition, r.StartArc):F0} m";

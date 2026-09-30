@@ -189,8 +189,10 @@ public sealed class AutoPilot
             // a lesser driver corners and brakes a little short of the car; an aggressive one brakes later
             Mount.Car => line.SpeedProfile(S, Rideable.Arcade, (S.Style == DriveStyle.Grip ? 0.64f : 0.6f) * Mathf.Lerp(0.94f, 1f, (Skill - 0.8f) / 0.2f),
                 0.85f * Mathf.Lerp(0.92f, 1f, (Skill - 0.8f) / 0.2f) + 0.04f * Aggression),
-            // v = √(g·R·tan φ): 80% of the lean it can hold, 85% of its brakes
-            Mount.Lean => line.SpeedProfile(0.8f * g * Mathf.Tan(_maxLean), _ => 0.85f * _brake),
+            // v = √(g·R·tan φ): 65% of the lean it can hold (measured upright on the flat: braking
+            // into a bend takes grip off the lean, and at 80% two R1s ran wide off a R 50 m bend at
+            // 93 km/h on full lock), 85% of its brakes
+            Mount.Lean => line.SpeedProfile(0.65f * g * Mathf.Tan(_maxLean), _ => 0.85f * _brake),
             // a runner corners on its feet at any speed it can run
             _ => line.SpeedProfile(0.6f * g, _ => 4f),
         };
@@ -245,7 +247,7 @@ public sealed class AutoPilot
         // each waiting for the other — measured: all six cars parked at 170 m for ten minutes):
         // put back on the line past it, the way a game unsticks a car
         _held = motion.Speed < 1f && !Finished ? _held + dt : 0f;
-        if (_held > 10f) { _held = 0f; ResetToLine("held up"); }
+        if (_held > 10f) { _held = 0f; ResetToLine($"held up ({(Seen.Length > 0 ? Seen : "nothing seen")})"); }
         var input = Policy(ref D, Player.GlobalPosition, motion, dt, live: true);
         FacingBack(dt, motion);
         // Past the line the route runs out a few tens of metres later: stay on the line and brake to
@@ -358,6 +360,13 @@ public sealed class AutoPilot
         var me = Player.GlobalPosition;
         float v = Player.Motion.Speed;
         var fwd = RaceRoute.Flat(new Basis(Vector3.Up, Player.Motion.Yaw + Player.Motion.Slip) * Vector3.Forward);
+        // at a crawl the direction of travel means nothing (a car on the grid turned across the
+        // road, one just out of a spin): "ahead" is along the road
+        if (v < 3f)
+        {
+            var tan = RaceRoute.Flat(line.PointAt(Arc + 2f) - line.PointAt(Arc - 2f));
+            if (tan.LengthSquared() > 0.1f) fwd = tan.Normalized();
+        }
         var (myLat, _) = Side(me);
         int ai = line.IndexAt(Arc + Mathf.Clamp(v * 0.7f, 7f, 70f));
         float lo = -RoomR(ai), hi = RoomL(ai);
@@ -624,7 +633,7 @@ public sealed class AutoPilot
         float slip = Wrap(m.Slip);
         while (d.Near < line.Points.Count - 2
                && RaceRoute.Flat(line.Points[d.Near + 1] - pos).Length() < RaceRoute.Flat(line.Points[d.Near] - pos).Length()) d.Near++;
-        float s0 = line.Arc[d.Near];
+        float s0 = Along(d.Near, pos);
 
         // steer the TRAVEL toward a point ahead on the line (plus any overtaking offset); ~0.7 s
         // ahead, and further at motorway speed, where 30 m is a third of a second and the hands saw
@@ -802,7 +811,11 @@ public sealed class AutoPilot
         var pos = Player.GlobalPosition;
         float v = m.Speed;
         Advance(pos);
-        float s0 = Arc;
+        // off the road and going nowhere (ran wide into a bank, a fence): put back on the line after
+        // 3 s — a rider has no reverse, and one sat 200 s in a field 100 m from the finish
+        _held = !Finished && v < 3f && Route.Off(pos) - Route.HalfWidthAt(pos) > 1.5f ? _held + dt : 0f;
+        if (_held > 3f) { _held = 0f; ResetToLine(); }
+        float s0 = Along(D.Near, pos);
         CountVerge(dt);
         var line = Route.Line;
         float look = Mathf.Clamp(v * 0.8f, 5f, 60f);
@@ -852,8 +865,24 @@ public sealed class AutoPilot
         if (!Go || Finished) return (Vector3.Zero, false);
         var pos = Player.GlobalPosition;
         Advance(pos);
-        var to = RaceRoute.Flat(Route.Line.PointAt(Arc + 4f) - pos);
+        var to = RaceRoute.Flat(Route.Line.PointAt(Along(D.Near, pos) + 4f) - pos);
         return (to.LengthSquared() > 0.01f ? to.Normalized() : Vector3.Zero, true);
+    }
+
+    /// <summary>
+    /// Metres along the line of <paramref name="pos"/>: the nearest point's arc plus the projection on
+    /// the segment after it. The point's arc alone stalls wherever the points are far apart (RoadGen's
+    /// bridged junctions leave gaps up to 18 m): a runner aimed "4 m past the nearest point" reached
+    /// that spot, was still nearest the same point, and stood there — both runners, 280 m from the line.
+    /// </summary>
+    private float Along(int near, Vector3 pos)
+    {
+        var line = Route.Line;
+        if (near >= line.Points.Count - 1) return line.Arc[near];
+        var seg = RaceRoute.Flat(line.Points[near + 1] - line.Points[near]);
+        float len = seg.Length();
+        if (len < 1e-3f) return line.Arc[near];
+        return line.Arc[near] + Mathf.Clamp(RaceRoute.Flat(pos - line.Points[near]).Dot(seg) / len, 0f, len);
     }
 
     private void Advance(Vector3 pos)
