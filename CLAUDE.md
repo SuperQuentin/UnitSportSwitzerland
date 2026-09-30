@@ -14,7 +14,7 @@ occasions, core, general. New knowledge goes in a new or existing note plus one 
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
-`headless-exit-139` (read the RESULT line), `godot-exe`, `graphify`.
+`headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional).
 
 ## Rules
 
@@ -36,8 +36,8 @@ occasions, core, general. New knowledge goes in a new or existing note plus one 
   (no args = offline). `<godot>` is `godot` on WSL; Windows path: `docs/notes/general/godot-exe.md`.
 - Area-specific commands and checks: the `commands` note of that area.
 
-## graphify
+## graphify (optional)
 
-Knowledge graph in `graphify-out/`. For codebase questions run `graphify query "<question>"` (or
-`graphify path "<A>" "<B>"`, `graphify explain "<concept>"`) before grepping; `graphify update .` after
-changing code. Details: `docs/notes/general/graphify.md`.
+Only if `graphify` is installed and `graphify-out/graph.json` exists locally (it is not in the repo):
+`graphify query "<question>"` can orient you before grepping. Otherwise search as usual. Details:
+`docs/notes/general/graphify.md`.
