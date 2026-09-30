@@ -65,6 +65,9 @@ changed is how you get there.
   drew the whole landscape 3 km above, behind the ceiling.
 - **Leaves.** `DoorLeaf`, one per entrance, in the interior node, swinging into the room.
   Solid only while shut. The facade still has its baked closed leaf, hidden by the tunnel mouth.
+  The leaf hinges on the doorway frame's -X jamb, so the baked handle is on +X (`-t` along the
+  facade in `AppendDoor`). The mouth (`OutsideQuadOffset`) stands in front of that handle;
+  otherwise the handle stays hanging in the open doorway.
 - **Occupancy cues (G).** Buildings other players are in, except those with a door open near us:
   facade shader boxes (`ChunkManager.SetOccupancy`: more lit windows, figures behind the glass)
   and `BuildingSounds`: muffled steps, knocks and inner doors on the wall nearest the listener.
