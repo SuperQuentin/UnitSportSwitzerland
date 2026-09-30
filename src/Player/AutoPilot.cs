@@ -42,8 +42,6 @@ public sealed class AutoPilot
     /// no more corners came out feasible and the cars left the road more often, so it stays.
     /// </summary>
     private const float HoldAngle = 0.52f;
-    /// <summary>Half the car's width for "is a wheel off the tarmac", m (the body capsule's radius).</summary>
-    private const float CarHalf = 0.85f;
 
     /// <summary>What is being driven, which decides the policy.</summary>
     public enum Mount { Car, Lean, Foot }
@@ -239,7 +237,8 @@ public sealed class AutoPilot
     {
         if (Finished) return;
         var (lat, i) = Side(Player.GlobalPosition);
-        float beyond = Mathf.Abs(lat) + CarHalf - Route.Width[i] * 0.5f;
+        // half the body: a car is its capsule (0.85 m), a rider far narrower
+        float beyond = Mathf.Abs(lat) + (Player.Vehicle?.BodyRadius ?? 0.32f) - Route.Width[i] * 0.5f;
         // a wheel or two over the edge; further out is an excursion, counted as off road elsewhere
         if (beyond < 0.1f || beyond > 1.6f) return;
         var line = Route.Line;
