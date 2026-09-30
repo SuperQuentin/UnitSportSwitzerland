@@ -15,7 +15,7 @@
   the low-speed kinematic blend must key on TOTAL speed (keyed on forward speed it zeroed the sideways
   speed at 70° of angle, 50 km/h gone in 0.3 s), and speed-scaled steering lock must lift in a slide or
   there is not enough counter-steer to catch anything. The chase camera swings ~55% toward the travel.
-  Known limits: the body is still the player capsule (radius 0.85 m), and there is no per-surface grip,
-  so the 4WD does not yet get its gravel advantage. Check: `<godot> --headless --path . -- --driftcheck
+  Known limits: the body is still the player capsule (radius 0.85 m); per-surface grip for cars came with
+  the presets (`car-setups`, #40). Check: `<godot> --headless --path . -- --driftcheck
   [--trace]` — flat ground, no world: launch, handbrake entry, 4 s hold, recovery for every car in both
   profiles; non-zero exit on a spin, no drift, or no recovery.

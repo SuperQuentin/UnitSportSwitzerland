@@ -60,7 +60,7 @@ public static class CarMeshBuilder
     private static readonly Color Cabin = new(0.14f, 0.13f, 0.13f);
     private static readonly Color Amber = new(1f, 0.6f, 0.12f);
 
-    private sealed record Dims(
+    internal sealed record Dims(
         float Length, float Width, float Roof, float Wheelbase, float WheelR, float TyreW, float Track,
         float Belt, float Hood, float Deck,
         float WsBase, float WsTop, float RgTop, float RgBase);
@@ -69,7 +69,7 @@ public static class CarMeshBuilder
     // values are the base and top of the windscreen and rear glass. Heights in metres. Derived
     // from the body's real length and height by per-shape proportions, measured off the three
     // hand-built originals (AE86 hatch, FD, GC8) and extended to the other shapes.
-    private static Dims For(CarBody b, float wheelbase)
+    internal static Dims For(CarBody b, float wheelbase)
     {
         float hl = b.Length * 0.5f, h = b.Height;
         // fractions of the half-length: windscreen base, windscreen top, rear glass top, rear glass base

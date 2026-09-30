@@ -117,6 +117,13 @@ public partial class FootPlayer : CharacterBody3D
     [Export] public int RideKindId { get; set; }
 
     /// <summary>
+    /// The preset on the car being driven (<see cref="CarSetups"/> id; 0 = stock, and 0 for anything
+    /// but a car). Replicated beside <see cref="RideKindId"/>, whose meaning it depends on, and reset
+    /// with it in <see cref="ApplyRide"/>; <see cref="SetCarSetup"/> changes it.
+    /// </summary>
+    [Export] public int CarSetupId { get; set; }
+
+    /// <summary>
     /// The garage parts on the car being driven (<see cref="CarTuning"/> bits; 0 = stock, and 0 for
     /// anything but a car). Replicated beside <see cref="RideKindId"/>, whose meaning it depends on,
     /// and reset with it in <see cref="ApplyRide"/>: a new car comes stock.
@@ -293,7 +300,7 @@ public partial class FootPlayer : CharacterBody3D
             Rotation = new Vector3(0, Rotation.Y, 0);
             if (kind != RideKind.OnFoot)
             {
-                ApplyRide(kind, NetVel, TuningBits);
+                ApplyRide(kind, NetVel, TuningBits, CarSetupId);
                 if (_ride is { IsVehicle: true } machine) { EngineOn = true; VehicleHealth = machine.MaxHealth; }
             }
             else { _ride = null; Velocity = NetVel; }
@@ -372,6 +379,7 @@ public partial class FootPlayer : CharacterBody3D
     private float _slipCam;
     private Node3D? _visual;
     private RideKind _visualKind = RideKind.OnFoot;
+    private int _visualSetup;
     private long _visualTuning;
     /// <summary>Owner: seconds until every door open while getting in (the driver's, any left open) shuts.</summary>
     private float _shutDriverIn;
@@ -825,6 +833,7 @@ public partial class FootPlayer : CharacterBody3D
         // What you are riding travels with where you are. Without it a remote client sees a
         // figure sprinting down a descent at 60 km/h in a running pose.
         replication.AddProperty(".:RideKindId");
+        replication.AddProperty(".:CarSetupId");
         replication.AddProperty(".:TuningBits");
         replication.AddProperty(".:DoorsOpen");
         replication.AddProperty(".:HeldItemId");
@@ -839,7 +848,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:TuningBits", ".:DoorsOpen", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -944,7 +953,7 @@ public partial class FootPlayer : CharacterBody3D
             Terrain?.AddAnchor(this, collision: true);
             SetProcessUnhandledInput(false);
             // spawned here after a handoff (#50): the spawn state put the mount in RideKindId, not under the body
-            if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, NetVel, TuningBits);
+            if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, NetVel, TuningBits, CarSetupId);
         }
         else if (IsMultiplayerAuthority())
         {
@@ -1010,14 +1019,15 @@ public partial class FootPlayer : CharacterBody3D
     private void RefreshVisual(bool force = false)
     {
         var kind = (RideKind)RideKindId;
-        // a car is redrawn when its garage parts change too (the garage's live preview, or a remote tune)
-        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning) return;
+        // a car is redrawn when its preset or garage parts change too (the garage's live preview, a remote tune)
+        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup) return;
 
         _visual?.QueueFree();
         _visual = null;
         _walker = null;
         HandLocal = null;
         _visualKind = kind;
+        _visualSetup = CarSetupId;
         _visualTuning = TuningBits;
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
 
@@ -1039,7 +1049,7 @@ public partial class FootPlayer : CharacterBody3D
         else
         {
             _walker = null;
-            _visual = (_ride ?? CarTuning.Ride(kind, TuningBits))?.BuildVisual(rider);
+            _visual = (_ride ?? CarSetups.Ride(kind, CarSetupId, TuningBits))?.BuildVisual(rider);
         }
 
         if (_visual != null)
@@ -1539,10 +1549,10 @@ public partial class FootPlayer : CharacterBody3D
         if (_sliding) EndSlide();
         GlobalPosition = state.Position;
         Rotation = new Vector3(0, state.Yaw, 0);
-        // the same car: its garage parts and whatever doors were left open come with it; the
+        // the same car: its preset, its garage parts and whatever doors were left open come with it; the
         // driver's door opens to let them in, and once seated every door shuts (and stays shut:
         // nobody drives with a door open, see TryToggleCarDoor)
-        ApplyRide(state.Kind, state.Velocity, state.Tuning);
+        ApplyRide(state.Kind, state.Velocity, state.Tuning, state.Setup);
         if (_ride is Car)
         {
             DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor);
@@ -1571,7 +1581,26 @@ public partial class FootPlayer : CharacterBody3D
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
-            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen);
+            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId);
+    }
+
+    /// <summary>
+    /// Puts a preset (<see cref="CarSetups"/>) on the car being driven, at a standstill: the car is
+    /// rebuilt from the catalog with it, garage parts, lights and roof kept. False when not in a car or moving.
+    /// </summary>
+    public bool SetCarSetup(int id)
+    {
+        id = CarSetups.Clamp(id);
+        if (_ride is not Car old || CarCatalog.For(old.Kind) is null) return false;
+        if (id == CarSetupId) return true;
+        if (GroundSpeed > 2f) return false;
+        var car = (Car)CarSetups.Ride(old.Kind, id, TuningBits)!;   // the garage parts stay on
+        car.Headlights = old.Headlights;
+        car.RoofOpen = old.RoofOpen;
+        _ride = car;
+        CarSetupId = id;
+        RefreshVisual();
+        return true;
     }
 
     /// <summary>
@@ -1581,7 +1610,7 @@ public partial class FootPlayer : CharacterBody3D
     public void SetTuning(CarTuning tuning)
     {
         if (_ride is not Car car || CarCatalog.For(car.Kind) is not { } stock) return;
-        _ride = new Car(stock, tuning);
+        _ride = new Car(CarSetups.For(CarSetupId).Apply(stock), tuning);   // over the preset (#40)
         TuningBits = tuning.Pack();
         RefreshVisual();
     }
@@ -1813,13 +1842,15 @@ public partial class FootPlayer : CharacterBody3D
     /// those for the picker; a base jump and a canopy opening call this directly mid-air.
     /// </summary>
     /// <param name="tuning">Garage parts, for a car taken back from the world; 0 (stock) for a new one.</param>
-    private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0)
+    /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
+    private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
-        _ride = CarTuning.Ride(kind, tuning);
+        _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         RideKindId = (int)kind;
         // the parts and the doors belong to one car: changing car (the picker), getting out or a
         // wreck leaves them with that car
         TuningBits = _ride is Car car ? car.Tuning.Pack() : 0;
+        CarSetupId = _ride is Car withSetup ? withSetup.Spec.SetupId : 0;
         DoorsOpen = 0;
         _shutDriverIn = 0f;
         ShowroomYaw = null;
@@ -2565,9 +2596,9 @@ public partial class FootPlayer : CharacterBody3D
             : 0f;
 
         // a motorbike's or a car's grip depends on what is under it (cached lookup: road, else cover).
-        // ponytail: not for race NPC cars — their racing line is planned on tarmac grip and may put
-        // two wheels on the verge; give them the lookup once RaceLine plans with it.
-        var surface = (_ride is Motorbike || _ride is Car && !Npc) && Terrain != null
+        // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
+        // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
+        var surface = (_ride is Motorbike || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike && _motion.Speed > 10f
