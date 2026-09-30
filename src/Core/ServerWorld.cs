@@ -75,6 +75,11 @@ public partial class ServerWorld : Node3D
         _chat = ChatManager.CreateServer(_registry, _players, origin, places);
         AddChild(_chat);
 
+        // car races between players: World/Race, like World/Chat, so the RPCs find it
+        var race = World.RaceManager.CreateServer(_chat, _players, source, origin);
+        AddChild(race);
+        _chat.Race = race;
+
         // The operator's own command line. This is how the first admin gets granted.
         AddChild(new ServerConsole(_chat));
 
