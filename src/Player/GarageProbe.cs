@@ -6,7 +6,8 @@ using UnitSport.Vehicles;
 namespace UnitSport.Player;
 
 /// <summary>
-/// <c>--garagecheck a|b|c</c> on a client connected to a loopback server: the garage parts and the
+/// <c>--garagecheck a|b|c</c> on a client connected to a loopback server (a with the server's
+/// <c>--admin-password</c> after its role, so it may park the car it conjured): the garage parts and the
 /// car doors, seen from the OTHER peers.
 ///
 /// <list type="bullet">
@@ -75,8 +76,26 @@ public partial class GarageProbe : Node
         else Watch(me);
     }
 
+    /// <summary>
+    /// <c>--garagecheck a &lt;password&gt;</c>: the server's <c>--admin-password</c>. Online only an
+    /// admin may leave a conjured car in the world (the <c>admin-only-spawning</c> note), and a
+    /// parks it to work its doors on foot and get back in.
+    /// </summary>
+    private static string? Password
+    {
+        get
+        {
+            var args = OS.GetCmdlineUserArgs();
+            int i = Array.IndexOf(args, "--garagecheck");
+            return i >= 0 && i + 2 < args.Length && !args[i + 2].StartsWith("--") ? args[i + 2] : null;
+        }
+    }
+
     private void Act(FootPlayer me, Func<double, bool> at)
     {
+        if (at(0.5) && Password is { } pw && GetTree().Root.FindChild(Net.ChatManager.NodeName, true, false) is Net.ChatManager chat)
+            chat.Send($"/login {pw}");
+        if (at(1.8)) Log($"admin: {Permissions.IsAdmin}");
         if (at(2)) Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
         if (at(3)) { me.SetTuning(Tuned); Log($"tuned: bits {me.TuningBits:X}"); }
         // the menu itself, on the tuned car, for a look

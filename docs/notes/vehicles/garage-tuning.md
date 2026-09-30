@@ -43,7 +43,7 @@
   a value set in `_Ready` is taken by the synchronizer as the spawn state and only later CHANGES
   are sent — a door opened in `_Ready` and shut a second later was never seen open by anyone.
   Hence the door comes open in the spawn data instead.
-- Check (loopback, windowed so the rigs exist): dedicated server + `--garagecheck a` (owner: tune,
+- Check (loopback, windowed so the rigs exist): dedicated server with `--admin-password <pw>` + `--garagecheck a <pw>` (owner, admin so it may park the car it conjured: tune,
   a door from the seat (refused), park, G on foot, re-enter (doors shut), drive off, change car, wreck), `b` (watches, works a
   door of a's parked car through the server, screenshots) and `c` (late joiner), each
   `--connect 127.0.0.1:<port> --cache <own dir> --at 2518038,1167321`; read the `[garage]` lines.
