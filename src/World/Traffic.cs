@@ -127,9 +127,28 @@ public partial class Traffic : Node3D
     private static bool IsRail(RoadSegment s) =>
         s.Class == RoadClass.Railway && (s.Flags & (RoadFlags.Disused | RoadFlags.Tramway)) == 0;
 
+    private int _epoch;
+
+    /// <summary>
+    /// Removes every car and train and forgets the lane graphs, for when the roads they were
+    /// built from are replaced (the generated fallback retiring). They rebuild on the next frame.
+    /// </summary>
+    public void Forget()
+    {
+        _epoch++;
+        foreach (var v in _cars) v.Free();
+        foreach (var v in _trains) v.Free();
+        _cars.Clear();
+        _trains.Clear();
+        _roads = _rails = null;
+        _builtAround = null;
+        _building = false;
+    }
+
     private void RebuildIfMoved(Vector3 focus)
     {
         if (_building || _chunks.Source is not { } source) return;
+        int epoch = _epoch;
         var (e, n) = _origin.ToLv95(focus);
         var here = TileId.FromLv95(e, n);
         if (_builtAround is { } b && b.E == here.E && b.N == here.N) return;
@@ -157,6 +176,7 @@ public partial class Traffic : Node3D
                 + $"carriageways oriented), {rails.Edges.Count} rail edges");
             Callable.From(() =>
             {
+                if (epoch != _epoch) return;   // built from the world that was replaced
                 _roads = roads;
                 _rails = rails;
                 _builtAround = here;
@@ -234,7 +254,7 @@ public partial class Traffic : Node3D
         bool van = _rng.NextDouble() < 0.18;
         var (body, lamps) = TrafficMeshBuilder.Car(TrafficMeshBuilder.Paints[_rng.Next(TrafficMeshBuilder.Paints.Length)], van);
         var v = new Vehicle(route, CruiseSpeed(edge.Class) * 0.8f, new[] { 0f },
-            new[] { Unit(body, lamps, van ? new Vector3(1.9f, 2.0f, 5f) : new Vector3(1.85f, 1.5f, 4.2f)) });
+            new[] { Unit(body, lamps) });
         AddVehicle(v);
         _cars.Add(v);
     }
@@ -323,7 +343,7 @@ public partial class Traffic : Node3D
             offsets[i] = length * 0.5f + i * gap;
             var (body, lamps) = TrafficMeshBuilder.Carriage(i == 0 ? new Color(0.78f, 0.1f, 0.1f) : paint,
                 i == 0 ? new Color(0.95f, 0.95f, 0.95f) : band, length, narrow, i == 0, i == count - 1);
-            units[i] = Unit(body, lamps, new Vector3(narrow ? 2.65f : 2.95f, 3.8f, length - 0.4f));
+            units[i] = Unit(body, lamps);
         }
         float speed = (edge.Flags & RoadFlags.RackRailway) != 0 ? 7f : narrow ? 16f : 30f;
         var v = new Vehicle(route, speed, offsets, units)
@@ -370,16 +390,17 @@ public partial class Traffic : Node3D
 
     // ---- bodies --------------------------------------------------------------------------
 
-    private Node3D Unit(ArrayMesh body, ArrayMesh lamps, Vector3 box)
+    /// <summary>
+    /// One solid unit. Its box is the mesh's own bounds: the hand-typed ones stood 15 cm over a
+    /// car, 20 cm over a van and 30 cm short of a carriage roof.
+    /// </summary>
+    private Node3D Unit(ArrayMesh body, ArrayMesh lamps)
     {
         var node = new AnimatableBody3D { SyncToPhysics = false };
         node.AddChild(new MeshInstance3D { Mesh = body, MaterialOverride = _bodyMaterial });
         node.AddChild(new MeshInstance3D { Mesh = lamps, MaterialOverride = _lampMaterial });
-        node.AddChild(new CollisionShape3D
-        {
-            Shape = new BoxShape3D { Size = box },
-            Position = new Vector3(0, box.Y * 0.5f + 0.1f, 0),
-        });
+        var box = body.GetAabb().Merge(lamps.GetAabb());
+        node.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = box.Size }, Position = box.GetCenter() });
         return node;
     }
 

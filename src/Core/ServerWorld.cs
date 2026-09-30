@@ -56,6 +56,9 @@ public partial class ServerWorld : Node3D
         _vehicles = Vehicles.VehicleManager.Create(this, null);
         _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
 
+        // gunfire: clients send their rounds here to be relayed; the server flies none of them
+        Combat.CombatManager.Create(this, null, server: true);
+
         // building interiors: planned here on first entry, stored under user://interiors, and
         // handed to everyone who walks in afterwards
         _interiors = Interiors.InteriorManager.Create(this, source, origin);

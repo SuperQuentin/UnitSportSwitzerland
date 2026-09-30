@@ -25,7 +25,9 @@ directly. Do not `@import` them here: imports load eagerly and defeat the split.
 | `src/Avatar/` (human, bike, aircraft meshes, gait) | `src/Avatar/CLAUDE.md` |
 | `src/Audio/` (synthesis, engines, ambience) | `src/Audio/CLAUDE.md` |
 | `src/Gpx/` (replay, cinema, lens, video export) | `src/Gpx/CLAUDE.md` |
-| `src/World/` (day/night, traffic) | `src/World/CLAUDE.md` |
+| `src/World/` (day/night, traffic, tree collision) | `src/World/CLAUDE.md` |
+| `src/Combat/` (aerial combat, tracers, drones) | `src/Combat/CLAUDE.md` |
+| `src/Birds/` (Swiss species, hunting, journal, bird strikes) | `src/Birds/CLAUDE.md` |
 | `src/Items/`, `src/Loot/` (inventory, loot, gathering) | `src/Items/CLAUDE.md`, `src/Loot/CLAUDE.md` |
 | `src/Core/` (modes, menu, input, settings, perf, teleport, spawn) | `src/Core/CLAUDE.md` |
 
@@ -105,3 +107,19 @@ More commands (preprocessing, `--shot`, `--fly`, `--ride`, `--probe`, replay fla
 - godot-ai MCP: `game_eval` needs `Engine.get_main_loop().root` (no bare `root`) and
   TAB indentation; `editor_manage monitors_get` reads the EDITOR process, not the game —
   use `Performance.get_monitor` inside `game_eval` for game metrics.
+
+## Checks
+
+- **Headless runs of several checks exit 139 (segfault) after printing their result** —
+  `--mantlecheck` on main does it too, so it predates the sync/hitbox work. Read the RESULT line,
+  or run them windowed (exit code 0).
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

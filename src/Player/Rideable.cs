@@ -14,6 +14,8 @@ public enum RideKind
     Paraglider = 5,
     Helicopter = 6,
     Plane = 7,
+    // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
+    // The next non-car mount is 64.
 }
 
 /// <summary>Controls as the vehicle sees them, already stripped of key bindings.</summary>
@@ -21,7 +23,8 @@ public enum RideKind
 /// <param name="Brake">0..1.</param>
 /// <param name="Steer">-1 left .. +1 right.</param>
 /// <param name="Effort">Shift: sprint on a bike, tuck on skis.</param>
-public readonly record struct RideInput(float Throttle, float Brake, float Steer, bool Effort);
+/// <param name="Handbrake">Space on a car (<see cref="Rideable.CanHop"/> false): locks the rear wheels.</param>
+public readonly record struct RideInput(float Throttle, float Brake, float Steer, bool Effort, bool Handbrake = false);
 
 /// <summary>
 /// The ground under the vehicle.
@@ -56,6 +59,13 @@ public struct RideMotion
 
     /// <summary>Yaw rate from the last step, rad/s. Read by the chase camera to trail the turn.</summary>
     public float YawRate;
+
+    /// <summary>
+    /// Direction of travel minus <see cref="Yaw"/>, radians, same sign as yaw (+ = travelling to
+    /// the left of where the nose points). Zero for everything that goes where it points; a
+    /// drifting car is the one thing that does not. π is reversing.
+    /// </summary>
+    public float Slip;
 }
 
 /// <summary>
@@ -105,6 +115,10 @@ public abstract class Rideable
     /// <summary>Chase camera offset behind and above the rider. Zero distance means first person.</summary>
     public virtual float ChaseDistance => 3.6f;
     public virtual float ChaseHeight => 1.45f;
+    /// <summary>Chase camera tilt, radians, negative looks down. A car's roof hides the road from a level camera behind it.</summary>
+    public virtual float ChasePitch => 0f;
+    /// <summary>How far the chase camera swings toward the direction of travel in a slide, 0..1.</summary>
+    public virtual float ChaseFollowsTravel => 0f;
 
     /// <summary>FOV at rest, and the speed at which it has widened to <see cref="MaxFov"/>.</summary>
     public virtual float BaseFov => 70f;
@@ -130,6 +144,9 @@ public abstract class Rideable
 
     public virtual float MaxHealth => 100f;
 
+    /// <summary>Space hops (bike, skis). False on a car, where Space is the handbrake.</summary>
+    public virtual bool CanHop => true;
+
     /// <summary>The mesh as it stands with nobody on it (a bike without its rider).</summary>
     public virtual Node3D BuildParkedVisual(int riderIndex) => BuildVisual(riderIndex);
 
@@ -137,14 +154,47 @@ public abstract class Rideable
     public virtual float BodyRadius => 0.32f;
     public virtual float BodyHeight => 1.78f;
 
-    /// <summary>Collision box of the vehicle standing empty in the world: centre and size, node space.</summary>
-    public virtual (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 0.8f, 0), new Vector3(0.6f, 1.6f, 1.6f));
+    /// <summary>
+    /// Collision box of the vehicle standing empty in the world: centre and size, node space.
+    /// Measured from the parked mesh by default, so it cannot drift from what is drawn — the
+    /// bike's hand-typed box was 1.1 m tall and centred 0.55 m up while the bike stands 1.0 m.
+    /// </summary>
+    public virtual (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual);
+
+    private static readonly System.Collections.Generic.Dictionary<RideKind, (Vector3, Vector3)> _measured = new();
+
+    /// <summary>
+    /// The bounds of a visual this mount builds, once per kind (a throwaway build, freed at once).
+    /// <paramref name="skip"/> names parts left out, such as a rotor disc nothing rests on.
+    /// </summary>
+    protected static (Vector3 Centre, Vector3 Size) Measured(RideKind kind, System.Func<int, Node3D> build, params string[] skip)
+    {
+        if (_measured.TryGetValue(kind, out var known)) return known;
+        var visual = build(1);
+        var box = Avatar.MeshBounds.Of(visual, skip);
+        visual.Free();
+        // nothing drawn (should not happen, meshes build headless too): the old generic box
+        var result = box.Size.LengthSquared() > 1e-4f ? (box.GetCenter(), box.Size) : (new Vector3(0, 0.8f, 0), new Vector3(0.6f, 1.6f, 1.6f));
+        return _measured[kind] = result;
+    }
 
     /// <summary>Advances speed, heading and lean by one physics step.</summary>
     public abstract void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion);
 
     /// <summary>Per-frame visual update — spinning cranks, and so on. Called on the render thread.</summary>
     public virtual void Animate(Node3D visual, in RideMotion motion, float dt) { }
+
+    // ---- what other players see ---------------------------------------------------------
+    // The visual's whole transform (lean, tricks, a craft's attitude) is replicated by FootPlayer
+    // as BodyPose. These two carry the moving PARTS: whatever drives them beyond that transform,
+    // packed into four floats the owner writes and every remote copy reads back. Cars: slip,
+    // steer angle, wheel spin, rpm.
+
+    /// <summary>On the rider's own peer, after <see cref="Animate"/>: the state remote copies need to animate the parts.</summary>
+    public virtual Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) => default;
+
+    /// <summary>On every other peer, each frame: animates the parts from what <see cref="WritePose"/> sent.</summary>
+    public virtual void AnimateRemote(Node3D visual, Vector4 pose, float dt) { }
 
     /// <summary>
     /// Gravity's component along the direction of travel, m/s². Negative when climbing.
@@ -215,6 +265,8 @@ public abstract class Rideable
     /// Add one here and to <see cref="Create"/> and it appears everywhere.
     /// </summary>
     /// <remarks>
+    /// Cars are not here either: there are dozens, and the picker lists <see cref="CarCatalog.All"/>
+    /// on a page of its own.
     /// The wingsuit and parachute are not here: nobody straps into a wingsuit on flat ground.
     /// They are a base jump — Jump while falling from height — see <c>FootPlayer</c>.
     /// </remarks>
@@ -239,6 +291,7 @@ public abstract class Rideable
         RideKind.Paraglider => new Canopy(paraglider: true),
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
+        _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ => null,
     };
 }

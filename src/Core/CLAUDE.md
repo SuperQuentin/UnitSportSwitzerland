@@ -102,8 +102,16 @@ Boot, game modes and menu, the input facade, settings, performance tools, telepo
   `ParkExploreAnchor` takes it off for the duration; `ToggleMode` (T) is now refused during replay,
   since swapping underneath it would both steal the camera and put the box back.
 - **Never default the world origin to LV95 0/0.** Switzerland is 2.6 million metres from
-  there, so float precision collapses the moment real data arrives. With no manifest,
-  `WorldOrigin.SwissDefault()` is used, and a client with zero tiles then *adopts* the
-  server's origin via `Rebase` rather than refusing the mismatch — refusing is right when two
-  populated worlds disagree, wrong when you have no world at all. Rebasing changes what every
-  world coordinate means, so `ClientWorld.RespawnAfterRebase` puts the player down again.
+  there, so float precision collapses the moment real data arrives. With no manifest the origin
+  is the spawn point (where the fallback world is built), and a client whose only world is
+  generated then *adopts* the server's origin via `Rebase` rather than refusing the mismatch —
+  refusing is right when two populated worlds disagree, wrong when you have no real world at all.
+  `FallbackActive` must be checked alongside `AvailableTileCount`, which counts generated tiles.
+  Rebasing changes what every world coordinate means, so `ClientWorld.RespawnAfterRebase` puts
+  the player down again.
+- **A menu that refuses to close must still CONSUME the key.** At boot the mode menu opens with no
+  mode running; `MainMenu._UnhandledInput` only closed when one was, and otherwise left Esc
+  unhandled — so the same event fell through to `ClientWorld._UnhandledInput`, whose Esc handler
+  re-opens the menu. Esc visibly did nothing and the menu could only be left with the mouse. With
+  nothing to resume, Esc / B now start Explore. Check: `<godot> --headless --path . -- --menucheck`
+  (boot menu, Esc, pad Start/B, Esc out of Settings; non-zero exit on the first failure).

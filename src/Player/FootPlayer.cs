@@ -124,6 +124,32 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     [Export] public int HeldItemId { get; set; }
 
+    // --- pose, replicated (see _Ready) ---
+    // Everything a remote copy draws comes from these three, written by the owner every frame.
+    // Before them a remote peer rebuilt the pose from the transform stream alone, so it never saw a
+    // lean, a trick, a bail, a craft's attitude, a spinning rotor, a turning crank, a slide or a
+    // jump, and each peer ran its own gait phase, so the feet did not match.
+
+    /// <summary>
+    /// The body visual's local transform: lean and bank, trick flips and spins, a bail, a craft's
+    /// attitude, the landing squash and a stunned figure lying flat — all of it, whatever computed
+    /// it, in one value the remote copy applies as-is rather than re-deriving.
+    /// </summary>
+    [Export] public Transform3D BodyPose { get; set; } = Transform3D.Identity;
+
+    /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/> or <see cref="PoseTucked"/>.</summary>
+    [Export] public int PoseKind { get; set; }
+
+    /// <summary>
+    /// On foot: (ground speed, gait phase). Mounted: whatever the <see cref="Rideable"/> writes in
+    /// <see cref="Rideable.WritePose"/> and reads back in <see cref="Rideable.AnimateRemote"/> —
+    /// cadence and crank angle for the bike, spool and throttle for a craft. A new mount that has
+    /// moving parts plugs in there and never touches the sync code.
+    /// </summary>
+    [Export] public Vector4 Anim { get; set; }
+
+    public const int PoseStride = 0, PoseAir = 1, PoseTucked = 2;
+
     /// <summary>
     /// The figure's right hand in this node's local space, or null when no figure is drawn
     /// (first person on foot, or mounted). Updated whenever the body mesh is posed.
@@ -146,15 +172,24 @@ public partial class FootPlayer : CharacterBody3D
 
     private Rideable? _ride;
     private RideMotion _motion;
+    private float _slipCam;
     private Node3D? _visual;
     private RideKind _visualKind = RideKind.OnFoot;
 
-    // --- remote figure animation ---
+    /// <summary>The replicated pose properties, in one place for the synchronizer and <c>--synccheck</c>.</summary>
+    public static readonly string[] PoseProperties = { ".:BodyPose", ".:PoseKind", ".:Anim" };
+
+    // --- figure animation ---
     private MeshInstance3D? _walker;
     private Avatar.HumanPalette _walkPalette = Avatar.HumanPalette.Default;
     private float _stridePhase;
-    private Vector3 _lastSeenPosition;
-    private float _seenSpeed;
+    /// <summary>Remote: the last replicated gait phase, so a fresh one is taken and a repeat integrated.</summary>
+    private float _seenPhase = float.NaN;
+    /// <summary>Owner: the stunned figure's lean toward the ground, eased.</summary>
+    private float _downRot;
+    /// <summary>Remote: a private instance of what the owner rides, for its <see cref="Rideable.AnimateRemote"/> state.</summary>
+    private Rideable? _remoteRide;
+    private Audio.EngineSynth? _remoteEngine;
 
     /// <summary>Free look while riding. Steering owns the body's yaw, so the eyes get their own.</summary>
     private float _lookYaw;
@@ -216,6 +251,9 @@ public partial class FootPlayer : CharacterBody3D
 
     /// <summary>What is being ridden, or null on foot. Read by the HUD and the picker.</summary>
     public RideKind Ride => (RideKind)RideKindId;
+
+    /// <summary>The drawn body — figure, machine or craft — or null in first person on foot.</summary>
+    public Node3D? Visual => _visual;
 
     /// <summary>Ground speed, m/s — for a speedometer, and for the trainer link later.</summary>
     public float RideSpeed => _motion.Speed;
@@ -318,6 +356,8 @@ public partial class FootPlayer : CharacterBody3D
     public void DebugLaunch(Vector3 position, Vector3 velocity)
     {
         GlobalPosition = position;
+        // placed by hand, so it need not wait for terrain under it (a probe over no terrain at all)
+        _placed = true;
         _flight.Velocity = velocity;
         Velocity = velocity;
         // pointed where it is going: a dive is a dive, not level flight with a sink rate
@@ -508,8 +548,16 @@ public partial class FootPlayer : CharacterBody3D
         Explosion.Blast -= OnBlast;
     }
 
+    /// <summary>
+    /// What the camera pull-in rays test: everything the body collides with except tree trunks.
+    /// A chase camera in a forest shoved into the rider's head by a trunk it can see past is
+    /// worse than a trunk briefly between lens and rider — the tree shader dissolves that anyway.
+    /// </summary>
+    private uint CameraMask => CollisionMask & ~World.TreeColliders.Layer;
+
     public override void _Ready()
     {
+        CollisionMask |= World.TreeColliders.Layer;   // trunks are solid (layer 2)
         // authority pushes its transform to everyone else (server relays)
         var replication = new SceneReplicationConfig();
         replication.AddProperty(".:position");
@@ -518,6 +566,7 @@ public partial class FootPlayer : CharacterBody3D
         // figure sprinting down a descent at 60 km/h in a running pose.
         replication.AddProperty(".:RideKindId");
         replication.AddProperty(".:HeldItemId");
+        foreach (var prop in PoseProperties) replication.AddProperty(prop);
         var sync = new MultiplayerSynchronizer
         {
             // deterministic name: replication matches nodes by path across peers, and
@@ -638,6 +687,8 @@ public partial class FootPlayer : CharacterBody3D
         {
             _visual.Name = "Body";
             AddChild(_visual);
+            // a machine is far bigger than the capsule it moves with; shots hit what is drawn
+            if (kind != RideKind.OnFoot) Hurtbox.Fit(_visual);
             // a craft's mesh is not authored level (the wingsuit is an upright figure); pose it
             // level for a remote copy, which only receives position and yaw
             if (_ride == null && Rideable.Create(kind) is Flyer remoteFlyer)
@@ -661,9 +712,14 @@ public partial class FootPlayer : CharacterBody3D
                 {
                     if (_ride is Flyer f) f.AnimateFlight(_visual, _flight, dt);
                     else _ride.Animate(_visual, _motion, dt);
+                    BodyPose = _visual.Transform;
+                    Anim = _ride.WritePose(_visual, _motion, _flight);
                 }
                 return;
             }
+
+            // published whatever the view: first person draws no body, but everyone else does
+            PublishFootPose(dt);
 
             // Render rate, not physics rate: the look has to answer the mouse the frame it
             // moves, the way rotating the body directly always did.
@@ -682,7 +738,7 @@ public partial class FootPlayer : CharacterBody3D
             else
             {
                 if (_walker != null) _walker.Visible = true;
-                AnimateLocalBody(dt);
+                ApplyFootPose();
                 UpdateThirdPersonCamera(dt);
             }
             return;
@@ -699,35 +755,59 @@ public partial class FootPlayer : CharacterBody3D
         if (!here) return;
 
         RefreshVisual();
-        AnimateRemoteWalk((float)delta);
+        AnimateRemote((float)delta);
     }
 
     /// <summary>
-    /// Walks the remote figure's legs at whatever speed it is actually covering ground.
-    ///
-    /// <para>
-    /// Speed is measured from the replicated position rather than sent: it is already implied by
-    /// the transform stream, and a second synchronised property would only give the two ways to
-    /// disagree. Smoothed, because that stream arrives at the network's rate rather than the
-    /// frame rate, so the raw difference is zero on most frames and a spike on the rest.
-    /// </para>
+    /// Draws a remote player from the pose its owner published, never from anything this peer
+    /// guesses. The gait phase is taken fresh whenever a new one arrives and only integrated in
+    /// between (updates come at the network's rate, not every frame), so the feet land when the
+    /// owner's do instead of on a phase this peer made up.
     /// </summary>
-    private void AnimateRemoteWalk(float dt)
+    private void AnimateRemote(float dt)
     {
-        if (_walker == null || dt <= 0) return;
+        if (dt <= 0) return;
+        var kind = (RideKind)RideKindId;
+        if (kind == RideKind.OnFoot)
+        {
+            if (Anim.Y != _seenPhase) _stridePhase = _seenPhase = Anim.Y;
+            else if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, Anim.X, dt);
+            ApplyFootPose();
+            SetRemoteEngine(null);
+            return;
+        }
+        if (_visual == null) return;
+        if (_remoteRide?.Kind != kind) _remoteRide = Rideable.Create(kind);
+        _visual.Transform = BodyPose;
+        _remoteRide?.AnimateRemote(_visual, Anim, dt);
+        SetRemoteEngine(_remoteRide as Flyer);
+    }
 
-        var here = GlobalPosition;
-        float measured = new Vector2(here.X - _lastSeenPosition.X, here.Z - _lastSeenPosition.Z)
-            .Length() / dt;
-        _lastSeenPosition = here;
-
-        // reject the teleport-sized jumps a respawn or a rebase produces
-        if (measured > 40f) measured = _seenSpeed;
-        _seenSpeed = Mathf.Lerp(_seenSpeed, measured, 1f - Mathf.Exp(-6f * dt));
-
-        _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, _seenSpeed, dt);
-        _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, _seenSpeed, _stridePhase);
-        PlaceHand(Avatar.HumanMeshBuilder.MountsFor(_seenSpeed, _stridePhase));
+    /// <summary>
+    /// Another player's helicopter or plane is heard where it is, from the spool and throttle it
+    /// publishes — the same sound a parked one makes (<c>VehicleBody</c>), driven like the pilot's own.
+    /// </summary>
+    private void SetRemoteEngine(Flyer? craft)
+    {
+        bool wanted = craft is { HasEngine: true } && DisplayServer.GetName() != "headless";
+        if (!wanted)
+        {
+            _remoteEngine?.QueueFree();
+            _remoteEngine = null;
+            return;
+        }
+        bool heli = craft is Helicopter;
+        var profile = heli ? Audio.EngineProfile.Turboshaft : Audio.EngineProfile.PistonAero;
+        if (_remoteEngine?.Profile != profile)
+        {
+            _remoteEngine?.QueueFree();
+            _remoteEngine = new Audio.EngineSynth(profile, spatial: true, seed: GetMultiplayerAuthority()) { Name = "RemoteEngine" };
+            AddChild(_remoteEngine);
+        }
+        float spool = Anim.X, control = Anim.Y;
+        if (heli) _remoteEngine.Set(spool, spool, 0.35f, 0.3f + 0.6f * spool);
+        else _remoteEngine.Set(Mathf.Clamp((spool - 0.15f) / 0.85f, 0f, 1f), control, control,
+            spool > 0.02f ? 0.35f + 0.45f * spool : 0f);
     }
 
     /// <summary>
@@ -743,45 +823,53 @@ public partial class FootPlayer : CharacterBody3D
     }
 
     /// <summary>
-    /// Poses the local on-foot body for third person: the solved gait while grounded, a
-    /// mid-stride leap in the air, and a crouch while sliding — the same figure and the same
-    /// gait remote players already see, so what you watch yourself do is what they see too.
+    /// The owner's on-foot pose, every frame and whatever the view: the solved gait grounded, a
+    /// mid-stride leap in the air, a crouch while sliding, the landing squash and a stunned figure
+    /// lying flat. Written into the replicated <see cref="PoseKind"/>, <see cref="Anim"/> and
+    /// <see cref="BodyPose"/>, which <see cref="ApplyFootPose"/> draws on this peer and every other.
     /// </summary>
-    private void AnimateLocalBody(float dt)
+    private void PublishFootPose(float dt)
     {
-        if (_walker == null) return;
-
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
 
-        Avatar.HumanMeshBuilder.GaitMounts mounts;
-        if (_sliding)
-        {
-            _walker.Mesh = _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked);
-            mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked);
-        }
-        else if (_airTime > 0.12f)
-        {
-            _walker.Mesh = _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running);
-            mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running);
-        }
-        else
-        {
-            _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
-            _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, speed, _stridePhase);
-            mounts = Avatar.HumanMeshBuilder.MountsFor(speed, _stridePhase);
-        }
+        PoseKind = _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
+        if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
+        Anim = new Vector4(speed, _stridePhase, 0f, 0f);
 
         // Landing squash: the same spring that dips the first-person eye, spent on the body's
         // proportions instead. Volume is roughly kept, so it reads as knees taking the weight
         // rather than the figure shrinking.
         float squash = Mathf.Clamp(-_landingDip * 1.2f, 0f, 0.22f);
-        _walker.Scale = new Vector3(1f + squash * 0.5f, 1f - squash, 1f + squash * 0.5f);
-
         // thrown, stunned or knocked out: flat on the ground
         float down = _stunTimer > 0 && IsOnFloor() ? -1.45f : 0f;
-        _walker.Rotation = new Vector3(Mathf.Lerp(_walker.Rotation.X, down, 1f - Mathf.Exp(-10f * dt)), 0, 0);
-        _walker.Position = new Vector3(0, Mathf.Abs(_walker.Rotation.X) * 0.12f, 0);
+        _downRot = Mathf.Lerp(_downRot, down, 1f - Mathf.Exp(-10f * dt));
+        BodyPose = new Transform3D(
+            new Basis(Vector3.Right, _downRot) * Basis.FromScale(new Vector3(1f + squash * 0.5f, 1f - squash, 1f + squash * 0.5f)),
+            new Vector3(0, Mathf.Abs(_downRot) * 0.12f, 0));
+    }
+
+    /// <summary>Draws the on-foot figure from the published pose — the same code for the owner and every remote copy.</summary>
+    private void ApplyFootPose()
+    {
+        if (_walker == null) return;
+        Avatar.HumanMeshBuilder.GaitMounts mounts;
+        switch (PoseKind)
+        {
+            case PoseTucked:
+                _walker.Mesh = _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked);
+                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked);
+                break;
+            case PoseAir:
+                _walker.Mesh = _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running);
+                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running);
+                break;
+            default:
+                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase);
+                mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase);
+                break;
+        }
+        _walker.Transform = BodyPose;
         PlaceHand(mounts);
     }
 
@@ -819,7 +907,7 @@ public partial class FootPlayer : CharacterBody3D
         // leave the lens behind it
         float want = 1f;
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            pivot, wanted, CollisionMask, new Godot.Collections.Array<Rid> { GetRid() }));
+            pivot, wanted, CameraMask, new Godot.Collections.Array<Rid> { GetRid() }));
         if (hit.Count > 0)
         {
             float span = Mathf.Max(0.01f, (wanted - pivot).Length());
@@ -933,7 +1021,7 @@ public partial class FootPlayer : CharacterBody3D
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
         var velocity = _ride is Flyer
             ? _flight.Velocity
-            : heading * _motion.Speed + Vector3.Up * Velocity.Y;
+            : heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Vector3.Up * Velocity.Y;
         return new VehicleState((RideKind)RideKindId, GlobalPosition,
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now);
@@ -1020,6 +1108,42 @@ public partial class FootPlayer : CharacterBody3D
         Hurt?.Invoke(amount);
         PlayerInput.Rumble(0.6f, Mathf.Clamp(amount / 40f, 0.2f, 1f), 0.25f);
         if (Health <= 0f) Die();
+    }
+
+    /// <summary>
+    /// A round from a gun (<see cref="Combat.CombatManager"/>). A vehicle takes it for its
+    /// occupant, and going to zero wrecks it with them inside; on foot or on equipment it is the
+    /// player who is hit.
+    /// </summary>
+    public void ShotHit(float damage)
+    {
+        if (_ride is { IsVehicle: true })
+        {
+            VehicleHealth -= damage;
+            if (VehicleHealth <= 0f) WreckVehicle();
+            return;
+        }
+        TakeDamage(damage);
+    }
+
+    /// <summary>
+    /// A bird strike (<see cref="Birds.BirdLife"/>): damage like a round, and a big enough bird
+    /// through the propeller or the rotor stops the engine — the plane then glides and the
+    /// helicopter autorotates, exactly as if it had been switched off.
+    /// </summary>
+    public void BirdStrike(float damage, bool engineOut)
+    {
+        Shaken?.Invoke(Mathf.Clamp(damage / 40f, 0.15f, 1f));
+        bool stop = engineOut && _ride is { HasEngine: true } && EngineOn;
+        ShotHit(damage);
+        if (stop && _ride is { HasEngine: true })
+        {
+            EngineOn = false;
+            EngineToggled?.Invoke(false);
+            Announced?.Invoke("BIRD STRIKE — ENGINE OUT", false);
+        }
+        // a tit on the windscreen is a thud, not an event worth a banner
+        else if (damage >= 1f) Announced?.Invoke("BIRD STRIKE", false);
     }
 
     /// <summary>Restores health (food, water). Returns false when there was nothing to restore.</summary>
@@ -1110,6 +1234,11 @@ public partial class FootPlayer : CharacterBody3D
     {
         _ride = Rideable.Create(kind);
         RideKindId = (int)kind;
+        // The pose travels with the kind, and each kind reads Anim its own way: left as it was, the
+        // next update would hand a bike its rider's stride phase as a crank angle (seen: 0.93 rad).
+        Anim = default;
+        BodyPose = Transform3D.Identity;
+        PoseKind = PoseStride;
 
         // Momentum carries across the change: freewheeling to a halt and stepping off should
         // leave you walking, not standing still, and the reverse is what makes a rolling start
@@ -1128,7 +1257,9 @@ public partial class FootPlayer : CharacterBody3D
         }
         else _flight = default;
         // a craft skimming the ground must not be snapped onto it
-        FloorSnapLength = _ride is Flyer ? 0.05f : 0.5f;
+        // a car stays on its wheels over a crest the way a suspension keeps it there; 0.5 m let every
+        // Jura hump launch it for a second at 100 km/h, and a car in the air cannot steer
+        FloorSnapLength = _ride switch { Flyer => 0.05f, Car => 1.2f, _ => 0.5f };
 
         // the body is the machine's size while in it — a helicopter is not a 0.3 m person
         if (_capsule != null && !_sliding)
@@ -1723,7 +1854,7 @@ public partial class FootPlayer : CharacterBody3D
 
         float want = 1f;
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            pivot, wanted, CollisionMask, new Godot.Collections.Array<Rid> { GetRid() }));
+            pivot, wanted, CameraMask, new Godot.Collections.Array<Rid> { GetRid() }));
         if (hit.Count > 0)
         {
             float span = Mathf.Max(0.01f, (wanted - pivot).Length());
@@ -1750,7 +1881,9 @@ public partial class FootPlayer : CharacterBody3D
             Throttle: Mathf.Max(PlayerInput.Strength(PlayerInput.Throttle), Mathf.Max(0f, -stick.Y)),
             Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
             Steer: SteerInput(),
-            Effort: PlayerInput.Held(PlayerInput.TuckBoost));
+            Effort: PlayerInput.Held(PlayerInput.TuckBoost),
+            // Space is a hop on a bike and the handbrake in a car
+            Handbrake: _ride is { CanHop: false } && PlayerInput.Held(PlayerInput.Jump));
 
         // After a bail the rider is on the ground, not riding: no drive, no steering.
         if (_bailTimer > 0)
@@ -1807,16 +1940,18 @@ public partial class FootPlayer : CharacterBody3D
         heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
 
+        // a drifting car travels at an angle to its nose; everything else has Slip = 0
+        var travel = heading.Rotated(Vector3.Up, _motion.Slip);
         var velocity = Velocity;
-        velocity.X = heading.X * _motion.Speed;
-        velocity.Z = heading.Z * _motion.Speed;
+        velocity.X = travel.X * _motion.Speed;
+        velocity.Z = travel.Z * _motion.Speed;
         velocity.Y = onFloor ? Mathf.Min(velocity.Y, 0f) : velocity.Y - Gravity * dt;
 
         // Space hops: edge-triggered like the on-foot jump, so holding it does not bunny-hop
         // every frame, and only from the ground - there is nothing to push against in the air.
         // Speed and heading are untouched: a hop carries the bike's momentum, it does not add any.
         bool spaceDown = PlayerInput.Held(PlayerInput.Jump);
-        bool hop = spaceDown && !_jumpHeld && onFloor;
+        bool hop = spaceDown && !_jumpHeld && onFloor && _ride.CanHop;
         _jumpHeld = spaceDown;
         if (hop) { velocity.Y = RideJumpVelocity; Jumped?.Invoke(); }
         LastRideInput = input;
@@ -1992,7 +2127,11 @@ public partial class FootPlayer : CharacterBody3D
         // well out; eased, so the trail itself never snaps
         float lagTarget = Mathf.Clamp(-_motion.YawRate * 0.28f, -0.42f, 0.42f);
         _turnLag = Mathf.Lerp(_turnLag, lagTarget, 1f - Mathf.Exp(-3.5f * dt));
-        float orbit = _lookYaw + _turnLag;
+        // In a drift the camera swings part of the way toward where the car is going, so the
+        // road stays in view while the nose points at the inside verge. Not when reversing.
+        float slip = Mathf.Wrap(_motion.Slip, -Mathf.Pi, Mathf.Pi);
+        _slipCam = Mathf.Lerp(_slipCam, Mathf.Abs(slip) < 1.4f ? slip * _ride.ChaseFollowsTravel : 0f, 1f - Mathf.Exp(-4f * dt));
+        float orbit = _lookYaw + _turnLag + _slipCam;
 
         // both are local to the body, which is yaw-only, so the camera stays level
         var eye = new Vector3(0, _ride.EyeHeight, 0);
@@ -2008,7 +2147,7 @@ public partial class FootPlayer : CharacterBody3D
 
         float wanted = 1f;
         var query = PhysicsRayQueryParameters3D.Create(from, to,
-            CollisionMask, new Godot.Collections.Array<Rid> { GetRid() });
+            CameraMask, new Godot.Collections.Array<Rid> { GetRid() });
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         if (hit.Count > 0)
         {
@@ -2029,7 +2168,7 @@ public partial class FootPlayer : CharacterBody3D
         // enough to tip the horizon over
         // Rotated by the same orbit angle as its position, so it still looks straight through the
         // rider's axis and they stay centred while the view swings.
-        _camera.Rotation = new Vector3(_pitch, orbit, _motion.Lean * 0.35f);
+        _camera.Rotation = new Vector3(_pitch + _ride.ChasePitch, orbit, _motion.Lean * 0.35f);
 
         ApplyRideFov(dt);
     }

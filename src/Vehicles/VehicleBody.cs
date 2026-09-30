@@ -37,6 +37,8 @@ public partial class VehicleBody : CharacterBody3D
     [Export] public bool EngineOn { get; set; }
     /// <summary>The craft's attitude, for a remote copy that only receives position and yaw.</summary>
     [Export] public Quaternion Tilt { get; set; } = Quaternion.Identity;
+    /// <summary>Rotor / prop spool as the authority simulates it; a remote copy used to guess it from <see cref="EngineOn"/>.</summary>
+    [Export] public float Spool { get; set; }
 
     public ChunkManager? Terrain { get; set; }
 
@@ -58,7 +60,6 @@ public partial class VehicleBody : CharacterBody3D
     private bool _anchored;
     private bool _charred;
     private bool _wasWrecked;
-    private float _spoolView;
     private EngineSynth? _engineSound;
     private GpuParticles3D? _fire, _smoke;
     private readonly List<PhysicsBody3D> _ignoring = new();
@@ -87,6 +88,7 @@ public partial class VehicleBody : CharacterBody3D
 
     public override void _Ready()
     {
+        CollisionMask |= World.TreeColliders.Layer;   // a runaway car stops at a trunk
         AddToGroup(Group);
         var s = _initial;
         // A hand's breadth up. The terrain collision is a one-sided heightfield, and a box whose
@@ -111,7 +113,7 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         var replication = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt" })
+        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool" })
             replication.AddProperty(prop);
         var sync = new MultiplayerSynchronizer { Name = "Sync", RootPath = new NodePath(".."), ReplicationConfig = replication };
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
@@ -122,10 +124,12 @@ public partial class VehicleBody : CharacterBody3D
             _visual = Ride.BuildParkedVisual((int)Math.Max(1, Owner));
             _visual.Name = "Visual";
             AddChild(_visual);
-            if (Ride is Helicopter or Plane)
+            Hurtbox.Fit(_visual);
+            if (Ride is Helicopter or Plane or Car)
             {
-                _engineSound = new EngineSynth(Ride is Helicopter ? EngineProfile.Turboshaft : EngineProfile.PistonAero,
-                    spatial: true, seed: (int)Math.Max(1, Owner));
+                var profile = Ride is Car parkedCar ? EngineProfile.For(parkedCar.Spec.Engine, parkedCar.Spec.IdleRpm, parkedCar.Spec.Redline)
+                    : Ride is Helicopter ? EngineProfile.Turboshaft : EngineProfile.PistonAero;
+                _engineSound = new EngineSynth(profile, spatial: true, seed: (int)Math.Max(1, Owner));
                 AddChild(_engineSound);
             }
         }
@@ -324,12 +328,21 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         // what the engine and rotor are doing, as far as this peer can know
-        float spool = IsMultiplayerAuthority() ? _flight.Spool
-            : Mathf.MoveToward(_spoolView, EngineOn && !Wrecked ? 1f : 0f, 0.2f * dt);
-        if (Wrecked) spool = 0f;
-        _spoolView = spool;
+        if (IsMultiplayerAuthority()) Spool = _flight.Spool;
+        float spool = Wrecked ? 0f : Spool;
         if (Ride is Flyer f && !Wrecked) f.AnimateFlight(_visual, _flight with { Spool = spool }, dt);
-        if (_engineSound != null)
+        if (_visual is Avatar.CarRig rig)
+        {
+            // a driverless car rolls to a stop on its own wheels; it never tips, so no roll here
+            rig.WheelSpin += Velocity.Length() / 0.3f * dt;
+            rig.SteerAngle = 0f;
+            rig.BodyPitch = 0f;
+            rig.BrakeLights = false;
+        }
+        if (_engineSound != null && Ride is Car)
+            // ticking over while it rolls; a car at rest is asleep and silent
+            _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep ? 0.1f : 0f);
+        else if (_engineSound != null)
         {
             _engineSound.Set(spool, spool, 0.5f, spool * 0.7f);
         }

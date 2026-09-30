@@ -149,3 +149,88 @@ On foot, mounts, bike, skis, flight, feel layer, tricks, Game/Sim profile. Input
   when a standing capsule will not fit (shape query, radius shaved 3 cm), so releasing Ctrl in
   a tunnel keeps you down instead of forcing the body up through the roof — and you cannot
   jump out of a slide you could not stand up in either.
+- **Cars and drifting** (`Player/Car.cs`, `CarSpec`, `RideKind` 8–10: Coupe 86, Rotary FD, Rally 4WD;
+  issue #1). A car is the one mount that does not go where it points, so `RideMotion` gained **`Slip`**
+  (travel minus nose, rad, + = left; π reversing) and `FootPlayer.RidePhysics` moves the body along
+  `Yaw + Slip` — zero for every other mount, which is why nothing else changed. The model is a planar
+  bicycle model in `RideMotion` alone (speed, slip, yaw rate), so a wall, boost or a sloppy landing that
+  edits `Speed` applies to the car too: slip angles through `sin(C·atan(B·α))` (peak ~0.15 rad), each
+  axle's side force limited to what its **friction circle** leaves after drive/brake force, load
+  transfer from the last step's acceleration, 5-speed auto box, 4 substeps. Every way into a drift
+  falls out of that: **handbrake** (Space / A — `Rideable.CanHop` false, `RideInput.Handbrake`) collapses
+  the rear circle, power-over eats it, and braking into a turn unloads the rear (feint). Game adds grip,
+  power, a counter-steer assist and a **yaw moment that catches the car past ~35°** (the fronts are on
+  the lock stop by then, so steering alone cannot); Sim has none of it. Two traps found by the check:
+  the low-speed kinematic blend must key on TOTAL speed (keyed on forward speed it zeroed the sideways
+  speed at 70° of angle, 50 km/h gone in 0.3 s), and speed-scaled steering lock must lift in a slide or
+  there is not enough counter-steer to catch anything. The chase camera swings ~55% toward the travel.
+  Known limits: the body is still the player capsule (radius 0.85 m), and there is no per-surface grip,
+  so the 4WD does not yet get its gravel advantage. Check: `<godot> --headless --path . -- --driftcheck
+  [--trace]` — flat ground, no world: launch, handbrake entry, 4 s hold, recovery for every car in both
+  profiles; non-zero exit on a spin, no drift, or no recovery.
+- **What others see is what the owner sees** (`FootPlayer` pose sync, issue #9). A remote copy
+  used to get position, yaw and ride kind only, so nobody else ever saw a lean, a trick, a bail, a
+  craft's attitude (it was posed level), a turning rotor or crank, a slide, a jump or a stunned
+  body, and every peer ran its own gait phase. Three more synced properties now carry it:
+  **`BodyPose`** (the visual's local transform — lean, bank, flips/spins, bails, flight attitude,
+  landing squash, stun all in one value, applied as-is), **`PoseKind`** (stride / air / tucked) and
+  **`Anim`** (a `Vector4`: on foot speed + gait phase; mounted whatever the `Rideable` writes in
+  `WritePose` and reads in `AnimateRemote` — bike cadence + crank angle, craft spool + throttle).
+  Owner and remote draw the on-foot figure through the same `ApplyFootPose`; a fresh gait phase or
+  crank angle is taken as-is and only integrated between updates. **A new mount with moving parts
+  plugs into `WritePose`/`AnimateRemote` and never touches the sync code** — the drift cars'
+  slip, steer angle, wheel spin and rpm go there. The pose is reset on every ride change (see the
+  gotcha). Remote helicopters and planes are heard (spatial `EngineSynth` from `Anim`), and a
+  parked craft's rotor follows the synced `VehicleBody.Spool` instead of a guess from `EngineOn`.
+  Check: `<godot> --path . -- --synccheck [--at E,N]` — an owner runs walk, sprint, jump, slide, a
+  leaning bike ride, a helicopter climb and a rolling plane while a MIRROR (foreign authority, so
+  it takes the remote path) is fed the owner's real `ReplicationConfig` properties at 20 Hz of
+  wall time; non-zero exit if the mirror differs the frame after an update (must be 0: that is
+  state not replicated) or drifts between updates past one interval. Measured: 0.0000 fresh on
+  pose, hand and crank; with the old replication set, plane attitude off by 3.0, crank 3 rad,
+  bike lean 0.6, hand 0.64 m. One process, no sockets: it tests that the state is complete and
+  both sides derive the same picture, not ENet.
+- **Hitboxes are measured, never typed** (`Avatar/MeshBounds`, `Player/Hurtbox`). Movement keeps
+  its capsule (a rigid 11 m box would snag every slope of the 1 m lattice), but every drawn
+  machine — mounted player or parked `VehicleBody` — also carries a **`Hurtbox`**: an `Area3D`
+  fitted to its mesh bounds, parented to the VISUAL so it banks and flips with it, alone on
+  physics layer 8 (`Hurtbox.Layer`), monitorable, not monitoring — no movement changes. A shot that
+  wants it sets `CollideWithAreas = true` with `Hurtbox.Layer` in its mask and resolves the hit
+  with `Hurtbox.BodyOf` (combat, PR #6, needs that one-line change to hit wings and rotors).
+  `Rideable.ParkedBox` defaults to the parked mesh's bounds (`Measured`, once per kind; the
+  helicopter leaves its "Rotor" out; the plane keeps a documented fuselage-only box, checked to lie
+  inside its mesh), and traffic units take their mesh's own AABB. Before: bike parked box 1.10 m
+  tall for a 0.91 m bike, traffic car/van boxes 15/20 cm over the roof, carriages 30 cm short.
+  Check: `<godot> --path . -- --hitboxcheck [--at E,N]` — per mount: drawn bounds, capsule, parked
+  box, hurtbox; live rays through a wingtip and a rotor rim; and with `--at` in a town, a ray from
+  outside at up to 5,000 faces of the real `.bldg` tiles through `ChunkNode.BuildingShape` (the
+  building collision is one-sided `ConcavePolygonShape3D` with the render's raw winding — this is
+  the raycast verification the bridge-deck gotcha asked for; not yet run on a region with
+  buildings).
+- **A replicated value whose MEANING depends on another replicated value must be reset when that
+  one changes.** `Anim` means gait speed + phase on foot and cadence + crank angle on a bike; the
+  ride kind and `Anim` arrive in the same update, but the owner had not rewritten `Anim` yet on the
+  frame the ride changed, so the bike read the rider's stride phase as a crank angle (0.93 rad, an
+  instant snap). `ApplyRide` zeroes `Anim`/`BodyPose`/`PoseKind` with the kind.
+- **Simulate a network's rate in wall time, not frames.** `--synccheck` first copied every third
+  frame; at WSL's 33 fps that is 11 Hz, and a plane rolling at 2.2 rad/s legitimately drifted
+  0.26 rad between updates — a failure that was the probe's, not the sync's.
+- **Initial D roster, real specs, racing** (`CarCatalog`, `RaceLine`, `DriveProbe`; #5). 26 cars, append-only,
+  `RideKind` = 8 + index (8..63 reserved for cars). Each `CarSpec` carries the real car: crank torque curve
+  (`Torque`, interpolated by `TorqueAt`), OEM `Tyre` (rolling radius from the sidewall), published braking
+  (`BrakeDecel`), `Differential` (an open diff stops pushing at 72% of the driven axle's grip, so it will not
+  power over like an LSD car), `Style` Drift/Grip as in the series, and published `RefZeroTo100`/`RefTopKmh`
+  that `--driftcheck` compares the model against (all within ±15% / ±8%; figures are from recall, not
+  source-checked). Game: every car must hold a drift (the throttle keeps the rear sliding once sideways,
+  more for FF); Sim: grip cars need not slide.
+  **`--drivecheck --cars 0,1,3,4,12,6`** races them all at once, colliding, down the main road from the
+  spawn: a minimum-curvature `RaceLine` inside the tarmac (curvature over ±8 m AND ±4 m — RoadGen's
+  junction gaps leave 15-20° kinks the wide window hid), a per-car quasi-steady speed profile (corner
+  `√(μg/κ)`, crest `√(gR)`, forward power/traction pass, backward braking pass), drift planning only for
+  Drift cars by stepping `Car.Clone()` through a handbrake entry (committed only if the sim stays 1.5 m
+  inside the edge), soft-hands catching of unplanned slides, reverse-out when stuck, passes on straights.
+  `--record prefix` writes a GPX per car with the nose yaw (`<us:yaw>`); the GPX replay plays it as a car
+  (`<type>car:N</type>`, `Runner.KeepOutside` keeps every cinema lens out of the body) — that is how a race
+  is shown in Absolute Cinema. Traps found: the brake at a standstill selects REVERSE (the grid held the
+  brake and reversed off the line — hold the handbrake); a reversing car has 180° of slip and is not a slide.
+

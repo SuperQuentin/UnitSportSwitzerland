@@ -34,6 +34,9 @@ public partial class ItemController : Node
     private bool _capturing;
     private bool _forceAim;
 
+    /// <summary>Fires the held gun (a shell already taken); set by the bird hunt, <c>Birds.BirdLife</c>.</summary>
+    public Action<FootPlayer>? Fire { get; set; }
+
     /// <summary>Resolved per frame, never captured: the local on-foot player, or null (fly camera, replay).</summary>
     public Func<FootPlayer?>? ActivePlayer { get; set; }
 
@@ -101,13 +104,13 @@ public partial class ItemController : Node
         bool usable = UsablePlayer != null;
         bool aiming = usable && !UiFocus.TextEntryActive
                       && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim)
-                      && def?.Use is ItemUse.Optic or ItemUse.Photo;
+                      && def?.Use is ItemUse.Optic or ItemUse.Photo or ItemUse.Shoot;
 
         // everything pushed onto the player is re-asserted every frame, so letting go of Aim,
         // switching item or getting on a bike all fall back to normal without a special case
-        player.FovOverride = aiming ? (def!.Use == ItemUse.Optic ? 9f : 38f) : null;
+        player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f, ItemUse.Photo => 38f, _ => 50f } : null;
         player.ScopeView = aiming;
-        player.LookScale = aiming ? (def!.Use == ItemUse.Optic ? 0.2f : 0.5f) : 1f;
+        player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => 0.5f, _ => 0.6f } : 1f;
         if (visual != null) visual.Suppressed = aiming || _capturing;
 
         _ui.Scope = aiming ? def!.Use : null;
@@ -199,6 +202,23 @@ public partial class ItemController : Node
 
             case ItemUse.Readout:
                 break;
+
+            case ItemUse.Shoot:
+            {
+                int shells = -1;
+                for (int i = 0; i < Inventory.Size && shells < 0; i++)
+                    if (_inventory[i].Id == ItemId.Shells && !_inventory[i].IsEmpty) shells = i;
+                if (shells < 0)
+                {
+                    Play(SfxSynth.Tick, 0.5f);
+                    _ui.Toast("Out of shells.");
+                    break;
+                }
+                _inventory.TakeOne(shells);
+                Kick(player);
+                Fire?.Invoke(player);
+                break;
+            }
 
             case ItemUse.Material:
                 _ui.Toast(def.Category == ItemCategory.Money

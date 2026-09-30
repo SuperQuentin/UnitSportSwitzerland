@@ -218,9 +218,9 @@ Chunk streaming, LOD rings, mesh builders, collision, horizon, cover/pattern sha
   it has been asked for.
 - **A fresh clone has NO terrain** — the generated data is gitignored — so a missing
   `manifest.json` is an ordinary state, not an error. `LocalChunkSource` returns an empty
-  manifest and the client boots into an empty world with a message; it used to throw
-  `FileNotFoundException` out of `ClientWorld._Ready` and take the game down. A *server* still
-  fails fast, because it is the authority on where the world is and has nothing to serve.
+  manifest and the client boots into the generated fallback world with a message; it used to
+  throw `FileNotFoundException` out of `ClientWorld._Ready` and take the game down. A *server*
+  still fails fast, because it is the authority on where the world is and has nothing to serve.
 - **Publish the terrain before the things that stand on it.** A tile build fetches chunk →
   holes → cover → roads → buildings and used to commit all of it at once, so a streaming client
   saw nothing until the last link landed. `ChunkManager` now enqueues an *interim* `BuildResult`
@@ -251,3 +251,30 @@ Chunk streaming, LOD rings, mesh builders, collision, horizon, cover/pattern sha
   nearest-first ordering in `EvaluateRings` fixes it: measured 175k prims after 55 s before,
   **4.34 M after 15 s** after. Neither change affects local loading, where the per-frame commit
   budget is the limiter — measured byte-identical at caps of 6 and 24.
+- **Generated fallback world** (`Terrain/ProceduralWorld`, `Terrain/FallbackChunkSource`): a client
+  with no tiles at all (a fresh clone) gets a stand-in instead of a void — an alpine valley through
+  the spawn point with a river on a flat bed (water from the cover raster, like the real one), a
+  road and a railway along the floor, villages with side streets and a church every ~2.6 km, farms
+  and alpine huts, forest to a wandering tree line, rock, scree, glacier, vineyards on the sunny
+  side, orchards, a 100 km horizon. 81 x 81 tiles, all in the **ordinary formats**, served through
+  the ordinary `IChunkSource` seam under `CachingChunkSource`, so roads, traffic, trains, doors,
+  interiors, collision and gathering all work on it unchanged. Everything is a pure function of
+  LV95 position, so seams are bit-identical and the stride-10 grid equals the decimated full one
+  (both checked). Noise is sampled on a **world-anchored 5 m lattice** and interpolated: evaluated
+  per vertex it cost 320 ms a tile; now ~30-40 ms, cover ~10 ms (classified from 10 m samples, since
+  every tile in the rings asks for cover), horizon 0.2 s. The origin goes on the spawn point.
+  **Real tiles replace it**: `ChunkManager.MergeAvailableTiles` calls `RetireFallback` first, which
+  unloads every generated tile, switches the source off, flushes the cache (`CachingChunkSource.Clear`
+  bumps an epoch so a fetch straddling it is not cached), clears the horizon, and raises
+  `TerrainReplaced` for the systems that keep their own tile caches (`Surfaces`, `Ambience`,
+  `Gathering`, `Traffic`). Joining a server retires it **before** adopting the server's origin
+  (`ClientTerrainSync.Adopt`, run on the main thread). Test it with `--chunks <empty dir> --cache
+  <empty dir>`; a server still refuses to start without real terrain.
+- **A tile worker must not create a Godot object after the engine starts tearing down.** Workers
+  make `ArrayMesh`/`MultiMesh` themselves, and one that did so during quit was `Fatal error.
+  0xC0000005` in `ArrayMesh..ctor` — the process died on exit. It only showed once something was
+  always building at quit, which the generated fallback world is (3 of 3 fly probes crashed).
+  `ChunkManager._ExitTree` cancels every build and waits up to 3 s for `_buildsInFlight` to reach
+  0, and every worker checks its token right before each Godot call; either alone leaves a race.
+  Related: `ClientTerrainSync` continues on the thread pool, so anything it raises that touches UI
+  or nodes must be marshalled (`Status` is deferred; the rebase/merge runs via `OnMainThread`).
