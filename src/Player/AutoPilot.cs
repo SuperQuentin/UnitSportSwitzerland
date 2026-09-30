@@ -203,6 +203,7 @@ public sealed class AutoPilot
             return motion.Speed > 1.5f ? input with { Throttle = 0f, Brake = Mathf.Abs(Wrap(motion.Slip)) > 0.05f ? 0.2f : 0.7f, Effort = false }
                                        : new RideInput(0f, 0f, 0f, false, Handbrake: true);
         if (wasDrifting && !D.Drifting) EndDrift(wasPlanned);
+        CountSpin(car, motion);
         Plan(car, Player.GlobalPosition, motion, dt);
         return input;
     }
@@ -647,6 +648,21 @@ public sealed class AutoPilot
     }
 
     public int Resets;
+    /// <summary>Spins: the car past 90° to its travel going forward (not backing out); logged each time.</summary>
+    public int Spins;
+    private bool _spinning;
+
+    private void CountSpin(Car car, in RideMotion m)
+    {
+        float slip = Mathf.Abs(Wrap(m.Slip));
+        if (!_spinning && slip > 1.6f && car.Gear > 0 && m.Speed > 4f && D.Reversing <= 0f)
+        {
+            _spinning = true;
+            Spins++;
+            Log?.Invoke($"{Label}: SPIN at {Arc:F0} m, {m.Speed * 3.6f:F0} km/h");
+        }
+        else if (_spinning && (slip < 0.3f || m.Speed < 1f)) _spinning = false;
+    }
 
     private void ResetToLine()
     {
