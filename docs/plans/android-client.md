@@ -49,7 +49,8 @@ Out of scope: iOS, a phone-hosted server, the Play Store, and shipping real terr
 3. On the PC: `<godot> --headless --path . -- --server --generated-world`. On the phone: "Join a
    server" at the PC's LAN IP.
 4. Measure frame rate, memory (`adb shell dumpsys meminfo`) and heat over about 10 minutes on
-   foot, then in a car. `PerfOverlay` and `PerfRecorder` already exist.
+   foot, then in a car. `PerfOverlay` and `PerfRecorder` already exist. Also record how many
+   MB were streamed, since the phase 5 data warning needs a real estimate.
 5. Connect a Bluetooth gamepad to test movement. This only lets the spike measure performance
    before touch exists; touch is still required for the first version (phase 3).
 
@@ -62,7 +63,7 @@ Stop here if a mid-range phone can't reach about 30 fps with a reduced render di
   `System.IO` keeps working. No `res://` fallback.
 - Check every `System.IO` read that joins onto the chunk dir or `res://`. Each file either comes
   from the server stream or cache, or moves to Godot's `FileAccess`.
-- Decide the stream-cache cap for phones: a lower default than desktop, set in settings.
+- The stream-cache cap becomes a setting (phase 5), with a lower default on Android.
 
 ### 2. Launch without a command line
 
@@ -73,7 +74,6 @@ Stop here if a mid-range phone can't reach about 30 fps with a reduced render di
 ### 3. Touch controls (required)
 
 This is the main way to play on a phone, not an optional extra.
-
 
 - A touch overlay (a `CanvasLayer`) that feeds the same actions `PlayerInput` already reads:
   - a left virtual stick for movement;
@@ -90,13 +90,54 @@ This is the main way to play on a phone, not an optional extra.
 - Check GC behaviour on the Android runtime (`ConserveMemory=7` in the csproj) under tile churn.
 - Cap background mesh-build concurrency by core count, so big.LITTLE CPUs don't throttle.
 
-### 5. Platform gating
+### 5. Data usage settings (all platforms)
+
+These settings apply on PC too, so this phase doesn't need Android and can be built and tested
+on desktop first. What the client streams per tile (`AssetKind` in `src/Net/AssetStream.cs`):
+`.terr` about 490 KB, `.bldg` up to 2 MB on a dense town tile, plus roads, cover, trees and holes.
+The cache cap is `NetworkChunkSource.MaxCacheBytes`, currently a hard-coded 2 GB.
+
+**Settings** (a "Data" section in `SettingsMenu`, stored in `GameSettings`):
+
+- **Data preset:** Standard / Low data.
+- **Auto low data:** follow the OS data-saver mode (default on). Android only for now; PC keeps
+  the manual preset.
+- **Warn on metered connections** (default on).
+- **Cache size cap:** replaces the hard-coded 2 GB. Default 2 GB on PC, lower on Android.
+- Current cache usage and a **Clear cache** button.
+- Data streamed this session, also shown in `PerfOverlay`.
+
+**Low data preset:**
+
+- A smaller streaming radius than the render distance. World generation (`GeneratedFill`) covers
+  the tiles beyond it, the same way it fills tiles the server does not have.
+- No prefetching ahead of the player.
+- To check: which per-tile assets can be skipped or fetched only in the nearest rings (trees,
+  far buildings) without breaking what the client reads.
+
+**Data-saver and metered detection (Android):** Godot has no API for either, so call Android
+directly, through Godot's `AndroidRuntime` singleton and `JavaClassWrapper`, or a small Android
+plugin if those are not enough:
+
+- `ConnectivityManager.getRestrictBackgroundStatus()`: data saver on → switch to Low data
+  (when auto is on);
+- `ConnectivityManager.isActiveNetworkMetered()`: triggers the warning. This covers phone
+  hotspots too, not only cellular.
+
+Re-check on network changes, not only at launch.
+
+**Warning:** before joining (and when the network switches to metered mid-session), show "You
+are on a metered connection. Streaming uses about X MB per hour" with **Continue**, **Switch to
+Low data** and **Cancel**. X comes from the phase 0 measurement. Offer "don't ask again for this
+network".
+
+### 6. Platform gating
 
 - Hide or disable GPX video export (ffmpeg), the server console and server mode on Android.
 - Home-trainer input: check which transport it uses, and whether it can work on Android or should
   be hidden.
 
-### 6. Multiplayer verification
+### 7. Multiplayer verification
 
 Follow the project rule: PC dedicated server plus a desktop client plus the phone client on the
 same LAN. Check replication, authority, animation and damage **on the remote peer**, in both
@@ -109,8 +150,11 @@ directions (phone sees desktop, desktop sees phone).
 | Distribution | **Sideloaded APK** for now. No Play Store, so no AAB, upload key or target-SDK policy yet. |
 | Input | **Touch controls are required** for the first version. A gamepad is a fallback, not a replacement. |
 | Real terrain in the APK | **None.** World generation covers anything the server does not stream. |
+| Metered connections | **Warn** before streaming on a metered network. |
+| Data settings | **On all platforms**, PC included: data preset, cache cap, metered warning. |
+| Low data preset | Switches on **automatically when Android data saver is on** (unless the player turns that off). |
 
 ## Open questions
 
 - **Minimum device:** which phone is the reference for "fast enough"?
-- **Mobile data:** warn before streaming tiles over a cellular connection?
+- **Low data scope:** which per-tile assets can be dropped without breaking the client (phase 5).
