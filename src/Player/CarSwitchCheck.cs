@@ -30,7 +30,9 @@ public partial class CarSwitchCheck : Node
     private readonly Func<Node?> _players;
     private double _t, _since = -1;
     private int _step;
-    private (bool Roof, bool Lights, int Setup, float Lift)? _seenDriving, _seenParked;
+    private (bool Roof, bool Lights, int Setup, float Lift, byte Doors)? _seenDriving, _seenParked;
+    /// <summary>The parked car's driver door was seen open (getting out), so its shutting is a real check.</summary>
+    private bool _doorSeenOpen;
     private static int Preset => CarSetups.Parse("rally-raid")!.Id;
     private bool _drivingOk;
 
@@ -98,7 +100,7 @@ public partial class CarSwitchCheck : Node
             case 2 when t > 6:
                 GD.Print($"[switchcheck] driver: preset {CarSetups.For(Preset).Name}: {(me.SetCarSetup(Preset) ? "ok" : "REFUSED")}");
                 var car = me.Visual as CarRig;
-                GD.Print($"[switchcheck] driver: own car roof open {car?.RoofOpen}, lights {car?.Headlights}, preset {me.CarSetupId}, lift {Lift(car):F2}");
+                GD.Print($"[switchcheck] driver: own car roof open {car?.RoofOpen}, lights {car?.Headlights}, preset {me.CarSetupId}, lift {Lift(car):F2}, doors {me.DoorsOpen}");
                 _step++;
                 break;
             case 3 when t > 12:
@@ -124,8 +126,8 @@ public partial class CarSwitchCheck : Node
     {
         if (Other() is { Visual: CarRig driving } other)
         {
-            var now = (driving.RoofOpen, driving.Headlights, other.CarSetupId, MathF.Round(Lift(driving), 2));
-            if (now != _seenDriving) GD.Print($"[switchcheck] watch: the other player's car: roof open {now.Item1}, lights {now.Item2}, preset {now.Item3}, lift {now.Item4:F2}");
+            var now = (driving.RoofOpen, driving.Headlights, other.CarSetupId, MathF.Round(Lift(driving), 2), other.DoorsOpen);
+            if (now != _seenDriving) GD.Print($"[switchcheck] watch: the other player's car: roof open {now.Item1}, lights {now.Item2}, preset {now.Item3}, lift {now.Item4:F2}, doors {now.Item5}");
             _seenDriving = now;
             _drivingOk |= now.Item1 && now.Item2 && now.Item3 == Preset && now.Item4 > 0.1f;
         }
@@ -134,13 +136,15 @@ public partial class CarSwitchCheck : Node
             if (node is VehicleBody body && body.GetNodeOrNull<CarRig>("Visual") is { } parked)
             {
                 int setup = body.Ride is Car c ? c.Spec.SetupId : -1;
-                var now = (parked.RoofOpen, parked.Headlights, setup, MathF.Round(Lift(parked), 2));
-                if (now != _seenParked) GD.Print($"[switchcheck] watch: parked car {body.Name}: roof open {now.Item1}, lights {now.Item2}, preset {now.Item3}, lift {now.Item4:F2}");
+                var now = (parked.RoofOpen, parked.Headlights, setup, MathF.Round(Lift(parked), 2), body.DoorsOpen);
+                if (now != _seenParked) GD.Print($"[switchcheck] watch: parked car {body.Name}: roof open {now.Item1}, lights {now.Item2}, preset {now.Item3}, lift {now.Item4:F2}, doors {now.Item5}");
                 _seenParked = now;
-                if (_drivingOk && now.Item1 && now.Item2 && now.Item3 == Preset && now.Item4 > 0.1f)
+                _doorSeenOpen |= (body.DoorsOpen & CarRig.DriverDoor) != 0;
+                // the garage doors (#56) with a preset on: out through the driver's door, which shuts behind
+                if (_drivingOk && now.Item1 && now.Item2 && now.Item3 == Preset && now.Item4 > 0.1f && _doorSeenOpen && body.DoorsOpen == 0)
                 {
                     Shot();
-                    Finish(true, "saw it driven and parked with the top down, the lights on and the Rally-raid preset");
+                    Finish(true, "saw it driven and parked with the top down, the lights on and the Rally-raid preset, its door opened and shut");
                 }
             }
     }

@@ -975,7 +975,7 @@ public partial class InteriorNode : Node3D
             var z = new Vector3(-e.InX, 0, -e.InZ).Normalized();
             var doorway = new Transform3D(new Basis(Vector3.Up.Cross(z), Vector3.Up, z), new Vector3(e.X, 0, e.Z));
             var (width, top) = layout.OpeningOf(e);
-            var leaf = DoorLeaf.Create(e.Door, doorway, width, top, material);
+            var leaf = DoorLeaf.Create(e.Door, doorway, width, top, layout.DressedKind(), material);
             node.AddChild(leaf);
             leaf.SetSwing(0);
             node._leaves[e.Door] = leaf;

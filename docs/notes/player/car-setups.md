@@ -22,7 +22,8 @@
   off-road car fast off-road; a lowered road racer on a meadow tops out near 45-65 km/h.
 - **Look** (`CarBody.Lift/Tread/RoofRack/BullBar`, `Avatar/CarKit.cs`): `CarRig.Create` raises the
   body node by the lift (wheels stay on the road), `CarKit.Fit` adds tread blocks on the wheel spin
-  nodes, a roof rack (spare, two jerrycans) and a bumper bar with spot lamps. Bigger wheels force
+  nodes, a roof rack (spare, two olive jerrycans lying flat: upright and red they read as police
+  lights) and a bumper bar with spot lamps. Bigger wheels force
   `Lift ≥ 2·ΔR`, or tyre tops go through the arches. All drawn mesh, so the hull (`FitHull`),
   hurtbox and parked box are measured from it; `Rideable.Measured` is keyed `(Kind, SetupId)` for cars.
 - **Wire**: `FootPlayer.CarSetupId` (OnChange, beside `RideKindId`; reset by `ApplyRide` for a new
@@ -35,6 +36,14 @@
 - **Races**: `/race start [metres] [mount] class=<preset>` (name, slug or id): every car entrant is put
   in that preset on the grid (`RaceManager.Hold`), NPCs spawned for the race get it; `/race npc ...
   class=<preset>` gives NPCs a preset in a race of any class. The class travels in the `Setup` RPC.
+- **With the garage (#56)**: the preset goes over the stock spec, the garage parts over that:
+  `new Car(setup.Apply(stock), tuning)`, built by `CarSetups.Ride(kind, setup, tuningBits)`
+  (`CarTuning.Ride` delegates to it). Grip: tarmac = `Spec.Grip × TyreModel.Grip`; off tarmac the
+  preset's `TyreType` value, and a garage tyre with `Offroad` > 0 (Rally) claws back its share of the
+  gap to 1, capped at the tarmac grip. `SetCarSetup` keeps the garage parts, `SetTuning` keeps the
+  preset. `Car.ParkedBox` is the preset's look with stock garage parts and doors shut, keyed
+  `(Kind, SetupId)`. `--garagecheck a <pw> --setup <preset>` runs the #56 check over a preset.
+  The rough-ground term also lowers `--tuningcheck`'s gravel figures (Rally 0.76 g, Stock 0.53 g).
 - **Checks**: `--setupcheck [car]` (headless, flat, Sim: wire round-trip, every preset on every car
   builds, table of 0-100/top on tarmac and 0-80/30 s on gravel and grass; fails unless the off-road
   presets beat the road racer off tarmac and the road presets beat SUV/crawler on it);

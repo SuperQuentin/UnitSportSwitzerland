@@ -180,9 +180,13 @@ public static class CarSetups
     /// <summary>A slug for chat commands: "Road racing" -> "road-racing".</summary>
     public static string Slug(CarSetup s) => s.Name.ToLowerInvariant().Replace(' ', '-');
 
-    /// <summary><see cref="Rideable.Create"/>, with this preset on it if it is a car.</summary>
-    public static Rideable? Ride(RideKind kind, int setup) =>
-        setup != 0 && CarCatalog.For(kind) is { } spec ? new Car(For(setup).Apply(spec)) : Rideable.Create(kind);
+    /// <summary>
+    /// <see cref="Rideable.Create"/>, with this preset and these garage parts (<see cref="CarTuning"/>
+    /// bits, #56) on it if it is a car: the preset over the stock spec, the garage parts over that.
+    /// </summary>
+    public static Rideable? Ride(RideKind kind, int setup, long tuning = 0) =>
+        (setup != 0 || tuning != 0) && CarCatalog.For(kind) is { } spec
+            ? new Car(For(setup).Apply(spec), CarTuning.Unpack(tuning)) : Rideable.Create(kind);
 
     /// <summary>
     /// How rough and soft a surface is for a car, 0 (tarmac) .. ~1 (rock, forest floor): the bumps

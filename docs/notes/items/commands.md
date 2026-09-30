@@ -8,3 +8,4 @@
   non-admin vehicle refused, `/login` flips the flag, admin vehicle spawned, cash claimed to the
   server account. Leaves its test deposit in the server's accounts file.
 - `--invuicheck`/`--econcheck` use a scratch inventory (`Inventory.Scratch`, `Persist = false`).
+- `<godot> --headless --path . -- --iconsheet`: renders every item icon to `test_output/iconsheet.png` (see `pixel-icons`).

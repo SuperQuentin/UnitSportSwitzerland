@@ -276,15 +276,41 @@ public static class ItemDefs
                 break;
             }
             default:
-                // scavenged items: a small box in the item's colour; a bespoke mesh can replace it
-                if (Get(id) is { } def)
-                    s.Box(new Vector3(0, 0.04f, 0.02f), new Vector3(0.08f, 0.08f, 0.08f), def.Tint);
+                // no bespoke mesh: a thin card of the item's icon, one box per run of same-coloured pixels
+                AppendIconCard(s, id);
                 break;
         }
 
         var mesh = s.Build();
         HandMeshes[id] = mesh;
         return mesh;
+    }
+
+    /// <summary>
+    /// The icon as a 10 cm card facing the holder. The hand material is vertex-coloured (it ignores
+    /// textures), so the pixels are baked into the mesh as boxes, merged per horizontal run.
+    /// </summary>
+    private static void AppendIconCard(MeshScratch s, ItemId id)
+    {
+        var img = ItemIcons.GetImage(id);
+        if (img == null) return;
+        const float px = 0.0065f, depth = 0.006f;
+        int n = ItemIcons.Size;
+        for (int y = 0; y < n; y++)
+        {
+            int x = 0;
+            while (x < n)
+            {
+                var c = img.GetPixel(x, y);
+                if (c.A < 0.5f) { x++; continue; }
+                int x1 = x;
+                while (x1 + 1 < n && img.GetPixel(x1 + 1, y) == c) x1++;
+                float cx = ((x + x1 + 1) * 0.5f - n * 0.5f) * px;
+                float cy = 0.06f + (n * 0.5f - y - 0.5f) * px;
+                s.Box(new Vector3(cx, cy, 0.02f), new Vector3((x1 - x + 1) * px, px, depth), c);
+                x = x1 + 1;
+            }
+        }
     }
 
     /// <summary>A flag planted in the ground: origin at the foot of the pole.</summary>

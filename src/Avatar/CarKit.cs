@@ -15,7 +15,8 @@ public static class CarKit
     /// <summary>Tread blocks: a shade lighter than the tyre, or a knobbly tyre reads as a smooth one.</summary>
     private static readonly Color Lug = new(0.17f, 0.16f, 0.15f);
     private static readonly Color Bar = new(0.1f, 0.1f, 0.11f);
-    private static readonly Color Can = new(0.55f, 0.12f, 0.08f);
+    // olive drab, lying flat: upright and red they read as police lights on the roof
+    private static readonly Color Can = new(0.29f, 0.33f, 0.17f);
     private static readonly Color Lamp = new(1f, 0.96f, 0.8f);
 
     /// <param name="body">The rig's body node (pitched, raised by the lift): the rack and the bar go on it.</param>
@@ -54,7 +55,7 @@ public static class CarKit
             float sz = z0 + spare + 0.05f;
             s.Ring(new Vector3(0, y + 0.02f + d.TyreW * 0.5f, sz), Vector3.Up, spare - 0.12f, spare, d.TyreW, Rubber, 14);
             foreach (float sx in new[] { -1f, 1f })
-                s.Box(new Vector3(sx * 0.2f, y + 0.19f, z1 - 0.2f), new Vector3(0.16f, 0.34f, 0.26f), Can);
+                s.Box(new Vector3(sx * 0.2f, y + 0.09f, z1 - 0.25f), new Vector3(0.3f, 0.14f, 0.42f), Can);
         }
         if (b.BullBar)
         {

@@ -158,7 +158,8 @@ public partial class RideProbe : Node
             GD.Print($"[ride] t={_elapsed,5:F1}s  v={_player.RideSpeed,5:F1} m/s "
                 + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
                 + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
-                + (_player.Vehicle is Car car ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {car.Gear}" : ""));
+                + (_player.Vehicle is Car car ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {car.Gear}" : "")
+                + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : ""));
         }
 
         if (_elapsed < _seconds) return;
