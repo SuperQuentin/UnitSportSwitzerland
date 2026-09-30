@@ -8,3 +8,5 @@
   instead of leaving it there.
 - When the branch is merged: `git worktree remove ../UnitSportSwitzerland-<issue#>`.
 - `git worktree list` shows what exists.
+- Simple tasks (docs/notes tweaks, one-line fixes) need no branch or worktree: commit straight on
+  `main` in the main checkout and push.
