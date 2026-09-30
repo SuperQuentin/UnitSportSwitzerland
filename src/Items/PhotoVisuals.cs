@@ -94,6 +94,7 @@ shader_type spatial;
 uniform sampler2D photo : source_color, filter_linear_mipmap;
 uniform float develop = 0.0;
 uniform vec4 image_rect;
+" + HeldItemVisual.ViewmodelVertex + @"
 void fragment() {
     vec3 c = texture(photo, UV).rgb;
     bool inside = UV.x > image_rect.x && UV.x < image_rect.z && UV.y > image_rect.y && UV.y < image_rect.w;
@@ -119,7 +120,7 @@ void fragment() {
     COLOR = vec4(inside ? mix(mix(dark, early, clamp(d * 2.0, 0.0, 1.0)), c, clamp(d * 1.6 - 0.6, 0.0, 1.0)) : c, t.a) * COLOR;
 }";
 
-    /// <summary>A material for the print as it comes out: set its <c>develop</c> parameter 0..1.</summary>
+    /// <summary>A material for the print as it comes out of the viewmodel (drawn over the world like it): set its <c>develop</c> parameter 0..1.</summary>
     public static ShaderMaterial Developing3D(Texture2D photo)
     {
         var m = new ShaderMaterial { Shader = _develop3D ??= new Shader { Code = Develop3DCode } };

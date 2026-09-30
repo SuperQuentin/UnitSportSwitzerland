@@ -11,9 +11,15 @@
   photo capture and for binoculars and the camera once at the eye (you look through them, never at them); `Ui.Scope` for Photo/Optic waits for `PoseSettled`
   so the overlay appears after the raise. Shoot crosshair shows at once, gun stays visible.
 - Sway is cut to 25% outside Rest; Kick recoil works in every pose.
-- Wall clipping: the viewmodel is drawn at `ViewScale` = 0.5 size and pulled in by the same factor
-  (identical on screen), so a shotgun pokes half as far forward. Chosen over depth-test-off
-  materials (break self-occlusion, sorting) and a lower camera Near (FootPlayer, shared).
+- Drawn over the world: every viewmodel material goes through `HeldItemVisual.ForView` (a
+  StandardMaterial3D becomes a shader with the same look) whose vertex stage `ViewmodelVertex`
+  squeezes depth into the nearest 1 % of the range. It still sorts against itself (depth-test-off
+  would not) but never goes into a wall or behind a door portal's quad while stepping through.
+  A ShaderMaterial on the viewmodel (the developing Polaroid print) must include `ViewmodelVertex`.
+  It is also on its own visual layer 17 (`ViewmodelLayer`): door portal cameras and doorway ghosts
+  skip it, so it is not drawn a second time through the doorway.
+- `ViewScale` = 0.5: drawn at half size and pulled in by the same factor (identical on screen),
+  well clear of the near plane (it was the wall-clipping fix before the depth squeeze).
 - Screenshot: `--ride foot,6,out.png --hold shotgun --view first --aim`.
 - **Use animations** (#108): `ViewPose` also has `Read` (GPS held up, low centre, top tipped away) and `Head`
   (hat lifted above the eye line). `PoseTransform` Mouth depends on the item: a bottle tips ~70 deg, food jabs
