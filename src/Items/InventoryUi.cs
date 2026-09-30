@@ -97,6 +97,9 @@ public partial class InventoryUi : CanvasLayer
     /// <summary>Which optic overlay to draw, if Aim is held with one in hand.</summary>
     public ItemUse? Scope { get; set; }
 
+    /// <summary>Breathing drift of the binocular overlay, in screen fractions.</summary>
+    public Vector2 OpticSway { get; set; }
+
     /// <summary>The camera's 35 mm-equivalent focal length, shown in the viewfinder.</summary>
     public float PhotoFocalMm { get => _viewfinder.FocalMm; set => _viewfinder.FocalMm = value; }
 
@@ -823,7 +826,10 @@ public partial class InventoryUi : CanvasLayer
         _viewfinder.Visible = Scope == ItemUse.Photo;
         _crosshair.Visible = Scope == ItemUse.Shoot;
         if (_binoculars.Visible && _binoculars.Material is ShaderMaterial sm)
+        {
             sm.SetShaderParameter("aspect", _root.Size.X / Mathf.Max(1f, _root.Size.Y));
+            sm.SetShaderParameter("sway", OpticSway);
+        }
 
         _heldNameTimer -= dt;
         _heldName.Visible = ItemsActive && !IsOpen;
@@ -862,8 +868,9 @@ public partial class InventoryUi : CanvasLayer
     private const string BinocularShader = @"
 shader_type canvas_item;
 uniform float aspect = 1.777;
+uniform vec2 sway = vec2(0.0);
 void fragment() {
-    vec2 p = (UV - 0.5) * vec2(aspect, 1.0);
+    vec2 p = (UV - 0.5 - sway) * vec2(aspect, 1.0);
     float r = 0.42;
     float d = min(length(p - vec2(-0.24, 0.0)), length(p - vec2(0.24, 0.0)));
     float a = smoothstep(r - 0.012, r + 0.004, d);

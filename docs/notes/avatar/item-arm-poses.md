@@ -22,3 +22,5 @@
 - The owner in 3P while aiming still gets the forced eye view (`ScopeView`); its own body is hidden.
 - Check: `--synccheck` (fresh hand error must stay < 0.02); loopback `--server --generated-world` + two
   clients, one `--hold Shotgun --aim`, the other `--shot` at the holder (the remote copy shoulders it).
+- Use poses (#108): `ItemAction` 2 is set by `ItemController` for the length of an eat/drink/put-on-hat one-shot;
+  `Consume` and `Wear` both map to `Mouth`. `FootPlayer.DrawnArmPose` is what a peer actually draws (used by `--useanim B`).

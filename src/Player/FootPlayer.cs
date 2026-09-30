@@ -1324,6 +1324,7 @@ public partial class FootPlayer : CharacterBody3D
             Items.ItemUse.Optic or Items.ItemUse.Photo => aim || use ? Avatar.ItemArmPose.TwoHandEye : Avatar.ItemArmPose.Hold,
             Items.ItemUse.Shoot => aim || use ? Avatar.ItemArmPose.ShoulderAim : Avatar.ItemArmPose.Hold,
             Items.ItemUse.Consume => use ? Avatar.ItemArmPose.Mouth : Avatar.ItemArmPose.Hold,
+            Items.ItemUse.Wear => use ? Avatar.ItemArmPose.Mouth : Avatar.ItemArmPose.Hold,   // a hat goes up to the head
             Items.ItemUse.Place => use ? Avatar.ItemArmPose.Plant : Avatar.ItemArmPose.Hold,
             _ => Avatar.ItemArmPose.Hold,
         };

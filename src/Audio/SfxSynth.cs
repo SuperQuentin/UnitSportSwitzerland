@@ -25,7 +25,7 @@ public static class SfxSynth
     public const int Rate = Dsp.Rate;
 
     private static AudioStreamWav? _hiss, _tyre, _scrape;
-    private static SfxBank? _stepsBank, _landingBank, _whooshBank, _tickBank, _impactBank, _chimeBank, _boomBank;
+    private static SfxBank? _stepsBank, _landingBank, _whooshBank, _tickBank, _impactBank, _chimeBank, _boomBank, _gulpBank, _crunchBank;
 
     /// <summary>Looping edge hiss for skis: bright, high-passed noise.</summary>
     public static AudioStreamWav Hiss => _hiss ??= Loop(2.0f, 12, (rng, n) =>
@@ -294,6 +294,39 @@ public static class SfxSynth
             float second = t > 0.07f ? Mathf.Exp(-dk * (t - 0.07f)) : 0f;
             s[i] = env * Mathf.Sin(Mathf.Tau * fa * t) * 0.6f
                  + second * Mathf.Min(1f, (t - 0.07f) * 400f) * Mathf.Sin(Mathf.Tau * fb * t) * 0.5f;
+        }
+        return s;
+    });
+
+    /// <summary>Three swallows: short low blips that fall in pitch, over a wet band of noise. Drinking.</summary>
+    public static SfxBank GulpBank => _gulpBank ??= SfxBank.Build("gulp", 4, 0.6f, 35, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        var s = BandPass(Noise(rng, n), 0.02f, 0.12f);
+        float f0 = 190f * J();
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float local = t % 0.19f;   // one swallow per 0.19 s
+            bool on = t < 0.57f;
+            float env = on ? Mathf.Min(1f, local * 250f) * Mathf.Exp(-local * 22f) : 0f;
+            float f = f0 * (1f - local * 2.2f);
+            s[i] = env * (Mathf.Sin(Mathf.Tau * f * local) * 0.8f + s[i] * 0.9f);
+        }
+        return s;
+    });
+
+    /// <summary>A bite of something dry: a few bursts of bright, fast-decaying noise.</summary>
+    public static SfxBank CrunchBank => _crunchBank ??= SfxBank.Build("crunch", 4, 0.5f, 36, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.15f;
+        var s = HighPass(Noise(rng, n), 0.25f * J());
+        float[] at = { 0f, 0.09f * J(), 0.2f * J(), 0.31f * J() };
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate, env = 0f;
+            foreach (float a in at) if (t >= a) env += Mathf.Exp(-(t - a) * 55f) * (0.5f + 0.5f * (float)rng.NextDouble());
+            s[i] *= 1.6f * env;
         }
         return s;
     });
