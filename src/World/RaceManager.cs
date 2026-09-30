@@ -78,6 +78,8 @@ public partial class RaceManager : Node
         public readonly Dictionary<long, int> Next = new();
         /// <summary>Air: when each entrant flew through gate 0 — its own start.</summary>
         public readonly Dictionary<long, double> Started = new();
+        /// <summary>When each entrant's last accepted checkpoint came in, for the pace check.</summary>
+        public readonly Dictionary<long, double> LastReport = new();
         public readonly Dictionary<long, double> Finished = new();
         /// <summary>Left, disconnected, or crossed the line with checkpoints missed.</summary>
         public readonly HashSet<long> Out = new();
@@ -623,9 +625,58 @@ public partial class RaceManager : Node
             GD.Print($"[race] #{raceId} {Who(entrant)} reported checkpoint {index}, expected {next} — ignored");
             return;
         }
+        if (!Plausible(race, entrant, index)) return;
         race.Next[entrant] = next + 1;
+        race.LastReport[entrant] = _clock;
         if (race.Air && index == 0) race.Started[entrant] = _clock;
     }
+
+    /// <summary>
+    /// The server checks a report against what it can see itself instead of believing it: the
+    /// entrant's body (the server's proxy copy, at its latest replicated position) must be near
+    /// that checkpoint, and it must have got there at a pace its mount can do. Without this a
+    /// teleport across the course was classified — a client reporting checkpoints is not proof.
+    /// </summary>
+    private bool Plausible(Race race, long entrant, int index)
+    {
+        var course = race.Course!;
+        int slot = race.Entrants.IndexOf(entrant);
+        float startArc = race.Air ? 0f : RaceCourse.StartArc(slot, race.Entrants.Count);
+        var at = course.CheckpointAt(index, startArc);
+        if (_players?.GetNodeOrNull<Node3D>(PlayerReplication.NodeName(entrant)) is { } body)
+        {
+            float reach = race.Air ? RaceCourse.GateRadius + 60f : 80f;   // the proxy lags a few frames
+            float off = RaceRoute.Flat(body.GlobalPosition - at).Length();
+            if (off > reach)
+            {
+                GD.Print($"[race] #{race.Id} {Who(entrant)} reported checkpoint {index} {off:F0} m from it — ignored");
+                return false;
+            }
+        }
+        double since = _clock - race.LastReport.GetValueOrDefault(entrant, race.StartAt);
+        // straight-line distance between consecutive checkpoints: never more than the road, so
+        // the check can only be generous
+        float metres = index == 0 ? 0f
+            : RaceRoute.Flat(at - course.CheckpointAt(index - 1, startArc)).Length() * 0.9f;
+        if (index > 0 && since < metres / MaxPace(race.Mount))
+        {
+            _chat?.Broadcast($"[race] #{race.Id} {Who(entrant)} reached checkpoint {index} impossibly fast — out", ChatKind.Error);
+            _raceOf.Remove(entrant);
+            race.Out.Add(entrant);
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>A generous ceiling on a mount's speed, m/s: anything faster between checkpoints is a teleport.</summary>
+    private static float MaxPace(int mount) => (RideKind)mount switch
+    {
+        RideKind.OnFoot => 14f,
+        RideKind.RoadBike or RideKind.Skis => 45f,
+        RideKind.Paraglider or RideKind.Wingsuit or RideKind.Parachute => 70f,
+        RideKind.Helicopter or RideKind.Plane => 120f,
+        _ => 125f,   // cars and motorbikes: 450 km/h
+    };
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Crossed(int raceId, long entrant)
@@ -633,6 +684,7 @@ public partial class RaceManager : Node
         if (!_server || !Valid(raceId, entrant, out var race) || race.Finished.ContainsKey(entrant)) return;
         int needed = race.Course!.Checkpoints;
         int passed = race.Next.GetValueOrDefault(entrant);
+        if (passed >= needed && !Plausible(race, entrant, needed)) return;
         if (passed < needed)
         {
             _chat?.Broadcast($"[race] #{raceId} {Who(entrant)} crossed the line with {needed - passed} checkpoint(s) missed — not counted", ChatKind.Error);

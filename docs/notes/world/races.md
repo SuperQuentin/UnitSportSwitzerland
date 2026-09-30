@@ -78,3 +78,12 @@
     `--racecmd "<args>"`, `--racejoin [host]`, `--raceskip N`, `--racenpc N`.
   - Measured: Col du Mollendruz 1.5 km AE86 1:05–1:14; Mont-la-Ville → Montricher 5.2 km plane
     1:30–1:32, heli 1:37; Haut du Mollendruz → Pétra Félix 1.9 km paraglider 2:12–2:14.
+
+- **The server verifies every checkpoint and the finish** (`RaceManager.Plausible`) instead of
+  believing the client: the entrant's body — the server's proxy copy at its latest replicated
+  position — must be within 80 m of that checkpoint (gate radius + 60 m in the air), and it must
+  have got there no faster than the mount can go over the straight-line distance from the
+  previous one (`MaxPace`: foot 14, bike/skis 45, canopies 70, aircraft 120, cars/motorbikes
+  125 m/s). A report from the wrong place is ignored; an impossible pace is out. Before this a
+  `/city` teleport across the course was classified. Check: a racer teleported 25 s after GO is
+  refused at its next checkpoint ("5031 m from it — ignored") and ends DNF.

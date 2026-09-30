@@ -68,6 +68,14 @@ public sealed class RaceCourse
     /// <summary>Ground: where a slot stands along the route. Slot 0 is the front, the rearmost is at <see cref="GridLead"/>.</summary>
     public static float StartArc(int slot, int count) => GridLead + GridGap * (count - 1 - slot);
 
+    /// <summary>
+    /// Where checkpoint <paramref name="k"/> (k == <see cref="Checkpoints"/>: the finish) is, for an
+    /// entrant starting at <paramref name="startArc"/>: what the server checks a report against.
+    /// </summary>
+    public Vector3 CheckpointAt(int k, float startArc) => Air
+        ? Gates[Mathf.Clamp(k, 0, Gates.Length - 1)]
+        : Route!.Centre[Route.NearestCentreIndexAt(startArc + (k >= Checkpoints ? Length : (k + 1) * CheckpointEvery))];
+
     /// <summary>Ground: the longest race a route holds for this many entrants (the front slot's finish, plus a run-off).</summary>
     public static float MaxLength(RaceRoute route, int count) => route.Length - StartArc(0, count) - 60f;
 
