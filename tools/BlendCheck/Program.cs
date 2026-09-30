@@ -6,8 +6,8 @@ using static System.Console;
 
 // Checks the invariants that make generated tiles meet real ones without a seam
 // (src/Terrain/ProceduralWorld.Blend.cs), on synthetic "real" terrain placed next to the generator:
-//   A: a 3x3 block far ABOVE the generated valley floor (on the river, so the valley runs into it)
-//   B: a 5x5 block with a one-tile hole, far BELOW the generated massif north of the valley
+//   A: a 3x3 block far ABOVE the generated Rhone floor east of Riddes (the river runs into it)
+//   B: a 5x5 block with a one-tile hole, far BELOW the generated mountains north of the valley
 // Non-zero exit on any failed check.
 //
 //   dotnet run --project tools/BlendCheck -c Release
@@ -403,9 +403,10 @@ foreach (double d in new[] { 250.0, 500, 1000, 2000, 2900 })
     double after = (StreakRms(EastLine(d)) + StreakRms(SouthLine(d))) / 2;
     double own = (OwnRms(EastLine(d)) + OwnRms(SouthLine(d))) / 2;
     WriteLine($"  streaks {d,5:F0} m out: {after,5:F2} m RMS (a single level: {before,5:F2} m; the generated ground's own relief: {own,5:F2} m)");
-    // past a kilometre what the blend brings must be lost in the ground's own texture, and the
-    // pyramid must never make it worse than reading every distance at the knots
-    if ((d >= 1000 && after > 0.05 * own) || after > before + 0.005) streakBad++;
+    // past a kilometre what the blend brings must be lost in the ground's own texture (or under
+    // 10 cm, where that texture is a flat valley floor), and the pyramid must never make it worse
+    // than reading every distance at the knots
+    if ((d >= 1000 && after > Math.Max(0.05 * own, 0.1)) || after > before + 0.005) streakBad++;
 }
 Check("distances where carried real detail shows as streaks", streakBad);
 
