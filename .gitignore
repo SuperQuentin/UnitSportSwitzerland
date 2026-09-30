@@ -24,6 +24,9 @@
 !/terrain_chunks/.gdignore
 /terrain_chunks_temp/
 /terrain_chunks_png/
+# terrain_location.json: where MapSetup was told to keep the data and the tiles
+#                      (another drive); read by MapSetup, the game and the server.
+/terrain_location.json
 
 
 # =============================================================================

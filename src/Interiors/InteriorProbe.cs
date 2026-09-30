@@ -66,6 +66,23 @@ public partial class InteriorProbe : Node
         return (false, null);
     }
 
+    /// <summary>
+    /// <c>--doorkind Agricultural</c>: the check and the door watch use the nearest door of that
+    /// kind of building instead of the nearest door (a barn's outward pair, say).
+    /// </summary>
+    public static BuildingKind? DoorKindArg()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        for (int i = 0; i < args.Length - 1; i++)
+            if (args[i] == "--doorkind" && Enum.TryParse<BuildingKind>(args[i + 1], true, out var kind))
+                return kind;
+        return null;
+    }
+
+    /// <summary>The door the check uses, and the door watch watches.</summary>
+    public static DoorIndex.Entry? ChooseDoor(Vector3 at) =>
+        DoorKindArg() is { } kind ? DoorIndex.Nearest(at, 400f, kind) : DoorIndex.Nearest(at, 400f);
+
     private void Check(bool condition, string what)
     {
         GD.Print($"[interior] {(condition ? "ok  " : "FAIL")} {what}");
@@ -211,7 +228,7 @@ public partial class InteriorProbe : Node
                     return;
                 }
                 if (!_player.IsOnFloor()) return;
-                var door = DoorIndex.Nearest(_player.GlobalPosition, 400f);
+                var door = ChooseDoor(_player.GlobalPosition);
                 if (door == null) return;
                 _door = door.Value;
                 StandOutside(_door);
@@ -357,6 +374,8 @@ public partial class InteriorProbe : Node
             case 9:
             {
                 if (_t < 1.0) return;
+                if (ShutBehind(interiors) is not { } shut) return;
+                if (!shut) { Finish(); return; }
                 var d = _player!.GlobalPosition - _door.World;
                 Check(new Vector2(d.X, d.Z).Length() < 3f && Mathf.Abs(d.Y) < 2f,
                     $"back by the same door ({new Vector2(d.X, d.Z).Length():F1} m, dy {d.Y:F1})");
@@ -772,6 +791,141 @@ public partial class InteriorProbe : Node
         _player.Velocity = Vector3.Zero;
     }
 
+    /// <summary>
+    /// Out, back in; shut, walking into the door must not get you out; then E on the door from
+    /// just inside and straight out while it swings shut:
+    /// the leaf is not solid yet and the door no longer passable, and there must still be a way
+    /// out, not a step into the void under the terrain (#78). Null while under way; ends outside.
+    /// </summary>
+    private bool? ShutBehind(InteriorManager interiors)
+    {
+        string door = _door.Key.ToString();
+        switch (_shut)
+        {
+            case -1:
+                // just out, facing the street: turned round in front of the door
+                StandOutside(_door);
+                _shut = -2;
+                _shutT = 0;
+                return null;
+            case -2:
+                if ((_shutT += GetPhysicsProcessDeltaTime()) < 1.0 || !_player!.IsOnFloor()) return null;
+                _shut = 0;
+                return null;
+            case 0:
+                if (WalkThrough(interiors, door, inward: true, GetPhysicsProcessDeltaTime(), null) is not { } inside) return null;
+                if (!inside) return false;
+                _shut = 10;
+                _shutT = 0;
+                return null;
+            case 10:
+            {
+                // first: shut, the door keeps you in. A barn's pair hangs outside, so only its
+                // shutter stands in the hole (DoorLeaf.CreateShutter)
+                var l = interiors.Current!;
+                var node = interiors.CurrentNode!;
+                var way = l.EntranceFor(door);
+                var at = node.GlobalTransform * new Vector3(way.X + way.InX * 1.5f, 0.1f, way.Z + way.InZ * 1.5f);
+                var face = node.GlobalTransform.Basis * new Vector3(-way.InX, 0, -way.InZ);
+                _player!.EnterInterior(l.Key, at, Mathf.Atan2(-face.X, -face.Z));
+                _player.Velocity = Vector3.Zero;
+                _shut = 11;
+                _shutT = 0;
+                return null;
+            }
+            case 11:
+                if ((_shutT += GetPhysicsProcessDeltaTime()) < 0.5) return null;
+                Check(interiors.IsOpen(door) && _player!.TryInteract(), $"E from inside shuts {door}, to walk into it");
+                _shut = 12;
+                _shutT = 0;
+                return null;
+            case 12:
+            {
+                _shutT += GetPhysicsProcessDeltaTime();
+                bool shut = interiors.Links.TryGetValue(door, out var link) ? link.Swing <= 0f : !interiors.IsOpen(door);
+                if (!shut && _shutT < 8) return null;
+                if (DoorLeaf.SwingsOut(_door.Kind) && DoorLeaf.LeafWidth(_door.Kind, _door.Width) > 2f)
+                {
+                    var edge = _door.World + _door.Outward * DoorLeaf.LeafWidth(_door.Kind, _door.Width) + Vector3.Up;
+                    Check(interiors.OutsideDoorInReach(edge) == null, $"shut, {door} is not in reach from where its leaves stood");
+                }
+                Input.ActionPress(PlayerInput.MoveForward);
+                _shut = 13;
+                _shutT = 0;
+                return null;
+            }
+            case 13:
+                if ((_shutT += GetPhysicsProcessDeltaTime()) < 2.5) return null;
+                Input.ActionRelease(PlayerInput.MoveForward);
+                Check(_player!.Indoors, $"shut, {door} keeps you in");
+                if (!_player.Indoors) return false;
+                Check(_player.TryInteract(), $"E from inside opens {door} again");
+                _shut = 14;
+                _shutT = 0;
+                return null;
+            case 14:
+            {
+                _shutT += GetPhysicsProcessDeltaTime();
+                bool open = interiors.Links.TryGetValue(door, out var link) && link.Swing >= 1f;
+                if (!open && _shutT < 8) return null;
+                Check(open, $"{door} swung open from inside");
+                _shut = 1;
+                _shutT = 0;
+                return null;
+            }
+            case 1:
+            {
+                // half a metre in, facing out: at the hole while the leaf is still swinging
+                var l = interiors.Current!;
+                var node = interiors.CurrentNode!;
+                var way = l.EntranceFor(door);
+                var at = node.GlobalTransform * new Vector3(way.X + way.InX * 0.5f, 0.1f, way.Z + way.InZ * 0.5f);
+                var face = node.GlobalTransform.Basis * new Vector3(-way.InX, 0, -way.InZ);
+                _player!.EnterInterior(l.Key, at, Mathf.Atan2(-face.X, -face.Z));
+                _player.Velocity = Vector3.Zero;
+                _shut = 2;
+                _shutT = 0;
+                return null;
+            }
+            case 2:
+                if ((_shutT += GetPhysicsProcessDeltaTime()) < 0.5) return null;
+                Check(interiors.IsOpen(door) && _player!.TryInteract(), $"E from inside shuts {door}");
+                Input.ActionPress(PlayerInput.MoveForward);
+                _shut = 3;
+                _shutT = 0;
+                return null;
+            case 3:
+            {
+                _shutT += GetPhysicsProcessDeltaTime();
+                bool swinging = interiors.Links.TryGetValue(door, out var link) && link.Swing > 0f;
+                if (_player!.Indoors && _shutT < 3) return null;
+                Input.ActionRelease(PlayerInput.MoveForward);
+                Check(!_player.Indoors, $"walked out while {door} swung shut{(swinging ? "" : " (it had shut first)")}");
+                Check(_player.GlobalPosition.Y > InteriorManager.InteriorBaseY + 1000f,
+                    $"on the street, not in the void under it (y {_player.GlobalPosition.Y:F1})");
+                _shut = 4;
+                _shutT = 0;
+                return null;
+            }
+            case 4:
+                // opened again from the street, so the walk away below still sees it shut by itself
+                if ((_shutT += GetPhysicsProcessDeltaTime()) < 1.0) return null;
+                Check(!interiors.IsOpen(door) && _player!.TryInteract(), $"E outside opens {door} again");
+                _shut = 5;
+                _shutT = 0;
+                return null;
+            default:
+                _shutT += GetPhysicsProcessDeltaTime();
+                if (!interiors.IsOpen(door) && _shutT < 5) return null;
+                Check(interiors.IsOpen(door), $"{door} open again");
+                _shut = -1;
+                return !_player!.Indoors;
+        }
+    }
+
+    private int _shut = -1;
+    private double _shutT;
+
     private int _walk, _frame;
     private Camera3D? _demo;
     private bool _pressed, _aimed;
@@ -806,6 +960,13 @@ public partial class InteriorProbe : Node
                 }
                 if (link.Swing < 1f || _walkT < 1.2) return null; // the portal picture settles
                 Check(true, $"the door {door} swung open ({_walkT:F1} s)");
+                if (inward && BuildingKey.TryParse(door, out var key) && DoorIndex.Find(key) is { } spot && DoorLeaf.SwingsOut(spot.Kind))
+                {
+                    // open, a barn door is worked from out by its leaves' free edges, not only at the sill
+                    float leaf = DoorLeaf.LeafWidth(spot.Kind, spot.Width);
+                    var edge = spot.World + spot.Outward * leaf + Vector3.Up;
+                    Check(interiors.OutsideDoorInReach(edge) == door, $"open, {door} is in reach {leaf:F1} m out, by its leaves");
+                }
                 if (_shot != null && shot != null)
                 {
                     Check(interiors.Portals?.IsShown(link) == true, "the doorway shows the other side");

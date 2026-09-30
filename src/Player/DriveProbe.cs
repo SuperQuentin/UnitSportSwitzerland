@@ -10,7 +10,7 @@ namespace UnitSport.Player;
 /// <summary>
 /// <c>godot --path . -- --drivecheck[,out_prefix] [--cars 0,1,3,4 | --car N] [--seconds S] [--finish M]
 /// [--record prefix] [--trace] [--tyrewear on] [--brakewear on] [--at E,N] [--traffic 0]
-/// [--mount K [--riders N]] [--verge 0]</c>
+/// [--mount K [--riders N]] [--verge 0] [--setups 0,4,3]</c>
 ///
 /// <para>
 /// A race down the real road from the spawn (<see cref="RaceRoute"/>): every listed car on a
@@ -26,7 +26,8 @@ namespace UnitSport.Player;
 /// <c>--mount K</c> races N (<c>--riders</c>, default 1) of another mount instead of cars — its
 /// <see cref="RideKind"/> number, 0 on foot, 1 the road bike, 2 skis — each on the pilot
 /// <see cref="AutoPilot.For"/> picks for it. <c>--verge 0</c> skips the verge survey, so the line
-/// keeps to the tarmac (for comparison).
+/// keeps to the tarmac (for comparison). <c>--setups</c> gives each listed car a preset
+/// (<see cref="CarSetups"/> id or name, in the order of <c>--cars</c>; one value for all).
 /// </para>
 /// </summary>
 public partial class DriveProbe : Node
@@ -173,8 +174,11 @@ public partial class DriveProbe : Node
             for (int k = 0; k < count; k++)
             {
                 var spec = _mount == null ? CarCatalog.All[Mathf.Clamp(_cars[k], 0, CarCatalog.All.Count - 1)] : null;
+                if (spec != null && ArgAfter("--setups")?.Split(',') is { } setups
+                    && CarSetups.Parse(setups[Mathf.Min(k, setups.Length - 1)]) is { Id: > 0 } preset)
+                    spec = preset.Apply(spec);
                 var kind = spec?.Kind ?? (RideKind)_mount!.Value;
-                string label = spec?.Label ?? (kind == RideKind.OnFoot ? $"Runner {k + 1}" : $"{Rideable.Create(kind)?.Label ?? kind.ToString()} {k + 1}");
+                string label = spec is { SetupId: > 0 } ? $"{spec.Label} {CarSetups.For(spec.SetupId).Name}" : spec?.Label ?? (kind == RideKind.OnFoot ? $"Runner {k + 1}" : $"{Rideable.Create(kind)?.Label ?? kind.ToString()} {k + 1}");
                 float s = 12f + 15f * (count - 1 - k);
                 var at = line.PointAt(s);
                 var fwd = RaceRoute.Flat(line.PointAt(s + 2f) - line.PointAt(s - 2f)).Normalized();
@@ -228,6 +232,7 @@ public partial class DriveProbe : Node
                 if (en.Mounted || !en.Player.IsOnFloor()) continue;
                 en.Mounted = en.Kind == RideKind.OnFoot || en.Player.SetRide(en.Kind);
                 if (!en.Mounted) continue;
+                if (en.Spec is { SetupId: > 0 } preset) en.Player.SetCarSetup(preset.SetupId);
                 var entry = en;
                 en.Pilot = AutoPilot.For(_route, en.Player);
                 if (en.Pilot == null) { GD.Print($"[drive] no pilot for {en.Label}"); Finish(1); return; }

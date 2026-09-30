@@ -18,6 +18,10 @@
 - Far horizon (needed once for a region built before it existed; a normal build and `--coarse` emit
   it): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --horizon --jobs 8`
 - Buildings export (needs GDAL): `python tools/export_buildings.py --bbox 2578500 1108500 2586500 1115500`
+  PyPI has no Windows GDAL wheel (`pip install gdal` tries to build from source and fails). Install
+  the matching wheel from https://github.com/cgohlke/geospatial-wheels/releases instead
+  (`gdal-<ver>-cp313-cp313-win_amd64.whl` for Python 3.13), e.g. `python -m pip install <url>`.
+  It includes the OpenFileGDB and GPKG drivers.
 - Features: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --tlm <tlm.gpkg> --route-keys ressources/data/routes/route_keys.sqlite --cover --buildings ressources/data/buildings3d/buildings.gpkg --gwr ressources/data/gwr/data.sqlite`
 - Roads preprocessing: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --roads-only --tlm ressources/data/tlm3d/SWISSTLM3D_2026_LV95_LN02.gpkg --route-keys ressources/data/routes/route_keys.sqlite`
 - Junctions (run **after** roads preprocessing, rewrites `.road` in place as v2):
@@ -32,3 +36,8 @@
   stretch up the hillside, so the centroid of Riddes lands on the mountain above it.
 - French features for a box (needs the terrain built there already; merges into existing tiles):
   `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --france 6.21,46.26,6.27,46.30`
+- Cover only, for a few tiles (after editing `docs/data/cover_overrides.json`; run from the repo
+  root): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --cover-only --tlm <tlm.gpkg> --tiles-file tiles.txt`
+  (`tiles.txt`: one `E-N` per line). Skips the road stage, so the RoadGen junctions survive.
+  It rewrites the tile's `.trees` too, and a tile whose roads were rewritten by RoadGen after its
+  first cover pass gets a reshuffled (equally dense) scatter: the road mask changed under the RNG.

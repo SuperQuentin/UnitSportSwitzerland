@@ -40,7 +40,7 @@ public partial class PortalDemo : Node3D
     private int _view = -1;
 
     private sealed record HouseSpec(string Name, Vector2 Center, float Width, float Depth, BuildingKind Kind,
-        (float X, bool South)[] Doors, FurnitureType[] Furniture);
+        (float X, bool South)[] Doors, FurnitureType[] Furniture, float DoorWidth = 1.0f, float DoorHeight = 2.1f);
 
     private static readonly HouseSpec[] Houses =
     {
@@ -54,6 +54,9 @@ public partial class PortalDemo : Node3D
             new[] { FurnitureType.Sofa, FurnitureType.Tv, FurnitureType.Rug }),
         new("D", new Vector2(26, -12), 9, 8, BuildingKind.Apartment, new[] { (0f, true) },
             new[] { FurnitureType.Table, FurnitureType.Shelf, FurnitureType.Plant }),
+        // E: a barn west of A, its wall-sized double door swung out (10 m of its 16, under the 6.2 m eave)
+        new("E", new Vector2(-17, -12), 16, 10, BuildingKind.Agricultural, new[] { (0f, true) },
+            new FurnitureType[0], DoorWidth: 10.0f, DoorHeight: 5.85f),
     };
 
     public PortalDemo(string? shot) => _shot = shot;
@@ -104,7 +107,7 @@ public partial class PortalDemo : Node3D
             foreach (var (x, south) in h.Doors)
             {
                 float z = h.Center.Y + (south ? h.Depth / 2 + 0.03f : -h.Depth / 2 - 0.03f);
-                spots.Add(new DoorSpot(index, new Vector3(h.Center.X + x, 0, z), new Vector3(0, 0, south ? 1 : -1), 1.0f, 2.1f));
+                spots.Add(new DoorSpot(index, new Vector3(h.Center.X + x, 0, z), new Vector3(0, 0, south ? 1 : -1), h.DoorWidth, h.DoorHeight));
             }
         }
         var mesh = BuildingMeshBuilder.Build(tile, spots.ToArray())!;
@@ -126,16 +129,32 @@ public partial class PortalDemo : Node3D
             _interiors[layout.Key] = node;
             foreach (var e in layout.Entrances)
             {
-                var link = DoorLink.Create(layout, e, _origin, 1.0f);
+                var link = DoorLink.Create(layout, e, _origin, Houses[i].DoorWidth, Houses[i].DoorHeight);
                 link.Open = true;
                 link.Swing = 1f;
                 link.Leaf = node.Leaf(e.Door);
-                link.Leaf?.SetSwing(1f);
+                link.Shutter = node.Shutter(e.Door);
+                if (link.Leaf == null && DoorLeaf.SwingsOut(layout.DressedKind()))
+                {
+                    link.Leaf = DoorLeaf.CreateOutward(e.Door, link.Outside, link.OutsideWidth, link.OutsideHeight,
+                        layout.DressedKind(), interiorMaterial);
+                    AddChild(link.Leaf);
+                }
+                link.SetLeaves(1f);
                 _links.Add(link);
             }
         }
 
-        var portals = new DoorPortals(() => _links, PlanAt) { Name = "Portals" };
+        var portals = new DoorPortals(() => _links, PlanAt)
+        {
+            Name = "Portals",
+            OpenDoors = (boxes, axes, count) =>
+            {
+                buildingMaterial.SetShaderParameter("open_door_box", boxes);
+                buildingMaterial.SetShaderParameter("open_door_axis", axes);
+                buildingMaterial.SetShaderParameter("open_door_count", count);
+            },
+        };
         AddChild(portals);
         foreach (var l in _links) portals.Attach(l);
         AddChild(new DoorwayGhosts(() => _links, PlanAt) { Name = "Ghosts" });
@@ -169,6 +188,14 @@ public partial class PortalDemo : Node3D
         ("two_houses", 2.0),     // C and D side by side, both open
         ("through", 2.0),        // through A's front door, its room, its back door, the backyard
         ("inside_out", 2.0),     // from inside B, across the street into A
+        ("in_doorway", 2.0),     // lens 5 cm in front of A's facade: snapped out of the doorway
+        ("in_reveal", 2.0),      // lens 10 cm inside A's doorway, looking out
+        ("in_reveal_down", 2.0), // lens on A's doorway plane from inside, looking out and down (#78)
+        ("barn", 2.0),           // E's wall-sized double door, both leaves swung out
+        ("barn_swinging", 2.0),  // the same, half open
+        ("barn_shut", 2.0),      // and shut: the pair over the facade's baked door, no flicker
+        ("barn_inside", 2.0),    // from inside E, out through its door at the leaves
+        ("barn_inside_shut", 2.0), // and shut: the pair's inner face, not a hole
         ("crossing", 4.0),       // the figure walks in through A's front door
     };
 
@@ -225,9 +252,20 @@ public partial class PortalDemo : Node3D
     {
         var a = _links.First(l => l.Plan == "0_0_0" && l.Outside.Basis.Z.Z > 0);
         var b = _links.First(l => l.Plan == "0_0_1");
+        var barn = _links.First(l => l.Plan == "0_0_4");
         Transform3D Look(Vector3 eye, Vector3 at) => Transform3D.Identity.Translated(eye).LookingAt(at, Vector3.Up);
+        barn.SetLeaves(view == "barn_swinging" ? 0.45f : view is "barn_shut" or "barn_inside_shut" ? 0f : 1f);
         switch (view)
         {
+            case "barn":
+            case "barn_swinging":
+            case "barn_shut":
+                _camera.GlobalTransform = Look(new Vector3(-7.5f, 2.2f, 9f), new Vector3(-17f, 3f, -7f));
+                break;
+            case "barn_inside":
+            case "barn_inside_shut":
+                _camera.GlobalTransform = Look(barn.Inside * new Vector3(1.2f, 1.7f, -5f), barn.Inside * new Vector3(0, 2f, 2f));
+                break;
             case "two_houses":
                 _camera.GlobalTransform = Look(new Vector3(20.5f, 1.7f, 4.5f), new Vector3(20f, 1.3f, -8f));
                 break;
@@ -240,6 +278,18 @@ public partial class PortalDemo : Node3D
                 var eye = b.Inside * new Vector3(0.1f, 1.6f, -1.5f);
                 var at = b.ToInside * (a.Outside * new Vector3(0, 1.2f, 0));
                 _camera.GlobalTransform = Look(eye, at);
+                break;
+            }
+            case "in_doorway":
+                _camera.GlobalTransform = a.Outside * Look(new Vector3(0.1f, 1.6f, 0.05f), new Vector3(0, 1.4f, -4f));
+                break;
+            case "in_reveal":
+                _camera.GlobalTransform = a.Inside * Look(new Vector3(0.1f, 1.6f, -0.1f), new Vector3(0, 1.4f, 4f));
+                break;
+            case "in_reveal_down":
+            {
+                var eye = new Vector3(0.023f, 1.68f, -0.002f);
+                _camera.GlobalTransform = a.Inside * Look(eye, eye + new Vector3(-0.27f, -0.64f, 0.72f));
                 break;
             }
             case "crossing":
@@ -314,7 +364,7 @@ public partial class PortalDemo : Node3D
         {
             Key = $"0_0_{index}", Kind = h.Kind, TriangleCount = 0, MinY = 0, MaxY = 8.5f,
             CenterX = h.Center.X, CenterZ = h.Center.Y, Yaw = yaw, Width = h.Width, Depth = h.Depth,
-            StoreyHeight = 3.0f, EntryWidth = 1.0f,
+            StoreyHeight = Math.Max(3.0f, h.DoorHeight + 0.4f), EntryWidth = h.DoorWidth,
         };
         int n = 0;
         foreach (var (x, doorSouth) in h.Doors)
@@ -324,21 +374,21 @@ public partial class PortalDemo : Node3D
             bool front = local.Z < 0;
             room.Openings.Add(new OpeningPlan
             {
-                Side = front ? Side.Front : Side.Back, Center = local.X, Width = 1.0f, Bottom = 0, Top = 2.1f,
+                Side = front ? Side.Front : Side.Back, Center = local.X, Width = h.DoorWidth, Bottom = 0, Top = h.DoorHeight,
                 Kind = OpeningKind.Entry,
             });
             var outward = new Vector3(0, 0, doorSouth ? 1 : -1);
             layout.Entrances.Add(new EntrancePlan
             {
                 Door = n++ == 0 ? layout.Key : $"0_0_{index + 10}", X = local.X, Z = front ? -hd : hd,
-                InX = 0, InZ = front ? 1 : -1, Width = 1.0f,
+                InX = 0, InZ = front ? 1 : -1, Width = h.DoorWidth,
                 DoorX = world.X, DoorY = 0, DoorZ = world.Z + outward.Z * 0.03f,
                 DoorOutX = 0, DoorOutZ = outward.Z,
             });
         }
         var main = layout.Entrances[0];
         layout.DoorX = main.DoorX; layout.DoorY = main.DoorY; layout.DoorZ = main.DoorZ;
-        layout.DoorOutX = main.DoorOutX; layout.DoorOutZ = main.DoorOutZ; layout.DoorWidth = 1.0f;
+        layout.DoorOutX = main.DoorOutX; layout.DoorOutZ = main.DoorOutZ; layout.DoorWidth = h.DoorWidth;
         layout.EntryX = main.X;
 
         foreach (var side in new[] { Side.Left, Side.Right })

@@ -28,6 +28,9 @@ public partial class RaceNpc : Node
     /// <summary>What it rides (a class <see cref="AutoPilot.Drives"/>).</summary>
     public RideKind Kind { get; set; }
 
+    /// <summary>A car's preset (<see cref="CarSetups"/> id, #40): a class race's, or one asked for.</summary>
+    public int Setup { get; set; }
+
     private FootPlayer _me = null!;
     private RaceManager? _race;
     private RaceRoute? _route;
@@ -75,6 +78,8 @@ public partial class RaceNpc : Node
         if (!_active) { _active = true; _me.RideControls = Hold; }
         // on its mount, and back on it after being thrown off (the mount waits for the ground)
         if (_me.Ride != Kind && _me.IsOnFloor()) _me.SetRide(Kind);
+        if (Setup != 0 && _me.Vehicle is Car && _me.CarSetupId != Setup && _pilot == null && _me.SetCarSetup(Setup))
+            GD.Print($"[npc] {_me.Name} preset {CarSetups.For(Setup).Name}");
         if (_arrival == null && _pilot == null && _race?.TakeArrival(Id) is { } a) Arrive(a);
         if (_arrival is { Staged: true } && !_reported)
         {
@@ -268,7 +273,8 @@ public partial class RaceNpcs : Node
 
     /// <summary>Server: spawns up to <paramref name="count"/> NPCs for <paramref name="owner"/> behind <paramref name="at"/>; returns their ids.</summary>
     /// <param name="place">Where the i-th one appears and its yaw (<see cref="NpcArrival.Plan"/>); null: behind <paramref name="at"/>.</param>
-    public List<long> Spawn(long owner, int count, RideKind kind, Vector3 at, float yaw, System.Func<int, (Vector3 At, float Yaw)>? place = null)
+    /// <param name="setup">A car preset for all of them (<see cref="CarSetups"/> id); 0 stock.</param>
+    public List<long> Spawn(long owner, int count, RideKind kind, Vector3 at, float yaw, System.Func<int, (Vector3 At, float Yaw)>? place = null, int setup = 0)
     {
         var ids = new List<long>();
         if (_spawner == null || !AutoPilot.Drives(kind)) return ids;
@@ -282,7 +288,7 @@ public partial class RaceNpcs : Node
             if (_live.ContainsKey(id)) continue;
             var (pos, facing) = place?.Invoke(ids.Count) ?? (at + back * (8f * (ids.Count + 1)) + Vector3.Up * 1.5f, yaw);
             _live[id] = new Live { Kind = kind, Since = Now };
-            _spawner.Spawn(PlayerReplication.NpcData(owner, n, (int)kind, pos, facing));
+            _spawner.Spawn(PlayerReplication.NpcData(owner, n, (int)kind, pos, facing, setup));
             ids.Add(id);
             GD.Print($"[npc] spawned {PlayerReplication.NodeName(id)} ({Label(id)}) for peer {owner}");
         }

@@ -20,8 +20,23 @@ namespace UnitSport.Interiors;
 /// </summary>
 public sealed class DoorLink
 {
-    /// <summary>How far out from the facade the portal quad stands: in front of the door leaf baked into the facade.</summary>
-    public const float OutsideQuadOffset = 0.075f;
+    /// <summary>
+    /// How far out from the facade the portal quad stands: just proud of the wall, which has no
+    /// hole in it. The closed leaf and handle baked in front of it (6..11 cm) are dropped by the
+    /// building shader while the portal shows (<see cref="DoorPortals.OpenDoors"/>), and the frame
+    /// round the opening stands in front of it like a real one.
+    /// </summary>
+    public const float OutsideQuadOffset = 0.02f;
+    /// <summary>Where the interior doorway's portal quad stands: at the reveal, just inside the room.</summary>
+    public const float InsideQuadOffset = -0.005f;
+    /// <summary>
+    /// The slab, in doorway-frame Z, a camera lens must not stand in: from the interior quad to the
+    /// facade one, widened by <paramref name="margin"/> (how far the near plane's corners reach from
+    /// the lens). In it the near plane cuts the portal's mouth and the view goes black or shows the
+    /// wall behind. The map keeps Z, so it holds in either frame.
+    /// </summary>
+    public static float LensSlabMin(float margin) => InsideQuadOffset - margin;
+    public static float LensSlabMax(float margin) => OutsideQuadOffset + margin;
 
     public required string Door { get; init; }
     public required string Plan { get; init; }
@@ -44,6 +59,8 @@ public sealed class DoorLink
     public bool Open { get; set; }
     /// <summary>How far the leaf has swung, 0 shut .. 1 open.</summary>
     public float Swing { get; set; }
+    /// <summary>Seconds a swing takes, open or shut (<see cref="SwingSecondsFor"/>).</summary>
+    public float SwingSeconds { get; init; } = SwingSecondsFor(1f);
     /// <summary>Open wide enough to walk through, and to see through.</summary>
     public bool Passable => Open && Swing > 0.6f;
 
@@ -51,8 +68,17 @@ public sealed class DoorLink
     public MeshInstance3D?[] OutsideQuads { get; } = new MeshInstance3D?[3];
     public MeshInstance3D?[] InsideQuads { get; } = new MeshInstance3D?[3];
     public DoorLeaf? Leaf { get; set; }
+    /// <summary>A barn's pair as its interior sees it, swung with <see cref="Leaf"/> (<see cref="DoorLeaf.CreateShutter"/>).</summary>
+    public DoorLeaf? Shutter { get; set; }
 
-    public static DoorLink Create(InteriorLayout layout, EntrancePlan e, WorldOrigin origin, float? outsideWidth)
+    /// <summary>Both sides' leaves to <paramref name="swing"/>.</summary>
+    public void SetLeaves(float swing)
+    {
+        Leaf?.SetSwing(swing);
+        Shutter?.SetSwing(swing);
+    }
+
+    public static DoorLink Create(InteriorLayout layout, EntrancePlan e, WorldOrigin origin, float? outsideWidth, float? outsideHeight = null)
     {
         BuildingKey.TryParse(e.Door, out var door);
         var tileOrigin = origin.ToWorld(door.Tile.MinE, door.Tile.MaxN, 0);
@@ -66,8 +92,9 @@ public sealed class DoorLink
         var inward = placement.Basis * new Vector3(e.InX, 0, e.InZ);
         var inside = Frame(placement * new Vector3(e.X, 0, e.Z), -inward.Normalized());
 
-        var kind = layout.Type == BuildingType.Church ? BuildingKind.Sacral : layout.Kind;
+        var kind = layout.DressedKind();
         var (width, top) = layout.OpeningOf(e);
+        float outsideW = outsideWidth ?? e.Width;
         return new DoorLink
         {
             Door = e.Door,
@@ -75,12 +102,21 @@ public sealed class DoorLink
             Tile = door.Tile,
             Outside = outside,
             Inside = inside,
-            OutsideWidth = outsideWidth ?? e.Width,
-            OutsideHeight = BuildingFootprint.DoorHeightFor(kind),
+            OutsideWidth = outsideW,
+            OutsideHeight = outsideHeight ?? BuildingFootprint.DoorHeightFor(kind),
             InsideWidth = width,
             InsideHeight = top,
+            // a barn's pair: each leaf is half the opening
+            SwingSeconds = SwingSecondsFor(DoorLeaf.SwingsOut(kind) ? outsideW / 2 : outsideW),
         };
     }
+
+    /// <summary>
+    /// How long a leaf <paramref name="leafWidth"/> metres wide takes to swing: 0.6 s for a house
+    /// door, and 0.4 s more per extra metre, so a big leaf moves with its weight (a 10 m barn
+    /// pair's 5 m leaves take 2.2 s).
+    /// </summary>
+    public static float SwingSecondsFor(float leafWidth) => 0.6f + 0.4f * Math.Max(0f, leafWidth - 1f);
 
     /// <summary>A doorway frame: origin on the sill, Z out of the building, Y up.</summary>
     private static Transform3D Frame(Vector3 origin, Vector3 outward)

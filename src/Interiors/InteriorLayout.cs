@@ -144,7 +144,7 @@ public sealed class EntrancePlan
 public sealed class InteriorLayout
 {
     /// <summary>Bumped whenever the generator changes enough that old plans should be regenerated.</summary>
-    public const int CurrentVersion = 2; // 2: doors on the wall cross-section, not the triangle extent
+    public const int CurrentVersion = 5; // 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
@@ -186,6 +186,9 @@ public sealed class InteriorLayout
     public bool Matches(Building b, string group) =>
         Version == CurrentVersion && TriangleCount == b.TriangleCount && Group == group
         && Math.Abs(MinY - b.MinY) < 0.01f && Math.Abs(MaxY - b.MaxY) < 0.01f;
+
+    /// <summary>The kind its facade is dressed as (BuildingMeshBuilder.KindOf): a church as a church.</summary>
+    public BuildingKind DressedKind() => Type == BuildingType.Church ? BuildingKind.Sacral : Kind;
 
     /// <summary>The ways in; a single-door plan's one entrance is built from its front-door fields.</summary>
     public IReadOnlyList<EntrancePlan> AllEntrances() => Entrances.Count > 0 ? Entrances : new[]

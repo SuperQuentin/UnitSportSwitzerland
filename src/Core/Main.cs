@@ -8,13 +8,46 @@ namespace UnitSport.Core;
 /// </summary>
 public partial class Main : Node
 {
+	/// <summary>
+	/// Names the window after what this run is (<c>--title "..."</c>, else its user args minus
+	/// the --chunks/--cache paths), so parallel test windows can be told apart.
+	/// </summary>
+	private static void SetWindowTitle()
+	{
+		var args = OS.GetCmdlineUserArgs();
+		int t = System.Array.IndexOf(args, "--title");
+		string what;
+		if (t >= 0 && t + 1 < args.Length) what = args[t + 1];
+		else
+		{
+			var shown = new System.Collections.Generic.List<string>();
+			for (int i = 0; i < args.Length; i++)
+				if (args[i] is "--chunks" or "--cache") i++;
+				else shown.Add(args[i]);
+			what = string.Join(' ', shown);
+		}
+		if (what.Length > 100) what = what[..100] + "…";
+		if (what.Length > 0) DisplayServer.WindowSetTitle($"UnitSportSwitzerland — {what}");
+	}
+
 	public override void _Ready()
 	{
+		SetWindowTitle();
+
 		// the network rules' own self-checks: vision interest and remote interpolation
 		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--interestcheck") >= 0)
 		{
 			bool ok = UnitSport.Net.Interest.SelfCheck() & UnitSport.Net.RemoteInterpolator.SelfCheck();
 			GD.Print(ok ? "[interestcheck] RESULT: ok" : "[interestcheck] RESULT: FAILED");
+			GetTree().Quit(ok ? 0 : 1);
+			return;
+		}
+
+		// the CD beat analyser's self-test: synthetic clicks at known tempos
+		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--beatcheck") >= 0)
+		{
+			bool ok = UnitSport.Audio.Cd.BeatAnalyzer.SelfCheck();
+			GD.Print(ok ? "[beatcheck] RESULT: ok" : "[beatcheck] RESULT: FAILED");
 			GetTree().Quit(ok ? 0 : 1);
 			return;
 		}
@@ -43,8 +76,20 @@ public partial class Main : Node
 			if (si >= 0 && si + 1 < a.Length) float.TryParse(a[si + 1],
 				System.Globalization.NumberStyles.Float,
 				System.Globalization.CultureInfo.InvariantCulture, out stride);
+			// --dance <style>,<move>: one standing and one walking figure dancing that move
+			(UnitSport.Audio.Cd.MusicStyle Style, int Move)? dance = null;
+			int di = Array.IndexOf(a, "--dance");
+			if (di >= 0 && di + 1 < a.Length)
+			{
+				var parts = a[di + 1].Split(',');
+				if (parts.Length == 2
+					&& Enum.TryParse<UnitSport.Audio.Cd.MusicStyle>(parts[0], true, out var danceStyle)
+					&& int.TryParse(parts[1], System.Globalization.NumberStyles.Integer,
+						System.Globalization.CultureInfo.InvariantCulture, out int danceMove))
+					dance = (danceStyle, danceMove);
+			}
 			AddChild(UnitSport.Avatar.AvatarPreview.Create(
-				seconds, output, view, focus, crank, stride));
+				seconds, output, view, focus, crank, stride, dance));
 			return;
 		}
 

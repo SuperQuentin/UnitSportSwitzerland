@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Interiors;
 
@@ -76,7 +77,6 @@ public static class InteriorMeshBuilder
     private static Color C(float r, float g, float b) => new Color(r, g, b).SrgbToLinear();
 
     private static readonly Color Glass = new(0.80f, 0.88f, 0.96f, 0f);
-    private static readonly Color DoorWood = C(0.40f, 0.26f, 0.16f);
     private static readonly Color Rail = C(0.30f, 0.24f, 0.18f);
     private static readonly Color StairWood = C(0.55f, 0.40f, 0.26f);
     private static readonly Color Concrete = C(0.60f, 0.60f, 0.58f);
@@ -135,21 +135,33 @@ public static class InteriorMeshBuilder
     }
 
     /// <summary>
-    /// A front door's leaf, in its hinge's frame: x from the hinge across the opening, y up, z
-    /// 0..<paramref name="thickness"/> toward the street. Handle on the room side, near the free edge.
+    /// A front door's leaf, in its hinge's frame: x from the hinge across the opening (toward -x
+    /// when <paramref name="mirrored"/>), y from <paramref name="bottom"/> up, z
+    /// 0..<paramref name="thickness"/> toward the street. A knob on the room side near the free edge,
+    /// and the facade's handle and colour (<see cref="BuildingFootprint"/>) on the street side, so
+    /// the leaf seen swinging through the portal is the one on the facade.
     /// </summary>
-    public static MeshData Leaf(float width, float height, float thickness)
+    public static MeshData Leaf(float width, float height, float thickness, BuildingKind kind,
+        bool mirrored = false, float bottom = 0f)
     {
         var s = new Scratch();
-        s.Box(new Vector3(0.01f, 0, 0), new Vector3(width - 0.01f, height - 0.01f, thickness), DoorWood, false);
+        void Box(float x0, float y0, float z0, float x1, float y1, float z1, Color col) =>
+            s.Box(new Vector3(mirrored ? -x1 : x0, y0, z0), new Vector3(mirrored ? -x0 : x1, y1, z1), col, false);
+
+        var wood = BuildingFootprint.DoorLeafColorFor(kind);
+        Box(0.01f, bottom, 0, width - 0.01f, height - 0.01f, thickness, wood);
         // two raised panels, so it reads as a door and not a plank
-        var panel = DoorWood * 0.85f;
+        var panel = wood * 0.85f;
         panel.A = 1;
-        float pw = width - 0.3f;
-        s.Box(new Vector3(0.15f, 0.2f, -0.01f), new Vector3(0.15f + pw, height * 0.45f, 0), panel, false);
-        s.Box(new Vector3(0.15f, height * 0.55f, -0.01f), new Vector3(0.15f + pw, height - 0.2f, 0), panel, false);
+        float pw = width - 0.3f, ph = height - bottom;
+        Box(0.15f, bottom + 0.2f, -0.01f, 0.15f + pw, bottom + ph * 0.45f, 0, panel);
+        Box(0.15f, bottom + ph * 0.55f, -0.01f, 0.15f + pw, height - 0.2f, 0, panel);
         var knob = C(0.80f, 0.70f, 0.30f);
-        s.Box(new Vector3(width - 0.14f, 1.0f, -0.06f), new Vector3(width - 0.06f, 1.08f, 0), knob, false);
+        Box(width - 0.14f, 1.0f, -0.06f, width - 0.06f, 1.08f, 0, knob);
+        // where BuildingMeshBuilder.AppendDoor puts it: 0.7 of the half-width from the middle
+        // (a pair's leaf: 0.15 of it, both handles near the meeting stiles)
+        float hx = width * 0.85f;
+        Box(hx - 0.04f, 1.0f, thickness, hx + 0.04f, 1.08f, thickness + 0.05f, BuildingFootprint.DoorHandleColor);
         return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
     }
 

@@ -7,6 +7,7 @@
 //   dotnet run --project tools/MapSetup -- --resume          last selection, straight to the estimate
 //   dotnet run --project tools/MapSetup -- --town Zermatt --radius 4 --layers terrain,roads --yes
 //   dotnet run --project tools/MapSetup -- --bake            rebuild tools/MapSetup/switzerland.bin
+//   dotnet run --project tools/MapSetup -- --pick-location   store the data on another drive
 
 using System.Diagnostics;
 using System.Globalization;
@@ -34,6 +35,18 @@ if (!File.Exists(paths.CountryFile))
     AnsiConsole.MarkupLine($"[red]No country map at {Markup.Escape(paths.CountryFile)}.[/] "
                            + "It is committed to the repository; pull it, or rebuild it with [bold]--bake[/].");
     return 1;
+}
+
+if (Flag("--save-location"))
+{
+    paths.SaveLocation();
+    AnsiConsole.MarkupLine($"Saved the location: {Markup.Escape(Where(paths))}");
+}
+if (Flag("--pick-location") && PickLocation(paths) is { } picked)
+{
+    paths = picked;
+    paths.SaveLocation();
+    AnsiConsole.MarkupLine($"Saved the location: {Markup.Escape(Where(paths))}");
 }
 
 var country = CountryData.Load(paths.CountryFile);
@@ -112,9 +125,10 @@ if (Arg("--snapshot") is { } snapshotPath)
 }
 
 bool interactive = !scripted && !Flag("--resume") && !Flag("--yes");
+bool skipMap = false;
 while (true)
 {
-    if (interactive)
+    if (interactive && !skipMap)
     {
         var view = new MapView(country, local, selection, sel => MapSummary(sel));
         if (!view.Run()) return 0;
@@ -124,6 +138,7 @@ while (true)
         state.Layers = layers;
         state.Save(paths);
     }
+    skipMap = false;
     if (selection.Count == 0)
     {
         AnsiConsole.MarkupLine("[yellow]Nothing selected.[/]");
@@ -146,10 +161,15 @@ while (true)
     if (Flag("--yes")) break;
     var choice = AnsiConsole.Prompt(new SelectionPrompt<string>()
         .Title("Go?")
-        .AddChoices("Start", "Back to the map", "Quit"));
+        .AddChoices("Start", "Back to the map", "Storage location...", "Quit"));
     if (choice == "Start") break;
     if (choice == "Quit") return 0;
     interactive = true;
+    if (choice == "Storage location...")
+    {
+        if (PickLocation(paths) is { } next) SwitchTo(next);
+        skipMap = true;
+    }
 }
 
 state.Tiles = selection.Tiles.Select(SetupState.Key).ToList();
@@ -240,8 +260,11 @@ AnsiConsole.Write(timeTable);
 
 var centre = selection.Centre()!.Value;
 AnsiConsole.MarkupLine($"[green]Done in {Duration(total.Elapsed.TotalSeconds)}.[/] Logs: {Markup.Escape(logDir)}");
+// the game finds the tiles on its own when they are where terrain_location.json (or its default) says
+var gameChunks = DataLocation.Load(paths.LocationFile).Chunks ?? paths.DefaultChunks;
+var chunksArg = Paths.SamePath(gameChunks, paths.Chunks) ? "" : $" --chunks \"{paths.Chunks}\"";
 AnsiConsole.MarkupLine("Play it:");
-AnsiConsole.MarkupLine($"  [bold]<godot> --path . -- --at {centre.E * 1000 + 500},{centre.N * 1000 + 500}[/]");
+AnsiConsole.MarkupLine($"  [bold]{Markup.Escape($"<godot> --path . -- --at {centre.E * 1000 + 500},{centre.N * 1000 + 500}{chunksArg}")}[/]");
 return 0;
 
 // ---------------------------------------------------------------------------------------------------
@@ -273,6 +296,7 @@ IReadOnlyList<(string, string)> MapSummary(Selection sel)
 
 void ShowPlan(List<Step> steps)
 {
+    AnsiConsole.MarkupLine($"[grey]Storage: {Markup.Escape(Where(paths))}[/]");
     var table = new Table().Border(TableBorder.Rounded).Title("[bold]What will happen[/]")
         .AddColumns("Step", "Details", "Download", "Disk", "Time");
     foreach (var s in steps)
@@ -304,6 +328,103 @@ void ShowPlan(List<Step> steps)
         if (need * 1.1 > free)
             AnsiConsole.MarkupLine($"[red]Drive {Markup.Escape(group.Key ?? "?")} needs {Bytes(need)} but has {Bytes(free)} free.[/]");
     }
+}
+
+// Where the downloads and the built tiles go: the repo's folders, a folder on any ready drive, or
+// one typed in. Returns null to keep the current place.
+Paths? PickLocation(Paths current)
+{
+    var options = new List<(string Label, string? Base)>
+    {
+        ($"Keep  [grey]{Markup.Escape(Where(current))}[/]", null),
+        ($"The repository's folders  [grey]{Markup.Escape(current.Root)} · {Bytes(FreeBytes(current.Root))} free[/]", ""),
+    };
+    var repoDrive = Path.GetPathRoot(current.Root);
+    foreach (var d in Drives())
+    {
+        string name = d.RootDirectory.FullName;
+        string label = "";
+        try { label = d.VolumeLabel; } catch (Exception) { /* not every platform names volumes */ }
+        string tags = string.Join(" · ", new[]
+        {
+            label, $"{Bytes(d.AvailableFreeSpace)} free of {Bytes(d.TotalSize)}",
+            string.Equals(name, repoDrive, StringComparison.OrdinalIgnoreCase) ? "the repo's drive" : "",
+        }.Where(t => t.Length > 0));
+        var baseDir = Path.Combine(name, "UnitSportSwitzerland");
+        options.Add(($"{Markup.Escape(baseDir)}  [grey]{Markup.Escape(tags)}[/]", baseDir));
+    }
+    options.Add(("Another folder...", "?"));
+
+    var pick = AnsiConsole.Prompt(new SelectionPrompt<(string Label, string? Base)>()
+        .Title("Where should the map data live? [grey](source downloads ≈ 155 GB and built tiles ≈ 55 GB for all of CH)[/]")
+        .PageSize(15)
+        .UseConverter(o => o.Label)
+        .AddChoices(options));
+    if (pick.Base == null) return null;
+
+    string data, chunks;
+    if (pick.Base == "")
+        (data, chunks) = (current.DefaultData, current.DefaultChunks);
+    else
+    {
+        var baseDir = pick.Base == "?"
+            ? AnsiConsole.Prompt(new TextPrompt<string>("Folder [grey](data/ and terrain_chunks/ go inside)[/]:"))
+            : pick.Base;
+        (data, chunks) = (Path.Combine(baseDir, "data"), Path.Combine(baseDir, "terrain_chunks"));
+    }
+
+    const string both = "Source data and built tiles", dataOnly = "Source data only (the downloads)",
+        tilesOnly = "Built tiles only (what the game and the server load)";
+    var what = AnsiConsole.Prompt(new SelectionPrompt<string>()
+        .Title($"Move what to [bold]{Markup.Escape(Path.GetDirectoryName(data) ?? data)}[/]?")
+        .AddChoices(both, dataOnly, tilesOnly));
+    var next = current.With(what == tilesOnly ? current.Data : data, what == dataOnly ? current.Chunks : chunks);
+    return Paths.SamePath(next.Data, current.Data) && Paths.SamePath(next.Chunks, current.Chunks) ? null : next;
+}
+
+// Carries the selection and layers over to another location and saves it for the next run and the game.
+// Nothing is moved: what is already downloaded or built there counts, what is left behind does not.
+void SwitchTo(Paths next)
+{
+    var old = (Paths: paths, Local: local);
+    paths = next;
+    paths.SaveLocation();
+    local = AnsiConsole.Status().Start("Looking at the new location...", _ => LocalState.Scan(paths));
+    var moved = SetupState.Load(paths);
+    moved.Tiles = selection.Tiles.Select(SetupState.Key).ToList();
+    moved.Layers = layers;
+    state = moved;
+    state.Save(paths);
+    stats.Save(paths); // download and core rates belong to the machine, not the folder
+    AnsiConsole.MarkupLine($"Saved the location: {Markup.Escape(Where(paths))}");
+
+    if (!Paths.SamePath(old.Paths.Chunks, paths.Chunks) && old.Local.Built.Count > 0 && local.Built.Count == 0)
+        AnsiConsole.MarkupLine($"[yellow]The {old.Local.Built.Count:N0} tiles built in {Markup.Escape(old.Paths.Chunks)} stay there.[/] "
+                               + $"Move that folder to {Markup.Escape(paths.Chunks)} (and its _temp next to it) to keep them, or they are built again.");
+    if (!Paths.SamePath(old.Paths.Data, paths.Data) && old.Local.Downloaded.Count > 0 && local.Downloaded.Count == 0)
+        AnsiConsole.MarkupLine($"[yellow]The downloads in {Markup.Escape(old.Paths.Data)} stay there.[/] "
+                               + $"Move what is inside to {Markup.Escape(paths.Data)} to keep them, or they are downloaded again.");
+}
+
+static string Where(Paths p) =>
+    p.DataOverride == null && p.ChunksOverride == null ? $"the repository's folders ({p.Root})"
+    : $"source data {p.Data}, built tiles {p.Chunks}";
+
+// Ready drives with room on them; skips pseudo and read-only filesystems (Linux lists dozens).
+static List<DriveInfo> Drives()
+{
+    var list = new List<DriveInfo>();
+    foreach (var d in DriveInfo.GetDrives())
+    {
+        try
+        {
+            if (d.IsReady && d.DriveType is (DriveType.Fixed or DriveType.Removable or DriveType.Network)
+                && d.TotalSize >= 8_000_000_000 && d.AvailableFreeSpace >= 1_000_000_000)
+                list.Add(d);
+        }
+        catch (Exception) { /* a drive that cannot be asked is not a candidate */ }
+    }
+    return list;
 }
 
 Layers AskLayers(Layers current)
@@ -428,6 +549,10 @@ static void PrintHelp()
         Folders:
           --data DIR                   source data instead of ressources/data (dataset subfolders inside)
           --chunks DIR                 built tiles instead of terrain_chunks (state goes to DIR_temp)
+          --save-location              keep --data/--chunks for later runs, the game and the server
+          --pick-location              choose a drive or folder first (also under "Go?")
+                                       The choice is saved in terrain_location.json (repo root,
+                                       gitignored); --data/--chunks override it for one run.
         Run:
           --plan-only                  show the estimate and stop
           --yes                        do not ask before starting

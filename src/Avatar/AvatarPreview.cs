@@ -25,6 +25,9 @@ public partial class AvatarPreview : Node3D
     private int _focus = -1;
     private float _crank = float.NaN;
     private float _stride = float.NaN;
+    private (Audio.Cd.MusicStyle Style, int Move)? _dance;
+    private MeshInstance3D? _danceStill, _danceWalk;
+    private float _walkPhase;
     private Cyclist? _cyclist;
     private readonly List<Node3D> _turntables = new();
 
@@ -45,11 +48,12 @@ public partial class AvatarPreview : Node3D
     }
 
     public static AvatarPreview Create(double seconds, string output, float viewDegrees = 90,
-        int focus = -1, float crank = float.NaN, float stride = float.NaN) =>
+        int focus = -1, float crank = float.NaN, float stride = float.NaN,
+        (Audio.Cd.MusicStyle Style, int Move)? dance = null) =>
         new()
         {
             Name = "AvatarPreview", _seconds = seconds, _output = output,
-            _viewDegrees = viewDegrees, _focus = focus, _crank = crank, _stride = stride,
+            _viewDegrees = viewDegrees, _focus = focus, _crank = crank, _stride = stride, _dance = dance,
         };
 
     public override void _Ready()
@@ -148,6 +152,46 @@ public partial class AvatarPreview : Node3D
             return;
         }
 
+        // "--dance <style>,<move>": one standing and one walking (1.4 m/s) figure dancing that move
+        // at 120 BPM, rebuilt every frame in _Process. Judge it with --view 180 (front) and 90 (side).
+        if (_dance is { } dance)
+        {
+            _danceStill = new MeshInstance3D { MaterialOverride = material };
+            _danceWalk = new MeshInstance3D { MaterialOverride = material };
+            Place(-0.6f, _danceStill);
+            Place(0.6f, _danceWalk);
+            var danceCam = new Camera3D { Position = new Vector3(0, 1.15f, 6.5f), Fov = 28 };
+            AddChild(danceCam);
+            danceCam.LookAt(new Vector3(0, 0.9f, 0), Vector3.Up);
+            danceCam.Current = true;
+            UpdateDance(dance.Style, dance.Move, 0f);
+            return;
+        }
+
+        // "--carsetups [--car N] [--setups 0,3,2,4]": one car in several presets (#40), side by side
+        if (OS.GetCmdlineUserArgs().Contains("--carsetups"))
+        {
+            var args = OS.GetCmdlineUserArgs();
+            string? After(string flag) => Array.IndexOf(args, flag) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+            var car = Player.CarCatalog.All[int.TryParse(After("--car"), out int n) ? Mathf.Clamp(n, 0, Player.CarCatalog.All.Count - 1) : 0];
+            var setups = (After("--setups") ?? "0,3,2,4").Split(',').Select(w => Player.CarSetups.Parse(w) ?? Player.CarSetups.All[0]).ToArray();
+            for (int i = 0; i < setups.Length; i++)
+            {
+                var spec = setups[i].Apply(car);
+                var rig = CarRig.Create(spec.Body, spec.Wheelbase);
+                rig.Rotation = new Vector3(0, Mathf.Pi - (_viewDegrees == 90 ? 0.6f : Mathf.DegToRad(_viewDegrees)), 0);
+                Place((i - (setups.Length - 1) * 0.5f) * 3.6f, rig);
+                GD.Print($"[carsetups] {i + 1}. {car.Label} {setups[i].Name}: lift {spec.Body.Lift:F2} m, wheel {spec.Body.WheelRadius:F2} m, "
+                    + $"box {MeshBounds.Of(rig).Position} .. {MeshBounds.Of(rig).End}");
+            }
+            var carCam = new Camera3D { Position = new Vector3(0, 3.6f, 8f + 2.2f * setups.Length), Fov = 34 };
+            AddChild(carCam);
+            carCam.LookAt(new Vector3(0, 0.7f, 0), Vector3.Up);
+            carCam.Current = true;
+            _turntables.Clear();
+            return;
+        }
+
         if (!float.IsNaN(_stride))
         {
             const int steps = 6;
@@ -228,6 +272,18 @@ public partial class AvatarPreview : Node3D
         camera.Current = true;
     }
 
+    /// <summary>The dance figures at <paramref name="dt"/> further along a 120 BPM clock.</summary>
+    private void UpdateDance(Audio.Cd.MusicStyle style, int move, float dt)
+    {
+        const float speed = 1.4f;
+        _walkPhase = HumanMeshBuilder.AdvancePhase(_walkPhase, speed, dt);
+        float t = (float)_elapsed;
+        float bars = t / 2f;                                   // 4 beats of 0.5 s
+        var dance = new DanceParams(style, move, (t * 2f) % 1f, bars % 1f, (int)bars, 1f);
+        _danceStill!.Mesh = HumanMeshBuilder.BuildStride(HumanPalette.ForRider(1), 0f, 0f, dance: dance);
+        _danceWalk!.Mesh = HumanMeshBuilder.BuildStride(HumanPalette.ForRider(3), speed, _walkPhase, dance: dance);
+    }
+
     private void Place(float x, Node3D node)
     {
         var pivot = new Node3D { Position = new Vector3(x, 0, 0) };
@@ -239,6 +295,7 @@ public partial class AvatarPreview : Node3D
     public override void _Process(double delta)
     {
         _elapsed += delta;
+        if (_dance is { } dance) UpdateDance(dance.Style, dance.Move, (float)delta);
 
         // A fixed angle, not a turn. Bicycle and rider geometry is judged side-on — saddle
         // height against hip, hands against the drops, knee over the pedal spindle — and a

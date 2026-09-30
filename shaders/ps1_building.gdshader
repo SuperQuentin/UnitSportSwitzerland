@@ -35,6 +35,44 @@ uniform vec4 occupied_box[8];
 uniform vec4 occupied_axis[8];
 uniform int occupied_count = 0;
 
+// --- open doors (Interiors/DoorPortals, via ChunkManager.SetOpenDoors) --------------------
+// Doors whose portal is showing: the doorway frame's origin (on the sill, in the facade's plane)
+// and half its width, then (outward x, outward z, its height). Their baked closed leaf and handle
+// (BuildingMeshBuilder.AppendDoor: 6..11 cm proud, inside the opening) are dropped, so the
+// portal can stand right on the facade. The frame, lintel and doorstep stay: beside, above and
+// below the opening. The leaf's foot, inside the doorstep, goes too, but only in the leaf's own
+// plane: the step has no back face, and looking out from inside, the foot showed through it.
+uniform vec4 open_door_box[16];
+uniform vec4 open_door_axis[16];
+uniform int open_door_count = 0;
+
+bool open_door_leaf(vec3 p) {
+    for (int i = 0; i < 16; i++) {
+        if (i >= open_door_count) {
+            break;
+        }
+        vec3 d = p - open_door_box[i].xyz;
+        vec2 o = open_door_axis[i].xy;
+        float out_ = d.x * o.x + d.z * o.y;
+        float along = d.z * o.x - d.x * o.y;
+        // a hair inside the opening: the jambs' and the lintel's own faces bound it exactly
+        if (abs(along) >= open_door_box[i].w - 0.002 || d.y >= open_door_axis[i].z - 0.002) {
+            continue;
+        }
+        // leaf and handles above the step; below its top (12 cm), the leaf's plane alone
+        if ((out_ > 0.045 && out_ < 0.125 && d.y > 0.125)
+            || (out_ > 0.05 && out_ < 0.07 && d.y > -0.01 && d.y < 0.119)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// garages (BuildingMeshBuilder flags them in UV2.y): the sign's light face over the door (lit
+// from behind at night), and a painted stripe under the eave that reads from across the valley
+uniform vec3 garage_sign : source_color = vec3(0.97, 0.95, 0.88);
+uniform vec3 garage_stripe : source_color = vec3(0.82, 0.24, 0.12);
+
 varying vec3 world_pos;
 
 // --- sightline cut ----------------------------------------------------------------------
@@ -206,11 +244,14 @@ vec3 stained_glass(vec2 q, vec2 cell, bool lit) {
     return c * (lit ? 1.4 : mix(0.7, 0.25, world_night));
 }
 
+varying float garage_flag;  // UV2.y: 0 plain, 1 neon sign, 2 garage wall (storey_count = eave m)
+
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     facade = UV;
     storey_count = UV2.x;
     wall_frame = CUSTOM0.xyz;
+    garage_flag = UV2.y;
     vec4 clip = PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
     if (clip.w > 0.0) {
         vec2 half_res = snap_resolution * 0.5;
@@ -222,7 +263,7 @@ void vertex() {
 }
 
 void fragment() {
-    if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
+    if (portal_clipped(world_pos, CAMERA_POSITION_WORLD) || open_door_leaf(world_pos)) {
         discard;
     }
     vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
@@ -245,7 +286,8 @@ void fragment() {
     // stop a little below the wall plate so the eave never cuts a row in half
     float top = storey_count - 0.22;
     vec3 glow = vec3(0.0);
-    if (facade.y > 0.0 && facade.y < top && detail < 0.6) {
+    bool garage_wall = garage_flag > 1.5;
+    if (!garage_wall && facade.y > 0.0 && facade.y < top && detail < 0.6) {
         float u = facade.x;
         float wall_v = fract(facade.y);
         float col_u = fract(u / window_spacing);
@@ -282,7 +324,7 @@ void fragment() {
     // A string of bulbs along the eaves, just under the wall plate, on about 60% of the houses
     // that have a window grid. Drawn here rather than as geometry: every house in view gets them
     // for the cost of a few instructions, and they follow the facade frame the windows use.
-    if (world_lights > 0.0 && storey_count > 0.5 && detail < 0.6) {
+    if (!garage_wall && world_lights > 0.0 && storey_count > 0.5 && detail < 0.6) {
         float house = fract(sin(dot(floor(world_pos.xz / 24.0), vec2(41.3, 17.9))) * 9731.7);
         float eave = storey_count - 0.05;
         if (house < 0.6 && facade.y > eave - 0.08 && facade.y < eave) {
@@ -296,6 +338,16 @@ void fragment() {
                 glow = max(glow, bulb * legible * world_lights);
             }
         }
+    }
+
+    // --- garage: the sign's light face, and a painted stripe under the eave -------------
+    // The face is a light box: plain paint by day, lit at night like a window. The stripe is
+    // paint, shaded like the wall, 0.5 m tall so it still reads as a line a kilometre off.
+    if (garage_flag > 0.5 && garage_flag < 1.5) {
+        col = garage_sign;
+        glow = max(glow, garage_sign);
+    } else if (garage_wall && facade.y > storey_count - 0.75 && facade.y < storey_count - 0.25) {
+        col = garage_stripe;
     }
 
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);

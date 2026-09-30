@@ -24,7 +24,14 @@ public readonly record struct BuildingKey(int TileE, int TileN, int Index)
 /// Where a building's front door is, in tile-local metres (X east, Y altitude, Z south — the
 /// frame the building triangles and the chunk node share). <see cref="Outward"/> is horizontal.
 /// </summary>
-public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outward, float Width, float Height);
+public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outward, float Width, float Height)
+{
+    /// <summary>The building's kind, so door consumers (garage doors) need not keep the tile.</summary>
+    public BuildingKind Kind { get; init; }
+
+    /// <summary>A garage's drive-in room behind this door (<see cref="GarageBay"/>), null for every other door.</summary>
+    public GarageBay.Bay? Bay { get; init; }
+}
 
 /// <summary>
 /// A building's plan-view box and its door, derived from nothing but its wall triangles. The
@@ -73,11 +80,49 @@ public static class BuildingFootprint
     {
         BuildingKind.House or BuildingKind.Other => 1.0f,
         BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Civic or BuildingKind.Sacral => 1.8f,
-        _ => 2.8f, // barns, works, garages
+        BuildingKind.Agricultural => 4.0f, // a barn's double door at the least, a hay wagon wide
+        _ => 2.8f, // works, garages
     };
 
-    public static float DoorHeightFor(BuildingKind kind) =>
-        DoorWidthFor(kind) > 2f ? 2.8f : kind == BuildingKind.Sacral ? 2.6f : 2.1f;
+    /// <summary>A barn's pair spans its facade but for this much wall at each end, for the jambs.</summary>
+    public const float BarnDoorMargin = 0.6f;
+
+    /// <summary>However long the barn, its door stops here: a leaf is half of it, swinging out.</summary>
+    public const float MaxBarnDoorWidth = 10f;
+
+    /// <summary>A barn's door stops this far under the eave, for the lintel.</summary>
+    public const float BarnDoorUnderEave = 0.35f;
+
+    public static float DoorHeightFor(BuildingKind kind) => kind switch
+    {
+        BuildingKind.Agricultural => 4.0f,
+        _ => DoorWidthFor(kind) > 2f ? 2.8f : kind == BuildingKind.Sacral ? 2.6f : 2.1f,
+    };
+
+    /// <summary>
+    /// The door's height in a building whose ground floor has <paramref name="clear"/> metres of
+    /// headroom: a barn's as tall as its hall allows, others as <see cref="DoorHeightFor(BuildingKind)"/>.
+    /// A barn's facade door is also kept under the eave, and the interior plan takes the height
+    /// the footprint settled on (<see cref="DoorSpot.Height"/>), so the two openings match.
+    /// </summary>
+    public static float DoorHeightFor(BuildingKind kind, float clear) =>
+        kind == BuildingKind.Agricultural ? clear - 0.15f : DoorHeightFor(kind);
+
+    /// <summary>The front door's leaf, linear: the facade's baked leaf and the interior's swinging one.</summary>
+    public static Color DoorLeafColorFor(BuildingKind kind) => (kind switch
+    {
+        BuildingKind.Agricultural or BuildingKind.Annex => new Color(0.42f, 0.30f, 0.20f),
+        BuildingKind.Industrial => new Color(0.46f, 0.50f, 0.54f),
+        BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Civic => new Color(0.22f, 0.26f, 0.30f),
+        BuildingKind.Sacral => new Color(0.30f, 0.18f, 0.10f), // old oak
+        _ => new Color(0.40f, 0.25f, 0.15f),
+    }).SrgbToLinear();
+
+    /// <summary>The door frame on the facade, linear.</summary>
+    public static readonly Color DoorFrameColor = new Color(0.86f, 0.84f, 0.79f).SrgbToLinear();
+
+    /// <summary>The front door's street-side handle, linear: on the facade and on the swinging leaf.</summary>
+    public static readonly Color DoorHandleColor = DoorFrameColor * 0.7f;
 
     /// <summary>Doors for every building of a tile, in building order.</summary>
     public static DoorSpot[] ComputeDoors(BuildingTile tile, RoadTile? roads, ChunkGrid? grid)
@@ -85,7 +130,13 @@ public static class BuildingFootprint
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
         var doors = new DoorSpot[tile.Buildings.Count];
         for (int i = 0; i < doors.Length; i++)
-            doors[i] = Compute(tile, i, roadIndex, grid)?.Door ?? default;
+        {
+            var d = (Compute(tile, i, roadIndex, grid)?.Door ?? default) with { Kind = tile.Buildings[i].Kind };
+            // a bay needs the sill on the real ground: only with the full-resolution grid
+            if (grid != null && d.Kind == BuildingKind.Garage && GarageBay.Plan(tile, i, d) is (var fitted, { } bay))
+                d = fitted with { Bay = bay };
+            doors[i] = d;
+        }
         return doors;
     }
 
@@ -158,7 +209,11 @@ public static class BuildingFootprint
             f.Spans.Add((Math.Min(u0, u1), Math.Max(u0, u1)));
         }
 
-        float doorW = DoorWidthFor(kind), doorH = DoorHeightFor(kind);
+        float doorW = DoorWidthFor(kind);
+        float doorH = DoorHeightFor(kind, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab);
+        // a door's worth of height, for judging a wall and for the odd doors that are no barn gate
+        float plainH = Math.Min(doorH, DoorHeightFor(kind));
+        bool barn = DoorLeaf.SwingsOut(kind);
         var roadTarget = roads.Streets.Nearest(center, 60f) ?? roads.Paths.Nearest(center, 40f);
 
         var ranked = new List<(float Score, DoorSpot Door)>();
@@ -167,7 +222,8 @@ public static class BuildingFootprint
             var (s0, s1) = f.LongestRun();
             float length = s1 - s0;
             if (length < 0.9f) continue;
-            float width = Math.Min(doorW, length - 0.3f);
+            // a barn's pair spans nearly the whole wall, its leaves standing out square when open
+            float width = barn ? Math.Min(length - 2 * BarnDoorMargin, MaxBarnDoorWidth) : Math.Min(doorW, length - 0.3f);
             var t = new Vector2(-f.Normal.Y, f.Normal.X);
             var xz = f.Normal * f.Offset + t * ((s0 + s1) * 0.5f);
             if (Covered(xz)) continue;
@@ -176,6 +232,9 @@ public static class BuildingFootprint
                 ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
                 : b.MinY + 0.8f;
             float baseY = Math.Max(ground, b.MinY);
+            // and rises to the eave: on the long side that is the wall plate, on a gable end the
+            // level the gable's slopes start from, so the door's top corners stay on the wall
+            float height = barn ? Math.Min(doorH, Math.Max(2.5f, box.Eave - baseY - BarnDoorUnderEave)) : doorH;
 
             float score = Math.Min(length, 12f) * 0.08f;
             if (roadTarget is { } r)
@@ -187,11 +246,11 @@ public static class BuildingFootprint
             }
             else score += f.Normal.Dot(new Vector2(0.3f, 0.95f)) * 0.3f; // south-ish, like Swiss entrances
             if (ground < b.MinY - 0.6f) score -= 2f;          // on stilts over a slope
-            if (ground > b.MaxY - doorH - 0.3f) score -= 3f; // buried side of a hillside house
+            if (ground > b.MaxY - plainH - 0.3f) score -= 3f; // buried side of a hillside house
             if (width < doorW * 0.8f) score -= 1f;
 
             var pos = new Vector3(xz.X + f.Normal.X * 0.03f, baseY, xz.Y + f.Normal.Y * 0.03f);
-            ranked.Add((score, new DoorSpot(index, pos, new Vector3(f.Normal.X, 0, f.Normal.Y), Math.Max(0.7f, width), doorH)));
+            ranked.Add((score, new DoorSpot(index, pos, new Vector3(f.Normal.X, 0, f.Normal.Y), Math.Max(0.7f, width), height)));
         }
 
         // best-scoring door that is actually on a wall; the score alone can pick a run whose
@@ -208,7 +267,7 @@ public static class BuildingFootprint
             var open = cuts.Where(k => !Covered(k.Mid)).ToList();
             var cut = (open.Count > 0 ? open : cuts).MaxBy(k => k.Normal.Dot((aim - k.Mid).Normalized()) - k.Mid.DistanceTo(aim) * 0.01f);
             var pos = new Vector3(cut.Mid.X + cut.Normal.X * 0.03f, cut.Ground, cut.Mid.Y + cut.Normal.Y * 0.03f);
-            door = new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f), doorH);
+            door = new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f), plainH);
             found = true;
         }
         if (!found && ranked.Count > 0) { door = ranked.MaxBy(r => r.Score).Door; found = true; }
@@ -218,7 +277,7 @@ public static class BuildingFootprint
         {
             var v = new Vector2(-u.Y, u.X);
             var xz = center - v * (dpt * 0.5f);
-            door = new DoorSpot(index, new Vector3(xz.X, b.MinY, xz.Y), new Vector3(-v.X, 0, -v.Y), 0f, doorH);
+            door = new DoorSpot(index, new Vector3(xz.X, b.MinY, xz.Y), new Vector3(-v.X, 0, -v.Y), 0f, plainH);
         }
 
         // ---- interior frame: the box edge the door is on becomes local -Z ----------------

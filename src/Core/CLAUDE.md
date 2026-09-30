@@ -18,7 +18,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 ## Commands
 
-- `commands` — Commands: --at, --goto, --menu, --path, --probe, --shot
+- `commands` — Commands: --at, --chatcheck, --goto, --menu, --path, --probe, --shot, --title
 
 ## Gotchas
 

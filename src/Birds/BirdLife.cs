@@ -324,38 +324,40 @@ public partial class BirdLife : Node3D
     // the hunt
     // ------------------------------------------------------------------------------------
 
-    private static SfxBank? _blast;
-
-    /// <summary>A shotgun report: a sharp crack, a noise body and a low thump, then a short tail.</summary>
-    public static SfxBank Blast => _blast ??= SfxBank.Build("shotgun", 6, 1.2f, 71, (rng, n) =>
-    {
-        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
-        var crack = Dsp.HighPass(Dsp.Noise(rng, n), 0.3f);
-        var body = Dsp.LowPass(Dsp.Noise(rng, n), 0.08f * J());
-        float d1 = 70f * J(), d2 = 11f * J(), d3 = 2.5f * J(), f = 55f * J();
-        var s = new float[n];
-        for (int i = 0; i < n; i++)
-        {
-            float t = (float)i / Dsp.Rate;
-            s[i] = crack[i] * 2.5f * Mathf.Exp(-d1 * t) + body[i] * 7f * Mathf.Exp(-d2 * t)
-                 + Mathf.Sin(Mathf.Tau * f * t) * 0.9f * Mathf.Exp(-14f * t)
-                 + body[i] * 2.5f * Mathf.Exp(-d3 * t) * Mathf.Min(1f, t * 20f);
-        }
-        return s;
-    });
-
     /// <summary>Called by the item controller with a shell already spent.</summary>
     private void Fire(FootPlayer player)
     {
-        var (stream, pitch, db) = Blast.Pick(_rng);
-        _gun.Stream = stream;
-        _gun.PitchScale = pitch;
-        _gun.VolumeDb = -3f + db;
-        _gun.Play();
-
+        // The shot leaves the EYE. In third person the camera is ~3 m behind and to the side: the
+        // camera's ray finds what the crosshair is on, then the barrel aims from the eye at that point.
         var cam = player.Camera;
-        var hit = Shoot(cam.GlobalPosition, -cam.GlobalTransform.Basis.Z, player);
-        if (hit == null) return;
+        var eye = player.EyePosition;
+        var look = -cam.GlobalTransform.Basis.Z;
+        var aim = look;
+        if (!player.IsFirstPerson && !player.ScopeView)
+        {
+            var start = cam.GlobalPosition + look * Mathf.Max(0f, (eye - cam.GlobalPosition).Dot(look));
+            var end = start + look * (Range + 10f);
+            var ray = GetWorld3D().DirectSpaceState.IntersectRay(
+                PhysicsRayQueryParameters3D.Create(start, end, uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() }));
+            var point = ray.Count > 0 ? ray["position"].AsVector3() : end;
+            if (point.DistanceTo(eye) > 1f) aim = (point - eye).Normalized();
+        }
+        // the blast is an item event: heard (in 3D, at the muzzle) and seen by everyone near,
+        // this player included. Without the event node (a probe world) it stays a local sound.
+        if (ItemEvents.Instance is { } events)
+            events.Send(ItemEventKind.Shot, ItemEvents.MuzzleOf(player, aim), aim);
+        else
+        {
+            var (stream, pitch, db) = SfxSynth.Shotgun.Pick(_rng);
+            _gun.Stream = stream;
+            _gun.PitchScale = pitch;
+            _gun.VolumeDb = -3f + db;
+            _gun.Play();
+        }
+
+        var bird = Shoot(eye, aim, player);
+        if (bird == null) return;
+        var hit = bird;
 
         var s = hit.Species;
         int points = Journal.Bag(s, Month);

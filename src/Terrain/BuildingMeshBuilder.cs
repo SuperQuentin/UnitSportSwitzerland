@@ -28,20 +28,57 @@ public static class BuildingMeshBuilder
     private const float RoofNormalY = 0.45f;
 
     /// <summary>
+    /// UV2.y flags read by <c>ps1_building.gdshader</c>: 0 plain, <see cref="SignFlag"/> a garage
+    /// sign's light face (lit at night), <see cref="GarageWallFlag"/> a garage wall, whose UV is
+    /// (metres along, metres above the base) and UV2.x the eave height the painted stripe runs under.
+    /// </summary>
+    public const float SignFlag = 1f, GarageWallFlag = 2f;
+
+    /// <summary>
     /// The building mesh plus a front door on each building. The doors are a few boxes appended
     /// after the facades, with no windows (uv.y &lt; 0), so a tile's buildings and all their doors
     /// stay one surface and one draw call.
     /// </summary>
-    public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors)
+    /// <para>
+    /// A garage with a drive-in bay (<see cref="GarageBay"/>) gets its doorway cut out of the
+    /// facade, the room behind it and, when <paramref name="ground"/> gives the terrain heights
+    /// (tile-local column, row), the apron over the carved cells outside its walls.
+    /// </para>
+    public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors,
+        Func<int, int, float>? ground = null, IReadOnlySet<int>? otherHoles = null, Func<int, int, Color>? groundColor = null)
     {
-        var data = Build(tile);
+        var bays = BaysOf(tile, doors);
+        var data = Build(tile, bays);
         if (data == null || doors == null || doors.Length == 0) return data;
 
         var v = new List<Vector3>(doors.Length * 120);
         var c = new List<Color>(doors.Length * 120);
+        var f = new List<float>(doors.Length * 120); // UV2.y flag per vertex
         var types = BuildingTypes.For(tile);
         foreach (var d in doors)
-            if (d.Width > 0) AppendDoor(v, c, d, KindOf(tile.Buildings[d.Index], types.TypeOf(d.Index)));
+            if (d.Width > 0) AppendDoor(v, c, f, d, KindOf(tile.Buildings[d.Index], types.TypeOf(d.Index)));
+        var rooms = bays.OfType<GarageBay.Bay>().ToList();
+        foreach (var bay in rooms)
+            GarageBay.Room(bay, (a, b, cc, dd, col) =>
+            {
+                // both windings: seen from inside through the door and from outside through the hole
+                v.AddRange([a, b, cc, a, cc, dd, a, cc, b, a, dd, cc]);
+                for (int i = 0; i < 12; i++) { c.Add(col); f.Add(0f); }
+            });
+        if (rooms.Count > 0 && ground != null)
+        {
+            var apron = new List<Vector3>();
+            GarageBay.Apron(rooms, GarageBay.HoleCells(rooms), otherHoles, ground, false, apron);
+            // Exactly on the carved ground's vertices (a lift opens a slit onto the cut walls
+            // below), and coloured like it (nearest vertex), so the carve's 1 m steps do not show.
+            // Only stride 1 carves these cells; farther out it lies on the coarse terrain.
+            foreach (var p in apron)
+            {
+                v.Add(p);
+                c.Add(groundColor?.Invoke(Mathf.RoundToInt(p.X), Mathf.RoundToInt(p.Z)) ?? ApronColor);
+                f.Add(0f);
+            }
+        }
 
         int n = data.Vertices.Length;
         var vertices = new Vector3[n + v.Count];
@@ -59,12 +96,17 @@ public static class BuildingMeshBuilder
             vertices[n + i] = v[i];
             colors[n + i] = c[i];
             uvs[n + i] = new Vector2(0f, -1f);
+            uv2s[n + i] = new Vector2(0f, f[i]);
         }
         return new MeshData(vertices, colors, uvs, uv2s, frames);
     }
 
-    /// <summary>Frame, leaf and a doorstep, in the door's own frame (along the wall, out, up).</summary>
-    private static void AppendDoor(List<Vector3> v, List<Color> c, Interiors.DoorSpot d, BuildingKind kind)
+    /// <summary>
+    /// Frame, leaf and a doorstep, in the door's own frame (along the wall, out, up). A garage gets
+    /// no leaf (its roll-up door is a node, <c>Vehicles.GarageDoors</c>) but a sign over the opening:
+    /// a coloured board with a light face.
+    /// </summary>
+    private static void AppendDoor(List<Vector3> v, List<Color> c, List<float> f, Interiors.DoorSpot d, BuildingKind kind)
     {
         var o = d.Outward;
         var t = new Vector3(-o.Z, 0, o.X);
@@ -78,6 +120,7 @@ public static class BuildingMeshBuilder
             v.Add(a); v.Add(b); v.Add(cc); v.Add(a); v.Add(cc); v.Add(dd);
             v.Add(a); v.Add(cc); v.Add(b); v.Add(a); v.Add(dd); v.Add(cc);
             for (int i = 0; i < 12; i++) c.Add(col);
+            for (int i = 0; i < 12; i++) f.Add(0f);
         }
         void Box(float a0, float a1, float u0, float u1, float o0, float o1, Color col)
         {
@@ -89,32 +132,72 @@ public static class BuildingMeshBuilder
             Quad(P(a0, u0, o0), P(a1, u0, o0), P(a1, u0, o1), P(a0, u0, o1), side * 0.8f);
         }
 
-        var frame = new Color(0.86f, 0.84f, 0.79f).SrgbToLinear();
-        var leaf = (kind switch
-        {
-            BuildingKind.Agricultural or BuildingKind.Annex => new Color(0.42f, 0.30f, 0.20f),
-            BuildingKind.Industrial => new Color(0.46f, 0.50f, 0.54f),
-            BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Civic => new Color(0.22f, 0.26f, 0.30f),
-            BuildingKind.Sacral => new Color(0.30f, 0.18f, 0.10f), // old oak
-            _ => new Color(0.40f, 0.25f, 0.15f),
-        }).SrgbToLinear();
+        var frame = BuildingFootprint.DoorFrameColor;
+        var leaf = BuildingFootprint.DoorLeafColorFor(kind);
         var step = new Color(0.62f, 0.61f, 0.58f).SrgbToLinear();
 
         Box(-hw - 0.12f, -hw, 0, h + 0.12f, 0, 0.08f, frame);
         Box(hw, hw + 0.12f, 0, h + 0.12f, 0, 0.08f, frame);
         Box(-hw - 0.12f, hw + 0.12f, h, h + 0.12f, 0, 0.08f, frame);
+        if (kind == BuildingKind.Garage)
+        {
+            // a drive-in bay's step is flush with its floor, or a car would hit a kerb
+            float stepTop = d.Bay != null ? 0.01f : 0.12f;
+            // the sign: a workshop-blue board, and on it a light face the shader lights at night
+            Box(-hw - 0.35f, hw + 0.35f, h + 0.2f, h + 0.85f, 0, 0.12f, new Color(0.16f, 0.30f, 0.58f).SrgbToLinear());
+            int start = f.Count;
+            Quad(P(-hw - 0.22f, h + 0.3f, 0.13f), P(hw + 0.22f, h + 0.3f, 0.13f),
+                P(hw + 0.22f, h + 0.75f, 0.13f), P(-hw - 0.22f, h + 0.75f, 0.13f), Colors.White);
+            for (int i = start; i < f.Count; i++) f[i] = SignFlag;
+            Box(-hw - 0.2f, hw + 0.2f, -0.3f, stepTop, 0, 0.45f, step);
+            return;
+        }
         Quad(P(-hw, 0, 0.03f), P(hw, 0, 0.03f), P(hw, h, 0.03f), P(-hw, h, 0.03f), leaf);
-        // handle
-        float hx = hw * 0.7f;
-        Box(hx - 0.04f, hx + 0.04f, 1.0f, 1.08f, 0.03f, 0.08f, frame * 0.7f);
+        if (Interiors.DoorLeaf.SwingsOut(kind))
+        {
+            // a pair (DoorLeaf.CreateOutward): the seam where they meet, a handle each beside it
+            Quad(P(-0.015f, 0, 0.035f), P(0.015f, 0, 0.035f), P(0.015f, h, 0.035f), P(-0.015f, h, 0.035f), leaf * 0.6f);
+            foreach (float px in new[] { -hw * 0.15f, hw * 0.15f })
+                Box(px - 0.04f, px + 0.04f, 1.0f, 1.08f, 0.03f, 0.08f, BuildingFootprint.DoorHandleColor);
+        }
+        else
+        {
+            // handle, on the free edge: the doorway frame's X is -t, and DoorLeaf hinges on its -X jamb
+            float hx = -hw * 0.7f;
+            Box(hx - 0.04f, hx + 0.04f, 1.0f, 1.08f, 0.03f, 0.08f, BuildingFootprint.DoorHandleColor);
+        }
         // a doorstep: the cue that says "this is a way in" from across the street
         Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
     }
 
-    public static MeshData? Build(BuildingTile tile)
+    /// <summary>A concrete apron where a garage's carved ground reaches past its walls, linear.</summary>
+    private static readonly Color ApronColor = new Color(0.60f, 0.59f, 0.57f).SrgbToLinear();
+
+    /// <summary>Each building's drive-in bay, by building index (null for all but such garages).</summary>
+    private static GarageBay.Bay?[] BaysOf(BuildingTile tile, Interiors.DoorSpot[]? doors)
     {
+        var bays = new GarageBay.Bay?[tile.Buildings.Count];
+        if (doors != null)
+            foreach (var d in doors)
+                if (d.Bay != null && d.Index < bays.Length) bays[d.Index] = d.Bay;
+        return bays;
+    }
+
+    /// <summary>A building's triangles, with the doorway cut out of a drive-in garage's facade.</summary>
+    private static float[] TrianglesOf(BuildingTile tile, int index, GarageBay.Bay?[] bays) =>
+        bays[index] is { } bay ? GarageBay.CutFacade(tile.Buildings[index], bay) : tile.Buildings[index].Triangles;
+
+    public static MeshData? Build(BuildingTile tile) => Build(tile, new GarageBay.Bay?[tile.Buildings.Count]);
+
+    private static MeshData? Build(BuildingTile tile, GarageBay.Bay?[] bays)
+    {
+        var soups = new float[tile.Buildings.Count][];
         int triangles = 0;
-        foreach (var b in tile.Buildings) triangles += b.TriangleCount;
+        for (int i = 0; i < soups.Length; i++)
+        {
+            soups[i] = TrianglesOf(tile, i, bays);
+            triangles += soups[i].Length / 9;
+        }
         if (triangles == 0) return null;
 
         var types = BuildingTypes.For(tile);
@@ -146,13 +229,19 @@ public static class BuildingMeshBuilder
             // a spire's faces are steep enough to count as wall; above the eave they are roof
             float spireFrom = part == BuildingPart.Tower ? (types.Boxes[bi]?.Eave ?? b.MaxY) + 0.3f : float.MaxValue;
             var uv2 = new Vector2(storeyCount, 0f);
-
-            for (int t = 0; t < b.TriangleCount; t++)
+            if (b.Kind == BuildingKind.Garage)
             {
-                int o = t * 9;
-                var a = new Vector3(b.Triangles[o], b.Triangles[o + 1], b.Triangles[o + 2]);
-                var c = new Vector3(b.Triangles[o + 3], b.Triangles[o + 4], b.Triangles[o + 5]);
-                var d = new Vector3(b.Triangles[o + 6], b.Triangles[o + 7], b.Triangles[o + 8]);
+                // the painted stripe runs under the eave; a flat-roofed garage has its eave near
+                // the top, a pitched one lower down (same 0.78 split Storeys uses)
+                float wallHeight = b.MaxY - b.MinY;
+                uv2 = new Vector2(Mathf.Max(wallHeight * 0.78f, Mathf.Min(wallHeight - 0.1f, 4f)), GarageWallFlag);
+                storey = 1f; // facade v in metres
+            }
+
+            var soup = soups[bi];
+            for (int t = 0; t < soup.Length / 9; t++)
+            {
+                var (a, c, d) = GarageBay.Tri(soup, t);
 
                 var normal = (c - a).Cross(d - a);
                 float len = normal.Length();
@@ -200,22 +289,33 @@ public static class BuildingMeshBuilder
     private static Vector2 FacadeUv(Vector3 p, Vector3 tangent, float baseY, float storey) =>
         new(p.X * tangent.X + p.Z * tangent.Z, (p.Y - baseY) / storey);
 
-    /// <summary>Flat triangle list for ConcavePolygonShape3D.</summary>
-    public static Vector3[] BuildCollisionFaces(BuildingTile tile)
+    /// <summary>
+    /// Flat triangle list for ConcavePolygonShape3D: the same cut facades, rooms and aprons as the
+    /// render mesh (<see cref="Build(BuildingTile, Interiors.DoorSpot[], Func{int, int, float}, IReadOnlySet{int})"/>),
+    /// the rooms and aprons in both windings, as the shape is one-sided.
+    /// </summary>
+    public static Vector3[] BuildCollisionFaces(BuildingTile tile, Interiors.DoorSpot[]? doors = null,
+        Func<int, int, float>? ground = null, IReadOnlySet<int>? otherHoles = null)
     {
-        int triangles = 0;
-        foreach (var b in tile.Buildings) triangles += b.TriangleCount;
-        var faces = new Vector3[triangles * 3];
-        int v = 0;
-        foreach (var b in tile.Buildings)
-            for (int t = 0; t < b.TriangleCount; t++)
-            {
-                int o = t * 9;
-                faces[v++] = new Vector3(b.Triangles[o], b.Triangles[o + 1], b.Triangles[o + 2]);
-                faces[v++] = new Vector3(b.Triangles[o + 3], b.Triangles[o + 4], b.Triangles[o + 5]);
-                faces[v++] = new Vector3(b.Triangles[o + 6], b.Triangles[o + 7], b.Triangles[o + 8]);
-            }
-        return faces;
+        var bays = BaysOf(tile, doors);
+        var faces = new List<Vector3>();
+        for (int i = 0; i < tile.Buildings.Count; i++)
+        {
+            var soup = TrianglesOf(tile, i, bays);
+            for (int k = 0; k + 2 < soup.Length; k += 3) faces.Add(new Vector3(soup[k], soup[k + 1], soup[k + 2]));
+        }
+        var rooms = bays.OfType<GarageBay.Bay>().ToList();
+        if (rooms.Count == 0) return faces.ToArray();
+        foreach (var bay in rooms)
+            GarageBay.Room(bay, (a, b, c, d, _) => faces.AddRange([a, b, c, a, c, d, a, c, b, a, d, c]));
+        if (ground != null)
+        {
+            var apron = new List<Vector3>();
+            GarageBay.Apron(rooms, GarageBay.HoleCells(rooms), otherHoles, ground, true, apron);
+            for (int k = 0; k < apron.Count; k += 3)
+                faces.AddRange([apron[k], apron[k + 1], apron[k + 2], apron[k], apron[k + 2], apron[k + 1]]);
+        }
+        return faces.ToArray();
     }
 
     /// <summary>
@@ -229,7 +329,7 @@ public static class BuildingMeshBuilder
     /// </summary>
     public static (float Height, int Count) Storeys(Building b)
     {
-        if (b.Kind is BuildingKind.Annex or BuildingKind.Agricultural
+        if (b.Kind is BuildingKind.Annex or BuildingKind.Garage or BuildingKind.Agricultural
             or BuildingKind.Industrial or BuildingKind.UnderConstruction)
             return (0f, 0);
 
@@ -270,6 +370,7 @@ public static class BuildingMeshBuilder
             BuildingKind.Sacral => new Color(0.88f, 0.86f, 0.80f),       // pale stone
             BuildingKind.Civic => new Color(0.80f, 0.79f, 0.75f),
             BuildingKind.Annex => new Color(0.62f, 0.59f, 0.54f),
+            BuildingKind.Garage => new Color(0.66f, 0.66f, 0.64f),        // sheet-metal workshop
             BuildingKind.UnderConstruction => new Color(0.70f, 0.69f, 0.66f),
             _ => new Color(0.72f, 0.70f, 0.66f),
         };
@@ -282,6 +383,7 @@ public static class BuildingMeshBuilder
         BuildingKind.Industrial => new Color(0.46f, 0.48f, 0.49f),
         BuildingKind.Sacral or BuildingKind.Civic => new Color(0.35f, 0.33f, 0.34f), // slate
         BuildingKind.Annex => new Color(0.44f, 0.40f, 0.36f),
+        BuildingKind.Garage => new Color(0.46f, 0.47f, 0.48f),
         BuildingKind.UnderConstruction => new Color(0.60f, 0.59f, 0.57f),
         _ => new Color(0.50f, 0.30f, 0.23f), // the usual Swiss reddish-brown tile
     };

@@ -56,15 +56,17 @@ public static partial class InteriorGenerator
             DoorWidth = fp.Door.Width,
             StoreyHeight = h,
             EntryX = fp.EntryX,
-            EntryWidth = Math.Min(fp.Door.Width, 1.8f),
+            // a barn's hall opens as wide as its door; elsewhere a door leads into a hall or a core
+            EntryWidth = b.Kind == BuildingKind.Agricultural ? fp.Door.Width : Math.Min(fp.Door.Width, 1.8f),
         };
 
         bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
+            or BuildingKind.Garage
             or BuildingKind.UnderConstruction or BuildingKind.Sacral
             || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
 
         if (single || !TryCored(layout, fp, b.Kind, n, rng))
-            SingleRoom(layout, b.Kind, rng);
+            SingleRoom(layout, b.Kind, fp.Door.Height, rng);
 
         Furnish(layout, rng);
         return layout;
@@ -90,7 +92,7 @@ public static partial class InteriorGenerator
 
     // ---- single room -------------------------------------------------------------------
 
-    private static void SingleRoom(InteriorLayout l, BuildingKind kind, Random rng)
+    private static void SingleRoom(InteriorLayout l, BuildingKind kind, float doorHeight, Random rng)
     {
         l.Floors.Clear();
         float hw = l.Width / 2, hd = l.Depth / 2;
@@ -100,6 +102,7 @@ public static partial class InteriorGenerator
             BuildingKind.Industrial => RoomType.Workshop,
             BuildingKind.Agricultural => RoomType.Barn,
             BuildingKind.Annex => l.Width * l.Depth > 16 ? RoomType.Garage : RoomType.Storage,
+            BuildingKind.Garage => RoomType.Garage,
             BuildingKind.UnderConstruction => RoomType.Storage,
             BuildingKind.Commercial => RoomType.Shop,
             BuildingKind.House or BuildingKind.Apartment => RoomType.Living,
@@ -112,7 +115,9 @@ public static partial class InteriorGenerator
         room.Openings.Add(new OpeningPlan
         {
             Side = Side.Front, Center = l.EntryX, Width = l.EntryWidth, Bottom = 0,
-            Top = Math.Min(kind is BuildingKind.Agricultural or BuildingKind.Industrial ? 2.8f : 2.1f, clear - 0.15f),
+            // a barn's as tall as its facade door, which the footprint kept under the eave
+            Top = kind == BuildingKind.Agricultural ? Math.Min(doorHeight, BuildingFootprint.DoorHeightFor(kind, clear))
+                : Math.Min(kind == BuildingKind.Industrial ? 2.8f : 2.1f, clear - 0.15f),
             Kind = OpeningKind.Entry,
         });
         var floor = new FloorPlan();

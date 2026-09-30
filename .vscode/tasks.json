@@ -262,6 +262,24 @@
 
         // ----------------------------------------------------------- terrain data
         {
+            "label": "data: map setup wizard",
+            "detail": "MapSetup: pick tiles on the map of CH, then download and build them",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["run", "--project", "tools/MapSetup", "-c", "Release"],
+            "presentation": { "focus": true, "panel": "dedicated" },
+            "problemMatcher": []
+        },
+        {
+            "label": "data: map setup wizard (resume)",
+            "detail": "MapSetup --resume: continue the last selection's pipeline",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["run", "--project", "tools/MapSetup", "-c", "Release", "--", "--resume"],
+            "presentation": { "focus": true, "panel": "dedicated" },
+            "problemMatcher": []
+        },
+        {
             "label": "data: coarse companions + horizon",
             "detail": "Regenerate .terrc tiles and horizon.bin from existing .terr",
             "type": "process",
