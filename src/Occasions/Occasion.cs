@@ -70,6 +70,15 @@ public abstract class Occasion
 
     /// <summary>The hat everyone wears while this occasion runs (the Hats facet).</summary>
     public virtual Avatar.Headwear Hat => Avatar.Headwear.None;
+
+    /// <summary>Creatures in the air around the player (part of the Atmosphere facet).</summary>
+    public virtual Flock[] Flocks => [];
+
+    /// <summary>Schedules this occasion's sounds; called every frame while its Audio facet runs.</summary>
+    public virtual void Ambience(OccasionAudio audio) { }
+
+    /// <summary>The menu's chip-tune jingle (the Audio facet), as samples, or null.</summary>
+    public virtual float[]? Jingle() => null;
 }
 
 /// <summary>

@@ -77,6 +77,61 @@ public sealed class HalloweenOccasion : Occasion
 
     public override Headwear Hat => Headwear.WitchHat;
 
+    /// <summary>Bats round the church from dusk, crows over the fields by day, wisps in the woods at night.</summary>
+    public override Flock[] Flocks { get; } =
+    [
+        new(CritterKind.Bat, 14, 0.3f, 1f),
+        new(CritterKind.Crow, 9, 0f, 0.5f),
+        new(CritterKind.Wisp, 7, 0.75f, 1f),
+    ];
+
+    // ---- sound ---------------------------------------------------------------------------------
+
+    private double _owlNext, _howlNext, _windNext;
+    private int _tolledOn = -1;
+
+    /// <summary>
+    /// Owls in the woods and a wolf far off once it is dark, wind gusting more by night, and at
+    /// real midnight the nearest church tolls three times on a low, detuned bell.
+    /// </summary>
+    public override void Ambience(OccasionAudio a)
+    {
+        if (a.Night > 0.5f)
+        {
+            if (a.Now >= _owlNext)
+            {
+                _owlNext = a.Now + a.Rand(12f, 35f);
+                if (a.Bank("owl", OccasionSounds.Owl) is { } owl && a.Spot(25f, 110f, CoverFormat.IsWooded) is { } s)
+                    a.Speak(owl, s + Vector3.Up * a.Rand(6f, 14f), a.Rand(0.95f, 1.05f), -6f, 12f, 260f);
+            }
+            if (a.Now >= _howlNext)
+            {
+                _howlNext = a.Now + a.Rand(50f, 120f);
+                if (a.Bank("howl", OccasionSounds.Howl, 2) is { } howl && a.Spot(300f, 700f) is { } s)
+                    a.Speak(howl, s + Vector3.Up * 5f, a.Rand(0.92f, 1.06f), -3f, 70f, 2000f);
+            }
+        }
+        if (a.Now >= _windNext)
+        {
+            _windNext = a.Now + a.Rand(15f, 40f) / (0.4f + a.Night);
+            if (a.Bank("wind", OccasionSounds.Wind) is { } wind && a.Spot(15f, 50f) is { } s)
+                a.Speak(wind, s + Vector3.Up * 8f, a.Rand(0.9f, 1.1f), -14f + 6f * a.Night, 30f, 400f);
+        }
+
+        var clock = a.Clock;
+        if (clock is { Hour: 0, Minute: 0, Second: >= 40 } && _tolledOn != clock.DayOfYear
+            && a.Bank("toll", OccasionSounds.Toll, 1) is { } toll)
+        {
+            // after the ordinary twelve strokes, which finish around 30 s past
+            _tolledOn = clock.DayOfYear;
+            if (a.NearestTown(2400f) is { } church)
+                for (int i = 0; i < 3; i++)
+                    a.At(i * 5.0, () => a.Speak(toll, church + Vector3.Up * 22f, 1f, 5f, 90f, 2400f));
+        }
+    }
+
+    public override float[] Jingle() => OccasionSounds.HalloweenJingle();
+
     // ---- props ---------------------------------------------------------------------------------
 
     private static readonly Color Orange = Matte(0.93f, 0.44f, 0.07f);

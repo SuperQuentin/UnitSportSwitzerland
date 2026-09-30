@@ -851,6 +851,20 @@ Several people work on this repo in parallel, so every new feature follows these
   day without one. Overrides: `--occasion <id|none>` (repeatable; replaces the calendar for the
   session), `--date YYYY-MM-DD`, and `/occasion list|start|stop|auto` in chat or the server
   console.
+  **Content hooks** (all on `Occasion`, all no-ops by default): `Decorate`/`PlaceHunt` per tile
+  via `OccasionDecor`, which listens to `ChunkManager.TileFurnished`/`TileUnloaded` (fired beside
+  the `DoorIndex` calls) and parents MultiMeshes to the tile's own node, so they unload with it;
+  every placement is hashed (`OccasionHash`) from building keys and world-anchored cells, never a
+  shared random stream. Props use `ps1_prop.gdshader`, where **vertex alpha is the glow mask**
+  (dark by day, lit at night). `Flocks` (bats/crows/wisps, `OccasionCreatures`), `Ambience`
+  (`OccasionAmbience`, sounds in `OccasionSounds`), `Jingle` (menu, `Audio/ChipTune`), `Treats`
+  (→ `LootTables.Seasonal`, one extra roll drawn **last** so no-occasion loot is bit-identical),
+  `HuntReward`, `Hat` (→ replicated `FootPlayer.HeadwearId` via `OccasionHats`; a worn hat item,
+  `Inventory.Worn`, wins). Towns come from `OccasionTowns`: `places.json`, else
+  `ProceduralWorld.VillageCentres()` for the generated world. The hunt is taken with the
+  **gather hold** (G), not E — the spots stand beside doors, where E means "go in" — and claims
+  are local (`user://occasions/claims.json`, per instance), like `Gathering` and the inventory.
+  `ItemId` 37/38 are reserved by the bird-hunting PR (#7); occasions own 39-49.
 
 ## Commands
 
@@ -950,6 +964,11 @@ Several people work on this repo in parallel, so every new feature follows these
 - Occasion calendar check: `<godot> --headless --path . -- --occasioncheck` — both ends of every
   window, the new-year wrap, one-offs, leap day, config merge; non-zero exit on a mismatch.
   Look at an occasion out of season with `--occasion christmas` (or `--date 2026-12-24`).
+  `--huntcheck` (with an occasion running) claims a drawn hunt spot **in memory only** and checks
+  it disappears, prints reward odds and a counter's seasonal loot; `--decorlog` prints each tile's
+  props with a position and facing (and the creatures every 3 s) for aiming a `--shot`;
+  `--avatars 2 out.png --hats` lines up every `Headwear`; `--soundcheck` also writes
+  `occasion_*.wav`.
 
 ## Gotchas (learned the hard way)
 
@@ -1386,6 +1405,15 @@ Several people work on this repo in parallel, so every new feature follows these
   `FallbackActive` must be checked alongside `AvailableTileCount`, which counts generated tiles.
   Rebasing changes what every world coordinate means, so `ClientWorld.RespawnAfterRebase` puts
   the player down again.
+- **`new Color(r, g, b)` has alpha 1, and `ps1_prop` reads vertex alpha as "this is a light".**
+  The first jack-o'-lanterns glowed from stalk to base at night and were darkened to 18% by day.
+  Every non-emissive prop colour goes through `HalloweenOccasion.Matte` (alpha 0).
+- **A loopback server test leaves its manifest in the client's chunk cache.** `ClientTerrainSync`
+  saves the server's index as `server-manifest.json`, and the next *offline* boot merges it,
+  retires the generated world and loads a tile that does not exist — an empty world, `prims=4`.
+  Give the test client its own `--cache <scratch dir>`.
+- **Headless runs cannot read MultiMesh transforms back** — the dummy renderer returns zeros, so a
+  headless `--decorlog` reports every creature at the origin. Check moving instances windowed.
 - **A tile worker must not create a Godot object after the engine starts tearing down.** Workers
   make `ArrayMesh`/`MultiMesh` themselves, and one that did so during quit was `Fatal error.
   0xC0000005` in `ArrayMesh..ctor` — the process died on exit. It only showed once something was

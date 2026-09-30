@@ -204,6 +204,9 @@ public partial class ClientWorld : Node3D
         Occasions.OccasionManager.Create(this);
         // their props, dressed onto each tile as its buildings load
         AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
+        // …the creatures in the air around the camera, and their sounds
+        AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
+        AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
 
         // the clock: sun, light colour, sky and night for every shader and the environment
         var chunksForSky = _chunks;
