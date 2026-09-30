@@ -15,3 +15,6 @@
 - **Only odds, never contents**: the math is `LootTables.Chance` (see the `loot` note), no roll or taken mask is read.
 - Screenshot: `--ride foot,16,out.png --give SmartBinoculars --hold SmartBinoculars --view first --aim
   --chunks <terrain_chunks> [--smarttarget Bread] [--smartpicker]`. `--give <item>` (dev) puts one in hotbar slot 1.
+- **Declutter** (#108): labels are placed nearest-first; the centre building's label stays put and its panel is
+  reserved next (`PanelRect`: beside the marker, right side first then left, never over the marker or the centre pip);
+  any other label overlapping a placed one is pushed up/down in label steps with a leader line and a dot on its building.

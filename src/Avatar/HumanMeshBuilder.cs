@@ -421,7 +421,7 @@ public static class HumanMeshBuilder
     /// A hat on the head, built in the head's own frame so it follows the neck like the helmet
     /// does. The figure is authored facing +Z, so "forward" is +Z made square to the head.
     /// </summary>
-    private static void AppendHat(MeshScratch s, Headwear hat, Vector3 centre, Vector3 axis)
+    internal static void AppendHat(MeshScratch s, Headwear hat, Vector3 centre, Vector3 axis)
     {
         var up = axis.LengthSquared() > 1e-8f ? axis.Normalized() : Vector3.Up;
         var fwd = Vector3.Back - up * up.Dot(Vector3.Back);

@@ -274,7 +274,23 @@ public partial class SmartBinocularsHud : CanvasLayer
                 HorizontalAlignment.Center, size.X, 13, new Color(0.7f, 0.85f, 0.9f));
 
         var centre = size * 0.5f;
-        for (int i = 0; i < _markers.Count; i++)
+
+        // --- declutter: labels are placed nearest-first; a label that would overlap one already placed (or the
+        // info panel, which is reserved first, beside the centre building's marker) is pushed up or down with a leader line
+        const float BoxW = 56f, BoxH = 22f, Cell = 40f;   // a label cell is the box plus its distance line
+        var taken = new List<Rect2>();
+        Rect2? panelRect = null;
+        if (_markers.Count > 0 && OddsOf(_markers[0].Key) is { } best)
+        {
+            var c0 = _markers[0];
+            taken.Add(new Rect2(c0.Screen + new Vector2(-BoxW / 2 - 2, -BoxH / 2 - 2), new Vector2(BoxW + 4, Cell + 6)));   // its own label stays put
+            panelRect = PanelRect(c0, best, size, centre);
+            taken.Add(panelRect.Value.Grow(4));
+        }
+        taken.Add(new Rect2(centre - new Vector2(10, 10), new Vector2(20, 20)));   // the centre pip
+
+        var order = Enumerable.Range(0, _markers.Count).OrderBy(i => i == 0 ? -1f : _markers[i].Distance).ToList();
+        foreach (int i in order)
         {
             var m = _markers[i];
             var odds = OddsOf(m.Key);
@@ -282,15 +298,36 @@ public partial class SmartBinocularsHud : CanvasLayer
             if (odds == null && noPlan) continue;   // nothing to tell
             string text = odds is { } o ? Pct(o.Any) : "...";
             var col = odds is { } oo ? ChanceColor(oo.Any) : new Color(0.7f, 0.8f, 0.85f);
-            var box = new Rect2(m.Screen + new Vector2(-28, -11), new Vector2(56, 22));
+
+            var pos = m.Screen + new Vector2(-BoxW / 2, -BoxH / 2);
+            if (i != 0)
+            {
+                // try the anchor, then alternately above and below it in label-sized steps
+                var cell = new Rect2(pos, new Vector2(BoxW, Cell));
+                for (int step = 0; step < 12 && taken.Any(r => r.Intersects(cell)); step++)
+                {
+                    float dy = ((step / 2) + 1) * (BoxH + 14) * (step % 2 == 0 ? -1 : 1);
+                    cell = new Rect2(pos + new Vector2(0, dy), cell.Size);
+                    if (cell.Position.Y < 40 || cell.End.Y > size.Y - 20) cell = new Rect2(cell.Position with { Y = Mathf.Clamp(cell.Position.Y, 40, size.Y - 20 - Cell) }, cell.Size);
+                }
+                pos = cell.Position;
+                taken.Add(cell.Grow(2));
+            }
+            var box = new Rect2(pos, new Vector2(BoxW, BoxH));
             v.DrawRect(box, new Color(0.02f, 0.05f, 0.07f, 0.82f));
             v.DrawRect(box, col, false, 2f);
             v.DrawString(font, box.Position + new Vector2(0, 16), text, HorizontalAlignment.Center, box.Size.X, 15, col);
-            v.DrawLine(m.Screen + new Vector2(0, 11), m.Screen + new Vector2(0, 18), col, 2f);
-            v.DrawString(font, m.Screen + new Vector2(-28, 32), $"{m.Distance:F0} m", HorizontalAlignment.Center, 56, 11, new Color(0.75f, 0.85f, 0.9f));
-
+            if (box.Position.DistanceTo(m.Screen + new Vector2(-BoxW / 2, -BoxH / 2)) < 1f)
+                v.DrawLine(m.Screen + new Vector2(0, 11), m.Screen + new Vector2(0, 18), col, 2f);
+            else
+            {
+                // leader: from the building down to the displaced box, and a dot on the building
+                v.DrawLine(m.Screen, box.GetCenter() + new Vector2(0, box.Position.Y < m.Screen.Y ? BoxH / 2 : -BoxH / 2), new Color(col, 0.75f), 1.5f);
+                v.DrawCircle(m.Screen, 3f, col);
+            }
+            v.DrawString(font, box.Position + new Vector2(0, BoxH + 12), $"{m.Distance:F0} m", HorizontalAlignment.Center, BoxW, 11, new Color(0.75f, 0.85f, 0.9f));
         }
-        if (_markers.Count > 0 && OddsOf(_markers[0].Key) is { } best) DrawPanel(v, _markers[0], best, size);   // last, over the markers
+        if (panelRect is { } pr && _markers.Count > 0 && OddsOf(_markers[0].Key) is { } best2) DrawPanel(v, _markers[0], best2, pr);   // last, over the markers
 
         // centre pip, so "nearest the centre" is something you can aim
         v.DrawCircle(centre, 2f, new Color(0.3f, 0.9f, 1f, 0.9f));
@@ -298,14 +335,28 @@ public partial class SmartBinocularsHud : CanvasLayer
         if (PickerOpen) DrawPicker(v, size);
     }
 
+    /// <summary>
+    /// Where the nearest-to-centre building's panel goes: beside its marker, on the side with room and never over the
+    /// marker or the centre pip (right first, then left, then clamped on screen).
+    /// </summary>
+    private static Rect2 PanelRect(Marker m, LootTables.BuildingOdds odds, Vector2 size, Vector2 centre)
+    {
+        int rows = Math.Min(3, odds.Containers.Count);
+        var dim = new Vector2(200, 34 + Math.Max(1, rows) * 18);
+        var keep = new Rect2(m.Screen + new Vector2(-34, -16), new Vector2(68, 60)).Merge(new Rect2(centre - new Vector2(10, 10), new Vector2(20, 20)));
+        var right = new Rect2(new Vector2(keep.End.X + 6, m.Screen.Y - 14), dim);
+        var left = new Rect2(new Vector2(keep.Position.X - 6 - dim.X, m.Screen.Y - 14), dim);
+        var panel = right.End.X <= size.X - 10 ? right : left;
+        float y = Mathf.Clamp(panel.Position.Y, 10, Mathf.Max(10, size.Y - 10 - dim.Y));
+        float x = Mathf.Clamp(panel.Position.X, 10, Mathf.Max(10, size.X - 10 - dim.X));
+        return new Rect2(x, y, dim);
+    }
+
     /// <summary>The nearest-to-centre building: its kind, total chance and three best containers.</summary>
-    private static void DrawPanel(View v, Marker m, LootTables.BuildingOdds odds, Vector2 size)
+    private static void DrawPanel(View v, Marker m, LootTables.BuildingOdds odds, Rect2 panel)
     {
         var font = ThemeDB.FallbackFont;
         int rows = Math.Min(3, odds.Containers.Count);
-        var panel = new Rect2(m.Screen + new Vector2(38, -14), new Vector2(200, 34 + Math.Max(1, rows) * 18));
-        if (panel.End.X > size.X - 10) panel.Position = new Vector2(m.Screen.X - 38 - panel.Size.X, panel.Position.Y);
-        if (panel.End.Y > size.Y - 10) panel.Position = new Vector2(panel.Position.X, size.Y - 10 - panel.Size.Y);
         v.DrawRect(panel, new Color(0.02f, 0.05f, 0.07f, 0.88f));
         v.DrawRect(panel, ChanceColor(odds.Any), false, 1.5f);
         v.DrawString(font, panel.Position + new Vector2(8, 18), $"{m.Kind}: {Pct(odds.Any)} any", HorizontalAlignment.Left, -1, 14, Colors.White);
