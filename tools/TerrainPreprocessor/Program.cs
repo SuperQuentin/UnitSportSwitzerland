@@ -17,6 +17,10 @@ bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false,
 // --tiles-file: feature passes only touch these tiles ("E-N" in km per line), so adding one valley
 // to a built country does not re-extract every road in it
 string? tilesFile = null;
+// hand-traced cover TLM lacks (see docs/notes/tools/land-cover.md); --cover-only skips the road
+// stage, which would otherwise strip the junction polygons RoadGen --rewrite added
+string? coverOverrides = File.Exists("docs/data/cover_overrides.json") ? "docs/data/cover_overrides.json" : null;
+bool coverOnly = false;
 bool coarseOnly = false, horizonOnly = false;
 bool force = false, fresh = false;
 string? franceBox = null;
@@ -36,6 +40,8 @@ for (int i = 0; i < args.Length; i++)
         case "--buildings": buildingsGpkg = args[++i]; break;
         case "--gwr": gwrPath = args[++i]; break;
         case "--cover": doCover = true; break;
+        case "--cover-only": doCover = coverOnly = featuresOnly = true; break;
+        case "--cover-overrides": coverOverrides = args[++i]; break;
         case "--places": doPlaces = true; break;
         // the place index alone: --places with --tlm (for summits) would otherwise re-run roads,
         // which strips the junction polygons RoadGen --rewrite added
@@ -302,7 +308,7 @@ int RunFeatures(TerrainManifest existing)
         var batch = new Dictionary<TileId, ChunkGrid>(grids);
         Console.WriteLine($"=== batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
 
-        if (tlmGpkg != null)
+        if (tlmGpkg != null && !coverOnly)
         {
             int rc = RoadStage.Run(tlmGpkg, routeKeys, outDir!, batch);
             if (rc != 0) return rc;
@@ -314,7 +320,7 @@ int RunFeatures(TerrainManifest existing)
                 Console.Error.WriteLine("--cover requires --tlm <swisstlm3d .gpkg>");
                 return 2;
             }
-            int rc = CoverStage.Run(tlmGpkg, outDir!, batch);
+            int rc = CoverStage.Run(tlmGpkg, outDir!, batch, coverOverrides);
             if (rc != 0) return rc;
         }
         if (buildingsGpkg != null)

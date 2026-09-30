@@ -75,6 +75,11 @@ public partial class ClientWorld : Node3D
                 return;
             }
         }
+        if (Items.IconSheet.Requested)
+        {
+            GetTree().Quit(Items.IconSheet.Run());
+            return;
+        }
         if (Items.InventoryCheck.Requested)
         {
             GetTree().Quit(Items.InventoryCheck.Run());

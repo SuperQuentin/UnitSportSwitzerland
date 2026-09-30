@@ -11,6 +11,8 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `riding-position-derived-from-bike` — A riding position is derived from the bike, never eyeballed
 - `judge-model-proportions-long-lens` — Judge model proportions with a long lens: The avatar preview's focus camera sits 9 m back at 13° FOV,...
 
+- `item-arm-poses` — Held items pose the arms (ItemArmPose, replicated ItemAction) and the held mesh follows the hand basis
+
 ## Gotchas
 
 - `stopped-figure-slow-walk` — A stopped figure is not a slow walk: `HumanMeshBuilder.Cadence` has a floor — it must, or a figure inching forward...

@@ -83,6 +83,22 @@ public static class BuildingFootprint
     public static float DoorHeightFor(BuildingKind kind) =>
         DoorWidthFor(kind) > 2f ? 2.8f : kind == BuildingKind.Sacral ? 2.6f : 2.1f;
 
+    /// <summary>The front door's leaf, linear: the facade's baked leaf and the interior's swinging one.</summary>
+    public static Color DoorLeafColorFor(BuildingKind kind) => (kind switch
+    {
+        BuildingKind.Agricultural or BuildingKind.Annex => new Color(0.42f, 0.30f, 0.20f),
+        BuildingKind.Industrial => new Color(0.46f, 0.50f, 0.54f),
+        BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Civic => new Color(0.22f, 0.26f, 0.30f),
+        BuildingKind.Sacral => new Color(0.30f, 0.18f, 0.10f), // old oak
+        _ => new Color(0.40f, 0.25f, 0.15f),
+    }).SrgbToLinear();
+
+    /// <summary>The door frame on the facade, linear.</summary>
+    public static readonly Color DoorFrameColor = new Color(0.86f, 0.84f, 0.79f).SrgbToLinear();
+
+    /// <summary>The front door's street-side handle, linear: on the facade and on the swinging leaf.</summary>
+    public static readonly Color DoorHandleColor = DoorFrameColor * 0.7f;
+
     /// <summary>Doors for every building of a tile, in building order.</summary>
     public static DoorSpot[] ComputeDoors(BuildingTile tile, RoadTile? roads, ChunkGrid? grid)
     {

@@ -66,6 +66,9 @@ public sealed class CoverExtractor
             minE, minN, maxE, maxN);
         TrafficAreaCount = Rasterise(conn, "tlm_areale_verkehrsareal", CoverFormat.ParseTrafficArea,
             minE, minN, maxE, maxN);
+        // hand-traced ground TLM does not map (docs/data/cover_overrides.json), last so it beats
+        // every TLM layer; before the trees so an orchard it paves over is not planted
+        if (OverridesPath != null) StampOverrides(OverridesPath);
 
         ScatterTrees(tiles, heightOf);
         PlantRows(tiles, heightOf);
@@ -74,6 +77,31 @@ public sealed class CoverExtractor
         // the three passes each ask for a list up front; drop the tiles that stayed bare
         foreach (var id in Trees.Where(kv => kv.Value.Count == 0).Select(kv => kv.Key).ToList())
             Trees.Remove(id);
+    }
+
+    /// <summary>JSON file of hand-traced cover polygons, or null for none.</summary>
+    public string? OverridesPath { get; init; }
+
+    /// <summary>
+    /// Stamps the override polygons: <c>{"polygons":[{"cover":"ParkingPrivate","ring":[[E,N],...]}]}</c>
+    /// in LV95. Rings off the batch's tiles fall away in <see cref="MarkIn"/>, which also keeps Water.
+    /// </summary>
+    private void StampOverrides(string path)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        int rings = 0;
+        foreach (var poly in doc.RootElement.GetProperty("polygons").EnumerateArray())
+        {
+            var cls = Enum.Parse<CoverClass>(poly.GetProperty("cover").GetString()!);
+            var xyz = new List<double>();
+            foreach (var p in poly.GetProperty("ring").EnumerateArray())
+                xyz.AddRange(new[] { p[0].GetDouble(), p[1].GetDouble(), 0.0 });
+            // close it: the scanline walks edges i -> i+1
+            if (xyz[0] != xyz[^3] || xyz[1] != xyz[^2]) xyz.AddRange(new[] { xyz[0], xyz[1], 0.0 });
+            Rasterise(new GeoPackageReader.Ring(xyz.ToArray()), cls);
+            rings++;
+        }
+        LayerRings["cover_overrides"] = rings;
     }
 
     /// <summary>
