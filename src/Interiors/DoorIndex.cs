@@ -50,6 +50,13 @@ public static class DoorIndex
     public static Entry? Nearest(Vector3 at, float reach, BuildingKind kind) => Nearest(at, reach, e => e.Kind == kind);
 
     /// <summary>
+    /// The nearest door a player on foot enters an interior by. <paramref name="deeper"/> gives a
+    /// door extra reach straight out in front, where its open leaves stand.
+    /// </summary>
+    public static Entry? NearestEntrance(Vector3 at, float reach, Func<Entry, float>? deeper = null) =>
+        Nearest(at, reach, _ => true, deeper);
+
+    /// <summary>
     /// The nearest door a vehicle drives through (<see cref="BuildingFootprint.VehicleDoor"/>)
     /// within <paramref name="reach"/> in front of it, at most <paramref name="halfAngle"/>
     /// radians off square: a vehicle heading at a garage or a barn, not driving past one.
@@ -75,7 +82,7 @@ public static class DoorIndex
         });
     }
 
-    private static Entry? Nearest(Vector3 at, float reach, Func<Entry, bool> wanted)
+    private static Entry? Nearest(Vector3 at, float reach, Func<Entry, bool> wanted, Func<Entry, float>? deeper = null)
     {
         Entry? best = null;
         float bestD = reach;
@@ -89,7 +96,8 @@ public static class DoorIndex
                 if (outward < -0.3f) continue;
                 var t = new Vector3(-e.Outward.Z, 0, e.Outward.X);
                 float along = Mathf.Max(0, Mathf.Abs(rel.X * t.X + rel.Z * t.Z) - e.Width / 2);
-                float d = Mathf.Sqrt(along * along + outward * outward);
+                float depth = Mathf.Max(0, outward - (deeper?.Invoke(e) ?? 0f));
+                float d = Mathf.Sqrt(along * along + depth * depth);
                 if (d < bestD) { bestD = d; best = e; }
             }
         return best;

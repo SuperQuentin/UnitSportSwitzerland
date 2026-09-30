@@ -144,7 +144,7 @@ public sealed class EntrancePlan
 public sealed class InteriorLayout
 {
     /// <summary>Bumped whenever the generator changes enough that old plans should be regenerated.</summary>
-    public const int CurrentVersion = 5; // 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: garages driven into
+    public const int CurrentVersion = 6; // 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";

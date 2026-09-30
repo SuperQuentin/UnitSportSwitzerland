@@ -23,16 +23,23 @@ public partial class ChatUi : CanvasLayer
     private const double VisibleSeconds = 12.0;
 
     private ChatManager _chat = null!;
+    private ChatCompleter _completer = null!;
     private VBoxContainer _log = null!;
     private ScrollContainer _scroll = null!;
     private PanelContainer _logPanel = null!;
     private LineEdit _input = null!;
+    private Label _hint = null!;
 
     private double _sinceLastLine = double.MaxValue;
     private readonly List<string> _history = [];
     private int _historyCursor = -1;
 
-    public static ChatUi Create(ChatManager chat) => new() { Name = "ChatUi", _chat = chat };
+    /// <summary>What Tab would offer for the text as it was last typed, and which one is in the box.</summary>
+    private IReadOnlyList<Suggestion> _suggestions = [];
+    private int _suggestionCursor = -1;
+
+    public static ChatUi Create(ChatManager chat, ChatCompleter completer) =>
+        new() { Name = "ChatUi", _chat = chat, _completer = completer };
 
     /// <summary>True while the input box is taking keystrokes.</summary>
     public bool IsTyping => _input.Visible;
@@ -45,7 +52,7 @@ public partial class ChatUi : CanvasLayer
         {
             AnchorTop = 1, AnchorBottom = 1,
             OffsetLeft = 12, OffsetRight = 520,
-            OffsetTop = -260, OffsetBottom = -56,
+            OffsetTop = -284, OffsetBottom = -80,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         _logPanel.AddThemeStyleboxOverride("panel", Panel());
@@ -76,7 +83,23 @@ public partial class ChatUi : CanvasLayer
             MaxLength = 240,
         };
         _input.TextSubmitted += OnSubmitted;
+        _input.TextChanged += _ => RefreshSuggestions();
+        _input.GuiInput += OnInputGui;
         AddChild(_input);
+
+        // one line above the box: what Tab would put in it
+        _hint = new Label
+        {
+            AnchorTop = 1, AnchorBottom = 1,
+            OffsetLeft = 16, OffsetRight = 520,
+            OffsetTop = -76, OffsetBottom = -52,
+            Visible = false,
+            ClipText = true,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _hint.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
+        _hint.AddThemeFontSizeOverride("font_size", 13);
+        AddChild(_hint);
 
         _chat.LineReceived += (line, kind) => Callable.From(() => Append(line, kind)).CallDeferred();
         _chat.Kicked += reason => Callable.From(
@@ -139,10 +162,49 @@ public partial class ChatUi : CanvasLayer
         _logPanel.Modulate = Colors.White;
         _sinceLastLine = 0;
         _historyCursor = -1;
+        RefreshSuggestions();
 
         // The fly camera holds the pointer captured; typing needs it back.
         Input.MouseMode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
+    }
+
+    /// <summary>Recomputes what Tab offers for the text in the box, and shows it.</summary>
+    private void RefreshSuggestions()
+    {
+        _suggestions = _completer.Complete(_input.Text);
+        _suggestionCursor = -1;
+        ShowSuggestions();
+    }
+
+    private void ShowSuggestions()
+    {
+        _hint.Visible = _input.Visible && _suggestions.Count > 0;
+        if (!_hint.Visible) return;
+
+        _hint.Text = "Tab: " + string.Join("   ", _suggestions.Select(
+            (s, i) => i == _suggestionCursor ? $"[{s.Label}]" : s.Label));
+    }
+
+    /// <summary>
+    /// Tab fills in the first suggestion and walks through the rest (Shift+Tab walks back). Handled
+    /// on the box itself because a focused LineEdit would otherwise hand Tab to focus navigation.
+    /// </summary>
+    private void OnInputGui(InputEvent @event)
+    {
+        if (@event is not InputEventKey { Pressed: true, PhysicalKeycode: Key.Tab } key) return;
+        _input.AcceptEvent();
+
+        if (_suggestions.Count == 0) return;
+        int step = key.ShiftPressed ? -1 : 1;
+        _suggestionCursor = _suggestionCursor < 0
+            ? (step > 0 ? 0 : _suggestions.Count - 1)
+            : (_suggestionCursor + step + _suggestions.Count) % _suggestions.Count;
+
+        // setting Text does not raise TextChanged, so the list stays put while Tab cycles it
+        _input.Text = _suggestions[_suggestionCursor].Text;
+        _input.CaretColumn = _input.Text.Length;
+        ShowSuggestions();
     }
 
     /// <summary>Closes the input box without sending.</summary>
@@ -151,6 +213,7 @@ public partial class ChatUi : CanvasLayer
         if (!_input.Visible) return;
 
         _input.Visible = false;
+        _hint.Visible = false;
         _input.ReleaseFocus();
         UiFocus.Set(this, false);
 
@@ -204,6 +267,7 @@ public partial class ChatUi : CanvasLayer
                     : Math.Max(0, _historyCursor - 1);
                 _input.Text = _history[_historyCursor];
                 _input.CaretColumn = _input.Text.Length;
+                RefreshSuggestions();
                 GetViewport().SetInputAsHandled();
                 return;
 
@@ -219,6 +283,7 @@ public partial class ChatUi : CanvasLayer
                     _input.Text = _history[_historyCursor];
                 }
                 _input.CaretColumn = _input.Text.Length;
+                RefreshSuggestions();
                 GetViewport().SetInputAsHandled();
                 return;
         }

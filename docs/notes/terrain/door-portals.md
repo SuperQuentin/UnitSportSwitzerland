@@ -78,13 +78,17 @@ changed is how you get there.
   its own size, has every visible mesh copied each frame to the other side through the map. A body
   straddling the sill is then whole from either side. Without it, the figure was cut by the doorway
   outline for ~8 frames and read as a small dark flash. Its side is read from its height, so
-  remote copies need nothing extra.
+  remote copies need nothing extra. Not the first-person viewmodel: it is on its own visual layer
+  17 (`HeldItemVisual.ViewmodelLayer`) that ghosts skip and portal cameras leave out, or held
+  in front of a doorway it was drawn a second time through the portal.
 - **Far plane inside.** The outside must stay drawn while a door is open (for the portal camera),
   and node visibility is shared by every viewport. So a lens underground gets `Far` = 400 m
   (`DoorPortals.ClipFar`), and the portal camera keeps the real one. Without this, the main camera
   drew the whole landscape 3 km above, behind the ceiling.
 - **Leaves.** `DoorLeaf`, one per entrance, in the interior node, swinging into the room, 90° and no
   more: a house door can stand 0.2 m from the stair core's side wall.
+  A swing takes `DoorLink.SwingSeconds`, from the leaf's width (`SwingSecondsFor`: 0.6 s for 1 m,
+  +0.4 s a metre; a barn pair's leaf is half the opening, so a 10 m barn door takes 2.2 s).
   Solid only while shut. The facade still has its baked closed leaf and handle (6..11 cm proud),
   but while a door's portal shows, `ps1_building` drops them (#93): `DoorPortals.OpenDoors` sends
   the nearest 16 such doors (sill origin, half width, outward, height) through
@@ -99,19 +103,34 @@ changed is how you get there.
   is on +X (`-t` along the facade in `AppendDoor`). The leaf carries the same handle on its
   street face and the facade's leaf colour (`BuildingFootprint.DoorLeafColorFor`, the kind from
   `InteriorLayout.DressedKind`), so the leaf seen swinging through the portal is the facade's door.
-- **Barn doors (#105).** A barn (`DoorLeaf.SwingsOut`) has a double door up to 4 × 4 m, as tall as
-  its hall allows (`BuildingFootprint.DoorHeightFor(kind, clear)`, asked by the facade and the
-  plan alike, so the openings match) and no wider than half the facade run, so each leaf has wall
-  to lie back against. Its pair is not in the interior: `DoorLeaf.CreateOutward`, top level on
+- **Barn doors (#105, #135).** A barn (`DoorLeaf.SwingsOut`) has a double door nearly the size of
+  its wall: the facade run less 0.6 m each end (`BarnDoorMargin`, at most `MaxBarnDoorWidth` 10 m),
+  and up to 0.35 m under the eave (`PlanBox.Eave` above the sill; at least 2.5 m) and the hall's
+  clear height (`BuildingFootprint.DoorHeightFor(kind, clear)`). The interior opening takes the
+  footprint's `DoorSpot.Height`, so the two openings match. Scoring and fallback doors still judge
+  by a plain 4 m door. Its pair is not in the interior: `DoorLeaf.CreateOutward`, top level on
   `DoorLink.Outside`, built and freed with the link. Hinges on the jambs' faces, 1 cm in front of
-  the mouth and the jambs, so the leaves swing 170° out without cutting either, and lap the jambs
-  so no chink of the portal shows when shut. The baked facade door is a pair too (seam, two handles).
+  the mouth and the jambs, so the leaves swing out without cutting either (100°: no wall is left
+  beside the jambs to lie back on), and lap the jambs so no chink of the portal shows when shut.
+  The baked facade door is a pair too (seam, two handles). Inside, the pair's shut face is a
+  `DoorLeaf.CreateShutter` (`InteriorNode.Shutter`, `DoorLink.Shutter`, swung by `SetLeaves`):
+  shown and solid only while shut, hidden from the first moment it opens so the portal shows the
+  real leaves. Without it a shut barn door was a bare hole from inside that let you walk out.
+- **Reach.** E works a door from outside within 1.6 m of its span (`OutsideDoorInReach`), inside
+  within 1.8 m of the doorway's span, not its centre (`ExitAt`). An open door reaches deeper on the
+  side its leaves stand by `DoorLeaf.OpenReach` (leaf width less 1 m: nothing for a house door, 4 m
+  out for a 10 m barn pair). The server allows `ServerDoorReach` plus the door's width.
+- **Check.** `--interiorcheck` also shuts the door from inside and walks into it (must stay in);
+  for a barn it asks for the door from where its open leaves' edges stand (in reach) and again shut
+  (not in reach).
 - **Vehicles (#139).** A garage's or a barn's doorway (`DoorLink.VehicleDoor`) lets a ground
   vehicle through: the ride step calls `BeforeMove`/`AfterMove` like the walk. `FootPlayer.DoorwayBox`
   (half width/length from `ParkedBox`, height; null on foot and flying) must be lower than the
   opening, and before its nose reaches the facade the whole box must be between the jambs
   (`DoorLink.InOutsideDoorway(feet, forward, halfWidth, halfLength)`: an angled car hits the wall);
-  once into the doorway only its middle must stay in the opening. The crossing is its centre over
+  once into the doorway only its middle must stay in the opening. A garage's door is a roll-up
+  `DoorLeaf` on the facade (`OnFacade`, 1 s: `RollSeconds`), shut from inside by a slatted
+  `CreateShutter` like a barn's pair. The crossing is its centre over
   the plane, as on foot; `CrossDoor` also turns `_motion.Yaw`. The chase camera's arm reaches through
   an open doorway like the third-person arm (`ArmThroughDoor`), else it is pulled in by the room.
   Indoors, E gets into a parked vehicle before it works a door or a cupboard, G works a car door,

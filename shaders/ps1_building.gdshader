@@ -8,6 +8,7 @@ global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
+#include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
 
 // Buildings take their base colour from baked vertex colours (kind + roof/wall + age)
@@ -370,7 +371,7 @@ void fragment() {
         }
     }
 
-    col *= world_tint;
+    col *= world_tint + door_light(world_pos, n);
     // a lit window is its own light: at night it shines through the darkness around it
     col = max(col, glow * world_night);
     // valley mist of a running occasion; a no-op on an ordinary day
