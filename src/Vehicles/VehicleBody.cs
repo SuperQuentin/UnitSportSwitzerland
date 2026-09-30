@@ -90,6 +90,8 @@ public partial class VehicleBody : CharacterBody3D
     {
         CollisionMask |= World.TreeColliders.Layer;   // a runaway car stops at a trunk
         AddToGroup(Group);
+        // parked across an open doorway, it is seen on both sides of it
+        AddToGroup(Interiors.DoorwayGhosts.Group);
         var s = _initial;
         // A hand's breadth up. The terrain collision is a one-sided heightfield, and a box whose
         // bottom starts exactly on it — a vehicle parked from where the rider stood — begins a
@@ -177,7 +179,7 @@ public partial class VehicleBody : CharacterBody3D
     /// </remarks>
     public VehicleState Capture() => new(Kind, GlobalPosition,
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
-        _flight.Control, VehicleState.Now, Owner, Name);
+        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen);
 
     public override void _PhysicsProcess(double delta)
     {
@@ -338,6 +340,10 @@ public partial class VehicleBody : CharacterBody3D
             rig.SteerAngle = 0f;
             rig.BodyPitch = 0f;
             rig.BrakeLights = false;
+            // left as the driver left them; nobody can switch them from outside, so the spawn
+            // data is enough and nothing more is replicated
+            rig.Headlights = _initial.Headlights && !Wrecked;
+            rig.RoofOpen = _initial.RoofOpen;
         }
         if (_engineSound != null && Ride is Car)
             // ticking over while it rolls; a car at rest is asleep and silent

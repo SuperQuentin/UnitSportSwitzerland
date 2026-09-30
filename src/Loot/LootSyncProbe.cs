@@ -65,14 +65,24 @@ public partial class LootSyncProbe : Node
         if (!await Until(() => me.IsOnFloor() && !me.KnockedOut && DoorIndex.Nearest(me.GlobalPosition, 400f) != null, 60)) { Fail("no door near the spot"); return; }
         await Seconds(1.0);
         var door = DoorIndex.Nearest(me.GlobalPosition, 400f)!.Value;
-        me.GlobalPosition = door.World + door.Outward * 0.8f + Vector3.Up * 0.3f;
+        string doorKey = door.Key.ToString();
+        var inward = -door.Outward;
+        me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
         me.Velocity = Vector3.Zero;
         await Seconds(1.5);   // the server checks the doorstep against its relayed copy
         await Until(() => me.IsOnFloor(), 10);
-        bool asked = me.TryInteract();
-        GD.Print($"[lootsync {_role}] at door {door.Key}: on floor {me.IsOnFloor()}, E taken {asked}, "
-            + $"{me.GlobalPosition.DistanceTo(door.World):F1} m from it");
-        if (!await Until(() => me.Indoors && interiors.Current != null, 20)) { Fail($"could not enter {door.Key}"); return; }
+
+        // doors are portals (#59): E opens it — unless the other client already did, when E would
+        // shut it in their face — it swings, and you walk through
+        if (!interiors.IsOpen(doorKey)) me.TryInteract();
+        if (!await Until(() => interiors.Links.TryGetValue(doorKey, out var l) && l.Passable && l.Swing >= 1f, 15))
+        { Fail($"the door {doorKey} never opened"); return; }
+        Input.ActionPress(PlayerInput.MoveForward);
+        bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
+        await Seconds(0.4);
+        Input.ActionRelease(PlayerInput.MoveForward);
+        if (!inside) { Fail($"could not walk in through {doorKey}"); return; }
+        await Seconds(1.0);   // the server learns the space a round trip after the sill
         var layout = interiors.Current!;
         var node = interiors.CurrentNode!;
         GD.Print($"[lootsync {_role}] inside {layout.Key}");

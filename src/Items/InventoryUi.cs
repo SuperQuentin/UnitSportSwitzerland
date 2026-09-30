@@ -537,7 +537,7 @@ public partial class InventoryUi : CanvasLayer
         // Minecraft throws a stack held on closing to the ground; here it goes back in the pack
         Inv.ReturnCarried();
         UiFocus.Set(this, false);
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+        Core.MouseCapture.Capture();
         Refresh();
     }
 

@@ -73,6 +73,12 @@ public partial class ChunkStreamer : Node
     /// <summary>Raised on the client when a transfer completes, for progress display.</summary>
     public event Action<AssetKind, TileId, int>? AssetReceived;
 
+    /// <summary>
+    /// Served in place of <c>manifest.json</c>, for a server with no terrain files of its own
+    /// (<c>--generated-world</c>): an empty tile list, but the origin every client must adopt.
+    /// </summary>
+    public byte[]? ManifestOverride { get; set; }
+
     /// <summary>Builds the server half, serving raw files out of a directory.</summary>
     public static ChunkStreamer CreateServer(string chunkDirectory) => new()
     {
@@ -229,12 +235,14 @@ public partial class ChunkStreamer : Node
         byte[] payload;
         try
         {
-            if (!System.IO.File.Exists(path))
+            if (assetKind == AssetKind.Manifest && ManifestOverride is { } manifest)
+                payload = manifest;
+            else if (!System.IO.File.Exists(path))
             {
                 RpcId(peer, MethodName.AssetMissing, requestId, true);
                 return;
             }
-            payload = System.IO.File.ReadAllBytes(path);
+            else payload = System.IO.File.ReadAllBytes(path);
         }
         catch (Exception e)
         {

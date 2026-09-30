@@ -2,7 +2,7 @@
 
 - **Loot** (`src/Loot/`): lootable furniture in every generated interior (fridge, wardrobe,
   nightstand, desk, shelf, crate/rack, workbench, car, shop counter, hay bale, altar). **E** facing
-  one indoors opens `LootUi`; E at the front door still leaves (`InteriorManager.AtExit` wins).
+  one indoors opens `LootUi`; E at a front door works the door (`InteriorManager.AtExit` wins).
   Items: food/water/medical (Consume), francs, scrap, minerals, vehicle parts (`ItemUse.Material`,
   `ItemCategory`, CHF `Value` for later trade) — `ItemId` 7–36, appended. **Contents are computed,
   never stored**: `LootTables.Roll` is seeded by building key + furniture index + restock epoch

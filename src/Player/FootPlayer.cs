@@ -312,6 +312,23 @@ public partial class FootPlayer : CharacterBody3D
         _hasSafe = true;
     }
 
+    /// <summary>
+    /// Steps through an open doorway into the space on the other side: the same stride carried
+    /// across by the door's map, so position, heading and momentum all come through, and nothing
+    /// resets the way a teleport does. <paramref name="interiorKey"/> is null going out.
+    /// </summary>
+    public void CrossDoor(string? interiorKey, Vector3 at, float turn, Basis map)
+    {
+        InteriorKey = interiorKey;
+        GlobalPosition = at;
+        Velocity = map * Velocity;
+        _viewYaw += turn;
+        Rotation = new Vector3(Rotation.X, Rotation.Y + turn, Rotation.Z);
+        _lastSafe = at;
+        _hasSafe = true;
+        _pivotY = float.NaN;
+    }
+
     /// <summary>Back outside; null <paramref name="at"/> just drops the state (a teleport is moving us anyway).</summary>
     public void LeaveInterior(Vector3? at, float yaw)
     {
@@ -597,6 +614,8 @@ public partial class FootPlayer : CharacterBody3D
         AddChild(sync);
 
         AddToGroup(Group);
+        // drawn on both sides of a doorway it is stepping through
+        AddToGroup(Interiors.DoorwayGhosts.Group);
 
         // kept in a field: sliding shrinks it, so the player fits under things a standing
         // body does not, and standing back up has to be tested against the world first
@@ -918,18 +937,44 @@ public partial class FootPlayer : CharacterBody3D
         // cast from the body's centre, not the shoulder, so a wall at the player's right does not
         // leave the lens behind it
         float want = 1f;
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            pivot, wanted, CameraMask, new Godot.Collections.Array<Rid> { GetRid() }));
-        if (hit.Count > 0)
+        float span = Mathf.Max(0.01f, (wanted - pivot).Length());
+        var space = GetWorld3D().DirectSpaceState;
+        // An arm reaching back through an open doorway goes on in the space on the other side:
+        // this side up to the sill (the building's shell there is the doorway, not a wall), then
+        // the rest carried across by the door's map, where the lens ends up if it gets that far.
+        float through = 2f;
+        var across = Transform3D.Identity;
+        if (Interiors.InteriorManager.Instance?.ArmThroughDoor(this, pivot, wanted, out float t, out var map, out var shell) == true)
         {
-            float span = Mathf.Max(0.01f, (wanted - pivot).Length());
-            want = Mathf.Clamp(((hit["position"].AsVector3() - pivot).Length() - 0.25f) / span, 0.1f, 1f);
+            var exclude = new Godot.Collections.Array<Rid> { GetRid() };
+            if (shell.IsValid) exclude.Add(shell);
+            var sill = pivot.Lerp(wanted, t);
+            var near = space.IntersectRay(PhysicsRayQueryParameters3D.Create(pivot, sill, CameraMask, exclude));
+            if (near.Count > 0)
+                want = Mathf.Clamp(((near["position"].AsVector3() - pivot).Length() - 0.25f) / span, 0.1f, 1f);
+            else
+            {
+                through = t;
+                across = map;
+                var far = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                    map * pivot.Lerp(wanted, Mathf.Min(1f, t + 0.1f / span)), map * wanted, CameraMask, exclude));
+                if (far.Count > 0)
+                    want = Mathf.Clamp((t * span + (far["position"].AsVector3() - map * sill).Length() - 0.25f) / span, 0.1f, 1f);
+            }
+        }
+        else
+        {
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                pivot, wanted, CameraMask, new Godot.Collections.Array<Rid> { GetRid() }));
+            if (hit.Count > 0)
+                want = Mathf.Clamp(((hit["position"].AsVector3() - pivot).Length() - 0.25f) / span, 0.1f, 1f);
         }
         // snap in, ease out: late at a wall is a frame with the lens inside it
         _armBlend = want < _armBlend ? want : Mathf.Lerp(_armBlend, want, 1f - Mathf.Exp(-5f * dt));
 
         var position = pivot.Lerp(wanted, _armBlend) + Vector3.Up * _landingDip * 0.5f;
-        _camera.GlobalTransform = new Transform3D(view, position);
+        var lens = new Transform3D(view, position);
+        _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
     }
 
     /// <summary>Switches first/third person, rebuilding the local body and saving the choice.</summary>
@@ -1002,13 +1047,13 @@ public partial class FootPlayer : CharacterBody3D
         {
             var interiors = Interiors.InteriorManager.Instance;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
-            return interiors?.TryExit(this) ?? true;
+            return interiors?.TryDoor(this) ?? true;
         }
         if (_ride != null || _mantling || _deadTimer > 0) return false;
 
         var vehicle = Vehicles?.Nearest(GlobalPosition, EnterReach);
         if (vehicle == null)
-            return IsOnFloor() && Interiors.InteriorManager.Instance?.TryEnter(this) == true;
+            return IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true;
         Vehicles!.Claim(vehicle, EnterVehicle);
         return true;
     }
@@ -1023,6 +1068,11 @@ public partial class FootPlayer : CharacterBody3D
         _flight.Control = state.Throttle;
         EngineOn = true;
         VehicleHealth = state.Health;
+        if (_ride is Car car)
+        {
+            car.Headlights = state.Headlights;
+            car.RoofOpen = state.RoofOpen && car.HasSoftTop;
+        }
         _placed = true;
     }
 
@@ -1036,7 +1086,8 @@ public partial class FootPlayer : CharacterBody3D
             : heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Vector3.Up * Velocity.Y;
         return new VehicleState((RideKind)RideKindId, GlobalPosition,
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
-            wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now);
+            wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
+            Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true });
     }
 
     /// <summary>
@@ -1317,6 +1368,20 @@ public partial class FootPlayer : CharacterBody3D
             return;
         }
 
+        if (@event.IsActionPressed(PlayerInput.LightsToggle) && !@event.IsEcho() && _ride is Car lit)
+        {
+            lit.Headlights = !lit.Headlights;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Car { HasSoftTop: true } open)
+        {
+            open.RoofOpen = !open.RoofOpen;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (@event is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
         {
             // Mounted, the body's yaw belongs to the steering — a bicycle goes where it points,
@@ -1593,7 +1658,12 @@ public partial class FootPlayer : CharacterBody3D
         }
 
         Velocity = velocity;
+        // an open doorway: let through the building's shell to the sill, then carried across it
+        var interiors = Interiors.InteriorManager.Instance;
+        var before = GlobalPosition;
+        interiors?.BeforeMove(this);
         MoveAndSlide();
+        interiors?.AfterMove(this, before);
 
         // a slide that ran into a wall has no speed left to give
         if (_sliding && new Vector2(Velocity.X, Velocity.Z).Length() < SlideMinSpeed * 0.5f)

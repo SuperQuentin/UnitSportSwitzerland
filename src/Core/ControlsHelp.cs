@@ -62,6 +62,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Boost", PlayerInput.Boost),
             new("Look behind", PlayerInput.LookBehind),
             new("Engine on / off", PlayerInput.EngineToggle),
+            new("Car: headlights / pop-ups", PlayerInput.LightsToggle),
+            new("Car: fold the soft top", PlayerInput.RoofToggle),
             new("Get out", PlayerInput.InteractMount),
         }),
         ("Flying", new Row[]

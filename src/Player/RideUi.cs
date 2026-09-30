@@ -227,7 +227,7 @@ public partial class RideUi : CanvasLayer
     {
         _panel.Visible = false;
         UiFocus.Set(this, false);
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+        Core.MouseCapture.Capture();
     }
 
     public override void _UnhandledInput(InputEvent @event)

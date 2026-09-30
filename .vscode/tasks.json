@@ -1,5 +1,7 @@
 {
-    // Godot is taken from "godotTools.editorPath.godot4" in .vscode/settings.json.
+    // Godot is taken from "godotTools.editorPath.godot4" in .vscode/settings.json (a Windows path);
+    // on macOS each task's "osx" override runs /Applications/Godot_mono.app instead, and on
+    // Linux/WSL its "linux" override runs `godot` from PATH (the .NET build of 4.7.1).
     // Every task that launches the game builds the C# first: launching Godot from the
     // command line does not compile the assembly the way F5 in the editor does.
     // Check and probe output goes to test_output/ (gitignored).
@@ -28,6 +30,8 @@
             "detail": "First-time headless import (creates .godot/)",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--headless", "--path", ".", "--import"],
             "problemMatcher": []
         },
@@ -38,6 +42,8 @@
             "detail": "Offline, main menu",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", "."],
             "dependsOn": "build",
             "group": { "kind": "test", "isDefault": true },
@@ -47,6 +53,8 @@
             "label": "run: game at LV95",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--at", "${input:lv95}"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -55,6 +63,8 @@
             "label": "run: game at town",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--goto", "${input:town}"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -63,6 +73,8 @@
             "label": "run: GPX replay",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--gpx", "${input:gpx}"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -71,6 +83,8 @@
             "label": "run: editor",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--editor"],
             "dependsOn": "build",
             "isBackground": true,
@@ -83,6 +97,8 @@
             "detail": "Headless server on port 7777; type /commands into this terminal",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--headless", "--path", ".", "--", "--server", "--admin-password", "${input:adminPassword}"],
             "dependsOn": "build",
             "isBackground": true,
@@ -92,6 +108,8 @@
             "label": "mp: client (localhost)",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--connect", "127.0.0.1", "--name", "${input:playerName}"],
             "problemMatcher": []
         },
@@ -99,6 +117,8 @@
             "label": "mp: client (host)",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--connect", "${input:host}", "--name", "${input:playerName}"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -110,6 +130,8 @@
             "detail": "SETUP.md step 3 - boots and writes test_output/smoke.png",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--shot", "0,300,0,-20,0,3,test_output/smoke.png"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -119,6 +141,8 @@
             "detail": "--shot x,y,z,pitchDeg,yawDeg,seconds,out.png",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--shot", "${input:shot}"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -128,6 +152,8 @@
             "detail": "Straight flight, prints frame-time distribution, fails on any frame > 33 ms",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--fly", "${input:fly}"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -136,6 +162,8 @@
             "label": "check: ride",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--ride", "${input:rideKind},20,test_output/ride_${input:rideKind}.png"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -144,6 +172,8 @@
             "label": "check: flight model",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--flycheck", "${input:craft},test_output/flycheck_${input:craft}.png"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -152,6 +182,8 @@
             "label": "check: vehicles",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--vehiclecheck,test_output/vehiclecheck.png", "--at", "2585000,1110000"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -160,6 +192,8 @@
             "label": "check: road collision",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--roadcheck"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -168,6 +202,8 @@
             "label": "check: bridge collision",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--roadcheck", "--bridges"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -176,6 +212,8 @@
             "label": "check: mantle",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--mantlecheck"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -184,6 +222,8 @@
             "label": "check: traffic",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--trafficcheck,test_output/trafficcheck.png"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -192,6 +232,8 @@
             "label": "check: gathering",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--gathercheck,test_output/gathercheck.png"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -200,6 +242,8 @@
             "label": "check: loot stats",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--path", ".", "--", "--lootstats"],
             "dependsOn": "build",
             "problemMatcher": []
@@ -209,6 +253,8 @@
             "detail": "Writes every sound bank as WAV to test_output/soundcheck, fails on NaN/clipping",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
             "args": ["--headless", "--path", ".", "--", "--soundcheck", "test_output/soundcheck"],
             "dependsOn": "build",
             "problemMatcher": []
