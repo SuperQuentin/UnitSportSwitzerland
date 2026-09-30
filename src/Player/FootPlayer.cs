@@ -989,6 +989,7 @@ public partial class FootPlayer : CharacterBody3D
             AddChild(_visual);
             // a machine is far bigger than the capsule it moves with; shots hit what is drawn
             if (kind != RideKind.OnFoot) Hurtbox.Fit(_visual);
+            FitHull(kind == RideKind.OnFoot ? null : _ride ?? Rideable.Create(kind));
             // a craft's mesh is not authored level (the wingsuit is an upright figure); pose it
             // level for a remote copy, which only receives position and yaw
             if (_ride == null && Rideable.Create(kind) is Flyer remoteFlyer)
@@ -1006,48 +1007,78 @@ public partial class FootPlayer : CharacterBody3D
         var ride = kind == RideKind.OnFoot ? null : Rideable.Create(kind);
         _capsule.Radius = ride?.BodyRadius ?? BodyRadius;
         SetBodyHeight(ride?.BodyHeight ?? StandHeight);
-        FitHull(ride);
     }
 
     /// <summary>Bottom of a hull, above the ground: bumps of the 1 m lattice must not catch it.</summary>
     private const float HullLift = 0.45f;
 
-    private CollisionShape3D? _hull;
+    /// <summary>Where the hull splits into body and cabin (or frame and rider), as a share of the height.</summary>
+    private const float HullCut = 0.55f;
+
+    private readonly CollisionShape3D?[] _hull = new CollisionShape3D?[2];
+    private readonly Vector3[] _hullCentre = new Vector3[2];
+    private bool _hullLeans;
 
     /// <summary>
-    /// A car or a motorbike is a box, not the capsule that carries it. The capsule (radius 0.85 for a
-    /// car) is what rides the ground — it glides over the terrain lattice where a box would snag —
-    /// but two capsules only meet when their centres are 1.7 m apart, so two 4.2 m cars sank a third
-    /// of their length into each other. The hull is the body's box from bumper height up, turned
-    /// with the body (drift angle included, see <see cref="AlignHull"/>), on the owner's copy for its
-    /// own physics and on every remote copy so others hit the car they see.
+    /// A car or a motorbike collides as what is DRAWN, never as the capsule that carries it: the
+    /// user's rule is that nothing ever goes into another model. The capsule (radius 0.85 for a car)
+    /// rides the ground — it glides over the terrain lattice where a box would snag — but two
+    /// capsules only meet 1.7 m apart, and 4.2 m cars sank a third into each other.
+    ///
+    /// The hull is two boxes measured from the actual mesh of this very model (<see
+    /// cref="Avatar.MeshBounds.Split"/>): the body below the belt line and the cabin above it — or a
+    /// motorbike's frame and its rider — from <see cref="HullLift"/> up. Every model gets its own
+    /// size (an AE86 is not an NSX), and <see cref="AlignHull"/> moves the boxes with the body's
+    /// pose every frame. Built on the owner (its own physics, trees, walls) and on every remote copy
+    /// so others hit what they see.
     /// </summary>
     private void FitHull(Rideable? ride)
     {
-        bool wants = ride is { IsVehicle: true } and not Flyer;
+        bool wants = ride is { IsVehicle: true } and not Flyer && _visual != null;
         if (!wants)
         {
-            _hull?.QueueFree();
-            _hull = null;
+            for (int i = 0; i < 2; i++) { _hull[i]?.QueueFree(); _hull[i] = null; }
             return;
         }
-        var (centre, size) = ride!.ParkedBox;
-        float bottom = Mathf.Max(centre.Y - size.Y / 2f, HullLift);
-        float top = centre.Y + size.Y / 2f;
-        if (top - bottom < 0.2f) { _hull?.QueueFree(); _hull = null; return; }
-        _hull ??= new CollisionShape3D { Name = "Hull" };
-        _hull.Shape = new BoxShape3D { Size = new Vector3(size.X, top - bottom, size.Z) };
-        _hull.Position = new Vector3(centre.X, (top + bottom) / 2f, centre.Z);
-        if (_hull.GetParent() == null) AddChild(_hull);
+        // measured at rest: the pose is applied per frame, so the visual's own transform is undone
+        var pose = _visual!.Transform;
+        _visual.Transform = Transform3D.Identity;
+        var (lower, upper) = Avatar.MeshBounds.Split(_visual, HullCut);
+        _visual.Transform = pose;
+        _hullLeans = ride is not Car;   // lean-steered: yaw and pitch only (see AlignHull)
+        var parts = new[] { lower, upper };
+        for (int i = 0; i < 2; i++)
+        {
+            var box = parts[i];
+            float bottom = Mathf.Max(box.Position.Y, HullLift);
+            float top = box.End.Y;
+            if (top - bottom < 0.1f || box.Size.X < 0.05f) { _hull[i]?.QueueFree(); _hull[i] = null; continue; }
+            _hull[i] ??= new CollisionShape3D { Name = i == 0 ? "HullLow" : "HullHigh" };
+            _hull[i]!.Shape = new BoxShape3D { Size = new Vector3(box.Size.X, top - bottom, box.Size.Z) };
+            _hullCentre[i] = new Vector3(box.GetCenter().X, (top + bottom) / 2f, box.GetCenter().Z);
+            if (_hull[i]!.GetParent() == null) AddChild(_hull[i]);
+        }
+        AlignHull();
     }
 
-    /// <summary>Turns the hull to the body's actual yaw (a drifting car is sideways to the node).</summary>
+    /// <summary>
+    /// Moves the hull with the body's pose (drift yaw, pitch over a crest, a flip). A leaning
+    /// two-wheeler keeps its hull upright: rolled 50° into a bend, a box starting at 0.45 m would
+    /// put its inside corner on the road and snag every corner.
+    /// </summary>
     private void AlignHull()
     {
-        if (_hull == null) return;
-        var fwd = BodyPose.Basis.Z;
-        float yaw = new Vector2(fwd.X, fwd.Z).LengthSquared() > 1e-6f ? Mathf.Atan2(fwd.X, fwd.Z) : 0f;
-        _hull.Rotation = new Vector3(0, yaw, 0);
+        if (_hull[0] == null && _hull[1] == null) return;
+        var pose = BodyPose;
+        if (_hullLeans)
+        {
+            var fwd = pose.Basis.Z;
+            float yaw = Mathf.Atan2(fwd.X, fwd.Z);
+            float pitch = -Mathf.Asin(Mathf.Clamp(fwd.Y, -1f, 1f));
+            pose = new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, 0)), pose.Origin);
+        }
+        for (int i = 0; i < 2; i++)
+            if (_hull[i] != null) _hull[i]!.Transform = pose * new Transform3D(Basis.Identity, _hullCentre[i]);
     }
 
     /// <summary>
@@ -1645,7 +1676,6 @@ public partial class FootPlayer : CharacterBody3D
             if (radius > _capsule.Radius + 0.05f) GlobalPosition += Vector3.Up * (radius - _capsule.Radius);
             _capsule.Radius = radius;
             SetBodyHeight(_ride?.BodyHeight ?? StandHeight);
-            FitHull(_ride);
         }
         _settle = SettleTime;
         _shortfall = 0f;

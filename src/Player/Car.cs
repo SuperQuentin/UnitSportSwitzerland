@@ -179,7 +179,8 @@ public sealed class Car : Rideable, IEngined
     public override float BodyRadius => 0.85f;
     public override float BodyHeight => 1.7f;
     public override float DismountSpeed => 1.5f;
-    public override (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 0.65f, 0), new Vector3(1.7f, 1.3f, 4.2f));
+    // measured from this model's own mesh (Rideable.Measured): an AE86 is not an NSX
+    public override (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual);
 
     // ---- what the feel layer and the rig read ----
     /// <summary>Engine speed, rpm.</summary>
