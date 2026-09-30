@@ -1,0 +1,23 @@
+{
+  "about": "Hand-traced land cover that swissTLM3D does not map. Stamped by the preprocessor's cover stage (--cover) after the six TLM area layers, never over Water. ring = LV95 (EPSG:2056) E,N pairs, open or closed; cover = a CoverClass name (tools/TerrainFormat/CoverFormat.cs). Every polygon cites its source.",
+  "polygons": [
+    {
+      "name": "Riddes house 15: forecourt and access lane",
+      "cover": "PavedArea",
+      "source": "Owner's aerial photo (Google satellite, shared 2026-09-30, issue #84), traced relative to the TLM access lane; TLM maps no traffic area within 300 m",
+      "ring": [[2582651.3, 1112868.3], [2582661.6, 1112866.0], [2582689.5, 1112822.9], [2582690.8, 1112822.1], [2582686.5, 1112811.4], [2582703.4, 1112780.7], [2582705.9, 1112776.0], [2582697.4, 1112775.6], [2582693.3, 1112782.6], [2582673.9, 1112802.3], [2582679.9, 1112812.3], [2582677.6, 1112826.8], [2582666.7, 1112843.8], [2582657.9, 1112856.0]]
+    },
+    {
+      "name": "Riddes house 15: north-east parking row",
+      "cover": "ParkingPrivate",
+      "source": "Owner's aerial photo (Google satellite, shared 2026-09-30, issue #84): one row of bays between the access lane and the orchard, cars parked",
+      "ring": [[2582661.6, 1112865.2], [2582666.0, 1112868.1], [2582693.8, 1112825.7], [2582689.5, 1112822.9]]
+    },
+    {
+      "name": "Riddes house 15: south-east parking row",
+      "cover": "ParkingPrivate",
+      "source": "Owner's aerial photo (Google satellite, shared 2026-09-30, issue #84): one row of bays between the access lane and the orchard",
+      "ring": [[2582686.1, 1112810.8], [2582690.6, 1112813.5], [2582708.0, 1112783.3], [2582703.4, 1112780.7]]
+    }
+  ]
+}

@@ -9,7 +9,8 @@ namespace UnitSport.Player;
 ///
 /// <para>
 /// <c>godot --path . -- --ride bike|skis|car[:N]|r1|monster,seconds[,out.png] [--at E,N] [--heading deg]</c>
-/// (<c>--heading</c>: compass bearing to ride along, 0 = north, 90 = east)
+/// (<c>--heading</c>: compass bearing to ride along, 0 = north, 90 = east; <c>--setup name</c>: a car
+/// preset, <see cref="CarSetups"/>)
 /// </para>
 ///
 /// <para>
@@ -125,6 +126,12 @@ public partial class RideProbe : Node
                 ? $"[ride] mounted {_kind}"
                 : $"[ride] MOUNT REFUSED for {_kind}");
             if (!_mounted) { _done = true; GetTree().Quit(1); }
+            int si = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--setup");
+            if (_mounted && si >= 0 && si + 1 < OS.GetCmdlineUserArgs().Length)
+            {
+                var setup = CarSetups.Parse(OS.GetCmdlineUserArgs()[si + 1]);
+                GD.Print(setup != null && _player.SetCarSetup(setup.Id) ? $"[ride] preset {setup.Name}" : "[ride] PRESET REFUSED");
+            }
 
             // full throttle, straight ahead — the probe measures the model, not the steering
             _player.RideControls = () => new RideInput(1f, 0f, 0f, false);
@@ -133,7 +140,7 @@ public partial class RideProbe : Node
 
         _elapsed += delta;
         _topSpeed = Mathf.Max(_topSpeed, _player.RideSpeed);
-        foreach (float kmh in new[] { 100f, 200f })
+        foreach (float kmh in new[] { 80f, 100f, 200f })
             if (_player.RideSpeed * 3.6f >= kmh && !_reached.Contains(kmh))
             {
                 _reached.Add(kmh);
@@ -150,7 +157,9 @@ public partial class RideProbe : Node
             float clearance = _chunks.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
             GD.Print($"[ride] t={_elapsed,5:F1}s  v={_player.RideSpeed,5:F1} m/s "
                 + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
-                + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : ""));
+                + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
+                + (_player.Vehicle is Car car ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {car.Gear}" : "")
+                + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : ""));
         }
 
         if (_elapsed < _seconds) return;

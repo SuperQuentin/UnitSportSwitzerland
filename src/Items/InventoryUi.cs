@@ -61,7 +61,7 @@ public partial class InventoryUi : CanvasLayer
     private ColorRect _flash = null!;
     private ColorRect _binoculars = null!;
     private ViewfinderView _viewfinder = null!;
-    private Label _crosshair = null!;
+    private Control _crosshair = null!;
     private Label _cashHud = null!;
 
     private Control _panel = null!;
@@ -96,6 +96,12 @@ public partial class InventoryUi : CanvasLayer
 
     /// <summary>Which optic overlay to draw, if Aim is held with one in hand.</summary>
     public ItemUse? Scope { get; set; }
+
+    /// <summary>Breathing drift of the binocular overlay, in screen fractions.</summary>
+    public Vector2 OpticSway { get; set; }
+
+    /// <summary>The camera's 35 mm-equivalent focal length, shown in the viewfinder.</summary>
+    public float PhotoFocalMm { get => _viewfinder.FocalMm; set => _viewfinder.FocalMm = value; }
 
     /// <summary>Text for the GPS panel, or null to hide it.</summary>
     public string? Readout { get; set; }
@@ -157,13 +163,8 @@ public partial class InventoryUi : CanvasLayer
         _viewfinder.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_viewfinder);
 
-        // the shotgun's bead: a plain centred cross
-        _crosshair = new Label
-        {
-            Text = "+", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
-            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-        };
-        _crosshair.AddThemeFontSizeOverride("font_size", 28);
+        // the shotgun's bead: a small open ring at the screen centre, where the front bead sits
+        _crosshair = new BeadReticle { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _crosshair.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_crosshair);
 
@@ -319,6 +320,11 @@ public partial class InventoryUi : CanvasLayer
         _handButton = new Button { Text = "Take in hand" };
         _handButton.Pressed += TakeInHand;
         right.AddChild(_handButton);
+
+        // the Polaroids: every photo in the pack and every one taken here (PhotoUi)
+        var albumButton = new Button { Text = "Photo album" };
+        albumButton.Pressed += () => _items.PhotoUi.OpenAlbum();
+        right.AddChild(albumButton);
 
         // the bin: drop a stack on it to throw it away; click it empty-handed to get it back
         var binRow = new HBoxContainer();
@@ -488,7 +494,7 @@ public partial class InventoryUi : CanvasLayer
         _infoBlurb.Text = def != null ? InputHints.Format(def.Blurb)
             : slot < Inventory.HotbarSize ? "Hotbar slot — whatever is here can be in your hand." : "Backpack slot.";
         _infoValue.Text = def is { Value: > 0 } ? $"Worth about {def.Value * stack.Count:0.#} CHF" : "";
-        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear);
+        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear or ItemUse.Print);
         _handButton.Disabled = def == null || slot == Inv.Selected;
     }
 
@@ -722,6 +728,7 @@ public partial class InventoryUi : CanvasLayer
 
     public override void _UnhandledInput(InputEvent e)
     {
+        if (_items.PhotoUi.Blocking) return;   // the album or a photo is over the panel
         if (IsOpen)
         {
             if (!e.IsPressed() || e.IsEcho()) return;
@@ -760,6 +767,7 @@ public partial class InventoryUi : CanvasLayer
 
     public override void _Input(InputEvent e)
     {
+        if (_items.PhotoUi.Blocking) return;
         if (IsOpen)
         {
             if (HandlePanelMouse(e)) GetViewport().SetInputAsHandled();
@@ -818,7 +826,10 @@ public partial class InventoryUi : CanvasLayer
         _viewfinder.Visible = Scope == ItemUse.Photo;
         _crosshair.Visible = Scope == ItemUse.Shoot;
         if (_binoculars.Visible && _binoculars.Material is ShaderMaterial sm)
+        {
             sm.SetShaderParameter("aspect", _root.Size.X / Mathf.Max(1f, _root.Size.Y));
+            sm.SetShaderParameter("sway", OpticSway);
+        }
 
         _heldNameTimer -= dt;
         _heldName.Visible = ItemsActive && !IsOpen;
@@ -857,8 +868,9 @@ public partial class InventoryUi : CanvasLayer
     private const string BinocularShader = @"
 shader_type canvas_item;
 uniform float aspect = 1.777;
+uniform vec2 sway = vec2(0.0);
 void fragment() {
-    vec2 p = (UV - 0.5) * vec2(aspect, 1.0);
+    vec2 p = (UV - 0.5 - sway) * vec2(aspect, 1.0);
     float r = 0.42;
     float d = min(length(p - vec2(-0.24, 0.0)), length(p - vec2(0.24, 0.0)));
     float a = smoothstep(r - 0.012, r + 0.004, d);
@@ -937,12 +949,33 @@ public static class SlotDrawing
 
         if (!stack.IsEmpty && ItemDefs.Get(stack.Id) is { } def)
         {
-            var inner = r.Grow(-r.Size.X * 0.18f);
-            c.DrawRect(inner, def.Tint);
-            c.DrawRect(inner, def.Tint.Lightened(0.4f), false, 1.5f);
-            int glyphSize = (int)(r.Size.Y * 0.30f);
-            c.DrawString(font, new Vector2(inner.Position.X, inner.GetCenter().Y + glyphSize * 0.36f), def.Glyph,
-                HorizontalAlignment.Center, inner.Size.X, glyphSize, Colors.White);
+            var icon = ItemIcons.Get(stack.Id);
+            // a photo shows its own print, a thumbnail drawn 1:1
+            if (stack.Id == ItemId.Photo && PhotoStore.Thumbnail(stack.Data) is { } thumb)
+            {
+                var size = thumb.GetSize();
+                float k = Mathf.Min(1f, r.Size.Y * 0.86f / size.Y);
+                c.DrawTextureRect(thumb, new Rect2((r.GetCenter() - size * k * 0.5f).Round(), size * k), false);
+            }
+            else if (icon != null)
+            {
+                if (c.TextureFilter != CanvasItem.TextureFilterEnum.Nearest)
+                    c.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+                float avail = Mathf.Min(r.Size.X, r.Size.Y) * 0.8f;
+                float px = avail >= ItemIcons.Size ? Mathf.Floor(avail / ItemIcons.Size) : avail / ItemIcons.Size;
+                var size = new Vector2(ItemIcons.Size, ItemIcons.Size) * px;
+                var at = (r.GetCenter() - size * 0.5f).Round();
+                c.DrawTextureRect(icon, new Rect2(at, size), false);
+            }
+            else
+            {
+                var inner = r.Grow(-r.Size.X * 0.18f);
+                c.DrawRect(inner, def.Tint);
+                c.DrawRect(inner, def.Tint.Lightened(0.4f), false, 1.5f);
+                int glyphSize = (int)(r.Size.Y * 0.30f);
+                c.DrawString(font, new Vector2(inner.Position.X, inner.GetCenter().Y + glyphSize * 0.36f), def.Glyph,
+                    HorizontalAlignment.Center, inner.Size.X, glyphSize, Colors.White);
+            }
             if (def.MaxStack > 1)
             {
                 int countSize = (int)(r.Size.Y * 0.26f);
@@ -996,12 +1029,66 @@ public partial class WheelView : Control
     }
 }
 
-/// <summary>A camera's viewfinder: corner brackets, a centre mark and the rule-of-thirds grid.</summary>
-public partial class ViewfinderView : Control
+/// <summary>
+/// A camera's viewfinder: thirds grid, corner brackets, focal length readout with a zoom scale,
+/// an autofocus brace that hunts after every zoom change, and shots / time / battery at the corners.
+/// </summary>
+/// <summary>The shotgun's aiming dot: a thin dark-edged ring around the centre, small enough to leave the front bead visible.</summary>
+public partial class BeadReticle : Control
 {
     public override void _Draw()
     {
+        var c = Size / 2f;
+        DrawArc(c, 5.5f, 0f, Mathf.Tau, 28, new Color(0, 0, 0, 0.55f), 3.5f, true);
+        DrawArc(c, 5.5f, 0f, Mathf.Tau, 28, new Color(1f, 0.92f, 0.6f, 0.95f), 1.6f, true);
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationResized) QueueRedraw();
+    }
+}
+
+public partial class ViewfinderView : Control
+{
+    public const float Min = 24f, Max = 200f;
+    private float _focal = 35f;
+    private double _hunt;          // seconds of autofocus hunt left
+    private int _shots;
+    private double _recount = 99;
+
+    public float FocalMm
+    {
+        get => _focal;
+        set
+        {
+            if (Mathf.Abs(value - _focal) < 0.01f) return;
+            _focal = value;
+            _hunt = 0.35;
+            QueueRedraw();
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!IsVisibleInTree()) { _recount = 99; return; }
+        _hunt = System.Math.Max(0, _hunt - delta);
+        _recount += delta;
+        if (_recount > 1.0)
+        {
+            _recount = 0;
+            using var d = DirAccess.Open("user://photos");
+            _shots = d?.GetFiles().Length ?? 0;
+        }
+        QueueRedraw();   // the clock and the hunt animate
+    }
+
+    private static string Fmt(float v, string f) => v.ToString(f, System.Globalization.CultureInfo.InvariantCulture);
+
+    public override void _Draw()
+    {
         var s = Size;
+        var font = ThemeDB.FallbackFont;
         var line = new Color(1, 1, 1, 0.85f);
         var faint = new Color(1, 1, 1, 0.18f);
         float inset = s.Y * 0.08f, arm = s.Y * 0.07f;
@@ -1019,11 +1106,51 @@ public partial class ViewfinderView : Control
             DrawLine(new Vector2(x, y), new Vector2(x, y + arm * dy), line, 2f);
         }
 
+        // autofocus: the brace starts wide and shrinks onto the subject, green once locked
         var c = s * 0.5f;
-        DrawLine(c - new Vector2(10, 0), c + new Vector2(10, 0), line, 1.5f);
-        DrawLine(c - new Vector2(0, 10), c + new Vector2(0, 10), line, 1.5f);
-        DrawString(ThemeDB.FallbackFont, new Vector2(inset, s.Y - inset + 22), "Use to shoot",
-            HorizontalAlignment.Left, -1, 14, line);
+        float t = (float)(_hunt / 0.35);
+        bool locked = _hunt <= 0;
+        float half = 22f + (locked ? 0f : t * 26f * (0.6f + 0.4f * Mathf.Sin((float)Time.GetTicksMsec() * 0.04f)));
+        var af = locked ? new Color(0.35f, 1f, 0.35f, 0.95f) : new Color(1f, 0.85f, 0.3f, 0.95f);
+        float a = 9f;
+        foreach (var (sx, sy) in new[] { (-1f, -1f), (1f, -1f), (-1f, 1f), (1f, 1f) })
+        {
+            var p = c + new Vector2(sx * half, sy * half);
+            DrawLine(p, p + new Vector2(-sx * a, 0), af, 2f);
+            DrawLine(p, p + new Vector2(0, -sy * a), af, 2f);
+        }
+        DrawRect(new Rect2(c - Vector2.One, Vector2.One * 2f), line);
+
+        // focal length and relative zoom, top centre
+        DrawString(font, new Vector2(0, inset + 24), Fmt(_focal, "F0") + "mm   x" + Fmt(_focal / 24f, "F1"),
+            HorizontalAlignment.Center, s.X, 20, Colors.White);
+
+        // zoom scale down the right side: ticks at the classic stops, a marker at the focal length
+        float sx0 = s.X - inset - 40f, top = s.Y * 0.3f, bot = s.Y * 0.7f;
+        float Y(float mm) => bot - (bot - top) * Mathf.Log(mm / Min) / Mathf.Log(Max / Min);
+        DrawLine(new Vector2(sx0, top), new Vector2(sx0, bot), line, 1.5f);
+        foreach (float mm in new[] { 24f, 28f, 35f, 50f, 70f, 85f, 105f, 135f, 200f })
+        {
+            float y = Y(mm);
+            bool major = mm is 24f or 35f or 70f or 135f or 200f;
+            DrawLine(new Vector2(sx0, y), new Vector2(sx0 + (major ? 10 : 6), y), line, 1.5f);
+            if (major)
+                DrawString(font, new Vector2(sx0 + 14, y + 5), Fmt(mm, "F0"), HorizontalAlignment.Left, -1, 12, line);
+        }
+        float my = Y(Mathf.Clamp(_focal, Min, Max));
+        DrawColoredPolygon(new[] { new Vector2(sx0 - 2, my), new Vector2(sx0 - 12, my - 6), new Vector2(sx0 - 12, my + 6) }, af);
+
+        // bottom row: shots taken, time stamp, battery; key hint on top
+        float by = s.Y - inset + 22;
+        DrawString(font, new Vector2(inset, by), "SHOTS " + _shots, HorizontalAlignment.Left, -1, 14, line);
+        DrawString(font, new Vector2(0, by),
+            System.DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
+            HorizontalAlignment.Center, s.X, 14, line);
+        DrawString(font, new Vector2(inset, inset - 10), "Use: shoot   Wheel: zoom", HorizontalAlignment.Left, -1, 14, line);
+        var bat = new Rect2(s.X - inset - 30, by - 11, 26, 12);
+        DrawRect(bat, line, false, 1.5f);
+        DrawRect(new Rect2(bat.End.X, bat.Position.Y + 3, 3, 6), line);
+        for (int i = 0; i < 3; i++) DrawRect(new Rect2(bat.Position.X + 2 + i * 8, bat.Position.Y + 2, 6, 8), line);
     }
 
     public override void _Notification(int what)

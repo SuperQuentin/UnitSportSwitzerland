@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Interiors;
 
@@ -8,8 +9,11 @@ namespace UnitSport.Interiors;
 /// </summary>
 public partial class DoorLeaf : Node3D
 {
-    /// <summary>How far it swings when fully open, radians.</summary>
-    private const float OpenAngle = 1.75f;
+    /// <summary>
+    /// How far it swings when fully open, radians: square to the wall, no further. A house's door
+    /// can stand 0.2 m from the stair core's side wall, and any more swings the leaf into it.
+    /// </summary>
+    private const float OpenAngle = Mathf.Pi / 2;
     private const float Thickness = 0.04f;
 
     private Node3D _hinge = null!;
@@ -19,14 +23,14 @@ public partial class DoorLeaf : Node3D
     /// A leaf for an entrance, in the interior node's frame: <paramref name="doorway"/> is the
     /// doorway frame (origin on the sill at the wall's outer face, Z toward the street).
     /// </summary>
-    public static DoorLeaf Create(string door, Transform3D doorway, float width, float height, Material material)
+    public static DoorLeaf Create(string door, Transform3D doorway, float width, float height, BuildingKind kind, Material material)
     {
         var leaf = new DoorLeaf { Name = "Leaf_" + door, Transform = doorway };
         // on the room side of the reveal, where the old baked leaf stood
         leaf._hinge = new Node3D { Name = "Hinge", Position = new Vector3(-width / 2, 0, -InteriorGenerator.WallInset) };
         leaf.AddChild(leaf._hinge);
 
-        var data = InteriorMeshBuilder.Leaf(width, height, Thickness);
+        var data = InteriorMeshBuilder.Leaf(width, height, Thickness, kind);
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;

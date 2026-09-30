@@ -24,7 +24,11 @@ public readonly record struct BuildingKey(int TileE, int TileN, int Index)
 /// Where a building's front door is, in tile-local metres (X east, Y altitude, Z south — the
 /// frame the building triangles and the chunk node share). <see cref="Outward"/> is horizontal.
 /// </summary>
-public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outward, float Width, float Height);
+public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outward, float Width, float Height)
+{
+    /// <summary>The building's kind, so door consumers (garage doors) need not keep the tile.</summary>
+    public BuildingKind Kind { get; init; }
+}
 
 /// <summary>
 /// A building's plan-view box and its door, derived from nothing but its wall triangles. The
@@ -79,13 +83,29 @@ public static class BuildingFootprint
     public static float DoorHeightFor(BuildingKind kind) =>
         DoorWidthFor(kind) > 2f ? 2.8f : kind == BuildingKind.Sacral ? 2.6f : 2.1f;
 
+    /// <summary>The front door's leaf, linear: the facade's baked leaf and the interior's swinging one.</summary>
+    public static Color DoorLeafColorFor(BuildingKind kind) => (kind switch
+    {
+        BuildingKind.Agricultural or BuildingKind.Annex => new Color(0.42f, 0.30f, 0.20f),
+        BuildingKind.Industrial => new Color(0.46f, 0.50f, 0.54f),
+        BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Civic => new Color(0.22f, 0.26f, 0.30f),
+        BuildingKind.Sacral => new Color(0.30f, 0.18f, 0.10f), // old oak
+        _ => new Color(0.40f, 0.25f, 0.15f),
+    }).SrgbToLinear();
+
+    /// <summary>The door frame on the facade, linear.</summary>
+    public static readonly Color DoorFrameColor = new Color(0.86f, 0.84f, 0.79f).SrgbToLinear();
+
+    /// <summary>The front door's street-side handle, linear: on the facade and on the swinging leaf.</summary>
+    public static readonly Color DoorHandleColor = DoorFrameColor * 0.7f;
+
     /// <summary>Doors for every building of a tile, in building order.</summary>
     public static DoorSpot[] ComputeDoors(BuildingTile tile, RoadTile? roads, ChunkGrid? grid)
     {
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
         var doors = new DoorSpot[tile.Buildings.Count];
         for (int i = 0; i < doors.Length; i++)
-            doors[i] = Compute(tile, i, roadIndex, grid)?.Door ?? default;
+            doors[i] = (Compute(tile, i, roadIndex, grid)?.Door ?? default) with { Kind = tile.Buildings[i].Kind };
         return doors;
     }
 

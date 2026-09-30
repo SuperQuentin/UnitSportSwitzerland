@@ -79,7 +79,7 @@
   holds 0.6 s. `--motocheck` fails a DCT that down-shifts flat out or reverses a shift at a steady
   35% throttle (0 reversals on all 13 DCTs).
 - **Surface grip** (all motorbikes): `RideGround.Surface` is `Surfaces.At` under the wheels (the
-  `.road` surface, else the cover), looked up by `FootPlayer` for motorbikes only.
+  `.road` surface, else the cover), looked up by `FootPlayer` for motorbikes and cars (cars: `car-setups`).
   `Motorbike.SurfaceGrip`: tarmac keeps the tyre's own grip; off it the ground sets the limit — a
   road tyre gets 0.65 on gravel / a dirt road, 0.5 on grass (rock 0.8, snow 0.3, ice 0.1) whatever
   its compound — and `MotorbikeSpec.OffroadTyre` claws back that share of the gap to 1 (Africa Twin

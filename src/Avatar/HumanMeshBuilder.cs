@@ -26,6 +26,27 @@ public enum HumanPose
     Hanging,
 }
 
+/// <summary>
+/// An arm-override layer on top of any body pose: where the hands go while an item is held or in
+/// use. Legs and gait are untouched. Derived on every peer from replicated state
+/// (<c>HeldItemId</c> + <c>ItemAction</c>), so it is never sent itself. See docs/notes/avatar/item-arm-poses.md.
+/// </summary>
+public enum ItemArmPose
+{
+    /// <summary>The gait's own arms.</summary>
+    None,
+    /// <summary>The item hand forward at the waist, the other arm swinging less.</summary>
+    Hold,
+    /// <summary>Stock in the shoulder pocket, the other hand forward under the barrel.</summary>
+    ShoulderAim,
+    /// <summary>Both hands at the face: binoculars, a camera.</summary>
+    TwoHandEye,
+    /// <summary>The item hand up at the mouth: eating, drinking.</summary>
+    Mouth,
+    /// <summary>The item hand low and forward: planting something in the ground.</summary>
+    Plant,
+}
+
 /// <summary>Colours for one figure. Kept separate so riders can be told apart at distance.</summary>
 public sealed record HumanPalette(
     Color Skin,
@@ -92,7 +113,7 @@ public static class HumanMeshBuilder
         Vector3 ShoulderR, Vector3 ElbowR, Vector3 WristR,
         Vector3 HipL, Vector3 KneeL, Vector3 AnkleL, Vector3 ToeL,
         Vector3 HipR, Vector3 KneeR, Vector3 AnkleR, Vector3 ToeR,
-        float TorsoLean);
+        float TorsoLean, Vector3 HandDir = default);
 
     public static ArrayMesh Build(HumanPalette palette, HumanPose pose = HumanPose.Standing,
         bool includeLegs = true, bool helmet = false, Headwear hat = Headwear.None)
@@ -123,11 +144,78 @@ public static class HumanMeshBuilder
     /// </summary>
     /// <param name="phase">Gait cycle position, 0..1. Both feet complete one step each per cycle.</param>
     public static ArrayMesh BuildStride(HumanPalette palette, float speed, float phase,
-        bool helmet = false, Headwear hat = Headwear.None)
+        bool helmet = false, Headwear hat = Headwear.None,
+        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f)
     {
         var scratch = new MeshScratch();
-        AppendRig(scratch, palette, GaitRig(speed, phase), includeLegs: true, helmet, hat);
+        AppendRig(scratch, palette, ApplyArms(GaitRig(speed, phase), arm, armBlend), includeLegs: true, helmet, hat);
         return scratch.Build();
+    }
+
+    /// <summary>A fixed pose with the item arm override on top (uncached: the blend changes every frame).</summary>
+    public static ArrayMesh BuildPosed(HumanPalette palette, HumanPose pose, ItemArmPose arm, float armBlend,
+        Headwear hat = Headwear.None)
+    {
+        var scratch = new MeshScratch();
+        AppendRig(scratch, palette, ApplyArms(RigFor(pose), arm, armBlend), includeLegs: true, helmet: false, hat);
+        return scratch.Build();
+    }
+
+    /// <summary>
+    /// Replaces the hands' targets for <paramref name="arm"/>, blended by <paramref name="blend"/> (0..1)
+    /// from the pose's own arms, and re-solves the elbows. The item hand is the rig's -X one
+    /// (the figure's right once the mesh is turned to face -Z). Targets hang off chest, neck and head
+    /// so they follow the torso lean; none depends on view pitch (only yaw is replicated).
+    /// </summary>
+    private static Rig ApplyArms(Rig rig, ItemArmPose arm, float blend)
+    {
+        blend = Mathf.Clamp(blend, 0f, 1f);
+        if (arm == ItemArmPose.None || blend <= 0.001f) return rig;
+
+        const float s = -1f;   // item hand side in author space
+        Vector3 item, support, dir;
+        Vector3 rest = new(-s * 0.21f, rig.Hip.Y + 0.02f, rig.Hip.Z + 0.02f);   // support arm hangs
+        switch (arm)
+        {
+            case ItemArmPose.ShoulderAim:
+                // butt in the shoulder pocket, trigger hand near the cheek, fore-end hand under the barrel
+                item = new(s * 0.135f, rig.Neck.Y + 0.05f, rig.Chest.Z + 0.29f);
+                support = new(-s * 0.02f, rig.Neck.Y - 0.03f, rig.Chest.Z + 0.50f);
+                dir = new Vector3(-s * 0.03f, 0.04f, 1f); break;
+            case ItemArmPose.TwoHandEye:
+                item = new(s * 0.08f, rig.HeadBase.Y + 0.09f, rig.HeadBase.Z + 0.29f);
+                support = new(-s * 0.08f, rig.HeadBase.Y + 0.09f, rig.HeadBase.Z + 0.29f);
+                dir = Vector3.Back; break;
+            case ItemArmPose.Mouth:
+                item = new(s * 0.05f, rig.HeadBase.Y - 0.03f, rig.HeadBase.Z + 0.18f);
+                support = Reduce(rig.WristR, rest);
+                dir = new Vector3(0f, 0.8f, -0.3f); break;
+            case ItemArmPose.Plant:
+                // both hands on the pole, which stands upright in front with its foot near the ground (cloth up)
+                item = new(s * 0.05f, rig.Hip.Y - 0.22f, rig.Hip.Z + 0.42f);
+                support = new(-s * 0.05f, rig.Hip.Y + 0.08f, rig.Hip.Z + 0.42f);
+                dir = new Vector3(0f, 1f, 0.12f); break;
+            default:   // Hold
+                item = new(s * 0.19f, rig.Waist.Y + 0.05f, rig.Waist.Z + 0.30f);
+                support = Reduce(rig.WristR, rest);
+                dir = new Vector3(0f, -0.35f, 1f); break;
+        }
+        Vector3 Reduce(Vector3 gait, Vector3 to) => gait.Lerp(to, 0.5f);
+
+        var wristL = rig.WristL.Lerp(item, blend);
+        var wristR = rig.WristR.Lerp(support, blend);
+        var elbowL = Limb.Solve(rig.ShoulderL, wristL, UpperArmLength, ForearmLength, new Vector3(-0.6f, -0.6f, -0.2f));
+        var elbowR = Limb.Solve(rig.ShoulderR, wristR, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.6f, -0.2f));
+        // the item points along the forearm swinging in the gait, along the pose's own direction once blended
+        var fore = (rig.WristL - rig.ElbowL).Normalized();
+        // head down onto the stock: the crown tips forward a little
+        var headTop = arm == ItemArmPose.ShoulderAim ? rig.HeadTop + new Vector3(0, -0.012f, 0.04f) * blend : rig.HeadTop;
+        return rig with
+        {
+            HeadTop = headTop,
+            ElbowL = elbowL, WristL = wristL, ElbowR = elbowR, WristR = wristR,
+            HandDir = fore.Lerp(dir.Normalized(), blend).Normalized(),
+        };
     }
 
     /// <summary>
@@ -143,7 +231,7 @@ public static class HumanMeshBuilder
     public readonly record struct GaitMounts(
         Vector3 Eye, Vector3 Head, Vector3 Chest, Vector3 Hip,
         Vector3 ShoulderL, Vector3 ShoulderR, Vector3 FootL, Vector3 FootR,
-        float Lean, Vector3 HandL, Vector3 HandR);
+        float Lean, Vector3 HandL, Vector3 HandR, Basis HandBasis = default);
 
     /// <summary>
     /// The mount points for one instant of the gait.
@@ -154,7 +242,9 @@ public static class HumanMeshBuilder
     /// difference between a helmet cam and a camera floating near a head.
     /// </para>
     /// </summary>
-    public static GaitMounts MountsFor(float speed, float phase) => MountsForRig(GaitRig(speed, phase));
+    public static GaitMounts MountsFor(float speed, float phase,
+        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f) =>
+        MountsForRig(ApplyArms(GaitRig(speed, phase), arm, armBlend));
 
     /// <summary>
     /// Mounts for a fixed (non-gait) pose — a cyclist, who does not run, still needs a head to
@@ -162,7 +252,8 @@ public static class HumanMeshBuilder
     /// <see cref="MountsFor"/> uses, so a static pose's camera points are correct by construction
     /// rather than duplicated by hand into whichever caller needed them next.
     /// </summary>
-    public static GaitMounts MountsForPose(HumanPose pose) => MountsForRig(RigFor(pose));
+    public static GaitMounts MountsForPose(HumanPose pose, ItemArmPose arm = ItemArmPose.None, float armBlend = 0f) =>
+        MountsForRig(ApplyArms(RigFor(pose), arm, armBlend));
 
     /// <summary>
     /// A seated rider (a motorbike) posed from the machine's three contact points, author space
@@ -272,7 +363,17 @@ public static class HumanMeshBuilder
             FootR: Flip(rig.AnkleR),
             Lean: rig.TorsoLean,
             HandL: Flip(rig.WristL),
-            HandR: Flip(rig.WristR));
+            HandR: Flip(rig.WristR),
+            HandBasis: HandBasisOf(rig));
+
+        // the item hand's frame in mesh space: -Z along the item, from the pose's direction or the forearm
+        static Basis HandBasisOf(Rig r)
+        {
+            var d = r.HandDir.LengthSquared() > 1e-6f ? r.HandDir : r.WristL - r.ElbowL;
+            d = Flip(d.Normalized());
+            var up = Mathf.Abs(d.Y) > 0.97f ? Vector3.Forward : Vector3.Up;
+            return Basis.LookingAt(d, up);
+        }
 
         static Vector3 Flip(Vector3 v) => new(-v.X, v.Y, -v.Z);
     }
@@ -321,7 +422,7 @@ public static class HumanMeshBuilder
     /// A hat on the head, built in the head's own frame so it follows the neck like the helmet
     /// does. The figure is authored facing +Z, so "forward" is +Z made square to the head.
     /// </summary>
-    private static void AppendHat(MeshScratch s, Headwear hat, Vector3 centre, Vector3 axis)
+    internal static void AppendHat(MeshScratch s, Headwear hat, Vector3 centre, Vector3 axis)
     {
         var up = axis.LengthSquared() > 1e-8f ? axis.Normalized() : Vector3.Up;
         var fwd = Vector3.Back - up * up.Dot(Vector3.Back);

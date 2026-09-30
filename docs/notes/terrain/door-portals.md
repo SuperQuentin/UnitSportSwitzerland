@@ -63,8 +63,14 @@ changed is how you get there.
   and node visibility is shared by every viewport. So a lens underground gets `Far` = 400 m
   (`DoorPortals.ClipFar`), and the portal camera keeps the real one. Without this, the main camera
   drew the whole landscape 3 km above, behind the ceiling.
-- **Leaves.** `DoorLeaf`, one per entrance, in the interior node, swinging into the room.
+- **Leaves.** `DoorLeaf`, one per entrance, in the interior node, swinging into the room, 90° and no
+  more: a house door can stand 0.2 m from the stair core's side wall.
   Solid only while shut. The facade still has its baked closed leaf, hidden by the tunnel mouth.
+  The leaf hinges on the doorway frame's -X jamb, so the baked handle is on +X (`-t` along the
+  facade in `AppendDoor`). The mouth (`OutsideQuadOffset`) stands in front of that handle;
+  otherwise the handle stays hanging in the open doorway. The leaf carries the same handle on its
+  street face and the facade's leaf colour (`BuildingFootprint.DoorLeafColorFor`, the kind from
+  `InteriorLayout.DressedKind`), so the leaf seen swinging through the portal is the facade's door.
 - **Occupancy cues (G).** Buildings other players are in, except those with a door open near us:
   facade shader boxes (`ChunkManager.SetOccupancy`: more lit windows, figures behind the glass)
   and `BuildingSounds`: muffled steps, knocks and inner doors on the wall nearest the listener.

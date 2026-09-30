@@ -28,6 +28,8 @@ public partial class RideUi : CanvasLayer
     private readonly List<(RideKind Kind, Button Button, bool Vehicle)> _entries = new();
     private readonly List<(Label Line, string Blurb)> _blurbs = new();
     private Label _hint = null!, _lockNote = null!;
+    /// <summary>The car preset (#40): put on the car being driven, and on any car picked from here.</summary>
+    private OptionButton _setup = null!;
     /// <summary>Entries reachable by number key: the mounts, not the car list.</summary>
     private int _shortcuts;
     /// <summary>The folded rosters (cars, motorbikes), on the number keys after the mounts.</summary>
@@ -90,6 +92,7 @@ public partial class RideUi : CanvasLayer
         // The cars and the motorbikes are rosters, not a line each: one button folds a scrolling
         // list open, so the mounts above stay on screen and in reach of the number keys.
         Fold(rows, number, "Cars", CarCatalog.All.Select(c => (c.Kind, c.Label, c.Blurb)));
+        SetupRow(rows);
         Fold(rows, number + 1, "Motorbikes", MotorbikeCatalog.All.Select(b => (b.Kind, b.Label, b.Blurb)));
 
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -161,6 +164,33 @@ public partial class RideUi : CanvasLayer
         _folds.Add((button, scroll));
     }
 
+    /// <summary>
+    /// The car preset chooser, data-driven from <see cref="CarSetups.All"/>: the one piece of UI
+    /// for #40, meant to be replaced by the garage (#56), which calls
+    /// <see cref="FootPlayer.SetCarSetup"/> the same way.
+    /// </summary>
+    private void SetupRow(Container rows)
+    {
+        var row = new HBoxContainer();
+        row.AddChild(new Label { Text = "Car preset" });
+        _setup = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        foreach (var s in CarSetups.All) _setup.AddItem(s.Name, s.Id);
+        row.AddChild(_setup);
+        rows.AddChild(row);
+        var blurb = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Text = CarSetups.All[0].Blurb };
+        blurb.AddThemeFontSizeOverride("font_size", 12);
+        blurb.AddThemeColorOverride("font_color", new Color(0.55f, 0.59f, 0.65f));
+        rows.AddChild(blurb);
+        _setup.ItemSelected += i =>
+        {
+            var setup = CarSetups.For(_setup.GetItemId((int)i));
+            blurb.Text = setup.Blurb;
+            // in a car: on it now, if it is standing still
+            if (ActivePlayer?.Invoke() is { Vehicle: Car } player)
+                _status.Text = player.SetCarSetup(setup.Id) ? $"{setup.Name} fitted." : "Stop the car first.";
+        };
+    }
+
     private void Entry(Container into, int number, RideKind kind, string label, string blurb, bool vehicle)
     {
         var box = new VBoxContainer();
@@ -199,6 +229,7 @@ public partial class RideUi : CanvasLayer
 
         if (player.SetRide(kind))
         {
+            if (CarCatalog.IsCar(kind)) player.SetCarSetup(_setup.GetSelectedId());
             Close();
             return;
         }
@@ -222,6 +253,8 @@ public partial class RideUi : CanvasLayer
         // marks what you are already on, so the panel answers "what am I riding" too, and greys
         // the vehicles for a non-admin on a server
         Relabel();
+        // the chooser shows what is on the car being driven
+        if (ActivePlayer?.Invoke() is { Vehicle: Car } driver) _setup.Select(_setup.GetItemIndex(driver.CarSetupId));
 
         _status.Text = "";
         _panel.Visible = true;

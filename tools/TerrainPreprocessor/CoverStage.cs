@@ -50,7 +50,7 @@ public static class CoverStage
         return mask;
     }
 
-    public static int Run(string tlmGpkg, string outDir, Dictionary<TileId, ChunkGrid> grids)
+    public static int Run(string tlmGpkg, string outDir, Dictionary<TileId, ChunkGrid> grids, string? overridesPath = null)
     {
         if (!File.Exists(tlmGpkg))
         {
@@ -59,7 +59,7 @@ public static class CoverStage
         }
 
         var sw = Stopwatch.StartNew();
-        var extractor = new CoverExtractor(tlmGpkg);
+        var extractor = new CoverExtractor(tlmGpkg) { OverridesPath = overridesPath };
 
         var heightOf = TerrainSampler.For(grids);
 

@@ -80,6 +80,21 @@ public sealed record CarSpec
     public float RefZeroTo100 { get; init; }
     public float RefTopKmh { get; init; }
 
+    // ---- the preset over the real car (CarSetup, #40); the defaults are the catalog car ----
+    /// <summary>The <see cref="CarSetups"/> id this spec was built with; 0 = the catalog car.</summary>
+    public int SetupId { get; init; }
+    /// <summary>What the tyres grip off tarmac (on tarmac: <see cref="Grip"/>).</summary>
+    public TyreType TyreType { get; init; } = TyreType.Road;
+    /// <summary>Suspension travel, m: how much rough ground it swallows (<see cref="CarSetups.Harshness"/>).</summary>
+    public float Travel { get; init; } = StockTravel;
+    /// <summary>Spring rate against stock: body roll and pitch, and harshness off-road.</summary>
+    public float Stiffness { get; init; } = 1f;
+    /// <summary>Wheel diameter against the <see cref="Tyre"/> size: bigger off-road wheels.</summary>
+    public float WheelScale { get; init; } = 1f;
+
+    /// <summary>A road car's suspension travel, m.</summary>
+    public const float StockTravel = 0.15f;
+
     /// <summary>Rolling radius from the tyre size (rim + sidewall), m; 0.3 when no tyre is given.</summary>
     public float WheelRadius
     {
@@ -93,8 +108,8 @@ public sealed record CarSpec
                 || !float.TryParse(t[(slash + 1)..r], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float ar)
                 || !float.TryParse(new string(t[(r + 1)..].TakeWhile(c => char.IsDigit(c) || c == '.').ToArray()),
                     System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float rim))
-                return 0.3f;
-            return (rim * 25.4f * 0.5f + w * ar / 100f) / 1000f * 0.97f;   // loaded: ~3% squat
+                return 0.3f * WheelScale;
+            return (rim * 25.4f * 0.5f + w * ar / 100f) / 1000f * 0.97f * WheelScale;   // loaded: ~3% squat
         }
     }
 
@@ -150,9 +165,19 @@ public sealed record CarSpec
 /// </summary>
 public sealed class Car : Rideable, IEngined
 {
+    /// <summary>The car as tuned: the catalog's numbers under the garage's body (<see cref="CarTuning.Apply"/>).</summary>
     public CarSpec Spec { get; }
+    /// <summary>This car's garage parts. They belong to the car, not the player: a new car is Stock.</summary>
+    public CarTuning Tuning { get; }
+    /// <summary>The tyres on it, which replace the stock tyre curve, handbrake grip and throttle sustain.</summary>
+    public TyreModel Tyres { get; }
 
-    public Car(CarSpec spec) => Spec = spec;
+    public Car(CarSpec spec, CarTuning tuning = default)
+    {
+        Spec = tuning.Apply(spec);
+        Tuning = tuning;
+        Tyres = tuning.Tyres;
+    }
 
     public override RideKind Kind => Spec.Kind;
     public override string Label => Spec.Label;
@@ -164,7 +189,7 @@ public sealed class Car : Rideable, IEngined
 
     // the driver's seat, in the visual's frame (faces −Z, so +X is the driver's right):
     // these are Japanese-market cars, right-hand drive
-    public override Vector3 FirstPersonEye => new(0.36f, 1.08f, 0.15f);
+    public override Vector3 FirstPersonEye => new(0.36f, 1.08f + Spec.Body.Lift, 0.15f);
     public override float EyeHeight => 1.1f;
     // Up and behind, looking down ~25° over the roof: from a level camera at roof height the car
     // itself hid the road you were about to drive onto.
@@ -179,8 +204,14 @@ public sealed class Car : Rideable, IEngined
     public override float BodyRadius => 0.85f;
     public override float BodyHeight => 1.7f;
     public override float DismountSpeed => 1.5f;
-    // measured from this model's own mesh (Rideable.Measured): an AE86 is not an NSX
-    public override (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual);
+    // measured from this model's own mesh (Rideable.Measured): an AE86 is not an NSX. Cached per
+    // model and preset (an SUV stands taller than the same car on semi-slicks), so always that
+    // preset's look with stock garage parts and the doors shut: an open door is not hull
+    public override (Vector3 Centre, Vector3 Size) ParkedBox => Measured((Kind, Spec.SetupId), _ =>
+    {
+        var body = CarCatalog.For(Kind) is { } stock ? CarSetups.For(Spec.SetupId).Apply(stock).Body : Spec.Body;
+        return CarRig.Create(body, Spec.Wheelbase);
+    });
 
     // ---- what the feel layer and the rig read ----
     /// <summary>Engine speed, rpm.</summary>
@@ -253,8 +284,7 @@ public sealed class Car : Rideable, IEngined
     /// <summary>More for a front-driver, whose driven wheels pull it straight the moment the gas goes on.</summary>
     private const float ArcadeSustainFf = 0.55f;
     private const float ArcadePower = 1.35f, ArcadeGrip = 1.12f;
-    /// <summary>Rear side grip left while the handbrake locks them.</summary>
-    private const float HandbrakeGrip = 0.35f;
+    // rear side grip left under the handbrake: per tyre, TyreModel.Handbrake (stock 0.35)
     private const int Substeps = 4;
 
     private float _steer;   // eased steering input, −1..1
@@ -281,8 +311,18 @@ public sealed class Car : Rideable, IEngined
     {
         var s = Spec;
         bool arcade = Arcade;
-        float grip = s.Grip * (arcade ? ArcadeGrip : 1f);
-        float tyreC = arcade ? ArcadeTyreC : SimTyreC;
+        // what the tyres find under them (the road, else the cover: RideGround.Surface): the preset's
+        // tyre type per surface (CarSetup.cs) on the garage tyre's tarmac grip; off tarmac a garage
+        // rally tyre claws back its share of the gap to 1, as on the motorbikes. Less what the bumps
+        // take when the suspension cannot keep the wheels on the ground.
+        float tarmac = s.Grip * Tyres.Grip;
+        float onGround = s.TyreType.Grip(ground.Surface, tarmac);
+        if (Tyres.Offroad > 0f && CarSetups.Roughness(ground.Surface) > 0f)
+            onGround = Mathf.Min(tarmac, onGround + (1f - onGround) * Tyres.Offroad);
+        float harsh = CarSetups.Harshness(ground.Surface, motion.Speed, s.Travel, s.Stiffness);
+        float grip = onGround * CarSetups.BumpGrip(harsh) * (arcade ? ArcadeGrip : 1f);
+        float roughDrag = CarSetups.RoughDrag(ground.Surface, harsh);
+        float tyreC = (arcade ? ArcadeTyreC : SimTyreC) * Tyres.CurveC;
 
         // planar state in the body frame: u forward, w to the left
         float u = motion.Speed * Mathf.Cos(motion.Slip);
@@ -398,12 +438,12 @@ public sealed class Car : Rideable, IEngined
                 * Mathf.Clamp((Mathf.Abs(alphaR) - 0.08f) / 0.08f, 0f, 1f));
             float latF = Mathf.Sqrt(Mathf.Max(capF * capF - fxF * fxF, 0.01f * capF * capF));
             float latR = Mathf.Sqrt(Mathf.Max(capR * capR - fxR * fxR, 0.01f * capR * capR));
-            if (input.Handbrake) latR *= HandbrakeGrip;
+            if (input.Handbrake) latR *= Tyres.Handbrake;
             // Game: once sideways, the gas keeps the rear sliding, whatever drives the wheels — so a
             // front-driver, a mid-engined car or a 90 hp roadster holds a drift on the throttle
             // exactly like the FR cars do. Sim leaves each car to its own layout and power.
             if (arcade)
-                latR *= 1f - (s.Drive == Drivetrain.Front ? ArcadeSustainFf : ArcadeSustain) * pedal
+                latR *= 1f - Mathf.Min(0.9f, (s.Drive == Drivetrain.Front ? ArcadeSustainFf : ArcadeSustain) * Tyres.Sustain) * pedal
                     // from 14°, not 7°: a bump in an ordinary bend reaches 7° and was tipping plain
                     // driving into a drift nobody asked for; a real drift passes 14° at once
                     * Mathf.Clamp((Mathf.Abs(slipNow) - 0.25f) / 0.2f, 0f, 1f);
@@ -425,7 +465,7 @@ public sealed class Car : Rideable, IEngined
 
             // --- resistances and gravity along the grade ---
             float drag = 0.5f * AirDensity * s.DragArea * u * Mathf.Abs(u) * (1f - ground.Draft);
-            float roll = RollingResistance * m * Gravity * sign;
+            float roll = (RollingResistance + roughDrag) * m * Gravity * sign;
             float cos = Mathf.Cos(delta), sin = Mathf.Sin(delta);
 
             float fx = fxR + fxF * cos - fyF * sin - drag - roll;
@@ -482,7 +522,7 @@ public sealed class Car : Rideable, IEngined
         motion.Yaw += r * dt;
         motion.Bank = 0f;
         // body roll: outward, a few degrees at the limit
-        motion.Lean = Mathf.Clamp(-AccelY * 0.012f, -0.09f, 0.09f);
+        motion.Lean = Mathf.Clamp(-AccelY * 0.012f / s.Stiffness, -0.09f, 0.09f);
     }
 
     /// <summary>
@@ -518,7 +558,7 @@ public sealed class Car : Rideable, IEngined
         if (visual is not CarRig rig) return;
         rig.SteerAngle = SteerAngle;
         rig.WheelSpin = WheelSpin;
-        rig.BodyPitch = Mathf.Clamp(AccelX * 0.006f, -0.05f, 0.05f);
+        rig.BodyPitch = Mathf.Clamp(AccelX * 0.006f / Spec.Stiffness, -0.05f, 0.05f);
         rig.BrakeLights = Braking;
         rig.Headlights = Headlights;
         rig.RoofOpen = RoofOpen;

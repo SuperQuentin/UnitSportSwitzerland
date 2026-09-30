@@ -13,9 +13,10 @@ public enum BuildingKind : byte
     Agricultural = 4, // 1271/1276/1277/1278 — barns, animal sheds, greenhouses
     Sacral = 5,       // 1272 — churches, chapels
     Civic = 6,        // 1261-1265/1273 — schools, hospitals, sport, monuments
-    Annex = 7,        // 1242/1274 — garages and other minor structures
+    Annex = 7,        // 1274 — other minor structures (and BD TOPO "Annexe")
     UnderConstruction = 8,
     Other = 9,
+    Garage = 10,      // 1242 — garages (v2; v1 files carry them as Annex)
 }
 
 /// <summary>
@@ -47,7 +48,12 @@ public static class BuildingFormat
     /// <summary>"USBD" little-endian.</summary>
     public const uint Magic = 0x44425355;
 
-    public const ushort Version = 1;
+    /// <summary>
+    /// 2 = same layout as 1, but GKLAS 1242 is <see cref="BuildingKind.Garage"/> instead of
+    /// Annex. Decoders accept both; a client cache must refetch anything older.
+    /// </summary>
+    public const ushort Version = 2;
+    public const ushort MinVersion = 1;
     public const int HeaderSize = 24;
 
     public static string FileName(TileId id) => $"buildings_{id.E}_{id.N}.bldg";
@@ -77,7 +83,8 @@ public static class BuildingFormat
             1261 or 1262 or 1263 or 1264 or 1265 or 1273 => BuildingKind.Civic,
             1271 or 1276 or 1277 or 1278 => BuildingKind.Agricultural,
             1272 => BuildingKind.Sacral,
-            1242 or 1274 => BuildingKind.Annex,
+            1242 => BuildingKind.Garage,
+            1274 => BuildingKind.Annex,
             _ => dwellings switch
             {
                 > 2 => BuildingKind.Apartment,

@@ -20,8 +20,11 @@ namespace UnitSport.Interiors;
 /// </summary>
 public sealed class DoorLink
 {
-    /// <summary>How far out from the facade the portal quad stands: in front of the door leaf baked into the facade.</summary>
-    public const float OutsideQuadOffset = 0.075f;
+    /// <summary>
+    /// How far out from the facade the portal quad stands: in front of the door leaf baked into the
+    /// facade and its handle (11 cm out), or the handle stays hanging in the open doorway.
+    /// </summary>
+    public const float OutsideQuadOffset = 0.12f;
 
     public required string Door { get; init; }
     public required string Plan { get; init; }
@@ -66,7 +69,7 @@ public sealed class DoorLink
         var inward = placement.Basis * new Vector3(e.InX, 0, e.InZ);
         var inside = Frame(placement * new Vector3(e.X, 0, e.Z), -inward.Normalized());
 
-        var kind = layout.Type == BuildingType.Church ? BuildingKind.Sacral : layout.Kind;
+        var kind = layout.DressedKind();
         var (width, top) = layout.OpeningOf(e);
         return new DoorLink
         {
