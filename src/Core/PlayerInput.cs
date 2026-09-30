@@ -77,7 +77,7 @@ public partial class PlayerInput : Node
     public const string Menu = "menu";
     /// <summary>In a stopped car at a garage: open the tuning menu (<see cref="Vehicles.GarageUi"/>).</summary>
     public const string Tune = "tune";
-    /// <summary>Open or shut a car door without getting in (on foot beside a parked car, or the driver's own at a standstill).</summary>
+    /// <summary>Open or shut a parked car's door without getting in (on foot beside it; never from the seat).</summary>
     public const string CarDoor = "car_door";
     /// <summary>The travel picker (<see cref="Player.RideUi"/>): mounts, equipment and, for an admin, vehicles.</summary>
     public const string RideMenu = "ride_menu";

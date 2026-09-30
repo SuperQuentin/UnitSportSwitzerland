@@ -10,7 +10,7 @@ namespace UnitSport.Player;
 /// car doors, seen from the OTHER peers.
 ///
 /// <list type="bullet">
-/// <item><b>a</b> (the owner) takes a car, tunes it, opens and shuts the driver's door at a stop,
+/// <item><b>a</b> (the owner) takes a car, tunes it, tries a door from the seat (refused: in a car they are shut),
 /// gets out (parks it), opens a door on foot, gets back in (the parts must still be there), drives
 /// off (doors shut above 20 km/h), changes car (stock again), then wrecks a tuned car;</item>
 /// <item><b>b</b> watches: every change to a's player and to parked cars (parts, doors, the rig's
@@ -85,8 +85,7 @@ public partial class GarageProbe : Node
         if (at(6.5) && DisplayServer.GetName() != "headless")
             GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath("res://test_output/garage_menu_a.png"));
         if (at(7)) garage?.Close();
-        if (at(8)) Log($"driver door at a stop: {me.TryToggleCarDoor()} -> doors {me.DoorsOpen}");
-        if (at(12)) Log($"driver door again: {me.TryToggleCarDoor()} -> doors {me.DoorsOpen}");
+        if (at(8)) Log($"door from the seat (must be refused): {me.TryToggleCarDoor()} -> doors {me.DoorsOpen}");
         if (at(15)) { me.ExitVehicle(); Log($"got out (parked); ride {me.Ride}, bits {me.TuningBits:X}"); }
         if (at(38))
         {
@@ -99,8 +98,8 @@ public partial class GarageProbe : Node
             Log($"parked before getting in: doors {v?.DoorsOpen} tune {(v?.Ride as Car)?.Tuning.Bits:X}");
             Log($"get back in: {me.TryInteract()}");
         }
-        if (at(73)) Log($"in again: ride {me.Ride}, bits {me.TuningBits:X} (same car: {me.TuningBits == Tuned.Pack()}), doors {me.DoorsOpen}");
-        if (at(76)) Log($"door open to drive off: {me.TryToggleCarDoor()} -> doors {me.DoorsOpen}");
+        if (at(70.3)) Log($"getting in: doors {me.DoorsOpen}");
+        if (at(73)) Log($"in again: ride {me.Ride}, bits {me.TuningBits:X} (same car: {me.TuningBits == Tuned.Pack()}), doors {me.DoorsOpen} (all shut: {me.DoorsOpen == 0})");
         // off down the road past 20 km/h, then stop again
         if (at(77)) { Input.ActionPress(PlayerInput.Throttle); _drive = 1; }
         if (_drive == 1 && me.GroundSpeed > 30f / 3.6f)

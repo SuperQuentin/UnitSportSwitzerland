@@ -359,7 +359,7 @@ public partial class FootPlayer : CharacterBody3D
     private Node3D? _visual;
     private RideKind _visualKind = RideKind.OnFoot;
     private long _visualTuning;
-    /// <summary>Owner: seconds until the driver's door, opened to get in, shuts again.</summary>
+    /// <summary>Owner: seconds until every door open while getting in (the driver's, any left open) shuts.</summary>
     private float _shutDriverIn;
     /// <summary>Doors shut by themselves above this speed, m/s (20 km/h).</summary>
     private const float DoorsShutSpeed = 20f / 3.6f;
@@ -1482,8 +1482,9 @@ public partial class FootPlayer : CharacterBody3D
         if (_sliding) EndSlide();
         GlobalPosition = state.Position;
         Rotation = new Vector3(0, state.Yaw, 0);
-        // the same car: its garage parts and whatever doors were left open come with it, and the
-        // driver's door opens to let them in and shuts behind them
+        // the same car: its garage parts and whatever doors were left open come with it; the
+        // driver's door opens to let them in, and once seated every door shuts (and stays shut:
+        // nobody drives with a door open, see TryToggleCarDoor)
         ApplyRide(state.Kind, state.Velocity, state.Tuning);
         if (_ride is Car)
         {
@@ -1532,18 +1533,11 @@ public partial class FootPlayer : CharacterBody3D
     public CarTuning Tuning => _ride is Car car ? car.Tuning : default;
 
     /// <summary>
-    /// G / pad X: works a car door without getting in. In a car at a standstill, the driver's own
-    /// door; on foot beside a parked car, the door nearest you. False when there is none in reach.
+    /// G / pad X: works a car door without getting in: on foot beside a parked car, the door nearest
+    /// you. Not from the seat — in a car the doors are shut. False when there is none in reach.
     /// </summary>
     public bool TryToggleCarDoor()
     {
-        if (_ride is Car)
-        {
-            if (GroundSpeed > 1f) return false;
-            DoorsOpen ^= Avatar.CarRig.DriverDoor;
-            _shutDriverIn = 0f;
-            return true;
-        }
         if (_ride != null || Indoors || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
             return false;
         var (bit, distance) = rig.NearestDoor(GlobalPosition);
@@ -2524,9 +2518,10 @@ public partial class FootPlayer : CharacterBody3D
         _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
         if (_ride is Car)
         {
-            // doors: the driver's shuts behind them once in; any left open shut themselves at speed
-            if (_shutDriverIn > 0f && (_shutDriverIn -= dt) <= 0f) DoorsOpen &= unchecked((byte)~Avatar.CarRig.DriverDoor);
-            if (DoorsOpen != 0 && _motion.Speed > DoorsShutSpeed) DoorsOpen = 0;
+            // doors: once seated every door shuts, sooner if the car pulls away before then
+            if (_shutDriverIn > 0f && ((_shutDriverIn -= dt) <= 0f || _motion.Speed > DoorsShutSpeed))
+                _shutDriverIn = 0f;
+            if (_shutDriverIn <= 0f) DoorsOpen = 0;
         }
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
