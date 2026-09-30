@@ -506,7 +506,10 @@ public sealed class AutoPilot
                 // clear of it: a wreck or a stopped racer is passed at a walk (it may move off, a driver may
                 // get out); a traffic car waiting tucked in for the race is passed at speed — at a walk past
                 // every one of them the pack ran at 8% of its pace (#85)
-                if (need <= 0f) { if (!q.Civil) CapBy(Mathf.Max(8f, StopWithin(ahead - 12f))); }
+                // A traffic car standing in the road is passed at 50 km/h at most: at 90 the car's own line
+                // (the steering aims 20 m on, past the car) swung it 2 m back towards the traffic in the
+                // last 15 m, too late to stop — five racers thrown off that way in one run (#85)
+                if (need <= 0f) CapBy(q.Civil ? Mathf.Max(14f, StopWithin(ahead - 12f)) : Mathf.Max(8f, StopWithin(ahead - 12f)));
                 else if (q.Civil)
                 {
                     // not across yet: slow to a crawl by where the metres left are just enough to get across
