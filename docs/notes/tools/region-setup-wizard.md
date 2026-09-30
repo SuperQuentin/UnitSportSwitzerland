@@ -13,3 +13,8 @@
   `--features-only --tiles-file` and `--places-only` (places without re-running roads, which
   would strip junctions), RoadGen `--tiles-file --skip-rewritten`, and `export_buildings.py --src`
   (per-sheet zips).
+- **Storage location**: `--pick-location` or "Storage location..." under "Go?" lists the repo's
+  folders, every ready drive (`<drive>/UnitSportSwitzerland/{data,terrain_chunks}`, free space
+  shown) and a typed folder, then asks whether to move the source data, the built tiles or both.
+  Saved in `terrain_location.json`, which the game and the server read too
+  (`docs/notes/terrain/data-location.md`).
