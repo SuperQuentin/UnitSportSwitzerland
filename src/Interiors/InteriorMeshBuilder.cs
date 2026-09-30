@@ -93,6 +93,8 @@ public static class InteriorMeshBuilder
         RoomType.Workshop or RoomType.Garage or RoomType.Storage => (Concrete, C(0.72f, 0.72f, 0.70f), C(0.64f, 0.64f, 0.64f)),
         RoomType.Barn => (C(0.46f, 0.38f, 0.28f), C(0.50f, 0.38f, 0.26f), C(0.40f, 0.31f, 0.22f)),
         RoomType.Lobby => (C(0.70f, 0.66f, 0.60f), C(0.86f, 0.84f, 0.80f), C(0.94f, 0.94f, 0.92f)),
+        RoomType.Porch => (C(0.58f, 0.56f, 0.52f), C(0.84f, 0.82f, 0.76f), C(0.70f, 0.66f, 0.60f)),
+        RoomType.Belfry => (C(0.46f, 0.36f, 0.26f), C(0.70f, 0.67f, 0.61f), C(0.40f, 0.31f, 0.22f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -102,13 +104,14 @@ public static class InteriorMeshBuilder
         float h = l.StoreyHeight;
         float clear = h - InteriorGenerator.Slab;
 
+        List<RectPlan> HolesOf(int f) => f < l.Floors.Count ? l.Floors[f].Holes : new List<RectPlan>();
         for (int f = 0; f < l.Floors.Count; f++)
         {
             var floor = l.Floors[f];
             float y0 = f * h;
-            var above = f + 1 < l.Floors.Count ? l.Floors[f + 1].Holes : new List<RectPlan>();
-            for (int ri = 0; ri < floor.Rooms.Count; ri++)
-                Room(s, floor.Rooms[ri], y0, clear, floor.Holes, above);
+            var above = HolesOf(f + 1);
+            foreach (var room in floor.Rooms)
+                Room(s, room, y0, l.ClearOf(room), floor.Holes, HolesOf(f + room.Span));
             if (floor.Flight is { } flight) Flight(s, flight, y0, h);
             foreach (var r in floor.Rails)
                 s.Box(new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1)),
@@ -126,7 +129,7 @@ public static class InteriorMeshBuilder
         }
 
         foreach (var p in l.Furniture)
-            Furniture(s, p, p.Floor * h);
+            Furniture(s, p, p.Floor * h + p.Lift);
 
         return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
     }
@@ -293,8 +296,10 @@ public static class InteriorMeshBuilder
             var max = new Vector3(xb, yb, zb);
             s.Box(at + min, at + max, col, collide, basis, at);
         }
-        // one collision box for the whole piece: cheaper than per-part, and what a player hits anyway
-        bool solid = p.Type is not (FurnitureType.Rug or FurnitureType.Plant);
+        // one collision box for the whole piece: cheaper than per-part, and what a player hits
+        // anyway; hung and wall-mounted pieces are overhead, and the chancel step has its own
+        bool solid = p.Type is not (FurnitureType.Rug or FurnitureType.Plant or FurnitureType.Bell
+            or FurnitureType.Cross or FurnitureType.Dais);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));
 
         var wood = C(0.52f, 0.36f, 0.22f);
@@ -432,6 +437,50 @@ public static class InteriorMeshBuilder
                 B(-w, 0.42f, -d, w, 0.46f, d, wood);
                 B(-w, 0.46f, -d, w, 0.9f, -d + 0.05f, wood);
                 break;
+            case FurnitureType.Dais:
+            {
+                var stone = C(0.62f, 0.58f, 0.52f);
+                B(-w, 0, -d, w, H, d, stone);
+                B(-w, 0, -d - 0.4f, w, H * 0.5f, -d, stone * 0.92f); // a half step in front
+                // stood on, not bumped into: the top, and a ramp over the step, which a body
+                // walks up where it would catch on a riser
+                Vector3 P(float x, float y, float z) => at + basis * new Vector3(x, y, z);
+                void Col(Vector3 a, Vector3 b, Vector3 c, Vector3 dd)
+                {
+                    s.Col.Add(a); s.Col.Add(b); s.Col.Add(c);
+                    s.Col.Add(a); s.Col.Add(c); s.Col.Add(dd);
+                }
+                Col(P(-w, H, -d), P(w, H, -d), P(w, H, d), P(-w, H, d));
+                Col(P(-w, 0, -d - 0.9f), P(w, 0, -d - 0.9f), P(w, H, -d), P(-w, H, -d));
+                Col(P(-w, 0, -d), P(-w, H, -d), P(-w, H, d), P(-w, 0, d));
+                Col(P(w, 0, -d), P(w, 0, d), P(w, H, d), P(w, H, -d));
+                break;
+            }
+            case FurnitureType.Lectern:
+                B(-0.08f, 0, -0.08f, 0.08f, H - 0.12f, 0.08f, darkWood);
+                B(-w, 0, -d, w, 0.06f, d, darkWood);
+                B(-w, H - 0.14f, -d, w, H, d, wood);
+                B(-w * 0.8f, H, -d + 0.08f, w * 0.8f, H + 0.03f, d - 0.12f, white); // an open book
+                break;
+            case FurnitureType.Cross:
+            {
+                var gilt = C(0.78f, 0.64f, 0.30f);
+                B(-0.07f, 0, -d, 0.07f, H, d, gilt);
+                B(-w, H * 0.62f, -d, w, H * 0.62f + 0.14f, d, gilt);
+                break;
+            }
+            case FurnitureType.Bell:
+            {
+                var bronze = C(0.55f, 0.42f, 0.22f);
+                // a yoke up to the ceiling beam, then the bell flaring out to its lip
+                B(-w * 0.9f, H * 0.92f, -0.08f, w * 0.9f, H * 1.05f + 0.25f, 0.08f, darkWood);
+                B(-w * 0.28f, H * 0.78f, -d * 0.28f, w * 0.28f, H * 0.92f, d * 0.28f, bronze);
+                B(-w * 0.4f, H * 0.5f, -d * 0.4f, w * 0.4f, H * 0.78f, d * 0.4f, bronze);
+                B(-w * 0.46f, H * 0.2f, -d * 0.46f, w * 0.46f, H * 0.5f, d * 0.46f, bronze);
+                B(-w * 0.5f, H * 0.08f, -d * 0.5f, w * 0.5f, H * 0.2f, d * 0.5f, bronze * 0.9f);
+                B(-0.06f, 0, -0.06f, 0.06f, H * 0.12f, 0.06f, dark); // the clapper
+                break;
+            }
         }
     }
 

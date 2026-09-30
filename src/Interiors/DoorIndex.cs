@@ -25,6 +25,15 @@ public static class DoorIndex
 
     public static void ClearTile(TileId id) => Tiles.Remove(id);
 
+    /// <summary>A given building's door, if its tile is drawn and it has one.</summary>
+    public static Entry? Find(BuildingKey key)
+    {
+        if (!Tiles.TryGetValue(key.Tile, out var doors)) return null;
+        foreach (var e in doors)
+            if (e.Key == key) return e;
+        return null;
+    }
+
     public static void Clear() => Tiles.Clear();
 
     /// <summary>
