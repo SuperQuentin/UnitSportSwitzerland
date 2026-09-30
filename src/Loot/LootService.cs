@@ -131,7 +131,7 @@ public partial class LootService : Node
         int i = NearestContainer(p, layout, node);
         if (i < 0) return null;
         string what = LootTables.Describe(layout.Furniture[i].Type);
-        string key = PlayerInput.LastDevice == InputDevice.Gamepad ? "[Y]" : "[E]";
+        string key = InputHints.Tag(PlayerInput.InteractMount);
         bool empty = _seenEmpty.TryGetValue((layout.Key, i), out long ep)
             && ep == LootTables.Epoch(layout.Key, Now);
         return empty ? $"{key} Search the {what} (empty)" : $"{key} Search the {what}";
@@ -241,7 +241,9 @@ public partial class LootService : Node
         {
             int left = Items.Inventory.Add((ItemId)id, count);
             var def = ItemDefs.Get((ItemId)id);
-            Items.Ui.Toast(id == (int)ItemId.Francs ? $"+{count - left} CHF" : $"+{count - left} {def?.Name}");
+            Items.Ui.Toast(id == (int)ItemId.Francs
+                ? InputHints.Format($"+{count} CHF cash — claim it to your account in the inventory ({{inventory}})")
+                : $"+{count - left} {def?.Name}");
             if (left > 0) GD.PushWarning($"[loot] {left} {(ItemId)id} did not fit and were lost");
         }
         Play(SfxSynth.Chime, 1.5f);

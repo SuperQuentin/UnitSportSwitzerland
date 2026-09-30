@@ -4,16 +4,32 @@ using UnitSport.Core;
 namespace UnitSport.Items;
 
 /// <summary>
-/// Everything the inventory puts on screen: the hotbar, the full inventory panel (K / Back),
-/// the radial quick wheel (hold X / D-pad left), the optic overlays and the GPS readout.
+/// Everything the inventory puts on screen: the hotbar and cash counter, the full inventory panel
+/// (I / Tab / Back), the radial quick wheel (hold X / D-pad left), the optic overlays and the GPS
+/// readout.
 ///
 /// <para>
 /// <b>Hotbar</b>: the six slots at the bottom are what can be in your hand. 1–6, the mouse
 /// wheel, or D-pad right pick one. <b>Quick wheel</b>: the same six slots laid out round the
 /// centre of the screen, chosen by pushing the mouse or right stick toward one and letting go —
-/// the way to swap on a pad without cycling past everything. <b>Inventory</b>: the hotbar plus
-/// an 18-slot pack. Click (or A) picks a stack up, click another slot to put it there — same
-/// items merge, different ones swap. Right-click or "Use" eats and drinks from any slot.
+/// the way to swap on a pad without cycling past everything.
+/// </para>
+///
+/// <para>
+/// <b>The panel works like Minecraft's.</b> A stack taken out of a slot rides on the cursor
+/// (<see cref="Inventory.Carried"/>) until it is put down: left click picks up / puts down / swaps,
+/// right click takes half or puts down one, shift-click sends a stack across between hotbar and
+/// pack, a double-click gathers every stack of that item onto the cursor, and dragging with a stack
+/// on the cursor spreads it over the slots crossed (evenly with the left button, one each with the
+/// right). A plain press-drag-release from one slot to another is also a drag and drop. A number
+/// key over a slot swaps it with that hotbar slot. On a pad: A, X and Y on the focused slot.
+/// </para>
+///
+/// <para>
+/// Mouse handling is done here in <see cref="_Input"/>, by hit-testing the slots, rather than by
+/// each slot button: Godot keeps sending the events of a press to the control that took it, so a
+/// slot never hears the mouse arrive during a drag that started on another. The slot buttons still
+/// take focus, which is what a pad drives.
 /// </para>
 ///
 /// <para>
@@ -26,6 +42,8 @@ public partial class InventoryUi : CanvasLayer
 {
     private const int SlotPx = 50;
     private const int PanelSlotPx = 58;
+    private const int TrashSlot = -2;
+    private const double DoubleClickSeconds = 0.35;
 
     private readonly ItemController _items;
     private Inventory Inv => _items.Inventory;
@@ -44,13 +62,28 @@ public partial class InventoryUi : CanvasLayer
     private ColorRect _binoculars = null!;
     private ViewfinderView _viewfinder = null!;
     private Label _crosshair = null!;
+    private Label _cashHud = null!;
 
     private Control _panel = null!;
     private readonly SlotButton[] _panelSlots = new SlotButton[Inventory.Size];
-    private Label _infoName = null!, _infoBlurb = null!;
-    private Button _useButton = null!, _handButton = null!;
-    private int _picked = -1;
+    private SlotButton _trash = null!;
+    private Label _infoName = null!, _infoBlurb = null!, _infoValue = null!;
+    private Button _useButton = null!, _handButton = null!, _claimButton = null!;
+    private Label _cashLine = null!, _accountLine = null!, _controlsHint = null!, _hotbarCaption = null!;
     private int _inspect;
+    private CarriedView _carried = null!;
+    private PanelContainer _tooltip = null!;
+    private Label _tooltipText = null!;
+
+    // mouse state while the panel is open
+    private Vector2 _cursor;
+    private int _hover = -1;
+    private MouseButton _paintButton = MouseButton.None;
+    private (ItemStack[] Slots, ItemStack Carried) _paintSnapshot;
+    private readonly List<int> _paintSlots = new();
+    private int _pickedOnPress = -1;
+    private int _lastClickSlot = -1;
+    private double _lastClickTime;
 
     private WheelView _wheel = null!;
     private Vector2 _wheelAim;
@@ -87,7 +120,22 @@ public partial class InventoryUi : CanvasLayer
         BuildHud();
         BuildWheel();
         BuildPanel();
+
+        // the cursor stack and its tooltip sit over everything else in the panel
+        _carried = new CarriedView(this) { MouseFilter = Control.MouseFilterEnum.Ignore };
+        _carried.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _root.AddChild(_carried);
+        BuildTooltip();
+
+        PlayerInput.DeviceChanged += OnDeviceChanged;
+        if (Bank.Instance is { } bank) bank.BalanceChanged += OnBalanceChanged;
         Refresh();
+    }
+
+    public override void _ExitTree()
+    {
+        PlayerInput.DeviceChanged -= OnDeviceChanged;
+        if (Bank.Instance is { } bank) bank.BalanceChanged -= OnBalanceChanged;
     }
 
     // ------------------------------------------------------------------------------------
@@ -153,6 +201,19 @@ public partial class InventoryUi : CanvasLayer
             _hotbarSlots[i] = slot;
             _hotbar.AddChild(slot);
         }
+
+        // cash in the pocket, just right of the hotbar, where the eye already is
+        _cashHud = new Label { MouseFilter = Control.MouseFilterEnum.Ignore, VerticalAlignment = VerticalAlignment.Center };
+        _cashHud.AddThemeFontSizeOverride("font_size", 15);
+        _cashHud.AddThemeColorOverride("font_color", new Color(0.98f, 0.84f, 0.38f));
+        _cashHud.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.9f));
+        _cashHud.AddThemeConstantOverride("outline_size", 5);
+        _cashHud.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
+        _cashHud.OffsetLeft = width / 2f + 14;
+        _cashHud.OffsetRight = width / 2f + 220;
+        _cashHud.OffsetTop = -12 - SlotPx;
+        _cashHud.OffsetBottom = -12;
+        _root.AddChild(_cashHud);
 
         _heldName = CentredLabel(16, -12 - SlotPx - 28);
         _toast = CentredLabel(15, -12 - SlotPx - 56);
@@ -223,17 +284,17 @@ public partial class InventoryUi : CanvasLayer
         title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
         left.AddChild(title);
 
-        left.AddChild(Caption("Hotbar — in reach (1–6)"));
+        _hotbarCaption = Caption("");
+        left.AddChild(_hotbarCaption);
         left.AddChild(SlotGrid(0, Inventory.HotbarSize));
         left.AddChild(Caption("Backpack"));
         left.AddChild(SlotGrid(Inventory.HotbarSize, Inventory.BackpackSize));
 
-        var hint = Caption("Click / (A) to pick up, again to place — same items stack, others swap.\n"
-                           + "Right-click uses. K / (Back) closes. Hold X / D-pad ← for the quick wheel.");
-        hint.AutowrapMode = TextServer.AutowrapMode.Off;
-        left.AddChild(hint);
+        _controlsHint = Caption("");
+        _controlsHint.AutowrapMode = TextServer.AutowrapMode.Off;
+        left.AddChild(_controlsHint);
 
-        var right = new VBoxContainer { CustomMinimumSize = new Vector2(220, 0) };
+        var right = new VBoxContainer { CustomMinimumSize = new Vector2(230, 0) };
         right.AddThemeConstantOverride("separation", 8);
         columns.AddChild(right);
 
@@ -241,10 +302,15 @@ public partial class InventoryUi : CanvasLayer
         _infoName.AddThemeFontSizeOverride("font_size", 18);
         right.AddChild(_infoName);
 
-        _infoBlurb = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(220, 0) };
+        _infoBlurb = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(230, 0) };
         _infoBlurb.AddThemeFontSizeOverride("font_size", 13);
         _infoBlurb.AddThemeColorOverride("font_color", new Color(0.7f, 0.74f, 0.8f));
         right.AddChild(_infoBlurb);
+
+        _infoValue = new Label();
+        _infoValue.AddThemeFontSizeOverride("font_size", 12);
+        _infoValue.AddThemeColorOverride("font_color", new Color(0.62f, 0.58f, 0.44f));
+        right.AddChild(_infoValue);
 
         _useButton = new Button { Text = "Use" };
         _useButton.Pressed += () => _items.UseSlot(null, _inspect);
@@ -253,6 +319,52 @@ public partial class InventoryUi : CanvasLayer
         _handButton = new Button { Text = "Take in hand" };
         _handButton.Pressed += TakeInHand;
         right.AddChild(_handButton);
+
+        // the bin: drop a stack on it to throw it away; click it empty-handed to get it back
+        var binRow = new HBoxContainer();
+        binRow.AddThemeConstantOverride("separation", 10);
+        _trash = new SlotButton
+        {
+            Slot = TrashSlot, KeyHint = "", IsTrash = true,
+            CustomMinimumSize = new Vector2(PanelSlotPx, PanelSlotPx),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _trash.Pressed += () => ClickTrash();
+        binRow.AddChild(_trash);
+        var binText = Caption("Bin: drop a stack here to throw it away.\nClick it again to take the last one back.");
+        binText.VerticalAlignment = VerticalAlignment.Center;
+        binRow.AddChild(binText);
+        right.AddChild(binRow);
+
+        right.AddChild(new HSeparator());
+
+        // money: what is in your pocket, what is safe, and the button between the two
+        var money = new Label { Text = "Money" };
+        money.AddThemeFontSizeOverride("font_size", 16);
+        money.AddThemeColorOverride("font_color", new Color(0.98f, 0.84f, 0.38f));
+        right.AddChild(money);
+        _cashLine = new Label();
+        _cashLine.AddThemeFontSizeOverride("font_size", 14);
+        right.AddChild(_cashLine);
+        _accountLine = new Label();
+        _accountLine.AddThemeFontSizeOverride("font_size", 14);
+        _accountLine.AddThemeColorOverride("font_color", new Color(0.7f, 0.86f, 0.72f));
+        right.AddChild(_accountLine);
+        _claimButton = new Button();
+        _claimButton.Pressed += () => Bank.Instance?.ClaimAll();
+        right.AddChild(_claimButton);
+        var moneyHint = Caption("Cash you carry is lost if you are knocked out.\nClaimed money is safe in your account.");
+        right.AddChild(moneyHint);
+    }
+
+    private void BuildTooltip()
+    {
+        _tooltip = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        _tooltip.AddThemeStyleboxOverride("panel", PanelStyle(0.96f, 8));
+        _tooltipText = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(220, 0) };
+        _tooltipText.AddThemeFontSizeOverride("font_size", 13);
+        _tooltip.AddChild(_tooltipText);
+        _root.AddChild(_tooltip);
     }
 
     private static Label Caption(string text)
@@ -276,18 +388,12 @@ public partial class InventoryUi : CanvasLayer
                 Slot = slot,
                 KeyHint = slot < Inventory.HotbarSize ? (slot + 1).ToString() : "",
                 CustomMinimumSize = new Vector2(PanelSlotPx, PanelSlotPx),
+                // the mouse is hit-tested by the panel (see the class notes); focus is for the pad
+                MouseFilter = Control.MouseFilterEnum.Ignore,
             };
-            button.Pressed += () => PickOrPlace(slot);
+            // ui_accept on a focused slot: the pad's A, the keyboard's Enter
+            button.Pressed += () => { Inv.PrimaryClick(slot); Inspect(slot); };
             button.FocusEntered += () => Inspect(slot);
-            button.MouseEntered += () => Inspect(slot);
-            button.GuiInput += e =>
-            {
-                if (e is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true })
-                {
-                    _items.UseSlot(null, slot);
-                    button.AcceptEvent();
-                }
-            };
             _panelSlots[slot] = button;
             grid.AddChild(button);
         }
@@ -317,9 +423,16 @@ public partial class InventoryUi : CanvasLayer
         for (int i = 0; i < Inventory.HotbarSize; i++)
             _hotbarSlots[i].Display(Inv[i], i == Inv.Selected, false);
         for (int i = 0; i < Inventory.Size; i++)
-            _panelSlots[i].Display(Inv[i], i == Inv.Selected, i == _picked);
+        {
+            _panelSlots[i].Hot = i == _hover;
+            _panelSlots[i].Display(Inv[i], i == Inv.Selected, _paintSlots.Contains(i));
+        }
+        _trash.Hot = _hover == TrashSlot;
+        _trash.Display(Inv.Trashed, false, false);
         Inspect(_inspect);
         _wheel.QueueRedraw();
+        _carried.QueueRedraw();
+        RefreshMoney();
 
         // the name of what just came into the hand, briefly
         if (Inv.HeldId != _lastHeld)
@@ -330,31 +443,53 @@ public partial class InventoryUi : CanvasLayer
         }
     }
 
+    private void RefreshMoney()
+    {
+        long balance = Bank.Instance?.Balance ?? 0;
+        bool pending = Bank.Instance?.Pending == true;
+        _cashLine.Text = $"Cash on you:  {Chf(Inv.Cash)}";
+        _accountLine.Text = $"Account:  {Chf(balance)}";
+        _claimButton.Text = pending ? "Claiming…" : Inv.Cash > 0 ? $"Claim {Chf(Inv.Cash)} to account" : "No cash to claim";
+        _claimButton.Disabled = pending || Inv.Cash <= 0 || Bank.Instance == null;
+        _cashHud.Text = Inv.Cash > 0 ? $"{Chf(Inv.Cash)}\n{InputHints.Tag(PlayerInput.Inventory)} claim" : "";
+    }
+
+    private static string Chf(long amount) =>
+        amount.ToString("#,0", System.Globalization.CultureInfo.InvariantCulture).Replace(",", "'") + " CHF";
+
+    /// <summary>The key reference under the slots, for the device in hand.</summary>
+    private void OnDeviceChanged()
+    {
+        _hotbarCaption.Text = $"Hotbar — in reach ({InputHints.Label(PlayerInput.NextItem)} / 1–6 to pick)";
+        _controlsHint.Text = PlayerInput.LastDevice == InputDevice.Gamepad
+            ? "(A) pick up / put down   (X) take half / put one   (Y) send across\n"
+              + $"(B) put back, then close   {InputHints.Label(PlayerInput.Inventory)} close"
+            : "LMB pick up / put down   RMB take half / put one   Shift+LMB send across\n"
+              + "Drag to move or to spread a stack   Double-click gather   1–6 over a slot: swap into hotbar\n"
+              + $"{InputHints.Label(PlayerInput.Inventory)} / Esc close   {InputHints.Label(PlayerInput.QuickWheel)} (hold) quick wheel";
+        _useButton.Text = PlayerInput.LastDevice == InputDevice.Gamepad ? "Use" : "Use  [MMB]";
+        RefreshMoney();
+    }
+
+    private void OnBalanceChanged(long deposited)
+    {
+        if (deposited > 0) Toast($"+{Chf(deposited)} claimed — account {Chf(Bank.Instance?.Balance ?? 0)}");
+        RefreshMoney();
+    }
+
     private void Inspect(int slot)
     {
+        if (slot < 0) return;
         _inspect = slot;
         var stack = Inv[slot];
         var def = stack.IsEmpty ? null : ItemDefs.Get(stack.Id);
         _infoName.Text = def == null ? "Empty slot" : def.MaxStack > 1 ? $"{def.Name}  ×{stack.Count}" : def.Name;
         _infoName.AddThemeColorOverride("font_color", def?.Tint.Lightened(0.35f) ?? new Color(0.6f, 0.6f, 0.6f));
-        _infoBlurb.Text = def?.Blurb ?? (slot < Inventory.HotbarSize ? "Hotbar slot — whatever is here can be in your hand." : "Backpack slot.");
-        _useButton.Disabled = def?.Use != ItemUse.Consume;
+        _infoBlurb.Text = def != null ? InputHints.Format(def.Blurb)
+            : slot < Inventory.HotbarSize ? "Hotbar slot — whatever is here can be in your hand." : "Backpack slot.";
+        _infoValue.Text = def is { Value: > 0 } ? $"Worth about {def.Value * stack.Count:0.#} CHF" : "";
+        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear);
         _handButton.Disabled = def == null || slot == Inv.Selected;
-    }
-
-    private void PickOrPlace(int slot)
-    {
-        if (_picked < 0)
-        {
-            if (Inv[slot].IsEmpty) return;
-            _picked = slot;
-            Refresh();
-            return;
-        }
-        int from = _picked;
-        _picked = -1;
-        Inv.Move(from, slot);   // raises Changed -> Refresh
-        Refresh();
     }
 
     /// <summary>A backpack item is swapped into the selected hotbar slot; a hotbar item just becomes the selection.</summary>
@@ -363,6 +498,12 @@ public partial class InventoryUi : CanvasLayer
         if (_inspect < Inventory.HotbarSize) Inv.Select(_inspect);
         else Inv.Move(_inspect, Inv.Selected);
         Inspect(_inspect);
+    }
+
+    private void ClickTrash()
+    {
+        if (!Inv.Carried.IsEmpty) Inv.Trash();
+        else Inv.Untrash();
     }
 
     public void Toast(string text)
@@ -377,8 +518,9 @@ public partial class InventoryUi : CanvasLayer
     {
         if (IsOpen) return;
         CloseWheel(false);
-        _picked = -1;
+        EndPaint(commit: false);
         _panel.Visible = true;
+        OnDeviceChanged();
         Refresh();
         Input.MouseMode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
@@ -388,8 +530,12 @@ public partial class InventoryUi : CanvasLayer
     public void Close()
     {
         if (!IsOpen) return;
+        EndPaint(commit: true);
         _panel.Visible = false;
-        _picked = -1;
+        _tooltip.Visible = false;
+        _hover = -1;
+        // Minecraft throws a stack held on closing to the ground; here it goes back in the pack
+        Inv.ReturnCarried();
         UiFocus.Set(this, false);
         Input.MouseMode = Input.MouseModeEnum.Captured;
         Refresh();
@@ -412,6 +558,165 @@ public partial class InventoryUi : CanvasLayer
     }
 
     // ------------------------------------------------------------------------------------
+    // the panel's mouse
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>The slot under a point, <see cref="TrashSlot"/> for the bin, or -1.</summary>
+    private int SlotAt(Vector2 point)
+    {
+        for (int i = 0; i < Inventory.Size; i++)
+            if (_panelSlots[i].GetGlobalRect().HasPoint(point)) return i;
+        return _trash.GetGlobalRect().HasPoint(point) ? TrashSlot : -1;
+    }
+
+    /// <summary>Where the carried stack is drawn: at the pointer, or on the focused slot with a pad.</summary>
+    public Vector2 CarriedAt =>
+        PlayerInput.LastDevice == InputDevice.Gamepad && GetViewport().GuiGetFocusOwner() is SlotButton focused
+            ? focused.GetGlobalRect().GetCenter() + new Vector2(10, 10)
+            : _cursor;
+
+    public ItemStack CarriedStack => IsOpen ? Inv.Carried : ItemStack.Empty;
+
+    private bool HandlePanelMouse(InputEvent e)
+    {
+        switch (e)
+        {
+            case InputEventMouseMotion m:
+            {
+                _cursor = m.Position;
+                int hover = SlotAt(m.Position);
+                if (hover != _hover)
+                {
+                    _hover = hover;
+                    if (hover >= 0) Inspect(hover);
+                    if (_paintButton != MouseButton.None && hover >= 0 && !_paintSlots.Contains(hover)) AddPaint(hover);
+                    Refresh();
+                }
+                _carried.QueueRedraw();
+                return false;   // motion is never consumed: the buttons need their hover
+            }
+
+            case InputEventMouseButton { Pressed: true } b when b.ButtonIndex is MouseButton.Left or MouseButton.Right or MouseButton.Middle:
+            {
+                int slot = SlotAt(b.Position);
+                if (slot == -1) return false;
+                if (slot == TrashSlot)
+                {
+                    if (b.ButtonIndex == MouseButton.Left) ClickTrash();
+                    return true;
+                }
+                if (b.ButtonIndex == MouseButton.Middle)
+                {
+                    _items.UseSlot(null, slot);
+                    return true;
+                }
+
+                bool left = b.ButtonIndex == MouseButton.Left;
+                double now = Time.GetTicksMsec() / 1000.0;
+                bool doubleClick = left && slot == _lastClickSlot && now - _lastClickTime < DoubleClickSeconds;
+                _lastClickSlot = slot;
+                _lastClickTime = now;
+
+                if (left && b.ShiftPressed && Inv.Carried.IsEmpty) Inv.QuickMove(slot);
+                else if (doubleClick && !Inv.Carried.IsEmpty)
+                {
+                    EndPaint(commit: false);
+                    Inv.Collect();
+                }
+                else if (Inv.Carried.IsEmpty)
+                {
+                    if (left) Inv.PrimaryClick(slot);
+                    else Inv.SecondaryClick(slot);
+                    // released over another slot, this becomes a drag and drop
+                    _pickedOnPress = Inv.Carried.IsEmpty ? -1 : slot;
+                }
+                else
+                {
+                    // a stack on the cursor: what this press does is decided on release, since a
+                    // drag across slots spreads it where a click would put it all in one
+                    _paintButton = b.ButtonIndex;
+                    _paintSnapshot = Inv.Snapshot();
+                    _paintSlots.Clear();
+                    _paintSlots.Add(slot);
+                    Refresh();
+                }
+                Inspect(slot);
+                return true;
+            }
+
+            case InputEventMouseButton { Pressed: false } b when b.ButtonIndex is MouseButton.Left or MouseButton.Right:
+            {
+                int slot = SlotAt(b.Position);
+                if (_paintButton == b.ButtonIndex)
+                {
+                    EndPaint(commit: true);
+                    return true;
+                }
+                if (_pickedOnPress >= 0)
+                {
+                    int from = _pickedOnPress;
+                    _pickedOnPress = -1;
+                    if (slot == TrashSlot) Inv.Trash();
+                    else if (slot >= 0 && slot != from) Inv.PrimaryClick(slot);   // dropped on another slot
+                    return slot != -1;
+                }
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private void AddPaint(int slot)
+    {
+        _paintSlots.Add(slot);
+        using (Inv.Batch())
+        {
+            Inv.Restore(_paintSnapshot);
+            Inv.Distribute(_paintSlots, oneEach: _paintButton == MouseButton.Right);
+        }
+    }
+
+    /// <summary>
+    /// Ends a press that started with a stack on the cursor. Over a single slot it was a click;
+    /// over several, the spread already applied as the pointer crossed them stays.
+    /// </summary>
+    private void EndPaint(bool commit)
+    {
+        if (_paintButton == MouseButton.None) return;
+        var button = _paintButton;
+        _paintButton = MouseButton.None;
+        if (commit && _paintSlots.Count == 1)
+        {
+            int slot = _paintSlots[0];
+            if (button == MouseButton.Left) Inv.PrimaryClick(slot);
+            else Inv.SecondaryClick(slot);
+        }
+        _paintSlots.Clear();
+        Refresh();
+    }
+
+    private void UpdateTooltip()
+    {
+        bool show = IsOpen && _hover >= 0 && Inv.Carried.IsEmpty && PlayerInput.LastDevice != InputDevice.Gamepad
+                    && !Inv[_hover].IsEmpty && ItemDefs.Get(Inv[_hover].Id) is not null;
+        _tooltip.Visible = show;
+        if (!show) return;
+        var stack = Inv[_hover];
+        var def = ItemDefs.Get(stack.Id)!;
+        string count = def.MaxStack > 1 ? $"  ×{stack.Count}" : "";
+        string worth = def.Value > 0 ? $"\n{def.Value * stack.Count:0.#} CHF" : "";
+        string swap = _hover >= Inventory.HotbarSize ? "\n1–6 swap into hotbar · Shift+click to hotbar" : "\nShift+click to backpack";
+        _tooltipText.Text = $"{def.Name}{count}\n{InputHints.Format(def.Blurb)}{worth}{swap}";
+        _tooltip.ResetSize();
+        var size = _tooltip.Size;
+        var at = _cursor + new Vector2(18, 18);
+        var view = _root.Size;
+        if (at.X + size.X > view.X) at.X = _cursor.X - size.X - 12;
+        if (at.Y + size.Y > view.Y) at.Y = view.Y - size.Y - 4;
+        _tooltip.Position = at;
+    }
+
+    // ------------------------------------------------------------------------------------
     // input
     // ------------------------------------------------------------------------------------
 
@@ -420,14 +725,19 @@ public partial class InventoryUi : CanvasLayer
         if (IsOpen)
         {
             if (!e.IsPressed() || e.IsEcho()) return;
-            if (e.IsActionPressed("ui_cancel") && _picked >= 0)
-            {
-                _picked = -1;          // B first puts the held stack down, then closes
-                Refresh();
-            }
+            if (e.IsActionPressed("ui_cancel") && !Inv.Carried.IsEmpty)
+                Inv.ReturnCarried();   // B first puts the carried stack back, then closes
             else if (e.IsActionPressed(PlayerInput.Inventory) || e.IsActionPressed(PlayerInput.Menu)
                      || e.IsActionPressed("ui_cancel"))
                 Close();
+            else if (e is InputEventJoypadButton pad && GetViewport().GuiGetFocusOwner() is SlotButton { Slot: >= 0 } focused)
+            {
+                // A is ui_accept, which presses the focused slot; X and Y are the other two clicks
+                if (pad.ButtonIndex == JoyButton.X) Inv.SecondaryClick(focused.Slot);
+                else if (pad.ButtonIndex == JoyButton.Y) Inv.QuickMove(focused.Slot);
+                else return;
+                Inspect(focused.Slot);
+            }
             else return;
             GetViewport().SetInputAsHandled();
             return;
@@ -450,6 +760,19 @@ public partial class InventoryUi : CanvasLayer
 
     public override void _Input(InputEvent e)
     {
+        if (IsOpen)
+        {
+            if (HandlePanelMouse(e)) GetViewport().SetInputAsHandled();
+            // a number key over a slot swaps it with that hotbar slot, as in Minecraft
+            else if (e is InputEventKey { Pressed: true, Echo: false } k && _hover >= 0
+                     && (int)k.PhysicalKeycode - (int)Key.Key1 is var n && n >= 0 && n < Inventory.HotbarSize)
+            {
+                Inv.SwapWithHotbar(_hover, n);
+                GetViewport().SetInputAsHandled();
+            }
+            return;
+        }
+
         if (!WheelOpen) return;
 
         switch (e)
@@ -487,6 +810,7 @@ public partial class InventoryUi : CanvasLayer
         }
 
         _hotbar.Visible = ItemsActive && !IsOpen && Scope == null;
+        _cashHud.Visible = _hotbar.Visible;
         _readoutPanel.Visible = Readout != null && !IsOpen;
         if (Readout != null) _readout.Text = Readout;
 
@@ -503,6 +827,9 @@ public partial class InventoryUi : CanvasLayer
         _toast.Visible = PlayerPresent;
         _toast.Modulate = new Color(1, 1, 1, Mathf.Clamp(_toastTimer / 0.5f, 0f, 1f));
         if (_flash.Color.A > 0) _flash.Color = new Color(1, 1, 1, Mathf.MoveToward(_flash.Color.A, 0f, dt * 3f));
+
+        UpdateTooltip();
+        if (IsOpen && PlayerInput.LastDevice == InputDevice.Gamepad) _carried.QueueRedraw();
 
         if (WheelOpen)
         {
@@ -546,6 +873,10 @@ public partial class SlotButton : Button
 {
     public int Slot;
     public string KeyHint = "";
+    /// <summary>Under the pointer. Set by the panel, which hit-tests the mouse itself.</summary>
+    public bool Hot;
+    /// <summary>The bin, drawn with its own mark when empty.</summary>
+    public bool IsTrash;
     private ItemStack _stack;
     private bool _selected, _picked;
 
@@ -567,8 +898,32 @@ public partial class SlotButton : Button
         QueueRedraw();
     }
 
-    public override void _Draw() => SlotDrawing.DrawSlot(this, new Rect2(Vector2.Zero, Size), _stack, KeyHint,
-        _selected, _picked, IsHovered() || HasFocus());
+    public override void _Draw()
+    {
+        var r = new Rect2(Vector2.Zero, Size);
+        SlotDrawing.DrawSlot(this, r, _stack, KeyHint, _selected, _picked, Hot || IsHovered() || HasFocus());
+        if (IsTrash && _stack.IsEmpty)
+            DrawString(ThemeDB.FallbackFont, new Vector2(0, r.Size.Y * 0.62f), "BIN",
+                HorizontalAlignment.Center, r.Size.X, 13, new Color(0.55f, 0.35f, 0.32f));
+    }
+}
+
+/// <summary>The stack riding on the cursor while the inventory is open, drawn over everything.</summary>
+public partial class CarriedView : Control
+{
+    private readonly InventoryUi _ui;
+
+    public CarriedView(InventoryUi ui) => _ui = ui;
+    public CarriedView() : this(null!) { }
+
+    public override void _Draw()
+    {
+        var stack = _ui.CarriedStack;
+        if (stack.IsEmpty) return;
+        const float size = 50f;
+        var at = _ui.CarriedAt - new Vector2(size * 0.5f, size * 0.5f);
+        SlotDrawing.DrawSlot(this, new Rect2(at, new Vector2(size, size)), stack, "", false, true, false);
+    }
 }
 
 public static class SlotDrawing

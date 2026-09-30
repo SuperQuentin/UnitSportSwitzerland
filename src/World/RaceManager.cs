@@ -50,6 +50,13 @@ public partial class RaceManager : Node
     private readonly Dictionary<long, int> _checkpoint = new();
     private readonly Dictionary<long, double> _finished = new();
 
+    /// <summary>
+    /// Server: entrants the race put in a car. Spawning vehicles is an admin's on a server, but the
+    /// race hands every entrant one, so each may leave exactly one car in the world afterwards
+    /// (<see cref="Vehicles.VehicleManager.MayPark"/> consumes the entry).
+    /// </summary>
+    public HashSet<long> IssuedCars { get; } = new();
+
     // ---- client ----
     /// <summary>The local player, resolved when needed (never captured: it is respawned).</summary>
     public System.Func<FootPlayer?>? LocalPlayer { get; set; }
@@ -148,6 +155,7 @@ public partial class RaceManager : Node
             // drop entrants who left the server
             _entrants.RemoveAll(p => _players?.GetNodeOrNull(p.ToString()) == null);
             if (_entrants.Count == 0) { Reset("nobody joined"); return; }
+            IssuedCars.UnionWith(_entrants);
             _phase = Phase.Running;
             _startAt = _clock + Countdown;
             // a generous time limit: the whole distance at 10 m/s, plus the countdown

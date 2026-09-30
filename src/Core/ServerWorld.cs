@@ -84,6 +84,15 @@ public partial class ServerWorld : Node3D
         AddChild(race);
         _chat.Race = race;
 
+        // claimed cash, kept per player name on this server
+        var bank = Items.Bank.Create(this, null, server: true);
+        bank.NameOf = _chat.NameOfPeer;
+        _chat.NameAssigned += bank.SendBalance;
+
+        // a vehicle out of nothing is an admin's, or the car a race issued (Core/Permissions)
+        _vehicles.MayPark = (peer, state) => _chat.IsAdminPeer(peer)
+            || (Player.CarCatalog.IsCar(state.Kind) && race.IssuedCars.Remove(peer));
+
         // The operator's own command line. This is how the first admin gets granted.
         AddChild(new ServerConsole(_chat));
 

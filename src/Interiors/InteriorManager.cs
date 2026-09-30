@@ -320,11 +320,11 @@ public partial class InteriorManager : Node3D
                 var local = _currentNode.ToLocal(p.GlobalPosition);
                 if (local.Y < _current.StoreyHeight - 0.5f
                     && new Vector2(local.X, local.Z).DistanceTo(new Vector2(_current.EntryX, -_current.Depth / 2)) <= ExitReach)
-                    text = "[E] Leave";
+                    text = InputHints.Prompt(PlayerInput.InteractMount, "Leave");
                 else text = Loot.LootService.Instance?.PromptFor(p);
             }
             else if (!p.Indoors && DoorIndex.Nearest(p.GlobalPosition, DoorReach) != null)
-                text = "[E] Enter";
+                text = InputHints.Prompt(PlayerInput.InteractMount, "Enter");
         }
         _prompt.Visible = text != null;
         if (text != null) _prompt.Text = text;

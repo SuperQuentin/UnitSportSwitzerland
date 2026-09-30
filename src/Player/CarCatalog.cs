@@ -35,7 +35,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "AE86 hatch",
-            Blurb = "Tofu delivery panda: light, rear drive, a 4A-GE that revs to 7,800. W / RT gas, S / LT brake, Space / A handbrake",
+            Blurb = "Tofu delivery panda: light, rear drive, a 4A-GE that revs to 7,800. {throttle} gas, {brake} brake, {jump} handbrake",
             Body = new CarBody
             {
                 Shape = BodyShape.Hatchback, Length = 4.2f, Width = 1.63f, Height = 1.34f, WheelRadius = 0.29f,

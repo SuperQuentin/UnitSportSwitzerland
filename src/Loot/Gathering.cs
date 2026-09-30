@@ -146,7 +146,7 @@ public partial class Gathering : Node
             : Label(_target.Kind);
         bool depleted = Remaining(_target) <= 0;
         _prompt.Visible = _progress <= 0;
-        string key = PlayerInput.LastDevice == InputDevice.Gamepad ? "[X]" : "[G]";
+        string key = InputHints.Tag(PlayerInput.Gather);
         _prompt.Text = depleted ? $"Nothing left to {Verb(_target.Kind)} here" : $"{key} Hold to {Verb(_target.Kind)} {what}";
 
         if (!holding || depleted)

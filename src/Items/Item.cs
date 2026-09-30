@@ -113,17 +113,17 @@ public static class ItemDefs
 {
     public static readonly ItemDef[] All =
     {
-        new(ItemId.Binoculars, "Binoculars", "Hold Aim (right mouse / LB) to look through them. 8x.",
+        new(ItemId.Binoculars, "Binoculars", "Hold {aim_item} to look through them. 8x.",
             ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN"),
-        new(ItemId.Camera, "Camera", "Aim to frame, Use (left mouse / RB) to take a photo. Saved to user://photos.",
+        new(ItemId.Camera, "Camera", "Hold {aim_item} to frame, {use_item} to take a photo. Saved to user://photos.",
             ItemUse.Photo, 1, new Color(0.18f, 0.18f, 0.20f), "CM"),
         new(ItemId.Gps, "GPS", "Shows your LV95 coordinates, altitude and heading while held.",
             ItemUse.Readout, 1, new Color(0.95f, 0.78f, 0.12f), "GP"),
-        new(ItemId.SwissFlag, "Swiss flag", "Use to plant it where you look; Use on a planted flag picks it back up.",
+        new(ItemId.SwissFlag, "Swiss flag", "{use_item} plants it where you look; {use_item} on a planted flag picks it back up.",
             ItemUse.Place, 5, new Color(0.85f, 0.08f, 0.10f), "FL"),
-        new(ItemId.EnergyBar, "Energy bar", "Use to eat. Restores 35 health.",
+        new(ItemId.EnergyBar, "Energy bar", "{use_item} to eat. Restores 35 health.",
             ItemUse.Consume, 10, new Color(0.95f, 0.50f, 0.10f), "EB", Heal: 35f, ItemCategory.Food, 3f),
-        new(ItemId.WaterBottle, "Water bottle", "Use to drink. Restores 15 health.",
+        new(ItemId.WaterBottle, "Water bottle", "{use_item} to drink. Restores 15 health.",
             ItemUse.Consume, 5, new Color(0.25f, 0.55f, 0.95f), "WB", Heal: 15f, ItemCategory.Water, 2f),
 
         Eat(ItemId.Bread, "Bread", 5, "#c8914a", "BR", 20, ItemCategory.Food, 3),
@@ -132,7 +132,7 @@ public static class ItemDefs
         Eat(ItemId.Cheese, "Gruyère", 5, "#f0d060", "GR", 35, ItemCategory.Food, 8),
         Eat(ItemId.Chocolate, "Chocolate", 10, "#5a3220", "CH", 15, ItemCategory.Food, 3),
         Eat(ItemId.MineralWater, "Mineral water", 5, "#6ec8e8", "MW", 25, ItemCategory.Water, 3),
-        new(ItemId.Francs, "Swiss francs", "Money. Keep it for trading.",
+        new(ItemId.Francs, "Swiss francs", "Money. Never takes a slot: it is counted as cash, and claimed to your account from the inventory.",
             ItemUse.Material, 9999, new Color(0.80f, 0.70f, 0.35f), "CHF", 0, ItemCategory.Money, 1f),
         Eat(ItemId.Bandage, "Bandage", 10, "#f2eee6", "BD", 25, ItemCategory.Medical, 5),
         Eat(ItemId.FirstAidKit, "First-aid kit", 3, "#d02828", "+", 100, ItemCategory.Medical, 30),
@@ -161,7 +161,7 @@ public static class ItemDefs
         Mat(ItemId.FuelCan, "Fuel can", 3, "#c82a1e", "FC", ItemCategory.Part, 25),
         Mat(ItemId.EnginePart, "Engine part", 3, "#6a5a4a", "EP", ItemCategory.Part, 60),
 
-        new(ItemId.Shotgun, "Shotgun", "Aim (right mouse / LB) to shoulder it, Use (left mouse / RB) to fire one shell. Game birds only, and only in season. J opens the field journal.",
+        new(ItemId.Shotgun, "Shotgun", "{aim_item} to shoulder it, {use_item} to fire one shell. Game birds only, and only in season. {bird_journal} opens the field journal.",
             ItemUse.Shoot, 1, new Color(0.40f, 0.27f, 0.16f), "SG", 0, ItemCategory.Gear, 400f),
         new(ItemId.Shells, "Shotgun shells", "Ammunition for the shotgun.",
             ItemUse.Material, 50, new Color(0.70f, 0.16f, 0.12f), "SH", 0, ItemCategory.Gear, 1f),
@@ -182,11 +182,11 @@ public static class ItemDefs
 
     private static ItemDef Eat(ItemId id, string name, int stack, string tint, string glyph, float heal,
         ItemCategory category, float value) =>
-        new(id, name, $"Use to {(category == ItemCategory.Water ? "drink" : category == ItemCategory.Medical ? "apply" : "eat")}. Restores {heal:F0} health.",
+        new(id, name, $"{{use_item}} to {(category == ItemCategory.Water ? "drink" : category == ItemCategory.Medical ? "apply" : "eat")}. Restores {heal:F0} health.",
             ItemUse.Consume, stack, new Color(tint), glyph, heal, category, value);
 
     private static ItemDef Hat(ItemId id, string name, string tint, string glyph) =>
-        new(id, name, "Use to put it on, or take it off. Others see you wearing it.",
+        new(id, name, "{use_item} to put it on, or take it off. Others see you wearing it.",
             ItemUse.Wear, 1, new Color(tint), glyph, 0, ItemCategory.Cosmetic, 10);
 
     private static ItemDef Mat(ItemId id, string name, int stack, string tint, string glyph,

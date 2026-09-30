@@ -26,6 +26,8 @@ public partial class MainMenu : CanvasLayer
 {
     public event Action<GameMode>? ModeChosen;
     public event Action? QuitRequested;
+    /// <summary>The Controls button: every key and button (<see cref="ControlsHelp"/>).</summary>
+    public event Action? ControlsRequested;
 
     private PanelContainer _panel = null!;
     private LineEdit _host = null!;
@@ -101,7 +103,7 @@ public partial class MainMenu : CanvasLayer
         _resume.Visible = false;
 
         ModeButton(rows, "Explore",
-            "Fly the terrain, T to drop on foot, Tab to teleport to a town",
+            InputHints.Format("Fly the terrain, {toggle_mode} to drop on foot, {teleport} to search a town and go"),
             () => Choose(GameMode.Explore));
 
         ModeButton(rows, "GPX replay",
@@ -129,11 +131,15 @@ public partial class MainMenu : CanvasLayer
             "Render distance, detail, horizon, fog and performance",
             OpenSettings);
 
+        ModeButton(rows, $"Controls   {InputHints.Tag(PlayerInput.Help)}",
+            "Every key and button, as bound on your keyboard and pad",
+            () => ControlsRequested?.Invoke());
+
         var quit = new Button { Text = "Quit", CustomMinimumSize = new Vector2(0, 30) };
         quit.Pressed += () => QuitRequested?.Invoke();
         rows.AddChild(quit);
 
-        var hint = new Label { Text = "Esc / Start opens this menu at any time" };
+        var hint = new Label { Text = InputHints.Format("Esc / Start opens this menu at any time. {help}: all controls.") };
         hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
         rows.AddChild(hint);
     }

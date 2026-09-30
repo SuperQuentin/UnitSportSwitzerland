@@ -24,6 +24,8 @@ public partial class ClientWorld : Node3D
     private PlaceSearchUi? _places;
     private RideUi? _rides;
     private MainMenu? _menu;
+    private ControlsHelp? _help;
+    private Items.ItemController? _items;
     private Teleporter? _teleporter;
     private ChatManager? _chat;
     private ChatUi? _chatUi;
@@ -51,6 +53,11 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(Player.DriftCheck.Run());
                 return;
             }
+        }
+        if (Items.InventoryCheck.Requested)
+        {
+            GetTree().Quit(Items.InventoryCheck.Run());
+            return;
         }
         if (Occasions.OccasionProbe.Requested)
         {
@@ -279,11 +286,11 @@ public partial class ClientWorld : Node3D
         };
         AddChild(_teleporter);
 
-        // Tab opens the teleport search over any town that has terrain
+        // M opens the teleport search over any town that has terrain
         _places = PlaceSearchUi.Create(_teleporter);
         AddChild(_places);
 
-        // E picks what you travel as. Same rule as the teleporter: the player node is resolved
+        // R picks what you travel as. Same rule as the teleporter: the player node is resolved
         // at the moment of the press, because in multiplayer it is spawned by the server and
         // replaced on a reconnect — holding one from startup would move a node nobody controls.
         _rides = RideUi.Create();
@@ -292,11 +299,26 @@ public partial class ClientWorld : Node3D
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
-        var items = new Items.ItemController(Items.Inventory.Load(), origin)
+        var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
+            ? Items.Inventory.Scratch() : Items.Inventory.Load();
+        // the account claimed cash goes to: the server's online, this machine's offline. Made
+        // before the items, whose panel shows the balance from its first frame.
+        Items.Bank.Create(this, inventory);
+        var items = new Items.ItemController(inventory, origin)
         {
             ActivePlayer = () => _onFoot ? LocalPlayer : null,
         };
         AddChild(items);
+        _items = items;
+        if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
+        Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
+
+        // F1: every control, from the live bindings; bottom right: the ones that apply here
+        _help = ControlsHelp.Create();
+        AddChild(_help);
+        var prompts = PromptBar.Create();
+        prompts.Source = Prompts;
+        AddChild(prompts);
 
         // Scavenging: what the furniture in those interiors holds. Same node path as the server's,
         // which decides who gets what; offline this client does both.
@@ -346,6 +368,10 @@ public partial class ClientWorld : Node3D
         _menu = MainMenu.Create();
         _menu.ModeChosen += EnterMode;
         _menu.QuitRequested += () => GetTree().Quit();
+        _menu.ControlsRequested += () => _help?.Open();
+        // "--controls" opens the F1 overlay, for screenshotting it
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--controls") >= 0)
+            GetTree().CreateTimer(1.5).Timeout += () => _help?.Open();
         AddChild(_menu);
         if (MenuCheck.Requested()) AddChild(new MenuCheck(_menu));
 
@@ -637,6 +663,8 @@ public partial class ClientWorld : Node3D
         _chat = ChatManager.CreateClient();
         _chat.Teleporter = _teleporter;
         AddChild(_chat);
+        if (Items.EconomyProbe.Password != null && _items != null)
+            AddChild(new Items.EconomyProbe(_chat, _items.Inventory));
 
         // World/Race on both sides; the client side puts this player on the grid and times the run
         var race = World.RaceManager.CreateClient();
@@ -703,7 +731,10 @@ public partial class ClientWorld : Node3D
 
         Multiplayer.ConnectionFailed += () => GD.PushError("[world] connection failed");
         Multiplayer.ServerDisconnected += () =>
+        {
             _chatUi?.Append("Disconnected from the server.", ChatKind.Error);
+            Permissions.Reset();
+        };
 
         _menu?.NoteMode(GameMode.Multiplayer);
     }
@@ -750,13 +781,25 @@ public partial class ClientWorld : Node3D
         }
         if (_places is { IsOpen: true }) return;
 
-        // RideUi consumes E / Y itself while open (from _UnhandledInput, which runs first on
-        // its deeper node), so reaching here means it is closed. In a vehicle E gets out, beside
-        // a parked one it gets in; only with neither does it open the picker.
+        // replay owns the screen and its own keys (R there snaps to roads)
+        if (_gpx is { Active: true }) return;
+
+        // RideUi consumes E / R / Y itself while open (from _UnhandledInput, which runs first on
+        // its deeper node), so reaching here means it is closed. E acts on what is in front of
+        // you: in a vehicle it gets out, beside a parked one it gets in. The picker is R's.
+        if (@event.IsActionPressed(PlayerInput.RideMenu))
+        {
+            _rides?.Open();
+            return;
+        }
         if (@event.IsActionPressed(PlayerInput.InteractMount))
         {
             if (_onFoot && LocalPlayer is { } lp && lp.TryInteract()) return;
-            _rides?.Open();
+            // A pad has no spare face button for the picker, so Y still opens it when there is
+            // nothing to act on. A keyboard player is told where it went instead of being
+            // surprised by a menu one step too far from a car.
+            if (@event is InputEventJoypadButton) _rides?.Open();
+            else if (_onFoot) _items?.Ui.Toast(InputHints.Format("Nothing to interact with here. {ride_menu} opens the travel menu."));
             return;
         }
         if (_rides is { IsOpen: true }) return;
@@ -765,6 +808,55 @@ public partial class ClientWorld : Node3D
     }
 
     private FootPlayer? LocalPlayer => _networked ? GetLocalNetPlayer() : _player;
+
+    /// <summary>
+    /// The hints for the prompt bar: what the buttons do in the situation the player is in now.
+    /// Short on purpose — the loot, door and gather prompts are already centred on screen, and
+    /// the whole list is one F1 away.
+    /// </summary>
+    private IEnumerable<(string, string)> Prompts()
+    {
+        if (_menu is { IsOpen: true } || _gpx is { Active: true } || _rides is { IsOpen: true }) yield break;
+
+        // whoever owns the camera on screen: the local player, or a body a probe made itself
+        var viewer = (_onFoot ? LocalPlayer : null) ?? GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
+        if (viewer == null && GetViewport().GetCamera3D() == _spectator)
+        {
+            yield return (PlayerInput.ToggleMode, "Walk");
+            yield return (PlayerInput.FlyUp, "Up");
+            yield return (PlayerInput.FlyDown, "Down");
+            yield return (PlayerInput.Teleport, "Map");
+        }
+        else if (viewer is { } p && IsInstanceValid(p))
+        {
+            if (p.Vehicle is { IsVehicle: true } vehicle)
+            {
+                // the engine and "get out" are on the vehicle readout in the same corner
+                yield return (PlayerInput.CameraToggle, "Camera");
+                if (vehicle is not Flyer && vehicle.CanHop)
+                {
+                    yield return (PlayerInput.Trick, "Trick (in the air)");
+                    if (Rideable.Arcade) yield return (PlayerInput.Boost, "Boost");
+                }
+            }
+            else if (p.Vehicle is { } gear)
+            {
+                if (p.IsOnFloor()) yield return (PlayerInput.RideMenu, $"Take off the {gear.Label.ToLowerInvariant()}");
+                if (gear is not Flyer && gear.CanHop) yield return (PlayerInput.Trick, "Trick (in the air)");
+            }
+            else if (!p.Indoors)
+            {
+                if (Vehicles.VehicleManager.Instance?.Nearest(p.GlobalPosition, FootPlayer.EnterReach) is { } parked)
+                    yield return (PlayerInput.InteractMount, $"Get in the {parked.Ride.Label.ToLowerInvariant()}");
+                yield return (PlayerInput.RideMenu, "Travel");
+                yield return (PlayerInput.Inventory, "Inventory");
+                yield return (PlayerInput.Teleport, "Map");
+                yield return (PlayerInput.ToggleMode, "Fly camera");
+            }
+            else yield return (PlayerInput.Inventory, "Inventory");
+        }
+        yield return (PlayerInput.Help, "All controls");
+    }
 
     private double _sinceStatus;
 

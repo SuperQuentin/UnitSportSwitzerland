@@ -332,7 +332,7 @@ public partial class InteriorProbe : Node
     {
         var items = Loot.LootService.Instance?.Items?.Inventory;
         if (items == null) return 0;
-        int n = 0;
+        int n = items.Cash;   // francs are counted as cash, not held in a slot
         for (int i = 0; i < Items.Inventory.Size; i++) if (!items[i].IsEmpty) n += items[i].Count;
         return n;
     }

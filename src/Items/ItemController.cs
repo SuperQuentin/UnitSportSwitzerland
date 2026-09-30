@@ -33,6 +33,7 @@ public partial class ItemController : Node
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
     private bool _forceAim;
+    private bool _wasKnockedOut;
 
     /// <summary>Fires the held gun (a shell already taken); set by the bird hunt, <c>Birds.BirdLife</c>.</summary>
     public Action<FootPlayer>? Fire { get; set; }
@@ -96,6 +97,15 @@ public partial class ItemController : Node
         _ui.PlayerPresent = player is { IsViewing: true };
         _ui.ItemsActive = UsablePlayer != null;
         if (player == null) return;
+
+        // cash you carry is lost when you go down; what you claimed to the account is not
+        if (player.KnockedOut && !_wasKnockedOut && _inventory.Cash > 0)
+        {
+            int lost = _inventory.Cash;
+            _inventory.TakeCash(lost);
+            _ui.Toast($"You dropped {lost} CHF you had not claimed.");
+        }
+        _wasKnockedOut = player.KnockedOut;
 
         player.HeldItemId = (int)_inventory.HeldId;
         var visual = player.GetNodeOrNull<HeldItemVisual>("HeldItem");
@@ -197,7 +207,7 @@ public partial class ItemController : Node
                 break;
 
             case ItemUse.Optic:
-                _ui.Toast("Hold Aim (right mouse / LB) to look through them.");
+                _ui.Toast(InputHints.Format("Hold Aim ({aim_item}) to look through them."));
                 break;
 
             case ItemUse.Readout:
@@ -228,9 +238,7 @@ public partial class ItemController : Node
                 break;
 
             case ItemUse.Material:
-                _ui.Toast(def.Category == ItemCategory.Money
-                    ? $"{stack.Count} CHF. Keep it for trading."
-                    : $"{def.Name}: keep it for trading or building.");
+                _ui.Toast($"{def.Name}: keep it for trading or building.");
                 break;
         }
     }
