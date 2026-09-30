@@ -54,7 +54,11 @@ public readonly record struct RideInput(float Throttle, float Brake, float Steer
 /// slope of the terrain: a traverse across a 40% face is flat to a bicycle, and modelling it
 /// any other way would have a road that contours a hillside costing power to ride along.
 /// </param>
-public readonly record struct RideGround(bool OnFloor, float Grade);
+/// <param name="Surface">
+/// What the wheels are on (<see cref="Audio.Surfaces.At"/>: the road under them, else the cover).
+/// Only the motorbikes read it, for grip; the default is tarmac.
+/// </param>
+public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surface Surface = Audio.Surface.Asphalt);
 
 /// <summary>
 /// The vehicle's own state between frames. Speed is a scalar along <see cref="Yaw"/> rather than
@@ -290,12 +294,11 @@ public abstract class Rideable
     /// They are a base jump — Jump while falling from height — see <c>FootPlayer</c>.
     /// </remarks>
     /// <remarks>
-    /// Every motorbike in <see cref="MotorbikeCatalog"/> follows, one line each (a longer roster
-    /// wants a folded page like the cars'; the picker is being reworked).
+    /// Nor are the motorbikes: <see cref="MotorbikeCatalog"/> (the R1, the Monster, every Africa
+    /// Twin) folds open on its own page like the cars.
     /// </remarks>
-    public static readonly Rideable[] All = new Rideable[]
-        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() }
-        .Concat(MotorbikeCatalog.All.Select(bike => (Rideable)new Motorbike(bike))).ToArray();
+    public static readonly Rideable[] All =
+        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() };
 
     /// <summary>
     /// A fresh instance for one rider.

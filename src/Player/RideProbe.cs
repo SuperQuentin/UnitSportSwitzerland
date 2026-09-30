@@ -149,7 +149,8 @@ public partial class RideProbe : Node
             var p = _player.GlobalPosition;
             float clearance = _chunks.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
             GD.Print($"[ride] t={_elapsed,5:F1}s  v={_player.RideSpeed,5:F1} m/s "
-                + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}");
+                + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
+                + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : ""));
         }
 
         if (_elapsed < _seconds) return;

@@ -69,8 +69,8 @@ public partial class SyncProbe : Node
         ProcessPriority = 1;
     }
 
-    private static readonly string[] Stages = { "walk", "sprint", "jump", "slide", "stand", "bike", "brake", "car", "moto", "heli", "plane" };
-    private static readonly double[] StageEnd = { 3, 5, 6.5, 8, 9.5, 15.5, 18.5, 25.5, 32.5, 38.5, 45.5 };
+    private static readonly string[] Stages = { "walk", "sprint", "jump", "slide", "stand", "bike", "brake", "car", "moto", "africa", "heli", "plane" };
+    private static readonly double[] StageEnd = { 3, 5, 6.5, 8, 9.5, 15.5, 18.5, 25.5, 32.5, 39.5, 45.5, 52.5 };
     private double _stageStart;
     private int _ownerPoseKind;
 
@@ -215,6 +215,12 @@ public partial class SyncProbe : Node
                 Mount((RideKind)MotorbikeCatalog.First);
                 _owner!.RideControls = () => new RideInput(0.5f, 0f, Mathf.Sin((float)_t * 1.4f) * 0.8f, false);
                 break;
+            case "africa":
+                // the last Africa Twin (CRF1100L Adventure Sports ES DCT): its own mesh, the DCT shifting itself
+                Mount(RideKind.OnFoot);
+                Mount((RideKind)(MotorbikeCatalog.First + MotorbikeCatalog.All.Count - 1));
+                _owner!.RideControls = () => new RideInput(0.6f, 0f, Mathf.Sin((float)_t * 1.2f) * 0.8f, false);
+                break;
             case "heli":
                 _owner!.RideControls = null;
                 Mount(RideKind.Helicopter);
@@ -249,7 +255,7 @@ public partial class SyncProbe : Node
             + $"hand {_freshHand:F4} m (< {FreshErr}), crank {_freshCrank:F3} rad (< {FreshCrank})");
         bool ok = _samples > 200 && _basisErr < MaxBasisErr && _handErr < MaxHandErr && _crankErr < MaxCrankErr
             && _freshBasis < FreshErr && _freshHand < FreshErr && _freshCrank < FreshCrank
-            && _byStage.ContainsKey("bike") && _byStage.ContainsKey("moto") && _byStage.ContainsKey("plane");
+            && _byStage.ContainsKey("bike") && _byStage.ContainsKey("moto") && _byStage.ContainsKey("africa") && _byStage.ContainsKey("plane");
         GD.Print($"[synccheck] max pose {_basisErr:F3} (< {MaxBasisErr}), hand {_handErr:F3} m (< {MaxHandErr}), "
             + $"crank {_crankErr:F3} rad beyond a frame of cadence (< {MaxCrankErr}), {_samples} frames, {_kindMismatch} frames waiting on a ride change");
         GD.Print(ok ? "[synccheck] RESULT: ok" : "[synccheck] RESULT: FAILED");

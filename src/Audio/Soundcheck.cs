@@ -26,7 +26,8 @@ public static class Soundcheck
 
         var profiles = new (string name, EngineProfile p)[] { ("plane", EngineProfile.PistonAero), ("heli", EngineProfile.Turboshaft),
             ("inline4", EngineProfile.Inline4Na), ("rotary", EngineProfile.Rotary), ("boxer", EngineProfile.Boxer4Turbo),
-            ("crossplane4", EngineProfile.Crossplane4), ("vtwin90", EngineProfile.VTwin90) };
+            ("crossplane4", EngineProfile.Crossplane4), ("vtwin90", EngineProfile.VTwin90),
+            ("twin270", EngineProfile.ParallelTwin270), ("vtwin52", EngineProfile.VTwin52) };
         foreach (var (pname, profile) in profiles)
             foreach (EngineVoice voice in Enum.GetValues<EngineVoice>())
             {
