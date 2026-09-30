@@ -13,8 +13,10 @@
   the verge. The survey runs off the main thread when a pilot is made (or before GO in `--drivecheck`)
   and swaps `route.Line` for the widened one (same point count, so indices stay valid).
   Mollendruz (8.4 km): 12.0 of 16.7 km of edge usable, blocked by Drop 4.3 km, Bank 0.3 km; the line
-  uses it over ~670 m. **Trees never block it here: the preprocessor keeps trunks ≥ 2.5 m off a road
+  uses it over ~490 m. **Trees never block it here: the preprocessor keeps trunks ≥ 2.5 m off a road
   edge**, beyond the 1.5 m counted. `AutoPilot.VergeMetres` / `VergeUnsafe` count metres driven with a
   wheel off the tarmac where the survey allowed it / did not (by reason); `--drivecheck` prints both.
-- Overtaking uses the same room: a pass is taken only where the rival's offset plus 2.4 m (a car and a
-  gap) fits inside tarmac + safe verge on that side.
+- Overtaking uses the same room: a pass is taken only where the rival's offset plus 2.1 m (a car and
+  0.3 m) fits inside tarmac + safe verge on that side, the line's own 0.3 m off the edge given up (2.4 m
+  never fit on a 6 m road, and the field ran as a train), never with oncoming traffic or something
+  stopped ahead, and only through bends wider than R 150 m.

@@ -184,7 +184,9 @@ public partial class DriveProbe : Node
                     if (_t - entry.LastHit > 0.3) { entry.HitLoss = 0f; entry.HitCounted = false; }
                     entry.LastHit = _t;
                     entry.HitLoss += lost;
-                    if (entry.HitCounted || entry.HitLoss < 2f) return;
+                    // a knock against something (a trunk, a car, the traffic), or a big one against
+                    // anything: a hard launch alone reads as a 2 m/s "knock" (the body lags the model)
+                    if (entry.HitCounted || entry.HitLoss < 2f || (entry.HitLoss < 5f && !TouchingSomething(player))) return;
                     entry.HitCounted = true;
                     entry.Impacts++;
                     _log.Add($"{_t,5:F1}s {label}: impact at {entry.Arc:F0} m ({entry.Player.Motion.Speed * 3.6f:F0} km/h)");
@@ -407,6 +409,16 @@ public partial class DriveProbe : Node
         if (_shotPrefix != null && GetViewport().GetTexture().GetImage().SavePng($"{_shotPrefix}_end.png") == Error.Ok)
             GD.Print($"[drive] wrote {_shotPrefix}_end.png");
         Finish(ok ? 0 : 1);
+    }
+
+    /// <summary>In contact with anything but the ground: a trunk (layer 2), a car, the traffic.</summary>
+    private static bool TouchingSomething(FootPlayer p)
+    {
+        for (int i = 0; i < p.GetSlideCollisionCount(); i++)
+            if (p.GetSlideCollision(i).GetCollider() is CollisionObject3D c
+                && (c is not StaticBody3D || c is AnimatableBody3D || (c.CollisionLayer & World.TreeColliders.Layer) != 0))
+                return true;
+        return false;
     }
 
     private static World.Traffic? FindTraffic(Node node)

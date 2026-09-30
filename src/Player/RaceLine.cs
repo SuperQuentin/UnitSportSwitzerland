@@ -205,24 +205,26 @@ public sealed class RaceLine
         float brakes = car.BrakeDecel > 0 ? car.BrakeDecel * (arcade ? 1.1f : 1f) : 99f;
         // Car.Step splits the brakes 65/35 front/rear, and braking takes load off the rear: past
         // this decel the rear circle is all brake and the car swaps ends (it did, straight-line
-        // braking from 225 km/h). Stay at 80% of it, as a driver without ABS or ESC would.
+        // braking from 225 km/h). All of it at 110 km/h and below, 80% from 215 km/h, where a line
+        // correction is enough to start the rear going, as a driver without ABS or ESC would.
         float rearSat = mu * g * car.FrontAxle / car.Wheelbase / (0.35f + mu * car.CgHeight / car.Wheelbase);
-        float brake = 0.85f * Mathf.Min(Mathf.Min(brakes, 0.95f * mu * g), 0.8f * rearSat);
+        float Brake(float u) => 0.85f * Mathf.Min(Mathf.Min(brakes, 0.95f * mu * g),
+            rearSat * Mathf.Lerp(1f, 0.8f, Mathf.Clamp((u - 30f) / 30f, 0f, 1f)));
         // air and rolling resistance: they cap the straights and help every brake from high speed
         float Resist(float u) => 0.5f * 1.2f * car.DragArea * u * u / car.Mass + 0.013f * g;
-        return SpeedProfile(courage * mu * g, brake,
+        return SpeedProfile(courage * mu * g, Brake,
             u => Mathf.Min(power / (car.Mass * Mathf.Max(u, 1f)), driven * mu * g) - Resist(u), Resist, mu * g);
     }
 
     /// <summary>
     /// The quasi-steady profile for any vehicle: <paramref name="lateral"/> is the sideways
     /// acceleration it holds in a corner on tarmac (m/s²), <paramref name="brake"/> its braking
-    /// (m/s²); <paramref name="drive"/> its net forward acceleration on the flat at a speed (null:
+    /// at a speed (m/s²); <paramref name="drive"/> its net forward acceleration on the flat at a speed (null:
     /// no forward pass, it simply gets there when it gets there); <paramref name="resist"/> what
     /// slows it off the throttle at a speed (added to the braking); <paramref name="grip"/> its whole
     /// tyre limit (m/s², 0: braking never shares it with the turn).
     /// </summary>
-    public float[] SpeedProfile(float lateral, float brake, System.Func<float, float>? drive = null,
+    public float[] SpeedProfile(float lateral, System.Func<float, float> brake, System.Func<float, float>? drive = null,
         System.Func<float, float>? resist = null, float grip = 0f)
     {
         int n = Points.Count;
@@ -256,7 +258,7 @@ public sealed class RaceLine
             // braking in a bend shares the tyres with the turn (friction circle): what is left of the
             // grip after the corner takes its share — full brakes into a fast bend spun the car
             float turning = grip > 0f ? Mathf.Min(1f, v[i + 1] * v[i + 1] * Mathf.Abs(Curvature[i]) / grip) : 0f;
-            float decel = Mathf.Max(1f, brake * Mathf.Sqrt(1f - turning * turning) + (resist?.Invoke(v[i + 1]) ?? 0f) + g * grade);
+            float decel = Mathf.Max(1f, brake(v[i + 1]) * Mathf.Sqrt(1f - turning * turning) + (resist?.Invoke(v[i + 1]) ?? 0f) + g * grade);
             v[i] = Mathf.Min(v[i], Mathf.Sqrt(v[i + 1] * v[i + 1] + 2f * decel * ds));
         }
         return v;

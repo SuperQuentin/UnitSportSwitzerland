@@ -144,9 +144,9 @@ public sealed class AutoPilot
             // a share of the tyre limit: a narrow road with camber and bumps is not a flat skidpad
             Mount.Car => line.SpeedProfile(S, Rideable.Arcade, S.Style == DriveStyle.Grip ? 0.64f : 0.6f),
             // v = √(g·R·tan φ): 80% of the lean it can hold, 85% of its brakes
-            Mount.Lean => line.SpeedProfile(0.8f * g * Mathf.Tan(_maxLean), 0.85f * _brake),
+            Mount.Lean => line.SpeedProfile(0.8f * g * Mathf.Tan(_maxLean), _ => 0.85f * _brake),
             // a runner corners on its feet at any speed it can run
-            _ => line.SpeedProfile(0.6f * g, 4f),
+            _ => line.SpeedProfile(0.6f * g, _ => 4f),
         };
     }
 
@@ -283,8 +283,10 @@ public sealed class AutoPilot
             if (Mathf.Abs(theirs - lineOff) > 2.4f) continue;   // not on this car's line
             float roomL = line.RoomLeft[qi], roomR = line.RoomRight[qi];
             // a car's width (1.8 m) and a gap beside it, all of it inside the room
-            const float Beside = 2.4f;
-            bool fitsLeft = theirs + Beside <= roomL, fitsRight = theirs - Beside >= -roomR;
+            // (and for a pass the line's own 0.3 m off the edge is given up: two cars side by side on
+            // a 6 m Jura road is 0.3 m between them and wheels on the white line, and 2.4 m never fit)
+            const float Beside = 2.1f;
+            bool fitsLeft = theirs + Beside <= roomL + 0.3f, fitsRight = theirs - Beside >= -roomR - 0.3f;
             float PickSide()
             {
                 float l = theirs + Beside, r = theirs - Beside;
@@ -308,7 +310,8 @@ public sealed class AutoPilot
                 D.Cap = Mathf.Min(D.Cap, Mathf.Max(8f, StopWithin(ahead - 12f)));
                 continue;
             }
-            bool straight = MaxCurvature(Arc, 0f, 60f + v) < 1f / 300f;
+            // side by side through a sweeper is fine; into a hairpin it is not
+            bool straight = MaxCurvature(Arc, 0f, 60f + v) < 1f / 150f;
             if (straight && (fitsLeft || fitsRight))
             {
                 pass = PickSide();
@@ -400,9 +403,10 @@ public sealed class AutoPilot
         float k = line.Curvature[line.IndexAt(s0 + look * 0.5f)];
         float sagitta = Mathf.Clamp(look * look * k / 8f, -1.5f, 1.5f);
         // an overtaking offset never takes the car past the room where it is aimed (tarmac + safe
-        // verge): chosen against the line's offset beside the rival, it overshot where the line moved
+        // verge, plus the 0.3 m the line keeps off the edge): chosen against the line beside the rival,
+        // it overshot where the line moved
         int ai = line.IndexAt(s0 + look);
-        lateral = Mathf.Clamp(lateral, -line.RoomRight[ai] - line.Offset[ai], line.RoomLeft[ai] - line.Offset[ai]);
+        lateral = Mathf.Clamp(lateral, -line.RoomRight[ai] - 0.3f - line.Offset[ai], line.RoomLeft[ai] + 0.3f - line.Offset[ai]);
         return line.PointAt(s0 + look) + new Vector3(t.Z, 0, -t.X) * (lateral - sagitta);
     }
 

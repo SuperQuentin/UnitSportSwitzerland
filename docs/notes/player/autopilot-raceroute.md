@@ -32,5 +32,13 @@
 - Check top speed: `--drivecheck --at 2522700,1163026 --finish 1150 --cars N --traffic 0` (the longest
   straight in the Mollendruz data, ~1 km west of 2522.7/1163.0). The classification prints the car
   model's own flat-out speed over the same run: all six tested within 1 km/h of it.
+- **Impacts in `--drivecheck`**: `FootPlayer` takes a knock off the speed at most 0.4 m/s a frame, so
+  the old "one `Impacted` ≥ 2 m/s" rule never fired and crashes read "0 impacts" (the pre-#39 figures
+  are not comparable). A knock is now the losses of one contact added up (events < 0.3 s apart), ≥ 2 m/s
+  while touching something that is not the ground (trunk, car, traffic), or ≥ 5 m/s against anything —
+  a hard launch alone reads as a 2 m/s knock because the body lags the model.
+- Traffic makes races chaotic (35 cars around the camera on a 6 m pass: head-ons, cars stuck behind a
+  thrown-off rival's parked car): with it on, 3 of 6 finished; the reference runs use `--traffic 0`.
+  A car nose-to-tail with something stopped backs off and resets like one stuck off the road.
 - `--drivecheck --mount K [--riders N]` races another mount (RideKind number, 0 on foot) with the pilot
   `For` picks; `--verge 0` skips the verge survey.
