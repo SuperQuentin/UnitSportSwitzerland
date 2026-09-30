@@ -14,6 +14,7 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `camera-zoom` — Camera focal-length zoom (wheel while aiming), LookScale, viewfinder readout + autofocus hunt, --zoom
 - `cash-account` — Money is a counter, not an item: `Inventory.Cash`, lost when knocked out, claimed to the server-kept account...
 - `item-net-events` — ItemEvents.Send (shot, photo flash relayed to others) and PlacedObjects (server-kept, saved flags/photos, kind factories)
+- `smart-binoculars` — Optic item: pick a target item, see the loot chance (%) on buildings in view (LootTables.Chance)
 
 ## Commands
 
