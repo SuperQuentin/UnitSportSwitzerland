@@ -144,6 +144,12 @@ if [ $S_SETUP = 1 ]; then
 fi
 
 stopped=0
+install_start() { # start-server.sh with this config baked in; cron and every restart run it
+  sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
+    | awk -v a="$SERVER_ARGS" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
+  [ $DRY = 1 ] && return
+  rq "cat > $(qd "$DEPLOY_DIR/start-server.sh") && chmod 755 $(qd "$DEPLOY_DIR/start-server.sh")" < "$OUT/start-server.sh"
+}
 stop_server() { [ $stopped = 1 ] && return; rx "tmux kill-session -t unitsport 2>/dev/null || true"; stopped=1; }
 
 # --- 4. upload the build ------------------------------------------------------------------------
@@ -152,15 +158,12 @@ if [ $S_BUILD = 1 ]; then
   need=$(( $(du -sb "$BUILD" | cut -f1) + SPACE_MARGIN_MB * 1048576 )); free=$(avail "$DEPLOY_DIR")
   [ "$free" -ge "$need" ] || die "not enough space in $DEPLOY_DIR: need $(human $need) (build + margin), $(human "$free") free"
   stamp=$(date +%Y%m%d-%H%M%S); rel="$DEPLOY_DIR/releases/$stamp"
-  sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
-    | awk -v a="$SERVER_ARGS" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
   stop_server
   if [ $DRY = 1 ]; then echo "  [dry] upload $BUILD -> $rel, link $DEPLOY_DIR/current, install start-server.sh"
   else
     # chmod: a tar made on Windows carries no exec bit for the ELF binary
     tar -C "$BUILD" -czf - . | rq "mkdir -p $(qd "$rel") && tar -xzf - -C $(qd "$rel") && chmod 755 $(qd "$rel/$BIN") && ln -sfn $(qd "$rel") $(qd "$DEPLOY_DIR/current") \
       && cd $(qd "$DEPLOY_DIR/releases") && ls -1dt */ | tail -n +4 | xargs -r rm -rf"
-    rq "cat > $(qd "$DEPLOY_DIR/start-server.sh") && chmod 755 $(qd "$DEPLOY_DIR/start-server.sh")" < "$OUT/start-server.sh"
     echo "  $rel (current), older than the last 3 releases removed"
   fi
 fi
@@ -219,7 +222,9 @@ fi
 # --- 6. (re)start --------------------------------------------------------------------------------------
 if [ $S_RESTART = 1 ] || [ $stopped = 1 ]; then
   say "Start server"
-  rx "tmux kill-session -t unitsport 2>/dev/null; $(qd "$DEPLOY_DIR/start-server.sh")"
+  install_start
+  # wait for the old process to let go of the port, or the "listening" check below sees it and not the new one
+  rx "tmux kill-session -t unitsport 2>/dev/null; for i in \$(seq 30); do ss -Hlun 'sport = :$GAME_PORT' | grep -q . || break; sleep 0.5; done; $(qd "$DEPLOY_DIR/start-server.sh")"
   if [ $DRY = 0 ]; then
     printf '  waiting for UDP %s' "$GAME_PORT"
     for _ in $(seq 60); do
@@ -227,7 +232,8 @@ if [ $S_RESTART = 1 ] || [ $stopped = 1 ]; then
       rq "tmux has-session -t unitsport 2>/dev/null" || { echo " - server exited"; break; }
       printf .; sleep 2
     done
-    rq "tail -n 15 $(qd "$DEPLOY_DIR/server.log")" | sed 's/^/  | /'
+    # this run only: everything after the last start marker
+    rq "awk '/^=== start/{b=\"\"} {b=b \$0 \"\\n\"} END{printf \"%s\", b}' $(qd "$DEPLOY_DIR/server.log") | tail -n 15" | sed 's/^/  | /'
     echo "  console: ssh -t -p $DEPLOY_PORT_SSH $DEPLOY_HOST tmux attach -t unitsport   (detach: Ctrl-b d)"
   fi
 fi

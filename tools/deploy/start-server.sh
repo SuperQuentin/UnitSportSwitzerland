@@ -11,6 +11,8 @@ SESSION=unitsport
 tmux has-session -t "$SESSION" 2>/dev/null && { echo "already running (tmux attach -t $SESSION)"; exit 0; }
 cd "$DIR/current"
 echo "=== start $(date -Is) ===" >> "$DIR/server.log"
-tmux new-session -d -s "$SESSION" \
-  "./UnitSportSwitzerland.x86_64 --headless -- --server --port @GAME_PORT@ @SERVER_ARGS@ 2>&1 | tee -a '$DIR/server.log'"
+# The server writes straight to the pane (a tty, so its output is line-buffered and the console shows it);
+# pipe-pane copies the pane to the log. Piping through tee instead block-buffers everything until exit.
+tmux new-session -d -s "$SESSION" -x 200 -y 50 "./UnitSportSwitzerland.x86_64 --headless -- --server --port @GAME_PORT@ @SERVER_ARGS@"
+tmux pipe-pane -t "$SESSION" -o "cat >> '$DIR/server.log'"
 echo "started (tmux attach -t $SESSION, log $DIR/server.log)"
