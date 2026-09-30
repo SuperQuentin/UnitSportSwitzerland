@@ -21,7 +21,7 @@ namespace UnitSport.Interiors;
 /// regenerated, so changing this code never changes a house somebody has already walked into.
 /// </para>
 /// </summary>
-public static class InteriorGenerator
+public static partial class InteriorGenerator
 {
     public const float Slab = 0.2f;
     public const float WallInset = 0.06f;
@@ -800,8 +800,9 @@ public static class InteriorGenerator
             {
                 float x = (r.X0 + r.X1) / 2 + sign * (aisle / 2 + pewW / 2);
                 var rect = new RectPlan(x - pewW / 2, z, x + pewW / 2, z + 0.5f);
+                // backrest toward the door, so they face the altar
                 if (Free(r, rect, placed, blocked, 0.05f))
-                    Add(l, f, new Piece(FurnitureType.Pew, pewW, 0.5f, 0.9f, false), rect, 2, placed);
+                    Add(l, f, new Piece(FurnitureType.Pew, pewW, 0.5f, 0.9f, false), rect, 0, placed);
             }
     }
 

@@ -17,7 +17,9 @@ namespace UnitSport.Interiors;
 /// Floor plans of a few of each kind are written as SVG to <c>user://interior_plans</c>.
 /// <b>Live</b>: a player walks up to a real house door, presses E, must end up standing on the
 /// interior's ground floor; the stair ramp must be there to stand on; E at the front door must
-/// put them back on the street by the door. Non-zero exit on any failure.
+/// put them back on the street by the door. Then, if a church stands nearby: in by its tower
+/// door, into the one church interior; up every flight to the bell chamber; out by the nave's
+/// door and back in by it, into the same interior. Non-zero exit on any failure.
 /// </para>
 /// </summary>
 public partial class InteriorProbe : Node
@@ -32,6 +34,11 @@ public partial class InteriorProbe : Node
     private double _t, _total;
     private DoorIndex.Entry _door;
     private int _doorless;
+    private BuildingGroup? _church;
+    private TileId _churchTile;
+    private string _churchKey = "";
+    private DoorIndex.Entry _churchIn, _churchOut;
+    private bool _viewed;
 
     public InteriorProbe(ChunkManager chunks, WorldOrigin origin, IChunkSource source, string? shot)
     {
@@ -87,12 +94,30 @@ public partial class InteriorProbe : Node
                 var result = await Task.Run(() =>
                 {
                     var list = new List<(Building B, InteriorLayout? L, List<string> P)>();
+                    var types = BuildingTypes.For(tile);
                     for (int i = 0; i < tile.Buildings.Count; i++)
                     {
                         var fp = BuildingFootprint.Compute(tile, i, roads, grid);
                         if (fp == null) { list.Add((tile.Buildings[i], null, new List<string> { "no footprint" })); continue; }
-                        var layout = InteriorGenerator.Generate(fp, tile.Buildings[i]);
-                        var problems = InteriorValidator.Validate(layout);
+                        // a church is planned once, from its primary; its other doors are still checked
+                        var group = types.GroupOf(i);
+                        var layout = group == null || group.Primary == i ? InteriorGenerator.Generate(tile, i, roads, grid) : null;
+                        var problems = layout != null ? InteriorValidator.Validate(layout) : new List<string>();
+                        if (group?.Type == BuildingType.Church && group.Primary == i && layout != null)
+                        {
+                            GD.Print($"[interior] church {layout.Key}: {group.Members.Count} solid(s) ({string.Join(", ", group.Parts)}), "
+                                + $"{layout.AllEntrances().Count} entrance(s), {layout.Floors.Count} floor(s) of {layout.StoreyHeight:F1} m, "
+                                + $"{layout.Furniture.Count(f => f.Type == FurnitureType.Pew)} pews, at LV95 {tile.Id.MinE + layout.CenterX:F0}/{tile.Id.MaxN - layout.CenterZ:F0}");
+                            if (layout.Type != BuildingType.Church) problems.Add("church planned as a plain building");
+                            if (layout.Entrances.Count < group.Members.Count)
+                                GD.Print($"[interior]   (only {layout.Entrances.Count} of {group.Members.Count} solids have a door)");
+                            if (_church == null || group.Members.Count > _church.Members.Count)
+                            {
+                                _church = group;
+                                _churchTile = tile.Id;
+                                _churchKey = layout.Key;
+                            }
+                        }
                         if (fp.Door.Width <= 0) Interlocked.Increment(ref _doorless);
                         else if (!BuildingFootprint.DoorOnWall(tile.Buildings[i], fp.Door))
                             problems.Add($"door at {fp.Door.Position:F1} is not on a wall");
@@ -103,6 +128,7 @@ public partial class InteriorProbe : Node
 
                 foreach (var (b, l, p) in result)
                 {
+                    if (l == null && p.Count == 0) continue; // a church's other solid: planned with its primary
                     total++;
                     var s = stats.GetValueOrDefault(b.Kind);
                     s.Count++;
@@ -119,7 +145,9 @@ public partial class InteriorProbe : Node
                         if (l.Floors[0].Rooms.Count > 1) s.Cored++;
                         int w = written.GetValueOrDefault(b.Kind);
                         bool interesting = l.Floors.Count > 1 || w == 0;
-                        if (w < 3 && interesting)
+                        if (l.Type != BuildingType.None)
+                            File.WriteAllText(Path.Combine(svgDir, $"{l.Type}_{l.Key}.svg"), InteriorValidator.ToSvg(l));
+                        else if (w < 3 && interesting)
                         {
                             written[b.Kind] = w + 1;
                             File.WriteAllText(Path.Combine(svgDir, $"{b.Kind}_{l.Key}.svg"), InteriorValidator.ToSvg(l));
@@ -284,10 +312,11 @@ public partial class InteriorProbe : Node
 
             case 7:
             {
-                // back to the front door and out
+                // back to the door we came in by, and out
                 var l = interiors.Current!;
                 var node = interiors.CurrentNode!;
-                _player.GlobalPosition = node.GlobalTransform * new Vector3(l.EntryX, 0.1f, -l.Depth / 2 + 0.9f);
+                var way = l.EntranceFor(_door.Key.ToString());
+                _player.GlobalPosition = node.GlobalTransform * new Vector3(way.X + way.InX * 0.9f, 0.1f, way.Z + way.InZ * 0.9f);
                 _player.Velocity = Vector3.Zero;
                 _step = 8;
                 _t = 0;
@@ -307,23 +336,197 @@ public partial class InteriorProbe : Node
                 Check(new Vector2(d.X, d.Z).Length() < 3f && Mathf.Abs(d.Y) < 2f,
                     $"back by the same door ({new Vector2(d.X, d.Z).Length():F1} m, dy {d.Y:F1})");
                 Check(_player.IsOnFloor(), "standing on the street");
+                if (_church == null) { GD.Print("[interior] (no church nearby: churches not tested live)"); Finish(); }
+                else Next();
+                break;
+
+            // ---- a church: every door into one interior, and up the tower ------------------------
+            case 10:
+            {
+                // the tower's door if it has one, so the way in and the way out differ
+                var doors = _church!.Members
+                    .Select(m => DoorIndex.Find(new BuildingKey(_churchTile.E, _churchTile.N, m)))
+                    .Where(d => d != null).Select(d => d!.Value).ToList();
+                if (doors.Count == 0)
+                {
+                    if (_t > 30) { Check(false, $"church {_churchKey} has a drawn door"); Finish(); }
+                    return;
+                }
+                _churchIn = doors[^1];
+                _churchOut = doors[0];
+                if (_shot != null && !_viewed)
+                {
+                    // a look at it from across the street first, for the screenshot
+                    if (_t < 0.1)
+                    {
+                        GD.Print($"[interior] church {_churchKey}: in by {_churchIn.Key}, out by {_churchOut.Key} ({doors.Count} door(s))");
+                        var from = ViewOf(_churchIn.World + Vector3.Up * 12f, _churchIn.Outward);
+                        var look = (_churchIn.World - from) with { Y = 0 };
+                        _player!.LeaveInterior(from, Mathf.Atan2(-look.X, -look.Z));
+                        _player.Velocity = Vector3.Zero;
+                    }
+                    if (_t < 3.0) return;
+                    GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_church_outside.png"));
+                    _viewed = true;
+                }
+                _player!.GlobalPosition = _churchIn.World + _churchIn.Outward * 0.8f + Vector3.Up * 0.3f;
+                _player.Velocity = Vector3.Zero;
+                Next();
+                break;
+            }
+
+            case 11:
+                if (_t < 1.0 || !_player!.IsOnFloor()) { if (_t > 20) { Check(false, "stood at the church door"); Finish(); } return; }
+                Check(_player.TryInteract(), $"E at the church door {_churchIn.Key} is taken");
+                Next();
+                break;
+
+            case 12:
+            {
+                if (!_player!.Indoors && _t < 15) return;
+                if (!_player.Indoors) { Check(false, "inside the church"); Finish(); return; }
+                if (_t < 1.5) return;
+                var l = interiors.Current!;
+                Check(l.Type == BuildingType.Church && l.Key == _churchKey, $"one church interior, {l.Key} ({l.Type})");
+                Check(interiors.SpaceOf(1) == _churchKey, "the player's space is the church, not the door's building");
+                Check(_player.IsOnFloor() && _player.GlobalPosition.Y < InteriorManager.InteriorBaseY + 2f, "standing on the church floor");
+                if (_shot != null) GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_church.png"));
+                for (int f = 0; f < l.Floors.Count; f++) StairRay(interiors, f);
+                if (l.Floors[0].Flight is { } flight)
+                {
+                    // walk up the first flight for real: a ramp a body cannot climb is no stair
+                    float dir = Math.Sign(flight.ZTop - flight.ZBottom);
+                    var start = new Vector3((flight.X0 + flight.X1) / 2, 0.1f, flight.ZBottom - dir * 0.7f);
+                    var up = interiors.CurrentNode!.GlobalTransform.Basis * new Vector3(0, 0, dir);
+                    _player.EnterInterior(l.Key, interiors.CurrentNode.GlobalTransform * start, Mathf.Atan2(-up.X, -up.Z));
+                    _player.Velocity = Vector3.Zero;
+                    Input.ActionPress(PlayerInput.MoveForward);
+                }
+                Next();
+                break;
+            }
+
+            case 13:
+            {
+                var l = interiors.Current!;
+                if (l.Floors[0].Flight != null)
+                {
+                    // walking uphill is slowed to under half pace: a flight takes several seconds
+                    float y = interiors.CurrentNode!.ToLocal(_player!.GlobalPosition).Y;
+                    if (y < l.StoreyHeight - 0.2f && _t < 10.0) return;
+                    Input.ActionRelease(PlayerInput.MoveForward);
+                    Check(y > l.StoreyHeight - 0.4f, $"walked up the first tower flight ({y:F2} m of {l.StoreyHeight:F1} in {_t:F1} s)");
+                    if (_shot != null) GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_stair.png"));
+                }
+                if (l.Floors.Count > 1)
+                {
+                    // to the top of the tower
+                    int top = l.Floors.Count - 1;
+                    var room = l.Floors[top].Rooms[0];
+                    var bell = l.Furniture.FirstOrDefault(p => p.Type == FurnitureType.Bell);
+                    Check(bell != null, "a bell in the bell chamber");
+                    var spot = bell != null ? new Vector3(bell.X, 0, bell.Z) : new Vector3((room.X0 + room.X1) / 2, 0, (room.Z0 + room.Z1) / 2);
+                    _player!.GlobalPosition = interiors.CurrentNode!.GlobalTransform * (spot + Vector3.Up * (top * l.StoreyHeight + 0.3f));
+                    _player.Velocity = Vector3.Zero;
+                }
+                Next();
+                break;
+            }
+
+            case 14:
+            {
+                // the camera eases after a teleport this tall: give it time before the shot
+                if (_t < 3.0) return;
+                var l = interiors.Current!;
+                var node = interiors.CurrentNode!;
+                if (l.Floors.Count > 1)
+                {
+                    float y = node.ToLocal(_player!.GlobalPosition).Y;
+                    float want = (l.Floors.Count - 1) * l.StoreyHeight;
+                    Check(_player.IsOnFloor() && Math.Abs(y - want) < 0.5f, $"standing in the bell chamber ({y:F1} m, floor at {want:F1})");
+                    if (_shot != null) GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_belfry.png"));
+                }
+                // down to the other door and out through it
+                var way = l.EntranceFor(_churchOut.Key.ToString());
+                _player!.GlobalPosition = node.GlobalTransform * new Vector3(way.X + way.InX * 0.9f, 0.1f, way.Z + way.InZ * 0.9f);
+                _player.Velocity = Vector3.Zero;
+                Next();
+                break;
+            }
+
+            case 15:
+                if (_t < 0.8) return;
+                Check(_player!.TryInteract(), "E at the nave door is taken");
+                Next();
+                break;
+
+            case 16:
+            {
+                if (_t < 2.5) return;
+                Check(!_player!.Indoors, "out of the church");
+                var off = _player.GlobalPosition - _churchOut.World;
+                Check(new Vector2(off.X, off.Z).Length() < 3f && Mathf.Abs(off.Y) < 2f,
+                    $"out by the door used, {_churchOut.Key} ({new Vector2(off.X, off.Z).Length():F1} m)");
+                _player.GlobalPosition = _churchOut.World + _churchOut.Outward * 0.8f + Vector3.Up * 0.3f;
+                _player.Velocity = Vector3.Zero;
+                Next();
+                break;
+            }
+
+            case 17:
+                if (_t < 1.0) return;
+                Check(_player!.TryInteract(), "E at the nave door from outside is taken");
+                Next();
+                break;
+
+            case 18:
+                if (!_player!.Indoors && _t < 15) return;
+                Check(_player.Indoors && interiors.Current?.Key == _churchKey, "the nave door leads into the same church");
                 Finish();
                 break;
         }
     }
 
-    /// <summary>Straight down onto the middle of the first flight: the ramp must be there.</summary>
-    private void StairRay(InteriorManager interiors)
+    /// <summary>
+    /// Somewhere to stand to see <paramref name="target"/>: out along <paramref name="outward"/>,
+    /// swung either side until nothing stands in the way of an eye 3 m up.
+    /// </summary>
+    private Vector3 ViewOf(Vector3 target, Vector3 outward)
+    {
+        var space = _player!.GetWorld3D().DirectSpaceState;
+        foreach (float dist in new[] { 40f, 55f, 30f })
+            foreach (float deg in new[] { 0f, 25f, -25f, 45f, -45f, 60f, -60f })
+            {
+                var dir = outward.Rotated(Vector3.Up, Mathf.DegToRad(deg));
+                var at = target with { Y = _churchIn.World.Y } + dir * dist;
+                if (!_chunks.TryGetHeight(at, out float g)) continue;
+                var eye = new Vector3(at.X, g + 3f, at.Z);
+                var query = PhysicsRayQueryParameters3D.Create(eye, target);
+                query.Exclude = new Godot.Collections.Array<Rid> { _player.GetRid() };
+                var hit = space.IntersectRay(query);
+                if (hit.Count == 0 || hit["position"].AsVector3().DistanceTo(target) < 6f)
+                    return new Vector3(at.X, g + 0.5f, at.Z);
+            }
+        return _churchIn.World + outward * 30f + Vector3.Up * 2f;
+    }
+
+    /// <summary>Straight down onto the middle of a floor's flight: the ramp must be there.</summary>
+    private void StairRay(InteriorManager interiors, int floor = 0)
     {
         var l = interiors.Current;
         var node = interiors.CurrentNode;
-        if (l?.Floors[0].Flight is not { } f || node == null) { GD.Print("[interior] (single storey: no stairs to test)"); return; }
-        var local = new Vector3((f.X0 + f.X1) / 2, 0, (f.ZBottom + f.ZTop) / 2);
+        if (l == null || floor >= l.Floors.Count || l.Floors[floor].Flight is not { } f || node == null)
+        {
+            if (floor == 0) GD.Print("[interior] (single storey: no stairs to test)");
+            return;
+        }
+        float y0 = floor * l.StoreyHeight;
+        var local = new Vector3((f.X0 + f.X1) / 2, y0, (f.ZBottom + f.ZTop) / 2);
         var from = node.GlobalTransform * (local + Vector3.Up * (l.StoreyHeight - 0.5f));
         var to = node.GlobalTransform * (local + Vector3.Down * 0.5f);
         var hit = node.GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to));
-        float y = hit.Count > 0 ? node.ToLocal(hit["position"].AsVector3()).Y : -1;
-        Check(y > l.StoreyHeight * 0.3f && y < l.StoreyHeight * 0.7f, $"stair ramp under mid-flight at {y:F2} m of {l.StoreyHeight:F2}");
+        float y = hit.Count > 0 ? node.ToLocal(hit["position"].AsVector3()).Y - y0 : -1;
+        Check(y > l.StoreyHeight * 0.3f && y < l.StoreyHeight * 0.7f, $"floor {floor} stair ramp under mid-flight at {y:F2} m of {l.StoreyHeight:F2}");
     }
 
     private int _lootIndex = -1, _lootBefore, _lootPhase;

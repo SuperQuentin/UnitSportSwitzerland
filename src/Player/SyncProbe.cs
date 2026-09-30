@@ -16,7 +16,9 @@ namespace UnitSport.Player;
 /// frame (20 Hz, a network's rate rather than the frame rate, so the in-between integration is
 /// tested too). Each frame the mirror's drawn pose is compared with the owner's: the body visual's
 /// transform, the on-foot hand (a proxy for pose and gait phase together) and the bike's crank.
-/// Non-zero exit if any drifts past what one update interval explains.
+/// Non-zero exit if any drifts past what one update interval explains. The car stage also flips the
+/// NA6CE's headlights and soft top through the real key actions (#48): the mirror's must match the
+/// owner's on every fresh frame, and both switches must have been seen on.
 /// </para>
 ///
 /// <para>
@@ -57,6 +59,13 @@ public partial class SyncProbe : Node
     private float _basisErr, _handErr, _crankErr, _freshBasis, _freshHand, _freshCrank;
     private int _samples, _freshSamples, _kindMismatch;
     private bool _copiedLastFrame;
+
+    // the car's switches: the owner's last frame, fresh frames where the mirror's differed, and
+    // which states the owner went through (1 top down, 2 lights on, 4 lights off again after that)
+    private (bool Roof, bool Lights)? _ownerSwitches;
+    private int _switchMismatch, _switchSeen, _switchPressed;
+    private static readonly (double At, string Action)[] SwitchPresses =
+        { (20.0, PlayerInput.RoofToggle), (20.5, PlayerInput.LightsToggle), (23.0, PlayerInput.LightsToggle) };
     private readonly System.Collections.Generic.Dictionary<string, (float Basis, float Hand, float Crank, int N, float Speed, int Poses)> _byStage = new();
 
     public SyncProbe(ChunkManager chunks, WorldOrigin origin)
@@ -133,6 +142,9 @@ public partial class SyncProbe : Node
             }
         }
         else if (_ownerPose != null && _mirror.Ride != _ownerKind && !_copiedLastFrame) _kindMismatch++;
+        if (_copiedLastFrame && _ownerSwitches is { } sw && _mirror.Visual is Avatar.CarRig mirrorCar
+            && (mirrorCar.RoofOpen != sw.Roof || mirrorCar.Headlights != sw.Lights))
+            _switchMismatch++;
 
         // 2. the owner's picture now
         _lastDelta = delta;
@@ -147,6 +159,9 @@ public partial class SyncProbe : Node
             _ => null,
         };
         _ownerCadence = _owner.Visual is Avatar.Cyclist cc ? cc.CadenceRpm : 0f;
+        _ownerSwitches = _owner.Visual is Avatar.CarRig oc2 ? (oc2.RoofOpen, oc2.Headlights) : null;
+        if (_ownerSwitches is { } now)
+            _switchSeen |= (now.Roof ? 1 : 0) | (now.Lights ? 2 : 0) | (!now.Lights && (_switchSeen & 2) != 0 ? 4 : 0);
 
         // 3. the network: exactly the replicated properties, at 20 Hz
         _sinceUpdate += delta;
@@ -186,6 +201,14 @@ public partial class SyncProbe : Node
         Hold(PlayerInput.MoveLeft, Stages[_stage] == "plane" && (_t % 4) >= 2);
         Hold(PlayerInput.Jump, Stages[_stage] == "jump" && _t < 5.15);
         Hold(PlayerInput.CrouchSlide, Stages[_stage] == "slide" && _t > 6.6);
+
+        // the car's switches are presses, not holds: through the event path, as a key would be
+        if (_switchPressed < SwitchPresses.Length && _t >= SwitchPresses[_switchPressed].At)
+        {
+            var action = SwitchPresses[_switchPressed++].Action;
+            Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = true });
+            Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = false });
+        }
     }
 
     private void Enter(string stage)
@@ -201,9 +224,10 @@ public partial class SyncProbe : Node
                 _owner!.RideControls = () => new RideInput(0f, 1f, 0f, false);
                 break;
             case "car":
-                // a drift car sliding: throttle, a weaving wheel and handbrake stabs
+                // a drift car sliding: throttle, a weaving wheel and handbrake stabs. The NA6CE,
+                // which has both a soft top and pop-ups for the switch presses.
                 Mount(RideKind.OnFoot);
-                Mount((RideKind)CarCatalog.First);
+                Mount(CarCatalog.All.First(c => c.Label == "NA6CE Roadster").Kind);
                 _owner!.RideControls = () => new RideInput(1f, 0f, Mathf.Sin((float)_t * 1.1f) * 0.8f, false,
                     Handbrake: _t % 2.5 < 0.35);
                 break;
@@ -239,7 +263,9 @@ public partial class SyncProbe : Node
                 + $"  (owner up to {s.Speed:F1} m/s, on-foot poses {(s.Poses & 1) != 0}/{(s.Poses & 2) != 0}/{(s.Poses & 4) != 0} stride/air/tucked)");
         GD.Print($"[synccheck] fresh (frame after an update, {_freshSamples} frames): pose {_freshBasis:F4} (< {FreshErr}), "
             + $"hand {_freshHand:F4} m (< {FreshErr}), crank {_freshCrank:F3} rad (< {FreshCrank})");
-        bool ok = _samples > 200 && _basisErr < MaxBasisErr && _handErr < MaxHandErr && _crankErr < MaxCrankErr
+        GD.Print($"[synccheck] car switches: owner went top down {(_switchSeen & 1) != 0}, lights on {(_switchSeen & 2) != 0}, "
+            + $"lights off again {(_switchSeen & 4) != 0}; fresh frames where the mirror differed: {_switchMismatch} (must be 0)");
+        bool ok = _switchSeen == 7 && _switchMismatch == 0 && _samples > 200 && _basisErr < MaxBasisErr && _handErr < MaxHandErr && _crankErr < MaxCrankErr
             && _freshBasis < FreshErr && _freshHand < FreshErr && _freshCrank < FreshCrank
             && _byStage.ContainsKey("bike") && _byStage.ContainsKey("plane");
         GD.Print($"[synccheck] max pose {_basisErr:F3} (< {MaxBasisErr}), hand {_handErr:F3} m (< {MaxHandErr}), "

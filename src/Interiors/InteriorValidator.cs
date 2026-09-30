@@ -16,8 +16,15 @@ public static class InteriorValidator
         var errors = new List<string>();
         float hw = l.Width / 2 + 0.02f, hd = l.Depth / 2 + 0.02f;
         if (l.Floors.Count == 0) { errors.Add("no floors"); return errors; }
-        if (!l.Floors[0].Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && o.Side == Side.Front)))
-            errors.Add("no entry door on the front wall");
+        if (l.Entrances.Count == 0)
+        {
+            if (!l.Floors[0].Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && o.Side == Side.Front)))
+                errors.Add("no entry door on the front wall");
+        }
+        else
+            foreach (var e in l.Entrances)
+                if (!l.Floors[0].Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(r, o, e.X, e.Z))))
+                    errors.Add($"entrance for {e.Door} has no doorway at {e.X:F1},{e.Z:F1}");
 
         for (int f = 0; f < l.Floors.Count; f++)
         {
@@ -32,6 +39,11 @@ public static class InteriorValidator
                 for (int j = i + 1; j < rooms.Count; j++)
                     if (new RectPlan(r.X0, r.Z0, r.X1, r.Z1).Overlaps(new RectPlan(rooms[j].X0, rooms[j].Z0, rooms[j].X1, rooms[j].Z1), 0.02f))
                         errors.Add($"floor {f} rooms {i} and {j} overlap");
+                // a room several storeys tall owns its rectangle on the floors it rises through
+                for (int g = f + 1; g < Math.Min(l.Floors.Count, f + r.Span); g++)
+                    foreach (var q in l.Floors[g].Rooms)
+                        if (new RectPlan(r.X0, r.Z0, r.X1, r.Z1).Overlaps(new RectPlan(q.X0, q.Z0, q.X1, q.Z1), 0.02f))
+                            errors.Add($"floor {g} room {q.Type} inside the {r.Span}-storey {r.Type} of floor {f}");
                 foreach (var o in r.Openings.Where(o => o.Kind == OpeningKind.Door))
                 {
                     if (o.Other < 0 || o.Other >= rooms.Count
@@ -49,7 +61,7 @@ public static class InteriorValidator
             {
                 int a = queue.Dequeue();
                 foreach (var o in rooms[a].Openings)
-                    if (o.Kind == OpeningKind.Door && o.Other >= 0 && o.Other < rooms.Count && !seen[o.Other])
+                    if (o.Kind is OpeningKind.Door or OpeningKind.Arch && o.Other >= 0 && o.Other < rooms.Count && !seen[o.Other])
                     {
                         seen[o.Other] = true;
                         queue.Enqueue(o.Other);
@@ -64,10 +76,9 @@ public static class InteriorValidator
                 if (fl == null) errors.Add($"no stairs from floor {f}");
                 else
                 {
-                    var core = rooms[0];
-                    if (fl.X0 < core.X0 - 0.01f || fl.X1 > core.X1 + 0.01f
-                        || Math.Min(fl.ZBottom, fl.ZTop) < core.Z0 || Math.Max(fl.ZBottom, fl.ZTop) > core.Z1)
-                        errors.Add($"floor {f} stairs outside the core");
+                    if (!rooms.Any(core => fl.X0 >= core.X0 - 0.01f && fl.X1 <= core.X1 + 0.01f
+                        && Math.Min(fl.ZBottom, fl.ZTop) >= core.Z0 && Math.Max(fl.ZBottom, fl.ZTop) <= core.Z1))
+                        errors.Add($"floor {f} stairs outside any room");
                     if (!l.Floors[f + 1].Holes.Any(h => h.X0 <= fl.X0 + 0.01f && h.X1 >= fl.X1 - 0.01f))
                         errors.Add($"floor {f + 1} has no opening over the stairs from below");
                 }
@@ -90,18 +101,32 @@ public static class InteriorValidator
                 if (room == null) { errors.Add($"{p.Type} on floor {p.Floor} is in no room"); continue; }
                 if (rect.X0 < room.X0 || rect.X1 > room.X1 || rect.Z0 < room.Z0 || rect.Z1 > room.Z1)
                     errors.Add($"{p.Type} on floor {p.Floor} pokes through a wall");
-                if (p.Type != FurnitureType.Rug)
+                // stood on (a rug, the chancel step) or overhead (a bell, a cross on the wall)
+                if (p.Type is not (FurnitureType.Rug or FurnitureType.Dais) && p.Lift < 1.5f)
                 {
-                    foreach (var o in room.Openings.Where(o => o.Kind is OpeningKind.Door or OpeningKind.Entry))
+                    foreach (var o in room.Openings.Where(o => o.Kind is OpeningKind.Door or OpeningKind.Entry or OpeningKind.Arch))
                         if (Doorway(room, o).Overlaps(rect)) errors.Add($"{p.Type} on floor {p.Floor} blocks a doorway");
                     foreach (var (q, r) in rects)
-                        if (q.Type != FurnitureType.Rug && r.Overlaps(rect, 0.02f))
+                        if (r.Overlaps(rect, 0.02f))
                             errors.Add($"{p.Type} and {q.Type} on floor {p.Floor} overlap");
                     rects.Add((p, rect));
                 }
             }
         }
         return errors;
+    }
+
+    /// <summary>Whether an opening's middle is at (x, z) on its room's wall line.</summary>
+    private static bool OnWall(RoomPlan r, OpeningPlan o, float x, float z)
+    {
+        var (px, pz) = o.Side switch
+        {
+            Side.Front => (o.Center, r.Z0),
+            Side.Back => (o.Center, r.Z1),
+            Side.Left => (r.X0, o.Center),
+            _ => (r.X1, o.Center),
+        };
+        return Math.Abs(px - x) < 0.05f && Math.Abs(pz - z) < 0.05f;
     }
 
     /// <summary>The strip just inside a doorway, which must stay clear.</summary>

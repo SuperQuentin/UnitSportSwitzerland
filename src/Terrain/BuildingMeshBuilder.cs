@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Interiors;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain;
@@ -7,6 +8,12 @@ namespace UnitSport.Terrain;
 /// Turns building triangle soups into a single mesh per tile, colouring each triangle by
 /// building kind and whether the face is roof or wall. Worker-thread safe: produces plain
 /// arrays only.
+///
+/// <para>
+/// Detected <see cref="BuildingTypes"/> override the per-solid kind: every solid of a church is
+/// dressed as one, its nave with a single row of tall windows and its tower bare stone under a
+/// slate spire, whatever the cadastre match made each of them.
+/// </para>
 /// </summary>
 public static class BuildingMeshBuilder
 {
@@ -27,8 +34,9 @@ public static class BuildingMeshBuilder
 
         var v = new List<Vector3>(doors.Length * 120);
         var c = new List<Color>(doors.Length * 120);
+        var types = BuildingTypes.For(tile);
         foreach (var d in doors)
-            if (d.Width > 0) AppendDoor(v, c, d, tile.Buildings[d.Index].Kind);
+            if (d.Width > 0) AppendDoor(v, c, d, KindOf(tile.Buildings[d.Index], types.TypeOf(d.Index)));
 
         int n = data.Vertices.Length;
         var vertices = new Vector3[n + v.Count];
@@ -80,6 +88,7 @@ public static class BuildingMeshBuilder
             BuildingKind.Agricultural or BuildingKind.Annex => new Color(0.42f, 0.30f, 0.20f),
             BuildingKind.Industrial => new Color(0.46f, 0.50f, 0.54f),
             BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Civic => new Color(0.22f, 0.26f, 0.30f),
+            BuildingKind.Sacral => new Color(0.30f, 0.18f, 0.10f), // old oak
             _ => new Color(0.40f, 0.25f, 0.15f),
         }).SrgbToLinear();
         var step = new Color(0.62f, 0.61f, 0.58f).SrgbToLinear();
@@ -101,6 +110,7 @@ public static class BuildingMeshBuilder
         foreach (var b in tile.Buildings) triangles += b.TriangleCount;
         if (triangles == 0) return null;
 
+        var types = BuildingTypes.For(tile);
         var vertices = new Vector3[triangles * 3];
         var colors = new Color[triangles * 3];
         // uv.x = metres along the facade, uv.y = storey coordinate (<0 disables windows)
@@ -110,11 +120,23 @@ public static class BuildingMeshBuilder
         var uv2s = new Vector2[triangles * 3];
         int v = 0;
 
-        foreach (var b in tile.Buildings)
+        for (int bi = 0; bi < tile.Buildings.Count; bi++)
         {
-            var wall = WallColor(b).SrgbToLinear();
-            var roof = RoofColor(b).SrgbToLinear();
-            var (storey, storeyCount) = Storeys(b);
+            var b = tile.Buildings[bi];
+            var part = types.PartOf(bi);
+            var kind = KindOf(b, types.TypeOf(bi));
+            var wall = WallColor(kind, b.YearBuilt).SrgbToLinear();
+            var roof = RoofColor(kind).SrgbToLinear();
+            var (storey, storeyCount) = part switch
+            {
+                // one tall storey: the shader's window row becomes a church window
+                BuildingPart.Nave => (Math.Max(3f, (types.Boxes[bi]?.Eave ?? b.MaxY) - b.MinY), 1),
+                // a tower's few openings are not a grid of flats
+                BuildingPart.Tower => (0f, 0),
+                _ => Storeys(b),
+            };
+            // a spire's faces are steep enough to count as wall; above the eave they are roof
+            float spireFrom = part == BuildingPart.Tower ? (types.Boxes[bi]?.Eave ?? b.MaxY) + 0.3f : float.MaxValue;
             var uv2 = new Vector2(storeyCount, 0f);
 
             for (int t = 0; t < b.TriangleCount; t++)
@@ -126,7 +148,8 @@ public static class BuildingMeshBuilder
 
                 var normal = (c - a).Cross(d - a);
                 float len = normal.Length();
-                bool isRoof = len > 1e-6f && Mathf.Abs(normal.Y / len) >= RoofNormalY;
+                bool isRoof = len > 1e-6f && Mathf.Abs(normal.Y / len) >= RoofNormalY
+                    || (a.Y + c.Y + d.Y) / 3f > spireFrom;
                 var color = isRoof ? roof : wall;
 
                 // Facade coordinates are baked here rather than derived in the shader:
@@ -215,9 +238,13 @@ public static class BuildingMeshBuilder
         return (height, count);
     }
 
-    private static Color WallColor(Building b)
+    /// <summary>The kind a building is dressed as: a church's every solid as a church.</summary>
+    private static BuildingKind KindOf(Building b, BuildingType type) =>
+        type == BuildingType.Church ? BuildingKind.Sacral : b.Kind;
+
+    private static Color WallColor(BuildingKind kind, ushort year)
     {
-        var baseColor = b.Kind switch
+        var baseColor = kind switch
         {
             BuildingKind.House => new Color(0.82f, 0.76f, 0.65f),        // rendered cream
             BuildingKind.Apartment => new Color(0.75f, 0.72f, 0.67f),
@@ -230,10 +257,10 @@ public static class BuildingMeshBuilder
             BuildingKind.UnderConstruction => new Color(0.70f, 0.69f, 0.66f),
             _ => new Color(0.72f, 0.70f, 0.66f),
         };
-        return ApplyAge(baseColor, b.YearBuilt);
+        return ApplyAge(baseColor, year);
     }
 
-    private static Color RoofColor(Building b) => b.Kind switch
+    private static Color RoofColor(BuildingKind kind) => kind switch
     {
         BuildingKind.Agricultural => new Color(0.42f, 0.36f, 0.30f),
         BuildingKind.Industrial => new Color(0.46f, 0.48f, 0.49f),

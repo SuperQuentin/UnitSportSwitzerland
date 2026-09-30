@@ -441,7 +441,7 @@ public static class CarCatalog
         new CarSpec
         {
             Label = "NA6CE Roadster",
-            Blurb = "Tohru's Roadster of Seven Star Leaf: light, pop-up eyes and a tiny 1.6",
+            Blurb = "Tohru's Roadster of Seven Star Leaf, the first MX-5: light, a tiny 1.6, pop-up eyes (L) and a top that folds (O)",
             Body = new CarBody
             {
                 Shape = BodyShape.Roadster, Length = 3.95f, Width = 1.675f, Height = 1.235f, WheelRadius = 0.29f,

@@ -2,5 +2,6 @@
     // Godot used by .vscode/tasks.json (and by the godot-tools extension, if installed).
     // The _console.exe build prints the game's log to the terminal; the plain .exe does not.
     // Not installed through Chocolatey? Point this at your own copy of the .NET build of 4.7.1.
+    // Windows only: on macOS the tasks run /Applications/Godot_mono.app, on Linux/WSL `godot` from PATH.
     "godotTools.editorPath.godot4": "C:\\ProgramData\\chocolatey\\lib\\godot-mono\\tools\\godot_v4.7.1-stable_mono_win64\\godot_v4.7.1-stable_mono_win64_console.exe"
 }

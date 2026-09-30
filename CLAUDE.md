@@ -14,7 +14,8 @@ occasions, core, general. New knowledge goes in a new or existing note plus one 
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
-`headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional).
+`headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
+`worktrees` (main checkout stays on `main`).
 
 ## Rules
 
@@ -23,7 +24,11 @@ occasions, core, general. New knowledge goes in a new or existing note plus one 
   1. Search issues and PRs first (`gh issue list --state all --search "<kw>"`, `gh pr list`); if work
      overlaps (same feature, files or system), coordinate on that issue instead.
   2. `gh issue create` before coding: what it does, which files and systems it touches.
-  3. Branch from up-to-date `main` as `feat/<issue#>-name`; never commit on `main`; `Closes #N` in the PR.
+  3. Branch from up-to-date `main` as `feat/<issue#>-name`, in a **worktree**
+     (`../UnitSportSwitzerland-<issue#>`): the main checkout stays on `main`
+     (`docs/notes/general/worktrees.md`). Never commit features on `main`; `Closes #N` in the PR.
+- **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
+  in the main checkout and push. No issue, branch, worktree or PR.
   4. **Test in multiplayer**: dedicated server + client on loopback, check the feature on the
      **remote** peer (replication, authority, animation, damage). The PR says what was and was not
      verified. Network model: `src/Net/CLAUDE.md`.
