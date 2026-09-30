@@ -13,7 +13,7 @@ public static class Soundcheck
         var banks = new[]
         {
             SfxSynth.StepsBank, SfxSynth.LandingBank, SfxSynth.WhooshBank, SfxSynth.TickBank,
-            SfxSynth.ImpactBank, SfxSynth.ChimeBank, SfxSynth.BoomBank,
+            SfxSynth.ImpactBank, SfxSynth.ChimeBank, SfxSynth.BoomBank, SfxSynth.GunBank,
         };
         bad += Save(System.IO.Path.Combine(outDir, "tyre_squeal.wav"), Decode(SfxSynth.Squeal));
         foreach (var bank in banks)

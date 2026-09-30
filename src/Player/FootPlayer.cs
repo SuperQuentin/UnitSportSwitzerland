@@ -319,6 +319,8 @@ public partial class FootPlayer : CharacterBody3D
     public void DebugLaunch(Vector3 position, Vector3 velocity)
     {
         GlobalPosition = position;
+        // placed by hand, so it need not wait for terrain under it (a probe over no terrain at all)
+        _placed = true;
         _flight.Velocity = velocity;
         Velocity = velocity;
         // pointed where it is going: a dive is a dive, not level flight with a sink rate
@@ -1029,6 +1031,22 @@ public partial class FootPlayer : CharacterBody3D
         Hurt?.Invoke(amount);
         PlayerInput.Rumble(0.6f, Mathf.Clamp(amount / 40f, 0.2f, 1f), 0.25f);
         if (Health <= 0f) Die();
+    }
+
+    /// <summary>
+    /// A round from a gun (<see cref="Combat.CombatManager"/>). A vehicle takes it for its
+    /// occupant, and going to zero wrecks it with them inside; on foot or on equipment it is the
+    /// player who is hit.
+    /// </summary>
+    public void ShotHit(float damage)
+    {
+        if (_ride is { IsVehicle: true })
+        {
+            VehicleHealth -= damage;
+            if (VehicleHealth <= 0f) WreckVehicle();
+            return;
+        }
+        TakeDamage(damage);
     }
 
     /// <summary>Restores health (food, water). Returns false when there was nothing to restore.</summary>
