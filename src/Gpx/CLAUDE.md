@@ -94,6 +94,18 @@ Ghost racing, road matching, the cinema director, lens, zoom bubble, sightline c
   would remove the only way back).
   `--gpx <path>` may be repeated to start a race from the command line.
 
+- **Absolute Racing** (`CameraMode.Racing`, after Cinema in the C cycle; `--racingmode`; #22): the
+  Absolute Cinema director (`Director.ForRacing()`) over a car shot set in `Cinema/RacingShots.cs` —
+  bumper cam with a dutch tilt that follows the slide (`ShotContext.Place(..., roll)`), side tracking at
+  wheel height on the outside of the bend, front reverse framing the chaser, a crane over hairpins, a
+  trackside sweep the car passes close to, a duel chase behind the rear car framing both, a wheel cam,
+  and a racing chase as the fallback (last in the array). Cuts of 2-5 s. `ShotContext.Rival` is the
+  nearest other runner, set by the camera each frame; `Nose`/`Slip` are the body vs the travel — for a
+  recorded car the body turns to the recorded yaw (`<us:yaw>`), so a drift reads as a drift. `CanSee`
+  ignores tree trunks (layer 2): the sightline cut dissolves them, so a forest must not veto a vantage.
+  A recorded race from `--drivecheck --record` exported with `--racingmode --path 0 --export ...` is
+  the way to film one.
+
 ## Commands
 
 - Replay verification flags (all alongside `--gpx <track>`): `--snap` road matching, `--cinemamode`

@@ -233,4 +233,18 @@ On foot, mounts, bike, skis, flight, feel layer, tricks, Game/Sim profile. Input
   (`<type>car:N</type>`, `Runner.KeepOutside` keeps every cinema lens out of the body) — that is how a race
   is shown in Absolute Cinema. Traps found: the brake at a standstill selects REVERSE (the grid held the
   brake and reversed off the line — hold the handbrake); a reversing car has 180° of slip and is not a slide.
+- **AutoPilot and RaceRoute** (`Player/AutoPilot.cs`, `Player/RaceRoute.cs`): the scripted racing driver
+  and its road, shared by `--drivecheck` (all cars in one scene) and multiplayer races (`--raceauto`,
+  see `src/World/CLAUDE.md`). `RaceRoute.BuildAsync` walks the main road from a point over the `.road`
+  tiles (bridging RoadGen's trimmed junctions within 18 m), `FromPoints` rebuilds one a server sent.
+  `AutoPilot.Drive(dt, go, others)` plugs into `FootPlayer.RideControls`; `others` are the other cars
+  (position, speed, wreck?) for racecraft.
+- **Tyre wear, brake wear and fade** (Settings -> Feel, off by default; `--tyrewear on`,
+  `--brakewear on`; #20). Tyres wear per axle with sliding work (side force x slip speed + wheelspin,
+  ~25 MJ per axle) and lose up to 30% of peak grip when finished — a drift burns the rears, grip driving
+  barely scrubs. Discs heat with braking power (capacity 9 J/K per kg of car), cool faster with airflow,
+  fade past 450 C (braking down to 40% at worst), and pads wear with the energy put through them. The
+  car HUD shows tyres % and disc temperature. `--driftcheck` checks both: 30 s of drift wears the rears
+  6%, fronts 1.6%; 15 stops 150->50 km/h take an AE86's discs to ~570 C (braking at 65%), a minute of
+  cruising cools them to ~110 C.
 
