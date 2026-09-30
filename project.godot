@@ -80,3 +80,11 @@ world_lights={
 "type": "float",
 "value": 0.0
 }
+portal_clip_eye={
+"type": "vec3",
+"value": Vector3(0, 1e+09, 0)
+}
+portal_clip_plane={
+"type": "vec4",
+"value": Vector4(0, 1, 0, 0)
+}

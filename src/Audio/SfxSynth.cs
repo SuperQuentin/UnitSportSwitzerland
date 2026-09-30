@@ -272,4 +272,64 @@ public static class SfxSynth
         }
         return s;
     });
+
+    /// <summary>A door opening: the latch clacks, then the hinge creaks as it swings.</summary>
+    public static SfxBank DoorOpenBank => _doorOpenBank ??= SfxBank.Build("door_open", 6, 0.9f, 51, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.15f;
+        float f0 = 330f * J(), f1 = 520f * J(), start = 0.09f * J(), length = 0.55f * J();
+        var click = BandPass(Noise(rng, n), 0.15f, 0.6f);
+        var rasp = Noise(rng, n);
+        var s = new float[n];
+        float phase = 0;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            // the latch: two quick metal ticks
+            s[i] = click[i] * 2.5f * (Mathf.Exp(-120f * t) + 0.6f * (t > 0.035f ? Mathf.Exp(-140f * (t - 0.035f)) : 0f));
+            // the hinge: a stick-slip tone wandering up in pitch, rough at the edges
+            float u = (t - start) / length;
+            if (u > 0 && u < 1)
+            {
+                float f = Mathf.Lerp(f0, f1, u) * (1f + 0.04f * Mathf.Sin(Mathf.Tau * 23f * t));
+                phase += Mathf.Tau * f / Rate;
+                float env = Mathf.Sin(Mathf.Pi * u) * 0.35f;
+                float saw = 2f * (phase / Mathf.Tau - Mathf.Floor(phase / Mathf.Tau + 0.5f));
+                s[i] += (saw * 0.6f + rasp[i] * 0.4f) * env * (0.7f + 0.3f * Mathf.Sin(Mathf.Tau * 41f * t));
+            }
+        }
+        return LowPass(s, 0.45f);
+    });
+
+    /// <summary>A door shutting: a wooden thud and the latch catching.</summary>
+    public static SfxBank DoorCloseBank => _doorCloseBank ??= SfxBank.Build("door_close", 6, 0.5f, 52, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        float f = 72f * J(), d = 18f * J(), latch = 0.05f * J();
+        var body = LowPass(Noise(rng, n), 0.08f);
+        var click = BandPass(Noise(rng, n), 0.2f, 0.7f);
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            s[i] = Mathf.Sin(Mathf.Tau * f * t) * Mathf.Exp(-d * t) * 0.9f + body[i] * 4f * Mathf.Exp(-30f * t);
+            if (t > latch) s[i] += click[i] * 1.6f * Mathf.Exp(-150f * (t - latch));
+        }
+        return s;
+    });
+
+    /// <summary>
+    /// The street heard through a wall or a doorway: a low rumble of distant traffic and wind,
+    /// looping. Filtered further by whoever plays it, according to how open the way out is.
+    /// </summary>
+    public static AudioStreamWav Street => _street ??= Loop(3.0f, 53, (rng, n) =>
+    {
+        var s = BandPass(Noise(rng, n), 0.004f, 0.08f);
+        var swell = LowPass(Noise(rng, n), 0.0008f);
+        for (int i = 0; i < n; i++) s[i] *= 3f * (0.6f + swell[i] * 30f);
+        return s;
+    });
+
+    private static SfxBank? _doorOpenBank, _doorCloseBank;
+    private static AudioStreamWav? _street;
 }

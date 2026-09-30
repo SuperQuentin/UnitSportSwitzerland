@@ -8,6 +8,7 @@ global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
+#include "res://shaders/portal_clip.gdshaderinc"
 
 // Occasion props (src/Occasions/OccasionDecor): jack-o'-lanterns, treat bowls, pumpkins, lights,
 // town trees. Same PS1 treatment as the trees — vertex snap, stepped sun, dither, fog — plus a
@@ -43,6 +44,9 @@ void vertex() {
 }
 
 void fragment() {
+    if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
+        discard;
+    }
     vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     float light = floor(ndl * 4.0) / 4.0 * 0.5 + 0.5;

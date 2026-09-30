@@ -15,11 +15,13 @@ namespace UnitSport.Interiors;
 /// a door and a plan, and every plan is run through <see cref="InteriorValidator"/> — rooms
 /// reachable, doorways cut both sides, stairs between all floors, furniture clear of doors.
 /// Floor plans of a few of each kind are written as SVG to <c>user://interior_plans</c>.
-/// <b>Live</b>: a player walks up to a real house door, presses E, must end up standing on the
-/// interior's ground floor; the stair ramp must be there to stand on; E at the front door must
-/// put them back on the street by the door. Then, if a church stands nearby: in by its tower
-/// door, into the one church interior; up every flight to the bell chamber; out by the nave's
-/// door and back in by it, into the same interior. Non-zero exit on any failure.
+/// <b>Live</b>: a player walks up to a real house door, presses E to open it, and walks through
+/// it: they must end up standing on the interior's ground floor; the stair ramp must be there to
+/// stand on; walking back out through the front door (opening it again if it shut meanwhile)
+/// must put them on the street by it; walked away from, the door must shut by itself. Then, if a
+/// church stands nearby: in through its tower door, into the one church interior; up every flight
+/// to the bell chamber; out through the nave's door and back in through it, into the same
+/// interior. Non-zero exit on any failure.
 /// </para>
 /// </summary>
 public partial class InteriorProbe : Node
@@ -39,6 +41,11 @@ public partial class InteriorProbe : Node
     private string _churchKey = "";
     private DoorIndex.Entry _churchIn, _churchOut;
     private bool _viewed;
+
+    /// <summary>Connected to a server: the probe drives this client's own networked player.</summary>
+    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
+        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private long Me => Online ? Multiplayer.GetUniqueId() : 1;
 
     public InteriorProbe(ChunkManager chunks, WorldOrigin origin, IChunkSource source, string? shot)
     {
@@ -183,38 +190,53 @@ public partial class InteriorProbe : Node
                 if (_player == null)
                 {
                     if (!_chunks.TryGetHeight(at, out float g)) return;
-                    _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
-                    AddChild(_player);
-                    _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
-                    interiors.LocalPlayer = () => _player;
+                    if (Online)
+                    {
+                        // the player the server spawned for us: its position is what the server checks
+                        _player = GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
+                            .FirstOrDefault(p => p.IsMultiplayerAuthority());
+                        if (_player == null) return;
+                        _player.Camera.Current = true;
+                        _player.LeaveInterior(new Vector3(at.X, g + 1f, at.Z), 0);
+                        GD.Print($"[interior] online as peer {Me}");
+                    }
+                    else
+                    {
+                        _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+                        AddChild(_player);
+                        _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
+                    }
+                    var probePlayer = _player;
+                    interiors.LocalPlayer = () => probePlayer;
                     return;
                 }
                 if (!_player.IsOnFloor()) return;
                 var door = DoorIndex.Nearest(_player.GlobalPosition, 400f);
                 if (door == null) return;
                 _door = door.Value;
-                var stand = _door.World + _door.Outward * 0.8f + Vector3.Up * 0.3f;
-                _player.GlobalPosition = stand;
-                _player.Velocity = Vector3.Zero;
+                StandOutside(_door);
                 GD.Print($"[interior] door of {_door.Key} at {_door.World:F1}");
                 Next();
                 break;
             }
             case 1:
                 if (_t < 1.0 || !_player!.IsOnFloor()) { if (_t > 20) { Check(false, "stood at the door"); Finish(); } return; }
-                Check(_player.TryInteract(), "E at the door is taken as entering");
+                Check(!interiors.IsOpen(_door.Key.ToString()), "the door starts shut");
                 Next();
                 break;
 
             case 2:
-                if (!_player!.Indoors && _t < 15) return;
-                Check(_player.Indoors, "player is inside");
-                if (!_player.Indoors) { Finish(); return; }
+            {
+                if (WalkThrough(interiors, _door.Key.ToString(), inward: true, delta, "_door_open") is not { } done) return;
+                if (!done) { Finish(); return; }
                 Next();
                 break;
+            }
 
             case 3:
                 if (_t < 1.5) return;
+                // online the server says so: a round trip after the step over the sill
+                Check(interiors.SpaceOf(Me) == interiors.Current?.Key, "the player's space is the building walked into");
                 Check(_player!.GlobalPosition.Y < InteriorManager.InteriorBaseY + 5f && _player.GlobalPosition.Y > InteriorManager.InteriorBaseY - 1f,
                     $"standing on the ground floor (y {_player.GlobalPosition.Y:F1})");
                 Check(_player.IsOnFloor(), "on a floor, not falling");
@@ -240,6 +262,12 @@ public partial class InteriorProbe : Node
                 var li = interiors.Current!;
                 var ni = interiors.CurrentNode!;
                 _lootIndex = li.Furniture.FindIndex(f => f.Floor == 0 && Loot.LootTables.IsLootable(f.Type));
+                if (Online)
+                {
+                    GD.Print("[interior] (online: loot not tested here)");
+                    _step = 7;
+                    return;
+                }
                 if (_lootIndex < 0 || Loot.LootService.Instance == null)
                 {
                     GD.Print("[interior] (no lootable furniture on the ground floor: loot not tested)");
@@ -311,37 +339,49 @@ public partial class InteriorProbe : Node
             }
 
             case 7:
-            {
-                // back to the door we came in by, and out
-                var l = interiors.Current!;
-                var node = interiors.CurrentNode!;
-                var way = l.EntranceFor(_door.Key.ToString());
-                _player.GlobalPosition = node.GlobalTransform * new Vector3(way.X + way.InX * 0.9f, 0.1f, way.Z + way.InZ * 0.9f);
-                _player.Velocity = Vector3.Zero;
+                // back to the door we came in by, facing out
+                StandInside(interiors, _door.Key.ToString());
                 _step = 8;
                 _t = 0;
                 break;
-            }
 
             case 8:
+            {
                 if (_t < 0.5) return;
-                Check(_player!.TryInteract(), "E at the front door is taken");
+                if (WalkThrough(interiors, _door.Key.ToString(), inward: false, delta, "_door_inside") is not { } done) return;
+                if (!done) { Finish(); return; }
                 Next();
                 break;
+            }
 
             case 9:
-                if (_t < 2.5) return;
-                Check(!_player!.Indoors, "player is outside again");
-                var d = _player.GlobalPosition - _door.World;
+            {
+                if (_t < 1.0) return;
+                var d = _player!.GlobalPosition - _door.World;
                 Check(new Vector2(d.X, d.Z).Length() < 3f && Mathf.Abs(d.Y) < 2f,
                     $"back by the same door ({new Vector2(d.X, d.Z).Length():F1} m, dy {d.Y:F1})");
                 Check(_player.IsOnFloor(), "standing on the street");
+                Check(interiors.SpaceOf(Me) == "", "the player's space is outside again");
+                // walk away: nobody near it, the door shuts by itself
+                var away = _door.World + _door.Outward * 25f;
+                if (_chunks.TryGetHeight(away, out float g)) away.Y = g + 1f;
+                _player.LeaveInterior(away, 0);
+                Next();
+                break;
+            }
+
+            case 10:
+            {
+                bool open = interiors.IsOpen(_door.Key.ToString());
+                if (open && _t < 12) return;
+                Check(!open, $"the door shut by itself with nobody near ({_t:F1} s)");
                 if (_church == null) { GD.Print("[interior] (no church nearby: churches not tested live)"); Finish(); }
                 else Next();
                 break;
+            }
 
             // ---- a church: every door into one interior, and up the tower ------------------------
-            case 10:
+            case 11:
             {
                 // the tower's door if it has one, so the way in and the way out differ
                 var doors = _church!.Members
@@ -369,27 +409,27 @@ public partial class InteriorProbe : Node
                     GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_church_outside.png"));
                     _viewed = true;
                 }
-                _player!.GlobalPosition = _churchIn.World + _churchIn.Outward * 0.8f + Vector3.Up * 0.3f;
-                _player.Velocity = Vector3.Zero;
+                StandOutside(_churchIn);
                 Next();
                 break;
             }
 
-            case 11:
-                if (_t < 1.0 || !_player!.IsOnFloor()) { if (_t > 20) { Check(false, "stood at the church door"); Finish(); } return; }
-                Check(_player.TryInteract(), $"E at the church door {_churchIn.Key} is taken");
-                Next();
-                break;
-
             case 12:
             {
-                if (!_player!.Indoors && _t < 15) return;
-                if (!_player.Indoors) { Check(false, "inside the church"); Finish(); return; }
+                if (_t < 1.0) return;
+                if (WalkThrough(interiors, _churchIn.Key.ToString(), inward: true, delta, "_church_door") is not { } done) return;
+                if (!done) { Finish(); return; }
+                Next();
+                break;
+            }
+
+            case 13:
+            {
                 if (_t < 1.5) return;
                 var l = interiors.Current!;
                 Check(l.Type == BuildingType.Church && l.Key == _churchKey, $"one church interior, {l.Key} ({l.Type})");
-                Check(interiors.SpaceOf(1) == _churchKey, "the player's space is the church, not the door's building");
-                Check(_player.IsOnFloor() && _player.GlobalPosition.Y < InteriorManager.InteriorBaseY + 2f, "standing on the church floor");
+                Check(interiors.SpaceOf(Me) == _churchKey, "the player's space is the church, not the door's building");
+                Check(_player!.IsOnFloor() && _player.GlobalPosition.Y < InteriorManager.InteriorBaseY + 2f, "standing on the church floor");
                 if (_shot != null) GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_church.png"));
                 for (int f = 0; f < l.Floors.Count; f++) StairRay(interiors, f);
                 if (l.Floors[0].Flight is { } flight)
@@ -406,7 +446,7 @@ public partial class InteriorProbe : Node
                 break;
             }
 
-            case 13:
+            case 14:
             {
                 var l = interiors.Current!;
                 if (l.Floors[0].Flight != null)
@@ -433,7 +473,7 @@ public partial class InteriorProbe : Node
                 break;
             }
 
-            case 14:
+            case 15:
             {
                 // the camera eases after a teleport this tall: give it time before the shot
                 if (_t < 3.0) return;
@@ -447,44 +487,108 @@ public partial class InteriorProbe : Node
                     if (_shot != null) GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_belfry.png"));
                 }
                 // down to the other door and out through it
-                var way = l.EntranceFor(_churchOut.Key.ToString());
-                _player!.GlobalPosition = node.GlobalTransform * new Vector3(way.X + way.InX * 0.9f, 0.1f, way.Z + way.InZ * 0.9f);
-                _player.Velocity = Vector3.Zero;
+                StandInside(interiors, _churchOut.Key.ToString());
                 Next();
                 break;
             }
 
-            case 15:
-                if (_t < 0.8) return;
-                Check(_player!.TryInteract(), "E at the nave door is taken");
-                Next();
-                break;
-
             case 16:
             {
-                if (_t < 2.5) return;
-                Check(!_player!.Indoors, "out of the church");
-                var off = _player.GlobalPosition - _churchOut.World;
+                if (_t < 0.8) return;
+                if (WalkThrough(interiors, _churchOut.Key.ToString(), inward: false, delta, null) is not { } done) return;
+                if (!done) { Finish(); return; }
+                var off = _player!.GlobalPosition - _churchOut.World;
                 Check(new Vector2(off.X, off.Z).Length() < 3f && Mathf.Abs(off.Y) < 2f,
                     $"out by the door used, {_churchOut.Key} ({new Vector2(off.X, off.Z).Length():F1} m)");
-                _player.GlobalPosition = _churchOut.World + _churchOut.Outward * 0.8f + Vector3.Up * 0.3f;
-                _player.Velocity = Vector3.Zero;
+                StandOutside(_churchOut);
                 Next();
                 break;
             }
 
             case 17:
+            {
                 if (_t < 1.0) return;
-                Check(_player!.TryInteract(), "E at the nave door from outside is taken");
-                Next();
-                break;
-
-            case 18:
-                if (!_player!.Indoors && _t < 15) return;
-                Check(_player.Indoors && interiors.Current?.Key == _churchKey, "the nave door leads into the same church");
+                if (WalkThrough(interiors, _churchOut.Key.ToString(), inward: true, delta, null) is not { } done) return;
+                Check(done && interiors.Current?.Key == _churchKey, "the nave door leads into the same church");
                 Finish();
                 break;
+            }
         }
+    }
+
+    /// <summary>Puts the player on the street 1.2 m out from a door, facing it.</summary>
+    private void StandOutside(DoorIndex.Entry d)
+    {
+        var face = -d.Outward;
+        _player!.LeaveInterior(d.World + d.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-face.X, -face.Z));
+        _player.Velocity = Vector3.Zero;
+    }
+
+    /// <summary>Puts the player inside, 1.3 m in from a door of the current interior, facing out through it.</summary>
+    private void StandInside(InteriorManager interiors, string door)
+    {
+        var l = interiors.Current!;
+        var node = interiors.CurrentNode!;
+        var way = l.EntranceFor(door);
+        var at = node.GlobalTransform * new Vector3(way.X + way.InX * 1.3f, 0.1f, way.Z + way.InZ * 1.3f);
+        var face = node.GlobalTransform.Basis * new Vector3(-way.InX, 0, -way.InZ);
+        _player!.EnterInterior(l.Key, at, Mathf.Atan2(-face.X, -face.Z));
+        _player.Velocity = Vector3.Zero;
+    }
+
+    private int _walk, _frame;
+    private double _crossedAt = -1;
+    private double _walkT;
+
+    /// <summary>
+    /// Walks the player, standing at a door and facing it, through it: E opens it if it is shut,
+    /// the leaf must swing open, then forward until they are on the other side. Null while under
+    /// way, then whether it worked. <paramref name="shot"/> names a screenshot of the open doorway.
+    /// </summary>
+    private bool? WalkThrough(InteriorManager interiors, string door, bool inward, double delta, string? shot)
+    {
+        _walkT += delta;
+        switch (_walk)
+        {
+            case 0:
+                if (!interiors.IsOpen(door)) Check(_player!.TryInteract(), $"E at the door {door} opens it");
+                _walk = 1;
+                _walkT = 0;
+                return null;
+            case 1:
+                if (!(interiors.Links.TryGetValue(door, out var link) && link.Passable))
+                {
+                    if (_walkT < 12) return null;
+                    Check(false, $"the door {door} swings open");
+                    _walk = 0;
+                    return false;
+                }
+                if (link.Swing < 1f || _walkT < 1.2) return null; // the portal picture settles
+                Check(true, $"the door {door} swung open ({_walkT:F1} s)");
+                if (_shot != null && shot != null)
+                {
+                    Check(interiors.Portals?.Active == link, "the doorway shows the other side");
+                    GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", shot + ".png"));
+                }
+                Input.ActionPress(PlayerInput.MoveForward);
+                _walk = 2;
+                _walkT = 0;
+                return null;
+            case 2:
+                // --film: every frame of the way through, to see the step over the sill
+                if (_shot != null && shot != null && _frame < 400 && Array.IndexOf(OS.GetCmdlineUserArgs(), "--film") >= 0)
+                    GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", $"{shot}_f{_frame++:000}.png"));
+                if (_player!.Indoors != inward && _walkT < 6) return null;
+                // a step past the sill, then stop
+                if (_crossedAt < 0) _crossedAt = _walkT;
+                if (_walkT - _crossedAt < 0.4) return null;
+                Input.ActionRelease(PlayerInput.MoveForward);
+                _walk = 0;
+                _crossedAt = -1;
+                Check(_player.Indoors == inward, inward ? $"walked in through {door}" : $"walked out through {door}");
+                return _player.Indoors == inward;
+        }
+        return null;
     }
 
     /// <summary>

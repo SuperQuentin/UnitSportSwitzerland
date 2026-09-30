@@ -20,7 +20,7 @@ public partial class SpectatorCamera : Camera3D
     {
         Near = 1f;
         Far = Core.GameSettings.Current.CameraFar;
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+        Core.MouseCapture.Capture();
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -42,7 +42,7 @@ public partial class SpectatorCamera : Camera3D
                 else if (button.ButtonIndex == MouseButton.WheelDown)
                     Speed = Mathf.Max(Speed / 1.25f, 2f);
                 else if (Input.MouseMode == Input.MouseModeEnum.Visible)
-                    Input.MouseMode = Input.MouseModeEnum.Captured;
+                    Core.MouseCapture.Capture();
                 break;
 
         }
