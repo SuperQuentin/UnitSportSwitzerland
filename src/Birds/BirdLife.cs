@@ -327,8 +327,21 @@ public partial class BirdLife : Node3D
     /// <summary>Called by the item controller with a shell already spent.</summary>
     private void Fire(FootPlayer player)
     {
+        // The shot leaves the EYE. In third person the camera is ~3 m behind and to the side: the
+        // camera's ray finds what the crosshair is on, then the barrel aims from the eye at that point.
         var cam = player.Camera;
-        var aim = -cam.GlobalTransform.Basis.Z;
+        var eye = player.EyePosition;
+        var look = -cam.GlobalTransform.Basis.Z;
+        var aim = look;
+        if (!player.IsFirstPerson && !player.ScopeView)
+        {
+            var start = cam.GlobalPosition + look * Mathf.Max(0f, (eye - cam.GlobalPosition).Dot(look));
+            var end = start + look * (Range + 10f);
+            var ray = GetWorld3D().DirectSpaceState.IntersectRay(
+                PhysicsRayQueryParameters3D.Create(start, end, uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() }));
+            var point = ray.Count > 0 ? ray["position"].AsVector3() : end;
+            if (point.DistanceTo(eye) > 1f) aim = (point - eye).Normalized();
+        }
         // the blast is an item event: heard (in 3D, at the muzzle) and seen by everyone near,
         // this player included. Without the event node (a probe world) it stays a local sound.
         if (ItemEvents.Instance is { } events)
@@ -342,8 +355,9 @@ public partial class BirdLife : Node3D
             _gun.Play();
         }
 
-        var hit = Shoot(cam.GlobalPosition, aim, player);
-        if (hit == null) return;
+        var bird = Shoot(eye, aim, player);
+        if (bird == null) return;
+        var hit = bird;
 
         var s = hit.Species;
         int points = Journal.Bag(s, Month);

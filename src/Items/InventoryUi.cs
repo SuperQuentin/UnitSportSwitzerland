@@ -61,7 +61,7 @@ public partial class InventoryUi : CanvasLayer
     private ColorRect _flash = null!;
     private ColorRect _binoculars = null!;
     private ViewfinderView _viewfinder = null!;
-    private Label _crosshair = null!;
+    private Control _crosshair = null!;
     private Label _cashHud = null!;
 
     private Control _panel = null!;
@@ -160,13 +160,8 @@ public partial class InventoryUi : CanvasLayer
         _viewfinder.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_viewfinder);
 
-        // the shotgun's bead: a plain centred cross
-        _crosshair = new Label
-        {
-            Text = "+", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
-            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-        };
-        _crosshair.AddThemeFontSizeOverride("font_size", 28);
+        // the shotgun's bead: a small open ring at the screen centre, where the front bead sits
+        _crosshair = new BeadReticle { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _crosshair.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_crosshair);
 
@@ -1031,6 +1026,22 @@ public partial class WheelView : Control
 /// A camera's viewfinder: thirds grid, corner brackets, focal length readout with a zoom scale,
 /// an autofocus brace that hunts after every zoom change, and shots / time / battery at the corners.
 /// </summary>
+/// <summary>The shotgun's aiming dot: a thin dark-edged ring around the centre, small enough to leave the front bead visible.</summary>
+public partial class BeadReticle : Control
+{
+    public override void _Draw()
+    {
+        var c = Size / 2f;
+        DrawArc(c, 5.5f, 0f, Mathf.Tau, 28, new Color(0, 0, 0, 0.55f), 3.5f, true);
+        DrawArc(c, 5.5f, 0f, Mathf.Tau, 28, new Color(1f, 0.92f, 0.6f, 0.95f), 1.6f, true);
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationResized) QueueRedraw();
+    }
+}
+
 public partial class ViewfinderView : Control
 {
     public const float Min = 24f, Max = 200f;

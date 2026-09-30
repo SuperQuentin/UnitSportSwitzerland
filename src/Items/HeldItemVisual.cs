@@ -37,6 +37,10 @@ public partial class HeldItemVisual : Node3D
     private readonly FootPlayer _player;
     private MeshInstance3D _inHand = null!;
     private MeshInstance3D? _viewmodel;
+    private MeshInstance3D _handFore = null!;   // the shotgun's slide handle on the figure ...
+    private MeshInstance3D? _viewFore;          // ... and on the viewmodel
+    private float _pumpT;                       // seconds into the pump; negative while it waits out its delay
+    private bool _pumping;
     private ItemId _shown = ItemId.None;
     private string? _shownData;
 
@@ -103,7 +107,7 @@ public partial class HeldItemVisual : Node3D
         return pose switch
         {
             // shotgun shouldered: the barrel line (y +0.025 above the grip) sits on the screen centre line
-            ViewPose.Aim when use == ItemUse.Shoot => (new Vector3(0f, -0.045f, -0.46f), Vector3.Zero),
+            ViewPose.Aim when use == ItemUse.Shoot => (new Vector3(0.0f, -0.105f, -0.42f), new Vector3(0.085f, 0f, 0f)),
             ViewPose.Aim => (new Vector3(0.05f, -0.16f, -0.50f), new Vector3(0, 0.05f, 0)),
             // camera raised in front of the eye, slightly below centre; binoculars right at the eyes
             ViewPose.Eye when use == ItemUse.Optic => (new Vector3(0f, -0.03f, -0.20f), Vector3.Zero),
@@ -153,6 +157,17 @@ public partial class HeldItemVisual : Node3D
         if (_print != null && IsInstanceValid(_print)) _print.QueueFree();
         _print = null;
     }
+    /// <summary>Seconds a shot takes to cycle: the pump starts this long after the shot (see <see cref="Pump"/>) and lasts <see cref="PumpTime"/>.</summary>
+    public const float PumpDelay = 0.35f, PumpTime = 0.30f;
+
+    /// <summary>How far the slide handle travels back toward the shooter, m.</summary>
+    private const float PumpTravel = 0.11f;
+
+    /// <summary>Cycles the action: after <paramref name="delay"/> seconds the fore-end slides back and forward again.</summary>
+    public void Pump(float delay = PumpDelay) { _pumpT = -Mathf.Max(0f, delay); _pumping = true; }
+
+    /// <summary>The felt recoil of a shot, 0..1: a hard up-and-back jolt with a little roll, settling in ~0.25 s (viewmodel only).</summary>
+    public float Recoil { get; set; }
 
     /// <summary>A short push toward the camera, 0..1 — the recoil of a shutter or a bite.</summary>
     public float Kick { get; set; }
@@ -171,7 +186,18 @@ public partial class HeldItemVisual : Node3D
             Visible = false,
         };
         AddChild(_inHand);
+        _handFore = NewForeEnd();
+        _inHand.AddChild(_handFore);
     }
+
+    private static MeshInstance3D NewForeEnd() => new()
+    {
+        Name = "ForeEnd",
+        Mesh = ItemDefs.ShotgunForeEnd(),
+        MaterialOverride = ItemDefs.Material,
+        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        Visible = false,
+    };
 
     public override void _Process(double delta)
     {
@@ -200,6 +226,23 @@ public partial class HeldItemVisual : Node3D
             }
         }
         bool any = id != ItemId.None && onFoot && !Suppressed;
+
+        // the slide handle: back and forth along the barrel (mesh -Z is forward, so back is +Z)
+        float slide = 0f;
+        if (_pumping)
+        {
+            _pumpT += dt;
+            if (_pumpT >= PumpTime) _pumping = false;
+        }
+        if (_pumping && _pumpT >= 0f) slide = Mathf.Sin(Mathf.Clamp(_pumpT / PumpTime, 0f, 1f) * Mathf.Pi);
+        bool gun = id == ItemId.Shotgun;
+        _handFore.Visible = gun;
+        _handFore.Position = new Vector3(0, 0, slide * PumpTravel);
+        if (_viewFore != null && IsInstanceValid(_viewFore))
+        {
+            _viewFore.Visible = gun;
+            _viewFore.Position = new Vector3(0, 0, slide * PumpTravel);
+        }
 
         // --- on the figure ---
         if (_player.HandLocal is { } hand && any)
@@ -267,8 +310,10 @@ public partial class HeldItemVisual : Node3D
         // less sway once the item is raised to a pose
         float swayScale = _pose == ViewPose.Rest ? 1f : 0.25f;
         _viewmodel.Scale = Vector3.One * ViewScale;
-        _viewmodel.Position = (pos + _sway * swayScale + new Vector3(0, -lowered, Kick * 0.06f)) * ViewScale;
-        _viewmodel.Rotation = rot + new Vector3(Kick * 0.3f, 0, 0);
+        Recoil = Mathf.MoveToward(Recoil, 0f, dt * 4.5f);
+        float rc = Recoil * Recoil;   // squared: a sharp hit that tails off
+        _viewmodel.Position = (pos + _sway * swayScale + new Vector3(rc * 0.012f, -lowered + rc * 0.03f, Kick * 0.06f + rc * 0.13f)) * ViewScale;
+        _viewmodel.Rotation = rot + new Vector3(Kick * 0.3f + rc * 0.22f, rc * 0.03f, rc * 0.07f);
 
         if (_print != null && IsInstanceValid(_print))
         {
@@ -295,6 +340,8 @@ public partial class HeldItemVisual : Node3D
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
         camera.AddChild(_viewmodel);
+        _viewFore = NewForeEnd();
+        _viewmodel.AddChild(_viewFore);
         _lastCamera = camera.GlobalTransform.Basis;
     }
 

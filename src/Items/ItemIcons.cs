@@ -425,6 +425,13 @@ public static class ItemIcons
             ".....kkkkkk.....",
         };
         d[ItemId.MineralWater] = Map(d[ItemId.WaterBottle], "cCbBw", "CwcbC");
+        {
+            // the binoculars in slate, with a small cyan screen on the bridge
+            var smart = Map(d[ItemId.Binoculars], "eE", "Gd");
+            smart[8] = ".kGGGdCcCCdGGdk.";
+            d[ItemId.SmartBinoculars] = smart;
+        }
+
         d[ItemId.MineralWater][7] = "....kCeeeeCk....";
 
         d[ItemId.Bread] = new[]

@@ -11,11 +11,13 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `viewmodel-poses` — ViewPose enum, SetPose/PlayOneShot, aim poses, clipping via half-scale viewmodel
 - `cursor-inventory` — The panel works like Minecraft's: a carried stack on the cursor, click/right-click/shift/double-click/drag...
 - `pixel-icons` — 16x16 item icons: grids + palette, generic fallback, held card, --iconsheet
+- `shotgun-feel` — Shotgun ADS pose + bead reticle, recoil/camera punch, pump fore-end + sound, rate limit, eye-origin shots, remote jolt
 - `camera-zoom` — Camera focal-length zoom (wheel while aiming), LookScale, viewfinder readout + autofocus hunt, --zoom
 - `cash-account` — Money is a counter, not an item: `Inventory.Cash`, lost when knocked out, claimed to the server-kept account...
 - `polaroid` — Camera prints photos: ItemId.Photo + ItemStack.Data, develop animation, album, sticking, PhotoTransfer image sharing, --photocheck
 - `item-net-events` — ItemEvents.Send (shot, photo flash relayed to others) and PlacedObjects (server-kept, saved flags/photos, kind factories)
+- `smart-binoculars` — Optic item: pick a target item, see the loot chance (%) on buildings in view (LootTables.Chance)
 
 ## Commands
 
-- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck
+- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh

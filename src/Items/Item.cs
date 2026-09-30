@@ -69,6 +69,8 @@ public enum ItemId
     // ---- the Polaroid camera (docs/notes/items/polaroid.md) ----
     /// <summary>A printed photo; which one is <see cref="ItemStack.Data"/> (the photo id).</summary>
     Photo = 50,
+    // ---- optics (src/Items/SmartBinocularsHud) ----
+    SmartBinoculars = 51,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -121,6 +123,8 @@ public static class ItemDefs
     {
         new(ItemId.Binoculars, "Binoculars", "Hold {aim_item} to look through them. 8x.",
             ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN"),
+        new(ItemId.SmartBinoculars, "Smart binoculars", "Hold {aim_item} to look through them. {use_item} picks a target item: buildings in view show the chance it drops from their containers.",
+            ItemUse.Optic, 1, new Color(0.20f, 0.42f, 0.50f), "SB", 0, ItemCategory.Gear, 250f),
         new(ItemId.Camera, "Camera", "A Polaroid. Hold {aim_item} to frame, {use_item} to take a photo: it prints, develops, and goes in your pack.",
             ItemUse.Photo, 1, new Color(0.18f, 0.18f, 0.20f), "CM"),
         new(ItemId.Gps, "GPS", "Shows your LV95 coordinates, altitude and heading while held.",
@@ -214,6 +218,17 @@ public static class ItemDefs
     // ------------------------------------------------------------------------------------
 
     private static readonly Dictionary<ItemId, ArrayMesh> HandMeshes = new();
+    private static ArrayMesh? _foreEnd;
+
+    /// <summary>The shotgun's slide handle, origin where it sits at rest (the viewmodel and the hand slide it along Z to pump).</summary>
+    public static ArrayMesh ShotgunForeEnd()
+    {
+        if (_foreEnd != null) return _foreEnd;
+        var s = new MeshScratch();
+        s.Box(new Vector3(0, -0.01f, 0.24f), new Vector3(0.04f, 0.035f, 0.26f), new Color(0.40f, 0.26f, 0.15f));
+        return _foreEnd = s.Build();
+    }
+
     private static ArrayMesh? _plantedFlag;
     private static StandardMaterial3D? _material;
 
@@ -255,6 +270,19 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0.03f, 0.0f), new Vector3(0.05f, 0.018f, 0.05f), body);
                 break;
             }
+            case ItemId.SmartBinoculars:
+            {
+                var body = new Color(0.14f, 0.20f, 0.24f);
+                var glass = new Color(0.10f, 0.12f, 0.16f);
+                foreach (float x in new[] { -0.034f, 0.034f })
+                {
+                    s.Tube(new Vector3(x, 0.02f, -0.05f), new Vector3(x, 0.02f, 0.07f), 0.024f, 0.028f, body, 8);
+                    s.Tube(new Vector3(x, 0.02f, 0.07f), new Vector3(x, 0.02f, 0.078f), 0.026f, glass, 8);
+                }
+                s.Box(new Vector3(0, 0.03f, 0.0f), new Vector3(0.05f, 0.018f, 0.05f), body);
+                s.Box(new Vector3(0, 0.043f, -0.01f), new Vector3(0.04f, 0.006f, 0.03f), new Color(0.25f, 0.95f, 1.0f));   // the small screen
+                break;
+            }
             case ItemId.Camera:
             {
                 var body = new Color(0.12f, 0.12f, 0.13f);
@@ -290,9 +318,11 @@ public static class ItemDefs
                 var steel = new Color(0.22f, 0.23f, 0.25f);
                 s.Box(new Vector3(0, -0.03f, -0.22f), new Vector3(0.04f, 0.09f, 0.34f), wood);      // stock
                 s.Box(new Vector3(0, 0.01f, 0.02f), new Vector3(0.045f, 0.06f, 0.16f), steel);     // action
-                s.Box(new Vector3(0, -0.01f, 0.24f), new Vector3(0.04f, 0.035f, 0.26f), wood);     // fore-end
+                // the fore-end is its own mesh (ShotgunForeEnd): it slides back and forth to pump
                 foreach (float x in new[] { -0.011f, 0.011f })
-                    s.Tube(new Vector3(x, 0.025f, 0.08f), new Vector3(x, 0.025f, 0.72f), 0.011f, steel, 6);
+                    s.Tube(new Vector3(x, 0.03f, 0.08f), new Vector3(x, 0.03f, 0.72f), 0.011f, steel, 6);
+                s.Box(new Vector3(0, 0.048f, 0.40f), new Vector3(0.012f, 0.006f, 0.64f), new Color(0.55f, 0.56f, 0.6f));   // rib between the barrels
+                s.Box(new Vector3(0, 0.056f, 0.70f), new Vector3(0.009f, 0.012f, 0.012f), new Color(1f, 0.85f, 0.25f));   // front bead
                 break;
             }
             default:

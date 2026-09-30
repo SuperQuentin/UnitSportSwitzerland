@@ -29,6 +29,7 @@ public partial class ItemController : Node
     private readonly Inventory _inventory;
     private readonly WorldOrigin _origin;
     private InventoryUi _ui = null!;
+    private SmartBinocularsHud _smart = null!;
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
     private bool _forceAim;
@@ -86,12 +87,17 @@ public partial class ItemController : Node
         AddChild(_ui);
         _photoUi = new PhotoUi(this) { Name = "PhotoUi" };
         AddChild(_photoUi);
+        _smart = new SmartBinocularsHud();
+        AddChild(_smart);
 
         _inventory.Changed += () => _ui.Refresh();
 
         // "--hold <item>" puts that item in the hand, for screenshotting the viewmodel
         var args = OS.GetCmdlineUserArgs();
         _forceAim = Array.IndexOf(args, "--aim") >= 0;   // and "--aim" holds Aim down
+        int gi = Array.IndexOf(args, "--give");   // "--give <item>": a dev flag, puts one in hotbar slot 1 (for screenshots)
+        if (gi >= 0 && gi + 1 < args.Length && Enum.TryParse<ItemId>(args[gi + 1], true, out var give) && !_inventory.Contains(give))
+            _inventory.Put(0, new ItemStack(give, 1));   // hotbar slot 1, so --hold finds it
         int at = Array.IndexOf(args, "--hold");
         if (at >= 0 && at + 1 < args.Length && Enum.TryParse<ItemId>(args[at + 1], true, out var hold))
             for (int i = 0; i < Inventory.HotbarSize; i++)
@@ -148,8 +154,9 @@ public partial class ItemController : Node
 
         var def = ItemDefs.Get(_inventory.HeldId);
         bool usable = UsablePlayer != null;
-        bool aiming = usable && !UiFocus.TextEntryActive
-                      && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim)
+        bool picking = _smart.PickerOpen && _inventory.HeldId == ItemId.SmartBinoculars;   // stays raised while a target is picked
+        bool aiming = usable && (!UiFocus.TextEntryActive || picking)
+                      && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim || picking)
                       && def?.Use is ItemUse.Optic or ItemUse.Photo or ItemUse.Shoot;
 
         // everything pushed onto the player is re-asserted every frame, so letting go of Aim,
@@ -179,6 +186,8 @@ public partial class ItemController : Node
 
         // the viewfinder / binocular overlay appears once the item has been raised
         _ui.Scope = aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def.Use : null;
+        _smart.Held = usable && _inventory.HeldId == ItemId.SmartBinoculars;
+        _smart.Active = _smart.Held && _ui.Scope == ItemUse.Optic;
         _ui.Readout = usable && def?.Use == ItemUse.Readout ? GpsReadout(player) : null;
     }
 
@@ -279,6 +288,11 @@ public partial class ItemController : Node
                 PlaceOrPickUpFlag(player, slot);
                 break;
 
+            case ItemUse.Optic when stack.Id == ItemId.SmartBinoculars:
+                if (_smart.Active) _smart.OpenPicker();
+                else _ui.Toast(InputHints.Format("Hold Aim ({aim_item}), then {use_item} picks the target item."));
+                break;
+
             case ItemUse.Optic:
                 _ui.Toast(InputHints.Format("Hold Aim ({aim_item}) to look through them."));
                 break;
@@ -288,6 +302,8 @@ public partial class ItemController : Node
 
             case ItemUse.Shoot:
             {
+                // the action has to be pumped before the next shell: no firing until it has cycled
+                if (Time.GetTicksMsec() < _nextShotMs) break;
                 int shells = -1;
                 for (int i = 0; i < Inventory.Size && shells < 0; i++)
                     if (_inventory[i].Id == ItemId.Shells && !_inventory[i].IsEmpty) shells = i;
@@ -298,7 +314,8 @@ public partial class ItemController : Node
                     break;
                 }
                 _inventory.TakeOne(shells);
-                Kick(player);
+                _nextShotMs = Time.GetTicksMsec() + (ulong)((HeldItemVisual.PumpDelay + HeldItemVisual.PumpTime + 0.1f) * 1000f);
+                Recoil(player);
                 Fire?.Invoke(player);
                 break;
             }
@@ -327,6 +344,20 @@ public partial class ItemController : Node
                 }
                 break;
         }
+    }
+
+    private ulong _nextShotMs;
+
+    /// <summary>A shotgun's kick: the viewmodel jolts, the view punches up a few degrees, the action cycles.</summary>
+    private static void Recoil(FootPlayer player)
+    {
+        if (player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v)
+        {
+            v.Kick = 1f;
+            v.Recoil = 1f;
+            v.Pump();
+        }
+        player.Punch(Mathf.DegToRad(4.5f));
     }
 
     private static void Kick(FootPlayer player)

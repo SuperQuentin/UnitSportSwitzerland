@@ -80,6 +80,11 @@ public partial class ClientWorld : Node3D
             GetTree().Quit(Items.IconSheet.Run());
             return;
         }
+        if (Loot.LootChanceCheck.Requested)
+        {
+            GetTree().Quit(Loot.LootChanceCheck.Run());
+            return;
+        }
         if (Items.InventoryCheck.Requested)
         {
             GetTree().Quit(Items.InventoryCheck.Run());
@@ -351,7 +356,9 @@ public partial class ClientWorld : Node3D
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null
             || Items.PlacedProbe.Role != null || Items.PhotoProbe.Requested
+            || Items.ShotgunProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
+        if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
         Items.Bank.Create(this, inventory);
@@ -365,6 +372,7 @@ public partial class ClientWorld : Node3D
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
+        if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
 
         // F1: every control, from the live bindings; bottom right: the ones that apply here

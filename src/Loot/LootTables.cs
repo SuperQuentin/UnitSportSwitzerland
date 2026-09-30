@@ -43,6 +43,7 @@ public static class LootTables
         [ItemId.Electronics] = Tier.Uncommon,
         [ItemId.BikeChain] = Tier.Rare, [ItemId.Tyre] = Tier.Rare, [ItemId.CarBattery] = Tier.Rare,
         [ItemId.FuelCan] = Tier.Rare, [ItemId.EnginePart] = Tier.VeryRare,
+        [ItemId.SmartBinoculars] = Tier.VeryRare,
     };
 
     // ---- pools ------------------------------------------------------------------------------
@@ -63,6 +64,7 @@ public static class LootTables
     private static readonly ItemId[] Gadgets = { ItemId.Electronics };
     private static readonly ItemId[] Wire = { ItemId.CopperWire };
     private static readonly ItemId[] Hardware = { ItemId.Screws, ItemId.DuctTape, ItemId.CopperWire, ItemId.Rope };
+    private static readonly ItemId[] Optics = { ItemId.SmartBinoculars };
     private static readonly ItemId[] Tins = { ItemId.CannedFood };
     private static readonly ItemId[] BarnStuff = { ItemId.Rope, ItemId.Firewood, ItemId.Apple };
 
@@ -78,10 +80,10 @@ public static class LootTables
         [FurnitureType.Fridge] = new(0.25f, 1, 3, new[] { P(Food, 60), P(Water, 40) }),
         [FurnitureType.Counter] = new(0.40f, 0, 2, new[] { P(Food, 50), P(Water, 35), P(KitchenScrap, 15) }, 0.20f, 1, 5),
         [FurnitureType.Stove] = new(0.40f, 0, 2, new[] { P(Food, 60), P(Water, 20), P(KitchenScrap, 20) }, 0.20f, 1, 5),
-        [FurnitureType.Shelf] = new(0.35f, 1, 2, new[] { P(Food, 25), P(Water, 10), P(Scrap, 35), P(Medical, 10), P(Minerals, 15), P(Parts, 5) }, 0.10f, 1, 5),
+        [FurnitureType.Shelf] = new(0.35f, 1, 2, new[] { P(Food, 25), P(Water, 10), P(Scrap, 35), P(Medical, 10), P(Minerals, 15), P(Parts, 5), P(Optics, 1) }, 0.10f, 1, 5),
         [FurnitureType.Wardrobe] = new(0.45f, 1, 1, new[] { P(Cloth, 60), P(Medical, 20), P(Scrap, 20) }, 0.25f, 5, 40),
         [FurnitureType.Nightstand] = new(0.45f, 0, 1, new[] { P(Medical, 40), P(Sweets, 30), P(Gadgets, 30) }, 0.40f, 2, 20),
-        [FurnitureType.Desk] = new(0.40f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 30), P(Scrap, 30) }, 0.35f, 5, 50),
+        [FurnitureType.Desk] = new(0.40f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 30), P(Scrap, 30), P(Optics, 1.5f) }, 0.35f, 5, 50),
         [FurnitureType.Crate] = new(0.20f, 2, 4, new[] { P(Scrap, 45), P(Minerals, 30), P(Tins, 15), P(Parts, 10) }),
         [FurnitureType.Rack] = new(0.20f, 2, 4, new[] { P(Scrap, 45), P(Minerals, 30), P(Tins, 15), P(Parts, 10) }),
         [FurnitureType.Workbench] = new(0.15f, 2, 4, new[] { P(Hardware, 50), P(Parts, 25), P(Scrap, 25) }),
@@ -151,18 +153,7 @@ public static class LootTables
         if (!Containers.TryGetValue(type, out var c)) return result;
         if (rng.NextDouble() >= (1 - c.Empty) * abundance) return result;
 
-        // weight every item this container can give, once, with the kind applied
-        var candidates = new List<(ItemId Id, float W)>();
-        foreach (var pool in c.Pools)
-        {
-            float tierSum = pool.Items.Sum(id => TierWeight(Tiers[id]));
-            foreach (var id in pool.Items)
-            {
-                var cat = ItemDefs.Get(id)!.Category;
-                float w = pool.Weight * TierWeight(Tiers[id]) / tierSum * KindFactor(kind, cat);
-                if (w > 0) candidates.Add((id, w));
-            }
-        }
+        var candidates = Candidates(kind, c);
 
         var found = new Dictionary<ItemId, int>();
         float total = candidates.Sum(x => x.W);
@@ -201,6 +192,109 @@ public static class LootTables
         foreach (var (id, count) in found)
             result.Add(new ItemStack(id, Math.Min(count, ItemDefs.Get(id)!.MaxStack)));
         return result;
+    }
+
+    /// <summary>
+    /// Every item a container can give with its weight, the kind applied (an item in two pools
+    /// appears twice). One place for <see cref="Roll"/> and <see cref="Chance"/>, so they cannot drift.
+    /// </summary>
+    private static List<(ItemId Id, float W)> Candidates(BuildingKind kind, Container c)
+    {
+        var candidates = new List<(ItemId Id, float W)>();
+        foreach (var pool in c.Pools)
+        {
+            float tierSum = pool.Items.Sum(id => TierWeight(Tiers[id]));
+            foreach (var id in pool.Items)
+            {
+                var cat = ItemDefs.Get(id)!.Category;
+                float w = pool.Weight * TierWeight(Tiers[id]) / tierSum * KindFactor(kind, cat);
+                if (w > 0) candidates.Add((id, w));
+            }
+        }
+        return candidates;
+    }
+
+    // ---- exact chances (smart binoculars) -------------------------------------------------------
+
+    /// <summary>Every item some container's pools can give, plus francs: what a target can be.</summary>
+    public static IReadOnlyList<ItemId> Targets() => _targets ??= Containers.Values
+        .SelectMany(c => c.Pools.SelectMany(p => p.Items)).Append(ItemId.Francs)
+        .Distinct().OrderBy(id => ItemDefs.Get(id)!.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    private static ItemId[]? _targets;
+
+    /// <summary>
+    /// The exact probability that one container of this type, in a building of this kind, holds at
+    /// least one of <paramref name="item"/> when restocked: a pure function of the tables, the
+    /// same arithmetic as <see cref="Roll"/> worked out instead of sampled. Never depends on a
+    /// building's actual rolled contents or on what was taken, so it reveals nothing.
+    /// <paramref name="now"/> is reserved: the occasions' treats follow the occasions running now.
+    /// </summary>
+    public static double Chance(BuildingKind kind, FurnitureType type, float abundance, ItemId item, DateTime? now = null)
+    {
+        if (item == ItemId.Francs) return ChanceFrancs(kind, type, abundance);
+        if (!Containers.TryGetValue(type, out var c)) return 0;
+
+        // everything below happens only in a container that was not empty, so work conditionally
+        double any = 0;
+        var cand = Candidates(kind, c);
+        double total = cand.Sum(x => (double)x.W);
+        double pk = total > 0 ? cand.Where(x => x.Id == item).Sum(x => (double)x.W) / total : 0;
+        if (pk > 0)
+        {
+            // each of MinRolls..MaxRolls equally likely; a fractional count rounds up with that probability
+            int span = c.MaxRolls - c.MinRolls + 1;
+            for (int r = c.MinRolls; r <= c.MaxRolls; r++)
+            {
+                float rolls = r * RollFactor(kind);
+                int lo = (int)rolls;
+                double up = rolls - lo;
+                any += ((1 - up) * (1 - Math.Pow(1 - pk, lo)) + up * (1 - Math.Pow(1 - pk, lo + 1))) / span;
+            }
+        }
+
+        double seasonal = 0;   // the occasions' extra roll, drawn after the empty check, like Roll
+        if (Seasonal?.Invoke(type) is { Items.Length: > 0 } treats)
+            seasonal = Math.Clamp(treats.Chance, 0f, 1f) * treats.Items.Count(i => i == item) / treats.Items.Length;
+        return NonEmpty(c, abundance) * (1 - (1 - any) * (1 - seasonal));
+    }
+
+    /// <summary>Probability a container gives francs (they are cash, not an item: <see cref="Roll"/> stacks them as <see cref="ItemId.Francs"/>).</summary>
+    public static double ChanceFrancs(BuildingKind kind, FurnitureType type, float abundance) =>
+        Containers.TryGetValue(type, out var c) && c.FrancsChance > 0
+            ? NonEmpty(c, abundance) * Math.Min(1.0, c.FrancsChance * FrancsFactor(kind))
+            : 0;
+
+    private static double NonEmpty(Container c, float abundance) => Math.Clamp((1 - c.Empty) * (double)abundance, 0, 1);
+
+    /// <summary>One line of a building's chance breakdown: a furniture type, how many, and the chance per piece.</summary>
+    public readonly record struct ContainerChance(FurnitureType Type, int Count, double Each)
+    {
+        /// <summary>At least one of the <see cref="Count"/> pieces of this type yields it.</summary>
+        public double Group => 1 - Math.Pow(1 - Each, Count);
+    }
+
+    /// <summary>The building's chance of the item in at least one container, and its container types best first (by the chance that some piece of the type has it).</summary>
+    public readonly record struct BuildingOdds(double Any, IReadOnlyList<ContainerChance> Containers)
+    {
+        public ContainerChance? Best => Containers.Count > 0 ? Containers[0] : null;
+    }
+
+    /// <summary>P(at least one container in the building yields <paramref name="item"/>) = 1 − Π(1 − pᵢ), with the per-type breakdown.</summary>
+    public static BuildingOdds BuildingChance(InteriorLayout layout, ItemId item, DateTime? now = null)
+    {
+        float abundance = Abundance(layout);
+        double none = 1;
+        var counts = new Dictionary<FurnitureType, int>();
+        foreach (var f in layout.Furniture)
+        {
+            if (!IsLootable(f.Type)) continue;
+            none *= 1 - Chance(layout.Kind, f.Type, abundance, item, now);
+            counts[f.Type] = counts.GetValueOrDefault(f.Type) + 1;
+        }
+        var list = counts
+            .Select(kv => new ContainerChance(kv.Key, kv.Value, Chance(layout.Kind, kv.Key, abundance, item, now)))
+            .Where(x => x.Each > 0).OrderByDescending(x => x.Group).ToList();
+        return new BuildingOdds(1 - none, list);
     }
 
     /// <summary>
