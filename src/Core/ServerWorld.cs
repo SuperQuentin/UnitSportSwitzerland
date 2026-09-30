@@ -21,6 +21,7 @@ public partial class ServerWorld : Node3D
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
     private Interiors.InteriorManager? _interiors;
+    private WorldOrigin? _origin;
 
     public override async void _Ready()
     {
@@ -47,6 +48,7 @@ public partial class ServerWorld : Node3D
         var origin = manifest.Tiles.Count > 0
             ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
             : new WorldOrigin(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+        _origin = origin;
         GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}"
             + (manifest.Tiles.Count == 0 ? " (generated world)" : ""));
 
@@ -180,7 +182,13 @@ public partial class ServerWorld : Node3D
         _sinceStatus = 0;
         foreach (var child in _players.GetChildren())
             if (child is Node3D p)
-                GD.Print($"[server] player {p.Name} at {p.GlobalPosition}");
+            {
+                // the ground this server holds under them: what any server-side check would use
+                string ground = _chunks != null && _chunks.TryGetHeight(p.GlobalPosition, out float h)
+                    ? $"ground {h:F1} m" + (_chunks.IsGenerated(_origin!.TileAt(p.GlobalPosition)) ? " (generated)" : "")
+                    : "ground not loaded";
+                GD.Print($"[server] player {p.Name} at {p.GlobalPosition}, {ground}");
+            }
     }
 
     private void OnPeerConnected(long id)

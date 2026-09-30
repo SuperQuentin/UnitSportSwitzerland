@@ -35,7 +35,7 @@ public partial class GeneratedTerrainNote : CanvasLayer
         };
         _label.AddThemeFontSizeOverride("font_size", 12);
         _label.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.6f));
-        _label.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
+        // the UI lays out at a fixed BaseWidth x BaseHeight (stretch mode "viewport")
         _label.Position = new Vector2(10, GameSettings.BaseHeight - 26);
         AddChild(_label);
     }
