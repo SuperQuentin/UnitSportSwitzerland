@@ -193,8 +193,8 @@ public partial class DriveProbe : Node
             en.Arc = en.Pilot!.Arc;
             en.Top = Mathf.Max(en.Top, en.Player.Motion.Speed);
             if (en.Pilot.Car is { } car) en.PeakBrake = Mathf.Max(en.PeakBrake, car.BrakeTemp);
-            if (_route.Off(en.Player.GlobalPosition) - _route.HalfWidthAt(en.Player.GlobalPosition) > 1.5f) en.OffRoad += dt;
-            if (en.FinishTime < 0 && en.Arc >= _finish) { en.FinishTime = _t; _log.Add($"{_t,5:F1}s {en.Spec.Label} FINISHES"); }
+            if (en.FinishTime < 0 && _route.Off(en.Player.GlobalPosition) - _route.HalfWidthAt(en.Player.GlobalPosition) > 1.5f) en.OffRoad += dt;
+            if (en.FinishTime < 0 && en.Arc >= _finish) { en.FinishTime = _t; en.Pilot.Finished = true; _log.Add($"{_t,5:F1}s {en.Spec.Label} FINISHES"); }
             if (en.Player.Ride != en.Spec.Kind)
             {
                 en.Out = true;
@@ -203,7 +203,7 @@ public partial class DriveProbe : Node
             }
             RecordFix(en, delta);
             foreach (var q in _entries)
-                if (q != en && !q.Out && _entries.IndexOf(q) > _entries.IndexOf(en)
+                if (q != en && !q.Out && en.FinishTime < 0 && q.FinishTime < 0 && _entries.IndexOf(q) > _entries.IndexOf(en)
                     && RaceRoute.Flat(q.Player.GlobalPosition - en.Player.GlobalPosition).Length() < 2.1f)
                 {
                     en.Contacts++; q.Contacts++;

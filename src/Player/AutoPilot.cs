@@ -71,6 +71,9 @@ public sealed class AutoPilot
     }
 
     /// <summary>One step of driving. <paramref name="go"/> false holds the car on the grid.</summary>
+    /// <summary>Set once the car has crossed the finish: from then on it only brakes to a stop.</summary>
+    public bool Finished;
+
     public RideInput Drive(float dt, bool go, IEnumerable<Other> others)
     {
         // On the grid: the handbrake, not the brake — at a standstill the brake pedal selects
@@ -82,8 +85,13 @@ public sealed class AutoPilot
         // Wedged between trunks for 8 s with backing out not working (an AWD car can dig itself in
         // spinning against a root): put it back on the line, the way a game resets a car to the
         // track. Measured before this: three AWD grip cars out of 26 never reached the bottom.
-        if (D.Lost > 8f) ResetToLine();
+        if (D.Lost > 8f && !Finished) ResetToLine();   // a car stopped past the line is not lost
         var input = Policy(ref D, Player.GlobalPosition, motion, dt);
+        // Past the line the route runs out a few tens of metres later: stay on the line and brake to
+        // a stop there, instead of racing into the trees at 150 km/h (every demo ended in a pile-up).
+        if (Finished)
+            return motion.Speed > 1.5f ? input with { Throttle = 0f, Brake = 1f, Effort = false }
+                                       : new RideInput(0f, 0f, 0f, false, Handbrake: true);
         if (wasDrifting && !D.Drifting) EndDrift(wasPlanned);
         Plan(car, Player.GlobalPosition, motion, dt);
         return input;
