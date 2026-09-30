@@ -178,9 +178,10 @@ public static class HumanMeshBuilder
         switch (arm)
         {
             case ItemArmPose.ShoulderAim:
-                item = new(s * 0.13f, rig.Neck.Y - 0.17f, rig.Chest.Z + 0.17f);
-                support = new(-s * 0.09f, rig.Neck.Y - 0.22f, rig.Chest.Z + 0.40f);
-                dir = Vector3.Back; break;
+                // butt in the shoulder pocket, trigger hand near the cheek, fore-end hand under the barrel
+                item = new(s * 0.135f, rig.Neck.Y + 0.05f, rig.Chest.Z + 0.29f);
+                support = new(-s * 0.02f, rig.Neck.Y - 0.03f, rig.Chest.Z + 0.50f);
+                dir = new Vector3(-s * 0.03f, 0.04f, 1f); break;
             case ItemArmPose.TwoHandEye:
                 item = new(s * 0.08f, rig.HeadBase.Y + 0.09f, rig.HeadBase.Z + 0.29f);
                 support = new(-s * 0.08f, rig.HeadBase.Y + 0.09f, rig.HeadBase.Z + 0.29f);
@@ -206,8 +207,11 @@ public static class HumanMeshBuilder
         var elbowR = Limb.Solve(rig.ShoulderR, wristR, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.6f, -0.2f));
         // the item points along the forearm swinging in the gait, along the pose's own direction once blended
         var fore = (rig.WristL - rig.ElbowL).Normalized();
+        // head down onto the stock: the crown tips forward a little
+        var headTop = arm == ItemArmPose.ShoulderAim ? rig.HeadTop + new Vector3(0, -0.012f, 0.04f) * blend : rig.HeadTop;
         return rig with
         {
+            HeadTop = headTop,
             ElbowL = elbowL, WristL = wristL, ElbowR = elbowR, WristR = wristR,
             HandDir = fore.Lerp(dir.Normalized(), blend).Normalized(),
         };
@@ -417,7 +421,7 @@ public static class HumanMeshBuilder
     /// A hat on the head, built in the head's own frame so it follows the neck like the helmet
     /// does. The figure is authored facing +Z, so "forward" is +Z made square to the head.
     /// </summary>
-    private static void AppendHat(MeshScratch s, Headwear hat, Vector3 centre, Vector3 axis)
+    internal static void AppendHat(MeshScratch s, Headwear hat, Vector3 centre, Vector3 axis)
     {
         var up = axis.LengthSquared() > 1e-8f ? axis.Normalized() : Vector3.Up;
         var fwd = Vector3.Back - up * up.Dot(Vector3.Back);

@@ -13,6 +13,7 @@
 - Blend eases in/out over ~0.18 s per peer (`StepArmPose`: out of the old pose, then into the new). A
   remote copy snaps to its first received state instead of ramping, or `--synccheck`'s fresh-frame hand
   error is not 0.
+- ShoulderAim (#100): trigger hand at the cheek (neck height, 0.29 m ahead of the chest, butt in the shoulder pocket), support hand under the fore-end, crown tipped 4 cm forward onto the stock. `FootPlayer.BodyJolt` rocks the walker mesh about the hips on a Shot event.
 - No view pitch is replicated, so aim poses follow body yaw only (barrel level); add a replicated pitch
   to tilt them.
 - `GaitMounts.HandBasis` / `FootPlayer.HandLocal` (a full transform) carry the item direction: the pose's
@@ -20,3 +21,5 @@
 - The owner in 3P while aiming still gets the forced eye view (`ScopeView`); its own body is hidden.
 - Check: `--synccheck` (fresh hand error must stay < 0.02); loopback `--server --generated-world` + two
   clients, one `--hold Shotgun --aim`, the other `--shot` at the holder (the remote copy shoulders it).
+- Use poses (#108): `ItemAction` 2 is set by `ItemController` for the length of an eat/drink/put-on-hat one-shot;
+  `Consume` and `Wear` both map to `Mouth`. `FootPlayer.DrawnArmPose` is what a peer actually draws (used by `--useanim B`).

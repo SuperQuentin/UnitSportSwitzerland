@@ -61,7 +61,7 @@ public partial class InventoryUi : CanvasLayer
     private ColorRect _flash = null!;
     private ColorRect _binoculars = null!;
     private ViewfinderView _viewfinder = null!;
-    private Label _crosshair = null!;
+    private Control _crosshair = null!;
     private Label _cashHud = null!;
 
     private Control _panel = null!;
@@ -96,6 +96,9 @@ public partial class InventoryUi : CanvasLayer
 
     /// <summary>Which optic overlay to draw, if Aim is held with one in hand.</summary>
     public ItemUse? Scope { get; set; }
+
+    /// <summary>Breathing drift of the binocular overlay, in screen fractions.</summary>
+    public Vector2 OpticSway { get; set; }
 
     /// <summary>The camera's 35 mm-equivalent focal length, shown in the viewfinder.</summary>
     public float PhotoFocalMm { get => _viewfinder.FocalMm; set => _viewfinder.FocalMm = value; }
@@ -160,13 +163,8 @@ public partial class InventoryUi : CanvasLayer
         _viewfinder.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_viewfinder);
 
-        // the shotgun's bead: a plain centred cross
-        _crosshair = new Label
-        {
-            Text = "+", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
-            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-        };
-        _crosshair.AddThemeFontSizeOverride("font_size", 28);
+        // the shotgun's bead: a small open ring at the screen centre, where the front bead sits
+        _crosshair = new BeadReticle { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _crosshair.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_crosshair);
 
@@ -322,6 +320,11 @@ public partial class InventoryUi : CanvasLayer
         _handButton = new Button { Text = "Take in hand" };
         _handButton.Pressed += TakeInHand;
         right.AddChild(_handButton);
+
+        // the Polaroids: every photo in the pack and every one taken here (PhotoUi)
+        var albumButton = new Button { Text = "Photo album" };
+        albumButton.Pressed += () => _items.PhotoUi.OpenAlbum();
+        right.AddChild(albumButton);
 
         // the bin: drop a stack on it to throw it away; click it empty-handed to get it back
         var binRow = new HBoxContainer();
@@ -491,7 +494,7 @@ public partial class InventoryUi : CanvasLayer
         _infoBlurb.Text = def != null ? InputHints.Format(def.Blurb)
             : slot < Inventory.HotbarSize ? "Hotbar slot — whatever is here can be in your hand." : "Backpack slot.";
         _infoValue.Text = def is { Value: > 0 } ? $"Worth about {def.Value * stack.Count:0.#} CHF" : "";
-        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear);
+        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear or ItemUse.Print);
         _handButton.Disabled = def == null || slot == Inv.Selected;
     }
 
@@ -725,6 +728,7 @@ public partial class InventoryUi : CanvasLayer
 
     public override void _UnhandledInput(InputEvent e)
     {
+        if (_items.PhotoUi.Blocking) return;   // the album or a photo is over the panel
         if (IsOpen)
         {
             if (!e.IsPressed() || e.IsEcho()) return;
@@ -763,6 +767,7 @@ public partial class InventoryUi : CanvasLayer
 
     public override void _Input(InputEvent e)
     {
+        if (_items.PhotoUi.Blocking) return;
         if (IsOpen)
         {
             if (HandlePanelMouse(e)) GetViewport().SetInputAsHandled();
@@ -821,7 +826,10 @@ public partial class InventoryUi : CanvasLayer
         _viewfinder.Visible = Scope == ItemUse.Photo;
         _crosshair.Visible = Scope == ItemUse.Shoot;
         if (_binoculars.Visible && _binoculars.Material is ShaderMaterial sm)
+        {
             sm.SetShaderParameter("aspect", _root.Size.X / Mathf.Max(1f, _root.Size.Y));
+            sm.SetShaderParameter("sway", OpticSway);
+        }
 
         _heldNameTimer -= dt;
         _heldName.Visible = ItemsActive && !IsOpen;
@@ -860,8 +868,9 @@ public partial class InventoryUi : CanvasLayer
     private const string BinocularShader = @"
 shader_type canvas_item;
 uniform float aspect = 1.777;
+uniform vec2 sway = vec2(0.0);
 void fragment() {
-    vec2 p = (UV - 0.5) * vec2(aspect, 1.0);
+    vec2 p = (UV - 0.5 - sway) * vec2(aspect, 1.0);
     float r = 0.42;
     float d = min(length(p - vec2(-0.24, 0.0)), length(p - vec2(0.24, 0.0)));
     float a = smoothstep(r - 0.012, r + 0.004, d);
@@ -941,7 +950,14 @@ public static class SlotDrawing
         if (!stack.IsEmpty && ItemDefs.Get(stack.Id) is { } def)
         {
             var icon = ItemIcons.Get(stack.Id);
-            if (icon != null)
+            // a photo shows its own print, a thumbnail drawn 1:1
+            if (stack.Id == ItemId.Photo && PhotoStore.Thumbnail(stack.Data) is { } thumb)
+            {
+                var size = thumb.GetSize();
+                float k = Mathf.Min(1f, r.Size.Y * 0.86f / size.Y);
+                c.DrawTextureRect(thumb, new Rect2((r.GetCenter() - size * k * 0.5f).Round(), size * k), false);
+            }
+            else if (icon != null)
             {
                 if (c.TextureFilter != CanvasItem.TextureFilterEnum.Nearest)
                     c.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
@@ -1017,6 +1033,22 @@ public partial class WheelView : Control
 /// A camera's viewfinder: thirds grid, corner brackets, focal length readout with a zoom scale,
 /// an autofocus brace that hunts after every zoom change, and shots / time / battery at the corners.
 /// </summary>
+/// <summary>The shotgun's aiming dot: a thin dark-edged ring around the centre, small enough to leave the front bead visible.</summary>
+public partial class BeadReticle : Control
+{
+    public override void _Draw()
+    {
+        var c = Size / 2f;
+        DrawArc(c, 5.5f, 0f, Mathf.Tau, 28, new Color(0, 0, 0, 0.55f), 3.5f, true);
+        DrawArc(c, 5.5f, 0f, Mathf.Tau, 28, new Color(1f, 0.92f, 0.6f, 0.95f), 1.6f, true);
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationResized) QueueRedraw();
+    }
+}
+
 public partial class ViewfinderView : Control
 {
     public const float Min = 24f, Max = 200f;
