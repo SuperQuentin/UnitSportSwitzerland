@@ -12,7 +12,8 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `cursor-inventory` — The panel works like Minecraft's: a carried stack on the cursor, click/right-click/shift/double-click/drag...
 - `pixel-icons` — 16x16 item icons: grids + palette, generic fallback, held card, --iconsheet
 - `cash-account` — Money is a counter, not an item: `Inventory.Cash`, lost when knocked out, claimed to the server-kept account...
+- `item-net-events` — ItemEvents.Send (shot, photo flash relayed to others) and PlacedObjects (server-kept, saved flags/photos, kind factories)
 
 ## Commands
 
-- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet
+- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh

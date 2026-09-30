@@ -324,37 +324,25 @@ public partial class BirdLife : Node3D
     // the hunt
     // ------------------------------------------------------------------------------------
 
-    private static SfxBank? _blast;
-
-    /// <summary>A shotgun report: a sharp crack, a noise body and a low thump, then a short tail.</summary>
-    public static SfxBank Blast => _blast ??= SfxBank.Build("shotgun", 6, 1.2f, 71, (rng, n) =>
-    {
-        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
-        var crack = Dsp.HighPass(Dsp.Noise(rng, n), 0.3f);
-        var body = Dsp.LowPass(Dsp.Noise(rng, n), 0.08f * J());
-        float d1 = 70f * J(), d2 = 11f * J(), d3 = 2.5f * J(), f = 55f * J();
-        var s = new float[n];
-        for (int i = 0; i < n; i++)
-        {
-            float t = (float)i / Dsp.Rate;
-            s[i] = crack[i] * 2.5f * Mathf.Exp(-d1 * t) + body[i] * 7f * Mathf.Exp(-d2 * t)
-                 + Mathf.Sin(Mathf.Tau * f * t) * 0.9f * Mathf.Exp(-14f * t)
-                 + body[i] * 2.5f * Mathf.Exp(-d3 * t) * Mathf.Min(1f, t * 20f);
-        }
-        return s;
-    });
-
     /// <summary>Called by the item controller with a shell already spent.</summary>
     private void Fire(FootPlayer player)
     {
-        var (stream, pitch, db) = Blast.Pick(_rng);
-        _gun.Stream = stream;
-        _gun.PitchScale = pitch;
-        _gun.VolumeDb = -3f + db;
-        _gun.Play();
-
         var cam = player.Camera;
-        var hit = Shoot(cam.GlobalPosition, -cam.GlobalTransform.Basis.Z, player);
+        var aim = -cam.GlobalTransform.Basis.Z;
+        // the blast is an item event: heard (in 3D, at the muzzle) and seen by everyone near,
+        // this player included. Without the event node (a probe world) it stays a local sound.
+        if (ItemEvents.Instance is { } events)
+            events.Send(ItemEventKind.Shot, ItemEvents.MuzzleOf(player, aim), aim);
+        else
+        {
+            var (stream, pitch, db) = SfxSynth.Shotgun.Pick(_rng);
+            _gun.Stream = stream;
+            _gun.PitchScale = pitch;
+            _gun.VolumeDb = -3f + db;
+            _gun.Play();
+        }
+
+        var hit = Shoot(cam.GlobalPosition, aim, player);
         if (hit == null) return;
 
         var s = hit.Species;

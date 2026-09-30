@@ -233,6 +233,26 @@ public static class SfxSynth
 
     private static SfxBank? _gunBank;
 
+    private static SfxBank? _blast;
+
+    /// <summary>A shotgun report (the bird hunt, relayed as an item event): a sharp crack, a noise body and a low thump, then a short tail.</summary>
+    public static SfxBank Shotgun => _blast ??= SfxBank.Build("shotgun", 6, 1.2f, 71, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        var crack = HighPass(Noise(rng, n), 0.3f);
+        var body = LowPass(Noise(rng, n), 0.08f * J());
+        float d1 = 70f * J(), d2 = 11f * J(), d3 = 2.5f * J(), f = 55f * J();
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            s[i] = crack[i] * 2.5f * Mathf.Exp(-d1 * t) + body[i] * 7f * Mathf.Exp(-d2 * t)
+                 + Mathf.Sin(Mathf.Tau * f * t) * 0.9f * Mathf.Exp(-14f * t)
+                 + body[i] * 2.5f * Mathf.Exp(-d3 * t) * Mathf.Min(1f, t * 20f);
+        }
+        return s;
+    });
+
     /// <summary>
     /// The reward sound for a clean landing or trick: two bright bell partials a fifth apart,
     /// with a quick attack. Pure tones are the one thing here that is not noise, which is why
