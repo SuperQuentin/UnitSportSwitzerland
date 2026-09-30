@@ -85,6 +85,8 @@ changed is how you get there.
   drew the whole landscape 3 km above, behind the ceiling.
 - **Leaves.** `DoorLeaf`, one per entrance, in the interior node, swinging into the room, 90° and no
   more: a house door can stand 0.2 m from the stair core's side wall.
+  A swing takes `DoorLink.SwingSeconds`, from the leaf's width (`SwingSecondsFor`: 0.6 s for 1 m,
+  +0.4 s a metre; a barn pair's leaf is half the opening, so a 10 m barn door takes 2.2 s).
   Solid only while shut. The facade still has its baked closed leaf and handle (6..11 cm proud),
   but while a door's portal shows, `ps1_building` drops them (#93): `DoorPortals.OpenDoors` sends
   the nearest 16 such doors (sill origin, half width, outward, height) through
