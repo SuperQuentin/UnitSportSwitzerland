@@ -21,10 +21,22 @@ namespace UnitSport.Interiors;
 public sealed class DoorLink
 {
     /// <summary>
-    /// How far out from the facade the portal quad stands: in front of the door leaf baked into the
-    /// facade and its handle (11 cm out), or the handle stays hanging in the open doorway.
+    /// How far out from the facade the portal quad stands: just proud of the wall, which has no
+    /// hole in it. The closed leaf and handle baked in front of it (6..11 cm) are dropped by the
+    /// building shader while the portal shows (<see cref="DoorPortals.OpenDoors"/>), and the frame
+    /// round the opening stands in front of it like a real one.
     /// </summary>
-    public const float OutsideQuadOffset = 0.12f;
+    public const float OutsideQuadOffset = 0.02f;
+    /// <summary>Where the interior doorway's portal quad stands: at the reveal, just inside the room.</summary>
+    public const float InsideQuadOffset = -0.005f;
+    /// <summary>
+    /// The slab, in doorway-frame Z, a camera lens must not stand in: from the interior quad to the
+    /// facade one, widened by <paramref name="margin"/> (how far the near plane's corners reach from
+    /// the lens). In it the near plane cuts the portal's mouth and the view goes black or shows the
+    /// wall behind. The map keeps Z, so it holds in either frame.
+    /// </summary>
+    public static float LensSlabMin(float margin) => InsideQuadOffset - margin;
+    public static float LensSlabMax(float margin) => OutsideQuadOffset + margin;
 
     public required string Door { get; init; }
     public required string Plan { get; init; }
@@ -55,7 +67,7 @@ public sealed class DoorLink
     public MeshInstance3D?[] InsideQuads { get; } = new MeshInstance3D?[3];
     public DoorLeaf? Leaf { get; set; }
 
-    public static DoorLink Create(InteriorLayout layout, EntrancePlan e, WorldOrigin origin, float? outsideWidth)
+    public static DoorLink Create(InteriorLayout layout, EntrancePlan e, WorldOrigin origin, float? outsideWidth, float? outsideHeight = null)
     {
         BuildingKey.TryParse(e.Door, out var door);
         var tileOrigin = origin.ToWorld(door.Tile.MinE, door.Tile.MaxN, 0);
@@ -79,7 +91,7 @@ public sealed class DoorLink
             Outside = outside,
             Inside = inside,
             OutsideWidth = outsideWidth ?? e.Width,
-            OutsideHeight = BuildingFootprint.DoorHeightFor(kind),
+            OutsideHeight = outsideHeight ?? BuildingFootprint.DoorHeightFor(kind),
             InsideWidth = width,
             InsideHeight = top,
         };

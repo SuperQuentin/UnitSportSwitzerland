@@ -35,6 +35,39 @@ uniform vec4 occupied_box[8];
 uniform vec4 occupied_axis[8];
 uniform int occupied_count = 0;
 
+// --- open doors (Interiors/DoorPortals, via ChunkManager.SetOpenDoors) --------------------
+// Doors whose portal is showing: the doorway frame's origin (on the sill, in the facade's plane)
+// and half its width, then (outward x, outward z, its height). Their baked closed leaf and handle
+// (BuildingMeshBuilder.AppendDoor: 6..11 cm proud, inside the opening) are dropped, so the
+// portal can stand right on the facade. The frame, lintel and doorstep stay: beside, above and
+// below the opening. The leaf's foot, inside the doorstep, goes too, but only in the leaf's own
+// plane: the step has no back face, and looking out from inside, the foot showed through it.
+uniform vec4 open_door_box[16];
+uniform vec4 open_door_axis[16];
+uniform int open_door_count = 0;
+
+bool open_door_leaf(vec3 p) {
+    for (int i = 0; i < 16; i++) {
+        if (i >= open_door_count) {
+            break;
+        }
+        vec3 d = p - open_door_box[i].xyz;
+        vec2 o = open_door_axis[i].xy;
+        float out_ = d.x * o.x + d.z * o.y;
+        float along = d.z * o.x - d.x * o.y;
+        // a hair inside the opening: the jambs' and the lintel's own faces bound it exactly
+        if (abs(along) >= open_door_box[i].w - 0.002 || d.y >= open_door_axis[i].z - 0.002) {
+            continue;
+        }
+        // leaf and handles above the step; below its top (12 cm), the leaf's plane alone
+        if ((out_ > 0.045 && out_ < 0.125 && d.y > 0.125)
+            || (out_ > 0.05 && out_ < 0.07 && d.y > -0.01 && d.y < 0.119)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // garages (BuildingMeshBuilder flags them in UV2.y): the sign's light face over the door (lit
 // from behind at night), and a painted stripe under the eave that reads from across the valley
 uniform vec3 garage_sign : source_color = vec3(0.97, 0.95, 0.88);
@@ -230,7 +263,7 @@ void vertex() {
 }
 
 void fragment() {
-    if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
+    if (portal_clipped(world_pos, CAMERA_POSITION_WORLD) || open_door_leaf(world_pos)) {
         discard;
     }
     vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));

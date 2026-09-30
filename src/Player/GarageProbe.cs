@@ -97,7 +97,11 @@ public partial class GarageProbe : Node
             chat.Send($"/login {pw}");
         if (at(1.8)) Log($"admin: {Permissions.IsAdmin}");
         if (at(2)) Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
-        if (at(3)) { me.SetTuning(Tuned); Log($"tuned: bits {me.TuningBits:X}"); }
+        // --setup <preset> (#40): the garage parts go on over a car preset, and both travel with the car
+        if (at(2.5) && Array.IndexOf(OS.GetCmdlineUserArgs(), "--setup") is var si and >= 0 && si + 1 < OS.GetCmdlineUserArgs().Length
+            && CarSetups.Parse(OS.GetCmdlineUserArgs()[si + 1]) is { } preset)
+            Log($"preset {preset.Name}: {me.SetCarSetup(preset.Id)} -> {me.CarSetupId}");
+        if (at(3)) { me.SetTuning(Tuned); Log($"tuned: bits {me.TuningBits:X}, preset {me.CarSetupId}"); }
         // the menu itself, on the tuned car, for a look
         var garage = GetTree().Root.FindChild("GarageUi", true, false) as GarageUi;
         if (at(4) && garage != null) { garage.Open(me); Log($"garage menu open: {garage.IsOpen}"); }
@@ -118,7 +122,7 @@ public partial class GarageProbe : Node
             Log($"get back in: {me.TryInteract()}");
         }
         if (at(70.3)) Log($"getting in: doors {me.DoorsOpen}");
-        if (at(73)) Log($"in again: ride {me.Ride}, bits {me.TuningBits:X} (same car: {me.TuningBits == Tuned.Pack()}), doors {me.DoorsOpen} (all shut: {me.DoorsOpen == 0})");
+        if (at(73)) Log($"in again: ride {me.Ride}, bits {me.TuningBits:X} (same car: {me.TuningBits == Tuned.Pack()}), preset {me.CarSetupId}, doors {me.DoorsOpen} (all shut: {me.DoorsOpen == 0})");
         // off down the road past 20 km/h, then stop again
         if (at(77)) { Input.ActionPress(PlayerInput.Throttle); _drive = 1; }
         if (_drive == 1 && me.GroundSpeed > 30f / 3.6f)
@@ -156,11 +160,11 @@ public partial class GarageProbe : Node
         var lines = new List<string>();
         foreach (var p in GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>())
             if (p != me)
-                lines.Add($"player {p.Name}: {p.Ride} bits {p.TuningBits:X} doors {p.DoorsOpen} rig[{Rig(p.GetChildren().OfType<CarRig>().FirstOrDefault(r => !r.IsQueuedForDeletion()))}]");
+                lines.Add($"player {p.Name}: {p.Ride} preset {p.CarSetupId} bits {p.TuningBits:X} doors {p.DoorsOpen} rig[{Rig(p.GetChildren().OfType<CarRig>().FirstOrDefault(r => !r.IsQueuedForDeletion()))}]");
         VehicleBody? target = null;
         foreach (var v in VehicleManager.Instance?.GetChildren().OfType<VehicleBody>() ?? Enumerable.Empty<VehicleBody>())
         {
-            lines.Add($"parked {v.Name}: {v.Kind} bits {(v.Ride as Car)?.Tuning.Bits:X} doors {v.DoorsOpen} wrecked {v.Wrecked} rig[{Rig(v.Rig)}]");
+            lines.Add($"parked {v.Name}: {v.Kind} preset {(v.Ride as Car)?.Spec.SetupId} bits {(v.Ride as Car)?.Tuning.Bits:X} doors {v.DoorsOpen} wrecked {v.Wrecked} rig[{Rig(v.Rig)}]");
             if (!v.Wrecked && v.Ride is Car { Tuning.Bits: not 0 }) target = v;
         }
         string now = string.Join(" | ", lines);

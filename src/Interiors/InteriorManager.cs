@@ -77,6 +77,8 @@ public partial class InteriorManager : Node3D
     public Func<TileId, StaticBody3D?>? BuildingBodies { get; set; }
     /// <summary>Client: where the facade shader's occupancy cues go (<c>ChunkManager.SetOccupancy</c>).</summary>
     public Action<Vector4[], Vector4[], int>? OccupancySink { get; set; }
+    /// <summary>Client: where the facade shader's open doors go (<c>ChunkManager.SetOpenDoors</c>, see <see cref="DoorPortals.OpenDoors"/>).</summary>
+    public Action<Vector4[], Vector4[], int>? OpenDoorsSink { get; set; }
 
     /// <summary>
     /// Raised on the client when the outside world has to be drawn (true) or may be hidden
@@ -158,7 +160,11 @@ public partial class InteriorManager : Node3D
         _prompt.Size = new Vector2(300, 30);
         _ui.AddChild(_prompt);
 
-        _portals = new DoorPortals(() => _links.Values, PlanAt) { Name = "Portals" };
+        _portals = new DoorPortals(() => _links.Values, PlanAt)
+        {
+            Name = "Portals",
+            OpenDoors = (boxes, axes, count) => OpenDoorsSink?.Invoke(boxes, axes, count),
+        };
         AddChild(_portals);
         _sounds = new BuildingSounds { Name = "Sounds" };
         AddChild(_sounds);
@@ -462,7 +468,9 @@ public partial class InteriorManager : Node3D
         foreach (var link in _links.Values.ToList())
         {
             link.Open = _doors.ContainsKey(link.Door);
-            bool gone = !link.Open && link.Swing <= 0f;
+            // a shut door of the building we are in stays linked: a leaf going solid on someone
+            // standing in the doorway can push them out through the hole, and that is a way out
+            bool gone = !link.Open && link.Swing <= 0f && link.Plan != inside;
             if (gone || !Wanted(link.Door, link.Plan)) DropLink(link);
         }
 
@@ -498,10 +506,18 @@ public partial class InteriorManager : Node3D
             return;
         }
         var e = layout.EntranceFor(door);
-        float? width = BuildingKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d ? d.Width : null;
-        var link = DoorLink.Create(layout, e, Origin!, width);
+        var spot = BuildingKey.TryParse(door, out var k) ? DoorIndex.Find(k) : null;
+        var link = DoorLink.Create(layout, e, Origin!, spot?.Width, spot?.Height);
         link.Open = _doors.ContainsKey(door);
         link.Leaf = node.Leaf(door);
+        if (link.Leaf == null && DoorLeaf.SwingsOut(layout.DressedKind()))
+        {
+            // a barn's pair hangs on the facade, and lives as long as the link
+            link.Leaf = DoorLeaf.CreateOutward(door, link.Outside, link.OutsideWidth, link.OutsideHeight,
+                layout.DressedKind(), _material!);
+            AddChild(link.Leaf);
+            link.Leaf.SetSwing(link.Swing);
+        }
         _portals?.Attach(link);
         _links[door] = link;
     }
@@ -509,7 +525,8 @@ public partial class InteriorManager : Node3D
     private void DropLink(DoorLink link)
     {
         _portals?.Detach(link);
-        link.Leaf?.SetSwing(0);
+        if (link.Leaf is { Outward: true } pair) pair.QueueFree();
+        else link.Leaf?.SetSwing(0);
         _links.Remove(link.Door);
     }
 
@@ -570,8 +587,12 @@ public partial class InteriorManager : Node3D
     {
         foreach (var link in _links.Values)
         {
-            if (!link.Passable) continue;
             bool inside = p.Indoors;
+            // Out is let through whatever the door is doing: swinging, its leaf is not solid yet
+            // but the door is not passable, and a leaf going solid can push someone standing in it
+            // out through the hole. Past the hole is only the void under the terrain. In, the
+            // facade's shell stops anyone the door does not let through.
+            if (!inside && !link.Passable) continue;
             if (inside && p.InteriorKey != link.Plan) continue;
             var frame = (inside ? link.Inside : link.Outside).AffineInverse();
             var a = frame * before;
@@ -579,7 +600,9 @@ public partial class InteriorManager : Node3D
             bool crossed = inside ? a.Z < 0 && b.Z >= 0 : a.Z >= 0 && b.Z < 0;
             if (!crossed) continue;
             var at = a.Lerp(b, a.Z / (a.Z - b.Z));
-            if (Mathf.Abs(at.X) > link.HalfPass || at.Y < -1.2f || at.Y > 1.2f) continue;
+            // out: anywhere through the hole, it has no other side
+            float half = inside ? link.InsideWidth / 2 : link.HalfPass;
+            if (Mathf.Abs(at.X) > half || at.Y < -1.2f || at.Y > 1.2f) continue;
             Cross(p, link, inward: !inside);
             return;
         }
@@ -972,6 +995,7 @@ public partial class InteriorNode : Node3D
         // the front doors, shut: the way out is to open one, not to walk into the void
         foreach (var e in layout.AllEntrances())
         {
+            if (DoorLeaf.SwingsOut(layout.DressedKind())) break; // on the facade, with its link
             var z = new Vector3(-e.InX, 0, -e.InZ).Normalized();
             var doorway = new Transform3D(new Basis(Vector3.Up.Cross(z), Vector3.Up, z), new Vector3(e.X, 0, e.Z));
             var (width, top) = layout.OpeningOf(e);

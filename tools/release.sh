@@ -1,26 +1,18 @@
 #!/usr/bin/env bash
 # Local release: next semver from commits since the last tag, Windows export, GitHub release.
-# Usage: tools/release.sh [--dry-run | --after-push <sha>]   (Git Bash; --after-push is used by tools/hooks/pre-push)
+# Usage: tools/release.sh [--dry-run]   (Git Bash, on a main in sync with origin/main)
 # The build runs in a temporary worktree of the released commit, so your working files are never touched.
 # Needs: gh (logged in), dotnet, Godot mono + export templates, 7z or PowerShell (for zipping).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
-SHA=""; if [ "${1:-}" = "--after-push" ]; then SHA=$2; fi
 GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe'}
 OUT=test_output/release; mkdir -p "$OUT"
 
-if [ -n "$SHA" ]; then
-  # the hook runs before the push lands: wait until origin/main is the pushed commit
-  for _ in $(seq 60); do [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$SHA" ] && break; sleep 2; done
-  [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$SHA" ] || { echo "push of $SHA never landed"; exit 1; }
-  git fetch -q origin --tags
-else
-  [ "$(git branch --show-current)" = main ] || { echo "Not on main"; exit 1; }
-  git fetch -q origin --tags
-  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main is not in sync with origin/main (push or pull first)"; exit 1; }
-  SHA=$(git rev-parse HEAD)
-fi
+[ "$(git branch --show-current)" = main ] || { echo "Not on main"; exit 1; }
+git fetch -q origin --tags
+[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main is not in sync with origin/main (push or pull first)"; exit 1; }
+SHA=$(git rev-parse HEAD)
 
 last=$(git describe --tags --abbrev=0 "$SHA" --match 'v[0-9]*' 2>/dev/null || true)
 if [ -n "$last" ]; then range="$last..$SHA"; cur="${last#v}"; else range="$SHA"; cur="0.0.0"; fi

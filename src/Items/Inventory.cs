@@ -3,11 +3,17 @@ using Godot;
 
 namespace UnitSport.Items;
 
-/// <summary>One slot's contents. An empty slot is <c>default</c> (None, 0).</summary>
-public readonly record struct ItemStack(ItemId Id, int Count)
+/// <summary>
+/// One slot's contents. An empty slot is <c>default</c> (None, 0). <see cref="Data"/> is per-instance
+/// data (a photo's id): two stacks only ever merge when both the item and the data are the same.
+/// </summary>
+public readonly record struct ItemStack(ItemId Id, int Count, string? Data = null)
 {
     public bool IsEmpty => Id == ItemId.None || Count <= 0;
     public static readonly ItemStack Empty = default;
+
+    /// <summary>Same item and same per-instance data: the two may share a stack.</summary>
+    public bool SameKind(ItemStack other) => Id == other.Id && Data == other.Data;
 }
 
 /// <summary>
@@ -103,8 +109,15 @@ public sealed class Inventory
     /// Adds items, topping up existing stacks first, then the hotbar, then the backpack.
     /// Francs go to <see cref="Cash"/>. Returns how many did not fit.
     /// </summary>
-    public int Add(ItemId id, int count)
+    public int Add(ItemId id, int count) => Add(new ItemStack(id, count));
+
+    /// <summary>
+    /// Adds a stack, its <see cref="ItemStack.Data"/> kept: only stacks with the same data are topped
+    /// up. Returns how many did not fit.
+    /// </summary>
+    public int Add(ItemStack stack)
     {
+        var (id, count, data) = (stack.Id, stack.Count, stack.Data);
         if (count <= 0) return count;
         if (id == ItemId.Francs)
         {
@@ -115,7 +128,7 @@ public sealed class Inventory
         if (ItemDefs.Get(id) is not { } def) return count;
 
         for (int i = 0; i < Size && count > 0; i++)
-            if (_slots[i].Id == id && _slots[i].Count < def.MaxStack)
+            if (_slots[i].Id == id && _slots[i].Data == data && _slots[i].Count < def.MaxStack)
             {
                 int take = Math.Min(count, def.MaxStack - _slots[i].Count);
                 _slots[i] = _slots[i] with { Count = _slots[i].Count + take };
@@ -126,7 +139,7 @@ public sealed class Inventory
             if (_slots[i].IsEmpty)
             {
                 int take = Math.Min(count, def.MaxStack);
-                _slots[i] = new ItemStack(id, take);
+                _slots[i] = new ItemStack(id, take, data);
                 count -= take;
             }
 
@@ -135,14 +148,17 @@ public sealed class Inventory
     }
 
     /// <summary>How many of <paramref name="id"/> would fit right now, without adding any.</summary>
-    public int Room(ItemId id)
+    public int Room(ItemId id) => Room(id, null);
+
+    /// <summary>Room for <paramref name="id"/> carrying <paramref name="data"/> (a photo needs a free slot).</summary>
+    public int Room(ItemId id, string? data)
     {
         if (id == ItemId.Francs) return int.MaxValue;
         if (ItemDefs.Get(id) is not { } def) return 0;
         int room = 0;
         for (int i = 0; i < Size; i++)
             if (_slots[i].IsEmpty) room += def.MaxStack;
-            else if (_slots[i].Id == id) room += Math.Max(0, def.MaxStack - _slots[i].Count);
+            else if (_slots[i].Id == id && _slots[i].Data == data) room += Math.Max(0, def.MaxStack - _slots[i].Count);
         return room;
     }
 
@@ -165,7 +181,7 @@ public sealed class Inventory
         var a = _slots[from];
         var b = _slots[to];
 
-        if (!a.IsEmpty && a.Id == b.Id && b.Count < MaxStack(a.Id))
+        if (!a.IsEmpty && a.SameKind(b) && b.Count < MaxStack(a.Id))
         {
             int take = Math.Min(a.Count, MaxStack(a.Id) - b.Count);
             _slots[to] = b with { Count = b.Count + take };
@@ -202,7 +218,7 @@ public sealed class Inventory
             _slots[slot] = Carried with { Count = put };
             Carried = Less(Carried, put);
         }
-        else if (s.Id == Carried.Id)
+        else if (s.SameKind(Carried))
         {
             int put = Math.Min(Carried.Count, MaxStack(s.Id) - s.Count);
             if (put <= 0) return;
@@ -231,12 +247,12 @@ public sealed class Inventory
             Carried = s with { Count = half };
             _slots[slot] = Less(s, half);
         }
-        else if (s.IsEmpty || (s.Id == Carried.Id && s.Count < MaxStack(s.Id)))
+        else if (s.IsEmpty || (s.SameKind(Carried) && s.Count < MaxStack(s.Id)))
         {
-            _slots[slot] = new ItemStack(Carried.Id, s.IsEmpty ? 1 : s.Count + 1);
+            _slots[slot] = Carried with { Count = s.IsEmpty ? 1 : s.Count + 1 };
             Carried = Less(Carried, 1);
         }
-        else if (s.Id != Carried.Id)
+        else if (!s.SameKind(Carried))
         {
             _slots[slot] = Carried;
             Carried = s;
@@ -257,7 +273,7 @@ public sealed class Inventory
         int left = s.Count, max = MaxStack(s.Id);
 
         for (int i = from; i < to && left > 0; i++)
-            if (_slots[i].Id == s.Id && _slots[i].Count < max)
+            if (_slots[i].SameKind(s) && _slots[i].Count < max)
             {
                 int put = Math.Min(left, max - _slots[i].Count);
                 _slots[i] = _slots[i] with { Count = _slots[i].Count + put };
@@ -285,7 +301,7 @@ public sealed class Inventory
         if (Carried.IsEmpty) return;
         int max = MaxStack(Carried.Id);
         var order = Enumerable.Range(0, Size)
-            .Where(i => _slots[i].Id == Carried.Id && !_slots[i].IsEmpty)
+            .Where(i => _slots[i].SameKind(Carried) && !_slots[i].IsEmpty)
             .OrderBy(i => _slots[i].Count);
         foreach (int i in order)
         {
@@ -315,9 +331,9 @@ public sealed class Inventory
     public void Distribute(IReadOnlyList<int> slots, bool oneEach)
     {
         if (Carried.IsEmpty) return;
-        var id = Carried.Id;
-        int max = MaxStack(id);
-        var usable = slots.Where(i => _slots[i].IsEmpty || (_slots[i].Id == id && _slots[i].Count < max)).ToList();
+        var carried = Carried;
+        int max = MaxStack(carried.Id);
+        var usable = slots.Where(i => _slots[i].IsEmpty || (_slots[i].SameKind(carried) && _slots[i].Count < max)).ToList();
         if (usable.Count == 0) return;
 
         int share = oneEach ? 1 : Math.Max(1, Carried.Count / usable.Count);
@@ -327,7 +343,7 @@ public sealed class Inventory
             int have = _slots[i].IsEmpty ? 0 : _slots[i].Count;
             int put = Math.Min(Math.Min(share, Carried.Count), max - have);
             if (put <= 0) continue;
-            _slots[i] = new ItemStack(id, have + put);
+            _slots[i] = carried with { Count = have + put };
             Carried = Less(Carried, put);
         }
         Notify();
@@ -363,7 +379,7 @@ public sealed class Inventory
         Carried = ItemStack.Empty;
         using (Batch())
         {
-            int left = Add(c.Id, c.Count);
+            int left = Add(c);
             if (left > 0) Trashed = c with { Count = left };
             _dirty = true;
         }
@@ -472,51 +488,58 @@ public sealed class Inventory
         public int Slot { get; set; }
         public string Item { get; set; } = "";
         public int Count { get; set; }
+        /// <summary>Per-instance data (a photo id); absent in saves made before it existed.</summary>
+        public string? Data { get; set; }
     }
 
     /// <summary>The saved inventory, or a fresh starter kit when there is none (or it is unreadable).</summary>
     public static Inventory Load()
     {
-        var inv = new Inventory();
         try
         {
             using var f = Godot.FileAccess.FileExists(File)
                 ? Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Read)
                 : null;
-            if (f != null)
-            {
-                var data = JsonSerializer.Deserialize<SaveData>(f.GetAsText());
-                if (data != null)
-                {
-                    inv.Cash = Math.Max(0, data.Cash);
-                    // saved by name, so a renumbered enum cannot turn binoculars into a flag
-                    foreach (var s in data.Slots)
-                        if (s.Slot >= 0 && s.Slot < Size && Parse(s) is { } stack)
-                        {
-                            // francs saved in a slot before money had its own counter
-                            if (stack.Id == ItemId.Francs) inv.Cash += stack.Count;
-                            else inv._slots[s.Slot] = stack;
-                        }
-                    inv.Selected = Math.Clamp(data.Selected, 0, HotbarSize - 1);
-                    if (Enum.TryParse<ItemId>(data.Worn, out var worn)) inv._worn = worn;
-                    // quit with something on the cursor: back into the slots
-                    if (data.Carried is { } c && Parse(c) is { } carried)
-                    {
-                        inv.Carried = carried;
-                        inv._batch++;           // no save from inside Load
-                        inv.ReturnCarried();
-                        inv._batch--;
-                    }
-                    return inv;
-                }
-            }
+            if (f != null && FromJson(f.GetAsText()) is { } loaded) return loaded;
         }
         catch (Exception e)
         {
             GD.PushWarning($"[inventory] could not read {File}: {e.Message}; starting fresh");
         }
 
+        var inv = new Inventory();
         inv.GiveStarterKit();
+        return inv;
+    }
+
+    /// <summary>
+    /// An inventory from the save format, or null. Saves from before <see cref="ItemStack.Data"/>
+    /// existed have no "Data" and load as plain stacks.
+    /// </summary>
+    internal static Inventory? FromJson(string json, bool persist = true)
+    {
+        var data = JsonSerializer.Deserialize<SaveData>(json);
+        if (data == null) return null;
+        var inv = new Inventory { Persist = persist };
+        inv.Cash = Math.Max(0, data.Cash);
+        // saved by name, so a renumbered enum cannot turn binoculars into a flag
+        foreach (var s in data.Slots)
+            if (s.Slot >= 0 && s.Slot < Size && Parse(s) is { } stack)
+            {
+                // francs saved in a slot before money had its own counter
+                if (stack.Id == ItemId.Francs) inv.Cash += stack.Count;
+                else inv._slots[s.Slot] = stack;
+            }
+        inv.Selected = Math.Clamp(data.Selected, 0, HotbarSize - 1);
+        if (Enum.TryParse<ItemId>(data.Worn, out var worn)) inv._worn = worn;
+        // quit with something on the cursor: back into the slots
+        if (data.Carried is { } c && Parse(c) is { } carried)
+        {
+            inv.Carried = carried;
+            inv._batch++;           // no save from inside Load
+            inv.ReturnCarried();
+            inv._batch--;
+        }
         return inv;
     }
 
@@ -530,7 +553,8 @@ public sealed class Inventory
 
     private static ItemStack? Parse(SavedSlot s) =>
         Enum.TryParse<ItemId>(s.Item, out var id) && ItemDefs.Get(id) is { } def && s.Count > 0
-            ? new ItemStack(id, id == ItemId.Francs ? s.Count : Math.Min(s.Count, def.MaxStack))
+            ? new ItemStack(id, id == ItemId.Francs ? s.Count : Math.Min(s.Count, def.MaxStack),
+                string.IsNullOrEmpty(s.Data) ? null : s.Data)
             : null;
 
     /// <summary>Puts a stack straight into a slot, for the check to set up a position.</summary>
@@ -554,14 +578,24 @@ public sealed class Inventory
     private void Save()
     {
         if (!Persist) return;
+        using var f = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
+        f?.StoreString(ToJson());
+    }
+
+    /// <summary>The save format: stacks by item name, their data only when there is some.</summary>
+    internal string ToJson()
+    {
         var data = new SaveData { Selected = Selected, Cash = Cash, Worn = _worn == ItemId.None ? "" : _worn.ToString() };
         for (int i = 0; i < Size; i++)
             if (!_slots[i].IsEmpty)
-                data.Slots.Add(new SavedSlot { Slot = i, Item = _slots[i].Id.ToString(), Count = _slots[i].Count });
+                data.Slots.Add(new SavedSlot { Slot = i, Item = _slots[i].Id.ToString(), Count = _slots[i].Count, Data = _slots[i].Data });
         if (!Carried.IsEmpty)
-            data.Carried = new SavedSlot { Slot = -1, Item = Carried.Id.ToString(), Count = Carried.Count };
+            data.Carried = new SavedSlot { Slot = -1, Item = Carried.Id.ToString(), Count = Carried.Count, Data = Carried.Data };
 
-        using var f = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
-        f?.StoreString(JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true }));
+        return JsonSerializer.Serialize(data, new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        });
     }
 }
