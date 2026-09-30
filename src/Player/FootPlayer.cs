@@ -2429,16 +2429,46 @@ public partial class FootPlayer : CharacterBody3D
         };
         if (space.IntersectShape(room, 1).Count > 0) return false;
 
+        // and a clear way there: the pull-up moves the body directly, so nothing else stops it.
+        // Under a low ceiling (a car in a garage, a wall up to a room's ceiling) the rays above
+        // start on its far side and take its top for a ledge: this sweep meets its underside.
+        var rise = new Vector3(feet.X, top.Y + 0.08f, feet.Z);
+        var to = top + forward * 0.3f + Vector3.Up * 0.05f;
+        if (!ClearSweep(space, feet + Vector3.Up * 0.3f, rise, exclude)
+            || !ClearSweep(space, rise, to, exclude))
+            return false;
+
         _mantling = true;
         _mantleT = 0;
         _mantleForward = forward;
         _mantleFrom = feet;
-        _mantleRise = new Vector3(feet.X, top.Y + 0.08f, feet.Z);
-        _mantleTo = top + forward * 0.3f + Vector3.Up * 0.05f;
+        _mantleRise = rise;
+        _mantleTo = to;
         _mantleExitSpeed = Mathf.Max(speed, 2.5f);
         Velocity = Vector3.Zero;
         Mantled?.Invoke();
         return true;
+    }
+
+    /// <summary>
+    /// Whether a standing body (radius shaved 3 cm, clear of the face it is pressed against)
+    /// moves from feet at <paramref name="from"/> to feet at <paramref name="to"/> without
+    /// touching anything. The start is tested on its own: a cast ignores what it starts inside.
+    /// </summary>
+    private bool ClearSweep(PhysicsDirectSpaceState3D space, Vector3 from, Vector3 to,
+        Godot.Collections.Array<Rid> exclude)
+    {
+        _standProbe ??= new CapsuleShape3D { Radius = BodyRadius - 0.03f, Height = StandHeight };
+        var sweep = new PhysicsShapeQueryParameters3D
+        {
+            Shape = _standProbe,
+            Transform = new Transform3D(Basis.Identity, from + Vector3.Up * (StandHeight * 0.5f + 0.03f)),
+            CollisionMask = CollisionMask,
+            Exclude = exclude,
+        };
+        if (space.IntersectShape(sweep, 1).Count > 0) return false;
+        sweep.Motion = to - from;
+        return space.CastMotion(sweep)[0] >= 1f;
     }
 
     /// <summary>
