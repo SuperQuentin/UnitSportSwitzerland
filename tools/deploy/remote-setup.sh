@@ -13,10 +13,12 @@ bad()  { printf '  %-28s FAIL %s\n' "$1" "${2:-}"; FAIL=1; }
 act()  { if [ "$DRY" = 1 ]; then echo "  [dry] $*"; else "$@"; fi; }
 export DEBIAN_FRONTEND=noninteractive
 
-. /etc/os-release 2>/dev/null || true
-case " ${ID:-} ${ID_LIKE:-} " in
-  *" debian "*|*" ubuntu "*) ok "os" "${PRETTY_NAME:-}" ;;
-  *) echo "Unsupported distro '${PRETTY_NAME:-unknown}': this tool only handles Debian/Ubuntu (apt, ufw, avahi)."; exit 1 ;;
+# read in a subshell: os-release defines VERSION, which would clobber ours (the build's git describe)
+ids=$(. /etc/os-release 2>/dev/null; echo " ${ID:-} ${ID_LIKE:-} ")
+pretty=$(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-unknown}")
+case $ids in
+  *" debian "*|*" ubuntu "*) ok "os" "$pretty" ;;
+  *) echo "Unsupported distro '$pretty': this tool only handles Debian/Ubuntu (apt, ufw, avahi)."; exit 1 ;;
 esac
 ARCH=$(uname -m)
 [ "$ARCH" = x86_64 ] && ok "arch" "$ARCH" || bad "arch" "$ARCH (the export is linux x86_64)"
