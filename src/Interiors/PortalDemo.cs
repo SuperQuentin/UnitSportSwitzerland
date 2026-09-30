@@ -57,6 +57,9 @@ public partial class PortalDemo : Node3D
         // E: a barn west of A, its double door swung out against the facade
         new("E", new Vector2(-17, -12), 16, 10, BuildingKind.Agricultural, new[] { (0f, true) },
             new FurnitureType[0], DoorWidth: 4.0f, DoorHeight: 4.0f),
+        // F: a garage west of the barn, its roll-up door up in the lintel
+        new("F", new Vector2(-31, -12), 3.6f, 6.4f, BuildingKind.Garage, new[] { (0f, true) },
+            new[] { FurnitureType.Shelf }, DoorWidth: 2.8f, DoorHeight: 2.35f),
     };
 
     public PortalDemo(string? shot) => _shot = shot;
@@ -133,9 +136,9 @@ public partial class PortalDemo : Node3D
                 link.Open = true;
                 link.Swing = 1f;
                 link.Leaf = node.Leaf(e.Door);
-                if (link.Leaf == null && DoorLeaf.SwingsOut(layout.DressedKind()))
+                if (link.Leaf == null && DoorLeaf.OnFacade(layout.DressedKind()))
                 {
-                    link.Leaf = DoorLeaf.CreateOutward(e.Door, link.Outside, link.OutsideWidth, link.OutsideHeight,
+                    link.Leaf = DoorLeaf.CreateOnFacade(e.Door, link.Outside, link.OutsideWidth, link.OutsideHeight,
                         layout.DressedKind(), interiorMaterial);
                     AddChild(link.Leaf);
                 }
@@ -194,6 +197,10 @@ public partial class PortalDemo : Node3D
         ("barn_swinging", 2.0),  // the same, half open
         ("barn_shut", 2.0),      // and shut: the pair over the facade's baked door, no flicker
         ("barn_inside", 2.0),    // from inside E, out through its door at the leaves
+        ("garage", 2.0),         // F's roll-up door, up in the lintel
+        ("garage_rolling", 2.0), // half down
+        ("garage_shut", 2.0),    // and down: the leaf over the facade's baked door, no flicker
+        ("garage_inside", 2.0),  // from inside F, out through its door
         ("crossing", 4.0),       // the figure walks in through A's front door
     };
 
@@ -252,9 +259,19 @@ public partial class PortalDemo : Node3D
         var b = _links.First(l => l.Plan == "0_0_1");
         var barn = _links.First(l => l.Plan == "0_0_4");
         Transform3D Look(Vector3 eye, Vector3 at) => Transform3D.Identity.Translated(eye).LookingAt(at, Vector3.Up);
+        var garage = _links.First(l => l.Plan == "0_0_5");
         barn.Leaf?.SetSwing(view == "barn_swinging" ? 0.45f : view == "barn_shut" ? 0f : 1f);
+        garage.Leaf?.SetSwing(view == "garage_rolling" ? 0.45f : view == "garage_shut" ? 0f : 1f);
         switch (view)
         {
+            case "garage":
+            case "garage_rolling":
+            case "garage_shut":
+                _camera.GlobalTransform = Look(new Vector3(-27.5f, 1.7f, -1.5f), new Vector3(-31f, 1.3f, -8.8f));
+                break;
+            case "garage_inside":
+                _camera.GlobalTransform = Look(garage.Inside * new Vector3(0.6f, 1.6f, -4.5f), garage.Inside * new Vector3(0, 1.2f, 2f));
+                break;
             case "barn":
             case "barn_swinging":
             case "barn_shut":

@@ -6,7 +6,7 @@
   download with holes, and everywhere on a fresh clone. The generator: an alpine valley running
   east-west through its **anchor** with a river on a flat bed (water from the cover raster, like the
   real one), a road and a railway along the floor, villages with side streets and a church every
-  ~2.6 km, farms and alpine huts, forest to a wandering tree line, rock, scree, glacier, vineyards on
+  ~2.6 km, garages beside some houses (`vehicles/garage-buildings`), farms and alpine huts, forest to a wandering tree line, rock, scree, glacier, vineyards on
   the sunny side, orchards; high massif far from the valley. All in the **ordinary formats**, served
   through the ordinary `IChunkSource` seam under `CachingChunkSource`, so roads, traffic, trains,
   doors, interiors, collision and gathering all work on it unchanged. Everything is a pure function

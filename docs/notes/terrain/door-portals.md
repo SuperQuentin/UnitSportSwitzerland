@@ -106,6 +106,21 @@ changed is how you get there.
   `DoorLink.Outside`, built and freed with the link. Hinges on the jambs' faces, 1 cm in front of
   the mouth and the jambs, so the leaves swing 170° out without cutting either, and lap the jambs
   so no chink of the portal shows when shut. The baked facade door is a pair too (seam, two handles).
+- **Vehicles (#139).** A garage's or a barn's doorway (`DoorLink.VehicleDoor`) lets a ground
+  vehicle through: the ride step calls `BeforeMove`/`AfterMove` like the walk. `FootPlayer.DoorwayBox`
+  (half width/length from `ParkedBox`, height; null on foot and flying) must be lower than the
+  opening, and before its nose reaches the facade the whole box must be between the jambs
+  (`DoorLink.InOutsideDoorway(feet, forward, halfWidth, halfLength)`: an angled car hits the wall);
+  once into the doorway only its middle must stay in the opening. The crossing is its centre over
+  the plane, as on foot; `CrossDoor` also turns `_motion.Yaw`. The chase camera's arm reaches through
+  an open doorway like the third-person arm (`ArmThroughDoor`), else it is pulled in by the room.
+  Indoors, E gets into a parked vehicle before it works a door or a cupboard, G works a car door,
+  and getting out tries behind and in front of the car too (a garage one car wide) and never lifts
+  to the terrain 3 km overhead. A parked `VehicleBody` in interior space skips the terrain rescue
+  and holds still where this peer has not built that interior. Distances for interest
+  (`InterestService`) and lonely vehicles use `InteriorManager.SurfacePoint`: an interior point
+  counts as up at its building. That fixed remote players "leaving view" inside (seen in #136).
+  Doors open for a vehicle driving up: `vehicles/garage-buildings`.
 - **Occupancy cues (G).** Buildings other players are in, except those with a door open near us:
   facade shader boxes (`ChunkManager.SetOccupancy`: more lit windows, figures behind the glass)
   and `BuildingSounds`: muffled steps, knocks and inner doors on the wall nearest the listener.
@@ -130,5 +145,5 @@ changed is how you get there.
   With a path it saves each view and quits; without, it cycles them.
   A dedicated server needs terrain; with none, PR #46's `--generated-world`.
 - **Known limits.** Two portals plus one nested in each; a third level is a dark hall. Mounted
-  players cannot pass. No shooting or throwing through.
+  players pass only garage and barn doors, and never flying. No shooting or throwing through.
   Exterior and interior windows do not line up (#60).

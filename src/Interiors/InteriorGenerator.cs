@@ -56,8 +56,9 @@ public static partial class InteriorGenerator
             DoorWidth = fp.Door.Width,
             StoreyHeight = h,
             EntryX = fp.EntryX,
-            // a barn's hall opens as wide as its door; elsewhere a door leads into a hall or a core
-            EntryWidth = b.Kind == BuildingKind.Agricultural ? fp.Door.Width : Math.Min(fp.Door.Width, 1.8f),
+            // a barn's or a garage's hall opens as wide as its door (a vehicle drives through);
+            // elsewhere a door leads into a hall or a core
+            EntryWidth = BuildingFootprint.VehicleDoor(b.Kind) ? fp.Door.Width : Math.Min(fp.Door.Width, 1.8f),
         };
 
         bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
@@ -115,7 +116,7 @@ public static partial class InteriorGenerator
         room.Openings.Add(new OpeningPlan
         {
             Side = Side.Front, Center = l.EntryX, Width = l.EntryWidth, Bottom = 0,
-            Top = kind == BuildingKind.Agricultural ? BuildingFootprint.DoorHeightFor(kind, clear)
+            Top = BuildingFootprint.VehicleDoor(kind) ? BuildingFootprint.DoorHeightFor(kind, clear)
                 : Math.Min(kind == BuildingKind.Industrial ? 2.8f : 2.1f, clear - 0.15f),
             Kind = OpeningKind.Entry,
         });
@@ -678,6 +679,10 @@ public static partial class InteriorGenerator
                 var blocked = new List<RectPlan>();
                 foreach (var o in r.Openings)
                     if (o.Kind != OpeningKind.Window) blocked.Add(Clearance(r, o));
+                // a garage or a barn is driven into: a lane from its door, as wide, kept clear
+                if (f == 0 && BuildingFootprint.VehicleDoor(l.Kind))
+                    foreach (var o in r.Openings)
+                        if (o.Kind == OpeningKind.Entry && o.Side == Side.Front) blocked.Add(Lane(l.Kind, r, o));
                 // the stairwell is not somewhere to put a sofa
                 bool isCore = ri == 0 && floor.Rooms.Count > 1;
                 if (isCore)
@@ -701,6 +706,17 @@ public static partial class InteriorGenerator
         l.Floors.Select(fl => fl.Flight).Where(x => x != null)
             .Select(x => Math.Min(x!.ZBottom, x.ZTop)).DefaultIfEmpty(float.MaxValue).Min()
         is var z && z < float.MaxValue ? z - Landing : float.MaxValue;
+
+    /// <summary>
+    /// The lane a vehicle drives in by, from the front door: as wide as it plus a margin, a garage's
+    /// to just short of its back wall (room there for a shelf), a barn's two car lengths deep.
+    /// </summary>
+    private static RectPlan Lane(BuildingKind kind, RoomPlan r, OpeningPlan o)
+    {
+        float half = o.Width / 2 + 0.3f;
+        float deep = kind == BuildingKind.Garage ? r.Z1 - r.Z0 - 0.7f : Math.Min(r.Z1 - r.Z0 - 1.5f, 9f);
+        return new RectPlan(o.Center - half, r.Z0, o.Center + half, r.Z0 + Math.Max(deep, 1.1f));
+    }
 
     /// <summary>Space that must stay clear in front of a doorway, on this room's side.</summary>
     private static RectPlan Clearance(RoomPlan r, OpeningPlan o)

@@ -109,9 +109,17 @@ public sealed partial class ProceduralWorld
                     double width = 9 + rng.NextDouble() * 4, depth = 10 + rng.NextDouble() * 3;
                     double setback = 7 + rng.NextDouble() * 3 + depth / 2;
                     var c = (E: a.E + left.Item1 * side * setback, N: a.N + left.Item2 * side * setback);
-                    if (rng.NextDouble() < 0.85)
+                    bool house = rng.NextDouble() < 0.85;
+                    if (house)
                         plans.Add(House(rng, c, dir, width, depth, s < 80 ? 0.2 : 0.0));
-                    s += width + 5 + rng.NextDouble() * 10;
+                    double gap = 5 + rng.NextDouble() * 10;
+                    // a garage beside some of the houses, in the gap before the next one (which is
+                    // at most 13 m wide), its front in line with the house's and its door to the street
+                    double gs = s + width / 2 + 2.5;
+                    if (house && gap >= 11.5 - width / 2 && gs < length - 4
+                        && Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 211) < 0.5)
+                        plans.Add(Garage(points, gs, side, setback - depth / 2 + GarageHalfDepth));
+                    s += width + gap;
                 }
         }
 
@@ -156,6 +164,28 @@ public sealed partial class ProceduralWorld
         }
 
         return new Village(x, halfLength, streets, plans);
+    }
+
+    private const double GarageHalfWidth = 1.7, GarageHalfDepth = 3.1;
+
+    /// <summary>
+    /// A flat-roofed single garage <paramref name="along"/> metres up a street, on its
+    /// <paramref name="side"/>, its middle <paramref name="setback"/> metres off the centre line:
+    /// one car wide and deep, tall enough for its door and the sign over it.
+    /// </summary>
+    private static Plan Garage(List<(double E, double N)> points, double along, int side, double setback)
+    {
+        int i = Math.Min((int)(along / RoadStep), points.Count - 2);
+        var a = points[i];
+        var b = points[i + 1];
+        double dl = Math.Sqrt((b.E - a.E) * (b.E - a.E) + (b.N - a.N) * (b.N - a.N));
+        var dir = ((b.E - a.E) / dl, (b.N - a.N) / dl);
+        var left = (-dir.Item2, dir.Item1);
+        double off = along - i * RoadStep;
+        var c = (E: a.E + dir.Item1 * off + left.Item1 * side * setback, N: a.N + dir.Item2 * off + left.Item2 * side * setback);
+        var year = (ushort)(1955 + (int)(Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 223) * 60));
+        return new Plan(new Footprint(c.E, c.N, dir.Item1, dir.Item2, GarageHalfWidth, GarageHalfDepth),
+            BuildingKind.Garage, 3.3, 0, 1, year);
     }
 
     private static Plan House(Random rng, (double E, double N) c, (double E, double N) along,
@@ -234,13 +264,17 @@ public sealed partial class ProceduralWorld
 
     private IEnumerable<Plan> PlansNear(Site site, double minE, double minN, double maxE, double maxN)
     {
-        foreach (var v in VillagesNear(minE - CenterE, maxE - CenterE))
+        bool In(Plan p) => p.Rect.E >= minE && p.Rect.E < maxE && p.Rect.N >= minN && p.Rect.N < maxN;
+        var villages = VillagesNear(minE - CenterE, maxE - CenterE).ToList();
+        foreach (var v in villages)
             foreach (var p in v.Buildings)
-                if (p.Rect.E >= minE && p.Rect.E < maxE && p.Rect.N >= minN && p.Rect.N < maxN)
-                    yield return p;
+                if (In(p) && p.Kind != BuildingKind.Garage) yield return p;
         foreach (var p in FarmsNear(site, minE, minN, maxE, maxN))
-            if (p.Rect.E >= minE && p.Rect.E < maxE && p.Rect.N >= minN && p.Rect.N < maxN)
-                yield return p;
+            if (In(p)) yield return p;
+        // garages last: they came later, and must not move any other building's index in its tile
+        foreach (var v in villages)
+            foreach (var p in v.Buildings)
+                if (In(p) && p.Kind == BuildingKind.Garage) yield return p;
     }
 
     // ---- roads -------------------------------------------------------------------------------
