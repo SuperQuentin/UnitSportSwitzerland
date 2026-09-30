@@ -89,7 +89,9 @@ changed is how you get there.
   but while a door's portal shows, `ps1_building` drops them (#93): `DoorPortals.OpenDoors` sends
   the nearest 16 such doors (sill origin, half width, outward, height) through
   `ChunkManager.SetOpenDoors`, the same way as the occupancy boxes, and the shader discards what
-  is 4.5..12.5 cm out, inside the opening, above the 12 cm doorstep. Frame, lintel and step stay.
+  is 4.5..12.5 cm out, inside the opening, above the 12 cm doorstep, and below it the leaf's own
+  plane (5..7 cm): the step has no back face, and looking out from inside, the leaf's foot showed
+  through it as a strip at the sill. Frame, lintel and step stay.
   So the mouth (`OutsideQuadOffset`) stands 2 cm off the wall (not 0: the wall has no hole and
   would z-fight), behind the frame like a real door; it used to stand 12 cm out, in front of the
   handle, and the camera's jump across the doorway was ~15 cm. Leaf and mouth change over on the

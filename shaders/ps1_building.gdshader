@@ -40,7 +40,8 @@ uniform int occupied_count = 0;
 // and half its width, then (outward x, outward z, its height). Their baked closed leaf and handle
 // (BuildingMeshBuilder.AppendDoor: 6..11 cm proud, inside the opening) are dropped, so the
 // portal can stand right on the facade. The frame, lintel and doorstep stay: beside, above and
-// below the opening.
+// below the opening. The leaf's foot, inside the doorstep, goes too, but only in the leaf's own
+// plane: the step has no back face, and looking out from inside, the foot showed through it.
 uniform vec4 open_door_box[16];
 uniform vec4 open_door_axis[16];
 uniform int open_door_count = 0;
@@ -55,8 +56,12 @@ bool open_door_leaf(vec3 p) {
         float out_ = d.x * o.x + d.z * o.y;
         float along = d.z * o.x - d.x * o.y;
         // a hair inside the opening: the jambs' and the lintel's own faces bound it exactly
-        if (out_ > 0.045 && out_ < 0.125 && abs(along) < open_door_box[i].w - 0.002
-            && d.y > 0.125 && d.y < open_door_axis[i].z - 0.002) {
+        if (abs(along) >= open_door_box[i].w - 0.002 || d.y >= open_door_axis[i].z - 0.002) {
+            continue;
+        }
+        // leaf and handles above the step; below its top (12 cm), the leaf's plane alone
+        if ((out_ > 0.045 && out_ < 0.125 && d.y > 0.125)
+            || (out_ > 0.05 && out_ < 0.07 && d.y > -0.01 && d.y < 0.119)) {
             return true;
         }
     }
