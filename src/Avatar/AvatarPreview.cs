@@ -112,6 +112,42 @@ public partial class AvatarPreview : Node3D
             return;
         }
 
+        // "--cartops": the moving parts of the cars (#48), from a three-quarter front view up high
+        // enough to see into an open cockpit. Top up and lights off, then the same car switched to
+        // top down, lights on half a second in (so the shot shows where the animation ENDS; a
+        // short [seconds] catches it mid-fold), then the NB with both set from the start and a
+        // pop-up coupe with its lights on.
+        if (OS.GetCmdlineUserArgs().Contains("--cartops"))
+        {
+            var cars = Player.CarCatalog.All;
+            Player.CarSpec Find(string label) => cars.First(c => c.Label == label);
+            var line = new (Player.CarSpec Spec, bool Open, bool Lights)[]
+            {
+                (Find("NA6CE Roadster"), false, false),
+                (Find("NA6CE Roadster"), false, false),
+                (Find("NB8C Roadster"), true, true),
+                (Find("FD3S"), false, true),
+            };
+            for (int i = 0; i < line.Length; i++)
+            {
+                if (_focus >= 0 && i != _focus) continue;   // --focus N: that car alone, close up
+                var rig = CarRig.Create(line[i].Spec.Body, line[i].Spec.Wheelbase);
+                rig.RoofOpen = line[i].Open;
+                rig.Headlights = line[i].Lights;
+                // nose toward the camera, turned three-quarters (or by --view degrees)
+                rig.Rotation = new Vector3(0, Mathf.Pi - (_viewDegrees == 90 ? 0.6f : Mathf.DegToRad(_viewDegrees)), 0);
+                Place(_focus >= 0 ? 0f : (i - (line.Length - 1) * 0.5f) * 3.4f, rig);
+                if (i == 1)
+                    GetTree().CreateTimer(0.5).Timeout += () => { rig.RoofOpen = true; rig.Headlights = true; };
+            }
+            var carCam = new Camera3D { Position = _focus >= 0 ? new Vector3(0, 3.2f, 7.5f) : new Vector3(0, 4.5f, 16f), Fov = _focus >= 0 ? 30 : 42 };
+            AddChild(carCam);
+            carCam.LookAt(new Vector3(0, 0.5f, 0), Vector3.Up);
+            carCam.Current = true;
+            _turntables.Clear();   // posed here, not turned side-on
+            return;
+        }
+
         if (!float.IsNaN(_stride))
         {
             const int steps = 6;
