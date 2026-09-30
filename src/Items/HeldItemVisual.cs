@@ -3,6 +3,9 @@ using UnitSport.Player;
 
 namespace UnitSport.Items;
 
+/// <summary>Named places the viewmodel can be held; blended between smoothly, see <see cref="HeldItemVisual.SetPose"/>.</summary>
+public enum ViewPose { Rest, Aim, Eye, Mouth, Plant, Inspect }
+
 /// <summary>
 /// Draws what a player holds, on every copy of that player.
 ///
@@ -24,6 +27,13 @@ public partial class HeldItemVisual : Node3D
     /// <summary>Where a viewmodel rests in camera space: low, right, and far enough out not to clip the near plane.</summary>
     private static readonly Vector3 ViewmodelRest = new(0.27f, -0.25f, -0.66f);
 
+    /// <summary>
+    /// The viewmodel is drawn at this fraction of its real size, pulled in by the same fraction
+    /// (same look on screen). Halving it halves how far a shotgun pokes out in front of the
+    /// camera, so it goes through walls far less — no shader or extra layer needed.
+    /// </summary>
+    public const float ViewScale = 0.5f;
+
     private readonly FootPlayer _player;
     private MeshInstance3D _inHand = null!;
     private MeshInstance3D? _viewmodel;
@@ -32,6 +42,72 @@ public partial class HeldItemVisual : Node3D
     private Basis _lastCamera = Basis.Identity;
     private Vector3 _sway;
     private float _raise;   // 0 lowered .. 1 at rest; eased in when the item changes
+
+    private ViewPose _pose = ViewPose.Rest;
+    private Vector3 _curPos = ViewmodelRest, _curRot = new(0, 0.12f, 0);
+    private float _blendStart = 1f;
+
+    // one-shot animation (eat, plant...): pose weight 0..1 over in / hold / out
+    private bool _shotActive;
+    private ViewPose _shotPose;
+    private float _shotIn, _shotHold, _shotOut, _shotT;
+    private bool _shotPeaked;
+    private System.Action? _shotPeak;
+
+    /// <summary>The pose being blended toward.</summary>
+    public ViewPose Pose => _pose;
+
+    /// <summary>0 just after the pose changed .. 1 arrived.</summary>
+    public float PoseBlend01 { get; private set; } = 1f;
+
+    /// <summary>True once the current pose is reached and no one-shot is playing.</summary>
+    public bool PoseSettled => PoseBlend01 >= 0.98f && !_shotActive;
+
+    /// <summary>Blends the viewmodel toward <paramref name="pose"/> (eased, exponential damping).</summary>
+    public void SetPose(ViewPose pose)
+    {
+        if (pose == _pose) return;
+        _pose = pose;
+        var (p, r) = PoseTransform(pose);
+        _blendStart = Mathf.Max(0.01f, (p - _curPos).Length() + (r - _curRot).Length() * 0.2f);
+        PoseBlend01 = 0f;
+    }
+
+    /// <summary>
+    /// Plays a there-and-back animation to <paramref name="target"/> over the current pose:
+    /// eases in for <paramref name="inTime"/>, calls <paramref name="onPeak"/> once on arrival,
+    /// holds, eases out for <paramref name="outTime"/>. A new call replaces one in progress.
+    /// </summary>
+    public void PlayOneShot(ViewPose target, float inTime, float hold, float outTime, System.Action? onPeak = null)
+    {
+        _shotActive = true;
+        _shotPose = target;
+        _shotIn = Mathf.Max(0.01f, inTime);
+        _shotHold = Mathf.Max(0f, hold);
+        _shotOut = Mathf.Max(0.01f, outTime);
+        _shotT = 0f;
+        _shotPeaked = false;
+        _shotPeak = onPeak;
+    }
+
+    /// <summary>Position and euler rotation (camera space, full scale) of a pose for the held item.</summary>
+    private (Vector3 pos, Vector3 rot) PoseTransform(ViewPose pose)
+    {
+        var use = ItemDefs.Get(_shown)?.Use;
+        return pose switch
+        {
+            // shotgun shouldered: the barrel line (y +0.025 above the grip) sits on the screen centre line
+            ViewPose.Aim when use == ItemUse.Shoot => (new Vector3(0f, -0.045f, -0.46f), Vector3.Zero),
+            ViewPose.Aim => (new Vector3(0.05f, -0.16f, -0.50f), new Vector3(0, 0.05f, 0)),
+            // camera raised in front of the eye, slightly below centre; binoculars right at the eyes
+            ViewPose.Eye when use == ItemUse.Optic => (new Vector3(0f, -0.03f, -0.20f), Vector3.Zero),
+            ViewPose.Eye => (new Vector3(0f, -0.12f, -0.38f), Vector3.Zero),
+            ViewPose.Mouth => (new Vector3(0.02f, -0.15f, -0.28f), new Vector3(0.55f, 0, 0)),
+            ViewPose.Plant => (new Vector3(0.10f, -0.42f, -0.50f), new Vector3(-0.9f, 0.1f, 0)),
+            ViewPose.Inspect => (new Vector3(0.02f, -0.06f, -0.36f), new Vector3(0.3f, 0.6f, 0.1f)),
+            _ => (ViewmodelRest, new Vector3(0, 0.12f, 0)),
+        };
+    }
 
     /// <summary>Set while the item is at the eye (binoculars) or a photo is being taken: nothing to draw.</summary>
     public bool Suppressed { get; set; }
@@ -108,10 +184,38 @@ public partial class HeldItemVisual : Node3D
         Kick = Mathf.MoveToward(Kick, 0f, dt * 5f);
         float lowered = (1f - _raise * _raise) * 0.25f;
 
-        _viewmodel.Position = ViewmodelRest + _sway
-            + new Vector3(0, -lowered, Kick * 0.06f);
-        // tipped a little toward the centre of the screen, the way a hand actually holds it
-        _viewmodel.Rotation = new Vector3(Kick * 0.3f, 0.12f, 0);
+        // ease toward the pose; Rest keeps the old hand-held tilt
+        var (tp, tr) = PoseTransform(_pose);
+        float k = 1f - Mathf.Exp(-12f * dt);
+        _curPos = _curPos.Lerp(tp, k);
+        _curRot = _curRot.Lerp(tr, k);
+        float remaining = (tp - _curPos).Length() + (tr - _curRot).Length() * 0.2f;
+        PoseBlend01 = Mathf.Clamp(1f - remaining / _blendStart, 0f, 1f);
+        if (remaining < 0.004f) PoseBlend01 = 1f;
+
+        var pos = _curPos;
+        var rot = _curRot;
+        if (_shotActive)
+        {
+            _shotT += dt;
+            float w;
+            if (_shotT < _shotIn) w = _shotT / _shotIn;
+            else if (_shotT < _shotIn + _shotHold) w = 1f;
+            else w = 1f - (_shotT - _shotIn - _shotHold) / _shotOut;
+            if (!_shotPeaked && _shotT >= _shotIn) { _shotPeaked = true; _shotPeak?.Invoke(); }
+            if (_shotT >= _shotIn + _shotHold + _shotOut) { _shotActive = false; w = 0f; }
+            w = Mathf.Clamp(w, 0f, 1f);
+            w = w * w * (3f - 2f * w);
+            var (sp, sr) = PoseTransform(_shotPose);
+            pos = pos.Lerp(sp, w);
+            rot = rot.Lerp(sr, w);
+        }
+
+        // less sway once the item is raised to a pose
+        float swayScale = _pose == ViewPose.Rest ? 1f : 0.25f;
+        _viewmodel.Scale = Vector3.One * ViewScale;
+        _viewmodel.Position = (pos + _sway * swayScale + new Vector3(0, -lowered, Kick * 0.06f)) * ViewScale;
+        _viewmodel.Rotation = rot + new Vector3(Kick * 0.3f, 0, 0);
     }
 
     private void EnsureViewmodel()
