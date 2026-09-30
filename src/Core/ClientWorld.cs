@@ -300,6 +300,7 @@ public partial class ClientWorld : Node3D
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
+            || Loot.LootSyncProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
@@ -311,6 +312,7 @@ public partial class ClientWorld : Node3D
         AddChild(items);
         _items = items;
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
+        if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
 
         // F1: every control, from the live bindings; bottom right: the ones that apply here

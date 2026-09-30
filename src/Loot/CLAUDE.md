@@ -20,7 +20,16 @@ Lootable furniture and outdoor gathering.
   buildings around the spawn, prints per-kind averages, non-zero exit if an average house leaves
   its target: ~3.5 food, 1.5 drinks, 8 scrap, 1 mineral, 0.2 parts, 30 CHF). `--interiorcheck`
   also searches a container and takes everything (this adds items to the real inventory).
-  `--lootepoch N` pretends N restocks have passed. Multiplayer path is untested with two clients.
+  `--lootepoch N` pretends N restocks have passed.
+- **Two players, one container** (verified with two real clients, issue #32). The server grants each
+  stack once; a take by a peer whose view is stale is answered with the current contents, not an
+  item. After every granted take the server also sends `Taken` to every OTHER peer inside that
+  building (`InteriorManager.SpaceOf`), so a panel already open elsewhere drops the stack at once —
+  before this it kept offering it until clicked. Check: `GODOT=<exe> tools/lootsynccheck.sh [epoch]
+  [E,N]` (server + clients A and B, `LootSyncProbe`, chat lines as the handshake; the two stand side
+  by side and each verifies it faces the chosen container, or bodies shove each other onto the
+  cupboard next door). The epoch must be fresh — the server remembers what an earlier run took —
+  and it writes to the real `user://loot`, so back that up first.
 - **Gathering** (`src/Loot/Gathering.cs`, hold **G / pad X** on foot outdoors — pad X is only
   tuck/sprint when mounted): a bar fills (water 1.2 s, stone 1.6 s, tree 2.2 s), moving 0.9 m
   cancels. What is offered comes from real data, in priority order: **water** where the cover

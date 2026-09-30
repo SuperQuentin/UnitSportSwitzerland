@@ -280,6 +280,7 @@ public partial class InteriorManager : Node3D
 
     private void Refused(string why)
     {
+        GD.Print($"[interior] refused: {why}");
         _requesting = false;
         _entering = null;
         Hint(why);
