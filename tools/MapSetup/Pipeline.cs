@@ -22,6 +22,12 @@ public enum Layers
     Routes = 16,
     /// <summary>places.json, the in-game Tab search.</summary>
     Places = 32,
+    /// <summary>
+    /// OpenStreetMap road attributes (one-way, lanes, sidewalks...) conflated onto TLM lines.
+    /// Off unless picked by name: tiles built with it are an ODbL derived database
+    /// (docs/notes/tools/osm-odbl-licence.md).
+    /// </summary>
+    Osm = 64,
 }
 
 /// <summary>What MapSetup remembers between runs, in terrain_chunks_temp/mapsetup.json.</summary>
@@ -218,6 +224,21 @@ public static partial class Planner
                             && await r.SwissData(["--out", p.RoutesDir, "mountainbikeland"]),
         });
 
+        // ---- OpenStreetMap (optional) -----------------------------------------------------------
+        bool wantOsm = c.Layers.HasFlag(Layers.Osm) && wantRoads;
+        long osmPbf = c.Country.Extras.GetValueOrDefault("osm", 550_000_000);
+        steps.Add(new Step
+        {
+            Title = "Download OpenStreetMap",
+            Detail = "Geofabrik Switzerland extract (ODbL), for one-way, lanes, sidewalks and cycleways",
+            DownloadBytes = wantOsm && p.OsmPbf == null ? osmPbf : 0,
+            DiskBytes = wantOsm && p.OsmPbf == null ? osmPbf : 0,
+            DiskPath = p.OsmDir,
+            Seconds = osmPbf / stats.EffectiveDownload + 3,
+            Skip = !wantOsm ? "OSM layer off" : p.OsmPbf != null ? "already here" : !py ? noPython : null,
+            Run = r => r.SwissData(["--out", p.OsmDir, "osm"]),
+        });
+
         // ---- unpack ------------------------------------------------------------------------------
         steps.Add(new Step
         {
@@ -374,6 +395,22 @@ public static partial class Planner
                     c.State.Save(p);
                 }
                 return ok;
+            },
+        });
+
+        // the whole built region, not just the selection, so a second selection does not shrink it
+        steps.Add(new Step
+        {
+            Title = "OpenStreetMap overlay",
+            Detail = "OSM road attributes matched to TLM lines (osm_overlay.tsv, temp dir)",
+            Seconds = 10 + builtTotal * 0.01,
+            Skip = !wantOsm ? "OSM layer off"
+                 : toBuild.Count == 0 && featureTiles.Count == 0 && File.Exists(Path.Combine(p.Temp, "osm_overlay.tsv")) ? "overlay up to date" : null,
+            Run = r =>
+            {
+                if (p.TlmGpkg is not { } tlm) { r.Fail("no swissTLM3D GeoPackage in " + p.TlmDir); return Task.FromResult(false); }
+                if (p.OsmPbf is not { } pbf) { r.Fail("no switzerland-*.osm.pbf in " + p.OsmDir); return Task.FromResult(false); }
+                return r.Tool("TerrainPreprocessor", ["--out", p.Chunks, "--tlm", tlm, "--osm-overlay", pbf], LineProgress.None);
             },
         });
 

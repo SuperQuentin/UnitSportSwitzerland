@@ -189,6 +189,13 @@ public partial class MainMenu : CanvasLayer
         PlayerInput.FocusFirst(_settings);
     }
 
+    /// <summary>Settings > Licenses directly (<c>--licenses</c>, for screenshotting it).</summary>
+    public void OpenLicenses()
+    {
+        OpenSettings();
+        _settings.ShowLicenses();
+    }
+
     private void SetOpen(bool open)
     {
         // Held while open so the player does not walk off under the menu: a pad's left stick is

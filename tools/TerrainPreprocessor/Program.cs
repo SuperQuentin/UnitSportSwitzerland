@@ -24,6 +24,9 @@ bool coverOnly = false;
 bool coarseOnly = false, horizonOnly = false;
 bool force = false, fresh = false;
 string? franceBox = null;
+// optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
+string? osmPbf = null;
+bool osmCheck = false;
 int jobs = Environment.ProcessorCount;
 int ioJobs = 4;
 
@@ -53,6 +56,8 @@ for (int i = 0; i < args.Length; i++)
         case "--horizon": horizonOnly = true; break;
         case "--verify": verify = true; break;
         case "--france": franceBox = args[++i]; break;
+        case "--osm-overlay": osmPbf = args[++i]; break;
+        case "--osm-check": osmCheck = true; break;
         case "--jobs": jobs = int.Parse(args[++i]); break;
         case "--io-jobs": ioJobs = int.Parse(args[++i]); break;
         case "--force": force = true; break;
@@ -61,6 +66,25 @@ for (int i = 0; i < args.Length; i++)
             Console.Error.WriteLine($"Unknown argument: {args[i]}");
             return 2;
     }
+}
+
+if (osmCheck) return OsmOverlay.SelfCheck();
+
+// ---- OSM overlay: OSM attributes conflated onto TLM road lines, for the built tiles ----------
+// Standalone and region-wide (not per batch), so it covers the whole region however the feature
+// passes were split. Without --osm-overlay nothing here runs and no build output changes.
+if (osmPbf != null)
+{
+    if (outDir == null || tlmGpkg == null)
+    {
+        Console.Error.WriteLine("--osm-overlay <pbf> requires --out <chunk dir> and --tlm <gpkg>");
+        return 2;
+    }
+    var manifestPath = Path.Combine(outDir, "manifest.json");
+    var region = tilesFile != null ? ReadTilesFile(tilesFile)
+        : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+        : new HashSet<TileId>();
+    return OsmOverlay.Run(osmPbf, tlmGpkg, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", region, jobs);
 }
 
 // ---- horizon: one region-wide 100 m lattice, from the tiles already built ------------------

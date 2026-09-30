@@ -14,6 +14,9 @@ public partial class SettingsMenu : PanelContainer
 
     private Label _ringsValue = null!;
     private Label _horizonValue = null!;
+    private VBoxContainer _rows = null!;
+    private VBoxContainer? _licenses;
+    private ScrollContainer _scroll = null!;
 
     public static SettingsMenu Create() => new() { Name = "SettingsMenu" };
 
@@ -31,7 +34,7 @@ public partial class SettingsMenu : PanelContainer
         AddThemeStyleboxOverride("panel", style);
 
         // the panel is taller than the 648 px layout, so it scrolls instead of losing Back
-        var scroll = new ScrollContainer
+        var scroll = _scroll = new ScrollContainer
         {
             HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
             CustomMinimumSize = new Vector2(0, GameSettings.BaseHeight - 60),
@@ -40,7 +43,7 @@ public partial class SettingsMenu : PanelContainer
         var gutter = new MarginContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         gutter.AddThemeConstantOverride("margin_right", 16); // keeps values clear of the scrollbar
         scroll.AddChild(gutter);
-        var rows = new VBoxContainer();
+        var rows = _rows = new VBoxContainer();
         rows.AddThemeConstantOverride("separation", 8);
         gutter.AddChild(rows);
 
@@ -148,6 +151,14 @@ public partial class SettingsMenu : PanelContainer
         logs.AddChild(openLogs);
         rows.AddChild(logs);
 
+        Section(rows, "About");
+        var about = new HBoxContainer();
+        about.AddChild(new Label { Text = "Licenses and data sources", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        var view = new Button { Text = "View" };
+        view.Pressed += ShowLicenses;
+        about.AddChild(view);
+        rows.AddChild(about);
+
         rows.AddChild(new HSeparator());
         var back = new Button { Text = "Back", CustomMinimumSize = new Vector2(0, 30) };
         back.Pressed += () => BackRequested?.Invoke();
@@ -157,6 +168,87 @@ public partial class SettingsMenu : PanelContainer
         hint.AddThemeFontSizeOverride("font_size", 12);
         hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
         rows.AddChild(hint);
+    }
+
+    /// <summary>
+    /// Swaps the settings rows for the Licenses page (<see cref="Licenses.All"/> plus Godot's own
+    /// third-party notices), in the same scrolling panel; its Back returns to the settings.
+    /// </summary>
+    public void ShowLicenses()
+    {
+        if (_licenses == null)
+        {
+            _licenses = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+            _licenses.AddThemeConstantOverride("separation", 6);
+            _rows.GetParent().AddChild(_licenses);
+            BuildLicenses(_licenses);
+        }
+        _rows.Visible = false;
+        _licenses.Visible = true;
+        _scroll.ScrollVertical = 0;
+        PlayerInput.FocusFirst(_licenses);
+    }
+
+    private void HideLicenses()
+    {
+        if (_licenses != null) _licenses.Visible = false;
+        _rows.Visible = true;
+        PlayerInput.FocusFirst(_rows);
+    }
+
+    public override void _Notification(int what)
+    {
+        // leaving Settings always lands back on the settings rows next time
+        if (what == NotificationVisibilityChanged && !Visible && _licenses?.Visible == true) HideLicenses();
+    }
+
+    private void BuildLicenses(VBoxContainer into)
+    {
+        var title = new Label { Text = "Licenses" };
+        title.AddThemeFontSizeOverride("font_size", 26);
+        title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
+        into.AddChild(title);
+        into.AddChild(new HSeparator());
+
+        var grey = new Color(0.62f, 0.66f, 0.72f);
+        foreach (var e in Licenses.All)
+        {
+            Section(into, e.Name);
+            into.AddChild(Wrapped(e.Attribution, 14, null));
+            into.AddChild(Wrapped($"{e.UsedFor}. Licence: {e.Licence}.", 12, grey));
+            // LinkButton only takes focus for screen readers by default; the pad needs it too
+            var link = new LinkButton { Text = e.Url, Uri = e.Url, Underline = LinkButton.UnderlineMode.OnHover, FocusMode = FocusModeEnum.All };
+            link.AddThemeFontSizeOverride("font_size", 12);
+            into.AddChild(link);
+        }
+
+        // what Godot itself requires: its MIT text and the licences of the libraries built into it
+        Section(into, "Godot Engine licence text");
+        into.AddChild(Wrapped(Engine.GetLicenseText(), 11, grey));
+        Section(into, "Third-party components in Godot Engine");
+        var parts = new List<string>();
+        foreach (var info in Engine.GetCopyrightInfo())
+        {
+            var licences = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var part in info["parts"].AsGodotArray<Godot.Collections.Dictionary>())
+                licences.Add(part["license"].AsString());
+            parts.Add($"{info["name"].AsString()} ({string.Join(", ", licences)})");
+        }
+        into.AddChild(Wrapped(string.Join("; ", parts), 11, grey));
+        into.AddChild(Wrapped("Full texts: " + string.Join(", ", Engine.GetLicenseInfo().Keys.Select(k => k.AsString())), 11, grey));
+
+        into.AddChild(new HSeparator());
+        var back = new Button { Text = "Back", CustomMinimumSize = new Vector2(0, 30) };
+        back.Pressed += HideLicenses;
+        into.AddChild(back);
+    }
+
+    private static Label Wrapped(string text, int size, Color? colour)
+    {
+        var label = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(500, 0) };
+        label.AddThemeFontSizeOverride("font_size", size);
+        if (colour is { } c) label.AddThemeColorOverride("font_color", c);
+        return label;
     }
 
     /// <summary>
