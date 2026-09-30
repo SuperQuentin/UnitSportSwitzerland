@@ -326,7 +326,7 @@ public partial class Traffic : Node3D
         bool van = _rng.NextDouble() < 0.18;
         var (body, lamps) = TrafficMeshBuilder.Car(TrafficMeshBuilder.Paints[_rng.Next(TrafficMeshBuilder.Paints.Length)], van);
         var v = new Vehicle(route, CruiseSpeed(edge.Class) * 0.8f, new[] { 0f },
-            new[] { Unit(body, lamps) });
+            new[] { Unit(body, lamps) }) { Reaction = 0.5f + 0.5f * (float)_rng.NextDouble() };
         AddVehicle(v);
         _cars.Add(v);
     }
@@ -387,9 +387,22 @@ public partial class Traffic : Node3D
         float maxPull = twoWay ? Mathf.Max(0f, half - 0.95f - keep) : 0f;
         float mine = keep + car.Pull;   // this car's centre, right of the centreline
         float wantPull = 0f, makeWay = float.MaxValue;
-        bool yield = false, hold = false, blocked = false;
+        bool yield = false, hold = false, blocked = false, stopFor = false;
         (Vector3 At, float Distance)? junction = null;
         bool junctionLooked = false;
+        // what this driver has noticed: someone in sight (no crest, hillside or building between), and then
+        // only after its reaction time. Seen late — little time left — it is startled (see below)
+        bool threat = false, threatBrake = false, racerRight = false;
+        float threatTtc = float.MaxValue;
+        car.SawAgo += dt;
+        car.LookIn -= dt;
+        bool Noticed(Vector3 oPos, float ttc, bool brake)
+        {
+            if (!Sees(car, oPos)) return false;
+            threat = true;
+            if (ttc < threatTtc) { threatTtc = ttc; threatBrake = brake; }
+            return car.Alert >= car.Reaction;
+        }
 
         if (obstacles.Count > 0)
             for (int k = 0; k < _roadPos.Length; k++) (_roadPos[k], _roadDir[k]) = car.Route.At(4f * (Behind - k));
@@ -427,10 +440,14 @@ public partial class Traffic : Node3D
             {
                 // coming the other way: they meet in this many seconds
                 float meet = along / Mathf.Max(car.Speed - ov, 1f);
-                if (meet > 7f) continue;
+                if (meet > 7f || !Noticed(oPos, meet, brake: true)) continue;
+                racerRight |= lat > mine + 0.5f && along < 30f;
                 wantPull = maxPull;
                 yield = true;
                 if (!narrow) continue;
+                // someone fast on a road too narrow to meet at speed: over to the edge and stop there until
+                // it has gone by — a car still rolling, however slowly, is one a racer has to judge (#85)
+                if (oSpeed > 8f) { stopFor = true; continue; }
                 target = Mathf.Min(target, 4f);
                 // where it will be across the road when they meet, its sideways drift carried on
                 float across = lat + (oVel.X * side.X + oVel.Z * side.Z) * Mathf.Min(meet, 2f);
@@ -450,11 +467,20 @@ public partial class Traffic : Node3D
             if (onRoad)
             {
                 // behind on this road, closing: make way — over to the edge, and slow so the pass is short
+                // (on a narrow road also one that has caught up and follows: slowing only until it no longer
+                // closed, the car sped up again and the racer sat behind it waiting for a gap)
                 float closing = ov - car.Speed;
-                if (along > 0.5f || closing < 2f || -along / closing > 6f) continue;
+                bool following = narrow && along > -40f && ov > 1f;
+                if (along > 0.5f || (!following && (closing < 2f || -along / closing > 8f))) continue;
+                // one bursting up from behind: a start, a swerve, but a lift rather than a stamp on the brakes
+                // in front of it
+                if (!Noticed(oPos, closing > 0.5f ? -along / closing : 99f, brake: false)) continue;
+                racerRight |= lat > mine + 0.5f && along > -30f;
                 wantPull = maxPull;
                 yield = true;
-                makeWay = Mathf.Min(makeWay, narrow && along > -30f ? 5f : cruise * 0.6f);
+                // narrow: stop at the edge, a standing car is passed at speed wherever one fits beside it
+                if (narrow) stopFor = true;
+                else makeWay = Mathf.Min(makeWay, cruise * 0.6f);
                 continue;
             }
             // off this road: someone fast about to pass through the junction ahead? wait short of it
@@ -465,7 +491,7 @@ public partial class Traffic : Node3D
             float dJ = toJ.Length(), towards = dJ > 0.1f ? (oVel.X * toJ.X + oVel.Z * toJ.Z) / dJ : oSpeed;
             if (dJ > 15f && (towards < 3f || dJ / towards > 7f)) continue;
             // committed (the nose is in it): clear it rather than stop across the road
-            if (dj < 5f) continue;
+            if (dj < 5f || !Noticed(oPos, towards > 0.5f ? dJ / towards : 99f, brake: true)) continue;
             hold = true;
             target = Mathf.Min(target, StopWithin(dj - 12f));
         }
@@ -474,8 +500,23 @@ public partial class Traffic : Node3D
         // at a gap planned for 5 m/s² is how one was rear-ended at 63 km/h (#85)
         float accel = target > car.Speed ? 2.2f : 6f;
         if (makeWay < target) { target = makeWay; accel = car.Speed > target ? 2.5f : 2.2f; }
+        if (stopFor && target > 0f) { target = 0f; accel = 3.5f; }
+        // seen early the reaction is the calm one above; seen with under 2.5 s left (out of a blind bend, over
+        // a crest) the driver is startled: brakes hard to a stop for someone coming at it or across its way,
+        // swerves for the verge faster (never towards the racer: not if it is on that side), and wobbles a
+        // little — a fright, not a plan. Staying on the tarmac, it never goes off a drop
+        bool reacted = car.Alert >= car.Reaction;
+        car.Alert = threat ? car.Alert + dt : 0f;
+        if (threat && !reacted && car.Alert >= car.Reaction && threatTtc < 2.5f) { car.Startle = 1.2f; car.StartleBrake = threatBrake; }
+        if (car.Startle > 0f)
+        {
+            car.Startle -= dt;
+            if (car.StartleBrake) { target = 0f; accel = 8f; }
+        }
+        if (racerRight) wantPull = Mathf.Min(wantPull, car.Pull);
         car.Speed = Mathf.MoveToward(car.Speed, target, accel * dt);
-        car.Stuck = car.Speed < 0.3f ? car.Stuck + dt : 0f;
+        // waiting for a race is not stuck: a car dropped after 20 s of it vanished in front of the racers
+        car.Stuck = car.Speed < 0.3f && !stopFor && !hold ? car.Stuck + dt : 0f;
         car.Holding = hold;
         car.Yield = yield;
         car.Stale = blocked && car.Speed < 0.3f ? car.Stale + dt : 0f;
@@ -484,12 +525,12 @@ public partial class Traffic : Node3D
             car.Stale = 0f;
             car.Route = new Route(edge, !car.Route.Forward, edge.Length - car.Route.Arc);
         }
-        car.Pull = Mathf.MoveToward(car.Pull, Mathf.Min(wantPull, maxPull), 0.8f * dt);
+        car.Pull = Mathf.MoveToward(car.Pull, Mathf.Min(wantPull, maxPull), (car.Startle > 0f ? 2.2f : 0.8f) * dt);
 
         var before = car.Head;
         if (!car.Route.Advance(car.Speed * dt, leg => NextRoad(leg))) car.Stuck += 5f;
         car.Route.Trim(90f);   // the road behind it too: whoever is closing from behind is found on it
-        float pull = car.Pull;
+        float pull = car.Startle > 0f ? Mathf.Clamp(car.Pull + 0.12f * Mathf.Sin(car.Startle * 14f), 0f, maxPull) : car.Pull;
         car.Place(e => KeepRight(e) + pull);
         car.Vel = dt > 0f ? Flat(car.Head - before) / dt : Vector3.Zero;
         // where its lane takes it, 0.5 s apart at this speed: a racer reads it to see it coming out of a side road
@@ -497,6 +538,31 @@ public partial class Traffic : Node3D
     }
 
     private static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
+
+    /// <summary>How far a driver notices a car coming, m.</summary>
+    private const float SightRange = 250f;
+
+    /// <summary>
+    /// Whether this car's driver has <paramref name="at"/> in sight: within <see cref="SightRange"/> and
+    /// no terrain or building on the line from the driver's eyes (trees, cars and people do not hide it).
+    /// One ray per car every 0.2 s, remembered for 1.5 s.
+    /// ponytail: one sight per car, not per racer: a driver who has seen one racer "sees" the others
+    /// near it too; per-racer memory if that ever shows.
+    /// </summary>
+    private bool Sees(Vehicle car, Vector3 at)
+    {
+        var eye = car.Head + Vector3.Up * 1.2f;
+        if (eye.DistanceSquaredTo(at) > SightRange * SightRange) return false;
+        if (car.LookIn <= 0f)
+        {
+            car.LookIn = 0.2f;
+            var query = PhysicsRayQueryParameters3D.Create(eye, at + Vector3.Up, ~(TreeColliders.Layer | Player.Hurtbox.Layer));
+            var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+            bool hidden = hit.Count > 0 && hit["collider"].AsGodotObject() is StaticBody3D and not AnimatableBody3D;
+            if (!hidden) car.SawAgo = 0f;
+        }
+        return car.SawAgo < 1.5f;
+    }
 
     /// <summary>Right-hand traffic: an undivided road is shared, so each car keeps to its half.</summary>
     private static float KeepRight(LaneEdge e) =>
@@ -663,6 +729,10 @@ public partial class Traffic : Node3D
         /// <summary>Waiting short of a junction for someone to pass; making way for someone (see <see cref="Traffic.Yielding"/>).</summary>
         public bool Holding, Yield;
         public readonly Vector3[] Path = new Vector3[PathSteps];
+        /// <summary>The driver: reaction time (s), how long it has had someone in view, when it last saw
+        /// them, when it looks again, and a fright (s left, and whether it brakes in it).</summary>
+        public float Reaction = 0.75f, Alert, SawAgo = 99f, LookIn, Startle;
+        public bool StartleBrake;
 
         public Vehicle(Route route, float cruise, float[] offsets, Node3D[] units)
         {
