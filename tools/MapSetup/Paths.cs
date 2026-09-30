@@ -22,6 +22,7 @@ public sealed class Paths
     public string BuildingsDir => Path.Combine(Data, "buildings3d");
     public string GwrDir => Path.Combine(Data, "gwr");
     public string RoutesDir => Path.Combine(Data, "routes");
+    public string OsmDir => Path.Combine(Data, "osm");
 
     public string Chunks => ChunksOverride ?? DefaultChunks;
     /// <summary>
@@ -56,6 +57,11 @@ public sealed class Paths
     /// <summary>The extracted swissTLM3D GeoPackage, whichever release is on disk (newest name wins).</summary>
     public string? TlmGpkg => Directory.Exists(TlmDir)
         ? Directory.EnumerateFiles(TlmDir, "*.gpkg").OrderByDescending(f => f, StringComparer.Ordinal).FirstOrDefault()
+        : null;
+
+    /// <summary>The OpenStreetMap extract, whichever dated Geofabrik file is on disk (newest name wins).</summary>
+    public string? OsmPbf => Directory.Exists(OsmDir)
+        ? Directory.EnumerateFiles(OsmDir, "switzerland-*.osm.pbf").OrderByDescending(f => f, StringComparer.Ordinal).FirstOrDefault()
         : null;
 
     public string DefaultData => Path.Combine(Root, "ressources", "data");
