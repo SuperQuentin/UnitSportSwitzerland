@@ -34,6 +34,13 @@ public partial class HeldItemVisual : Node3D
     /// </summary>
     public const float ViewScale = 0.5f;
 
+    /// <summary>
+    /// Visual layer 17: the viewmodel and what hangs on it. Only the screen's camera draws it;
+    /// door portal cameras leave it out and doorway ghosts do not copy it, or it would show a
+    /// second time through a doorway it is held in front of.
+    /// </summary>
+    public const uint ViewmodelLayer = 1u << 16;
+
     private readonly FootPlayer _player;
     private MeshInstance3D _inHand = null!;
     private MeshInstance3D? _viewmodel;
@@ -199,6 +206,7 @@ public partial class HeldItemVisual : Node3D
         {
             Name = "Print", Mesh = _printMesh, MaterialOverride = material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Layers = ViewmodelLayer,
             Position = new Vector3(0, 0.03f, 0),
         };
         _viewmodel!.AddChild(_print);
@@ -406,6 +414,7 @@ public partial class HeldItemVisual : Node3D
                 Mesh = new QuadMesh { Size = new Vector2(0.07f, 0.061f) },
                 Position = new Vector3(0, 0.075f, 0.0153f),
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                Layers = ViewmodelLayer,
                 MaterialOverride = new StandardMaterial3D
                 {
                     ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
@@ -432,9 +441,11 @@ public partial class HeldItemVisual : Node3D
             Mesh = ItemDefs.HandMesh(_shown),
             MaterialOverride = ItemDefs.HandMaterial(_shown, _shownData) ?? ItemDefs.Material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Layers = ViewmodelLayer,
         };
         camera.AddChild(_viewmodel);
         _viewFore = NewForeEnd();
+        _viewFore.Layers = ViewmodelLayer;
         _viewmodel.AddChild(_viewFore);
         _lastCamera = camera.GlobalTransform.Basis;
     }

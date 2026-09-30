@@ -78,7 +78,9 @@ changed is how you get there.
   its own size, has every visible mesh copied each frame to the other side through the map. A body
   straddling the sill is then whole from either side. Without it, the figure was cut by the doorway
   outline for ~8 frames and read as a small dark flash. Its side is read from its height, so
-  remote copies need nothing extra.
+  remote copies need nothing extra. Not the first-person viewmodel: it is on its own visual layer
+  17 (`HeldItemVisual.ViewmodelLayer`) that ghosts skip and portal cameras leave out, or held
+  in front of a doorway it was drawn a second time through the portal.
 - **Far plane inside.** The outside must stay drawn while a door is open (for the portal camera),
   and node visibility is shared by every viewport. So a lens underground gets `Far` = 400 m
   (`DoorPortals.ClipFar`), and the portal camera keeps the real one. Without this, the main camera

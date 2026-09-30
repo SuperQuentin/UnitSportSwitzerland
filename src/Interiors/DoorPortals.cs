@@ -49,7 +49,8 @@ public partial class DoorPortals : Node3D
     /// <summary>Visual layers 18, 19, 20: doorway quads for depth 0, 1 and 2.</summary>
     public static readonly uint[] QuadLayers = { 1u << 17, 1u << 18, 1u << 19 };
     public const uint AllQuadLayers = (1u << 17) | (1u << 18) | (1u << 19);
-    private const uint WorldLayers = 0xFFFFFu & ~AllQuadLayers;
+    /// <summary>What portal cameras draw: not the first-person viewmodel, already drawn by the screen's camera.</summary>
+    private const uint WorldLayers = 0xFFFFFu & ~AllQuadLayers & ~Items.HeldItemVisual.ViewmodelLayer;
 
     /// <summary>Doorways seen directly that get a portal each.</summary>
     private const int Width = 2;
