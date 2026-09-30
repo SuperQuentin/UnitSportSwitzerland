@@ -60,6 +60,7 @@ public static class InteriorGenerator
         };
 
         bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
+            or BuildingKind.Garage
             or BuildingKind.UnderConstruction or BuildingKind.Sacral
             || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
 
@@ -100,6 +101,7 @@ public static class InteriorGenerator
             BuildingKind.Industrial => RoomType.Workshop,
             BuildingKind.Agricultural => RoomType.Barn,
             BuildingKind.Annex => l.Width * l.Depth > 16 ? RoomType.Garage : RoomType.Storage,
+            BuildingKind.Garage => RoomType.Garage,
             BuildingKind.UnderConstruction => RoomType.Storage,
             BuildingKind.Commercial => RoomType.Shop,
             BuildingKind.House or BuildingKind.Apartment => RoomType.Living,
