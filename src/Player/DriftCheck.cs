@@ -38,6 +38,85 @@ public static class DriftCheck
     }
 
     /// <summary>
+    /// <c>--spincheck</c>: a badly managed stop, as a player does it — full brake with some steer
+    /// into a bend at 180-220 km/h — must be able to lock the rear and spin EVERY car, in Game as in
+    /// Sim, while the same bend with the brake off (steer alone) and a straight full stop stay
+    /// straight. Prints peak slip and yaw rate per case; non-zero exit when a car never spins with
+    /// the pedal mismanaged, or spins where it should not.
+    /// </summary>
+    public static int Spin()
+    {
+        int failures = 0;
+        var was = GameSettings.Current.RideProfile;
+        foreach (var profile in new[] { RideProfile.Game, RideProfile.Sim })
+        {
+            GameSettings.Current.RideProfile = profile;
+            foreach (var spec in CarCatalog.All)
+            {
+                float v0 = Mathf.Min(200f / 3.6f, 0.9f * TopSpeed(spec));
+                // "some steer": the wheel a bend taken at half the grip needs at that speed
+                // (δ = L·a/v², through the speed-scaled rack) — a sweeper, not a flick
+                float mu = spec.Grip * (profile == RideProfile.Game ? 1.12f : 1f);
+                float delta = spec.Wheelbase * 0.5f * mu * Rideable.Gravity / (v0 * v0);
+                float steer = Mathf.Clamp(delta * (1f + v0 / 28f) / spec.MaxSteer, 0f, 1f);
+                var bad = SpinRun(spec, v0, 1f, steer);
+                var eased = SpinRun(spec, v0, 0.4f, steer);
+                var trail = SpinRun(spec, v0, 0f, steer);
+                var straight = SpinRun(spec, v0, 1f, 0f);
+                // Game keeps plain driving friendly: a managed brake, a lift or a straight stop never spin.
+                // Sim is the bare car with nobody correcting it (a fixed wheel for 4 s): only the
+                // mismanaged brake and the straight stop are judged there
+                // A mid-engined car's brakes never saturate its heavy rear (65/35 against ~45/55 of the
+                // weight): it locks the fronts and ploughs on instead — the physics' answer, accepted
+                float g = Rideable.Gravity, L = spec.Wheelbase;
+                float rearSat = mu * g * spec.FrontAxle / L / (0.35f + mu * spec.CgHeight / L);
+                float brakes = Mathf.Min(spec.BrakeDecel > 0 ? spec.BrakeDecel * (profile == RideProfile.Game ? 1.1f : 1f) : 99f, 0.95f * mu * g);
+                bool rearLocks = brakes > rearSat;
+                bool ok = bad.Spun == rearLocks && !straight.Spun && (profile == RideProfile.Sim || (!eased.Spun && !trail.Spun));
+                GD.Print($"[spin] {profile,-4} {spec.Label,-16} from {v0 * 3.6f,3:F0} km/h steer {steer:F2}  "
+                    + $"full brake: peak slip {bad.Slip,4:F0}° yaw {bad.Yaw,4:F2} rad/s{(bad.Spun ? $" SPUN at {bad.At * 3.6f:F0} km/h" : "")}  "
+                    + (rearLocks ? "" : $" (rear never locks: brakes {brakes:F1} < {rearSat:F1} m/s²)")
+                    + $"  40% brake: {eased.Slip,3:F0}°  no brake: {trail.Slip,3:F0}°  straight stop: {straight.Slip,3:F0}°  {(ok ? "ok" : "FAIL")}");
+                if (!ok) failures++;
+            }
+        }
+        GameSettings.Current.RideProfile = was;
+        GD.Print(failures == 0 ? "[spin] RESULT: a mismanaged brake spins every car, a managed one does not"
+            : $"[spin] RESULT: FAILED ({failures})");
+        return failures == 0 ? 0 : 1;
+    }
+
+    private static float TopSpeed(CarSpec spec)
+    {
+        var car = new Car(spec);
+        var m = new RideMotion();
+        for (float t = 0; t < 90f; t += Dt) car.Step(new RideInput(1f, 0f, 0f, false), new RideGround(true, 0f), Dt, ref m);
+        return m.Speed;
+    }
+
+    /// <summary>At speed on the flat, <paramref name="brake"/> and <paramref name="steer"/> held for 4 s (or to a stop).</summary>
+    private static (float Slip, float Yaw, bool Spun, float At) SpinRun(CarSpec spec, float v0, float brake, float steer)
+    {
+        var car = new Car(spec);
+        var m = new RideMotion { Speed = v0 };
+        var ground = new RideGround(true, 0f);
+        // settle at speed on a whiff of throttle, gear and rack included
+        for (float t = 0; t < 1f; t += Dt) { m.Speed = v0; car.Step(new RideInput(0.3f, 0f, 0f, false), ground, Dt, ref m); }
+        float peak = 0f, yaw = 0f, at = 0f;
+        bool spun = false;
+        for (float t = 0; t < 4f && m.Speed > 3f; t += Dt)
+        {
+            float before = m.Speed;
+            car.Step(new RideInput(0f, brake, steer, false), ground, Dt, ref m);
+            float slip = Mathf.Abs(Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi));
+            peak = Mathf.Max(peak, slip);
+            yaw = Mathf.Max(yaw, Mathf.Abs(m.YawRate));
+            if (!spun && slip > 1.6f) { spun = true; at = before; }
+        }
+        return (Mathf.RadToDeg(peak), yaw, spun, at);
+    }
+
+    /// <summary>
     /// With both wear options on: a long drift eats the rear tyres more than the fronts, and ten hard
     /// stops (fifteen) from 150 to 50 km/h back to back heat the discs into fade — then they must cool again.
     /// </summary>

@@ -251,6 +251,14 @@ public sealed class Car : Rideable, IEngined
     private const int Substeps = 4;
 
     private float _steer;   // eased steering input, −1..1
+    /// <summary>
+    /// Game: how much of the arcade help is left, 1 all .. 0 none. The foot brake taking the whole
+    /// rear circle while the rear slides past its peak (a locked rear let go, last step) takes it away: the counter-steer assist, the yaw
+    /// damping and the catch past 35° held every car short of a spin however badly it was braked
+    /// (measured: 63° peak with the pedal floored and a sweeper's steer at 200 km/h). The handbrake
+    /// is not the foot brake, so a drift entry keeps all of it.
+    /// </summary>
+    private float _help = 1f;
     private float _shiftTimer;
 
     /// <summary>
@@ -299,7 +307,8 @@ public sealed class Car : Rideable, IEngined
         // Game: the fronts point part of the way down the direction of travel and lean against
         // the rotation, as a driver's hands would, so a drift is held rather than spun
         if (arcade && u > 3f)
-            delta = Mathf.Clamp(delta + ArcadeAssist * slipNow - ArcadeYawDamp * motion.YawRate, -s.MaxSteer, s.MaxSteer);
+            delta = Mathf.Clamp(delta + _help * (ArcadeAssist * slipNow - ArcadeYawDamp * motion.YawRate), -s.MaxSteer, s.MaxSteer);
+        float rearLock = 0f;
         SteerAngle = delta;
 
         float powerScale = arcade ? ArcadePower : 1f;
@@ -375,6 +384,11 @@ public sealed class Car : Rideable, IEngined
             float speed = Mathf.Max(Mathf.Abs(u), 1f);
             float alphaF = Mathf.Atan2(w + a * r, speed) - delta * sign;
             float alphaR = Mathf.Atan2(w - b * r, speed);
+            // the foot brake taking the whole rear circle AND the rear sliding sideways past its peak:
+            // a rear let go under braking. Both: a straight stop saturates the rear too, and with
+            // the help intact it stays straight, as a player braking in a line expects
+            rearLock = Mathf.Max(rearLock, Mathf.Clamp((brakeForce * 0.35f / capR - 0.85f) / 0.15f, 0f, 1f)
+                * Mathf.Clamp((Mathf.Abs(alphaR) - 0.08f) / 0.08f, 0f, 1f));
             float latF = Mathf.Sqrt(Mathf.Max(capF * capF - fxF * fxF, 0.01f * capF * capF));
             float latR = Mathf.Sqrt(Mathf.Max(capR * capR - fxR * fxR, 0.01f * capR * capR));
             if (input.Handbrake) latR *= HandbrakeGrip;
@@ -417,7 +431,7 @@ public sealed class Car : Rideable, IEngined
             {
                 float angle = Mathf.Atan2(w, Mathf.Abs(u));
                 float excess = angle - Mathf.Clamp(angle, -ArcadeMaxAngle, ArcadeMaxAngle);
-                if (excess != 0f) mz += m * a * b * (ArcadeCatch * excess - ArcadeCatchDamp * r);
+                if (excess != 0f) mz += _help * m * a * b * (ArcadeCatch * excess - ArcadeCatchDamp * r);
             }
 
             float ax = fx / m + SlopeAccel(ground.Grade);
@@ -440,6 +454,9 @@ public sealed class Car : Rideable, IEngined
             slideAccum += Mathf.Clamp(Mathf.Max(Mathf.Abs(alphaR), Mathf.Abs(alphaF) * 0.6f) * 3f
                 + wheelspin + (input.Handbrake && Mathf.Abs(u) > 2f ? 0.6f : 0f), 0f, 1f);
         }
+
+        // a locked rear takes the arcade help away within ~0.15 s; off the pedal it comes back as fast
+        _help = Mathf.MoveToward(_help, 1f - rearLock, 7f * dt);
 
         // automatic gearbox: up near the redline, down when it bogs; a brief cut of drive on each
         _shiftTimer = Mathf.Max(0f, _shiftTimer - dt);
