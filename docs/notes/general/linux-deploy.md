@@ -5,7 +5,7 @@
   `--check` reports and changes nothing; `--dry-run` prints every change instead of making it; `--no-chunks` skips the tiles.
 - **One-time setup:** `cp tools/deploy.env.example tools/deploy.env` (gitignored) and set `DEPLOY_HOST=user@host`; env vars override
   the file. Key auth is required: `ssh-keygen` once, then `ssh-copy-id user@host`. The user needs sudo (with a password is fine,
-  the setup step asks for it through `ssh -t`). Linux export templates must be installed (Godot editor > Manage Export Templates).
+  the setup step asks for it through `ssh -t`, so run it from a real terminal; `--check`/`--dry-run` without a terminal report without root). Linux export templates must be installed (Godot editor > Manage Export Templates).
 - **Export preset:** `export_presets.cfg` is gitignored and per machine; the script appends a `"Linux Server"` preset
   (`platform="Linux"`, `dedicated_server=true`, the Windows preset's `exclude_filter`) when it is missing. Output: `build/linux/`.
 - **.NET:** the local SDK must match the csproj `TargetFramework` (net8 -> SDK 8.x) and Godot must be the csproj's `Godot.NET.Sdk`
@@ -33,3 +33,7 @@
   Free space is checked first (new minus replaced bytes plus `SPACE_MARGIN_MB`). Copy is `rsync` when both ends have it,
   else a `tar | ssh tar` stream (keeps mtimes, so the next run is a no-op); `manifest.json` goes last. Server-only files are
   kept unless `--prune`. Lists land in `test_output/deploy/`. Listing 246k files from Git Bash takes minutes.
+- **Gotchas seen on the first real deploy (Debian 13):** the root partition was 19 GB, so the space check refused the tiles until
+  `DEPLOY_CHUNKS_DIR` pointed at `/home` (check `df -h` on the host first). `/etc/os-release` defines `VERSION`, so the setup
+  script reads it in a subshell or the mDNS TXT would advertise "13 (trixie)". A server started before the tiles arrive exits
+  with `no terrain data` - expected; `--chunks --restart` brings it up.
