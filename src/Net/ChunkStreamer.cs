@@ -215,7 +215,7 @@ public partial class ChunkStreamer : Node
         }
 
         var queue = GetQueue(peer);
-        if (queue.Transfers.Count >= MaxQueuedPerPeer)
+        if (queue.Transfers.Count + queue.Preparing >= MaxQueuedPerPeer)
         {
             // Refusing is better than growing an unbounded queue — but it must be refused as
             // "busy", not "absent", or the client writes the tile off for the whole session.
@@ -226,37 +226,52 @@ public partial class ChunkStreamer : Node
         string path = System.IO.Path.Combine(
             _serveDirectory!, AssetStream.FileNameFor(assetKind, tile));
 
-        byte[] payload;
+        // Reading, checksumming and deflating half a megabyte is milliseconds of work, and on
+        // the main thread it stalled every player's relay behind one client's download. A worker
+        // prepares it; the RPCs go out from _Process, because an RPC sent off the main thread
+        // never arrives (see the net notes).
+        queue.Preparing++;
+        System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(Prepare(peer, requestId, assetKind, path)));
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Prepared> _prepared = new();
+
+    private sealed record Prepared(long Peer, uint RequestId, byte[]? Wire, int RawLength, uint Crc, bool Compressed, bool Missing);
+
+    private static Prepared Prepare(long peer, uint requestId, AssetKind kind, string path)
+    {
         try
         {
-            if (!System.IO.File.Exists(path))
-            {
-                RpcId(peer, MethodName.AssetMissing, requestId, true);
-                return;
-            }
-            payload = System.IO.File.ReadAllBytes(path);
+            if (!System.IO.File.Exists(path)) return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
+            var payload = System.IO.File.ReadAllBytes(path);
+            uint crc = AssetStream.Crc32(payload);
+            if (!AssetStream.IsAlreadyCompressed(kind) && AssetStream.TryCompress(payload) is { } smaller)
+                return new Prepared(peer, requestId, smaller, payload.Length, crc, true, false);
+            return new Prepared(peer, requestId, payload, payload.Length, crc, false, false);
         }
         catch (Exception e)
         {
             GD.PushWarning($"[stream] cannot read {path}: {e.Message}");
-            RpcId(peer, MethodName.AssetBusy, requestId);
-            return;
+            return new Prepared(peer, requestId, null, 0, 0, false, Missing: false);
         }
+    }
 
-        uint crc = AssetStream.Crc32(payload);
-        int rawLength = payload.Length;
-
-        byte[] wire = payload;
-        bool compressed = false;
-        if (!AssetStream.IsAlreadyCompressed(assetKind)
-            && AssetStream.TryCompress(payload) is { } smaller)
+    /// <summary>Main thread: announces what the workers finished and queues it for sending.</summary>
+    private void DeliverPrepared()
+    {
+        while (_prepared.TryDequeue(out var p))
         {
-            wire = smaller;
-            compressed = true;
+            if (!_queues.TryGetValue(p.Peer, out var queue)) continue;   // left meanwhile
+            queue.Preparing--;
+            if (p.Wire == null)
+            {
+                if (p.Missing) RpcId(p.Peer, MethodName.AssetMissing, p.RequestId, true);
+                else RpcId(p.Peer, MethodName.AssetBusy, p.RequestId);
+                continue;
+            }
+            RpcId(p.Peer, MethodName.BeginAsset, p.RequestId, p.RawLength, p.Wire.Length, p.Crc, p.Compressed);
+            queue.Transfers.Enqueue(new Transfer(p.RequestId, p.Wire));
         }
-
-        RpcId(peer, MethodName.BeginAsset, requestId, rawLength, wire.Length, crc, compressed);
-        queue.Transfers.Enqueue(new Transfer(requestId, wire));
     }
 
     // ---- server -> client --------------------------------------------------------------
@@ -337,6 +352,7 @@ public partial class ChunkStreamer : Node
 
         if (IsServing)
         {
+            DeliverPrepared();
             PumpServer(delta);
             return;
         }
@@ -361,7 +377,8 @@ public partial class ChunkStreamer : Node
                 int remaining = transfer.Payload.Length - transfer.Offset;
                 int size = Math.Min(AssetStream.FragmentBytes, remaining);
 
-                var slice = new byte[size];
+                // one reused buffer: the RPC marshals a copy synchronously, so nothing keeps it
+                var slice = size == AssetStream.FragmentBytes ? (_fragment ??= new byte[size]) : new byte[size];
                 Array.Copy(transfer.Payload, transfer.Offset, slice, 0, size);
                 RpcId(peer, MethodName.AssetFragment, transfer.RequestId, slice);
 
@@ -392,9 +409,12 @@ public partial class ChunkStreamer : Node
 
     // ---- state holders --------------------------------------------------------------------
 
+    private byte[]? _fragment;
+
     private sealed class PeerQueue
     {
         public Queue<Transfer> Transfers { get; } = new();
+        public int Preparing { get; set; }
         public int Budget { get; set; }
     }
 

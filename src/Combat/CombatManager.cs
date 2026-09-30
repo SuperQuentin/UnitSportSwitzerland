@@ -226,10 +226,22 @@ public partial class CombatManager : Node3D
         var jitter = new Vector3(Rand(), Rand(), Rand()) * 0.004f;
         var vel = (dir + jitter).Normalized() * BulletSpeed + m.Velocity;
         Spawn(muzzle, vel, LocalId);
-        if (Online) Rpc(MethodName.Shot, muzzle, vel);
+        if (Online) SendShot(muzzle, vel);
     }
 
     private float Rand() => (float)_rng.NextDouble() * 2f - 1f;
+
+    /// <summary>
+    /// A round goes to the players who can see the shooter (Net/InterestService), not to the whole
+    /// server: someone 60 km away has no tracer to draw and no bullet that can reach them.
+    /// </summary>
+    private void SendShot(Vector3 muzzle, Vector3 vel)
+    {
+        var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
+        if (interest == null) { Rpc(MethodName.Shot, muzzle, vel); return; }
+        foreach (int peer in Multiplayer.GetPeers())
+            if (peer != 1 && interest.Sees(peer)) RpcId(peer, MethodName.Shot, muzzle, vel);
+    }
 
     /// <summary>
     /// What the crosshair is on: the first thing along the camera's line of sight — terrain or a

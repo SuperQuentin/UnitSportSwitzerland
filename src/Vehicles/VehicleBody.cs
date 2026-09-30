@@ -57,6 +57,7 @@ public partial class VehicleBody : CharacterBody3D
     private float _bikeRoll;
     private float _restTime;
     private bool _asleep;
+    private MultiplayerSynchronizer? _sync;
     private bool _anchored;
     private bool _charred;
     private bool _wasWrecked;
@@ -115,7 +116,15 @@ public partial class VehicleBody : CharacterBody3D
         var replication = new SceneReplicationConfig();
         foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool" })
             replication.AddProperty(prop);
-        var sync = new MultiplayerSynchronizer { Name = "Sync", RootPath = new NodePath(".."), ReplicationConfig = replication };
+        // states that change a few times per life of a vehicle go reliably on change; the motion
+        // at 20 Hz while it moves (every frame before, for a bike standing in a field for hours)
+        foreach (var prop in new[] { ".:Wrecked", ".:Health", ".:EngineOn" })
+            replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
+        var sync = _sync = new MultiplayerSynchronizer
+        {
+            Name = "Sync", RootPath = new NodePath(".."), ReplicationConfig = replication,
+            ReplicationInterval = 0.05f,
+        };
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
         AddChild(sync);
 
@@ -215,6 +224,8 @@ public partial class VehicleBody : CharacterBody3D
         {
             _asleep = true;
             Velocity = Vector3.Zero;
+            // asleep it cannot move until someone claims it (a new node): a heartbeat is enough
+            if (_sync != null) _sync.ReplicationInterval = 2f;
             SetAnchored(false);
         }
     }

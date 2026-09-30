@@ -45,6 +45,10 @@ public partial class ServerWorld : Node3D
         var origin = new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
         GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
 
+        // A headless server draws nothing, so nothing capped its loop: it spun as fast as a core
+        // allows. 60 matches the physics tick and every client's send rate is well under it.
+        Engine.MaxFps = 60;
+
         _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = false };
         _chunks.Initialize(source, origin, manifest, null);
         AddChild(_chunks);

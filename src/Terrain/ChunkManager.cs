@@ -367,12 +367,15 @@ public partial class ChunkManager : Node3D
         }
 
         // A server only holds grids for height queries around players, so the player's
-        // render distance means nothing to it: it keeps a small fixed radius of full tiles.
+        // render distance means nothing to it: it keeps a small fixed radius of tiles, and only
+        // the 5 KB coarse companions — nothing on the server builds on the ground (no meshes,
+        // no collision, players are proxies), and 2 MB full grids made its memory grow ~50 MB
+        // per player spread out across the country.
         if (BuildMeshes) ApplySettings(GameSettings.Current);
-        else Lod = new LodPolicy { Rings = new LodPolicy.Ring[] { new(ServerGridRadius, 1) } };
+        else Lod = new LodPolicy { Rings = new LodPolicy.Ring[] { new(ServerGridRadius, ChunkFormat.CoarseStride) } };
     }
 
-    /// <summary>Tiles of height data a server keeps around each player (2 MB each).</summary>
+    /// <summary>Tiles of height data a server keeps around each player (coarse, 5 KB each).</summary>
     private const int ServerGridRadius = 2;
 
     /// <summary>
@@ -1157,8 +1160,9 @@ public partial class ChunkManager : Node3D
                 if (grid == null) { _failedBuilds.Enqueue(id); return; }
                 ct.ThrowIfCancellationRequested();
 
-                var holes = holesLoaded ? cachedHoles : await source.LoadHolesAsync(id, ct);
-                var cover = coverLoaded ? cachedCover : await source.LoadCoverAsync(id, ct);
+                // a headless server draws nothing: holes and the 1 MB cover raster are for meshes
+                var holes = holesLoaded || !BuildMeshes ? cachedHoles : await source.LoadHolesAsync(id, ct);
+                var cover = coverLoaded || !BuildMeshes ? cachedCover : await source.LoadCoverAsync(id, ct);
                 Lap(StAux, stageMs, clock);
                 ct.ThrowIfCancellationRequested();
 
