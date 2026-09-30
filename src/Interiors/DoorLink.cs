@@ -25,6 +25,16 @@ public sealed class DoorLink
     /// facade and its handle (11 cm out), or the handle stays hanging in the open doorway.
     /// </summary>
     public const float OutsideQuadOffset = 0.12f;
+    /// <summary>Where the interior doorway's portal quad stands: at the reveal, just inside the room.</summary>
+    public const float InsideQuadOffset = -0.005f;
+    /// <summary>
+    /// The slab, in doorway-frame Z, a camera lens must not stand in: from the interior quad to the
+    /// facade one, widened by <paramref name="margin"/> (how far the near plane's corners reach from
+    /// the lens). In it the near plane cuts the portal's mouth and the view goes black or shows the
+    /// wall behind. The map keeps Z, so it holds in either frame.
+    /// </summary>
+    public static float LensSlabMin(float margin) => InsideQuadOffset - margin;
+    public static float LensSlabMax(float margin) => OutsideQuadOffset + margin;
 
     public required string Door { get; init; }
     public required string Plan { get; init; }

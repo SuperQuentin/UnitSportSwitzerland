@@ -169,6 +169,9 @@ public partial class PortalDemo : Node3D
         ("two_houses", 2.0),     // C and D side by side, both open
         ("through", 2.0),        // through A's front door, its room, its back door, the backyard
         ("inside_out", 2.0),     // from inside B, across the street into A
+        ("in_doorway", 2.0),     // lens 5 cm in front of A's facade: snapped out of the doorway
+        ("in_reveal", 2.0),      // lens 10 cm inside A's doorway, looking out
+        ("in_reveal_down", 2.0), // lens on A's doorway plane from inside, looking out and down (#78)
         ("crossing", 4.0),       // the figure walks in through A's front door
     };
 
@@ -240,6 +243,18 @@ public partial class PortalDemo : Node3D
                 var eye = b.Inside * new Vector3(0.1f, 1.6f, -1.5f);
                 var at = b.ToInside * (a.Outside * new Vector3(0, 1.2f, 0));
                 _camera.GlobalTransform = Look(eye, at);
+                break;
+            }
+            case "in_doorway":
+                _camera.GlobalTransform = a.Outside * Look(new Vector3(0.1f, 1.6f, 0.05f), new Vector3(0, 1.4f, -4f));
+                break;
+            case "in_reveal":
+                _camera.GlobalTransform = a.Inside * Look(new Vector3(0.1f, 1.6f, -0.1f), new Vector3(0, 1.4f, 4f));
+                break;
+            case "in_reveal_down":
+            {
+                var eye = new Vector3(0.023f, 1.68f, -0.002f);
+                _camera.GlobalTransform = a.Inside * Look(eye, eye + new Vector3(-0.27f, -0.64f, 0.72f));
                 break;
             }
             case "crossing":

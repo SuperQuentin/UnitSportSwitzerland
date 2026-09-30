@@ -22,7 +22,7 @@ changed is how you get there.
 - **The views (`DoorPortals`).** Each open link has a doorway "tunnel" on both sides (a quad plus
   a short box behind it, so the near plane clipping the mouth while stepping through still shows
   the other side). The two nearest in view, on the camera's side, get a portal each: a camera at
-  `map * mainCamera`, half resolution, in a `SubViewport` sampled in screen space
+  `map * mainCamera`, full resolution, in a `SubViewport` sampled in screen space
   (`door_portal.gdshader`, `source_color`). Each of those can see one more doorway through its
   own, which gets a nested portal: through a house with two doors, or out of one door and into
   the house across the street. Past that, a doorway shows a dark hall.
@@ -36,7 +36,8 @@ changed is how you get there.
   `portal_clip_plane_N` (`portal_clip.gdshaderinc`): the world shaders, `ps1_interior` and the
   doorway quads discard what is on the camera's side of its doorway, but only when
   `CAMERA_POSITION_WORLD` is that camera's. Through two doors in line the map can land a portal
-  camera exactly on the screen's camera, so each is nudged 5 cm per slot along its view, and the
+  camera exactly on the screen's camera, so each is nudged 5 cm per slot back along its view (forward,
+  a lens by a doorway put its portal camera into the far doorway's tunnel: a black view), and the
   match is 2 cm (floats are ~2 mm steps tens of km out). Avatars and vehicles (standard materials)
   are not clipped.
 - **Which interior a camera is in.** `InteriorNode.PlanAt`: the one whose plan contains it, else
@@ -47,9 +48,28 @@ changed is how you get there.
   (`ChunkManager.BuildingBodyAt`). `AfterMove` checks the step against the doorway plane and
   `FootPlayer.CrossDoor` carries position, heading and velocity across (no reset, unlike a
   teleport). The client then tells the server (`RequestCross`), which updates the space table.
+  **Out is let through whatever the door is doing** (#78): the leaf is solid only below 2 % swing
+  while crossing needed `Passable` (open, over 60 %), so walking out as it swung shut stepped
+  through the hole into the void under the terrain. Out needs only the hole (the interior
+  doorway's full width); in still needs `Passable`, the facade stops the rest. The building
+  you are in keeps its shut doors' links, so a leaf going solid on someone in the doorway and
+  pushing them out still carries them outside. The server accepts it (`_planKeys` keeps doors).
 - **Third person.** `FootPlayer.UpdateThirdPersonCamera` asks `ArmThroughDoor`: an arm crossing
   an open doorway is ray-tested on this side up to the sill, then in the other space, and the lens
   is placed in the other space. The portal logic finds the viewer's side from the camera's height.
+- **The screen's camera never stands in a doorway** (#78), whatever placed it (first person,
+  the arm, a ride, the free camera). Within 1 m of an open doorway its near plane drops from 8 cm
+  to 5 mm (reversed depth keeps the distance sharp). In the slab `DoorLink.LensSlabMin`..`LensSlabMax`
+  (both quads plus how far the near plane's corners reach, ~1.3 cm), inside the opening widened as
+  much, the near plane would cut the quad: the view went black or showed the wall behind.
+  `DoorPortals.KeepOutOfDoorways` snaps it to the nearer side (through the map only within the
+  opening): a ~15 cm jump, most of it the gap between the quads (`OutsideQuadOffset`). Both for
+  the drawn frame only: `RenderingServer.FramePostDraw` puts them back, since a first-person
+  camera is a child of a body that turns in `_Process` without a physics tick. So
+  `door_portal.gdshader` drops a quad for any camera behind it: its old 30 cm slack (for a lens
+  stepping through) made a lens up to 30 cm in front of a doorway black, its portal camera as
+  close behind the far doorway drawing that dark hall. "Behind" is behind the quad's mouth
+  (`OutsideQuadOffset` out on the facade), not the doorway plane.
 - **Linked spaces.** `InteriorManager.Linked(a, b)`: an interior and the outside see each other
   while one of its doors is open. It drives remote visibility and the synchroniser filter, so
   players are seen (and move) through the doorway.
@@ -78,7 +98,8 @@ changed is how you get there.
   (`SfxSynth.Street`), muffled while shut.
 - **World hiding.** `OutsideShownChanged`: the outside is hidden only while the player is inside
   with every door of the building shut; the portal needs it drawn.
-- **Checks.** `--interiorcheck[,shot.png]` opens, walks in, out, and checks the auto-close. Online
+- **Checks.** `--interiorcheck[,shot.png]` opens, walks in, out, back in, shuts the door from
+  just inside and walks out while it swings (must land on the street), and checks the auto-close. Online
   (`--connect`), it drives the networked player. `--doorwatch[,shot.png]` on a second client
   watches the same door from 8 m: door state, portal, the other player visible through it.
   `--film` (with a shot path) saves every frame of each walk-through. After the church, it opens
@@ -86,7 +107,9 @@ changed is how you get there.
   and two facing each other across a street, when the generated village has them.
 - **Demo.** `--portaldemo[,out.png]` (`PortalDemo`): a hand-laid street with no terrain and no
   server. Two houses side by side, a house with a front and a back door (seen through, to a red
-  car in the backyard), a house across the street (seen from inside it), a figure walking in.
+  car in the backyard), a house across the street (seen from inside it), a lens parked in a
+  doorway from each side (`in_doorway`, `in_reveal`, `in_reveal_down`: must not be black), a
+  figure walking in.
   With a path it saves each view and quits; without, it cycles them.
   A dedicated server needs terrain; with none, PR #46's `--generated-world`.
 - **Known limits.** Two portals plus one nested in each; a third level is a dark hall. Mounted

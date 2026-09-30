@@ -357,6 +357,8 @@ public partial class InteriorProbe : Node
             case 9:
             {
                 if (_t < 1.0) return;
+                if (ShutBehind(interiors) is not { } shut) return;
+                if (!shut) { Finish(); return; }
                 var d = _player!.GlobalPosition - _door.World;
                 Check(new Vector2(d.X, d.Z).Length() < 3f && Mathf.Abs(d.Y) < 2f,
                     $"back by the same door ({new Vector2(d.X, d.Z).Length():F1} m, dy {d.Y:F1})");
@@ -771,6 +773,85 @@ public partial class InteriorProbe : Node
         _player!.EnterInterior(l.Key, at, Mathf.Atan2(-face.X, -face.Z));
         _player.Velocity = Vector3.Zero;
     }
+
+    /// <summary>
+    /// Out, back in, then E on the door from just inside and straight out while it swings shut:
+    /// the leaf is not solid yet and the door no longer passable, and there must still be a way
+    /// out, not a step into the void under the terrain (#78). Null while under way; ends outside.
+    /// </summary>
+    private bool? ShutBehind(InteriorManager interiors)
+    {
+        string door = _door.Key.ToString();
+        switch (_shut)
+        {
+            case -1:
+                // just out, facing the street: turned round in front of the door
+                StandOutside(_door);
+                _shut = -2;
+                _shutT = 0;
+                return null;
+            case -2:
+                if ((_shutT += GetPhysicsProcessDeltaTime()) < 1.0 || !_player!.IsOnFloor()) return null;
+                _shut = 0;
+                return null;
+            case 0:
+                if (WalkThrough(interiors, door, inward: true, GetPhysicsProcessDeltaTime(), null) is not { } inside) return null;
+                if (!inside) return false;
+                _shut = 1;
+                _shutT = 0;
+                return null;
+            case 1:
+            {
+                // half a metre in, facing out: at the hole while the leaf is still swinging
+                var l = interiors.Current!;
+                var node = interiors.CurrentNode!;
+                var way = l.EntranceFor(door);
+                var at = node.GlobalTransform * new Vector3(way.X + way.InX * 0.5f, 0.1f, way.Z + way.InZ * 0.5f);
+                var face = node.GlobalTransform.Basis * new Vector3(-way.InX, 0, -way.InZ);
+                _player!.EnterInterior(l.Key, at, Mathf.Atan2(-face.X, -face.Z));
+                _player.Velocity = Vector3.Zero;
+                _shut = 2;
+                _shutT = 0;
+                return null;
+            }
+            case 2:
+                if ((_shutT += GetPhysicsProcessDeltaTime()) < 0.5) return null;
+                Check(interiors.IsOpen(door) && _player!.TryInteract(), $"E from inside shuts {door}");
+                Input.ActionPress(PlayerInput.MoveForward);
+                _shut = 3;
+                _shutT = 0;
+                return null;
+            case 3:
+            {
+                _shutT += GetPhysicsProcessDeltaTime();
+                bool swinging = interiors.Links.TryGetValue(door, out var link) && link.Swing > 0f;
+                if (_player!.Indoors && _shutT < 3) return null;
+                Input.ActionRelease(PlayerInput.MoveForward);
+                Check(!_player.Indoors, $"walked out while {door} swung shut{(swinging ? "" : " (it had shut first)")}");
+                Check(_player.GlobalPosition.Y > InteriorManager.InteriorBaseY + 1000f,
+                    $"on the street, not in the void under it (y {_player.GlobalPosition.Y:F1})");
+                _shut = 4;
+                _shutT = 0;
+                return null;
+            }
+            case 4:
+                // opened again from the street, so the walk away below still sees it shut by itself
+                if ((_shutT += GetPhysicsProcessDeltaTime()) < 1.0) return null;
+                Check(!interiors.IsOpen(door) && _player!.TryInteract(), $"E outside opens {door} again");
+                _shut = 5;
+                _shutT = 0;
+                return null;
+            default:
+                _shutT += GetPhysicsProcessDeltaTime();
+                if (!interiors.IsOpen(door) && _shutT < 5) return null;
+                Check(interiors.IsOpen(door), $"{door} open again");
+                _shut = -1;
+                return !_player!.Indoors;
+        }
+    }
+
+    private int _shut = -1;
+    private double _shutT;
 
     private int _walk, _frame;
     private Camera3D? _demo;
