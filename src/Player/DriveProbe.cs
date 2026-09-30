@@ -68,6 +68,10 @@ public partial class DriveProbe : Node
         public bool Mounted, Out;
         public double FinishTime = -1;
         public int Impacts, Contacts;
+        /// <summary>The speed the current knock has taken so far, and when it last took some.</summary>
+        public float HitLoss;
+        public double LastHit = -1;
+        public bool HitCounted;
         public float OffRoad, Top, PeakBrake, Arc;
         /// <summary>Where the top speed was reached, and where this entry started, m along the line.</summary>
         public float TopArc, StartArc = -1;
@@ -174,9 +178,16 @@ public partial class DriveProbe : Node
                 var entry = new Entry { Spec = spec, Kind = kind, Label = label, Grip = spec?.Style == DriveStyle.Grip, Player = player };
                 player.Impacted += lost =>
                 {
-                    if (lost < 2f) return;
+                    // FootPlayer takes a knock off the speed at most 25 m/s² a frame (0.4 m/s), so one
+                    // event never reached the old 2 m/s bar and head-on crashes counted as 0 impacts:
+                    // add up the losses of one knock (events less than 0.3 s apart)
+                    if (_t - entry.LastHit > 0.3) { entry.HitLoss = 0f; entry.HitCounted = false; }
+                    entry.LastHit = _t;
+                    entry.HitLoss += lost;
+                    if (entry.HitCounted || entry.HitLoss < 2f) return;
+                    entry.HitCounted = true;
                     entry.Impacts++;
-                    _log.Add($"{_t,5:F1}s {label}: impact -{lost * 3.6f:F0} km/h at {entry.Arc:F0} m");
+                    _log.Add($"{_t,5:F1}s {label}: impact at {entry.Arc:F0} m ({entry.Player.Motion.Speed * 3.6f:F0} km/h)");
                 };
                 player.Announced += (text, _) => _log.Add($"{_t,5:F1}s {label}: {text}");
                 _entries.Add(entry);
