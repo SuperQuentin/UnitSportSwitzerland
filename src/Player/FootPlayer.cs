@@ -1006,6 +1006,48 @@ public partial class FootPlayer : CharacterBody3D
         var ride = kind == RideKind.OnFoot ? null : Rideable.Create(kind);
         _capsule.Radius = ride?.BodyRadius ?? BodyRadius;
         SetBodyHeight(ride?.BodyHeight ?? StandHeight);
+        FitHull(ride);
+    }
+
+    /// <summary>Bottom of a hull, above the ground: bumps of the 1 m lattice must not catch it.</summary>
+    private const float HullLift = 0.45f;
+
+    private CollisionShape3D? _hull;
+
+    /// <summary>
+    /// A car or a motorbike is a box, not the capsule that carries it. The capsule (radius 0.85 for a
+    /// car) is what rides the ground — it glides over the terrain lattice where a box would snag —
+    /// but two capsules only meet when their centres are 1.7 m apart, so two 4.2 m cars sank a third
+    /// of their length into each other. The hull is the body's box from bumper height up, turned
+    /// with the body (drift angle included, see <see cref="AlignHull"/>), on the owner's copy for its
+    /// own physics and on every remote copy so others hit the car they see.
+    /// </summary>
+    private void FitHull(Rideable? ride)
+    {
+        bool wants = ride is { IsVehicle: true } and not Flyer;
+        if (!wants)
+        {
+            _hull?.QueueFree();
+            _hull = null;
+            return;
+        }
+        var (centre, size) = ride!.ParkedBox;
+        float bottom = Mathf.Max(centre.Y - size.Y / 2f, HullLift);
+        float top = centre.Y + size.Y / 2f;
+        if (top - bottom < 0.2f) { _hull?.QueueFree(); _hull = null; return; }
+        _hull ??= new CollisionShape3D { Name = "Hull" };
+        _hull.Shape = new BoxShape3D { Size = new Vector3(size.X, top - bottom, size.Z) };
+        _hull.Position = new Vector3(centre.X, (top + bottom) / 2f, centre.Z);
+        if (_hull.GetParent() == null) AddChild(_hull);
+    }
+
+    /// <summary>Turns the hull to the body's actual yaw (a drifting car is sideways to the node).</summary>
+    private void AlignHull()
+    {
+        if (_hull == null) return;
+        var fwd = BodyPose.Basis.Z;
+        float yaw = new Vector2(fwd.X, fwd.Z).LengthSquared() > 1e-6f ? Mathf.Atan2(fwd.X, fwd.Z) : 0f;
+        _hull.Rotation = new Vector3(0, yaw, 0);
     }
 
     /// <summary>
@@ -1029,6 +1071,7 @@ public partial class FootPlayer : CharacterBody3D
                     if (_ride is Flyer f) f.AnimateFlight(_visual, _flight, dt);
                     else _ride.Animate(_visual, _motion, dt);
                     BodyPose = _visual.Transform;
+                    AlignHull();
                     Anim = _ride.WritePose(_visual, _motion, _flight);
                 }
                 return;
@@ -1106,6 +1149,7 @@ public partial class FootPlayer : CharacterBody3D
         if (_visual == null) return;
         if (_remoteRide?.Kind != kind) _remoteRide = Rideable.Create(kind);
         _visual.Transform = BodyPose;
+        AlignHull();
         _remoteRide?.AnimateRemote(_visual, Anim, dt);
         SetRemoteEngine(_remoteRide as Flyer);
     }
@@ -1601,6 +1645,7 @@ public partial class FootPlayer : CharacterBody3D
             if (radius > _capsule.Radius + 0.05f) GlobalPosition += Vector3.Up * (radius - _capsule.Radius);
             _capsule.Radius = radius;
             SetBodyHeight(_ride?.BodyHeight ?? StandHeight);
+            FitHull(_ride);
         }
         _settle = SettleTime;
         _shortfall = 0f;
