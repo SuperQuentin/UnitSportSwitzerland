@@ -35,6 +35,11 @@ public partial class ItemController : Node
     private bool _forceAim;
     private bool _wasKnockedOut;
 
+    // a use that plays an animation first (eat, drink, put on a hat): the effect lands at the peak
+    private bool _useBusy, _usePeaked;
+    private ItemId _useItem;
+    private static readonly Random SfxRng = new();
+
     // camera zoom: 35 mm-equivalent focal length, kept across aims; wheel / D-pad change it while aiming
     private const float FocalMin = 24f, FocalMax = 200f, ZoomStep = 1.12f;
     private float _focalMm = 35f;
@@ -126,6 +131,13 @@ public partial class ItemController : Node
         player.HeldItemId = (int)_inventory.HeldId;
         var visual = player.GetNodeOrNull<HeldItemVisual>("HeldItem");
 
+        // switching item mid-animation cancels it (once the effect has landed, the item may be gone: let it finish)
+        if (_useBusy && (visual == null || !visual.OneShotActive || (!_usePeaked && _inventory.HeldId != _useItem)))
+        {
+            if (visual?.OneShotActive == true) visual.CancelOneShot();
+            _useBusy = false;
+        }
+
         var def = ItemDefs.Get(_inventory.HeldId);
         bool usable = UsablePlayer != null;
         bool picking = _smart.PickerOpen && _inventory.HeldId == ItemId.SmartBinoculars;   // stays raised while a target is picked
@@ -137,9 +149,14 @@ public partial class ItemController : Node
         // switching item or getting on a bike all fall back to normal without a special case
         _aimingPhoto = aiming && def!.Use == ItemUse.Photo;
         _ui.PhotoFocalMm = _focalMm;
-        player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f, ItemUse.Photo => FovFromFocal(_focalMm), _ => 50f } : null;
+        // binoculars breathe: a slow tiny zoom drift, and the overlay drifts with it
+        float breath = (float)Time.GetTicksMsec() / 1000f;
+        float breathFov = 1f + 0.012f * Mathf.Sin(breath * 1.3f);
+        _ui.OpticSway = aiming && def!.Use == ItemUse.Optic
+            ? new Vector2(0.0035f * Mathf.Sin(breath * 0.9f + 1f), 0.005f * Mathf.Sin(breath * 1.3f)) : Vector2.Zero;
+        player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f * breathFov, ItemUse.Photo => FovFromFocal(_focalMm), _ => 50f } : null;
         player.ScopeView = aiming;
-        player.ItemAction = aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
+        player.ItemAction = _useBusy ? 2 : aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
         player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => 0.6f } : 1f;
         // held items stay visible while aiming: they are raised to a pose. Binoculars and the
         // camera hide once at the eye (you look through them: the overlay is the view).
@@ -151,6 +168,8 @@ public partial class ItemController : Node
                 ItemUse.Shoot => ViewPose.Aim,
                 _ => ViewPose.Eye,
             });
+            if (!aiming && def?.Use == ItemUse.Readout) visual.SetPose(ViewPose.Read);   // the GPS is held up to read
+            visual.ScreenText = def?.Use == ItemUse.Readout && usable ? GpsScreen(player) : null;
             visual.Suppressed = _capturing || (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
         }
 
@@ -158,7 +177,8 @@ public partial class ItemController : Node
         _ui.Scope = aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def.Use : null;
         _smart.Held = usable && _inventory.HeldId == ItemId.SmartBinoculars;
         _smart.Active = _smart.Held && _ui.Scope == ItemUse.Optic;
-        _ui.Readout = usable && def?.Use == ItemUse.Readout ? GpsReadout(player) : null;
+        // in first person the readout is on the device's own screen; the HUD panel is for third person
+        _ui.Readout = usable && def?.Use == ItemUse.Readout && !player.IsFirstPerson ? GpsReadout(player) : null;
     }
 
     public override void _UnhandledInput(InputEvent e)
@@ -231,14 +251,22 @@ public partial class ItemController : Node
         switch (def.Use)
         {
             case ItemUse.Consume:
-                if (player.Heal(def.Heal))
+                if (_useBusy) break;
+                if (player.Health >= FootPlayer.MaxHealth - 0.01f)
                 {
+                    _ui.Toast("Already at full health.");
+                    break;
+                }
+                bool drink = def.Category == ItemCategory.Water;
+                StartUse(player, slot, def, ViewPose.Mouth, 0.35f, 0.6f, 0.3f, () =>
+                {
+                    if (!player.Heal(def.Heal)) return;
                     _inventory.TakeOne(slot);
                     Kick(player);
-                    Play(SfxSynth.Chime, 1.2f);
+                    var bank = drink ? SfxSynth.GulpBank : SfxSynth.CrunchBank;
+                    Play(bank.Variants[SfxRng.Next(bank.Variants.Length)]);
                     _ui.Toast($"{def.Name}: +{def.Heal:F0} health");
-                }
-                else _ui.Toast("Already at full health.");
+                });
                 break;
 
             case ItemUse.Photo:
@@ -279,16 +307,36 @@ public partial class ItemController : Node
             }
 
             case ItemUse.Wear:
-                bool on = _inventory.Worn != stack.Id;
-                _inventory.SetWorn(on ? stack.Id : ItemId.None);
-                Play(SfxSynth.Tick, on ? 1.2f : 0.9f);
-                _ui.Toast(on ? $"You put on the {def.Name.ToLowerInvariant()}." : $"You take off the {def.Name.ToLowerInvariant()}.");
+                if (_useBusy) break;
+                var hat = stack.Id;
+                StartUse(player, slot, def, ViewPose.Head, 0.3f, 0.2f, 0.3f, () =>
+                {
+                    bool on = _inventory.Worn != hat;
+                    _inventory.SetWorn(on ? hat : ItemId.None);
+                    Play(SfxSynth.Tick, on ? 1.2f : 0.9f);
+                    _ui.Toast(on ? $"You put on the {def.Name.ToLowerInvariant()}." : $"You take off the {def.Name.ToLowerInvariant()}.");
+                });
                 break;
 
             case ItemUse.Material:
                 _ui.Toast($"{def.Name}: keep it for trading or building.");
                 break;
         }
+    }
+
+    /// <summary>
+    /// Plays <paramref name="pose"/> as a one-shot, then runs <paramref name="effect"/> at its peak. Replicated
+    /// as <c>ItemAction</c> = 2 for the animation's length. A use of a slot that is not the held one (from the
+    /// pack panel) has nothing in hand to animate and applies at once.
+    /// </summary>
+    private void StartUse(FootPlayer player, int slot, ItemDef def, ViewPose pose, float inTime, float hold, float outTime, Action effect)
+    {
+        var visual = player.GetNodeOrNull<HeldItemVisual>("HeldItem");
+        if (visual == null || slot != _inventory.Selected) { effect(); return; }
+        _useBusy = true;
+        _usePeaked = false;
+        _useItem = def.Id;
+        visual.PlayOneShot(pose, inTime, hold, outTime, () => { _usePeaked = true; effect(); });
     }
 
     private static void Kick(FootPlayer player)
@@ -411,6 +459,18 @@ public partial class ItemController : Node
             Play(SfxSynth.Landing, 1.5f);
             _ui.Toast("Flag planted.");
         });
+    }
+
+    /// <summary>The same numbers in the short lines that fit the device's own screen.</summary>
+    private string GpsScreen(FootPlayer player)
+    {
+        var p = player.GlobalPosition;
+        var (e, n) = _origin.ToLv95(p);
+        var f = -player.Camera.GlobalTransform.Basis.Z;
+        int bearing = Mathf.PosMod(Mathf.RoundToInt(Mathf.RadToDeg(Mathf.Atan2(f.X, -f.Z))), 360);
+        string[] points = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
+        string point = points[(int)Mathf.Round(bearing / 45f) % 8];
+        return $"E {e:# ### ###}\nN {n:# ### ###}\n{p.Y:F0} m\n{bearing:000}° {point}";
     }
 
     /// <summary>LV95 position, altitude and compass heading — what a hiking GPS shows.</summary>

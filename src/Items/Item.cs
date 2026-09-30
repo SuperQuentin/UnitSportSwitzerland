@@ -264,10 +264,13 @@ public static class ItemDefs
             }
             case ItemId.Gps:
             {
+                // the screen faces +Z, toward the holder's camera (in first person a texture quad is drawn on top)
                 var body = new Color(0.95f, 0.78f, 0.12f);
-                s.Box(new Vector3(0, 0.06f, 0), new Vector3(0.058f, 0.11f, 0.026f), body);
-                s.Box(new Vector3(0, 0.075f, -0.0135f), new Vector3(0.044f, 0.05f, 0.002f), new Color(0.35f, 0.55f, 0.40f));
-                s.Tube(new Vector3(0.02f, 0.11f, 0), new Vector3(0.02f, 0.15f, 0), 0.006f, new Color(0.1f, 0.1f, 0.1f));
+                s.Box(new Vector3(0, 0.07f, 0), new Vector3(0.085f, 0.15f, 0.028f), body);
+                s.Box(new Vector3(0, 0.075f, 0.0145f), new Vector3(0.074f, 0.063f, 0.002f), new Color(0.35f, 0.55f, 0.40f));
+                foreach (float x in new[] { -0.02f, 0.02f })
+                    s.Box(new Vector3(x, 0.022f, 0.0145f), new Vector3(0.022f, 0.012f, 0.002f), new Color(0.15f, 0.15f, 0.15f));
+                s.Tube(new Vector3(0.03f, 0.145f, 0), new Vector3(0.03f, 0.19f, 0), 0.007f, new Color(0.1f, 0.1f, 0.1f));
                 break;
             }
             case ItemId.SwissFlag:
@@ -293,6 +296,10 @@ public static class ItemDefs
                     s.Tube(new Vector3(x, 0.025f, 0.08f), new Vector3(x, 0.025f, 0.72f), 0.011f, steel, 6);
                 break;
             }
+            case ItemId.WitchHat or ItemId.PumpkinHead or ItemId.SantaHat or ItemId.ReindeerAntlers:
+                // the real hat, the one a figure wears
+                HumanMeshBuilder.AppendHat(s, UnitSport.Occasions.OccasionHats.ForItem(id), new Vector3(0, -0.02f, 0), Vector3.Up * 0.2f);
+                break;
             default:
                 // no bespoke mesh: a thin card of the item's icon, one box per run of same-coloured pixels
                 AppendIconCard(s, id);

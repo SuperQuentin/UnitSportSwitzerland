@@ -4,7 +4,7 @@ using UnitSport.Player;
 namespace UnitSport.Items;
 
 /// <summary>Named places the viewmodel can be held; blended between smoothly, see <see cref="HeldItemVisual.SetPose"/>.</summary>
-public enum ViewPose { Rest, Aim, Eye, Mouth, Plant, Inspect }
+public enum ViewPose { Rest, Aim, Eye, Mouth, Plant, Inspect, Read, Head }
 
 /// <summary>
 /// Draws what a player holds, on every copy of that player.
@@ -52,7 +52,8 @@ public partial class HeldItemVisual : Node3D
     private ViewPose _shotPose;
     private float _shotIn, _shotHold, _shotOut, _shotT;
     private bool _shotPeaked;
-    private System.Action? _shotPeak;
+    private System.Action? _shotPeak, _shotEnd;
+    private float _shotW;
 
     /// <summary>The pose being blended toward.</summary>
     public ViewPose Pose => _pose;
@@ -78,7 +79,7 @@ public partial class HeldItemVisual : Node3D
     /// eases in for <paramref name="inTime"/>, calls <paramref name="onPeak"/> once on arrival,
     /// holds, eases out for <paramref name="outTime"/>. A new call replaces one in progress.
     /// </summary>
-    public void PlayOneShot(ViewPose target, float inTime, float hold, float outTime, System.Action? onPeak = null)
+    public void PlayOneShot(ViewPose target, float inTime, float hold, float outTime, System.Action? onPeak = null, System.Action? onEnd = null)
     {
         _shotActive = true;
         _shotPose = target;
@@ -88,7 +89,49 @@ public partial class HeldItemVisual : Node3D
         _shotT = 0f;
         _shotPeaked = false;
         _shotPeak = onPeak;
+        _shotEnd = onEnd;
     }
+
+    /// <summary>True while a one-shot (eat, put on a hat...) is playing; the owner mirrors it into <c>ItemAction</c>.</summary>
+    public bool OneShotActive => _shotActive;
+
+    /// <summary>Stops a one-shot at once without firing its peak or end (the item was switched away).</summary>
+    public void CancelOneShot()
+    {
+        _shotActive = false;
+        _shotW = 0f;
+        _shotPeak = null;
+        _shotEnd = null;
+    }
+
+    /// <summary>Advances the one-shot clock; runs in every view, because the third-person owner has no viewmodel to drive it.</summary>
+    private void StepShot(float dt)
+    {
+        if (!_shotActive) { _shotW = 0f; return; }
+        _shotT += dt;
+        float w;
+        if (_shotT < _shotIn) w = _shotT / _shotIn;
+        else if (_shotT < _shotIn + _shotHold) w = 1f;
+        else w = 1f - (_shotT - _shotIn - _shotHold) / _shotOut;
+        if (!_shotPeaked && _shotT >= _shotIn) { _shotPeaked = true; var peak = _shotPeak; _shotPeak = null; peak?.Invoke(); }
+        if (_shotT >= _shotIn + _shotHold + _shotOut)
+        {
+            _shotActive = false;
+            w = 0f;
+            var end = _shotEnd;
+            _shotEnd = null;
+            end?.Invoke();
+        }
+        w = Mathf.Clamp(w, 0f, 1f);
+        _shotW = w * w * (3f - 2f * w);
+    }
+
+    /// <summary>Text drawn on the GPS screen (first person); null leaves it blank.</summary>
+    public string? ScreenText { get; set; }
+
+    private SubViewport? _screenVp;
+    private Label? _screenLabel;
+    private MeshInstance3D? _screenQuad;
 
     /// <summary>Position and euler rotation (camera space, full scale) of a pose for the held item.</summary>
     private (Vector3 pos, Vector3 rot) PoseTransform(ViewPose pose)
@@ -102,7 +145,13 @@ public partial class HeldItemVisual : Node3D
             // camera raised in front of the eye, slightly below centre; binoculars right at the eyes
             ViewPose.Eye when use == ItemUse.Optic => (new Vector3(0f, -0.03f, -0.20f), Vector3.Zero),
             ViewPose.Eye => (new Vector3(0f, -0.12f, -0.38f), Vector3.Zero),
-            ViewPose.Mouth => (new Vector3(0.02f, -0.15f, -0.28f), new Vector3(0.55f, 0, 0)),
+            // a bottle is upright in the hand: tipped ~70 degrees so its neck comes to the mouth; food jabs up and in
+            ViewPose.Mouth when _shown == ItemId.WaterBottle => (new Vector3(0.0f, -0.17f, -0.24f), new Vector3(1.25f, 0, 0)),
+            ViewPose.Mouth => (new Vector3(0.0f, -0.16f, -0.24f), new Vector3(0.45f, 0, 0)),
+            // GPS held up: low centre, top tipped away so the screen faces the eye
+            ViewPose.Read => (new Vector3(0.0f, -0.16f, -0.30f), new Vector3(-0.65f, 0, 0)),
+            // a hat lifted above the eye line, about to go on
+            ViewPose.Head => (new Vector3(0.0f, 0.09f, -0.26f), new Vector3(0.6f, 0, 0)),
             ViewPose.Plant => (new Vector3(0.10f, -0.42f, -0.50f), new Vector3(-0.9f, 0.1f, 0)),
             ViewPose.Inspect => (new Vector3(0.02f, -0.06f, -0.36f), new Vector3(0.3f, 0.6f, 0.1f)),
             _ => (ViewmodelRest, new Vector3(0, 0.12f, 0)),
@@ -160,6 +209,7 @@ public partial class HeldItemVisual : Node3D
         // --- in front of the local camera ---
         if (!_player.IsMultiplayerAuthority()) return;
         bool firstPerson = _player.IsFirstPerson || _player.ScopeView;
+        StepShot(dt);
         EnsureViewmodel();
         if (_viewmodel == null) return;
 
@@ -197,25 +247,63 @@ public partial class HeldItemVisual : Node3D
         var rot = _curRot;
         if (_shotActive)
         {
-            _shotT += dt;
-            float w;
-            if (_shotT < _shotIn) w = _shotT / _shotIn;
-            else if (_shotT < _shotIn + _shotHold) w = 1f;
-            else w = 1f - (_shotT - _shotIn - _shotHold) / _shotOut;
-            if (!_shotPeaked && _shotT >= _shotIn) { _shotPeaked = true; _shotPeak?.Invoke(); }
-            if (_shotT >= _shotIn + _shotHold + _shotOut) { _shotActive = false; w = 0f; }
-            w = Mathf.Clamp(w, 0f, 1f);
-            w = w * w * (3f - 2f * w);
             var (sp, sr) = PoseTransform(_shotPose);
-            pos = pos.Lerp(sp, w);
-            rot = rot.Lerp(sr, w);
+            pos = pos.Lerp(sp, _shotW);
+            rot = rot.Lerp(sr, _shotW);
         }
 
         // less sway once the item is raised to a pose
         float swayScale = _pose == ViewPose.Rest ? 1f : 0.25f;
+        UpdateScreen();
         _viewmodel.Scale = Vector3.One * ViewScale;
         _viewmodel.Position = (pos + _sway * swayScale + new Vector3(0, -lowered, Kick * 0.06f)) * ViewScale;
         _viewmodel.Rotation = rot + new Vector3(Kick * 0.3f, 0, 0);
+    }
+
+    /// <summary>
+    /// The GPS screen: a SubViewport drawing the readout in a Label, shown on a quad just in front of the
+    /// device's face. Chosen over the HUD panel because the numbers then live on the device you hold up;
+    /// the HUD panel stays as the third-person / fallback display.
+    /// </summary>
+    private void UpdateScreen()
+    {
+        bool gps = _shown == ItemId.Gps && _viewmodel != null;
+        if (!gps)
+        {
+            if (_screenQuad != null) _screenQuad.Visible = false;
+            if (_screenVp != null) _screenVp.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+            return;
+        }
+        if (_screenVp == null)
+        {
+            _screenVp = new SubViewport { Size = new Vector2I(96, 84), RenderTargetUpdateMode = SubViewport.UpdateMode.Always, TransparentBg = false };
+            var bg = new ColorRect { Color = new Color(0.62f, 0.78f, 0.55f) };
+            bg.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+            _screenVp.AddChild(bg);
+            _screenLabel = new Label { Position = new Vector2(4, 3), Size = new Vector2(90, 78) };
+            _screenLabel.AddThemeFontSizeOverride("font_size", 13);
+            _screenLabel.AddThemeColorOverride("font_color", new Color(0.08f, 0.16f, 0.08f));
+            _screenLabel.AddThemeConstantOverride("line_spacing", -2);
+            _screenVp.AddChild(_screenLabel);
+            AddChild(_screenVp);
+            _screenQuad = new MeshInstance3D
+            {
+                Name = "GpsScreen",
+                Mesh = new QuadMesh { Size = new Vector2(0.07f, 0.061f) },
+                Position = new Vector3(0, 0.075f, 0.0153f),
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                MaterialOverride = new StandardMaterial3D
+                {
+                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                    AlbedoTexture = _screenVp.GetTexture(),
+                    TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+                },
+            };
+            _viewmodel!.AddChild(_screenQuad);
+        }
+        _screenVp.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        _screenQuad!.Visible = _viewmodel!.Visible;
+        if (_screenLabel != null && _screenLabel.Text != (ScreenText ?? "")) _screenLabel.Text = ScreenText ?? "";
     }
 
     private void EnsureViewmodel()

@@ -355,7 +355,7 @@ public partial class ClientWorld : Node3D
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null
-            || Items.PlacedProbe.Role != null
+            || Items.PlacedProbe.Role != null || Items.UseAnimProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
@@ -369,6 +369,7 @@ public partial class ClientWorld : Node3D
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
+        if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
 
         // F1: every control, from the live bindings; bottom right: the ones that apply here
