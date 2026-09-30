@@ -263,6 +263,91 @@ WriteLine($"  {trees} trees, {buildings} buildings, {water} water cells ({plainW
 Check("trees more than 1 m off the ground mesh", treeErr > 1 ? 1 : 0);
 Check("road vertices more than 1 m off the ground mesh", roadErr > 1 ? 1 : 0);
 
+// ---- the source: FallbackChunkSource under CachingChunkSource, as the game chains them ----------
+WriteLine("source:");
+var inner = new SyntheticSource(real, realFull, realCoarse, knots);
+var fallback = new FallbackChunkSource(inner, world, AnchorE, AnchorN);
+var cache = new CachingChunkSource(fallback);
+fallback.Neighbours = cache;
+var logs = new ConcurrentBag<string>();
+fallback.Log = logs.Add;
+
+// a sample of generated tiles: every one with a detail neighbour, and some further out
+var sample = gen.Where(t => real.Any(k => Math.Abs(k.E - t.E) <= 1 && Math.Abs(k.N - t.N) <= 1)).Take(10)
+    .Concat(gen.Where(t => !real.Any(k => Math.Abs(k.E - t.E) <= 1 && Math.Abs(k.N - t.N) <= 1)).Take(6))
+    .ToList();
+static long Differ(ushort[] a, ushort[] b) =>
+    a.Length != b.Length ? long.MaxValue : a.Zip(b).LongCount(p => p.First != p.Second);
+
+// no real tiles yet: every tile is generated, unblended, the real ones' ids included
+long srcBad = 0;
+foreach (var t in sample.Concat(real.Take(3)))
+    srcBad += Differ((await cache.LoadChunkAsync(t))!.Heights, world.BuildGrid(t, 1).Heights);
+Check("tiles differing from the plain generator before any real tile is known", srcBad);
+
+// the real set arrives: until invalidated, the cache still serves the old tiles
+var snap = fallback.SetReal(real);
+int stale = 0;
+foreach (var t in sample.Take(4))
+    if (Differ((await cache.LoadChunkAsync(t))!.Heights, full[t].Heights) != 0) stale++;
+Check("blended tiles NOT served stale before Invalidate (the test would prove nothing)", 4 - stale);
+// what ChunkManager.MergeAvailableTiles invalidates: the new ids and generated tiles within 4 of them
+bool Affected(TileId id) => real.Contains(id) || real.Any(k => Math.Abs(k.E - id.E) <= 4 && Math.Abs(k.N - id.N) <= 4);
+cache.Invalidate(Affected);
+
+// knots from the coarse grids (no horizon.bin loaded yet)
+long fullBad = 0, coarseBad = 0, realBad = 0, coverBad = 0;
+var clockSrc = Stopwatch.StartNew();
+await Parallel.ForEachAsync(sample, async (t, _) =>
+{
+    var f = await cache.LoadChunkAsync(t);
+    var c = await cache.LoadCoarseChunkAsync(t);
+    Interlocked.Add(ref fullBad, Differ(f!.Heights, full[t].Heights));
+    Interlocked.Add(ref coarseBad, Differ(c!.Heights, coarse[t].Heights));
+    // cover comes from the coarse blend and must equal cover from the full one
+    var cov = await cache.LoadCoverAsync(t);
+    Interlocked.Add(ref coverBad, cov!.Zip(world.BuildCover(t, MakeBlend(t, 1))).LongCount(p => p.First != p.Second));
+});
+double coldMs = clockSrc.Elapsed.TotalMilliseconds;
+foreach (var k in real.Take(5))
+    realBad += Differ((await cache.LoadChunkAsync(k))!.Heights, realFull[k].Heights);
+Check($"full vertices differing from the harness's blend ({sample.Count} tiles through the source)", fullBad);
+Check("coarse vertices differing from the harness's blend", coarseBad);
+Check("cover cells differing between the coarse blend and the full one", coverBad);
+Check("real tiles served other than the inner source's", realBad);
+Check("real ids the source claims to generate", real.Count(fallback.Covers));
+var farther = new TileId(real.Max(t => t.E) + FallbackChunkSource.FillRadiusTiles + 1, c0.N);
+Check("a tile past the fill domain the source claims to generate", fallback.Covers(farther) || snap.InDomain(farther) ? 1 : 0);
+Check("tiles outside every blend window that still get a blend",
+    gen.Count(t => !Affected(t) && fallback.BlendFor(t, true).Result != null));
+
+// the merged horizon: real knots where real, the harness's knots-only samples everywhere generated
+var hIndex = (await fallback.LoadHorizonAsync())!;
+long hzBad = 0, hzMissing = 0;
+foreach (var t in gen)
+    if (hIndex.TryGet(t, out var s)) hzBad += Differ(s, horizon[t]); else hzMissing++;
+foreach (var k in real)
+    if (hIndex.TryGet(k, out var s)) hzBad += Differ(s, knots[k]); else hzMissing++;
+Check($"horizon samples differing from the grids ({hIndex.Count} tiles in the merged index)", hzBad);
+Check("tiles missing from the merged horizon", hzMissing);
+
+// the same blends again, now from horizon.bin's knots rather than the tiles: the same bits
+fallback.SetReal(real);
+cache.Invalidate(Affected);
+long knotBad = 0;
+foreach (var t in sample.Take(4))
+    knotBad += Differ((await cache.LoadChunkAsync(t))!.Heights, full[t].Heights);
+Check("vertices differing when the knots come from horizon.bin instead of the tiles", knotBad);
+
+// switched off: nothing generated, the real tiles untouched
+fallback.SetReal(real, enabled: false);
+cache.Invalidate(null);
+Check("tiles still generated with the fill off",
+    (await cache.LoadChunkAsync(sample[0]) == null ? 0 : 1) + (fallback.Covers(sample[0]) ? 1 : 0));
+Check("real tiles lost with the fill off", await cache.LoadChunkAsync(real.First()) == null ? 1 : 0);
+foreach (var l in logs) WriteLine($"  log: {l}");
+WriteLine($"  {sample.Count} tiles cold through the source, blend loads included: {coldMs:F0} ms");
+
 static string Ms(IEnumerable<double> v)
 {
     var a = v.OrderBy(x => x).ToArray();
@@ -273,3 +358,22 @@ WriteLine($"  full grid {Ms(tFull)} (unblended {Ms(tPlain)}), coarse grid {Ms(tC
 
 WriteLine(fails == 0 ? "ALL OK" : $"{fails} CHECK(S) FAILED");
 return fails == 0 ? 0 : 1;
+
+/// <summary>The "real" region as an ordinary chunk source: grids, coarse grids and a horizon.bin.</summary>
+sealed class SyntheticSource(IReadOnlySet<TileId> real, IReadOnlyDictionary<TileId, ChunkGrid> fullGrids,
+    IReadOnlyDictionary<TileId, ChunkGrid> coarseGrids, IReadOnlyDictionary<TileId, ushort[]> knots) : IChunkSource
+{
+    public Task<TerrainManifest> LoadManifestAsync(CancellationToken ct = default) => Task.FromResult(new TerrainManifest());
+    public Task<ChunkGrid?> LoadChunkAsync(TileId id, CancellationToken ct = default) =>
+        Task.FromResult(real.Contains(id) ? fullGrids[id] : null);
+    public Task<ChunkGrid?> LoadCoarseChunkAsync(TileId id, CancellationToken ct = default) =>
+        Task.FromResult(real.Contains(id) ? coarseGrids[id] : null);
+    public Task<RoadTile?> LoadRoadsAsync(TileId id, CancellationToken ct = default) => Task.FromResult<RoadTile?>(null);
+    public Task<HashSet<int>?> LoadHolesAsync(TileId id, CancellationToken ct = default) => Task.FromResult<HashSet<int>?>(null);
+    public Task<BuildingTile?> LoadBuildingsAsync(TileId id, CancellationToken ct = default) => Task.FromResult<BuildingTile?>(null);
+    public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default) => Task.FromResult<byte[]?>(null);
+    public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default) =>
+        Task.FromResult<List<TreeInstance>?>(null);
+    public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default) =>
+        Task.FromResult<HorizonIndex?>(new HorizonIndex(knots.ToDictionary(kv => kv.Key, kv => kv.Value)));
+}

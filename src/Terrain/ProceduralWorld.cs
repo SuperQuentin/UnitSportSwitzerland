@@ -3,59 +3,48 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Terrain;
 
 /// <summary>
-/// A generated stand-in world for a copy of the game with no terrain data at all: an alpine
-/// valley with a river, a road and a railway along its floor, villages strung along the road,
-/// farms, forest up to a tree line, rock and snow above it, vineyards on the sunny side.
+/// A generated stand-in for terrain the game has no data for: an alpine valley with a river, a
+/// road and a railway along its floor, villages strung along the road, farms, forest up to a
+/// tree line, rock and snow above it, vineyards on the sunny side.
 ///
 /// <para>
-/// It is only a fallback. A fresh clone has no <c>terrain_chunks/</c> (the generated data is
-/// 5.3 GB and not in the repository), and until the preprocessor is run or a server is joined
-/// the world used to be an empty void — nothing to stand on, so nothing in the game could be
-/// tried. <see cref="FallbackChunkSource"/> serves these tiles through the ordinary
-/// <see cref="IChunkSource"/> seam in the ordinary formats, so every system that reads terrain,
-/// roads, cover, trees or buildings works on them unchanged; <see cref="ChunkManager.RetireFallback"/>
-/// throws all of it away the moment real tiles become available.
+/// A fresh clone has no <c>terrain_chunks/</c> (the generated data is 5.3 GB and not in the
+/// repository), and a partial region — a MapSetup zone, a server streaming part of the country —
+/// ends somewhere. Both used to end in void. <see cref="FallbackChunkSource"/> serves these tiles
+/// wherever no real tile exists, through the ordinary <see cref="IChunkSource"/> seam in the
+/// ordinary formats, so every system that reads terrain, roads, cover, trees or buildings works on
+/// them unchanged; beside real tiles the ground bends to meet them (<see cref="Blend"/>).
 /// </para>
 ///
 /// <para>
 /// Everything is a pure function of LV95 position, so it is thread-safe, needs no state per tile,
 /// and a vertex on a tile edge gets the same height from both tiles that share it — the seams are
 /// bit-identical after quantisation for the same reason the real ones are. Distances along the
-/// valley are measured from <see cref="CenterE"/>/<see cref="CenterN"/>, which is placed on the
-/// main road in the middle of a village, so the default spawn lands somewhere worth looking at.
+/// valley are measured from <see cref="CenterE"/>/<see cref="CenterN"/>, the anchor: the game puts
+/// it at the default spawn (Riddes) on every peer, so a client and the server generate the same
+/// world. The valley runs east-west through it for ever; far to the north or south the ground is
+/// high massif.
 /// </para>
 /// </summary>
 public sealed partial class ProceduralWorld
 {
-    /// <summary>Tiles either side of the centre that exist, i.e. an 81 x 81 km square.</summary>
+    /// <summary>
+    /// How far generation reaches past the spawn and past real terrain, in tiles
+    /// (<see cref="FallbackChunkSource.FillRadiusTiles"/>).
+    /// </summary>
     public const int RadiusTiles = 40;
 
-    /// <summary>Horizon reach beyond the playable square: the default 60 km horizon from its edge.</summary>
+    /// <summary>Horizon reach beyond the fill: the default 60 km horizon from its edge.</summary>
     public const int HorizonRadiusTiles = RadiusTiles + 60;
 
     public double CenterE { get; }
     public double CenterN { get; }
-    private readonly TileId _center;
 
     public ProceduralWorld(double centerE, double centerN)
     {
         CenterE = centerE;
         CenterN = centerN;
-        _center = TileId.FromLv95(centerE, centerN);
         _axis0 = RawAxis(0);
-    }
-
-    public bool Contains(TileId id) =>
-        Math.Abs(id.E - _center.E) <= RadiusTiles && Math.Abs(id.N - _center.N) <= RadiusTiles;
-
-    public IEnumerable<TileId> Tiles
-    {
-        get
-        {
-            for (int n = -RadiusTiles; n <= RadiusTiles; n++)
-                for (int e = -RadiusTiles; e <= RadiusTiles; e++)
-                    yield return new TileId(_center.E + e, _center.N + n);
-        }
     }
 
     // ---- the valley ------------------------------------------------------------------------
@@ -297,22 +286,6 @@ public sealed partial class ProceduralWorld
         return (MassifNoise(i, j), DetailNoise(i, j));
     }
 
-    /// <summary>The 100 m far-horizon lattice, well past the playable square.</summary>
-    public HorizonIndex BuildHorizon()
-    {
-        var ids = new List<TileId>();
-        for (int dn = -HorizonRadiusTiles; dn <= HorizonRadiusTiles; dn++)
-            for (int de = -HorizonRadiusTiles; de <= HorizonRadiusTiles; de++)
-                ids.Add(new TileId(_center.E + de, _center.N + dn));
-
-        var samples = new ushort[ids.Count][];
-        Parallel.For(0, ids.Count, t => samples[t] = HorizonSamples(ids[t], null));
-
-        var tiles = new Dictionary<TileId, ushort[]>(ids.Count);
-        for (int t = 0; t < ids.Count; t++) tiles[ids[t]] = samples[t];
-        return new HorizonIndex(tiles);
-    }
-
     /// <summary>
     /// One tile's 11x11 horizon samples. A blend needs only its real knots here: at a 100 m point
     /// D is exactly zero, and a sample on a real tile's edge copies that tile's knot, so these are
@@ -347,12 +320,6 @@ public sealed partial class ProceduralWorld
         }
         return tile;
     }
-
-    public TerrainManifest BuildManifest() => new()
-    {
-        SuggestedOriginLv95 = new Lv95Point { E = CenterE, N = CenterN },
-        Tiles = Tiles.Select(t => new ManifestTile { E = t.E, N = t.N }).ToList(),
-    };
 
     // ---- ground cover ----------------------------------------------------------------------
 

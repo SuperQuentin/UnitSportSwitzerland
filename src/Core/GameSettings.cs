@@ -74,6 +74,13 @@ public sealed class GameSettings
     /// <summary>Distance fog in the world shaders. Off by default: the horizon is the point.</summary>
     public bool Fog { get; set; }
 
+    /// <summary>
+    /// Generate the terrain there is no data for, blended into the real tiles beside it
+    /// (<see cref="Terrain.FallbackChunkSource"/>). Off leaves void past the real region, and
+    /// no world at all on a copy with no terrain.
+    /// </summary>
+    public bool GeneratedFill { get; set; } = true;
+
     /// <summary>Tile builds allowed in flight at once; 0 picks by whether a server is involved.</summary>
     public int MaxConcurrentBuilds { get; set; }
     public const int MaxBuildsCap = 32;
@@ -228,7 +235,8 @@ public sealed class GameSettings
     }
 
     /// <summary>
-    /// "--rings N", "--horizon km", "--fog on|off", "--detail low|medium|high" — for
+    /// "--rings N", "--horizon km", "--fog on|off", "--detail low|medium|high",
+    /// "--generated on|off" — for
     /// screenshotting one configuration against another without touching the saved file.
     /// </summary>
     private void ApplyCommandLine(string[] args)
@@ -241,6 +249,7 @@ public sealed class GameSettings
                 case "--rings" when int.TryParse(v, out int r): RenderDistanceRings = r; break;
                 case "--horizon" when int.TryParse(v, out int h): HorizonKm = h; break;
                 case "--fog": Fog = v != "off" && v != "0" && v != "false"; break;
+                case "--generated": GeneratedFill = v != "off" && v != "0" && v != "false"; break;
                 case "--detail" when Enum.TryParse<DetailPreset>(v, true, out var d): Detail = d; break;
                 case "--builds" when int.TryParse(v, out int b): MaxConcurrentBuilds = b; break;
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):

@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Checks the generated-terrain blend (src/Terrain/ProceduralWorld.Blend.cs) against synthetic
-       real terrain, with no Godot: the generator is plain C# over TerrainFormat. -->
+  <!-- Checks the generated-terrain blend (src/Terrain/ProceduralWorld.Blend.cs) and the source that
+       serves it (FallbackChunkSource under CachingChunkSource) against synthetic real terrain, with
+       no Godot: the generator and the source chain are plain C# over TerrainFormat. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
@@ -15,6 +16,8 @@
 
   <ItemGroup>
     <Compile Include="..\..\src\Terrain\ProceduralWorld*.cs" Link="Generator\%(Filename)%(Extension)" />
+    <!-- the source chain the game runs it through: generation, blend loads, cache invalidation -->
+    <Compile Include="..\..\src\Terrain\IChunkSource.cs;..\..\src\Terrain\FallbackChunkSource.cs;..\..\src\Terrain\CachingChunkSource.cs" Link="Source\%(Filename)%(Extension)" />
     <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
   </ItemGroup>
 

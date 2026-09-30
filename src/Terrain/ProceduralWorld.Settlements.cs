@@ -235,9 +235,9 @@ public sealed partial class ProceduralWorld
     private IEnumerable<(List<(double E, double N)> Points, RoadClass Class)> LinesNear(
         double minE, double minN, double maxE, double maxN)
     {
-        double limit = (RadiusTiles + 1) * ChunkFormat.TileSizeM;
-        double x0 = Math.Max(Math.Floor((minE - CenterE - 2 * RoadStep) / RoadStep) * RoadStep, -limit);
-        double x1 = Math.Min(Math.Ceiling((maxE - CenterE + 2 * RoadStep) / RoadStep) * RoadStep, limit);
+        // the valley runs on as far as the fill domain does: no end of its own
+        double x0 = Math.Floor((minE - CenterE - 2 * RoadStep) / RoadStep) * RoadStep;
+        double x1 = Math.Ceiling((maxE - CenterE + 2 * RoadStep) / RoadStep) * RoadStep;
         if (x1 > x0)
         {
             var road = new List<(double, double)>();

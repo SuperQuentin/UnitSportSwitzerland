@@ -9,6 +9,7 @@ namespace UnitSport.Core;
 /// Dedicated server: no meshes, no rendering — terrain height data is streamed around
 /// every connected player for (future) validation, and the MultiplayerSpawner owns the
 /// lifecycle of player nodes. Transforms are client-authoritative and relayed by ENet.
+/// Ground with no terrain data is generated here exactly as on the clients.
 /// </summary>
 public partial class ServerWorld : Node3D
 {
@@ -24,27 +25,44 @@ public partial class ServerWorld : Node3D
     public override async void _Ready()
     {
         string chunkDir = TerrainPaths.FindChunkDir();
-        var source = new LocalChunkSource(chunkDir);
-        var manifest = await source.LoadManifestAsync();
+        var local = new LocalChunkSource(chunkDir);
+        var manifest = await local.LoadManifestAsync();
+        var args = OS.GetCmdlineUserArgs();
+        bool generatedWorld = Array.IndexOf(args, "--generated-world") >= 0;
 
         // Unlike a client, a server cannot shrug this off: it is the authority on where the
         // world is and the only source of terrain for clients that lack it. Starting anyway
-        // would hand every client an origin of 0/0 and a world with nothing in it.
-        if (manifest.Tiles.Count == 0)
+        // would hand every client an origin of 0/0 and a world with nothing in it — unless it
+        // is asked to serve a generated world, which is then all there is (and says so).
+        if (manifest.Tiles.Count == 0 && !generatedWorld)
         {
             GD.PushError(
                 $"[server] no terrain data in {chunkDir}. A server has nothing to serve and no "
-                + "world origin to hand out. Generate the chunks first (see the README), or "
-                + "point at an existing set with --chunks <dir>.");
+                + "world origin to hand out. Generate the chunks first (see the README), point at "
+                + "an existing set with --chunks <dir>, or run a generated world with --generated-world.");
             GetTree().Quit(1);
             return;
         }
 
-        var origin = new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N);
-        GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
+        var origin = manifest.Tiles.Count > 0
+            ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
+            : new WorldOrigin(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+        GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}"
+            + (manifest.Tiles.Count == 0 ? " (generated world)" : ""));
+
+        // The same generated fill as every client's, anchored at the same point, so height
+        // queries, interiors and loot work on generated ground and agree with what players see.
+        // "--generated off" turns it off, as on a client.
+        var fallback = new FallbackChunkSource(local,
+            new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N),
+            SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N,
+            enabled: generatedWorld || !GeneratedOff(args)) { Log = s => GD.Print(s) };
+        var source = new CachingChunkSource(fallback, 128L * 1024 * 1024);
+        fallback.Neighbours = source;
 
         _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = false };
         _chunks.Initialize(source, origin, manifest, null);
+        _chunks.UseFallback(fallback, source.Invalidate);
         AddChild(_chunks);
 
         _players = new Node3D { Name = "Players" };
@@ -86,6 +104,12 @@ public partial class ServerWorld : Node3D
         // Serves generated terrain files to clients that lack them. Reads raw bytes straight
         // off disk, so it costs the server no decoding work.
         _streamer = ChunkStreamer.CreateServer(chunkDir);
+        // no manifest.json to serve, but the clients still need the origin to adopt
+        if (manifest.Tiles.Count == 0)
+            _streamer.ManifestOverride = System.Text.Encoding.UTF8.GetBytes(new TerrainManifest
+            {
+                SuggestedOriginLv95 = new Lv95Point { E = origin.E, N = origin.N },
+            }.ToJson());
         if (ParseStreamBandwidth() is { } megabytesPerSecond)
         {
             _streamer.BytesPerSecondPerPeer = (int)(megabytesPerSecond * 1024 * 1024);
@@ -128,6 +152,13 @@ public partial class ServerWorld : Node3D
                 && v > 0)
                 return v;
         return null;
+    }
+
+    /// <summary>"--generated off": no generated fill (a server does not read the client's settings file).</summary>
+    private static bool GeneratedOff(string[] args)
+    {
+        int i = Array.IndexOf(args, "--generated");
+        return i >= 0 && i + 1 < args.Length && args[i + 1] is "off" or "0" or "false";
     }
 
     private static int ParsePort()

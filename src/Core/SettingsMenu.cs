@@ -66,6 +66,8 @@ public partial class SettingsMenu : PanelContainer
 
         ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on);
 
+        ToggleRow(rows, "Generated terrain", s.GeneratedFill, on => GameSettings.Current.GeneratedFill = on);
+
         Section(rows, "Display");
         OptionRow(rows, "Window", new[] { "Windowed", "Borderless fullscreen", "Fullscreen" }, (int)s.WindowMode,
             i => GameSettings.Current.WindowMode = (WindowMode)i);
