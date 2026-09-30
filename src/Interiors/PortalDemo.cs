@@ -54,9 +54,9 @@ public partial class PortalDemo : Node3D
             new[] { FurnitureType.Sofa, FurnitureType.Tv, FurnitureType.Rug }),
         new("D", new Vector2(26, -12), 9, 8, BuildingKind.Apartment, new[] { (0f, true) },
             new[] { FurnitureType.Table, FurnitureType.Shelf, FurnitureType.Plant }),
-        // E: a barn west of A, its double door swung out against the facade
+        // E: a barn west of A, its wall-sized double door swung out (10 m of its 16, under the 6.2 m eave)
         new("E", new Vector2(-17, -12), 16, 10, BuildingKind.Agricultural, new[] { (0f, true) },
-            new FurnitureType[0], DoorWidth: 4.0f, DoorHeight: 4.0f),
+            new FurnitureType[0], DoorWidth: 10.0f, DoorHeight: 5.85f),
     };
 
     public PortalDemo(string? shot) => _shot = shot;
@@ -190,7 +190,7 @@ public partial class PortalDemo : Node3D
         ("in_doorway", 2.0),     // lens 5 cm in front of A's facade: snapped out of the doorway
         ("in_reveal", 2.0),      // lens 10 cm inside A's doorway, looking out
         ("in_reveal_down", 2.0), // lens on A's doorway plane from inside, looking out and down (#78)
-        ("barn", 2.0),           // E's double door, both leaves swung back against the facade
+        ("barn", 2.0),           // E's wall-sized double door, both leaves swung out
         ("barn_swinging", 2.0),  // the same, half open
         ("barn_shut", 2.0),      // and shut: the pair over the facade's baked door, no flicker
         ("barn_inside", 2.0),    // from inside E, out through its door at the leaves
@@ -258,7 +258,7 @@ public partial class PortalDemo : Node3D
             case "barn":
             case "barn_swinging":
             case "barn_shut":
-                _camera.GlobalTransform = Look(new Vector3(-10.5f, 1.7f, 3.5f), new Vector3(-17f, 2.2f, -7f));
+                _camera.GlobalTransform = Look(new Vector3(-7.5f, 2.2f, 9f), new Vector3(-17f, 3f, -7f));
                 break;
             case "barn_inside":
                 _camera.GlobalTransform = Look(barn.Inside * new Vector3(1.2f, 1.7f, -5f), barn.Inside * new Vector3(0, 2f, 2f));

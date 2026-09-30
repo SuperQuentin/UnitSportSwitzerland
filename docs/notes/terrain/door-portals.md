@@ -99,13 +99,16 @@ changed is how you get there.
   is on +X (`-t` along the facade in `AppendDoor`). The leaf carries the same handle on its
   street face and the facade's leaf colour (`BuildingFootprint.DoorLeafColorFor`, the kind from
   `InteriorLayout.DressedKind`), so the leaf seen swinging through the portal is the facade's door.
-- **Barn doors (#105).** A barn (`DoorLeaf.SwingsOut`) has a double door up to 4 × 4 m, as tall as
-  its hall allows (`BuildingFootprint.DoorHeightFor(kind, clear)`, asked by the facade and the
-  plan alike, so the openings match) and no wider than half the facade run, so each leaf has wall
-  to lie back against. Its pair is not in the interior: `DoorLeaf.CreateOutward`, top level on
+- **Barn doors (#105, #135).** A barn (`DoorLeaf.SwingsOut`) has a double door nearly the size of
+  its wall: the facade run less 0.6 m each end (`BarnDoorMargin`, at most `MaxBarnDoorWidth` 10 m),
+  and up to 0.35 m under the eave (`PlanBox.Eave` above the sill; at least 2.5 m) and the hall's
+  clear height (`BuildingFootprint.DoorHeightFor(kind, clear)`). The interior opening takes the
+  footprint's `DoorSpot.Height`, so the two openings match. Scoring and fallback doors still judge
+  by a plain 4 m door. Its pair is not in the interior: `DoorLeaf.CreateOutward`, top level on
   `DoorLink.Outside`, built and freed with the link. Hinges on the jambs' faces, 1 cm in front of
-  the mouth and the jambs, so the leaves swing 170° out without cutting either, and lap the jambs
-  so no chink of the portal shows when shut. The baked facade door is a pair too (seam, two handles).
+  the mouth and the jambs, so the leaves swing out without cutting either (100°: no wall is left
+  beside the jambs to lie back on), and lap the jambs so no chink of the portal shows when shut.
+  The baked facade door is a pair too (seam, two handles).
 - **Occupancy cues (G).** Buildings other players are in, except those with a door open near us:
   facade shader boxes (`ChunkManager.SetOccupancy`: more lit windows, figures behind the glass)
   and `BuildingSounds`: muffled steps, knocks and inner doors on the wall nearest the listener.
