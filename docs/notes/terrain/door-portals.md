@@ -71,6 +71,13 @@ changed is how you get there.
   otherwise the handle stays hanging in the open doorway. The leaf carries the same handle on its
   street face and the facade's leaf colour (`BuildingFootprint.DoorLeafColorFor`, the kind from
   `InteriorLayout.DressedKind`), so the leaf seen swinging through the portal is the facade's door.
+- **Barn doors (#105).** A barn (`DoorLeaf.SwingsOut`) has a double door up to 4 × 4 m, as tall as
+  its hall allows (`BuildingFootprint.DoorHeightFor(kind, clear)`, asked by the facade and the
+  plan alike, so the openings match) and no wider than half the facade run, so each leaf has wall
+  to lie back against. Its pair is not in the interior: `DoorLeaf.CreateOutward`, top level on
+  `DoorLink.Outside`, built and freed with the link. Hinges on the jambs' faces, 1 cm in front of
+  the mouth and the jambs, so the leaves swing 170° out without cutting either, and lap the jambs
+  so no chink of the portal shows when shut. The baked facade door is a pair too (seam, two handles).
 - **Occupancy cues (G).** Buildings other players are in, except those with a door open near us:
   facade shader boxes (`ChunkManager.SetOccupancy`: more lit windows, figures behind the glass)
   and `BuildingSounds`: muffled steps, knocks and inner doors on the wall nearest the listener.
@@ -80,13 +87,16 @@ changed is how you get there.
   with every door of the building shut; the portal needs it drawn.
 - **Checks.** `--interiorcheck[,shot.png]` opens, walks in, out, and checks the auto-close. Online
   (`--connect`), it drives the networked player. `--doorwatch[,shot.png]` on a second client
-  watches the same door from 8 m: door state, portal, the other player visible through it.
+  watches the same door from 8 m: door state, portal, the other player visible through it (put
+  back on its spot if traffic carries it off: doors face the road). `--doorkind Agricultural` makes
+  both use the nearest barn door instead of the nearest door.
   `--film` (with a shot path) saves every frame of each walk-through. After the church, it opens
   both church doors and checks both show at once from inside, then finds two neighbours' doors
   and two facing each other across a street, when the generated village has them.
 - **Demo.** `--portaldemo[,out.png]` (`PortalDemo`): a hand-laid street with no terrain and no
   server. Two houses side by side, a house with a front and a back door (seen through, to a red
-  car in the backyard), a house across the street (seen from inside it), a figure walking in.
+  car in the backyard), a house across the street (seen from inside it), a figure walking in,
+  and a barn with its pair open, half open, shut, and seen from inside.
   With a path it saves each view and quits; without, it cycles them.
   A dedicated server needs terrain; with none, PR #46's `--generated-world`.
 - **Known limits.** Two portals plus one nested in each; a third level is a dark hall. Mounted

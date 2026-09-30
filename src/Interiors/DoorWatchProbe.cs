@@ -26,6 +26,8 @@ public partial class DoorWatchProbe : Node
     private readonly string? _shot;
     private FootPlayer? _player;
     private DoorIndex.Entry? _door;
+    private Vector3 _stand;
+    private float _standYaw;
     private string _key = "";
     private double _t, _seen;
     private bool _sawOpen, _sawPortal, _sawInside, _sawOutsideAgain, _sawShut, _hiddenOk = true, _sawHidden;
@@ -74,16 +76,21 @@ public partial class DoorWatchProbe : Node
         {
             if (!_player.IsOnFloor()) return;
             // the same choice the check makes: the door nearest the spawn
-            _door = DoorIndex.Nearest(_player.GlobalPosition, 400f);
+            _door = InteriorProbe.ChooseDoor(_player.GlobalPosition);
             if (_door is not { } d) return;
             _key = d.Key.ToString();
             var stand = d.World + d.Outward * 8f;
             if (_chunks.TryGetHeight(stand, out float g)) stand.Y = g + 1f;
             var face = -d.Outward;
-            _player.LeaveInterior(stand, Mathf.Atan2(-face.X, -face.Z));
+            _stand = stand;
+            _standYaw = Mathf.Atan2(-face.X, -face.Z);
+            _player.LeaveInterior(stand, _standYaw);
             GD.Print($"[watch] as peer {Multiplayer.GetUniqueId()}, watching the door of {_key} from 8 m");
             return;
         }
+
+        // a door faces the road, so 8 m out is often in it: passing traffic carries the watcher off
+        if (_player.GlobalPosition.DistanceTo(_stand) > 2f) _player.LeaveInterior(_stand, _standYaw);
 
         var remote = GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
             .FirstOrDefault(p => !p.IsMultiplayerAuthority() && p.GetMultiplayerAuthority() != 1);
