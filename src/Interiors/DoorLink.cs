@@ -67,7 +67,7 @@ public sealed class DoorLink
     public MeshInstance3D?[] InsideQuads { get; } = new MeshInstance3D?[3];
     public DoorLeaf? Leaf { get; set; }
 
-    public static DoorLink Create(InteriorLayout layout, EntrancePlan e, WorldOrigin origin, float? outsideWidth)
+    public static DoorLink Create(InteriorLayout layout, EntrancePlan e, WorldOrigin origin, float? outsideWidth, float? outsideHeight = null)
     {
         BuildingKey.TryParse(e.Door, out var door);
         var tileOrigin = origin.ToWorld(door.Tile.MinE, door.Tile.MaxN, 0);
@@ -91,7 +91,7 @@ public sealed class DoorLink
             Outside = outside,
             Inside = inside,
             OutsideWidth = outsideWidth ?? e.Width,
-            OutsideHeight = BuildingFootprint.DoorHeightFor(kind),
+            OutsideHeight = outsideHeight ?? BuildingFootprint.DoorHeightFor(kind),
             InsideWidth = width,
             InsideHeight = top,
         };

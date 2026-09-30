@@ -187,7 +187,7 @@ public partial class PlacedObjects : Node
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Add(long id, int kind, string owner, double e, double n, double alt, Quaternion rot, string payload) =>
-        Put(new PlacedObject(id, (PlacedKind)kind, owner, e, n, alt, rot, payload));
+        Spawned(Put(new PlacedObject(id, (PlacedKind)kind, owner, e, n, alt, rot, payload)));
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Remove(long id) => Drop(id);
@@ -214,12 +214,19 @@ public partial class PlacedObjects : Node
     /// <summary>Objects just removed, so a removal's answer (which follows the <c>Remove</c>) can still hand them back.</summary>
     private readonly Dictionary<long, PlacedObject> _lastRemoved = new();
 
-    private void Put(PlacedObject o)
+    private PlacedObject Put(PlacedObject o)
     {
         if (_objects.ContainsKey(o.Id)) Drop(o.Id);
         _objects[o.Id] = o;
         if (!_server) Draw(o);
         Added?.Invoke(o);
+        return o;
+    }
+
+    /// <summary>A live placement (not the join snapshot, not a redraw): the local planting effect.</summary>
+    private void Spawned(PlacedObject o)
+    {
+        if (o.Kind == PlacedKind.Flag && _visuals.TryGetValue(o.Id, out var node) && IsInstanceValid(node)) FlagFx.Spawned(node);
     }
 
     private void Drop(long id)
@@ -299,7 +306,7 @@ public partial class PlacedObjects : Node
         }
 
         var o = new PlacedObject(_nextId++, (PlacedKind)kind, owner, e, n, alt, rot.Normalized(), payload);
-        Put(o);
+        Spawned(Put(o));   // offline the client plays the server's part; a dedicated server has no visual, so it is a no-op there
         Save();
         GD.Print(FormattableString.Invariant($"[placed] {o.Kind} #{o.Id} by {owner} at LV95 {e:F1}/{n:F1}"));
         if (Online)

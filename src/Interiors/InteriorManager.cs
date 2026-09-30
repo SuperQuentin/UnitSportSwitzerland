@@ -506,10 +506,18 @@ public partial class InteriorManager : Node3D
             return;
         }
         var e = layout.EntranceFor(door);
-        float? width = BuildingKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d ? d.Width : null;
-        var link = DoorLink.Create(layout, e, Origin!, width);
+        var spot = BuildingKey.TryParse(door, out var k) ? DoorIndex.Find(k) : null;
+        var link = DoorLink.Create(layout, e, Origin!, spot?.Width, spot?.Height);
         link.Open = _doors.ContainsKey(door);
         link.Leaf = node.Leaf(door);
+        if (link.Leaf == null && DoorLeaf.SwingsOut(layout.DressedKind()))
+        {
+            // a barn's pair hangs on the facade, and lives as long as the link
+            link.Leaf = DoorLeaf.CreateOutward(door, link.Outside, link.OutsideWidth, link.OutsideHeight,
+                layout.DressedKind(), _material!);
+            AddChild(link.Leaf);
+            link.Leaf.SetSwing(link.Swing);
+        }
         _portals?.Attach(link);
         _links[door] = link;
     }
@@ -517,7 +525,8 @@ public partial class InteriorManager : Node3D
     private void DropLink(DoorLink link)
     {
         _portals?.Detach(link);
-        link.Leaf?.SetSwing(0);
+        if (link.Leaf is { Outward: true } pair) pair.QueueFree();
+        else link.Leaf?.SetSwing(0);
         _links.Remove(link.Door);
     }
 
@@ -986,6 +995,7 @@ public partial class InteriorNode : Node3D
         // the front doors, shut: the way out is to open one, not to walk into the void
         foreach (var e in layout.AllEntrances())
         {
+            if (DoorLeaf.SwingsOut(layout.DressedKind())) break; // on the facade, with its link
             var z = new Vector3(-e.InX, 0, -e.InZ).Normalized();
             var doorway = new Transform3D(new Basis(Vector3.Up.Cross(z), Vector3.Up, z), new Vector3(e.X, 0, e.Z));
             var (width, top) = layout.OpeningOf(e);

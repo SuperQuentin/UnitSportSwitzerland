@@ -66,6 +66,23 @@ public partial class InteriorProbe : Node
         return (false, null);
     }
 
+    /// <summary>
+    /// <c>--doorkind Agricultural</c>: the check and the door watch use the nearest door of that
+    /// kind of building instead of the nearest door (a barn's outward pair, say).
+    /// </summary>
+    public static BuildingKind? DoorKindArg()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        for (int i = 0; i < args.Length - 1; i++)
+            if (args[i] == "--doorkind" && Enum.TryParse<BuildingKind>(args[i + 1], true, out var kind))
+                return kind;
+        return null;
+    }
+
+    /// <summary>The door the check uses, and the door watch watches.</summary>
+    public static DoorIndex.Entry? ChooseDoor(Vector3 at) =>
+        DoorKindArg() is { } kind ? DoorIndex.Nearest(at, 400f, kind) : DoorIndex.Nearest(at, 400f);
+
     private void Check(bool condition, string what)
     {
         GD.Print($"[interior] {(condition ? "ok  " : "FAIL")} {what}");
@@ -211,7 +228,7 @@ public partial class InteriorProbe : Node
                     return;
                 }
                 if (!_player.IsOnFloor()) return;
-                var door = DoorIndex.Nearest(_player.GlobalPosition, 400f);
+                var door = ChooseDoor(_player.GlobalPosition);
                 if (door == null) return;
                 _door = door.Value;
                 StandOutside(_door);
