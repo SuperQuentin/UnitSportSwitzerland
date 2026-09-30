@@ -4,7 +4,7 @@ using UnitSport.Player;
 namespace UnitSport.Items;
 
 /// <summary>Named places the viewmodel can be held; blended between smoothly, see <see cref="HeldItemVisual.SetPose"/>.</summary>
-public enum ViewPose { Rest, Aim, Eye, Mouth, Plant, Inspect }
+public enum ViewPose { Rest, Aim, Eye, Mouth, Plant, Inspect, Raise }
 
 /// <summary>
 /// Draws what a player holds, on every copy of that player.
@@ -114,6 +114,8 @@ public partial class HeldItemVisual : Node3D
             ViewPose.Eye => (new Vector3(0f, -0.12f, -0.38f), Vector3.Zero),
             ViewPose.Mouth => (new Vector3(0.02f, -0.15f, -0.28f), new Vector3(0.55f, 0, 0)),
             ViewPose.Plant => (new Vector3(0.10f, -0.42f, -0.50f), new Vector3(-0.9f, 0.1f, 0)),
+            // flag lifted high, before it is stabbed down (Plant)
+            ViewPose.Raise => (new Vector3(0.10f, -0.10f, -0.50f), new Vector3(0.15f, 0.1f, 0)),
             ViewPose.Inspect => (new Vector3(0.02f, -0.06f, -0.36f), new Vector3(0.3f, 0.6f, 0.1f)),
             _ => (ViewmodelRest, new Vector3(0, 0.12f, 0)),
         };

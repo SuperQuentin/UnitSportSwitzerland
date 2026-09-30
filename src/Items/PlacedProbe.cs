@@ -109,7 +109,7 @@ public partial class PlacedProbe : Node
         for (int i = 0; i < 3; i++)
         {
             _items.UseSlot(me, gun);
-            await Seconds(0.6);
+            await Seconds(0.9);   // longer than the shotgun pump
         }
         var look = -cam.GlobalTransform.Basis.Z;
         ItemEvents.Instance!.Send(ItemEventKind.PhotoFlash, ItemEvents.MuzzleOf(me, look, 0.1f), look, "probe");
@@ -147,7 +147,7 @@ public partial class PlacedProbe : Node
         _items.Inventory.Move(SlotOfPhoto(shot), _items.Inventory.Selected);
         me.LookPitch = -0.9f;
         _items.ForceAim = true;
-        await Seconds(0.6);
+        await Seconds(0.9);   // longer than the shotgun pump
         _items.UseSlot(me, _items.Inventory.Selected);
         _items.ForceAim = false;
         Expect(await Until(() => placed.All.Values.Any(o => o.Kind == PlacedKind.Photo && o.Payload == shot), 5),

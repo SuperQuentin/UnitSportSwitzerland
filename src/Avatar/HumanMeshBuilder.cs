@@ -191,9 +191,10 @@ public static class HumanMeshBuilder
                 support = Reduce(rig.WristR, rest);
                 dir = new Vector3(0f, 0.8f, -0.3f); break;
             case ItemArmPose.Plant:
-                item = new(s * 0.14f, rig.Hip.Y - 0.12f, rig.Hip.Z + 0.36f);
-                support = rest;
-                dir = new Vector3(0f, -0.8f, 0.4f); break;
+                // both hands on the pole, which stands upright in front with its foot near the ground (cloth up)
+                item = new(s * 0.05f, rig.Hip.Y - 0.22f, rig.Hip.Z + 0.42f);
+                support = new(-s * 0.05f, rig.Hip.Y + 0.08f, rig.Hip.Z + 0.42f);
+                dir = new Vector3(0f, 1f, 0.12f); break;
             default:   // Hold
                 item = new(s * 0.19f, rig.Waist.Y + 0.05f, rig.Waist.Z + 0.30f);
                 support = Reduce(rig.WristR, rest);

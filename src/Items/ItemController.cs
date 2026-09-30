@@ -24,12 +24,13 @@ namespace UnitSport.Items;
 /// </summary>
 public partial class ItemController : Node
 {
-    private const float PlaceReach = 6f;
+    internal const float PlaceReach = 6f;
 
     private readonly Inventory _inventory;
     private readonly WorldOrigin _origin;
     private InventoryUi _ui = null!;
     private SmartBinocularsHud _smart = null!;
+    private FlagGhost _flagGhost = null!;
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
     private bool _forceAim;
@@ -89,6 +90,8 @@ public partial class ItemController : Node
         AddChild(_photoUi);
         _smart = new SmartBinocularsHud();
         AddChild(_smart);
+        _flagGhost = new FlagGhost { Name = "FlagGhost" };
+        AddChild(_flagGhost);
 
         _inventory.Changed += () => _ui.Refresh();
 
@@ -165,7 +168,7 @@ public partial class ItemController : Node
         _ui.PhotoFocalMm = _focalMm;
         player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f, ItemUse.Photo => FovFromFocal(_focalMm), _ => 50f } : null;
         player.ScopeView = aiming;
-        player.ItemAction = aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
+        player.ItemAction = _planting ? 2 : aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
         player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => 0.6f } : 1f;
         // held items stay visible while aiming: they are raised to a pose. Binoculars and the
         // camera hide once at the eye (you look through them: the overlay is the view).
@@ -174,9 +177,10 @@ public partial class ItemController : Node
         bool sticking = usable && !UiFocus.TextEntryActive && def?.Use == ItemUse.Print
                         && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
         ShowGhost(sticking ? StickTarget(player).At : null);
+        _flagGhost.Step(player, usable && !_planting && _inventory.HeldId == ItemId.SwissFlag);
         if (visual != null)
         {
-            visual.SetPose(!aiming ? ViewPose.Rest : def!.Use switch
+            visual.SetPose(_raiseFlag ? ViewPose.Raise : !aiming ? ViewPose.Rest : def!.Use switch
             {
                 ItemUse.Shoot => ViewPose.Aim,
                 _ => ViewPose.Eye,
@@ -577,38 +581,30 @@ public partial class ItemController : Node
     }
 
     /// <summary>
-    /// Plants a flag where the view meets the ground, or — if the view meets a planted flag —
-    /// takes it back. Placing only on ground flat enough to stand on: a flag is planted, not
-    /// stuck to a cliff. Planted flags are <see cref="PlacedObjects"/>: the server keeps and saves
-    /// them, so the flag leaves the pack at once and comes back if the server refuses.
+    /// Plants a flag where the view meets the ground (the ghost shows the spot), or — if the view
+    /// meets a planted flag — takes it back. Placing only on ground flat enough to stand on. Both are
+    /// a short stroke: the flag is raised and stabbed down (the request goes out at the stab), or
+    /// reached down for and pulled up. Planted flags are <see cref="PlacedObjects"/>: the server
+    /// keeps and saves them, so the flag leaves the pack at the stab and comes back if refused.
     /// </summary>
-    private void PlaceOrPickUpFlag(FootPlayer player, int slot)
+    private async void PlaceOrPickUpFlag(FootPlayer player, int slot)
     {
-        if (PlacedObjects.Instance is not { } placed) return;
-        var camera = player.Camera;
-        var from = camera.GlobalPosition;
-        var forward = -camera.GlobalTransform.Basis.Z;
-        // third person looks from behind the shoulder, so reach is measured from the body
-        float reach = PlaceReach + from.DistanceTo(player.GlobalPosition + Vector3.Up * 1.6f);
-
-        var query = PhysicsRayQueryParameters3D.Create(from, from + forward * reach,
-            uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() });
-        var hit = player.GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.Count == 0)
+        if (_planting || PlacedObjects.Instance is not { } placed) return;
+        var aim = FlagGhost.Aim(player);
+        if (aim.Kind == FlagAimKind.None)
         {
             _ui.Toast("Nothing in reach to plant it in.");
             return;
         }
 
-        if (PlacedObjects.IdOf(hit["collider"].AsGodotObject() as Node) is long id
-            && placed.All.TryGetValue(id, out var existing) && existing.Kind == PlacedKind.Flag)
+        if (aim.Kind == FlagAimKind.PickUp)
         {
             if (_inventory.Room(ItemId.SwissFlag) < 1)
             {
                 _ui.Toast("No room in your pack.");
                 return;
             }
-            placed.RequestRemove(id, r =>
+            await Stroke(player, raise: false, () => placed.RequestRemove(aim.Id, r =>
             {
                 if (!r.Ok)
                 {
@@ -618,39 +614,73 @@ public partial class ItemController : Node
                 if (_inventory.Add(ItemId.SwissFlag, 1) > 0) _ui.Toast("No room in your pack: the flag is lost.");
                 else _ui.Toast("Flag picked up.");
                 Play(SfxSynth.Whoosh, 1.3f);
-            });
+            }));
             return;
         }
 
-        var point = hit["position"].AsVector3();
-        var normal = hit["normal"].AsVector3();
-        if (normal.Y < 0.6f)
+        if (!aim.Valid)
         {
-            _ui.Toast("Too steep to plant a flag.");
-            return;
-        }
-        if (point.DistanceTo(player.GlobalPosition) > PlaceReach)
-        {
-            _ui.Toast("Too far away.");
+            _ui.Toast(aim.Reason);
             return;
         }
 
-        // the cloth faces whoever planted it
-        var toPlayer = (player.GlobalPosition - point) with { Y = 0 };
-        float yaw = toPlayer.LengthSquared() > 1e-4f ? Mathf.Atan2(toPlayer.X, toPlayer.Z) : 0f;
-        _inventory.TakeOne(slot);
-        Kick(player);
-        placed.RequestPlace(PlacedKind.Flag, new Transform3D(new Basis(Vector3.Up, yaw), point), "", r =>
+        var at = new Transform3D(new Basis(Vector3.Up, aim.Yaw), aim.Point);
+        await Stroke(player, raise: true, () =>
         {
-            if (!r.Ok)
+            if (_inventory[slot].Id != ItemId.SwissFlag) return;   // swapped away during the raise
+            _inventory.TakeOne(slot);
+            Kick(player);
+            placed.RequestPlace(PlacedKind.Flag, at, "", r =>
             {
-                _inventory.Add(ItemId.SwissFlag, 1);   // the server said no: the flag comes back
-                _ui.Toast($"Cannot plant it here: {r.Refused}");
-                return;
-            }
-            Play(SfxSynth.Landing, 1.5f);
-            _ui.Toast("Flag planted.");
+                if (!r.Ok)
+                {
+                    _inventory.Add(ItemId.SwissFlag, 1);   // the server said no: the flag comes back
+                    _ui.Toast($"Cannot plant it here: {r.Refused}");
+                    return;
+                }
+                _ui.Toast("Flag planted.");
+            });
         });
+    }
+
+    private bool _planting, _raiseFlag;
+
+    private async Task Wait(double seconds) => await ToSignal(GetTree().CreateTimer(seconds), SceneTreeTimer.SignalName.Timeout);
+
+    /// <summary>
+    /// The plant / pull-up stroke, timed here rather than in the viewmodel (which does not run in third
+    /// person): <c>ItemAction = 2</c> for its whole length makes every peer pose the Plant arms.
+    /// <paramref name="raise"/>: lift the flag, then stab (<paramref name="onPeak"/> at the stab);
+    /// otherwise reach down and pull up (<paramref name="onPeak"/> when the hands close on the pole).
+    /// </summary>
+    private async Task Stroke(FootPlayer player, bool raise, Action onPeak)
+    {
+        _planting = true;
+        try
+        {
+            var visual = player.GetNodeOrNull<HeldItemVisual>("HeldItem");
+            if (raise)
+            {
+                _raiseFlag = true;
+                await Wait(0.45);   // long enough for remote peers to ease into the Plant arms before the stab
+                if (!IsInstanceValid(player)) return;
+                visual?.PlayOneShot(ViewPose.Plant, 0.12f, 0.1f, 0.3f);
+                await Wait(0.12);
+                _raiseFlag = false;
+            }
+            else
+            {
+                visual?.PlayOneShot(ViewPose.Plant, 0.25f, 0.05f, 0.3f);
+                await Wait(0.25);
+            }
+            onPeak();
+            await Wait(raise ? 0.4 : 0.35);
+        }
+        finally
+        {
+            _raiseFlag = false;
+            _planting = false;
+        }
     }
 
     /// <summary>LV95 position, altitude and compass heading — what a hiking GPS shows.</summary>
