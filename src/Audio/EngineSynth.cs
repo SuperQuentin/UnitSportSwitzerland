@@ -168,9 +168,6 @@ public partial class EngineSynth : Node3D
         Name = "EngineSynth";
     }
 
-    /// <summary>The 3D player, when spatial, for attenuation and doppler settings.</summary>
-    public AudioStreamPlayer3D? Player3D => _player3D;
-
     /// <summary>
     /// Sets what the engine is doing. <paramref name="rpm01"/>: idle 0 .. redline 1 (a turboshaft's
     /// spool). <paramref name="level"/>: 0..1 loudness before the volume setting; 0 is silent.
