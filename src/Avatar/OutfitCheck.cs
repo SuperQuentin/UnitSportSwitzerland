@@ -1,0 +1,90 @@
+using Godot;
+using UnitSport.Items;
+
+namespace UnitSport.Avatar;
+
+/// <summary>
+/// <c>--outfitcheck</c> (#251): the wardrobe's data holds together (every look has an item, a slot
+/// and a code of its own that survives the packing), and every look builds on a figure in every
+/// pose: walking, the fixed poses, a ragdoll's free joints, seated — with no vertex off at
+/// infinity and every finish readable back out of the vertex alpha. Headless, no scene.
+/// </summary>
+public static class OutfitCheck
+{
+    public static int Run()
+    {
+        int failed = 0;
+        void Fail(string why)
+        {
+            failed++;
+            GD.Print($"[outfitcheck] FAIL {why}");
+        }
+
+        foreach (var bad in Garments.Validate()) Fail(bad);
+
+        // every slot packs and unpacks on its own, and all ten at once
+        var full = Outfit.Empty;
+        foreach (var g in Garments.All.GroupBy(g => g.Slot).Select(group => group.Last()))
+            full = full.With(g.Slot, g.Code);
+        for (var s = WearSlot.Head; s <= WearSlot.Hands; s++)
+            if (full[s] is not { } back || back.Slot != s) Fail($"a full outfit lost its {s}");
+        if (full.Bits >> (Outfit.SlotCount * 6) != 0) Fail("an outfit spills past its 60 bits");
+        if (Outfit.Of(new[] { ItemId.WhiteTee, ItemId.GothicRobe })[WearSlot.Top]?.Item != ItemId.GothicRobe)
+            Fail("Outfit.Of: the later look in a slot should win");
+
+        int built = 0;
+        var palette = HumanPalette.ForRider(3);
+        foreach (var g in Garments.All)
+        {
+            var dressed = palette with { Outfit = Outfit.Empty.With(g.Slot, g.Code) };
+            var meshes = new List<(string Pose, ArrayMesh Mesh)>
+            {
+                ("standing", HumanMeshBuilder.Build(dressed)),
+                ("running", HumanMeshBuilder.Build(dressed, HumanPose.Running)),
+                ("tucked", HumanMeshBuilder.Build(dressed, HumanPose.Tucked)),
+                ("stride", HumanMeshBuilder.BuildStride(dressed, 3.5f, 0.3f)),
+                ("held", HumanMeshBuilder.BuildPosed(dressed, HumanPose.Standing, ItemArmPose.ShoulderAim, 1f)),
+                ("ragdoll", HumanMeshBuilder.BuildJoints(dressed, HumanMeshBuilder.PoseJoints(HumanPose.Running))),
+            };
+            foreach (var (pose, mesh) in meshes)
+            {
+                built++;
+                if (Problem(mesh, g.Finish) is { } why) Fail($"{g.Item} {pose}: {why}");
+            }
+        }
+
+        // a whole figure dressed head to toe, with a one-piece over a skirt (the dress wins)
+        var outfit = Outfit.Of(new[]
+        {
+            ItemId.CatHeadset, ItemId.HeartShades, ItemId.MaskUwu, ItemId.StarStuds, ItemId.BellCollar,
+            ItemId.LolitaDress, ItemId.TartanSkirt, ItemId.BeeStockings, ItemId.MaryJanes, ItemId.PawGloves,
+        });
+        if (Problem(HumanMeshBuilder.BuildStride(palette with { Outfit = outfit }, 1.4f, 0.7f), Finish.Neon) is { } whole)
+            Fail($"a figure dressed head to toe: {whole}");
+
+        GD.Print(failed == 0
+            ? $"[outfitcheck] RESULT: ok — {Garments.All.Length} looks, {built} figures built"
+            : $"[outfitcheck] RESULT: FAILED — {failed}");
+        return failed == 0 ? 0 : 1;
+    }
+
+    /// <summary>What is wrong with a dressed figure's mesh, or null.</summary>
+    private static string? Problem(ArrayMesh mesh, Finish finish)
+    {
+        if (mesh.GetSurfaceCount() == 0) return "no surface";
+        var arrays = mesh.SurfaceGetArrays(0);
+        var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        var colours = arrays[(int)Mesh.ArrayType.Color].AsColorArray();
+        foreach (var v in vertices)
+            if (!float.IsFinite(v.X) || !float.IsFinite(v.Y) || !float.IsFinite(v.Z) || v.Length() > 5f)
+                return $"a vertex at {v}";
+        bool seen = finish == Finish.None;
+        foreach (var c in colours)
+        {
+            int id = Mathf.RoundToInt((1f - c.A) * 255f);
+            if (id < 0 || id > (int)Finish.Lace) return $"alpha {c.A} decodes to no finish ({id})";
+            if (id == (int)finish) seen = true;
+        }
+        return seen ? null : $"its {finish} finish is nowhere in the mesh";
+    }
+}

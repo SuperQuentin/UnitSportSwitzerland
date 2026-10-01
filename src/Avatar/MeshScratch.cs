@@ -84,6 +84,51 @@ public sealed class MeshScratch
     public void Tube(Vector3 a, Vector3 b, float radius, Color colour, int sides = 6) =>
         Tube(a, b, radius, radius, colour, sides);
 
+    /// <summary>
+    /// A tapered tube with no ends, each side wound both ways so it is seen from inside as well as
+    /// out: a skirt, a flared sleeve (#251). Faces whose middle points within
+    /// <paramref name="gapAngle"/> radians of <paramref name="gap"/> are left out, which makes a
+    /// slit. Not closed, so like <see cref="Pane"/> it has no volume for <c>--meshcheck</c>.
+    /// </summary>
+    public void Skirt(Vector3 a, Vector3 b, float radiusA, float radiusB, Color colour, int sides = 10,
+        Vector3 gap = default, float gapAngle = 0f)
+    {
+        var axis = b - a;
+        float length = axis.Length();
+        if (length < 1e-5f || sides < 3) return;
+        axis /= length;
+
+        // the same frame as Tube, so a skirt's facets line up with the body's
+        var reference = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var u = axis.Cross(reference).Normalized();
+        var v = axis.Cross(u);
+        var slit = gap - axis * gap.Dot(axis);
+        bool open = gapAngle > 0f && slit.LengthSquared() > 1e-8f;
+        if (open) slit = slit.Normalized();
+
+        int start = _vertices.Count;
+        var linear = colour.SrgbToLinear();
+        for (int i = 0; i < sides; i++)
+        {
+            float angle = Mathf.Tau * i / sides;
+            var offset = u * Mathf.Cos(angle) + v * Mathf.Sin(angle);
+            Add(a + offset * radiusA, linear);
+            Add(b + offset * radiusB, linear);
+        }
+        for (int i = 0; i < sides; i++)
+        {
+            if (open)
+            {
+                float mid = Mathf.Tau * (i + 0.5f) / sides;
+                if ((u * Mathf.Cos(mid) + v * Mathf.Sin(mid)).AngleTo(slit) < gapAngle) continue;
+            }
+            int p = start + i * 2;
+            int q = start + ((i + 1) % sides) * 2;
+            Quad(p, p + 1, q + 1, q);   // outside
+            Quad(p, q, q + 1, p + 1);   // inside
+        }
+    }
+
     /// <summary>An axis-aligned box, optionally rotated about its own centre.</summary>
     public void Box(Vector3 centre, Vector3 size, Color colour, Basis? orientation = null)
     {

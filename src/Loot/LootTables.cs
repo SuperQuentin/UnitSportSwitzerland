@@ -28,7 +28,7 @@ public static class LootTables
         _ => 2f,
     };
 
-    private static readonly Dictionary<ItemId, Tier> Tiers = new()
+    private static readonly Dictionary<ItemId, Tier> Tiers = WithClothes(new()
     {
         [ItemId.Bread] = Tier.Common, [ItemId.CannedFood] = Tier.Common, [ItemId.Apple] = Tier.Common,
         [ItemId.Cheese] = Tier.Uncommon, [ItemId.Chocolate] = Tier.Uncommon, [ItemId.EnergyBar] = Tier.Uncommon,
@@ -49,7 +49,24 @@ public static class LootTables
         // bags (#208): category Gear too, so only the pools that name them (Bags, Purses) give them
         [ItemId.BeltPouch] = Tier.Common, [ItemId.Handbag] = Tier.Uncommon,
         [ItemId.Backpack] = Tier.Rare, [ItemId.HikingPack] = Tier.VeryRare,
-    };
+    });
+
+    /// <summary>
+    /// Every look in the wardrobe (#251): plain ones common, gothic and kawaii ones uncommon, the
+    /// finishes rare. Category Clothing, which no pool takes by category, so only the pools that
+    /// name them (<see cref="Clothes"/>, <see cref="Specials"/>) give them.
+    /// </summary>
+    private static Dictionary<ItemId, Tier> WithClothes(Dictionary<ItemId, Tier> tiers)
+    {
+        foreach (var g in Avatar.Garments.All)
+            tiers[g.Item] = g.Style switch
+            {
+                Avatar.GarmentStyle.Basic => Tier.Common,
+                Avatar.GarmentStyle.Special => Tier.Rare,
+                _ => Tier.Uncommon,
+            };
+        return tiers;
+    }
 
     // ---- pools ------------------------------------------------------------------------------
 
@@ -82,6 +99,16 @@ public static class LootTables
     private static readonly ItemId[] Purses = { ItemId.BeltPouch, ItemId.Handbag };
     private static readonly ItemId[] Plastic = { ItemId.Plastic };
     private static readonly ItemId[] Larder = { ItemId.Cheese, ItemId.Bread, ItemId.Apple };
+    /// <summary>Clothes to wear, plain, gothic and kawaii (#251): what a wardrobe mostly holds.</summary>
+    private static readonly ItemId[] Clothes = Avatar.Garments.All.Where(g => !g.IsSpecial).Select(g => g.Item).ToArray();
+    /// <summary>The rare ones with a finish that moves: rainbow, disco ball, galaxy…</summary>
+    private static readonly ItemId[] Specials = Avatar.Garments.All.Where(g => g.IsSpecial).Select(g => g.Item).ToArray();
+    /// <summary>What comes out of the wash: tees, shorts, socks.</summary>
+    private static readonly ItemId[] Laundry = Avatar.Garments.All
+        .Where(g => !g.IsSpecial && g.Shape is Avatar.GarmentShape.TShirt or Avatar.GarmentShape.Marcel
+            or Avatar.GarmentShape.Shorts or Avatar.GarmentShape.KneeSock or Avatar.GarmentShape.ThighHigh
+            or Avatar.GarmentShape.StripedThighHigh or Avatar.GarmentShape.Polo)
+        .Select(g => g.Item).ToArray();
 
     private readonly record struct Pool(ItemId[] Items, float Weight);
 
@@ -96,7 +123,8 @@ public static class LootTables
         [FurnitureType.Counter] = new(0.40f, 0, 2, new[] { P(Food, 50), P(Water, 35), P(KitchenScrap, 15) }, 0.20f, 1, 5),
         [FurnitureType.Stove] = new(0.40f, 0, 2, new[] { P(Food, 60), P(Water, 20), P(KitchenScrap, 20) }, 0.20f, 1, 5),
         [FurnitureType.Shelf] = new(0.35f, 1, 2, new[] { P(Food, 25), P(Water, 10), P(Scrap, 35), P(Medical, 10), P(Minerals, 15), P(Parts, 5), P(Optics, 1) }, 0.10f, 1, 5),
-        [FurnitureType.Wardrobe] = new(0.45f, 1, 1, new[] { P(Cloth, 55), P(Medical, 18), P(Scrap, 17), P(Bags, 10) }, 0.25f, 5, 40),
+        // mostly clothes to wear (#251), now and then a rare one with a finish
+        [FurnitureType.Wardrobe] = new(0.40f, 1, 2, new[] { P(Clothes, 70), P(Specials, 1.6f), P(Cloth, 9), P(Medical, 6), P(Scrap, 4), P(Bags, 9) }, 0.25f, 5, 40),
         [FurnitureType.Nightstand] = new(0.45f, 0, 1, new[] { P(Medical, 38), P(Sweets, 28), P(Gadgets, 28), P(Purses, 6) }, 0.40f, 2, 20),
         [FurnitureType.Desk] = new(0.40f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 30), P(Scrap, 30), P(Optics, 1.5f) }, 0.35f, 5, 50),
         [FurnitureType.Crate] = new(0.20f, 2, 4, new[] { P(Scrap, 45), P(Minerals, 30), P(Tins, 15), P(Parts, 10) }),
@@ -112,8 +140,8 @@ public static class LootTables
         // a bank vault's: mostly money, sometimes a lot (#213); cracked with the dial, then Simon
         [FurnitureType.VaultSafe] = new(0.05f, 0, 2, new[] { P(Gadgets, 40), P(Optics, 15), P(Guns, 10), P(Ammo, 15), P(Medical, 20) }, 1.0f, 150, 2500),
         // #213: cellars, music rooms, playrooms
-        [FurnitureType.WashingMachine] = new(0.55f, 0, 1, new[] { P(Cloth, 80), P(Sweets, 10), P(Gadgets, 10) }, 0.25f, 1, 20),   // forgotten in a pocket
-        [FurnitureType.Dryer] = new(0.55f, 0, 1, new[] { P(Cloth, 100) }, 0.15f, 1, 10),
+        [FurnitureType.WashingMachine] = new(0.55f, 0, 1, new[] { P(Laundry, 45), P(Cloth, 35), P(Sweets, 10), P(Gadgets, 10) }, 0.25f, 1, 20),   // forgotten in a pocket
+        [FurnitureType.Dryer] = new(0.55f, 0, 1, new[] { P(Laundry, 60), P(Cloth, 40) }, 0.15f, 1, 10),
         [FurnitureType.WineRack] = new(0.45f, 1, 1, new[] { P(KitchenScrap, 55), P(Water, 30), P(Food, 15) }),
         [FurnitureType.Barrel] = new(0.60f, 0, 1, new[] { P(Water, 60), P(Scrap, 40) }),
         [FurnitureType.WaterTank] = new(0.40f, 1, 2, new[] { P(Water, 100) }),

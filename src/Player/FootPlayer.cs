@@ -365,6 +365,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private Avatar.Headwear _poseHat;
 
     /// <summary>
+    /// The clothes on the figure, an <see cref="Avatar.Outfit"/> packed into 60 bits (#251).
+    /// Replicated like <see cref="HeadwearId"/>; set on the owner by <c>Occasions.OccasionHats</c>
+    /// from the inventory's body slots.
+    /// </summary>
+    [Export] public long OutfitBits { get; set; }
+
+    private long _poseOutfit;
+
+    /// <summary>The figure's colours with what it wears: the jersey of whoever owns it, the clothes it has on.</summary>
+    private Avatar.HumanPalette FigurePalette(int rider) => Avatar.HumanPalette.ForRider(rider) with { Outfit = new(OutfitBits) };
+
+    /// <summary>
     /// The figure's right hand in this node's local space, or null when no figure is drawn
     /// (first person on foot, or mounted). Updated whenever the body mesh is posed.
     /// </summary>
@@ -934,6 +946,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
+        replication.AddProperty(".:OutfitBits");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:HeldRadio");
         replication.AddProperty(".:CarRadio");
@@ -946,7 +959,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId", ".:HeldRadio", ".:CarRadio", ".:CarCd" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:CarRadio", ".:CarCd" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1142,12 +1155,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             // first person: nothing to draw, except in VR for the monitor's third-person view (#186)
             if (IsMultiplayerAuthority() && !Npc && !_thirdPerson && !XR.XrSession.Active) return;
-            _walkPalette = Avatar.HumanPalette.ForRider(rider);
+            _walkPalette = FigurePalette(rider);
+            _poseOutfit = OutfitBits;
             _walker = new MeshInstance3D
             {
                 Name = "Body",
                 Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f, hat: Hat),
-                MaterialOverride = Avatar.HumanMeshBuilder.Material(),
+                MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial(),
             };
             if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) _walker.Layers = XR.XrSession.SpectatorOnlyLayer;
             _visual = _walker;
@@ -1569,6 +1583,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_walker == null) return;
         // the two held poses are cached, so a hat put on or taken off (#18) rebuilds them
         if (_poseHat != Hat) { _slidePose = null; _airPose = null; _poseHat = Hat; }
+        // and so do clothes put on or taken off (#251)
+        if (_poseOutfit != OutfitBits)
+        {
+            _slidePose = null; _airPose = null; _poseOutfit = OutfitBits;
+            _walkPalette = _walkPalette with { Outfit = new(OutfitBits) };
+        }
         float dt = (float)GetProcessDeltaTime();
         StepArmPose(dt);
         var dance = StepDance(dt);

@@ -82,10 +82,29 @@ public enum ItemId
     Handbag = 62,
     Backpack = 63,
     HikingPack = 64,
+
+    // ---- clothes (#251, docs/notes/avatar/clothing.md): worn in a body slot; the looks are Avatar.Garments ----
+    CatEarsBlack = 65, CatEarsPink = 66, CatHeadset = 67, GamerHeadset = 68, BunnyEars = 69,
+    DevilHorns = 70, PinkBow = 71, LaceHeadband = 72, BlackBeanie = 73, RainbowCatEars = 74, NeonHeadset = 75,
+    RoundGlasses = 76, HeartShades = 77, BlackShades = 78, GothShades = 79, StarGlasses = 80, DiscoShades = 81,
+    MaskUwu = 82, MaskSwirlA = 83, MaskSwirlW = 84, MaskFang = 85, MaskTongue = 86, MaskBlack = 87,
+    MaskSkull = 88, MaskCat = 89, HoloMask = 90,
+    SilverStuds = 91, SilverHoops = 92, IndustrialSet = 93, SpikePiercings = 94, StarStuds = 95,
+    SpikedChoker = 96, HeartChoker = 97, ChainNecklace = 98, BellCollar = 99,
+    WhiteTee = 100, BandTee = 101, PastelTee = 102, GreenPolo = 103, NavyPolo = 104, WhiteMarcel = 105,
+    BlackMarcel = 106, BuckleCorset = 107, ChainCropTop = 108, PinkCropTop = 109, StripedLongsleeve = 110,
+    PastelHoodie = 111, PostalJacket = 112, GothicRobe = 113, LolitaDress = 114, WitchRobe = 115,
+    RainbowTee = 116, DiscoTop = 117, GalaxyHoodie = 118, LavaTee = 119, GalaxyDress = 120, GlitchTee = 121,
+    JoggingShorts = 122, BlackShorts = 123, TartanSkirt = 124, SlitMaxiSkirt = 125, RuffledMini = 126,
+    PinkPleated = 127, PostalSkirt = 128, Jeans = 129, CargoPants = 130, HoloSkirt = 131,
+    GothStockings = 132, BeeStockings = 133, PinkStockings = 134, BlackStockings = 135, Fishnets = 136,
+    KneeSocks = 137, RainbowStockings = 138,
+    PlatformBoots = 139, CombatBoots = 140, PinkSneakers = 141, WhiteSneakers = 142, MaryJanes = 143, DiscoPlatforms = 144,
+    LaceArmWarmers = 145, FingerlessGloves = 146, PawGloves = 147, StripedArmWarmers = 148, NeonGloves = 149,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
-public enum ItemCategory { Gear, Food, Water, Money, Medical, Scrap, Mineral, Part, Cosmetic }
+public enum ItemCategory { Gear, Food, Water, Money, Medical, Scrap, Mineral, Part, Cosmetic, Clothing }
 
 /// <summary>What pressing Use does with the item in hand.</summary>
 public enum ItemUse
@@ -104,7 +123,7 @@ public enum ItemUse
     Material,
     /// <summary>Aim shoulders it, Use fires one shell (<see cref="ItemController.Fire"/>).</summary>
     Shoot,
-    /// <summary>Use puts it on, or takes it off (a hat — <see cref="Inventory.Worn"/>).</summary>
+    /// <summary>Use puts it on in its body slot (<see cref="ItemDef.Slot"/>, <see cref="Inventory.Wear"/>), swapping with what was there.</summary>
     Wear,
     /// <summary>A printed photo: Use looks at it, Aim + Use (or the stick key) sticks it where you look.</summary>
     Print,
@@ -132,11 +151,16 @@ public sealed record ItemDef(
     /// <summary>Worth in Swiss francs, for trade later on.</summary>
     float Value = 0f,
     /// <summary>A bag's extra pack slots while it is worn (<see cref="ItemUse.Bag"/>).</summary>
-    int PackSlots = 0);
+    int PackSlots = 0,
+    /// <summary>The body slot a <see cref="ItemUse.Wear"/> item goes in (hats: the head).</summary>
+    WearSlot Slot = WearSlot.None);
 
 public static class ItemDefs
 {
-    public static readonly ItemDef[] All =
+    /// <summary>Every item: the authored rows, then one per look in the wardrobe (<see cref="Garments.All"/>).</summary>
+    public static readonly ItemDef[] All = Authored().Concat(Garments.All.Select(Cloth)).ToArray();
+
+    private static ItemDef[] Authored() => new[]
     {
         new(ItemId.Binoculars, "Binoculars", "Hold {aim_item} to look through them. 8x.",
             ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN"),
@@ -229,8 +253,32 @@ public static class ItemDefs
             ItemUse.Consume, stack, new Color(tint), glyph, heal, category, value);
 
     private static ItemDef Hat(ItemId id, string name, string tint, string glyph) =>
-        new(id, name, "{use_item} to put it on, or take it off. Others see you wearing it.",
-            ItemUse.Wear, 1, new Color(tint), glyph, 0, ItemCategory.Cosmetic, 10);
+        new(id, name, "{use_item} puts it on your head, in place of what was there. Others see you wearing it.",
+            ItemUse.Wear, 1, new Color(tint), glyph, 0, ItemCategory.Cosmetic, 10, Slot: WearSlot.Head);
+
+    /// <summary>A look from the wardrobe as an item: one to a slot, worn in its body slot.</summary>
+    private static ItemDef Cloth(Garment g)
+    {
+        string look = g.Style switch
+        {
+            GarmentStyle.Gothic => " Gothic.",
+            GarmentStyle.Kawaii => " Kawaii.",
+            GarmentStyle.Special => $" Rare: a {Garments.FinishName(g.Finish)} finish that moves.",
+            _ => "",
+        };
+        string covers = g.CoversBottom ? " One piece: it takes the bottom slot too." : "";
+        string glyph = string.Concat(g.Name.Split(' ', '-').Where(w => w.Length > 0).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+        float value = g.Style switch { GarmentStyle.Special => 300f, GarmentStyle.Basic => 20f, _ => 45f };
+        // a finish's tint is what it looks like at a glance, not its plain base colour
+        var tint = g.Finish switch
+        {
+            Finish.Rainbow => new Color("ff4fa8"), Finish.Disco => new Color("d8dce8"), Finish.Galaxy => new Color("5a2a9a"),
+            Finish.Holo => new Color("a8f0f8"), Finish.Glitch => new Color("30f0c8"), Finish.Lava => new Color("f05a10"),
+            Finish.Neon => new Color("30f0ff"), _ => g.A,
+        };
+        return new(g.Item, g.Name, $"{{use_item}} puts it on ({Garments.SlotName(g.Slot)}), in place of what was there.{look}{covers}",
+            ItemUse.Wear, 1, tint, glyph, 0, ItemCategory.Clothing, value, Slot: g.Slot);
+    }
 
     private static ItemDef Mat(ItemId id, string name, int stack, string tint, string glyph,
         ItemCategory category, float value) =>

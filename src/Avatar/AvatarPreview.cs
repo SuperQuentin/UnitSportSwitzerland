@@ -117,6 +117,15 @@ public partial class AvatarPreview : Node3D
             return;
         }
 
+        // "--outfits [page] [--walk]" (#251): figures in the clothes, turned toward the camera (or by
+        // --view degrees). Page 0 (default) is whole outfits, gothic, kawaii and the finishes; a slot
+        // name (top, bottom, legs, head, …) lines up every look for that slot. --walk strides them.
+        if (OS.GetCmdlineUserArgs().Contains("--outfits"))
+        {
+            BuildOutfits();
+            return;
+        }
+
         // "--cockpit --heavy N [--section k] [--turn deg] [--throttle t] [--outside|--side|--saloon] [--bare]
         // [--mirrors] [--lights] [--front] [--pitch rad]" (#157): a truck or bus (HeavyCatalog index) with its driver,
         // from the driver's eye, a three-quarter front view, the left side, through the windscreen, or
@@ -420,6 +429,86 @@ public partial class AvatarPreview : Node3D
         _danceWalk!.Mesh = HumanMeshBuilder.BuildStride(HumanPalette.ForRider(3), speed, _walkPhase, dance: dance);
     }
 
+    private readonly List<(MeshInstance3D Mesh, HumanPalette Palette, Headwear Hat)> _walkers = new();
+    private bool _outfitWalk;
+
+    /// <summary>The whole outfits of <c>--outfits</c>' first page: one figure each.</summary>
+    private static readonly (Items.ItemId[] Items, Headwear Hat)[] Showcase =
+    {
+        (new[] { Items.ItemId.CatEarsBlack, Items.ItemId.GothShades, Items.ItemId.MaskFang, Items.ItemId.SpikePiercings, Items.ItemId.SpikedChoker,
+            Items.ItemId.BuckleCorset, Items.ItemId.SlitMaxiSkirt, Items.ItemId.GothStockings, Items.ItemId.PlatformBoots, Items.ItemId.LaceArmWarmers }, Headwear.None),
+        (new[] { Items.ItemId.CatHeadset, Items.ItemId.HeartShades, Items.ItemId.MaskUwu, Items.ItemId.StarStuds, Items.ItemId.BellCollar,
+            Items.ItemId.PinkCropTop, Items.ItemId.PinkPleated, Items.ItemId.PinkStockings, Items.ItemId.MaryJanes, Items.ItemId.PawGloves }, Headwear.None),
+        (new[] { Items.ItemId.LaceHeadband, Items.ItemId.PostalJacket, Items.ItemId.PostalSkirt, Items.ItemId.CombatBoots }, Headwear.None),
+        (new[] { Items.ItemId.DevilHorns, Items.ItemId.BlackShades, Items.ItemId.MaskSkull, Items.ItemId.IndustrialSet, Items.ItemId.ChainNecklace,
+            Items.ItemId.BandTee, Items.ItemId.TartanSkirt, Items.ItemId.Fishnets, Items.ItemId.CombatBoots, Items.ItemId.FingerlessGloves }, Headwear.None),
+        (new[] { Items.ItemId.GamerHeadset, Items.ItemId.RoundGlasses, Items.ItemId.GreenPolo, Items.ItemId.JoggingShorts,
+            Items.ItemId.KneeSocks, Items.ItemId.WhiteSneakers }, Headwear.None),
+        (new[] { Items.ItemId.PinkBow, Items.ItemId.HeartChoker, Items.ItemId.LolitaDress, Items.ItemId.KneeSocks, Items.ItemId.MaryJanes }, Headwear.None),
+        (new[] { Items.ItemId.WitchRobe, Items.ItemId.SilverHoops, Items.ItemId.PlatformBoots }, Headwear.WitchHat),
+        (new[] { Items.ItemId.RainbowCatEars, Items.ItemId.DiscoShades, Items.ItemId.HoloMask, Items.ItemId.DiscoTop,
+            Items.ItemId.HoloSkirt, Items.ItemId.RainbowStockings, Items.ItemId.DiscoPlatforms, Items.ItemId.NeonGloves }, Headwear.None),
+        (new[] { Items.ItemId.NeonHeadset, Items.ItemId.GalaxyHoodie, Items.ItemId.CargoPants, Items.ItemId.PinkSneakers }, Headwear.None),
+        (new[] { Items.ItemId.BunnyEars, Items.ItemId.GalaxyDress, Items.ItemId.BlackStockings, Items.ItemId.MaryJanes }, Headwear.None),
+        (new[] { Items.ItemId.BlackBeanie, Items.ItemId.LavaTee, Items.ItemId.Jeans, Items.ItemId.CombatBoots }, Headwear.None),
+        (new[] { Items.ItemId.StarGlasses, Items.ItemId.GlitchTee, Items.ItemId.BlackShorts, Items.ItemId.BeeStockings,
+            Items.ItemId.PinkSneakers, Items.ItemId.StripedArmWarmers }, Headwear.None),
+        (new[] { Items.ItemId.MaskCat, Items.ItemId.StripedLongsleeve, Items.ItemId.RuffledMini, Items.ItemId.GothStockings, Items.ItemId.PlatformBoots }, Headwear.None),
+        (new[] { Items.ItemId.WhiteMarcel, Items.ItemId.Jeans, Items.ItemId.WhiteSneakers, Items.ItemId.SilverStuds }, Headwear.None),
+        (new[] { Items.ItemId.GothicRobe, Items.ItemId.MaskBlack, Items.ItemId.ChainNecklace }, Headwear.None),
+    };
+
+    private void BuildOutfits()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int at = Array.IndexOf(args, "--outfits");
+        string page = at + 1 < args.Length && !args[at + 1].StartsWith("--") ? args[at + 1] : "0";
+        _outfitWalk = args.Contains("--walk");
+
+        var looks = new List<(Outfit Outfit, Headwear Hat)>();
+        if (Enum.TryParse<WearSlot>(page, ignoreCase: true, out var slot) && slot != WearSlot.None)
+        {
+            // every look for one slot, on a figure that keeps the rest plain
+            foreach (var g in Garments.All.Where(g => g.Slot == slot))
+                looks.Add((Outfit.Empty.With(g.Slot, g.Code), Headwear.None));
+        }
+        else
+            foreach (var (items, hat) in Showcase) looks.Add((Outfit.Of(items), hat));
+        // --focus N: that one close up; --focus N --count k: k of them from N
+        if (_focus >= 0 && _focus < looks.Count)
+        {
+            int count = Array.IndexOf(args, "--count") is var c and >= 0 && c + 1 < args.Length && int.TryParse(args[c + 1], out int n) ? n : 1;
+            looks = looks.Skip(_focus).Take(Mathf.Max(1, count)).ToList();
+        }
+
+        var material = HumanMeshBuilder.FigureMaterial();
+        int columns = Mathf.Min(looks.Count, 8);
+        int rows = (looks.Count + columns - 1) / columns;
+        float yaw = _viewDegrees == 90 ? Mathf.Pi - 0.45f : Mathf.DegToRad(_viewDegrees);
+        for (int i = 0; i < looks.Count; i++)
+        {
+            int col = i % columns, row = i / columns;
+            var palette = HumanPalette.ForRider(i) with { Outfit = looks[i].Outfit };
+            var figure = new MeshInstance3D
+            {
+                Mesh = HumanMeshBuilder.Build(palette, hat: looks[i].Hat),
+                MaterialOverride = material,
+                Position = new Vector3((col - (columns - 1) * 0.5f) * 0.95f, 0, -row * 2.2f),
+                Rotation = new Vector3(0, yaw, 0),
+            };
+            AddChild(figure);
+            _walkers.Add((figure, palette, looks[i].Hat));
+        }
+        float width = columns * 0.95f;
+        var cam = new Camera3D { Fov = 30 };
+        AddChild(cam);
+        // a lone figure fills the frame; a crowd is seen from a little above
+        cam.Position = looks.Count == 1 ? new Vector3(0, 1.1f, 4.2f) : new Vector3(0, 1.1f + rows * 0.5f, width * 1.25f + 1.2f);
+        cam.LookAt(new Vector3(0, 0.95f, -(rows - 1) * 1.1f), Vector3.Up);
+        cam.Current = true;
+        GD.Print($"[outfits] page {page}: {looks.Count} figures");
+    }
+
     private void Place(float x, Node3D node)
     {
         var pivot = new Node3D { Position = new Vector3(x, 0, 0) };
@@ -432,6 +521,12 @@ public partial class AvatarPreview : Node3D
     {
         _elapsed += delta;
         if (_dance is { } dance) UpdateDance(dance.Style, dance.Move, (float)delta);
+        if (_outfitWalk)
+        {
+            _walkPhase = HumanMeshBuilder.AdvancePhase(_walkPhase, 1.4f, (float)delta);
+            foreach (var (mesh, palette, hat) in _walkers)
+                mesh.Mesh = HumanMeshBuilder.BuildStride(palette, 1.4f, _walkPhase, hat: hat);
+        }
 
         // A fixed angle, not a turn. Bicycle and rider geometry is judged side-on — saddle
         // height against hip, hands against the drops, knee over the pedal spindle — and a

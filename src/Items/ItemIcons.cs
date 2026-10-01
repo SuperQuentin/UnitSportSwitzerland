@@ -54,6 +54,7 @@ public static class ItemIcons
         if (Images.TryGetValue(id, out var cached)) return cached;
         Image? img = null;
         if (Grids().TryGetValue(id, out var rows)) img = FromRows(rows);
+        else if (Avatar.Garments.Get(id) is { } look) img = ClothingIcons.Image(look);
         else if (ItemDefs.Get(id) is { } def) img = GenericImage(def.Tint, def.Glyph, ShapeFor(def));
         Images[id] = img;
         return img;
@@ -98,7 +99,9 @@ public static class ItemIcons
             }
         }
         foreach (var d in ItemDefs.All)
-            if (d.Id != ItemId.None && !Grids().ContainsKey(d.Id)) bad.Add($"{d.Id}: no authored icon (generic fallback)");
+            if (d.Id != ItemId.None && !Grids().ContainsKey(d.Id) && Avatar.Garments.Get(d.Id) == null)
+                bad.Add($"{d.Id}: no authored icon (generic fallback)");
+        bad.AddRange(ClothingIcons.Validate());
         return bad;
     }
 
