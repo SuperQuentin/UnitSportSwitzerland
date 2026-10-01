@@ -42,7 +42,8 @@ static class RoadBlendCheck
 
         var blendMs = new List<double>();
         var applyMs = new List<double>();
-        long cells = 0, cliffs = 0, hidden = 0, walls = 0, tlmWalls = 0;
+        long cells = 0, cliffs = 0, hidden = 0, walls = 0, tlmWalls = 0, tlmSegments = 0;
+        var heights = new int[7];   // wall peak heights: <2, <4, <6, <10, <15, <25, more
         double wallM = 0, wallM2 = 0, maxWall = 0, roadKm = 0;
         int n = ChunkFormat.GridSize;
 
@@ -83,6 +84,7 @@ static class RoadBlendCheck
                         roadKm += Math.Sqrt(Sq(seg.Points[i] - seg.Points[i - 3]) + Sq(seg.Points[i + 2] - seg.Points[i - 1])) / 1000;
 
             var inWall = WallCells(tile);
+            tlmSegments += tile.Segments.Count(x => x.Class == RoadClass.Wall);
             foreach (var w in tile.LinearProps)
             {
                 if (w.Type is not (LinearPropType.RetainingWallFill or LinearPropType.RetainingWallCut)) continue;
@@ -97,6 +99,7 @@ static class RoadBlendCheck
                 double high = 0;
                 for (int i = 0; i < w.PointCount; i++) high = Math.Max(high, w.Points[i * 4 + 3]);
                 maxWall = Math.Max(maxWall, high);
+                heights[high < 2 ? 0 : high < 4 ? 1 : high < 6 ? 2 : high < 10 ? 3 : high < 15 ? 4 : high < 25 ? 5 : 6]++;
                 int mid = w.PointCount / 2;
                 if (args.Contains("--walls"))
                 {
@@ -149,6 +152,7 @@ static class RoadBlendCheck
         Console.WriteLine($"  apply (collision)  {Dist(applyMs)}");
         Console.WriteLine(string.Create(c0, $"  blend cells {cells / (double)blendMs.Count:F0}/tile"));
         Console.WriteLine(string.Create(c0, $"  walls {walls} ({wallM / 1000:F2} km, {wallM2:F0} m2 of face, highest {maxWall:F1} m), TLM walls kept {tlmWalls}"));
+        Console.WriteLine($"  wall peak heights <2 / <4 / <6 / <10 / <15 / <25 / more m: {string.Join(" / ", heights)};  TLM wall segments {tlmSegments}");
         Console.WriteLine(string.Create(c0, $"  drops > {CliffM} m per lattice edge: {cliffs} unhidden ({cliffs / Math.Max(roadKm, 1e-9):F1}/km), {hidden} inside a wall"));
         return 0;
     }
