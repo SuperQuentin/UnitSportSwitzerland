@@ -224,10 +224,13 @@ public partial class VehicleBody : CharacterBody3D
     public VehicleState Capture() => new(Kind, GlobalPosition,
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning, DoorsOpen, _initial.Setup,
-        _initial.Train, _initial.Angles, _initial.Flags, _initial.Load, _initial.Radio);
+        _initial.Train, _initial.Angles, _initial.Flags, _initial.Load, _initial.Radio, _initial.Cd);
 
     /// <summary>The live station its radio plays, as the driver left it (spawn data only: nobody tunes a parked car).</summary>
     public int Radio => _initial.Radio;
+
+    /// <summary>The CD its stereo plays (<c>Items.RadioPlay</c>), as the driver left it; empty for none. Spawn data only (#211).</summary>
+    public string Cd => _initial.Cd;
 
     /// <summary>A lone trailer standing here, waiting for a truck; null for anything else.</summary>
     public ParkedTrailer? Trailer => Ride as ParkedTrailer;
@@ -270,7 +273,8 @@ public partial class VehicleBody : CharacterBody3D
         if (!inside && Terrain != null && !Terrain.HasCollisionAt(GlobalPosition)) return;
 
         // the player's safety net, for vehicles: never under the terrain surface
-        if (!inside && Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f)
+        if (!inside && Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f
+            && !Terrain.InTunnel(GlobalPosition) && !Terrain.FloorBelow(this, GlobalPosition, GetRid()))
         {
             GlobalPosition = GlobalPosition with { Y = ground + 0.2f };
             Velocity = Velocity with { Y = 0f };

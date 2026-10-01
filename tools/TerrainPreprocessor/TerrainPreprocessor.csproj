@@ -16,6 +16,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
+    <!-- the road network stage (TileRewriter) runs after the road stage -->
+    <ProjectReference Include="..\RoadGen\RoadGen.csproj" />
   </ItemGroup>
 
 </Project>

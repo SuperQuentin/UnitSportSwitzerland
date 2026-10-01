@@ -14,5 +14,8 @@
   of Swiss buildings), so it decodes, appends and writes back. Re-runs are safe — French buildings
   are marked with `YearBuilt = 1` (BD TOPO has no build year, so nothing French ever has a real
   one) and roads keep a `.road.swiss` copy of the original.
+  BD TOPO also fills the v3 attributes (#117): `sens_de_circulation` -> one-way,
+  `nombre_de_voies` -> lanes, `largeur_de_chaussee` -> width, `importance` 1-2/3/4 -> priority
+  rank 3/2/1, `Rond-point` -> Roundabout (not run against the WFS yet).
   Not imported: land cover, trees, and cycle routes — the `amenagement_cyclable_*` fields come
   back null from this WFS, so no French road is ever flagged `Cycle`.

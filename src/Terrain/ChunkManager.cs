@@ -42,6 +42,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// so a teleport spent seconds committing far tiles one pair at a time.
     /// </summary>
     public double CommitBudgetMs { get; set; } = 4;
+    private const double VrCommitBudgetMs = 2;
 
     public LodPolicy Lod { get; set; } = new();
 
@@ -346,6 +347,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         public bool HasBuildingCollision;
         public ChunkGrid? Grid;
         public HashSet<int>? Holes;   // tunnel portals; null until the tile is first loaded
+        /// <summary>The tile's tunnel bores (#119), with its collision: a body inside one is not under the ground.</summary>
+        public List<(float[] Points, int Count, float Half, float Height)>? Bores;
         public bool HolesLoaded;
         public byte[]? Cover;
         public bool CoverLoaded;
@@ -383,7 +386,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         ArrayMesh? Buildings, Vector3[]? BuildingFaces, bool BuildingsRequested,
         ChunkNode.TreeMeshes? Trees, ArrayMesh? Water,
         Vector3[]? RoadCollisionFaces = null, long[]? StageMs = null,
-        Interiors.DoorSpot[]? Doors = null);
+        Interiors.DoorSpot[]? Doors = null,
+        List<(float[] Points, int Count, float Half, float Height)>? Bores = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -403,10 +407,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _waterMaterial = waterMaterial;
         _available = manifest.Tiles.Select(t => t.Id).ToHashSet();
 
-        if (BuildMeshes && material is ShaderMaterial terrainShader)
+        if (BuildMeshes && material is ShaderMaterial)
         {
             // its own material instance: the discard rectangle must not touch the tiles
-            var horizonMaterial = new ShaderMaterial { Shader = terrainShader.Shader };
+            var horizonMaterial = Styles.StyleKit.Material(Styles.MaterialRole.Terrain);
             Horizon = new HorizonLayer { Name = "Horizon" };
             Horizon.Initialize(source, origin, horizonMaterial,
                 () => _anchors.Select(a => a.GlobalPosition));
@@ -434,7 +438,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public void ApplySettings(GameSettings s)
     {
         Lod = LodPolicy.FromSettings(s);
-        CommitBudgetMs = s.CommitBudgetMs;
+        if (Styles.StyleKit.Detail != Detail)
+        {
+            Detail = Styles.StyleKit.Detail;
+            RebuildVisuals();
+        }
+        // a headset frame is 11 ms at 90 Hz, and a missed one is warped and smeared over Link (#244)
+        CommitBudgetMs = XR.XrSession.Active ? Math.Min(s.CommitBudgetMs, VrCommitBudgetMs) : s.CommitBudgetMs;
         MaxConcurrentBuildsOverride = s.MaxConcurrentBuilds;
         if (Horizon != null)
         {
@@ -442,6 +452,40 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             FogUniforms.Apply(Horizon.Material);
         }
         _sinceEval = double.MaxValue;
+    }
+
+    /// <summary>
+    /// How finely the tile meshes are built: the visual style's (<see cref="Styles.StyleKit.Detail"/>),
+    /// taken by <see cref="ApplySettings"/>. Each build reads it once, when it starts.
+    /// </summary>
+    public Styles.MeshDetail Detail { get; private set; } = Styles.MeshDetail.Low;
+
+    /// <summary>
+    /// Builds every tile's meshes again, in place: ground, roads, buildings, trees and water, for
+    /// a style with another <see cref="Detail"/> (or <c>/style rebuild</c>). The old meshes stay
+    /// drawn until each tile's new ones commit, and its collision is left alone, so the player,
+    /// physics and the network session carry on through it. Builds in flight are cancelled: they
+    /// would commit the old detail. Main thread.
+    /// </summary>
+    public void RebuildVisuals()
+    {
+        if (!BuildMeshes) return;
+        int tiles = 0;
+        foreach (var state in _chunks.Values)
+        {
+            if (state.Cts != null)
+            {
+                state.CancelPending();
+                Interlocked.Increment(ref _cancelledBuilds);
+            }
+            if (state.ActiveStride < 0 && !state.HasRoads && !state.HasBuildings) continue;
+            state.ActiveStride = -1;
+            state.HasRoads = false;
+            state.HasBuildings = false;
+            tiles++;
+        }
+        _sinceEval = double.MaxValue;
+        GD.Print($"[terrain] rebuilding {tiles} tiles at {Detail} detail");
     }
 
     /// <summary>
@@ -944,6 +988,32 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
+    /// Whether a body at <paramref name="worldPos"/> has collision under it within
+    /// <paramref name="depth"/> metres (excluding <paramref name="self"/>): the road blend cuts
+    /// ramps and streets metres under the raw terrain the safety nets compare against (#119), and a
+    /// body standing on that is not under the world.
+    /// </summary>
+    public bool FloorBelow(Node3D body, Vector3 worldPos, Rid self, float depth = 4f)
+    {
+        var q = PhysicsRayQueryParameters3D.Create(worldPos + Vector3.Up * 0.5f, worldPos - Vector3.Up * depth);
+        q.Exclude = new Godot.Collections.Array<Rid> { self };
+        return body.GetWorld3D().DirectSpaceState.IntersectRay(q).Count > 0;
+    }
+
+    /// <summary>
+    /// Whether a world position lies inside a tunnel bore of a tile whose collision is built (#119):
+    /// there a body is legitimately under the terrain surface, and no safety net may lift it out.
+    /// </summary>
+    public bool InTunnel(Vector3 worldPos)
+    {
+        if (_origin == null) return false;
+        var (e, n) = _origin.ToLv95(worldPos);
+        var id = TileId.FromLv95(e, n);
+        return _chunks.TryGetValue(id, out var state) && state.Bores is { Count: > 0 } bores
+            && RoadTunnels.Inside(bores, e - id.MinE, worldPos.Y, id.MaxN - n);
+    }
+
+    /// <summary>
     /// Whether the tile under a world position has its collision shape committed. A body
     /// placed before that falls through the ground it can see.
     /// </summary>
@@ -1098,6 +1168,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             }
             if (result.RoadCollisionFaces != null)
                 EnsureNode(result.Id, state).SetRoadCollision(result.RoadCollisionFaces);
+            if (result.Bores != null) state.Bores = result.Bores;
             if (result.RoadsRequested)
             {
                 if (result.Roads != null)
@@ -1443,6 +1514,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var buildingMaterial = _buildingMaterial;
         var waterMaterial = _waterMaterial;
         var treeMaterial = _treeMaterial;
+        var detail = Detail;
 
         Task.Run(async () =>
         {
@@ -1482,7 +1554,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 TerrainMeshBuilder.MeshData? surfaceCore = null;
                 if (buildMesh && terrainMaterial != null)
                 {
-                    surfaceCore = TerrainMeshBuilder.BuildSurfaceCore(grid, stride, holes, cover);
+                    surfaceCore = TerrainMeshBuilder.BuildSurfaceCore(grid, stride, holes, cover, detail: detail);
                     // checked right before every Godot object this worker makes: see _ExitTree
                     ct.ThrowIfCancellationRequested();
                     mesh = ChunkNode.ToArrayMesh(
@@ -1537,7 +1609,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         && RoadMeshBuilder.Build(roadTile, grid) is { } roadData)
                     {
                         ct.ThrowIfCancellationRequested();
-                        roads = ChunkNode.ToArrayMesh(roadData, roadMaterial);
+                        roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));
                     }
                     Lap(StRoadMesh, stageMs, clock);
                 }
@@ -1564,14 +1636,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                             new Vector3(1000, grid.MaxHeight - grid.MinHeight + 80, 1000));
                         var buffers = ChunkNode.BuildTreeBuffers(treeList);
                         ct.ThrowIfCancellationRequested();
-                        trees = ChunkNode.BuildTreeMeshes(buffers, treeMaterial, bounds);
+                        trees = ChunkNode.BuildTreeMeshes(buffers, treeMaterial, bounds, detail);
                     }
                     Lap(StTrees, stageMs, clock);
 
                     // watercourses ride in the road tile but are meshed here, so a stream gets
                     // the water material instead of being drawn as a narrow blue road
                     if (cover != null && waterMaterial != null
-                        && WaterMeshBuilder.Build(grid, cover, roadTile) is { } waterData)
+                        && WaterMeshBuilder.Build(grid, cover, roadTile, detail) is { } waterData)
                     {
                         ct.ThrowIfCancellationRequested();
                         water = ChunkNode.ToArrayMesh(waterData, waterMaterial);
@@ -1600,7 +1672,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
                         doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null);
-                        if (BuildingMeshBuilder.Build(bTile, doors) is { } buildingData)
+                        if (BuildingMeshBuilder.Build(bTile, doors, detail) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
                             buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
@@ -1633,12 +1705,20 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
                 float[]? blendedCollision = null;
                 Vector3[]? bridgeCollision = null;
+                List<(float[] Points, int Count, float Half, float Height)>? bores = null;
                 if (wantCollision && roadTile != null)
                 {
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes, blend);
                     // A heightfield cannot hold a deck floating above the terrain it crosses, so
                     // bridges get their own small collision body alongside the blended ground.
-                    bridgeCollision = RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile);
+                    // and retaining walls (#125): a heightfield cannot stand a vertical face either,
+                    // nor a railing (#126), nor a kerb (#119)
+                    bridgeCollision = [.. RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile),
+                        .. RoadWallBuilder.BuildCollisionFaces(roadTile), .. RailingBuilder.BuildCollisionFaces(roadTile),
+                        .. IslandBuilder.BuildCollisionFaces(roadTile),   // roundabout islands (#122)
+                        .. RoadSignBuilder.BuildCollisionFaces(roadTile),   // sign poles (#121)
+                        .. RoadStreetBuilder.BuildCollisionFaces(roadTile)];   // sidewalks and kerbs (#119)
+                    bores = RoadTunnels.Bores(roadTile);
                 }
                 else if (wantCollision && !publishInterimCollision)
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes); // no road tile after all
@@ -1671,7 +1751,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: false,
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
-                    bridgeCollision, stageMs, doors));
+                    bridgeCollision, stageMs, doors, bores));
             }
             catch (OperationCanceledException)
             {

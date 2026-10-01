@@ -353,6 +353,8 @@ public partial class RaceNpcs : Node
         npc.SetSimulator((int)to);
         _live[id].Since = Now;
         npc.RefreshNetVisibility(to);   // it must exist there: an NPC always does on its simulator
+        // and the old simulator keeps it only if it sees it (visibility is refreshed on change only)
+        if (_players!.GetNodeOrNull(from.ToString()) != null) npc.RefreshNetVisibility(from);
         Rpc(MethodName.Migrate, id, (int)to);
         npc.RefreshRelays();   // the relays skip the simulator: now another peer
         Race?.ResumeNpc(id);

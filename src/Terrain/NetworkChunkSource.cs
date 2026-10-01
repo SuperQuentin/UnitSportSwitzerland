@@ -201,6 +201,14 @@ public sealed class NetworkChunkSource : IChunkSource
             bytes = null;
         }
 
+        // Same for a .road cached before the v3 bump: it still decodes (no attributes), so it is
+        // only refetched while a server can send the new one; offline the old copy still serves.
+        // ponytail: a v2-only server gets asked again every session; per-file hashes in the
+        // manifest would make every cache check exact.
+        if (bytes is not null && kind == AssetKind.Roads && bytes.Length >= 6 && _streamer.ServerReachable
+            && System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4)) < RoadFormat.Version)
+            bytes = null;
+
         if (bytes is null)
         {
             // With no server there is nothing to fetch from, and the retry ladder cannot help.

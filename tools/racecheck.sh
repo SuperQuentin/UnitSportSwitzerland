@@ -10,6 +10,7 @@
 # Defaults: ground at the Col du Mollendruz over 1500 m; air from Mont-la-Ville to Montricher.
 # Each client gets its own --cache (a loopback run leaves the server manifest in the cache).
 # CHUNKS=<dir> passes --chunks <dir> to every process (a worktree has no terrain_chunks of its own).
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 CHUNKARGS=(); [ -n "${CHUNKS:-}" ] && CHUNKARGS=(--chunks "$CHUNKS")
 CLASS=${1:-car}

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using UnitSport.Terrain.Format;
 using UnitSport.Tools.Preprocessor;
+using UnitSport.Tools.RoadGen.Rewrite;
 
 // swissALTI3D XYZ zips -> .terr chunk files + manifest.json
 // Usage:
@@ -18,12 +19,15 @@ bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false,
 // to a built country does not re-extract every road in it
 string? tilesFile = null;
 // hand-traced cover TLM lacks (see docs/notes/tools/land-cover.md); --cover-only skips the road
-// stage, which would otherwise strip the junction polygons RoadGen --rewrite added
+// stage and the network stage after it
 string? coverOverrides = File.Exists("docs/data/cover_overrides.json") ? "docs/data/cover_overrides.json" : null;
 bool coverOnly = false;
 bool coarseOnly = false, horizonOnly = false;
 bool force = false, fresh = false;
 string? franceBox = null;
+// optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
+string? osmPbf = null;
+bool osmCheck = false;
 int jobs = Environment.ProcessorCount;
 int ioJobs = 4;
 
@@ -43,8 +47,7 @@ for (int i = 0; i < args.Length; i++)
         case "--cover-only": doCover = coverOnly = featuresOnly = true; break;
         case "--cover-overrides": coverOverrides = args[++i]; break;
         case "--places": doPlaces = true; break;
-        // the place index alone: --places with --tlm (for summits) would otherwise re-run roads,
-        // which strips the junction polygons RoadGen --rewrite added
+        // the place index alone: --places with --tlm (for summits) would otherwise re-run roads
         case "--places-only": doPlaces = placesOnly = true; featuresOnly = true; break;
         case "--tiles-file": tilesFile = args[++i]; break;
         case "--roads-only": roadsOnly = true; break;
@@ -53,6 +56,8 @@ for (int i = 0; i < args.Length; i++)
         case "--horizon": horizonOnly = true; break;
         case "--verify": verify = true; break;
         case "--france": franceBox = args[++i]; break;
+        case "--osm-overlay": osmPbf = args[++i]; break;
+        case "--osm-check": osmCheck = true; break;
         case "--jobs": jobs = int.Parse(args[++i]); break;
         case "--io-jobs": ioJobs = int.Parse(args[++i]); break;
         case "--force": force = true; break;
@@ -61,6 +66,25 @@ for (int i = 0; i < args.Length; i++)
             Console.Error.WriteLine($"Unknown argument: {args[i]}");
             return 2;
     }
+}
+
+if (osmCheck) return OsmOverlay.SelfCheck();
+
+// ---- OSM overlay: OSM attributes conflated onto TLM road lines, for the built tiles ----------
+// Standalone and region-wide (not per batch), so it covers the whole region however the feature
+// passes were split. Without --osm-overlay nothing here runs and no build output changes.
+if (osmPbf != null)
+{
+    if (outDir == null || tlmGpkg == null)
+    {
+        Console.Error.WriteLine("--osm-overlay <pbf> requires --out <chunk dir> and --tlm <gpkg>");
+        return 2;
+    }
+    var manifestPath = Path.Combine(outDir, "manifest.json");
+    var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
+        : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+        : new HashSet<TileId>();
+    return OsmOverlay.Run(osmPbf, tlmGpkg, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", region, jobs);
 }
 
 // ---- horizon: one region-wide 100 m lattice, from the tiles already built ------------------
@@ -296,34 +320,56 @@ int RunFeatures(TerrainManifest existing)
     }
     int batches = (ordered.Count + BatchSize - 1) / BatchSize;
 
-    for (int b = 0; b < batches; b++)
+    Dictionary<TileId, ChunkGrid> LoadBatch(int b, out List<ManifestTile> slice)
     {
-        var slice = ordered.Skip(b * BatchSize).Take(BatchSize).ToList();
+        slice = ordered.Skip(b * BatchSize).Take(BatchSize).ToList();
         var grids = new System.Collections.Concurrent.ConcurrentDictionary<TileId, ChunkGrid>();
         Parallel.ForEach(slice, new ParallelOptions { MaxDegreeOfParallelism = jobs }, t =>
         {
             using var fs = File.OpenRead(Path.Combine(outDir!, ChunkFormat.ChunkFileName(t.Id)));
             grids[t.Id] = ChunkCodec.Decode(fs);
         });
-        var batch = new Dictionary<TileId, ChunkGrid>(grids);
-        Console.WriteLine($"=== batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
+        return new Dictionary<TileId, ChunkGrid>(grids);
+    }
 
-        if (tlmGpkg != null && !coverOnly)
+    // roads and buildings first, every batch, then the network stage, which sees every batch at
+    // once (a junction on a batch seam needs both sides) and measures streets against the facades
+    // (#119); cover masks trees off the network stage's final lines
+    bool roads = tlmGpkg != null && !coverOnly;
+    if (roads)
+    {
+        for (int b = 0; b < batches; b++)
         {
-            int rc = RoadStage.Run(tlmGpkg, routeKeys, outDir!, batch);
+            var batch = LoadBatch(b, out var slice);
+            Console.WriteLine($"=== roads, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
+            int rc = RoadStage.Run(tlmGpkg!, routeKeys, outDir!, tempDir!, batch);
             if (rc != 0) return rc;
+            if (buildingsGpkg != null)
+            {
+                rc = BuildingStage.Run(buildingsGpkg, gwrPath, outDir!, batch);
+                if (rc != 0) return rc;
+            }
         }
+        int nrc = RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
+        if (nrc != 0) return nrc;
+    }
+
+    if (!doCover && (buildingsGpkg == null || roads)) return 0;
+    if (doCover && tlmGpkg == null)
+    {
+        Console.Error.WriteLine("--cover requires --tlm <swisstlm3d .gpkg>");
+        return 2;
+    }
+    for (int b = 0; b < batches; b++)
+    {
+        var batch = LoadBatch(b, out var slice);
+        Console.WriteLine($"=== batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
         if (doCover)
         {
-            if (tlmGpkg == null)
-            {
-                Console.Error.WriteLine("--cover requires --tlm <swisstlm3d .gpkg>");
-                return 2;
-            }
-            int rc = CoverStage.Run(tlmGpkg, outDir!, batch, coverOverrides);
+            int rc = CoverStage.Run(tlmGpkg!, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!));
             if (rc != 0) return rc;
         }
-        if (buildingsGpkg != null)
+        if (buildingsGpkg != null && !roads)
         {
             int rc = BuildingStage.Run(buildingsGpkg, gwrPath, outDir!, batch);
             if (rc != 0) return rc;

@@ -1,12 +1,17 @@
 using System.Diagnostics;
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Rewrite;
 
 namespace UnitSport.Tools.Preprocessor;
 
-/// <summary>Runs road extraction for the tiles whose terrain chunks already exist.</summary>
+/// <summary>
+/// Runs road extraction for the tiles whose terrain chunks already exist. The output is the
+/// network stage's raw input (<see cref="RawRoads"/>, in the temp dir); the chunk dir's
+/// <c>.road</c> tiles are written by <see cref="RunNetwork"/> once every batch is extracted.
+/// </summary>
 public static class RoadStage
 {
-    public static int Run(string tlmGpkg, string? routeKeys, string outDir,
+    public static int Run(string tlmGpkg, string? routeKeys, string outDir, string tempDir,
         Dictionary<TileId, ChunkGrid> grids)
     {
         if (!File.Exists(tlmGpkg))
@@ -26,10 +31,10 @@ public static class RoadStage
         var flagCounts = new SortedDictionary<string, int>();
         int paved = 0, natural = 0;
 
+        string rawDir = RawRoads.DirFor(tempDir);
         foreach (var (id, tile) in tiles)
         {
-            using (var fs = File.Create(Path.Combine(outDir, RoadFormat.FileName(id))))
-                RoadCodec.Encode(tile, fs);
+            RawRoads.Write(rawDir, tile, extractor.SourceKeys.GetValueOrDefault(id));
 
             totalSegments += tile.Segments.Count;
             foreach (var s in tile.Segments)
@@ -60,11 +65,39 @@ public static class RoadStage
         int holeTiles = extractor.Holes.Count(kv => kv.Value.Count > 0);
         int holeCells = extractor.Holes.Sum(kv => kv.Value.Count);
 
-        Console.WriteLine($"Roads written for {tiles.Count} tiles: {totalSegments} segments in {sw.Elapsed.TotalSeconds:F1}s");
+        Console.WriteLine($"Raw roads written for {tiles.Count} tiles: {totalSegments} segments in {sw.Elapsed.TotalSeconds:F1}s");
         Console.WriteLine($"  tunnel portals: {holeCells} carved quads across {holeTiles} tiles");
         Console.WriteLine("  by class:   " + string.Join(", ", byClass.Select(kv => $"{kv.Key}={kv.Value}")));
         Console.WriteLine($"  by surface: Paved={paved}, Natural={natural}");
         Console.WriteLine("  flags:      " + string.Join(", ", flagCounts.Select(kv => $"{kv.Key}={kv.Value}")));
         return 0;
+    }
+
+    /// <summary>
+    /// The road network stage over <paramref name="tiles"/>: raw input -> junctions, attributes,
+    /// OSM overlay (when <c>&lt;temp&gt;/osm_overlay.tsv</c> exists) -> v3 tiles in the chunk dir.
+    /// Always from the raw input, so a second build writes the same bytes.
+    /// </summary>
+    public static int RunNetwork(string outDir, string tempDir, IReadOnlyList<TileId> tiles)
+    {
+        var sw = Stopwatch.StartNew();
+        string overlay = Path.Combine(tempDir, "osm_overlay.tsv");
+        Console.WriteLine($"Road network stage: {tiles.Count} tiles"
+            + (File.Exists(overlay) ? " with the OSM overlay (ODbL)" : ""));
+        try
+        {
+            var stats = TileRewriter.Run(outDir, tiles, new TileRewriter.Options(
+                RawDir: RawRoads.DirFor(tempDir), OsmOverlay: overlay), Console.WriteLine);
+            Console.WriteLine($"  {stats.TilesWritten} tiles, {stats.SegmentsWritten:N0} segments, "
+                + $"{stats.Junctions:N0} junctions in {sw.Elapsed.TotalSeconds:F1}s");
+            Console.WriteLine(stats.Network.Format(stats.TilesWritten));
+            Console.WriteLine(stats.Heights.Format());
+            return 0;
+        }
+        catch (TileRewriter.AlreadyRewrittenException e)
+        {
+            Console.Error.WriteLine(e.Message);
+            return 3;
+        }
     }
 }

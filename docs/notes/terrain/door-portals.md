@@ -163,6 +163,14 @@ changed is how you get there.
   figure walking in, and a barn with its pair open, half open, shut, and seen from inside.
   With a path it saves each view and quits; without, it cycles them.
   A dedicated server needs terrain; with none, PR #46's `--generated-world`.
+- **In VR** (#244): the headset camera draws depth-0 quads only (the dark depth-1/2 quads in
+  the same place were what made doorways black). The four portal cameras become door × eye:
+  `_views[i]` the left eye, its `Nested` the right, each placed at
+  `map * xr.GetTransformForView(eye)` with that eye's asymmetric frustum (`SetFrustum`, as
+  `XrMonitor` draws the eyes), at half the eye's render size; `door_portal.gdshader` picks
+  `view_right` by `VIEW_INDEX`. No nesting in VR. The headset camera cannot be moved out of a
+  doorway, so it only gets `DoorwayNear` there and `InsideFar` indoors (`FitHead`). The monitor's
+  window camera shows the left eye's picture, a little off.
 - **Known limits.** Two portals plus one nested in each; a third level is a dark hall. Mounted
   players pass only garage and barn doors, and never flying. No shooting or throwing through.
   Exterior and interior windows do not line up (#60).

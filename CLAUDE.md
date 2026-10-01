@@ -17,6 +17,7 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
+`testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
 `dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it).
 
 ## Rules
@@ -33,9 +34,11 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
      and a local crash loses nothing.
 - **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
   in the main checkout and push. No issue, branch, worktree or PR.
-  4. **Test in multiplayer**: dedicated server + client on loopback, check the feature on the
-     **remote** peer (replication, authority, animation, damage). The PR says what was and was not
-     verified. Network model: `src/Net/CLAUDE.md`.
+  4. **Test the cheapest tier that can catch the bug** (`docs/notes/general/testing.md`):
+     `tools/test.sh quick` on every change; **tier 2 (`tools/test.sh net`) when the change touches
+     network/authority/replicated state**, checking the feature on the **remote** peer (replication,
+     authority, animation, damage). The PR says what was and was not verified. Network model:
+     `src/Net/CLAUDE.md`.
 - Check and probe output goes in `test_output/` (gitignored), never the repo root.
 
 ## Commands

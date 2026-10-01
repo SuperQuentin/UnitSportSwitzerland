@@ -6,6 +6,8 @@
 - `--style ps1|cartoon|real-|real+`: the visual style for this run (`GameSettings.VisualStyle`).
 - `--style-report`: headless check of the style kit's shader table, RESULT PASS/FAIL, and what
   each style borrows (`style-kit`).
+- `/style [ps1|cartoon|real-|real+]` in the chat: switch live, for the session only;
+  `/style rebuild`: rebuild every tile's meshes in place (`style-kit`).
 - `--tree-lod off`: every tree 3D, no billboards; `--tree-near m`: the 3D/billboard handover
   (`tree-lod`).
 - **Style screenshots and timings:** `tools/style-shots.sh <tag> [game flags]` from the checkout
@@ -14,6 +16,16 @@
   `test_output/styles/`, then each shot's frame time and primitives. `VIEWS="top street"` takes
   only those, `SETTLE=s` per shot, `TIME=h`. Compare a branch with `main` by running it from a
   `main` checkout too (needs `--origin` and `g` heights, so `main` after #212).
+- **A live change in one launch:** a `--shot-queue` line starting with `/` is typed into the chat
+  between two shots (`/style cartoon`, `/style rebuild`, `/time set 19:30`).
+- **On Windows** the script needs zsh and `godot` on the PATH; a bash copy with `${=X}` changed
+  to `$X` and `godot` to the exe path (`docs/notes/general/godot-exe.md`) runs the same (never with
+  `--always-on-top` there: `core/windows-launch-focus`), with
+  `--chunks <dir>` when the worktree has no terrain. Vsync caps the frame times at 16.7 ms there:
+  compare primitives, or turn vsync off for timings.
+- **Pixel check of a shader refactor:** diff the branch's pictures against `main`'s, and two
+  `main` runs against each other for the noise floor (water and traffic move, far tiles load at
+  different moments, the aerial view differs by several % between two `main` runs).
 - **Discard a run when** (both macOS): the frame times are a flat ~6.9 ms with the same
   primitive count repeated (the window stopped being drawn, usually covered by another game
   window: Godot skips drawing an occluded window, and the picture is the last one drawn), or the

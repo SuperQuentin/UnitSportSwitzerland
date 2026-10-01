@@ -223,8 +223,7 @@ public sealed class PlayerRegistry
     {
         try
         {
-            using var file = Godot.FileAccess.Open(AdminFile, Godot.FileAccess.ModeFlags.Write);
-            file.StoreString(JsonSerializer.Serialize(_persistentAdmins.ToArray()));
+            Core.JsonStore.Save(AdminFile, _persistentAdmins.ToArray());
         }
         catch (Exception e)
         {
