@@ -16,7 +16,7 @@
   - `yt-dlp`: latest release binary in `/usr/local/bin` (apt's goes stale; updated with `-U` each run), plus `deno`, the JS runtime
     yt-dlp needs for YouTube. ffmpeg and yt-dlp are what server-side CD burning calls (`src/Audio/Cd/CdBurner.cs`).
   - mDNS: `/etc/avahi/services/unitsport.service` advertises `_unitsport._udp` on the game port, name `MDNS_NAME`, TXT
-    `version=<git describe>`; clients list it in the main menu (`docs/notes/net/lan-discovery.md`).
+    `version=<git describe>`; clients list it on the Multiplayer screen (`docs/notes/net/lan-discovery.md`).
   - ufw: the SSH port is allowed **before** `ufw --force enable` (no lockout), then `WEB_PORTS` (80 443) tcp, `GAME_PORT` (7777) udp,
     5353 udp.
   - cron: `@reboot $DEPLOY_DIR/start-server.sh` in the SSH user's crontab.
