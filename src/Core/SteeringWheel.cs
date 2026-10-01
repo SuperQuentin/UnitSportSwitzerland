@@ -77,11 +77,17 @@ public partial class SteeringWheel : Node
     private unsafe SDL_Joystick* _joy;
     private string _name = "";
     private float[] _axes = Array.Empty<float>();
+    /// <summary>
+    /// Axes that have read anything but 0. Until a wheel sends its first report every axis reads 0 —
+    /// the HORI's pedals rest at −1, so 0 would be gas and brake held half way.
+    /// </summary>
+    private bool[] _reported = Array.Empty<bool>();
     private readonly HashSet<int> _pressed = new();
     /// <summary>Actions this wheel is holding down, released when the button is or the wheel goes.</summary>
     private readonly HashSet<string> _held = new();
     private string[] _devices = Array.Empty<string>();
     private double _scanTimer;
+    private List<int> _ignoredLogged = new();
 
     /// <summary>Adds the reader under <paramref name="root"/>; nothing on a headless run. Idempotent.</summary>
     public static void Install(Node root)
@@ -199,7 +205,8 @@ public partial class SteeringWheel : Node
         FeedButtons(s);
     }
 
-    private float Pedal(WheelAxis a) => a.Bound && a.Axis < _axes.Length ? a.Read(_axes[a.Axis]) : 0f;
+    private float Pedal(WheelAxis a) =>
+        a.Bound && a.Axis < _axes.Length && _reported[a.Axis] ? a.Read(_axes[a.Axis]) : 0f;
 
     private unsafe bool Connected() => _joy != null && SDL_JoystickConnected(_joy);
 
@@ -284,6 +291,7 @@ public partial class SteeringWheel : Node
         if (_claimed) GD.Print($"[wheel] {_name} released");
         _claimed = false;
         _axes = Array.Empty<float>();
+        _reported = Array.Empty<bool>();
         _pressed.Clear();
         Neutral();
         PlayerInput.SetIgnoredJoypads(Array.Empty<int>());
@@ -299,8 +307,12 @@ public partial class SteeringWheel : Node
     private unsafe void Read()
     {
         int axes = Math.Max(0, SDL_GetNumJoystickAxes(_joy));
-        if (_axes.Length != axes) _axes = new float[axes];
-        for (int i = 0; i < axes; i++) _axes[i] = Math.Clamp(SDL_GetJoystickAxis(_joy, i) / 32767f, -1f, 1f);
+        if (_axes.Length != axes) (_axes, _reported) = (new float[axes], new bool[axes]);
+        for (int i = 0; i < axes; i++)
+        {
+            _axes[i] = Math.Clamp(SDL_GetJoystickAxis(_joy, i) / 32767f, -1f, 1f);
+            _reported[i] |= _axes[i] != 0f;
+        }
 
         _pressed.Clear();
         int buttons = SDL_GetNumJoystickButtons(_joy);
@@ -364,6 +376,13 @@ public partial class SteeringWheel : Node
             bool byName = godotName.Length > 0
                 && (godotName.Contains(_name, StringComparison.OrdinalIgnoreCase) || _name.Contains(godotName, StringComparison.OrdinalIgnoreCase));
             if (byIds || byName) ignored.Add(pad);
+        }
+        if (!ignored.SequenceEqual(_ignoredLogged))
+        {
+            _ignoredLogged = ignored;
+            GD.Print(ignored.Count == 0
+                ? $"[wheel] Godot has no joypad matching {_name} ({vendor:x4}:{product:x4})"
+                : $"[wheel] Godot joypad {string.Join(", ", ignored.Select(p => $"{p} '{Input.GetJoyName(p)}'"))} left to SDL");
         }
         PlayerInput.SetIgnoredJoypads(ignored);
     }

@@ -38,16 +38,24 @@ public static class WheelPresets
                 [9] = PlayerInput.Menu,
             };
         }),
-        // HORI Force Feedback Truck Control System: a first guess (steering on X, gas and brake on
-        // the next two axes) until it has been checked on the device; the panel fixes the rest.
+        // HORI Force Feedback Truck Control System ("HORI TRUCK CONTROL SYSTEM WHEEL", 0f0d:017a),
+        // recorded on the device: 8 axes, 54 buttons, 1 hat. Steering on axis 0 (left negative);
+        // clutch, brake and gas on axes 4, 5, 6, each resting at −1 and reading +1 floored.
         new("HORI Truck Control", n => Has(n, "HORI") && (Has(n, "Truck") || Has(n, "Force Feedback")), s =>
         {
             s.SteerAxis = 0;
-            s.Throttle = Pedal(1);
-            s.Brake = Pedal(2);
-            s.Clutch = new();
+            s.Throttle = Pedal(6, rest: -1f);
+            s.Brake = Pedal(5, rest: -1f);
+            s.Clutch = Pedal(4, rest: -1f);
             s.Handbrake = new();
-            s.Buttons = new();
+            s.Buttons = new()
+            {
+                [45] = WheelSettings.HandbrakeButton,
+                [8] = PlayerInput.LookBehind,
+                [7] = PlayerInput.CameraToggle,
+                [0] = PlayerInput.LightsToggle,
+                [5] = PlayerInput.InteractMount,
+            };
         }),
     };
 
@@ -75,7 +83,7 @@ public static class WheelPresets
         s.Preset = "";
     }
 
-    private static WheelAxis Pedal(int axis) => new() { Axis = axis, From = 1f, To = -1f };
+    private static WheelAxis Pedal(int axis, float rest = 1f) => new() { Axis = axis, From = rest, To = -rest };
 
     private static bool Has(string name, string part) => name.Contains(part, StringComparison.OrdinalIgnoreCase);
 }
