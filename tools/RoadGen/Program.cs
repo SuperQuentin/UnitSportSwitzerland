@@ -38,8 +38,10 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
               --force            rewrite even rewritten tiles with no raw input (trims twice)
               --measure          also compute the overlap comparison (slow)
               --no-audit         skip the height audit against the terrain
+              --no-shift         keep motorway carriageways on TLM's lines (median "before")
 
           --format-check        .road v1/v2/v3 codec self-check (round trips, unknown sections)
+          --plan-check          width/lanes/one-way/motorway-offset self-check (synthetic lines)
           --compare-v2 V2DIR --chunks V3DIR
                                  v3 tiles against a v2 build of the same region: same geometry,
                                  one-way agreement with the runtime inference, bytes per tile
@@ -90,6 +92,10 @@ else if (args.Contains("--format-check"))
 {
     return FormatCheck.Run(Console.WriteLine) ? 0 : 2;
 }
+else if (args.Contains("--plan-check"))
+{
+    return UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.SelfCheck(Console.WriteLine) ? 0 : 2;
+}
 else if (ArgValue("--compare-v2") is { } v2Dir)
 {
     return V2Compare.Run(v2Dir, ArgValue("--chunks") ?? "terrain_chunks", Console.WriteLine);
@@ -100,6 +106,7 @@ else if (args.Contains("--rewrite"))
     string temp = ArgValue("--temp") ?? RawRoads.DefaultTempDir(chunks);
     double dividedScale = double.Parse(ArgValue("--divided-scale") ?? "1.0", CultureInfo.InvariantCulture);
     bool dryRun = args.Contains("--dry-run");
+    UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.ShiftCarriageways = !args.Contains("--no-shift");
 
     var ids = ArgValue("--tiles-file") is { } file ? ReadTilesFile(file)
         : ArgValue("--tiles") is { } spec ? ParseTiles(spec) : DiscoverTiles(chunks, RawRoads.DirFor(temp));
@@ -144,10 +151,15 @@ else if (args.Contains("--rewrite"))
             ? 0 : 100.0 * (1 - stats.OverlapAfter / stats.OverlapBefore);
         Console.WriteLine($"overlap {stats.OverlapBefore:N0} m² -> {stats.OverlapAfter:N0} m² "
                           + $"({removed:F1}% removed)");
+        foreach (var (pair, area) in stats.Network.OverlapPairs.OrderByDescending(kv => kv.Value).Take(8))
+            Console.WriteLine($"  overlap {pair,-22} {area,10:N0} m²");
     }
 
     Console.WriteLine(stats.Network.Format(stats.TilesWritten));
     Console.WriteLine(stats.Heights.Format());
+    if (stats.Network.Shifted is { Samples: > 0 } sh)
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"  shifted carriageways: terrain under the shifted line vs under TLM's ({sh.Samples:N0} samples): mean {sh.MeanDelta:F2} m, p99 {sh.P99Delta:F2} m, worst {sh.WorstDelta:F2} m at {sh.WorstWhere}"));
     if (stats.VerticesReverted > 0)
         Console.WriteLine($"    {stats.VerticesReverted:N0} vertices put back on the surveyed line (cliff guard)");
     Console.WriteLine($"{stopwatch.Elapsed.TotalSeconds:F1} s");

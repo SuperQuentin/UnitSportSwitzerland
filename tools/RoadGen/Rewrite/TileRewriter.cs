@@ -70,6 +70,11 @@ public static class TileRewriter
         public int Roads, OneWay, Divided, DividedResolved, Urban, Osm, Roundabout, OsmTiles;
         public double RoadKm, OneWayKm, UrbanKm, OsmKm;
         public long Bytes, DeflatedBytes;
+        /// <summary>Overlap area per class pair (<c>--measure</c>), e.g. "motorway+motorway".</summary>
+        public SortedDictionary<string, double> OverlapPairs = new(StringComparer.Ordinal);
+        public readonly CrossSectionPlanner.Stats Carriageways = new();
+        /// <summary>Terrain under each shifted carriageway vertex vs under the TLM line it came from.</summary>
+        public HeightAudit Shifted = HeightAudit.Empty;
         public int MaxBytes;
         public string MaxBytesTile = "";
 
@@ -83,7 +88,7 @@ public static class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """);
+                """) + "\n" + Carriageways.Format();
         }
     }
 
@@ -126,6 +131,7 @@ public static class TileRewriter
         public required Vec2[] Plan { get; init; }     // LV95 plan view of the original
         public required float[] Height { get; init; }  // altitude at each original vertex
         public RawRoads.Key? Key { get; init; }         // TLM uuid/part/along-line, for OSM rows
+        public required CrossSectionPlanner.Line Line { get; init; }  // width, lanes, one-way (#117)
 
         /// <summary>2D distance along the original to the point nearest <paramref name="p"/>.</summary>
         public double AlongOf(Vec2 p)
@@ -227,6 +233,7 @@ public static class TileRewriter
         double overlapBefore = 0, overlapAfter = 0, carriageway = 0;
         int blockIndex = 0, guarded = 0;
         var audit = new HeightAuditor();
+        var shiftAudit = new HeightAuditor();
         var netStats = new NetworkStats();
 
         foreach (var block in blocks)
@@ -235,6 +242,7 @@ public static class TileRewriter
             var context = WithHalo(block, options.Halo);
 
             var net = new RoadNetwork();
+            var lines = new List<CrossSectionPlanner.Line>();
             var loaded = new Dictionary<TileId, RoadTile>();
             var passthrough = new Dictionary<TileId, List<RoadSegment>>();
 
@@ -261,9 +269,13 @@ public static class TileRewriter
                         continue;
                     }
 
-                    AddSegment(net, id, segment, keys?[si], options.DividedScale);
+                    lines.Add(new CrossSectionPlanner.Line
+                        { Tile = id, Segment = segment, Key = keys?[si], Write = block.Contains(id) });
                 }
             }
+
+            CrossSectionPlanner.Plan(lines, overlay, netStats.Carriageways);
+            foreach (var line in lines) AddSegment(net, line, options.DividedScale);
 
             var output = new Dictionary<TileId, List<RoadSegment>>();
             var caps = new Dictionary<TileId, List<RoadJunction>>();
@@ -285,6 +297,8 @@ public static class TileRewriter
                     Analyze: options.Measure));
 
                 overlapAfter += result.Report.OverlapArea;
+                foreach (var (pair, area) in result.Report.TopOverlapPairs ?? [])
+                    netStats.OverlapPairs[pair] = netStats.OverlapPairs.GetValueOrDefault(pair) + area;
                 carriageway += result.Report.CarriagewayArea;
 
                 var terrain = options.AuditHeights ? LoadGrids(chunkDir, context) : null;
@@ -300,7 +314,9 @@ public static class TileRewriter
                     if (ribbon.Stations.Count < 2) { if (write) dropped++; continue; }
 
                     var plan = ribbon.Stations.Select(s => s.Position).ToList();
-                    if (write && terrain is not null && link.AllowSmoothing)
+                    if (write && terrain is not null && source.Line.IsShifted)
+                        shiftAudit.Add(plan, source, terrain);   // moved on purpose: measured, never reverted
+                    else if (write && terrain is not null && link.AllowSmoothing)
                     {
                         guarded += ApplyCliffGuard(plan, source, terrain, options.MaxHeightShift);
                         // structures are meant to sit above the ground, so auditing them against
@@ -310,23 +326,17 @@ public static class TileRewriter
                     plans.Add((source, plan, write));
                 }
 
-                var partners = new PartnerGrid(plans
-                    .Where(x => IsDividedCarRoad(x.Source.Segment))
-                    .Select(x => x.Plan));
-
                 foreach (var (source, plan, write) in plans)
                 {
                     if (!write) continue;
                     if (!output.TryGetValue(source.Tile, out var list))
                         output[source.Tile] = list = new List<RoadSegment>();
 
-                    var attributes = source.Segment.Attributes;
-                    if (IsDividedCarRoad(source.Segment))
-                        attributes = attributes with { OneWay = partners.OneWay(plan) };
+                    var attributes = CrossSectionPlanner.Attributes(source.Line);
                     if (overlay is not null && source.Key is { } key
                         && overlay.Best(key.Uuid, key.Part,
                             key.FromM + source.AlongOf(plan[0]), key.FromM + source.AlongOf(plan[^1])) is { } row)
-                        attributes = OsmOverlayReader.Apply(attributes, row);
+                        attributes = CrossSectionPlanner.Finish(OsmOverlayReader.Apply(attributes, row), source.Line);
 
                     list.Add(ToSegment(plan, source, attributes));
                     written++;
@@ -378,6 +388,7 @@ public static class TileRewriter
                 log($"  block {blockIndex}/{blocks.Count}  {tilesWritten} tiles, {junctionCount} junctions");
         }
 
+        netStats.Shifted = shiftAudit.Result();
         return new Stats(tilesRead, tilesWritten, junctionCount, written, dropped,
             overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, netStats);
     }
@@ -451,78 +462,6 @@ public static class TileRewriter
             if (a.Has(RoadAttrFlags.Urban)) { st.Urban++; st.UrbanKm += km; }
             if (a.Has(RoadAttrFlags.Osm)) { st.Osm++; st.OsmKm += km; }
             if (a.Has(RoadAttrFlags.Roundabout)) st.Roundabout++;
-        }
-    }
-
-    /// <summary>
-    /// Direction of one carriageway of a divided road, from where its partner lies. swissTLM3D
-    /// records none; Switzerland drives on the right, so each carriageway runs with the other on
-    /// its LEFT. This is <c>LaneGraph.OrientDivided</c> (the runtime inference it replaces for v3
-    /// tiles) moved to build time: vote with every partner point beside the segment's middle,
-    /// 3..30 m to the side and within 25 m along. An exact band query instead of the runtime's
-    /// 30 m cells, so the answer does not depend on where the world origin put the cells.
-    /// </summary>
-    private sealed class PartnerGrid
-    {
-        private const double Cell = 30;
-        private readonly Dictionary<(long, long), List<(int Line, Vec2 P)>> _cells = new();
-        private readonly Dictionary<List<Vec2>, int> _ids = new(ReferenceEqualityComparer.Instance);
-
-        public PartnerGrid(IEnumerable<List<Vec2>> lines)
-        {
-            foreach (var line in lines)
-            {
-                int id = _ids.Count;
-                _ids[line] = id;
-                foreach (var p in line)
-                {
-                    var key = ((long)Math.Floor(p.X / Cell), (long)Math.Floor(p.Y / Cell));
-                    if (!_cells.TryGetValue(key, out var list)) _cells[key] = list = new();
-                    list.Add((id, p));
-                }
-            }
-        }
-
-        public sbyte OneWay(List<Vec2> line)
-        {
-            int self = _ids.TryGetValue(line, out int id) ? id : -1;
-            var (mid, t) = Middle(line);
-            var right = new Vec2(t.Y, -t.X);   // plan view: X east, Y north
-            int votes = 0;
-            long cx = (long)Math.Floor(mid.X / Cell), cy = (long)Math.Floor(mid.Y / Cell);
-            for (long dx = -2; dx <= 2; dx++)
-            for (long dy = -2; dy <= 2; dy++)
-            {
-                if (!_cells.TryGetValue((cx + dx, cy + dy), out var list)) continue;
-                foreach (var (other, p) in list)
-                {
-                    if (other == self) continue;
-                    var d = p - mid;
-                    double along = Math.Abs(d.Dot(t)), side = d.Dot(right);
-                    if (along > 25 || Math.Abs(side) < 3 || Math.Abs(side) > 30) continue;
-                    votes += side > 0 ? -1 : 1;   // partner on the right: we run against the drawing
-                }
-            }
-            return (sbyte)Math.Sign(votes);
-        }
-
-        private static (Vec2 Mid, Vec2 Tangent) Middle(List<Vec2> line)
-        {
-            double total = 0;
-            for (int i = 1; i < line.Count; i++) total += line[i].DistanceTo(line[i - 1]);
-            double half = total * 0.5, run = 0;
-            for (int i = 1; i < line.Count; i++)
-            {
-                double len = line[i].DistanceTo(line[i - 1]);
-                if (run + len >= half && len > 1e-9)
-                {
-                    var dir = (line[i] - line[i - 1]) * (1 / len);
-                    return (line[i - 1] + dir * (half - run), dir);
-                }
-                run += len;
-            }
-            var d = line[^1] - line[0];
-            return (line[0], d.LengthSquared > 1e-18 ? d.Normalized() : new Vec2(1, 0));
         }
     }
 
@@ -667,27 +606,24 @@ public static class TileRewriter
         }
     }
 
-    private static void AddSegment(RoadNetwork net, TileId id, RoadSegment segment, RawRoads.Key? key, double dividedScale)
+    private static void AddSegment(RoadNetwork net, CrossSectionPlanner.Line line, double dividedScale)
     {
+        var (id, segment) = (line.Tile, line.Segment);
         if (segment.PointCount < 2) return;
 
-        var plan = new Vec2[segment.PointCount];
         var height = new float[segment.PointCount];
-        for (int i = 0; i < segment.PointCount; i++)
-        {
-            plan[i] = new Vec2(id.MinE + segment.Points[i * 3], id.MaxN - segment.Points[i * 3 + 2]);
-            height[i] = segment.Points[i * 3 + 1];
-        }
+        for (int i = 0; i < segment.PointCount; i++) height[i] = segment.Points[i * 3 + 1];
 
-        var source = new Source { Tile = id, Segment = segment, Plan = plan, Height = height, Key = key };
-        var centreline = Polyline.Dedupe(plan.ToList());
+        // heights stay the original line's (nearest point), the plan may be the shifted one
+        var source = new Source { Tile = id, Segment = segment, Plan = line.Plan, Height = height, Key = line.Key, Line = line };
+        var centreline = Polyline.Dedupe(line.Shifted.ToList());
         if (centreline.Count < 2) return;
 
         bool structure = (segment.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0;
         int layer = (segment.Flags & RoadFlags.Bridge) != 0 ? 1
             : (segment.Flags & RoadFlags.Tunnel) != 0 ? -1 : 0;
 
-        net.AddLink(centreline, ProfileFor(segment, dividedScale), layer, source, allowSmoothing: !structure);
+        net.AddLink(centreline, ProfileFor(segment, line.Width, dividedScale), layer, source, allowSmoothing: !structure);
     }
 
     private static RoadSegment ToSegment(List<Vec2> plan, Source source, RoadAttributes attributes)
@@ -706,7 +642,7 @@ public static class TileRewriter
             Class = source.Segment.Class,
             Surface = source.Segment.Surface,
             Flags = source.Segment.Flags,
-            Width = source.Segment.Width,
+            Width = source.Line.Width,
             Points = points,
             Attributes = attributes,
         };
@@ -785,7 +721,7 @@ public static class TileRewriter
         return weightSum < 1e-12 ? anchors[0].Height : (float)(valueSum / weightSum);
     }
 
-    private static RoadProfile ProfileFor(RoadSegment segment, double dividedScale)
+    private static RoadProfile ProfileFor(RoadSegment segment, float plannedWidth, double dividedScale)
     {
         var profile = segment.Class switch
         {
@@ -802,7 +738,7 @@ public static class TileRewriter
             _ => RoadProfile.Lane,
         };
 
-        double width = segment.Width > 0.1 ? segment.Width : profile.Width;
+        double width = plannedWidth > 0.1 ? plannedWidth : profile.Width;
         if ((segment.Flags & RoadFlags.Divided) != 0) width *= dividedScale;
 
         return profile with { Width = width };
