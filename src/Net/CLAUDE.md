@@ -12,6 +12,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `chat-commands` — Chat and commands: (`Net/ChatManager`, `Core/ChatUi`): one class runs on both sides at `World/Chat` — the path must...
 - `admin` — Admin: (`Net/PlayerRegistry`): identity is the ENet peer id, which a client cannot forge; the display name is a...
 - `vision-interest` — Vision-based interest: the server decides who sees whom (size at render resolution, sky, line of sight, race); out of view = despawned
+- `perf-visibility-on-change` — Player synchronizers keep `VisibilityUpdateMode.None`: every change to what a peer may see must call `UpdateVisibility` (`RefreshNetVisibility`/`RefreshRelays`) where it happens
 - `remote-interpolation` — Remote players are interpolated (NetPos/NetVel/NetTime at 30 Hz, Hermite, bounded extrapolation, smooth render clock)
 - `load-testing` — Load testing: --swarm bots, --serverstats, --netsmooth, tools/loadtest.sh; before/after numbers at 32 players and a 30-min soak
 - `lean-dedicated-server` — Dedicated server: proxy players, fps cap, coarse grids, asset prep off the main thread, throttled vehicles
@@ -38,4 +39,5 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `places-json-one-asset-ui` — `places.json` is the one asset the UI reads, not the streamer
 - `client-needs-own-request-budget` — The client needs its own request budget, not just the server's
 - `multiplayersynchronizer-s-own-authority-decides` — A MultiplayerSynchronizer's own authority decides who sends
+- `netlink-dead-peer` — A dead ENet peer: GetUniqueId/IsServer/RPC each log an error, per frame a flood; `NetLink.Ready/Online/IsServer`, `GetLocalNetPlayer` null while down
 - `loopback-server-test-leaves-manifest` — A loopback server test leaves its manifest in the client's chunk cache

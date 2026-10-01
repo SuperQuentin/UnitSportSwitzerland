@@ -230,6 +230,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var relay = new MultiplayerSynchronizer
         {
             Name = name, RootPath = new NodePath(".."), ReplicationConfig = config, ReplicationInterval = interval,
+            // refreshed when the audience changes (RefreshRelays): Idle ran the filter every frame for every peer
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         relay.SetMultiplayerAuthority(1);
         return relay;
@@ -407,6 +409,22 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public float LookScale { get; set; } = 1f;
 
     public bool IsFirstPerson => !_thirdPerson;
+
+    /// <summary>
+    /// 0..1: an item held ready to throw wants the close over-the-shoulder camera (set every frame by
+    /// <see cref="Items.ItemController"/>, like <see cref="FovOverride"/>). In first person the view
+    /// is lent to third person for as long as it lasts, pulled out of the head and back.
+    /// </summary>
+    public float ThrowAim { get; set; }
+
+    /// <summary>Camera tremble in radians, set every frame (a fully wound-up throw shakes).</summary>
+    public float CameraShake { get; set; }
+
+    /// <summary>The throw camera's eased weight.</summary>
+    private float _throwBlend;
+
+    /// <summary>Third person lent to a throw from first person: given back when the throw camera has eased out.</summary>
+    private bool _borrowedThird;
 
     /// <summary>In a car's, a truck's or a bus's driver's seat, looking out through the windscreen (not the chase camera, not the garage's orbit).</summary>
     public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null && SeatIndex == 0;
@@ -919,6 +937,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:HeldRadio");
         replication.AddProperty(".:CarRadio");
+        replication.AddProperty(".:CarCd");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -927,7 +946,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId", ".:HeldRadio", ".:CarRadio" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId", ".:HeldRadio", ".:CarRadio", ".:CarCd" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -941,6 +960,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // 30 Hz is plenty once the receiver interpolates; the frame rate was the old rate,
             // which is 144 packets a second per viewer from a fast machine
             ReplicationInterval = 1f / 30f,
+            // a fixed filter (the server only): Godot evaluates it on join, SetSimulator on handoff
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _sync = sync;
         // the synchronizer's own authority decides who sends; children added after the
@@ -993,6 +1014,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // for every peer, 30 000 managed calls a second at 32 players
             ReplicationInterval = 3600f,
             DeltaInterval = 3600f,
+            // refreshed per viewer when its set changes (RefreshNetVisibility), not every frame
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _vis.SetMultiplayerAuthority(1);
         if (NetProxy && netId != 0)
@@ -1271,8 +1294,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 return;
             }
 
+            // thrown from a crash (#214): limp, and the crash camera on the body
+            if (TickRagdoll(dt))
+            {
+                UpdateCrashCamera(dt);
+                return;
+            }
+
             // published whatever the view: first person draws no body, but everyone else does
             PublishFootPose(dt);
+            StepThrowView(dt);
 
             // Render rate, not physics rate: the look has to answer the mouse the frame it
             // moves, the way rotating the body directly always did.
@@ -1294,10 +1325,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             }
             else
             {
-                if (_walker != null) _walker.Visible = true;
+                // borrowed from first person for a throw: the body only shows once the lens is out of the head
+                if (_walker != null) _walker.Visible = !_borrowedThird || _throwBlend > 0.3f;
                 ApplyFootPose();
                 UpdateThirdPersonCamera(dt);
             }
+            BlendOutCrashCamera(dt);
             return;
         }
 
@@ -1345,8 +1378,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (dt <= 0) return;
         var kind = (RideKind)RideKindId;
+        // thrown from a crash (#214): this peer's own ragdoll, started and stopped by the owner's pose
+        bool limp = TickRagdoll(dt);
         if (kind == RideKind.OnFoot)
         {
+            if (limp) { SetRemoteEngine(null); return; }
             if (Anim.Y != _seenPhase) _stridePhase = _seenPhase = Anim.Y;
             else if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, Anim.X, dt);
             ApplyFootPose();
@@ -1359,7 +1395,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         AlignHull();
         _remoteRide?.AnimateRemote(_visual, Anim, dt);
         AnimateRemoteSections(dt);
-        if (_visual is Avatar.CarRig rig) { rig.DoorsOpen = DoorsOpen; rig.DriverShown = SeatIndex == 0; }
+        if (_visual is Avatar.CarRig rig)
+        {
+            rig.DoorsOpen = DoorsOpen;
+            rig.DriverShown = SeatIndex == 0;
+            // where the driver sits, in case the next update throws them through the windscreen
+            _seenSeat = rig.DriverSeat;
+            _seenSeatFrame = GlobalTransform * _visual.Transform * rig.DriverFrame;
+            _seenSeatAt = Time.GetTicksMsec() / 1000.0;
+        }
         else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
         SetRemoteEngine(_remoteRide as Flyer);
     }
@@ -1406,6 +1450,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The arm pose the held item and <see cref="ItemAction"/> call for, the same on every peer.</summary>
     private Avatar.ItemArmPose TargetArmPose()
     {
+        // a throw (#206): wound up with anything, and the follow-through once it has left the hand
+        if (ItemAction == 3) return Avatar.ItemArmPose.ThrowWindup;
+        if (ItemAction == 4) return Avatar.ItemArmPose.ThrowRelease;
         var def = Items.ItemDefs.Get((Items.ItemId)HeldItemId);
         if (def == null) return Avatar.ItemArmPose.None;
         bool aim = ItemAction == 1, use = ItemAction == 2;
@@ -1434,6 +1481,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _itemArmBlend = target;
             return;
         }
+        // the release whips straight out of the wind-up: no easing out of one into the other
+        if (want == Avatar.ItemArmPose.ThrowRelease && _itemArmCur == Avatar.ItemArmPose.ThrowWindup) _itemArmCur = want;
         if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first
         else if (want != _itemArmCur) _itemArmCur = want;
         _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / 0.18f);
@@ -1566,25 +1615,65 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// a camera parented to that turn would swing round every time the player changed direction.
     /// </para>
     /// </summary>
+    private const float ThrowCamHeight = 1.62f, ThrowCamOffset = 0.62f, ThrowCamDistance = 1.7f;
+
+    /// <summary>
+    /// Eases the throw camera toward <see cref="ThrowAim"/>, lending third person to a first-person
+    /// player for as long as it is out (the body has to be built to be seen) and handing it back once
+    /// the lens is home in the head.
+    /// </summary>
+    private void StepThrowView(float dt)
+    {
+        float want = ScopeView ? 0f : Mathf.Clamp(ThrowAim, 0f, 1f);
+        _throwBlend = Mathf.Lerp(_throwBlend, want, 1f - Mathf.Exp(-(want > _throwBlend ? 9f : 7f) * dt));
+        if (want == 0f && _throwBlend < 0.01f) _throwBlend = 0f;
+        if (!_thirdPerson && want > 0f)
+        {
+            _borrowedThird = true;
+            _thirdPerson = true;
+            _pivotY = float.NaN;
+            _armBlend = 1f;
+            RefreshVisual(force: true);
+        }
+        else if (_borrowedThird && want == 0f && _throwBlend == 0f)
+        {
+            _borrowedThird = false;
+            _thirdPerson = false;
+            if (_camera != null) _camera.Transform = new Transform3D(Basis.Identity, new Vector3(0, EyeHeight, 0));
+            RefreshVisual(force: true);
+        }
+    }
+
     private void UpdateThirdPersonCamera(float dt)
     {
         if (_camera == null) return;
 
         // The pivot drops with the slide, and its height is eased so a step, a kerb or the top
         // of a jump does not jerk the whole picture; far off (a teleport), it snaps.
-        float pivotTarget = GlobalPosition.Y + Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend);
+        // A throw pulls the lens in close over the right shoulder (#206); lent from first person,
+        // the arm grows out of the eye instead of shrinking from the chase distance.
+        float tb = _throwBlend;
+        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend), ThrowCamHeight, tb);
+        float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
             : Mathf.Lerp(_pivotY, pivotTarget, 1f - Mathf.Exp(-10f * dt));
         var pivot = new Vector3(GlobalPosition.X, _pivotY, GlobalPosition.Z);
 
         var view = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, _pitch + _punch);
+        if (CameraShake > 0f)
+        {
+            // two incommensurate wobbles per axis: a tremble, not a wave
+            float now = (float)Time.GetTicksMsec() / 1000f;
+            view = view * new Basis(Vector3.Right, CameraShake * (Mathf.Sin(now * 61f) + 0.6f * Mathf.Sin(now * 97f)))
+                        * new Basis(Vector3.Up, CameraShake * (Mathf.Sin(now * 53f + 1f) + 0.6f * Mathf.Sin(now * 89f)));
+        }
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
-        float distance = ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f;
+        float distance = Mathf.Lerp(_borrowedThird ? 0f : ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f, ThrowCamDistance, tb);
 
-        var shoulder = pivot + view.X * ShoulderOffset;
+        var shoulder = pivot + view.X * Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset, ThrowCamOffset, tb);
         var wanted = shoulder + view.Z * distance;
 
         // cast from the body's centre, not the shoulder, so a wall at the player's right does not
@@ -1637,6 +1726,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void ToggleView()
     {
+        // mid-throw from first person: the lent view is given back first, then toggled as usual
+        if (_borrowedThird)
+        {
+            _borrowedThird = false;
+            _thirdPerson = false;
+        }
         var settings = Core.GameSettings.Current;
         // VR is first person only (#186): at the wheel, V still shows or hides your own body
         if (XR.XrSession.Active)
@@ -1684,7 +1779,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool SetRide(RideKind kind)
     {
         if (kind == (RideKind)RideKindId) return true;
-        if (!IsOnFloor() || _sliding || Indoors) return false;
+        if (!IsOnFloor() || _sliding || Indoors || Ragdolled) return false;
 
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
         float limit = _ride?.DismountSpeed ?? RunSpeed + 0.5f;
@@ -1711,10 +1806,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public bool TryInteract()
     {
+        // limp after a crash: nothing to do, and no picker either
+        if (Ragdolled) return true;
         if (RidingWith != 0) return TryLeaveSeat();
         if (_ride is { IsVehicle: true })
         {
             ExitVehicle();
+            return true;
+        }
+        // what the view points at and the border outlines (#206): a dropped item is picked up
+        if (_ride == null && !_mantling && _deadTimer <= 0 && Items.Highlight.Pointed is Items.DroppedItem dropped
+            && IsInstanceValid(dropped) && Items.ItemController.Instance is { } items)
+        {
+            items.PickUp(dropped);
             return true;
         }
         // inside, E is the front door or nothing: no mount picker in a living room
@@ -1733,8 +1837,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         if (_ride != null || _mantling || _deadTimer > 0) return false;
 
-        // a radio within reach: its panel (play a CD, burn one, pick it up)
-        if (Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach) is { } radio)
+        // a radio within reach, the one pointed at first: its panel (play a CD, burn one, pick it up)
+        if ((Items.Highlight.Pointed as Items.RadioBody ?? Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach)) is { } radio)
         {
             Items.RadioUi.Instance?.Open(radio);
             return true;
@@ -1793,6 +1897,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             car.RoofOpen = state.RoofOpen && car.HasSoftTop;
         }
         CarRadio = state.Radio;
+        CarCd = state.Cd;
         _placed = true;
     }
 
@@ -1811,7 +1916,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId,
             Train: _ride is Truck t ? t.TrailerCode : 0, Angles: _ride is Truck ta ? ta.Angles : default,
             Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
-            Radio: wrecked ? 0 : CarRadio);
+            Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd);
     }
 
     /// <summary>
@@ -1858,6 +1963,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return false;
         var (bit, distance) = rig.NearestDoor(GlobalPosition);
         if (bit == 0 || distance > VehicleManager.DoorReach) return false;
+        Vehicles.ToggleDoor(vehicle, bit);
+        return true;
+    }
+
+    /// <summary>How near the middle of a car door a VR hand must be to work it, m (#243).</summary>
+    private const float HandDoorReach = 0.6f;
+
+    /// <summary>
+    /// A VR hand gripping a car door (#243): as <see cref="TryToggleCarDoor()"/>, but the door the
+    /// hand is at, and only when the hand is really there.
+    /// </summary>
+    public bool TryToggleCarDoor(Vector3 hand)
+    {
+        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+            return false;
+        var (bit, distance) = rig.NearestDoor(hand);
+        if (bit == 0 || distance > HandDoorReach) return false;
         Vehicles.ToggleDoor(vehicle, bit);
         return true;
     }
@@ -2053,6 +2175,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void Revive()
     {
+        // knocked out while still tumbling from a crash (#214): up at the safe spot, not lying there
+        if (Ragdolled) { EndRagdoll(); _stunTimer = 0.3f; }
         Health = MaxHealth;
         if (HasSafeHere) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
         Velocity = Vector3.Zero;
@@ -2072,6 +2196,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _mantleForward = shift.Direction(_mantleForward);
         _camFwd = shift.Direction(_camFwd);
         Velocity = shift.Direction(Velocity);
+        ShiftCrash(shift);
     }
 
     private void RememberSafe(Vector3 at)
@@ -2145,12 +2270,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
+        // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
+        if (kind != RideKind.OnFoot) EndRagdoll();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
         if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
         RideKindId = (int)kind;
         // the radio belongs to the vehicle: getting out leaves it tuned in the parked one
         CarRadio = 0;
+        CarCd = "";
         // the parts and the doors belong to one car: changing car (the picker), getting out or a
         // wreck leaves them with that car
         TuningBits = _ride is Car car ? car.Tuning.Pack() : 0;
@@ -2253,6 +2381,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if ((@event.IsActionPressed(PlayerInput.RadioNext) || @event.IsActionPressed(PlayerInput.RadioPrev)) && !@event.IsEcho()
             && _ride != null && SeatIndex == 0 && HasCarRadio((RideKind)RideKindId))
         {
+            CarCd = "";
             CarRadio = Audio.Live.Stations.Step(CarRadio, @event.IsActionPressed(PlayerInput.RadioNext) ? 1 : -1);
             CarRadioTuned?.Invoke(Audio.Live.Stations.Name(CarRadio));
             GetViewport().SetInputAsHandled();
@@ -2343,6 +2472,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         TickHealth(dt, onFloor);
+
+        // limp after a crash (#214): the body goes where its hips are, so the replicated position follows the ragdoll
+        if (_ragdoll != null)
+        {
+            Velocity = Vector3.Zero;
+            GlobalPosition = _ragdoll.Pelvis;
+            return;
+        }
 
         // PlayerInput returns neutral while a text field has the keyboard, so typing in chat
         // does not walk the player around.
@@ -2704,6 +2841,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void FaceTravel(float dt, Vector3 moveDirection)
     {
+        // winding up a throw: square up to where the view points, whatever the feet do
+        if (_throwBlend > 0.05f)
+        {
+            Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, _viewYaw, 1f - Mathf.Exp(-18f * dt)), 0);
+            return;
+        }
         var flat = new Vector3(Velocity.X, 0, Velocity.Z);
         Vector3 facing;
         if (!_sliding && moveDirection.LengthSquared() > 0.01f) facing = moveDirection;
@@ -2963,8 +3106,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
             Steer: SteerInput(),
             Effort: PlayerInput.Held(PlayerInput.TuckBoost),
-            // Space is a hop on a bike and the handbrake in a car
-            Handbrake: _ride is { CanHop: false } && PlayerInput.Held(PlayerInput.Jump));
+            // Space is a hop on a bike and the handbrake in a car, as is a wheel's lever
+            Handbrake: _ride is { CanHop: false } && (PlayerInput.Held(PlayerInput.Jump) || PlayerInput.WheelHandbrake > 0.5f),
+            WheelAngle: _ride is { WheelLock: > 0f } wheeled ? PlayerInput.WheelAngle(wheeled.WheelLock) : float.NaN);
 
         // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
         if (_ride is Skis && XR.XrSession.Active && RideControls == null)
@@ -2974,6 +3118,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 Throttle = Mathf.Max(input.Throttle, XR.XrSession.SkiPole),
                 Effort = input.Effort || XR.XrSession.SkiTuck,
             };
+        // VR hands on the steering wheel (#243): the wheel's angle, as a real wheel's (#68)
+        if (_ride is { WheelLock: > 0f } && XR.XrSession.Active && RideControls == null && !float.IsNaN(XR.XrSession.WheelAngle))
+            input = input with { WheelAngle = XR.XrSession.WheelAngle };
 
         // nobody at the wheel (the driver jumped out, #158): no pedal, the wheel let go
         if (SeatIndex != 0) input = new RideInput(0f, 0f, 0f, false);
@@ -3097,6 +3244,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float achieved = new Vector2(real.X, real.Z).Length();
         _shortfall = Mathf.Lerp(_shortfall, Mathf.Max(0f, _motion.Speed - achieved), 1f - Mathf.Exp(-ImpactResponse * dt));
         _realSpeed = _motion.Speed - _shortfall;
+        // The settle after mounting is time, not contact: counted only while touching something,
+        // it swallowed the first second of the first real crash, and nobody was ever thrown (#214).
+        if (_settle > 0f) _settle -= dt;
         if (_realSpeed < _motion.Speed - ImpactTolerance)
         {
             float before = _motion.Speed;
@@ -3105,19 +3255,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             PlayerInput.Rumble(0.4f, Mathf.Clamp((before - _motion.Speed) * 0.6f, 0f, 1f), 0.12f);
             Impacted?.Invoke(before - _motion.Speed);
 
-            // A wall taken at speed throws the rider over the bars; the bike stays where it hit.
-            if (_settle > 0f) _settle -= dt;
-            else if (_ride is { IsVehicle: true } && before - _realSpeed > 9f)
+            // A wall taken at speed throws the rider over the bars, or through the windscreen
+            // (#214, FootPlayer.Crash.cs); the machine stays where it hit. A shortfall that
+            // persists (the smoothed one, so a bump is not a wall) and a big one right now: the
+            // smoothed figure alone, with the decel cap above, only just reached 9 m/s in a
+            // 56 km/h head-on hit, and whether it did came down to frame timing.
+            float stopped = _motion.Speed - achieved;
+            if (_settle <= 0f && _ride is { IsVehicle: true } && _shortfall > 3f && stopped > ThrowSpeed)
             {
-                float hit = before;
-                var fwd = -GlobalTransform.Basis.Z with { Y = 0 };
-                var state = CaptureVehicle(wrecked: false) with { Velocity = Vector3.Zero };
-                Vehicles?.Park(state);
-                Announced?.Invoke("THROWN OFF!", false);
-                ApplyRide(RideKind.OnFoot, fwd.Normalized() * hit * 0.25f + Vector3.Up * 4f);
-                GlobalPosition += Vector3.Up * 1.2f;
-                _stunTimer = 1.2f;
-                TakeDamage((hit - 8f) * 3f);
+                ThrowFromVehicle(before);
                 return;
             }
         }

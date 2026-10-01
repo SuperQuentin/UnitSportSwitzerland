@@ -29,6 +29,18 @@ public sealed class NetworkBuilder
     /// <summary>Split two links that cross mid-span, where neither one ends on the other.</summary>
     public bool SplitAtCrossings { get; init; } = true;
 
+    /// <summary>
+    /// A dead end that stops short of another road's flank, inside that road's half width, is
+    /// carried on onto it and becomes a T junction (#121): TLM sometimes ends a side road at the
+    /// main road's edge instead of its centreline. Null = off. The predicate says which pairs may
+    /// join (the network stage keeps divided carriageways and motorways out: their partner lies
+    /// inside their half width by construction).
+    /// </summary>
+    public Func<RoadLink, RoadLink, bool>? JoinNearEnds { get; init; }
+
+    /// <summary>Dead ends carried onto a nearby road by <see cref="JoinNearEnds"/> in the last build.</summary>
+    public int NearEndsJoined { get; private set; }
+
     public sealed record Stats(int Nodes, int Junctions, int Links, int SplitsApplied,
         int CrossingsFound, int EndpointsMerged);
 
@@ -181,8 +193,10 @@ public sealed class NetworkBuilder
 
         foreach (var link in net.Links)
         {
-            foreach (var end in new[] { link.First, link.Last })
+            foreach (bool atStart in new[] { true, false })
             {
+                var end = atStart ? link.First : link.Last;
+                if (JoinNearEnds is not null && TryJoinNearEnd(net, index, link, atStart, cuts)) continue;
                 foreach (int otherId in index.Near(end, SnapTolerance))
                 {
                     if (otherId == link.Id) continue;
@@ -206,6 +220,48 @@ public sealed class NetworkBuilder
         }
 
         return ApplyCuts(net, cuts);
+    }
+
+    /// <summary>
+    /// <see cref="JoinNearEnds"/> for one end: only a real dead end (no other end, no flank within
+    /// the snap tolerance), only onto a flank between the tolerance and the other road's half width,
+    /// and only when the end points at it. The end is extended onto the flank and the flank cut there.
+    /// </summary>
+    private bool TryJoinNearEnd(RoadNetwork net, SegmentIndex index, RoadLink link, bool atStart,
+        Dictionary<int, List<double>> cuts)
+    {
+        var pts = link.Centreline;
+        if (pts.Count < 2) return false;
+        var end = atStart ? pts[0] : pts[^1];
+        var outward = (end - (atStart ? pts[1] : pts[^2])).Normalized();
+        const double MaxReach = 6.0;
+
+        int best = -1;
+        double bestDistance = double.MaxValue, bestStation = 0;
+        foreach (int otherId in index.Near(end, MaxReach))
+        {
+            if (otherId == link.Id) continue;
+            var other = net.Links[otherId];
+            if (other.Layer != link.Layer || other.Centreline.Count < 2) continue;
+            // a dead end only: another end or a flank inside the tolerance is the normal path's
+            if (other.First.DistanceTo(end) <= SnapTolerance || other.Last.DistanceTo(end) <= SnapTolerance) return false;
+            if (!ClosestOnPolyline(other.Centreline, end, out double distance, out double station)) continue;
+            if (distance <= SnapTolerance) return false;
+            if (distance > Math.Min(other.Profile.HalfWidth, MaxReach) || distance >= bestDistance) continue;
+            double total = Polyline.Length(other.Centreline);
+            if (station < SnapTolerance || station > total - SnapTolerance) continue;
+            if (!JoinNearEnds!(link, other)) continue;
+            (best, bestDistance, bestStation) = (otherId, distance, station);
+        }
+        if (best < 0) return false;
+
+        var line = net.Links[best].Centreline;
+        var target = Polyline.PointAt(line, Polyline.ArcLengths(line), bestStation);
+        if ((target - end).Normalized().Dot(outward) < 0.5) return false;   // it lies beside or behind the end
+        if (atStart) pts.Insert(0, target); else pts.Add(target);
+        AddCut(cuts, best, bestStation, Polyline.Length(line));
+        NearEndsJoined++;
+        return true;
     }
 
     private static bool ClosestOnPolyline(IReadOnlyList<Vec2> pts, Vec2 query,

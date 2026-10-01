@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Items;
 using UnitSport.Net;
 using UnitSport.Player;
 using UnitSport.Vehicles;
@@ -31,6 +32,8 @@ public partial class WebRadio : Node
 {
     public const string NodeName = "WebRadio";
     public const string SpeakerName = "WebRadio";
+    /// <summary>The node of a car stereo's CD speaker (#211), beside the station's.</summary>
+    public const string CdSpeakerName = "CarCd";
 
     public const int Rate = 16000;
     /// <summary>A fifth of a second: the unit sent, and the slots of the client's buffer.</summary>
@@ -99,7 +102,7 @@ public partial class WebRadio : Node
                 Scan();
             }
         }
-        if (Multiplayer.IsServer()) Serve(delta);
+        if (NetLink.IsServer(this)) Serve(delta);
     }
 
     // ---- client: speakers on the sources, and asking for their stations ----------------------
@@ -107,11 +110,25 @@ public partial class WebRadio : Node
     private void Scan()
     {
         var sources = new List<(Node3D Node, int Station)>();
+        var discs = new List<(Node3D Node, RadioPlay? Cd)>();
         foreach (var p in Players?.Invoke() ?? Enumerable.Empty<FootPlayer>())
-            if (IsInstanceValid(p)) sources.Add((p, p.PlayingCarRadio));
+            if (IsInstanceValid(p))
+            {
+                sources.Add((p, p.PlayingCarRadio));
+                discs.Add((p, p.PlayingCarCd));
+            }
         if (VehicleManager.Instance is { } vehicles)
             foreach (var node in vehicles.GetChildren())
-                if (node is VehicleBody v) sources.Add((v, v.Wrecked ? 0 : v.Radio));
+                if (node is VehicleBody v)
+                {
+                    sources.Add((v, v.Wrecked ? 0 : v.Radio));
+                    discs.Add((v, v.Wrecked ? null : RadioPlay.Decode(v.Cd)));
+                }
+        // a CD in a car stereo (#211) is the boombox's clock-driven speaker, no relay: every
+        // client fetches the Ogg once and plays it from ServerNow − StartedAt. Not headless, like
+        // a radio in the world (no speaker to drive, no file worth downloading).
+        if (DisplayServer.GetName() != "headless")
+            foreach (var (node, cd) in discs) UpdateCd(node, cd);
 
         var ear = Listener?.Invoke();
         var near = new List<(float Dist, int Station)>();
@@ -143,8 +160,27 @@ public partial class WebRadio : Node
         _wanted = want;
         foreach (var gone in _buffers.Keys.Except(want).ToList()) _buffers.Remove(gone);
         GD.Print($"[webradio] listening to {(want.Length == 0 ? "nothing" : string.Join(", ", want.Select(Stations.Name)))}");
-        if (Multiplayer.IsServer()) _subs[Multiplayer.GetUniqueId()] = want;
-        else if (Online) RpcId(1, MethodName.Want, want);
+        if (NetLink.IsServer(this)) _subs[Multiplayer.GetUniqueId()] = want;
+        else if (NetLink.Online(this)) RpcId(1, MethodName.Want, want);
+    }
+
+    private static void UpdateCd(Node3D node, RadioPlay? cd)
+    {
+        var speaker = node.GetNodeOrNull<RadioSpeaker>(CdSpeakerName);
+        if (cd is not { } play)
+        {
+            if (speaker != null) speaker.On = false;   // kept, silent, as for a held radio
+            return;
+        }
+        if (speaker == null)
+        {
+            speaker = new RadioSpeaker { Name = CdSpeakerName, Position = new Vector3(0, 1f, 0) };
+            node.AddChild(speaker);
+        }
+        speaker.CdId = play.CdId;
+        speaker.StartedAt = play.StartedAt;
+        speaker.Length = play.Length;
+        speaker.On = true;
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

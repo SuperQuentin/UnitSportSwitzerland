@@ -1,5 +1,8 @@
 # Roads are merged into terrain collision, not just draped over it
 
+> Since #125 the corridor is an embankment (cut/fill slopes, retaining walls), not the smoothstep
+> described below: `road-embankments-walls`. The one-pass, two-clearance structure is unchanged.
+
 - **Roads are merged into terrain collision, not just draped over it.** The player always
   physically stood on the bare-terrain `HeightMapShape3D` — roads had no collision of their own
   at all — which was invisible on flat ground but a real mismatch wherever a road's surveyed

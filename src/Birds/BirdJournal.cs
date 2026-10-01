@@ -184,7 +184,7 @@ public partial class BirdJournal : CanvasLayer
 
     private void Save()
     {
-        using var f = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
-        f?.StoreString(JsonSerializer.Serialize(_data));
+        try { Core.JsonStore.Save(File, _data); }
+        catch (Exception e) { GD.PushWarning($"[birds] could not write {File}: {e.Message}"); }
     }
 }

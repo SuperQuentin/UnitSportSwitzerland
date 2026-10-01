@@ -451,6 +451,25 @@ public static partial class InteriorGenerator
                 Add(l, 0, new Piece(FurnitureType.Lectern, 0.6f, 0.5f, 1.15f, false), lectern, 2, placed);
         }
 
+        // the pastor rat (#241), blessing the congregation: beside the altar, else at the step
+        var off = placed.Where(p => !hasDais || p != placed[0]).ToList();
+        float rw = RatPiece.W, rd = RatPiece.D;
+        var spots = new List<(float X, float Z, bool Up)>();
+        foreach (float side in new[] { 1f, -1f })
+            spots.Add((cx + side * (altarW / 2 + 0.3f + rw / 2), az, hasDais));
+        if (hasDais) spots.Add((cx + Math.Min(daisW / 2 - 0.6f, width * 0.28f), daisZ0 - 0.4f - rd / 2, false));
+        spots.Add((cx, az - 1.2f, hasDais));
+        foreach (var (rx, rz, up) in spots)
+        {
+            var rat = new RectPlan(rx - rw / 2, rz - rd / 2, rx + rw / 2, rz + rd / 2);
+            // on the step or clear of it, never half on it
+            var dais = hasDais ? placed[0] : null;
+            if (dais != null && (up ? !Inside(rat, dais) : rat.Overlaps(dais))) continue;
+            if (!Free(nave, rat, off, blocked, 0.05f)) continue;
+            AddLifted(l, 0, RatPiece, rat, 2, placed, up ? lift : 0);
+            break;
+        }
+
         // pews in two blocks either side of the aisle, facing the altar
         const float aisle = 1.6f, sideAisle = 0.9f, pewD = 0.55f, pitch = 1.05f;
         float pewW = Math.Min(4.5f, (width - aisle - 2 * sideAisle) / 2);
@@ -469,6 +488,7 @@ public static partial class InteriorGenerator
                 if (Free(nave, rect, placed, blocked, 0.05f))
                     Add(l, 0, new Piece(FurnitureType.Pew, pewW, pewD, 0.9f, false), rect, 0, placed);
             }
+        FillFrontPews(l, 0);
 
         // the bell, hung over the stair-free half of the chamber
         if (climb != null && l.Floors.Count > 1)
@@ -486,6 +506,8 @@ public static partial class InteriorGenerator
             }
         }
     }
+
+    private static bool Inside(RectPlan a, RectPlan b) => a.X0 >= b.X0 && a.X1 <= b.X1 && a.Z0 >= b.Z0 && a.Z1 <= b.Z1;
 
     private static RectPlan Grow(RectPlan r, float by) => new(r.X0 - by, r.Z0 - by, r.X1 + by, r.Z1 + by);
 

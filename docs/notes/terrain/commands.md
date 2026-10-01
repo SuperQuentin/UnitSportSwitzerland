@@ -11,3 +11,6 @@
   streaks, invalidation, horizon.bin knots = tile knots, the fill switched off. Non-zero exit on
   any failure; `--render` writes before/after hillshades to `test_output/blend/`. In game:
   `--chunks <partial region> --generated on|off`; a server with no terrain: `--server --generated-world`.
+- Road embankments (no Godot): `dotnet run --project tools/BlendCheck -c Release -- --roads DIR
+  [--tiles E_N,...] [--render E,N --scale M] [--walls]`; in game `--roadcheck --embankments [--at E,N]`
+  (`road-embankments-walls`).

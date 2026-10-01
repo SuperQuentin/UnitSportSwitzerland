@@ -74,8 +74,7 @@ public sealed class ServerBook
     {
         try
         {
-            using var f = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
-            f.StoreString(JsonSerializer.Serialize(new Stored { Servers = _servers }, JsonOptions));
+            Core.JsonStore.Save(File, new Stored { Servers = _servers }, JsonOptions);
         }
         catch (Exception e)
         {
