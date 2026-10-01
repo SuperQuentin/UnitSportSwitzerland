@@ -146,9 +146,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(race);
         _chat.Race = race;
 
-        // claimed cash, kept per player name on this server
+        // deposited cash, kept per player name on this server
         var bank = Items.Bank.Create(this, null, server: true);
         bank.NameOf = _chat.NameOfPeer;
+        // money moves only at a bank's teller desk (#213)
+        bank.InBank = peer => Loot.LootService.Instance?.InBank(peer) ?? Task.FromResult(false);
 
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here

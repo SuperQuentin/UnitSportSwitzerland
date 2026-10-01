@@ -35,6 +35,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private ClientTerrainSync? _terrainSync;
     private WorldOrigin? _worldOrigin;
     private ShaderMaterial[] _worldMaterials = Array.Empty<ShaderMaterial>();
+    private WorldEnvironment? _worldEnvironment;
+    private World.DayNight? _dayNight;
+    private DirectionalLight3D? _sun;
 
     /// <summary>The session this world is built for: the title screen's choice, or the command line's.</summary>
     public WorldLaunch Launch { get; init; } = WorldLaunch.FromArgs();
@@ -138,7 +141,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         if (ChatCheck.Requested)
         {
-            GetTree().Quit(ChatCheck.Run());
+            GetTree().Quit(ChatCheck.Run(this));
             return;
         }
         if (StyleKit.ReportRequested)
@@ -208,7 +211,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 + "with tools/TerrainPreprocessor, or join a server and it will stream in. "
                 + "See the README.");
 
-        GD.Print($"[style] {StyleKit.Style}");
+        // the style chosen since the last world, if it changed at the title screen
+        StyleKit.Restyle();
+        GD.Print($"[style] {StyleKit.Applied}");
         var material = StyleKit.Material(MaterialRole.Terrain);
         var roadMaterial = StyleKit.Material(MaterialRole.Road);
         var buildingMaterial = StyleKit.Material(MaterialRole.Building);
@@ -225,6 +230,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
         // a named handler, unsubscribed in _ExitTree: the event is static and outlives this world
         GameSettings.Changed += OnSettingsChanged;
+        StyleCommand.RebuildRequested += OnRebuildRequested;
+        StyleKit.Chosen += OnStyleChosen;
 
         // The streamer exists even offline. Its fetches short-circuit to null with no peer, so
         // single player is unaffected — but the on-disk cache is still consulted, which means
@@ -332,18 +339,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             vehicles.Visible = shown;
         };
 
-        var environment = new Godot.Environment
-        {
-            BackgroundMode = Godot.Environment.BGMode.Color,
-            BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
-        };
-        AddChild(new WorldEnvironment { Environment = environment });
+        var environment = StyleKit.NewEnvironment();
+        _worldEnvironment = new WorldEnvironment { Environment = environment };
+        AddChild(_worldEnvironment);
 
         // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
         // word online. Before the clock, which reads its sun and sky from it.
         Occasions.OccasionManager.Create(this);
         // their props, dressed onto each tile as its buildings load
         AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
+        // a sign over every bank door (#213)
+        AddChild(new Interiors.BankSigns(_chunks));
         // …the creatures in the air around the camera, and their sounds
         AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
         AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
@@ -352,10 +358,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // the clock: sun, light colour, sky and night for every shader and the environment
         var chunksForSky = _chunks;
-        AddChild(new World.DayNight(environment)
+        _dayNight = new World.DayNight(environment)
         {
             GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
-        });
+        };
+        AddChild(_dayNight);
+        ApplySun();
 
         // cars on the roads and trains on the railway, around wherever the view is
         _traffic = new World.Traffic(_chunks, origin)
@@ -376,7 +384,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _chunks.AddAnchor(tcam);
             var (tE, tN) = SpawnPoint.ParseTarget();
             tcam.Position = origin.ToWorld(tE, tN, 600);
-            AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot));
+            AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot)
+                { Origin = origin });
         }
 
         // Start somewhere with something to look at, not at the world origin — after a
@@ -442,13 +451,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(_garage);
         if (Player.GarageProbe.ParseArgs() is { } garageRole) AddChild(new Player.GarageProbe(garageRole, () => LocalPlayer));
         if (Player.HeavyNetProbe.ParseArgs() is { } heavyRole) AddChild(new Player.HeavyNetProbe(heavyRole, () => LocalPlayer));
+        if (Player.CrashNetProbe.ParseArgs() is { } crashRole) AddChild(new Player.CrashNetProbe(crashRole, () => LocalPlayer));
         if (Player.PassengerProbe.ParseArgs() is { } passengerRole) AddChild(new Player.PassengerProbe(passengerRole, () => LocalPlayer));
         if (Player.ExitProbe.Requested) AddChild(new Player.ExitProbe(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
-            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null
+            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
@@ -466,6 +476,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
+        if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
@@ -783,6 +794,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Input.MouseMode = Input.MouseModeEnum.Visible;
             var runner = ShotRunner.ForQueue(_spectator, queue, _worldOrigin);
             runner.GroundHeight = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
+            runner.RunCommand = line => _chat?.Send(line);
             AddChild(runner);
         }
     }
@@ -917,10 +929,49 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private void OnSettingsChanged()
     {
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
+        // before the terrain takes the settings: its rings and mesh detail are the style's
+        if (StyleKit.Restyle()) ApplyStyle();
         _chunks?.ApplySettings(GameSettings.Current);
         _chunks?.SetFallbackEnabled(GameSettings.Current.GeneratedFill);
         if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume);
         SetCameraFar(GameSettings.Current.CameraFar);
+    }
+
+    /// <summary>
+    /// The rest of the world after <see cref="StyleKit.Restyle"/> moved every material over: the
+    /// style's environment and sun. The terrain's rings and mesh detail follow in
+    /// <see cref="ChunkManager.ApplySettings"/>, which rebuilds the tiles in place when the detail
+    /// changed. The network session, the player and physics are untouched.
+    /// </summary>
+    private void ApplyStyle()
+    {
+        GD.Print($"[style] {StyleKit.Applied}");
+        if (_worldEnvironment != null)
+        {
+            var environment = StyleKit.NewEnvironment();
+            _worldEnvironment.Environment = environment;
+            _dayNight?.SetEnvironment(environment);
+        }
+        ApplySun();
+    }
+
+    /// <summary>The style's sun, or none: made here, pointed by <see cref="World.DayNight"/>.</summary>
+    private void ApplySun()
+    {
+        _sun?.QueueFree();
+        _sun = StyleKit.NewSun();
+        if (_sun != null) AddChild(_sun);
+        if (_dayNight != null) _dayNight.Sun = _sun;
+    }
+
+    private void OnRebuildRequested() => _chunks?.RebuildVisuals();
+
+    /// <summary><c>/style</c> picked a style for this session.</summary>
+    private void OnStyleChosen()
+    {
+        if (!StyleKit.Restyle()) return;
+        ApplyStyle();
+        _chunks?.ApplySettings(GameSettings.Current);
     }
 
     private void Toast(string message) => _items?.Ui.Toast(message);
@@ -932,6 +983,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     public override void _ExitTree()
     {
         GameSettings.Changed -= OnSettingsChanged;
+        StyleCommand.RebuildRequested -= OnRebuildRequested;
+        StyleKit.Chosen -= OnStyleChosen;
         Vehicles.VehicleManager.Refused -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         if (_networked)
@@ -1092,6 +1145,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(PlayerReplication.CreateSpawner());
         AddChild(World.RaceNpcs.CreateClient());   // World/Npcs: the path its RPC routes by
         if (NetSmoothProbe.ParseArgs() is { } smooth) AddChild(new NetSmoothProbe(_players, smooth.Seconds, smooth.Label));
+        if (WallOffProbe.ParseArgs() is { } wallOff) AddChild(new WallOffProbe(_players, _chunks!, _worldOrigin!, wallOff));
         var net = new NetworkManager { Name = "Net" };
         AddChild(net);
         // Handles bare hosts, host:port, and bracketed IPv6 — a plain colon split breaks on

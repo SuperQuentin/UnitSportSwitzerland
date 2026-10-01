@@ -277,10 +277,12 @@ public partial class GarageProbe : Node
     }
 
     /// <summary>
-    /// <c>--garagecheck drive &lt;password&gt; [--at E,N --heading deg] [--drive-m m] [--brake-m m]</c>:
+    /// <c>--garagecheck drive &lt;password&gt; [--at E,N --heading deg] [--drive-m m] [--brake-m m] [--drive-at s] [--drive-end s]</c>:
     /// takes a car, faces the bearing (with no <c>--heading</c>: lined up 12 m in front of the nearest
     /// garage), holds the throttle for <c>--drive-m</c> metres, coasts, brakes from <c>--brake-m</c> to a
     /// stop; then gets out and back in (a car parked inside), and reverses out through the door.
+    /// <c>--drive-at</c> starts the throttle at that time instead of 7 s after lining up; <c>--drive-end</c>
+    /// quits there with the car's position (a road check driving at something other than a garage).
     /// </summary>
     private void DriveIn(FootPlayer me, Func<double, bool> at)
     {
@@ -313,7 +315,7 @@ public partial class GarageProbe : Node
         if (_readyAt < 0) return;
         if (at(_readyAt + 3)) Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
         // the watcher needs a moment to see the car before it moves
-        if (at(_readyAt + 7)) { _from = me.GlobalPosition; Input.ActionPress(PlayerInput.Throttle); _drive = 1; Log($"throttle, {Where(me)}"); }
+        if (at(Arg("--drive-at") ?? _readyAt + 7)) { _from = me.GlobalPosition; Input.ActionPress(PlayerInput.Throttle); _drive = 1; Log($"throttle, {Where(me)}"); }
         float gone = new Vector2(me.GlobalPosition.X - _from.X, me.GlobalPosition.Z - _from.Z).Length();
         if (_target is { } tg && (_drive is 1 or 2 or 6 || _t < _readyAt + 7) && (_trace -= GetPhysicsProcessDeltaTime()) <= 0)
         {
@@ -351,6 +353,7 @@ public partial class GarageProbe : Node
             _drive = 3;
             _stepAt = _t;
         }
+        if (Arg("--drive-end") is { } end && at(end)) { Log($"RESULT: {Where(me)} at {me.GlobalPosition}"); GetTree().Quit(); return; }
         // parked inside: out on foot, and back in
         if (_drive == 3 && _t - _stepAt > 3)
         {

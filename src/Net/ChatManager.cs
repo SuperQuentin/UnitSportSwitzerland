@@ -147,6 +147,12 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(clock, ChatKind.Private);
             return;
         }
+        // the visual style is this screen's alone: never a server's business
+        if (Styles.StyleCommand.Run(text.Trim()) is { } style)
+        {
+            LineReceived?.Invoke(style, ChatKind.Private);
+            return;
+        }
         if (IsLocal)
         {
             text = text.Trim();
@@ -240,7 +246,7 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help":
-                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /occasion  /time  — Tab completes.", ChatKind.Private);
+                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /occasion  /time  /style  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 

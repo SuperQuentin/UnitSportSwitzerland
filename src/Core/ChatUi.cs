@@ -61,8 +61,10 @@ public partial class ChatUi : CanvasLayer
     private LineEdit _input = null!;
     private Label _ghost = null!;
 
+    /// <summary>Lines sent, oldest first; which one is in the box (-1: the draft); what was typed before Up.</summary>
     private readonly List<string> _history = [];
     private int _historyCursor = -1;
+    private string _draft = "";
 
     /// <summary>What Tab offers for the text as it was last typed, and which one is in the box (-1: none yet).</summary>
     private IReadOnlyList<Suggestion> _suggestions = [];
@@ -331,7 +333,8 @@ public partial class ChatUi : CanvasLayer
 
         if (text.Length == 0) return;
 
-        _history.Add(text);
+        // the same line sent twice in a row is one step back, as in a shell
+        if (_history.Count == 0 || _history[^1] != text) _history.Add(text);
         if (_history.Count > 30) _history.RemoveAt(0);
 
         _chat.Send(text);
@@ -466,12 +469,19 @@ public partial class ChatUi : CanvasLayer
 
     /// <summary>
     /// Tab takes the highlighted completion and walks on (Shift+Tab back); Right at the end of the
-    /// line takes the ghost. Handled on the box itself because a focused LineEdit would otherwise
-    /// hand Tab to focus navigation.
+    /// line takes the ghost; Up and Down walk through what was sent. Handled on the box itself
+    /// because a focused LineEdit would otherwise keep the arrows and hand Tab to focus navigation.
     /// </summary>
     private void OnInputGui(InputEvent @event)
     {
         if (@event is not InputEventKey { Pressed: true } key) return;
+
+        if (key.PhysicalKeycode is Key.Up or Key.Down)
+        {
+            _input.AcceptEvent();
+            WalkHistory(key.PhysicalKeycode == Key.Up ? -1 : 1);
+            return;
+        }
 
         if (key.PhysicalKeycode == Key.Right && _ghost.Visible)
         {
@@ -513,36 +523,27 @@ public partial class ChatUi : CanvasLayer
             return;
         }
 
-        switch (key.PhysicalKeycode)
+        if (key.PhysicalKeycode == Key.Escape)
         {
-            case Key.Escape:
-                CloseInput();
-                GetViewport().SetInputAsHandled();
-                return;
-
-            // Up and down walk back through what was sent, like a shell.
-            case Key.Up when _history.Count > 0:
-                _historyCursor = _historyCursor < 0
-                    ? _history.Count - 1
-                    : Math.Max(0, _historyCursor - 1);
-                SetText(_history[_historyCursor]);
-                GetViewport().SetInputAsHandled();
-                return;
-
-            case Key.Down when _historyCursor >= 0:
-                _historyCursor++;
-                if (_historyCursor >= _history.Count)
-                {
-                    _historyCursor = -1;
-                    SetText(string.Empty);
-                }
-                else
-                {
-                    SetText(_history[_historyCursor]);
-                }
-                GetViewport().SetInputAsHandled();
-                return;
+            CloseInput();
+            GetViewport().SetInputAsHandled();
         }
+    }
+
+    /// <summary>
+    /// Up (-1) and Down (+1) through what was sent, like a shell: the first Up keeps what was
+    /// being typed, and Down past the newest line brings it back.
+    /// </summary>
+    private void WalkHistory(int step)
+    {
+        if (_history.Count == 0) return;
+
+        int next = (_historyCursor < 0 ? _history.Count : _historyCursor) + step;
+        if (next < 0 || (_historyCursor < 0 && step > 0)) return;   // already at the oldest, or at the draft
+
+        if (_historyCursor < 0) _draft = _input.Text;
+        _historyCursor = next >= _history.Count ? -1 : next;
+        SetText(_historyCursor < 0 ? _draft : _history[_historyCursor]);
     }
 
     private void SetText(string text)
