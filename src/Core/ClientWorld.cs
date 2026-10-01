@@ -158,6 +158,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             GetTree().Quit(Player.WheelProbe.Check());
             return;
         }
+        if (Player.WheelProbe.ForceCheckRequested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Player.WheelProbe { Name = "WheelProbe" });
+            return;
+        }
 
         // a hand-made street to show the door portals: no terrain, no server
         if (Interiors.PortalDemo.ParseArgs() is { Requested: true } portalDemo)

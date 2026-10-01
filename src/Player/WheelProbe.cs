@@ -24,6 +24,13 @@ public partial class WheelProbe : Node
 {
     public static bool CheckRequested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--wheelcheck") >= 0;
 
+    /// <summary>
+    /// <c>--ffbcheck</c>, in a window with a real wheel and hands off it: pushes it right, then left,
+    /// at 30% for half a second each, and reads back which way it turned — whether this device needs
+    /// <see cref="WheelSettings.FfbInvert"/>. RESULT line.
+    /// </summary>
+    public static bool ForceCheckRequested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--ffbcheck") >= 0;
+
     public static string? WatchRole
     {
         get
@@ -224,6 +231,7 @@ public partial class WheelProbe : Node
     {
         if (_done) return;
         _time += delta;
+        if (ForceCheckRequested) { PushTest(); return; }
         if (_role == "A") Drive(delta);
         else Watch();
         if (!_done && _time > WatchSeconds + 30) Finish(false, "timed out");
@@ -292,6 +300,52 @@ public partial class WheelProbe : Node
             Finish(true, $"remote road wheel {Mathf.RadToDeg(_min):F1}°..{Mathf.RadToDeg(_max):F1}° over {_samples} frames");
         else if (_time > WatchSeconds)
             Finish(false, _samples == 0 ? "never saw a remote car" : $"remote road wheel only {Mathf.RadToDeg(_min):F1}°..{Mathf.RadToDeg(_max):F1}°");
+    }
+
+    private int _pushStage;
+    private double _stageAt;
+    /// <summary>The wheel's angle before and after each push: right, then left.</summary>
+    private float _beforeRight, _afterRight, _beforeLeft;
+
+    /// <summary>--ffbcheck: wait for the forces, push right, rest, push left, judge.</summary>
+    private void PushTest()
+    {
+        if (_pushStage == 0)
+        {
+            if (!SteeringWheel.HasForceFeedback)
+            {
+                if (_time > 15) Finish(false, SteeringWheel.DeviceName == null ? "no wheel" : $"{SteeringWheel.DeviceName} has no force feedback SDL can open");
+                return;
+            }
+            // give the wheel a moment after its forces open before reading where it rests
+            if (_stageAt == 0) _stageAt = _time + 1.0;
+            if (_time < _stageAt) return;
+            _beforeRight = SteeringWheel.Angle;
+            SteeringWheel.Test(0.3f, 0.5f);
+            (_pushStage, _stageAt) = (1, _time + 0.6);
+        }
+        else if (_pushStage == 1 && _time >= _stageAt)
+        {
+            _afterRight = SteeringWheel.Angle;
+            (_pushStage, _stageAt) = (2, _time + 0.6);
+        }
+        else if (_pushStage == 2 && _time >= _stageAt)
+        {
+            _beforeLeft = SteeringWheel.Angle;
+            SteeringWheel.Test(-0.3f, 0.5f);
+            (_pushStage, _stageAt) = (3, _time + 0.6);
+        }
+        else if (_pushStage == 3 && _time >= _stageAt)
+        {
+            float rightDeg = Mathf.RadToDeg(_afterRight - _beforeRight);
+            float leftDeg = Mathf.RadToDeg(SteeringWheel.Angle - _beforeLeft);
+            bool moved = Mathf.Abs(rightDeg) > 2f && Mathf.Abs(leftDeg) > 2f;
+            bool sense = rightDeg > 0f && leftDeg < 0f;
+            GD.Print($"[ffbcheck] {SteeringWheel.DeviceName}: push right turned it {rightDeg:+0.0;-0.0}°, push left {leftDeg:+0.0;-0.0}° "
+                + $"(invert {(GameSettings.Current.Wheel.FfbInvert ? "on" : "off")})");
+            Finish(moved && sense, !moved ? "the wheel hardly moved: hands on it, or forces too weak"
+                : sense ? "forces push the way they should" : "forces push the wrong way: switch on Invert force");
+        }
     }
 
     private void Track(float v)
