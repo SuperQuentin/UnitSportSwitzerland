@@ -37,4 +37,4 @@
   Settings → **Wheel** tab: device picker, range, live bars, and
   **Assign** = move the control (turn right / press the pedal / press the button); an axis resting
   mid-travel binds as half of a combined gas/brake axis. Hats are buttons from `HatBase` (1000).
-- Gearbox (paddles, H-shifter, clutch) waits for the trucks (#70), which add those actions.
+- Gearbox: the trucks (#70) shift from `shift_up`/`shift_down`/`gear_*`/`clutch` and a wheel pedal holds `clutch` past half way; binding paddles and the H-shifter, and an analog clutch, are a follow-up.
