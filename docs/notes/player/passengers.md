@@ -48,6 +48,8 @@
   passenger is 0.000 m from its host, the figures on the rig and the driver drawn only while there
   is one. b saves `test_output/passenger_seat_view.png` and `passengers_outside.png`.
   `--avatars … --cockpit [--heavy N] --fill` puts somebody in every seat.
+- **Flaky**: in about one run in three (seen on `main`, 2026-10-01) a's car never gets going in the
+  drive stage ("jumping out at 0 km/h") and b fails "it rolls on and slows"; rerun before blaming a change.
 - **Limits**: a hand-over blinks the vehicle out for a round trip (the old host stops simulating
   before the new one starts). No seat changes but through the wheel. The first-person passenger has
   no mirrors. Planes and helicopters take no passengers.

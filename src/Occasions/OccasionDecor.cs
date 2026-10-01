@@ -97,7 +97,7 @@ public partial class OccasionDecor : Node
 
     private static ShaderMaterial MakeMaterial(bool candle)
     {
-        var m = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_prop.gdshader") };
+        var m = Styles.StyleKit.Material(Styles.MaterialRole.Prop);
         m.SetShaderParameter("flicker", candle ? 1f : 0f);
         FogUniforms.Apply(m);
         return m;

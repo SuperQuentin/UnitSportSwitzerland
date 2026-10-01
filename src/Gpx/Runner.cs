@@ -10,7 +10,7 @@ namespace UnitSport.Gpx;
 /// clock, so they all start together and you can see who is ahead at any moment — which
 /// is the point of ghost racing.
 /// </summary>
-public partial class Runner : Node3D
+public partial class Runner : Node3D, Core.IOriginShiftAware
 {
     public GpxTrack Track { get; private set; } = null!;
 
@@ -85,6 +85,9 @@ public partial class Runner : Node3D
     private UnitSport.Avatar.HumanPalette _palette = null!;
     private float _stridePhase;
     private Vector3 _smoothPos;
+
+    /// <summary>The origin moved (#185): the smoothed position it eases toward the track follows.</summary>
+    public void OnOriginShifted(Core.OriginShift shift) => _smoothPos = shift.Point(_smoothPos);
     private bool _placed;
 
     /// <summary>

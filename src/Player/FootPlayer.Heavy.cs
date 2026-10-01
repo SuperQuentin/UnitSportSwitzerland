@@ -74,7 +74,7 @@ public partial class FootPlayer
             body.AddChild(rig);
             // the same two hull boxes as the cab's: measured from this section's own mesh
             var (lower, upper) = Avatar.MeshBounds.Split(rig, HullCut);
-            foreach (var box in new[] { lower, upper })
+            foreach (var box in new[] { truck.Solid(lower, k), truck.Solid(upper, k) })
             {
                 float bottom = Mathf.Max(box.Position.Y, truck.HullLift);
                 float top = box.End.Y;

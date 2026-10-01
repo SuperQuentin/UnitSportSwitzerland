@@ -11,7 +11,7 @@ namespace UnitSport.Core;
 /// lifecycle of player nodes. Transforms are client-authoritative and relayed by ENet.
 /// Ground with no terrain data is generated here exactly as on the clients.
 /// </summary>
-public partial class ServerWorld : Node3D
+public partial class ServerWorld : Node3D, IOriginContainer
 {
     private InterestService? _interest;
     private Vehicles.PassengerService? _passengers;
@@ -82,6 +82,7 @@ public partial class ServerWorld : Node3D
         AddChild(_chunks);
 
         _players = new Node3D { Name = "Players" };
+        _players.AddToGroup(OriginShifter.ContainerGroup);
         AddChild(_players);
         // who may see whom: decided here for everyone, before any player node exists (each
         // player's synchronizer looks it up in _Ready). Line of sight from the 100 m horizon lattice.

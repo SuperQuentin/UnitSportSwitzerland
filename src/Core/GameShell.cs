@@ -80,8 +80,9 @@ public partial class GameShell : Node
             "--name", "--chunks", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail",
             "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--perflog",
+            "--origin", "--style", "--tree-lod", "--tree-near",
             "--menu", "--settings", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
-            "--leave-restart", "--autostart",
+            "--leave-restart", "--autostart", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -93,6 +94,8 @@ public partial class GameShell : Node
         Instance = this;
         Audio.SfxBus.Ensure();
         PlayerInput.Install(GetParent());
+        // VR (#186) before any menu or camera exists, so the title is in the headset too
+        bool vr = XR.XrSession.TryStart(GetParent());
         AddChild(new DisplaySettings { Name = "Display" });
 
         // F1 over everything, menus included (layer 42)
@@ -113,9 +116,23 @@ public partial class GameShell : Node
 
         var args = OS.GetCmdlineUserArgs();
         bool Has(string flag) => Array.IndexOf(args, flag) >= 0;
+        // "VR mode" saved on, launched from the desktop: start again with OpenXR (once: the
+        // relaunch carries --vr, and a run with --vr never relaunches)
+        if (!Direct && !vr && GameSettings.Current.VrMode && !Has("--vr") && !Has("--xrsim")
+            && DisplayServer.GetName() != "headless" && XR.XrSession.Relaunch(true))
+        {
+            Quit();
+            return;
+        }
         if (!Direct)
         {
             ShowTitle();
+            // asked for VR, but no headset answered: say so once, on the screen
+            if (Has("--vr") && !vr)
+                Callable.From(() => Modal.Inform(_menuRoot, "No VR headset",
+                    "OpenXR did not start. Connect the headset with Quest Link (Meta set as the OpenXR runtime), "
+                    + "then turn VR mode on again in Settings. Playing on the screen for now.",
+                    () => { GameSettings.Current.VrMode = false; GameSettings.Current.Commit(); })).CallDeferred();
             if (Has("--settings")) Push(SettingsScreen.Create());
             else if (Has("--multiplayer")) Push(MultiplayerScreen.Create());
             else if (Has("--solo")) Push(SoloScreen.Create());
@@ -522,6 +539,7 @@ public partial class GameShell : Node
         LoadStage.WaitingForPlayer => "Waiting for your player",
         LoadStage.PlacingYou => "Finding solid ground",
         LoadStage.BuildingTerrain => "Building the terrain around you",
+        LoadStage.DrawingHorizon => "Raising the mountains",
         LoadStage.Ready => "Ready",
         _ => "Something went wrong",
     };

@@ -34,7 +34,7 @@ namespace UnitSport.Birds;
 /// Every shot flushes every bird within <see cref="ShotFlushRadius"/>.
 /// </para>
 /// </summary>
-public partial class BirdLife : Node3D
+public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShiftAware
 {
     public const int Budget = 32;
     private const float SpawnMin = 35f, SpawnMax = 150f;
@@ -48,6 +48,7 @@ public partial class BirdLife : Node3D
     private readonly ItemController _items;
     private readonly List<Bird> _birds = new();
     private readonly Random _rng = new();
+    /// <summary>Tree tops per tile, relative to the tile's NW corner, so an origin shift leaves them be.</summary>
     private readonly Dictionary<TileId, List<Vector3>?> _trees = new();
     private readonly HashSet<TileId> _loading = new();
     private AudioStreamPlayer _gun = null!;
@@ -298,9 +299,8 @@ public partial class BirdLife : Node3D
         try
         {
             var trees = await source.LoadTreesAsync(tile);
-            var origin = _origin;
             _trees[tile] = trees == null ? null : await Task.Run(() => trees
-                .Select(t => origin.ToWorld(tile.MinE + t.X, tile.MaxN - t.Z, t.Y + t.Height * 0.92f))
+                .Select(t => new Vector3(t.X, t.Y + t.Height * 0.92f, t.Z))
                 .ToList());
         }
         catch (Exception e)
@@ -314,15 +314,24 @@ public partial class BirdLife : Node3D
     // ponytail: linear scan of the tile's trees (tens of thousands) at most every 0.4 s; bucket like Gathering if it shows up in a profile
     private Vector3? NearestTreeTop(Vector3 at, float reach)
     {
-        if (!_trees.TryGetValue(_origin.TileAt(at), out var tops) || tops == null) return null;
+        var tile = _origin.TileAt(at);
+        if (!_trees.TryGetValue(tile, out var tops) || tops == null) return null;
+        var corner = _origin.ToWorld(tile.MinE, tile.MaxN, 0);
+        var local = at - corner;
         Vector3? best = null;
         float bestD = reach;
         foreach (var t in tops)
         {
-            float d = Flat(t - at);
+            float d = Flat(t - local);
             if (d < bestD) { bestD = d; best = t; }
         }
-        return best;
+        return best + corner;
+    }
+
+    /// <summary>The origin moved (#185): the birds' nodes have moved with it, their flight plans have not.</summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        foreach (var b in _birds) b.Shift(shift);
     }
 
     // ------------------------------------------------------------------------------------
@@ -661,6 +670,14 @@ public sealed class Bird
 
     /// <summary>Where a shot aims: the middle of the body, not the feet.</summary>
     public Vector3 Centre => Node.GlobalPosition + Node.GlobalTransform.Basis * _parts.Shoulder;
+
+    /// <summary>The world positions this bird steers by, moved with the origin (#185).</summary>
+    public void Shift(Core.OriginShift shift)
+    {
+        _anchor = shift.Point(_anchor);
+        _walkTo = shift.Point(_walkTo);
+        _velocity = shift.Direction(_velocity);
+    }
 
     /// <summary>What the shot pattern has to touch: the body, plus the wings when they are spread.</summary>
     public float HitRadius => Species.Length * 0.4f + (Airborne ? Species.Wingspan * 0.25f : 0f);

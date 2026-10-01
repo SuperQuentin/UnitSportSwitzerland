@@ -9,6 +9,7 @@ global uniform vec3 world_sky;
 global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
+#include "res://shaders/world_origin.gdshaderinc"
 
 // Water: banded blue with a slow dithered shimmer. No transparency or reflection —
 // PS1-era water was flat colour plus animated dither, which is also what reads best
@@ -44,7 +45,8 @@ void fragment() {
     }
     // two drifting wave trains, quantised into bands
     float t = TIME * wave_speed;
-    float w = sin(world_pos.x * 0.35 + t) * 0.5 + sin(world_pos.z * 0.27 - t * 0.8) * 0.5;
+    vec2 ground = pattern_xz(world_pos);
+    float w = sin(ground.x * 0.35 + t) * 0.5 + sin(ground.y * 0.27 - t * 0.8) * 0.5;
     float band = floor((w * 0.5 + 0.5) * 4.0) / 4.0;
 
     vec3 col = mix(deep_color, shallow_color, band);
@@ -52,7 +54,7 @@ void fragment() {
     // sparse glints on the wave crests — kept small and infrequent, otherwise they read
     // as patches of foam rather than light catching the surface
     float crest = step(0.90, w * 0.5 + 0.5);
-    float sparkle = step(0.78, fract(sin(dot(floor(world_pos.xz * 2.3), vec2(12.9898, 78.233))
+    float sparkle = step(0.78, fract(sin(dot(floor(ground * 2.3), vec2(12.9898, 78.233))
                                          + floor(TIME * 3.0)) * 43758.5453));
     col = mix(col, glint_color, crest * sparkle * 0.55);
 

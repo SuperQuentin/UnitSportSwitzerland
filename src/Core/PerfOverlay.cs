@@ -178,6 +178,15 @@ public partial class PerfOverlay : CanvasLayer
             Mon(Performance.Monitor.RenderTotalPrimitivesInFrame) / 1e6);
         sb.AppendFormat(ci, "memory {0:F0} MB static  {1:F0} MB video\n",
             Mon(Performance.Monitor.MemoryStatic) / 1048576, Mon(Performance.Monitor.RenderVideoMemUsed) / 1048576);
+        if (OriginShifter.Instance is { } shifter && _chunks.Origin is { } origin)
+        {
+            // the floating origin (#185): how far out the camera is, and float32's step there
+            var cam = GetViewport().GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
+            float away = new Vector2(cam.X, cam.Z).Length();
+            float step = away < 1f ? 0f : MathF.Pow(2f, MathF.Floor(MathF.Log2(away)) - 23f);
+            sb.AppendFormat(ci, "origin {0:F0}/{1:F0}  cam {2:F0} m out ({3:F2} mm)  shifts {4} ({5:F1} ms)\n",
+                origin.E, origin.N, away, step * 1000f, shifter.ShiftCount, shifter.LastShiftMs);
+        }
 
         sb.Append("-- tiles --\n");
         sb.AppendFormat(ci, "loaded {0}/{1}  horizon blocks {2}\n", stats.Loaded, stats.Desired, stats.HorizonBlocks);

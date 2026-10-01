@@ -144,7 +144,7 @@ changed is how you get there.
   facade shader boxes (`ChunkManager.SetOccupancy`: more lit windows, figures behind the glass)
   and `BuildingSounds`: muffled steps, knocks and inner doors on the wall nearest the listener.
   Also door latch/creak/shut on both sides, and inside, near a way out, the street
-  (`SfxSynth.Street`), muffled while shut.
+  (`SfxSynth.Street`), fading with the swing, silent once shut.
 - **World hiding.** `OutsideShownChanged`: the outside is hidden only while the player is inside
   with every door of the building shut; the portal needs it drawn.
 - **Checks.** `--interiorcheck[,shot.png]` opens, walks in, out, back in, shuts the door from
