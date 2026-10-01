@@ -158,7 +158,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         PlayerInput.Install(GetParent());
         if (Player.WheelProbe.CheckRequested)
         {
-            GetTree().Quit(Player.WheelProbe.Check());
+            GetTree().Quit(Player.WheelProbe.Check(GetParent()));
             return;
         }
         if (Player.WheelProbe.ForceCheckRequested)

@@ -46,7 +46,7 @@ public partial class WheelProbe : Node
     // ---------------------------------------------------------------------------------------
 
     /// <summary>Runs the numbers; call after <see cref="PlayerInput.Install"/> so the actions exist.</summary>
-    public static int Check()
+    public static int Check(Node root)
     {
         int failures = 0;
         void Expect(bool ok, string what)
@@ -119,6 +119,10 @@ public partial class WheelProbe : Node
         int before = PadEvents(PlayerInput.MoveLeft, -1);
         PlayerInput.SetIgnoredJoypads(new[] { 0 });
         Expect(PadEvents(PlayerInput.MoveLeft, -1) == 0 && PadEvents("ui_accept", -1) == 0, "pad bindings kept every device while a wheel is ignored");
+        // loading a world installs the input again: the wheel must stay out of the pad bindings
+        PlayerInput.Install(root);
+        Expect(PadEvents(PlayerInput.MoveLeft, -1) == 0 && PadEvents(PlayerInput.Throttle, -1) == 0,
+            "a second Install gave the ignored wheel back to the pad bindings");
         PlayerInput.SetIgnoredJoypads(Array.Empty<int>());
         Expect(before > 0 && PadEvents(PlayerInput.MoveLeft, -1) == before, $"pad bindings restored ({before} before)");
 
