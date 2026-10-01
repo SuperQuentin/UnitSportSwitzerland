@@ -69,7 +69,7 @@ public sealed class LaneGraph
 
     private const float Snap = 0.5f;
 
-    /// <summary>RoadMeshBuilder's raised rail height (0.18) less the paint lift (0.02).</summary>
+    /// <summary>RoadMeshBuilder's raised rail height (0.18) less the paint lift (0.02): RoadGen's RailRoadOverlap.RailTop.</summary>
     private const float EmbeddedRailSink = 0.16f;
 
     public static long KeyOf(Vector3 p) =>
