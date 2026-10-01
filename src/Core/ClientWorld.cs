@@ -251,6 +251,13 @@ public partial class ClientWorld : Node3D
         // server's; the clock the CDs run on (offline: this machine's own).
         var radios = Items.RadioManager.Create(this);
         radios.PlayerPositions = vehicles.PlayerPositions;
+        // every body that may hold a radio that plays (#168): the remote players and this one
+        radios.Players = () =>
+        {
+            var all = _players?.GetChildren().OfType<FootPlayer>().ToList() ?? new List<FootPlayer>();
+            if (LocalPlayer is { } me && !all.Contains(me)) all.Add(me);
+            return all;
+        };
         Audio.Cd.CdLibrary.Create(this, server: false);
         Net.ClockSync.Create(this);
         // the Africa Twin at Riddes: placed here offline, by the server online
@@ -837,7 +844,7 @@ public partial class ClientWorld : Node3D
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
-        if (RadioSyncCheck.Create(() => LocalPlayer, () => _players) is { } radioCheck) AddChild(radioCheck);
+        if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
 
         _chat!.Kicked += reason => GD.Print($"[net] kicked: {reason}");
 
