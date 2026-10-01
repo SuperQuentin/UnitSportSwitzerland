@@ -138,36 +138,7 @@ public static partial class TerrainMeshBuilder
         }
     }
 
-    private readonly record struct Scratch(float[] Lo, float[] Hi, float[] CoreDist, byte[] Seen, List<int> Touched, int N)
-    {
-        /// <summary>One road's say over one cell: under it (edge distance &lt;= 0) or on its slope.</summary>
-        public void Apply(int idx, double dist, double fromEdge, double y, double reach)
-        {
-            if (fromEdge <= 0)
-            {
-                if (Seen[idx] == 0) { Seen[idx] = 1; Touched.Add(idx); }
-                else if (dist >= CoreDist[idx]) return;
-                CoreDist[idx] = (float)dist;
-                Lo[idx] = Hi[idx] = (float)y;
-                return;
-            }
-            if (fromEdge > reach) return;
-            float l = (float)(y - RoadEmbankment.FillSlope * fromEdge);
-            float h = (float)(y + RoadEmbankment.CutSlope * fromEdge);
-            if (Seen[idx] == 0)
-            {
-                Seen[idx] = 1;
-                Touched.Add(idx);
-                CoreDist[idx] = float.PositiveInfinity;
-                Lo[idx] = l;
-                Hi[idx] = h;
-                return;
-            }
-            if (CoreDist[idx] < float.PositiveInfinity) return;   // a slope never reaches under a road
-            if (l > Lo[idx]) Lo[idx] = l;
-            if (h < Hi[idx]) Hi[idx] = h;
-        }
-    }
+    private sealed record Scratch(float[] Lo, float[] Hi, float[] CoreDist, byte[] Seen, List<int> Touched, int N);
 
     /// <summary>One segment's centreline, in lattice units (1 m), with its two edge offsets.</summary>
     private readonly struct Line
@@ -194,17 +165,43 @@ public static partial class TerrainMeshBuilder
         public void Piece(Scratch s, int i)
         {
             double ax = X(i), az = Z(i), bx = X(i + 1), bz = Z(i + 1);
-            double ay = Y(i), by = Y(i + 1);
             double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
             if (len < 1e-6) return;
-            double ux = (bx - ax) / len, uz = (bz - az) / len;
-            // right of the drawing direction, X east and Z south
-            double rx = -uz, rz = ux;
             // past each end by what the bend there needs: the outside of a turn of θ opens a gap
             // of θ·radius at the slope's reach, which the two pieces close half each
-            double a0 = -Overlap(i), a1 = len + Overlap(i + 1);
+            Strip(s, ax, az, Y(i), Y(i + 1), (bx - ax) / len, (bz - az) / len, len, -Overlap(i), len + Overlap(i + 1));
+        }
+
+        /// <summary>Every cell within the radius of vertex i, at that vertex's height: a strip of no length.</summary>
+        public void Disc(Scratch s, int i)
+        {
+            // the side a cell is on, from the direction through the vertex
+            int a = Math.Max(0, i - 1), b = Math.Min(_count - 1, i + 1);
+            double fx = X(b) - X(a), fz = Z(b) - Z(a), fl = Math.Sqrt(fx * fx + fz * fz);
+            if (fl < 1e-6) return;
             double rad = _radius / ChunkFormat.SpacingM;
+            Strip(s, X(i), Z(i), Y(i), Y(i), fx / fl, fz / fl, 0, -rad, rad);
+        }
+
+        /// <summary>
+        /// Every cell within the radius of the piece from (ax, az) along (ux, uz) for len, whose
+        /// position along it lies in [a0, a1]: under the road (nearest centreline wins) or on its
+        /// slope (tightest bound wins). One loop with the cell logic inline: it runs a few hundred
+        /// thousand times a tile, and a Debug build does not inline a call.
+        /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
+        private void Strip(Scratch s, double ax, double az, double ay, double by, double ux, double uz,
+            double len, double a0, double a1)
+        {
+            float[] lo = s.Lo, hi = s.Hi, coreDist = s.CoreDist;
+            byte[] seen = s.Seen;
+            var touched = s.Touched;
             int n = s.N;
+            double left = _left, right = _right, reach = _reach, spacing = ChunkFormat.SpacingM;
+            double fill = RoadEmbankment.FillSlope, cut = RoadEmbankment.CutSlope;
+            // right of the drawing direction, X east and Z south
+            double rx = -uz, rz = ux;
+            double rad = _radius / spacing;
 
             // corners of the strip, for the row range
             double minZ = double.MaxValue, maxZ = double.MinValue;
@@ -215,6 +212,7 @@ public static partial class TerrainMeshBuilder
                 maxZ = Math.Max(maxZ, z);
             }
             int r0 = Math.Max(0, (int)Math.Ceiling(minZ)), r1 = Math.Min(n - 1, (int)Math.Floor(maxZ));
+            double rad2 = rad * rad;
 
             for (int r = r0; r <= r1; r++)
             {
@@ -229,11 +227,38 @@ public static partial class TerrainMeshBuilder
                 {
                     double dx = c - ax;
                     double along = dx * ux + dz * uz, perp = dx * rx + dz * rz;
-                    double t = along <= 0 ? 0 : along >= len ? 1 : along / len;
                     double over = along < 0 ? -along : along > len ? along - len : 0;
-                    double dist = (over > 0 ? Math.Sqrt(perp * perp + over * over) : Math.Abs(perp)) * ChunkFormat.SpacingM;
-                    double edge = perp >= 0 ? _right : _left;
-                    s.Apply(row + c, dist, dist - edge, ay + (by - ay) * t, _reach);
+                    double d2 = perp * perp + over * over;
+                    if (d2 > rad2) continue;   // the round ends
+                    double dist = (over > 0 ? Math.Sqrt(d2) : Math.Abs(perp)) * spacing;
+                    double fromEdge = dist - (perp >= 0 ? right : left);
+                    if (fromEdge > reach) continue;
+                    double y = len <= 0 || along <= 0 ? ay : along >= len ? by : ay + (by - ay) * (along / len);
+                    int idx = row + c;
+
+                    if (fromEdge <= 0)
+                    {
+                        // under the road: the centreline's height at this cell's own foot,
+                        // nearest segment wins outright
+                        if (seen[idx] == 0) { seen[idx] = 1; touched.Add(idx); }
+                        else if (dist >= coreDist[idx]) continue;
+                        coreDist[idx] = (float)dist;
+                        lo[idx] = hi[idx] = (float)y;
+                        continue;
+                    }
+                    float l = (float)(y - fill * fromEdge), h = (float)(y + cut * fromEdge);
+                    if (seen[idx] == 0)
+                    {
+                        seen[idx] = 1;
+                        touched.Add(idx);
+                        coreDist[idx] = float.PositiveInfinity;
+                        lo[idx] = l;
+                        hi[idx] = h;
+                        continue;
+                    }
+                    if (coreDist[idx] < float.PositiveInfinity) continue;   // a slope never reaches under a road
+                    if (l > lo[idx]) lo[idx] = l;
+                    if (h < hi[idx]) hi[idx] = h;
                 }
             }
         }
@@ -256,30 +281,6 @@ public static partial class TerrainMeshBuilder
             if (lu < 1e-6 || lv < 1e-6) return 0;
             return Math.Acos(Math.Clamp((ux * vx + uz * vz) / (lu * lv), -1, 1));
         }
-
-        /// <summary>Every cell within the radius of vertex i, at that vertex's height.</summary>
-        public void Disc(Scratch s, int i)
-        {
-            double vx = X(i), vz = Z(i), vy = Y(i);
-            // the side a cell is on, from the direction through the vertex
-            int a = Math.Max(0, i - 1), b = Math.Min(_count - 1, i + 1);
-            double fx = X(b) - X(a), fz = Z(b) - Z(a);
-            double rx = -fz, rz = fx;
-            double rad = _radius / ChunkFormat.SpacingM;
-            int n = s.N;
-            int c0 = Math.Max(0, (int)Math.Ceiling(vx - rad)), c1 = Math.Min(n - 1, (int)Math.Floor(vx + rad));
-            int r0 = Math.Max(0, (int)Math.Ceiling(vz - rad)), r1 = Math.Min(n - 1, (int)Math.Floor(vz + rad));
-            for (int r = r0; r <= r1; r++)
-                for (int c = c0; c <= c1; c++)
-                {
-                    double dx = c - vx, dz = r - vz;
-                    double d2 = dx * dx + dz * dz;
-                    if (d2 > rad * rad) continue;
-                    double dist = Math.Sqrt(d2) * ChunkFormat.SpacingM;
-                    double edge = dx * rx + dz * rz >= 0 ? _right : _left;
-                    s.Apply(r * n + c, dist, dist - edge, vy, _reach);
-                }
-        }
     }
 
     /// <summary>
@@ -288,6 +289,7 @@ public static partial class TerrainMeshBuilder
     /// surface (a core cell) is never released. The one-cell drop from the shelf to the released
     /// ground then lies inside the wall's solid (<see cref="RoadEmbankment"/>).
     /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
     private static void FreeBehindWall(Scratch s, RoadLinearProp wall)
     {
         int count = wall.PointCount;

@@ -41,6 +41,7 @@ static class RoadBlendCheck
         }
 
         var blendMs = new List<double>();
+        var firstMs = new List<double>();
         var applyMs = new List<double>();
         long cells = 0, cliffs = 0, hidden = 0, walls = 0, tlmWalls = 0, tlmSegments = 0;
         var heights = new int[7];   // wall peak heights: <2, <4, <6, <10, <15, <25, more
@@ -57,8 +58,11 @@ static class RoadBlendCheck
             RoadTile tile;
             using (var s = File.OpenRead(road)) tile = RoadCodec.Decode(s);
 
-            // warm once, then time the median of three like a steady worker would see it
+            // the first call on a tile, then the median of three like a steady worker would see it;
+            // the first tiles' first calls are what a cold game pays (tiered JIT)
+            var cold = Stopwatch.StartNew();
             TerrainMeshBuilder.ComputeRoadBlend(tile);
+            if (firstMs.Count < 20) firstMs.Add(cold.Elapsed.TotalMilliseconds);
             var times = new double[3];
             TerrainMeshBuilder.RoadBlend blend = null!;
             for (int k = 0; k < times.Length; k++)
@@ -149,6 +153,7 @@ static class RoadBlendCheck
         }
         Console.WriteLine(string.Create(c0, $"road blend over {blendMs.Count} tiles, {roadKm:F0} km of at-grade lines"));
         Console.WriteLine($"  ComputeRoadBlend   {Dist(blendMs)}");
+        Console.WriteLine($"  first call, first {firstMs.Count} tiles (cold JIT): {Dist(firstMs)}");
         Console.WriteLine($"  apply (collision)  {Dist(applyMs)}");
         Console.WriteLine(string.Create(c0, $"  blend cells {cells / (double)blendMs.Count:F0}/tile"));
         Console.WriteLine(string.Create(c0, $"  walls {walls} ({wallM / 1000:F2} km, {wallM2:F0} m2 of face, highest {maxWall:F1} m), TLM walls kept {tlmWalls}"));
