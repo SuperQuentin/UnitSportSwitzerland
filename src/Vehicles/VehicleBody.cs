@@ -41,6 +41,8 @@ public partial class VehicleBody : CharacterBody3D
     [Export] public float Spool { get; set; }
     /// <summary>A car's open doors, one bit each (<see cref="CarRig.DoorLeft"/>..): left open for show, or by whoever just got out.</summary>
     [Export] public byte DoorsOpen { get; set; }
+    /// <summary>A truck's joints as its authority rolls it on (#162), for the copies: its trailer swings where it does.</summary>
+    [Export] public Vector3 TrainAngles { get; set; }
 
     public ChunkManager? Terrain { get; set; }
 
@@ -55,8 +57,8 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>What is drawn, the frame of its first section (a parked train's others are its children named <c>Section{k}</c>).</summary>
     public Node3D? Visual => _visual;
 
-    /// <summary>A parked bus's doors as its driver left them, one bit each (#162: open, they can be walked through).</summary>
-    public byte BusDoors => (byte)((_initial.Flags >> 4) & 15);
+    /// <summary>A parked bus's doors, one bit each (#162: open, they can be walked through; anyone works them by their buttons).</summary>
+    public byte BusDoors => Ride is Truck { IsBus: true } ? DoorsOpen : (byte)0;
 
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
@@ -89,7 +91,8 @@ public partial class VehicleBody : CharacterBody3D
             // part of it
             Ride = state.CreateRide() ?? new Bicycle(),
             Wrecked = state.Wrecked,
-            DoorsOpen = (byte)(state.DoorsOpen & 15),
+            // a car's doors, or a bus's (kept in its flags while it is driven)
+            DoorsOpen = (byte)((state.CreateRide() is Truck { IsBus: true } ? state.Flags >> 4 : state.DoorsOpen) & 15),
             Health = state.Health,
             EngineOn = state.EngineOn,
             Owner = state.Owner,
@@ -140,7 +143,7 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         var replication = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen" })
+        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen", ".:TrainAngles" })
             replication.AddProperty(prop);
         // states that change a few times per life of a vehicle go reliably on change; the motion
         // at 20 Hz while it moves (every frame before, for a bike standing in a field for hours)
@@ -229,8 +232,11 @@ public partial class VehicleBody : CharacterBody3D
     /// </remarks>
     public VehicleState Capture() => new(Kind, GlobalPosition,
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
-        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning, DoorsOpen, _initial.Setup,
-        _initial.Train, _initial.Angles, _initial.Flags, _initial.Load);
+        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning,
+        Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
+        _initial.Train, _initial.Angles,
+        // a bus's doors as they are now, where a truck keeps them
+        Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4) : _initial.Flags, _initial.Load);
 
     /// <summary>A lone trailer standing here, waiting for a truck; null for anything else.</summary>
     public ParkedTrailer? Trailer => Ride as ParkedTrailer;
@@ -241,7 +247,7 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>Opens or shuts one door. The authority's call: others ask <see cref="VehicleManager.ToggleDoor"/>.</summary>
     public void ToggleDoor(byte bit)
     {
-        if (Wrecked || Ride is not Car) return;
+        if (Wrecked || Ride is not (Car or Truck { IsBus: true })) return;
         DoorsOpen ^= (byte)(bit & 15);
         _shutDriverIn = 0f;   // a door someone chose to leave open stays open
     }
@@ -287,6 +293,7 @@ public partial class VehicleBody : CharacterBody3D
         bool onFloor = IsOnFloor();
         if (Wrecked) StepWreck(dt, onFloor);
         else if (Ride is Flyer flyer) StepFlyer(dt, onFloor, flyer);
+        else if (Ride.Driverless) StepDriverless(dt, onFloor);
         else StepRolling(dt, onFloor);
 
         // at rest long enough: sleep, and stop asking for collision
@@ -376,6 +383,44 @@ public partial class VehicleBody : CharacterBody3D
         if (_visual != null) flyer.Pose(_visual, _flight.Yaw, _flight);
     }
 
+    /// <summary>
+    /// A car, a truck or a bus nobody drives, rolling on (#162): its own physics with no input, as
+    /// it does with passengers aboard and nobody at the wheel (#158): no pedal, the wheel let go,
+    /// the engine dragging, a truck's automatic holding it once it stops. It used to slide straight
+    /// on, losing 3 m/s every second, whatever the road did. At rest it sleeps as before.
+    /// </summary>
+    private void StepDriverless(float dt, bool onFloor)
+    {
+        var normal = onFloor ? GetFloorNormal() : Vector3.Up;
+        var heading = -GlobalTransform.Basis.Z with { Y = 0 };
+        heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
+        // the slope along the way it points, as the ride feels it when driven
+        float grade = onFloor ? -(heading.X * normal.X + heading.Z * normal.Z) / Mathf.Max(normal.Y, 0.15f) : 0f;
+        bool inside = Interiors.InteriorManager.InInteriorSpace(GlobalPosition);
+        var surface = Terrain != null ? Audio.Surfaces.At(Terrain, GlobalPosition, inside) : Audio.Surface.Asphalt;
+        if (Ride is Truck truck)
+        {
+            // nobody's foot on anything: the engine only drags. Idling in drive, a bus's converter
+            // would creep on for ever, with nobody aboard to stop it
+            truck.EngineRunning = false;
+            truck.Box.ClutchHeld = false;
+        }
+        _motion.Yaw = Rotation.Y;
+        Ride.Step(new RideInput(0f, 0f, 0f, false), new RideGround(onFloor, grade, surface), dt, ref _motion);
+        Rotation = new Vector3(0, _motion.Yaw, 0);
+        heading = -GlobalTransform.Basis.Z with { Y = 0 };
+        heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
+        var v = heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed;
+        v.Y = onFloor ? Mathf.Min(Velocity.Y, 0f) : Velocity.Y - Rideable.Gravity * dt;
+        Velocity = v;
+        MoveAndSlide();
+        // what it hit takes the speed it could not keep (a wall, a tree, another vehicle)
+        var real = GetRealVelocity();
+        float achieved = new Vector2(real.X, real.Z).Length();
+        if (achieved < _motion.Speed - 1f) _motion.Speed = Mathf.Max(achieved, _motion.Speed - 25f * dt);
+        if (Ride is Truck rolled) TrainAngles = rolled.Angles;
+    }
+
     /// <summary>A riderless bike: it rolls on, slows, and falls over.</summary>
     private void StepRolling(float dt, bool onFloor)
     {
@@ -401,6 +446,12 @@ public partial class VehicleBody : CharacterBody3D
 
         if (_visual == null) return;
         if (_visual is CarRig doors) doors.DoorsOpen = DoorsOpen;
+        else if (_visual is HeavyRig bus && Ride is Truck { IsBus: true })
+        {
+            // the bus's leaves swing on its rig, an articulated one's on both halves
+            bus.DoorsOpen = DoorsOpen;
+            foreach (var half in bus.GetChildren().OfType<HeavyRig>()) half.DoorsOpen = DoorsOpen;
+        }
 
         if (!IsMultiplayerAuthority() && Ride is Flyer remoteFlyer)
             remoteFlyer.Pose(_visual, Rotation.Y, new FlightMotion { Attitude = new Basis(Tilt) });
@@ -429,6 +480,8 @@ public partial class VehicleBody : CharacterBody3D
             rig.Headlights = _initial.Headlights && !Wrecked;
             rig.RoofOpen = _initial.RoofOpen;
         }
+        // a copy's trailer swings where its authority's does
+        if (!IsMultiplayerAuthority() && Ride is Truck swung && TrainAngles != default) swung.SetAngles(TrainAngles);
         StandOnGround(dt);
         if (_visual is HeavyRig heavy && Ride is Truck truck)
         {

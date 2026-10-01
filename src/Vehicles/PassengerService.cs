@@ -117,6 +117,9 @@ public partial class PassengerService : Node
     /// <summary>A passenger, or a host sat in its own driverless vehicle: the driver's seat, please.</summary>
     public void AskWheel() { if (Online) RpcId(1, MethodName.RequestWheel); }
 
+    /// <summary>At a door's button of <paramref name="host"/>'s bus (#162): open or shut that door.</summary>
+    public void PressDoor(FootPlayer host, int door) { if (Online) RpcId(1, MethodName.RequestDoorPress, host.Name.ToString(), door); }
+
     /// <summary>Walking about in <paramref name="host"/>'s vehicle (#162): that seat, please.</summary>
     public void AskSeatAt(FootPlayer host, int seat) { if (Online) RpcId(1, MethodName.RequestSeatAt, host.Name.ToString(), seat); }
 
@@ -181,6 +184,28 @@ public partial class PassengerService : Node
         GD.Print($"[passengers] {peer} takes seat {seat} in {host}'s {them.Ride} ({ride.Riders.Count} aboard)");
         return null;
     }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestDoorPress(string hostName, int door)
+    {
+        if (!Multiplayer.IsServer()) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        long host = long.TryParse(hostName, out long h) ? h : 0;
+        var (me, them) = (Player(sender), Player(host));
+        if (me == null || them == null || them.Ride == RideKind.OnFoot) return;
+        var vehicle = CarSetups.Ride(them.Ride, them.CarSetupId, them.TuningBits) ?? Rideable.Create(them.Ride);
+        // only someone standing at one of that door's buttons (the bus straight: a joint moves little)
+        bool there = vehicle.Decks.SelectMany(d => d.Buttons.Where(b => b.Door == door).Select(b =>
+            them.ToGlobal(d.Section == 0 || vehicle is not Truck t ? b.At : t.NodeLocal(d.Section) * b.At)))
+            .Any(at => at.DistanceTo(me.GlobalPosition + Vector3.Up * 1.1f) < ButtonReach + 1f);
+        if (there) RpcId(host, MethodName.DoorPress, door);
+    }
+
+    /// <summary>How far from a door's button a player may press it, m (a hand's reach from the chest).</summary>
+    public const float ButtonReach = 0.9f;
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void DoorPress(int door) => Local?.DoorPressed(door);
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestSeatAt(string hostName, int seat)

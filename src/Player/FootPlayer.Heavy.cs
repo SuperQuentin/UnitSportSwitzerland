@@ -259,7 +259,8 @@ public partial class FootPlayer
     /// <summary>The ignition and the clutch pedal into the truck, and last frame's section contacts are already in.</summary>
     private void PrepareTruck(Truck truck)
     {
-        truck.EngineRunning = EngineOn;
+        // nobody at the wheel (#158): the engine only drags; idling in drive it would creep on for ever
+        truck.EngineRunning = EngineOn && SeatIndex == 0;
         truck.Box.ClutchHeld = !Npc && RideControls == null && PlayerInput.Held(PlayerInput.Clutch);
     }
 

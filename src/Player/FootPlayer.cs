@@ -1707,6 +1707,8 @@ public partial class FootPlayer : CharacterBody3D
             return interiors?.TryDoor(this) ?? true;
         }
         if (_ride != null || _mantling || _deadTimer > 0) return false;
+        // a bus door's button within reach, inside or out (#162), before anything else here
+        if (TryDoorButton()) return true;
         // walking about in a vehicle: a seat, or the wheel (#162)
         if (Aboard) return TryDeckSeat();
 
@@ -1829,6 +1831,8 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public bool TryToggleCarDoor()
     {
+        // G works a bus door's button as E does (#162)
+        if (TryDoorButton()) return true;
         if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
             return false;
         var (bit, distance) = rig.NearestDoor(GlobalPosition);

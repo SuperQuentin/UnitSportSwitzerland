@@ -1001,6 +1001,9 @@ public partial class ClientWorld : Node3D
         }
         else if (viewer is { } p && IsInstanceValid(p))
         {
+            // a bus door's button in reach, inside or out (#162)
+            if (p.Vehicle == null && p.ButtonInReach() is { } button)
+                yield return (PlayerInput.InteractMount, button.Open ? "Shut the door" : "Open the door");
             // walking about in a vehicle, or sat in one somebody else hosts (#158, #162)
             if (p.Aboard)
             {

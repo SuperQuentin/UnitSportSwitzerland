@@ -159,9 +159,32 @@ public partial class DeckProbe : Node
                 {
                     Check(me.IsOnFloor(), "walked out of the middle door onto the road");
                     me.WalkControls = null;
-                    Stage("in");
+                    Stage("button");
                 }
                 else if (InStage > 15) { Trace(me, frame, "stuck"); Check(false, "never got out"); Finish(); }
+                break;
+            case "button":
+                // to the middle door's outside button, shut it, open it again (anyone may)
+                if (frame == null) return;
+                _target = OnBus(frame, 1.275f + 0.45f, 0.3f, 5.06f);
+                SoloWalk(me);
+                if (InStage > 3 && _seen.Add("press-shut"))
+                {
+                    me.WalkControls = null;
+                    Log($"button in reach: {me.ButtonInReach()?.Door}, G: {me.TryToggleCarDoor()}");
+                }
+                if (InStage > 4.5 && _seen.Add("shut"))
+                {
+                    var parked = VehicleManager.Instance!.GetChildren().OfType<VehicleBody>().First(v => v.Kind == Bus);
+                    Check((parked.BusDoors & 2) == 0, $"pressed the outside button: the middle door shut (doors {parked.BusDoors})");
+                    Log($"E: {me.TryInteract()}");
+                }
+                if (InStage > 6 && _seen.Add("opened"))
+                {
+                    var parked = VehicleManager.Instance!.GetChildren().OfType<VehicleBody>().First(v => v.Kind == Bus);
+                    Check((parked.BusDoors & 2) != 0, $"pressed it again: open (doors {parked.BusDoors})");
+                    Stage("in");
+                }
                 break;
             case "in":
                 if (frame == null || InStage < 1) return;
@@ -223,7 +246,7 @@ public partial class DeckProbe : Node
     public override void _PhysicsProcess(double delta)
     {
         _clock += delta;
-        if (_clock > 200) { Log("timed out in " + _stage); _failed++; Finish(); return; }
+        if (_clock > 280) { Log("timed out in " + _stage); _failed++; Finish(); return; }
         var me = _local();
         if (me == null) return;
         if (_t < 0)
@@ -305,17 +328,34 @@ public partial class DeckProbe : Node
                 else if (InStage > 30) { Check(false, "b never stood up"); Finish(); }
                 break;
             case "drive2":
-                if (InStage > 8) { Input.ActionRelease(PlayerInput.Throttle); Input.ActionPress(PlayerInput.Brake); Log($"hard brake from {me.GroundSpeed * 3.6f:F0} km/h"); Stage("stop2"); }
+                if (me.Heavy is { } own && (own.DoorsOpen & 2) != 0 && _seen.Add("opened-moving"))
+                    Check(true, $"b opened the middle door from inside while driving, at {me.GroundSpeed * 3.6f:F0} km/h");
+                if (InStage > 8)
+                {
+                    // out of the cab at speed, b on its feet in the aisle: the bus rolls on by itself
+                    if (!_seen.Contains("opened-moving")) Check(false, "b's button press never opened the middle door");
+                    _jumpedAt = me.GlobalPosition;
+                    Log($"jumping out of the cab at {me.GroundSpeed * 3.6f:F0} km/h");
+                    Input.ActionRelease(PlayerInput.Throttle);
+                    me.ExitVehicle();
+                    Stage("jumped");
+                }
                 break;
-            case "stop2":
-                if (me.GroundSpeed > 0.3f && InStage < 20) return;
-                Input.ActionRelease(PlayerInput.Brake);
-                Doors(me, true);
-                Stage("wait-out");
+            case "jumped":
+                if (VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => v.Kind == Bus) is not { } rolling) return;
+                float kmh = rolling.Velocity.Length() * 3.6f;
+                if (_seen.Add("rolls") ) Log($"the bus rolls on by itself at {kmh:F0} km/h");
+                if (InStage > 2 && _seen.Add("rolling-2s")) Check(kmh > 3f, $"two seconds later it still rolls, slowing on its own: {kmh:F0} km/h");
+                if (kmh < 0.5f && InStage > 3 && _seen.Add("rolled"))
+                {
+                    Check(true, $"it rolled {rolling.GlobalPosition.DistanceTo(_jumpedAt):F0} m from where a jumped and stopped");
+                    Stage("wait-out");
+                }
+                else if (InStage > 120) { Check(false, "the bus never stopped"); Finish(); }
                 break;
             case "wait-out":
                 if (b is { DeckOn: "", RidingWith: 0 } && InStage > 2) { Check(true, "b walked out"); Stage("done"); }
-                else if (InStage > 40) { Check(false, "b never got out"); Finish(); }
+                else if (InStage > 60) { Check(false, "b never got out"); Finish(); }
                 break;
             case "done":
                 if (InStage > 3) Finish();
@@ -326,6 +366,11 @@ public partial class DeckProbe : Node
     // ---- b: the passenger on foot -------------------------------------------------------------
 
     private Vector3 _target;
+    private Vector3 _jumpedAt;
+    private double _offDeck;
+
+    /// <summary>The bus standing in the world (parked, or rolling with nobody at the wheel).</summary>
+    private VehicleBody? ParkedBus => VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => v.Kind == Bus);
     private Vector3 _lastBusPos;
     private double _stillFor;
     private float _localZ0;
@@ -396,34 +441,59 @@ public partial class DeckProbe : Node
                 }
                 break;
             case "standing":
+                // to the middle door's inside button, to press it once the bus moves
+                if (_seen.Contains("stood")) { _target = OnBus(bus!, 1.195f - 0.45f, 0.3f, 5.06f); if (me.WalkControls == null) WalkTo(me, _target); }
                 if (InStage > 1.5 && _seen.Add("stood"))
                 {
                     Check(me.DeckOn == bus!.Name && me.RidingWith == 0 && me.IsOnFloor(),
                         $"b stood up into the aisle: on {me.DeckOn}'s deck at {me.DeckPos}, on its feet {me.IsOnFloor()}");
                     _localZ0 = me.DeckPos.Z;
                 }
-                if (bus!.WorldVelocity.Length() * 3.6f > 15f && _seen.Add("moving")) { Stage("riding"); Shoot(); me.MaxDeckAccel = 0; _stuns = 0; }
+                if (bus!.WorldVelocity.Length() * 3.6f > 15f && _seen.Add("moving")) { me.WalkControls = null; Stage("riding"); Shoot(); me.MaxDeckAccel = 0; _stuns = 0; }
                 break;
             case "riding":
-                // on its feet while the bus drives and brakes: still aboard, never through the floor
+                // pressing the middle door's inside button as the bus drives: it opens, at our risk
+                if (InStage > 2 && InStage < 2.1 && _seen.Add("press-moving"))
+                    Log($"button in reach: {me.ButtonInReach()?.Door}, E: {me.TryInteract()}");
                 if (Mathf.PosMod(InStage, 1.0) < GetPhysicsProcessDeltaTime())
-                    Log($"  riding: at {me.DeckPos}, floor {me.IsOnFloor()}, bus {bus!.WorldVelocity.Length() * 3.6f:F0} km/h");
-                if (me.DeckOn != bus!.Name) { Check(false, $"b fell off the deck at {bus.WorldVelocity.Length() * 3.6f:F0} km/h ({me.GlobalPosition})"); Finish(); return; }
+                    Log($"  riding: at {me.DeckPos}, on '{me.DeckOn}', floor {me.IsOnFloor()}");
+                // on its feet through the drive and the driver jumping out: aboard, never through the floor
+                // off a deck only for the moment the bus changes hands (the driver jumped: it is parked now)
+                _offDeck = me.DeckOn == "" ? _offDeck + GetPhysicsProcessDeltaTime() : 0;
+                if (_offDeck > 3) { Check(false, $"b fell off the deck ({me.GlobalPosition})"); Finish(); return; }
                 if (me.DeckPos.Y < -0.5f) { Check(false, $"b is under the floor: {me.DeckPos}"); Finish(); return; }
-                if (bus.WorldVelocity.Length() < 0.3f && InStage > 6 && bus.BusDoors != 0)
+                if (me.DeckOn.StartsWith("v:") && ParkedBus is { } stopped && stopped.Velocity.Length() < 0.3f && InStage > 6)
                 {
-                    Check(true, $"b stayed aboard through the drive and the brake: {me.DeckPos} (moved {me.DeckPos.Z - _localZ0:F2} m along), stunned {_stuns} time(s), hardest {me.MaxDeckAccel:F1} m/s²");
-                    Stage("to-exit");
+                    Check(true, $"b stayed aboard as the driver jumped out and the bus rolled to a stop: on '{me.DeckOn}' at {me.DeckPos}, stunned {_stuns} time(s), hardest {me.MaxDeckAccel:F1} m/s²");
+                    Stage("to-button");
                 }
+                else if (InStage > 130) { Check(false, "the bus never stopped with b aboard"); Finish(); }
+                break;
+            case "to-button":
+                // the parked bus's middle door from inside: shut as it pulled away? press it open
+                if (ParkedBus is not { } parked || parked.Visual is not { } pframe) return;
+                if (!_seen.Contains("pressed"))
+                {
+                    _target = OnBus(pframe, 1.195f - 0.45f, 0.3f, 5.06f);
+                    if (me.WalkControls == null) WalkTo(me, _target);
+                }
+                if (InStage > 4 && _seen.Add("pressed"))
+                {
+                    me.WalkControls = null;
+                    if ((parked.BusDoors & 2) == 0) Log($"button in reach: {me.ButtonInReach()?.Door}, E: {me.TryInteract()}");
+                }
+                if (InStage > 6 && (parked.BusDoors & 2) != 0) { Check(true, $"the middle door of the parked bus is open (doors {parked.BusDoors})"); Stage("to-exit"); }
+                else if (InStage > 12) { Check(false, $"the parked bus's door never opened (doors {parked.BusDoors})"); Finish(); }
                 break;
             case "to-exit":
-                var door = OnBus(bus!, 0.2f, 0.3f, 5.8f);
-                var outside = OnBus(bus!, 1.275f + 3f, 0.3f, 5.8f);
+                if (ParkedBus is not { } at || at.Visual is not { } xframe) return;
+                var door = OnBus(xframe, 0.2f, 0.3f, 5.8f);
+                var outside = OnBus(xframe, 1.275f + 3f, 0.3f, 5.8f);
                 WalkTo(me, me.DeckOn != "" && (me.GlobalPosition - door).Length() > 0.5f && !_seen.Contains("at-door") ? door : outside);
                 if ((me.GlobalPosition - door).Length() < 0.5f) _seen.Add("at-door");
                 if (me.DeckOn == "" && InStage > 1 && _seen.Add("out"))
                 {
-                    Check(me.RidingWith == 0, $"b walked out of the door: off the deck at {bus.Visual!.GlobalTransform.AffineInverse() * me.GlobalPosition}");
+                    Check(me.RidingWith == 0, $"b walked out of the door: off the deck at {xframe.GlobalTransform.AffineInverse() * me.GlobalPosition}");
                     Stage("outside");
                 }
                 else if (InStage > 15) { Check(false, $"b could not get out, at {me.DeckPos}"); Finish(); }

@@ -46,6 +46,26 @@
   1.5 m/s², 1 m/s; full all of it, 2 m/s², 3 m/s; beside a pole (0.35 m) a quarter. A hard brake from
   35 km/h (5.3 m/s² measured): sway 0.1 m, full 0.5 m forward. Knocked down (`_stunTimer`) past 7
   (sway) or 4.5 m/s² (full) held 0.35 / 0.25 s, twice that holding a pole.
+- **Door buttons** (`DeckButton`, `VehicleDeck.Buttons`): one inside and one outside each bus door,
+  at hand height ahead of the opening; anyone presses one with E or G (`TryDoorButton`, before
+  seats and getting in; hint "Open the door" / "Shut the door"). A parked bus: `VehicleManager.
+  ToggleDoor` (its authority, or the server checks the asker is by it); its doors are now live
+  replicated state (`VehicleBody.DoorsOpen`, kept in the flags when it is claimed). A driven one:
+  `PassengerService.PressDoor` → the server checks the asker is at that door's button → the host's
+  `Truck.ToggleDoor`. A bus shuts its doors **once, as it pulls away**; a door opened after that
+  stays open (on and off while moving, at your own risk); it used to shut them every step above
+  1.5 m/s.
+- **Nobody at the wheel rolls on with real physics, passengers or not**: a parked car, truck or bus
+  still moving (`VehicleBody.StepDriverless`) steps its own ride with no input, as a vehicle hosted
+  driverless by a seated passenger does (#158); a train's joints are replicated (`TrainAngles`) so the
+  trailer swings alike everywhere. A truck's engine only drags then (idling in drive, a bus's
+  converter crept on for ever): from 35 km/h on the flat a city bus coasted 332 m and stopped. At
+  rest it sleeps (no physics, a 2 s heartbeat) until someone gets in. A bike still just rolls and
+  falls over.
+- **The vehicle vanishing underfoot**: its driver got out, so it is a parked vehicle (or another
+  host's) a round trip later. A walker on it is carried on at its last speed (`_deckWait`) and
+  boards its new form, whose velocity starts from the one it publishes (measured after). There is a
+  ~0.4 m jump along the aisle at that moment.
 - **Seats and the wheel** (#158's seats): E aboard takes the seat whose **place to stand** is nearest
   (`AisleSpot`: beside it toward the aisle; the wheel's by the front door), not the nearest hip
   (the driver's seat is up on its platform: a passenger seat beside it came out nearer). A parked
@@ -55,12 +75,13 @@
   will be until the vehicle's new form (parked, or rehosted) is here. E from outside still drives a
   parked bus; it no longer seats a passenger (walk in).
 - **Checks**: `--decknet a|b` (loopback server + 2 clients: a drives a city bus, b walks in by the
-  middle door, sits, stands when it stops, rides standing through a drive and a hard brake, walks
-  out; both peers check where b is drawn), `--decknet solo pw` (one client: up from the wheel into the
-  now parked bus, out, back in, sit, stand, walk to the wheel, drive), both with `--deck-inertia`
+  middle door, sits, stands when it stops, presses the middle door open from inside as the bus
+  drives, rides standing until a jumps out at 35 km/h, stays aboard as it coasts to a stop, opens
+  the parked bus's door by its button and walks out; both peers check where b is drawn), `--decknet solo pw` (one client: up from the wheel into the
+  now parked bus, out, the outside button shuts and opens the door, back in, sit, stand, walk to the
+  wheel, drive), both with `--deck-inertia`
   on the server; `--avatars … --cockpit --heavy N --deck [--door]` draws the deck. Test traps met:
   both clients spawn on one spot (b was inside a's bus and was carried off), a headless client has
   no parked models (the parked vehicle's own node is the frame then).
-- **Limits**: buses only; a standing passenger is not a rider (a driver getting off with only
-  standing people aboard parks the bus, which coasts as parked vehicles do); a parked bus's doors
-  stay as its driver left them; no hand on a pole is drawn.
+- **Limits**: buses only; no hand on a pole is drawn; the ~0.4 m jump when the vehicle changes hands
+  under a walker; a parked train's trailer boxes take its pose only once it is at rest.

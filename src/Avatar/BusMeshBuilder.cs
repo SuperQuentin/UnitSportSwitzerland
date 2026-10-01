@@ -20,6 +20,8 @@ public static class BusMeshBuilder
     private static readonly Color Pole = new(0.95f, 0.78f, 0.15f);
     private static readonly Color CoachSeat = new(0.2f, 0.22f, 0.3f);
     private static readonly Color LightStrip = new(0.95f, 0.95f, 0.88f);
+    private static readonly Color DoorButton = new(0.95f, 0.78f, 0.15f);
+    private static readonly Color DoorButtonLamp = new(0.2f, 0.75f, 0.3f);
     private const float Wall = 0.08f;
     /// <summary>Window pillars: their width, and the glass between them a bus is built with.</summary>
     private const float Pillar = 0.1f, WindowLength = 1.35f;
@@ -113,6 +115,18 @@ public static class BusMeshBuilder
                 dk.Along(0f, from, floor, roof, 0.12f, side * (hw - 0.1f));
         foreach (var d in doors)
         {
+            // a button by each door, inside and out, anyone presses to open or shut it: just ahead
+            // of the opening, at hand height
+            float buttonAt = d.At - d.Width * 0.5f - 0.14f;
+            foreach (bool outside in new[] { false, true })
+            {
+                float x = outside ? -(hw + 0.012f) : -(inner + 0.012f);
+                var normal = new Vector3(outside ? -1f : 1f, 0, 0);
+                var at = new Vector3(x, (coach && !outside ? deck : floor) + 0.95f, cg - buttonAt);
+                m.Box(at, new Vector3(0.024f, 0.12f, 0.08f), DoorButton);
+                m.Box(at + normal * 0.012f + new Vector3(0, 0.02f, 0), new Vector3(0.004f, 0.04f, 0.04f), DoorButtonLamp);
+                dk.Button(d.Index, at, normal);
+            }
             // a shut door is solid; an open one has a step down to the road outside it (the walk has no
             // step-up), meeting the floor flush at its edge: a lip of even a centimetre stops the walk on it
             dk.Along(d.At - d.Width * 0.5f, d.At + d.Width * 0.5f, floor, roof, Wall, -(hw - Wall * 0.5f), DeckPart.DoorShut, d.Index);

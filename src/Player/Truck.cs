@@ -202,6 +202,15 @@ public sealed class Truck : Rideable, IEngined
     public bool Headlights { get; set; }
     /// <summary>Passenger doors open, one bit per door (<see cref="HeavyLook.Doors"/>).</summary>
     public byte DoorsOpen { get; set; }
+    private bool _pulledAway;
+
+    /// <summary>A door's button pressed (#162): that door opens or shuts; a stopped city bus kneels while any is open.</summary>
+    public void ToggleDoor(int door)
+    {
+        if (door < 0 || door >= DoorCount) return;
+        DoorsOpen ^= (byte)(1 << door);
+        if (Spec.Class != HeavyClass.Coach && !_pulledAway) Kneeling = DoorsOpen != 0;
+    }
     public int DoorCount => Spec.Look.Doors.Length;
     /// <summary>Lowered on the door side for boarding (buses).</summary>
     public bool Kneeling { get; set; }
@@ -486,9 +495,11 @@ public sealed class Truck : Rideable, IEngined
             WheelSpin[k] += b.V.Dot(b.Forward) / WheelRadius * dt;
         }
 
-        // a bus comes up off its knees when it pulls away
-        if (Kneeling && motion.Speed > 1.5f) Kneeling = false;
-        if (DoorsOpen != 0 && motion.Speed > 1.5f) DoorsOpen = 0;
+        // a bus shuts its doors and comes up off its knees as it pulls away; a door opened after
+        // that (a passenger's button, #162) stays open, at their own risk
+        bool moving = motion.Speed > 1.5f;
+        if (moving && !_pulledAway) { DoorsOpen = 0; Kneeling = false; }
+        _pulledAway = moving;
     }
 
     /// <summary>

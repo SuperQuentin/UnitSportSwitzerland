@@ -147,6 +147,19 @@ public partial class FootPlayer
             ClearDecks();
             return;
         }
+        // The vehicle under this player stopped being one here (its driver got out: it is a parked
+        // vehicle now, or somebody else's, arriving a round trip later). Its deck would follow the
+        // driver's walking body: carried on at its last speed until the vehicle is back, then aboard.
+        if (Aboard && (HostNamed(DeckOn) is not { } under || RideOfHost(under) is not { Walkable: true }))
+        {
+            var speed = _decks.TryGetValue(DeckOn, out var gone) ? gone.Velocity : Vector3.Zero;
+            var world = Velocity + speed;
+            LeaveDeck(keepVelocity: false);
+            Velocity = world;
+            _deckWait = 2.5f;
+            _deckWaitVelocity = world with { Y = 0 };
+            _deckScan = 0;
+        }
         _deckScan -= dt;
         if (_deckScan <= 0) { _deckScan = 0.5; ScanDecks(); }
 
@@ -227,7 +240,9 @@ public partial class FootPlayer
 
     private DeckSet BuildDeck(Node3D host, string key, Rideable ride)
     {
-        var set = new DeckSet { Host = host, Key = key, Ride = ride };
+        // its velocity starts as the vehicle publishes it (level, sane), until its motion is measured
+        var start = host switch { VehicleBody v => v.Velocity, FootPlayer p => p.WorldVelocity, _ => Vector3.Zero } with { Y = 0 };
+        var set = new DeckSet { Host = host, Key = key, Ride = ride, Velocity = start.LimitLength(60f) };
         foreach (var deck in ride.Decks)
         {
             var body = new StaticBody3D { Name = $"Deck_{key.Replace(':', '_')}_{deck.Section}", TopLevel = true, CollisionLayer = 0, CollisionMask = 0 };
@@ -439,6 +454,54 @@ public partial class FootPlayer
             if (!IsInstanceValid(p)) continue;
             foreach (var body in bodies) if (IsInstanceValid(body)) body.RemoveCollisionExceptionWith(p);
         }
+    }
+
+    // ---- door buttons, inside and out -----------------------------------------------------------
+
+    /// <summary>
+    /// The door button within a hand's reach of this player's chest, of any walkable vehicle near
+    /// (driven, or parked), and whether that door is open; null when none.
+    /// </summary>
+    public (Node3D Host, int Door, bool Open)? ButtonInReach()
+    {
+        var chest = GlobalPosition + Vector3.Up * 1.1f;
+        (Node3D, int, bool)? best = null;
+        float bestDist = PassengerService.ButtonReach;
+        var hosts = GetTree().GetNodesInGroup(Group).OfType<FootPlayer>().Where(p => p != this).Cast<Node3D>()
+            .Concat(VehicleManager.Instance?.GetChildren().OfType<VehicleBody>() ?? Enumerable.Empty<VehicleBody>());
+        foreach (var host in hosts)
+        {
+            if (host.GlobalPosition.DistanceTo(GlobalPosition) > DeckReach || RideOfHost(host) is not { Walkable: true } ride) continue;
+            byte doors = DoorsOfHost(host);
+            foreach (var deck in ride.Decks)
+            {
+                if (SectionFrame(host, deck.Section) is not { } frame) continue;
+                foreach (var button in deck.Buttons)
+                {
+                    float d = (frame.GlobalTransform * button.At).DistanceTo(chest);
+                    if (d < bestDist) { bestDist = d; best = (host, button.Door, (doors >> button.Door & 1) != 0); }
+                }
+            }
+        }
+        return best;
+    }
+
+    /// <summary>E or G at a door's button: the door opens or shuts, whoever presses it. True when there was one.</summary>
+    private bool TryDoorButton()
+    {
+        if (_ride != null || RidingWith != 0 || ButtonInReach() is not { } button) return false;
+        switch (button.Host)
+        {
+            case VehicleBody parked: Vehicles?.ToggleDoor(parked, (byte)(1 << button.Door)); break;
+            case FootPlayer host: PassengerService.Instance?.PressDoor(host, button.Door); break;
+        }
+        return true;
+    }
+
+    /// <summary>The host of a bus: somebody pressed one of its doors' buttons (the server checked they stand at it).</summary>
+    public void DoorPressed(int door)
+    {
+        if (_ride is Truck { IsBus: true } bus) bus.ToggleDoor(door);
     }
 
     // ---- seats and the wheel from the aisle ------------------------------------------------------

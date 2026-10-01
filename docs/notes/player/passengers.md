@@ -29,7 +29,8 @@
 - **The driver gets out (or bails) at any speed with people aboard**: not handed to a passenger, not
   parked. `HostLeaving` sends the state; the server makes the **first rider** the host, sat where it
   was (`TakeVehicle`, `SeatIndex` > 0), and the car rolls on with **no input**: no pedal, the wheel
-  let go (`RidePhysics`), into the ditch or down the hill. The others are `Moved` to the new host.
+  let go (`RidePhysics`), a truck's engine only dragging, into the ditch or down the hill. With
+  nobody seated, the parked vehicle does the same (#162, `walk-aboard`). The others are `Moved` to the new host.
   A motorbike cannot: its pillion is put off (`Eject`) and it is parked as before. A host that
   leaves the game: the same, from the server's copy (`VehicleStateOfCopy`).
 - **Taking the wheel** (`take_wheel`: F / RB, the trick keys, which a passenger never uses): only

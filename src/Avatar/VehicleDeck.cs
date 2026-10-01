@@ -12,6 +12,9 @@ public enum DeckPart { Solid, DoorShut, DoorStep }
 /// </summary>
 public readonly record struct DeckBox(Vector3 Centre, Vector3 Size, Basis Basis, DeckPart Part = DeckPart.Solid, int Door = -1);
 
+/// <summary>A door's button (#162): which door, where it is and which way it faces, in the section's node frame.</summary>
+public readonly record struct DeckButton(int Door, Vector3 At, Vector3 Normal);
+
 /// <summary>
 /// A vehicle you can walk around in (#162), one section of it: what is solid (walls with real door
 /// holes, floors, ramps where the floor changes height, seats, poles), the volume that counts as
@@ -23,7 +26,11 @@ public readonly record struct DeckBox(Vector3 Centre, Vector3 Size, Basis Basis,
 /// <param name="Boxes">The collision.</param>
 /// <param name="Aboard">Standing inside this box, node frame, is being aboard: carried by the vehicle.</param>
 /// <param name="Holds">Poles a standing passenger steadies on when beside one, as points on the floor plan (x, z).</param>
-public sealed record VehicleDeck(int Section, DeckBox[] Boxes, Aabb Aboard, Vector2[] Holds);
+public sealed record VehicleDeck(int Section, DeckBox[] Boxes, Aabb Aboard, Vector2[] Holds)
+{
+    /// <summary>The buttons anyone presses to open or shut a door, inside and out.</summary>
+    public DeckButton[] Buttons { get; init; } = System.Array.Empty<DeckButton>();
+}
 
 /// <summary>
 /// Collects a deck's boxes from the same numbers its model is built from: authored space (+Z forward,
@@ -35,6 +42,7 @@ public sealed class DeckBuilder
     private readonly float _cg;
     private readonly List<DeckBox> _boxes = new();
     private readonly List<Vector2> _holds = new();
+    private readonly List<DeckButton> _buttons = new();
 
     public DeckBuilder(float cg) => _cg = cg;
 
@@ -87,6 +95,9 @@ public sealed class DeckBuilder
         _boxes.Add(new DeckBox(Node(centre), new Vector3(width, thick, length), basis.Orthonormalized(), part, door));
     }
 
+    /// <summary>A door's button at an authored point, facing authored <paramref name="normal"/>.</summary>
+    public void Button(int door, Vector3 at, Vector3 normal) => _buttons.Add(new DeckButton(door, Node(at), Node(normal)));
+
     /// <summary>A pole or rail to hold, as an authored point on the floor plan.</summary>
     public void Hold(float x, float at) => _holds.Add(new Vector2(-x, -(_cg - at)));
 
@@ -96,6 +107,6 @@ public sealed class DeckBuilder
         var a = aboardAuthored;
         var min = new Vector3(-a.End.X, a.Position.Y, -a.End.Z);
         var aboard = new Aabb(min, a.Size);
-        return new VehicleDeck(section, _boxes.ToArray(), aboard, _holds.ToArray());
+        return new VehicleDeck(section, _boxes.ToArray(), aboard, _holds.ToArray()) { Buttons = _buttons.ToArray() };
     }
 }
