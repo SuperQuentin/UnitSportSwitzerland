@@ -488,6 +488,7 @@ public static partial class InteriorGenerator
                 if (Free(nave, rect, placed, blocked, 0.05f))
                     Add(l, 0, new Piece(FurnitureType.Pew, pewW, pewD, 0.9f, false), rect, 0, placed);
             }
+        FillFrontPews(l, 0);
 
         // the bell, hung over the stair-free half of the chamber
         if (climb != null && l.Floors.Count > 1)

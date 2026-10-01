@@ -1207,6 +1207,17 @@ public static partial class InteriorGenerator
                 if (Free(r, rect, placed, blocked, 0.05f))
                     Add(l, f, new Piece(FurnitureType.Pew, pewW, 0.5f, 0.9f, false), rect, 0, placed);
             }
+        FillFrontPews(l, f);
+    }
+
+    /// <summary>The row nearest the altar is full: the pastor rat's congregation (#241).</summary>
+    private static void FillFrontPews(InteriorLayout l, int f)
+    {
+        var pews = l.Furniture.Where(p => p.Floor == f && p.Type == FurnitureType.Pew).ToList();
+        if (pews.Count == 0) return;
+        float front = pews.Max(p => p.Z);
+        foreach (var p in pews)
+            if (p.Z > front - 0.05f) p.Type = FurnitureType.FrontPew;
     }
 
     private static void Desks(InteriorLayout l, int f, RoomPlan r, List<RectPlan> placed, List<RectPlan> blocked)

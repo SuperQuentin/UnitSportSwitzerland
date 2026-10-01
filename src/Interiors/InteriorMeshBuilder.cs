@@ -20,7 +20,7 @@ namespace UnitSport.Interiors;
 /// Alpha 0 marks glass: the shader draws it as the sky of the hour (<c>world_sky</c>), unlit.
 /// </para>
 /// </summary>
-public static class InteriorMeshBuilder
+public static partial class InteriorMeshBuilder
 {
     public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector3[] Collision);
 
@@ -713,10 +713,13 @@ public static class InteriorMeshBuilder
                 B(-w, H, -d, w, H + 0.03f, d, dark);
                 break;
             case FurnitureType.Pew:
+            case FurnitureType.FrontPew:
                 B(-w, 0.42f, -d + 0.1f, w, 0.47f, d, wood);
                 B(-w, 0.42f, -d, w, H, -d + 0.08f, wood);
                 B(-w, 0, -d, -w + 0.06f, 0.42f, d, darkWood);
                 B(w - 0.06f, 0, -d, w, 0.42f, d, darkWood);
+                if (p.Type == FurnitureType.FrontPew)
+                    Congregation(p, w, d, (a, b, col) => B(a.X, a.Y, a.Z, b.X, b.Y, b.Z, col));
                 break;
             case FurnitureType.Car:
                 var paint = C(0.62f, 0.14f, 0.12f);
