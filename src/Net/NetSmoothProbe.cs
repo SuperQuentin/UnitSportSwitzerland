@@ -69,7 +69,7 @@ public partial class NetSmoothProbe : Node
             Pick(local);
             return;
         }
-        if (!GodotObject.IsInstanceValid(_target)) { Finish("target left"); return; }
+        if (!GodotObject.IsInstanceValid(_target) || !_target.IsInsideTree()) { Finish("target left"); return; }
         _rec.Add((_t, dt, _target.GlobalPosition));
         FloorGap(_target);
         if (_t - _rec[0].T >= _seconds) Finish(null);
