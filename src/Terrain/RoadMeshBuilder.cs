@@ -67,6 +67,7 @@ public static class RoadMeshBuilder
                 AppendBridgeStructure(seg, tile.Id, grid, vertices, colors, uvs, uv2s, indices);
         }
         RoadWallBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // retaining walls (#125)
+        RoadSignBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // junction signs (#121)
 
         return vertices.Count == 0
             ? null

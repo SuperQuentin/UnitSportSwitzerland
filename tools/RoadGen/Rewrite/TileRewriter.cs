@@ -23,7 +23,7 @@ using UnitSport.Tools.RoadGen.Network;
 /// seconds instead of a fourteen-minute rebuild.
 /// </para>
 /// </summary>
-public static class TileRewriter
+public static partial class TileRewriter
 {
     /// <param name="BlockSize">Tiles per side processed together.</param>
     /// <param name="Halo">
@@ -80,6 +80,7 @@ public static class TileRewriter
         public string MaxBytesTile = "";
         public readonly PaintEmitter.Tally Paint = new();
         public readonly RailRoadOverlap.Tally Rail = new();
+        public readonly PriorityPlanner.Stats Priority = new();
 
         public string Format(int tiles)
         {
@@ -91,7 +92,7 @@ public static class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Rail.Format();
+                """) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Rail.Format() + "\n" + Priority.Format();
         }
     }
 
@@ -239,6 +240,7 @@ public static class TileRewriter
         var shiftAudit = new HeightAuditor();
         var netStats = new NetworkStats();
         var embankments = new EmbankmentPlanner.Stats();
+        var buildings = new Footprints(chunkDir);
 
         foreach (var block in blocks)
         {
@@ -285,6 +287,7 @@ public static class TileRewriter
             var output = new Dictionary<TileId, List<RoadSegment>>();
             var caps = new Dictionary<TileId, List<RoadJunction>>();
             var paint = new Dictionary<TileId, List<RoadPaint>>();
+            var signs = new Dictionary<TileId, List<RoadPointProp>>();
 
             // the full-res terrain of the block and its halo: the height audit and the walls (#125)
             var grids = LoadGrids(chunkDir, context);
@@ -303,7 +306,10 @@ public static class TileRewriter
                     BuildJunctions: true,
                     SimplifyTolerance: options.SimplifyTolerance,
                     ChordTolerance: options.ChordTolerance,
-                    Analyze: options.Measure));
+                    Analyze: options.Measure,
+                    JoinNearEnds: MayJoinNearEnd));
+                netStats.Priority.NearEndsJoined += result.NearEndsJoined;
+                var priority = PlanPriority(result);
 
                 overlapAfter += result.Report.OverlapArea;
                 foreach (var (pair, area) in result.Report.TopOverlapPairs ?? [])
@@ -314,7 +320,7 @@ public static class TileRewriter
 
                 // Final plan of every ribbon, halo included: the halo's divided carriageways are
                 // the partners the block's ones take their direction from.
-                var plans = new List<(Source Source, List<Vec2> Plan, bool Write)>();
+                var plans = new List<(Source Source, List<Vec2> Plan, bool Write, int LinkId)>();
                 foreach (var ribbon in result.Ribbons)
                 {
                     var link = result.Network.Links[ribbon.LinkId];
@@ -332,10 +338,10 @@ public static class TileRewriter
                         // the terrain would measure the bridge, not the smoothing
                         audit.Add(plan, source, terrain);
                     }
-                    plans.Add((source, plan, write));
+                    plans.Add((source, plan, write, link.Id));
                 }
 
-                foreach (var (source, plan, write) in plans)
+                foreach (var (source, plan, write, linkId) in plans)
                 {
                     // rails inside a carriageway (#124); halo rails too, their track zone may reach into the block
                     var pieces = source.Segment.Class == RoadClass.Railway
@@ -362,6 +368,7 @@ public static class TileRewriter
                             key.FromM + source.AlongOf(plan[0]), key.FromM + source.AlongOf(plan[^1])) is { } row)
                         attributes = CrossSectionPlanner.Finish(OsmOverlayReader.Apply(attributes, row), source.Line);
 
+                    attributes = attributes with { Flags = attributes.Flags | priority.FlagsOf(linkId) };   // #121
                     var segment = ToSegment(plan, source, attributes);
                     list.Add(segment);
                     written++;
@@ -381,6 +388,8 @@ public static class TileRewriter
                     list.Add(record);
                     junctionCount++;
                 }
+
+                EmitPriority(priority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
             }
 
             foreach (var id in block)
@@ -402,6 +411,7 @@ public static class TileRewriter
                     Id = id, Segments = segments, Junctions = junctions, Flags = flags,
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
+                    PointProps = signs.TryGetValue(id, out var sp) ? sp : new List<RoadPointProp>(),
                 };
                 rails.ClearTrackZones(tile.Paint, id);
                 var bytes = Encode(tile);

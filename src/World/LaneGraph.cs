@@ -31,6 +31,13 @@ public sealed class LaneEdge
     /// </summary>
     public float RightLane { get; init; }
 
+    /// <summary>
+    /// Traffic leaving this edge at its first (<see cref="RoadAttrFlags.YieldAtStart"/>) or last
+    /// point (<see cref="RoadAttrFlags.YieldAtEnd"/>) gives way there: the side road of a junction
+    /// with a main road (#121, v3 tiles; none in v1/v2).
+    /// </summary>
+    public RoadAttrFlags Yield { get; init; }
+
     public float Length => Cumulative[^1];
 
     /// <summary>Position and unit tangent at arc length <paramref name="s"/> along the drawing order.</summary>
@@ -108,6 +115,7 @@ public sealed class LaneGraph
                     Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags,
                     Width = seg.Width, KeyStart = KeyOf(pts[0]), KeyEnd = KeyOf(pts[^1]),
                     OneWay = seg.Attributes.OneWay,
+                    Yield = seg.Attributes.Flags & (RoadAttrFlags.YieldAtStart | RoadAttrFlags.YieldAtEnd),
                     RightLane = RoadCrossSection.RightLaneOffset(seg.Class, seg.Width,
                         Math.Max(seg.Attributes.LanesForward, seg.Attributes.LanesBackward)),
                 };

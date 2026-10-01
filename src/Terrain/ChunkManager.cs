@@ -1486,7 +1486,8 @@ public partial class ChunkManager : Node3D
                     // bridges get their own small collision body alongside the blended ground.
                     // and retaining walls (#125): a heightfield cannot stand a vertical face either
                     bridgeCollision = [.. RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile),
-                        .. RoadWallBuilder.BuildCollisionFaces(roadTile)];
+                        .. RoadWallBuilder.BuildCollisionFaces(roadTile),
+                        .. RoadSignBuilder.BuildCollisionFaces(roadTile)];   // sign poles (#121)
                 }
                 else if (wantCollision && (!publishInterimCollision || newGarageCells))
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes); // no road tile after all

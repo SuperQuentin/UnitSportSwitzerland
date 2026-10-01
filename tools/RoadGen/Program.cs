@@ -42,6 +42,7 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
 
           --format-check        .road v1/v2/v3 codec self-check (round trips, unknown sections)
           --plan-check          width/lanes/one-way/motorway-offset self-check (synthetic lines)
+          --priority-check      junction priority self-check: main road, Wartelinie, signs (#121)
           --compare-v2 V2DIR --chunks V3DIR
                                  v3 tiles against a v2 build of the same region: same geometry,
                                  one-way agreement with the runtime inference, bytes per tile
@@ -95,6 +96,10 @@ else if (args.Contains("--format-check"))
 else if (args.Contains("--plan-check"))
 {
     return UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.SelfCheck(Console.WriteLine) ? 0 : 2;
+}
+else if (args.Contains("--priority-check"))
+{
+    return UnitSport.Tools.RoadGen.Junctions.PriorityPlanner.SelfCheck(Console.WriteLine) ? 0 : 2;
 }
 else if (ArgValue("--compare-v2") is { } v2Dir)
 {

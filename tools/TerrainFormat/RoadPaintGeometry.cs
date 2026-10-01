@@ -51,9 +51,32 @@ public static class RoadPaintGeometry
         return runs;
     }
 
-    /// <summary>Triangles the game draws for this primitive: two per run edge, or the list as stored.</summary>
+    /// <summary>Triangles the game draws for this primitive: two per run edge, one per tooth, or the list as stored.</summary>
     public static int TriangleCount(RoadPaint p) =>
-        p.Shape == PaintShape.Triangles ? p.Indices.Length / 3 : Runs(p).Sum(r => Math.Max(0, r.Length / 3 - 1) * 2);
+        p.Shape == PaintShape.Triangles ? p.Indices.Length / 3
+        : p.Type == PaintType.SharkTooth ? Runs(p).Count
+        : Runs(p).Sum(r => Math.Max(0, r.Length / 3 - 1) * 2);
+
+    /// <summary>
+    /// A <see cref="PaintType.SharkTooth"/> polyline (#121, the Swiss Wartelinie 6.13) as triangles,
+    /// xyz × 3 each: <c>Dash</c> is a tooth's base, <c>Gap</c> the space between two, <c>Width</c> its
+    /// height; each dash run is a base and its apex lies <c>Width</c> to the RIGHT of the line's
+    /// direction (x east, z south: right of (dx, dz) is (-dz, dx)), toward the approaching driver.
+    /// Two vertices store a whole row.
+    /// </summary>
+    public static List<float[]> Teeth(RoadPaint p)
+    {
+        var teeth = new List<float[]>();
+        foreach (var run in Runs(p))
+        {
+            float ax = run[0], ay = run[1], az = run[2], bx = run[^3], by = run[^2], bz = run[^1];
+            float dx = bx - ax, dz = bz - az, len = MathF.Sqrt(dx * dx + dz * dz);
+            if (len < 1e-4f) continue;
+            float rx = -dz / len * p.Width, rz = dx / len * p.Width;
+            teeth.Add([ax, ay, az, bx, by, bz, (ax + bx) * 0.5f + rx, (ay + by) * 0.5f, (az + bz) * 0.5f + rz]);
+        }
+        return teeth;
+    }
 
     private static void Flush(List<float[]> runs, List<float> cur)
     {
