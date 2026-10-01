@@ -3,8 +3,8 @@
 
 # Visual styles: PS1, Cartoon, Realistic− and Realistic+
 
-Status: **exploration**. Issue #181. The first step is a throwaway vertical prototype (phase 0).
-Its results decide whether to build the framework and which style comes first.
+Status: **phase 1 in progress** (issue #212). Phase 0 is done (issue #181): the prototype's
+results, at the end of this file, decided to build the framework and to do Cartoon first.
 
 ## Goal
 
@@ -178,12 +178,16 @@ Realistic+ → Realistic− → Cartoon → PS1 (base)
 
 Forest tiles hold up to 60k trees, so trees decide the frame time more than anything else.
 
-- **Far: billboards in every style.** A camera-facing quad per tree, from the same instance
-  buffer. PS1 and Cartoon draw the silhouette procedurally in the shader (PS1: the 5-sided cone
-  and bipyramid, shaded in 5 facets; Cartoon: puffy blobs and tiered cones). The realistic styles
-  sample an **impostor baked at startup** from the 3D tree, so near and far match.
-- **Near: 3D trees**, crossfaded per tree with a dither. The distance is measured from the
-  player's camera (`world_cam_pos`), not the rendering camera, so the shadow pass agrees.
+- **Far: billboards in every style.** A quad per tree, from the same instance buffer. PS1
+  **ray-traces** its unit meshes on the quad (both crowns are convex bipyramids, the trunk a
+  prism: 17 plane tests a pixel), so the silhouette and facets match the 3D tree from any angle;
+  a camera-facing picture of a cone shrinks to a sliver seen from above, and the forest floor
+  shows through (found in phase 1, `docs/notes/styles/tree-lod.md`). Cartoon's puffy blobs and
+  tiered cones can be ray-traced the same way (ellipsoids, cones). The realistic styles sample an
+  **impostor baked at startup** from the 3D tree, so near and far match.
+- **Near: 3D trees**, crossfaded per tree with a dither, the billboard taking exactly the pixels
+  the 3D tree gives up. The distance is measured from the player's camera (`world_cam_pos`),
+  not the rendering camera, so every view (and in the lit styles the shadow pass) agrees.
 - **Cheap trees (PS1 20 triangles, Cartoon ~120) can stay per tile**: the shader collapses the
   far ones, and a tile-level visibility range drops whole tiles.
 - **Expensive trees (realistic, ~2.5–3.5k triangles) need CPU culling per tree** (`NearTrees`):
@@ -282,6 +286,19 @@ Nothing gets merged.
 
 ### Phase 1: framework, with no visible change
 
+In two parts, because #185 (floating origin) and the road network stack (#114) were changing
+the tile shaders and `ChunkManager` at the same time:
+
+- **Part 1 (#212):** `VisualStyle` and `--style`, `StyleKit` with the fallback chain and
+  `--style-report`, every `ps1_*` load routed through it, tree LOD in PS1 (ray-traced
+  billboards, the tile-level cut, `world_cam_pos`), and the timing check
+  (`tools/style-shots.sh`, `--origin`, `g` heights, `frame=` per shot). `NearTrees` waits for
+  phase 2, where Cartoon is its first user.
+- **Part 2 (after #185 and #114):** the role bodies and neutral switches, `shaders/common/`,
+  `DayNight` driving the kit's environment, rebuild in place, `MeshDetail`, per-style terrain LOD.
+
+The original scope:
+
 `VisualStyle` setting and `--style`. `StyleKit` with the fallback chain and `--style-report`,
 with every `ps1_*` load routed through it, and the neutral switches in the base shaders.
 `shaders/common/` extracted. `DayNight` drives the kit's environment. "Rebuild world visuals in
@@ -339,7 +356,7 @@ Decide the default (PS1 or Cartoon) from the phase 2 and 3 results and player fe
 Phase 0, branch `feat/181-visual-styles-prototype` (issue #181). Riddes (VS), tiles 2582–2583 /
 1112–1113, 14:00 and 19:20. Measured on an **Apple M1 Pro** (1152×648 window, render scale
 0.75), the only machine available. Screenshots and logs: `test_output/styles/` in the worktree;
-the side-by-side is `test_output/styles/styles_comparison.png` (rows PS1, Cartoon, Realistic−,
+the side-by-side is `docs/plans/visual-styles-phase0.jpg` on that branch (rows PS1, Cartoon, Realistic−,
 Realistic+; columns street, chase cam, valley). Every timing run pins the origin to
 `--origin 2590000,1116500`; runs whose frames stalled (see finding 8) are discarded.
 

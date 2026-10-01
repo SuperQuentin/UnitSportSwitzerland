@@ -64,7 +64,7 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
 
     public override void _Ready()
     {
-        _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_prop.gdshader") };
+        _material = Styles.StyleKit.Material(Styles.MaterialRole.Prop);
         _material.SetShaderParameter("flicker", 0.6f);
         FogUniforms.Apply(_material);
     }

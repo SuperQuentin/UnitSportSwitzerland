@@ -84,6 +84,10 @@ world_origin_offset={
 "type": "vec2",
 "value": Vector2(0, 0)
 }
+world_cam_pos={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
 world_door_light_0={
 "type": "vec4",
 "value": Vector4(0, 0, 0, 0)
