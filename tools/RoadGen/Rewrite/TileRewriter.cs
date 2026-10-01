@@ -6,6 +6,7 @@ using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.Import;
 using UnitSport.Tools.RoadGen.Geometry;
 using UnitSport.Tools.RoadGen.Junctions;
+using UnitSport.Tools.RoadGen.Meshing;
 using UnitSport.Tools.RoadGen.Network;
 
 /// <summary>
@@ -72,6 +73,7 @@ public static class TileRewriter
         public long Bytes, DeflatedBytes;
         public int MaxBytes;
         public string MaxBytesTile = "";
+        public readonly PaintEmitter.Tally Paint = new();
 
         public string Format(int tiles)
         {
@@ -83,7 +85,7 @@ public static class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """);
+                """) + "\n" + Paint.Format(tiles);
         }
     }
 
@@ -267,6 +269,7 @@ public static class TileRewriter
 
             var output = new Dictionary<TileId, List<RoadSegment>>();
             var caps = new Dictionary<TileId, List<RoadJunction>>();
+            var paint = new Dictionary<TileId, List<RoadPaint>>();
 
             if (net.Links.Count > 0)
             {
@@ -328,8 +331,12 @@ public static class TileRewriter
                             key.FromM + source.AlongOf(plan[0]), key.FromM + source.AlongOf(plan[^1])) is { } row)
                         attributes = OsmOverlayReader.Apply(attributes, row);
 
-                    list.Add(ToSegment(plan, source, attributes));
+                    var segment = ToSegment(plan, source, attributes);
+                    list.Add(segment);
                     written++;
+
+                    if (!paint.TryGetValue(source.Tile, out var painted)) paint[source.Tile] = painted = new List<RoadPaint>();
+                    PaintEmitter.Emit(segment, source.Key is { } k ? k.FromM + source.AlongOf(plan[0]) : 0, painted);
                 }
 
                 foreach (var junction in result.Junctions)
@@ -358,7 +365,11 @@ public static class TileRewriter
 
                 var flags = RoadTileFlags.Network;
                 if (segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) flags |= RoadTileFlags.Osm;
-                var tile = new RoadTile { Id = id, Segments = segments, Junctions = junctions, Flags = flags };
+                var tile = new RoadTile
+                {
+                    Id = id, Segments = segments, Junctions = junctions, Flags = flags,
+                    Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
+                };
                 var bytes = Encode(tile);
                 Count(netStats, tile, bytes);
 
@@ -434,6 +445,7 @@ public static class TileRewriter
             st.DeflatedBytes += Math.Min(ms.Length, bytes.Length);
         }
         if ((tile.Flags & RoadTileFlags.Osm) != 0) st.OsmTiles++;
+        st.Paint.Add(tile);
 
         foreach (var seg in tile.Segments)
         {
