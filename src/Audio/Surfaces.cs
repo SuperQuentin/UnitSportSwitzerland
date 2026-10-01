@@ -200,6 +200,8 @@ public static class Surfaces
                 for (int i = 0; i + 5 < _segs[k].Points.Length; i += 3) all.Add((k, i));
             var rng = new Random(tile.E * 7919 + tile.N);
             int n = 0, bad = 0, road = 0;
+            long fullTicks = 0, cellTicks = 0;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
             foreach (var (k, i) in all)
             {
                 if (rng.NextDouble() > 1000.0 / all.Count) continue;
@@ -209,13 +211,19 @@ public static class Surfaces
                 {
                     double lx = pts[i] + (rng.NextDouble() * 2 - 1) * r, lz = pts[i + 2] + (rng.NextDouble() * 2 - 1) * r;
                     float y = pts[i + 1] + (float)(rng.NextDouble() * 2 - 1) * 4f;
+                    long t0 = clock.ElapsedTicks;
                     var full = Nearest(lx, lz, y, all);
+                    long t1 = clock.ElapsedTicks;
+                    var cell = Nearest(lx, lz, y, Cell(lx, lz));
+                    cellTicks += clock.ElapsedTicks - t1;
+                    fullTicks += t1 - t0;
                     n++;
                     if (full != null) road++;
-                    if (full != Nearest(lx, lz, y, Cell(lx, lz))) bad++;
+                    if (full != cell) bad++;
                 }
             }
-            GD.Print($"[surfacecheck] tile {tile}: {all.Count} pieces, {n} lookups ({road} on a road), {bad} differ from the full scan RESULT {(bad == 0 ? "ok" : "FAIL")}");
+            GD.Print($"[surfacecheck] tile {tile}: {all.Count} pieces, {n} lookups ({road} on a road), {bad} differ from the full scan, "
+                + $"{fullTicks * 1e6 / System.Diagnostics.Stopwatch.Frequency / Math.Max(n, 1):F2} µs a full scan, {cellTicks * 1e6 / System.Diagnostics.Stopwatch.Frequency / Math.Max(n, 1):F2} µs a cell RESULT {(bad == 0 ? "ok" : "FAIL")}");
         }
     }
 
