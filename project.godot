@@ -45,6 +45,10 @@ lights_and_shadows/directional_shadow/size.mobile=4096
 
 [shader_globals]
 
+xr_smooth={
+"type": "bool",
+"value": false
+}
 world_sun_dir={
 "type": "vec3",
 "value": Vector3(0.45, 0.8, 0.25)
@@ -140,4 +144,5 @@ portal_clip_plane_3={
 
 [xr]
 
+openxr/submit_depth_buffer=true
 shaders/enabled=true
