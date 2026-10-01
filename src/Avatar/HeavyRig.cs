@@ -228,6 +228,10 @@ public partial class HeavyRig : Node3D
     public Transform3D EyeFrame => _cockpit == null ? Transform3D.Identity
         : _body.Transform * new Transform3D(Basis.Identity, _cockpit.Eye);
 
+    /// <summary>The steering wheel for VR hands (#243), as <see cref="CarRig.SteeringGrip"/>. Null on a section with no cockpit.</summary>
+    public (Node3D Wheel, Vector3 Axis, float Radius)? SteeringGrip =>
+        _cockpit is { } c ? (_wheel, c.ColumnAxis, c.Seat.WheelRadius) : null;
+
     /// <summary>A seat's hip in the rig's own frame, on the kneeling, rolling body: where someone sitting in it goes.</summary>
     public Transform3D SeatFrame(SeatAnchor seat) => _body.Transform * new Transform3D(Basis.Identity, seat.Hip);
 

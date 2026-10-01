@@ -15,7 +15,22 @@
 - **Triggers and grips.**
   - On foot, the triggers act as **shoulders**: right = use item / fire, left = aim.
   - Mounted, they act as **triggers**: throttle, and brake / plough.
-  - The grips are always the shoulders (trick, boost, items).
+  - The grips are the shoulders (trick, boost, items), except while a grip holds something
+    (below): `XrPad.LeftGripBusy` / `RightGripBusy` mute it until it opens.
+- **Hands (#243, `XR/XrHands`).** A grip closing (> 0.7, opens < 0.35) is the hand closing.
+  - **Steering wheel**, first person in the driver's seat (car, truck, bus): a hand within 0.14 m of
+    the rim catches it; its marker snaps onto the rim and rides round with it. The hands' turn about
+    the column (in the column's frame, so the vehicle turning does not count) accumulates into an
+    absolute, multi-turn angle clamped to ±`WheelLock`/2, sent as `XrSession.WheelAngle` and merged
+    in `FootPlayer.RidePhysics` as `RideInput.WheelAngle` (the #68 real-wheel channel). Two hands:
+    the mean of their turns. A hand lets go when the grip opens or when pulled > 0.22 m off its
+    point; with no hand on, `WheelAngle` is NaN and the sticks steer (the rack self-centres).
+    Haptic ticks on grab, every 0.4 rad, and on a slip. Rigs expose `SteeringGrip` (node, column
+    axis, rim radius).
+  - **Doors**, on foot: a grip closing with the hand within 0.6 m of a car door's middle
+    (`FootPlayer.TryToggleCarDoor(hand)`) or 0.7 m of a building doorway, between sill and lintel
+    (`InteriorManager.TryDoorByHand`), toggles it through the usual server-checked paths. A toggle,
+    not a hand-driven swing: door state is binary on the network.
 - **Flight gap.** In `FootPlayer`, flight reads `Input.GetJoyAxis(0, Trigger*)` directly, and
   parsed events do not set that. In an aircraft, climb and descend come from A and B
   (Jump / Crouch) only.

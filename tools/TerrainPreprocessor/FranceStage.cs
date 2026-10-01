@@ -164,10 +164,9 @@ public static class FranceStage
         var tileData = new RoadTile { Id = tile, Segments = new List<RoadSegment>() };
         if (File.Exists(original))
         {
+            // the whole tile, v3 layers and header flags included
             using var fs = File.OpenRead(original);
-            var decoded = RoadCodec.Decode(fs);
-            tileData.Segments.AddRange(decoded.Segments);
-            tileData.Junctions.AddRange(decoded.Junctions);
+            tileData = RoadCodec.Decode(fs);
         }
 
         int swiss = tileData.Segments.Count;

@@ -4,6 +4,7 @@
 # must see a's copy go limp, follow a's replicated position and get up when a does.
 #   tools/crashnetcheck.sh                 (terrain_chunks/ in this checkout)
 #   CHUNKS=/path/to/terrain_chunks tools/crashnetcheck.sh   (a worktree without terrain data)
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 PORT=7814
 PW=crashcheck

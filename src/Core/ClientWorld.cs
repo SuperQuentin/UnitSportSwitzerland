@@ -141,7 +141,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         if (ChatCheck.Requested)
         {
-            GetTree().Quit(ChatCheck.Run());
+            GetTree().Quit(ChatCheck.Run(this));
             return;
         }
         if (StyleKit.ReportRequested)
@@ -156,6 +156,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // idempotent: the shell, which owns the window settings, has usually installed it already
         PlayerInput.Install(GetParent());
+        if (Player.WheelProbe.CheckRequested)
+        {
+            GetTree().Quit(Player.WheelProbe.Check());
+            return;
+        }
 
         // a hand-made street to show the door portals: no terrain, no server
         if (Interiors.PortalDemo.ParseArgs() is { Requested: true } portalDemo)
@@ -373,7 +378,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _chunks.AddAnchor(tcam);
             var (tE, tN) = SpawnPoint.ParseTarget();
             tcam.Position = origin.ToWorld(tE, tN, 600);
-            AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot));
+            AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot)
+                { Origin = origin });
         }
 
         // Start somewhere with something to look at, not at the world origin — after a
@@ -385,7 +391,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || FlightProbe.ParseArgs() != null
             || RideProbe.ParseArgs() != null || TruckProbe.Requested || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
-            || RoadStandProbe.Requested() || MantleProbe.Requested() || VoidProbe.Requested()
+            || RoadStandProbe.Requested() || RoadPerfProbe.ParseArgs() != null || MantleProbe.Requested() || VoidProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Interiors.DoorWatchProbe.ParseArgs().Requested
             || Loot.LootProbe.ParseArgs() != null
@@ -395,6 +401,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Combat.CombatProbe.ParseArgs().Requested
             || Birds.BirdStrikeProbe.ParseArgs().Requested
             || SyncProbe.Requested() || HitboxProbe.Requested();
+        // --wheelwatch spawns normally, but must not grab the pointer either
+        MouseCapture.Disabled |= Player.WheelProbe.WatchRole != null;
         // a check running in a window must leave the pointer to whoever is using the machine
         MouseCapture.Disabled |= placedByTool;
 
@@ -463,6 +471,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
+        if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
         if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));
@@ -683,6 +692,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             var (vE, vN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(vE, vN, 1200);
             AddChild(new VoidProbe(_chunks, origin));
+            return;
+        }
+
+        if (RoadPerfProbe.ParseArgs() is { } roadPerf)
+        {
+            AddChild(new RoadPerfProbe(roadPerf.Dir, roadPerf.Label));
             return;
         }
 
@@ -1130,6 +1145,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(PlayerReplication.CreateSpawner());
         AddChild(World.RaceNpcs.CreateClient());   // World/Npcs: the path its RPC routes by
         if (NetSmoothProbe.ParseArgs() is { } smooth) AddChild(new NetSmoothProbe(_players, smooth.Seconds, smooth.Label));
+        if (WallOffProbe.ParseArgs() is { } wallOff) AddChild(new WallOffProbe(_players, _chunks!, _worldOrigin!, wallOff));
         var net = new NetworkManager { Name = "Net" };
         AddChild(net);
         // Handles bare hosts, host:port, and bracketed IPv6 — a plain colon split breaks on
