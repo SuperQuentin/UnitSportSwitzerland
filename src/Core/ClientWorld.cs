@@ -335,7 +335,8 @@ public partial class ClientWorld : Node3D
         // large import that is usually empty space. "--at E,N" overrides it (LV95 metres).
         // --shot and --probe place the camera themselves, and a spawn drop would fight
         // them for the height.
-        bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
+        bool placedByTool = ShotRunner.ParseArgs() != null || ShotRunner.ParseQueueArg() != null
+            || TunnelProbe.ParseArgs() != null
             || FlightProbe.ParseArgs() != null
             || RideProbe.ParseArgs() != null || TruckProbe.Requested || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
@@ -745,6 +746,13 @@ public partial class ClientWorld : Node3D
             AddChild(new ShotRunner(_spectator,
                 new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
                 float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]));
+        }
+        else if (ShotRunner.ParseQueueArg() is { } queue)
+        {
+            _spectator.SetProcess(false);
+            _spectator.SetProcessUnhandledInput(false);
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+            AddChild(ShotRunner.ForQueue(_spectator, queue));
         }
     }
 
