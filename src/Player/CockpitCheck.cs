@@ -54,8 +54,69 @@ public static class CockpitCheck
         }
         GD.Print("[cockpitcheck] head/ahead/behind/pedals in cm of room (head under the headlining, windscreen ahead of the eye, "
             + "rear glass behind the head, pedal hinges behind the bulkhead); reach = how far a hand or foot falls short");
-        GD.Print(failed == 0 ? $"[cockpitcheck] RESULT: all {CarCatalog.All.Count} cars fit their driver"
-            : $"[cockpitcheck] RESULT: FAILED — {failed} of {CarCatalog.All.Count} cars do not");
+        int heavyFailed = CheckHeavy();
+        int total = CarCatalog.All.Count + HeavyCatalog.All.Count;
+        failed += heavyFailed;
+        GD.Print(failed == 0 ? $"[cockpitcheck] RESULT: all {CarCatalog.All.Count} cars and {HeavyCatalog.All.Count} trucks and buses fit their driver"
+            : $"[cockpitcheck] RESULT: FAILED — {failed} of {total} vehicles do not");
         return failed == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// The trucks and buses (#157): the same fit from the cab (<see cref="HeavyCabin.SeatFor"/>), the
+    /// eye between the dash and the top of the windscreen, the seat inside the walls, and the seats
+    /// a passenger can take (#158): a truck's cab two, a bus at least twenty.
+    /// </summary>
+    private static int CheckHeavy()
+    {
+        int failed = 0;
+        GD.Print("[cockpitcheck] heavy                    eye (x, y, z)         head  ahead  over dash  reach  pedals  wall  seats  width");
+        foreach (var spec in HeavyCatalog.All)
+        {
+            var rigs = Enumerable.Range(0, spec.Sections.Length)
+                .Select(k => HeavyRig.Create(spec, k, 0.5f, k == 0 ? HumanPalette.Default : null)).ToList();
+            var c = rigs[0].Cockpit;
+            var shell = rigs[0].GetNode<Node3D>("Body").GetNode<MeshInstance3D>("Shell");
+            bool glass = shell.Mesh is ArrayMesh m && Enumerable.Range(0, m.GetSurfaceCount())
+                .Any(i => m.SurfaceGetName(i) == MeshScratch.GlassSurface);
+            bool driver = rigs[0].GetNode<Node3D>("Body").HasNode("Driver");
+            // what the hull is measured from: the mirrors must not have widened it
+            float span = MeshBounds.Of(rigs[0]).Size.X;
+            int seats = rigs.Sum(r => r.Seats.Length) - 1;   // the driver's is not a passenger's
+            foreach (var r in rigs) r.Free();
+            if (c == null)
+            {
+                failed++;
+                GD.Print($"[cockpitcheck] {spec.Label,-24} FAIL no cockpit");
+                continue;
+            }
+
+            var f = c.Frame;
+            var seat = c.Seat;
+            var eye = HumanMeshBuilder.DriverEye(seat.Hip, seat.Recline);
+            float head = f.Ceiling - (eye.Y + 0.1f);
+            float ahead = f.Front - eye.Z;
+            // looking straight out, the eye is over the dash and under the top of the glass
+            float overDash = Mathf.Min(eye.Y - (f.DashTop + 0.03f), f.WsTop - eye.Y);
+            float reach = 0f;
+            foreach (float turn in new[] { 0f, seat.MaxGrip, -seat.MaxGrip })
+            {
+                var (hr, hl, fr, fl) = HumanMeshBuilder.DriverReach(seat, turn);
+                reach = Mathf.Max(reach, Mathf.Max(Mathf.Max(hr, hl), Mathf.Max(fr, fl)));
+            }
+            float pedals = f.Front - f.Nose - (seat.Throttle + DriverSeat.PedalHinge).Z;
+            float wall = f.InnerHalf - (Mathf.Abs(seat.Hip.X) + 0.25f);
+            int wanted = spec.Class is HeavyClass.Tractor or HeavyClass.Rigid ? 1 : 20;
+
+            bool ok = head >= 0.05f && ahead >= 0.5f && overDash >= 0.1f && reach < 0.01f && pedals >= 0f && wall >= 0f
+                && glass && driver && seats >= wanted;
+            if (!ok) failed++;
+            GD.Print($"[cockpitcheck] {spec.Label,-24} ({eye.X,5:F2}, {eye.Y,4:F2}, {eye.Z,5:F2})  {head * 100,4:F0}  {ahead * 100,5:F0}  "
+                + $"{overDash * 100,9:F0}  {reach * 1000,4:F0}mm {pedals * 100,6:F0}  {wall * 100,4:F0}  {seats,5}  {span,5:F2}  "
+                + $"{(ok ? "ok" : "FAIL" + (glass ? "" : " no glass surface") + (driver ? "" : " no driver") + (seats >= wanted ? "" : " too few seats"))}");
+        }
+        GD.Print("[cockpitcheck] heavy: over dash = cm the eye has above the dash and under the top of the windscreen; "
+            + "wall = cm between the seat's side and the cab wall; seats = passenger seats; width = the first section's mesh, mirrors and all, m");
+        return failed;
     }
 }

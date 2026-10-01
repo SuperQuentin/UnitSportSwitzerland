@@ -39,6 +39,13 @@ public sealed record DriverSeat(Vector3 Hip, float Recline, Vector3 WheelCentre,
     /// <summary>How far a pedal swings about its hinge, floored, radians.</summary>
     public const float PedalTravel = 0.3f;
 
+    /// <summary>
+    /// How far the hands turn with the wheel before the rim slides through them, rad: a car's
+    /// upright wheel far round (<see cref="HumanMeshBuilder.MaxGripTurn"/>), a truck's flat one
+    /// less, its far side being out of reach.
+    /// </summary>
+    public float MaxGrip { get; init; } = HumanMeshBuilder.MaxGripTurn;
+
     /// <summary>A pad pressed <paramref name="amount"/> (0..1) down: it swings forward about its hinge.</summary>
     public static Vector3 Pressed(Vector3 pad, float amount)
     {
@@ -308,32 +315,36 @@ public static partial class CarMeshBuilder
     }
 
     /// <summary>A bucket seat for a hip at <paramref name="hip"/>: cushion, a back reclined with the driver, headrest.</summary>
-    private static void Bucket(MeshScratch s, Vector3 hip, float recline)
+    private static void Bucket(MeshScratch s, Vector3 hip, float recline) => Bucket(s, hip, recline, FloorY, Seat);
+
+    /// <summary>As above, on a floor at <paramref name="floor"/> (a truck's cab, a bus's platform), in <paramref name="colour"/>.</summary>
+    internal static void Bucket(MeshScratch s, Vector3 hip, float recline, float floor, Color colour)
     {
         var back = new Vector3(0, Mathf.Cos(recline), -Mathf.Sin(recline));
         var ahead = new Vector3(0, Mathf.Sin(recline), Mathf.Cos(recline));
         var tilt = new Basis(Vector3.Right, -recline);
         float cushion = hip.Y - 0.09f;
-        s.Box(new Vector3(hip.X, (cushion + FloorY) * 0.5f, hip.Z + 0.12f), new Vector3(0.46f, cushion - FloorY, 0.46f), Seat,
+        s.Box(new Vector3(hip.X, (cushion + floor) * 0.5f, hip.Z + 0.12f), new Vector3(0.46f, cushion - floor, 0.46f), colour,
             new Basis(Vector3.Right, -0.08f));
-        s.Box(hip + back * 0.3f - ahead * 0.17f, new Vector3(0.48f, 0.62f, 0.1f), Seat, tilt);
-        s.Box(hip + back * 0.7f - ahead * 0.17f, new Vector3(0.26f, 0.17f, 0.1f), Seat, tilt);
+        s.Box(hip + back * 0.3f - ahead * 0.17f, new Vector3(0.48f, 0.62f, 0.1f), colour, tilt);
+        s.Box(hip + back * 0.7f - ahead * 0.17f, new Vector3(0.26f, 0.17f, 0.1f), colour, tilt);
         // side bolsters
         foreach (float sx in new[] { -1f, 1f })
-            s.Box(hip + new Vector3(sx * 0.22f, 0, 0) + back * 0.28f - ahead * 0.1f, new Vector3(0.05f, 0.5f, 0.1f), Seat, tilt);
+            s.Box(hip + new Vector3(sx * 0.22f, 0, 0) + back * 0.28f - ahead * 0.1f, new Vector3(0.05f, 0.5f, 0.1f), colour, tilt);
     }
 
     /// <summary>
-    /// A seven-segment character (<c>r n 1..8</c>) in the plane of <paramref name="normal"/>,
+    /// A seven-segment character (<c>r n 0..9 A H L</c>) in the plane of <paramref name="normal"/>,
     /// 3 cm tall: the gear display. <paramref name="right"/> is the reader's right.
     /// </summary>
-    private static ArrayMesh SevenSegment(Vector3 centre, Vector3 up, Vector3 right, Vector3 normal, char ch)
+    internal static ArrayMesh SevenSegment(Vector3 centre, Vector3 up, Vector3 right, Vector3 normal, char ch)
     {
         const float h = 0.015f, w = 0.009f, t = 0.0035f;
         string on = ch switch
         {
             'r' => "eg", 'n' => "ceg", '1' => "bc", '2' => "abged", '3' => "abgcd", '4' => "fgbc",
-            '5' => "afgcd", '6' => "afgedc", '7' => "abc", _ => "abcdefg",
+            '5' => "afgcd", '6' => "afgedc", '7' => "abc", '9' => "abcdfg", '0' => "abcdef",
+            'A' => "abcefg", 'H' => "bcefg", 'L' => "def", _ => "abcdefg",
         };
         var basis = new Basis(right, up, normal);
         var m = new MeshScratch();

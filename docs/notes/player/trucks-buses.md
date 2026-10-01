@@ -59,11 +59,11 @@
   destination (Label3D on the front, `HeavyLook.Destinations`). Door leaves swing out of real
   holes in the right wall. Doors shut and the bus rises when it pulls away.
 - **Replication**: `Anim` (steer, wheel spin rate, rpm, lamps / reverse / kneel / doors /
-  destination bits), `TrainPose` (joint angles, with the pose properties, eased 15/s on the
+  destination / throttle-eighths bits), `TrainPose` (joint angles, with the pose properties, eased 15/s on the
   mirror), `TrailerCode` (on change). The cab's terrain pitch travels in `BodyPose`.
 - **Camera**: behind and above the whole train (`5 + 0.95·length` m back), swinging round with
-  the trailer's angle (`Truck.ChaseSwing`); the pull-in ray ignores the train. First person hides
-  the cab's shell (its glass boxes block the view from inside; a cockpit is #69).
+  the trailer's angle (`Truck.ChaseSwing`); the pull-in ray ignores the train. First person is the
+  cockpit (#157, `cockpit`, `heavy-cabin`): hollow cab, glass panes, the driver at the wheel.
 - **Measured** (`--truckcheck`, Sim, loaded, flat): Scania + curtainsider 39 t 0-80 in 50 s, top
   86 km/h (limiter 89), 80-0 in 41 m, 12% start to 20 km/h; MAN road train 40 t 0-80 in 57 s,
   12% to 18 km/h in A6; Citaro 0-50 in 14 s, Citaro G 17 s, coach 9.6 s. Off-tracking at R 11.5 m:
@@ -77,5 +77,5 @@
   `--heavynet a|b [pw]` on two clients of a loopback server (a with `--admin-password`): the train,
   coupling, parking and the bus from the other peer; `--ride truck:N --trailer M [--steer x]`.
 - **Not done**: shots on a trailer do not hurt the vehicle (`Hurtbox.BodyOf` stops at the section
-  body); no AI drivers for trucks; the first-person cockpit (#69); a steering wheel's range
+  body); no AI drivers for trucks; a steering wheel's range
   (#68); routing by road width (the report is there, the router is not).

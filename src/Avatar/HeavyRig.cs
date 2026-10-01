@@ -15,15 +15,23 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
 {
     /// <summary>The destination display's middle and width, node space (buses), or null.</summary>
     public (Vector3 At, float Width)? Display { get; init; }
+    /// <summary>The driver's cockpit (the first section of a truck or bus), or null.</summary>
+    public HeavyCockpit? Cockpit { get; init; }
+    /// <summary>Every seat in this section, the driver's first where there is one (#158 sits passengers in the rest).</summary>
+    public SeatAnchor[] Seats { get; init; } = System.Array.Empty<SeatAnchor>();
+    /// <summary>A bus's saloon lights, unshaded: lit with the headlights. Null where there are none.</summary>
+    public ArrayMesh? Glow { get; init; }
 }
 
 /// <summary>
 /// One section of a truck, a bus or a trailer, drawn (#70): the body, every axle's wheels (steering
 /// by their axle's share of the front angle, all spinning), brake, head and reversing lamps, a bus's
 /// door leaves swinging out on their hinges, the kneel that lowers the door side, and the destination
-/// display. Origin on the ground under the section's centre of mass — the same point its physics
-/// body turns about — facing −Z like every node. The owner sets the properties; <c>_Process</c>
-/// applies them.
+/// display. The first section of a truck or bus has its cockpit (#157): a steering wheel turning at
+/// <see cref="HeavyCockpit.SteerRatio"/>, working dials and gear display, warning lamps, pedals, the
+/// driver at the wheel and, for the local driver in the seat, working mirrors. Origin on the ground
+/// under the section's centre of mass — the same point its physics body turns about — facing −Z
+/// like every node. The owner sets the properties; <c>_Process</c> applies them.
 /// </summary>
 public partial class HeavyRig : Node3D
 {
@@ -39,11 +47,30 @@ public partial class HeavyRig : Node3D
     public string Destination { get; set; } = "";
     /// <summary>Body roll on the springs, rad (+ right side up): the wheels stay on the road.</summary>
     public float BodyRoll { get; set; }
-    /// <summary>
-    /// The body drawn. Off from the driver's seat in first person: the cab's glass and walls are
-    /// boxes that would block the view from inside (a cockpit is #69's).
-    /// </summary>
-    public bool ShellVisible { get => _body?.Visible ?? true; set { if (_body != null) _body.Visible = value; } }
+
+    // ---- the cockpit (first section of a truck or bus) ----
+    /// <summary>The steering wheel's turn, rad (+ anticlockwise as the driver sees it).</summary>
+    public float WheelTurn { get; set; }
+    public float Throttle { get; set; }
+    public float Brake { get; set; }
+    public float Clutch { get; set; }
+    public float SpeedKmh { get; set; }
+    public float Rpm { get; set; }
+    /// <summary>What the gear display reads: N, R, A7, 4H, 12.</summary>
+    public string Gear { get; set; } = "N";
+    /// <summary>The air tank, bar.</summary>
+    public float Air { get; set; } = HeavyDriveline.AirMax;
+    public bool SpringBrakes { get; set; }
+    public int Retarder { get; set; }
+    public bool EngineRunning { get; set; } = true;
+    /// <summary>What the local driver sees of their own figure from the seat; every remote copy is <see cref="CockpitView.Outside"/>.</summary>
+    public CockpitView View { get; set; }
+    /// <summary>The mirrors work (the setting); only ever for the local driver in the seat.</summary>
+    public bool MirrorsOn { get; set; }
+    /// <summary>The seats in this section, node space, the driver's first where there is one.</summary>
+    public SeatAnchor[] Seats { get; private set; } = System.Array.Empty<SeatAnchor>();
+    /// <summary>The cockpit this section was built with (the first of a truck or bus), or null.</summary>
+    public HeavyCockpit? Cockpit => _cockpit;
 
     private const float DoorTime = 1.2f, KneelTime = 1.5f, KneelDrop = 0.08f;
 
@@ -52,30 +79,51 @@ public partial class HeavyRig : Node3D
     private readonly List<(Node3D Pivot, int Door, float OpenYaw)> _doors = new();
     private float[] _doorOpen = System.Array.Empty<float>();
     private float _kneel;
-    private StandardMaterial3D _head = null!, _tail = null!, _reverse = null!;
+    private StandardMaterial3D _head = null!, _tail = null!, _reverse = null!, _glow = null!, _glass = null!;
     private Label3D? _display;
 
-    public static HeavyRig Create(HeavySpec spec, int section, float load) =>
+    private HeavyCockpit? _cockpit;
+    private Node3D _wheel = null!, _tach = null!, _speedo = null!, _air = null!;
+    private MeshInstance3D[] _gearChars = System.Array.Empty<MeshInstance3D>();
+    private MeshInstance3D[] _lamps = System.Array.Empty<MeshInstance3D>();
+    private Node3D[] _pedals = System.Array.Empty<Node3D>();
+    private HumanPalette? _driverPalette;
+    private MeshInstance3D? _driverBody, _driverHead;
+    private (int Turn, int Throttle, int Brake) _driverPose = (int.MinValue, 0, 0);
+    private float _rpmShown, _speedShown, _airShown = HeavyDriveline.AirMax;
+    private string _gearShown = "";
+    private CabMirrors? _mirrors;
+    /// <summary>The glass's tint from the driver's seat, as a car's: a windscreen is all but clear from inside.</summary>
+    private const float GlassFromSeat = 0.35f;
+
+    /// <param name="driver">The figure at the wheel, in its colours; null for an empty vehicle (parked, previewed).</param>
+    public static HeavyRig Create(HeavySpec spec, int section, float load, HumanPalette? driver = null) =>
         Assemble(spec.Class switch
         {
             HeavyClass.Tractor or HeavyClass.Rigid => TruckMeshBuilder.Build(spec, section, load),
             _ => BusMeshBuilder.Build(spec, section, load),
-        }, spec.Label);
+        }, driver);
 
     public static HeavyRig CreateTrailer(TrailerSpec spec, int section, float load) =>
-        Assemble(TrailerMeshBuilder.Build(spec, section, load), spec.Label);
+        Assemble(TrailerMeshBuilder.Build(spec, section, load), null);
 
-    private static HeavyRig Assemble(HeavyParts p, string name)
+    private static HeavyRig Assemble(HeavyParts p, HumanPalette? driver)
     {
-        var rig = new HeavyRig { Name = "Heavy" };
+        var rig = new HeavyRig { Name = "Heavy", _driverPalette = driver, Seats = p.Seats };
         var body = HumanMeshBuilder.Material();
+        var glass = rig._glass = CarRig.GlassMaterial();
         rig._head = TrafficMeshBuilder.LampMaterial();
         rig._tail = TrafficMeshBuilder.LampMaterial();
         rig._reverse = TrafficMeshBuilder.LampMaterial();
+        rig._glow = TrafficMeshBuilder.LampMaterial();
 
         rig._body = new Node3D { Name = "Body" };
         rig.AddChild(rig._body);
-        rig._body.AddChild(new MeshInstance3D { Name = "Shell", Mesh = p.Body, MaterialOverride = body });
+        var shell = new MeshInstance3D { Name = "Shell", Mesh = p.Body };
+        MeshScratch.Paint(shell, body, glass);
+        rig._body.AddChild(shell);
+        if (p.Glow is { } glow && glow.GetSurfaceCount() > 0)
+            rig._body.AddChild(new MeshInstance3D { Name = "SaloonLights", Mesh = glow, MaterialOverride = rig._glow });
         rig._body.AddChild(new MeshInstance3D { Name = "Headlamps", Mesh = p.Head, MaterialOverride = rig._head });
         rig._body.AddChild(new MeshInstance3D { Name = "Taillamps", Mesh = p.Tail, MaterialOverride = rig._tail });
         rig._body.AddChild(new MeshInstance3D { Name = "Reversing", Mesh = p.Reverse, MaterialOverride = rig._reverse });
@@ -84,7 +132,9 @@ public partial class HeavyRig : Node3D
         {
             var leaf = p.Doors[i];
             var pivot = new Node3D { Name = $"Door{leaf.Door}_{i}", Position = leaf.Hinge };
-            pivot.AddChild(new MeshInstance3D { Mesh = leaf.Mesh, MaterialOverride = body });
+            var panel = new MeshInstance3D { Mesh = leaf.Mesh };
+            MeshScratch.Paint(panel, body, glass);
+            pivot.AddChild(panel);
             rig._body.AddChild(pivot);
             rig._doors.Add((pivot, leaf.Door, leaf.OpenYaw));
         }
@@ -120,15 +170,120 @@ public partial class HeavyRig : Node3D
             };
             rig._body.AddChild(rig._display);
         }
+        if (p.Cockpit is { } cockpit) rig.AssembleCockpit(cockpit, body);
         rig.ApplyLamps();
         return rig;
     }
+
+    /// <summary>The cockpit's moving parts and instruments, and the driver if there is one.</summary>
+    private void AssembleCockpit(HeavyCockpit c, Material body)
+    {
+        _cockpit = c;
+        // the instruments are backlit: unshaded, so they read at night and in a tunnel
+        var lit = TrafficMeshBuilder.LampMaterial();
+        _body.AddChild(new MeshInstance3D { Name = "Instruments", Mesh = c.Instruments, MaterialOverride = lit });
+        _wheel = new Node3D { Name = "SteeringWheel", Position = c.SteeringWheel.Pivot };
+        _wheel.AddChild(new MeshInstance3D { Mesh = c.SteeringWheel.Mesh, MaterialOverride = body });
+        _body.AddChild(_wheel);
+        Node3D NeedleNode(string name, CarNeedle needle)
+        {
+            var node = new Node3D { Name = name, Position = needle.Pivot };
+            node.AddChild(new MeshInstance3D { Mesh = needle.Mesh, MaterialOverride = lit });
+            _body.AddChild(node);
+            return node;
+        }
+        _tach = NeedleNode("Tach", c.Tach);
+        _speedo = NeedleNode("Speedo", c.Speedo);
+        _air = NeedleNode("AirGauge", c.Air);
+        _gearChars = c.GearChars.Select((_, i) => new MeshInstance3D { Name = $"Gear{i}", MaterialOverride = lit }).ToArray();
+        foreach (var ch in _gearChars) _body.AddChild(ch);
+        _lamps = c.Lamps.Select((mesh, i) => new MeshInstance3D { Name = $"Lamp{i}", Mesh = mesh, MaterialOverride = lit, Visible = false }).ToArray();
+        foreach (var lamp in _lamps) _body.AddChild(lamp);
+        _pedals = c.Pedals.Select((pedal, i) =>
+        {
+            var node = new Node3D { Name = $"Pedal{i}", Position = pedal.Pivot };
+            node.AddChild(new MeshInstance3D { Mesh = pedal.Mesh, MaterialOverride = body });
+            _body.AddChild(node);
+            return node;
+        }).ToArray();
+        _mirrors = new CabMirrors(this, _body, c.Mirrors, Vector3.Zero);
+
+        if (_driverPalette is { } palette)
+        {
+            _driverBody = new MeshInstance3D { Name = "Driver", MaterialOverride = body };
+            var head = new MeshScratch();
+            HumanMeshBuilder.AppendDriver(head, palette, c.Seat, 0f, 0f, 0f, body: false);
+            _driverHead = new MeshInstance3D { Name = "DriverHead", Mesh = head.Build(), MaterialOverride = body };
+            _body.AddChild(_driverBody);
+            _body.AddChild(_driverHead);
+        }
+    }
+
+    /// <summary>
+    /// The driver's eye, where the first-person camera goes, in the rig's own frame: on the body,
+    /// so it kneels and rolls with it. Identity on a section with no cockpit.
+    /// </summary>
+    public Transform3D EyeFrame => _cockpit == null ? Transform3D.Identity
+        : _body.Transform * new Transform3D(Basis.Identity, _cockpit.Eye);
 
     private void ApplyLamps()
     {
         _tail.AlbedoColor = BrakeLights ? Colors.White : new Color(0.42f, 0.42f, 0.42f);
         _head.AlbedoColor = Headlights ? Colors.White : new Color(0.55f, 0.55f, 0.55f);
         _reverse.AlbedoColor = ReverseLights ? Colors.White : new Color(0.5f, 0.5f, 0.5f);
+        _glow.AlbedoColor = Headlights ? Colors.White : new Color(0.5f, 0.5f, 0.48f);
+    }
+
+    /// <summary>
+    /// Wheel, needles, gear display, lamps and pedals from the properties, and the driver re-posed
+    /// when what they hold or press has moved enough to see (the figure is one mesh, rebuilt).
+    /// </summary>
+    private void ApplyCockpit(float dt)
+    {
+        if (_cockpit is not { } c) return;
+        _wheel.Basis = new Basis(c.ColumnAxis, WheelTurn);
+        // needles swing to a reading rather than jump to it, like a real movement's damping
+        float ease = 1f - Mathf.Exp(-10f * dt);
+        _rpmShown = Mathf.Lerp(_rpmShown, EngineRunning ? Rpm : 0f, ease);
+        _speedShown = Mathf.Lerp(_speedShown, Mathf.Abs(SpeedKmh), ease);
+        _airShown = Mathf.Lerp(_airShown, Air, 1f - Mathf.Exp(-3f * dt));
+        _tach.Basis = new Basis(c.Tach.Axis, CarNeedle.Angle(_rpmShown / c.Gauges.TachRpm));
+        _speedo.Basis = new Basis(c.Speedo.Axis, CarNeedle.Angle(_speedShown / c.Gauges.SpeedoKmh));
+        _air.Basis = new Basis(c.Air.Axis, CarNeedle.Angle(_airShown / HeavyDriveline.AirMax));
+        if (Gear != _gearShown)
+        {
+            _gearShown = Gear;
+            // right-aligned, N and R as seven segments can draw them
+            var text = Gear.Replace('N', 'n').Replace('R', 'r');
+            if (text.Length > _gearChars.Length) text = text[^_gearChars.Length..];
+            text = text.PadLeft(_gearChars.Length);
+            for (int i = 0; i < _gearChars.Length; i++)
+                _gearChars[i].Mesh = c.GearChars[i].TryGetValue(text[i], out var mesh) ? mesh : null;
+        }
+        _lamps[HeavyCockpit.LampSpringBrake].Visible = SpringBrakes;
+        _lamps[HeavyCockpit.LampLowAir].Visible = Air < HeavyDriveline.AirLow;
+        _lamps[HeavyCockpit.LampLights].Visible = Headlights;
+        _lamps[HeavyCockpit.LampRetarder].Visible = Retarder > 0;
+        _lamps[HeavyCockpit.LampDoors].Visible = DoorsOpen != 0;
+        _lamps[HeavyCockpit.LampEngine].Visible = !EngineRunning;
+        _pedals[HeavyCockpit.PedalThrottle].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Throttle, 0f, 1f));
+        _pedals[HeavyCockpit.PedalBrake].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Brake, 0f, 1f));
+        if (_pedals.Length > HeavyCockpit.PedalClutch)
+            _pedals[HeavyCockpit.PedalClutch].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Clutch, 0f, 1f));
+
+        _glass.AlbedoColor = Colors.White with { A = View == CockpitView.Outside ? 1f : GlassFromSeat };
+        _mirrors?.Update(View != CockpitView.Outside, MirrorsOn);
+
+        if (_driverBody == null || _driverHead == null || _driverPalette is not { } palette) return;
+        _driverBody.Visible = View != CockpitView.Bare;
+        _driverHead.Visible = View == CockpitView.Outside;
+        if (!_driverBody.Visible) return;
+        var pose = (Mathf.RoundToInt(WheelTurn / 0.03f), Mathf.RoundToInt(Throttle * 8f), Mathf.RoundToInt(Brake * 8f));
+        if (pose == _driverPose) return;
+        _driverPose = pose;
+        var s = new MeshScratch();
+        HumanMeshBuilder.AppendDriver(s, palette, c.Seat, WheelTurn, Throttle, Brake, head: false);
+        _driverBody.Mesh = s.Build();
     }
 
     public override void _Process(double delta)
@@ -159,6 +314,7 @@ public partial class HeavyRig : Node3D
 
         if (_display != null && _display.Text != Destination) _display.Text = Destination;
         ApplyLamps();
+        ApplyCockpit(dt);
     }
 }
 
@@ -166,6 +322,8 @@ public partial class HeavyRig : Node3D
 public static class HeavyMesh
 {
     public static readonly Color Glass = new(0.26f, 0.33f, 0.4f);
+    /// <summary>The glass of a pane: the same tint, translucent (<see cref="CarRig.GlassMaterial"/>).</summary>
+    public static readonly Color PaneTint = Glass with { A = 0.55f };
     public static readonly Color Rubber = new(0.07f, 0.07f, 0.08f);
     public static readonly Color Trim = new(0.08f, 0.08f, 0.09f);
     public static readonly Color Steel = new(0.55f, 0.56f, 0.6f);
@@ -269,6 +427,14 @@ public static class HeavyMesh
 
     /// <summary>The centre of mass with this much of the payload aboard, metres behind the section's front: the rig's origin.</summary>
     public static float Cg(SectionSpec s, float load) => new HeavyTrain.Body(s, s.PayloadMax * load).CgAt;
+
+    /// <summary>A window in the face, square to the road: from −<paramref name="halfWidth"/> to + across, at authored z <paramref name="z"/>.</summary>
+    public static void FrontPane(MeshScratch m, float z, float halfWidth, float y0, float y1) =>
+        m.Pane(new[] { new Vector3(-halfWidth, y0, z), new Vector3(halfWidth, y0, z), new Vector3(halfWidth, y1, z), new Vector3(-halfWidth, y1, z) }, PaneTint);
+
+    /// <summary>A window in a side wall at authored x <paramref name="x"/>, between authored z <paramref name="z0"/> and <paramref name="z1"/>.</summary>
+    public static void SidePane(MeshScratch m, float x, float z0, float z1, float y0, float y1) =>
+        m.Pane(new[] { new Vector3(x, y0, z0), new Vector3(x, y0, z1), new Vector3(x, y1, z1), new Vector3(x, y1, z0) }, PaneTint);
 
     /// <summary>A lamp-sized box, authored space.</summary>
     public static void Lamp(MeshScratch m, float x, float y, float z, float w, float h, float d, Color colour) =>
