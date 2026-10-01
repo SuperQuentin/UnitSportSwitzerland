@@ -525,52 +525,70 @@ public partial class ItemController : Node
     {
         player ??= UsablePlayer;
         var stack = _inventory[slot];
-        if (player == null || stack.IsEmpty) return;
+        if (player == null || stack.IsEmpty || !CanRelease(stack)) return;
+        DropStack(player, _inventory.TakeFrom(slot, all ? stack.Count : 1));
+    }
+
+    /// <summary>
+    /// Drops a stack that is in no slot (the cursor's, a print with no room in the pack) a little
+    /// ahead of <paramref name="player"/> (null: the local one), the same toss as Q. Keeps
+    /// <see cref="ItemStack.Data"/>. False when there is nobody or nowhere to put it: the caller
+    /// still holds the stack then.
+    /// </summary>
+    public bool DropStack(FootPlayer? player, ItemStack stack)
+    {
+        player ??= CurrentPlayer();
+        if (player == null || stack.IsEmpty || !CanRelease(stack)) return false;
         var view = player.Camera.GlobalTransform.Basis;
         var ahead = new Vector3(-view.Z.X, 0, -view.Z.Z).Normalized();
         var origin = player.GlobalPosition + Vector3.Up * 1.15f + ahead * 0.45f;
         var velocity = ahead * 1.8f + Vector3.Up * 1.4f + player.Velocity;
-        if (!Release(player, slot, all ? stack.Count : 1, origin, velocity, 0.1f)) return;
+        Launch(player, stack, origin, velocity, 0.1f);
         Kick(player);
         Play(SfxSynth.Whoosh, 1.5f);
+        return true;
     }
 
-    /// <summary>
-    /// Takes <paramref name="count"/> out of <paramref name="slot"/> and puts it in the world at
-    /// <paramref name="origin"/>, moving at <paramref name="velocity"/>: a radio as a
-    /// <see cref="RadioBody"/> (it plays on where it lands), anything else as a <see cref="DroppedItem"/>
-    /// tumbling end over end. False when there is nowhere to put it.
-    /// </summary>
+    /// <summary>Whether the world can take <paramref name="stack"/> now (its manager exists); toasts when not.</summary>
+    private bool CanRelease(ItemStack stack)
+    {
+        if (stack.Id == ItemId.Radio ? RadioManager.Instance != null : DroppedItems.Instance != null) return true;
+        _ui.Toast("Nowhere to put it.");
+        return false;
+    }
+
+    /// <summary>Takes <paramref name="count"/> out of <paramref name="slot"/> and launches it (<see cref="Launch"/>). False when there is nowhere to put it.</summary>
     private bool Release(FootPlayer player, int slot, int count, Vector3 origin, Vector3 velocity, float power)
     {
         var stack = _inventory[slot];
+        if (stack.IsEmpty || !CanRelease(stack)) return false;
+        Launch(player, _inventory.TakeFrom(slot, count), origin, velocity, power);
+        return true;
+    }
+
+    /// <summary>
+    /// Puts <paramref name="stack"/> in the world at <paramref name="origin"/>, moving at
+    /// <paramref name="velocity"/>: radios as <see cref="RadioBody"/> (each its own body, playing on
+    /// where it lands), anything else as one <see cref="DroppedItem"/> tumbling end over end.
+    /// <see cref="CanRelease"/> first.
+    /// </summary>
+    private void Launch(FootPlayer player, ItemStack stack, Vector3 origin, Vector3 velocity, float power)
+    {
         var flat = new Vector3(velocity.X, 0, velocity.Z);
         var ahead = flat.LengthSquared() > 1e-4f ? flat.Normalized() : -player.GlobalTransform.Basis.Z;
         float yaw = Mathf.Atan2(-ahead.X, -ahead.Z);
         if (stack.Id == ItemId.Radio)
         {
-            if (RadioManager.Instance is not { } radios)
-            {
-                _ui.Toast("Nowhere to put it.");
-                return false;
-            }
-            _inventory.TakeOne(slot);   // a radio is a body of its own: one at a time
             var play = RadioPlay.Decode(stack.Data);
-            radios.Throw(new RadioState("", 0, origin, yaw, velocity,
-                play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
-            return true;
+            for (int i = 0; i < stack.Count; i++)
+                RadioManager.Instance!.Throw(new RadioState("", 0, origin + Vector3.Up * (0.25f * i), yaw, velocity,
+                    play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
+            return;
         }
-        if (DroppedItems.Instance is not { } dropped)
-        {
-            _ui.Toast("Nowhere to put it.");
-            return false;
-        }
-        var taken = _inventory.TakeFrom(slot, count);
         var right = ahead.Cross(Vector3.Up);
         var spin = right * -(3f + 14f * power)
                    + new Vector3(SfxRng.NextSingle() - 0.5f, SfxRng.NextSingle() - 0.5f, SfxRng.NextSingle() - 0.5f) * 3f;
-        dropped.Drop(taken, origin, velocity, new Vector3(0, yaw, 0), spin);
-        return true;
+        DroppedItems.Instance!.Drop(stack, origin, velocity, new Vector3(0, yaw, 0), spin);
     }
 
     /// <summary>

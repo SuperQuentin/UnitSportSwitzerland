@@ -75,6 +75,13 @@ public partial class DroppedItems : Node3D
 
     // ---- client API ----------------------------------------------------------------------------
 
+    /// <summary>
+    /// Drops <paramref name="stack"/> a little ahead of the local player, offline or online, its
+    /// <see cref="ItemStack.Data"/> kept (<see cref="ItemController.DropStack"/>). False when there is
+    /// no player or no world to drop into: the caller still holds the stack then.
+    /// </summary>
+    public static bool Drop(ItemStack stack) => ItemController.Instance?.DropStack(null, stack) == true;
+
     /// <summary>Puts a stack into the world at <paramref name="at"/>, moving at <paramref name="velocity"/>.</summary>
     public void Drop(ItemStack stack, Vector3 at, Vector3 velocity, Vector3 rotation, Vector3 spin)
     {
