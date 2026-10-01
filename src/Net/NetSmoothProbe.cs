@@ -125,6 +125,9 @@ public partial class NetSmoothProbe : Node
             string dir = ProjectSettings.GlobalizePath($"res://test_output/loadtest/{_label}");
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "netsmooth.txt"), sb.ToString());
+            // the raw track, for profiles the summary does not cover (a bump at a level crossing, #124)
+            File.WriteAllLines(Path.Combine(dir, "netsmooth_track.csv"), _rec.Select(r =>
+                string.Create(inv, $"{r.T:F4},{r.P.X:F3},{r.P.Y:F3},{r.P.Z:F3}")));
         }
         catch (Exception e) { GD.PushWarning($"[netsmooth] cannot write result: {e.Message}"); }
         GetTree().Quit();
