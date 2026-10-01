@@ -3,8 +3,10 @@
 
 # Visual styles: PS1, Cartoon, Realistic− and Realistic+
 
-Status: **phase 1 in progress** (issue #212). Phase 0 is done (issue #181): the prototype's
-results, at the end of this file, decided to build the framework and to do Cartoon first.
+Status: **phase 1 in progress** (issue #212: part 1 merged in #224, part 2 next; the issue's
+"Status and how to resume" section has the current steps). Phase 0 is done (issue #181): the
+prototype's results, at the end of this file, decided to build the framework and to do Cartoon
+first.
 
 ## Goal
 
@@ -289,13 +291,14 @@ Nothing gets merged.
 In two parts, because #185 (floating origin) and the road network stack (#114) were changing
 the tile shaders and `ChunkManager` at the same time:
 
-- **Part 1 (#212):** `VisualStyle` and `--style`, `StyleKit` with the fallback chain and
+- **Part 1 (#212, merged in #224):** `VisualStyle` and `--style`, `StyleKit` with the fallback chain and
   `--style-report`, every `ps1_*` load routed through it, tree LOD in PS1 (ray-traced
   billboards, the tile-level cut, `world_cam_pos`), and the timing check
   (`tools/style-shots.sh`, `--origin`, `g` heights, `frame=` per shot). `NearTrees` waits for
   phase 2, where Cartoon is its first user.
-- **Part 2 (after #185 and #114):** the role bodies and neutral switches, `shaders/common/`,
-  `DayNight` driving the kit's environment, rebuild in place, `MeshDetail`, per-style terrain LOD.
+- **Part 2 (#212):** the role bodies and neutral switches, `shaders/common/`, `DayNight`
+  driving the kit's environment, rebuild in place, `MeshDetail`, per-style terrain LOD. #185 has
+  landed, so it can start; only `ps1_road` waits for the road network stack (#114).
 
 The original scope:
 
