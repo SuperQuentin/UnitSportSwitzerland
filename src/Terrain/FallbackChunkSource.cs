@@ -58,6 +58,12 @@ public sealed class FallbackChunkSource : IChunkSource
     /// <summary>Where warnings and timings go; the game points it at <c>GD.Print</c>.</summary>
     public Action<string>? Log { get; set; }
 
+    /// <summary>
+    /// Folder for the generated horizon samples, so a launch reads them instead of spending
+    /// ~7 s of every core regenerating them. Null keeps them in memory only.
+    /// </summary>
+    public string? HorizonCacheDir { get; set; }
+
     /// <summary>An inclusive tile rectangle.</summary>
     public readonly record struct TileRect(int MinE, int MinN, int MaxE, int MaxN)
     {
@@ -343,8 +349,10 @@ public sealed class FallbackChunkSource : IChunkSource
             foreach (var k in snap.Real)
                 if (real.TryGet(k, out var s)) knots[k] = new ProceduralWorld.RealTile(k, s, null);
 
+        LoadHorizonCache();
+        int computed = 0, blended = 0;
         var samples = new ushort[ids.Count][];
-        int blended = 0;
+        var blendKeys = new ulong[ids.Count];
         Parallel.For(0, ids.Count, new ParallelOptions { CancellationToken = ct }, t =>
         {
             var id = ids[t];
@@ -354,11 +362,20 @@ public sealed class FallbackChunkSource : IChunkSource
                     if (knots.TryGetValue(k, out var r)) (near ??= new()).Add(r);
             if (near == null)
             {
-                samples[t] = _plainHorizon.GetOrAdd(id, i => World.HorizonSamples(i, null));
+                samples[t] = _plainHorizon.GetOrAdd(id, i =>
+                {
+                    Interlocked.Increment(ref computed);
+                    return World.HorizonSamples(i, null);
+                });
                 return;
             }
-            samples[t] = World.HorizonSamples(id, World.CreateBlend(id, near, snap.Version));
             Interlocked.Increment(ref blended);
+            ulong key = blendKeys[t] = BlendKey(near);
+            samples[t] = _blendedHorizon.GetOrAdd((id, key), _ =>
+            {
+                Interlocked.Increment(ref computed);
+                return World.HorizonSamples(id, World.CreateBlend(id, near, snap.Version));
+            });
         });
 
         var tiles = new Dictionary<TileId, ushort[]>(ids.Count + (real?.Count ?? 0));
@@ -368,7 +385,101 @@ public sealed class FallbackChunkSource : IChunkSource
         for (int t = 0; t < ids.Count; t++) tiles[ids[t]] = samples[t];
 
         Log?.Invoke($"[fallback] horizon: {real?.Count ?? 0} real + {ids.Count} generated tiles "
-            + $"({blended} blended) in {clock.ElapsedMilliseconds} ms");
+            + $"({blended} blended, {ids.Count - computed} from cache) in {clock.ElapsedMilliseconds} ms");
+        if (computed > 0)
+        {
+            var current = new List<((TileId, ulong), ushort[])>(ids.Count);
+            for (int t = 0; t < ids.Count; t++)
+                if (blendKeys[t] != 0) current.Add(((ids[t], blendKeys[t]), samples[t]));
+            SaveHorizonCache(current);
+        }
         return new HorizonIndex(tiles);
+    }
+
+    // ---- the generated horizon on disk -----------------------------------------------------
+    //
+    // Generating the ~44,000 tiles takes ~7 s of every core, at every launch, for the same
+    // numbers: a plain tile depends on the generator's code alone, a blended one also on the
+    // knots of the real tiles near it. The file is named after this build of the generator, so
+    // a rebuild reads none of an older one's (and deletes it on its first save); a blended tile
+    // is keyed by a hash of the knots it blends on, so a changed real set recomputes just those.
+    // Not the generator's own lattice cache: a warm launch skips the plain tiles that used to
+    // fill it, and the 180 blended ones then cost ~4 s rebuilding it.
+
+    private const uint HorizonCacheMagic = 0x43484755;   // "UGHC"
+    private const int HorizonCacheVersion = 1;
+
+    private readonly ConcurrentDictionary<(TileId Id, ulong Key), ushort[]> _blendedHorizon = new();
+    private bool _horizonCacheRead;
+
+    private string? HorizonCachePath => HorizonCacheDir == null ? null
+        : Path.Combine(HorizonCacheDir, $"generated-horizon-{typeof(ProceduralWorld).Module.ModuleVersionId:N}.bin");
+
+    /// <summary>FNV-1a over the ids and knots a blend is made from; never 0, which marks a plain tile on disk.</summary>
+    private static ulong BlendKey(List<ProceduralWorld.RealTile> near)
+    {
+        ulong h = 14695981039346656037UL;
+        void Mix(int v) { h = (h ^ (uint)v) * 1099511628211UL; }
+        foreach (var r in near)
+        {
+            Mix(r.Id.E);
+            Mix(r.Id.N);
+            foreach (ushort k in r.Knots) Mix(k);
+        }
+        return h | 1;
+    }
+
+    private void LoadHorizonCache()
+    {
+        if (_horizonCacheRead || HorizonCachePath is not { } path) return;
+        _horizonCacheRead = true;
+        if (!File.Exists(path)) return;
+        try
+        {
+            using var reader = new BinaryReader(new BufferedStream(File.OpenRead(path), 1 << 16));
+            if (reader.ReadUInt32() != HorizonCacheMagic || reader.ReadInt32() != HorizonCacheVersion) return;
+            int count = reader.ReadInt32();
+            for (int i = 0; i < count; i++)
+            {
+                var id = new TileId(reader.ReadInt32(), reader.ReadInt32());
+                ulong key = reader.ReadUInt64();
+                var samples = new ushort[HorizonFormat.SamplesPerTile];
+                for (int j = 0; j < samples.Length; j++) samples[j] = reader.ReadUInt16();
+                if (key == 0) _plainHorizon.TryAdd(id, samples);
+                else _blendedHorizon.TryAdd((id, key), samples);
+            }
+        }
+        catch (Exception e) { Log?.Invoke($"[fallback] generated horizon cache unreadable: {e.Message}"); }
+    }
+
+    /// <summary>Every plain tile known, and the blended tiles of the current real set.</summary>
+    private void SaveHorizonCache(List<((TileId Id, ulong Key), ushort[] Samples)> blended)
+    {
+        if (HorizonCachePath is not { } path) return;
+        try
+        {
+            Directory.CreateDirectory(HorizonCacheDir!);
+            foreach (var old in Directory.GetFiles(HorizonCacheDir!, "generated-horizon-*.bin"))
+                if (old != path) File.Delete(old);
+            string temp = path + ".tmp";
+            var plain = _plainHorizon.ToArray();
+            using (var writer = new BinaryWriter(new BufferedStream(File.Create(temp), 1 << 16)))
+            {
+                writer.Write(HorizonCacheMagic);
+                writer.Write(HorizonCacheVersion);
+                writer.Write(plain.Length + blended.Count);
+                void Entry(TileId id, ulong key, ushort[] samples)
+                {
+                    writer.Write(id.E);
+                    writer.Write(id.N);
+                    writer.Write(key);
+                    foreach (ushort v in samples) writer.Write(v);
+                }
+                foreach (var (id, samples) in plain) Entry(id, 0, samples);
+                foreach (var ((id, key), samples) in blended) Entry(id, key, samples);
+            }
+            File.Move(temp, path, overwrite: true);
+        }
+        catch (Exception e) { Log?.Invoke($"[fallback] could not cache the generated horizon: {e.Message}"); }
     }
 }

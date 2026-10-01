@@ -66,6 +66,10 @@ public sealed partial class Teleporter : Node
         foreach (var node in GetParent().GetChildren())
             if (node is SpawnPoint pending) pending.QueueFree();
 
+        // the origin goes first (#185), so the destination is placed near it rather than far from
+        // the old one, and the tiles there are built in precise coordinates from the start
+        OriginShifter.Instance?.ShiftTo(lv95E, lv95N);
+
         GetParent().AddChild(new SpawnPoint(target, _chunks, _origin, lv95E, lv95N, arrival));
 
         string where = label ?? $"{lv95E:F0}/{lv95N:F0}";

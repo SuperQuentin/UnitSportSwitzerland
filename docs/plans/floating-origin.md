@@ -3,7 +3,8 @@
 
 # Floating origin
 
-Status: **planned**. Issue: #185.
+Status: **phase 1 in progress** (offline floating origin, branch `feat/185-floating-origin`; the
+working rules are in `docs/notes/core/floating-origin.md`). Issue: #185.
 
 ## Why
 

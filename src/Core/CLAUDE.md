@@ -15,10 +15,11 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `teleport` — Teleport: (`Core/Teleporter`): resolves *what to move* at the moment of the jump, not at construction. Flying camera...
 - `key-hints` — Key hints: (`Core/InputHints`): never type a key into a UI string; bindings named for the device in hand, prompt bar, F1...
 - `permissions` — Permissions: (`Core/Permissions`): what the menus may offer; online, spawning a vehicle is an admin's...
+- `floating-origin` — Floating origin (#185): world space follows the camera; keep `GlobalPos` or handle `IOriginShiftAware`; containers; Jolt kinematic teleport; `--origincheck`, `--originstress`
 
 ## Commands
 
-- `commands` — Commands: --at, --chatcheck, --goto, --menu, --nohud, --path, --probe, --shot, --shot-queue, --title
+- `commands` — Commands: --at, --chatcheck, --origincheck, --originshift, --originstress, --goto, --menu, --nohud, --path, --probe, --shot, --shot-queue, --title
 
 ## Gotchas
 

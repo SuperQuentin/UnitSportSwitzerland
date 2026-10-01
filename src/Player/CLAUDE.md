@@ -7,7 +7,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 
 ## Architecture
 
-- `vehicle-hull-collision` — Cars and motorbikes collide as a box hull above the carrying capsule; no more cars sinking a third into each other
+- `vehicle-hull-collision` — Cars and motorbikes collide as a box hull above the carrying capsule; no more cars sinking a third into each other; trucks and buses no wider than their body, getting out never inside the vehicle (#209, `--exitcheck`)
 - `cockpit` — First-person driving (#69, trucks and buses #157): V cycles chase / cockpit with body / without, eye on the car body, head sway, held free look, seat and FOV settings, SubViewport mirrors (+0.5 ms), HUD setting, what is replicated, checks
 - `third-first-person` — Third / first person: (`FootPlayer`, V / R3, saved as `GameSettings.ThirdPerson`, default third; `--view...
 - `feel-layer` — Feel layer: (`Player/PlayerFeel`, child of the LOCAL `FootPlayer` only): sound, camera shake, speed lines,...

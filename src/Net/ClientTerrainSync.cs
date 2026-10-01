@@ -65,16 +65,25 @@ public sealed partial class ClientTerrainSync : Node
     /// </summary>
     public async Task SyncAsync(CancellationToken ct = default)
     {
-        try { await SyncCore(ct); }
-        finally { Finished = true; }
+        bool merged;
+        try { merged = await SyncIndex(ct); }
+        finally { IndexFinished = true; }
+        if (!merged) return;
+        await SyncPlacesAsync(ct).ConfigureAwait(false);
+        await SyncHorizonAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>The sync has run to its end, whether it merged anything or not (the loading screen waits on it).</summary>
-    public bool Finished { get; private set; }
+    /// <summary>
+    /// The tile index step is over, merged or not: the origin is settled and the LOD rings know
+    /// every tile. What the loading screen waits on; the place index and the horizon that follow
+    /// arrive through their events while you play.
+    /// </summary>
+    public bool IndexFinished { get; private set; }
 
-    private async Task SyncCore(CancellationToken ct)
+    /// <summary>Fetches and adopts the server's tile index. False when there is nothing more to sync.</summary>
+    private async Task<bool> SyncIndex(CancellationToken ct)
     {
-        if (Synced) return;
+        if (Synced) return false;
 
         // The manifest is not tile-scoped, so any TileId will do as the request key.
         byte[]? bytes = (await _streamer
@@ -85,7 +94,7 @@ public sealed partial class ClientTerrainSync : Node
         {
             GD.PushWarning("[stream] server sent no manifest; only local tiles will be available");
             Status?.Invoke("Server sent no terrain index — playing with local tiles only.");
-            return;
+            return false;
         }
 
         TerrainManifest manifest;
@@ -97,13 +106,13 @@ public sealed partial class ClientTerrainSync : Node
         {
             GD.PushError($"[stream] server manifest did not parse: {e.Message}");
             Status?.Invoke("Server terrain index is unreadable — playing with local tiles only.");
-            return;
+            return false;
         }
 
         // The continuation above runs on the thread pool, and what follows moves the origin and
         // unloads tiles (real ones replacing generated ground): main thread only.
         int added = await OnMainThread(() => Adopt(manifest)).ConfigureAwait(false);
-        if (added < 0) return;
+        if (added < 0) return false;
         Synced = true;
 
         // Persist it beside the cache. Without this the cached tiles are unreachable offline:
@@ -117,9 +126,7 @@ public sealed partial class ClientTerrainSync : Node
 
         GD.Print($"[stream] {line}");
         Status?.Invoke(line);
-
-        await SyncPlacesAsync(ct).ConfigureAwait(false);
-        await SyncHorizonAsync(ct).ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>

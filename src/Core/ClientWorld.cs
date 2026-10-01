@@ -10,7 +10,7 @@ namespace UnitSport.Core;
 /// Client bootstrap: loads the terrain manifest, sets up the chunk manager with the
 /// PS1 terrain material, sky/fog environment, and a spectator camera over the valley.
 /// </summary>
-public partial class ClientWorld : Node3D
+public partial class ClientWorld : Node3D, IOriginContainer
 {
     private ChunkManager? _chunks;
     private Audio.Ambience? _ambience;
@@ -59,6 +59,8 @@ public partial class ClientWorld : Node3D
 
     /// <summary>Players on the server, for the pause menu's status line (null offline).</summary>
     public int? Players => _networked && _players != null ? _players.GetChildCount() : null;
+    /// <summary>The origin the world started with: the server's frame, until positions on the wire are global.</summary>
+    private (double E, double N)? _startOrigin;
 
     public override async void _Ready()
     {
@@ -128,6 +130,11 @@ public partial class ClientWorld : Node3D
             GetTree().Quit(Items.InventoryCheck.Run());
             return;
         }
+        if (OriginCheck.Requested)
+        {
+            OriginCheck.Run(this);
+            return;
+        }
         if (ChatCheck.Requested)
         {
             GetTree().Quit(ChatCheck.Run());
@@ -169,7 +176,12 @@ public partial class ClientWorld : Node3D
             : new WorldOrigin(startE, startN);
 
         _worldOrigin = origin;
+        _startOrigin = (origin.E, origin.N);
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
+
+        // The floating origin (#185): world space follows the camera, so float32 stays precise
+        // however far it goes. Offline only until positions on the wire are origin-independent.
+        AddChild(new OriginShifter(origin, () => GetViewport().GetCamera3D()?.GlobalPosition, () => !_networked));
 
         if (!hasLocalTerrain)
             GD.PushWarning(
@@ -221,7 +233,7 @@ public partial class ClientWorld : Node3D
         // source so a client never asks a server for one, and under the cache so a generated tile
         // is not generated twice. Built even when switched off, so the setting can turn it on.
         var fallback = new FallbackChunkSource(streamedSource, generated, startE, startN,
-            GameSettings.Current.GeneratedFill) { Log = s => GD.Print(s) };
+            GameSettings.Current.GeneratedFill) { Log = s => GD.Print(s), HorizonCacheDir = TerrainPaths.FindCacheDir() };
 
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
@@ -418,6 +430,7 @@ public partial class ClientWorld : Node3D
         if (Player.GarageProbe.ParseArgs() is { } garageRole) AddChild(new Player.GarageProbe(garageRole, () => LocalPlayer));
         if (Player.HeavyNetProbe.ParseArgs() is { } heavyRole) AddChild(new Player.HeavyNetProbe(heavyRole, () => LocalPlayer));
         if (Player.PassengerProbe.ParseArgs() is { } passengerRole) AddChild(new Player.PassengerProbe(passengerRole, () => LocalPlayer));
+        if (Player.ExitProbe.Requested) AddChild(new Player.ExitProbe(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
@@ -738,14 +751,14 @@ public partial class ClientWorld : Node3D
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             AddChild(new ShotRunner(_spectator,
                 new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
-                float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]));
+                float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]) { Origin = _worldOrigin });
         }
         else if (ShotRunner.ParseQueueArg() is { } queue)
         {
             _spectator.SetProcess(false);
             _spectator.SetProcessUnhandledInput(false);
             Input.MouseMode = Input.MouseModeEnum.Visible;
-            AddChild(ShotRunner.ForQueue(_spectator, queue));
+            AddChild(ShotRunner.ForQueue(_spectator, queue, _worldOrigin));
         }
     }
 
@@ -796,9 +809,10 @@ public partial class ClientWorld : Node3D
 
     /// <summary>
     /// Works out how far the session is from playable: connected, terrain synced, our player
-    /// spawned, the spawn on the ground, and the tiles within three rings of the camera built.
-    /// A world that cannot finish the last step in 45 s goes ahead anyway: the rest streams in
-    /// while you play.
+    /// spawned, the spawn on the ground, the tile under the camera drawn (any detail; with its
+    /// collision when a body stands there), and the far horizon drawn around it, so you never
+    /// land in a void. A world that cannot finish the terrain in 25 s goes ahead anyway: the
+    /// tiles around you stream in while you play.
     /// </summary>
     private void TrackLoading(double delta)
     {
@@ -814,7 +828,7 @@ public partial class ClientWorld : Node3D
                 if (_loadClock > 15) Fail($"No answer from {Launch.Endpoint}. Is the server running, and its port open?");
                 return;
             }
-            if (_terrainSync is { Finished: false })
+            if (_terrainSync is { IndexFinished: false })
             {
                 Report(LoadStage.SyncingTerrain, 0.2f, LoadDetail);
                 return;
@@ -839,16 +853,34 @@ public partial class ClientWorld : Node3D
         }
 
         var eye = GetViewport().GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
-        var (done, total) = _chunks.ProgressNear(eye, 3);
+        var (done, total) = _chunks.PlayableNear(eye, 0);
         _terrainClock += delta;
-        Report(LoadStage.BuildingTerrain, total > 0 ? 0.35f + 0.65f * done / total : 0.35f,
-            total > 0 ? $"{done} / {total} tiles around you" : "");
-        if ((total > 0 && done >= total) || _terrainClock > 45 || (total == 0 && _terrainClock > 6))
+        bool timedOut = _terrainClock > 25;
+        if (!timedOut && (total > 0 ? done < total : _terrainClock <= 6))
         {
-            Stage = LoadStage.Ready;
-            LoadFraction = 1;
-            GD.Print($"[world] ready after {_loadClock:F1} s ({done}/{total} tiles near)");
+            Report(LoadStage.BuildingTerrain, total > 0 ? 0.35f + 0.25f * done / total : 0.35f,
+                total > 0 ? $"{done} / {total} tiles around you" : "");
+            return;
         }
+
+        // The horizon's lattice is generated at boot (or read from its cache) while the steps
+        // above run; its blocks then stream nearest first.
+        var horizon = _chunks.Horizon?.Progress();
+        if (!timedOut && horizon == null)
+        {
+            Report(LoadStage.DrawingHorizon, 0.6f);
+            return;
+        }
+        if (!timedOut && horizon is { Done: var hd, Total: var ht } && hd < ht)
+        {
+            Report(LoadStage.DrawingHorizon, 0.6f + 0.4f * hd / ht, $"{hd} / {ht} blocks of horizon");
+            return;
+        }
+
+        Stage = LoadStage.Ready;
+        LoadFraction = 1;
+        GD.Print($"[world] ready after {_loadClock:F1} s ({done}/{total} tiles near, "
+            + $"horizon {(horizon is { } hp ? $"{hp.Done}/{hp.Total}" : "loading")})");
     }
 
     /// <summary>A menu closed over this world: hand the pointer back to the mode that wants it.</summary>
@@ -971,6 +1003,10 @@ public partial class ClientWorld : Node3D
     private void StartNetworking(string host)
     {
         if (_networked) return;
+        // Positions on the wire are still world space (#185, phase 2), so online every peer must be
+        // in the frame the server is in: a game that travelled offline puts its origin back where
+        // it started before anything is sent. The shifter is off from here on.
+        if (_startOrigin is { } start) OriginShifter.Instance?.ShiftTo(start.E, start.N, exact: true);
         _networked = true;
 
         // The chat node (World/Chat, made at boot) is already where the server's RPCs route.
@@ -1019,6 +1055,7 @@ public partial class ClientWorld : Node3D
         // before any player arrives: each one's synchronizer asks it whom to send to
         InterestService.CreateClient(this);
         _players = new Node3D { Name = "Players" };
+        _players.AddToGroup(OriginShifter.ContainerGroup);
         _players.ChildEnteredTree += node =>
         {
             if (node.Name == Multiplayer.GetUniqueId().ToString() && node is FootPlayer player)

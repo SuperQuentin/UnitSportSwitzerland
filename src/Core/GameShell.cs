@@ -538,6 +538,7 @@ public partial class GameShell : Node
         LoadStage.WaitingForPlayer => "Waiting for your player",
         LoadStage.PlacingYou => "Finding solid ground",
         LoadStage.BuildingTerrain => "Building the terrain around you",
+        LoadStage.DrawingHorizon => "Raising the mountains",
         LoadStage.Ready => "Ready",
         _ => "Something went wrong",
     };
