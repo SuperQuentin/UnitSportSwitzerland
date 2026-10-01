@@ -11,6 +11,7 @@ namespace UnitSport.Birds;
 /// gone on the client, so there is no despawn message and a lost packet costs nothing;</item>
 /// <item>takes a peer's <see cref="Report"/> (a shot, a gun round, a strike, a scare), checks the peer is
 /// where it says and hands it to <see cref="BirdLife.ServerReport"/>;</item>
+/// <item>tells every peer near a pigeon's dropping where it falls and on whom (<see cref="BroadcastDropping"/>);</item>
 /// <item>tells every peer near a dead bird (reliable <c>Killed</c>), the shooter included: that is when
 /// the shooter's journal scores it, so the kill goes into the shooter's journal only.</item>
 /// </list>
@@ -100,6 +101,23 @@ public partial class BirdNet : Node
         foreach (int peer in Multiplayer.GetPeers())
             if (peer == shooter || GetNodeOrNull<Node3D>("../Players/" + peer) is { } body && body.GlobalPosition.DistanceTo(at) < KilledRange)
                 RpcId(peer, MethodName.Killed, b.Id, b.Species.Index, at, dir, shooter);
+    }
+
+    /// <summary>Server: a pigeon let go. Everyone near sees it fall; <paramref name="victim"/> (a peer, or 0) is who it lands on.</summary>
+    public void BroadcastDropping(Vector3 from, Vector3 vel, long victim)
+    {
+        if (!_server || !Online) return;
+        foreach (int peer in Multiplayer.GetPeers())
+            if (peer == victim || GetNodeOrNull<Node3D>("../Players/" + peer) is { } body && body.GlobalPosition.DistanceTo(from) < DroppingRange)
+                RpcId(peer, MethodName.Dropping, from, vel, victim);
+    }
+
+    private const float DroppingRange = 150f;
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Dropping(Vector3 from, Vector3 vel, long victim)
+    {
+        if (!_server) Life?.Dropping(from, vel, victim);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

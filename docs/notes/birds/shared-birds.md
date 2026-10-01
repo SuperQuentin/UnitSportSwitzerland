@@ -7,8 +7,9 @@
   bird of its own (spawned before it was connected) is dropped once online. Offline, `BirdLife` is its
   own authority exactly as before (`Authority`).
 - **Snapshots**: 8 Hz, unreliable, birds within 270 m of the peer's body, 35 B each (id, species
-  index, state, position, yaw, velocity) in packets of ≤ 32. Flying and falling birds every time,
-  resting and dead ones every 4th. No despawn message: a puppet not mentioned for 3 s is gone.
+  index, state with a town bit, position, yaw, velocity) in packets of ≤ 32. Flying and falling birds
+  every time, walking and swimming ones every 4th, perched and dead ones every 8th (1 Hz). No despawn
+  message: a puppet not mentioned for 4.5 s is gone. Town birds, landing, droppings: `town-birds`.
   The species index is the `BirdCatalog` position, so both sides must run the same catalogue.
 - **The lean server has no cover raster and a coarse 10 m ground** (`lean-dedicated-server`): the
   birds load the cover of a tile themselves (`CoverAt`, `LoadCoverAsync`) and its `.trees` for perches,

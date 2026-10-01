@@ -61,6 +61,16 @@ public partial class BirdLife : Node3D
     private readonly Dictionary<TileId, byte[]?> _cover = new();
     private readonly HashSet<TileId> _coverLoading = new();
     private readonly HashSet<TileId> _loading = new();
+    /// <summary>Building perches and density per tile (<see cref="TownPerches"/>), loaded like the trees.</summary>
+    private readonly Dictionary<TileId, TownPerches?> _town = new();
+    private readonly HashSet<TileId> _townLoading = new();
+    /// <summary>Where each flock is settling: the first of a flock to land picks the spot, the rest land around it.</summary>
+    private readonly Dictionary<int, (Vector3 At, double Until)> _flockSpots = new();
+    private int _nextFlock;
+    private double _clock;
+    private readonly List<Perch> _perchScratch = new();
+    private readonly List<Observer> _localWho = new(1);
+    private Droppings? _droppings;
     private AudioStreamPlayer _gun = null!;
     private AudioStreamPlayer3D _call = null!;
     private double _spawnTimer;
@@ -78,10 +88,11 @@ public partial class BirdLife : Node3D
     /// <summary>The dedicated server's copy: no meshes shown, sounds, journal or camera; it simulates for everyone.</summary>
     public bool Headless { get; init; }
 
-    /// <summary>Server: where the players are (position, velocity, in the air), for spawning, flushing and interest.</summary>
-    public Func<IReadOnlyList<Observer>>? Observers { get; set; }
+    /// <summary>Server: fills the list with where the players are (position, velocity, in the air), for spawning, flushing and droppings.</summary>
+    public Action<List<Observer>>? Observers { get; set; }
+    private readonly List<Observer> _who = new();
 
-    public readonly record struct Observer(Vector3 Position, Vector3 Velocity, bool Flying);
+    public readonly record struct Observer(Vector3 Position, Vector3 Velocity, bool Flying, long Peer = 1);
 
     /// <summary>The network side, set by <see cref="BirdNet"/>.</summary>
     public BirdNet? Net { get; set; }
@@ -121,6 +132,8 @@ public partial class BirdLife : Node3D
         AddChild(_gun);
         _call = new AudioStreamPlayer3D { Name = "Call", Bus = SfxBus.Name, UnitSize = 12f, VolumeDb = -4f };
         AddChild(_call);
+        _droppings = new Droppings();
+        AddChild(_droppings);
         _items.Fire = Fire;
 
         var args = OS.GetCmdlineUserArgs();
@@ -176,10 +189,14 @@ public partial class BirdLife : Node3D
 
         // binoculars see much further than the naked eye
         float seen = cam.Fov < 20f ? 300f : SeenRange;
+        _clock += delta;
+        _localWho.Clear();
+        if (player != null) _localWho.Add(new Observer(player.GlobalPosition, player.Velocity, player.IsFlying, Multiplayer.GetUniqueId()));
         for (int i = _birds.Count - 1; i >= 0; i--)
         {
             var b = _birds[i];
             b.Step(dt, this, player?.GlobalPosition);
+            if (Authority) MaybeDrop(b, dt, _localWho);
             var p = b.Node.GlobalPosition;
             // a puppet lives as long as the server keeps sending it; its own birds go when far
             if (b.Gone || (!b.Remote && Flat(p - focus) > DespawnDistance))
@@ -214,7 +231,10 @@ public partial class BirdLife : Node3D
     /// <summary>The server's tick: spawn around one player at a time, step everything, drop what nobody is near.</summary>
     private void ProcessServer(float dt)
     {
-        var who = Observers?.Invoke() ?? Array.Empty<Observer>();
+        var who = _who;
+        who.Clear();
+        Observers?.Invoke(who);
+        _clock += dt;
         _forgetTimer -= dt;
         if (_forgetTimer <= 0) { _forgetTimer = 10; ForgetFarTiles(who); }
         _spawnTimer -= dt;
@@ -222,7 +242,8 @@ public partial class BirdLife : Node3D
         {
             _spawnTimer = 0.4 / Math.Max(1, Math.Min(who.Count, 4));
             var o = who[_roundRobin++ % who.Count];
-            int near = _birds.Count(b => Flat(b.Node.GlobalPosition - o.Position) < DespawnDistance);
+            int near = 0;
+            foreach (var b in _birds) if (Flat(b.Node.GlobalPosition - o.Position) < DespawnDistance) near++;
             if (near < Budget) TrySpawn(o.Position, Budget - near);
             if (o.Flying && Flat(o.Velocity) > 12f && near < Budget) SpawnAhead(o.Position, o.Velocity, Budget - near);
         }
@@ -238,7 +259,8 @@ public partial class BirdLife : Node3D
                 if (d < best) { best = d; nearest = o.Position; }
             }
             b.Step(dt, this, nearest);
-            if (b.Gone || best > DespawnDistance) RemoveAt(i);
+            if (b.Gone || best > DespawnDistance) { RemoveAt(i); continue; }
+            MaybeDrop(b, dt, who);
         }
     }
 
@@ -309,18 +331,29 @@ public partial class BirdLife : Node3D
         if (!_chunks.TryGetHeight(p, out float ground) || !CoverAt(p, out var cover)) return (Habitat.None, 0);
         p.Y = ground;
         var habitat = HabitatAt(cover, ground);
-        EnsureTrees(_origin.TileAt(p));
+        var tile = _origin.TileAt(p);
+        EnsureTrees(tile);
+        EnsureTown(tile);
+        // the cover reads a village as farmland: the buildings say it is a town. Most of a town's
+        // birds are its own (pigeons, sparrows, swifts) on roofs, ledges and streets; the rest are
+        // the garden birds of the Town habitat.
+        if (TownAt(p) is { } town && town.BuildingsAround(p) >= TownBuildings && habitat is not (Habitat.Water or Habitat.Forest))
+        {
+            if (_rng.NextDouble() < 0.75) return (Habitat.Town, TownSpawn(p, town, free));
+            habitat = Habitat.Town;
+        }
         var s = Pick(habitat, ground);
         if (s == null) return (habitat, 0);
 
         int n = Math.Min(1 + _rng.Next(Math.Max(1, s.Flock)), free);
         var mode = ChooseMode(s, habitat);
+        int flock = ++_nextFlock;
         for (int i = 0; i < n; i++)
         {
             float spread = 1.5f + n * 0.6f;
             var at = p + new Vector3((float)(_rng.NextDouble() * 2 - 1) * spread, 0, (float)(_rng.NextDouble() * 2 - 1) * spread);
             at.Y = Ground(at);
-            Spawn(s, at, mode);
+            Spawn(s, at, mode).Flock = flock;
         }
         return (habitat, n);
     }
@@ -344,16 +377,16 @@ public partial class BirdLife : Node3D
     /// is one; <paramref name="lift"/> fixes a hovering, soaring or flying bird's height above
     /// <paramref name="at"/> instead of drawing one.
     /// </summary>
-    public Bird Spawn(BirdSpecies s, Vector3 at, Bird.Mode mode, float? lift = null)
+    public Bird Spawn(BirdSpecies s, Vector3 at, Bird.Mode mode, float? lift = null, bool town = false, float? yaw = null)
     {
-        if (mode == Bird.Mode.Perched)
+        if (mode == Bird.Mode.Perched && !town)
         {
             if (NearestTreeTop(at, 12f) is { } top) at = top;
             else mode = Bird.Mode.Ground;
         }
-        var bird = new Bird(s, (float)_rng.NextDouble(), visual: !Headless) { Id = ++_nextId };
+        var bird = new Bird(s, (float)_rng.NextDouble(), visual: !Headless) { Id = ++_nextId, Town = town };
         AddChild(bird.Node);
-        bird.Begin(mode, at, this, _rng, lift);
+        bird.Begin(mode, at, this, _rng, lift, yaw);
         _birds.Add(bird);
         _byId[bird.Id] = bird;
         return bird;
@@ -408,6 +441,8 @@ public partial class BirdLife : Node3D
         }
         foreach (var t in _cover.Keys.Where(t => !Near(t)).ToList()) _cover.Remove(t);
         foreach (var t in _trees.Keys.Where(t => !Near(t)).ToList()) _trees.Remove(t);
+        foreach (var t in _town.Keys.Where(t => !Near(t)).ToList()) _town.Remove(t);
+        foreach (var f in _flockSpots.Where(f => f.Value.Until < _clock).Select(f => f.Key).ToList()) _flockSpots.Remove(f);
     }
 
     private void EnsureTrees(TileId tile)
@@ -463,6 +498,244 @@ public partial class BirdLife : Node3D
                 }
             }
         return best;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // towns: perches on the buildings, the town birds, landing, droppings (#143)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>Real buildings (no barns or sheds) within the 192 m square around a point that make it a town.</summary>
+    public const int TownBuildings = 14;
+
+    /// <summary>
+    /// A town's own birds and where they sit: the weight (before the calendar), then the share on
+    /// roofs (ridges and eaves), on ledges, in the street and in the air. Feral pigeons first, then
+    /// what a Swiss town really has (Vogelwarte atlas): sparrows, crows and jackdaws, black redstarts
+    /// singing from the ridges, collared doves, blackbirds, wagtails and starlings; swifts and house
+    /// martins over the roofs in summer (by <see cref="BirdSpecies.PresenceIn"/>); gulls only near water.
+    /// </summary>
+    private static readonly (BirdSpecies Species, float Weight, float Roof, float Ledge, float Street, float Air, bool Water)[] TownBirds =
+    {
+        (Named("Rock Dove"), 40, 0.40f, 0.25f, 0.30f, 0.05f, false),
+        (Named("House Sparrow"), 22, 0.25f, 0.10f, 0.60f, 0.05f, false),
+        (Named("Carrion Crow"), 7, 0.50f, 0f, 0.45f, 0.05f, false),
+        (Named("Western Jackdaw"), 6, 0.55f, 0.15f, 0.25f, 0.05f, false),
+        (Named("Black Redstart"), 7, 0.75f, 0.20f, 0.05f, 0f, false),
+        (Named("Eurasian Collared Dove"), 5, 0.65f, 0.05f, 0.30f, 0f, false),
+        (Named("Common Blackbird"), 6, 0.40f, 0f, 0.60f, 0f, false),
+        (Named("White Wagtail"), 3, 0.20f, 0f, 0.80f, 0f, false),
+        (Named("Common Starling"), 3, 0.70f, 0.10f, 0.20f, 0f, false),
+        (Named("Eurasian Magpie"), 2, 0.50f, 0f, 0.50f, 0f, false),
+        (Named("Common Swift"), 14, 0f, 0f, 0f, 1f, false),
+        (Named("Alpine Swift"), 2, 0f, 0f, 0f, 1f, false),
+        (Named("Western House Martin"), 4, 0f, 0f, 0f, 1f, false),
+        (Named("Yellow-legged Gull"), 6, 0.55f, 0f, 0.15f, 0.30f, true),
+        (Named("Black-headed Gull"), 6, 0.40f, 0f, 0.25f, 0.35f, true),
+    };
+
+    private static BirdSpecies Named(string name) => BirdCatalog.All.First(s => s.Name == name);
+
+    private void EnsureTown(TileId tile)
+    {
+        if (_town.ContainsKey(tile) || !_townLoading.Add(tile) || _chunks.Source is not { } source) return;
+        LoadTown(source, tile);
+    }
+
+    private async void LoadTown(IChunkSource source, TileId tile)
+    {
+        try
+        {
+            var buildings = await source.LoadBuildingsAsync(tile);
+            var origin = _origin;
+            _town[tile] = buildings == null ? null : await Task.Run(() => TownPerches.Build(buildings, origin));
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[birds] buildings {tile}: {e.Message}");
+            _town[tile] = null;
+        }
+        finally { _townLoading.Remove(tile); }
+    }
+
+    private TownPerches? TownAt(Vector3 p) => _town.TryGetValue(_origin.TileAt(p), out var t) ? t : null;
+
+    /// <summary>True where the buildings make a town (for probes); false until the tile's buildings are read.</summary>
+    public bool IsTown(Vector3 p)
+    {
+        EnsureTown(_origin.TileAt(p));
+        return TownAt(p) is { } t && t.BuildingsAround(p) >= TownBuildings;
+    }
+
+    /// <summary>A random perch of the wanted kinds within <paramref name="radius"/> of a point, on that point's tile.</summary>
+    // ponytail: one tile only, a spot by a tile edge looks at half the town; look at the neighbour tile if that shows
+    private Perch? RandomPerch(TownPerches town, Vector3 around, float radius, bool roof, bool ledge, bool street)
+    {
+        _perchScratch.Clear();
+        int r = (int)Mathf.Ceil(radius / TownPerches.Cell);
+        var (cx, cz) = TownPerches.CellOf(around, TownPerches.Cell);
+        for (int dx = -r; dx <= r; dx++)
+            for (int dz = -r; dz <= r; dz++)
+            {
+                if (!town.Cells.TryGetValue((cx + dx, cz + dz), out var cell)) continue;
+                foreach (var p in cell)
+                {
+                    bool want = p.Kind switch { PerchKind.Ridge or PerchKind.Eave => roof, PerchKind.Ledge => ledge, _ => street };
+                    if (want && Flat(p.At - around) < radius) _perchScratch.Add(p);
+                }
+            }
+        return _perchScratch.Count == 0 ? null : _perchScratch[_rng.Next(_perchScratch.Count)];
+    }
+
+    /// <summary>Draws where a town bird of this kind goes: 0 roof, 1 ledge, 2 street, 3 air.</summary>
+    private int Placement(BirdSpecies s, bool air)
+    {
+        var row = Array.FindIndex(TownBirds, t => t.Species == s);
+        var (roof, ledge, street, fly) = row >= 0 ? (TownBirds[row].Roof, TownBirds[row].Ledge, TownBirds[row].Street, TownBirds[row].Air) : (0.5f, 0f, 0.5f, 0f);
+        if (!air) fly = 0f;
+        double r = _rng.NextDouble() * (roof + ledge + street + fly);
+        return (r -= roof) < 0 ? 0 : (r -= ledge) < 0 ? 1 : (r -= street) < 0 ? 2 : 3;
+    }
+
+    /// <summary>One town flock around <paramref name="p"/>: a species from <see cref="TownBirds"/>, sat on the buildings.</summary>
+    private int TownSpawn(Vector3 p, TownPerches town, int room)
+    {
+        double hour = World.DayNight.Instance?.Hour ?? 12.0;
+        bool night = hour < 5.5 || hour > 21.5;
+        bool water = false;
+        for (int k = 0; k < 6 && !water; k++)
+        {
+            float a = k * Mathf.Tau / 6f;
+            water = CoverAt(p + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * 250f, out var c) && c == CoverClass.Water;
+        }
+        double total = 0;
+        Span<double> w = stackalloc double[TownBirds.Length];
+        for (int i = 0; i < TownBirds.Length; i++)
+        {
+            var t = TownBirds[i];
+            bool fits = p.Y >= t.Species.MinAltitude - 100 && p.Y <= t.Species.MaxAltitude + 100 && (water || !t.Water) && !(night && t.Air >= 1f);
+            w[i] = fits ? t.Weight * t.Species.PresenceIn(Month) : 0;
+            total += w[i];
+        }
+        if (total <= 0) return 0;
+        double r = _rng.NextDouble() * total;
+        int pick = 0;
+        while (pick < w.Length - 1 && (r -= w[pick]) > 0) pick++;
+        var s = TownBirds[pick].Species;
+
+        int n = Math.Min(1 + _rng.Next(Math.Max(1, s.Flock)), room);
+        int where = Placement(s, air: !night);   // at night they roost: nothing is out flying
+        int flock = ++_nextFlock;
+        if (where == 3)
+        {
+            for (int i = 0; i < n; i++)
+                Spawn(s, p + new Vector3((float)(_rng.NextDouble() * 2 - 1) * 6f, 0, (float)(_rng.NextDouble() * 2 - 1) * 6f), Bird.Mode.Flying, town: true).Flock = flock;
+            return n;
+        }
+        if (RandomPerch(town, p, 40f, where == 0, where == 1, where == 2) is not { } first) return 0;
+        for (int i = 0; i < n; i++)
+        {
+            var perch = i == 0 ? first : RandomPerch(town, first.At, 12f, where == 0, where == 1, where == 2) ?? first;
+            if (where == 2)
+            {
+                var at = perch.At + new Vector3((float)(_rng.NextDouble() * 2 - 1) * 1.5f, 0, (float)(_rng.NextDouble() * 2 - 1) * 1.5f);
+                at.Y = Ground(at);
+                Spawn(s, at, Bird.Mode.Ground, town: true).Flock = flock;
+            }
+            else Spawn(s, perch.At + new Vector3((float)(_rng.NextDouble() - 0.5) * 0.4f, 0, (float)(_rng.NextDouble() - 0.5) * 0.4f), Bird.Mode.Perched, town: true, yaw: perch.Yaw).Flock = flock;
+        }
+        return n;
+    }
+
+    /// <summary>
+    /// Where a flying bird that has calmed down comes down (authority). A flock lands together: the
+    /// first of it to ask picks a spot 30–80 m ahead and the others settle within a few metres of it.
+    /// A town bird takes a roof, a ledge or the street; a perching bird a tree top; others the ground.
+    /// Null keeps it flying a while longer.
+    /// </summary>
+    public (Vector3 At, Bird.Mode Mode, float? Yaw)? FindLanding(Bird b)
+    {
+        var p = b.Node.GlobalPosition;
+        if (!_flockSpots.TryGetValue(b.Flock, out var spot) || spot.Until < _clock || b.Flock == 0)
+        {
+            var dir = b.Vel with { Y = 0 };
+            dir = dir.LengthSquared() > 0.01f ? dir.Normalized() : Vector3.Forward.Rotated(Vector3.Up, (float)(_rng.NextDouble() * Mathf.Tau));
+            spot = (p + dir * Mathf.Lerp(30f, 80f, (float)_rng.NextDouble()), _clock + 20.0);
+            if (b.Flock != 0) _flockSpots[b.Flock] = spot;
+        }
+        var area = spot.At;
+        if (b.Town && TownAt(area) is { } town)
+        {
+            int where = Placement(b.Species, air: false);
+            if (RandomPerch(town, area, 25f, where == 0, where == 1, where == 2) is { } perch)
+            {
+                if (perch.Kind != PerchKind.Street) return (perch.At, Bird.Mode.Perched, perch.Yaw);
+                var at = perch.At + new Vector3((float)(_rng.NextDouble() * 2 - 1) * 1.5f, 0, (float)(_rng.NextDouble() * 2 - 1) * 1.5f);
+                return (at with { Y = Ground(at) }, Bird.Mode.Ground, null);
+            }
+        }
+        var near = area + new Vector3((float)(_rng.NextDouble() * 2 - 1) * 4f, 0, (float)(_rng.NextDouble() * 2 - 1) * 4f);
+        EnsureTrees(_origin.TileAt(near));
+        bool percher = b.Species.Body is BodyPlan.Passerine or BodyPlan.Corvid or BodyPlan.Pigeon or BodyPlan.Woodpecker;
+        if (percher && NearestTreeTop(near, 16f) is { } top) return (top, Bird.Mode.Perched, null);
+        if (b.Species.Body is BodyPlan.Woodpecker || !_chunks.TryGetHeight(near, out float ground)
+            || CoverAt(near, out var cover) && cover is CoverClass.Water or CoverClass.Forest) return null;
+        return (near with { Y = ground }, Bird.Mode.Ground, null);
+    }
+
+    /// <summary>
+    /// Pigeons now and then let go (authority): about once in 2½ minutes each while someone is within
+    /// 80 m, and far more readily straight above a person, who is then the one hit. Cosmetic only:
+    /// <see cref="Droppings"/> draws the fall and the splat on every client.
+    /// </summary>
+    private void MaybeDrop(Bird b, float dt, List<Observer> who)
+    {
+        if (b.Species.Body != BodyPlan.Pigeon || b.State is not (Bird.Mode.Perched or Bird.Mode.Flying)) return;
+        var at = b.Node.GlobalPosition;
+        float nearest = float.MaxValue;
+        long victim = 0;
+        foreach (var o in who)
+        {
+            float d = Flat(at - o.Position);
+            nearest = Mathf.Min(nearest, d);
+            float above = at.Y - o.Position.Y;
+            if (d < 1.5f && above is > 2.5f and < 40f) victim = o.Peer;
+        }
+        if (nearest > 80f || _rng.NextDouble() > (victim != 0 ? DropAboveRate : DropRate) * dt) return;
+        var vel = victim != 0 ? Vector3.Zero : b.Vel * 0.6f;
+        var from = at + Vector3.Down * 0.05f;
+        if (Headless) Net?.BroadcastDropping(from, vel, victim);
+        else Dropping(from, vel, victim);
+    }
+
+    /// <summary>Per second, per pigeon: anywhere, and straight above someone.</summary>
+    public const float DropRate = 1f / 150f, DropAboveRate = 0.25f;
+
+    /// <summary>Client: a dropping falls from <paramref name="from"/>; <paramref name="victim"/> (a peer id, 0 for none) is who it lands on.</summary>
+    public void Dropping(Vector3 from, Vector3 vel, long victim)
+    {
+        if (_droppings == null) return;
+        bool mine = victim != 0 && victim == Multiplayer.GetUniqueId();
+        Node3D? target = victim == 0 ? null
+            : mine ? Player
+            : GetNodeOrNull<Node3D>("../Players/" + victim);
+        if (victim != 0 && !mine) { DropsOnOthers++; LastVictim = victim; }
+        GD.Print($"[birds] dropping from {from.X:F0},{from.Y:F0},{from.Z:F0}{(victim != 0 ? $" on peer {victim}{(mine ? " (me)" : "")}" : "")}");
+        _droppings.Drop(from, vel, target, mine ? () => Splattered(Player) : null);
+    }
+
+    /// <summary>Droppings this client saw fall on another player, and on whom last (probes read them).</summary>
+    public int DropsOnOthers { get; private set; }
+    public long LastVictim { get; private set; }
+
+    /// <summary>Counts the droppings that landed on this player (probes read it).</summary>
+    public int Splats { get; private set; }
+
+    private void Splattered(FootPlayer? me)
+    {
+        Splats++;
+        me?.Punch(0.05f);
+        _droppings?.OnScreen();
+        _items.Ui.Toast("A pigeon got you!");
     }
 
     // ------------------------------------------------------------------------------------
@@ -657,9 +930,11 @@ public partial class BirdLife : Node3D
         {
             var p = b.Node.GlobalPosition;
             if (Flat(p - focus) > DespawnDistance + 30f) continue;
-            // perched, walking and dead birds hardly change: a quarter of the rate, flying ones every time
-            if (b.State is Bird.Mode.Ground or Bird.Mode.Perched or Bird.Mode.Swimming or Bird.Mode.Dead && (tick + b.Id) % 4 != 0) continue;
-            w.Write(b.Id); w.Write((ushort)b.Species.Index); w.Write((byte)b.State);
+            // flying birds every time; walking and swimming ones at a quarter of the rate (they amble);
+            // perched and dead ones at an eighth: they only turn their heads (a town has dozens)
+            int every = b.State switch { Bird.Mode.Perched or Bird.Mode.Dead => 8, Bird.Mode.Ground or Bird.Mode.Swimming => 4, _ => 1 };
+            if ((tick + b.Id) % every != 0) continue;
+            w.Write(b.Id); w.Write((ushort)b.Species.Index); w.Write((byte)((byte)b.State | (b.Town ? TownBit : 0)));
             w.Write(p.X); w.Write(p.Y); w.Write(p.Z); w.Write(b.Yaw);
             w.Write(b.Vel.X); w.Write(b.Vel.Y); w.Write(b.Vel.Z);
             if (++n == 32) { chunks.Add(ms.ToArray()); ms.SetLength(0); n = 0; }
@@ -667,6 +942,9 @@ public partial class BirdLife : Node3D
         if (n > 0) chunks.Add(ms.ToArray());
         return chunks;
     }
+
+    /// <summary>The state byte's top bit: a town bird (tame: it lets people come much closer).</summary>
+    private const int TownBit = 0x80;
 
     /// <summary>Client: the server's birds near us. A bird not seen before becomes a puppet.</summary>
     public void ApplySnapshot(byte[] data)
@@ -676,7 +954,8 @@ public partial class BirdLife : Node3D
         {
             int id = r.ReadInt32();
             int species = r.ReadUInt16();
-            var state = (Bird.Mode)r.ReadByte();
+            byte bits = r.ReadByte();
+            var state = (Bird.Mode)(bits & ~TownBit);
             var p = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
             float yaw = r.ReadSingle();
             var v = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
@@ -684,7 +963,7 @@ public partial class BirdLife : Node3D
             {
                 var sp = BirdNet.Species(species);
                 if (sp == null) continue;
-                b = new Bird(sp, id * 0.618034f % 1f) { Id = id };
+                b = new Bird(sp, id * 0.618034f % 1f) { Id = id, Town = (bits & TownBit) != 0 };
                 AddChild(b.Node);
                 b.BeginRemote(this, state, p, yaw);
                 _birds.Add(b);
@@ -748,10 +1027,11 @@ public partial class BirdLife : Node3D
         float lift = Mathf.Clamp(agl + ((float)_rng.NextDouble() * 2f - 1f) * 15f, 3f, Ceiling(s));
         var mode = s.Flight == FlightStyle.Soar ? Bird.Mode.Soaring : Bird.Mode.Flying;
         int n = Math.Min(1 + _rng.Next(Math.Max(1, s.Flock)), room);
+        int flock = ++_nextFlock;
         for (int i = 0; i < n; i++)
         {
             var spot = p + new Vector3((float)(_rng.NextDouble() * 2 - 1) * 4f, 0, (float)(_rng.NextDouble() * 2 - 1) * 4f);
-            Spawn(s, spot, mode, lift + (float)(_rng.NextDouble() * 2 - 1) * 2f);
+            Spawn(s, spot, mode, lift + (float)(_rng.NextDouble() * 2 - 1) * 2f).Flock = flock;
         }
         return n;
     }
@@ -926,6 +1206,12 @@ public sealed class Bird
     /// <summary>A puppet: it only follows what the server sends.</summary>
     public bool Remote { get; private set; }
 
+    /// <summary>A town bird (#143): it lives on the buildings, lets people come close and lands back on a roof, a ledge or the street.</summary>
+    public bool Town { get; init; }
+
+    /// <summary>The flock it was spawned with (0: none); a flock lands together.</summary>
+    public int Flock { get; set; }
+
     public float Yaw => _yaw;
 
     /// <summary>Measured velocity (what the server sends so a puppet can carry on between snapshots).</summary>
@@ -981,14 +1267,25 @@ public sealed class Bird
 
     private float Cruise => Species.Flight == FlightStyle.Dart ? 12f + 6f * _seed : 5f + 9f * Mathf.Sqrt(Species.Length);
     private float FlapHz => 2.5f * Mathf.Pow(Mathf.Max(Species.Length, 0.08f), -0.7f);
-    private float FlushDistance => 5f + 18f * Mathf.Sqrt(Species.Length);
+    /// <summary>How close a person may come before it flies: town birds are used to people (a feral pigeon lets you within 4 m).</summary>
+    public float FlushDistance => Town ? 2f + 4f * Mathf.Sqrt(Species.Length) : 5f + 18f * Mathf.Sqrt(Species.Length);
 
-    public void Begin(Mode mode, Vector3 at, BirdLife life, Random rng, float? lift = null)
+    /// <summary>Lands at all, once calm again: not the swifts, soarers or hoverers, nor water birds (they fly on and are gone).</summary>
+    private bool Lands => Species.Flight is not (FlightStyle.Dart or FlightStyle.Soar or FlightStyle.Hover)
+        && (Species.Body is BodyPlan.Passerine or BodyPlan.Corvid or BodyPlan.Pigeon or BodyPlan.Woodpecker || (Town && Species.Body == BodyPlan.Gull));
+
+    private Vector3? _land;
+    private Mode _landMode;
+    private float? _landYaw;
+    private float _airTime, _settle;
+
+    public void Begin(Mode mode, Vector3 at, BirdLife life, Random rng, float? lift = null, float? yaw = null)
     {
         _life = life;
         State = mode;
-        _yaw = (float)(rng.NextDouble() * Mathf.Tau);
+        _yaw = yaw ?? (float)(rng.NextDouble() * Mathf.Tau);
         _timer = (float)rng.NextDouble() * 3f;
+        _settle = 5f + 15f * _seed;
         switch (mode)
         {
             case Mode.Soaring:
@@ -1040,7 +1337,8 @@ public sealed class Bird
     private void StepRemote(float dt)
     {
         _netAge += dt;
-        if (_netAge > 3f) { Gone = true; return; }
+        // perched birds are sent once a second (unreliable): three lost in a row are not a departure
+        if (_netAge > 4.5f) { Gone = true; return; }
         float age = Mathf.Min(_netAge, 0.5f);
         var target = _netPos + _netVel * age;
         if (State == Mode.Falling) target += Vector3.Down * (0.5f * Rideable.Gravity * age * age);
@@ -1080,6 +1378,8 @@ public sealed class Bird
         away = away.Normalized().Rotated(Vector3.Up, (float)(rng.NextDouble() - 0.5) * 1.4f);
         _velocity = away * Cruise * 1.2f + Vector3.Up * Cruise * 0.5f;
         _flee = 3f;
+        _land = null;
+        _settle = _airTime + 6f + 12f * _seed;   // a while in the air before it comes down again
         bool wasGrounded = !Airborne;
         State = Mode.Flying;
         if (wasGrounded) _life.Called(this);
@@ -1100,7 +1400,7 @@ public sealed class Bird
         var before = p;
         if (player is { } me && State is Mode.Ground or Mode.Perched or Mode.Swimming
             && p.DistanceTo(me) < FlushDistance)
-            Flush(me, new Random());
+            Flush(me, Random.Shared);
 
         float flap = 0f;
         switch (State)
@@ -1137,7 +1437,38 @@ public sealed class Bird
             case Mode.Flying:
             {
                 _flee -= dt;
+                _airTime += dt;
                 float ground = life.Ground(p);
+                if (_land is { } dest)
+                {
+                    // gliding in to the perch, braking over the last metres
+                    var to = dest - p;
+                    float dist = to.Length();
+                    if (dist < 0.3f)
+                    {
+                        p = dest;
+                        State = _landMode;
+                        _land = null;
+                        _velocity = Vector3.Zero;
+                        _walkTo = p;
+                        _timer = 1f + 3f * _seed;
+                        if (_landYaw is { } face) _yaw = face;
+                        break;
+                    }
+                    float speed = Mathf.Min(Cruise, 1.5f + dist * 0.7f);
+                    var want = to / dist * speed;
+                    _velocity = dist < 8f ? want : _velocity.Lerp(want, 1f - Mathf.Exp(-3f * dt));
+                    p += _velocity * dt;
+                    if (dist > 8f && p.Y < ground + 1f) p.Y = ground + 1f;
+                    _yaw = Mathf.Atan2(_velocity.X, _velocity.Z);
+                    flap = dist < 3f ? Mathf.Sin(_phase * 1.5f) * 0.9f : Mathf.Sin(_phase) * 0.9f;
+                    break;
+                }
+                if (_flee <= 0 && _airTime > _settle && Lands)
+                {
+                    _settle = _airTime + 3f;   // nowhere to land: look again in a moment
+                    if (life.FindLanding(this) is { } landing) (_land, _landMode, _landYaw) = landing;
+                }
                 if (_flee <= 0)
                 {
                     // level out after the escape, and keep clear of the ground

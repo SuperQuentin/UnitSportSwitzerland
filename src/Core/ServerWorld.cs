@@ -153,9 +153,14 @@ public partial class ServerWorld : Node3D
         var birds = new Birds.BirdLife(_chunks, origin, null)
         {
             Headless = true,
-            Observers = () => _players!.GetChildren().OfType<Player.FootPlayer>().Where(p => !p.Npc)
-                .Select(p => new Birds.BirdLife.Observer(p.GlobalPosition, p.NetVel, p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
-                    or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit)).ToList(),
+            // fills the birds' reused list: no allocation per frame (GC pauses at 16 players)
+            Observers = list =>
+            {
+                for (int i = 0; i < _players!.GetChildCount(); i++)
+                    if (_players.GetChild(i) is Player.FootPlayer { Npc: false } p && long.TryParse(p.Name, out long peer))
+                        list.Add(new Birds.BirdLife.Observer(p.GlobalPosition, p.NetVel, p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
+                            or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit, peer));
+            },
         };
         AddChild(birds);
         Birds.BirdNet.Create(this, birds, server: true);
