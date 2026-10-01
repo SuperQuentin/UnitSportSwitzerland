@@ -19,7 +19,7 @@ namespace UnitSport.Items;
 /// <see cref="RadioSpeaker"/> on every player holding a playing radio (<see cref="UpdateHeld"/>).
 /// </para>
 /// </summary>
-public partial class RadioManager : Node3D
+public partial class RadioManager : Node3D, Core.IOriginContainer
 {
     public const string NodeName = "Radios";
 

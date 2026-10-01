@@ -22,7 +22,7 @@ namespace UnitSport.Player;
 /// dead ends. Neither adds a new top speed on flat ground — see <see cref="AirDrag"/>.
 /// </para>
 /// </summary>
-public partial class FootPlayer : CharacterBody3D
+public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 {
     public const string Group = "players";
 
@@ -2029,6 +2029,21 @@ public partial class FootPlayer : CharacterBody3D
         if (HasSafeHere) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
         Velocity = Vector3.Zero;
         RequestReplacement();
+    }
+
+    /// <summary>
+    /// The origin moved (#185). The body has moved with it; these are the world positions it keeps
+    /// besides: where to put it back down, and a mantle in progress. Directions turn with the frame.
+    /// </summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        _lastSafe = shift.Point(_lastSafe);
+        _mantleFrom = shift.Point(_mantleFrom);
+        _mantleRise = shift.Point(_mantleRise);
+        _mantleTo = shift.Point(_mantleTo);
+        _mantleForward = shift.Direction(_mantleForward);
+        _camFwd = shift.Direction(_camFwd);
+        Velocity = shift.Direction(Velocity);
     }
 
     private void RememberSafe(Vector3 at)

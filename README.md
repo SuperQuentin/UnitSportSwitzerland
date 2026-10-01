@@ -291,7 +291,8 @@ Two things change when the area grows:
   coordinates shift. That is handled at runtime, but any hard-coded world position (a
   screenshot command, a saved camera) will move.
 - Beyond ~100 km from the origin, float32 world coordinates lose sub-centimetre precision.
-  Fine for a region; a country-scale world eventually wants a floating origin.
+  Offline, the origin follows the camera (a floating origin, #185), so this no longer matters
+  there; online it still does until positions on the wire are origin-independent.
 
 ### 4. Add roads, land cover and buildings
 

@@ -11,7 +11,7 @@ namespace UnitSport.Terrain;
 /// Godot resources per frame to avoid hitches. With BuildMeshes=false (dedicated server)
 /// only ChunkGrid data is loaded, which is all height queries need.
 /// </summary>
-public partial class ChunkManager : Node3D
+public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 {
     [Export] public bool BuildMeshes { get; set; } = true;
     [Export] public bool BuildCollision { get; set; } = true;
@@ -490,6 +490,7 @@ public partial class ChunkManager : Node3D
     /// </summary>
     public void SetOccupancy(Vector4[] boxes, Vector4[] axes, int count)
     {
+        _occupancy = (boxes, axes, count);
         if (_buildingMaterial is not ShaderMaterial shader) return;
         shader.SetShaderParameter("occupied_box", boxes);
         shader.SetShaderParameter("occupied_axis", axes);
@@ -502,11 +503,44 @@ public partial class ChunkManager : Node3D
     /// </summary>
     public void SetOpenDoors(Vector4[] boxes, Vector4[] axes, int count)
     {
+        _openDoors = (boxes, axes, count);
         if (_buildingMaterial is not ShaderMaterial shader) return;
         shader.SetShaderParameter("open_door_box", boxes);
         shader.SetShaderParameter("open_door_axis", axes);
         shader.SetShaderParameter("open_door_count", Math.Min(count, Interiors.DoorPortals.MaxOpenDoors));
     }
+
+    private (Vector4[] Boxes, Vector4[] Axes, int Count)? _occupancy, _openDoors;
+
+    /// <summary>
+    /// The origin moved (#185). The tiles are children and have moved already; what remains is
+    /// what this keeps in world space elsewhere: the view, the door index, and the boxes the
+    /// building shader was handed, which their owners only push again when they change.
+    /// </summary>
+    public void OnOriginShifted(OriginShift shift)
+    {
+        ViewPosition = shift.Point(ViewPosition);
+        ViewDirection = shift.Direction(ViewDirection);
+        Interiors.DoorIndex.Shift(shift);
+        if (_occupancy is { } o) SetOccupancy(ShiftBoxes(o.Boxes, shift), ShiftAxes(o.Axes, shift), o.Count);
+        if (_openDoors is { } d) SetOpenDoors(ShiftBoxes(d.Boxes, shift), ShiftAxes(d.Axes, shift), d.Count);
+    }
+
+    /// <summary>Boxes of (world x, world z, half width, half depth), moved by a shift.</summary>
+    private static Vector4[] ShiftBoxes(Vector4[] boxes, OriginShift shift) =>
+        boxes.Select(b =>
+        {
+            var p = shift.Point(new Vector3(b.X, 0, b.Y));
+            return new Vector4(p.X, p.Z, b.Z, b.W);
+        }).ToArray();
+
+    /// <summary>Axes of (cos, sin, ...) in the XZ plane, turned by a shift.</summary>
+    private static Vector4[] ShiftAxes(Vector4[] axes, OriginShift shift) =>
+        axes.Select(a =>
+        {
+            var v = shift.Direction(new Vector3(a.X, 0, a.Y));
+            return new Vector4(v.X, v.Z, a.Z, a.W);
+        }).ToArray();
 
     /// <summary>
     /// Adds tiles the client did not know about, so they become streamable.

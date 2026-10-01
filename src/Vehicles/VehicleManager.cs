@@ -16,7 +16,7 @@ namespace UnitSport.Vehicles;
 /// it — client authority, as for the players themselves.
 /// </para>
 /// </summary>
-public partial class VehicleManager : Node3D
+public partial class VehicleManager : Node3D, Core.IOriginContainer
 {
     public const string NodeName = "Vehicles";
 

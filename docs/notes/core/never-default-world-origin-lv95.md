@@ -10,3 +10,5 @@
   against the old origin are gone; the generated fill is anchored in LV95, so it comes back
   identical. Rebasing changes what every world coordinate means, so
   `ClientWorld.RespawnAfterRebase` puts the player down again.
+  Since #185 the origin also moves while the game runs, offline (`floating-origin`); the rebase
+  above is the online case, where every peer must share the server's frame.
