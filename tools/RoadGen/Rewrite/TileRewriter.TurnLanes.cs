@@ -114,7 +114,7 @@ public static partial class TileRewriter
                 approach.Pocket(Get(paint, inSeg.Tile), right, stats);
                 departure.Emit(Get(paint, outSeg.Tile), Get(areas, outSeg.Tile));
                 departure.Median(Get(paint, outSeg.Tile), stats);
-                Across(approach, departure, inSeg.Tile, Get(paint, inSeg.Tile), Get(areas, inSeg.Tile), edgeLine: !right);
+                Across(approach, departure, inSeg.Tile, Get(areas, inSeg.Tile), Get(paint, home), home, priority.Guides, joined: right);
                 // a sign beside the old edge (#121's 3.03) would now stand on the widening
                 stats.SignsMoved += approach.PushOut(Get(signs, inSeg.Tile)) + departure.PushOut(Get(signs, outSeg.Tile));
                 stats.Placed++;
@@ -125,10 +125,12 @@ public static partial class TileRewriter
     /// <summary>
     /// The through lane across the junction: the junction polygon only covers the original road,
     /// so the lane's outer part, from the approach strip's mouth to the exit strip's, is paved as
-    /// one more strip (in the approach's tile), with its edge line where no road leaves on that side.
+    /// one more strip (in the approach's tile). The junction's guide line on that side (#121) runs
+    /// along the old edge, now inside the lane: it moves out onto the strip's edge, dashed where a
+    /// road joins on that side, solid where none does (and only if there was one).
     /// </summary>
-    private static void Across(Widening approach, Widening exit, TileId tile, List<RoadPaint> paint,
-        List<RoadAreaProp> areas, bool edgeLine)
+    private static void Across(Widening approach, Widening exit, TileId tile, List<RoadAreaProp> areas,
+        List<RoadPaint> homePaint, TileId home, HashSet<RoadPaint> guides, bool joined)
     {
         var (ai, ao) = approach.Mouth(tile);
         var (ei, eo) = exit.Mouth(tile);
@@ -137,12 +139,19 @@ public static partial class TileRewriter
             Type = AreaPropType.Pavement, Flags = PropFlags.None, Height = 0f,
             Vertices = [.. ai, .. ao, .. eo, .. ei], Indices = [0, 1, 2, 0, 2, 3],
         });
-        if (!edgeLine) return;
-        var (_, aEdge) = approach.Mouth(tile, PaintEmitter.EdgeLineInset);
-        var (_, eEdge) = exit.Mouth(tile, PaintEmitter.EdgeLineInset);
-        paint.Add(new RoadPaint
+
+        var (corner, aEdge) = approach.Mouth(home, PaintEmitter.EdgeLineInset);
+        var (_, eEdge) = exit.Mouth(home, PaintEmitter.EdgeLineInset);
+        static double Gap(float[] v, int i, float[] p) => Math.Sqrt(Sq(v[i] - p[0]) + Sq(v[i + 2] - p[2]));
+        var old = homePaint.FirstOrDefault(q => guides.Contains(q)
+            && (Gap(q.Vertices, 0, corner) < 1.5 || Gap(q.Vertices, q.Vertices.Length - 3, corner) < 1.5));
+        if (old is not null) homePaint.Remove(old);
+        if (old is null && !joined) return;
+        homePaint.Add(new RoadPaint
         {
-            Shape = PaintShape.Polyline, Type = PaintType.WhiteSolid, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
+            Shape = PaintShape.Polyline, Type = joined ? PaintType.WhiteDashed : PaintType.WhiteSolid,
+            Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
+            Dash = joined ? GuideDash : 0, Gap = joined ? GuideDash : 0,
             Vertices = [.. aEdge, .. eEdge],
         });
     }
@@ -445,16 +454,60 @@ public static partial class TileRewriter
         }
     }
 
-    /// <summary>Length of a lane arrow, tail to tip.</summary>
+    /// <summary>Length of a straight lane arrow, tail to tip.</summary>
     private const double ArrowLength = 6.5;
 
     /// <summary>
-    /// A lane arrow (#123, SSV 6.06) as paint triangles, its tail at (x, z) and pointing along
-    /// (fx, fz) (tile-local, X east and Z south), after the current Swiss drawing (Stadt Bern
-    /// Normalien C 2.10.17, revised 2019): straight, a 0.15 m shaft and a head 2.55 m long and
-    /// 0.80 m wide, 6.50 m in all; a turn, the shaft jogging aside near its end into a short head
-    /// at 45 degrees, staying about a metre from the lane's middle (the older design bent a branch
-    /// off the shaft). A combined arrow is both drawn on one shaft.
+    /// Lane arrows (Einspurpfeile, SSV 6.06), outlines traced from the Wikimedia Commons diagram
+    /// <c>CH-Markierung-606-Einspurpfeile.svg</c> (path data in its units, y up = the driver's left;
+    /// tail x, shaft centre y): straight, a dart head with notches where the barbs meet the shaft;
+    /// left, the shaft jogging left near its end into an open corner head pointing 45 degrees
+    /// forward-left; straight + right, the straight arrow with a short barb leaving its shaft to the
+    /// right. Right and straight + left are their mirrors. Scaled so the straight one is
+    /// <see cref="ArrowLength"/> long (the Stadt Bern Normalien's 6.50 m); the shaft comes out
+    /// 0.175 m.
+    /// </summary>
+    private static readonly (double Tail, double Centre, double[] Xy) StraightOutline = (449.281, 390.959,
+    [
+        912.961, 362.883, 1026, 380.879, 449.281, 380.879, 449.281, 401.039, 1027.44, 401.039, 912.961, 420.48,
+        912.961, 438.48, 1198.08, 391.68, 912.961, 344.16,
+    ]);
+
+    private static readonly (double Tail, double Centre, double[] Xy) LeftOutline = (449.281, 671.039,
+    [
+        1057.68, 654.48, 1110.24, 701.277, 939.602, 660.961, 449.281, 660.961, 449.281, 681.117, 927.359, 681.117,
+        1066.32, 712.078, 912.961, 712.078, 913.684, 733.684, 1210.32, 733.684, 1091.52, 619.199,
+    ]);
+
+    private static readonly (double Tail, double Centre, double[] Xy) StraightRightOutline = (443.52, 141.838,
+    [
+        907.203, 113.762, 1020.24, 131.758, 616.316, 131.758, 699.121, 65.5195, 704.879, 113.762, 740.879, 110.16,
+        731.52, 29.5195, 585.359, 47.5195, 586.801, 66.957, 668.16, 56.879, 570.961, 131.758, 443.52, 131.758,
+        443.52, 151.918, 1021.68, 151.918, 907.203, 170.641, 907.203, 189.359, 1192.32, 141.84, 907.203, 95.0391,
+    ]);
+
+    private static readonly Dictionary<PaintArrow, (Vec2[] Points, int[] Triangles)> ArrowShapes = new()
+    {
+        [PaintArrow.Straight] = Shape(StraightOutline, mirror: false),
+        [PaintArrow.Left] = Shape(LeftOutline, mirror: false),
+        [PaintArrow.Right] = Shape(LeftOutline, mirror: true),
+        [PaintArrow.Straight | PaintArrow.Right] = Shape(StraightRightOutline, mirror: false),
+        [PaintArrow.Straight | PaintArrow.Left] = Shape(StraightRightOutline, mirror: true),
+    };
+
+    /// <summary>An outline in metres, (forward, left) from the tail, and its triangles.</summary>
+    private static (Vec2[] Points, int[] Triangles) Shape((double Tail, double Centre, double[] Xy) o, bool mirror)
+    {
+        double scale = ArrowLength / (1198.08 - 449.281);
+        var pts = new Vec2[o.Xy.Length / 2];
+        for (int i = 0; i < pts.Length; i++)
+            pts[i] = new Vec2((o.Xy[i * 2] - o.Tail) * scale, (o.Xy[i * 2 + 1] - o.Centre) * scale * (mirror ? -1 : 1));
+        return (pts, Junctions.EarClip.Triangulate(pts).ToArray());
+    }
+
+    /// <summary>
+    /// A lane arrow (#123) as paint triangles, its tail at (x, z) and pointing along (fx, fz)
+    /// (tile-local, X east and Z south); shapes in <see cref="ArrowShapes"/>.
     /// </summary>
     private static RoadPaint Arrow(double x, double y, double z, double fx, double fz, PaintArrow kind)
     {
@@ -462,50 +515,18 @@ public static partial class TileRewriter
         fx /= len; fz /= len;
         // the driver's left, X east and Z south: forward (fx, fz) turned a quarter to the left
         double lx = fz, lz = -fx;
-        var v = new List<float>();
-        var idx = new List<ushort>();
-        void Pt(double f, double l) => v.AddRange([(float)(x + fx * f + lx * l), (float)y, (float)(z + fz * f + lz * l)]);
-        void Quad(double f0, double l0, double f1, double l1, double f2, double l2, double f3, double l3)
+        var (pts, tris) = ArrowShapes[kind];
+        var v = new float[pts.Length * 3];
+        for (int i = 0; i < pts.Length; i++)
         {
-            ushort b = (ushort)(v.Count / 3);
-            Pt(f0, l0); Pt(f1, l1); Pt(f2, l2); Pt(f3, l3);
-            idx.AddRange([b, (ushort)(b + 1), (ushort)(b + 2), b, (ushort)(b + 2), (ushort)(b + 3)]);
-        }
-        void Tri(double f0, double l0, double f1, double l1, double f2, double l2)
-        {
-            ushort b = (ushort)(v.Count / 3);
-            Pt(f0, l0); Pt(f1, l1); Pt(f2, l2);
-            idx.AddRange([b, (ushort)(b + 1), (ushort)(b + 2)]);
-        }
-        // half the 0.15 m shaft; the straight head; the turn's shaft, jog and head
-        const double Shaft = 0.075, Head = 2.55, HeadHalf = 0.40;
-        const double TurnShaft = 4.6, JogF = 0.6, JogL = 0.35, TurnHead = 1.0, TurnHeadHalf = 0.3;
-        // a 0.15 m band from (f0, l0) to (f1, l1)
-        void Band(double f0, double l0, double f1, double l1)
-        {
-            double df = f1 - f0, dl = l1 - l0, n = Math.Sqrt(df * df + dl * dl);
-            double nf = -dl / n * Shaft, nl = df / n * Shaft;
-            Quad(f0 - nf, l0 - nl, f1 - nf, l1 - nl, f1 + nf, l1 + nl, f0 + nf, l0 + nl);
-        }
-
-        bool straight = (kind & PaintArrow.Straight) != 0;
-        Band(0, 0, straight ? ArrowLength - Head : TurnShaft, 0);
-        if (straight) Tri(ArrowLength - Head, -HeadHalf, ArrowLength, 0, ArrowLength - Head, HeadHalf);
-        foreach (var (bit, sign) in (ReadOnlySpan<(PaintArrow, int)>)[(PaintArrow.Left, 1), (PaintArrow.Right, -1)])
-        {
-            if ((kind & bit) == 0) continue;
-            // the jog off the shaft, then a head at 45 degrees from the jog's end
-            double jf = TurnShaft + JogF, jl = sign * JogL;
-            Band(TurnShaft, 0, jf, jl);
-            double c = Math.Sqrt(0.5);
-            double df = c, dl = sign * c, nf = -sign * c, nl = c;   // the head's way, and across it
-            Tri(jf - nf * TurnHeadHalf, jl - nl * TurnHeadHalf, jf + df * TurnHead, jl + dl * TurnHead,
-                jf + nf * TurnHeadHalf, jl + nl * TurnHeadHalf);
+            v[i * 3] = (float)(x + fx * pts[i].X + lx * pts[i].Y);
+            v[i * 3 + 1] = (float)y;
+            v[i * 3 + 2] = (float)(z + fz * pts[i].X + lz * pts[i].Y);
         }
         return new RoadPaint
         {
             Shape = PaintShape.Triangles, Type = PaintType.Arrow, Variant = (byte)kind, Rgba = PaintEmitter.White,
-            Vertices = v.ToArray(), Indices = idx.ToArray(),
+            Vertices = v, Indices = tris.Select(i => (ushort)i).ToArray(),
         };
     }
 }
