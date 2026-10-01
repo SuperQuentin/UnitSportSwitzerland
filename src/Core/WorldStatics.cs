@@ -28,6 +28,7 @@ public static class WorldStatics
         Items.ItemEvents.ResetEvents();
         Items.PhotoTransfer.ResetEvents();
         Items.RadioManager.ResetEvents();
+        Items.DroppedItems.ResetEvents();
         Net.PlayerInfo.ResetEvents();
         Occasions.OccasionTowns.ResetEvents();
         Vehicles.Explosion.ResetEvents();

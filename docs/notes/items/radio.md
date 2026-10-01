@@ -1,8 +1,8 @@
 # Radio: a thrown world item that plays CDs everyone hears in time (#104)
 
 - **The first world item.** `ItemId.Radio` with `ItemUse.Throw`: Use opens its panel in the hand,
-  Aim + Use throws it (`ItemController.UseSlot`, origin at the eye, `forward*8 + up*3 + player
-  velocity`) and it leaves the inventory. It lives on
+  Aim + hold Use winds up a throw (`ThrowAim`, the `throw-drop` note; Q drops it at your feet) and it
+  leaves the inventory. It lives on
   as a `RadioBody` (`RigidBody3D`) under `World/Radios`, spawned for everyone by `RadioManager`
   through `World/RadioSpawner` — the `VehicleManager` pattern: offline `AddChild`, online
   request/grant RPCs (`RequestThrow`, `RequestPickUp`, `RequestPlay`, `RequestStop`).

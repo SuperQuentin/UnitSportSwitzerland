@@ -175,7 +175,8 @@ public partial class RadioManager : Node3D
         if (!Multiplayer.IsServer() || _spawner == null) return;
         long sender = Multiplayer.GetRemoteSenderId();
         var thrown = RadioState.FromDict(data);
-        if (thrown.Velocity.Length() > 30f || !thrown.Position.IsFinite())
+        // a full-strength throw (ThrowAim.MaxSpeed) from a sprint, with room to spare
+        if (thrown.Velocity.Length() > 40f || !thrown.Position.IsFinite())
         {
             RpcId(sender, MethodName.ThrowRefused);
             return;

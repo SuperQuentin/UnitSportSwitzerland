@@ -115,6 +115,8 @@ public partial class PlayerInput : Node
     public const string AimItem = "aim_item";
     public const string Inventory = "inventory";
     public const string QuickWheel = "quick_wheel";
+    /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
+    public const string DropItem = "drop_item";
     public const string NextItem = "next_item";
     public const string PrevItem = "prev_item";
     /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
@@ -326,6 +328,8 @@ public partial class PlayerInput : Node
         Bind(AimItem, Mouse(MouseButton.Right), Button(JoyButton.LeftShoulder));
         Bind(Inventory, Keys(Key.I, Key.Tab), Button(JoyButton.Back));
         Bind(QuickWheel, Keys(Key.X), Button(JoyButton.DpadLeft));
+        // Minecraft's key: Q only means "down" in the fly camera and in the air, never on foot
+        Bind(DropItem, Keys(Key.Q));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
         Bind(Gather, Keys(Key.G), Button(JoyButton.X));
         Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
