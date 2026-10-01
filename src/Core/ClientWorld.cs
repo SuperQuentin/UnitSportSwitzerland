@@ -1062,7 +1062,7 @@ public partial class ClientWorld : Node3D
     {
         // the loader queues what is in front of the live camera first, whichever camera that is
         if (_chunks != null && GetViewport().GetCamera3D() is { } cam)
-            _chunks.ViewDirection = -cam.GlobalTransform.Basis.Z;
+            _chunks.SetView(cam);
 
         if (!_networked || _players == null) return;
         _sinceStatus += delta;

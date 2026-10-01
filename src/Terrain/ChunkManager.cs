@@ -46,11 +46,57 @@ public partial class ChunkManager : Node3D
     public LodPolicy Lod { get; set; } = new();
 
     /// <summary>
-    /// Where the player is looking, unit length, or zero for no preference. Tiles behind the
-    /// camera are queued later than tiles in front of it at the same distance - never
-    /// skipped, just deferred - so a turn does not wait on the ground behind your back.
+    /// Where the player is looking, unit length, or zero for no preference. Tiles outside the
+    /// camera's view cone are queued later than tiles inside it - never skipped, just
+    /// deferred - so what is on screen does not wait on the ground behind your back.
+    /// Set by <see cref="SetView"/>.
     /// </summary>
-    public Vector3 ViewDirection { get; set; }
+    public Vector3 ViewDirection { get; private set; }
+
+    /// <summary>Where the view cone starts: the live camera's global position.</summary>
+    public Vector3 ViewPosition { get; private set; }
+
+    /// <summary>Half the camera's horizontal field of view, in degrees.</summary>
+    public double ViewHalfFovDeg { get; private set; } = 55;
+
+    /// <summary>
+    /// How much later a tile straight behind the camera is queued: its ring distance is
+    /// multiplied by this, so at 4 a tile four rings behind waits for the sixteenth ring in
+    /// front. The weight climbs from 1 at the edge of the view cone over
+    /// <see cref="ViewRampDeg"/>, so the sides wait less than the back.
+    /// </summary>
+    public double ViewBehindWeight { get; set; } = 4;
+
+    /// <summary>Degrees past the cone's edge over which the weight climbs to <see cref="ViewBehindWeight"/>.</summary>
+    public double ViewRampDeg { get; set; } = 60;
+
+    /// <summary>
+    /// Degrees added to the cone: covers the 16-sector rounding of the view direction (up to
+    /// 11.25°) and a little turning, so the tile at the edge of the screen is not the one
+    /// left waiting.
+    /// </summary>
+    private const double ViewMarginDeg = 15;
+
+    /// <summary>
+    /// Rings that ignore the view altogether: the ground underfoot, its collision, and what a
+    /// turn of the head shows first. A third-person camera can sit across a tile boundary from
+    /// its player, and none of these may wait on which way it points.
+    /// </summary>
+    private const int ViewExemptRings = 2;
+
+    /// <summary>Points the loader's view cone along <paramref name="camera"/>. Main thread, every frame.</summary>
+    public void SetView(Camera3D camera)
+    {
+        ViewPosition = camera.GlobalPosition;
+        ViewDirection = -camera.GlobalTransform.Basis.Z;
+        var size = camera.GetViewport().GetVisibleRect().Size;
+        double aspect = size.Y > 0 ? size.X / size.Y : 16.0 / 9.0;
+        double half = Mathf.DegToRad(camera.Fov) / 2;
+        // Fov is the vertical angle unless the camera keeps its width
+        if (camera.KeepAspect == Camera3D.KeepAspectEnum.Height)
+            half = Math.Atan(Math.Tan(half) * aspect);
+        ViewHalfFovDeg = Mathf.RadToDeg(half);
+    }
 
     /// <summary>
     /// Whether tiles are coming over the network right now. Decides the auto build cap: six
@@ -602,8 +648,10 @@ public partial class ChunkManager : Node3D
     {
         foreach (var id in _chunks.Keys.ToList()) UnloadTile(id);
         _desired.Clear();
-        _ordered.Clear();
-        _orderedKey = "";
+        _wanted = [];
+        _ordered = [];
+        _desiredKey = "";
+        _orderedView = null;
         _worldVersion++;
         _sinceEval = double.MaxValue;
         _invalidate?.Invoke(null);
@@ -1027,33 +1075,69 @@ public partial class ChunkManager : Node3D
     private readonly record struct Want(int Stride, bool Collision, bool Roads, bool Buildings, int Dist);
 
     /// <summary>
-    /// The ring evaluation's expensive half - the square scan, the sort, the unload pass - is
-    /// only redone when something it depends on has changed: an anchor's tile, the ring table,
-    /// the view sector, the set of known tiles. Between those it walks the cached order, which
-    /// at 40 rings is 6,561 dictionary lookups rather than a 6,561-entry sort every 0.1 s and
-    /// again after every commit - measured as a 51 ms frame at the largest render distance.
+    /// The ring evaluation's expensive half - the square scan and the unload pass - is only
+    /// redone when something it depends on has changed: an anchor's tile, the ring table, the
+    /// set of known tiles. The sort is redone on those too, and on its own when the view turns
+    /// to another sector or the camera crosses into another tile; that is one key per tile and
+    /// an array sort. Between those it walks the cached order, which at 40 rings is 6,561
+    /// dictionary lookups rather than a 6,561-entry scan and sort every 0.1 s and again after
+    /// every commit - measured as a 51 ms frame at the largest render distance.
     /// </summary>
-    private List<KeyValuePair<TileId, Want>> _ordered = new();
-    private string _orderedKey = "";
+    private KeyValuePair<TileId, Want>[] _wanted = [];
+    private KeyValuePair<TileId, Want>[] _ordered = [];
+    private double[] _orderKeys = [];
+    private string _desiredKey = "";
+    private ViewCone? _orderedView;
+
+    /// <summary>
+    /// The view as the sort sees it: the camera's tile, its heading rounded to one of
+    /// <see cref="ViewSectors"/>, and its half field of view rounded to 5°. Coarse on purpose -
+    /// it only changes, and the queue is only re-sorted, when one of those does.
+    /// <c>Sector</c> is -1 for no preference.
+    /// </summary>
+    private readonly record struct ViewCone(TileId Tile, int Sector, int HalfFovDeg);
+
+    private const int ViewSectors = 16;
+
+    /// <summary>Half a tile's diagonal, in tiles: how far from its centre a tile still reaches.</summary>
+    private const double TileHalfDiagonal = 0.7071;
+
+    private ViewCone CurrentView()
+    {
+        // LV95 east and north; world -Z is north
+        double e = ViewDirection.X, n = -ViewDirection.Z;
+        // Nearly straight down (or up) there is no "in front": every heading is as visible as the next.
+        if (e * e + n * n < 0.04)
+        {
+            var primary = _anchors.Count > 0 ? _origin!.TileAt(_anchors[0].GlobalPosition) : default;
+            return new ViewCone(primary, -1, 0);
+        }
+        double step = 2 * Math.PI / ViewSectors;
+        int sector = ((int)Math.Round(Math.Atan2(n, e) / step) % ViewSectors + ViewSectors) % ViewSectors;
+        return new ViewCone(_origin!.TileAt(ViewPosition), sector, (int)Math.Round(ViewHalfFovDeg / 5) * 5);
+    }
 
     private void EvaluateRings()
     {
-        var view = ViewDirection;
-        // eight sectors: enough to keep "in front of me first" without re-sorting on every
-        // degree of mouse movement
-        int sector = view == Vector3.Zero ? -1
-            : (int)Math.Floor((Math.Atan2(view.Z, view.X) + Math.PI) / (Math.PI / 4)) & 7;
         var keyBuilder = new System.Text.StringBuilder();
         foreach (var anchor in _anchors)
             keyBuilder.Append(_origin!.TileAt(anchor.GlobalPosition)).Append(_collisionAnchors.Contains(anchor) ? 'p' : 'c').Append(';');
-        keyBuilder.Append('|').Append(Lod.GetHashCode()).Append('|').Append(sector)
+        keyBuilder.Append('|').Append(Lod.GetHashCode())
             .Append('|').Append(_worldVersion).Append('|').Append(BuildMeshes);
         string key = keyBuilder.ToString();
 
-        if (key != _orderedKey)
+        if (key != _desiredKey)
         {
-            _orderedKey = key;
-            RecomputeDesired(view);
+            _desiredKey = key;
+            _orderedView = null;
+            RecomputeDesired();
+        }
+
+        var view = CurrentView();
+        if (_orderedView != view)
+        {
+            _orderedView = view;
+            SortByView(view);
         }
 
         foreach (var (id, want) in _ordered)
@@ -1107,7 +1191,7 @@ public partial class ChunkManager : Node3D
         }
     }
 
-    private void RecomputeDesired(Vector3 view)
+    private void RecomputeDesired()
     {
         // desired stride per tile = finest over all anchors (0 = grid-only when meshes are off)
         var desired = new Dictionary<TileId, Want>();
@@ -1140,22 +1224,9 @@ public partial class ChunkManager : Node3D
                 }
         }
 
-        // Nearest first. With everything on local disk the order barely matters, but when the
-        // data is streaming it decides what the player sees: unordered, the tile underfoot
-        // queues behind up to 360 others nine rings out, and you stand in a hole for a minute
-        // while the horizon fills in. Tiles behind the camera are pushed three rings back in
-        // the queue - what is in front of you is what you are waiting for.
-        var primary = _anchors.Count > 0 ? _origin!.TileAt(_anchors[0].GlobalPosition) : default;
-        double Priority(TileId id, int dist)
-        {
-            if (dist <= 2 || view == Vector3.Zero) return dist;
-            var to = new Vector3(id.E - primary.E, 0, -(id.N - primary.N)).Normalized();
-            return to.Dot(view) < -0.3 ? dist + 3 : dist;
-        }
-        _ordered = desired.OrderBy(kv => Priority(kv.Key, kv.Value.Dist)).ToList();
-
+        _wanted = desired.ToArray();
         _desired.Clear();
-        foreach (var (id, _) in _ordered) _desired.Add(id);
+        foreach (var (id, _) in _wanted) _desired.Add(id);
 
         // unload with hysteresis
         var toRemove = new List<TileId>();
@@ -1169,6 +1240,51 @@ public partial class ChunkManager : Node3D
                 toRemove.Add(id);
         }
         foreach (var id in toRemove) UnloadTile(id);
+    }
+
+    /// <summary>
+    /// Orders the wanted tiles: nearest ring first, and tiles off screen later.
+    ///
+    /// <para>
+    /// With everything on local disk the order barely matters, but when the data is streaming it
+    /// decides what the player sees: unordered, the tile underfoot queues behind up to 360
+    /// others nine rings out, and you stand in a hole for a minute while the horizon fills in.
+    /// The same goes for direction - what is in front of you is what you are waiting for, and
+    /// the ground behind your back is already drawn by the horizon lattice. So a tile's ring
+    /// distance is multiplied by a weight: 1 while any of it is inside the camera's view cone
+    /// (horizontal field of view plus <see cref="ViewMarginDeg"/>), climbing to
+    /// <see cref="ViewBehindWeight"/> over <see cref="ViewRampDeg"/> past its edge. The angle
+    /// is taken from the camera, not the player, which a third-person or fly camera can be far
+    /// from, and the innermost <see cref="ViewExemptRings"/> rings are never weighted.
+    /// </para>
+    /// </summary>
+    private void SortByView(ViewCone view)
+    {
+        double step = 2 * Math.PI / ViewSectors;
+        double dirE = Math.Cos(view.Sector * step), dirN = Math.Sin(view.Sector * step);
+        double camE = view.Tile.E + 0.5, camN = view.Tile.N + 0.5;
+        double edge = view.HalfFovDeg + ViewMarginDeg;
+
+        if (_orderKeys.Length != _wanted.Length) _orderKeys = new double[_wanted.Length];
+        var ordered = (KeyValuePair<TileId, Want>[])_wanted.Clone();
+        for (int i = 0; i < ordered.Length; i++)
+        {
+            var (id, want) = ordered[i];
+            double de = id.E + 0.5 - camE, dn = id.N + 0.5 - camN;
+            double r = Math.Sqrt(de * de + dn * dn);
+            double weight = 1;
+            if (view.Sector >= 0 && want.Dist > ViewExemptRings && r > TileHalfDiagonal)
+            {
+                // the angle to the tile's nearest edge, not its centre: a tile half on screen is on screen
+                double off = Mathf.RadToDeg(Math.Acos(Math.Clamp((de * dirE + dn * dirN) / r, -1, 1))
+                    - Math.Asin(TileHalfDiagonal / r)) - edge;
+                if (off > 0) weight = 1 + (ViewBehindWeight - 1) * Math.Min(1, off / ViewRampDeg);
+            }
+            // nearest first among equals, so a re-sort does not reshuffle them
+            _orderKeys[i] = want.Dist * weight + r * 1e-3;
+        }
+        Array.Sort(_orderKeys, ordered);
+        _ordered = ordered;
     }
 
     private void UnloadTile(TileId id)
