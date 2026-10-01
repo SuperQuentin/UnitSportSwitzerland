@@ -10,6 +10,7 @@ global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
+#include "res://shaders/world_origin.gdshaderinc"
 
 // Buildings take their base colour from baked vertex colours (kind + roof/wall + age)
 // and get the same PS1 treatment as the terrain: vertex snap, quantised sun from a
@@ -326,7 +327,7 @@ void fragment() {
     // that have a window grid. Drawn here rather than as geometry: every house in view gets them
     // for the cost of a few instructions, and they follow the facade frame the windows use.
     if (!garage_wall && world_lights > 0.0 && storey_count > 0.5 && detail < 0.6) {
-        float house = fract(sin(dot(floor(world_pos.xz / 24.0), vec2(41.3, 17.9))) * 9731.7);
+        float house = fract(sin(dot(floor(pattern_xz(world_pos) / 24.0), vec2(41.3, 17.9))) * 9731.7);
         float eave = storey_count - 0.05;
         if (house < 0.6 && facade.y > eave - 0.08 && facade.y < eave) {
             float f = fract(facade.x / 0.5);

@@ -65,6 +65,8 @@ public partial class PlayerInput : Node
     /// <summary>In a car, truck or bus: the next / previous live radio station, through off (#179).</summary>
     public const string RadioNext = "radio_next";
     public const string RadioPrev = "radio_prev";
+    /// <summary>In a car, truck or bus (driver or passenger): the radio panel, stations and CDs (#211).</summary>
+    public const string RadioPanel = "radio_panel";
     // --- trucks and buses (#70) ---
     /// <summary>Couple or uncouple a trailer (<see cref="Player.Truck.Couple"/>).</summary>
     public const string Couple = "couple";
@@ -194,6 +196,12 @@ public partial class PlayerInput : Node
     /// </summary>
     public static void Rumble(float weak, float strong, float seconds)
     {
+        // in VR the hands are the pad (#186)
+        if (XR.XrSession.Active)
+        {
+            XR.XrSession.Rumble(weak, strong, seconds);
+            return;
+        }
         if (!GameSettings.Current.Vibration || LastDevice != InputDevice.Gamepad) return;
         foreach (int pad in Input.GetConnectedJoypads())
             Input.StartJoyVibration(pad, Mathf.Clamp(weak, 0, 1), Mathf.Clamp(strong, 0, 1), seconds);
@@ -218,6 +226,13 @@ public partial class PlayerInput : Node
 
     public override void _Input(InputEvent e)
     {
+        // VR replays the controllers as a pad, and points at the UI panel with mouse events:
+        // the prompts stay on pad glyphs either way (#186)
+        if (XR.XrSession.Active)
+        {
+            LastDevice = InputDevice.Gamepad;
+            return;
+        }
         switch (e)
         {
             case InputEventJoypadButton:
@@ -280,6 +295,9 @@ public partial class PlayerInput : Node
         // key printed Z on a Swiss keyboard, next to the engine's physical Z printed Y.
         Bind(RadioNext, Keys(Key.U));
         Bind(RadioPrev, Keys(Key.P));
+        // R, shared with the travel picker: in a vehicle with a stereo R is the radio (RadioUi takes it
+        // first and ClientWorld leaves it alone), on foot it is the picker. Keyboard only, like U / P.
+        Bind(RadioPanel, Keys(Key.R));
         // A truck has no tricks, boost or hop: its shift paddles take the shoulders (and Shift / Ctrl,
         // which only mean tuck and slide elsewhere), the clutch takes C / B, and the H-pattern's
         // gates the number keys, which only pick hotbar slots on foot.

@@ -64,6 +64,9 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
             UiKit.ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on, "Off by default: the far horizon is the point");
             UiKit.ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on, "Streaks at the screen edge at speed");
+            rows.AddChild(UiKit.Spacer(6));
+            rows.AddChild(UiKit.Section("Virtual reality"));
+            VrRow(rows);
         });
 
         Tab("Audio", rows =>
@@ -207,6 +210,39 @@ public partial class SettingsScreen : Screen
         Show(next);
         _tabs[next].GrabFocus();
         GetViewport().SetInputAsHandled();
+    }
+
+    /// <summary>VR mode (#186): saved, and applied by starting the game again.</summary>
+    private void VrRow(Container rows)
+    {
+        CheckButton toggle = null!;
+        toggle = UiKit.ToggleRow(rows, "VR mode", XR.XrSession.Active, on =>
+        {
+            if (on == XR.XrSession.Active) return;
+            AskVr(this, Shell, on, () => toggle.SetPressedNoSignal(!on));
+        }, "Meta Quest over Link (OpenXR). Changing it restarts the game");
+        UiKit.OptionRow(rows, "Monitor view in VR", Enum.GetValues<XR.MonitorView>().Select(XR.XrMonitor.Label).ToArray(),
+            (int)GameSettings.Current.VrMonitor, i => GameSettings.Current.VrMonitor = (XR.MonitorView)i,
+            "What the computer screen shows while you play in the headset (F7 cycles it)");
+    }
+
+    /// <summary>
+    /// Asks before restarting into VR or out of it, then saves the choice and relaunches. Shared
+    /// by the Settings toggle and the title screen's entry.
+    /// </summary>
+    internal static void AskVr(Control host, GameShell shell, bool on, Action? cancel = null)
+    {
+        string message = on
+            ? "The game restarts with the headset. Put on the Quest with Link connected and Meta set as the OpenXR runtime."
+            : "The game restarts on the screen.";
+        if (shell.InWorld) message += " You will leave the current world.";
+        Modal.Confirm(host, on ? "Play in VR?" : "Leave VR?", message, "Restart", () =>
+        {
+            GameSettings.Current.VrMode = on;
+            GameSettings.Current.Commit();
+            if (XR.XrSession.Relaunch(on)) shell.Quit();
+            else cancel?.Invoke();
+        }, cancel);
     }
 
     internal static string Percent(double v) => v <= 0 ? "off" : $"{v * 100:F0} %";

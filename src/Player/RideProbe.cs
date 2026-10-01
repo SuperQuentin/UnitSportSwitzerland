@@ -37,7 +37,8 @@ public partial class RideProbe : Node
     private double _sinceReport;
     private float _topSpeed;
     private float _startAltitude;
-    private Vector3 _start;
+    /// <summary>Where the ride started, kept in LV95: the origin may move under it (#185).</summary>
+    private GlobalPos _start;
     private bool _mounted;
     private bool _done;
     private bool _midShot;
@@ -127,7 +128,7 @@ public partial class RideProbe : Node
                 _player.Rotation = new Vector3(0, -Mathf.DegToRad(bearing), 0);
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, ground + 1.5f, at.Z);
-            _start = _player.GlobalPosition;
+            _start = _origin.ToGlobal(_player.GlobalPosition);
             _startAltitude = ground;
             GD.Print($"[ride] spawned at LV95 {e:F0}/{n:F0}, ground {ground:F1} m");
             return;
@@ -220,7 +221,7 @@ public partial class RideProbe : Node
         _done = true;
 
         var end = _player.GlobalPosition;
-        float travelled = new Vector2(end.X - _start.X, end.Z - _start.Z).Length();
+        float travelled = (float)_origin.ToGlobal(end).HorizontalDistanceTo(_start);
         bool underground = _chunks.TryGetHeight(end, out float endGround) && end.Y < endGround - 1.5f;
         if (Inside() is { } building)
         {

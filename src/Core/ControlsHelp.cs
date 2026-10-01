@@ -68,6 +68,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Car: headlights / pop-ups", PlayerInput.LightsToggle),
             new("Car radio: next station", PlayerInput.RadioNext),
             new("Car radio: previous station", PlayerInput.RadioPrev),
+            new("Car radio: stations and CDs (passengers too)", PlayerInput.RadioPanel),
             new("Car: fold the soft top", PlayerInput.RoofToggle),
             new("Get out", PlayerInput.InteractMount),
         }),
@@ -114,6 +115,9 @@ public partial class ControlsHelp : CanvasLayer
         }),
     };
 
+    private ScrollContainer _scroll = null!;
+    private Label _footer = null!;
+
     public override void _Ready()
     {
         Layer = 42;   // over the menus, so it can be opened from them
@@ -122,74 +126,121 @@ public partial class ControlsHelp : CanvasLayer
         centre.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(centre);
 
-        _panel = new PanelContainer { Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore };
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.05f, 0.06f, 0.08f, 0.95f),
-            ContentMarginLeft = 22, ContentMarginRight = 22, ContentMarginTop = 14, ContentMarginBottom = 14,
-        };
-        style.SetCornerRadiusAll(6);
-        _panel.AddThemeStyleboxOverride("panel", style);
+        // the menus' glass, themed on this panel's own root (docs/notes/ui/style-guide.md)
+        _panel = new PanelContainer { Visible = false, Theme = Ui.UiTheme.Get() };
+        _panel.AddThemeStyleboxOverride("panel", Ui.UiTheme.GlassPanel(0.92f, 12, 20));
         centre.AddChild(_panel);
 
-        var rows = new VBoxContainer();
-        rows.AddThemeConstantOverride("separation", 8);
+        var rows = Ui.UiKit.VBox(10);
         _panel.AddChild(rows);
 
-        var title = new Label { Text = "Controls" };
-        title.AddThemeFontSizeOverride("font_size", 22);
-        title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
-        rows.AddChild(title);
+        var head = Ui.UiKit.HBox(14);
+        head.AddChild(Ui.UiKit.Text("Controls", Ui.UiTheme.FontHeading, Ui.UiTheme.Text, bold: true));
+        head.AddChild(Ui.UiKit.Spacer(expand: true));
+        head.AddChild(Chip("Keyboard", KeyColor, true));
+        head.AddChild(Chip("Pad", PadColor, true));
+        rows.AddChild(head);
 
-        _columns = new GridContainer { Columns = 3 };
-        _columns.AddThemeConstantOverride("h_separation", 22);
-        _columns.AddThemeConstantOverride("v_separation", 10);
-        rows.AddChild(_columns);
+        // the groups flow into as many columns as the window has room for, and scroll past its height
+        _scroll = new ScrollContainer
+        {
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+        };
+        rows.AddChild(_scroll);
+        _columns = new GridContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _columns.AddThemeConstantOverride("h_separation", 12);
+        _scroll.AddChild(Ui.UiKit.Margin(_columns, 0, 0, 10, 0));
 
-        var foot = new Label();
-        foot.AddThemeFontSizeOverride("font_size", 12);
-        foot.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
-        rows.AddChild(foot);
-        _footer = foot;
+        _footer = Ui.UiKit.Text("", Ui.UiTheme.FontTiny, Ui.UiTheme.TextFaint, wrap: true);
+        rows.AddChild(_footer);
 
         PlayerInput.DeviceChanged += Rebuild;
+        GetViewport().SizeChanged += Rebuild;
         Rebuild();
+        // "--controls" opens it from boot, for screenshotting it
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--controls") >= 0) Callable.From(Open).CallDeferred();
     }
 
-    private Label _footer = null!;
+    public override void _ExitTree()
+    {
+        PlayerInput.DeviceChanged -= Rebuild;
+        GetViewport().SizeChanged -= Rebuild;
+    }
 
-    public override void _ExitTree() => PlayerInput.DeviceChanged -= Rebuild;
+    private static readonly Color KeyColor = new(1f, 0.84f, 0.42f);
+    private static readonly Color PadColor = new(0.6f, 0.8f, 1f);
+    private const float MinGroupWidth = 320;
 
     private void Rebuild()
     {
+        if (_columns == null) return;
+        var view = GetViewport().GetVisibleRect().Size;
+        var size = new Vector2(Mathf.Min(view.X - 48, 1600), Mathf.Min(view.Y - 48, 900));
+        _panel.CustomMinimumSize = size;
+        _panel.Size = size;
+
         foreach (var child in _columns.GetChildren()) child.QueueFree();
-        foreach (var (title, rows) in Groups) _columns.AddChild(Group(title, rows));
+        float inner = size.X - 40 - 10;   // panel margins, the scrollbar's gutter
+        int count = Mathf.Clamp((int)((inner + 12) / (MinGroupWidth + 12)), 1, 4);
+        float width = (inner - 12 * (count - 1)) / count;
+        _columns.Columns = count;
+        // greedy balance: each group goes to the shortest column, in order of the list
+        var stacks = new VBoxContainer[count];
+        var heights = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            stacks[i] = Ui.UiKit.VBox(12);
+            stacks[i].CustomMinimumSize = new Vector2(width, 0);
+            stacks[i].SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            _columns.AddChild(stacks[i]);
+        }
+        foreach (var (title, rows) in Groups)
+        {
+            int k = Array.IndexOf(heights, heights.Min());
+            stacks[k].AddChild(Group(title, rows));
+            heights[k] += rows.Length + 3;
+        }
         _footer.Text = $"{InputHints.Label(PlayerInput.Help, InputDevice.KeyboardMouse)} or Esc closes. "
             + "Keys are shown as printed on your keyboard. The hints at the bottom right change with what you are doing.";
     }
 
     private static Control Group(string title, Row[] rows)
     {
-        var box = new VBoxContainer();
-        box.AddThemeConstantOverride("separation", 1);
-        var head = new Label { Text = title };
-        head.AddThemeFontSizeOverride("font_size", 15);
-        head.AddThemeColorOverride("font_color", new Color(0.98f, 0.84f, 0.38f));
-        box.AddChild(head);
-
-        var grid = new GridContainer { Columns = 3 };
-        grid.AddThemeConstantOverride("h_separation", 8);
-        grid.AddThemeConstantOverride("v_separation", 1);
+        var box = Ui.UiKit.VBox(4);
+        box.AddChild(Ui.UiKit.Section(title));
         foreach (var row in rows)
         {
-            string keys = row.Keys != null ? InputHints.Format(row.Keys, InputDevice.KeyboardMouse) : (row.Action != null ? InputHints.Label(row.Action, InputDevice.KeyboardMouse) : "—");
+            string keys = row.Keys != null ? InputHints.Format(row.Keys, InputDevice.KeyboardMouse)
+                : row.Action != null ? InputHints.Label(row.Action, InputDevice.KeyboardMouse) : "—";
             string pad = row.Pad ?? (row.Action != null ? PadOrDash(row.Action) : "—");
-            grid.AddChild(Cell(row.What, new Color(0.82f, 0.85f, 0.9f), 168));
-            grid.AddChild(Cell(keys, new Color(1f, 0.86f, 0.45f), 78));
-            grid.AddChild(Cell(pad, new Color(0.62f, 0.8f, 1f), 70));
+            var line = Ui.UiKit.HBox(6);
+            var what = Ui.UiKit.Text(row.What, Ui.UiTheme.FontSmall, Ui.UiTheme.Text, wrap: true);
+            what.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            line.AddChild(what);
+            line.AddChild(Chip(keys, KeyColor));
+            line.AddChild(Chip(pad, PadColor));
+            box.AddChild(line);
         }
-        box.AddChild(grid);
-        return box;
+        return Ui.UiKit.Card(box, 0.5f, 12);
+    }
+
+    /// <summary>A key cap: the binding on a rounded tile, tinted keyboard-amber or pad-blue; a dash is left bare.</summary>
+    private static Control Chip(string text, Color color, bool legend = false)
+    {
+        bool none = text == "—";
+        var chip = new PanelContainer
+        {
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+            CustomMinimumSize = new Vector2(legend ? 0 : 70, 0),
+        };
+        chip.AddThemeStyleboxOverride("panel", none
+            ? new StyleBoxEmpty()
+            : Ui.UiTheme.Flat(new Color(color, 0.12f), 6, 7, 2, new Color(color, 0.35f), 1));
+        var label = Ui.UiKit.Text(text, Ui.UiTheme.FontTiny + 1, none ? Ui.UiTheme.TextFaint : color, bold: !none,
+            align: HorizontalAlignment.Center);
+        chip.AddChild(label);
+        return chip;
     }
 
     /// <summary>The pad binding, or a dash where there is only a keyboard one (the label would repeat the key).</summary>
@@ -197,14 +248,6 @@ public partial class ControlsHelp : CanvasLayer
     {
         string pad = InputHints.Label(action, InputDevice.Gamepad);
         return pad == InputHints.Label(action, InputDevice.KeyboardMouse) ? "—" : pad;
-    }
-
-    private static Label Cell(string text, Color color, float width)
-    {
-        var label = new Label { Text = text, CustomMinimumSize = new Vector2(width, 0) };
-        label.AddThemeFontSizeOverride("font_size", 12);
-        label.AddThemeColorOverride("font_color", color);
-        return label;
     }
 
     public void Toggle()

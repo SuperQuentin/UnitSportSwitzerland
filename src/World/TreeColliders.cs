@@ -15,7 +15,9 @@ namespace UnitSport.World;
 /// Instead a pool of trunk bodies (<see cref="StaticBody3D"/> + <see cref="CylinderShape3D"/>) is
 /// laid out around each anchor that already asks <see cref="ChunkManager"/> for collision — the
 /// local player, a vehicle rolling on its own — from the same <c>.trees</c> files the renderer
-/// draws, bucketed into 10 m cells. Cells are handed out and taken back as the anchor moves, around
+/// draws, bucketed into 10 m cells of the LV95 grid, so neither a cell nor a trunk changes when
+/// the origin moves (#185): a cell lies in exactly one tile, and a trunk is kept where the file
+/// puts it, relative to its tile. Cells are handed out and taken back as the anchor moves, around
 /// it and around a point ahead along its velocity (a car at 150 km/h covers the whole radius in a
 /// second), and never more than <see cref="BudgetPerFrame"/> trunks are placed in one frame.
 /// </para>
@@ -28,7 +30,7 @@ namespace UnitSport.World;
 /// hits the tree's axis, not its crown, which is the simple choice rather than a crown shape.
 /// </para>
 /// </summary>
-public partial class TreeColliders : Node3D
+public partial class TreeColliders : Node3D, Core.IOriginContainer
 {
     /// <summary>Collision layer bit of every trunk: layer 2.</summary>
     public const uint Layer = 1u << 1;
@@ -43,7 +45,8 @@ public partial class TreeColliders : Node3D
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
 
-    private readonly record struct Trunk(Vector3 Base, float Radius, float Height);
+    /// <summary>A trunk, relative to its tile's NW corner (east, altitude, south), as the .trees file has it.</summary>
+    private readonly record struct Trunk(float X, float Y, float Z, float Radius, float Height);
 
     private readonly Dictionary<TileId, Dictionary<long, List<Trunk>>?> _tiles = new();
     private readonly HashSet<TileId> _loading = new();
@@ -110,11 +113,11 @@ public partial class TreeColliders : Node3D
         {
             if (placed >= BudgetPerFrame) break;
             if (_live.ContainsKey(key)) continue;
-            var trunks = TrunksIn(key, out bool ready);
+            var trunks = TrunksIn(key, out var tile, out bool ready);
             if (!ready) continue;   // its tile is still loading: try again next frame
             var list = new List<StaticBody3D>(trunks?.Count ?? 0);
             if (trunks != null)
-                foreach (var t in trunks) { list.Add(Place(t)); placed++; }
+                foreach (var t in trunks) { list.Add(Place(tile, t)); placed++; }
             _live[key] = list;
             LiveTrunks += list.Count;
         }
@@ -125,35 +128,30 @@ public partial class TreeColliders : Node3D
 
     private void Want(Vector3 at)
     {
-        int cx = Mathf.FloorToInt(at.X / Cell), cz = Mathf.FloorToInt(at.Z / Cell);
+        var (e, n) = _origin.ToLv95(at);
+        long ce = (long)System.Math.Floor(e / Cell), cn = (long)System.Math.Floor(n / Cell);
         int r = Mathf.CeilToInt(Radius / Cell);
-        for (int dx = -r; dx <= r; dx++)
-            for (int dz = -r; dz <= r; dz++)
-                if (dx * dx + dz * dz <= r * r) _wanted.Add(Key(cx + dx, cz + dz));
+        for (int de = -r; de <= r; de++)
+            for (int dn = -r; dn <= r; dn++)
+                if (de * de + dn * dn <= r * r) _wanted.Add(Key(ce + de, cn + dn));
     }
 
-    private static long Key(int cx, int cz) => ((long)cx << 32) ^ (uint)cz;
+    /// <summary>A 10 m cell of the LV95 grid, by its south-west corner's indices.</summary>
+    private static long Key(long ce, long cn) => (ce << 32) ^ (uint)cn;
+
+    private static (long E, long N) Unkey(long key) => (key >> 32, (int)(uint)key);
 
     /// <summary>
-    /// Every trunk in a cell, from whichever tiles it overlaps (world cells need not line up with
-    /// the kilometre lattice). <paramref name="ready"/> is false while any of them is loading.
+    /// Every trunk in a cell, and the tile they are relative to. A cell lies in exactly one tile
+    /// (10 m divides the kilometre); <paramref name="ready"/> is false while that tile is loading.
     /// </summary>
-    private List<Trunk>? TrunksIn(long key, out bool ready)
+    private List<Trunk>? TrunksIn(long key, out TileId tile, out bool ready)
     {
+        var (ce, cn) = Unkey(key);
+        tile = TileId.FromLv95((ce + 0.5) * Cell, (cn + 0.5) * Cell);
         ready = true;
-        int cx = (int)(key >> 32), cz = (int)(uint)key;
-        List<Trunk>? all = null;
-        var a = _origin.TileAt(new Vector3(cx * Cell, 0, cz * Cell));
-        var b = _origin.TileAt(new Vector3((cx + 1) * Cell - 0.01f, 0, (cz + 1) * Cell - 0.01f));
-        // a cell straddles at most a 2x2 block of tiles
-        for (int e = System.Math.Min(a.E, b.E); e <= System.Math.Max(a.E, b.E); e++)
-            for (int n = System.Math.Min(a.N, b.N); n <= System.Math.Max(a.N, b.N); n++)
-            {
-                var tile = new TileId(e, n);
-                if (!_tiles.TryGetValue(tile, out var cells)) { Load(tile); ready = false; continue; }
-                if (cells != null && cells.TryGetValue(key, out var list)) (all ??= new()).AddRange(list);
-            }
-        return all;
+        if (!_tiles.TryGetValue(tile, out var cells)) { Load(tile); ready = false; return null; }
+        return cells != null && cells.TryGetValue(key, out var list) ? list : null;
     }
 
     private async void Load(TileId tile)
@@ -162,7 +160,6 @@ public partial class TreeColliders : Node3D
         try
         {
             var trees = await source.LoadTreesAsync(tile);
-            var origin = _origin;
             _tiles[tile] = trees == null ? null : await Task.Run(() =>
             {
                 var cells = new Dictionary<long, List<Trunk>>();
@@ -173,10 +170,10 @@ public partial class TreeColliders : Node3D
                     // clamped to what a real trunk measures
                     float slender = t.Kind switch { 2 => 0.34f, 3 => 0.40f, _ => 0.26f };
                     float r = Mathf.Clamp(t.Height * slender * 0.10f, 0.12f, 0.5f);
-                    var w = origin.ToWorld(tile.MinE + t.X, tile.MaxN - t.Z, t.Y);
-                    long key = Key(Mathf.FloorToInt(w.X / Cell), Mathf.FloorToInt(w.Z / Cell));
+                    long key = Key((long)System.Math.Floor((tile.MinE + t.X) / Cell),
+                        (long)System.Math.Floor((tile.MaxN - t.Z) / Cell));
                     if (!cells.TryGetValue(key, out var list)) cells[key] = list = new();
-                    list.Add(new Trunk(w, r, Mathf.Max(t.Height, 1.5f)));
+                    list.Add(new Trunk(t.X, t.Y, t.Z, r, Mathf.Max(t.Height, 1.5f)));
                 }
                 return cells;
             });
@@ -190,7 +187,7 @@ public partial class TreeColliders : Node3D
         // ponytail: loaded tiles are never evicted; ~50 bytes a trunk, a forest tile ~5 MB. Evict when a long drive shows it.
     }
 
-    private StaticBody3D Place(Trunk t)
+    private StaticBody3D Place(TileId tile, Trunk t)
     {
         if (!_free.TryPop(out var body))
         {
@@ -201,7 +198,8 @@ public partial class TreeColliders : Node3D
         var shape = (CylinderShape3D)body.GetChild<CollisionShape3D>(0).Shape;
         shape.Radius = t.Radius;
         shape.Height = t.Height;
-        body.GlobalPosition = t.Base + Vector3.Up * (t.Height * 0.5f - 0.3f);   // a little into the ground on a slope
+        var at = _origin.ToWorld(tile.MinE + t.X, tile.MaxN - t.Z, t.Y);
+        body.GlobalPosition = at + Vector3.Up * (t.Height * 0.5f - 0.3f);   // a little into the ground on a slope
         body.ProcessMode = ProcessModeEnum.Inherit;
         return body;
     }

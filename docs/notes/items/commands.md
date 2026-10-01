@@ -16,6 +16,8 @@
   (drops, full wind-up throw, stack drop; `test_output/dropcheck_aim.png`) + windowed `--dropcheck watch`
   (wind-up pose, items settled, points at and picks up the bars; `test_output/dropcheck_point.png`); see `throw-drop`.
   Offline: `<godot> --path . -- --ride foot,60 --dropcheck solo` (outline + pick-up, `test_output/dropcheck_solo.png`).
+- `tools/carcdcheck.sh` (`CHUNKS=` likewise, port 7811): car stereo CDs, `--carcdcheck driver` (headless) /
+  `watch` (windowed); `<godot> --path . -- --carcdcheck shots` offline screenshots of the radio panel; see `radio`.
 - `GODOT=<exe> tools/gunshotcheck.sh [--gunside]`: server + A (shouldered shotgun, fires, rate limit) + B (screenshots A's body, counts Shot events); pictures `test_output/gunshot_*.png` (see `shotgun-feel`).
 - `GODOT=<exe> tools/plantcheck.sh`: server + A (flag ghost, plant, pull-up) + B (remote view, spawn effect count); see `flag-plant`.
 - `GODOT=<exe> tools/placedcheck.sh [E,N]`: loopback server + three clients for item events and placed

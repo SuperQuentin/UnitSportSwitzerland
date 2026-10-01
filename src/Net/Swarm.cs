@@ -316,6 +316,7 @@ public partial class Swarm : Node
         foreach (string stub in new[] { "Vehicles", "Combat", "Interiors", "Loot", "ChunkStream" })
             world.AddChild(new Node { Name = stub });
         world.AddChild(new SwarmOccasions { Name = "Occasions" });
+        world.AddChild(new Birds.BirdNet { Name = Birds.BirdNet.NodeName });   // takes the bird snapshots, draws nothing
         world.AddChild(new MultiplayerSpawner { Name = "VehicleSpawner", SpawnPath = new NodePath("../Vehicles") });
         GetTree().Root.AddChild(root);
 
