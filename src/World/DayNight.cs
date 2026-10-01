@@ -149,17 +149,18 @@ public partial class DayNight : Node
         RenderingServer.GlobalShaderParameterSet(GNight, Night);
         ApplyOccasionGlobals(atmo, tintLinear, delta);
 
-        // the palette is flat through most of the day and night: only write when it moved (#221)
-        if ((sky, tint, Night) == _applied) return;
+        // the palette is flat through most of the day and night: only write when it moved (#221).
+        // Whatever swaps an environment in must reset _applied, or the new one waits for a change.
+        bool moved = (sky, tint, Night) != _applied;
         _applied = (sky, tint, Night);
-        if (_environment != null)
+        if (moved && _environment != null)
         {
             _environment.BackgroundColor = sky;
             _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
             _environment.AmbientLightColor = sky.Lerp(new Color(tint.R, tint.G, tint.B), 0.5f);
             _environment.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.55f, Night);
         }
-        if (_indoor != null)
+        if (moved && _indoor != null)
         {
             _indoor.BackgroundColor = sky;
             _indoor.AmbientLightSource = Godot.Environment.AmbientSource.Color;
