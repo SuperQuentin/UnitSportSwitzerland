@@ -12,7 +12,8 @@
 - **`ATTR`** (always): `count u32` (= segments), `recordSize u16` (24; readers skip a longer
   record's tail), pad u16, then per segment, in drawing direction:
   `flags u16` (`RoadAttrFlags`: Urban, Roundabout, Osm, Tram, YieldAtStart, YieldAtEnd,
-  OwnerFederal, OwnerCanton), `oneWay i8` (+1 with drawing, -1 against, 0 both/unknown),
+  OwnerFederal, OwnerCanton, OnStreet = TLM `auf_strasse` rail, Embedded = rail piece inside a
+  carriageway, #124 `railways`), `oneWay i8` (+1 with drawing, -1 against, 0 both/unknown),
   `layer i8` (TLM `stufe`, else bridge +1 / tunnel -1), `lanesFwd u8`, `lanesBwd u8` (per
   direction; a one-way segment has all its lanes in its travel direction; 0 = none/unknown),
   `priority u8` (high nibble `verkehrsbedeutung` rank 0..3, OSM highway where TLM has none; low
@@ -28,7 +29,8 @@
   surface painted (a bridge deck's included: + `BridgeLift` 0.15). Colour sRGB. A polyline's
   dash pattern starts with a dash at its first vertex (the writer phases it by where it starts
   the line, `road-markings`); `dash` 0 = solid. Written by `PaintEmitter` (#116): white lines
-  only so far; #120/#121/#123/#124 add types through the same layer.
+  and `RailGroove` (#124, one line per rail of an embedded piece, colour 0x9A9893); #120/#121/#123
+  add types through the same layer.
 - **`PPRP`** point props (#121 yield sign, #122 roundabout sign): `count u32`, `recordSize u16`,
   pad, records of 24 B: `type u8, variant u8, flags u16 (Solid), x, y (foot), z, heading
   (rad about +Y, 0 = -Z), height f32`.

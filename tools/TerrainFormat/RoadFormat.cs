@@ -122,6 +122,8 @@ public enum RoadAttrFlags : ushort
     YieldAtEnd = 1 << 5,   // ... at its last point
     OwnerFederal = 1 << 6, // TLM eigentuemer = Bund
     OwnerCanton = 1 << 7,  // TLM eigentuemer = Kanton
+    OnStreet = 1 << 8,     // railway: TLM auf_strasse, the track runs in a street (#124)
+    Embedded = 1 << 9,     // railway piece inside a carriageway: no ballast, no raised rails, RailGroove paint (#124)
 }
 
 /// <summary>Bike provision on one side of a carriageway (#120).</summary>

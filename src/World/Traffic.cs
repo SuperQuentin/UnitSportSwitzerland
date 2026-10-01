@@ -333,6 +333,27 @@ public partial class Traffic : Node3D
     private void SpawnTrain(Vector3 focus)
     {
         if (_rails!.RandomSpot(_rng, focus, TrainSpawnMin, TrainSpawnMax, _ => 1f) is not var (edge, arc)) return;
+        SpawnTrainOn(edge, arc);
+    }
+
+    /// <summary>
+    /// <c>--trafficcheck --crossing</c> (#124): a train with its head on the rail nearest
+    /// <paramref name="at"/>, so the whole train rolls over that point. False before the rails load.
+    /// </summary>
+    public bool SpawnTrainAt(Vector3 at)
+    {
+        if (_rails == null || _rails.Edges.Count == 0) return false;
+        var (edge, arc) = _rails.Edges
+            .SelectMany(e => Enumerable.Range(0, (int)(e.Length / 0.5f) + 1).Select(k => (e, s: k * 0.5f)))
+            .MinBy(x => x.e.Sample(x.s).Pos.DistanceTo(at));
+        SpawnTrainOn(edge, arc);
+        return true;
+    }
+
+    public IEnumerable<Vector3> TrainUnits => _trains.SelectMany(t => t.Units.Select(u => u.GlobalPosition));
+
+    private void SpawnTrainOn(LaneEdge edge, float arc)
+    {
         bool narrow = (edge.Flags & RoadFlags.NarrowGauge) != 0;
         bool forward = _rng.Next(2) == 0;
         var route = new Route(edge, forward, forward ? arc : edge.Length - arc);

@@ -240,8 +240,9 @@ public partial class GarageProbe : Node
         Interiors.DoorIndex.GarageAround(p.GlobalPosition) is { } g ? $"inside garage {g.Key}" : "outside";
 
     /// <summary>
-    /// <c>--garagecheck drive &lt;password&gt; --at E,N --heading deg --drive-m m</c>: takes a car, faces
-    /// the bearing, holds the throttle for <c>--drive-m</c> metres and brakes to a stop.
+    /// <c>--garagecheck drive &lt;password&gt; --at E,N --heading deg --drive-m m [--drive-at s] [--drive-end s]</c>:
+    /// takes a car, faces the bearing, holds the throttle from <c>--drive-at</c> (10 s) for <c>--drive-m</c>
+    /// metres and brakes to a stop; quits at <c>--drive-end</c> (40 s).
     /// </summary>
     private void DriveIn(FootPlayer me, Func<double, bool> at)
     {
@@ -253,7 +254,7 @@ public partial class GarageProbe : Node
             Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
         }
         // the watcher needs a moment to see the car before it moves
-        if (at(10)) { _from = me.GlobalPosition; Input.ActionPress(PlayerInput.Throttle); _drive = 1; Log($"throttle, {Where(me)}"); }
+        if (at(Arg("--drive-at") ?? 10)) { _from = me.GlobalPosition; Input.ActionPress(PlayerInput.Throttle); _drive = 1; Log($"throttle, {Where(me)}"); }
         float gone = new Vector2(me.GlobalPosition.X - _from.X, me.GlobalPosition.Z - _from.Z).Length();
         if (_drive == 1 && gone >= (Arg("--drive-m") ?? 15f))
         {
@@ -268,7 +269,7 @@ public partial class GarageProbe : Node
             Log($"stopped after {gone:F1} m, {Where(me)}, garage near: {GarageUi.GarageNear?.Invoke(me.GlobalPosition)}");
             _drive = 3;
         }
-        if (at(40)) { Log($"RESULT: {Where(me)} at {me.GlobalPosition}"); GetTree().Quit(); }
+        if (at(Arg("--drive-end") ?? 40)) { Log($"RESULT: {Where(me)} at {me.GlobalPosition}"); GetTree().Quit(); }
     }
 
     /// <summary>

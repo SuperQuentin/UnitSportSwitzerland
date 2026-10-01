@@ -75,6 +75,7 @@ public static class FormatCheck
         Check(runs.Count == 4 && runs[0][3] == 6 && runs[1][0] == 9 && runs[3][0] == 27 && runs[3][3] == 30,
             "paint dash runs");
         Check(PaintSeamIsContinuous(), "paint dashes continue across a tile seam, no stub at a dead end");
+        Check(RailCrossingIsEmbedded(), "level crossing: rail embedded at road height, blended back, grooves, road paint cut");
 
         log(failures == 0 ? "format check passed" : $"format check: {failures} failure(s)");
         return failures == 0;
@@ -104,6 +105,55 @@ public static class FormatCheck
             if (painted.Any(r => u >= r.Item1 && u <= r.Item2) != expected) return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// #124: a 6 m road at 10 m crossed square by a rail at 9 m. The rail piece inside the road
+    /// is embedded at 10 m out to where the 4.6 m ballast clears the road by 0.3 m (12 m), the ballast line meets it at 9.84 m and is back at 9 m
+    /// 8 m further out, two
+    /// grooves are painted and the road's centre dash leaves the track zone free.
+    /// </summary>
+    private static bool RailCrossingIsEmbedded()
+    {
+        var id = new TileId(2600, 1200);
+        var road = new RoadSegment
+        {
+            Class = RoadClass.Road, Surface = RoadSurface.Paved, Width = 6,
+            Points = [400, 10, 500, 600, 10, 500],
+        };
+        var rail = new RoadSegment
+        {
+            Class = RoadClass.Railway, Width = 4.6f, Points = [500, 9, 400, 500, 9, 600],
+        };
+        var lines = new List<Network.CrossSectionPlanner.Line>
+        {
+            new() { Tile = id, Segment = road, Write = true },
+            new() { Tile = id, Segment = rail, Write = true },
+        };
+        Network.CrossSectionPlanner.Plan(lines, null, new Network.CrossSectionPlanner.Stats());
+        var overlap = new Network.RailRoadOverlap(lines, new Network.RailRoadOverlap.Tally());
+        var plan = new List<Geometry.Vec2> { new(id.MinE + 500, id.MaxN - 400), new(id.MinE + 500, id.MaxN - 600) };
+        var pieces = overlap.Split(plan, _ => 9f, rail, count: true);
+        if (pieces is null || pieces.Count(p => p.Embedded) != 1) return false;
+        var inside = pieces.Single(p => p.Embedded);
+        double length = Geometry.Polyline.Length(inside.Plan);
+        if (Math.Abs(length - 12) > 0.6 || inside.Height.Any(h => Math.Abs(h - 10) > 1e-3)) return false;
+        if (pieces[0].Height[0] != 9f || pieces[^1].Height[^1] != 9f) return false;
+        // continuous: each piece starts where the last one ended; the ballast line meets the road
+        // RailTop lower, so the raised rails' heads are flush with the grooves
+        for (int i = 1; i < pieces.Count; i++)
+            if (pieces[i].Plan[0] != pieces[i - 1].Plan[^1]
+                || Math.Abs(pieces[i].Height[0] - pieces[i - 1].Height[^1]) - (pieces[i].Embedded != pieces[i - 1].Embedded ? Network.RailRoadOverlap.RailTop : 0) is > 1e-4f or < -1e-4f)
+                return false;
+
+        var paint = new List<RoadPaint>();
+        Meshing.PaintEmitter.Emit(road, 0, paint);
+        overlap.EmitGrooves(inside, rail, id, paint);
+        if (paint.Count(p => p.Type == PaintType.RailGroove) != 2) return false;
+        overlap.ClearTrackZones(paint, id);
+        return paint.Where(p => p.Type != PaintType.RailGroove)
+            .All(p => Enumerable.Range(0, p.Vertices.Length / 3).All(i => Math.Abs(p.Vertices[i * 3] - 500) > 1.2f))
+            && paint.Any(p => p.Type == PaintType.WhiteDashed);
     }
 
     private static byte[] Encode(RoadTile tile)
