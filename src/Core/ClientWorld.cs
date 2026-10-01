@@ -260,6 +260,11 @@ public partial class ClientWorld : Node3D
         };
         Audio.Cd.CdLibrary.Create(this, server: false);
         Net.ClockSync.Create(this);
+        // live stations in cars (#179): offline this machine tunes them itself
+        var webRadio = Audio.Live.WebRadio.Create(this);
+        webRadio.Players = radios.Players;
+        webRadio.Listener = () => GetViewport().GetCamera3D()?.GlobalPosition ?? LocalPlayer?.GlobalPosition;
+        if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: false) is { } webRadioOffline) AddChild(webRadioOffline);
         // the Africa Twin at Riddes: placed here offline, by the server online
         AddChild(new World.AfricaTwinEgg(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
@@ -853,6 +858,7 @@ public partial class ClientWorld : Node3D
         AddChild(race);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
         if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
+        if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: true) is { } webRadioCheck) AddChild(webRadioCheck);
 
         _chat!.Kicked += reason => GD.Print($"[net] kicked: {reason}");
 
@@ -1193,6 +1199,10 @@ public partial class ClientWorld : Node3D
         _chunks.RemoveAnchor(_spectator);
         _chunks.AddAnchor(player);
         _onFoot = true;
+        player.CarRadioTuned -= OnCarRadioTuned;
+        player.CarRadioTuned += OnCarRadioTuned;
         GD.Print($"[world] on foot at {player.GlobalPosition}");
     }
+
+    private void OnCarRadioTuned(string station) => _items?.Ui.Toast($"Radio: {station}");
 }
