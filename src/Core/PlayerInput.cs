@@ -65,6 +65,8 @@ public partial class PlayerInput : Node
     /// <summary>In a car, truck or bus: the next / previous live radio station, through off (#179).</summary>
     public const string RadioNext = "radio_next";
     public const string RadioPrev = "radio_prev";
+    /// <summary>In a car, truck or bus (driver or passenger): the radio panel, stations and CDs (#211).</summary>
+    public const string RadioPanel = "radio_panel";
     // --- trucks and buses (#70) ---
     /// <summary>Couple or uncouple a trailer (<see cref="Player.Truck.Couple"/>).</summary>
     public const string Couple = "couple";
@@ -115,6 +117,8 @@ public partial class PlayerInput : Node
     public const string AimItem = "aim_item";
     public const string Inventory = "inventory";
     public const string QuickWheel = "quick_wheel";
+    /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
+    public const string DropItem = "drop_item";
     public const string NextItem = "next_item";
     public const string PrevItem = "prev_item";
     /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
@@ -291,6 +295,9 @@ public partial class PlayerInput : Node
         // key printed Z on a Swiss keyboard, next to the engine's physical Z printed Y.
         Bind(RadioNext, Keys(Key.U));
         Bind(RadioPrev, Keys(Key.P));
+        // R, shared with the travel picker: in a vehicle with a stereo R is the radio (RadioUi takes it
+        // first and ClientWorld leaves it alone), on foot it is the picker. Keyboard only, like U / P.
+        Bind(RadioPanel, Keys(Key.R));
         // A truck has no tricks, boost or hop: its shift paddles take the shoulders (and Shift / Ctrl,
         // which only mean tuck and slide elsewhere), the clutch takes C / B, and the H-pattern's
         // gates the number keys, which only pick hotbar slots on foot.
@@ -339,6 +346,8 @@ public partial class PlayerInput : Node
         Bind(AimItem, Mouse(MouseButton.Right), Button(JoyButton.LeftShoulder));
         Bind(Inventory, Keys(Key.I, Key.Tab), Button(JoyButton.Back));
         Bind(QuickWheel, Keys(Key.X), Button(JoyButton.DpadLeft));
+        // Minecraft's key: Q only means "down" in the fly camera and in the air, never on foot
+        Bind(DropItem, Keys(Key.Q));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
         Bind(Gather, Keys(Key.G), Button(JoyButton.X));
         Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));

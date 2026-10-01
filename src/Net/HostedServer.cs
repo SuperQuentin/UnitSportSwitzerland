@@ -59,7 +59,7 @@ public sealed class HostedServer
         {
             if (!System.IO.File.Exists(LogPath)) return "The server stopped before writing a log.";
             var lines = System.IO.File.ReadAllLines(LogPath);
-            var bad = lines.Reverse().FirstOrDefault(l => l.Contains("ERROR") || l.Contains("failed") || l.Contains("[server]"));
+            var bad = lines.AsEnumerable().Reverse().FirstOrDefault(l => l.Contains("ERROR") || l.Contains("failed") || l.Contains("[server]"));
             if (bad != null && bad.Contains("failed to listen")) return $"Port {Port} is already in use. Pick another one.";
             return bad?.Replace("ERROR:", "").Trim() ?? "The server stopped. See logs/hosted-server.log.";
         }

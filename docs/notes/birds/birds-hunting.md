@@ -6,7 +6,7 @@
   out. Each row gives length/wingspan, back/belly/accent colours, a `BodyPlan` (12 archetypes),
   a `FlightStyle`, `Habitat` flags, an altitude range, presence, an abundance weight, a flock
   size and, for the **20 game species** of JSG Art. 5, the open-season months. Anything else is
-  protected. `BirdLife` (local and cosmetic like the traffic, ≤32 birds, removed past 240 m)
+  protected. `BirdLife` (≤32 birds per player, removed past 240 m; online the server owns them, see `shared-birds`)
   samples a point 35–150 m out every 0.4 s and maps `TryGetCover` + altitude to a habitat with
   `HabitatAt`. Unmapped open ground is farm/meadow/alpine by altitude, because TLM has no
   farmland. It then draws a species weighted by abundance × real calendar month (`--birdmonth N`)
@@ -16,7 +16,7 @@
   with the wings as separate meshes that flap about the shoulder. **Hunting**: the **shotgun**
   item (`ItemUse.Shoot`, `ItemId` 37–38 appended; Aim shoulders it at 50° FOV and shows a
   crosshair, Use spends a shell through `ItemController.Fire`) casts from the eye (`shotgun-feel`) a cone that opens to 1.4 m
-  across at 35 m, with hit chance fading from 30 to 55 m and a raycast so walls block. Every shot
+  across at 35 m, with hit chance fading from 30 to 55 m and a raycast so walls block (not the ground the bird stands on nor the trunk it perches in: `shared-birds`). Every shot
   flushes everything within 150 m. The field journal (**J**, `user://birds.json` by species
   name) scores a game species in season by size and flight (+), a game species out of season
   (−100) and a protected one (−250). A player with no shotgun is given one plus 25 shells on the

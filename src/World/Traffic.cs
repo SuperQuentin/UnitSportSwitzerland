@@ -118,7 +118,7 @@ public sealed class Route
 /// Density follows the clock — about half the cars at night (<see cref="DayNight"/>).
 /// </para>
 /// </summary>
-public partial class Traffic : Node3D
+public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftAware
 {
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
@@ -189,6 +189,26 @@ public partial class Traffic : Node3D
         _lampMaterial = TrafficMeshBuilder.LampMaterial();
     }
 
+    /// <summary>
+    /// The origin moved (#185). The car and train nodes are children and have moved; their lanes,
+    /// where they are on them and where they are heading are kept here, in world space.
+    /// </summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        var done = new HashSet<LaneEdge>();
+        _roads?.Shift(shift, _origin.Frame, done);
+        _rails?.Shift(shift, _origin.Frame, done);
+        foreach (var v in _cars.Concat(_trains))
+        {
+            // a vehicle may still be on an edge of an older graph
+            foreach (var (edge, _) in v.Route.Legs)
+                if (done.Add(edge)) edge.Shift(shift);
+            v.Head = shift.Point(v.Head);
+            v.Vel = shift.Direction(v.Vel);
+            for (int i = 0; i < v.Path.Length; i++) v.Path[i] = shift.Point(v.Path[i]);
+        }
+    }
+
     // ---- roads ---------------------------------------------------------------------------
 
     private static bool IsCarRoad(RoadSegment s) =>
@@ -226,7 +246,8 @@ public partial class Traffic : Node3D
         var here = TileId.FromLv95(e, n);
         if (_builtAround is { } b && b.E == here.E && b.N == here.N) return;
         _building = true;
-        var origin = _origin;
+        // one frame for the whole build: the origin may move while it runs (#185)
+        var origin = _origin.Frame;
 
         Task.Run(async () =>
         {
@@ -252,6 +273,13 @@ public partial class Traffic : Node3D
             Callable.From(() =>
             {
                 if (epoch != _epoch) return;   // built from the world that was replaced
+                if (origin.Epoch != _origin.Epoch)
+                {
+                    // the origin moved while it was being built: bring it into the current frame
+                    var shift = _origin.Since(origin);
+                    roads.Shift(shift, _origin.Frame, new());
+                    rails.Shift(shift, _origin.Frame, new());
+                }
                 _roads = roads;
                 _rails = rails;
                 _builtAround = here;

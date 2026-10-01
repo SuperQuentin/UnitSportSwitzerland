@@ -7,7 +7,7 @@ namespace UnitSport.World;
 /// down the course, the next one to fly through in yellow, the finish in red, the ones already
 /// passed hidden.
 /// </summary>
-public partial class RaceGates : Node3D
+public partial class RaceGates : Node3D, Core.IOriginContainer
 {
     private readonly System.Collections.Generic.List<MeshInstance3D> _rings = new();
     private StandardMaterial3D _idle = null!, _next = null!, _finish = null!;

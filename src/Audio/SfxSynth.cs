@@ -189,6 +189,27 @@ public static class SfxSynth
     private static AudioStreamWav? _engine;
 
     /// <summary>
+    /// A throw winding up: a soft hum with a breathy edge and a fast tremolo, looped. Every
+    /// frequency is a whole number of cycles per second, so the loop has no seam; the throw raises
+    /// its pitch with the charge.
+    /// </summary>
+    public static AudioStreamWav ChargeHum => _chargeHum ??= Loop(1.0f, 42, (rng, n) =>
+    {
+        var air = LowPass(Noise(rng, n), 0.08f);
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float tone = Mathf.Sin(Mathf.Tau * 220f * t) + 0.35f * Mathf.Sin(Mathf.Tau * 440f * t)
+                       + 0.15f * Mathf.Sin(Mathf.Tau * 663f * t);
+            float tremolo = 0.75f + 0.25f * Mathf.Sin(Mathf.Tau * 12f * t);
+            s[i] = (tone * 0.35f + air[i] * 1.5f) * tremolo;
+        }
+        return s;
+    });
+    private static AudioStreamWav? _chargeHum;
+
+    /// <summary>
     /// An explosion: a noise blast with a hard attack, a falling sub-bass thump under it, and a
     /// long rumbling tail. Played as a 3D sound, so distance does the rest.
     /// </summary>

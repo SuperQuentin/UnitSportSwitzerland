@@ -15,7 +15,7 @@ namespace UnitSport.Interiors;
 /// where it is (interiors are 3 km down), so remote copies need nothing replicated for it.
 /// </para>
 /// </summary>
-public partial class DoorwayGhosts : Node3D
+public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
 {
     /// <summary>The group a node joins to be drawn on both sides of a doorway it is near.</summary>
     public const string Group = "doorway_travellers";

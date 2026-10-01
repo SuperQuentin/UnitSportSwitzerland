@@ -11,7 +11,7 @@ namespace UnitSport.Core;
 /// lifecycle of player nodes. Transforms are client-authoritative and relayed by ENet.
 /// Ground with no terrain data is generated here exactly as on the clients.
 /// </summary>
-public partial class ServerWorld : Node3D
+public partial class ServerWorld : Node3D, IOriginContainer
 {
     private InterestService? _interest;
     private Vehicles.PassengerService? _passengers;
@@ -20,6 +20,7 @@ public partial class ServerWorld : Node3D
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
+    private Items.DroppedItems? _dropped;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
@@ -82,6 +83,7 @@ public partial class ServerWorld : Node3D
         AddChild(_chunks);
 
         _players = new Node3D { Name = "Players" };
+        _players.AddToGroup(OriginShifter.ContainerGroup);
         AddChild(_players);
         // who may see whom: decided here for everyone, before any player node exists (each
         // player's synchronizer looks it up in _Ready). Line of sight from the 100 m horizon lattice.
@@ -103,6 +105,9 @@ public partial class ServerWorld : Node3D
         // radios thrown into the world, and the CDs they play; the clock everyone plays them by
         _radios = Items.RadioManager.Create(this);
         _radios.PlayerPositions = _vehicles.PlayerPositions;
+        // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
+        _dropped = Items.DroppedItems.Create(this);
+        _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
         Net.ClockSync.Create(this);
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
@@ -150,6 +155,22 @@ public partial class ServerWorld : Node3D
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here
         Items.ItemEvents.Create(this, server: true);
+
+        // the birds everybody shares (#143): simulated here around every player, sent to those near
+        var birds = new Birds.BirdLife(_chunks, origin, null)
+        {
+            Headless = true,
+            // fills the birds' reused list: no allocation per frame (GC pauses at 16 players)
+            Observers = list =>
+            {
+                for (int i = 0; i < _players!.GetChildCount(); i++)
+                    if (_players.GetChild(i) is Player.FootPlayer { Npc: false } p)
+                        list.Add(new Birds.BirdLife.Observer(p.GlobalPosition, p.NetVel, p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
+                            or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit, p.GetMultiplayerAuthority()));
+            },
+        };
+        AddChild(birds);
+        Birds.BirdNet.Create(this, birds, server: true);
         // stuck Polaroids' images: uploaded by their owner, kept here, served to the others
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
@@ -302,6 +323,7 @@ public partial class ServerWorld : Node3D
         _passengers?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
+        _dropped?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);

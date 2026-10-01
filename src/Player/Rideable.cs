@@ -223,6 +223,13 @@ public abstract class Rideable
     /// </summary>
     public virtual (Aabb Lower, Aabb Upper)? HullBoxes => null;
 
+    /// <summary>
+    /// A collision box measured from section <paramref name="section"/>'s mesh, cut back to what is
+    /// solid enough to collide with (a bus's mirrors, out on their arms over a walker's head, are
+    /// not a wall down its whole length). As measured by default.
+    /// </summary>
+    public virtual Aabb Solid(Aabb measured, int section) => measured;
+
     /// <summary>Bottom of the collision hull above the ground, m: bumps of the terrain lattice must not catch it.</summary>
     public virtual float HullLift => 0.45f;
 
