@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text;
 
+using UnitSport.Core;
+
 namespace UnitSport.Audio.Cd;
 
 /// <summary>
@@ -36,7 +38,7 @@ public sealed class CdBurner
         {
             try
             {
-                using var p = Process.Start(new ProcessStartInfo(tool, "-version")
+                using var p = Process.Start(new ProcessStartInfo(BundledTools.Resolve(tool), "-version")
                 {
                     UseShellExecute = false, CreateNoWindow = true,
                     RedirectStandardOutput = true, RedirectStandardError = true,
@@ -202,7 +204,7 @@ public sealed class CdBurner
     private static async Task<int> RunAsync(string tool, string[] args, Action<string>? stdoutLine,
         Stream? stdoutBytes, CancellationToken ct)
     {
-        var start = new ProcessStartInfo(tool)
+        var start = new ProcessStartInfo(BundledTools.Resolve(tool))
         {
             UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true,

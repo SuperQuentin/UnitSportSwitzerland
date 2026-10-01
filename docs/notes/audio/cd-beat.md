@@ -4,10 +4,17 @@
   `user://cds/<id>.ogg` + `<id>.json` + `library.json`. A CD is a track in this list, **not** an
   inventory item (stacks carry no per-instance data). Clients get the list on connect (`Library`)
   and additions (`Added`); a client's `RequestBurn(url)` goes to the server, offline it burns locally.
+- **Personal CDs (#168).** "Just for me" in the radio panel burns on the player's own machine
+  (`RequestBurn(url, personal: true)`, same `CdBurner`, so the client needs yt-dlp/ffmpeg too) into
+  `user://cds/personal/` with its own `library.json`. Ids are **negative and random** so they never
+  collide with the server's (positive) or another player's. `CdLibrary.Find` looks in both lists;
+  `CdCache.LocalPath` answers a negative id from the personal list only (in memory, so a second
+  client sharing the same `user://` does not pick it up), and never fetches one. Others see
+  "someone's own CD" and hear nothing; the server takes the owner's length, capped at 10 min.
 - **Burning runs where the library is** (dedicated server, or the offline client), never on a client
   for someone else. `CdBurner`: `yt-dlp` (best audio stream as is, `--print title`/`after_move:filepath`)
   → `ffmpeg` to mono 22.05 kHz s16le on stdout for the analyser → `ffmpeg` to stereo Vorbis q2
-  (~80 kbit/s, ≤ 10 min, ~6 MB). Tools on PATH like the GPX export's ffmpeg; missing → a status
+  (~80 kbit/s, ≤ 10 min, ~6 MB). Tools from `bin/` next to the exe (shipped in releases), else PATH, like the GPX export's ffmpeg; missing → a status
   line, nothing else. Argument lists, never a shell string: the link is user input. Hosts are
   whitelisted (youtube.com, youtu.be, music.youtube.com); one burn at a time, one per player per
   minute; a local file path is accepted only from this process (`--cdfixture <wav>` for tests).

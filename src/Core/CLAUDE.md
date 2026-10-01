@@ -18,7 +18,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 ## Commands
 
-- `commands` — Commands: --at, --goto, --menu, --path, --probe, --shot
+- `commands` — Commands: --at, --chatcheck, --goto, --menu, --nohud, --path, --probe, --shot, --shot-queue, --title
 
 ## Gotchas
 
@@ -28,3 +28,4 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `never-default-world-origin-lv95` — Never default the world origin to LV95 0/0: Switzerland is 2.6 million metres from there, so float precision...
 - `menu-refuses-close-still-consume` — A menu that refuses to close must still CONSUME the key
 - `driving-settings-panel-through-godot` — Driving the Settings panel through the godot-ai MCP changes real settings
+- `macos-launch-steals-focus` — Every Godot launch (and editor play) steals focus on macOS; --headless draws nothing; use --shot-queue

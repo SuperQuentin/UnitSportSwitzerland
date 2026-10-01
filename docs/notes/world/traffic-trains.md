@@ -11,3 +11,9 @@
   bends (2.5 m/s² lateral) and for the car or player ahead. Density: Settings → Time of day (`TrafficCars`,
   35, ~half at night; `Trains`); `--traffic N`. Check: `<godot> --path . -- --trafficcheck[,out.png]
   [--time h]` — 40 s over the nearest motorway, chases a car then a train, fails if nothing moved.
+- **Junction ends joined** (`LaneGraph.JoinTrimmedEnds`, #85): the road generator trims roads back from
+  their junction polygon, so ends at a junction do not share a key; unjoined, every such junction was a
+  dead end and cars turned round on the spot mid-junction. Ends nothing else meets, ≤ 18 m apart and
+  pointing at each other, get a straight connector edge (Mollendruz tile: 400 dead ends → 36).
+  `Degree`/`Leaving` also look in the 8 neighbouring snap cells (two ends 0.1 m apart can round apart).
+- Around a race the cars behave like drivers who see it coming: `traffic-and-races`.

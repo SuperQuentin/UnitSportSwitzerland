@@ -30,8 +30,15 @@ public sealed class MeshScratch
     private readonly List<Vector3> _vertices = new();
     private readonly List<Color> _colors = new();
     private readonly List<int> _indices = new();
+    // panes go in a second surface, so they can take a translucent material of their own
+    private readonly List<Vector3> _glassVertices = new();
+    private readonly List<Color> _glassColors = new();
+    private readonly List<int> _glassIndices = new();
 
-    public int TriangleCount => _indices.Count / 3;
+    /// <summary>The name <see cref="Build(Vector3)"/> gives the surface <see cref="Pane"/> fills.</summary>
+    public const string GlassSurface = "glass";
+
+    public int TriangleCount => (_indices.Count + _glassIndices.Count) / 3;
 
     /// <summary>
     /// A tapered tube from <paramref name="a"/> to <paramref name="b"/>. Six sides by default:
@@ -144,6 +151,29 @@ public sealed class MeshScratch
     }
 
     /// <summary>
+    /// A flat convex polygon, <paramref name="corners"/> in order round its edge, seen from both
+    /// sides: a window. It goes in the mesh's second surface (<see cref="GlassSurface"/>), for a
+    /// translucent material. One sheet rather than a thin box, because behind glass you can see
+    /// through, a box's far face tints everything a second time.
+    /// </summary>
+    public void Pane(ReadOnlySpan<Vector3> corners, Color colour)
+    {
+        if (corners.Length < 3) return;
+        int start = _glassVertices.Count;
+        var linear = colour.SrgbToLinear();
+        foreach (var c in corners)
+        {
+            _glassVertices.Add(c);
+            _glassColors.Add(linear);
+        }
+        for (int i = 1; i < corners.Length - 1; i++)
+        {
+            _glassIndices.Add(start); _glassIndices.Add(start + i); _glassIndices.Add(start + i + 1);
+            _glassIndices.Add(start); _glassIndices.Add(start + i + 1); _glassIndices.Add(start + i);
+        }
+    }
+
+    /// <summary>
     /// Bakes the geometry, turning it to face <b>−Z</b> on the way out.
     ///
     /// <para>
@@ -171,23 +201,42 @@ public sealed class MeshScratch
     public ArrayMesh Build(Vector3 pivot)
     {
         var mesh = new ArrayMesh();
-        if (_indices.Count == 0) return mesh;
+        AddSurface(mesh, _vertices, _colors, _indices, pivot, "body");
+        AddSurface(mesh, _glassVertices, _glassColors, _glassIndices, pivot, GlassSurface);
+        return mesh;
+    }
 
-        var facing = new Vector3[_vertices.Count];
-        for (int i = 0; i < _vertices.Count; i++)
+    private static void AddSurface(ArrayMesh mesh, List<Vector3> vertices, List<Color> colors, List<int> indices,
+        Vector3 pivot, string name)
+    {
+        if (indices.Count == 0) return;
+        var facing = new Vector3[vertices.Count];
+        for (int i = 0; i < vertices.Count; i++)
         {
-            var v = _vertices[i] - pivot;
+            var v = vertices[i] - pivot;
             facing[i] = new Vector3(-v.X, v.Y, -v.Z);
         }
 
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = facing;
-        arrays[(int)Mesh.ArrayType.Color] = _colors.ToArray();
-        arrays[(int)Mesh.ArrayType.Index] = _indices.ToArray();
+        arrays[(int)Mesh.ArrayType.Color] = colors.ToArray();
+        arrays[(int)Mesh.ArrayType.Index] = indices.ToArray();
 
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        return mesh;
+        mesh.SurfaceSetName(mesh.GetSurfaceCount() - 1, name);
+    }
+
+    /// <summary>
+    /// Gives <paramref name="instance"/> <paramref name="body"/> on its solid surface and
+    /// <paramref name="glass"/> on its panes (a mesh from <see cref="Build(Vector3)"/>).
+    /// </summary>
+    public static void Paint(MeshInstance3D instance, Material body, Material glass)
+    {
+        instance.MaterialOverride = null;
+        if (instance.Mesh is not ArrayMesh mesh) return;
+        for (int i = 0; i < mesh.GetSurfaceCount(); i++)
+            instance.SetSurfaceOverrideMaterial(i, mesh.SurfaceGetName(i) == GlassSurface ? glass : body);
     }
 
     /// <summary>

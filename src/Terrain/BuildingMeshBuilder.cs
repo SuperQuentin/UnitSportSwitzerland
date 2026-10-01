@@ -73,9 +73,10 @@ public static class BuildingMeshBuilder
     }
 
     /// <summary>
-    /// Frame, leaf and a doorstep, in the door's own frame (along the wall, out, up). A garage gets
-    /// no leaf (its roll-up door is a node, <c>Vehicles.GarageDoors</c>) but a sign over the opening:
-    /// a coloured board with a light face.
+    /// Frame, leaf and a doorstep, in the door's own frame (along the wall, out, up). A garage's
+    /// leaf is its shut roll-up door (the live one is <see cref="Interiors.DoorLeaf.CreateRollUp"/>),
+    /// its step is flush with the ground a car drives over, and a sign hangs over the opening: a
+    /// coloured board with a light face.
     /// </summary>
     private static void AppendDoor(List<Vector3> v, List<Color> c, List<float> f, Interiors.DoorSpot d, BuildingKind kind)
     {
@@ -112,13 +113,24 @@ public static class BuildingMeshBuilder
         Box(-hw - 0.12f, hw + 0.12f, h, h + 0.12f, 0, 0.08f, frame);
         if (kind == BuildingKind.Garage)
         {
+            // The shut roll-up door: slats in the leaf's own plane (6 cm out of the facade), the
+            // one the building shader drops at every height while the door's portal shows.
+            var metal = new Color(0.80f, 0.82f, 0.85f).SrgbToLinear();
+            int slats = Mathf.Max(4, Mathf.RoundToInt(h / 0.22f));
+            for (int i = 0; i < slats; i++)
+            {
+                float y1 = h - i * h / slats, y0 = y1 - h / slats, mid = y1 - h / slats * 0.35f;
+                Quad(P(-hw, mid, 0.03f), P(hw, mid, 0.03f), P(hw, y1, 0.03f), P(-hw, y1, 0.03f), metal);
+                Quad(P(-hw, y0, 0.03f), P(hw, y0, 0.03f), P(hw, mid, 0.03f), P(-hw, mid, 0.03f), metal * 0.8f);
+            }
             // the sign: a workshop-blue board, and on it a light face the shader lights at night
             Box(-hw - 0.35f, hw + 0.35f, h + 0.2f, h + 0.85f, 0, 0.12f, new Color(0.16f, 0.30f, 0.58f).SrgbToLinear());
             int start = f.Count;
             Quad(P(-hw - 0.22f, h + 0.3f, 0.13f), P(hw + 0.22f, h + 0.3f, 0.13f),
                 P(hw + 0.22f, h + 0.75f, 0.13f), P(-hw - 0.22f, h + 0.75f, 0.13f), Colors.White);
             for (int i = start; i < f.Count; i++) f[i] = SignFlag;
-            Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
+            // flush with the ground, or a car would hit a kerb
+            Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.01f, 0, 0.45f, step);
             return;
         }
         Quad(P(-hw, 0, 0.03f), P(hw, 0, 0.03f), P(hw, h, 0.03f), P(-hw, h, 0.03f), leaf);

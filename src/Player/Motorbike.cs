@@ -57,6 +57,9 @@ public sealed class Motorbike : Rideable, IEngined
     public override Node3D BuildVisual(int riderIndex) => Motorcyclist.Create(Spec.Look, riderIndex);
     public override Node3D BuildParkedVisual(int riderIndex) => Motorcyclist.Create(Spec.Look, riderIndex, rider: false);
 
+    /// <summary>The rider's place and a pillion's (#158).</summary>
+    public override SeatAnchor[] Seats => SeatsOf(Kind, () => Motorcyclist.SeatsFor(Spec.Look));
+
     // ---- read by the feel layer and the rig ----
     public float Rpm { get; private set; }
     public float Rpm01 => Mathf.Clamp((Rpm - Spec.IdleRpm) / (Spec.Redline - Spec.IdleRpm), 0f, 1f);

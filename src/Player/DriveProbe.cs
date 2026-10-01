@@ -155,6 +155,9 @@ public partial class DriveProbe : Node
                     GD.Print($"[drive] route: {route.Class}, {route.Arc[^1]:F0} m, racing line {route.Length:F0} m "
                         + $"(max {route.Line.RoomLeft.Concat(route.Line.RoomRight).DefaultIfEmpty(0).Max():F1} m of room to a side)");
                     PrintVerge(route);
+                    // where the route runs, to find a spot again (LV95 every 500 m)
+                    GD.Print("[drive] route LV95: " + string.Join(", ", Enumerable.Range(0, (int)(route.Length / 500f) + 1)
+                        .Select(k => { var (e, n) = _origin.ToLv95(route.Line.PointAt(k * 500f)); return $"{k * 500} m {e:F0},{n:F0}"; })));
                 }).CallDeferred();
             });
             return;
@@ -202,13 +205,22 @@ public partial class DriveProbe : Node
                     entry.Hits[what] = entry.Hits.GetValueOrDefault(what) + 1;
                     _log.Add($"{_t,5:F1}s {label}: impact ({what}) at {entry.Arc:F0} m ({entry.Player.Motion.Speed * 3.6f:F0} km/h){(entry.Pilot?.Seen is { Length: > 0 } seen ? $" — saw {seen}" : "")}");
                 };
-                player.Announced += (text, _) => _log.Add($"{_t,5:F1}s {label}: {text}");
+                player.Announced += (text, _) =>
+                {
+                    _log.Add($"{_t,5:F1}s {label}: {text} (touching {HitKind(player, detail: true)}{(entry.Pilot?.Seen is { Length: > 0 } seen ? $", saw {seen}" : "")})");
+                    if (entry.Pilot is { } p) foreach (var line in p.Trail) _log.Add($"        before: {line}");
+                };
                 _entries.Add(entry);
             }
             // the traffic yields to the local player only, and there is none here: without this it
             // drove through the race as if the cars were not there, and shunted them back up the pass
             if (FindTraffic(GetTree().Root) is { } traffic)
-                traffic.Obstacles = () => _entries.Where(e => !e.Out).Select(e => e.Player.GlobalPosition);
+            {
+                traffic.Obstacles = () => _entries.Where(e => !e.Out).Select(e => (e.Player.GlobalPosition, e.Player.WorldVelocity));
+                // traffic spawned on the grid before there was one (every run began with racers held
+                // up behind a car standing nose to nose with the front row, #85)
+                foreach (var e in _entries) traffic.ClearAround(e.Player.GlobalPosition, 100f);
+            }
             return;
         }
 
@@ -225,11 +237,13 @@ public partial class DriveProbe : Node
                 en.Pilot = AutoPilot.For(_route, en.Player);
                 if (en.Pilot == null) { GD.Print($"[drive] no pilot for {en.Label}"); Finish(1); return; }
                 en.Pilot.Log = s => _log.Add($"{_t,5:F1}s {s}");
-                // every driver its own: skill 0.8..1 and aggression 0..1, the same each run
-                // (--skill / --aggression set them all)
+                // every driver its own, the same each run, as a race's NPCs get them: skill 0.8..1.1 with
+                // one ace (≥ 1.05; the grid slot seeded too), a calm temper 0..0.3 (--skill / --aggression
+                // set them all)
                 var rng = new System.Random(1000 + _entries.IndexOf(en));
-                float skill = float.TryParse(ArgAfter("--skill"), NumberStyles.Float, CultureInfo.InvariantCulture, out float sk) ? sk : 0.8f + 0.2f * (float)rng.NextDouble();
-                float aggr = float.TryParse(ArgAfter("--aggression"), NumberStyles.Float, CultureInfo.InvariantCulture, out float ag) ? ag : (float)rng.NextDouble();
+                float drawn = AutoPilot.GridSkills(_entries.Count, new System.Random(77))[_entries.IndexOf(en)];
+                float skill = float.TryParse(ArgAfter("--skill"), NumberStyles.Float, CultureInfo.InvariantCulture, out float sk) ? sk : drawn;
+                float aggr = float.TryParse(ArgAfter("--aggression"), NumberStyles.Float, CultureInfo.InvariantCulture, out float ag) ? ag : 0.3f * (float)rng.NextDouble();
                 en.Pilot.Temperament(skill, aggr, 1000 + _entries.IndexOf(en));
                 en.Pilot.Go = false;
                 en.Player.RideControls = () => entry.Pilot!.Drive((float)GetPhysicsProcessDeltaTime(), _started && !entry.Out, Others(entry));
@@ -267,7 +281,8 @@ public partial class DriveProbe : Node
             {
                 en.Out = true;
                 en.Wreck = en.Player.GlobalPosition;
-                _log.Add($"{_t,5:F1}s {en.Label} is OUT (crashed at {en.Arc:F0} m)");
+                var (outE, outN) = _origin.ToLv95(en.Player.GlobalPosition);
+                _log.Add($"{_t,5:F1}s {en.Label} is OUT (crashed at {en.Arc:F0} m, LV95 {outE:F0},{outN:F0})");
             }
             RecordFix(en, delta);
             CountPasses(en);
@@ -485,14 +500,18 @@ public partial class DriveProbe : Node
     }
 
     /// <summary>What a knock was against: another racer, the traffic, a trunk, or anything else (terrain, a wall, a parked machine).</summary>
-    private static string HitKind(FootPlayer p)
+    /// <summary>What the car is touching; <paramref name="detail"/>: with a traffic car's state (for the log lines).</summary>
+    private static string HitKind(FootPlayer p, bool detail = false)
     {
         string kind = "other";
         for (int i = 0; i < p.GetSlideCollisionCount(); i++)
             switch (p.GetSlideCollision(i).GetCollider())
             {
                 case FootPlayer: return "car";
-                case AnimatableBody3D: kind = "traffic"; break;
+                case AnimatableBody3D a:
+                    kind = a.Name.ToString().Contains("Train") ? "train" : "traffic";
+                    if (detail && World.Traffic.Current?.Describe(a.GetInstanceId()) is { } what) kind += $" [{what}]";
+                    break;
                 case CollisionObject3D c when (c.CollisionLayer & World.TreeColliders.Layer) != 0 && kind == "other": kind = "tree"; break;
             }
         return kind;

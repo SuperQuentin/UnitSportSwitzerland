@@ -68,9 +68,10 @@ public sealed class AutoPilot
     /// <summary>
     /// Another vehicle on the road, as this driver sees it: where it is and how it moves (a remote
     /// player's replicated <c>WorldVelocity</c>) — the direction matters: a car coming the other way
-    /// and one going away at the same speed are opposite problems.
+    /// and one going away at the same speed are opposite problems. <see cref="Yielding"/>: a traffic car
+    /// making way (pulled over, slowing), which may be passed anywhere a car fits beside it.
     /// </summary>
-    public readonly record struct Other(Vector3 Position, Vector3 Velocity, bool Wreck)
+    public readonly record struct Other(Vector3 Position, Vector3 Velocity, bool Wreck, bool Yielding = false, bool Civil = false)
     {
         public float Speed => new Vector2(Velocity.X, Velocity.Z).Length();
     }
@@ -107,7 +108,7 @@ public sealed class AutoPilot
     private float _planTimer, _cooldown, _gripUntil;
 
     /// <summary>
-    /// The driver: <see cref="Skill"/> 0.8..1 (how close to the car's limit it brakes and corners, and
+    /// The driver: <see cref="Skill"/> 0.8..1.1 (how close to the car's limit it brakes and corners, and
     /// how rarely it gets a braking point wrong under pressure), <see cref="Aggression"/> 0..1 (how
     /// late it brakes, how close it follows, whether it dives up the inside). Set with
     /// <see cref="Temperament"/>; the defaults are a calm, perfect driver.
@@ -121,10 +122,25 @@ public sealed class AutoPilot
     private bool _inZone;
     private float _backwards;
 
+    /// <summary>
+    /// A grid's skills: one drawn in each of <paramref name="count"/> equal bands of 0.8..1.1, shuffled —
+    /// levels that really differ, never a grid of 0.8s — and the best raised to an ace (≥ 1.05) if its
+    /// band did not already make one.
+    /// </summary>
+    public static float[] GridSkills(int count, System.Random rng)
+    {
+        var skills = new float[count];
+        for (int i = 0; i < count; i++) skills[i] = 0.8f + 0.3f * (i + (float)rng.NextDouble()) / count;
+        int best = count - 1;
+        skills[best] = Mathf.Max(skills[best], 1.05f + 0.05f * (float)rng.NextDouble());
+        for (int i = count - 1; i > 0; i--) { int j = rng.Next(i + 1); (skills[i], skills[j]) = (skills[j], skills[i]); }
+        return skills;
+    }
+
     /// <summary>Sets the driver (clamped) and recomputes its speed profile; <paramref name="seed"/> drives its mistakes.</summary>
     public void Temperament(float skill, float aggression, int seed)
     {
-        Skill = Mathf.Clamp(skill, 0.8f, 1f);
+        Skill = Mathf.Clamp(skill, 0.8f, 1.1f);
         Aggression = Mathf.Clamp(aggression, 0f, 1f);
         _rng = new System.Random(seed);
         Profile = ComputeProfile();
@@ -135,7 +151,7 @@ public sealed class AutoPilot
     /// ~10% at 0.8 and full aggression. At three times that, in a pack (always under pressure) the
     /// worst drivers blundered every other corner and half the field went into the trees.
     /// </summary>
-    private float MistakeChance => 0.35f * (1f - Skill) * (0.5f + Aggression);
+    private float MistakeChance => Mathf.Max(0f, 0.35f * (1f - Skill) * (0.5f + Aggression));   // none from skill 1 up
 
     /// <summary>A runner on foot waits for this (a vehicle gets it through <see cref="Drive"/>).</summary>
     public bool Go = true;
@@ -187,8 +203,10 @@ public sealed class AutoPilot
         {
             // a share of the tyre limit: a narrow road with camber and bumps is not a flat skidpad
             // a lesser driver corners and brakes a little short of the car; an aggressive one brakes later
+            // (an ace, skill 1.1, carries the trend on: ×1.03 corner and ×1.04 braking share, and the
+            // braking share never above 0.9 of the rear-lockup limit, whatever the temper)
             Mount.Car => line.SpeedProfile(S, Rideable.Arcade, (S.Style == DriveStyle.Grip ? 0.64f : 0.6f) * Mathf.Lerp(0.94f, 1f, (Skill - 0.8f) / 0.2f),
-                0.85f * Mathf.Lerp(0.92f, 1f, (Skill - 0.8f) / 0.2f) + 0.04f * Aggression),
+                Mathf.Min(0.9f, 0.85f * Mathf.Lerp(0.92f, 1f, (Skill - 0.8f) / 0.2f) + 0.04f * Aggression)),
             // v = √(g·R·tan φ): 65% of the lean it can hold (measured upright on the flat: braking
             // into a bend takes grip off the lean, and at 80% two R1s ran wide off a R 50 m bend at
             // 93 km/h on full lock), 85% of its brakes
@@ -247,6 +265,7 @@ public sealed class AutoPilot
         // each waiting for the other — measured: all six cars parked at 170 m for ten minutes):
         // put back on the line past it, the way a game unsticks a car
         _held = motion.Speed < 1f && !Finished ? _held + dt : 0f;
+        if (_held > 3f && _held - dt <= 3f || _held > 6f && _held - dt <= 6f) Log?.Invoke($"{Label}: held {_held:F0} s ({Seen})");
         if (_held > 10f) { _held = 0f; ResetToLine($"held up ({(Seen.Length > 0 ? Seen : "nothing seen")})"); }
         var input = Policy(ref D, Player.GlobalPosition, motion, dt, live: true);
         FacingBack(dt, motion);
@@ -331,7 +350,7 @@ public sealed class AutoPilot
     /// limit: nothing, not a pass, not an oncoming car, not a wreck, puts a wheel over it.
     /// </summary>
     /// <summary>Moving things ahead in this car's way this step: where across the road, and the speed that follows them.</summary>
-    private readonly List<(float Lateral, float Follow)> _ahead = new();
+    private readonly List<(float Lateral, float Follow, float Beside)> _ahead = new();
 
     private float RoomL(int i) => Route.Line.RoomLeft[i] + (Route.Line.MarginLeft[i] > 0f ? 0.3f : 0f);
     private float RoomR(int i) => Route.Line.RoomRight[i] + (Route.Line.MarginRight[i] > 0f ? 0.3f : 0f);
@@ -377,14 +396,31 @@ public sealed class AutoPilot
         _ahead.Clear();
         _around.Clear();
         D.Cap = float.MaxValue;
+        bool boxed = false, tailed = false;
+        // traffic about to come out onto the road ahead, not on it yet (the boxes below cannot see it)
+        D.Cap = Crossing(me, v);
+        _capRule = D.Cap < float.MaxValue ? -1 : 0;
         // a car's width (1.7 m) and 0.3 m beside a rival; 2.3 from one coming the other way
         const float Beside = 2.0f, Clear = 2.3f, CarLength = 4.5f;
 
+        // where the tightest bounds on each side come from (metres ahead): see the squeeze below
+        float loAt = float.MaxValue, hiAt = float.MaxValue, lastLo = lo, lastHi = hi, lastAhead = 0f;
+        void Note()
+        {
+            if (lo != lastLo) { loAt = lastAhead; lastLo = lo; }
+            if (hi != lastHi) { hiAt = lastAhead; lastHi = hi; }
+        }
         foreach (var q in others.Concat(Sensed(dt, fwd)))
         {
+            Note();
+            // the traffic (a 1.8 m car, a 2 m van, boxed at its mesh bounds) gets more room than a racer:
+            // at a racer's 2.0 / 2.3 m centre to centre the pack clipped traffic at 40-80 km/h (#85)
+            float clear = q.Civil ? Clear + 0.3f : Clear, beside = q.Civil ? Beside + 0.4f : Beside;
             var rel = RaceRoute.Flat(q.Position - me);
             _around.Add(q.Position);
             float ahead = rel.Dot(fwd);
+            lastAhead = ahead;
+            tailed |= ahead < 0f && ahead > -2.5f * CarLength && Mathf.Abs(rel.Dot(new Vector3(fwd.Z, 0, -fwd.X))) < 2.5f;
             float along = q.Velocity.X * fwd.X + q.Velocity.Z * fwd.Z;
             if (ahead > -3f && ahead < 40f && rel.Length() < nearest)
             {
@@ -395,6 +431,11 @@ public sealed class AutoPilot
             float reach = 30f + Mathf.Max(closing, 0f) * (1f + Mathf.Max(closing, 0f) / (2f * EasyBrake));
             if (ahead < -2f * CarLength || ahead > reach) continue;
             var (theirs, qi) = Side(q.Position);
+            // the bounds below are where this car must be THERE; the plan is an offset from the line at
+            // the aim point, and where the line swings across the road between the two, a bound kept at
+            // the aim point was a metre off at the car — racers passed standing traffic 0.5 m too close
+            // and hit it at 35-77 km/h (#85)
+            float shift = line.Offset[ai] - line.Offset[qi];
             var n = RaceLine.Normal(Route.Centre, qi);
             float mine = line.Offset[qi] + D.Lateral;   // where this car is headed as it reaches them
 
@@ -411,42 +452,77 @@ public sealed class AutoPilot
                 float sideways = q.Velocity.X * n.X + q.Velocity.Z * n.Y;
                 float half = Route.Width[qi] * 0.5f;
                 float at = Mathf.Clamp(theirs + sideways * Mathf.Min(meet, 2f), -half, half);
-                float spaceL = RoomL(qi) - (at + Clear), spaceR = (at - Clear) + RoomR(qi);
+                float spaceL = RoomL(qi) - (at + clear), spaceR = (at - clear) + RoomR(qi);
                 if (spaceL >= 0f || spaceR >= 0f)
                 {
-                    float bound = spaceR >= spaceL ? at - Clear : at + Clear;
-                    if (spaceR >= spaceL) hi = Mathf.Min(hi, bound); else lo = Mathf.Max(lo, bound);
-                    // not over yet, and not the time to get over (4 m/s sideways, a beat to react):
-                    // slow, so that there is — at 80 km/h into a blind bend it met the car nose first
+                    float bound = spaceR >= spaceL ? at - clear : at + clear;
+                    if (spaceR >= spaceL) hi = Mathf.Min(hi, bound + shift); else lo = Mathf.Max(lo, bound + shift);
+                    // not over yet, and not the time to get over (1.5 m/s sideways — what a car at speed
+                    // really makes — and a beat and a half): slow, so that there is. At 80 km/h into a blind
+                    // bend it met the car nose first; with 2 m/s and a beat, racers at 60-90 km/h still hit
+                    // traffic that stopped short in front of them (#85)
                     float wrong = spaceR >= spaceL ? myLat - bound : bound - myLat;
-                    if (wrong > 0f && meet < wrong / 4f + 0.8f)
-                        D.Cap = Mathf.Min(D.Cap, StopWithin(meet * v - 8f) + 2f);
+                    if (wrong > 0f && meet < wrong / 1.5f + 1.5f)
+                        CapBy(StopWithin(meet * v - 8f) + 2f);
                 }
                 else
                 {
                     // no room to meet it at speed: to the wider side, and slow enough to meet it crawling
-                    if (spaceR >= spaceL) hi = Mathf.Min(hi, -RoomR(qi)); else lo = Mathf.Max(lo, RoomL(qi));
-                    D.Cap = Mathf.Min(D.Cap, StopWithin(meet * v - 8f) + 2f);
+                    if (spaceR >= spaceL) hi = Mathf.Min(hi, -RoomR(qi) + shift); else lo = Mathf.Max(lo, RoomL(qi) + shift);
+                    CapBy(StopWithin(meet * v - 8f) + 2f);
                 }
                 continue;
             }
 
-            if (q.Wreck || q.Speed < 0.5f)
+            // (a traffic car creeping along the edge for the race is gone round like a standing one: followed
+            // as a car ahead at 2 km/h, it held racers up until they were reset, #85)
+            if (q.Wreck || q.Speed < 0.5f || (q.Civil && q.Speed < 3f))
             {
-                // stopped: just clear of it, on the side it leaves most room
-                if (ahead < 1f || Mathf.Abs(theirs - mine) > Clear + 0.5f) continue;
+                // stopped: just clear of it — on the side this car is on if that is a way through, else the roomier
+                if (ahead < 1f) continue;
+                float gap = Mathf.Abs(theirs - myLat);
+                // in the way where this car is headed OR where it still is: a car at -0.5 m ran into one
+                // standing at -1.7 m at 66 km/h because its target lateral was clear of it (#85)
+                bool inWay = Mathf.Min(Mathf.Abs(theirs - mine), gap) <= clear + 0.5f;
+                float spaceL = RoomL(qi) - (theirs + clear), spaceR = (theirs - clear) + RoomR(qi);
+                // a squeeze of up to 0.4 m past it is still a way through (the room keeps 0.3 off the edge)
+                bool wayL = spaceL >= -0.4f, wayR = spaceR >= -0.4f;
+                if (!wayL && !wayR)
+                {
+                    if (inWay) { stopped = true; CapBy(StopWithin(ahead - 6f)); }
+                    continue;
+                }
+                // the bound holds even while it is out of the way: without it the line swung into a car
+                // standing 30 m on, too late to get round it (racers hit parked traffic at 50-85 km/h, #85)
+                if (myLat > theirs ? wayL : !wayR) lo = Mathf.Max(lo, theirs + clear + Mathf.Min(spaceL, 0f) + shift);
+                else hi = Mathf.Min(hi, theirs - clear - Mathf.Min(spaceR, 0f) + shift);
+                if (!inWay) continue;
                 stopped = true;
                 urgency = 4f;
-                float spaceL = RoomL(qi) - (theirs + Clear), spaceR = (theirs - Clear) + RoomR(qi);
-                if (spaceL >= -0.4f || spaceR >= -0.4f)
+                // across by how much: past a traffic car at a crawl 2.0 m centre to centre (0.2 m of air between
+                // the boxes) is enough and is exact — with the full margin a car stopped 5 m short of one it
+                // would have cleared; at speed the full margin — 2.3 m off at 77 km/h, a racer clipped it and was thrown
+                float need = (q.Civil ? Mathf.Lerp(2.0f, clear, Mathf.Clamp((v - 5f) / 10f, 0f, 1f)) : clear) - gap;
+                // clear of it: a wreck or a stopped racer is passed at a walk (it may move off, a driver may
+                // get out); a traffic car waiting tucked in for the race is passed at speed — at a walk past
+                // every one of them the pack ran at 8% of its pace (#85)
+                // A traffic car standing in the road is passed at 50 km/h at most: at 90 the car's own line
+                // (the steering aims 20 m on, past the car) swung it 2 m back towards the traffic in the
+                // last 15 m, too late to stop — five racers thrown off that way in one run (#85)
+                if (need <= 0f) CapBy(q.Civil ? Mathf.Max(14f, StopWithin(ahead - 12f)) : Mathf.Max(8f, StopWithin(ahead - 12f)));
+                else if (q.Civil)
                 {
-                    // a squeeze of up to 0.4 m past it is still a way through (the room keeps 0.3 off the edge)
-                    if (spaceL >= spaceR) lo = Mathf.Max(lo, theirs + Clear + Mathf.Min(spaceL, 0f));
-                    else hi = Mathf.Min(hi, theirs - Clear - Mathf.Min(spaceR, 0f));
-                    // round it at a walk, but never into it: not yet clear of it sideways, stop short
-                    D.Cap = Mathf.Min(D.Cap, Mathf.Abs(theirs - myLat) < Beside ? StopWithin(ahead - 5f) : Mathf.Max(8f, StopWithin(ahead - 12f)));
+                    // not across yet: slow to a crawl by where the metres left are just enough to get across
+                    // at one (~0.15 m across per metre on: the steering aims 7 m ahead), and creep round it;
+                    // short of them, creep on to 5 m short, and if still not across, back off to try again (see
+                    // _boxed) — nose to nose with a car tucked in for the race, both waited for a reset
+                    float runway = CarLength + need / 0.15f;
+                    CapBy(ahead >= runway ? Mathf.Max(2.5f, StopWithin(ahead - runway)) : StopWithin(ahead - 5f));
+                    boxed |= ahead < runway;
                 }
-                else D.Cap = Mathf.Min(D.Cap, StopWithin(ahead - 6f));
+                // a rival standing, not yet cleared: stop short and wait. Backing off to get round it (an
+                // earlier try) had whole queues of racers reversing into each other on the grid (#85)
+                else CapBy(StopWithin(ahead - 5f));
                 continue;
             }
 
@@ -458,56 +534,83 @@ public sealed class AutoPilot
             bool close = ahead > -2f * CarLength && ahead < CarLength;
             if (close && Mathf.Abs(theirs - myLat) >= 1.2f)
             {
-                if (Mathf.Abs(theirs - myLat) < Beside + 1f)
+                if (Mathf.Abs(theirs - myLat) < beside + 1f)
                 {
-                    if (theirs > myLat) hi = Mathf.Min(hi, theirs - Beside); else lo = Mathf.Max(lo, theirs + Beside);
+                    if (theirs > myLat) hi = Mathf.Min(hi, theirs - beside + shift); else lo = Mathf.Max(lo, theirs + beside + shift);
                 }
                 continue;
             }
             // behind (its problem), or not in the way; right on its bumper it is followed below
             if (ahead < 1f) continue;
-            float followGap = Mathf.Lerp(10f, 5f, Aggression);
-            float follow = along + StopWithin(ahead - followGap);
-            _ahead.Add((theirs, follow));   // in the way or not: a pass may move into its lane
+            // the traffic brakes like traffic, for things a racer does not see: a longer gap behind it
+            float followGap = Mathf.Lerp(10f, 5f, Aggression) + (q.Civil ? 4f : 0f);
+            // (and one that may stop: traffic stops for things a racer does not see, so behind it the gap
+            // is one this car can stop in even if it stops too — racers ran into cars pulling over for them)
+            float follow = q.Civil ? Mathf.Sqrt(Mathf.Max(0f, 0.7f * along * Mathf.Abs(along) + 2f * EasyBrake * (ahead - followGap)))
+                : along + StopWithin(ahead - followGap);
+            _ahead.Add((theirs, follow, beside));   // in the way or not: a pass may move into its lane
             // in the way where this car is headed, or where it still is (the car lags its target)
-            if (Mathf.Min(Mathf.Abs(theirs - mine), Mathf.Abs(theirs - myLat)) > 2.1f) continue;
+            if (Mathf.Min(Mathf.Abs(theirs - mine), Mathf.Abs(theirs - myLat)) > beside + 0.1f)
+            {
+                // out of the way but closing on it: stay on this side of it until past — the line swinging
+                // over at the last moment ran racers into the back of traffic at 65-85 km/h (#85)
+                if (closing > 0.5f && ahead / closing < 3f)
+                {
+                    if (theirs > myLat) hi = Mathf.Min(hi, theirs - beside + shift); else lo = Mathf.Max(lo, theirs + beside + shift);
+                }
+                continue;
+            }
 
             // not faster than it where it is going: just follow
-            if (Profile[Mathf.Min(qi, Profile.Length - 1)] < along + 1f && closing < 1f) { D.Cap = Mathf.Min(D.Cap, follow); continue; }
-            float l = theirs + Beside, r = theirs - Beside;
+            if (Profile[Mathf.Min(qi, Profile.Length - 1)] < along + 1f && closing < 1f) { CapBy(follow); continue; }
+            float l = theirs + beside, r = theirs - beside;
             bool fitsL = l <= RoomL(qi), fitsR = r >= -RoomR(qi);
             bool straight = MaxCurvature(Arc, 0f, 60f + v) < 1f / 150f;
+            // a traffic car making way for the race: past it wherever a car fits beside it here and 25 m on
+            int later = line.IndexAt(Arc + ahead + 25f);
+            bool easyL = q.Yielding && fitsL && l <= RoomL(later), easyR = q.Yielding && fitsR && r >= -RoomR(later);
             // a dive up the inside of the next bend: close behind, braking later than it, where a car
             // fits beside it on the inside both here and at the apex
             float k = NextBend(Arc + ahead, 50f, out float apexAt);
             int apex = line.IndexAt(apexAt);
-            bool inside = k > 0f ? fitsL && theirs + Beside <= RoomL(apex) : fitsR && theirs - Beside >= -RoomR(apex);
+            bool inside = k > 0f ? fitsL && theirs + beside <= RoomL(apex) : fitsR && theirs - beside >= -RoomR(apex);
             bool diveHere = !straight && k != 0f && Aggression > 0.3f && ahead < 15f && inside;
-            if ((straight && (fitsL || fitsR)) || diveHere)
+            if ((straight && (fitsL || fitsR)) || diveHere || easyL || easyR)
             {
                 float side = diveHere ? (k > 0f ? l : r)
+                    : !straight ? (easyL ? l : r)
                     : fitsL && (!fitsR || Mathf.Abs(l - line.Offset[qi]) <= Mathf.Abs(r - line.Offset[qi])) ? l : r;
-                if (float.IsNaN(passTarget) || Mathf.Abs(side - myLat) < Mathf.Abs(passTarget - myLat)) passTarget = side;
+                if (float.IsNaN(passTarget) || Mathf.Abs(side - myLat) < Mathf.Abs(passTarget - myLat)) passTarget = side + shift;
                 passCap = Mathf.Min(passCap, follow);
                 dive |= diveHere;
             }
-            else D.Cap = Mathf.Min(D.Cap, follow);
+            else CapBy(follow);
         }
         // a pass only with nothing coming the other way and nothing stopped in the road: pulling out
         // into the other lane with a car in it is how the traffic runs ended, head-on at 130 km/h
+        Note();
+        // no way through: bounds from both sides that cross, set by things close together ahead (a car
+        // coming, one standing on the other side): stop short of the nearer — at 90-100 km/h racers
+        // drove into such a gap because nothing but the corridor said it was shut (#85)
+        if (lo > hi + 0.1f && Mathf.Min(loAt, hiAt) > 3f && Mathf.Abs(loAt - hiAt) < 20f)
+            CapBy(StopWithin(Mathf.Min(loAt, hiAt) - 8f));
+        // boxed in short of a traffic car, too close to steer round it: back off a little and try again —
+        // not with a car right behind (a queue of racers backing into each other on the grid, #85)
+        _boxed = boxed && !tailed && v < 0.5f ? _boxed + dt : 0f;
+        if (_boxed > 1.5f) { _boxed = 0f; D.Reversing = 2f; }
         D.Passing = !float.IsNaN(passTarget) && !oncoming && !stopped;
         // the lane a pass moves into must be empty too: passing one car into the back of another
         // (a slow van beyond it) threw a car off at 107 km/h
         if (D.Passing)
-            foreach (var (theirs, follow) in _ahead)
+            foreach (var (theirs, follow, beside) in _ahead)
                 // and until this car is out beside the one it passes, it still follows it
-                if (Mathf.Abs(theirs - passTarget) < Beside - 0.1f || Mathf.Abs(theirs - myLat) < Beside - 0.1f) D.Cap = Mathf.Min(D.Cap, follow);
+                if (Mathf.Abs(theirs - passTarget) < beside - 0.1f || Mathf.Abs(theirs - myLat) < beside - 0.1f) CapBy(follow);
         if (D.Passing)
         {
             target = passTarget;
             if (dive) urgency = 2f;
         }
-        else if (!float.IsNaN(passTarget)) D.Cap = Mathf.Min(D.Cap, passCap);   // stay behind it for now
+        else if (!float.IsNaN(passTarget)) CapBy(passCap);   // stay behind it for now
         // past the line: over to the right, out of the way of whoever is still racing
         if (Finished) target = -RoomR(ai);
         // everyone's room, then the edges: a blocked edge outranks all of it
@@ -520,7 +623,65 @@ public sealed class AutoPilot
         // over quickly for a car coming the other way or a wreck: 1.2 m/s is a lane change in two
         // seconds, and closing at 30 m/s from 60 m there is one
         D.Lateral = Mathf.MoveToward(D.Lateral, target - line.Offset[ai], urgency * dt);
+        if (Seen.Length > 0) Seen += $" aim {line.Offset[ai] + D.Lateral:F1} rule {_capRule} v {v * 3.6f:F0} rev {D.Reversing:F1}";
+        // the last 2 s of it, every 0.25 s: what led up to a crash (DriveProbe prints it with one)
+        if ((_traceT += dt) > 0.25f)
+        {
+            _traceT = 0f;
+            Trail.Enqueue($"arc {Arc:F0} myLat {myLat:F2} | {Seen}");
+            while (Trail.Count > 8) Trail.Dequeue();
+        }
     }
+
+    private float _traceT, _boxed;
+
+    /// <summary>Lowers the cap, noting which rule set it (for the logs).</summary>
+    private void CapBy(float cap, [System.Runtime.CompilerServices.CallerLineNumber] int rule = 0)
+    {
+        if (cap < D.Cap) { D.Cap = cap; _capRule = rule; }
+    }
+    private int _capRule;
+
+    /// <summary>
+    /// Traffic about to come out onto the road ahead — out of a side road, across a junction — that
+    /// the road-wide boxes cannot see before it is on the route: each car's lane over the next 6 s
+    /// (<see cref="World.Traffic.CarView.Path"/>), and where it first comes within the road's width
+    /// ahead of this car. Arriving there no earlier than 1.5 s before it does, this car slows to a
+    /// speed from which it stops 10 m short; once it is on the road the boxes take over. A car
+    /// waiting at the junction for the race (<c>Holding</c>) is not coming out. Before this, a car
+    /// joining at a junction was seen only once on the route and threw a racer off at 118 km/h.
+    /// </summary>
+    private float Crossing(Vector3 me, float v)
+    {
+        if (World.Traffic.Current is not { } traffic) return float.MaxValue;
+        float cap = float.MaxValue;
+        int mine = Side(me).Index;
+        foreach (var c in traffic.CarsNear(me, 250f))
+        {
+            if (c.Holding || c.Path[^1].DistanceSquaredTo(c.Pos) < 1f) continue;
+            // on the road already: the boxes see it
+            var (latNow, now) = Side(c.Pos);
+            if (Mathf.Abs(latNow) < Route.Width[now] * 0.5f + 1.5f && Mathf.Abs(c.Pos.Y - Route.Centre[now].Y) < 4f) continue;
+            for (int k = 0; k < c.Path.Length; k++)
+            {
+                var (lat, i) = Side(c.Path[k]);
+                if (Mathf.Abs(lat) > Route.Width[i] * 0.5f + 1.2f || Mathf.Abs(c.Path[k].Y - Route.Centre[i].Y) > 4f) continue;
+                float dist = Route.Arc[i] - Route.Arc[mine];
+                // it comes out behind this car, or this car is through well before it
+                if (dist < 0f || dist / Mathf.Max(v, 1f) < 0.5f * (k + 1) - 1.5f) break;
+                float slow = StopWithin(dist - 10f) + 1f;
+                if (slow < cap && slow < v + 5f && !_crossingLogged)
+                    Log?.Invoke($"{Label}: traffic coming out {dist:F0} m ahead in {0.5f * (k + 1):F1} s, from {Mathf.Abs(latNow):F0} m off the road, slowing from {v * 3.6f:F0} km/h");
+                _crossingLogged |= slow < v + 5f;
+                cap = Mathf.Min(cap, slow);
+                break;
+            }
+        }
+        if (cap == float.MaxValue) _crossingLogged = false;
+        return cap;
+    }
+
+    private bool _crossingLogged;
 
     /// <summary>The sharpest curvature (signed, + left) within <paramref name="span"/> m after <paramref name="s"/>, and where; 0 if all of it is straighter than R 150 m.</summary>
     private float NextBend(float s, float span, out float at)
@@ -601,7 +762,7 @@ public sealed class AutoPilot
             // first seen this step: its motion is not known yet, and taken for stopped it had the
             // car swerve for a body driving away from it — one step later it is known
             if (!_sensedAt.TryGetValue(id, out var was)) continue;
-            yield return new Other(at, RaceRoute.Flat(at - was) / dt, false);
+            yield return new Other(at, RaceRoute.Flat(at - was) / dt, false, World.Traffic.Current?.Yielding(id) ?? false, Civil: true);
         }
         _sensedAt.Clear();
         foreach (var kv in _sensedNow) _sensedAt[kv.Key] = kv.Value;
@@ -964,6 +1125,7 @@ public sealed class AutoPilot
     public int Resets;
     /// <summary>What racecraft saw last step, nearest thing first (for checks' logs).</summary>
     public string Seen = "";
+    public readonly Queue<string> Trail = new();
     /// <summary>Spins: the car past 90° to its travel going forward (not backing out); logged each time.</summary>
     public int Spins;
     private bool _spinning;

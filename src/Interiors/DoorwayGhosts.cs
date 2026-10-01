@@ -89,6 +89,8 @@ public partial class DoorwayGhosts : Node3D
     {
         foreach (var child in node.GetChildren())
         {
+            // the first-person viewmodel (and its print, screen) belongs to the screen's camera only
+            if (child is VisualInstance3D v && (v.Layers & Items.HeldItemVisual.ViewmodelLayer) != 0) continue;
             if (child is MeshInstance3D m && m.Visible && m.Mesh != null && (m.Layers & DoorPortals.AllQuadLayers) == 0)
                 into.Add(m);
             if (child is Node3D { Visible: false }) continue;

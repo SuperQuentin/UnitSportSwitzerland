@@ -56,8 +56,9 @@ public static partial class InteriorGenerator
             DoorWidth = fp.Door.Width,
             StoreyHeight = h,
             EntryX = fp.EntryX,
-            // a barn's hall opens as wide as its door; elsewhere a door leads into a hall or a core
-            EntryWidth = b.Kind == BuildingKind.Agricultural ? fp.Door.Width : Math.Min(fp.Door.Width, 1.8f),
+            // a barn's or a garage's hall opens as wide as its door (a vehicle drives through);
+            // elsewhere a door leads into a hall or a core
+            EntryWidth = BuildingFootprint.VehicleDoor(b.Kind) ? fp.Door.Width : Math.Min(fp.Door.Width, 1.8f),
         };
 
         bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
@@ -66,7 +67,7 @@ public static partial class InteriorGenerator
             || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
 
         if (single || !TryCored(layout, fp, b.Kind, n, rng))
-            SingleRoom(layout, b.Kind, rng);
+            SingleRoom(layout, b.Kind, fp.Door.Height, rng);
 
         Furnish(layout, rng);
         return layout;
@@ -92,7 +93,7 @@ public static partial class InteriorGenerator
 
     // ---- single room -------------------------------------------------------------------
 
-    private static void SingleRoom(InteriorLayout l, BuildingKind kind, Random rng)
+    private static void SingleRoom(InteriorLayout l, BuildingKind kind, float doorHeight, Random rng)
     {
         l.Floors.Clear();
         float hw = l.Width / 2, hd = l.Depth / 2;
@@ -115,7 +116,8 @@ public static partial class InteriorGenerator
         room.Openings.Add(new OpeningPlan
         {
             Side = Side.Front, Center = l.EntryX, Width = l.EntryWidth, Bottom = 0,
-            Top = kind == BuildingKind.Agricultural ? BuildingFootprint.DoorHeightFor(kind, clear)
+            // a barn's or a garage's as tall as its facade door, which the footprint kept under the eave
+            Top = BuildingFootprint.VehicleDoor(kind) ? Math.Min(doorHeight, BuildingFootprint.DoorHeightFor(kind, clear))
                 : Math.Min(kind == BuildingKind.Industrial ? 2.8f : 2.1f, clear - 0.15f),
             Kind = OpeningKind.Entry,
         });
@@ -561,7 +563,45 @@ public static partial class InteriorGenerator
 
     private sealed record Piece(FurnitureType Type, float W, float D, float H, bool Wall);
 
-    private static IEnumerable<Piece> Pieces(RoomType t, RoomPlan r, Random rng) => t switch
+    /// <summary>A room's pieces: what any room of its type has, then what its building kind adds (<see cref="KindExtras"/>).</summary>
+    private static IEnumerable<Piece> Pieces(RoomType t, RoomPlan r, Random rng, BuildingKind kind) =>
+        BasePieces(t, r, rng).Concat(KindExtras(t, kind));
+
+    /// <summary>
+    /// Stock that depends on what the building is for: a shop's back room is racks of goods, a
+    /// works' store racks and crates, a farm's store sacks and bales, an office building's office
+    /// another filing shelf. Added after the room's own pieces, so they only fill space left over.
+    /// </summary>
+    private static IEnumerable<Piece> KindExtras(RoomType t, BuildingKind kind) => (t, kind) switch
+    {
+        (RoomType.Storage, BuildingKind.Commercial) => new[]
+        {
+            new Piece(FurnitureType.Rack, 1.8f, 0.5f, 1.8f, true),
+            new Piece(FurnitureType.Crate, 0.8f, 0.8f, 0.7f, true),
+        },
+        (RoomType.Storage, BuildingKind.Industrial) or (RoomType.Workshop, BuildingKind.Industrial) => new[]
+        {
+            new Piece(FurnitureType.Rack, 2.0f, 0.6f, 2.2f, true),
+            new Piece(FurnitureType.Crate, 1.0f, 1.0f, 0.9f, false),
+        },
+        (RoomType.Storage or RoomType.Workshop, BuildingKind.Agricultural) => new[]
+        {
+            new Piece(FurnitureType.HayBale, 1.2f, 1.0f, 1.0f, true),
+            new Piece(FurnitureType.Crate, 1.0f, 0.8f, 0.8f, true),
+        },
+        (RoomType.Office, BuildingKind.Commercial or BuildingKind.Industrial or BuildingKind.Civic) => new[]
+        {
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
+        },
+        (RoomType.Kitchen, BuildingKind.Commercial) => new[]   // a restaurant's kitchen
+        {
+            new Piece(FurnitureType.Fridge, 0.6f, 0.65f, 1.8f, true),
+            new Piece(FurnitureType.Shelf, 1.2f, 0.45f, 1.9f, true),
+        },
+        _ => Array.Empty<Piece>(),
+    };
+
+    private static IEnumerable<Piece> BasePieces(RoomType t, RoomPlan r, Random rng) => t switch
     {
         RoomType.Living => new[]
         {
@@ -668,6 +708,7 @@ public static partial class InteriorGenerator
 
     private static void Furnish(InteriorLayout l, Random rng)
     {
+        var rooms = new List<(int Floor, RoomPlan Room, List<RectPlan> Placed, List<RectPlan> Blocked)>();
         for (int f = 0; f < l.Floors.Count; f++)
         {
             var floor = l.Floors[f];
@@ -676,8 +717,13 @@ public static partial class InteriorGenerator
                 var r = floor.Rooms[ri];
                 var placed = new List<RectPlan>();
                 var blocked = new List<RectPlan>();
+                rooms.Add((f, r, placed, blocked));
                 foreach (var o in r.Openings)
                     if (o.Kind != OpeningKind.Window) blocked.Add(Clearance(r, o));
+                // a garage or a barn is driven into: a lane from its door, as wide, kept clear
+                if (f == 0 && BuildingFootprint.VehicleDoor(l.Kind))
+                    foreach (var o in r.Openings)
+                        if (o.Kind == OpeningKind.Entry && o.Side == Side.Front) blocked.Add(Lane(l.Kind, r, o));
                 // the stairwell is not somewhere to put a sofa
                 bool isCore = ri == 0 && floor.Rooms.Count > 1;
                 if (isCore)
@@ -691,8 +737,86 @@ public static partial class InteriorGenerator
                 if (r.Type == RoomType.Nave) { Pews(l, f, r, placed, blocked); continue; }
                 if (r.Type == RoomType.Classroom) Desks(l, f, r, placed, blocked);
 
-                foreach (var p in Pieces(r.Type, r, rng))
+                foreach (var p in Pieces(r.Type, r, rng, l.Kind))
                     TryPlace(l, f, r, p, placed, blocked, rng);
+            }
+        }
+        Secure(l, rooms);
+    }
+
+    private static readonly Piece LockerPiece = new(FurnitureType.GunLocker, 0.6f, 0.45f, 1.8f, true);
+    private static readonly Piece SafePiece = new(FurnitureType.Safe, 0.6f, 0.6f, 0.85f, true);
+
+    /// <summary>
+    /// Gun lockers and safes (#165): what a kind of building keeps locked away, as (piece, chance,
+    /// the rooms it may stand in, best first). Swiss militia and hunters keep a rifle at home, so
+    /// houses and farms often have a gun locker; shops, offices and works a safe.
+    /// </summary>
+    private static IEnumerable<(Piece Piece, double Chance, RoomType[] Rooms)> SecureFor(InteriorLayout l)
+    {
+        var homeLocker = new[] { RoomType.Bedroom, RoomType.Storage, RoomType.Office, RoomType.Living, RoomType.Hall };
+        switch (l.Kind)
+        {
+            case BuildingKind.House:
+            case BuildingKind.Other:
+                yield return (LockerPiece, 0.40, homeLocker);
+                yield return (SafePiece, 0.15, new[] { RoomType.Office, RoomType.Bedroom, RoomType.Living, RoomType.Storage });
+                break;
+            case BuildingKind.Apartment:
+                for (int i = 0; i < Math.Max(1, l.Floors.Count); i++) yield return (LockerPiece, 0.25, homeLocker);
+                yield return (SafePiece, 0.10, new[] { RoomType.Office, RoomType.Bedroom, RoomType.Storage });
+                break;
+            case BuildingKind.Agricultural:
+                yield return (LockerPiece, 0.55, new[] { RoomType.Storage, RoomType.Workshop, RoomType.Bedroom, RoomType.Living, RoomType.Barn });
+                break;
+            case BuildingKind.Commercial:
+                yield return (SafePiece, 0.75, new[] { RoomType.Office, RoomType.Shop, RoomType.Storage, RoomType.Lobby });
+                break;
+            case BuildingKind.Industrial:
+                yield return (SafePiece, 0.50, new[] { RoomType.Office, RoomType.Storage, RoomType.Workshop });
+                break;
+            case BuildingKind.Civic:
+                yield return (SafePiece, 0.30, new[] { RoomType.Office, RoomType.Storage });
+                yield return (LockerPiece, 0.20, new[] { RoomType.Office, RoomType.Storage });
+                break;
+            case BuildingKind.Annex:
+                yield return (LockerPiece, 0.12, new[] { RoomType.Storage, RoomType.Workshop, RoomType.Garage, RoomType.Barn });
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Places the locked containers after everything else, from their own seed so the rest of the
+    /// plan does not depend on them: a random room of the first preferred type that has space,
+    /// then the next type. A room gets at most one.
+    /// </summary>
+    private static void Secure(InteriorLayout l, List<(int Floor, RoomPlan Room, List<RectPlan> Placed, List<RectPlan> Blocked)> rooms)
+    {
+        var rng = new Random(StableHash(l.Key + "|secure"));
+        var used = new HashSet<RoomPlan>();
+        foreach (var (piece, chance, types) in SecureFor(l).ToList())
+        {
+            if (rng.NextDouble() >= chance) continue;
+            bool done = false;
+            foreach (var type in types)
+            {
+                var candidates = rooms.Where(x => x.Room.Type == type && !used.Contains(x.Room)).ToList();
+                // shuffle, so it is not always the first bedroom
+                for (int i = candidates.Count - 1; i > 0; i--)
+                {
+                    int j = rng.Next(i + 1);
+                    (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
+                }
+                foreach (var c in candidates)
+                {
+                    int before = l.Furniture.Count;
+                    TryPlace(l, c.Floor, c.Room, piece, c.Placed, c.Blocked, rng);
+                    if (l.Furniture.Count == before) continue;
+                    used.Add(c.Room);
+                    done = true;
+                    break;
+                }
+                if (done) break;
             }
         }
     }
@@ -701,6 +825,17 @@ public static partial class InteriorGenerator
         l.Floors.Select(fl => fl.Flight).Where(x => x != null)
             .Select(x => Math.Min(x!.ZBottom, x.ZTop)).DefaultIfEmpty(float.MaxValue).Min()
         is var z && z < float.MaxValue ? z - Landing : float.MaxValue;
+
+    /// <summary>
+    /// The lane a vehicle drives in by, from the front door: as wide as it plus a margin, a garage's
+    /// to just short of its back wall (room there for a shelf), a barn's two car lengths deep.
+    /// </summary>
+    private static RectPlan Lane(BuildingKind kind, RoomPlan r, OpeningPlan o)
+    {
+        float half = o.Width / 2 + 0.3f;
+        float deep = kind == BuildingKind.Garage ? r.Z1 - r.Z0 - 0.7f : Math.Min(r.Z1 - r.Z0 - 1.5f, 9f);
+        return new RectPlan(o.Center - half, r.Z0, o.Center + half, r.Z0 + Math.Max(deep, 1.1f));
+    }
 
     /// <summary>Space that must stay clear in front of a doorway, on this room's side.</summary>
     private static RectPlan Clearance(RoomPlan r, OpeningPlan o)

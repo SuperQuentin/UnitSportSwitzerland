@@ -60,6 +60,21 @@ public partial class ChatManager : Node
     /// <summary>Client-side only: where a forced teleport is applied.</summary>
     public Teleporter? Teleporter { get; set; }
 
+    /// <summary>Client-side only: where <c>/spawn</c> puts items, and the towns <c>/city</c> offline looks in.</summary>
+    public Items.Inventory? Inventory { get; set; }
+    public PlaceSearchUi? PlaceSearch { get; set; }
+
+    /// <summary>
+    /// Client-side: nobody to ask — no server connection, so commands run here, on this machine,
+    /// with the rights of someone who owns the world. A server's own node never is.
+    /// </summary>
+    private bool IsLocal => _registry is null && !Permissions.Online;
+
+    /// <summary>Client-side: player names as last sent by the server, for completion.</summary>
+    public IReadOnlyList<string> PlayerNames => _playerNames;
+
+    private string[] _playerNames = [];
+
     /// <summary>Raised on the client for every line to display.</summary>
     public event Action<string, ChatKind>? LineReceived;
 
@@ -124,7 +139,124 @@ public partial class ChatManager : Node
     public void Send(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
+        if (IsLocal)
+        {
+            text = text.Trim();
+            HandleLocal(text.Length > MaxMessageLength ? text[..MaxMessageLength] : text);
+            return;
+        }
+
         RpcId(1, MethodName.SubmitLine, text);
+    }
+
+    /// <summary>Asks the server who is online, so names can be completed. The answer lands in <see cref="PlayerNames"/>.</summary>
+    public void RequestPlayerNames()
+    {
+        if (!IsLocal) RpcId(1, MethodName.SubmitNamesRequest);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void SubmitNamesRequest()
+    {
+        if (_registry is null) return;
+        RpcId(Multiplayer.GetRemoteSenderId(), MethodName.ReceiveNames,
+            _registry.Players.Select(p => p.Name).ToArray());
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveNames(string[] names) => _playerNames = names;
+
+    /// <summary>Client: the server granted items (<c>/spawn</c>, an admin's choice); they go in this machine's inventory.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void GrantItem(int item, int count)
+    {
+        if (!Enum.IsDefined((Items.ItemId)item) || Items.ItemDefs.Get((Items.ItemId)item) is not { } def) return;
+        count = Math.Clamp(count, 1, Items.ItemLookup.MaxSpawnFrancs);
+        LineReceived?.Invoke(Give(def, count), ChatKind.Admin);
+    }
+
+    /// <summary>Puts items in the inventory and says what happened.</summary>
+    private string Give(Items.ItemDef def, int count)
+    {
+        if (Inventory is null) return "No inventory to put that in.";
+
+        int left = Inventory.Add(def.Id, count);
+        return left == 0
+            ? $"Spawned {count} x {def.Name}."
+            : left == count
+                ? $"No room for {def.Name}."
+                : $"Spawned {count - left} x {def.Name}; {left} did not fit.";
+    }
+
+    /// <summary>
+    /// A line typed with no server to send it to: commands run here. Only what makes sense alone
+    /// works; the rest says it needs a server rather than silently doing nothing.
+    /// </summary>
+    private void HandleLocal(string text)
+    {
+        void Show(string line, ChatKind kind) => LineReceived?.Invoke(line, kind);
+
+        if (!text.StartsWith('/'))
+        {
+            Show($"You: {Scrub(text)}", ChatKind.Say);
+            return;
+        }
+
+        string[] parts = text[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return;
+
+        string verb = parts[0].ToLowerInvariant();
+        string rest = string.Join(' ', parts[1..]);
+
+        switch (verb)
+        {
+            case "help":
+                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /occasion  — Tab completes.", ChatKind.Private);
+                Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
+                return;
+
+            case "who":
+                Show("1 online: you", ChatKind.Private);
+                return;
+
+            case "me":
+                if (rest.Length > 0) Show($"* {Scrub(rest)}", ChatKind.System);
+                return;
+
+            case "city":
+                if (rest.Length == 0) Show("Usage: /city <town>", ChatKind.Error);
+                else if (PlaceSearch is null || Teleporter is null) Show("No place index here.", ChatKind.Error);
+                else if (PlaceSearch.Search(rest, 1) is not [var place]) Show($"No town matching '{rest}'.", ChatKind.Error);
+                else
+                {
+                    Teleporter.TeleportTo(place.E, place.N, place.Name);
+                    Show($"Teleported to {place.Name}", ChatKind.System);
+                }
+                return;
+
+            case "spawn":
+                if (Items.ItemLookup.TryParse(rest, out var def, out int count, out string error)) Show(Give(def, count), ChatKind.Admin);
+                else Show(error, ChatKind.Error);
+                return;
+
+            case "occasion" or "occasions":
+                if (Occasions.OccasionManager.Instance is not { } occasions) Show("Occasions are not running.", ChatKind.Error);
+                else
+                    foreach (string line in occasions.RunCommand(parts[1..], isAdmin: true))
+                        Show(line, ChatKind.Private);
+                return;
+
+            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick":
+                Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
+                return;
+
+            default:
+                Show($"Unknown command '/{verb}'. Try /help.", ChatKind.Error);
+                return;
+        }
     }
 
     /// <summary>Tells the server what this client would like to be called.</summary>
@@ -335,6 +467,7 @@ public partial class ChatManager : Node
             case "bring": if (RequiresAvatar(sender, verb)) CommandBring(sender, rest); return;
             case "tpall": CommandTeleportEveryone(sender, rest); return;
             case "kick": CommandKick(sender, parts); return;
+            case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;
 
             default:
                 ReplyTo(sender, $"Unknown command '/{verb}'. Try /help.", ChatKind.Error);
@@ -353,7 +486,7 @@ public partial class ChatManager : Node
             ReplyTo(sender,
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
                 + "/kick <player> [reason]  /admin list|add <name>|remove <name>  "
-                + "/occasion start|stop <id>|auto",
+                + "/occasion start|stop <id>|auto  /spawn <item> [count]  — Tab completes",
                 ChatKind.Private);
     }
 
@@ -587,6 +720,22 @@ public partial class ChatManager : Node
 
         RpcId(target.PeerId, MethodName.ForceTeleport, e, n, me.Name);
         Broadcast($"{me.Name} brought {target.Name} to them", ChatKind.Admin);
+    }
+
+    /// <summary>
+    /// <c>/spawn &lt;item&gt; [count]</c>: the server decides the sender may and what they get; the item
+    /// lands in that client's own inventory, which is local to it (see <see cref="Items.Inventory"/>).
+    /// </summary>
+    private void CommandSpawn(long sender, string rest)
+    {
+        if (!Items.ItemLookup.TryParse(rest, out var def, out int count, out string error))
+        {
+            ReplyTo(sender, error, ChatKind.Error);
+            return;
+        }
+
+        RpcId(sender, MethodName.GrantItem, (int)def.Id, count);
+        GD.Print($"[admin] {NameOf(sender)} spawned {count} x {def.Name}");
     }
 
     private void CommandKick(long sender, string[] parts)

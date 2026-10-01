@@ -107,6 +107,8 @@ public partial class SettingsMenu : PanelContainer
             i => GameSettings.Current.RideProfile = (RideProfile)i);
         ToggleRow(rows, "Tyre wear (cars)", s.TyreWear, on => GameSettings.Current.TyreWear = on);
         ToggleRow(rows, "Brake wear and fade (cars)", s.BrakeWear, on => GameSettings.Current.BrakeWear = on);
+        OptionRow(rows, "Truck gearbox", new[] { "Automatic", "Sequential", "Sequential + clutch", "H-pattern + splitter", "H-pattern (auto splitter)" },
+            (int)s.HeavyGearbox, i => GameSettings.Current.HeavyGearbox = (Player.HeavyShift)i);
         SliderRow(rows, "Master volume", 0, 1, 0.05, s.MasterVolume,
             v => GameSettings.Current.MasterVolume = (float)v, v => v <= 0 ? "off" : $"{v * 100:F0} %");
         SliderRow(rows, "Sound effects", 0, 1, 0.05, s.SfxVolume,
@@ -118,6 +120,18 @@ public partial class SettingsMenu : PanelContainer
         SliderRow(rows, "Camera shake", 0, 1, 0.05, s.ScreenShake,
             v => GameSettings.Current.ScreenShake = (float)v, v => v <= 0 ? "off" : $"{v * 100:F0} %");
         ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on);
+
+        Section(rows, "Cockpit");
+        ToggleRow(rows, "Show your own body (V cycles it too)", s.CockpitBody, on => GameSettings.Current.CockpitBody = on);
+        ToggleRow(rows, "Working mirrors", s.CockpitMirrors, on => GameSettings.Current.CockpitMirrors = on);
+        ToggleRow(rows, "Speed and gear on the HUD too", s.CockpitHud, on => GameSettings.Current.CockpitHud = on);
+        ToggleRow(rows, "Head moves with g-forces", s.CockpitHeadMotion, on => GameSettings.Current.CockpitHeadMotion = on);
+        SliderRow(rows, "Field of view", 50, 100, 1, s.CockpitFov,
+            v => GameSettings.Current.CockpitFov = (float)v, v => $"{v:F0}°");
+        SliderRow(rows, "Seat height", -0.1, 0.1, 0.01, s.SeatHeight,
+            v => GameSettings.Current.SeatHeight = (float)v, v => $"{v * 100:+0;-0;0} cm");
+        SliderRow(rows, "Seat forward", -0.15, 0.15, 0.01, s.SeatForward,
+            v => GameSettings.Current.SeatForward = (float)v, v => $"{v * 100:+0;-0;0} cm");
 
         Section(rows, "Controls");
         SliderRow(rows, "Stick look speed", 0.2, 3, 0.1, s.StickSensitivity,
@@ -241,6 +255,7 @@ public partial class SettingsMenu : PanelContainer
         {
             MinValue = min, MaxValue = max, Step = step, Value = value,
             CustomMinimumSize = new Vector2(0, 20),
+            Scrollable = false,   // the wheel scrolls the menu, it does not nudge the slider under the pointer
         };
         // the label tracks the drag; the world only re-applies once the mouse is let go, so a
         // slow drag across the render-distance slider does not start forty ring evaluations

@@ -95,6 +95,8 @@ public enum FurnitureType
     Toilet, Sink, Bathtub, Desk, Shelf, ShopCounter, Rack, Crate, HayBale, Pew, Altar, Car,
     Blackboard, Tv, Rug, Workbench, Plant,
     Bell, Lectern, Cross, Dais,
+    // stored plans hold these as numbers: new types go on the end
+    GunLocker, Safe,
 }
 
 public sealed class FurniturePlan
@@ -144,7 +146,7 @@ public sealed class EntrancePlan
 public sealed class InteriorLayout
 {
     /// <summary>Bumped whenever the generator changes enough that old plans should be regenerated.</summary>
-    public const int CurrentVersion = 4; // 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors
+    public const int CurrentVersion = 7; // 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
@@ -232,6 +234,19 @@ public sealed class InteriorLayout
                 if (d < bestD) { bestD = d; best = (o.Width, o.Top - o.Bottom); }
             }
         return best;
+    }
+
+    /// <summary>
+    /// The room a piece of furniture stands in: the room of its floor holding its centre, or a
+    /// taller room from a floor below reaching up into it (a nave). Null if none does.
+    /// </summary>
+    public RoomPlan? RoomOf(FurniturePlan f)
+    {
+        for (int fl = Math.Min(f.Floor, Floors.Count - 1); fl >= 0; fl--)
+            foreach (var r in Floors[fl].Rooms)
+                if (fl + r.Span > f.Floor && f.X >= r.X0 && f.X <= r.X1 && f.Z >= r.Z0 && f.Z <= r.Z1)
+                    return r;
+        return null;
     }
 
     /// <summary>Clear height of a room: its storeys less the slab under the floor above.</summary>

@@ -20,9 +20,8 @@ namespace UnitSport.Items;
 /// </para>
 ///
 /// <para>
-/// Nobody streams audio to anyone. Each client fetches the Ogg once (<see cref="CdCache"/>) and
-/// plays it from <c>ServerNow − StartedAt</c> on the shared clock, nudging the playback position
-/// back in line when it drifts. The beat the dancers follow (<see cref="BeatAt"/>) is computed
+/// Nobody streams audio to anyone: the <see cref="RadioSpeaker"/> fetches the Ogg once and plays
+/// it from <c>ServerNow − StartedAt</c> on the shared clock. The beat the dancers follow (<see cref="BeatAt"/>) is computed
 /// from that same clock and never from the playback position, so a client still downloading the
 /// CD dances in time with everyone else, in silence, until it arrives.
 /// </para>
@@ -36,6 +35,9 @@ public partial class RadioBody : RigidBody3D
     [Export] public bool Playing { get; set; }
     [Export] public bool Settled { get; set; }
 
+    /// <summary>Seconds the CD lasts, set by the server with the CD (it may not know a personal CD).</summary>
+    [Export] public float Length { get; set; }
+
     /// <summary>Peer that simulated the fall; 0 for the server.</summary>
     public long Owner { get; private set; }
 
@@ -43,25 +45,24 @@ public partial class RadioBody : RigidBody3D
     public double LonelyFor { get; set; }
 
     /// <summary>What the speaker is at right now, seconds into the CD, or NaN while silent. For the probes.</summary>
-    public double HeardPosition { get; private set; } = double.NaN;
+    public double HeardPosition => _speaker?.HeardPosition ?? double.NaN;
+
+    /// <summary>The speaker, on peers that have one (not the dedicated server, not headless).</summary>
+    public RadioSpeaker? Speaker => _speaker;
 
     /// <summary>Where the clock says the CD is, seconds, or NaN when nothing plays.</summary>
     public double WantedPosition => Playing ? ClockSync.ServerNow - StartedAt : double.NaN;
 
-    /// <summary>The CD in the tray, when the library knows it.</summary>
-    public CdInfo? Cd => CdLibrary.Instance?.All.GetValueOrDefault(CdId);
+    /// <summary>The CD in the tray, when this peer knows it (a personal CD only its owner does).</summary>
+    public CdInfo? Cd => CdLibrary.Instance?.Find(CdId);
 
     private const float BodyW = 0.46f, BodyH = 0.22f, BodyD = 0.16f;
     private const double SettleAfter = 8, RestFor = 1;
-    private const float DriftTolerance = 0.08f;
 
     private RadioState _initial;
     private MultiplayerSynchronizer? _sync;
-    private double _age, _restTime, _sinceSeek;
-    private AudioStreamPlayer3D? _speaker;
-    private int _loadedCd = -1;
-    private bool _fetching, _fetchFailed;
-    private string? _oggPath;
+    private double _age, _restTime;
+    private RadioSpeaker? _speaker;
 
     public static RadioBody Create(RadioState state)
     {
@@ -74,6 +75,7 @@ public partial class RadioBody : RigidBody3D
             StartedAt = state.StartedAt,
             Playing = state.Playing,
             Settled = state.Settled,
+            Length = state.Length,
         };
         r.SetMultiplayerAuthority(state.Owner > 0 ? (int)state.Owner : 1);
         return r;
@@ -107,7 +109,7 @@ public partial class RadioBody : RigidBody3D
 
         // what plays: the server's word, reliably on change, and with the spawn for late joiners
         var play = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:CdId", ".:StartedAt", ".:Playing" })
+        foreach (var prop in new[] { ".:CdId", ".:StartedAt", ".:Playing", ".:Length" })
         {
             play.AddProperty(prop);
             play.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
@@ -134,16 +136,7 @@ public partial class RadioBody : RigidBody3D
         if (!Headless && !NetworkManager.DedicatedServer)
         {
             AddChild(new MeshInstance3D { Name = "Visual", Mesh = Mesh(), MaterialOverride = ItemDefs.Material });
-            SfxBus.Ensure();
-            _speaker = new AudioStreamPlayer3D
-            {
-                Name = "Speaker",
-                Bus = SfxBus.Name,
-                UnitSize = 8f,
-                MaxDistance = 120f,
-                AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
-                AttenuationFilterCutoffHz = 8000f,
-            };
+            _speaker = new RadioSpeaker { Name = "Speaker" };
             AddChild(_speaker);
         }
     }
@@ -166,11 +159,18 @@ public partial class RadioBody : RigidBody3D
 
     public override void _Process(double delta)
     {
-        if (_speaker != null) UpdateSpeaker(delta);
+        if (_speaker == null) return;
+        _speaker.CdId = CdId;
+        _speaker.StartedAt = StartedAt;
+        _speaker.On = Playing;
+        _speaker.Length = Length > 0 ? Length : Cd?.Duration ?? 0;
     }
 
     /// <summary>The state to respawn it from: where it is now, what it plays.</summary>
-    public RadioState Capture() => new(Name, Owner, Position, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled);
+    public RadioState Capture() => new(Name, Owner, Position, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length);
+
+    /// <summary>What it plays, as the item carries it when picked up; null when silent or finished.</summary>
+    public RadioPlay? NowPlaying => Playing && WantedPosition < Length ? new RadioPlay(CdId, StartedAt, Length) : null;
 
     /// <summary>
     /// The beat the CD is on, from the shared clock alone. False when nothing plays or the CD is
@@ -189,80 +189,6 @@ public partial class RadioBody : RigidBody3D
         beatIndex = (int)floor;
         bar = (int)Math.Floor(floor / 4.0);
         style = cd.Style;
-        return true;
-    }
-
-    // ---- the speaker ---------------------------------------------------------------------------
-
-    private void UpdateSpeaker(double delta)
-    {
-        var speaker = _speaker!;
-        _sinceSeek += delta;
-        double want = WantedPosition;
-        if (Cd is not { } cd || double.IsNaN(want) || want < 0 || want >= cd.Duration)
-        {
-            if (speaker.Playing) speaker.Stop();
-            HeardPosition = double.NaN;
-            return;
-        }
-
-        if (_loadedCd != CdId)
-        {
-            if (speaker.Playing) speaker.Stop();
-            HeardPosition = double.NaN;
-            if (!TryLoad()) return;
-        }
-
-        if (!speaker.Playing)
-        {
-            speaker.Play((float)want);
-            _sinceSeek = 0;
-        }
-        else
-        {
-            double heard = speaker.GetPlaybackPosition() + AudioServer.GetTimeSinceLastMix() - AudioServer.GetOutputLatency();
-            HeardPosition = heard;
-            // a nudge, not a chase: a seek every frame would stutter, and the clock itself moves
-            if (Math.Abs(heard - want) > DriftTolerance && _sinceSeek > 1.0)
-            {
-                speaker.Seek((float)want);
-                _sinceSeek = 0;
-            }
-        }
-    }
-
-    /// <summary>Puts the CD's Ogg in the speaker, fetching it from the server first if need be.</summary>
-    private bool TryLoad()
-    {
-        if (_oggPath == null)
-        {
-            if (_fetching || _fetchFailed) return false;
-            if (CdCache.LocalPath(CdId) is { } here) _oggPath = here;
-            else
-            {
-                if (GetNodeOrNull<ChunkStreamer>("../../" + ChunkStreamer.NodeName) is not { } streamer) { _fetchFailed = true; return false; }
-                _fetching = true;
-                int id = CdId;
-                _ = CdCache.FetchAsync(streamer, id).ContinueWith(t => Callable.From(() =>
-                {
-                    if (!IsInstanceValid(this)) return;
-                    _fetching = false;
-                    if (t.Result is { } path && id == CdId) _oggPath = path;
-                    else _fetchFailed = true;
-                }).CallDeferred());
-                return false;
-            }
-        }
-        var stream = AudioStreamOggVorbis.LoadFromFile(_oggPath);
-        if (stream == null)
-        {
-            GD.PushWarning($"[cd] could not load {_oggPath}");
-            _fetchFailed = true;
-            return false;
-        }
-        stream.Loop = false;
-        _speaker!.Stream = stream;
-        _loadedCd = CdId;
         return true;
     }
 

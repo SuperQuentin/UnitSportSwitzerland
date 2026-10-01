@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using UnitSport.Player;
 
@@ -29,10 +30,67 @@ public partial class HeldItemVisual : Node3D
 
     /// <summary>
     /// The viewmodel is drawn at this fraction of its real size, pulled in by the same fraction
-    /// (same look on screen). Halving it halves how far a shotgun pokes out in front of the
-    /// camera, so it goes through walls far less — no shader or extra layer needed.
+    /// (same look on screen), so it stays well clear of the near plane.
     /// </summary>
     public const float ViewScale = 0.5f;
+
+    /// <summary>
+    /// Visual layer 17: the viewmodel and what hangs on it. Only the screen's camera draws it;
+    /// door portal cameras leave it out and doorway ghosts do not copy it, or it would show a
+    /// second time through a doorway it is held in front of.
+    /// </summary>
+    public const uint ViewmodelLayer = 1u << 16;
+
+    /// <summary>
+    /// The vertex stage of every viewmodel material: depth squeezed into the nearest 1 % of the
+    /// range (reversed z, 1 at the near plane). The item still sorts against itself but never goes
+    /// behind the world: a wall it pokes into, or a doorway's portal quad while stepping through.
+    /// </summary>
+    public const string ViewmodelVertex = @"
+void vertex() {
+    POSITION = PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
+    POSITION.z = mix(POSITION.w, POSITION.z, 0.01);
+}
+";
+
+    private static readonly Dictionary<(bool unshaded, bool nearest), Shader> ViewShaders = new();
+    private static readonly Dictionary<Material, Material> ViewMaterials = new();
+
+    /// <summary>
+    /// The viewmodel's copy of a held item's material: the same look (albedo, texture, vertex
+    /// colour, roughness, specular, shading) through <see cref="ViewmodelVertex"/>. A shader
+    /// material is taken as it is: it must include <see cref="ViewmodelVertex"/> itself.
+    /// </summary>
+    public static Material ForView(Material material)
+    {
+        if (material is not StandardMaterial3D s) return material;
+        if (ViewMaterials.TryGetValue(s, out var cached)) return cached;
+        bool unshaded = s.ShadingMode == BaseMaterial3D.ShadingModeEnum.Unshaded;
+        bool nearest = s.TextureFilter == BaseMaterial3D.TextureFilterEnum.Nearest;
+        if (!ViewShaders.TryGetValue((unshaded, nearest), out var shader))
+            ViewShaders[(unshaded, nearest)] = shader = new Shader { Code = $@"
+shader_type spatial;
+{(unshaded ? "render_mode unshaded;" : "")}
+uniform vec4 albedo : source_color = vec4(1.0);
+uniform sampler2D albedo_tex : source_color, hint_default_white, {(nearest ? "filter_nearest" : "filter_linear_mipmap")};
+uniform bool vertex_color;
+uniform float roughness = 1.0;
+uniform float specular = 0.5;
+{ViewmodelVertex}
+void fragment() {{
+    vec3 c = albedo.rgb * texture(albedo_tex, UV).rgb;
+    if (vertex_color) c *= COLOR.rgb;
+    ALBEDO = c;
+{(unshaded ? "" : "    ROUGHNESS = roughness;\n    SPECULAR = specular;")}
+}}" };
+        var m = new ShaderMaterial { Shader = shader };
+        m.SetShaderParameter("albedo", s.AlbedoColor);
+        if (s.AlbedoTexture != null) m.SetShaderParameter("albedo_tex", s.AlbedoTexture);
+        m.SetShaderParameter("vertex_color", s.VertexColorUseAsAlbedo);
+        m.SetShaderParameter("roughness", s.Roughness);
+        m.SetShaderParameter("specular", s.SpecularMode == BaseMaterial3D.SpecularModeEnum.Disabled ? 0f : s.MetallicSpecular);
+        return ViewMaterials[s] = m;
+    }
 
     private readonly FootPlayer _player;
     private MeshInstance3D _inHand = null!;
@@ -197,8 +255,9 @@ public partial class HeldItemVisual : Node3D
         _printMesh ??= PhotoVisuals.BuildCard(Vector3.Zero);
         _print = new MeshInstance3D
         {
-            Name = "Print", Mesh = _printMesh, MaterialOverride = material,
+            Name = "Print", Mesh = _printMesh, MaterialOverride = ForView(material),
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Layers = ViewmodelLayer,
             Position = new Vector3(0, 0.03f, 0),
         };
         _viewmodel!.AddChild(_print);
@@ -259,7 +318,7 @@ public partial class HeldItemVisual : Node3D
         float dt = (float)delta;
 
         var id = (ItemId)_player.HeldItemId;
-        bool onFoot = _player.Ride == RideKind.OnFoot;
+        bool onFoot = _player.Ride == RideKind.OnFoot && !_player.RidingAlong;
         if (id != _shown || HeldData != _shownData)
         {
             if (id != _shown)
@@ -276,7 +335,7 @@ public partial class HeldItemVisual : Node3D
             if (_viewmodel != null)
             {
                 _viewmodel.Mesh = mesh;
-                _viewmodel.MaterialOverride = material;
+                _viewmodel.MaterialOverride = ForView(material);
             }
         }
         bool any = id != ItemId.None && onFoot && !Suppressed;
@@ -406,12 +465,13 @@ public partial class HeldItemVisual : Node3D
                 Mesh = new QuadMesh { Size = new Vector2(0.07f, 0.061f) },
                 Position = new Vector3(0, 0.075f, 0.0153f),
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                MaterialOverride = new StandardMaterial3D
+                Layers = ViewmodelLayer,
+                MaterialOverride = ForView(new StandardMaterial3D
                 {
                     ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
                     AlbedoTexture = _screenVp.GetTexture(),
                     TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
-                },
+                }),
             };
             _viewmodel!.AddChild(_screenQuad);
         }
@@ -430,11 +490,14 @@ public partial class HeldItemVisual : Node3D
         {
             Name = "Viewmodel",
             Mesh = ItemDefs.HandMesh(_shown),
-            MaterialOverride = ItemDefs.HandMaterial(_shown, _shownData) ?? ItemDefs.Material,
+            MaterialOverride = ForView(ItemDefs.HandMaterial(_shown, _shownData) ?? ItemDefs.Material),
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Layers = ViewmodelLayer,
         };
         camera.AddChild(_viewmodel);
         _viewFore = NewForeEnd();
+        _viewFore.Layers = ViewmodelLayer;
+        _viewFore.MaterialOverride = ForView(ItemDefs.Material);
         _viewmodel.AddChild(_viewFore);
         _lastCamera = camera.GlobalTransform.Basis;
     }

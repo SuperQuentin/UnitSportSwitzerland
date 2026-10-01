@@ -7,7 +7,8 @@ namespace UnitSport.Interiors;
 /// <summary>
 /// A front door's leaves. Most doors have one, in the interior, hinged on one jamb and swinging
 /// into the room; shut, it is solid, open, it is only drawn, so it can never pin a player against
-/// the wall. A barn's door is a pair swinging out into the street, on the facade (<see cref="CreateOutward"/>).
+/// the wall. A barn's door is a pair swinging out into the street, on the facade (<see cref="CreateOutward"/>),
+/// and a garage's rolls up into its lintel, on the facade too (<see cref="CreateRollUp"/>).
 /// </summary>
 public partial class DoorLeaf : Node3D
 {
@@ -16,8 +17,11 @@ public partial class DoorLeaf : Node3D
     /// house's door can stand 0.2 m from the stair core's side wall, and any more swings the leaf into it.
     /// </summary>
     private const float InwardAngle = Mathf.Pi / 2;
-    /// <summary>How far an outward leaf swings: back until it nearly lies on the facade.</summary>
-    private const float OutwardAngle = 2.97f; // 170°
+    /// <summary>
+    /// How far an outward leaf swings: a little past square, splayed. A barn's pair spans nearly
+    /// the whole wall, so there is no facade beside the jambs for a leaf to lie back against.
+    /// </summary>
+    private const float OutwardAngle = 1.75f; // 100°
     private const float Thickness = 0.04f;
     private const float OutwardThickness = 0.06f;
     /// <summary>
@@ -27,17 +31,53 @@ public partial class DoorLeaf : Node3D
     private static float OutwardHingeZ => Mathf.Max(DoorLink.OutsideQuadOffset, 0.11f) + 0.01f + OutwardThickness;
     /// <summary>An outward leaf's bottom: clear of the doorstep (12 cm above the sill).</summary>
     private const float OutwardBottom = 0.13f;
+    /// <summary>
+    /// A roll-up door's slats, in front of the facade: clear of the portal mouth, inside the jambs
+    /// (which stand to 11 cm), where the facade's baked shut door is.
+    /// </summary>
+    private const float RollZ0 = 0.05f, RollZ1 = 0.08f;
+    /// <summary>How much of a roll-up door still shows under the lintel when fully up.</summary>
+    private const float RolledUp = 0.03f;
+    /// <summary>Seconds a roll-up door takes, up or down: a car driving up has to find it open.</summary>
+    public const float RollSeconds = 1f;
 
     // each hinge and the way it turns to open: + into the room, - out
     private readonly List<(Node3D Hinge, float Sign)> _hinges = new();
     private CollisionShape3D? _shape;
     private float _angle;
+    // a roll-up door: the slats, hung from the lintel, squashed up into it
+    private Node3D? _roll;
 
-    /// <summary>A pair on the facade, freed with its link, rather than a leaf of an interior.</summary>
+    /// <summary>On the facade (a pair, a roll-up door), freed with its link, rather than a leaf of an interior.</summary>
     public bool Outward { get; private init; }
+
+    /// <summary>
+    /// A facade door as its interior sees it (<see cref="CreateShutter"/>): it never swings, only
+    /// shows, and stops the way out, while the door is shut.
+    /// </summary>
+    public bool Shutter { get; private init; }
 
     /// <summary>Whether a building's front door is an outward pair: barns, whose doors open onto the yard.</summary>
     public static bool SwingsOut(BuildingKind kind) => kind == BuildingKind.Agricultural;
+
+    /// <summary>Whether a building's front door rolls up into its lintel: garages.</summary>
+    public static bool RollsUp(BuildingKind kind) => kind == BuildingKind.Garage;
+
+    /// <summary>Whether a building's front door hangs on the facade, with its link, not in the interior.</summary>
+    public static bool OnFacade(BuildingKind kind) => SwingsOut(kind) || RollsUp(kind);
+
+    /// <summary>The facade leaf for a kind of building, on its doorway frame (<see cref="DoorLink.Outside"/>).</summary>
+    public static DoorLeaf CreateOnFacade(string door, Transform3D doorway, float width, float height, BuildingKind kind, Material material) =>
+        RollsUp(kind) ? CreateRollUp(door, doorway, width, height, material) : CreateOutward(door, doorway, width, height, kind, material);
+
+    /// <summary>A leaf's width: a barn's pair splits the opening, any other door is one leaf.</summary>
+    public static float LeafWidth(BuildingKind kind, float doorWidth) => SwingsOut(kind) ? doorWidth / 2 : doorWidth;
+
+    /// <summary>
+    /// How much deeper than usual an open door is in reach, on the side its leaves stand: a big
+    /// leaf is worked by its free edge, as far out as it sticks. Nothing for a house door's 1 m leaf.
+    /// </summary>
+    public static float OpenReach(BuildingKind kind, float doorWidth) => Math.Max(0f, LeafWidth(kind, doorWidth) - 1f);
 
     /// <summary>
     /// A leaf for an entrance, in the interior node's frame: <paramref name="doorway"/> is the
@@ -81,6 +121,49 @@ public partial class DoorLeaf : Node3D
         return leaf;
     }
 
+    /// <summary>
+    /// A garage's roll-up door, in world space on the facade doorway frame <paramref name="doorway"/>:
+    /// slats across the opening, hung from the lintel and rolled up into it. Never solid, like a
+    /// barn's pair: shut, the facade behind it is.
+    /// </summary>
+    public static DoorLeaf CreateRollUp(string door, Transform3D doorway, float width, float height, Material material)
+    {
+        var leaf = new DoorLeaf { Name = "Leaf_" + door, TopLevel = true, Transform = doorway, Outward = true };
+        leaf._roll = leaf.AddHinge(new Vector3(0, height, 0), 0, InteriorMeshBuilder.RollUpLeaf(width, height, RollZ0, RollZ1), 0, material);
+        return leaf;
+    }
+
+    /// <summary>
+    /// A barn's pair or a garage's roll-up door seen from inside, in the interior node's frame like
+    /// <see cref="Create"/>: the real one hangs on the facade (<see cref="OnFacade"/>), out of the
+    /// interior's world, so without this a shut barn door was a bare hole from inside, and let
+    /// anyone walk (or drive) out through it. Shown and solid only
+    /// while the door is shut; open, or swinging, the portal shows the real leaves.
+    /// </summary>
+    public static DoorLeaf CreateShutter(string door, Transform3D doorway, float width, float height, BuildingKind kind, Material material)
+    {
+        var leaf = new DoorLeaf { Name = "Shutter_" + door, Transform = doorway, Shutter = true };
+        float half = width / 2, z = -InteriorGenerator.WallInset;
+        if (RollsUp(kind))
+            // a garage's roll-up door: its slats, the same as outside
+            leaf.AddHinge(new Vector3(0, height, 0), 0, InteriorMeshBuilder.RollUpLeaf(width, height, z - Thickness, z), 0, material);
+        else
+        {
+            leaf.AddHinge(new Vector3(-half, 0, z), 0, InteriorMeshBuilder.Leaf(half, height, Thickness, kind), 0, material);
+            leaf.AddHinge(new Vector3(half, 0, z), 0, InteriorMeshBuilder.Leaf(half, height, Thickness, kind, mirrored: true), 0, material);
+        }
+
+        var body = new StaticBody3D { Name = "Body" };
+        leaf._shape = new CollisionShape3D
+        {
+            Shape = new BoxShape3D { Size = new Vector3(width, height, Thickness) },
+            Position = new Vector3(0, height / 2, z + Thickness / 2),
+        };
+        body.AddChild(leaf._shape);
+        leaf.AddChild(body);
+        return leaf;
+    }
+
     private Node3D AddHinge(Vector3 at, float sign, InteriorMeshBuilder.MeshData data, float back, Material material)
     {
         var hinge = new Node3D { Name = "Hinge" + _hinges.Count, Position = at };
@@ -102,8 +185,12 @@ public partial class DoorLeaf : Node3D
     {
         // eased, so it starts and stops like something with weight on a hinge
         float s = swing * swing * (3 - 2 * swing);
-        foreach (var (hinge, sign) in _hinges)
-            hinge.Rotation = new Vector3(0, sign * s * _angle, 0);
+        if (_roll != null) _roll.Scale = new Vector3(1, Mathf.Max(RolledUp, 1 - s), 1);
+        else
+            foreach (var (hinge, sign) in _hinges)
+                hinge.Rotation = new Vector3(0, sign * s * _angle, 0);
         if (_shape != null) _shape.Disabled = swing > 0.02f;
+        // from the first moment it opens, the portal behind shows the real pair swinging
+        if (Shutter) Visible = swing <= 0f;
     }
 }

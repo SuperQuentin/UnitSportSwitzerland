@@ -17,7 +17,7 @@ namespace UnitSport.Interiors;
 ///
 /// <para>
 /// Colours go through <c>SrgbToLinear</c> (baked vertex colours are never converted by Godot).
-/// Alpha 0 marks glass: the shader draws it as flat daylight, unlit.
+/// Alpha 0 marks glass: the shader draws it as the sky of the hour (<c>world_sky</c>), unlit.
 /// </para>
 /// </summary>
 public static class InteriorMeshBuilder
@@ -165,6 +165,31 @@ public static class InteriorMeshBuilder
         return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
     }
 
+    /// <summary>
+    /// A garage's roll-up door, <paramref name="width"/> across and hanging <paramref name="height"/>
+    /// down from its top edge at the origin (so squashing Y rolls it into the lintel), between
+    /// <paramref name="z0"/> and <paramref name="z1"/>: sheet-metal slats, each a lit upper face over
+    /// a shaded lower one, and a dark bottom rail. The facade's baked shut door has the same slats.
+    /// </summary>
+    public static MeshData RollUpLeaf(float width, float height, float z0, float z1)
+    {
+        var s = new Scratch();
+        float hw = width / 2, mid = (z0 + z1) / 2;
+        var metal = C(0.80f, 0.82f, 0.85f);
+        var shade = metal * 0.8f;
+        shade.A = 1;
+        int slats = Math.Max(4, Mathf.RoundToInt(height / 0.22f));
+        float sh = height / slats;
+        for (int i = 0; i < slats; i++)
+        {
+            float top = -i * sh, split = top - sh * 0.35f, bottom = top - sh;
+            s.Box(new Vector3(-hw, split, z0), new Vector3(hw, top, z1), metal, false);
+            s.Box(new Vector3(-hw, bottom, z0), new Vector3(hw, split, mid), shade, false);
+        }
+        s.Box(new Vector3(-hw, -height, z0), new Vector3(hw, -height + 0.06f, z1 + 0.01f), C(0.2f, 0.2f, 0.22f), false);
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
+    }
+
     // ---- rooms -------------------------------------------------------------------------------
 
     private static void Room(Scratch s, RoomPlan r, float y0, float clear, List<RectPlan> holes, List<RectPlan> ceilingHoles)
@@ -306,6 +331,42 @@ public static class InteriorMeshBuilder
 
     // ---- furniture ---------------------------------------------------------------------------
 
+    private static readonly Color LockerSteel = C(0.22f, 0.30f, 0.24f);
+    private static readonly Color SafeSteel = C(0.26f, 0.27f, 0.29f);
+
+    /// <summary>
+    /// The door of a gun locker or safe, in its hinge's frame: x from the hinge (the piece's left
+    /// front edge seen from in front) across, y up, z 0..thickness outward. Swung about y by the
+    /// loot service (negative angles open it toward the room). Collision-free: the piece's own box
+    /// already stops a player.
+    /// </summary>
+    public static MeshData LockDoor(FurniturePlan p)
+    {
+        var s = new Scratch();
+        bool safe = p.Type == FurnitureType.Safe;
+        var steel = safe ? SafeSteel : LockerSteel;
+        float w = p.W, H = p.H, t = safe ? 0.07f : 0.03f;
+        void B(float xa, float ya, float za, float xb, float yb, float zb, Color col) =>
+            s.Box(new Vector3(xa, ya, za), new Vector3(xb, yb, zb), col, false);
+        B(0.005f, 0.01f, 0, w - 0.005f, H - 0.01f, t, steel);
+        var chrome = C(0.75f, 0.76f, 0.78f);
+        if (safe)
+        {
+            // the dial and its handle
+            B(w * 0.5f - 0.07f, H * 0.55f - 0.07f, t, w * 0.5f + 0.07f, H * 0.55f + 0.07f, t + 0.02f, C(0.10f, 0.10f, 0.11f));
+            B(w * 0.5f - 0.01f, H * 0.55f + 0.035f, t + 0.02f, w * 0.5f + 0.01f, H * 0.55f + 0.06f, t + 0.025f, chrome);
+            B(w - 0.12f, H * 0.3f, t, w - 0.08f, H * 0.45f, t + 0.04f, chrome);
+        }
+        else
+        {
+            for (int k = 0; k < 4; k++)   // vents
+                B(0.15f, H - 0.25f - k * 0.06f, t, w - 0.15f, H - 0.23f - k * 0.06f, t + 0.005f, (steel * 0.6f) with { A = 1f });
+            B(w - 0.1f, H * 0.48f, t, w - 0.06f, H * 0.58f, t + 0.03f, chrome);
+            B(w * 0.5f - 0.05f, H * 0.62f - 0.05f, t, w * 0.5f + 0.05f, H * 0.62f + 0.05f, t + 0.02f, C(0.10f, 0.10f, 0.11f));   // the dial
+        }
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), Array.Empty<Vector3>());
+    }
+
     private static void Furniture(Scratch s, FurniturePlan p, float y0)
     {
         // authored with its back to -Z, centred on the origin, then turned and moved
@@ -420,6 +481,38 @@ public static class InteriorMeshBuilder
                     }
                 }
                 break;
+            case FurnitureType.GunLocker:
+            case FurnitureType.Safe:
+            {
+                // an open-fronted steel box: the door is its own node (LockDoor), swung by the loot service
+                bool safe = p.Type == FurnitureType.Safe;
+                var steel = safe ? SafeSteel : LockerSteel;
+                var inside = (steel * 0.45f) with { A = 1f };
+                const float t = 0.04f;
+                B(-w, 0, -d, w, t, d, steel);              // floor
+                B(-w, H - t, -d, w, H, d, steel);          // roof
+                B(-w, 0, -d, -w + t, H, d, steel);         // sides
+                B(w - t, 0, -d, w, H, d, steel);
+                B(-w, 0, -d, w, H, -d + t, inside);        // back, darker: the inside is in shadow
+                if (safe)
+                {
+                    B(-w + t, H * 0.5f, -d + t, w - t, H * 0.5f + 0.02f, d - 0.06f, inside);   // a shelf
+                    B(-w + 0.1f, t, -d + 0.1f, -w + 0.3f, t + 0.12f, d - 0.15f, C(0.30f, 0.45f, 0.30f));   // a cash box
+                    B(0.0f, H * 0.5f + 0.02f, -d + 0.1f, w - 0.1f, H * 0.5f + 0.1f, d - 0.15f, C(0.62f, 0.58f, 0.40f));
+                }
+                else
+                {
+                    B(-w + t, H - 0.45f, -d + t, w - t, H - 0.43f, d - 0.06f, inside);         // the ammunition shelf
+                    for (int k = 0; k < 3; k++)
+                        B(-w + 0.08f + k * 0.15f, H - 0.43f, -d + 0.1f, -w + 0.2f + k * 0.15f, H - 0.33f, d - 0.15f, C(0.70f, 0.16f, 0.12f));
+                    foreach (float gx in new[] { -0.12f, 0.12f })
+                    {
+                        B(gx - 0.035f, 0.06f, -d + 0.08f, gx + 0.035f, 0.55f, -d + 0.2f, C(0.40f, 0.27f, 0.16f));   // stock
+                        B(gx - 0.015f, 0.55f, -d + 0.1f, gx + 0.015f, 1.3f, -d + 0.16f, dark);                   // barrel
+                    }
+                }
+                break;
+            }
             case FurnitureType.ShopCounter:
                 B(-w, 0, -d, w, H, d, C(0.62f, 0.44f, 0.30f));
                 B(-w, H, -d, w, H + 0.03f, d, dark);

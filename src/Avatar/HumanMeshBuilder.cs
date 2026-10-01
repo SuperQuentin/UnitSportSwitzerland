@@ -354,6 +354,106 @@ public static class HumanMeshBuilder
             TorsoLean: 0f);
     }
 
+    // ---- a car's driver (Avatar/CarCabin: the seat, wheel and pedals come from the car) ----
+
+    /// <summary>Hip to shoulders along the back, seated.</summary>
+    public const float DriverTorso = 0.48f;
+    /// <summary>How far the hands turn with the wheel before they stop following it: past it they hold still and the rim slides through them.</summary>
+    public const float MaxGripTurn = 1.75f;
+
+    /// <summary>The back, the neck and the head's axis of a figure seated at <paramref name="hip"/>, reclined <paramref name="recline"/>.</summary>
+    private static (Vector3 Back, Vector3 Neck, Vector3 HeadAxis) DriverSpine(Vector3 hip, float recline)
+    {
+        var back = new Vector3(0, Mathf.Cos(recline), -Mathf.Sin(recline));
+        // the head comes up off the backrest to look down the road
+        var headAxis = (back * 0.3f + Vector3.Up * 0.7f).Normalized();
+        return (back, hip + back * (DriverTorso + 0.08f), headAxis);
+    }
+
+    /// <summary>
+    /// The eye of a figure seated at <paramref name="hip"/> (author space, +Z forward, not flipped):
+    /// the same point <see cref="MountsForDriver"/> gives, without a seat to solve. The seat is
+    /// placed from it.
+    /// </summary>
+    public static Vector3 DriverEye(Vector3 hip, float recline)
+    {
+        var (_, neck, headAxis) = DriverSpine(hip, recline);
+        return neck + headAxis * (0.065f + 0.12f) + new Vector3(0, 0, 0.085f);
+    }
+
+    /// <summary>
+    /// A driver posed from the car's seat: back on the backrest, hands on the rim at a quarter to
+    /// three turned with the wheel (<paramref name="wheelAngle"/>, radians, + = anticlockwise as
+    /// the driver sees it), right foot on the throttle or, braking, the brake, left foot resting.
+    /// </summary>
+    private static Rig DriverRig(DriverSeat seat, float wheelAngle, float throttle, float brake)
+    {
+        var hip = seat.Hip;
+        var (back, neck, headAxis) = DriverSpine(hip, seat.Recline);
+        var shoulders = hip + back * DriverTorso;
+        const float shoulderHalf = 0.175f;
+        var shoulderL = shoulders + new Vector3(-shoulderHalf, 0, 0);
+        var shoulderR = shoulders + new Vector3(shoulderHalf, 0, 0);
+
+        var n = seat.WheelAxis;
+        var up = (Vector3.Up - n * n.Dot(Vector3.Up)).Normalized();
+        var left = n.Cross(up);
+        var turn = new Basis(n, Mathf.Clamp(wheelAngle, -seat.MaxGrip, seat.MaxGrip));
+        // side -1 is the figure's right (-X), +1 its left; a little above the horizontal diameter
+        Vector3 Grip(float side) => seat.WheelCentre + turn * (left * side * 0.96f + up * 0.28f) * seat.WheelRadius + n * 0.025f;
+        var wristL = Grip(-1f);
+        var wristR = Grip(1f);
+        var elbowL = Limb.Solve(shoulderL, wristL, UpperArmLength, ForearmLength, new Vector3(-0.6f, -0.7f, -0.3f));
+        var elbowR = Limb.Solve(shoulderR, wristR, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.7f, -0.3f));
+
+        (Vector3 Hip, Vector3 Knee, Vector3 Ankle, Vector3 Toe) Leg(float side, Vector3 ball)
+        {
+            var root = hip + new Vector3(side * 0.09f, 0, 0);
+            // heel down behind the ball of the foot, the knee up and a little out
+            var ankle = ball + new Vector3(0, 0.07f, -0.09f);
+            var knee = Limb.Solve(root, ankle, ThighLength, ShinLength, new Vector3(side * 0.2f, 1f, 0.3f));
+            return (root, knee, ankle, ball + new Vector3(0, 0.01f, 0.05f));
+        }
+        var pedal = brake > 0.05f ? DriverSeat.Pressed(seat.Brake, brake) : DriverSeat.Pressed(seat.Throttle, throttle);
+        var legL = Leg(-1f, pedal);
+        var legR = Leg(1f, seat.Rest);
+
+        return new Rig(
+            HeadTop: neck + headAxis * 0.255f, HeadBase: neck + headAxis * 0.065f, Neck: neck,
+            Chest: hip + back * (DriverTorso * 0.82f), Waist: hip + back * (DriverTorso * 0.33f), Hip: hip,
+            ShoulderL: shoulderL, ElbowL: elbowL, WristL: wristL,
+            ShoulderR: shoulderR, ElbowR: elbowR, WristR: wristR,
+            HipL: legL.Hip, KneeL: legL.Knee, AnkleL: legL.Ankle, ToeL: legL.Toe,
+            HipR: legR.Hip, KneeR: legR.Knee, AnkleR: legR.Ankle, ToeR: legR.Toe,
+            TorsoLean: 0f);
+    }
+
+    /// <summary>
+    /// A driver in <paramref name="seat"/> (author space, as the car is built): the body (torso,
+    /// arms, legs), the head, or both. A first-person driver sees their own arms but not the
+    /// inside of their own head.
+    /// </summary>
+    public static void AppendDriver(MeshScratch scratch, HumanPalette palette, DriverSeat seat,
+        float wheelAngle, float throttle, float brake, bool body = true, bool head = true, Headwear hat = Headwear.None) =>
+        AppendRig(scratch, palette, DriverRig(seat, wheelAngle, throttle, brake), includeLegs: true, helmet: false, hat, body, head);
+
+    /// <summary>Camera mounts for <see cref="AppendDriver"/>'s figure at rest, flipped to face -Z like the mesh.</summary>
+    public static GaitMounts MountsForDriver(DriverSeat seat) => MountsForRig(DriverRig(seat, 0f, 0f, 0f));
+
+    /// <summary>
+    /// How far short each limb falls of what it holds, m: the right and left hand of the rim, the
+    /// right foot of the throttle and the left of its rest. Zero when it reaches (the two-bone
+    /// solve keeps the upper bone's length, so a target out of reach stretches the lower one).
+    /// <c>--cockpitcheck</c> fails a seat where any does not.
+    /// </summary>
+    public static (float HandR, float HandL, float FootR, float FootL) DriverReach(DriverSeat seat, float wheelAngle)
+    {
+        var rig = DriverRig(seat, wheelAngle, 0f, 0f);
+        static float Short(Vector3 mid, Vector3 end, float lower) => Mathf.Max(0f, (end - mid).Length() - lower);
+        return (Short(rig.ElbowL, rig.WristL, ForearmLength), Short(rig.ElbowR, rig.WristR, ForearmLength),
+            Short(rig.KneeL, rig.AnkleL, ShinLength), Short(rig.KneeR, rig.AnkleR, ShinLength));
+    }
+
     private static GaitMounts MountsForRig(Rig rig)
     {
         // the eye sits high in the head and forward of its centre, along the head's own axis
@@ -388,16 +488,29 @@ public static class HumanMeshBuilder
     }
 
     private static void AppendRig(MeshScratch scratch, HumanPalette palette, Rig rig,
-        bool includeLegs, bool helmet, Headwear hat = Headwear.None)
+        bool includeLegs, bool helmet, Headwear hat = Headwear.None, bool body = true, bool head = true)
     {
-        // torso as a lozenge rather than a cylinder: shoulders wider than waist is most of
-        // what makes a figure read as a person from behind at fifty metres
-        scratch.Tube(rig.Hip, rig.Waist, 0.130f, 0.140f, palette.Shorts, 8);
-        scratch.Tube(rig.Waist, rig.Chest, 0.140f, 0.158f, palette.Jersey, 8);
-        scratch.Tube(rig.Chest, rig.Neck, 0.158f, 0.098f, palette.Jersey, 8);
+        if (body)
+        {
+            // torso as a lozenge rather than a cylinder: shoulders wider than waist is most of
+            // what makes a figure read as a person from behind at fifty metres
+            scratch.Tube(rig.Hip, rig.Waist, 0.130f, 0.140f, palette.Shorts, 8);
+            scratch.Tube(rig.Waist, rig.Chest, 0.140f, 0.158f, palette.Jersey, 8);
+            scratch.Tube(rig.Chest, rig.Neck, 0.158f, 0.098f, palette.Jersey, 8);
 
-        // shoulder caps, so the arms do not appear to sprout from the ribs
-        scratch.Tube(rig.ShoulderL, rig.ShoulderR, 0.082f, palette.Jersey, 6);
+            // shoulder caps, so the arms do not appear to sprout from the ribs
+            scratch.Tube(rig.ShoulderL, rig.ShoulderR, 0.082f, palette.Jersey, 6);
+
+            Arm(scratch, palette, rig.ShoulderL, rig.ElbowL, rig.WristL);
+            Arm(scratch, palette, rig.ShoulderR, rig.ElbowR, rig.WristR);
+
+            if (includeLegs)
+            {
+                Leg(scratch, palette, rig.HipL, rig.KneeL, rig.AnkleL, rig.ToeL);
+                Leg(scratch, palette, rig.HipR, rig.KneeR, rig.AnkleR, rig.ToeR);
+            }
+        }
+        if (!head) return;
 
         // The head follows the neck rather than a separately authored lean angle. Carrying its
         // own angle meant the head tilted independently of the body the moment a pose changed,
@@ -416,15 +529,6 @@ public static class HumanMeshBuilder
                 new Vector3(0.168f, 0.085f, 0.205f), palette.Helmet, headBasis);
         else if (hat != Headwear.None)
             AppendHat(scratch, hat, headCentre, headAxis);
-
-        Arm(scratch, palette, rig.ShoulderL, rig.ElbowL, rig.WristL);
-        Arm(scratch, palette, rig.ShoulderR, rig.ElbowR, rig.WristR);
-
-        if (includeLegs)
-        {
-            Leg(scratch, palette, rig.HipL, rig.KneeL, rig.AnkleL, rig.ToeL);
-            Leg(scratch, palette, rig.HipR, rig.KneeR, rig.AnkleR, rig.ToeR);
-        }
     }
 
     /// <summary>

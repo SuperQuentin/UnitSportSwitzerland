@@ -44,26 +44,60 @@ public static class DoorIndex
     /// than its centre line, and only from the outside: a player standing behind a wall must not
     /// open the door on its far side.
     /// </summary>
-    public static Entry? Nearest(Vector3 at, float reach) => Nearest(at, reach, null);
+    public static Entry? Nearest(Vector3 at, float reach) => Nearest(at, reach, _ => true);
 
     /// <summary>As <see cref="Nearest(Vector3, float)"/>, only doors of buildings of one kind.</summary>
-    public static Entry? Nearest(Vector3 at, float reach, BuildingKind kind) => Nearest(at, reach, (BuildingKind?)kind);
+    public static Entry? Nearest(Vector3 at, float reach, BuildingKind kind) => Nearest(at, reach, e => e.Kind == kind);
 
-    private static Entry? Nearest(Vector3 at, float reach, BuildingKind? kind)
+    /// <summary>
+    /// The nearest door a player on foot enters an interior by. <paramref name="deeper"/> gives a
+    /// door extra reach straight out in front, where its open leaves stand.
+    /// </summary>
+    public static Entry? NearestEntrance(Vector3 at, float reach, Func<Entry, float>? deeper = null) =>
+        Nearest(at, reach, _ => true, deeper);
+
+    /// <summary>
+    /// The nearest door a vehicle drives through (<see cref="BuildingFootprint.VehicleDoor"/>)
+    /// within <paramref name="reach"/> in front of it, at most <paramref name="halfAngle"/>
+    /// radians off square: a vehicle heading at a garage or a barn, not driving past one.
+    /// </summary>
+    public static Entry? VehicleDoorAhead(Vector3 at, Vector3 heading, float reach, float halfAngle)
+    {
+        var h = new Vector2(heading.X, heading.Z);
+        if (h.LengthSquared() < 1e-6f) return null;
+        h = h.Normalized();
+        float cos = Mathf.Cos(halfAngle);
+        return Nearest(at, reach, e =>
+        {
+            if (!BuildingFootprint.VehicleDoor(e.Kind)) return false;
+            var into = new Vector2(-e.Outward.X, -e.Outward.Z);
+            if (h.Dot(into) < cos) return false;
+            // and aimed at the opening, not at the wall beside it: where the heading meets the facade
+            var rel = new Vector2(at.X - e.World.X, at.Z - e.World.Z);
+            float outward = -rel.Dot(into);
+            if (outward < 0.5f) return false;
+            var t = new Vector2(-into.Y, into.X);
+            float along = rel.Dot(t) + outward / h.Dot(into) * h.Dot(t);
+            return Mathf.Abs(along) < e.Width / 2 + 1f;
+        });
+    }
+
+    private static Entry? Nearest(Vector3 at, float reach, Func<Entry, bool> wanted, Func<Entry, float>? deeper = null)
     {
         Entry? best = null;
         float bestD = reach;
         foreach (var doors in Tiles.Values)
             foreach (var e in doors)
             {
-                if (kind is { } k && e.Kind != k) continue;
+                if (!wanted(e)) continue;
                 var rel = at - e.World;
                 if (Mathf.Abs(rel.Y) > 2.5f) continue;
                 float outward = rel.X * e.Outward.X + rel.Z * e.Outward.Z;
                 if (outward < -0.3f) continue;
                 var t = new Vector3(-e.Outward.Z, 0, e.Outward.X);
                 float along = Mathf.Max(0, Mathf.Abs(rel.X * t.X + rel.Z * t.Z) - e.Width / 2);
-                float d = Mathf.Sqrt(along * along + outward * outward);
+                float depth = Mathf.Max(0, outward - (deeper?.Invoke(e) ?? 0f));
+                float d = Mathf.Sqrt(along * along + depth * depth);
                 if (d < bestD) { bestD = d; best = e; }
             }
         return best;

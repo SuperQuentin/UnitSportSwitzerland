@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Local release: next semver from commits since the last tag, Windows export, GitHub release.
-# Usage: tools/release.sh [--dry-run]   (Git Bash, on a main in sync with origin/main)
+# Usage: tools/release.sh [--dry-run]   (Git Bash or WSL, on a main in sync with origin/main; GODOT=godot on WSL)
 # The build runs in a temporary worktree of the released commit, so your working files are never touched.
-# Needs: gh (logged in), dotnet, Godot mono + export templates, 7z or PowerShell (for zipping).
+# Needs: gh (logged in), dotnet, Godot mono + export templates, export_presets.cfg in the repo root, zip or PowerShell.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
@@ -50,9 +50,11 @@ WT="$PWD/$OUT/wt"; REPO=$PWD
 git worktree remove --force "$WT" 2>/dev/null || true
 git worktree add -q --detach "$WT" "$SHA"
 trap 'cd "$REPO"; git worktree remove --force "$WT"' EXIT
+# export_presets.cfg is gitignored (per machine), so the worktree does not have it
+[ -f export_presets.cfg ] || { echo "No export_presets.cfg in the repo root"; exit 1; }
+cp export_presets.cfg "$WT/"
 cd "$WT"
-sed -i "s|^config/name=.*|&
-config/version=\"$V\"|" project.godot
+sed -i "s|^config/name=.*|&\\nconfig/version=\"$V\"|" project.godot
 
 mkdir -p build/windows
 dotnet build UnitSportSwitzerland.csproj -c Release
@@ -60,8 +62,19 @@ dotnet build UnitSportSwitzerland.csproj -c Release
 "$GODOT" --headless --path . --export-release "Windows Desktop" build/windows/UnitSportSwitzerland.exe
 [ -f build/windows/UnitSportSwitzerland.exe ] || { echo "Export failed"; exit 1; }
 
-ZIP="$REPO/$OUT/UnitSportSwitzerland-v$V-windows.zip"; rm -f "$ZIP"
-powershell -NoProfile -Command "Compress-Archive -Path 'build/windows/*' -DestinationPath '$ZIP'"
+# yt-dlp + LGPL ffmpeg (CD burning, GPX video export) ship in bin/, cached between releases; delete the cache to refresh
+TOOLS="$REPO/$OUT/tools"; mkdir -p "$TOOLS" build/windows/bin
+[ -f "$TOOLS/yt-dlp.exe" ] || curl -fsSL -o "$TOOLS/yt-dlp.exe" https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
+if [ ! -f "$TOOLS/ffmpeg.exe" ]; then
+  curl -fsSL -o "$TOOLS/ffmpeg.zip" https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+  if command -v unzip >/dev/null; then unzip -qjo "$TOOLS/ffmpeg.zip" '*/bin/ffmpeg.exe' -d "$TOOLS"
+  else powershell -NoProfile -Command "Add-Type -A System.IO.Compression.FileSystem; \$z=[IO.Compression.ZipFile]::OpenRead('$TOOLS/ffmpeg.zip'); \$e=\$z.Entries|?{\$_.FullName -like '*/bin/ffmpeg.exe'}; [IO.Compression.ZipFileExtensions]::ExtractToFile(\$e,'$TOOLS/ffmpeg.exe',\$true); \$z.Dispose()"; fi
+fi
+cp "$TOOLS/yt-dlp.exe" "$TOOLS/ffmpeg.exe" build/windows/bin/
 
-gh release create "v$V" "$ZIP" --target "$SHA" --title "v$V" --notes-file "$OUT/notes.md"
+ZIP="$REPO/$OUT/UnitSportSwitzerland-v$V-windows.zip"; rm -f "$ZIP"
+if command -v zip >/dev/null; then (cd build/windows && zip -qr "$ZIP" .)
+else powershell -NoProfile -Command "Compress-Archive -Path 'build/windows/*' -DestinationPath '$ZIP'"; fi
+
+gh release create "v$V" "$ZIP" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
 echo "Released v$V"

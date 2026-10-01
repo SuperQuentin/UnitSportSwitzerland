@@ -41,6 +41,10 @@ occasions, core, general. New knowledge goes in a new or existing note plus one 
 - Server: `<godot> --headless --path . -- --server [--port N] [--generated-world]`; client: `<godot> --path . -- --connect 127.0.0.1`
   (no args = offline). `<godot>` is `godot` on WSL; Windows path: `docs/notes/general/godot-exe.md`.
 - Area-specific commands and checks: the `commands` note of that area.
+- **Godot MCP** (`godot-ai` tools: scene, nodes, run game, screenshots, logs): available only while
+  the Godot editor has the project open, and it acts on whatever project that editor loaded. In a
+  worktree, make sure the editor has that worktree's project open (not the main checkout) before
+  trusting it. Tips: `docs/notes/general/godot-ai-mcp-tips.md`.
 
 ## graphify (optional)
 

@@ -11,5 +11,6 @@
   the mouse by up to a physics tick. The local body is the same `HumanMeshBuilder` figure remote
   players see: solved gait grounded, `Running` pose airborne (>0.12 s), `Tucked` sliding, and the
   landing-dip spring spent as a squash. Mounted first person sits at the figure's own eye
-  (`Rideable.FirstPersonEye` from `MountsForPose`), rolled with the lean.
+  (`Rideable.FirstPersonEye` from `MountsForPose`), rolled with the lean. In a car it is the
+  cockpit, a cycle of three (chase, with your body, without): `cockpit`.
   Screenshot the player's view with `--ride foot|bike|skis,seconds,out.png` (`foot` stands still).
