@@ -30,7 +30,8 @@ public partial class BirdNet : Node
     private const float KilledRange = 400f;
     private const double SendInterval = 0.125;
 
-    public BirdLife Life { get; private set; } = null!;
+    /// <summary>Null on a swarm bot (src/Net/Swarm), which takes the RPCs and draws nothing.</summary>
+    public BirdLife? Life { get; private set; }
     private bool _server;
     private double _acc;
     private int _tick;
@@ -59,7 +60,7 @@ public partial class BirdNet : Node
         foreach (int peer in Multiplayer.GetPeers())
         {
             if (GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body) continue;
-            foreach (var chunk in Life.Snapshot(body.GlobalPosition, _tick))
+            foreach (var chunk in Life!.Snapshot(body.GlobalPosition, _tick))
                 RpcId(peer, MethodName.Snapshot, chunk);
         }
     }
@@ -67,7 +68,7 @@ public partial class BirdNet : Node
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
     private void Snapshot(byte[] data)
     {
-        if (!_server) Life.ApplySnapshot(data);
+        if (!_server) Life?.ApplySnapshot(data);
     }
 
     /// <summary>Client: tell the server what this client's gun, rounds or craft did to a bird.</summary>
@@ -88,7 +89,7 @@ public partial class BirdNet : Node
             GD.Print($"[birds] peer {sender}: report {kind} on #{id} refused, not where its player is");
             return;
         }
-        Life.ServerReport(sender, kind, id, from, dir);
+        Life!.ServerReport(sender, kind, id, from, dir);
     }
 
     /// <summary>Server: a bird fell. Everyone within earshot hears of it; the shooter is always told.</summary>
@@ -106,6 +107,6 @@ public partial class BirdNet : Node
     {
         if (_server) return;
         GD.Print($"[birds] killed #{id} ({Species(species)?.Name}) by peer {shooter}");
-        Life.RemoteKilled(id, species, at, dir, shooter);
+        Life?.RemoteKilled(id, species, at, dir, shooter);
     }
 }

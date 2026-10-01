@@ -226,13 +226,13 @@ public partial class BirdProbe : Node
             uint noTrunks = uint.MaxValue & ~World.TreeColliders.Layer;
             for (int k = 0; k < 120 && pSeen < 30; k++)
             {
-                float d = 10f + (float)rng2.NextDouble() * 25f;
+                float d = 6f + (float)rng2.NextDouble() * 20f;
                 var dir = new Basis(Vector3.Up, (float)rng2.NextDouble() * Mathf.Tau) * Vector3.Forward;
                 var spot = standAt + dir * d;
                 var bird = _birds.Spawn(great, spot, Bird.Mode.Perched);
                 var c = bird.Centre;
                 float along = (c - eye2).Length();
-                if (bird.State == Bird.Mode.Perched && along is > 6f and < 45f
+                if (bird.State == Bird.Mode.Perched && along is > 6f and < 30f
                     && space.IntersectRay(PhysicsRayQueryParameters3D.Create(eye2, c + Vector3.Up * 0.1f, noTrunks, skip)).Count == 0)
                 {
                     var old = space.IntersectRay(PhysicsRayQueryParameters3D.Create(eye2, c, uint.MaxValue, skip));
@@ -246,7 +246,7 @@ public partial class BirdProbe : Node
                 _birds.Remove(bird);
             }
             GD.Print($"[birds] tits perched on tree tops, no building or ground in the way: {pHits}/{pSeen} hit (the old wall test would have lost {pOld})");
-            // another tree's trunk may still be in the way of a few
+            // inside 30 m the pattern always hits: another tree's trunk may still be in the way of a few
             Check(pSeen == 0 || pHits >= pSeen * 0.85, "a bird perched on a tree is hit when aimed at");
             _birds.PlayerOverride = () => player;
         }

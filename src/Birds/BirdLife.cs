@@ -54,7 +54,9 @@ public partial class BirdLife : Node3D
     private readonly Dictionary<int, Bird> _byId = new();
     private int _nextId;
     private readonly Random _rng = new();
-    private readonly Dictionary<TileId, List<Vector3>?> _trees = new();
+    /// <summary>Tree tops per tile, bucketed in <see cref="TreeCell"/> m cells (a forest tile holds 100k+).</summary>
+    private readonly Dictionary<TileId, Dictionary<(int, int), List<Vector3>>?> _trees = new();
+    private const float TreeCell = 16f;
     /// <summary>Server only: the lean server's terrain keeps no cover raster, so the birds load their own per tile.</summary>
     private readonly Dictionary<TileId, byte[]?> _cover = new();
     private readonly HashSet<TileId> _coverLoading = new();
@@ -227,11 +229,12 @@ public partial class BirdLife : Node3D
         for (int i = _birds.Count - 1; i >= 0; i--)
         {
             var b = _birds[i];
+            var at = b.Node.GlobalPosition;
             Vector3? nearest = null;
             float best = float.MaxValue;
             foreach (var o in who)
             {
-                float d = Flat(b.Node.GlobalPosition - o.Position);
+                float d = Flat(at - o.Position);
                 if (d < best) { best = d; nearest = o.Position; }
             }
             b.Step(dt, this, nearest);
@@ -348,7 +351,7 @@ public partial class BirdLife : Node3D
             if (NearestTreeTop(at, 12f) is { } top) at = top;
             else mode = Bird.Mode.Ground;
         }
-        var bird = new Bird(s, (float)_rng.NextDouble()) { Id = ++_nextId };
+        var bird = new Bird(s, (float)_rng.NextDouble(), visual: !Headless) { Id = ++_nextId };
         AddChild(bird.Node);
         bird.Begin(mode, at, this, _rng, lift);
         _birds.Add(bird);
@@ -419,9 +422,18 @@ public partial class BirdLife : Node3D
         {
             var trees = await source.LoadTreesAsync(tile);
             var origin = _origin;
-            _trees[tile] = trees == null ? null : await Task.Run(() => trees
-                .Select(t => origin.ToWorld(tile.MinE + t.X, tile.MaxN - t.Z, t.Y + t.Height * 0.92f))
-                .ToList());
+            _trees[tile] = trees == null ? null : await Task.Run(() =>
+            {
+                var cells = new Dictionary<(int, int), List<Vector3>>();
+                foreach (var t in trees)
+                {
+                    var top = origin.ToWorld(tile.MinE + t.X, tile.MaxN - t.Z, t.Y + t.Height * 0.92f);
+                    var key = Cell(top);
+                    if (!cells.TryGetValue(key, out var list)) cells[key] = list = new List<Vector3>();
+                    list.Add(top);
+                }
+                return cells;
+            });
         }
         catch (Exception e)
         {
@@ -431,17 +443,25 @@ public partial class BirdLife : Node3D
         finally { _loading.Remove(tile); }
     }
 
-    // ponytail: linear scan of the tile's trees (tens of thousands) at most every 0.4 s; bucket like Gathering if it shows up in a profile
+    private static (int, int) Cell(Vector3 p) => ((int)Mathf.Floor(p.X / TreeCell), (int)Mathf.Floor(p.Z / TreeCell));
+
+    /// <summary>The nearest tree top within <paramref name="reach"/> (at most <see cref="TreeCell"/>) on this tile.</summary>
     private Vector3? NearestTreeTop(Vector3 at, float reach)
     {
-        if (!_trees.TryGetValue(_origin.TileAt(at), out var tops) || tops == null) return null;
+        if (!_trees.TryGetValue(_origin.TileAt(at), out var cells) || cells == null) return null;
         Vector3? best = null;
         float bestD = reach;
-        foreach (var t in tops)
-        {
-            float d = Flat(t - at);
-            if (d < bestD) { bestD = d; best = t; }
-        }
+        var (cx, cz) = Cell(at);
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = -1; dz <= 1; dz++)
+            {
+                if (!cells.TryGetValue((cx + dx, cz + dz), out var tops)) continue;
+                foreach (var t in tops)
+                {
+                    float d = Flat(t - at);
+                    if (d < bestD) { bestD = d; best = t; }
+                }
+            }
         return best;
     }
 
@@ -529,7 +549,7 @@ public partial class BirdLife : Node3D
             // the pattern opens to about 1.4 m across at 35 m
             float pattern = 0.1f + along * 0.018f;
             if (off > pattern + b.HitRadius) continue;
-            // past 35 m the pellets thin out and a hit becomes a chance
+            // past 30 m the pellets thin out and a hit becomes a chance
             float chance = Mathf.Clamp(1f - (along - FullChance) / (Range - FullChance), 0f, 1f);
             if (_rng.NextDouble() > chance) continue;
             if (along < bestAlong) { bestAlong = along; best = b; }
@@ -579,7 +599,7 @@ public partial class BirdLife : Node3D
     }
 
     /// <summary>A pellet pattern this close to full strength, then fading to nothing at <see cref="Range"/>.</summary>
-    private const float FullChance = 35f;
+    private const float FullChance = 30f;
 
     // ------------------------------------------------------------------------------------
     // the server's side of a report, and a client's side of what the server says
@@ -621,12 +641,17 @@ public partial class BirdLife : Node3D
         }
     }
 
+    private readonly MemoryStream _snapshotBuffer = new();
+    private BinaryWriter _snapshotWriter => _writer ??= new BinaryWriter(_snapshotBuffer);
+    private BinaryWriter? _writer;
+
     /// <summary>Server: what <see cref="BirdNet"/> sends one peer: the birds within range of <paramref name="focus"/>.</summary>
     public List<byte[]> Snapshot(Vector3 focus, int tick)
     {
         var chunks = new List<byte[]>();
-        var ms = new MemoryStream();
-        var w = new BinaryWriter(ms);
+        var ms = _snapshotBuffer;
+        var w = _snapshotWriter;
+        ms.SetLength(0);
         int n = 0;
         foreach (var b in _birds)
         {
@@ -889,7 +914,7 @@ public sealed class Bird
 
     public readonly BirdSpecies Species;
     public readonly Node3D Node;
-    private readonly Node3D _wingA, _wingB;
+    private readonly Node3D? _wingA, _wingB;
     private readonly float _signA, _signB;
     private readonly BirdMesh.Parts _parts;
 
@@ -924,12 +949,14 @@ public sealed class Bird
     private float _phase, _timer, _flee, _yaw, _angle, _radius, _spin, _seed;
     private BirdLife _life = null!;
 
-    public Bird(BirdSpecies species, float seed)
+    /// <param name="visual">False on the dedicated server: a bare node, no meshes to keep in step.</param>
+    public Bird(BirdSpecies species, float seed, bool visual = true)
     {
         Species = species;
         _seed = seed;
         _parts = BirdMesh.Get(species);
         Node = new Node3D { Name = "Bird" };
+        if (!visual) return;
         Node.AddChild(new MeshInstance3D { Mesh = _parts.Body, MaterialOverride = BirdMesh.Material });
         _wingA = Wing(_parts.WingA, out _signA);
         _wingB = Wing(_parts.WingB, out _signB);
@@ -1177,9 +1204,12 @@ public sealed class Bird
     private void Pose(float flap)
     {
         bool wings = State is Mode.Flying or Mode.Soaring or Mode.Hovering or Mode.Falling;
-        _wingA.Visible = _wingB.Visible = wings;
-        _wingA.Rotation = new Vector3(0, 0, _signA * flap);
-        _wingB.Rotation = new Vector3(0, 0, _signB * flap);
+        if (_wingA != null && _wingB != null)
+        {
+            _wingA.Visible = _wingB.Visible = wings;
+            _wingA.Rotation = new Vector3(0, 0, _signA * flap);
+            _wingB.Rotation = new Vector3(0, 0, _signB * flap);
+        }
 
         // a node faces −Z, so a bird heading along (sin yaw, cos yaw) turns by yaw + π
         var basis = new Basis(Vector3.Up, _yaw + Mathf.Pi);
