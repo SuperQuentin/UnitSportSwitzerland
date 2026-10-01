@@ -7,7 +7,7 @@ How a world shader is laid out since phase 1, part 2 (#212), so another style ca
 functional parts and only change the finish.
 
 - **A role's shader file is a thin wrapper**: `shader_type`, `render_mode`, its defines, then one
-  include of the role's body in `shaders/body/` (`terrain`, `building`, `water`, `tree`). The body
+  include of the role's body in `shaders/body/` (`terrain`, `road`, `building`, `water`, `tree`). The body
   holds everything the game depends on: portal clipping, door light, occasions, surface patterns,
   windows and rooms, tree LOD. A Cartoon terrain is a `cartoon_terrain.gdshader` that includes the
   same body with its own defines, plus a row in `StyleKit.Shaders`.
@@ -25,10 +25,10 @@ functional parts and only change the finish.
   `main` runs as much).
 - **Dissolves keep the dither whatever `retro` says.** The sightline cut, the near fade and the
   tree LOD crossfade discard by `bayer4()`: they are functional, not a finish.
-- Converted: terrain (and the far horizon, which shares its shader), building, water, tree and
-  tree-far, prop, interior, path. **Not yet: `ps1_road`**, which the road network stack (#114)
-  rewrites; it stays retro in every style until it is split after that lands. `ps1_snowfall` has
-  no retro finish.
+- Converted: terrain (and the far horizon, which shares its shader), road, building, water, tree
+  and tree-far, prop, interior, path. `ps1_snowfall` has no retro finish. The road's paint
+  dissolve (a line under ~1.5 px dithers away instead of aliasing) is anti-aliasing, not the
+  finish: it keeps `bayer4()` in every style.
 - Unshaded vs lit is a `render_mode`, so it cannot be a uniform: a lit style gets its own wrapper
   over the same body (phase 2 adds the `STYLE_LIT` path to the bodies, from the prototype's
   `style.gdshaderinc` on `feat/181-visual-styles-prototype`).

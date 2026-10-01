@@ -198,6 +198,18 @@ public sealed class GameSettings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public XR.MonitorView VrMonitor { get; set; } = XR.MonitorView.FirstPerson;
 
+    // --- the headset's picture (#244): what a streamed headset (Air Link) needs ---
+    /// <summary>
+    /// Headset MSAA samples: 0, 2, 4 or 8. Aliased edges shimmer, and shimmer is what the Link
+    /// video encoder turns into blocks.
+    /// </summary>
+    public int VrMsaa { get; set; } = 4;
+    /// <summary>The headset's 3D resolution, relative to the eye size the runtime asks for.</summary>
+    public float VrRenderScale { get; set; } = 1f;
+    public const float MinVrRenderScale = 0.5f, MaxVrRenderScale = 1.5f;
+    /// <summary>Foveated rendering: coarser shading towards the edge of each eye (variable rate shading).</summary>
+    public bool VrFoveation { get; set; } = true;
+
     // --- cockpit: first person at the wheel of a car (#69) ---
     /// <summary>Your own arms and legs at the wheel. V cycles chase → cockpit with them → cockpit without.</summary>
     public bool CockpitBody { get; set; } = true;
@@ -282,6 +294,8 @@ public sealed class GameSettings
         MaxConcurrentBuilds = Math.Clamp(MaxConcurrentBuilds, 0, MaxBuildsCap);
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
         RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
+        VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
+        VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);

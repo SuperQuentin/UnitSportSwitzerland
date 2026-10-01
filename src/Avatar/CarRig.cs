@@ -346,6 +346,14 @@ public partial class CarRig : Node3D
     /// <summary>A seat's hip in the rig's own frame, on the pitching body: where someone sitting in it goes.</summary>
     public Transform3D SeatFrame(SeatAnchor seat) => _body.Transform * new Transform3D(Basis.Identity, seat.Hip + ShellOffset);
 
+    /// <summary>
+    /// The steering wheel for VR hands (#243): its node (hub at the origin, turned by
+    /// <see cref="WheelTurn"/> about <c>Axis</c>, which is in the node's parent's frame) and the rim's radius.
+    /// Null on a car built without its cabin.
+    /// </summary>
+    public (Node3D Wheel, Vector3 Axis, float Radius)? SteeringGrip =>
+        _cabin == null ? null : (_wheel, _cabin.ColumnAxis, _cabin.Seat.WheelRadius);
+
     /// <summary>The bit of the door whose middle is nearest a world point, and how far it is.</summary>
     public (byte Bit, float Distance) NearestDoor(Vector3 point)
     {
