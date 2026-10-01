@@ -54,6 +54,9 @@ public partial class WallOffProbe : Node
         if (_stage > 3 || _t < _after) return;
         var me = _players.GetNodeOrNull<FootPlayer>(Multiplayer.GetUniqueId().ToString());
         if (me == null) return;
+        // a client that joins before its tile streamed goes on foot high over it and falls: if that
+        // landing knocked it out, its revive puts it back on its last safe spot, mid-check
+        if (me.KnockedOut) { if (_stage > 0) _stage = 1; _stageT = 0; return; }
 
         switch (_stage)
         {
@@ -93,9 +96,10 @@ public partial class WallOffProbe : Node
 
     private void Next() { _stage++; _stageT = 0; }
 
+    /// <summary>A teleport: the fall the body was in is not charged when it lands on the wall.</summary>
     private static void Put(FootPlayer me, Vector3 at)
     {
-        me.GlobalPosition = at;
+        me.PlaceAt(at, me.Rotation.Y);
         me.Velocity = Vector3.Zero;
     }
 
