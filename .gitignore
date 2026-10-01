@@ -99,3 +99,6 @@ graphify-out/
 
 # GPX recordings (personal tracks used for replay testing)
 *.gpx
+
+# tools/deploy-linux.sh config (host names, paths)
+tools/deploy.env

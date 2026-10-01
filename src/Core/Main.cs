@@ -53,6 +53,28 @@ public partial class Main : Node
 			return;
 		}
 
+		// LAN discovery probe: browse mDNS for dedicated servers, list them, quit (docs/notes/net/lan-discovery.md)
+		int dc = Array.IndexOf(OS.GetCmdlineUserArgs(), "--discovercheck");
+		if (dc >= 0)
+		{
+			var a = OS.GetCmdlineUserArgs();
+			double wait = 8;
+			if (dc + 1 < a.Length) double.TryParse(a[dc + 1], System.Globalization.NumberStyles.Float,
+				System.Globalization.CultureInfo.InvariantCulture, out wait);
+			var lan = new UnitSport.Net.LanDiscovery();
+			lan.Start();
+			GetTree().CreateTimer(wait).Timeout += () =>
+			{
+				lan.Poll();
+				foreach (var s in lan.Servers) GD.Print($"[discover] {s.Name} {s.Endpoint} version={s.Version}");
+				bool ok = lan.Servers.Count > 0;
+				lan.Dispose();
+				GD.Print(ok ? "[discover] RESULT: ok" : "[discover] RESULT: FAILED (no server answered)");
+				GetTree().Quit(ok ? 0 : 1);
+			};
+			return;
+		}
+
 		// A model turntable, before any world is built: the avatars are the subject, so
 		// there is no point streaming terrain to look at them.
 		if (UnitSport.Avatar.AvatarPreview.Requested(out double seconds, out string output))

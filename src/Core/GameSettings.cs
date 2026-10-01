@@ -164,6 +164,13 @@ public sealed class GameSettings
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
 
+    // --- network ---
+    /// <summary>List the dedicated servers found on the LAN over mDNS in the main menu (<see cref="Net.LanDiscovery"/>).</summary>
+    public bool LanDiscovery { get; set; } = true;
+
+    /// <summary>The server last joined from the menu, so the field is not reset to localhost every launch.</summary>
+    public string LastHost { get; set; } = "127.0.0.1";
+
     // --- cockpit: first person at the wheel of a car (#69) ---
     /// <summary>Your own arms and legs at the wheel. V cycles chase → cockpit with them → cockpit without.</summary>
     public bool CockpitBody { get; set; } = true;

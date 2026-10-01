@@ -9,3 +9,5 @@
   The menu also owns the mouse: opening releases the pointer, closing recaptures it, which
   is why `SpectatorCamera` no longer handles Esc. `--menu` forces the picker open (and is
   how it gets screenshotted).
+  Under the server field the menu lists LAN servers found over mDNS (`net/lan-discovery`); the field
+  starts on the last joined host (`GameSettings.LastHost`).
