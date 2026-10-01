@@ -55,6 +55,10 @@ public partial class BrManager
     private FootPlayer? _hooked;
     private double _zoneTick;
 
+    /// <summary>"--br" on a client: it joins every Battle Royale lobby by itself.</summary>
+    public static readonly bool AutoJoin = OS.GetCmdlineUserArgs().Contains("--br");
+    private int _autoJoined;
+
     public static BrManager CreateClient(WorldOrigin origin)
     {
         var m = new BrManager { Name = NodeName, Origin = origin };
@@ -101,6 +105,15 @@ public partial class BrManager
     public Vector3 WorldPoint(Vector2 zone, float y) =>
         Origin!.ToWorld(_state.AreaE + zone.X, _state.AreaN + zone.Y, 0) with { Y = y };
 
+    /// <summary>Your living team-mates where this client draws them (zone metres, heading), for the maps and the compass (#231).</summary>
+    public IEnumerable<(string Name, Vector2 At, Vector2 Heading)> Mates()
+    {
+        if (Origin == null) yield break;
+        foreach (var m in _state.MatesOf(Me))
+            if (m.Alive && GetNodeOrNull<FootPlayer>("../Players/" + m.Peer) is { } body)
+                yield return (m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
+    }
+
     /// <summary>Spectating: the player watched, else 0.</summary>
     public long Watching => _spectator is { Current: true } ? _watching : 0;
 
@@ -121,10 +134,21 @@ public partial class BrManager
             _zoneKey = key;
         }
         if (s.Phase == BrPhase.Idle) _feed.Clear();
+        // "--br" (#231): join every lobby as it opens, and the one already open on arrival
+        if (AutoJoin && s.Phase is BrPhase.Lobby or BrPhase.Countdown && s.Find(Me) == null && _autoJoined != s.Seed
+            && GetNodeOrNull<ChatManager>("../" + ChatManager.NodeName) is { } chat)
+        {
+            _autoJoined = s.Seed;
+            GD.Print($"[br] --br: joining the lobby in {s.AreaName}");
+            chat.Send("/br join");
+        }
         SetMatchLoot(s);
         if (s.Phase != BrPhase.Idle && _mapFor != (s.AreaE, s.AreaN, s.Side)) BuildMap(s.Area);
-        if (before != BrPhase.Ended && s.Phase == BrPhase.Ended && s.Winner == Me && InMatch)
+        if (before != BrPhase.Ended && s.Phase == BrPhase.Ended && InMatch && (s.Winner == Me || s.WinnerTeam != 0 && s.Find(Me)?.Team == s.WinnerTeam))
+        {
             LocalPlayer()?.Announce("WINNER WINNER RACLETTE DINNER", true);
+            Sting(BrSounds.Win, 0f);
+        }
         GD.Print($"[br] state {s.Phase}, {s.AliveCount}/{s.Entrants.Count} alive");
         StateChanged?.Invoke();
     }
@@ -166,6 +190,7 @@ public partial class BrManager
         if (victim == Me)
         {
             LocalPlayer()?.Announce($"YOU PLACED #{place}", false);
+            Sting(BrSounds.Out);
             _watching = killer;
         }
     }
@@ -270,6 +295,7 @@ public partial class BrManager
         FlightTick(me);
 
         var zone = ZoneNow;
+        SoundTick(me, zone);
         if (_wall != null)
         {
             _wall.Visible = zone != null;
@@ -337,7 +363,10 @@ public partial class BrManager
 
     private void Spectate(FootPlayer? me)
     {
-        var alive = _state.Entrants.Where(x => x.Alive && x.Peer != Me).Select(x => x.Peer).ToList();
+        // team-mates first (#231): you follow your own side before the others
+        int team = MyEntry?.Team ?? 0;
+        var alive = _state.Entrants.Where(x => x.Alive && x.Peer != Me).OrderBy(x => team != 0 && x.Team == team ? 0 : 1)
+            .Select(x => x.Peer).ToList();
         if (alive.Count == 0) return;
         if (!alive.Contains(_watching))
         {

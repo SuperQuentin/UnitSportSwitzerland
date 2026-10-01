@@ -410,6 +410,8 @@ public partial class BrCrates : Node3D
         {
             node.AddChild(new MeshInstance3D { Name = "Canopy", Mesh = Canopy(), MaterialOverride = ItemDefs.Material, Position = Vector3.Up * 6f });
             node.AddChild(Smoke(new Color(0.95f, 0.35f, 0.25f, 0.55f)));
+            node.AddChild(Beacon());
+            if (!Landed(c)) _falling.Add(c.Id);
         }
         // the wreck still smokes: you see it from far off, and find it by it
         if (c.Style == CrateStyle.Wreck) node.AddChild(Smoke(new Color(0.25f, 0.25f, 0.27f, 0.6f)));
@@ -432,7 +434,48 @@ public partial class BrCrates : Node3D
             bool falling = !Landed(c);
             if (falling || (refresh && !_snapped.Contains(id))) Place(c, node);
             if (node.GetNodeOrNull<Node3D>("Canopy") is { } canopy) canopy.Visible = falling;
+            if (node.GetNodeOrNull<Node3D>("Beacon") is { } beacon)
+            {
+                // the beam once it is down, and a slow pulse on its light
+                beacon.Visible = !falling;
+                if (!falling && beacon.GetNodeOrNull<OmniLight3D>("Light") is { } light)
+                    light.LightEnergy = 2.5f + 1.5f * Mathf.Sin((float)Time.GetTicksMsec() / 260f);
+            }
+            if (!falling && _falling.Remove(id))
+            {
+                // down: a heavy thud
+                var (thud, pitch, db) = Audio.SfxSynth.ImpactBank.Pick(Rng);
+                Sound(node.GlobalPosition, thud, pitch * 0.5f, db + 8f);
+            }
         }
+    }
+
+    /// <summary>Airdrops still coming down here: their landing is heard (#231).</summary>
+    private readonly HashSet<long> _falling = new();
+
+    private static CylinderMesh? _beam;
+
+    /// <summary>
+    /// A landed supply drop's beacon (#231): a column of blue light 160 m tall, seen from far off, and a
+    /// pulsing light on the crate. Blue like its mark on the map.
+    /// </summary>
+    private static Node3D Beacon()
+    {
+        var beacon = new Node3D { Name = "Beacon", Visible = false };
+        _beam ??= new CylinderMesh
+        {
+            TopRadius = 2.0f, BottomRadius = 3.0f, Height = 160f, RadialSegments = 8, Rings = 1, CapTop = false, CapBottom = false,
+            // mixed, not added: added light vanishes against a bright sky
+            Material = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = new Color(0.25f, 0.5f, 1f, 0.45f),
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                DisableFog = true,
+            },
+        };
+        beacon.AddChild(new MeshInstance3D { Name = "Beam", Mesh = _beam, Position = Vector3.Up * 80f, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+        beacon.AddChild(new OmniLight3D { Name = "Light", LightColor = new Color(0.35f, 0.6f, 1f), OmniRange = 14f, LightEnergy = 2.5f, Position = Vector3.Up * 1.6f });
+        return beacon;
     }
 
     /// <summary>On this client's ground (once it has it), and up in the air while an airdrop falls.</summary>

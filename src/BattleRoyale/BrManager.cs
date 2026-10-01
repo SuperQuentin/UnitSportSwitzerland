@@ -110,7 +110,7 @@ public partial class BrManager : Node
                 Finish();
                 return "Cancelled.";
             default:
-                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] · join · leave · start · cancel · status";
+                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · start · cancel · status";
         }
     }
 
@@ -132,6 +132,7 @@ public partial class BrManager : Node
         if (_state.Phase != BrPhase.Idle) return "A match is already open (/br cancel first).";
         float? side = null;
         float pace = 1f;
+        int team = 1;
         var place = new List<string>();
         foreach (var w in words)
         {
@@ -141,6 +142,10 @@ public partial class BrManager : Node
                 case "normal": pace = 1f; continue;
                 case "long": pace = 1.3f; continue;
                 case "5" or "6" or "7": side = (w[0] - '0') * 1000f; continue;
+                case "solo": team = 1; continue;
+                case "duos": team = 2; continue;
+                case "trios": team = 3; continue;
+                case "squads": team = 4; continue;
                 case "auto" or "random": continue;
             }
             place.Add(w);
@@ -169,11 +174,13 @@ public partial class BrManager : Node
         _state = new BrState
         {
             Phase = BrPhase.Lobby, AreaE = area.E, AreaN = area.N, Side = area.Side, AreaName = area.Name, Seed = seed, Pace = pace,
+            TeamSize = team,
         };
         double minutes = new ZoneSchedule(seed, area.Side, pace).Duration / 60.0;
         _horizon ??= _source?.LoadHorizonAsync();   // for the plane's altitude at GO
         GD.Print(FormattableString.Invariant($"[br] lobby open: {area.Name} at {area.E:F0}/{area.N:F0}, {area.Side:F0} m, pace {pace}, zone {minutes:F0} min"));
-        Broadcast($"Battle Royale lobby open: {area.Name} ({area.Side / 1000:F0} × {area.Side / 1000:F0} km, about {minutes + 2:F0} min). Type /br join to play!");
+        string mode = team switch { 2 => ", duos", 3 => ", trios", 4 => ", squads", _ => "" };
+        Broadcast($"Battle Royale lobby open: {area.Name} ({area.Side / 1000:F0} × {area.Side / 1000:F0} km{mode}, about {minutes + 2:F0} min). Type /br join to play!");
         Push();
         return "Lobby open.";
     }
@@ -239,7 +246,7 @@ public partial class BrManager : Node
                 // the zone has closed and someone is still standing (a draw cannot linger)
                 var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace);
                 Airdrops(zone);
-                if (_state.AliveCount <= 1 || Now - _state.Started > zone.Duration + 120) End();
+                if (_state.TeamsAlive <= 1 || Now - _state.Started > zone.Duration + 120) End();
                 break;
             case BrPhase.Ended when Now - _endedAt >= ResultsSeconds:
                 Finish();
@@ -258,6 +265,7 @@ public partial class BrManager : Node
             return;
         }
         _state.Phase = BrPhase.Playing;
+        _state.AssignTeams();
         // everyone boards the cargo plane (#207); the zone's clock starts when its doors close
         _state.FlightStart = Now;
         _state.FlightAlt = PlaneAltitude();
@@ -312,7 +320,7 @@ public partial class BrManager : Node
         var a = _state.Find(shooter);
         var b = _state.Find(victim);
         if (a == null && b == null) return null;
-        return a is { Alive: true } && b is { Alive: true } && (a.Team == 0 || a.Team != b.Team);
+        return a is { Alive: true } && b is { Alive: true } && BrState.Hostile(a, b);
     }
 
     private void OnHit(long shooter, long victim, float damage)
@@ -458,7 +466,10 @@ public partial class BrManager : Node
     {
         e.Alive = false;
         e.Survived = Now - _state.FlightStart;
-        e.Place = _state.AliveCount + 1;
+        // a team places when its last member is out, all of them together (solo: at once)
+        if (!_state.Entrants.Any(m => m.Alive && BrState.SideOf(m) == BrState.SideOf(e)))
+            foreach (var m in _state.Entrants.Where(m => BrState.SideOf(m) == BrState.SideOf(e) && m.Place == 0))
+                m.Place = _state.TeamsAlive + 1;
         var k = killer != e.Peer ? _state.Find(killer) : null;
         if (k is { Alive: true }) k.Kills++;
         else k = null;
@@ -470,11 +481,11 @@ public partial class BrManager : Node
             BrOut.Disconnected => $"{e.Name} left the match",
             _ => k != null ? $"{k.Name} eliminated {e.Name}" : $"{e.Name} is out",
         };
-        Broadcast($"{what}. {_state.AliveCount} left.");
+        Broadcast(_state.TeamSize > 1 ? $"{what}. {_state.AliveCount} left in {_state.TeamsAlive} teams." : $"{what}. {_state.AliveCount} left.");
         GD.Print($"[br] out: {e.Name} ({cause}), place {e.Place}, killer {k?.Name ?? "-"}");
         Rpc(MethodName.Eliminated, e.Peer, k?.Peer ?? 0, (int)cause, e.Place);
         Push();
-        if (_state.AliveCount <= 1) End();
+        if (_state.TeamsAlive <= 1) End();
     }
 
     private void End()
@@ -482,20 +493,24 @@ public partial class BrManager : Node
         if (_state.Phase != BrPhase.Playing) return;
         var winner = _state.Entrants.FirstOrDefault(e => e.Alive)
                      ?? _state.Entrants.OrderBy(e => e.Place).FirstOrDefault();
+        // the winner's whole side wins (#231): its living keep standing, its fallen place first too
+        long side = winner != null ? BrState.SideOf(winner) : 0;
         foreach (var e in _state.Entrants.Where(e => e.Alive))
         {
             e.Survived = Now - _state.FlightStart;
             e.Place = 1;
-            e.Alive = e == winner;
+            e.Alive = winner != null && BrState.SideOf(e) == side;
         }
-        if (winner != null) winner.Place = 1;
+        foreach (var e in _state.Entrants.Where(e => winner != null && BrState.SideOf(e) == side)) e.Place = 1;
         _state.Winner = winner?.Peer ?? 0;
+        _state.WinnerTeam = winner?.Team ?? 0;
         _state.Phase = BrPhase.Ended;
         _endedAt = Now;
         Combat.PvpRules.Override = null;
-        Broadcast(winner != null
-            ? $"{winner.Name} WINS the Battle Royale in {_state.AreaName}! ({BrHud.Kills(winner.Kills)})"
-            : "The Battle Royale ended without a winner.");
+        Broadcast(winner == null ? "The Battle Royale ended without a winner."
+            : winner.Team != 0
+                ? $"Team {winner.Team} WINS the Battle Royale in {_state.AreaName}! ({string.Join(", ", _state.Entrants.Where(e => e.Team == winner.Team).Select(e => e.Name))})"
+                : $"{winner.Name} WINS the Battle Royale in {_state.AreaName}! ({BrHud.Kills(winner.Kills)})");
         GD.Print($"[br] ended, winner {winner?.Name ?? "-"}");
         SaveHistory();
         Push();

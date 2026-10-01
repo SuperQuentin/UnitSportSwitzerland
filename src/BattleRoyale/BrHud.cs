@@ -49,7 +49,7 @@ public partial class BrHud : CanvasLayer
     {
         public BrHud Hud = null!;
         /// <summary>Below the compass strip, while it shows.</summary>
-        private float Y0 => Hud._br.InMatch && Hud._br.State.Running ? BrCompass.Top + BrCompass.Height + 50 : 0;
+        private float Y0 => Hud._br.InMatch && Hud._br.State.Running && BrPrefs.Current.Compass ? BrCompass.Top + BrCompass.Height + 50 : 0;
         private static readonly Color Panel = new(0.05f, 0.05f, 0.08f, 0.62f);
         private static readonly Color Gold = new(1f, 0.82f, 0.25f);
         private static readonly Color Danger = new(1f, 0.25f, 0.2f);
@@ -91,11 +91,16 @@ public partial class BrHud : CanvasLayer
                         : z.Over ? "Final zone"
                         : z.Shrinking ? $"Zone closing · {Clock(z.Left)}"
                         : $"Zone {z.Phase}/{ZoneSchedule.Phases} shrinks in {Clock(z.Left)}";
-                    top = $"{zone}   ·   {s.AliveCount} alive" + (mine != null ? $"   ·   {Kills(mine.Kills)}" : "");
-                    sub = s.AreaName;
+                    top = $"{zone}   ·   {s.AliveCount} alive" + (s.TeamSize > 1 ? $" ({s.TeamsAlive} teams)" : "")
+                        + (mine != null ? $"   ·   {Kills(mine.Kills)}" : "");
+                    sub = mine is { Team: not 0 }
+                        ? $"{s.AreaName} · team {mine.Team}: " + string.Join(", ", s.MatesOf(br.Me).Select(m => m.Alive ? m.Name : $"{m.Name} (out)"))
+                        : s.AreaName;
                     break;
                 case BrPhase.Ended:
-                    top = $"{s.Entrants.FirstOrDefault(e => e.Peer == s.Winner)?.Name ?? "Nobody"} wins in {s.AreaName}";
+                    top = s.WinnerTeam != 0
+                        ? $"Team {s.WinnerTeam} wins in {s.AreaName}: {string.Join(", ", s.Entrants.Where(e => e.Team == s.WinnerTeam).Select(e => e.Name))}"
+                        : $"{s.Entrants.FirstOrDefault(e => e.Peer == s.Winner)?.Name ?? "Nobody"} wins in {s.AreaName}";
                     break;
                 default:
                     top = "BATTLE ROYALE";

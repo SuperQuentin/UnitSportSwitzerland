@@ -31,6 +31,7 @@ public static class BrCheck
         Flights();
         Regions();
         StateJson();
+        Polish();
         Lend();
         Loot();
         GD.Print(_failures == 0 ? "[brcheck] RESULT PASS" : $"[brcheck] RESULT FAIL ({_failures})");
@@ -181,6 +182,45 @@ public static class BrCheck
             GD.Print($"[brcheck] could not read the world: {e.Message}");
             return (new(), new());
         }
+    }
+
+    /// <summary>Squads groundwork, stings and display choices (#231).</summary>
+    private static void Polish()
+    {
+        // teams: filled in a seeded shuffle, the last one short; solo is all 0
+        BrState Field(int size, int players)
+        {
+            var s = new BrState { Seed = 99, TeamSize = size };
+            for (int i = 1; i <= players; i++) s.Entrants.Add(new BrEntrant { Peer = i * 10, Name = $"P{i}" });
+            s.AssignTeams();
+            return s;
+        }
+        var duos = Field(2, 7);
+        var sizes = duos.Entrants.GroupBy(e => e.Team).OrderBy(g => g.Key).Select(g => g.Count()).ToList();
+        bool same = Field(2, 7).Entrants.Select(e => e.Team).SequenceEqual(duos.Entrants.Select(e => e.Team));
+        Expect(sizes.SequenceEqual(new[] { 2, 2, 2, 1 }) && same && Field(1, 5).Entrants.All(e => e.Team == 0),
+            $"7 players in duos: teams of {string.Join("/", sizes)}, the same every time; solo has no teams");
+        var p1 = duos.Entrants.First(e => e.Team == 1);
+        var mate = duos.Entrants.First(e => e.Team == 1 && e != p1);
+        var foe = duos.Entrants.First(e => e.Team == 2);
+        Expect(!BrState.Hostile(p1, mate) && BrState.Hostile(p1, foe) && duos.MatesOf(p1.Peer).Single() == mate,
+            "team-mates cannot hurt each other; other teams can");
+        int teams = duos.TeamsAlive;
+        foreach (var e in duos.Entrants.Where(e => e.Team != 1)) e.Alive = false;
+        mate.Alive = false;
+        Expect(teams == 4 && duos.TeamsAlive == 1, $"teams alive count each side once ({teams} at the start, 1 when only team 1 has someone up)");
+        var solo = Field(1, 3);
+        Expect(solo.TeamsAlive == 3 && BrState.Hostile(solo.Entrants[0], solo.Entrants[1]), "solo: every player is a side of their own");
+
+        // the stings: built, heard, short
+        var bad = BrSounds.All().Where(x => x.Stream.Data.Length < 2000 || x.Stream.GetLength() > 6.0).Select(x => x.Name).ToList();
+        Expect(bad.Count == 0, $"{BrSounds.All().Count()} stings synthesised, each under 6 s ({string.Join(", ", BrSounds.All().Select(x => $"{x.Name} {x.Stream.GetLength():F1} s"))})");
+
+        // display choices survive their file's JSON
+        var prefs = new BrPrefs { Minimap = BrPrefs.MapSize.Large, MinimapTurns = true, Compass = false, Stings = false };
+        var again = System.Text.Json.JsonSerializer.Deserialize<BrPrefs>(System.Text.Json.JsonSerializer.Serialize(prefs))!;
+        Expect(again is { Minimap: BrPrefs.MapSize.Large, MinimapTurns: true, Compass: false, Stings: false } && again.MinimapSide == 290f,
+            "display choices survive their file (large minimap, turning, no compass, no stings)");
     }
 
     private static void StateJson()

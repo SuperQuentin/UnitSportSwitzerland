@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One whole Battle Royale match over loopback (src/BattleRoyale/BrProbe, #183), on a generated world at 1/12 of
-# the normal pace: A opens and starts it, both drop in, B is hurt by the zone, A knifes B, B spectates, A wins,
+# the normal pace: A opens and starts it, B joins by itself (--br), both board the plane and jump, B is hurt by the zone, A knifes B, B spectates, A wins,
 # both go back where they started with their own packs. Plus the headless --brcheck self-test.
 #   GODOT=<exe> tools/brcheck.sh   [CHUNKS=<terrain_chunks dir> from a worktree, for --brcheck's real regions]
 #   screenshots: test_output/br_{a,b}_{dropped,results}.png, br_b_outside.png
@@ -24,9 +24,9 @@ timeout 400 "$GODOT" --headless --path . -- --server "${WORLD[@]}" --port $PORT 
 trap 'kill $SERVER 2>/dev/null' EXIT
 sleep ${SERVER_WAIT:-12}
 client() { timeout 300 "$GODOT" --path . -- "${CH[@]}" --connect 127.0.0.1:$PORT --name "BR$1" --cache "$OUT/br_cache_$1" \
-    --at "$2" --brprobe "$1" ${SITES:+--brsites} > "$OUT/br_$1.log" 2>&1; }
+    --at "$2" --brprobe "$1" ${SITES:+--brsites} ${3:-} > "$OUT/br_$1.log" 2>&1; }
 client A "$AT" & A=$!
-client B "$AT_B"
+client B "$AT_B" --br
 wait $A
 kill $SERVER 2>/dev/null
 grep -h "\[br " "$OUT"/br_A.log "$OUT"/br_B.log

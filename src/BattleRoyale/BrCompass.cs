@@ -28,7 +28,7 @@ public partial class BrCompass : Control
 
     public override void _Process(double delta)
     {
-        Visible = _br.State.Running && _br.InMatch;
+        Visible = _br.State.Running && _br.InMatch && BrPrefs.Current.Compass;
         if (!Visible) return;
         Position = new Vector2((GetViewportRect().Size.X - Width) * 0.5f, Top);
         Size = new Vector2(Width, Height + 26);
@@ -85,6 +85,8 @@ public partial class BrCompass : Control
         if (_br.Watching == 0 && BrMapDraw.Airdrops(_br).Select(d => d.At).OrderBy(d => d.DistanceTo(view.Position)).FirstOrDefault() is var drop
             && drop != Vector2.Zero && drop.DistanceTo(view.Position) < 2000f)
             Marker(font, heading, drop - view.Position, BrMapDraw.Drop, $"drop {drop.DistanceTo(view.Position):F0} m", diamond: false, row: 2);
+        foreach (var mate in _br.Watching == 0 ? _br.Mates() : Enumerable.Empty<(string Name, Vector2 At, Vector2 Heading)>())
+            Marker(font, heading, mate.At - view.Position, BrMapDraw.Mate, $"{mate.Name} {view.Position.DistanceTo(mate.At):F0} m", diamond: false, row: 3);
         if (_br.Waypoint is { } wp && _br.Watching == 0)
             Marker(font, heading, wp - view.Position, BrMapDraw.Waypoint, $"{view.Position.DistanceTo(wp):F0} m", diamond: false, row: 1);
 

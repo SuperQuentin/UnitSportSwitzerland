@@ -48,9 +48,46 @@ public sealed class BrState
     /// <summary>The plane's altitude, m above sea (<see cref="BrFlight.AltitudeOver"/>, from the server's terrain).</summary>
     public float FlightAlt { get; set; }
     public long Winner { get; set; }
+    /// <summary>Players per team (#231): 1 is solo (every <see cref="BrEntrant.Team"/> 0), 2 duos, 4 squads.</summary>
+    public int TeamSize { get; set; } = 1;
+    /// <summary>The winning team, 0 in solo or with no winner.</summary>
+    public int WinnerTeam { get; set; }
     public List<BrEntrant> Entrants { get; set; } = new();
 
     [JsonIgnore] public int AliveCount => Entrants.Count(e => e.Alive);
+    /// <summary>Sides still in it: each living team once, each living solo player once.</summary>
+    [JsonIgnore] public int TeamsAlive => Entrants.Where(e => e.Alive).Select(SideOf).Distinct().Count();
+
+    /// <summary>A player's side: their team, or (solo) themselves.</summary>
+    public static long SideOf(BrEntrant e) => e.Team != 0 ? e.Team : -e.Peer;
+
+    /// <summary>Two entrants who may hurt each other: different sides.</summary>
+    public static bool Hostile(BrEntrant a, BrEntrant b) => SideOf(a) != SideOf(b);
+
+    /// <summary>The living team-mates of a player (none in solo).</summary>
+    public IEnumerable<BrEntrant> MatesOf(long peer) =>
+        Find(peer) is { Team: not 0 } me ? Entrants.Where(e => e.Team == me.Team && e.Peer != peer) : Enumerable.Empty<BrEntrant>();
+
+    /// <summary>
+    /// Fills teams of <see cref="TeamSize"/> at GO, in a seeded shuffle (#231): team 1, 2, ... in order, the
+    /// last one short if the field does not divide. Solo leaves every team 0.
+    /// </summary>
+    public void AssignTeams()
+    {
+        if (TeamSize <= 1)
+        {
+            foreach (var e in Entrants) e.Team = 0;
+            return;
+        }
+        var rng = new Random(Seed ^ 0x6a09e667);
+        var order = Entrants.OrderBy(e => e.Peer).ToList();
+        for (int i = order.Count - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
+        }
+        for (int i = 0; i < order.Count; i++) order[i].Team = i / TeamSize + 1;
+    }
     [JsonIgnore] public bool Running => Phase is BrPhase.Playing or BrPhase.Ended;
     [JsonIgnore] public BrArea Area => new(AreaE, AreaN, Side, AreaName);
 

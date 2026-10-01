@@ -3,13 +3,16 @@ using Godot;
 namespace UnitSport.BattleRoyale;
 
 /// <summary>
-/// The corner map (#190), top right: 1.2 km around you, north up, the map image under the zone,
-/// your arrow, the line to safety and your waypoint (<see cref="BrMapDraw"/>). It shows while a
-/// match runs and you are in it, and follows whoever you watch once you are out.
+/// The corner map (#190), top right: 1.2 km around you, the map image under the zone, your arrow,
+/// the line to safety and your waypoint (<see cref="BrMapDraw"/>). It shows while a match runs and
+/// you are in it, and follows whoever you watch once you are out. Its size, and whether it turns so
+/// that where you look is up, are <see cref="BrPrefs"/> (#231).
 /// </summary>
 public partial class Minimap : Control
 {
-    public const float Side = 220f, Margin = 16f;
+    public const float Margin = 16f;
+    /// <summary>The side in pixels, as chosen (<see cref="BrPrefs.MinimapSide"/>).</summary>
+    public static float Side => BrPrefs.Current.MinimapSide;
     /// <summary>Metres across the minimap.</summary>
     public const float Span = 1200f;
 
@@ -20,7 +23,6 @@ public partial class Minimap : Control
         _br = br;
         MouseFilter = MouseFilterEnum.Ignore;
         ClipContents = true;
-        CustomMinimumSize = new Vector2(Side, Side);
     }
 
     public override void _Process(double delta)
@@ -35,21 +37,27 @@ public partial class Minimap : Control
     public override void _Draw()
     {
         if (_br.MapTexture is not { } tex || _br.ViewPoint() is not { } view) return;
-        float ppm = Side / Span;
-        var mid = new Vector2(Side, Side) * 0.5f;
-        Vector2 ToScreen(Vector2 z) => mid + BrMapDraw.Screen(z - view.Position) * ppm;
+        float s = Side, ppm = s / Span;
+        var mid = new Vector2(s, s) * 0.5f;
+        // turning: the whole picture drawn about the middle, rotated so your heading points up
+        float turn = BrPrefs.Current.MinimapTurns ? -Mathf.DegToRad(BrCompass.Bearing(view.Heading)) : 0f;
+        Vector2 ToScreen(Vector2 z) => BrMapDraw.Screen(z - view.Position) * ppm;
 
         DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.08f, 0.09f, 0.1f));
+        DrawSetTransform(mid, turn, Vector2.One);
         float side = _br.State.Side;
         var nw = ToScreen(new Vector2(-side * 0.5f, side * 0.5f));
         DrawTextureRect(tex, new Rect2(nw, new Vector2(side, side) * ppm), false);
-        BrMapDraw.Overlays(this, _br, ToScreen, ppm, Side * 2f);
+        BrMapDraw.Overlays(this, _br, ToScreen, ppm, s * 2f);
+        DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 
         DrawRect(new Rect2(Vector2.Zero, Size), new Color(0, 0, 0, 0.9f), false, 3f);
-        DrawString(ThemeDB.FallbackFont, new Vector2(Side * 0.5f - 4, 14), "N", HorizontalAlignment.Left, -1, 13, Colors.White);
+        // N where north is: at the top edge, or round the rim as the map turns
+        var north = mid + new Vector2(0, -(s * 0.5f - 12f)).Rotated(turn);
+        DrawString(ThemeDB.FallbackFont, north + new Vector2(-4, 5), "N", HorizontalAlignment.Left, -1, 13, Colors.White);
         // the scale bar: 200 m
         float bar = 200f * ppm;
-        DrawLine(new Vector2(8, Side - 10), new Vector2(8 + bar, Side - 10), Colors.White, 2f);
-        DrawString(ThemeDB.FallbackFont, new Vector2(10 + bar, Side - 6), "200 m", HorizontalAlignment.Left, -1, 11, Colors.White);
+        DrawLine(new Vector2(8, s - 10), new Vector2(8 + bar, s - 10), Colors.White, 2f);
+        DrawString(ThemeDB.FallbackFont, new Vector2(10 + bar, s - 6), "200 m", HorizontalAlignment.Left, -1, 11, Colors.White);
     }
 }

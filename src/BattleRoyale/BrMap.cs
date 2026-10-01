@@ -12,7 +12,8 @@ namespace UnitSport.BattleRoyale;
 /// <item>the circles, the line to safety, your waypoint and your arrow (<see cref="BrMapDraw"/>).</item>
 /// </list>
 /// The wheel zooms around the pointer, a drag pans, a right click sets or clears the waypoint,
-/// and M or Esc closes it. The game goes on underneath.
+/// and M or Esc closes it. The game goes on underneath. A row of buttons at the bottom right sets the
+/// <see cref="BrPrefs"/> (minimap size and turning, compass, stings), where their effect is in view.
 /// </summary>
 public partial class BrMap : CanvasLayer
 {
@@ -36,6 +37,39 @@ public partial class BrMap : CanvasLayer
         _view = new View { Map = this, Visible = false, MouseFilter = Control.MouseFilterEnum.Stop };
         _view.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_view);
+        BuildOptions();
+    }
+
+    private readonly List<(Button Button, Func<string> Label)> _options = new();
+
+    /// <summary>The display choices (#231), each a button that steps through its values and saves.</summary>
+    private void BuildOptions()
+    {
+        var row = new HBoxContainer { Name = "Options" };
+        // bottom right, clear of the title and of the help line
+        row.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomRight, Control.LayoutPresetMode.KeepSize, 12);
+        row.GrowHorizontal = Control.GrowDirection.Begin;
+        row.GrowVertical = Control.GrowDirection.Begin;
+        row.AddThemeConstantOverride("separation", 6);
+        _view.AddChild(row);
+        var p = BrPrefs.Current;
+        void Option(Func<string> label, Action step)
+        {
+            var b = new Button { Text = label(), FocusMode = Control.FocusModeEnum.None, MouseFilter = Control.MouseFilterEnum.Stop };
+            b.AddThemeFontSizeOverride("font_size", 13);
+            b.Pressed += () =>
+            {
+                step();
+                p.Save();
+                foreach (var (button, text) in _options) button.Text = text();
+            };
+            row.AddChild(b);
+            _options.Add((b, label));
+        }
+        Option(() => $"Minimap: {p.Minimap}", () => p.Minimap = (BrPrefs.MapSize)(((int)p.Minimap + 1) % 3));
+        Option(() => "Minimap turns: " + (p.MinimapTurns ? "on" : "off"), () => p.MinimapTurns = !p.MinimapTurns);
+        Option(() => "Compass: " + (p.Compass ? "on" : "off"), () => p.Compass = !p.Compass);
+        Option(() => "Stings: " + (p.Stings ? "on" : "off"), () => p.Stings = !p.Stings);
     }
 
     public void Toggle() => SetOpen(!IsOpen);

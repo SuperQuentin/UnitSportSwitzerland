@@ -16,6 +16,7 @@ public static class BrMapDraw
     public static readonly Color Me = new(0.2f, 0.85f, 1f);
     public static readonly Color Drop = new(0.25f, 0.5f, 1f);
     public static readonly Color Rare = new(1f, 0.6f, 0.2f);
+    public static readonly Color Mate = new(0.35f, 1f, 0.45f);
     public static readonly Color Plane = new(0.95f, 0.95f, 0.85f);
 
     /// <summary>The supply drops of the match: zone position, and whether still falling.</summary>
@@ -68,6 +69,14 @@ public static class BrMapDraw
             c.DrawCircle(p, 8f, new Color(0, 0, 0, 0.7f));
             c.DrawArc(p, 8f, 0, Mathf.Tau, 16, Rare, 1.5f);
             c.DrawString(ThemeDB.FallbackFont, p + new Vector2(-4, 5), "?", HorizontalAlignment.Left, -1, 14, Rare);
+        }
+
+        // team-mates (#231): green arrows with their names
+        foreach (var mate in br.Mates())
+        {
+            var p = toScreen(mate.At);
+            Arrow(c, p, mate.Heading, Mate);
+            c.DrawString(ThemeDB.FallbackFont, p + new Vector2(9, -6), mate.Name, HorizontalAlignment.Left, -1, 11, Mate);
         }
 
         if (br.Waypoint is { } wp) Pin(c, toScreen(wp), Waypoint);

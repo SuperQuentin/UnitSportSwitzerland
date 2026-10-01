@@ -81,6 +81,7 @@ public partial class BrManager
         _aboard = false;
         StopPlaneCamera();
         me.Leap(exit, velocity, RideKind.Wingsuit);
+        Effect(Audio.SfxSynth.Whoosh, 2f, 0.8f);
         me.Camera.Current = true;
         RpcId(1, MethodName.Jump);
         var (e, n) = Origin!.ToLv95(exit);

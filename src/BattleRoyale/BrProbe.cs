@@ -87,6 +87,20 @@ public partial class BrProbe : Node
 
         // the first supply drop comes down at phase 2: seen before the duel ends the match
         await Until(() => _sawDrop, 100);   // the zone clock starts when the plane's doors close (#207)
+        if (BrCrates.Instance is { } dropped && dropped.All.Where(c => c.Style == CrateStyle.Airdrop).MinBy(Dist) is { } drop)
+        {
+            await Until(() => dropped.Landed(drop), 60);
+            await Seconds(0.6);
+            Expect(dropped.GetNodeOrNull<Node3D>($"C{drop.Id}/Beacon") is { Visible: true }, "a landed supply drop shows its beam of light (#231)");
+            if (dropped.GetNodeOrNull<Node3D>($"C{drop.Id}") is { } beacon)
+            {
+                var to = beacon.GlobalPosition + Vector3.Up * 40f - me.Camera.GlobalPosition;
+                me.LookYaw = Mathf.Atan2(-to.X, -to.Z);
+                me.LookPitch = 0.1f;
+                await Seconds(0.8);
+                Snap("a_beacon");
+            }
+        }
         Snap("a_drop");
 
         // wait for B next to us, then stab it until it goes down
@@ -113,8 +127,10 @@ public partial class BrProbe : Node
 
     private async Task RunB()
     {
-        if (!await Until(() => Br!.State.Phase == BrPhase.Lobby, 90)) { Fail("no lobby"); return; }
-        Chat!.Send("/br join");
+        // with two in, the lobby turns into the countdown at once
+        if (!await Until(() => Br!.State.Phase is BrPhase.Lobby or BrPhase.Countdown, 90)) { Fail("no lobby"); return; }
+        // B runs with "--br" (#231): it joins by itself
+        Expect(BrManager.AutoJoin && await Until(() => Br!.MyEntry != null, 30), "--br joined the lobby by itself");
         if (!await Dropped()) return;
 
         // outside the zone until it hurts
@@ -126,9 +142,11 @@ public partial class BrProbe : Node
         bool hurt = await Until(() => me.Health < hp - 0.9f, 60);
         Expect(hurt, $"the zone hurts outside it ({hp:F1} -> {me.Health:F1}, phase {Br.ZoneNow?.Phase})");
         Snap("b_outside");
+        // back inside while A gets ready: the wait is long enough to die out there
+        if (Br.ZoneNow is { } safe) Br.Teleport(s.AreaE + safe.NextCentre.X, s.AreaN + safe.NextCentre.Y, "back in the zone");
 
         // next to A
-        if (!await Until(() => _heard.Any(l => l.Contains("BR A posA")), 60)) { Expect(false, "A reported"); return; }
+        if (!await Until(() => _heard.Any(l => l.Contains("BR A posA")), 160)) { Expect(false, "A reported"); return; }
         var p = _heard.Last(l => l.Contains("BR A posA")).Split("posA ")[1].Split(' ');
         var a = new Vector3(Float(p[0]), Float(p[1]), Float(p[2]));
         var (e, n) = Br.Origin!.ToLv95(a);
