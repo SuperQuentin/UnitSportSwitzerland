@@ -32,6 +32,9 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
     public Camera3D? Anchor { get; private set; }
 
+    /// <summary>The headset camera's near plane (a doorway shortens it, Interiors/DoorPortals).</summary>
+    public const float HeadNear = 0.05f;
+
     /// <summary>The headset camera and tracking origin, for the monitor's eye views.</summary>
     internal XRCamera3D Head => _camera;
     internal XROrigin3D Origin => _origin;
@@ -42,6 +45,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XRCamera3D _camera = null!;
     private XRController3D _left = null!, _right = null!;
     private XrPad _pad = null!;
+    private XrHands _hands = null!;
     private XrUi _ui = null!;
     private MeshInstance3D _vignette = null!;
     private ShaderMaterial _vignetteMat = null!;
@@ -56,6 +60,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private Vector3 _prevAnchorPos;
     private float _prevAnchorYaw;
     private float _vignetteLevel;
+    /// <summary>All black, fading back to clear: the cover for a cut (<see cref="Blink"/>).</summary>
+    private float _blink;
     private MeshInstance3D _leftMarker = null!, _rightMarker = null!;
     /// <summary>The heading kept for an anchor that is not a player's, taken when it was adopted.</summary>
     private float _heldYaw;
@@ -107,7 +113,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _camera = new XRCamera3D
         {
             Name = "Head",
-            Near = 0.05f,
+            Near = HeadNear,
             Far = Core.GameSettings.Current.CameraFar,
             // the player's own body is for the monitor: from inside the head it fills the view
             CullMask = 0xFFFFFu & ~XrSession.SpectatorOnlyLayer,
@@ -141,6 +147,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _camera.AddChild(_vignette);
 
         _pad = new XrPad(_left, _right);
+        _hands = new XrHands(_left, _leftMarker, _right, _rightMarker);
         _ui = new XrUi(_camera, _right);
         AddChild(_ui);
         Notice = new XrNotice();
@@ -172,11 +179,41 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             };
         }
         Core.GameSettings.Changed += OnSettings;
+        ApplyQuality();
     }
 
     public override void _ExitTree() => Core.GameSettings.Changed -= OnSettings;
 
-    private void OnSettings() => _camera.Far = Core.GameSettings.Current.CameraFar;
+    private void OnSettings()
+    {
+        _camera.Far = Core.GameSettings.Current.CameraFar;
+        ApplyQuality();
+    }
+
+    /// <summary>
+    /// The headset's picture, set on its own viewport: the project's render settings are the
+    /// window's. Over Link the picture is video-encoded, so what matters most is that it holds
+    /// still: MSAA (TAA ghosts and FXAA crawls as the head moves), no debanding noise, and
+    /// foveated shading for the frame time (docs/notes/xr/air-link.md).
+    /// </summary>
+    private void ApplyQuality()
+    {
+        var s = Core.GameSettings.Current;
+        _view.Msaa3D = s.VrMsaa switch
+        {
+            >= 8 => Viewport.Msaa.Msaa8X,
+            >= 4 => Viewport.Msaa.Msaa4X,
+            >= 2 => Viewport.Msaa.Msaa2X,
+            _ => Viewport.Msaa.Disabled,
+        };
+        _view.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
+        _view.UseTaa = false;
+        _view.UseDebanding = false;
+        _view.Scaling3DMode = Viewport.Scaling3DModeEnum.Bilinear;
+        _view.Scaling3DScale = s.VrRenderScale;
+        // only on GPUs with variable rate shading; ignored elsewhere
+        _view.VrsMode = s.VrFoveation ? Viewport.VrsModeEnum.XR : Viewport.VrsModeEnum.Disabled;
+    }
 
     /// <summary>
     /// A small controller in each hand, until the avatar's own hands are driven (#186 phase 2): the
@@ -245,6 +282,10 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         var calibrated = _calib * head;
 
         HandleSticks(player, calibrated, dt);
+        // the hands first: a grip that holds the wheel or works a door is not a shoulder press
+        _hands.Update(player);
+        _pad.LeftGripBusy = _hands.LeftBusy;
+        _pad.RightGripBusy = _hands.RightBusy;
         _pad.Update(player, calibrated, uiActive: _ui.Pointing, dt);
         _ui.UpdatePanel(dt);
         UpdateSki(player, calibrated, dt);
@@ -287,6 +328,14 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _lastAnchor = new Transform3D(basis, at.Origin);
         _origin.GlobalTransform = _lastAnchor * _calib;
     }
+
+    private const float BlinkSeconds = 0.4f;
+
+    /// <summary>
+    /// Goes black at once and fades back in: what hides a cut in a headset. A view that jumps
+    /// in plain sight is a lurch; one that jumps behind a blink reads as a teleport.
+    /// </summary>
+    public void Blink() => _blink = 1f;
 
     /// <summary>Takes where the head is now as the neutral pose: straight ahead, at the avatar's eye.</summary>
     public void Recentre()
@@ -402,8 +451,11 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             }
         }
         _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, 1f - Mathf.Exp(-6f * dt));
-        _vignette.Visible = _vignetteLevel > 0.02f;
+        _blink = Mathf.Max(0f, _blink - dt / BlinkSeconds);
+        _vignette.Visible = _vignetteLevel > 0.02f || _blink > 0f;
         _vignetteMat.SetShaderParameter("strength", _vignetteLevel);
+        // eased out: black long enough to hide the jump, then the world comes back quickly
+        _vignetteMat.SetShaderParameter("blackout", _blink * _blink);
     }
 
     private Godot.Environment? _sceneEnv, _linearEnv;

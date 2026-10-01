@@ -93,7 +93,7 @@ public static class Surfaces
             or CoverClass.Military or CoverClass.Campsite => Surface.Gravel,
         CoverClass.Forest or CoverClass.OpenForest or CoverClass.Woodland or CoverClass.Shrub => Surface.Forest,
         CoverClass.Water or CoverClass.Wetland => Surface.Water,
-        CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea
+        CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea or CoverClass.TownPaving or CoverClass.TunnelRoof
             or CoverClass.Industrial or CoverClass.Runway or CoverClass.Platform => Surface.Asphalt,
         _ => Surface.Grass,
     };
@@ -231,7 +231,8 @@ public static class Surfaces
     /// A <c>.road</c> tile also holds cableways, streams, walls and barriers; none of those is
     /// something a foot lands on. Tunnels stay: a tunnel floor is a road.
     /// </summary>
-    private static bool Walkable(RoadSegment s) => s.Class <= RoadClass.Railway && s.Class != RoadClass.Unknown;
+    private static bool Walkable(RoadSegment s) => s.Class <= RoadClass.Railway && s.Class != RoadClass.Unknown
+        && !s.Attributes.Has(RoadAttrFlags.Embedded);   // the road around an embedded rail is what you stand on
 
     private static int _epoch;
     private static ChunkManager? _watched;

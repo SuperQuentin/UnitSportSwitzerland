@@ -154,8 +154,8 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         for (int i = 0; i < Inventory.Size; i++) hasGun |= inv[i].Id == ItemId.Shotgun;
         if (!hasGun)
         {
-            inv.Add(ItemId.Shotgun, 1);
-            inv.Add(ItemId.Shells, 25);
+            _items.Give(new ItemStack(ItemId.Shotgun, 1));
+            _items.Give(new ItemStack(ItemId.Shells, 25));
         }
     }
 
@@ -292,7 +292,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         CoverClass.Glacier or CoverClass.Snowfield => Habitat.Snow,
         CoverClass.Vineyard => Habitat.Vineyard,
         CoverClass.Orchard or CoverClass.Nursery => Habitat.Orchard,
-        CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea
+        CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea or CoverClass.TownPaving or CoverClass.TunnelRoof
             or CoverClass.Institution or CoverClass.Industrial or CoverClass.Landfill or CoverClass.SportsField
             or CoverClass.Pool or CoverClass.Campsite or CoverClass.Leisure or CoverClass.Runway
             or CoverClass.Platform => Habitat.Town,

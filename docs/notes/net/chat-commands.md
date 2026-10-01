@@ -6,7 +6,7 @@
   destinations) is taken on the server, since a client-side permission check is one the client
   can edit. **Look** (`ui/style-guide`): closed, each line floats bottom-left as outlined text (no box)
   and fades after 9 s (max 7 on screen); **Enter** opens a small glass panel (scrollback + input),
-  **/** opens it pre-filled, Up/Down walk the history, Esc closes.
+  **/** opens it pre-filled, Up/Down walk the history like a shell (the line being typed comes back past the newest; caught on the LineEdit's own GuiInput, which otherwise keeps the arrows), Esc closes.
   **Offline the chat still runs:** `ClientWorld` builds `World/Chat` and `ChatUi` at boot, and
   with no server connection (`ChatManager.IsLocal`) commands run on this machine with operator
   rights — `/help /who /me /city /spawn /occasion /time`; server-only ones (`/race /tp /kick`…) say

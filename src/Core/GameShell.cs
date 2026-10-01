@@ -81,7 +81,7 @@ public partial class GameShell : Node
             "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near",
-            "--menu", "--settings", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
+            "--menu", "--settings", "--licenses", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
             "--leave-restart", "--autostart", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot",
         };
         foreach (string a in args)
@@ -127,13 +127,26 @@ public partial class GameShell : Node
         if (!Direct)
         {
             ShowTitle();
-            // asked for VR, but no headset answered: say so once, on the screen
+            // started for VR, but no headset answered: back on the screen, VR mode saved off. Said
+            // only when the player just chose VR (#244); a launch that followed the saved setting
+            // with the headset unplugged stays quiet
             if (Has("--vr") && !vr)
-                Callable.From(() => Modal.Inform(_menuRoot, "No VR headset",
-                    "OpenXR did not start. Connect the headset with Quest Link (Meta set as the OpenXR runtime), "
-                    + "then turn VR mode on again in Settings. Playing on the screen for now.",
-                    () => { GameSettings.Current.VrMode = false; GameSettings.Current.Commit(); })).CallDeferred();
+            {
+                GameSettings.Current.VrMode = false;
+                GameSettings.Current.Commit();
+                if (Has(XR.XrSession.AskedFlag))
+                    Callable.From(() => Modal.Inform(_menuRoot, "No VR headset",
+                        "OpenXR did not start. Connect the headset with Quest Link (Meta set as the OpenXR runtime), "
+                        + "then turn VR mode on again in Settings. Playing on the screen for now.", null)).CallDeferred();
+            }
             if (Has("--settings")) Push(SettingsScreen.Create());
+            // "--licenses": Settings on its About tab, the licenses and data sources (#118), for screenshotting it
+            else if (Has("--licenses"))
+            {
+                var settings = SettingsScreen.Create();
+                Push(settings);
+                Callable.From(settings.ShowLicenses).CallDeferred();
+            }
             else if (Has("--multiplayer")) Push(MultiplayerScreen.Create());
             else if (Has("--solo")) Push(SoloScreen.Create());
             // "--autostart": straight into Explore through the loading screen, for screenshotting

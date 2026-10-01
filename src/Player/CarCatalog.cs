@@ -50,6 +50,7 @@ public static class CarCatalog
             Tyre = "185/60R14", BrakeDecel = 9.2f, Diff = Differential.Mechanical,
             RefZeroTo100 = 8.6f, RefTopKmh = 195f,
             MaxSteer = 0.62f, DragArea = 0.62f,
+            LockTurns = 3.5f, // lock to lock, est.: unassisted rack
         },
         new CarSpec
         {
@@ -69,6 +70,7 @@ public static class CarCatalog
             Tyre = "225/50R16", BrakeDecel = 10.1f, Diff = Differential.Torsen,
             RefZeroTo100 = 5.3f, RefTopKmh = 255f,
             MaxSteer = 0.6f, DragArea = 0.6f,
+            LockTurns = 2.9f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -90,6 +92,7 @@ public static class CarCatalog
             RefZeroTo100 = 5.4f, RefTopKmh = 240f,
             Drive = Drivetrain.All, RearBias = 0.55f,
             MaxSteer = 0.58f, DragArea = 0.66f,
+            LockTurns = 2.6f, // lock to lock, est.: STi quick rack
         },
         // Sources: series character/car lists (GTPlanet "Initial D cars" thread, Initial D wiki extracts),
         // real-world figures from factory/period road-test specs of each model; liveries approximate the series.
@@ -112,6 +115,7 @@ public static class CarCatalog
             Tyre = "205/55R16", BrakeDecel = 9.6f, Diff = Differential.Torsen,
             RefZeroTo100 = 7.2f, RefTopKmh = 235f,
             MaxSteer = 0.6f, DragArea = 0.58f,
+            LockTurns = 2.7f, // lock to lock, est.: with power steering
         },
         new CarSpec
         {
@@ -133,6 +137,7 @@ public static class CarCatalog
             RefZeroTo100 = 5.6f, RefTopKmh = 250f,
             Drive = Drivetrain.All, RearBias = 0.7f,
             MaxSteer = 0.58f, DragArea = 0.72f,
+            LockTurns = 2.7f, // lock to lock, published
         },
         new CarSpec
         {
@@ -154,6 +159,7 @@ public static class CarCatalog
             RefZeroTo100 = 7.7f, RefTopKmh = 215f,
             Drive = Drivetrain.Front,
             MaxSteer = 0.6f, DragArea = 0.6f,
+            LockTurns = 3.0f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -173,6 +179,7 @@ public static class CarCatalog
             Tyre = "195/60R15", BrakeDecel = 9.2f, Diff = Differential.Viscous,
             RefZeroTo100 = 7.9f, RefTopKmh = 215f,
             MaxSteer = 0.62f, DragArea = 0.62f,
+            LockTurns = 2.8f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -192,6 +199,7 @@ public static class CarCatalog
             Tyre = "205/60R15", BrakeDecel = 9.2f, Diff = Differential.Viscous,
             RefZeroTo100 = 7f, RefTopKmh = 225f,
             MaxSteer = 0.62f, DragArea = 0.62f,
+            LockTurns = 2.8f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -211,6 +219,7 @@ public static class CarCatalog
             Tyre = "205/60R15", BrakeDecel = 9.2f, Diff = Differential.Viscous,
             RefZeroTo100 = 7f, RefTopKmh = 225f,
             MaxSteer = 0.62f, DragArea = 0.62f,
+            LockTurns = 2.8f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -230,6 +239,7 @@ public static class CarCatalog
             Tyre = "175/70R13", BrakeDecel = 8.6f, Diff = Differential.Open,
             RefZeroTo100 = 13.5f, RefTopKmh = 165f,
             MaxSteer = 0.62f, DragArea = 0.62f,
+            LockTurns = 3.5f, // lock to lock, est.: unassisted rack
         },
         new CarSpec
         {
@@ -249,6 +259,7 @@ public static class CarCatalog
             Tyre = "185/60R14", BrakeDecel = 9.2f, Diff = Differential.Mechanical,
             RefZeroTo100 = 8.5f, RefTopKmh = 195f,
             MaxSteer = 0.62f, DragArea = 0.62f,
+            LockTurns = 3.5f, // lock to lock, est.: unassisted rack
         },
         // ---- Lancer Evolutions (Team Emperor and later rivals) ----
         new CarSpec
@@ -271,6 +282,7 @@ public static class CarCatalog
             RefZeroTo100 = 5.7f, RefTopKmh = 235f,
             Drive = Drivetrain.All, RearBias = 0.5f,
             MaxSteer = 0.58f, DragArea = 0.72f,
+            LockTurns = 2.6f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -292,6 +304,7 @@ public static class CarCatalog
             RefZeroTo100 = 5.3f, RefTopKmh = 240f,
             Drive = Drivetrain.All, RearBias = 0.55f,
             MaxSteer = 0.58f, DragArea = 0.68f,
+            LockTurns = 2.4f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -313,6 +326,7 @@ public static class CarCatalog
             RefZeroTo100 = 5.2f, RefTopKmh = 245f,
             Drive = Drivetrain.All, RearBias = 0.55f,
             MaxSteer = 0.58f, DragArea = 0.68f,
+            LockTurns = 2.2f, // lock to lock, published
         },
         // ---- Honda ----
         new CarSpec
@@ -334,6 +348,7 @@ public static class CarCatalog
             Tyre = "225/50R16", BrakeDecel = 10.4f, Diff = Differential.Mechanical,
             RefZeroTo100 = 5.6f, RefTopKmh = 265f,
             MaxSteer = 0.58f, DragArea = 0.62f,
+            LockTurns = 3.0f, // lock to lock, est.: unassisted with the manual box
         },
         new CarSpec
         {
@@ -355,6 +370,7 @@ public static class CarCatalog
             RefZeroTo100 = 7f, RefTopKmh = 220f,
             Drive = Drivetrain.Front,
             MaxSteer = 0.6f, DragArea = 0.6f,
+            LockTurns = 3.0f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -376,6 +392,7 @@ public static class CarCatalog
             RefZeroTo100 = 6.6f, RefTopKmh = 230f,
             Drive = Drivetrain.Front,
             MaxSteer = 0.6f, DragArea = 0.62f,
+            LockTurns = 2.9f, // lock to lock, est.
         },
         // ---- Toyota ----
         new CarSpec
@@ -397,6 +414,7 @@ public static class CarCatalog
             Tyre = "205/55R15", BrakeDecel = 9.4f, Diff = Differential.Open,
             RefZeroTo100 = 8.4f, RefTopKmh = 215f,
             MaxSteer = 0.58f, DragArea = 0.6f,
+            LockTurns = 3.0f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -417,6 +435,7 @@ public static class CarCatalog
             Tyre = "205/50R15", BrakeDecel = 9.2f, Diff = Differential.Open,
             RefZeroTo100 = 8.6f, RefTopKmh = 200f,
             MaxSteer = 0.6f, DragArea = 0.62f,
+            LockTurns = 2.7f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -436,6 +455,7 @@ public static class CarCatalog
             Tyre = "255/40R17", BrakeDecel = 10.1f, Diff = Differential.Torsen,
             RefZeroTo100 = 5.1f, RefTopKmh = 250f,
             MaxSteer = 0.58f, DragArea = 0.68f,
+            LockTurns = 2.9f, // lock to lock, est.
         },
         // ---- Mazda and Nissan rivals ----
         new CarSpec
@@ -456,6 +476,7 @@ public static class CarCatalog
             Tyre = "185/60R14", BrakeDecel = 9.2f, Diff = Differential.Open,
             RefZeroTo100 = 9.4f, RefTopKmh = 195f,
             MaxSteer = 0.6f, DragArea = 0.58f,
+            LockTurns = 2.9f, // lock to lock, published
         },
         new CarSpec
         {
@@ -475,6 +496,7 @@ public static class CarCatalog
             Tyre = "185/55R15", BrakeDecel = 9.4f, Diff = Differential.Torsen,
             RefZeroTo100 = 8.7f, RefTopKmh = 205f,
             MaxSteer = 0.6f, DragArea = 0.6f,
+            LockTurns = 2.6f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -494,6 +516,7 @@ public static class CarCatalog
             Tyre = "205/55R16", BrakeDecel = 9.9f, Diff = Differential.Viscous,
             RefZeroTo100 = 6.4f, RefTopKmh = 245f,
             MaxSteer = 0.58f, DragArea = 0.68f,
+            LockTurns = 2.9f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -515,6 +538,7 @@ public static class CarCatalog
             RefZeroTo100 = 5f, RefTopKmh = 250f,
             Drive = Drivetrain.All, RearBias = 0.7f,
             MaxSteer = 0.58f, DragArea = 0.7f,
+            LockTurns = 2.6f, // lock to lock, est.
         },
         new CarSpec
         {
@@ -535,6 +559,7 @@ public static class CarCatalog
             Tyre = "225/50R17", BrakeDecel = 9.8f, Diff = Differential.Viscous,
             RefZeroTo100 = 5.9f, RefTopKmh = 250f,
             MaxSteer = 0.58f, DragArea = 0.66f,
+            LockTurns = 2.6f, // lock to lock, est.
         },
         // ---- MF Ghost ----
         new CarSpec
@@ -556,6 +581,7 @@ public static class CarCatalog
             Tyre = "205/55R16", BrakeDecel = 10.1f, Diff = Differential.Torsen,
             RefZeroTo100 = 7.6f, RefTopKmh = 226f,
             MaxSteer = 0.6f, DragArea = 0.6f,
+            LockTurns = 2.5f, // lock to lock, est.
         },
     });
 

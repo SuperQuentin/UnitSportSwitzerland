@@ -13,3 +13,13 @@
   buttons**: Godot keeps sending a press's events to the control that took it, so a slot never hears
   the pointer arrive during a drag that began elsewhere; the buttons keep focus for the pad.
   `Batch()` folds a drag's many changes into one `Changed` and one save.
+- **Ground** (#208): a click outside the panel with a stack on the cursor drops it (right click: one), and so does
+  releasing a dragged stack off the panel; Q over a slot drops one, Ctrl+Q the stack; the card's Drop button does
+  it on a pad. `Inventory.TakeCarried(one)` takes it off the cursor, `ItemController.DropStack` (#206: a `DroppedItem`, a radio as a `RadioBody`) puts it in the world;
+  if that fails it goes back in the pack. Closing with a stack that no longer fits drops it too
+  (`ReturnCarried` returns the leftover; `Bin` keeps it if it cannot be dropped).
+- **Look** (#208): the menus' glass panel (`UiTheme.Get()` on the panel root, `UiKit` cards), rounded slot tiles
+  drawn by `SlotDrawing` (amber = selected / carried, red = a full bin), pack 9 columns showing only the rows in use;
+  slots shrink to fit the screen height when a big bag adds rows. Right column: bag slot + bin, item card
+  (icon, kind, blurb, Use/Wear, In hand, Drop), money card, photo album.
+- `--invuicheck` step 6: a click outside the panel with a carried stack must add a `DroppedItems` child and empty the slot.
