@@ -81,7 +81,7 @@ public partial class GameShell : Node
             "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
-            "--menu", "--settings", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
+            "--menu", "--settings", "--licenses", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
             "--leave-restart", "--autostart", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot",
         };
         foreach (string a in args)
@@ -134,6 +134,13 @@ public partial class GameShell : Node
                     + "then turn VR mode on again in Settings. Playing on the screen for now.",
                     () => { GameSettings.Current.VrMode = false; GameSettings.Current.Commit(); })).CallDeferred();
             if (Has("--settings")) Push(SettingsScreen.Create());
+            // "--licenses": Settings on its About tab, the licenses and data sources (#118), for screenshotting it
+            else if (Has("--licenses"))
+            {
+                var settings = SettingsScreen.Create();
+                Push(settings);
+                Callable.From(settings.ShowLicenses).CallDeferred();
+            }
             else if (Has("--multiplayer")) Push(MultiplayerScreen.Create());
             else if (Has("--solo")) Push(SoloScreen.Create());
             // "--autostart": straight into Explore through the loading screen, for screenshotting

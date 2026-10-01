@@ -2,6 +2,32 @@
 
 Run the cheapest tier that can catch the bug. Heavy tiers only when the change needs them.
 
+## Rule
+
+- **Pure logic goes in tier 0 with a unit test.** New logic with no Godot in it (math, parsing,
+  formats, rules, tables) lives in a plain C# file with no `using Godot`, linked into
+  `tests/UnitSportSwitzerland.Tests/UnitSportSwitzerland.Tests.csproj`
+  (`<Compile Include="..\..\src\<Area>\X.cs" Link="Game\%(Filename)%(Extension)" />`), with an xUnit test
+  beside the others. Do not add a new `--xcheck` Godot flag for logic a unit test can cover.
+  Never add a Godot package or `Godot.NET.Sdk` to the test project.
+- **Every new check gets a `tools/lib/checkmap.txt` line**: `<path prefix> <tier> <check>`.
+  The check must end by itself (quit with an exit code) and print `[name] RESULT: ok` or
+  `[name] RESULT: FAILED ...` (the runner fails on `FAIL` in the last `RESULT` line). Tier
+  `quick` = one headless Godot, no map; `net` = needs a server; `full` = windowed / two clients / load.
+- **Heavy runs only through `tools/lib/guard.sh`**: run a check with
+  `tools/test.sh quick|net|full [area]`. A new multi-process script sources `guard.sh` and runs each
+  process through `guard_run <timeout_s> <log> cmd...`, after `guard_lock` + `guard_wait_ram <GB>`
+  for a server or several clients, and `guard_unlock` in its `EXIT` trap. No bare
+  `godot ... &` without a timeout.
+- **Never kill by name or pattern** (`taskkill /im`, `pkill`, `Stop-Process` on a match): other
+  agents run Godot at the same time. Only the PIDs you started; `guard_run` already does it.
+- Network, authority or replicated state changed: `tools/test.sh net` before the PR (root `CLAUDE.md`).
+
+## Why: the tiers and what they cost (PR #232)
+
+Before, every check was a full Godot launch and the multiplayer checks started several windowed
+clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
+
 | Tier | What | Command | Measured (Windows, 4.7.1) |
 |---|---|---|---|
 | 0 unit | `tests/UnitSportSwitzerland.Tests`: xUnit, plain .NET, **no Godot** | `tools/test.sh unit` | 53 tests in ~0.1 s, ~3 s with the build |
@@ -48,8 +74,63 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
 - Free RAM: `Win32_OperatingSystem.FreePhysicalMemory` on Windows, `MemAvailable` on Linux.
   Light Godot runs wait for `TEST_RAM_GB` (3), tiers 2/3 for `TEST_HEAVY_RAM_GB` (6).
 - Machine-wide lock for tiers 2/3: a `mkdir` lock dir, `$TEMP/unitsport-heavy.lock` (`GUARD_LOCK_DIR`),
-  holding the owner's PID; a lock whose PID is dead is taken over. Two `test.sh net` started together
-  ran one after the other (46 s each, 104 s in all). The lock is per OS user temp dir: Git Bash and
-  WSL do not see each other's lock.
+  with the owner's PID, `info` (start time, `max_hold`, what runs) and a `beat` file. Two `test.sh net`
+  started together ran one after the other (46 s each, 104 s in all). The lock is per OS user temp
+  dir: Git Bash and WSL do not see each other's lock.
+- **Stale locks are taken over at once, never waited out.** An ad-hoc lock once kept two agents
+  waiting 20 min behind an owner that had died. Now a waiter takes the lock over when:
+  - the owner PID is gone (`kill -0`);
+  - the heartbeat, which a helper touches every `GUARD_BEAT` (10) s and which dies with its owner, is
+    older than `GUARD_STALE` (45) s. This covers a hung owner and a reused PID;
+  - it has been held longer than the owner's `guard_lock <max_wait> <max_hold>` + 120 s. This covers
+    a live shell that forgot to unlock.
+
+  `tools/test.sh lock` (`guard_status`) shows who holds it, for how long, the last heartbeat and
+  whether it is stale. A waiter prints the same every 2 min. `tools/lib/guard_selftest.sh` (in
+  `quick` for `tools/lib/`) checks the four cases: dead, stalled heartbeat, past max, live.
+  Never write your own `mkdir` lock loop: source `guard.sh`.
 - Timeouts kill only the run's own process tree: `taskkill /T /PID <its winpid>` on Windows (the
   `_console.exe` wrapper starts the real Godot as a child), its process group on Linux. Never by name.
+
+## Same logic, preserved
+
+- The checks themselves are unchanged: the runner only launches them (`--headless --path . -- <flag>`)
+  and reads their output. A check that passes by hand passes in the runner.
+- The verdict is the last `RESULT` line, so a check must print it **after** everything it tests.
+  Traps: a check that prints `RESULT` and then keeps running, or never quits, ends as `TIMEOUT`;
+  a failure printed without the word `FAIL` in the `RESULT` line counts as a pass; a check that
+  prints no `RESULT` is judged by its exit code only (exit 139 then fails).
+- Unit tests link the game's own source files, never copies: a copy would test code the game no
+  longer runs. A linked file that gains `using Godot` breaks the test build: move the Godot part out.
+- The game csproj excludes `tests/**`; a test file there never ends up in the game assembly.
+- The lock is held by the runner's PID: a crashed runner's lock is taken over, never deleted by hand
+  while its PID lives.
+
+## Migrating old code / open branches
+
+- Rebasing a branch made before #232: no conflicts expected in `src/`. Possible conflicts:
+  - root `CLAUDE.md`, the general notes list and rule 4 ("Test in multiplayer" is now "Test the
+    cheapest tier"): keep both sides' lines;
+  - `UnitSportSwitzerland.csproj` `DefaultItemExcludes` (now has `tests/**`): keep `tests/**` and your change;
+  - `UnitSportSwitzerland.sln`: keep both project entries.
+- Then, for each `--xcheck` / probe your branch added (`git diff --name-only main... | grep -E 'Probe|Check'`,
+  `grep -rhoE '"--[a-z]+check"' src` against `tools/lib/checkmap.txt`): add a checkmap line for it,
+  and make it print `RESULT: ok|FAILED` and quit by itself if it does not yet.
+- A `tools/<x>check.sh` your branch added: list it as tier `net` (headless) or `full` (windowed) in
+  the map; inside it, replace `timeout N "$GODOT" ... &` + `kill $SERVER` with `. tools/lib/guard.sh`,
+  `guard_lock`, `guard_wait_ram 6` and `guard_run N <log> "$GODOT" ...` (see `netsmoke` in `tools/test.sh`).
+- Pure helpers your branch added inside a `Node` class: move them to a plain file and give them a
+  unit test (Rule above).
+- Open PRs when #232 was opened that add checks or check scripts: #148 (`WheelProbe`, csproj),
+  #169 (`DeckProbe`, `PassengerProbe`, `ExitProbe`), #180 (`PvpProbe`, `tools/pvpcheck.sh`),
+  #188/#191/#197/#201/#223 (`BrCheck`, `BrProbe`, `tools/brcheck.sh`; #188 also `CLAUDE.md`),
+  #219 (`BankProbe`, `LootProbe`, `tools/bankcheck.sh`), #220 (`CrashNetProbe`, `RideProbe`,
+  `tools/crashnetcheck.sh`), #230 (`RoadStandProbe`, `WallOffProbe`, `TrafficProbe`),
+  #233 (`tools/loadtest.sh`, already wired as a `full` row).
+
+## How to check
+
+- `tools/test.sh unit` (3 s): the tier-0 project builds and passes.
+- `tools/test.sh quick <area>` for the area you touched; a new check shows up as a row in the table.
+- Guard: start two `tools/test.sh net Net` at once; the second prints `[guard] another heavy run holds
+  the lock`, and both pass one after the other.

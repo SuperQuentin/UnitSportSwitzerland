@@ -71,3 +71,4 @@ src/Audio/               full   tools/radiocheck.sh
 src/Player/              full   tools/switchcheck.sh
 src/Vehicles/            full   tools/switchcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
+tools/lib/               quick  tools/lib/guard_selftest.sh

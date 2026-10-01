@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings, in tabs: Video, Audio, Gameplay, Vehicles, Controls, World, Performance. Every
+/// Settings, in tabs: Video, Audio, Gameplay, Vehicles, Controls, Wheel, World, Performance, About. Every
 /// control writes straight into <see cref="GameSettings.Current"/> and commits, so the world
 /// re-applies itself live and the file is saved — there is no Apply button to forget. LB / RB
 /// (or Q / E) change tab. One instance serves the title screen and the in-game pause menu.
@@ -27,8 +27,10 @@ public partial class SettingsScreen : Screen
         var pages = new Control { SizeFlagsVertical = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore };
         body.AddChild(pages);
 
+        var names = new List<string>();
         void Tab(string name, Action<VBoxContainer> fill)
         {
+            names.Add(name);
             var b = new Button { Text = name, ToggleMode = true, ButtonGroup = group, FocusMode = FocusModeEnum.All, CustomMinimumSize = new Vector2(0, 36) };
             var normal = UiTheme.Flat(new Color(0, 0, 0, 0), 6, 14, 6);
             var on = UiTheme.Flat(new Color(UiTheme.Amber, 0.12f), 6, 14, 6);
@@ -126,6 +128,9 @@ public partial class SettingsScreen : Screen
                 InputHints.Format("As bound on your keyboard and pad ({help})"));
         });
 
+        // a steering wheel and its pedals (#68): its own tab, it is a page of bindings
+        Tab("Wheel", rows => rows.AddChild(new WheelPanel { Name = "WheelPanel" }));
+
         Tab("World", rows =>
         {
             rows.AddChild(UiKit.Section("Time and traffic"));
@@ -162,7 +167,59 @@ public partial class SettingsScreen : Screen
             UiKit.ActionRow(rows, "Performance logs", "Open folder", PerfRecorder.OpenLogsFolder, "F4 records a session");
         });
 
-        Show(0);
+        Tab("About", LicenseRows);
+        _about = _tabs.Count - 1;
+
+        Show(StartTab(names));
+    }
+
+    /// <summary>"--settings wheel" opens on that tab, for screenshotting it.</summary>
+    private static int StartTab(List<string> names)
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int i = Array.IndexOf(args, "--settings");
+        return i >= 0 && i + 1 < args.Length
+            ? Math.Max(0, names.FindIndex(n => n.Equals(args[i + 1], StringComparison.OrdinalIgnoreCase)))
+            : 0;
+    }
+
+    private int _about;
+
+    /// <summary>The About tab, the licenses and data sources (<c>--licenses</c>, for screenshotting it).</summary>
+    public void ShowLicenses() => Show(_about);
+
+    /// <summary>
+    /// Licenses and data sources: every entry of <see cref="Licenses.All"/> (what the game is built
+    /// from and credits, the OpenStreetMap overlay's ODbL among them), then what Godot itself
+    /// requires, its licence text and the components built into it.
+    /// </summary>
+    private static void LicenseRows(VBoxContainer rows)
+    {
+        foreach (var e in Licenses.All)
+        {
+            rows.AddChild(UiKit.Section(e.Name));
+            rows.AddChild(UiKit.Text(e.Attribution, UiTheme.FontSmall, wrap: true));
+            rows.AddChild(UiKit.Text($"{e.UsedFor}. Licence: {e.Licence}.", UiTheme.FontTiny, UiTheme.TextDim, wrap: true));
+            // LinkButton only takes focus for screen readers by default; the pad needs it too
+            var link = new LinkButton { Text = e.Url, Uri = e.Url, Underline = LinkButton.UnderlineMode.OnHover, FocusMode = FocusModeEnum.All };
+            link.AddThemeFontSizeOverride("font_size", UiTheme.FontTiny);
+            rows.AddChild(link);
+        }
+
+        rows.AddChild(UiKit.Section("Godot Engine licence text"));
+        rows.AddChild(UiKit.Text(Engine.GetLicenseText(), UiTheme.FontTiny, UiTheme.TextDim, wrap: true));
+        rows.AddChild(UiKit.Section("Third-party components in Godot Engine"));
+        var parts = new List<string>();
+        foreach (var info in Engine.GetCopyrightInfo())
+        {
+            var licences = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var part in info["parts"].AsGodotArray<Godot.Collections.Dictionary>())
+                licences.Add(part["license"].AsString());
+            parts.Add($"{info["name"].AsString()} ({string.Join(", ", licences)})");
+        }
+        rows.AddChild(UiKit.Text(string.Join("; ", parts), UiTheme.FontTiny, UiTheme.TextDim, wrap: true));
+        rows.AddChild(UiKit.Text("Full texts: " + string.Join(", ", Engine.GetLicenseInfo().Keys.Select(k => k.AsString())),
+            UiTheme.FontTiny, UiTheme.TextDim, wrap: true));
     }
 
     /// <summary>

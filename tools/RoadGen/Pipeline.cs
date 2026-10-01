@@ -17,7 +17,9 @@ public sealed record PipelineOptions(
     double SnapTolerance = 0.75,
     bool StopLines = true,
     /// <summary>Off skips the overlap rasterisation, which dominates the cost on a large run.</summary>
-    bool Analyze = true);
+    bool Analyze = true,
+    /// <summary>Which dead ends may be carried onto a road flank within its half width (#121); null = none.</summary>
+    Func<RoadLink, RoadLink, bool>? JoinNearEnds = null);
 
 public sealed class RoadGenResult
 {
@@ -27,6 +29,7 @@ public sealed class RoadGenResult
     public required Dictionary<int, List<MarkingLine>> Markings { get; init; }
     public required QualityReport Report { get; init; }
     public required NetworkBuilder.Stats GraphStats { get; init; }
+    public int NearEndsJoined { get; init; }
 }
 
 /// <summary>
@@ -46,11 +49,13 @@ public static class Pipeline
     {
         var opts = options ?? new PipelineOptions();
 
-        var graphStats = new NetworkBuilder
+        var builder = new NetworkBuilder
         {
             SnapTolerance = opts.SnapTolerance,
             SplitAtTJunctions = true,
-        }.Build(net);
+            JoinNearEnds = opts.JoinNearEnds,
+        };
+        var graphStats = builder.Build(net);
 
         if (opts.Smooth)
             foreach (var link in net.Links)
@@ -104,6 +109,7 @@ public static class Pipeline
             Markings = markings,
             Report = report,
             GraphStats = graphStats,
+            NearEndsJoined = builder.NearEndsJoined,
         };
     }
 

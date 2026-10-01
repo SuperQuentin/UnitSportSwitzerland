@@ -20,6 +20,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
+    private Items.DroppedItems? _dropped;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
@@ -109,6 +110,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // radios thrown into the world, and the CDs they play; the clock everyone plays them by
         _radios = Items.RadioManager.Create(this);
         _radios.PlayerPositions = _vehicles.PlayerPositions;
+        // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
+        _dropped = Items.DroppedItems.Create(this);
+        _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
         Net.ClockSync.Create(this);
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
@@ -147,13 +151,31 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(race);
         _chat.Race = race;
 
-        // claimed cash, kept per player name on this server
+        // deposited cash, kept per player name on this server
         var bank = Items.Bank.Create(this, null, server: true);
         bank.NameOf = _chat.NameOfPeer;
+        // money moves only at a bank's teller desk (#213)
+        bank.InBank = peer => Loot.LootService.Instance?.InBank(peer) ?? Task.FromResult(false);
 
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here
         Items.ItemEvents.Create(this, server: true);
+
+        // the birds everybody shares (#143): simulated here around every player, sent to those near
+        var birds = new Birds.BirdLife(_chunks, origin, null)
+        {
+            Headless = true,
+            // fills the birds' reused list: no allocation per frame (GC pauses at 16 players)
+            Observers = list =>
+            {
+                for (int i = 0; i < _players!.GetChildCount(); i++)
+                    if (_players.GetChild(i) is Player.FootPlayer { Npc: false } p)
+                        list.Add(new Birds.BirdLife.Observer(p.GlobalPosition, p.NetVel, p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
+                            or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit, p.GetMultiplayerAuthority()));
+            },
+        };
+        AddChild(birds);
+        Birds.BirdNet.Create(this, birds, server: true);
         // stuck Polaroids' images: uploaded by their owner, kept here, served to the others
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
@@ -306,6 +328,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
+        _dropped?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);

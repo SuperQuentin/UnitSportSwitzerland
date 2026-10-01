@@ -22,6 +22,12 @@ public enum Layers
     Routes = 16,
     /// <summary>places.json, the in-game Tab search.</summary>
     Places = 32,
+    /// <summary>
+    /// OpenStreetMap road attributes (one-way, lanes, sidewalks...) conflated onto TLM lines.
+    /// Off unless picked by name: tiles built with it are an ODbL derived database
+    /// (docs/notes/tools/osm-odbl-licence.md).
+    /// </summary>
+    Osm = 64,
 }
 
 /// <summary>What MapSetup remembers between runs, in terrain_chunks_temp/mapsetup.json.</summary>
@@ -33,7 +39,7 @@ public sealed class SetupState
     public Dictionary<string, Layers> FeaturesDone { get; set; } = new();
     /// <summary>Cantons (lower-case codes, or "ch") the extracted GWR data.sqlite was made from; null = unknown.</summary>
     public List<string>? GwrCantons { get; set; }
-    /// <summary>Tiles RoadGen has already been run over ("E-N").</summary>
+    /// <summary>Tiles the road network stage (RoadGen) has already been run over ("E-N").</summary>
     public HashSet<string> JunctionsDone { get; set; } = new();
     public DateTime? LastRun { get; set; }
 
@@ -218,6 +224,21 @@ public static partial class Planner
                             && await r.SwissData(["--out", p.RoutesDir, "mountainbikeland"]),
         });
 
+        // ---- OpenStreetMap (optional) -----------------------------------------------------------
+        bool wantOsm = c.Layers.HasFlag(Layers.Osm) && wantRoads;
+        long osmPbf = c.Country.Extras.GetValueOrDefault("osm", 550_000_000);
+        steps.Add(new Step
+        {
+            Title = "Download OpenStreetMap",
+            Detail = "Geofabrik Switzerland extract (ODbL), for one-way, lanes, sidewalks and cycleways",
+            DownloadBytes = wantOsm && p.OsmPbf == null ? osmPbf : 0,
+            DiskBytes = wantOsm && p.OsmPbf == null ? osmPbf : 0,
+            DiskPath = p.OsmDir,
+            Seconds = osmPbf / stats.EffectiveDownload + 3,
+            Skip = !wantOsm ? "OSM layer off" : p.OsmPbf != null ? "already here" : !py ? noPython : null,
+            Run = r => r.SwissData(["--out", p.OsmDir, "osm"]),
+        });
+
         // ---- unpack ------------------------------------------------------------------------------
         steps.Add(new Step
         {
@@ -316,6 +337,24 @@ public static partial class Planner
             },
         });
 
+        string? osmSkip = !wantOsm ? "OSM layer off"
+            : toBuild.Count == 0 && featureTiles.Count == 0 && File.Exists(Path.Combine(p.Temp, "osm_overlay.tsv")) ? "overlay up to date" : null;
+        // Before the extraction: the road network stage at its end reads the overlay. The whole
+        // built region, not just the selection, so a second selection does not shrink it.
+        steps.Add(new Step
+        {
+            Title = "OpenStreetMap overlay",
+            Detail = "OSM road attributes matched to TLM lines (osm_overlay.tsv, temp dir)",
+            Seconds = 10 + builtTotal * 0.01,
+            Skip = osmSkip,
+            Run = r =>
+            {
+                if (p.TlmGpkg is not { } tlm) { r.Fail("no swissTLM3D GeoPackage in " + p.TlmDir); return Task.FromResult(false); }
+                if (p.OsmPbf is not { } pbf) { r.Fail("no switzerland-*.osm.pbf in " + p.OsmDir); return Task.FromResult(false); }
+                return r.Tool("TerrainPreprocessor", ["--out", p.Chunks, "--tlm", tlm, "--osm-overlay", pbf], LineProgress.None);
+            },
+        });
+
         var tlmGpkgFuture = () => p.TlmGpkg;
         steps.Add(new Step
         {
@@ -347,7 +386,11 @@ public static partial class Planner
                 if (!ok) return false;
                 var done = (wantRoads ? Layers.Roads : 0) | (wantBuildings ? Layers.Buildings : 0);
                 foreach (var t in featureTiles)
+                {
                     c.State.FeaturesDone[SetupState.Key(t)] = c.State.FeaturesDone.GetValueOrDefault(SetupState.Key(t)) | done;
+                    // TerrainPreprocessor ends the road extraction with the network stage
+                    if (wantRoads) c.State.JunctionsDone.Add(SetupState.Key(t));
+                }
                 c.State.Save(p);
                 if (featureTiles.Count >= 20)
                     stats.FeaturesCoreSecPerTile = Stats.Blend(stats.FeaturesCoreSecPerTile,
@@ -358,15 +401,20 @@ public static partial class Planner
 
         steps.Add(new Step
         {
-            Title = "Road junctions (RoadGen)",
-            Detail = "trims roads at crossings and adds junction polygons (fresh tiles only)",
-            Seconds = 3 + featureTiles.Count * stats.RoadGenSecPerTile + (wantRoads ? 2 : 0),
+            Title = "Road network (RoadGen)",
+            Detail = "junctions and v3 road attributes again, from the kept raw roads (new OSM overlay)",
+            Seconds = 3 + sel.Count * stats.RoadGenSecPerTile,
+            // the extraction step ends with the network stage for the tiles it extracted; this
+            // reruns it for the selection when the overlay changed or a tile predates the stage
             Skip = !wantRoads ? "roads layer off"
-                 : featureTiles.Count == 0 && sel.All(t => c.State.JunctionsDone.Contains(SetupState.Key(t))) ? "all junctions done" : null,
+                 : sel.All(featureTiles.Contains) ? "done by the extraction step"
+                 : osmSkip == null ? null
+                 : sel.All(t => featureTiles.Contains(t) || c.State.JunctionsDone.Contains(SetupState.Key(t))) ? "all done" : null,
             Run = async r =>
             {
                 WriteTiles(SelectionTilesFile(p), sel);
-                // --skip-rewritten: tiles junctioned by an earlier run are left alone, never trimmed twice
+                // --skip-rewritten: a tile rewritten before the raw input was kept is left alone,
+                // never trimmed twice; every other tile rebuilds from its raw input
                 bool ok = await r.Tool("RoadGen", ["--rewrite", "--chunks", p.Chunks, "--tiles-file", SelectionTilesFile(p), "--skip-rewritten"], LineProgress.None);
                 if (ok)
                 {

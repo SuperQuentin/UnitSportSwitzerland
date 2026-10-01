@@ -5,6 +5,7 @@
 #                                 (--world flat, --systems) and tier 1 (fixture courses), never the map
 #   tools/test.sh net [area]      quick + the headless network tier on the fixture world, if the change touches it
 #   tools/test.sh full [area]     every check in tools/lib/checkmap.txt, windowed and load scripts too
+#   tools/test.sh lock            who holds the machine-wide heavy-run lock, and whether it is stale
 # The checks come from tools/lib/checkmap.txt, matched against the files changed since origin/main
 # (plus uncommitted and untracked ones); [area] (e.g. Loot, src/Player/) matches it instead.
 # Env: GODOT (the Godot executable; on Windows the full path of the *_console.exe, see
@@ -16,11 +17,12 @@ set -u
 TIER=${1:-}
 AREA=${2:-}
 case $TIER in
-  unit | quick | net | full) ;;
-  *) echo "usage: tools/test.sh unit|quick|net|full [area]" >&2; exit 2 ;;
+  unit | quick | net | full | lock) ;;
+  *) echo "usage: tools/test.sh unit|quick|net|full [area] | lock" >&2; exit 2 ;;
 esac
 cd "$(dirname "$0")/.."
 . tools/lib/guard.sh
+[ "$TIER" = lock ] && { guard_status; exit 0; }
 
 GODOT=${GODOT:-godot}
 export GODOT
@@ -78,6 +80,7 @@ CHANGED=$(changed_files)
 CHECKS=()
 RPC=
 while read -r prefix tier check; do
+  check=${check%$'\r'}  # a CRLF checkout must not glue a CR to the check
   [ -z "$prefix" ] || [[ $prefix == \#* ]] && continue
   [[ $WANT == *" $tier "* ]] || continue
   if [ -n "$AREA" ]; then

@@ -44,6 +44,12 @@ public static class XrSession
     public static bool SkiTuck { get; internal set; }
 
     /// <summary>
+    /// The steering wheel's angle while a VR hand holds it (#243), radians, + right, as a real
+    /// wheel's <see cref="Player.RideInput.WheelAngle"/>. NaN with no hand on it: the sticks steer.
+    /// </summary>
+    public static float WheelAngle { get; internal set; } = float.NaN;
+
+    /// <summary>
     /// Makes this client a VR client if OpenXR came up. Returns false (and changes nothing) when
     /// it did not; prints how to start it when <c>--vr</c> asked for it.
     /// </summary>
