@@ -95,6 +95,7 @@ __pycache__/
 .serena/
 .fr_backup/
 graphify-out/
+.claude/
 
 # GPX recordings (personal tracks used for replay testing)
 *.gpx
