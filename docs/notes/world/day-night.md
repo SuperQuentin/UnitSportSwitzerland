@@ -10,7 +10,13 @@
   `SrgbToLinear` before upload** — the shaders multiply linear values, and unconverted night's 0.13
   displayed as 0.40. Buildings light far more windows at night and those glow through the dark.
   Settings → Time of day (start hour, day length, default 24 min, 0 = stopped); `--time <h>` fixes
-  the hour for one run.
+  the hour for one run. **`/time`** (#202, `World/TimeCommand` parses, `Net/ChatManager` applies):
+  `set <hh:mm|sunrise|day|noon|sunset|night|midnight>`, `add <hours>`, `speed <min a day, 0 stops>`;
+  bare `/time` answers from this screen's clock. Offline it moves this machine's clock
+  (`DayNight.DayLengthOverride` for speed). Online changing it is an admin's: the server then owns
+  the world's clock (hour + day length), sends the current hour to every client and to each joiner
+  (`SendWorldTimeTo`), and their clocks run on at that length. Before any `/time set` every client
+  keeps its own clock from its settings, as before.
 - **Indoors** (#134): interior glass (`ps1_interior`, vertex alpha 0) is `world_sky * 1.3` plus a
   dark moonlit blue at night, so a room's windows show noon, sunset, blue hour and night. Rooms
   are lit, so characters in them are too: `DayNight` keeps a second environment (room daylight by

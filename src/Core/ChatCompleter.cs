@@ -47,6 +47,7 @@ public sealed class ChatCompleter
         ("me", false, true, "<action>"),
         ("city", false, true, "<town>"),
         ("occasion", false, true, "[list | start | stop | auto] [id]"),
+        ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
         ("spawn", true, true, "<item> [count]"),
         ("name", false, false, "<name>"),
         ("login", false, false, "<password>"),
@@ -157,6 +158,16 @@ public sealed class ChatCompleter
                 {
                     0 => ["start", "duel", "join", "leave", "list", "npc", "cancel"],
                     1 when words[1].ToLowerInvariant() == "duel" => PlayerNames(),
+                    _ => [],
+                };
+                break;
+
+            case "time":
+                bool mayTime = !Permissions.Online || Permissions.IsAdmin;
+                options = argIndex switch
+                {
+                    0 => mayTime ? World.TimeCommand.Verbs : ["query"],
+                    1 when mayTime && words[1].ToLowerInvariant() == "set" => World.TimeCommand.Named.Select(n => n.Name),
                     _ => [],
                 };
                 break;
