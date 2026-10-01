@@ -18,6 +18,8 @@
     <Compile Include="..\..\src\Terrain\ProceduralWorld*.cs" Link="Generator\%(Filename)%(Extension)" />
     <!-- the source chain the game runs it through: generation, blend loads, cache invalidation -->
     <Compile Include="..\..\src\Terrain\IChunkSource.cs;..\..\src\Terrain\FallbackChunkSource.cs;..\..\src\Terrain\CachingChunkSource.cs" Link="Source\%(Filename)%(Extension)" />
+    <!-- the road embankment blend (#125), checked on real tiles by the roads mode -->
+    <Compile Include="..\..\src\Terrain\TerrainMeshBuilder.RoadBlend.cs" Link="Roads\%(Filename)%(Extension)" />
     <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
   </ItemGroup>
 
