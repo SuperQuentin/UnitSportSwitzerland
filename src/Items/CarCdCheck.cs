@@ -149,8 +149,12 @@ public partial class CarCdCheck : Node
                     if (t > 60) Finish(false, "the fixture CDs are not in the library (burnt on the server?)");
                     return;
                 }
-                RadioUi.Instance?.OpenCar();
-                if (RadioUi.Instance is not { OnCar: true }) { Finish(false, $"the car radio panel did not open (stereo {me.StereoOwner?.Name})"); return; }
+                // the real key: R at the wheel opens the radio, and the travel picker (also R) stays shut
+                foreach (bool down in new[] { true, false })
+                    GetViewport().PushInput(new InputEventKey { Keycode = Key.R, PhysicalKeycode = Key.R, Pressed = down });
+                if (RadioUi.Instance is not { OnCar: true }) { Finish(false, $"R did not open the car radio panel (stereo {me.StereoOwner?.Name})"); return; }
+                if (GetTree().Root.FindChild("RideUi", true, false) is Player.RideUi { IsOpen: true }) { Finish(false, "R opened the travel picker too"); return; }
+                GD.Print("[carcdcheck] driver: R opened the radio, not the travel picker");
                 // a station first: picking a CD after it must turn the station off
                 bool ok = Press(Stations.Name(8));
                 GD.Print($"[carcdcheck] driver: station row {ok}, radio {me.PlayingCarRadio}");

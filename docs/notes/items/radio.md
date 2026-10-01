@@ -14,7 +14,7 @@
   authority 1: `CdId`, `StartedAt`, `Playing`, on-change and with the spawn for late joiners).
 - **E beside it** (`RadioManager.Reach` 2.5 m) opens `RadioUi`; `Nearest` in `TryInteract` runs
   before the vehicle lookup; the prompt bar shows "Radio". Use opens it on the radio in the hand,
-  "." on a car stereo (below).
+  R on a car stereo (below).
 - **The panel is a music picker (#211)**, menu look (`UiTheme`/`UiKit`, glass 0.95, at most
   700 x 660 px, re-fitted on resize): now playing (title, bpm/style, "CD n of m", elapsed / length
   bar), previous / Play-Stop / next (round the list; on a station, the next station), the mode
@@ -55,7 +55,7 @@
   (replicated int; prompt "Dance"/"Stop dancing"). The beat is never replicated: every peer calls
   `RadioBody.BeatAt(ClockSync.ServerNow)`, so figures on every screen step on the same beat, and a
   client still downloading the CD dances in silence. See `docs/notes/avatar/dance-moves.md`.
-- **Car stereo (#211):** `PlayerInput.RadioPanel` (".", keyboard only like U / P; F1 row, prompt
+- **Car stereo (#211):** `PlayerInput.RadioPanel` (R, keyboard only like U / P; shared with the travel picker: in a vehicle with a stereo R opens the radio and `ClientWorld` skips the picker, on foot R is the picker; F1 row, prompt
   "Radio") opens the panel on `FootPlayer.StereoOwner`: yourself at the wheel of a car/truck/bus, or
   the driver when riding along (read only: rows dimmed, "Only the driver changes the music"). A CD
   is the driver's replicated `FootPlayer.CarCd` (a `RadioPlay`, OnChange, `FootPlayer.CarCd.cs`),

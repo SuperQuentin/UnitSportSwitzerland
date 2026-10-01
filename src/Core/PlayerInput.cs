@@ -293,8 +293,9 @@ public partial class PlayerInput : Node
         // key printed Z on a Swiss keyboard, next to the engine's physical Z printed Y.
         Bind(RadioNext, Keys(Key.U));
         Bind(RadioPrev, Keys(Key.P));
-        // every letter is taken in a car (Y is the Swiss Z): the full stop, keyboard only like U / P
-        Bind(RadioPanel, Keys(Key.Period));
+        // R, shared with the travel picker: in a vehicle with a stereo R is the radio (RadioUi takes it
+        // first and ClientWorld leaves it alone), on foot it is the picker. Keyboard only, like U / P.
+        Bind(RadioPanel, Keys(Key.R));
         // A truck has no tricks, boost or hop: its shift paddles take the shoulders (and Shift / Ctrl,
         // which only mean tuck and slide elsewhere), the clutch takes C / B, and the H-pattern's
         // gates the number keys, which only pick hotbar slots on foot.
