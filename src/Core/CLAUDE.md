@@ -16,6 +16,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `key-hints` — Key hints: (`Core/InputHints`): never type a key into a UI string; bindings named for the device in hand, prompt bar, F1...
 - `permissions` — Permissions: (`Core/Permissions`): what the menus may offer; online, spawning a vehicle is an admin's...
 - `floating-origin` — Floating origin (#185): world space follows the camera; keep `GlobalPos` or handle `IOriginShiftAware`; containers; Jolt kinematic teleport; `--origincheck`, `--originstress`
+- `json-store` — JSON saves (`Core/JsonStore.Save`): atomic `.part` + move, `user://` ok, cached options; which files use it
 
 ## Commands
 
