@@ -230,6 +230,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var relay = new MultiplayerSynchronizer
         {
             Name = name, RootPath = new NodePath(".."), ReplicationConfig = config, ReplicationInterval = interval,
+            // refreshed when the audience changes (RefreshRelays): Idle ran the filter every frame for every peer
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         relay.SetMultiplayerAuthority(1);
         return relay;
@@ -958,6 +960,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // 30 Hz is plenty once the receiver interpolates; the frame rate was the old rate,
             // which is 144 packets a second per viewer from a fast machine
             ReplicationInterval = 1f / 30f,
+            // a fixed filter (the server only): Godot evaluates it on join, SetSimulator on handoff
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _sync = sync;
         // the synchronizer's own authority decides who sends; children added after the
@@ -1010,6 +1014,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // for every peer, 30 000 managed calls a second at 32 players
             ReplicationInterval = 3600f,
             DeltaInterval = 3600f,
+            // refreshed per viewer when its set changes (RefreshNetVisibility), not every frame
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _vis.SetMultiplayerAuthority(1);
         if (NetProxy && netId != 0)
