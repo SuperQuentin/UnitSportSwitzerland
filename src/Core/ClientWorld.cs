@@ -117,6 +117,8 @@ public partial class ClientWorld : Node3D
         }
         // after Load, so the saved stick deadzone is what the actions start with
         PlayerInput.Install(this);
+        // VR (#186), when the engine was started with OpenXR on; before any UI or camera exists
+        XR.XrSession.TryStart(this);
         ApplyViewportSettings();
         GameSettings.Changed += ApplyViewportSettings;
 
@@ -1012,8 +1014,9 @@ public partial class ClientWorld : Node3D
         if (_menu is { IsOpen: true } || _gpx is { Active: true } || _rides is { IsOpen: true }) yield break;
 
         // whoever owns the camera on screen: the local player, or a body a probe made itself
-        var viewer = (_onFoot ? LocalPlayer : null) ?? GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
-        if (viewer == null && GetViewport().GetCamera3D() == _spectator)
+        var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
+        var viewer = (_onFoot ? LocalPlayer : null) ?? shown?.GetParent() as FootPlayer;
+        if (viewer == null && shown == _spectator)
         {
             yield return (PlayerInput.ToggleMode, "Walk");
             yield return (PlayerInput.FlyUp, "Up");
@@ -1077,10 +1080,14 @@ public partial class ClientWorld : Node3D
     private void ApplyViewportSettings()
     {
         var s = GameSettings.Current;
-        GetViewport().Scaling3DScale = s.RenderScale;
-        DisplayServer.WindowSetVsyncMode(s.VSync
-            ? DisplayServer.VSyncMode.Enabled
-            : DisplayServer.VSyncMode.Disabled);
+        // the headset picks its own resolution and paces its own frames (XrSession)
+        if (!XR.XrSession.Active)
+        {
+            GetViewport().Scaling3DScale = s.RenderScale;
+            DisplayServer.WindowSetVsyncMode(s.VSync
+                ? DisplayServer.VSyncMode.Enabled
+                : DisplayServer.VSyncMode.Disabled);
+        }
         ApplyWindow(s);
     }
 

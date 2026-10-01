@@ -464,7 +464,7 @@ public partial class FootPlayer : CharacterBody3D
     private float _viewYaw;
 
     /// <summary>Third person (over the shoulder / chase) or first. Toggled with V / R3, saved.</summary>
-    private bool _thirdPerson = Core.GameSettings.Current.ThirdPerson;
+    private bool _thirdPerson = Core.GameSettings.Current.ThirdPerson && !XR.XrSession.Active;
 
     /// <summary>Smoothed camera pivot height, so a step up or a hop does not jerk the view.</summary>
     private float _pivotY = float.NaN;
@@ -541,7 +541,7 @@ public partial class FootPlayer : CharacterBody3D
     public RideInput LastRideInput { get; private set; }
 
     /// <summary>The camera this player is looking through is the one on screen.</summary>
-    public bool IsViewing => _camera is { Current: true };
+    public bool IsViewing => _camera is { Current: true } || (_camera != null && XR.XrSession.Anchor == _camera);
 
     /// <summary>The building this player is inside (<see cref="Interiors.BuildingKey"/> text), or null outdoors.</summary>
     public string? InteriorKey { get; private set; }
@@ -1632,6 +1632,16 @@ public partial class FootPlayer : CharacterBody3D
     private void ToggleView()
     {
         var settings = Core.GameSettings.Current;
+        // VR is first person only (#186): at the wheel, V still shows or hides your own body
+        if (XR.XrSession.Active)
+        {
+            if (HasCockpit)
+            {
+                settings.CockpitBody = !settings.CockpitBody;
+                settings.Save();
+            }
+            return;
+        }
         if (HasCockpit && !_thirdPerson && settings.CockpitBody)
         {
             settings.CockpitBody = false;
@@ -2905,6 +2915,15 @@ public partial class FootPlayer : CharacterBody3D
             // Space is a hop on a bike and the handbrake in a car
             Handbrake: _ride is { CanHop: false } && PlayerInput.Held(PlayerInput.Jump));
 
+        // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
+        if (_ride is Skis && XR.XrSession.Active && RideControls == null)
+            input = input with
+            {
+                Steer = Mathf.Clamp(input.Steer + XR.XrSession.SkiSteer, -1f, 1f),
+                Throttle = Mathf.Max(input.Throttle, XR.XrSession.SkiPole),
+                Effort = input.Effort || XR.XrSession.SkiTuck,
+            };
+
         // nobody at the wheel (the driver jumped out, #158): no pedal, the wheel let go
         if (SeatIndex != 0) input = new RideInput(0f, 0f, 0f, false);
 
@@ -3203,7 +3222,8 @@ public partial class FootPlayer : CharacterBody3D
             // only part of that roll — all of it at 40° of lean is a recipe for seasickness.
             // the visual is rolled by Rotation.Z = Lean, i.e. about +Z
             _camera.Position = new Basis(Vector3.Back, _motion.Lean) * _ride.FirstPersonEye;
-            _camera.Rotation = new Vector3(_pitch, _lookYaw, _motion.Lean * 0.5f);
+            // in VR the eye stays level and the head looks for itself: you lean with your body (#186)
+            _camera.Rotation = XR.XrSession.Active ? Vector3.Zero : new Vector3(_pitch, _lookYaw, _motion.Lean * 0.5f);
             ApplyRideFov(dt);
             return;
         }
@@ -3312,7 +3332,14 @@ public partial class FootPlayer : CharacterBody3D
 
         var head = new Basis(Vector3.Up, _lookYaw) * new Basis(Vector3.Right, _pitch)
             * new Basis(Vector3.Back, -_motion.Lean * 0.5f - _headSway.X * 1.5f);
-        _camera.Transform = _visual!.Transform * new Transform3D(eye.Basis * head, eye.Origin + seat + _headSway + lean);
+        // in VR the real head looks and sways; the eye is the seat, fixed to the car (#186)
+        if (XR.XrSession.Active)
+        {
+            head = Basis.Identity;
+            lean = Vector3.Zero;
+        }
+        _camera.Transform = _visual!.Transform * new Transform3D(eye.Basis * head,
+            eye.Origin + seat + (XR.XrSession.Active ? Vector3.Zero : _headSway) + lean);
 
         float t = Mathf.Clamp(_motion.Speed / _ride.FovSpeed, 0f, 1f);
         _camera.Fov = Mathf.Lerp(_camera.Fov, settings.CockpitFov + 6f * t * t, 1f - Mathf.Exp(-3f * dt));
@@ -3485,7 +3512,13 @@ public partial class FootPlayer : CharacterBody3D
 
         // third person places its own camera in _Process; the bob, dip and FOV here still run
         // for it, because the body squash and the FOV kick read them
-        if (!_thirdPerson)
+        if (!_thirdPerson && XR.XrSession.Active)
+        {
+            // no bob, dip, roll or pitch in VR: the eye moves only when the body does (#186)
+            _camera.Position = new Vector3(0, eye, 0);
+            _camera.Rotation = Vector3.Zero;
+        }
+        else if (!_thirdPerson)
         {
             _camera.Position = new Vector3(bobSide, eye + bobUp + _landingDip, 0);
             _camera.Rotation = new Vector3(_pitch + _punch, 0, roll + lean);
