@@ -21,7 +21,7 @@ namespace UnitSport.Occasions;
 /// spots stand beside front doors where E already means "go in".
 /// </para>
 /// </summary>
-public partial class OccasionHunt : Node
+public partial class OccasionHunt : Node, Core.IOriginShiftAware
 {
     private const string File = "user://occasions/claims.json";
     private const float Reach = 1.4f;
@@ -30,6 +30,13 @@ public partial class OccasionHunt : Node
 
     private Dictionary<string, HashSet<string>> _claims = new();
     private readonly Dictionary<string, (Vector3 World, string Label)> _seen = new();
+
+    /// <summary>The origin moved (#185): the spots seen so far are somewhere else in world space.</summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        foreach (var key in _seen.Keys.ToList())
+            _seen[key] = (shift.Point(_seen[key].World), _seen[key].Label);
+    }
     private readonly Random _rng = new();
 
     public override void _EnterTree() => Instance = this;

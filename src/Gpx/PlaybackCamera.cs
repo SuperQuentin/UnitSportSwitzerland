@@ -21,7 +21,7 @@ public enum CameraMode
 /// Camera for track playback. Chase and first-person ride the avatar, cinematic stands
 /// off and pans as the runner passes, and Free hands control back to the spectator cam.
 /// </summary>
-public partial class PlaybackCamera : Camera3D
+public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
 {
     [Export] public CameraMode Mode { get; set; } = CameraMode.Chase;
 
@@ -103,6 +103,14 @@ public partial class PlaybackCamera : Camera3D
     }
 
     private IReadOnlyList<Cinema.CinemaEvent> _events = System.Array.Empty<Cinema.CinemaEvent>();
+
+    /// <summary>The origin moved (#185): the planned shots' places, and the camera's own, follow.</summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        _cinematicAnchor = shift.Point(_cinematicAnchor);
+        _events = _events.Select(e => e with { Where = shift.Point(e.Where) }).ToList();
+        _director?.Shift(shift);
+    }
     private ulong _seed;
 
     private bool _directorIsRacing;

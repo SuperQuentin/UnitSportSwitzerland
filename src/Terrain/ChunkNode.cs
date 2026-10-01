@@ -194,6 +194,8 @@ public partial class ChunkNode : Node3D
 
     private MultiMeshInstance3D? _coniferInstance;
     private MultiMeshInstance3D? _broadleafInstance;
+    private MultiMeshInstance3D? _coniferFarInstance;
+    private MultiMeshInstance3D? _broadleafFarInstance;
 
     /// <summary>
     /// Trees as MultiMeshes per tile — 8k+ instances per tile makes individual nodes
@@ -261,8 +263,22 @@ public partial class ChunkNode : Node3D
         return (buffer, count);
     }
 
-    /// <summary>The two MultiMeshes of a tile, built on the worker; null where a tile has none.</summary>
-    public sealed record TreeMeshes(MultiMesh? Conifers, MultiMesh? Broadleaves);
+    /// <summary>
+    /// The MultiMeshes of a tile, built on the worker; null where a tile has none. The far pair
+    /// holds the same trees as billboards, when the style has them (<see cref="Styles.StyleKit.TreeLod"/>).
+    /// </summary>
+    public sealed record TreeMeshes(MultiMesh? Conifers, MultiMesh? Broadleaves,
+        MultiMesh? ConifersFar = null, MultiMesh? BroadleavesFar = null)
+    {
+        /// <summary>Frees a build that is thrown away before it reached a tile.</summary>
+        public void Dispose()
+        {
+            Conifers?.Dispose();
+            Broadleaves?.Dispose();
+            ConifersFar?.Dispose();
+            BroadleavesFar?.Dispose();
+        }
+    }
 
     /// <summary>
     /// Builds the MultiMesh resources off the main thread. The bounds are given rather than
@@ -271,9 +287,14 @@ public partial class ChunkNode : Node3D
     /// </summary>
     public static TreeMeshes BuildTreeMeshes(TreeBuffers trees, Material material, Aabb bounds)
     {
-        return new TreeMeshes(
-            Make(trees.Conifers, trees.ConiferCount, ConeMesh(material), bounds),
-            Make(trees.Broadleaves, trees.BroadleafCount, CrownMesh(material), bounds));
+        var conifers = Make(trees.Conifers, trees.ConiferCount, ConeMesh(material), bounds);
+        var broadleaves = Make(trees.Broadleaves, trees.BroadleafCount, CrownMesh(material), bounds);
+        if (Styles.StyleKit.TreeFarMaterial is not { } far)
+            return new TreeMeshes(conifers, broadleaves);
+        // the same instances again as billboards: the shaders crossfade the two per tree
+        return new TreeMeshes(conifers, broadleaves,
+            Make(trees.Conifers, trees.ConiferCount, BillboardMesh(far, 0f), bounds),
+            Make(trees.Broadleaves, trees.BroadleafCount, BillboardMesh(far, 1f), bounds));
     }
 
     private static MultiMesh? Make(float[] buffer, int count, ArrayMesh mesh, Aabb bounds)
@@ -295,6 +316,14 @@ public partial class ChunkNode : Node3D
     {
         Fill(ref _coniferInstance, "Trees", trees.Conifers);
         Fill(ref _broadleafInstance, "Broadleaves", trees.Broadleaves);
+        Fill(ref _coniferFarInstance, "TreesFar", trees.ConifersFar);
+        Fill(ref _broadleafFarInstance, "BroadleavesFar", trees.BroadleavesFar);
+        // a tile too far for any of its trees to be 3D skips the 3D MultiMeshes outright: the
+        // shader collapses each far tree, but the GPU would still run every vertex
+        bool billboards = trees.ConifersFar != null || trees.BroadleavesFar != null;
+        foreach (var near in new[] { _coniferInstance, _broadleafInstance })
+            if (near?.Multimesh is { } multi)
+                near.VisibilityRangeEnd = billboards ? Styles.StyleKit.TreeNearRange(multi.CustomAabb) : 0f;
     }
 
     private void Fill(ref MultiMeshInstance3D? node, string name, MultiMesh? multi)
@@ -381,6 +410,33 @@ public partial class ChunkNode : Node3D
         return BuildMesh(verts, material);
     }
 
+    /// <summary>
+    /// A unit quad for the billboard trees: UV = (across, up), UV2.x = kind (0 conifer, 1
+    /// broadleaf). The shader rebuilds the positions around each instance, facing the camera.
+    /// </summary>
+    private static ArrayMesh BillboardMesh(Material material, float kind)
+    {
+        using var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        // these only bound the quad: the shader places it
+        arrays[(int)Mesh.ArrayType.Vertex] = new[]
+        {
+            new Vector3(-1, 0, 0), new Vector3(1, 0, 0), new Vector3(1, 1, 0),
+            new Vector3(-1, 0, 0), new Vector3(1, 1, 0), new Vector3(-1, 1, 0),
+        };
+        arrays[(int)Mesh.ArrayType.TexUV] = new[]
+        {
+            new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1),
+            new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 1),
+        };
+        var k = new Vector2(kind, 0);
+        arrays[(int)Mesh.ArrayType.TexUV2] = new[] { k, k, k, k, k, k };
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        mesh.SurfaceSetMaterial(0, material);
+        return mesh;
+    }
+
     private static ArrayMesh BuildMesh(List<Vector3> verts, Material material)
     {
         using var arrays = new Godot.Collections.Array();
@@ -418,7 +474,7 @@ public partial class ChunkNode : Node3D
             instance!.Mesh = null;
             mesh.Dispose();
         }
-        foreach (var node in new[] { _coniferInstance, _broadleafInstance })
+        foreach (var node in new[] { _coniferInstance, _broadleafInstance, _coniferFarInstance, _broadleafFarInstance })
         {
             var multi = node?.Multimesh;
             if (multi == null) continue;

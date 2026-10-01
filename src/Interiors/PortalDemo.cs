@@ -88,10 +88,10 @@ public partial class PortalDemo : Node3D
             },
         });
 
-        var buildingMaterial = World("ps1_building");
-        var groundMaterial = World("ps1_terrain");
-        var propMaterial = World("ps1_prop");
-        var interiorMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_interior.gdshader") };
+        var buildingMaterial = World(Styles.MaterialRole.Building);
+        var groundMaterial = World(Styles.MaterialRole.Terrain);
+        var propMaterial = World(Styles.MaterialRole.Prop);
+        var interiorMaterial = Styles.StyleKit.Material(Styles.MaterialRole.Interior);
 
         AddChild(Ground(groundMaterial));
         AddChild(Props(propMaterial));
@@ -175,9 +175,9 @@ public partial class PortalDemo : Node3D
         _walker.Visible = false;
     }
 
-    private static ShaderMaterial World(string shader)
+    private static ShaderMaterial World(Styles.MaterialRole role)
     {
-        var m = new ShaderMaterial { Shader = GD.Load<Shader>($"res://shaders/{shader}.gdshader") };
+        var m = Styles.StyleKit.Material(role);
         FogUniforms.Apply(m);
         return m;
     }

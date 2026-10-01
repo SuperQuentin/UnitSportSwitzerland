@@ -44,7 +44,7 @@ namespace UnitSport.Interiors;
 /// (<c>portal_clip.gdshaderinc</c>, one slot per camera).
 /// </para>
 /// </summary>
-public partial class DoorPortals : Node3D
+public partial class DoorPortals : Node3D, Core.IOriginContainer
 {
     /// <summary>Visual layers 18, 19, 20: doorway quads for depth 0, 1 and 2.</summary>
     public static readonly uint[] QuadLayers = { 1u << 17, 1u << 18, 1u << 19 };

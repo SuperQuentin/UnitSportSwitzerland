@@ -13,14 +13,22 @@
   drop overwrites the requested y with ground + 220 m and every close-up shot comes back
   as an aerial one. `ShotRunner` also re-claims `Current` every frame — a mode entered from
   a deferred call (GPX replay) would otherwise steal the camera after the shot was set up.
-  Add `--menu` to capture the mode picker, `--settings` or `--licenses` for those pages. `--nohud`
-  hides every `CanvasLayer` (chat, key hints, menus) in the picture.
+  Add `--menu` to capture the pause menu over the world (the title screen: `--uishot`, `ui/screens`),
+  `--settings` or `--licenses` (Settings on its About tab) for those pages. `--nohud` hides every
+  `CanvasLayer` (chat, key hints, menus) in the picture.
 - Many screenshots, one launch: `<godot> --path . -- --shot-queue shots.txt [--nohud]` boots like
   `--shot`, then watches the file: one shot per line in the `--shot` syntax, taken in order,
   lines appended later picked up within 0.5 s; blank lines and `#` comments skipped, `quit`
   exits (code 1 if any shot or line failed). A file shorter than what was read is a new queue.
   Each PNG is written as `<out>.part` and renamed, so poll for the final name. Use it whenever
   more than one picture is needed: every launch steals focus on macOS (`macos-launch-steals-focus`).
+  A queued shot's y may be `g1.7` (that high above the ground, once it has streamed in), and each
+  shot logs `frame=` ms, averaged over its last second of settling.
+- `--origin E,N` (LV95): pins the world origin, so shots at fixed world coordinates stay put when
+  the manifest's suggested origin moves (offline; a server's origin wins online).
 - `--nocapture`: never grab the mouse (`Core/MouseCapture`). Every probe and tool run implies it,
   so a check running in a window leaves the pointer to whoever is using the machine.
 - `--chatcheck`: chat tab completion and `/spawn` parsing, headless, RESULT PASS/FAIL (`Core/ChatCheck`).
+- Floating origin (`floating-origin`): `--origincheck` (headless, RESULT PASS/FAIL), `--originstress <m>`
+  (shift past `m` metres, to the metre: add it to any probe), `--originshift <m>` (another threshold,
+  still snapped to whole km).

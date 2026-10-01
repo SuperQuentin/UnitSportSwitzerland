@@ -10,6 +10,7 @@ global uniform float world_night;
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
+#include "res://shaders/world_origin.gdshaderinc"
 
 // PS1-style terrain: clip-space vertex snapping, flat shading from screen derivatives,
 // altitude/slope palette bands, quantized sun, Bayer-dithered posterization, distance fog.
@@ -76,11 +77,12 @@ void fragment() {
     int pattern = int(COLOR.a * 4.0 + 0.5);
     if (pattern > 0) {
         float detail = max(fwidth(world_pos.x), fwidth(world_pos.z));
+        vec2 ground = pattern_xz(world_pos);
 
         if (pattern == 1) {                       // parking bays
             float legible = clamp(1.0 - detail / 0.6, 0.0, 1.0);
             if (legible > 0.0) {
-                vec2 cell = vec2(world_pos.x / bay_width, world_pos.z / bay_depth);
+                vec2 cell = vec2(ground.x / bay_width, ground.y / bay_depth);
                 vec2 f = abs(fract(cell) - 0.5);
                 // paint the bay divider lines, leaving the aisle ends open
                 float line = max(step(0.46, f.x), step(0.47, f.y) * step(0.25, f.x));
@@ -89,12 +91,12 @@ void fragment() {
         } else if (pattern == 2) {                // vine rows
             float legible = clamp(1.0 - detail / 0.5, 0.0, 1.0);
             if (legible > 0.0) {
-                float f = abs(fract(world_pos.x / vine_row_spacing) - 0.5);
+                float f = abs(fract(ground.x / vine_row_spacing) - 0.5);
                 col = mix(col, vine_color, smoothstep(0.20, 0.42, f) * legible * 0.75);
             }
         } else if (pattern == 3) {                // mown stripes on turf
             float legible = clamp(1.0 - detail / 1.5, 0.0, 1.0);
-            float band = step(0.5, fract(world_pos.z / mow_stripe));
+            float band = step(0.5, fract(ground.y / mow_stripe));
             col *= mix(1.0, mix(0.92, 1.08, band), legible);
         }
     }

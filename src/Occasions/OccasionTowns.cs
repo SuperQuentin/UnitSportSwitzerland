@@ -26,6 +26,8 @@ public static class OccasionTowns
 
 	/// <summary>Raised on the main thread when <see cref="All"/> is replaced.</summary>
 	public static event Action? Changed;
+	/// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
+	internal static void ResetEvents() => Changed = null;
 
 	private static ProceduralWorld? _generated;
 	private static Func<double, double, bool>? _generatedAt;

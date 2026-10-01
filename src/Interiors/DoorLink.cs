@@ -41,8 +41,16 @@ public sealed class DoorLink
     public required string Door { get; init; }
     public required string Plan { get; init; }
     public required TileId Tile { get; init; }
-    public required Transform3D Outside { get; init; }
-    public required Transform3D Inside { get; init; }
+    public required Transform3D Outside { get => _outside; init => _outside = value; }
+    public required Transform3D Inside { get => _inside; init => _inside = value; }
+    private Transform3D _outside, _inside;
+
+    /// <summary>The origin moved (#185): both doorways are somewhere else in world space.</summary>
+    public void Shift(OriginShift shift)
+    {
+        _outside = shift.Apply(_outside);
+        _inside = shift.Apply(_inside);
+    }
     public float OutsideWidth { get; init; }
     public float OutsideHeight { get; init; }
     public float InsideWidth { get; init; }

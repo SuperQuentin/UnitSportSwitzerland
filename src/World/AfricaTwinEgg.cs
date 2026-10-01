@@ -47,10 +47,18 @@ public partial class AfricaTwinEgg : Node
     {
         _chunks.TileEntered += OnTileEntered;
         // a local egg from an offline session would double the server's: the server's word wins
-        Multiplayer.ConnectedToServer += () => VehicleManager.Instance?.GetNodeOrNull(EggName)?.QueueFree();
+        // (a method, not a lambda: the multiplayer API outlives this node, and a static lambda would
+        // stay connected after the world is left, and be connected again by the next one)
+        Multiplayer.ConnectedToServer += DropLocalEgg;
     }
 
-    public override void _ExitTree() => _chunks.TileEntered -= OnTileEntered;
+    private void DropLocalEgg() => VehicleManager.Instance?.GetNodeOrNull(EggName)?.QueueFree();
+
+    public override void _ExitTree()
+    {
+        _chunks.TileEntered -= OnTileEntered;
+        Multiplayer.ConnectedToServer -= DropLocalEgg;
+    }
 
     /// <summary>The dedicated server decides; a client only when it has no server at all.</summary>
     private bool Decides => Net.NetworkManager.DedicatedServer
