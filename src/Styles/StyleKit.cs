@@ -417,9 +417,13 @@ public static class StyleKit
         {
             Name = "Sun",
             ShadowEnabled = true,
-            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits,
-            // about the 3D trees' reach: the billboards beyond cast none
+            // about the 3D trees' reach (the billboards beyond cast none), in cascades of 10, 40,
+            // 140 and 400 m: the default 40 m first one left a sawtooth on every near shadow
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
             DirectionalShadowMaxDistance = 400f,
+            DirectionalShadowSplit1 = 0.025f,
+            DirectionalShadowSplit2 = 0.1f,
+            DirectionalShadowSplit3 = 0.35f,
             // hard: the soft filter's noise turns into hatching under the cel band
             ShadowBlur = 0f,
             // the cel light reads attenuation as a hard band: any acne becomes stripes on the crowns

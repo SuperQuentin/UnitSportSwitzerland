@@ -25,7 +25,8 @@ pastel greens, a soft rim, strong aerial haze.
   exponential fog with aerial perspective (the haze: ridges go blue, then pale), ambient a
   bright cool blue. The style's own, whatever the "Distance fog" setting says.
 - **Sun** (`StyleKit.NewSun`): shines along the shaders' `world_sun_dir` (the moon at night),
-  coloured by the palette's tint, 2 cascades to 400 m. **Ground, roads, water, the horizon and
+  coloured by the palette's tint, 4 cascades of 10, 40, 140 and 400 m (with the default 40 m
+  first cascade every near shadow had a sawtooth edge; the Mobile atlas is 4096). **Ground, roads, water, the horizon and
   the far billboards never cast** (the full-resolution tiles under the cascades doubled the
   primitives in the prototype); buildings, near trees, props, avatars and vehicles do. Hidden
   while the camera is in the rooms under the terrain.
