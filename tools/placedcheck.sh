@@ -10,6 +10,7 @@
 #   GODOT=<exe> tools/placedcheck.sh [E,N]
 # WARNING: the server keeps its list in the real user://placed/server.json of this project (and the
 # uploaded Polaroid in user://placed/photos/).
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 AT=${1:-2583250,1113250}
 PORT=7793
