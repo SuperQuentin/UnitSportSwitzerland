@@ -967,6 +967,115 @@ public static class ItemIcons
         };
 
         // boombox: handle and aerial on top, two speakers either side of the tape deck
+        // weapons (#178)
+        d[ItemId.Pistol] = new[]
+        {
+            "................",
+            "................",
+            "..kkkkkkkkkkkkk.",
+            "..kwaaaaaaaaaGk.",
+            "..kgggggggggGGk.",
+            "..kkkkkkkkkkkkk.",
+            "..kddddk.kGk....",
+            "..kddddkkkk.....",
+            "..kddddk........",
+            "..kddddk........",
+            "..kddddk........",
+            "..kkkkkk........",
+        };
+
+        d[ItemId.Rifle] = new[]
+        {
+            "................",
+            "...........kk...",
+            "kkkkkkkkkkkykk..",
+            "kEeekkkkGaaaaaak",
+            "keeEkaagggGGGGGk",
+            "kEEEkkkkkkkkkkkk",
+            ".kEEk.kGk.......",
+            "..kkk.kGk.......",
+            "......kGk.......",
+            "......kkk.......",
+        };
+
+        d[ItemId.HuntingRifle] = new[]
+        {
+            "................",
+            "....kkkkkkk.....",
+            "....kddddddk....",
+            "....kkkkkkk.....",
+            "kkk..k...k......",
+            "knnkkkkkkkkkkkkk",
+            "kTnnnnnnnnnaaaGk",
+            "knnNNnnNNNkkkkkk",
+            "kNNk.kGk........",
+            ".kkk.kkk........",
+        };
+
+        d[ItemId.Knife] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            "...........kkk..",
+            "..........kwak..",
+            ".........kwak...",
+            "........kwak....",
+            ".......kwak.....",
+            "......kaak......",
+            "....kkkkk.......",
+            "...krrRk........",
+            "..krwrRk........",
+            ".krrrRk.........",
+            ".kRRRk..........",
+            "..kkk...........",
+        };
+
+        d[ItemId.Ammo9mm] = new[]
+        {
+            "................",
+            "................",
+            "..kk..kk..kk....",
+            ".kook.kook.kook.",
+            ".kOOk.kOOk.kOOk.",
+            ".kyyk.kyyk.kyyk.",
+            ".kyYk.kyYk.kyYk.",
+            ".kyYk.kyYk.kyYk.",
+            ".kYYk.kYYk.kYYk.",
+            ".kkkk.kkkk.kkkk.",
+        };
+
+        d[ItemId.Ammo75] = new[]
+        {
+            "..kk...kk...kk..",
+            ".kook.kook.kook.",
+            ".kOOk.kOOk.kOOk.",
+            ".kyyk.kyyk.kyyk.",
+            ".kyYk.kyYk.kyYk.",
+            "kyyYkkyyYkkyyYk.",
+            "kyyYkkyyYkkyyYk.",
+            "kyyYkkyyYkkyyYk.",
+            "kyyYkkyyYkkyyYk.",
+            "kYYYkkYYYkkYYYk.",
+            ".kkk..kkk..kkk..",
+        };
+
+        d[ItemId.ArmorVest] = new[]
+        {
+            "...kkk....kkk...",
+            "..kEeek..keeEk..",
+            "..kEeeekkeeeEk..",
+            ".kEeeeeeeeeeeEk.",
+            ".kEeeuuuuuueeEk.",
+            ".kEeeuEEEEueeEk.",
+            ".kEeeuuuuuueeEk.",
+            ".kEeeeeeeeeeeEk.",
+            ".kEeEEEEEEEEeEk.",
+            ".kEeeeeeeeeeeEk.",
+            ".kEEEEEEEEEEEEk.",
+            ".kkkkkkkkkkkkkk.",
+        };
+
         d[ItemId.Radio] = new[]
         {
             "............kw..",

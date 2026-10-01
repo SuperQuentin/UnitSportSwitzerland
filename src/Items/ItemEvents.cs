@@ -12,6 +12,11 @@ public enum ItemEventKind
     Shot = 1,
     /// <summary>A camera flash. Position = the camera, direction = where it looks.</summary>
     PhotoFlash = 2,
+    /// <summary>
+    /// A weapon hit a player (#178). Position = the hit point, direction = the shot, extra =
+    /// <see cref="PlayerHits.Hit"/>. Delivered to the victim only, and only while PvP is on.
+    /// </summary>
+    Hit = 3,
 }
 
 /// <summary>
@@ -56,6 +61,7 @@ public partial class ItemEvents : Node
     {
         [ItemEventKind.Shot] = (n, e) => n.ShotEffect(e),
         [ItemEventKind.PhotoFlash] = (n, e) => n.FlashEffect(e),
+        [ItemEventKind.Hit] = PlayerHits.OnHit,
     };
 
     /// <summary>
@@ -110,6 +116,11 @@ public partial class ItemEvents : Node
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
         if (extra.Length > MaxExtra) return;
+        if (kind == (int)ItemEventKind.Hit)
+        {
+            RelayHit(sender, position, direction, extra);
+            return;
+        }
         // a sound somewhere the sender is not is not an item it is holding
         if (GetNodeOrNull<Node3D>("../Players/" + sender) is { } body && body.GlobalPosition.DistanceTo(position) > MaxOffset)
             return;
@@ -119,11 +130,34 @@ public partial class ItemEvents : Node
                 RpcId(peer, MethodName.Deliver, sender, kind, position, direction, extra);
     }
 
+    /// <summary>
+    /// Server: a player says it hit another. Passed on to the victim alone when PvP is on, the
+    /// weapon exists and could do that much, the shooter stands by its body and the victim is
+    /// within the weapon's reach of it, where the shot says.
+    /// </summary>
+    private void RelayHit(long sender, Vector3 position, Vector3 direction, string extra)
+    {
+        if (!Combat.PvpRules.Enabled) return;
+        if (PlayerHits.Hit.Parse(extra) is not { } hit || hit.Victim == sender) return;
+        if (Weapons.Get(hit.Weapon) is not { } weapon || hit.Damage > weapon.MaxHit + 0.5f) return;
+        var shooter = GetNodeOrNull<FootPlayer>("../Players/" + sender);
+        var victim = GetNodeOrNull<FootPlayer>("../Players/" + hit.Victim);
+        if (shooter == null || victim == null || victim.Down != 0 || shooter.Down != 0) return;
+        // the bodies are where their owners last said: allow for a quarter second of running at both ends
+        const float Slack = 8f;
+        if (shooter.GlobalPosition.DistanceTo(victim.GlobalPosition) > weapon.Range + Slack) return;
+        if (victim.GlobalPosition.DistanceTo(position) > Slack) return;
+        if (!Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
+        GD.Print(FormattableString.Invariant($"[pvp] peer {sender} hit peer {hit.Victim} for {hit.Damage:F1} ({hit.Weapon})"));
+        RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position, direction, extra);
+        Combat.PvpRules.RaiseHit(sender, hit.Victim, hit.Damage);
+    }
+
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Deliver(long sender, int kind, Vector3 position, Vector3 direction, string extra)
     {
         // on the owner's body as this peer shows it, when it is here
-        if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && direction.LengthSquared() > 1e-6f)
+        if (kind != (int)ItemEventKind.Hit && GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && direction.LengthSquared() > 1e-6f)
             position = MuzzleOf(body, direction.Normalized(), kind == (int)ItemEventKind.Shot ? 0.55f : 0.1f);
         GD.Print(FormattableString.Invariant($"[items] event {(ItemEventKind)kind} from peer {sender} at {position.X:F1},{position.Y:F1},{position.Z:F1}"));
         Run(new ItemEvent(sender, (ItemEventKind)kind, position, direction, extra, Local: false));
@@ -144,8 +178,11 @@ public partial class ItemEvents : Node
 
     private void ShotEffect(ItemEvent e)
     {
+        // which gun: extra is its item id; empty is the shotgun (the only gun before #178)
+        var weapon = int.TryParse(e.Extra, out int id) ? Weapons.Get((ItemId)id) : null;
+        bool pump = weapon == null || weapon.Id == ItemId.Shotgun;
         var (stream, pitch, db) = SfxSynth.Shotgun.Pick(_rng);
-        Sound3D(e.Position, stream, pitch, db - 1f, unitSize: 18f, maxDistance: 1500f);
+        Sound3D(e.Position, stream, pitch * (weapon?.Pitch ?? 1f), db - (pump ? 1f : 3f), unitSize: 18f, maxDistance: 1500f);
         LightPulse(e.Position, new Color(1f, 0.78f, 0.45f), energy: 6f, range: 7f, time: 0.07f);
         if (!e.Local) Glow(e.Position, new Color(1f, 0.85f, 0.5f), size: 0.35f, time: 0.05f);   // in the owner's own view it is a hard-edged square on the lens
 
@@ -157,8 +194,9 @@ public partial class ItemEvents : Node
         if (shooter != null)
         {
             shooter.BodyJolt();
-            if (!e.Local) shooter.GetNodeOrNull<HeldItemVisual>("HeldItem")?.Pump();
+            if (!e.Local && pump) shooter.GetNodeOrNull<HeldItemVisual>("HeldItem")?.Pump();
         }
+        if (!pump) return;
         var at = e.Position;
         GetTree().CreateTimer(HeldItemVisual.PumpDelay + 0.10f).Timeout += () =>
         {

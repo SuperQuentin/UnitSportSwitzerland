@@ -5,6 +5,9 @@ using UnitSport.Vehicles;
 
 namespace UnitSport.Player;
 
+/// <summary>What took a player's health: kept with the last attacker for the kill credit.</summary>
+public enum DamageCause { Other, Weapon, Blast, Fall, Crash, Zone }
+
 /// <summary>
 /// First-person on-foot controller tuned for human scale: WASD / left stick, mouse or right
 /// stick look, Shift / L3 to run, Space / A to jump, Ctrl / B to slide, jump against a wall to
@@ -367,6 +370,13 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     [Export] public int DanceId { get; set; }
 
+    /// <summary>
+    /// 1 while down (knocked out, or eliminated in a match), else 0. Replicated like
+    /// <see cref="DanceId"/>; written by the owner. Other peers' hit tests skip a downed body
+    /// (<c>Items.PlayerHits</c>).
+    /// </summary>
+    [Export] public int Down { get; set; }
+
     /// <summary>The arm pose currently drawn and its 0..1 blend, eased in and out on every peer.</summary>
     public Avatar.ItemArmPose DrawnArmPose => _itemArmCur;
     public float DrawnArmBlend => _itemArmBlend;
@@ -669,6 +679,30 @@ public partial class FootPlayer : CharacterBody3D
 
     /// <summary>Hurt by this much (the feel layer flashes and shakes).</summary>
     public event Action<float>? Hurt;
+
+    /// <summary>
+    /// Health reached zero. The peer is whoever last hurt this player within
+    /// <see cref="CreditSeconds"/> (0 for nobody), the cause is what finished them.
+    /// </summary>
+    public event Action<long, DamageCause>? Died;
+
+    /// <summary>
+    /// Asked when this player goes down: true keeps them down (<see cref="Eliminated"/>) instead
+    /// of the knockout's revive a few seconds later. A Battle Royale match sets it.
+    /// </summary>
+    public static Func<FootPlayer, bool>? StayDown;
+
+    /// <summary>Down for good, until <see cref="Respawn"/>: out of the match.</summary>
+    public bool Eliminated { get; private set; }
+
+    /// <summary>Armour left, 0..<see cref="MaxArmor"/>: it takes half of every weapon hit while it lasts.</summary>
+    public float Armor { get; private set; }
+    public const float MaxArmor = 50f;
+
+    /// <summary>A hit this recent still credits its shooter with the kill, whatever finishes the job.</summary>
+    public const double CreditSeconds = 10;
+    private long _lastAttacker;
+    private double _lastAttackedAt = -99;
     /// <summary>Shaken by something nearby — an explosion — at this strength, 0..1.</summary>
     public event Action<float>? Shaken;
     public event Action<bool>? EngineToggled;
@@ -902,6 +936,7 @@ public partial class FootPlayer : CharacterBody3D
         replication.AddProperty(".:HeadwearId");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:HeldRadio");
+        replication.AddProperty(".:Down");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -910,7 +945,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId", ".:HeldRadio" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId", ".:HeldRadio", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1918,14 +1953,63 @@ public partial class FootPlayer : CharacterBody3D
     // health
     // ------------------------------------------------------------------------------------
 
-    public void TakeDamage(float amount)
+    public void TakeDamage(float amount) => TakeDamage(amount, 0, DamageCause.Other);
+
+    /// <summary>
+    /// Takes <paramref name="amount"/> of health. A weapon hit names its shooter
+    /// (<paramref name="attacker"/>, a peer id) and is half soaked by <see cref="Armor"/> while it lasts.
+    /// </summary>
+    public void TakeDamage(float amount, long attacker, DamageCause cause)
     {
         if (amount <= 0 || _deadTimer > 0) return;
+        if (cause == DamageCause.Weapon && Armor > 0)
+        {
+            float soaked = Mathf.Min(Armor, amount * 0.5f);
+            Armor -= soaked;
+            amount -= soaked;
+        }
+        double now = Time.GetTicksMsec() / 1000.0;
+        if (attacker != 0)
+        {
+            _lastAttacker = attacker;
+            _lastAttackedAt = now;
+        }
         Health = Mathf.Max(0f, Health - amount);
         _sinceHurt = 0;
         Hurt?.Invoke(amount);
         PlayerInput.Rumble(0.6f, Mathf.Clamp(amount / 40f, 0.2f, 1f), 0.25f);
-        if (Health <= 0f) Die();
+        if (Health <= 0f)
+        {
+            long killer = now - _lastAttackedAt <= CreditSeconds ? _lastAttacker : 0;
+            Die();
+            Died?.Invoke(killer, cause);
+        }
+    }
+
+    /// <summary>Puts on a vest: armour back to full. False when it already is.</summary>
+    public bool AddArmor(float amount)
+    {
+        if (amount <= 0 || _deadTimer > 0 || Armor >= MaxArmor - 0.01f) return false;
+        Armor = Mathf.Min(MaxArmor, Armor + amount);
+        return true;
+    }
+
+    /// <summary>
+    /// Back in the game after <see cref="Eliminated"/> (a match ended): full health, no armour, at
+    /// <paramref name="at"/>.
+    /// </summary>
+    public void Respawn(Vector3 at)
+    {
+        Eliminated = false;
+        _deadTimer = 0;
+        _stunTimer = 0;
+        Down = 0;
+        Health = MaxHealth;
+        Armor = 0;
+        _lastAttacker = 0;
+        GlobalPosition = at;
+        Velocity = Vector3.Zero;
+        RequestReplacement();
     }
 
     /// <summary>
@@ -1933,7 +2017,7 @@ public partial class FootPlayer : CharacterBody3D
     /// occupant, and going to zero wrecks it with them inside; on foot or on equipment it is the
     /// player who is hit.
     /// </summary>
-    public void ShotHit(float damage)
+    public void ShotHit(float damage, long attacker = 0)
     {
         if (_ride is { IsVehicle: true })
         {
@@ -1941,7 +2025,7 @@ public partial class FootPlayer : CharacterBody3D
             if (VehicleHealth <= 0f) WreckVehicle();
             return;
         }
-        TakeDamage(damage);
+        TakeDamage(damage, attacker, DamageCause.Weapon);
     }
 
     /// <summary>
@@ -1983,6 +2067,16 @@ public partial class FootPlayer : CharacterBody3D
     {
         if (_ride is { IsVehicle: true }) WreckVehicle();
         else if (_ride != null) ApplyRide(RideKind.OnFoot, Velocity);
+        Down = 1;
+        if (StayDown?.Invoke(this) == true)
+        {
+            // out of the match: never revived by the timer, only by Respawn
+            Eliminated = true;
+            Announced?.Invoke("ELIMINATED", false);
+            _deadTimer = float.PositiveInfinity;
+            _stunTimer = float.PositiveInfinity;
+            return;
+        }
         Announced?.Invoke("KNOCKED OUT", false);
         _deadTimer = 3.5f;
         _stunTimer = 3.5f;
@@ -1990,6 +2084,7 @@ public partial class FootPlayer : CharacterBody3D
 
     private void Revive()
     {
+        Down = 0;
         Health = MaxHealth;
         if (HasSafeHere) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
         Velocity = Vector3.Zero;
@@ -2049,7 +2144,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         float damage = 75f * t;
         if (_ejected > 0) damage = Mathf.Min(damage, EjectBlastCap);
-        TakeDamage(damage);
+        TakeDamage(damage, 0, DamageCause.Blast);
         if (_ride == null)
         {
             var away = (GlobalPosition - at) with { Y = 0 };
@@ -2791,7 +2886,7 @@ public partial class FootPlayer : CharacterBody3D
             return;
         }
         // a wingsuit into the ground is the pilot hitting it, not a machine
-        TakeDamage((speed - 8f) * 3.5f);
+        TakeDamage((speed - 8f) * 3.5f, 0, DamageCause.Crash);
         Impacted?.Invoke(Mathf.Max(speed, 8f));
         Announced?.Invoke(flyer is Wingsuit ? "SPLAT!" : "CRASH!", false);
         PlayerInput.Rumble(1f, 1f, 0.5f);
@@ -3017,7 +3112,7 @@ public partial class FootPlayer : CharacterBody3D
                 ApplyRide(RideKind.OnFoot, fwd.Normalized() * hit * 0.25f + Vector3.Up * 4f);
                 GlobalPosition += Vector3.Up * 1.2f;
                 _stunTimer = 1.2f;
-                TakeDamage((hit - 8f) * 3f);
+                TakeDamage((hit - 8f) * 3f, 0, DamageCause.Crash);
                 return;
             }
         }
@@ -3434,7 +3529,7 @@ public partial class FootPlayer : CharacterBody3D
                 PlayerInput.Rumble(0.2f, Mathf.Clamp((_fallSpeed - 3f) / 7f, 0.15f, 1f), 0.15f);
             if (_fallSpeed > 1.5f) Landed?.Invoke(_fallSpeed);
             // a 6 m drop is free, a 15 m one hurts a lot, a 25 m one is the end
-            if (_fallSpeed > 11f && _ejected <= 0) TakeDamage((_fallSpeed - 11f) * 9f);
+            if (_fallSpeed > 11f && _ejected <= 0) TakeDamage((_fallSpeed - 11f) * 9f, 0, DamageCause.Fall);
             _fallSpeed = 0f;
         }
         _wasOnFloor = onFloor;

@@ -50,6 +50,7 @@ public sealed class ChatCompleter
         ("bring", true, false),
         ("tpall", true, false),
         ("kick", true, false),
+        ("pvp", true, false),
     ];
 
     /// <summary>The commands this player can run right now.</summary>
@@ -119,6 +120,10 @@ public sealed class ChatCompleter
                     1 when words[1].ToLowerInvariant() is "add" or "remove" => PlayerNames(),
                     _ => [],
                 };
+                break;
+
+            case "pvp":
+                options = argIndex == 0 ? ["on", "off"] : [];
                 break;
 
             case "race":

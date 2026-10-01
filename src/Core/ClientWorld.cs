@@ -399,10 +399,11 @@ public partial class ClientWorld : Node3D
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null
             || Items.PlacedProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
-            || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null
+            || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.PvpProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
+        if (Items.PvpProbe.Role != null) Items.PvpProbe.Stock(inventory);
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
         Items.Bank.Create(this, inventory);
@@ -420,6 +421,7 @@ public partial class ClientWorld : Node3D
         if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
+        if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
         Vehicles.PassengerService.Said += message => items.Ui.Toast(message);
 

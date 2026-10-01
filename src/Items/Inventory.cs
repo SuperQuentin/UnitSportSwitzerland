@@ -394,6 +394,18 @@ public sealed class Inventory
         }
     }
 
+    /// <summary>
+    /// Empties every slot, the cursor and the bin (a Battle Royale match starts empty-handed).
+    /// Cash is left alone: it is the account's business.
+    /// </summary>
+    public void Clear()
+    {
+        Array.Fill(_slots, ItemStack.Empty);
+        Carried = ItemStack.Empty;
+        Trashed = ItemStack.Empty;
+        Notify();
+    }
+
     /// <summary>Everything the cursor operations touch, for undoing a drag in progress.</summary>
     public (ItemStack[] Slots, ItemStack Carried) Snapshot() => ((ItemStack[])_slots.Clone(), Carried);
 

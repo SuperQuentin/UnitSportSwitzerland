@@ -249,7 +249,7 @@ public partial class ChatManager : Node
                         Show(line, ChatKind.Private);
                 return;
 
-            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick":
+            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
@@ -468,9 +468,30 @@ public partial class ChatManager : Node
             case "tpall": CommandTeleportEveryone(sender, rest); return;
             case "kick": CommandKick(sender, parts); return;
             case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;
+            case "pvp": CommandPvp(sender, rest); return;
 
             default:
                 ReplyTo(sender, $"Unknown command '/{verb}'. Try /help.", ChatKind.Error);
+                return;
+        }
+    }
+
+    /// <summary>/pvp on|off: whether foot weapons hurt players (#178). Bare /pvp says which.</summary>
+    private void CommandPvp(long sender, string rest)
+    {
+        switch (rest.Trim().ToLowerInvariant())
+        {
+            case "":
+                ReplyTo(sender, $"PvP is {(Combat.PvpRules.Enabled ? "on" : "off")}.", ChatKind.Private);
+                return;
+            case "on" or "off":
+                Combat.PvpRules.Enabled = rest.Trim().ToLowerInvariant() == "on";
+                Broadcast(Combat.PvpRules.Enabled
+                    ? "PvP is ON: weapons hurt players."
+                    : "PvP is off: weapons no longer hurt players.", ChatKind.System);
+                return;
+            default:
+                ReplyTo(sender, "Usage: /pvp on|off", ChatKind.Error);
                 return;
         }
     }

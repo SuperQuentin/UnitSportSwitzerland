@@ -13,6 +13,7 @@
 - `tools/radiocheck.sh` (`CHUNKS=<terrain_chunks dir>` from a worktree): dedicated server with `--cdfixture <wav>` (repeatable),
   `--radiocheck thrower --radiopersonal <wav>` (headless) and `--radiocheck watch` (windowed) on loopback; see `radio`.
 - `GODOT=<exe> tools/gunshotcheck.sh [--gunside]`: server + A (shouldered shotgun, fires, rate limit) + B (screenshots A's body, counts Shot events); pictures `test_output/gunshot_*.png` (see `shotgun-feel`).
+- `GODOT=<exe> tools/pvpcheck.sh`: two loopback runs (PvP on, then off): rifle, pistol through a vest, knife, kill credit, replicated Down; see `combat/pvp-weapons`.
 - `GODOT=<exe> tools/plantcheck.sh`: server + A (flag ghost, plant, pull-up) + B (remote view, spawn effect count); see `flag-plant`.
 - `GODOT=<exe> tools/placedcheck.sh [E,N]`: loopback server + three clients for item events and placed
   objects (late join snapshot, owner-only photo removal, persistence across a server restart, a Polaroid
