@@ -42,6 +42,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XRCamera3D _camera = null!;
     private XRController3D _left = null!, _right = null!;
     private XrPad _pad = null!;
+    private XrHands _hands = null!;
     private XrUi _ui = null!;
     private MeshInstance3D _vignette = null!;
     private ShaderMaterial _vignetteMat = null!;
@@ -143,6 +144,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _camera.AddChild(_vignette);
 
         _pad = new XrPad(_left, _right);
+        _hands = new XrHands(_left, _leftMarker, _right, _rightMarker);
         _ui = new XrUi(_camera, _right);
         AddChild(_ui);
         Notice = new XrNotice();
@@ -247,6 +249,10 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         var calibrated = _calib * head;
 
         HandleSticks(player, calibrated, dt);
+        // the hands first: a grip that holds the wheel or works a door is not a shoulder press
+        _hands.Update(player);
+        _pad.LeftGripBusy = _hands.LeftBusy;
+        _pad.RightGripBusy = _hands.RightBusy;
         _pad.Update(player, calibrated, uiActive: _ui.Pointing, dt);
         _ui.UpdatePanel(dt);
         UpdateSki(player, calibrated, dt);
