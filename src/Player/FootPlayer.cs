@@ -2279,6 +2279,8 @@ public partial class FootPlayer : CharacterBody3D
         if (RescueFromVoid(delta)) return;
 
         float dt = (float)delta;
+        // inside another player (a shared spawn): ease apart rather than be shoved out (#203)
+        SeparateFromPlayers(dt);
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         TickHealth(dt, onFloor);
