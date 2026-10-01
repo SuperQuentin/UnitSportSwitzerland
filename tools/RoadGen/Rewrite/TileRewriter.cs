@@ -79,6 +79,7 @@ public static partial class TileRewriter
         public SortedDictionary<string, double> OverlapPairs = new(StringComparer.Ordinal);
         public readonly CrossSectionPlanner.Stats Carriageways = new();
         public readonly RoundaboutShaper.Stats Roundabouts = new();
+        public readonly TurnLaneStats TurnLanes = new();
         /// <summary>Terrain under each shifted carriageway vertex vs under the TLM line it came from.</summary>
         public HeightAudit Shifted = HeightAudit.Empty;
         public int MaxBytes;
@@ -103,7 +104,7 @@ public static partial class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format();
+                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format();
         }
     }
 
@@ -363,6 +364,7 @@ public static partial class TileRewriter
                     plans.Add((source, plan, write, link.Id));
                 }
 
+                var segmentOf = new Dictionary<int, (RoadSegment, TileId)>();   // turn lanes (#123)
                 foreach (var (source, plan, write, linkId) in plans)
                 {
                     // rails inside a carriageway (#124); halo rails too, their track zone may reach into the block
@@ -393,6 +395,7 @@ public static partial class TileRewriter
                     attributes = attributes with { Flags = attributes.Flags | priority.FlagsOf(linkId) };   // #121
                     var segment = ToSegment(plan, source, attributes);
                     list.Add(segment);
+                    segmentOf[linkId] = (segment, source.Tile);
                     written++;
 
                     PaintEmitter.Emit(segment, source.Key is { } k ? k.FromM + source.AlongOf(plan[0]) : 0, painted);
@@ -412,6 +415,7 @@ public static partial class TileRewriter
                 }
 
                 EmitPriority(priority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
+                EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, netStats.TurnLanes);
             }
 
             foreach (var id in block)

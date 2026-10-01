@@ -319,6 +319,7 @@ public enum AreaPropType : byte
     Island = 1,       // roundabout centre island (#122)
     SplitterIsland = 2, // raised island at a roundabout entry (#122)
     Sidewalk = 3,     // a sidewalk patch not carried by a segment, e.g. a junction corner (#119)
+    Pavement = 4,     // flush carriageway beside a segment: a turn lane's widening (#123); Height 0
 }
 
 /// <summary>A raised surface: a triangulated polygon lifted by <see cref="Height"/> with a kerb face.</summary>
