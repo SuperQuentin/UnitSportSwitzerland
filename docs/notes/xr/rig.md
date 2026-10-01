@@ -13,6 +13,17 @@
   camera (`player.Camera`, the spectator, a GPX shot) is the **anchor**. `XrSession.Anchor`
   exposes it. When the rig adopts a camera as the anchor, it strips `HeadsetOnlyLayer` and
   `SpectatorOnlyLayer` from that camera's cull mask.
+- **Anchors that are not a player's camera** (the spectator, a GPX shot, the title backdrop) are
+  followed in position only. The heading is the one the camera had when it was adopted: a camera
+  that orbits or pans on its own would spin the world round you.
+  - The title's backdrop camera (under `Ui.TitleDiorama`) drifts along its orbit, so it is held in
+    position too, from its first placed frame.
+- **Tonemap.** If the scene's environment is not linear (the title backdrop is Filmic), the
+  headset camera gets a copy of that environment with a linear tonemap (`UpdateTonemap`). The
+  reason: the UI panel is a 3D surface, and the Mobile renderer clamps colour before tonemapping,
+  so under Filmic its white topped out at about 63 % grey. A colour gain does not help.
+- **Controller markers** are hidden while their controller is untracked. An untracked controller
+  sits at the origin, inside the head.
 - **Calibration.** The tracking space is placed so that the head, at the yaw-only pose it had at
   the last recentre, sits exactly on the anchor: `origin = anchor * calib`, with
   `calib = inverse(head0)`.

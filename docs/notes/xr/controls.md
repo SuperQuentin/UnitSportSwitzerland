@@ -26,6 +26,10 @@
     logs disconnect errors when the layer exits.
   - It also draws the root canvas, through a shared `World2D`.
   - `FeelScreen` and `LensLayer` are left off the panel.
+  - It is in the menu style (`ui/style-guide`): the beam is a faint white line, and an amber
+    reticle sits on the panel, filling to full amber while the trigger is held. The panel ignores
+    fog (`DisableFog`). The pointer only shows while the hand is tracked.
+  - The controller markers use the menus' dark glass, with an amber tip.
   - Input stays with the root viewport. The panel is the root's size, so the right hand's ray
     becomes mouse events at that canvas point, and the hand's trigger clicks. This only happens
     while the mouse is not captured, i.e. while a menu is open.

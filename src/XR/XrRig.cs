@@ -56,6 +56,10 @@ public partial class XrRig : Node3D
     private Vector3 _prevAnchorPos;
     private float _prevAnchorYaw;
     private float _vignetteLevel;
+    private MeshInstance3D _leftMarker = null!, _rightMarker = null!;
+    /// <summary>The heading kept for an anchor that is not a player's, taken when it was adopted.</summary>
+    private float _heldYaw;
+    private bool _anchorIsBackdrop, _holdPending;
 
     private bool _snapArmed = true;
     private float _recentreHeld;
@@ -100,8 +104,10 @@ public partial class XrRig : Node3D
         _right = new XRController3D { Name = "Right", Tracker = "right_hand", Pose = "aim" };
         _origin.AddChild(_left);
         _origin.AddChild(_right);
-        _left.AddChild(HandMarker());
-        _right.AddChild(HandMarker());
+        _leftMarker = HandMarker();
+        _rightMarker = HandMarker();
+        _left.AddChild(_leftMarker);
+        _right.AddChild(_rightMarker);
 
         _vignetteMat = new ShaderMaterial
         {
@@ -124,10 +130,34 @@ public partial class XrRig : Node3D
         _pad = new XrPad(_left, _right);
         _ui = new XrUi(_camera, _right);
         AddChild(_ui);
+        Notice = new XrNotice();
+        AddChild(Notice);
+        if (XrSession.Simulated) Notice.CallDeferred(XrNotice.MethodName.Show, "VR", "simulated");
         _monitor = new XrMonitor(this) { Name = "Monitor" };
         AddChild(_monitor);
 
         _camera.Current = true;
+
+        // "--xrheadshot <png> [seconds]": what the headset camera itself renders, saved to a file
+        // (with --xrsim the headset viewport is otherwise not drawn); for checks of the panel
+        var args = OS.GetCmdlineUserArgs();
+        int shot = Array.IndexOf(args, "--xrheadshot");
+        if (shot >= 0 && shot + 1 < args.Length)
+        {
+            string path = args[shot + 1];
+            double wait = shot + 2 < args.Length && double.TryParse(args[shot + 2], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double w) ? w : 2.0;
+            if (XrSession.Simulated)
+            {
+                _view.Size = new Vector2I(1152, 648);
+                _view.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+            }
+            GetTree().CreateTimer(wait).Timeout += () =>
+            {
+                var err = _view.GetTexture().GetImage().SavePng(path);
+                GD.Print($"[xr] headset shot {(err == Error.Ok ? "saved" : "FAILED")}: {path}");
+            };
+        }
         Core.GameSettings.Changed += OnSettings;
     }
 
@@ -135,13 +165,34 @@ public partial class XrRig : Node3D
 
     private void OnSettings() => _camera.Far = Core.GameSettings.Current.CameraFar;
 
-    /// <summary>A small box in each hand, until the avatar's own hands are driven (#186 phase 2).</summary>
-    private static MeshInstance3D HandMarker() => new()
+    /// <summary>
+    /// A small controller in each hand, until the avatar's own hands are driven (#186 phase 2): the
+    /// menus' dark glass, with an amber tip where the pointer leaves it.
+    /// </summary>
+    private static MeshInstance3D HandMarker()
     {
-        Mesh = new BoxMesh { Size = new Vector3(0.05f, 0.04f, 0.12f) },
-        MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.85f, 0.75f, 0.62f) },
-        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-    };
+        var body = new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = new Vector3(0.045f, 0.035f, 0.11f) },
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = Ui.UiTheme.Glass with { A = 1f }, Roughness = 0.35f },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        body.AddChild(new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = new Vector3(0.047f, 0.037f, 0.008f) },
+            Position = new Vector3(0, 0, -0.055f),
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                AlbedoColor = Ui.UiTheme.Amber,
+            },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        });
+        return body;
+    }
+
+    /// <summary>The one-line notices (recentred, monitor view), on the monitor and the panel.</summary>
+    internal XrNotice Notice { get; private set; } = null!;
 
     public override void _Process(double delta)
     {
@@ -151,12 +202,24 @@ public partial class XrRig : Node3D
         if (current != Anchor && current != null)
         {
             Anchor = current;
+            _heldYaw = YawOf(current.GlobalBasis);
+            _anchorIsBackdrop = false;
+            for (var n = current.GetParent(); n != null; n = n.GetParent())
+                if (n is Ui.TitleDiorama) _anchorIsBackdrop = true;
+            // held from where it is on the next frame: when it turns current it may not be placed yet
+            _holdPending = _anchorIsBackdrop;
             // the window's copy of the game camera never shows the headset-only parts
             // (with --xrsim the window is the only view, so it keeps them)
             if (!XrSession.Simulated) Anchor.CullMask &= ~XrSession.HeadsetOnlyLayer;
             Anchor.CullMask &= ~XrSession.SpectatorOnlyLayer;
         }
         if (Anchor != null && !IsInstanceValid(Anchor)) Anchor = null;
+
+        UpdateTonemap();
+
+        // a controller that is not tracked sits at the origin, inside the head: not drawn then
+        _leftMarker.Visible = _left.GetHasTrackingData();
+        _rightMarker.Visible = _right.GetHasTrackingData();
 
         var head = _camera.Transform;
         bool tracking = head.Origin != Vector3.Zero;
@@ -180,6 +243,10 @@ public partial class XrRig : Node3D
             _lastHead = _camera.GlobalTransform.Orthonormalized();
             Anchor.GlobalTransform = _lastHead;
         }
+        // --xrsim shows the window, not a headset: on the title, show it from the held head too,
+        // or the backdrop drifts away from the panel the headset would be looking at
+        else if (XrSession.Simulated && _anchorIsBackdrop && Anchor != null)
+            Anchor.GlobalTransform = _camera.GlobalTransform.Orthonormalized();
     }
 
     /// <summary>Puts the tracking space so the calibrated head sits on the anchor.</summary>
@@ -190,12 +257,22 @@ public partial class XrRig : Node3D
         // A frame where the game did not place its camera again still holds the head we wrote
         // back: carrying on from that would walk the origin away by the head's offset each frame.
         if (player != null && at.IsEqualApprox(_lastHead)) at = _lastAnchor;
-        _lastAnchor = at;
 
         // A player's camera is VR-aware: level on foot, the body's frame in a vehicle. Anything
-        // else (the spectator, a filmed shot) is only followed in heading, never in pitch or roll.
-        var basis = player != null ? at.Basis : YawOnly(at.Basis);
-        _origin.GlobalTransform = new Transform3D(basis, at.Origin) * _calib;
+        // else (the title's turning backdrop, the spectator, a filmed shot) is followed in position
+        // only: a camera that orbits or pans on its own would spin the world round the player.
+        var basis = player != null ? at.Basis : new Basis(Vector3.Up, _heldYaw);
+        // the title's backdrop camera drifts round the valley on its own: in VR you stand still
+        // where it started instead of being carried
+        if (_anchorIsBackdrop && !_holdPending) at.Origin = _lastAnchor.Origin;
+        if (_holdPending)
+        {
+            _holdPending = false;
+            _heldYaw = YawOf(at.Basis);
+            basis = new Basis(Vector3.Up, _heldYaw);
+        }
+        _lastAnchor = new Transform3D(basis, at.Origin);
+        _origin.GlobalTransform = _lastAnchor * _calib;
     }
 
     /// <summary>Takes where the head is now as the neutral pose: straight ahead, at the avatar's eye.</summary>
@@ -227,6 +304,7 @@ public partial class XrRig : Node3D
             if (_recentreHeld > RecentreHold && !_recentreDone)
             {
                 Recentre();
+                Notice.Show("Recentred");
                 Rumble(0.4f, 0.1f, both: true);
                 _recentreDone = true;
             }
@@ -313,6 +391,31 @@ public partial class XrRig : Node3D
         _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, 1f - Mathf.Exp(-6f * dt));
         _vignette.Visible = _vignetteLevel > 0.02f;
         _vignetteMat.SetShaderParameter("strength", _vignetteLevel);
+    }
+
+    private Godot.Environment? _sceneEnv, _linearEnv;
+
+    /// <summary>
+    /// The headset sees the scene's environment with a linear tonemap. The UI panel is a 3D surface,
+    /// and the Mobile renderer clamps before the tonemap, so under Filmic (the title's backdrop) its
+    /// white could never be more than ~63 % grey. The game world is linear already; this only
+    /// changes anything where a scene asks for another tonemapper.
+    /// </summary>
+    private void UpdateTonemap()
+    {
+        var env = _camera.GetWorld3D()?.Environment;
+        if (env == null || env.TonemapMode == Godot.Environment.ToneMapper.Linear)
+        {
+            _camera.Environment = null;
+            return;
+        }
+        if (env != _sceneEnv)
+        {
+            _sceneEnv = env;
+            _linearEnv = (Godot.Environment)env.Duplicate();
+            _linearEnv.TonemapMode = Godot.Environment.ToneMapper.Linear;
+        }
+        _camera.Environment = _linearEnv;
     }
 
     /// <summary>One pulse on one or both hands; strength 0..1.</summary>

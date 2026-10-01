@@ -37,3 +37,6 @@
   anchor. Use it for checks:
   `<godot> --path . -- --xrsim --ride skis,10,<abs path>.png`. Give a Windows path, not `/c/...`,
   or the PNG fails to save.
+- **`--xrheadshot <png> [seconds]`** saves what the headset camera itself renders. With
+  `--xrsim` the window shows the game camera, not the headset camera, so this is the way to check
+  the panel and the tonemap. Both this flag and `--vrmonitor` keep the run on the title screen.

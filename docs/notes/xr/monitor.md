@@ -15,6 +15,10 @@
     mounted player uses the ride's `ChaseDistance` + 1.2 and `ChaseHeight`. The camera eases in,
     and a raycast pulls it in front of slopes and walls.
   - **Off**: no 3D on the monitor; all the GPU goes to the headset.
+- **Notices.** `XR/XrNotice` (CanvasLayer 39) shows a one-line notice in the style guide's
+  floating-text look: no box, an outline and a shadow, the changed value in amber. It fades out
+  after ~1.6 s and shows on both the monitor and the panel. It announces a monitor-view change
+  ("Monitor view  Both eyes"), a manual recentre, and with `--xrsim`, "VR  simulated".
 - **What each view does to the window.** In Both eyes, Third person and Off, the window's own 3D
   is disabled (`Root.Disable3D`), so nothing renders twice. Each view still costs one render of
   the world (two for Both eyes) on top of the headset's own render.

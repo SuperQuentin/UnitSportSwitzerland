@@ -39,6 +39,16 @@ public partial class XrMonitor : CanvasLayer
     private MonitorView _mode = (MonitorView)(-1);
     private Vector3 _chase;
     private bool _chaseSet;
+    private bool _announce;
+
+    /// <summary>The name a view has in Settings.</summary>
+    public static string Label(MonitorView v) => v switch
+    {
+        MonitorView.Off => "Off",
+        MonitorView.BothEyes => "Both eyes",
+        MonitorView.ThirdPerson => "Third person",
+        _ => "First person",
+    };
 
     public XrMonitor(XrRig rig) => _rig = rig;
 
@@ -112,6 +122,9 @@ public partial class XrMonitor : CanvasLayer
                 c.CullMask = (world | Interiors.DoorPortals.QuadLayers[0]) & ~XrSession.SpectatorOnlyLayer;
         }
         GD.Print($"[xr] monitor view: {_mode}");
+        // said on a change, not at start: the monitor view at start is the one that was chosen
+        if (_announce) _rig.Notice.Show("Monitor view", Label(_mode));
+        _announce = true;
     }
 
     /// <summary>F7 steps through the monitor views (keyboard only: the hands are in the headset).</summary>
