@@ -30,8 +30,16 @@ public partial class SteeringWheel
 {
     /// <summary>A feel this old means nobody is driving with this wheel any more.</summary>
     public const float StaleSeconds = 0.25f;
-    /// <summary>Past the lock, the soft lock is at full force within this much more rotation, radians (8°).</summary>
-    public const float SoftLockRamp = 0.14f;
+    /// <summary>
+    /// Past the lock, the soft lock is at full force within this much more rotation, radians (20°).
+    /// 8° made a stiff spring that, updated at the frame rate, bounced a fast rim off the lock and
+    /// back (measured on the HORI: 88° → 40° → 77°) instead of stopping it.
+    /// </summary>
+    public const float SoftLockRamp = 0.35f;
+    /// <summary>Past the lock, force per rad/s of rim speed (either way): it soaks up the bounce.</summary>
+    public const float SoftLockDamping = 0.07f;
+    /// <summary>The wheel's own damper near and past the lock, 0..1 of full: it runs at the device's rate, the frame cannot.</summary>
+    public const float SoftLockDamper = 0.7f;
 
     /// <summary>The claimed wheel has force feedback and it is open.</summary>
     public static bool HasForceFeedback => _instance is { _hapticOpen: true };
@@ -50,6 +58,8 @@ public partial class SteeringWheel
     private float _lock;
     private double _feelAge = double.MaxValue;
     private float _testLevel, _testTimer;
+    private bool _softLogged;
+    private float _lastAngle, _rate;
     private float _sentConstant = float.NaN, _sentRoad = float.NaN, _sentRoadHz, _sentDamper = float.NaN, _sentFriction = float.NaN;
 
     /// <summary>
@@ -100,17 +110,24 @@ public partial class SteeringWheel
     public static float SoftLockAt(float lockToLock, float range) =>
         lockToLock > 0f && range > lockToLock + 0.01f ? lockToLock * 0.5f : float.PositiveInfinity;
 
-    /// <summary>The forces for one frame, as the constant level and the three other channels.</summary>
+    /// <summary>
+    /// The forces for one frame, as the constant level and the three other channels.
+    /// <paramref name="rate"/> is the rim's speed, rad/s, + right.
+    /// </summary>
     public static (float Constant, float Road, float Damper, float Friction) Compose(
-        in WheelFeel feel, float lockToLock, float angle, WheelSettings s)
+        in WheelFeel feel, float lockToLock, float angle, float rate, WheelSettings s)
     {
-        float range = Mathf.DegToRad(s.RangeDeg);
-        float constant = feel.Torque * s.FfbAligning + SoftLock(angle, SoftLockAt(lockToLock, range));
+        float softAt = SoftLockAt(lockToLock, Mathf.DegToRad(s.RangeDeg));
+        float constant = feel.Torque * s.FfbAligning + SoftLock(angle, softAt);
+        if (Mathf.Abs(angle) > softAt) constant -= Math.Clamp(rate * SoftLockDamping, -0.5f, 0.5f);
+        // the wheel's damper takes over from 6° short of the lock, fully at it
+        float nearLock = Math.Clamp((Mathf.Abs(angle) - (softAt - 0.1f)) / 0.1f, 0f, 1f);
         float master = s.FfbStrength;
+        // a little damping always, so the rim does not oscillate on the aligning torque; more parked
+        float damper = Math.Max(Math.Clamp((0.12f + 0.5f * feel.Weight) * s.FfbWeight, 0f, 1f), SoftLockDamper * nearLock);
         return (Math.Clamp(constant, -1f, 1f) * master,
             Math.Clamp(feel.Road * s.FfbRoad, 0f, 1f) * master,
-            // a little damping always, so the rim does not oscillate on the aligning torque; more parked
-            Math.Clamp((0.12f + 0.5f * feel.Weight) * s.FfbWeight, 0f, 1f) * master,
+            damper * master,
             Math.Clamp(feel.Weight * s.FfbWeight, 0f, 1f) * master);
     }
 
@@ -129,15 +146,27 @@ public partial class SteeringWheel
         _feelAge += dt;
         float constant, road, damper, friction;
         float hz = _feel.RoadHz;
+        bool driving = _feelAge <= StaleSeconds && !Assigning;
+        // the rim's speed, smoothed over a few frames: a 1° step of the axis in one frame is noise, not 60°/s
+        if (dt > 0f) _rate = Mathf.Lerp(_rate, (Angle - _lastAngle) / dt, Mathf.Clamp(dt * 10f, 0f, 1f));
+        _lastAngle = Angle;
+        if (driving)
+            (constant, road, damper, friction) = Compose(_feel, _lock, Angle, _rate, s);
+        else
+            (constant, road, damper, friction) = (0f, 0f, 0.1f * s.FfbStrength, 0f);
+        // a test push rides on top of whatever is being driven (so --ffbcheck can push into the soft lock)
         if (_testTimer > 0f)
         {
             _testTimer -= dt;
-            (constant, road, damper, friction) = (_testLevel * s.FfbStrength, 0f, 0f, 0f);
+            constant = Math.Clamp(constant + _testLevel * s.FfbStrength, -1f, 1f);
+            if (!driving) damper = 0f;
         }
-        else if (_feelAge <= StaleSeconds && !Assigning)
-            (constant, road, damper, friction) = Compose(_feel, _lock, Angle, s);
-        else
-            (constant, road, damper, friction) = (0f, 0f, 0.1f * s.FfbStrength, 0f);
+        // say once per lock when the soft lock takes hold: the one force a player may never meet
+        float softAt = SoftLockAt(_lock, Mathf.DegToRad(s.RangeDeg));
+        bool locked = driving && Mathf.Abs(Angle) > softAt;
+        if (locked && !_softLogged)
+            GD.Print($"[wheel] soft lock at {Mathf.RadToDeg(softAt):F0}° (vehicle {Mathf.RadToDeg(_lock):F0}° lock to lock, range {s.RangeDeg:F0}°)");
+        _softLogged = locked || (_softLogged && Mathf.Abs(Angle) > softAt - 0.2f);
         if (s.FfbInvert) constant = -constant;
 
         if ((int)_constant >= 0 && (MathF.Abs(constant - _sentConstant) > 1f / 512f || float.IsNaN(_sentConstant)))

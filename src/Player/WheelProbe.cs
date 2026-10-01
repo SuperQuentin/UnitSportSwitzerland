@@ -187,8 +187,13 @@ public partial class WheelProbe : Node
         expect(float.IsPositiveInfinity(SteeringWheel.SoftLockAt(r1260, r900)), "no soft lock when the range is stretched over the lock");
         float at = SteeringWheel.SoftLockAt(r900, r1080);
         expect(Mathf.IsEqualApprox(at, r900 / 2), "soft lock at the vehicle's lock");
-        expect(SteeringWheel.SoftLock(at - 0.01f, at) == 0f && SteeringWheel.SoftLock(at + 0.07f, at) < -0.4f
-            && SteeringWheel.SoftLock(-at - 0.2f, at) == 1f, "soft lock pushes back toward centre");
+        expect(SteeringWheel.SoftLock(at - 0.01f, at) == 0f && SteeringWheel.SoftLock(at + 0.2f, at) < -0.5f
+            && SteeringWheel.SoftLock(-at - 0.5f, at) == 1f, "soft lock pushes back toward centre");
+        var s = new WheelSettings { RangeDeg = 1080f };
+        var into = SteeringWheel.Compose(default, r900, at + 0.1f, 3f, s);
+        var back = SteeringWheel.Compose(default, r900, at + 0.1f, -3f, s);
+        expect(into.Constant < back.Constant && into.Damper > 0.6f * s.FfbStrength,
+            $"soft lock damps the rim: {into.Constant:F2} going in, {back.Constant:F2} coming back, damper {into.Damper:F2}");
         return 0;
     }
 
@@ -343,8 +348,63 @@ public partial class WheelProbe : Node
             bool sense = rightDeg > 0f && leftDeg < 0f;
             GD.Print($"[ffbcheck] {SteeringWheel.DeviceName}: push right turned it {rightDeg:+0.0;-0.0}°, push left {leftDeg:+0.0;-0.0}° "
                 + $"(invert {(GameSettings.Current.Wheel.FfbInvert ? "on" : "off")})");
-            Finish(moved && sense, !moved ? "the wheel hardly moved: hands on it, or forces too weak"
-                : sense ? "forces push the way they should" : "forces push the wrong way: switch on Invert force");
+            if (!moved || !sense)
+            {
+                Finish(false, !moved ? "the wheel hardly moved: hands on it, or forces too weak"
+                    : "forces push the wrong way: switch on Invert force");
+                return;
+            }
+            // soft lock: a vehicle whose lock is 60° either side of where the wheel now rests
+            (_pushStage, _stageAt, _lockCentre) = (4, _time + 0.5, SteeringWheel.Angle);
+        }
+        else if (_pushStage >= 4)
+            SoftLockStage();
+    }
+
+    private float _lockCentre;
+    private double _traceAt;
+    private const float SoftHalfDeg = 60f;
+
+    /// <summary>
+    /// --ffbcheck, second part: a vehicle with its lock 60° either side of centre is "driven" (no
+    /// tyre forces), then the wheel pushed right at 35% for 1.2 s — it must stop near the lock, not
+    /// run on as it did free. Centred first, so the lock is measured from the middle of the wheel.
+    /// </summary>
+    private void SoftLockStage()
+    {
+        float half = Mathf.DegToRad(SoftHalfDeg);
+        if (_time >= _traceAt)
+        {
+            _traceAt = _time + 0.1;
+            GD.Print($"[ffbcheck]   stage {_pushStage} t={_time:F1}s wheel {Mathf.RadToDeg(SteeringWheel.Angle),7:F1}°  force {SteeringWheel.LastForces.Constant,6:F2}");
+        }
+        if (_pushStage == 4)
+        {
+            // back to the middle: a soft lock is measured from centre, wherever the first pushes left the rim
+            SteeringWheel.Drive(default, 2f * half);
+            if (Mathf.Abs(SteeringWheel.Angle) > Mathf.DegToRad(5f) && _time < _stageAt + 3)
+            {
+                SteeringWheel.Test(-Mathf.Sign(SteeringWheel.Angle) * 0.18f, 0.05f);
+                return;
+            }
+            (_pushStage, _stageAt) = (5, _time + 0.4);
+        }
+        else if (_pushStage == 5)
+        {
+            SteeringWheel.Drive(default, 2f * half);
+            if (_time < _stageAt) return;
+            SteeringWheel.Test(0.35f, 1.2f);
+            (_pushStage, _stageAt) = (6, _time + 1.2);
+        }
+        else if (_pushStage == 6)
+        {
+            SteeringWheel.Drive(default, 2f * half);
+            if (_time < _stageAt) return;
+            float deg = Mathf.RadToDeg(SteeringWheel.Angle);
+            GD.Print($"[ffbcheck] soft lock at {SoftHalfDeg:F0}° (range {GameSettings.Current.Wheel.RangeDeg:F0}°): a 35% push held at {deg:+0.0;-0.0}°");
+            bool held = deg > SoftHalfDeg - 15f && deg < SoftHalfDeg + 20f;
+            Finish(held, held ? "forces push the way they should, and the soft lock holds"
+                : deg <= SoftHalfDeg - 15f ? "the push did not reach the lock" : "the soft lock did not hold the wheel");
         }
     }
 

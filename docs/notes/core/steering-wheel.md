@@ -47,10 +47,17 @@
   gone by 6 m/s. `HeavyTrain` keeps each axle's `AxleFy`/`AxleAlpha` for the trucks. `PlayerFeel`
   calls `SteeringWheel.Drive(feel, WheelLock)` every frame the local vehicle is on screen and
   `Knock` on `Impacted`/`Landed`; a feel older than 0.25 s leaves only a light damper.
-- Effects: one infinite **constant** (aligning + **soft lock**, full within 8° past the vehicle's lock),
+- Effects: one infinite **constant** (aligning + **soft lock**, full within 20° past the vehicle's lock, with a
+  light rim-speed damping past it, and the wheel's own **damper** raised to 70% from 6° short of the lock),
   a **sine** for the road, a one-shot sine for knocks, **damper** and **friction** conditions (the
   wheel runs those itself). All on `SDL_HAPTIC_STEERING_AXIS`; the wheel's autocentre is switched off
   where supported. **SDL gives the side a force comes FROM**: a positive level pushes the wheel left, so
   the game's + right is sent negated — found with `--ffbcheck` on the HORI (all five effects supported,
   features 0xd87ff, no autocentre control). `FfbInvert` flips it again for an odd device. Gains in
   Settings → Wheel (strength 70% default; 30% turns a free HORI rim ~80° in 0.5 s).
+- **Soft lock bounced** at first: full force within 8°, updated at the frame rate, threw a free HORI rim
+  88° → 40° → 77° (no hands on it). A 20° ramp plus the device-side damper near the lock (it runs at the
+  wheel's own rate) holds it: `--ffbcheck`'s soft-lock stage pushes 35% into a 60° lock and must stop
+  there (HORI: peak 84°, settles 60–74°, still a ±10° wobble with no hands). In a truck at 1800° the lock
+  (~1790°) is the wheel's own stop, so there is nothing to feel; a car (AE86 1260°) has 270° of soft lock
+  either side.
