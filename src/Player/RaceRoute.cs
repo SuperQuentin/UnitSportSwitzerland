@@ -31,8 +31,9 @@ public sealed class RaceRoute
 
     public float Length => Line.Length;
 
+    /// <param name="smallest">The narrowest class of road it may take (a truck's probe keeps to Road and wider).</param>
     public static async Task<RaceRoute?> BuildAsync(IChunkSource source, WorldOrigin origin, Vector3 at,
-        CancellationToken ct = default)
+        CancellationToken ct = default, RoadClass smallest = RoadClass.Minor)
     {
         var (e, n) = origin.ToLv95(at);
         var here = TileId.FromLv95(e, n);
@@ -45,7 +46,7 @@ public sealed class RaceRoute
             }
         var graph = LaneGraph.Build(tiles, origin, s =>
             s.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Major or RoadClass.Road or RoadClass.Minor
-            && (s.Flags & (RoadFlags.Stairs | RoadFlags.Tunnel)) == 0);
+            && s.Class <= smallest && (s.Flags & (RoadFlags.Stairs | RoadFlags.Tunnel)) == 0);
 
         LaneEdge? best = null;
         float bestD = float.MaxValue, bestS = 0;

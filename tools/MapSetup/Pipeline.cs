@@ -176,7 +176,7 @@ public static partial class Planner
             DiskPath = p.BuildingsDir,
             Seconds = sheetBytes / stats.EffectiveDownload + 5,
             Skip = !c.Layers.HasFlag(Layers.Buildings) ? "buildings layer off"
-                 : !c.Gdal ? "needs GDAL (python -c \"import osgeo\" fails)"
+                 : !c.Gdal ? "needs GDAL (python -c \"import osgeo\" fails; docs/notes/tools/gdal-setup.md)"
                  : haveNationwideGpkg || haveNationwideZip ? "nationwide buildings already here"
                  : !needSheets || sheetsToGet.Count == 0 ? "already here" : !py ? noPython : null,
             Run = r =>

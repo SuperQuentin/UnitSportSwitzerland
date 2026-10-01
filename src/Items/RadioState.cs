@@ -10,6 +10,7 @@ namespace UnitSport.Items;
 /// <param name="Owner">Peer that simulates the fall; 0 for the server.</param>
 /// <param name="StartedAt">Server clock (<c>Net.ClockSync.ServerNow</c>) at which the CD began.</param>
 /// <param name="Settled">Already at rest: frozen where it stands, no physics.</param>
+/// <param name="Length">Seconds the CD lasts (what a thrown radio was playing carries on).</param>
 public readonly record struct RadioState(
     string Name,
     long Owner,
@@ -19,7 +20,8 @@ public readonly record struct RadioState(
     int CdId = 0,
     double StartedAt = 0,
     bool Playing = false,
-    bool Settled = false)
+    bool Settled = false,
+    float Length = 0)
 {
     public Godot.Collections.Dictionary ToDict() => new()
     {
@@ -32,6 +34,7 @@ public readonly record struct RadioState(
         ["at"] = StartedAt,
         ["playing"] = Playing,
         ["settled"] = Settled,
+        ["len"] = Length,
     };
 
     public static RadioState FromDict(Godot.Collections.Dictionary d) => new(
@@ -43,5 +46,6 @@ public readonly record struct RadioState(
         d["cd"].AsInt32(),
         d["at"].AsDouble(),
         d["playing"].AsBool(),
-        d["settled"].AsBool());
+        d["settled"].AsBool(),
+        d.TryGetValue("len", out var len) ? len.AsSingle() : 0f);
 }

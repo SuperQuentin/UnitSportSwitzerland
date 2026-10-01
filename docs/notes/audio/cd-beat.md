@@ -4,6 +4,13 @@
   `user://cds/<id>.ogg` + `<id>.json` + `library.json`. A CD is a track in this list, **not** an
   inventory item (stacks carry no per-instance data). Clients get the list on connect (`Library`)
   and additions (`Added`); a client's `RequestBurn(url)` goes to the server, offline it burns locally.
+- **Personal CDs (#168).** "Just for me" in the radio panel burns on the player's own machine
+  (`RequestBurn(url, personal: true)`, same `CdBurner`, so the client needs yt-dlp/ffmpeg too) into
+  `user://cds/personal/` with its own `library.json`. Ids are **negative and random** so they never
+  collide with the server's (positive) or another player's. `CdLibrary.Find` looks in both lists;
+  `CdCache.LocalPath` answers a negative id from the personal list only (in memory, so a second
+  client sharing the same `user://` does not pick it up), and never fetches one. Others see
+  "someone's own CD" and hear nothing; the server takes the owner's length, capped at 10 min.
 - **Burning runs where the library is** (dedicated server, or the offline client), never on a client
   for someone else. `CdBurner`: `yt-dlp` (best audio stream as is, `--print title`/`after_move:filepath`)
   → `ffmpeg` to mono 22.05 kHz s16le on stdout for the analyser → `ffmpeg` to stereo Vorbis q2

@@ -16,8 +16,11 @@
 - History (#48, before the fix reached it): `Box` wound its quads counter-clockwise, so every box
   showed its far inner walls and a part tucked into the body showed through (a grille intake 5 mm
   inside the bumper, a sunk pop-up lamp). The workarounds from then stay and are harmless:
-  `CarRig` folds the pods into lids on the nose instead of sinking them, and hides their lamps and
-  the roadster cockpit when put away (which also saves drawing them).
+  `CarRig` folds the pods into lids on the nose instead of sinking them, and hides their lamps
+  when put away. (The roadster cockpit it also hid is now the cabin every car has, always drawn
+  behind translucent glass: `car-cabin`, #69.)
+- **Panes** (#69): `MeshScratch.Pane` is the one primitive that is not closed: a flat polygon wound
+  both ways, in a second surface (`glass`), so it has no volume and `--meshcheck` leaves it out.
 - **Still true:** thin decals on a surface z-fight at distance — 24-bit depth resolves ~4 mm at 60 m.
   Make overlays stand at least ~1 cm proud (the Swiss flag cross was 2 mm proud and flickered;
   it now stands 12 mm proud each side, `ItemDefs.AppendFlag`). `MeshScratch.Build` writes no normals;

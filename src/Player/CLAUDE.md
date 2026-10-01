@@ -8,6 +8,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 ## Architecture
 
 - `vehicle-hull-collision` — Cars and motorbikes collide as a box hull above the carrying capsule; no more cars sinking a third into each other
+- `cockpit` — First-person driving (#69, trucks and buses #157): V cycles chase / cockpit with body / without, eye on the car body, head sway, held free look, seat and FOV settings, SubViewport mirrors (+0.5 ms), HUD setting, what is replicated, checks
 - `third-first-person` — Third / first person: (`FootPlayer`, V / R3, saved as `GameSettings.ThirdPerson`, default third; `--view...
 - `feel-layer` — Feel layer: (`Player/PlayerFeel`, child of the LOCAL `FootPlayer` only): sound, camera shake, speed lines,...
 - `game-sim-profile` — Game / Sim profile: (`GameSettings.RideProfile`, Settings → Movement, `--profile game|sim`, default Game;...
@@ -19,12 +20,18 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `mounts` — Mounts: (`src/Player/Rideable.cs`): E opens a picker (`RideUi`) — On foot / Road bike / Skis. A vehicle is a table...
 - `car-setups` — Car presets by category (#40): Everyday/SUV/Road racing/Rally-raid/All-terrain/Supercar/Rally over any car's spec, tyre grip per surface for cars, rough-ground term, raised bodies and off-road kit, replicated `CarSetupId`, `/race ... class=`, `--setupcheck`
 - `motorbike` — Motorbikes: (`Motorbike`, `MotorbikeCatalog`, RideKind 64..95 append-only; #38, #41): R1, Monster and all 28 Honda Africa Twins (`docs/data/africa_twin_specs.json`), DCT, surface grip, wheelie/stoppie/friction-circle limits, `--motocheck`...
+- `void-rescue` — Falling through the world (under terrain, into unstreamed void, under an interior floor) puts you back on the ground; safe spot per space; `--voidcheck`
+
+- `passengers` — Passengers (#158): seats from the models, `PassengerService` hands them out, riders moved and drawn from the host's copy, driverless vehicles when the driver jumps out, take the wheel (F / RB), hand-over between players, `--passengernet a|b|c`
+- `trucks-buses` — Trucks and buses (#70): `HeavyCatalog` RideKind 96..119, trailers by code, a planar multi-body train (pins, per-axle tyres), sections as their own bodies, clutch/converter driveline in five shift modes, retarder, air, rollover, coupling, bus doors/kneel/destination, `--truckcheck`, `--truckprobe`, `--heavynet`
 
 ## Commands
 
 - `commands` — Commands: --at, --path, --ride, --ridemenu, --shot
 
 ## Gotchas
+
+- `launch-clutch-bites-near-launch` — An automated clutch must bite near the launch speed, not from idle: biting at 600 rpm a diesel never got up to pull
 
 - `player-scale-set-speed-size` — Player scale is set by speed, not by size: A 1.8 m capsule moving at 6-14 m/s reads as a giant next to 10 m...
 - `isonwall-flickers-between-adjacent-physics` — `IsOnWall()` flickers between adjacent physics frames

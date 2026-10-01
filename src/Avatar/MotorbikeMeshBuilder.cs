@@ -497,6 +497,23 @@ public partial class Motorcyclist : Node3D
     public float WheelSpin { get; set; }
 
     private MotoLook _look = new();
+
+    /// <summary>
+    /// The rider's place and the pillion's behind it (#158), node space: the pillion a third of a
+    /// metre back and a little higher, hands on the rider's waist, feet on pegs behind the rider's.
+    /// </summary>
+    public static SeatAnchor[] SeatsFor(MotoLook k) => new[]
+    {
+        new SeatAnchor(0, Flip(k.Seat), 0f, 0f) { Pose = SeatPose.Straddle, Grip = Flip(k.Grip), Peg = Flip(k.Peg) },
+        new SeatAnchor(0, Flip(k.Seat + new Vector3(0, 0.07f, -0.34f)), 0f, 0f)
+        {
+            Pose = SeatPose.Straddle,
+            Grip = Flip(k.Seat + new Vector3(-0.16f, 0.24f, -0.14f)),
+            Peg = Flip(k.Peg with { Y = k.Peg.Y + 0.09f, Z = k.Peg.Z - 0.3f }),
+        },
+    };
+
+    public SeatAnchor[] Seats => SeatsFor(_look);
     private Node3D _steer = null!, _frontSpin = null!, _rearSpin = null!;
     private Vector3 _steerAxis;
 

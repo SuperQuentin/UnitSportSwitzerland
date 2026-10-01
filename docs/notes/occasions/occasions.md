@@ -38,6 +38,7 @@
   crowns and road *edges* (carriageways are ploughed), `world_lights` draws coloured bulbs along
   the eaves in `ps1_building` (no geometry) and lights more windows; falling snow is one static
   mesh of 4k quads that `ps1_snowfall.gdshader` drops and wraps round the camera in **world**
-  space (`OccasionPrecip`, zero CPU per frame, hidden indoors). Props are a 12 m fir per town
+  space (`OccasionPrecip`, zero CPU per frame; the shader draws nothing for a camera
+  under -2000 m, i.e. indoors, per camera so a door portal looking out still shows it). Props are a 12 m fir per town
   (`TreeSpot` nudges it off roads and doorsteps; tree and gifts agree by recomputing it) with
   five hunt gifts under it, plus a gift at ~1 door in 20.

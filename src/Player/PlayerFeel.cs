@@ -30,6 +30,8 @@ public partial class PlayerFeel : Node3D
     private AudioStreamPlayer _hiss = null!, _tyre = null!, _scrape = null!;
     private EngineSynth _rotor = null!, _engine = null!;
     private AudioStreamPlayer _squeal = null!;
+    private double _beep;
+    private int _puffs;
     private EngineSynth? _carEngine;
     private float _proximity;
     private readonly AudioStreamPlayer[] _voices = new AudioStreamPlayer[8];
@@ -328,6 +330,21 @@ public partial class PlayerFeel : Node3D
         }
         else _carEngine?.Set(0, 0, 0, 0);
 
+        if (_player.Vehicle is Truck truck)
+        {
+            float heavySlide = grounded ? Mathf.SmoothStep(0.15f, 0.9f, truck.TyreSlide) : 0f;
+            SetLoop(_squeal, heavySlide * Mathf.Clamp(speed / 8f, 0f, 1f) * 0.3f, 0.6f + 0.25f * truck.TyreSlide);
+            // the reversing alarm every truck and bus here has, a beep a second
+            if (truck.Reversing && _player.EngineOn)
+            {
+                _beep -= GetProcessDeltaTime();
+                if (_beep <= 0) { Play(SfxSynth.Chime, 0.22f, 2.6f); _beep = 0.9; }
+            }
+            else _beep = 0;
+            // the air: a hiss when the parking brake goes on or off
+            if (truck.Box.AirPuffs != _puffs) { _puffs = truck.Box.AirPuffs; Play(SfxSynth.Hiss, 0.35f, 1.7f); }
+            return;
+        }
         if (car == null)
         {
             SetLoop(_squeal, 0, 1);
@@ -744,22 +761,47 @@ public partial class PlayerFeel : Node3D
 
     private void UpdateHud(float dt, RideKind ride, float speed)
     {
-        // mounted only: on foot the pace is the walk, and a number would be clutter
-        _speedLabel.Visible = ride != RideKind.OnFoot;
+        // mounted only: on foot the pace is the walk, and a number would be clutter; in the
+        // cockpit the dashboard shows it, unless the setting wants it here too
+        bool dash = _player.InCockpit && !Core.GameSettings.Current.CockpitHud;
+        string wear = _player.Vehicle is Car worn
+            ? (Core.GameSettings.Current.TyreWear ? $"    tyres F {(1f - worn.TyreWearFront) * 100:0}% R {(1f - worn.TyreWearRear) * 100:0}%" : "")
+              + (Core.GameSettings.Current.BrakeWear ? $"    brakes {worn.BrakeTemp:0}°C{(worn.BrakeFactor < 0.95f ? " FADE" : "")}" : "")
+            : _player.Vehicle is Truck heavy
+            // a truck's dash has its air gauge and lamps, but no stage number, hold or weight
+            ? (heavy.Box.RetarderLevel > 0 ? $"    {(heavy.Box.RetarderLevel == 1 ? "EXH" : $"RET {heavy.Box.RetarderLevel - 1}")}" : "")
+              + (!heavy.Box.SpringBrakes && heavy.HillHold ? "    HOLD" : "")
+              + (heavy.Box.ClutchPedal > 0.5f ? "    CLUTCH" : "")
+              + $"    {heavy.Train.Mass / 1000f:0.0} t"
+            : "";
+        // a passenger (#158): the vehicle's speed, and the wheel when nobody holds it
+        var carrier = _player.Host;
+        bool aboard = carrier != null || _player.RollingDriverless;
+        // the dashboard has no tyre or brake gauges: those stay on the HUD
+        _speedLabel.Visible = ride != RideKind.OnFoot && (!dash || wear != "") || aboard;
         if (_speedLabel.Visible)
-            _speedLabel.Text = _player.IsFlying
+            _speedLabel.Text = aboard
+                ? $"{(carrier?.WorldVelocity.Length() ?? speed) * 3.6f:0} km/h    "
+                  + (carrier is { SeatIndex: 0 } ? "passenger" : Core.InputHints.Format("nobody at the wheel: {take_wheel} takes it"))
+                : dash ? wear.Trim()
+                : _player.IsFlying
                 ? $"{speed * 3.6f:0} km/h    {_player.Clearance:0} m"
                 + (ride == RideKind.Plane ? $"    {_player.Flight.Control * 100:0}%" : "")
+                : _player.Vehicle is Truck t
+                    ? $"{speed * 3.6f:0} km/h    {t.GearLabel}    {t.Rpm:0} rpm"
+                      + (t.Box.RetarderLevel > 0 ? $"    {(t.Box.RetarderLevel == 1 ? "EXH" : $"RET {t.Box.RetarderLevel - 1}")}" : "")
+                      + $"    AIR {t.Box.AirTank:0.0} bar{(t.Box.AirTank < HeavyDriveline.AirLow ? " LOW" : "")}"
+                      + (t.Box.SpringBrakes ? "    PARK" : t.HillHold ? "    HOLD" : "")
+                      + (t.Box.ClutchPedal > 0.5f ? "    CLUTCH" : "")
+                      + $"    {t.Train.Mass / 1000f:0.0} t"
                 : _player.Vehicle is Car c
-                    ? $"{speed * 3.6f:0} km/h    {(c.Gear < 0 ? "R" : c.Gear.ToString())}    {c.Rpm:0} rpm"
-                      + (Core.GameSettings.Current.TyreWear ? $"    tyres F {(1f - c.TyreWearFront) * 100:0}% R {(1f - c.TyreWearRear) * 100:0}%" : "")
-                      + (Core.GameSettings.Current.BrakeWear ? $"    brakes {c.BrakeTemp:0}°C{(c.BrakeFactor < 0.95f ? " FADE" : "")}" : "")
+                    ? $"{speed * 3.6f:0} km/h    {(c.Gear < 0 ? "R" : c.Gear.ToString())}    {c.Rpm:0} rpm" + wear
                     : _player.Vehicle is IEngined e
                         ? $"{speed * 3.6f:0} km/h    {e.Gear}    {e.Rpm:0} rpm"
                         : $"{speed * 3.6f:0} km/h";
 
         // the rev counter, amber turning red toward the limit
-        _rpmBar.Visible = _player.Vehicle is IEngined;
+        _rpmBar.Visible = _player.Vehicle is IEngined && !dash;
         if (_player.Vehicle is IEngined rev)
         {
             _rpmBar.Value = rev.Rpm01;
@@ -825,6 +867,11 @@ public partial class PlayerFeel : Node3D
                 break;
             case RideKind.Parachute:
                 text = $"{(pad ? "left stick" : "A / D")} steer     {(pad ? "pull back" : "S")} brake — hold it to flare the landing";
+                break;
+            case var _ when _player.Heavy is { } truck && truck.Trailer == null && _player.GroundSpeed < 1.5f
+                && _player.CoupleCandidate(truck) != null:
+                // the hitch is under a trailer's pivot: say so, in the device's own key
+                text = InputHints.Format("{couple}  COUPLE the trailer");
                 break;
         }
 

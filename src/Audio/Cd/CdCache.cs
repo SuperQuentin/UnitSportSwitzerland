@@ -20,6 +20,7 @@ public static class CdCache
     /// <summary>The Ogg for a CD if this machine already has it, else null.</summary>
     public static string? LocalPath(int id)
     {
+        if (id < 0) return CdLibrary.Instance?.PersonalPath(id);
         string own = Path.Combine(CdLibrary.Directory, $"{id}.ogg");
         if (File.Exists(own)) return own;
         string cached = Path.Combine(CacheDirectory, $"{id}.ogg");

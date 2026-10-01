@@ -5,13 +5,15 @@ namespace UnitSport.Items;
 
 /// <summary>
 /// <c>--photocheck</c> (with <c>--ride foot,&lt;s&gt; --view first --photo-dir &lt;abs&gt;</c>): the Polaroid
-/// offline, through the real item paths, with screenshots in <c>test_output/</c>. Takes a photo at
-/// rest (the print slides out of the camera: <c>photocheck_develop_3d.png</c>) and one at the eye
-/// (the card at the bottom of the screen: <c>photocheck_develop_ui.png</c>); checks both became
+/// offline, through the real item paths, with screenshots in <c>test_output/</c>. Checks the camera
+/// does not shoot at rest (only through the viewfinder); takes a photo at the eye and lowers the
+/// camera at once (the print slides out of it: <c>photocheck_develop_3d.png</c>) and one kept at
+/// the eye (the card at the bottom of the screen: <c>photocheck_develop_ui.png</c>); checks both became
 /// Photo items whose id is the hash of a stored JPEG with a sidecar; opens the album
 /// (<c>photocheck_album.png</c>) and a print (<c>photocheck_inspect.png</c>); sticks one on the
 /// ground with the ghost showing (<c>photocheck_ghost.png</c>, <c>photocheck_stuck.png</c>) and
-/// takes it back with an empty hand. Scratch inventory; the offline placed list ends as it began.
+/// takes it back with an empty hand; puts one on a wall in front through the API: a poster
+/// (<c>photocheck_poster.png</c>). Scratch inventory; the offline placed list ends as it began.
 /// </summary>
 public partial class PhotoProbe : Node
 {
@@ -38,12 +40,19 @@ public partial class PhotoProbe : Node
         await Seconds(1.5);
         GD.Print($"[photocheck] photo dir {PhotoStore.LocalDir}");
 
-        // 1: a shot at rest: the print comes out of the bottom of the camera, in first person
+        // 0: at rest the camera does not shoot: the picture is what the viewfinder frames
         int cam = SlotOf(ItemId.Camera);
         Inv.Select(cam);
         me.LookPitch = 0.05f;
         await Seconds(0.8);
         _items.UseSlot(me, cam);
+        Expect(!await Until(() => _items.Developing != null, 1.0), "no shot without the viewfinder up");
+
+        // 1: at the eye, lowered right after: the print comes out of the bottom of the camera
+        _items.ForceAim = true;
+        await Seconds(1.2);
+        _items.UseSlot(me, cam);
+        _items.ForceAim = false;
         Expect(await Until(() => _items.Developing != null, 3), "the first print is developing");
         string first = _items.Developing ?? "";
         await Seconds(1.6);
@@ -121,6 +130,29 @@ public partial class PhotoProbe : Node
         {
             _items.PickUpPhoto(stuck.Id);
             Expect(await Until(() => !placed.All.ContainsKey(stuck.Id) && Photos().Contains(first), 3), "taken back into the pack");
+        }
+
+        // 6: on a wall it is a poster: the second print, upright 1.8 m in front, facing us
+        me.LookPitch = 0f;
+        await Seconds(0.5);
+        var fwd = -me.Camera.GlobalTransform.Basis.Z with { Y = 0 };
+        fwd = fwd.LengthSquared() > 1e-4f ? fwd.Normalized() : Vector3.Forward;
+        var wall = new Transform3D(Basis.LookingAt(fwd, Vector3.Up), me.Camera.GlobalPosition + fwd * 1.8f);
+        PlacedResult? poster = null;
+        placed.RequestPlace(PlacedKind.Photo, wall, second, r => poster = r);
+        Expect(await Until(() => poster != null, 3) && poster!.Value.Ok, "the second print went on the wall");
+        if (poster?.Object is { } onWall)
+        {
+            await Seconds(0.6);
+            var mesh = placed.GetNodeOrNull<MeshInstance3D>($"P{onWall.Id}/Card");
+            var size = mesh?.Mesh.GetAabb().Size ?? Vector3.Zero;
+            Expect(mesh?.Mesh == PhotoVisuals.Poster && size.X > 0.5f && Mathf.Abs(size.Y / size.X - PhotoStore.CardSize.Y / PhotoStore.CardSize.X) < 0.01f,
+                FormattableString.Invariant($"drawn as a poster, card aspect ({size.X:F2} x {size.Y:F2} m)"));
+            Expect(mesh?.MaterialOverride is StandardMaterial3D pm && pm.AlbedoTexture == PhotoStore.Texture(second), "the poster shows the print");
+            Shot("photocheck_poster.png");
+            PlacedResult? gone = null;
+            placed.RequestRemove(onWall.Id, r => gone = r);
+            Expect(await Until(() => gone != null, 3) && gone!.Value.Ok, "the poster came down");
         }
 
         GD.Print(_failures == 0 ? "[photocheck] RESULT: ok" : $"[photocheck] RESULT: FAILED ({_failures})");

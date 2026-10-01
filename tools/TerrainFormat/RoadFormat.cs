@@ -224,6 +224,36 @@ public sealed class RoadPaint
     public float Gap { get; init; }
     /// <summary>xyz triples, same frame as <see cref="RoadSegment.Points"/>.</summary>
     public required float[] Vertices { get; init; }
+
+    /// <summary>
+    /// A polyline that lies along a segment of its tile: then <see cref="Vertices"/> are
+    /// <see cref="RoadPaintGeometry.Along"/>(Segment, Offset, From, To), and the file stores only
+    /// this reference (#116b), the decoder rebuilds the vertices. Null: the file stores the vertices.
+    /// Build one with <see cref="AlongSegment"/>, which rounds the numbers to what the file keeps.
+    /// </summary>
+    public RoadSegment? Segment { get; init; }
+    /// <summary>Metres right of the segment's drawing direction (mm in the file).</summary>
+    public float Offset { get; init; }
+    /// <summary>Horizontal metres along the offset line (cm in the file); To past the end (infinity) = to the end.</summary>
+    public float From { get; init; }
+    public float To { get; init; } = float.PositiveInfinity;
+
+    /// <summary>An offset rounded to the millimetre the file keeps.</summary>
+    public static float FileOffset(double offset) => MathF.Round((float)offset * 1000f) / 1000f;
+
+    /// <summary>A line along <paramref name="seg"/>, its numbers rounded as the file stores them.</summary>
+    public static RoadPaint AlongSegment(RoadSegment seg, PaintType type, uint rgba, float width, float dash, float gap,
+        double offset, double from = 0, double to = double.PositiveInfinity, byte variant = 0)
+    {
+        float o = FileOffset(offset);
+        float f = (float)(Math.Round(Math.Max(0, from) * 100) / 100);
+        float t = double.IsPositiveInfinity(to) ? float.PositiveInfinity : (float)(Math.Max(1, Math.Round(to * 100)) / 100);
+        return new RoadPaint
+        {
+            Shape = PaintShape.Polyline, Type = type, Variant = variant, Rgba = rgba, Width = width, Dash = dash, Gap = gap,
+            Segment = seg, Offset = o, From = f, To = t, Vertices = RoadPaintGeometry.Along(seg, o, f, t),
+        };
+    }
     /// <summary>Triangle list for <see cref="PaintShape.Triangles"/>; empty for a polyline.</summary>
     public ushort[] Indices { get; init; } = [];
 }

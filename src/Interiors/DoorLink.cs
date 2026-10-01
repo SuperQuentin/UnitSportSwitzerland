@@ -47,6 +47,9 @@ public sealed class DoorLink
     public float OutsideHeight { get; init; }
     public float InsideWidth { get; init; }
     public float InsideHeight { get; init; }
+    /// <summary>The building's kind as dressed: a garage's or a barn's door lets vehicles through.</summary>
+    public BuildingKind Kind { get; init; }
+    public bool VehicleDoor => BuildingFootprint.VehicleDoor(Kind);
 
     public Transform3D ToInside => Inside * Outside.AffineInverse();
     public Transform3D ToOutside => Outside * Inside.AffineInverse();
@@ -106,8 +109,11 @@ public sealed class DoorLink
             OutsideHeight = outsideHeight ?? BuildingFootprint.DoorHeightFor(kind),
             InsideWidth = width,
             InsideHeight = top,
-            // a barn's pair: each leaf is half the opening
-            SwingSeconds = SwingSecondsFor(DoorLeaf.SwingsOut(kind) ? outsideW / 2 : outsideW),
+            Kind = kind,
+            // a barn's pair: each leaf is half the opening; a roll-up door takes a second, as a
+            // car driving up has to find it open
+            SwingSeconds = DoorLeaf.RollsUp(kind) ? DoorLeaf.RollSeconds
+                : SwingSecondsFor(DoorLeaf.SwingsOut(kind) ? outsideW / 2 : outsideW),
         };
     }
 
@@ -134,5 +140,27 @@ public sealed class DoorLink
     {
         var p = Outside.AffineInverse() * feet;
         return Math.Abs(p.X) < HalfPass + 0.05f && p.Z > -0.3f && p.Z < radius + 0.6f && p.Y > -1.5f && p.Y < 1.5f;
+    }
+
+    /// <summary>
+    /// As <see cref="InOutsideDoorway(Vector3, float)"/> for a vehicle: a box
+    /// <paramref name="halfWidth"/> by <paramref name="halfLength"/> heading along
+    /// <paramref name="forward"/>. Before its nose reaches the facade it has to be lined up with
+    /// the opening, all of it between the jambs, or it drives into the wall beside them; once it is
+    /// into the doorway (let in, or come out through it) only its middle has to stay in the opening.
+    /// </summary>
+    public bool InOutsideDoorway(Vector3 feet, Vector3 forward, float halfWidth, float halfLength)
+    {
+        var inverse = Outside.AffineInverse();
+        var p = inverse * feet;
+        var f = inverse.Basis * forward;
+        var flat = new Vector2(f.X, f.Z);
+        flat = flat.LengthSquared() > 1e-6f ? flat.Normalized() : new Vector2(0, 1);
+        float sin = Math.Abs(flat.X), cos = Math.Abs(flat.Y);
+        // the box's reach across the doorway and out of it
+        float across = halfWidth * cos + halfLength * sin, deep = halfWidth * sin + halfLength * cos;
+        if (p.Y < -1.5f || p.Y > 1.5f || p.Z < -0.3f || p.Z > deep + 0.6f) return false;
+        float allowed = p.Z < deep ? HalfPass + 0.05f : HalfPass + 0.1f - across;
+        return Math.Abs(p.X) < allowed;
     }
 }

@@ -17,11 +17,7 @@
   — 6,699 tiles in 10 s, 3,207 MB read -> 33 MB written, every tile verified bit-identical.
 - Far horizon (needed once for a region built before it existed; a normal build and `--coarse` emit
   it): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --horizon --jobs 8`
-- Buildings export (needs GDAL): `python tools/export_buildings.py --bbox 2578500 1108500 2586500 1115500`
-  PyPI has no Windows GDAL wheel (`pip install gdal` tries to build from source and fails). Install
-  the matching wheel from https://github.com/cgohlke/geospatial-wheels/releases instead
-  (`gdal-<ver>-cp313-cp313-win_amd64.whl` for Python 3.13), e.g. `python -m pip install <url>`.
-  It includes the OpenFileGDB and GPKG drivers.
+- Buildings export (needs GDAL, install: `gdal-setup`): `python tools/export_buildings.py --bbox 2578500 1108500 2586500 1115500`
 - Features: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --tlm <tlm.gpkg> --route-keys ressources/data/routes/route_keys.sqlite --cover --buildings ressources/data/buildings3d/buildings.gpkg --gwr ressources/data/gwr/data.sqlite`
 - Roads preprocessing: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --roads-only --tlm ressources/data/tlm3d/SWISSTLM3D_2026_LV95_LN02.gpkg --route-keys ressources/data/routes/route_keys.sqlite`
 - Road network stage (junctions + v3 attributes): runs by itself at the end of any road

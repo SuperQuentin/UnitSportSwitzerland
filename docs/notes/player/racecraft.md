@@ -56,3 +56,4 @@
 - Side effect: with the "no planned drift within 30 m of a rival" rule a two-car drift-car drivecheck
   that stays nose to tail never plans a drift and exits "FAILED" (no held drift) — the 6-car runs still
   hold drifts (final run: FD 5, FC 3, AE86 2, S13 0; before: 3, 2, 3, 2).
+- Traffic around a race (#85: seeing, reacting, junctions, standing traffic, retirement): `docs/notes/world/traffic-and-races.md`.

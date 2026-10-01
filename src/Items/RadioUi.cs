@@ -1,14 +1,17 @@
 using Godot;
 using UnitSport.Audio.Cd;
 using UnitSport.Core;
+using UnitSport.Net;
 using UnitSport.Player;
 
 namespace UnitSport.Items;
 
 /// <summary>
-/// The panel over a radio you stand beside: the CDs in the shared library to play, stop, pick the
-/// radio back up, and a box to burn a new CD from a YouTube link. Modelled on
-/// <c>Loot.LootUi</c> — Esc closes it, and so does walking away or the radio going away.
+/// The panel of a radio: the CDs to play (the server's shared ones, then this player's own), stop,
+/// a volume slider, a box to burn a new CD from a link for everyone or for yourself only, and for
+/// a radio lying in the world, pick it back up. Opened beside a radio in the world (E) or on the
+/// one in your hand (Use). Modelled on <c>Loot.LootUi</c> — Esc closes it, and so does walking
+/// away, the radio going away, or putting the held radio away.
 ///
 /// <para>
 /// While open it registers with <see cref="UiFocus"/>, so typing a link does not walk the player
@@ -26,14 +29,23 @@ public partial class RadioUi : CanvasLayer
     private Func<FootPlayer?> _local = () => null;
     private Inventory _inventory = new();
     private RadioBody? _radio;
+    private int _heldSlot = -1;
     private PanelContainer _panel = null!;
+    private Label _title = null!;
     private ItemList _list = null!;
     private Label _now = null!;
     private Label _status = null!;
     private LineEdit _link = null!;
+    private CheckBox _mine = null!;
+    private Button _pick = null!;
+    private Button _remove = null!;
+    private HSlider _volume = null!;
     private readonly List<int> _ids = new();
 
     public bool IsOpen => _panel != null && _panel.Visible;
+
+    /// <summary>The panel is on the radio in the hand rather than one in the world.</summary>
+    public bool Held => IsOpen && _heldSlot >= 0;
 
     public static RadioUi Create(Func<FootPlayer?> local, Inventory inventory) =>
         new() { Name = "RadioUi", _local = local, _inventory = inventory };
@@ -51,27 +63,28 @@ public partial class RadioUi : CanvasLayer
             ContentMarginLeft = 14, ContentMarginRight = 14, ContentMarginTop = 10, ContentMarginBottom = 12,
         });
         _panel.SetAnchorsPreset(Control.LayoutPreset.Center);
-        _panel.OffsetLeft = -230;
-        _panel.OffsetRight = 230;
-        _panel.OffsetTop = -190;
-        _panel.OffsetBottom = 190;
+        _panel.OffsetLeft = -240;
+        _panel.OffsetRight = 240;
+        _panel.OffsetTop = -220;
+        _panel.OffsetBottom = 220;
         AddChild(_panel);
 
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 8);
         _panel.AddChild(box);
 
-        var title = new Label { Text = "Radio", HorizontalAlignment = HorizontalAlignment.Center };
-        title.AddThemeFontSizeOverride("font_size", 20);
-        box.AddChild(title);
+        _title = new Label { Text = "Radio", HorizontalAlignment = HorizontalAlignment.Center };
+        _title.AddThemeFontSizeOverride("font_size", 20);
+        box.AddChild(_title);
 
         _list = new ItemList
         {
-            CustomMinimumSize = new Vector2(430, 150),
+            CustomMinimumSize = new Vector2(450, 150),
             SizeFlagsVertical = Control.SizeFlags.ExpandFill,
             SelectMode = ItemList.SelectModeEnum.Single,
         };
         _list.ItemActivated += _ => PlaySelected();
+        _list.ItemSelected += _ => UpdateButtons();
         box.AddChild(_list);
 
         _now = new Label { HorizontalAlignment = HorizontalAlignment.Center, Modulate = new Color(0.7f, 0.72f, 0.76f) };
@@ -84,17 +97,31 @@ public partial class RadioUi : CanvasLayer
         play.Pressed += PlaySelected;
         row.AddChild(play);
         var stop = new Button { Text = "Stop" };
-        stop.Pressed += () =>
-        {
-            if (Live() is { } r) RadioManager.Instance?.Stop(r);
-        };
+        stop.Pressed += StopRadio;
         row.AddChild(stop);
-        var pick = new Button { Text = "Pick up" };
-        pick.Pressed += PickUp;
-        row.AddChild(pick);
+        _remove = new Button { Text = "Remove", TooltipText = "Delete one of your own CDs" };
+        _remove.Pressed += RemoveSelected;
+        row.AddChild(_remove);
+        _pick = new Button { Text = "Pick up" };
+        _pick.Pressed += PickUp;
+        row.AddChild(_pick);
         var close = new Button { Text = "Close" };
         close.Pressed += Close;
         row.AddChild(close);
+
+        var volume = new HBoxContainer();
+        volume.AddThemeConstantOverride("separation", 8);
+        box.AddChild(volume);
+        volume.AddChild(new Label { Text = "Volume" });
+        _volume = new HSlider
+        {
+            MinValue = 0, MaxValue = 1, Step = 0.05, Value = RadioSpeaker.UserVolume,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+        };
+        _volume.ValueChanged += v => RadioSpeaker.UserVolume = (float)v;
+        _volume.DragEnded += _ => RadioSpeaker.SaveVolume();
+        volume.AddChild(_volume);
 
         var burn = new HBoxContainer();
         burn.AddThemeConstantOverride("separation", 8);
@@ -107,6 +134,8 @@ public partial class RadioUi : CanvasLayer
         };
         _link.TextSubmitted += _ => Burn();
         burn.AddChild(_link);
+        _mine = new CheckBox { Text = "Just for me", TooltipText = "Burn it on this computer, into your own list: nobody else hears it" };
+        burn.AddChild(_mine);
         var burnButton = new Button { Text = "Burn" };
         burnButton.Pressed += Burn;
         burn.AddChild(burnButton);
@@ -132,10 +161,29 @@ public partial class RadioUi : CanvasLayer
         if (IsOpen) UiFocus.Set(this, false);
     }
 
+    /// <summary>Opens the panel on a radio lying in the world.</summary>
     public void Open(RadioBody radio)
     {
         _radio = radio;
+        _heldSlot = -1;
+        OpenPanel("Radio");
+    }
+
+    /// <summary>Opens (or, open already, closes) the panel on the radio in hotbar <paramref name="slot"/>, the one in the hand.</summary>
+    public void OpenHeld(int slot)
+    {
+        if (IsOpen) { Close(); return; }
+        _radio = null;
+        _heldSlot = slot;
+        OpenPanel("Radio (in your hand)");
+    }
+
+    private void OpenPanel(string title)
+    {
+        _title.Text = title;
         _status.Text = "";
+        _pick.Visible = _heldSlot < 0;
+        _volume.SetValueNoSignal(RadioSpeaker.UserVolume);
         _panel.Visible = true;
         Input.MouseMode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
@@ -147,46 +195,96 @@ public partial class RadioUi : CanvasLayer
         if (!IsOpen) return;
         _panel.Visible = false;
         _radio = null;
+        _heldSlot = -1;
         _link.ReleaseFocus();
+        RadioSpeaker.SaveVolume();
         UiFocus.Set(this, false);
         MouseCapture.Capture();
     }
 
-    /// <summary>The radio being looked at, or null once it is gone.</summary>
+    /// <summary>The world radio being looked at, or null once it is gone.</summary>
     private RadioBody? Live() => _radio != null && IsInstanceValid(_radio) && _radio.IsInsideTree() ? _radio : null;
+
+    /// <summary>The held radio is still in the hand.</summary>
+    private bool HeldLive() => _heldSlot >= 0 && _inventory.Selected == _heldSlot && _inventory[_heldSlot].Id == ItemId.Radio;
+
+    /// <summary>What the radio the panel is on plays: CD and since when, or null when silent.</summary>
+    private RadioPlay? Current()
+    {
+        if (_heldSlot >= 0) return HeldLive() ? RadioPlay.Decode(_inventory[_heldSlot].Data) : null;
+        return Live()?.NowPlaying;
+    }
 
     private void Refresh()
     {
         if (!IsOpen) return;
-        var before = _list.GetSelectedItems();
-        int keepId = before.Length > 0 && before[0] < _ids.Count ? _ids[before[0]] : -1;
+        int keepId = SelectedId();
         _list.Clear();
         _ids.Clear();
-        var all = CdLibrary.Instance?.All;
-        if (all != null)
-            foreach (var (id, cd) in all.OrderBy(kv => kv.Key))
-            {
-                _ids.Add(id);
-                _list.AddItem(cd.Describe());
-                if (id == keepId) _list.Select(_ids.Count - 1);
-            }
+        if (CdLibrary.Instance is { } library)
+        {
+            foreach (var (id, cd) in library.All.OrderBy(kv => kv.Key)) Add(id, cd.Describe());
+            foreach (var (id, cd) in library.Personal.OrderBy(kv => kv.Value.Title)) Add(id, "(mine) " + cd.Describe());
+        }
         if (_ids.Count == 0) _status.Text = "No CDs yet: paste a link below to burn one.";
+        UpdateButtons();
+
+        void Add(int id, string text)
+        {
+            _ids.Add(id);
+            _list.AddItem(text);
+            if (id == keepId) _list.Select(_ids.Count - 1);
+        }
     }
+
+    private int SelectedId()
+    {
+        var selected = _list.GetSelectedItems();
+        return selected.Length > 0 && selected[0] < _ids.Count ? _ids[selected[0]] : 0;
+    }
+
+    private void UpdateButtons() => _remove.Disabled = SelectedId() >= 0;
 
     private void PlaySelected()
     {
+        int id = SelectedId();
+        if (id == 0) { _status.Text = "Pick a CD first."; return; }
+        if (CdLibrary.Instance?.Find(id) is not { } cd) return;
+        if (_heldSlot >= 0)
+        {
+            if (HeldLive()) _inventory.SetData(_heldSlot, new RadioPlay(id, ClockSync.ServerNow, cd.Duration).Encode());
+            return;
+        }
         if (Live() is not { } radio || RadioManager.Instance is not { } manager) return;
-        var selected = _list.GetSelectedItems();
-        if (selected.Length == 0) { _status.Text = "Pick a CD first."; return; }
-        manager.Play(radio, _ids[selected[0]]);
+        manager.Play(radio, id, cd.Duration);
+    }
+
+    private void StopRadio()
+    {
+        if (_heldSlot >= 0)
+        {
+            if (HeldLive()) _inventory.SetData(_heldSlot, null);
+            return;
+        }
+        if (Live() is { } r) RadioManager.Instance?.Stop(r);
+    }
+
+    private void RemoveSelected()
+    {
+        int id = SelectedId();
+        if (id >= 0 || CdLibrary.Instance is not { } library) return;
+        if (Current() is { } now && now.CdId == id) StopRadio();
+        library.RemovePersonal(id);
     }
 
     private void PickUp()
     {
         if (Live() is not { } radio || RadioManager.Instance is not { } manager) return;
+        // what it plays carries on in the hand: the stack keeps the CD and its start (#168)
+        string? playing = radio.NowPlaying?.Encode();
         manager.PickUp(radio, () =>
         {
-            _inventory.Add(ItemId.Radio, 1);
+            _inventory.Add(new ItemStack(ItemId.Radio, 1, playing));
             Close();
         });
     }
@@ -196,7 +294,7 @@ public partial class RadioUi : CanvasLayer
         string text = _link.Text.Trim();
         if (text.Length == 0 || CdLibrary.Instance is not { } library) return;
         _link.Text = "";
-        library.RequestBurn(text);
+        library.RequestBurn(text, _mine.ButtonPressed);
     }
 
     private void OnBurnStatus(string line)
@@ -208,14 +306,23 @@ public partial class RadioUi : CanvasLayer
     public override void _Process(double delta)
     {
         if (!IsOpen) return;
-        if (Live() is not { } radio) { Close(); return; }
-        if (_local() is { } player && IsInstanceValid(player)
-            && player.GlobalPosition.DistanceTo(radio.GlobalPosition) > WalkAway)
+        if (_heldSlot >= 0)
         {
-            Close();
-            return;
+            if (!HeldLive()) { Close(); return; }
         }
-        _now.Text = radio.Playing && radio.Cd is { } cd ? $"Playing: {cd.Title}" : "Nothing playing.";
+        else
+        {
+            if (Live() is not { } radio) { Close(); return; }
+            if (_local() is { } player && IsInstanceValid(player)
+                && player.GlobalPosition.DistanceTo(radio.GlobalPosition) > WalkAway)
+            {
+                Close();
+                return;
+            }
+        }
+        _now.Text = Current() is { } now && ClockSync.ServerNow - now.StartedAt < now.Length
+            ? $"Playing: {CdLibrary.Instance?.Find(now.CdId)?.Title ?? "someone's own CD"}"
+            : "Nothing playing.";
     }
 
     public override void _UnhandledInput(InputEvent e)

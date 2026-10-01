@@ -71,6 +71,10 @@ public static partial class TileRewriter
         public int Roads, OneWay, Divided, DividedResolved, Urban, Osm, Roundabout, OsmTiles;
         public double RoadKm, OneWayKm, UrbanKm, OsmKm;
         public long Bytes, DeflatedBytes;
+        /// <summary>Per part of the file ("v2" = header, segments, junctions; then each v3 section tag): raw bytes, and deflated alone.</summary>
+        public readonly SortedDictionary<string, (long Raw, long Deflated)> Parts = new(StringComparer.Ordinal);
+        /// <summary>Paint stored as a segment reference / as geometry, and primitives the decoder rebuilt differently (must be 0).</summary>
+        public int PaintRefs, PaintGeometry, PaintMismatch;
         /// <summary>Overlap area per class pair (<c>--measure</c>), e.g. "motorway+motorway".</summary>
         public SortedDictionary<string, double> OverlapPairs = new(StringComparer.Ordinal);
         public readonly CrossSectionPlanner.Stats Carriageways = new();
@@ -82,6 +86,12 @@ public static partial class TileRewriter
         public readonly RailRoadOverlap.Tally Rail = new();
         public readonly PriorityPlanner.Stats Priority = new();
 
+        private string FormatParts(int tiles) => "    parts     " + string.Join(", ", Parts.Select(kv =>
+            string.Create(CultureInfo.InvariantCulture,
+                $"{kv.Key} {kv.Value.Raw / 1024.0 / Math.Max(1, tiles):F2}/{kv.Value.Deflated / 1024.0 / Math.Max(1, tiles):F2}")))
+            + " KB/tile raw/deflated alone\n"
+            + $"    paint encoding: {PaintRefs:N0} lines along a segment, {PaintGeometry:N0} as geometry, {PaintMismatch} decoded differently";
+
         public string Format(int tiles)
         {
             var c = CultureInfo.InvariantCulture;
@@ -92,7 +102,7 @@ public static partial class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Rail.Format() + "\n" + Priority.Format();
+                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Rail.Format() + "\n" + Priority.Format();
         }
     }
 
@@ -240,6 +250,7 @@ public static partial class TileRewriter
         var shiftAudit = new HeightAuditor();
         var netStats = new NetworkStats();
         var embankments = new EmbankmentPlanner.Stats();
+        var railings = new RailingPlanner.Stats();
         var buildings = new Footprints(chunkDir);
 
         foreach (var block in blocks)
@@ -404,8 +415,13 @@ public static partial class TileRewriter
 
                 var flags = RoadTileFlags.Network;
                 if (segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) flags |= RoadTileFlags.Osm;
-                var walls = grids is null ? new List<RoadLinearProp>()
-                    : EmbankmentPlanner.Plan(id, segments, (e, n) => SampleGround(grids, e, n), embankments);
+                var walls = new List<RoadLinearProp>();
+                if (grids is not null)
+                {
+                    var owners = new List<int>();
+                    walls = EmbankmentPlanner.Plan(id, segments, (e, n) => SampleGround(grids, e, n), embankments, owners);
+                    walls.AddRange(RailingPlanner.Plan(id, segments, walls, owners, (e, n) => SampleGround(grids, e, n), railings));
+                }
                 var tile = new RoadTile
                 {
                     Id = id, Segments = segments, Junctions = junctions, Flags = flags,
@@ -435,6 +451,7 @@ public static partial class TileRewriter
 
         netStats.Shifted = shiftAudit.Result();
         log(embankments.Format());
+        log(railings.Format());
         return new Stats(tilesRead, tilesWritten, junctionCount, written, dropped,
             overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, netStats);
     }
@@ -479,6 +496,56 @@ public static partial class TileRewriter
         return ms.ToArray();
     }
 
+    private static long DeflatedLength(ReadOnlySpan<byte> bytes)
+    {
+        using var ms = new MemoryStream();
+        using (var deflate = new DeflateStream(ms, CompressionLevel.Fastest, leaveOpen: true)) deflate.Write(bytes);
+        return Math.Min(ms.Length, bytes.Length);
+    }
+
+    /// <summary>Decodes the tile again: every paint primitive must come back as drawn (geometry within its 0.5 mm rounding).</summary>
+    private static void CheckPaint(NetworkStats st, RoadTile tile, byte[] bytes)
+    {
+        if (tile.Paint.Count == 0) return;
+        RoadTile back;
+        using (var ms = new MemoryStream(bytes)) back = RoadCodec.Decode(ms);
+        var segments = new HashSet<RoadSegment>(tile.Segments, ReferenceEqualityComparer.Instance);
+        for (int i = 0; i < tile.Paint.Count; i++)
+        {
+            var a = tile.Paint[i];
+            bool reference = a.Segment is { } seg && segments.Contains(seg);
+            if (reference) st.PaintRefs++; else st.PaintGeometry++;
+            var b = i < back.Paint.Count ? back.Paint[i] : null;
+            bool same = b is not null && b.Type == a.Type && b.Width == a.Width && b.Dash == a.Dash && b.Gap == a.Gap
+                && b.Rgba == a.Rgba && b.Vertices.Length == a.Vertices.Length && b.Indices.SequenceEqual(a.Indices)
+                && (reference ? b.Vertices.AsSpan().SequenceEqual(a.Vertices)
+                    : a.Vertices.Zip(b.Vertices).All(x => Math.Abs(x.First - x.Second) <= 6e-4f));
+            if (!same) st.PaintMismatch++;
+        }
+    }
+
+    /// <summary>Splits the encoded tile at its v3 section boundaries for the per-part table.</summary>
+    private static void CountParts(NetworkStats st, RoadTile tile, byte[] bytes)
+    {
+        void Add(string key, ReadOnlySpan<byte> part)
+        {
+            st.Parts.TryGetValue(key, out var v);
+            st.Parts[key] = (v.Raw + part.Length, v.Deflated + DeflatedLength(part));
+        }
+        int at = RoadFormat.HeaderSize + tile.Segments.Sum(s => 12 + s.Points.Length * 4)
+            + tile.Junctions.Sum(j => 8 + j.Vertices.Length * 4 + j.Indices.Length * 2);
+        Add("v2", bytes.AsSpan(0, at));
+        uint count = BitConverter.ToUInt32(bytes, at);
+        at += 4;
+        for (uint i = 0; i < count; i++)
+        {
+            string tag = System.Text.Encoding.ASCII.GetString(bytes, at, 4);
+            int length = BitConverter.ToInt32(bytes, at + 4);
+            Add(tag, bytes.AsSpan(at, 8 + length));
+            at += 8 + length;
+        }
+    }
+
     private static void Count(NetworkStats st, RoadTile tile, byte[] bytes)
     {
         st.Bytes += bytes.Length;
@@ -490,6 +557,8 @@ public static partial class TileRewriter
                 deflate.Write(bytes);
             st.DeflatedBytes += Math.Min(ms.Length, bytes.Length);
         }
+        CountParts(st, tile, bytes);
+        CheckPaint(st, tile, bytes);
         if ((tile.Flags & RoadTileFlags.Osm) != 0) st.OsmTiles++;
         st.Paint.Add(tile);
 
