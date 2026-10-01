@@ -39,6 +39,8 @@ public partial class ChatUi : CanvasLayer
     private const int MaxFloating = 7;
 
     private const int Width = 480, Left = 16, PanelBottom = -24, PanelMargin = 10;
+    /// <summary>Between the input and the scrollback above it, and between two lines (both lists).</summary>
+    private const int ColumnGap = 8, LineGap = 3;
 
     /// <summary>Completions shown at once; Tab scrolls through the rest.</summary>
     private const int MaxRows = 6;
@@ -86,10 +88,12 @@ public partial class ChatUi : CanvasLayer
             Alignment = BoxContainer.AlignmentMode.End,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        _feed.AddThemeConstantOverride("separation", 3);
+        _feed.AddThemeConstantOverride("separation", LineGap);
         AddChild(_feed);
 
         BuildPanel();
+        // once the input has a height, the floating lines line up with the scrollback's
+        Callable.From(AlignFeed).CallDeferred();
 
         _chat.LineReceived += (line, kind) => Callable.From(() => Append(line, kind)).CallDeferred();
         _chat.Kicked += reason => Callable.From(
@@ -98,6 +102,12 @@ public partial class ChatUi : CanvasLayer
         _chat.NamesReceived += () => Callable.From(() => { if (IsTyping) RefreshSuggestions(); }).CallDeferred();
 
         Append("Press Enter to chat, / for commands.", ChatKind.System);
+        // "--chatopen [seconds]" opens the input after that long, for screenshotting it against the floating lines
+        var args = OS.GetCmdlineUserArgs();
+        int at = Array.IndexOf(args, "--chatopen");
+        if (at >= 0)
+            GetTree().CreateTimer(at + 1 < args.Length && double.TryParse(args[at + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double wait) ? wait : 4).Timeout += () => OpenInput();
     }
 
     /// <summary>
@@ -115,10 +125,11 @@ public partial class ChatUi : CanvasLayer
             GrowVertical = Control.GrowDirection.Begin,
             Visible = false,
         };
-        _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.78f, 10, PanelMargin));
+        // see-through enough that the world stays in view behind the conversation
+        _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.55f, 10, PanelMargin));
         AddChild(_panel);
 
-        var column = UiKit.VBox(8);
+        var column = UiKit.VBox(ColumnGap);
         _panel.AddChild(column);
 
         _scroll = new ScrollContainer
@@ -128,8 +139,11 @@ public partial class ChatUi : CanvasLayer
         };
         column.AddChild(_scroll);
 
-        _log = UiKit.VBox(2);
+        _log = UiKit.VBox(LineGap);
         _log.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        // a short scrollback sits at the bottom, by the input, where the floating lines were
+        _log.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        _log.Alignment = BoxContainer.AlignmentMode.End;
         _scroll.AddChild(_log);
 
         // added after the panel, so it draws on top of the scrollback
@@ -179,6 +193,20 @@ public partial class ChatUi : CanvasLayer
         _input.AddChild(_ghost);
     }
 
+    /// <summary>
+    /// Puts the floating lines exactly where the same lines sit in the open panel's scrollback:
+    /// inside its margin, their last line just above the input. Opening the chat then only adds
+    /// the glass and the box behind lines that stay where they were.
+    /// </summary>
+    private void AlignFeed()
+    {
+        float bottom = PanelBottom - PanelMargin - _input.GetCombinedMinimumSize().Y - ColumnGap;
+        _feed.OffsetLeft = Left + PanelMargin;
+        _feed.OffsetRight = Left + Width - PanelMargin;
+        _feed.OffsetBottom = bottom;
+        _feed.OffsetTop = bottom;
+    }
+
     // ---- lines -----------------------------------------------------------------------------
 
     /// <summary>Adds a line to the scrollback and floats it up on screen.</summary>
@@ -217,8 +245,9 @@ public partial class ChatUi : CanvasLayer
         };
         label.AddThemeFontOverride("normal_font", UiTheme.Font);
         label.AddThemeFontOverride("bold_font", UiTheme.Bold);
-        label.AddThemeFontSizeOverride("normal_font_size", floating ? UiTheme.FontBody : UiTheme.FontSmall + 1);
-        label.AddThemeFontSizeOverride("bold_font_size", floating ? UiTheme.FontBody : UiTheme.FontSmall + 1);
+        // one size in both lists, so a line does not jump when the panel opens over it
+        label.AddThemeFontSizeOverride("normal_font_size", UiTheme.FontBody);
+        label.AddThemeFontSizeOverride("bold_font_size", UiTheme.FontBody);
         label.AddThemeColorOverride("default_color", UiTheme.Text);
 
         if (floating)

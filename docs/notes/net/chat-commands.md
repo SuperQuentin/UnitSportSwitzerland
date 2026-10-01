@@ -25,3 +25,4 @@
   Check: `<godot> --headless --path . -- --chatcheck` (completion + parsing, prints a RESULT line).
   **`/time`** (Minecraft style; `world/day-night`): the query is answered client-side from the
   clock on screen, set/add/speed go to the server, admin only, and change it for everyone.
+- **Look** (`Core/ChatUi`): floating lines sit exactly where the same lines sit in the open panel's scrollback (`AlignFeed`: inside the panel margin, just above the input; same font size and line gap in both lists, a short scrollback bottom-aligned), so opening the chat only adds the glass behind them. The open panel is see-through (`GlassPanel(0.55)`). `--chatopen [s]` opens the input after s seconds, for screenshots.
