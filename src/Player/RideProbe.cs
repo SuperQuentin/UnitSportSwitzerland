@@ -309,14 +309,16 @@ public partial class RideProbe : Node
         if (!limp && _restedAt < 0)
         {
             _restedAt = _elapsed;
-            GD.Print($"[crash] at rest at t={_elapsed:F2}s, {_player.CrashBones} bones broken, health {_player.Health:F0}");
+            GD.Print($"[crash] at rest at t={_elapsed:F2}s, {_player.CrashBones} bones broken, health {_player.Health:F0}"
+                + (XR.XrSession.Active ? $", VR anchor {XR.XrSession.Anchor?.Name}" : ""));
         }
         _sinceCrashReport += delta;
         if (limp && _sinceCrashReport >= 0.2)
         {
             _sinceCrashReport = 0;
             float clearance = _chunks.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
-            GD.Print($"[crash] t={_elapsed - _thrownAt,4:F1}s hips {p.X - _thrownFrom.X,6:F1} {p.Y - _thrownFrom.Y,5:F1} {p.Z - _thrownFrom.Z,6:F1}  clearance {clearance:F2}");
+            GD.Print($"[crash] t={_elapsed - _thrownAt,4:F1}s hips {p.X - _thrownFrom.X,6:F1} {p.Y - _thrownFrom.Y,5:F1} {p.Z - _thrownFrom.Z,6:F1}  clearance {clearance:F2}"
+                + (XR.XrSession.Active ? $"  VR anchor {XR.XrSession.Anchor?.Name} at {XR.XrSession.Anchor?.GlobalPosition.DistanceTo(p):F1} m" : ""));
         }
         for (int i = _crashShots.Count - 1; i >= 0; i--)
         {

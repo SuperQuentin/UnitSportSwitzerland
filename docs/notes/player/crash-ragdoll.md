@@ -26,11 +26,17 @@
   stale Anim never reads as a launch). Every peer simulates its own copy; remotes are steered (2/s, snapped past
   8 m) onto the replicated position, which is the owner's hips (the owner's body is pinned to them). Remotes start
   from the car's driver seat they last drew (`_seenSeat`). `tools/crashnetcheck.sh`: mean gap 0.2 m.
-- **Crash camera** (owner, not in VR): a cut to beside the crash, zooming to keep the body ~2 m across the frame,
+- **In VR** (`BeginVrCrashView`): no flying, zooming or shaking camera (all of them make people sick in a
+  headset). The player is stood at a still, level spot 5.5 m beside the body at standing eye height, facing it,
+  and watches with their own head: a `CrashEye` camera under a plain `Node3D` (under the player, the rig would take
+  it for the player's eye), which `XrRig` adopts as a position-only anchor. It cuts to a new spot (1.2 s apart at
+  least) when the body is over 14 m away or out of sight for 0.5 s; every cut, and the return to the player's
+  eyes at rest, is behind `XrRig.Blink()` (the vignette shader's `blackout`). Check: `--xrsim --ride car,19,<abs>.png --wall 70`.
+- **Crash camera** (owner, flat): a cut to beside the crash, zooming to keep the body ~2 m across the frame,
   then a chase from the side it watches from (rises when the body is out of sight), then a 0.9 s blend back to
   the normal view (`BlendOutCrashCamera`). Shake via `Shaken`.
 - **Sound**: `SfxSynth.BoneBreakBank` (2-4 cracks with a knock, a thump, a grinding crunch) and `GlassBank`
   (bang, craze, shard pings), played as `AudioStreamPlayer3D` on every peer from its own ragdoll's impacts
   (> 7 m/s into a surface = a bone, at most `MaxBreaks`, damage on the owner; softer = a thud).
-- Not done: the car's windscreen mesh stays whole (only shard particles fly); NPC drivers keep the old flat throw.
+- Not done: the car's windscreen mesh stays whole (only shard particles fly); NPC drivers keep the old flat throw; the VR blink is untested on a real headset (`--xrsim` does not draw it).
 - Checks: `--ride car,19,out.png --wall 70 --crashshots 0.4,1.6,4` (see `commands`), `tools/crashnetcheck.sh`.

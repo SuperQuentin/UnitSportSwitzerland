@@ -39,6 +39,9 @@ public partial class FootPlayer
     private float _crashTime, _crashOut, _crashFromFov;
     private Vector3 _crashAnchor, _crashLook, _crashSide;
     private Transform3D _crashFrom;
+    // in VR: a still spot to stand and watch from, cut to behind a blink
+    private Camera3D? _vrEye;
+    private float _vrSinceCut, _vrBlind, _vrCheck;
 
     /// <summary>Limp after a crash: no control until the body comes to rest.</summary>
     public bool Ragdolled => _ragdoll != null;
@@ -304,7 +307,8 @@ public partial class FootPlayer
     /// </summary>
     private void BeginCrashCamera(Vector3 fwd)
     {
-        if (_camera == null || !IsMultiplayerAuthority() || XR.XrSession.Active || _ragdoll == null) return;
+        if (_camera == null || !IsMultiplayerAuthority() || _ragdoll == null) return;
+        if (XR.XrSession.Active) { BeginVrCrashView(fwd); return; }
         var body = _ragdoll.Centre;
         var side = Vector3.Up.Cross(fwd).Normalized();
         var space = GetWorld3D().DirectSpaceState;
@@ -343,6 +347,7 @@ public partial class FootPlayer
 
     private void UpdateCrashCamera(float dt)
     {
+        if (_vrEye != null) { UpdateVrCrashView(dt); return; }
         if (!_crashCam || _camera == null || _ragdoll == null) return;
         _crashTime += dt;
         var body = _ragdoll.Centre;
@@ -384,6 +389,7 @@ public partial class FootPlayer
     /// <summary>The body is still: the normal view takes over, blended from where the crash camera was.</summary>
     private void EndCrashCamera()
     {
+        if (_vrEye != null) { EndVrCrashView(); return; }
         if (!_crashCam || _camera == null) { _crashCam = false; return; }
         _crashCam = false;
         _crashFrom = _camera.GlobalTransform;
@@ -405,5 +411,91 @@ public partial class FootPlayer
         t = t * t * (3f - 2f * t);
         _camera.GlobalTransform = _crashFrom.InterpolateWith(_camera.GlobalTransform, t);
         _camera.Fov = Mathf.Lerp(_crashFromFov, _camera.Fov, t);
+    }
+
+    // ---- the crash in VR ----
+    //
+    // The flat crash camera flies, zooms and shakes: in a headset any of those is a lurch the inner
+    // ear does not agree with. In VR the player is instead stood at a still spot beside the crash,
+    // level, at standing eye height, facing the body, and watches it go with their own head — the
+    // rig takes a camera that is not a player's as an anchor followed in position only, with the
+    // heading it had when adopted. Every change of spot happens behind a blink (XrRig.Blink).
+
+    private void BeginVrCrashView(Vector3 fwd)
+    {
+        if (_ragdoll == null || _camera == null) return;
+        var body = _ragdoll.Centre;
+        var side = Vector3.Up.Cross(fwd).Normalized();
+        _vrEye = new Camera3D { Name = "CrashEye", Far = _camera.Far, Near = _camera.Near };
+        // not under the player: the rig would take it for the player's own eye and turn it with the head
+        var holder = new Node3D { Name = "CrashView", TopLevel = true };
+        AddChild(holder);
+        holder.AddChild(_vrEye);
+        PlaceVrEye(body, new[] { side, -side, -fwd });
+        _vrEye.Current = true;
+        XR.XrSession.Rig?.Blink();
+    }
+
+    /// <summary>
+    /// Stands the eye 5.5 m from the body in the first of <paramref name="sides"/> with a clear
+    /// view, the ground under it plus standing eye height, turned (yaw only) to face the body.
+    /// </summary>
+    private void PlaceVrEye(Vector3 body, Vector3[] sides)
+    {
+        if (_vrEye == null) return;
+        var space = GetWorld3D().DirectSpaceState;
+        Vector3 best = body + sides[0] * 5.5f + Vector3.Up * 1.65f;
+        float bestRoom = -1f;
+        foreach (var side in sides)
+        {
+            var flat = (side with { Y = 0 }).Normalized();
+            var spot = CameraReach(space, body + Vector3.Up * 0.8f, body + flat * 5.5f + Vector3.Up * 0.8f);
+            spot.Y = (GroundAt(spot) ?? body.Y - 0.8f) + 1.65f;
+            float room = spot.DistanceTo(body);
+            bool sees = Sees(space, spot, body);
+            if (sees && room > 3f) { best = spot; break; }
+            if ((sees ? room + 100f : room) > bestRoom) { bestRoom = sees ? room + 100f : room; best = spot; }
+        }
+        var look = (body - best) with { Y = 0 };
+        float yaw = look.LengthSquared() > 1e-4f ? Mathf.Atan2(-look.X, -look.Z) : Rotation.Y;
+        _vrEye.GetParent<Node3D>().GlobalTransform = new Transform3D(new Basis(Vector3.Up, yaw), best);
+        _vrSinceCut = 0f;
+        _vrBlind = 0f;
+    }
+
+    /// <summary>The eye never moves on its own; it cuts (behind a blink) when the body flies too far or out of sight.</summary>
+    private void UpdateVrCrashView(float dt)
+    {
+        if (_vrEye == null || _ragdoll == null) return;
+        // a menu or the spectator took the view: give it back to them and stop
+        if (GetViewport().GetCamera3D() != _vrEye && !_vrEye.Current) return;
+        _vrSinceCut += dt;
+        _vrCheck += dt;
+        if (_vrCheck < 0.1f) return;
+        var body = _ragdoll.Centre;
+        var eye = _vrEye.GlobalPosition;
+        _vrBlind = Sees(GetWorld3D().DirectSpaceState, eye, body) ? 0f : _vrBlind + _vrCheck;
+        _vrCheck = 0f;
+        if (_vrSinceCut < 1.2f || (eye.DistanceTo(body) < 14f && _vrBlind < 0.5f)) return;
+        // beside it again, from the side we were on, then round the other ways
+        var from = (eye - body) with { Y = 0 };
+        var back = from.LengthSquared() > 1e-4f ? from.Normalized() : -GlobalTransform.Basis.Z;
+        var round = new Vector3(-back.Z, 0, back.X);
+        PlaceVrEye(body, new[] { back, round, -round, -back });
+        XR.XrSession.Rig?.Blink();
+    }
+
+    /// <summary>The body is still: back into the player's own eyes, behind a blink.</summary>
+    private void EndVrCrashView()
+    {
+        if (_vrEye == null) return;
+        _vrEye.GetParent().QueueFree();
+        _vrEye = null;
+        // first person in VR: the eyes follow the body's heading, which now points along it
+        _viewYaw = Rotation.Y;
+        _lookYaw = 0f;
+        _pitch = 0f;
+        if (_camera != null) _camera.Current = true;
+        XR.XrSession.Rig?.Blink();
     }
 }
