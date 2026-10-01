@@ -27,7 +27,7 @@
     paint 0.2 % of its distance toward the eye (view space, so independent of reverse Z). A line
     under ~1.5 px dissolves by ordered dither (discard) instead of aliasing.
   - Cost (Martigny-Sion, 513 tiles): 13,977 primitives on 233 tiles, 505 game triangles/tile
-    average, max 4,804; +1 draw call per road tile with paint (a Riddes view: +27..34 draws on
+    average, max 4,804; +1 draw call per road tile with paint (Riddes views: +29..35 draws on
     ~700, +0.2 % primitives). File +2.9 KB/tile raw, +2.0 KB deflated.
   - No paint LOD: roads are only built within `RoadMaxDist` (4 rings) and never rebuilt per
     stride, so a coarse-ring skip has nothing to hook into; the dither takes far lines out.
