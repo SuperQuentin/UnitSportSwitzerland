@@ -233,7 +233,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // source so a client never asks a server for one, and under the cache so a generated tile
         // is not generated twice. Built even when switched off, so the setting can turn it on.
         var fallback = new FallbackChunkSource(streamedSource, generated, startE, startN,
-            GameSettings.Current.GeneratedFill) { Log = s => GD.Print(s) };
+            GameSettings.Current.GeneratedFill) { Log = s => GD.Print(s), HorizonCacheDir = TerrainPaths.FindCacheDir() };
 
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
@@ -809,9 +809,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>
     /// Works out how far the session is from playable: connected, terrain synced, our player
-    /// spawned, the spawn on the ground, and the tile under the camera drawn (any detail; with
-    /// its collision when a body stands there). A world that cannot finish the last step in 15 s goes
-    /// ahead anyway: everything else streams in while you play.
+    /// spawned, the spawn on the ground, the tile under the camera drawn (any detail; with its
+    /// collision when a body stands there), and the far horizon drawn around it, so you never
+    /// land in a void. A world that cannot finish the terrain in 25 s goes ahead anyway: the
+    /// tiles around you stream in while you play.
     /// </summary>
     private void TrackLoading(double delta)
     {
@@ -854,14 +855,32 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var eye = GetViewport().GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
         var (done, total) = _chunks.PlayableNear(eye, 0);
         _terrainClock += delta;
-        Report(LoadStage.BuildingTerrain, total > 0 ? 0.35f + 0.65f * done / total : 0.35f,
-            total > 0 ? $"{done} / {total} tiles around you" : "");
-        if ((total > 0 && done >= total) || _terrainClock > 15 || (total == 0 && _terrainClock > 6))
+        bool timedOut = _terrainClock > 25;
+        if (!timedOut && (total > 0 ? done < total : _terrainClock <= 6))
         {
-            Stage = LoadStage.Ready;
-            LoadFraction = 1;
-            GD.Print($"[world] ready after {_loadClock:F1} s ({done}/{total} tiles near)");
+            Report(LoadStage.BuildingTerrain, total > 0 ? 0.35f + 0.25f * done / total : 0.35f,
+                total > 0 ? $"{done} / {total} tiles around you" : "");
+            return;
         }
+
+        // The horizon's lattice is generated at boot (or read from its cache) while the steps
+        // above run; its blocks then stream nearest first.
+        var horizon = _chunks.Horizon?.Progress();
+        if (!timedOut && horizon == null)
+        {
+            Report(LoadStage.DrawingHorizon, 0.6f);
+            return;
+        }
+        if (!timedOut && horizon is { Done: var hd, Total: var ht } && hd < ht)
+        {
+            Report(LoadStage.DrawingHorizon, 0.6f + 0.4f * hd / ht, $"{hd} / {ht} blocks of horizon");
+            return;
+        }
+
+        Stage = LoadStage.Ready;
+        LoadFraction = 1;
+        GD.Print($"[world] ready after {_loadClock:F1} s ({done}/{total} tiles near, "
+            + $"horizon {(horizon is { } hp ? $"{hp.Done}/{hp.Total}" : "loading")})");
     }
 
     /// <summary>A menu closed over this world: hand the pointer back to the mode that wants it.</summary>

@@ -79,6 +79,7 @@ public enum LoadStage
     WaitingForPlayer,
     PlacingYou,
     BuildingTerrain,
+    DrawingHorizon,
     Ready,
     Failed,
 }

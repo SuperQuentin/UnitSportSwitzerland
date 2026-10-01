@@ -9,8 +9,10 @@
   (`ClientTerrainSync.IndexFinished`: the tile index only; places and horizon arrive in play) -> WaitingForPlayer (our node spawned
   and on foot) -> PlacingYou (the `SpawnPoint` still alive) -> BuildingTerrain
   (`ChunkManager.PlayableNear(eye, 0)`: only the tile you stand on, drawn at any detail, plus
-  its collision when a body (not the fly camera) is on it; every other tile, refinement, roads and buildings stream in after; goes ahead after 15 s anyway)
-  -> Ready. Hosting adds "Starting your server" before all of it.
+  its collision when a body (not the fly camera) is on it; every other tile, refinement, roads and buildings stream in after)
+  -> DrawingHorizon (`HorizonLayer.Progress()`: every block within `HorizonKm` drawn, so you never land
+  in a void; ~2 s once the lattice is there, see `terrain/far-horizon`) -> Ready. Both terrain steps
+  go ahead after 25 s anyway. Hosting adds "Starting your server" before all of it.
 - **Frames to draw**: `ClientWorld._Ready` yields a frame (`Breathe`) at a few points when launched
   from the title, with an `IsInsideTree()` check after each await (Cancel may free the world
   mid-build). Command-line runs do not yield, so the probes see the old build order.
