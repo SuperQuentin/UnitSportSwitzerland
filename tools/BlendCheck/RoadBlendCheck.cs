@@ -162,7 +162,7 @@ static class RoadBlendCheck
         return 0;
     }
 
-    /// <summary>Cells inside any wall's solid (face to back), where the one-cell transition belongs.</summary>
+    /// <summary>Cells under any wall and its cover (face to the cover's back), where the one-cell transition belongs.</summary>
     private static HashSet<int> WallCells(RoadTile tile)
     {
         var set = new HashSet<int>();
@@ -179,7 +179,7 @@ static class RoadBlendCheck
                 // left of the point order, seen from above with X east and Z south: (uz, -ux)
                 double lx = uz, lz = -ux;
                 for (double s = 0; s <= len; s += 0.5)
-                    for (double d = -0.5; d <= w.Thickness + 0.5; d += 0.5)
+                    for (double d = -0.5; d <= RoadEmbankment.CoverDepth + 0.5; d += 0.5)
                     {
                         int c = (int)Math.Round(ax + ux * s + lx * d), r = (int)Math.Round(az + uz * s + lz * d);
                         if ((uint)c < (uint)n && (uint)r < (uint)n) set.Add(r * n + c);
