@@ -30,9 +30,16 @@
   left edge carries on as a 3/3 m dashed line (taking the pocket is a lane change), solid for the
   last 10 m. A 0.4 m stop bar closes the pocket at the mouth; the centre line is solid along the
   whole pocket (and along the exit taper); the right edge line is cut where the strip starts and a
-  new one follows it. Arrows two per lane in the 20 m storage (tails 5 and 13 m back, 5 m long):
-  left in the pocket, straight (or straight + right) in the through lane, as `PaintType.Arrow`
-  triangles (variant = `PaintArrow` bits); the stop bar is a `StopLine` polyline.
+  new one follows it. Across the junction the through lane's outer part is one more strip, from
+  the approach strip's mouth to the exit's (the junction polygon only covers the original road),
+  with an edge line where no road leaves on that side. Signs beside the old edge (#121's 3.03)
+  move out by the widening there (8 in the test region). Arrows two per lane in the 20 m
+  storage, tips 5 and 13 m from the stop bar: left in the pocket, straight (or straight + right)
+  in the through lane, as `PaintType.Arrow` triangles (variant = `PaintArrow` bits), after the
+  current Swiss drawing (Stadt Bern Normalien C 2.10.17, SSV 6.06, revised 2019): straight
+  6.50 m, 0.15 m shaft, head 2.55 x 0.80 m; a turn arrow jogs 0.35 m aside near its end into a
+  1 m head at 45 deg, about a metre from the lane's middle (the old design, a branch bent off the
+  shaft, crossed the centre line). The stop bar is a `StopLine` polyline.
 - **Runtime**: `src/Terrain/PavementBuilder.cs` draws the strip in the road's asphalt; the road
   blend (`HoldUnderPavement`, sharing `Rasterise` with `HoldUnderIsland`) holds its cells at the
   strip's height as road core, so the heightfield collision carries it like a ribbon.
