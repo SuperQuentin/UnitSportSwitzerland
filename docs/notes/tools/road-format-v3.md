@@ -31,6 +31,12 @@
   `count u32`, per prop `type u8, variant u8, flags u16, thickness f32, param f32 (type-specific,
   e.g. post spacing), pointCount u16, pad u16`, then x, y (foot), z, height f32 per point. A
   wall run whose height varies along it is one prop.
+  Retaining walls (#125, `road-embankments-walls`): `RetainingWallFill`/`Cut`, points every 2 m
+  on the FACE line, y = foot, height = top - foot; the solid lies on the LEFT of the point order,
+  `thickness` (3 m) deep, open air on the right (a fill wall runs with its road on its left, a cut
+  wall with it on its right); `flags` Solid; `variant` 0 generated, 1 a surveyed TLM wall stands
+  there (frees the ground, not drawn). A railing on a wall (#126) goes on the face line at the top.
+  Region: 2,933 walls, +1.5 KB/tile raw (+2.9 %).
 - **`APRP`** area props (#122 island, splitter island; #119 junction-corner sidewalk):
   `count u32`, per prop `type u8, variant u8, flags u16, height f32 (raise above the vertices,
   e.g. 0.12 kerb), vertexCount u16, indexCount u16`, xyz vertices, u16 indices.
