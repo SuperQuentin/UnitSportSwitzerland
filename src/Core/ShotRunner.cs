@@ -17,12 +17,17 @@ namespace UnitSport.Core;
 /// fields as --shot; blank lines and # comments skipped, "quit" exits). On macOS every
 /// launch brings Godot to the front, so a series of pictures should cost one launch.
 /// A queued shot's y may be "g1.7": that high above the ground, once it has streamed in.
+/// A line starting with '/' is typed into the chat between two shots (<c>/style cartoon</c>,
+/// <c>/time set 19:30</c>), so one launch can picture a live change.
 /// Each shot logs the frame time averaged over its last second of settling.
 /// </summary>
 public partial class ShotRunner : Node
 {
     private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath,
-        float? AboveGround = null);
+        float? AboveGround = null, string? Command = null);
+
+    /// <summary>Runs a queued chat line ("/style cartoon"); the client world sends it to its chat.</summary>
+    public System.Action<string>? RunCommand { get; set; }
 
     /// <summary>The ground height under a point, once loaded; for the "g" heights of queued shots.</summary>
     public System.Func<Vector3, float?>? GroundHeight { get; set; }
@@ -152,6 +157,12 @@ public partial class ShotRunner : Node
         if (_pending.Count == 0) return false;
 
         var next = _pending.Dequeue();
+        if (next is { Command: { } command })
+        {
+            GD.Print($"[shot-queue] {command}");
+            RunCommand?.Invoke(command);
+            return false;
+        }
         if (next is { } shot)
         {
             Aim(shot);
@@ -184,6 +195,7 @@ public partial class ShotRunner : Node
             string line = lines[i].Trim();
             if (line.Length == 0 || line.StartsWith('#')) continue;
             if (line == "quit") _pending.Enqueue(null);
+            else if (line.StartsWith('/')) _pending.Enqueue(new Shot(default, 0, 0, 0, "", Command: line));
             else if (TryParse(line, out var shot)) _pending.Enqueue(shot);
             else
             {

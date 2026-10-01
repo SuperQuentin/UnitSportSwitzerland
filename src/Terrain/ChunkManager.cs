@@ -403,10 +403,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _waterMaterial = waterMaterial;
         _available = manifest.Tiles.Select(t => t.Id).ToHashSet();
 
-        if (BuildMeshes && material is ShaderMaterial terrainShader)
+        if (BuildMeshes && material is ShaderMaterial)
         {
             // its own material instance: the discard rectangle must not touch the tiles
-            var horizonMaterial = new ShaderMaterial { Shader = terrainShader.Shader };
+            var horizonMaterial = Styles.StyleKit.Material(Styles.MaterialRole.Terrain);
             Horizon = new HorizonLayer { Name = "Horizon" };
             Horizon.Initialize(source, origin, horizonMaterial,
                 () => _anchors.Select(a => a.GlobalPosition));
@@ -434,6 +434,11 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public void ApplySettings(GameSettings s)
     {
         Lod = LodPolicy.FromSettings(s);
+        if (Styles.StyleKit.Detail != Detail)
+        {
+            Detail = Styles.StyleKit.Detail;
+            RebuildVisuals();
+        }
         CommitBudgetMs = s.CommitBudgetMs;
         MaxConcurrentBuildsOverride = s.MaxConcurrentBuilds;
         if (Horizon != null)
@@ -442,6 +447,40 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             FogUniforms.Apply(Horizon.Material);
         }
         _sinceEval = double.MaxValue;
+    }
+
+    /// <summary>
+    /// How finely the tile meshes are built: the visual style's (<see cref="Styles.StyleKit.Detail"/>),
+    /// taken by <see cref="ApplySettings"/>. Each build reads it once, when it starts.
+    /// </summary>
+    public Styles.MeshDetail Detail { get; private set; } = Styles.MeshDetail.Low;
+
+    /// <summary>
+    /// Builds every tile's meshes again, in place: ground, roads, buildings, trees and water, for
+    /// a style with another <see cref="Detail"/> (or <c>/style rebuild</c>). The old meshes stay
+    /// drawn until each tile's new ones commit, and its collision is left alone, so the player,
+    /// physics and the network session carry on through it. Builds in flight are cancelled: they
+    /// would commit the old detail. Main thread.
+    /// </summary>
+    public void RebuildVisuals()
+    {
+        if (!BuildMeshes) return;
+        int tiles = 0;
+        foreach (var state in _chunks.Values)
+        {
+            if (state.Cts != null)
+            {
+                state.CancelPending();
+                Interlocked.Increment(ref _cancelledBuilds);
+            }
+            if (state.ActiveStride < 0 && !state.HasRoads && !state.HasBuildings) continue;
+            state.ActiveStride = -1;
+            state.HasRoads = false;
+            state.HasBuildings = false;
+            tiles++;
+        }
+        _sinceEval = double.MaxValue;
+        GD.Print($"[terrain] rebuilding {tiles} tiles at {Detail} detail");
     }
 
     /// <summary>
@@ -1447,6 +1486,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var buildingMaterial = _buildingMaterial;
         var waterMaterial = _waterMaterial;
         var treeMaterial = _treeMaterial;
+        var detail = Detail;
 
         Task.Run(async () =>
         {
@@ -1486,7 +1526,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 TerrainMeshBuilder.MeshData? surfaceCore = null;
                 if (buildMesh && terrainMaterial != null)
                 {
-                    surfaceCore = TerrainMeshBuilder.BuildSurfaceCore(grid, stride, holes, cover);
+                    surfaceCore = TerrainMeshBuilder.BuildSurfaceCore(grid, stride, holes, cover, detail: detail);
                     // checked right before every Godot object this worker makes: see _ExitTree
                     ct.ThrowIfCancellationRequested();
                     mesh = ChunkNode.ToArrayMesh(
@@ -1568,14 +1608,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                             new Vector3(1000, grid.MaxHeight - grid.MinHeight + 80, 1000));
                         var buffers = ChunkNode.BuildTreeBuffers(treeList);
                         ct.ThrowIfCancellationRequested();
-                        trees = ChunkNode.BuildTreeMeshes(buffers, treeMaterial, bounds);
+                        trees = ChunkNode.BuildTreeMeshes(buffers, treeMaterial, bounds, detail);
                     }
                     Lap(StTrees, stageMs, clock);
 
                     // watercourses ride in the road tile but are meshed here, so a stream gets
                     // the water material instead of being drawn as a narrow blue road
                     if (cover != null && waterMaterial != null
-                        && WaterMeshBuilder.Build(grid, cover, roadTile) is { } waterData)
+                        && WaterMeshBuilder.Build(grid, cover, roadTile, detail) is { } waterData)
                     {
                         ct.ThrowIfCancellationRequested();
                         water = ChunkNode.ToArrayMesh(waterData, waterMaterial);
@@ -1604,7 +1644,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
                         doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null);
-                        if (BuildingMeshBuilder.Build(bTile, doors) is { } buildingData)
+                        if (BuildingMeshBuilder.Build(bTile, doors, detail) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
                             buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
