@@ -74,9 +74,21 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 - Free RAM: `Win32_OperatingSystem.FreePhysicalMemory` on Windows, `MemAvailable` on Linux.
   Light Godot runs wait for `TEST_RAM_GB` (3), tiers 2/3 for `TEST_HEAVY_RAM_GB` (6).
 - Machine-wide lock for tiers 2/3: a `mkdir` lock dir, `$TEMP/unitsport-heavy.lock` (`GUARD_LOCK_DIR`),
-  holding the owner's PID; a lock whose PID is dead is taken over. Two `test.sh net` started together
-  ran one after the other (46 s each, 104 s in all). The lock is per OS user temp dir: Git Bash and
-  WSL do not see each other's lock.
+  with the owner's PID, `info` (start time, `max_hold`, what runs) and a `beat` file. Two `test.sh net`
+  started together ran one after the other (46 s each, 104 s in all). The lock is per OS user temp
+  dir: Git Bash and WSL do not see each other's lock.
+- **Stale locks are taken over at once, never waited out.** An ad-hoc lock once kept two agents
+  waiting 20 min behind an owner that had died. Now a waiter takes the lock over when:
+  - the owner PID is gone (`kill -0`);
+  - the heartbeat, which a helper touches every `GUARD_BEAT` (10) s and which dies with its owner, is
+    older than `GUARD_STALE` (45) s. This covers a hung owner and a reused PID;
+  - it has been held longer than the owner's `guard_lock <max_wait> <max_hold>` + 120 s. This covers
+    a live shell that forgot to unlock.
+
+  `tools/test.sh lock` (`guard_status`) shows who holds it, for how long, the last heartbeat and
+  whether it is stale. A waiter prints the same every 2 min. `tools/lib/guard_selftest.sh` (in
+  `quick` for `tools/lib/`) checks the four cases: dead, stalled heartbeat, past max, live.
+  Never write your own `mkdir` lock loop: source `guard.sh`.
 - Timeouts kill only the run's own process tree: `taskkill /T /PID <its winpid>` on Windows (the
   `_console.exe` wrapper starts the real Godot as a child), its process group on Linux. Never by name.
 
