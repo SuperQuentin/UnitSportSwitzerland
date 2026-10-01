@@ -27,8 +27,32 @@ public readonly record struct VehicleState(
     long Tuning = 0,
     byte DoorsOpen = 0,
     // a car's preset (CarSetups id, #40): it belongs to this car too
-    int Setup = 0)
+    int Setup = 0,
+    // a truck's coupled trailer (TrailerCatalog code, with its load), or a lone trailer's own (#70)
+    int Train = 0,
+    // the articulation of every joint, rad: a parked train stands as it was left
+    Vector3 Angles = default,
+    // a truck's or a bus's lamps, doors, kneel and destination (Truck.PackFlags), and its own load 0..1
+    int Flags = 0,
+    float Load = 0.5f)
 {
+    /// <summary>The ride this state is: a car with its preset and parts, a truck with its trailer, a lone trailer.</summary>
+    public Rideable? CreateRide()
+    {
+        if (Kind == RideKind.Trailer) return new ParkedTrailer(Train, Angles);
+        if (HeavyCatalog.For(Kind) is { } heavy)
+        {
+            var truck = new Truck(heavy, Train, Load);
+            truck.SetAngles(Angles);
+            truck.UnpackFlags(Flags);
+            return truck;
+        }
+        return CarSetups.Ride(Kind, Setup, Tuning);
+    }
+
+    /// <summary>How many vehicles this state is to the server's count: a train is a truck and a trailer.</summary>
+    public int Units => Kind != RideKind.Trailer && Train != 0 ? 2 : 1;
+
     public Godot.Collections.Dictionary ToDict() => new()
     {
         ["kind"] = (int)Kind,
@@ -47,6 +71,10 @@ public readonly record struct VehicleState(
         ["tune"] = Tuning,
         ["doors"] = DoorsOpen,
         ["setup"] = Setup,
+        ["train"] = Train,
+        ["angles"] = Angles,
+        ["flags"] = Flags,
+        ["load"] = Load,
     };
 
     public static VehicleState FromDict(Godot.Collections.Dictionary d) => new(
@@ -67,7 +95,12 @@ public readonly record struct VehicleState(
         CarTuning.Unpack(d.TryGetValue("tune", out var tune) ? tune.AsInt64() : 0).Pack(),
         (byte)((d.TryGetValue("doors", out var doors) ? doors.AsInt32() : 0) & (15 | DriverDoorShuts)),
         // from another peer: out of range reads as Stock
-        d.TryGetValue("setup", out var setup) ? CarSetups.Clamp(setup.AsInt32()) : 0);
+        d.TryGetValue("setup", out var setup) ? CarSetups.Clamp(setup.AsInt32()) : 0,
+        // from another peer: an unknown trailer reads as none
+        d.TryGetValue("train", out var train) ? TrailerCatalog.Clean(train.AsInt32()) : 0,
+        d.TryGetValue("angles", out var angles) ? angles.AsVector3() : default,
+        d.TryGetValue("flags", out var flags) ? flags.AsInt32() : 0,
+        d.TryGetValue("load", out var load) ? Mathf.Clamp(load.AsSingle(), 0f, 1f) : 0.5f);
 
     /// <summary>
     /// In <see cref="DoorsOpen"/> of a car just got out of: the driver's door is only open because

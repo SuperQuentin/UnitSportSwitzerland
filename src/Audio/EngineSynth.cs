@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Audio;
 
 /// <summary>A car engine's layout, which is most of what it sounds like.</summary>
-public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8, Crossplane4, VTwin90, ParallelTwin270, VTwin52 }
+public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8, Crossplane4, VTwin90, ParallelTwin270, VTwin52, Diesel6 }
 
 /// <summary>How an engine is built, as far as its sound is concerned.</summary>
 public sealed record EngineProfile
@@ -88,6 +88,9 @@ public sealed record EngineProfile
         EngineLayout.VTwin90 => VTwin90,
         EngineLayout.ParallelTwin270 => ParallelTwin270,
         EngineLayout.VTwin52 => VTwin52,
+        // a truck or bus diesel: a big inline six at 550-2,200 rpm, fired evenly, through a long
+        // pipe — the low, smooth drone of a Scania or an OM 470, not a car's rasp
+        EngineLayout.Diesel6 => Inline4Na with { Cylinders = 6, PipeM = 2.4f, Unevenness = 0.3f },
         _ => Inline4Na,
     }) with { IdleRpm = idleRpm, MaxRpm = redline };
 }

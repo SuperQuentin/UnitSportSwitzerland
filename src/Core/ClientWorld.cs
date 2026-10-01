@@ -84,6 +84,11 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(Player.Motorbike.Check());
                 return;
             }
+            if (Array.IndexOf(scArgs, "--truckcheck") >= 0)
+            {
+                GetTree().Quit(Player.HeavyCheck.Run());
+                return;
+            }
         }
         if (Items.IconSheet.Requested)
         {
@@ -323,7 +328,7 @@ public partial class ClientWorld : Node3D
         // them for the height.
         bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
             || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
+            || RideProbe.ParseArgs() != null || TruckProbe.Requested || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
             || RoadStandProbe.Requested() || MantleProbe.Requested() || VoidProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
@@ -376,6 +381,7 @@ public partial class ClientWorld : Node3D
         _garage.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_garage);
         if (Player.GarageProbe.ParseArgs() is { } garageRole) AddChild(new Player.GarageProbe(garageRole, () => LocalPlayer));
+        if (Player.HeavyNetProbe.ParseArgs() is { } heavyRole) AddChild(new Player.HeavyNetProbe(heavyRole, () => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
@@ -671,6 +677,14 @@ public partial class ClientWorld : Node3D
             var (treeE, treeN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(treeE, treeN, 1200);
             AddChild(new World.TreeCheck(_chunks, origin, treeCheck.Shot));
+            return;
+        }
+
+        if (TruckProbe.Requested)
+        {
+            var (truckE, truckN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(truckE, truckN, 1200);
+            AddChild(new TruckProbe(_chunks, origin));
             return;
         }
 

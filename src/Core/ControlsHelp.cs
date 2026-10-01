@@ -66,6 +66,19 @@ public partial class ControlsHelp : CanvasLayer
             new("Car: fold the soft top", PlayerInput.RoofToggle),
             new("Get out", PlayerInput.InteractMount),
         }),
+        ("Trucks and buses", new Row[]
+        {
+            new("Couple / uncouple a trailer", PlayerInput.Couple),
+            new("Shift up / splitter high", PlayerInput.ShiftUp),
+            new("Shift down / splitter low", PlayerInput.ShiftDown),
+            new("Clutch (hold)", PlayerInput.Clutch),
+            new("H-pattern gates, reverse, neutral", Keys: "1–6, ` , 0", Pad: "—"),
+            new("Retarder stalk more / less", Keys: "{retarder_up} / {retarder_down}", Pad: "—"),
+            new("Parking brake (hold)", PlayerInput.Jump),
+            new("Bus: doors", PlayerInput.CarDoor),
+            new("Bus: kneel", PlayerInput.Kneel),
+            new("Bus: destination display", PlayerInput.Destination),
+        }),
         ("Flying", new Row[]
         {
             new("Pitch and roll", Keys: Wasd, Pad: "Left stick"),

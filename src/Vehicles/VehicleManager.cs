@@ -139,11 +139,34 @@ public partial class VehicleManager : Node3D
         VehicleBody? best = null;
         float bestDist = reach;
         foreach (var node in GetChildren())
-            if (node is VehicleBody { Wrecked: false } v && !_claimed.Contains(v.Name))
+            if (node is VehicleBody { Wrecked: false, Trailer: null } v && !_claimed.Contains(v.Name))
             {
-                // measured to the box, roughly: a plane's cockpit is metres from its origin
-                float d = v.GlobalPosition.DistanceTo(point) - v.Ride.ParkedBox.Size.X * 0.25f;
+                // measured to the door where there is one (a truck's cab, a bus's front door, metres
+                // from the middle), else to the box, roughly: a plane's cockpit is metres from its origin
+                var entry = v.Ride.EntryPoint;
+                float d = entry != Vector3.Zero
+                    ? v.ToGlobal(entry).DistanceTo(point)
+                    : v.GlobalPosition.DistanceTo(point) - v.Ride.ParkedBox.Size.X * 0.25f;
                 if (d < bestDist) { bestDist = d; best = v; }
+            }
+        return best;
+    }
+
+    /// <summary>
+    /// The lone trailer whose pivot (kingpin, drawbar eye) is nearest a point, within
+    /// <paramref name="reach"/> horizontally, and that <paramref name="fits"/> — for a truck backing
+    /// its hitch under it.
+    /// </summary>
+    public VehicleBody? NearestTrailer(Vector3 point, float reach, Func<VehicleBody, bool> fits)
+    {
+        VehicleBody? best = null;
+        float bestDist = reach;
+        foreach (var node in GetChildren())
+            if (node is VehicleBody { Wrecked: false, Trailer: { } t } v && !_claimed.Contains(v.Name) && fits(v))
+            {
+                var pivot = v.ToGlobal(t.PivotNode);
+                float d = new Vector2(pivot.X - point.X, pivot.Z - point.Z).Length();
+                if (d < bestDist && Mathf.Abs(pivot.Y - point.Y) < 2.5f) { bestDist = d; best = v; }
             }
         return best;
     }
@@ -160,8 +183,8 @@ public partial class VehicleManager : Node3D
         // A vehicle a player got out of is one they got into, and those are counted; anything
         // beyond that was spawned from the menu, which the client only offers an admin. A client
         // that offers it anyway is refused here, where the answer cannot be edited.
-        if (_driving.TryGetValue(sender, out int driving) && driving > 0)
-            _driving[sender] = driving - 1;
+        if (_driving.TryGetValue(sender, out int driving) && driving >= parked.Units)
+            _driving[sender] = driving - parked.Units;
         else if (MayPark != null && !MayPark(sender, parked))
         {
             GD.Print($"[vehicles] peer {sender} may not spawn a {parked.Kind}; not parked");
@@ -191,7 +214,7 @@ public partial class VehicleManager : Node3D
         var state = vehicle.Capture();
         vehicle.QueueFree();   // the spawner removes it on every client
         _claimed.Remove(name);
-        _driving[sender] = _driving.GetValueOrDefault(sender) + 1;
+        _driving[sender] = _driving.GetValueOrDefault(sender) + state.Units;
         RpcId(sender, MethodName.ClaimGranted, state.ToDict());
     }
 
