@@ -38,24 +38,38 @@ public static class Surfaces
     private const float CacheSeconds = 0.25f;
     private const float CacheMetres = 0.5f;
 
-    private static readonly Dictionary<TileId, List<RoadSegment>?> Roads = new();
+    private static readonly Dictionary<TileId, RoadIndex?> Roads = new();
     private static readonly HashSet<TileId> Loading = new();
 
-    private static Surface _cached;
-    private static Vector3 _cachedAt = new(float.NaN, 0, 0);
-    private static bool _cachedIndoors;
-    private static double _cachedTime = -100;
-
-    /// <summary>The surface under <paramref name="feet"/>. Cheap enough to call every frame.</summary>
-    public static Surface At(ChunkManager chunks, Vector3 feet, bool indoors)
+    /// <summary>One caller's last answer: where, when, and what.</summary>
+    private sealed class Cache
     {
+        public Surface Value;
+        public Vector3 At = new(float.NaN, 0, 0);
+        public bool Indoors;
+        public double Time = -100;
+    }
+
+    private static readonly Cache Shared = new();
+    // each vehicle keeps its own answer: with one cache for all, two vehicles asking in the same
+    // tick threw each other's away (#221)
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, Cache> Callers = new();
+
+    /// <summary>
+    /// The surface under <paramref name="feet"/>. Cheap enough to call every frame. A
+    /// <paramref name="caller"/> (a driven vehicle) gets a cache of its own; without one the
+    /// answer is cached for everyone (the local player's feet).
+    /// </summary>
+    public static Surface At(ChunkManager chunks, Vector3 feet, bool indoors, object? caller = null)
+    {
+        var c = caller == null ? Shared : Callers.GetValue(caller, _ => new Cache());
         double now = Time.GetTicksMsec() / 1000.0;
-        if (indoors == _cachedIndoors && now - _cachedTime < CacheSeconds
-            && !float.IsNaN(_cachedAt.X) && _cachedAt.DistanceTo(feet) < CacheMetres)
-            return _cached;
+        if (indoors == c.Indoors && now - c.Time < CacheSeconds
+            && !float.IsNaN(c.At.X) && c.At.DistanceTo(feet) < CacheMetres)
+            return c.Value;
 
         Surface s = indoors ? Surface.Indoor : Compute(chunks, feet);
-        _cached = s; _cachedAt = feet; _cachedIndoors = indoors; _cachedTime = now;
+        c.Value = s; c.At = feet; c.Indoors = indoors; c.Time = now;
         return s;
     }
 
@@ -91,33 +105,77 @@ public static class Surfaces
     private static Surface? RoadUnder(ChunkManager chunks, Vector3 feet)
     {
         if (Origin is not { } origin || chunks.Source is not { } source) return null;
+        Watch(chunks);
         var (e, n) = origin.ToLv95(feet);
         var tile = TileId.FromLv95(e, n);
-        if (!Roads.TryGetValue(tile, out var segs))
+        if (!Roads.TryGetValue(tile, out var index))
         {
             // fetched once through the (cached) chunk source; until it lands there is simply no road
             if (Loading.Add(tile)) Load(source, tile);
             return null;
         }
-        if (segs == null) return null;
-
+        if (index == null) return null;
         double lx = e - tile.MinE, lz = tile.MaxN - n;
-        Surface? best = null;
-        float bestD = float.MaxValue;
-        foreach (var s in segs)
+        return index.Nearest(lx, lz, feet.Y, index.Cell(lx, lz));
+    }
+
+    /// <summary>
+    /// A road tile's walkable segments, and which of their pieces come within reach of each
+    /// <see cref="CellSize"/> m cell: a lookup reads one cell's pieces instead of every point of
+    /// the tile (a full scan per vehicle per tick at speed, #221). A piece is listed in every cell
+    /// its box, grown by its reach, touches, so the nearest piece found is exactly the one a full
+    /// scan finds, in the same order (ties go to the first, as before).
+    /// </summary>
+    private sealed class RoadIndex
+    {
+        private const float CellSize = 32f;
+        private const int Cells = (int)(1000 / CellSize) + 1;
+
+        private readonly List<RoadSegment> _segs;
+        private readonly List<(int Seg, int I)>?[] _cells = new List<(int, int)>?[Cells * Cells];
+        private static readonly List<(int Seg, int I)> None = new();
+
+        public RoadIndex(List<RoadSegment> segs)
         {
-            float reach = s.Width * 0.5f + 0.3f;
-            var pts = s.Points;
-            for (int i = 0; i + 5 < pts.Length; i += 3)
+            _segs = segs;
+            for (int k = 0; k < segs.Count; k++)
             {
+                float reach = Reach(segs[k]);
+                var pts = segs[k].Points;
+                for (int i = 0; i + 5 < pts.Length; i += 3)
+                {
+                    int x0 = CellOf(Math.Min(pts[i], pts[i + 3]) - reach), x1 = CellOf(Math.Max(pts[i], pts[i + 3]) + reach);
+                    int z0 = CellOf(Math.Min(pts[i + 2], pts[i + 5]) - reach), z1 = CellOf(Math.Max(pts[i + 2], pts[i + 5]) + reach);
+                    for (int cz = z0; cz <= z1; cz++)
+                        for (int cx = x0; cx <= x1; cx++)
+                            (_cells[cz * Cells + cx] ??= new()).Add((k, i));
+                }
+            }
+        }
+
+        private static int CellOf(double v) => Math.Clamp((int)Math.Floor(v / CellSize), 0, Cells - 1);
+
+        /// <summary>The pieces listed in the cell holding a tile-local point.</summary>
+        public List<(int Seg, int I)> Cell(double lx, double lz) => _cells[CellOf(lz) * Cells + CellOf(lx)] ?? None;
+
+        /// <summary>The nearest piece in reach (and at the height of <paramref name="y"/>) among <paramref name="pieces"/>: its surface.</summary>
+        public Surface? Nearest(double lx, double lz, float y, List<(int Seg, int I)> pieces)
+        {
+            Surface? best = null;
+            float bestD = float.MaxValue;
+            foreach (var (k, i) in pieces)
+            {
+                var s = _segs[k];
+                float reach = Reach(s);
+                var pts = s.Points;
                 double ax = pts[i], az = pts[i + 2], vx = pts[i + 3] - ax, vz = pts[i + 5] - az;
                 double len2 = vx * vx + vz * vz;
                 double u = len2 > 1e-9 ? Math.Clamp(((lx - ax) * vx + (lz - az) * vz) / len2, 0, 1) : 0;
                 double px = ax + vx * u - lx, pz = az + vz * u - lz;
                 float d2 = (float)(px * px + pz * pz);
                 if (d2 > reach * reach || d2 >= bestD) continue;
-                float y = pts[i + 1] + (float)u * (pts[i + 4] - pts[i + 1]);
-                if (Mathf.Abs(feet.Y - y) > RoadYTolerance) continue;
+                float ry = pts[i + 1] + (float)u * (pts[i + 4] - pts[i + 1]);
+                if (Mathf.Abs(y - ry) > RoadYTolerance) continue;
                 bestD = d2;
                 best = s.Class == RoadClass.Railway ? Surface.Gravel   // ballast
                      : s.Surface == RoadSurface.Paved ? Surface.Asphalt
@@ -125,8 +183,40 @@ public static class Surfaces
                      // unsurveyed: wide classes are tarmac, tracks and paths are dirt
                      : s.Class <= RoadClass.Minor || s.Class == RoadClass.Square ? Surface.Asphalt : Surface.Gravel;
             }
+            return best;
         }
-        return best;
+
+        private static float Reach(RoadSegment s) => s.Width * 0.5f + 0.3f;
+
+        /// <summary>
+        /// <c>--surfacecheck</c>: the cell lookup against the full scan of every piece, at points
+        /// scattered along the tile's roads (on, beside and just out of reach, at and off the
+        /// road's height). Prints one RESULT line per road tile read.
+        /// </summary>
+        public void Check(TileId tile)
+        {
+            var all = new List<(int Seg, int I)>();
+            for (int k = 0; k < _segs.Count; k++)
+                for (int i = 0; i + 5 < _segs[k].Points.Length; i += 3) all.Add((k, i));
+            var rng = new Random(tile.E * 7919 + tile.N);
+            int n = 0, bad = 0, road = 0;
+            foreach (var (k, i) in all)
+            {
+                if (rng.NextDouble() > 1000.0 / all.Count) continue;
+                var pts = _segs[k].Points;
+                float r = Reach(_segs[k]) + 2f;
+                for (int t = 0; t < 4; t++)
+                {
+                    double lx = pts[i] + (rng.NextDouble() * 2 - 1) * r, lz = pts[i + 2] + (rng.NextDouble() * 2 - 1) * r;
+                    float y = pts[i + 1] + (float)(rng.NextDouble() * 2 - 1) * 4f;
+                    var full = Nearest(lx, lz, y, all);
+                    n++;
+                    if (full != null) road++;
+                    if (full != Nearest(lx, lz, y, Cell(lx, lz))) bad++;
+                }
+            }
+            GD.Print($"[surfacecheck] tile {tile}: {all.Count} pieces, {n} lookups ({road} on a road), {bad} differ from the full scan RESULT {(bad == 0 ? "ok" : "FAIL")}");
+        }
     }
 
     /// <summary>
@@ -136,6 +226,23 @@ public static class Surfaces
     private static bool Walkable(RoadSegment s) => s.Class <= RoadClass.Railway && s.Class != RoadClass.Unknown;
 
     private static int _epoch;
+    private static ChunkManager? _watched;
+    private static readonly bool CheckIndex = OS.GetCmdlineUserArgs().Contains("--surfacecheck");
+
+    /// <summary>A road tile goes when its terrain tile unloads: they used to pile up for the whole session (#221).</summary>
+    private static void Watch(ChunkManager chunks)
+    {
+        if (_watched == chunks) return;
+        if (_watched != null) _watched.TileUnloaded -= Evict;
+        chunks.TileUnloaded += Evict;
+        _watched = chunks;
+    }
+
+    private static void Evict(TileId tile)
+    {
+        Roads.Remove(tile);
+        Loading.Remove(tile);
+    }
 
     /// <summary>Drops the cached road tiles, for when the world under them is replaced.</summary>
     public static void Forget()
@@ -143,19 +250,30 @@ public static class Surfaces
         _epoch++;
         Roads.Clear();
         Loading.Clear();
-        _cachedAt = new Vector3(float.NaN, 0, 0);
+        Shared.At = new Vector3(float.NaN, 0, 0);
+        Callers.Clear();
+        if (_watched != null) _watched.TileUnloaded -= Evict;
+        _watched = null;
     }
 
     private static async void Load(IChunkSource source, TileId tile)
     {
         int epoch = _epoch;
+        RoadIndex? index = null;
         try
         {
-            var roads = await source.LoadRoadsAsync(tile);
-            if (epoch == _epoch) Roads[tile] = roads?.Segments.Where(Walkable).ToList();
+            if (await source.LoadRoadsAsync(tile) is { } roads)
+                // indexed off the main thread: a town tile has tens of thousands of pieces
+                index = await Task.Run(() =>
+                {
+                    var built = new RoadIndex(roads.Segments.Where(Walkable).ToList());
+                    if (CheckIndex) built.Check(tile);
+                    return built;
+                });
         }
-        catch { if (epoch == _epoch) Roads[tile] = null; }
-        finally { if (epoch == _epoch) Loading.Remove(tile); }
+        catch { index = null; }
+        // still wanted: not forgotten, nor unloaded while it was read
+        if (epoch == _epoch && Loading.Remove(tile)) Roads[tile] = index;
     }
 
     // ------------------------------------------------------------------------------------
