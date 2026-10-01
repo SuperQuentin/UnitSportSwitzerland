@@ -108,6 +108,16 @@ public partial class LootProbe : Node
                 + $"{t.Francs / per,8:F1}");
         }
 
+        // the locked containers (#165): how many buildings of a kind have one, and what they give
+        GD.Print($"[loot] {"kind",-18}{"lockers%",9}{"safes%",8}{"guns/100",10}{"shells/100",11}");
+        foreach (var (kind, t) in tallies.OrderByDescending(kv => kv.Value.Buildings))
+        {
+            double per = (double)t.Buildings * _epochs;
+            GD.Print($"[loot] {kind,-18}{100.0 * t.Types.GetValueOrDefault(FurnitureType.GunLocker) / t.Buildings,9:F1}"
+                + $"{100.0 * t.Types.GetValueOrDefault(FurnitureType.Safe) / t.Buildings,8:F1}"
+                + $"{100.0 * t.Seen.GetValueOrDefault(ItemId.Shotgun) / per,10:F1}{100.0 * t.Seen.GetValueOrDefault(ItemId.Shells) / per,11:F1}");
+        }
+
         bool ok = true;
         if (tallies.TryGetValue(BuildingKind.House, out var house))
         {

@@ -128,8 +128,8 @@ public static class ItemDefs
     {
         new(ItemId.Binoculars, "Binoculars", "Hold {aim_item} to look through them. 8x.",
             ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN"),
-        new(ItemId.SmartBinoculars, "Smart binoculars", "Hold {aim_item} to look through them. {use_item} picks a target item: buildings in view show the chance it drops from their containers.",
-            ItemUse.Optic, 1, new Color(0.20f, 0.42f, 0.50f), "SB", 0, ItemCategory.Gear, 250f),
+        new(ItemId.SmartBinoculars, "Smart binoculars", "Hold them at a building's door, or inside: they read out what its containers can hold and the chance of finding each item.",
+            ItemUse.Readout, 1, new Color(0.20f, 0.42f, 0.50f), "SB", 0, ItemCategory.Gear, 250f),
         new(ItemId.Camera, "Camera", "A Polaroid. Hold {aim_item} to frame, {use_item} to take a photo: it prints, develops, and goes in your pack.",
             ItemUse.Photo, 1, new Color(0.18f, 0.18f, 0.20f), "CM"),
         new(ItemId.Gps, "GPS", "Shows your LV95 coordinates, altitude and heading while held.",

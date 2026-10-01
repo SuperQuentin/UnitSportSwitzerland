@@ -30,6 +30,7 @@ public partial class ItemController : Node
     private readonly WorldOrigin _origin;
     private InventoryUi _ui = null!;
     private SmartBinocularsHud _smart = null!;
+    public SmartBinocularsHud SmartHud => _smart;
     private FlagGhost _flagGhost = null!;
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
@@ -180,9 +181,8 @@ public partial class ItemController : Node
 
         var def = ItemDefs.Get(_inventory.HeldId);
         bool usable = UsablePlayer != null;
-        bool picking = _smart.PickerOpen && _inventory.HeldId == ItemId.SmartBinoculars;   // stays raised while a target is picked
-        bool aiming = usable && (!UiFocus.TextEntryActive || picking)
-                      && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim || picking)
+        bool aiming = usable && !UiFocus.TextEntryActive
+                      && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim)
                       && def?.Use is ItemUse.Optic or ItemUse.Photo or ItemUse.Shoot;
 
         // everything pushed onto the player is re-asserted every frame, so letting go of Aim,
@@ -214,16 +214,17 @@ public partial class ItemController : Node
                 _ => ViewPose.Eye,
             });
             if (!aiming && def?.Use == ItemUse.Readout) visual.SetPose(ViewPose.Read);   // the GPS is held up to read
-            visual.ScreenText = def?.Use == ItemUse.Readout && usable ? GpsScreen(player) : null;
+            visual.ScreenText = _inventory.HeldId == ItemId.Gps && usable ? GpsScreen(player) : null;
             visual.Suppressed = _capturing || (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
         }
 
         // the viewfinder / binocular overlay appears once the item has been raised
         _ui.Scope = aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def.Use : null;
+        // the smart binoculars read out the building at hand while held (#165): no aiming
         _smart.Held = usable && _inventory.HeldId == ItemId.SmartBinoculars;
-        _smart.Active = _smart.Held && _ui.Scope == ItemUse.Optic;
+        _smart.Player = UsablePlayer;
         // in first person the readout is on the device's own screen; the HUD panel is for third person
-        _ui.Readout = usable && def?.Use == ItemUse.Readout && !player.IsFirstPerson ? GpsReadout(player) : null;
+        _ui.Readout = usable && _inventory.HeldId == ItemId.Gps && !player.IsFirstPerson ? GpsReadout(player) : null;
     }
 
     public override void _UnhandledInput(InputEvent e)
@@ -329,11 +330,6 @@ public partial class ItemController : Node
 
             case ItemUse.Place:
                 PlaceOrPickUpFlag(player, slot);
-                break;
-
-            case ItemUse.Optic when stack.Id == ItemId.SmartBinoculars:
-                if (_smart.Active) _smart.OpenPicker();
-                else _ui.Toast(InputHints.Format("Hold Aim ({aim_item}), then {use_item} picks the target item."));
                 break;
 
             case ItemUse.Optic:
