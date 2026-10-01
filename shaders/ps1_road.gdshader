@@ -23,6 +23,8 @@ global uniform float world_night;
 // second surface, colour from the vertex, uv = (along, lateral across the line in [-1,1]).
 
 uniform vec2 snap_resolution = vec2(640.0, 480.0);
+// in a headset: no snap, no colour dither (common/retro.gdshaderinc)
+global uniform bool xr_smooth;
 uniform float color_levels = 16.0;
 uniform float fog_start = 3500.0;
 uniform float fog_end = 8000.0;
@@ -46,7 +48,7 @@ void vertex() {
         view.xyz *= 1.0 - paint_depth_bias;   // toward the eye: same pixel, nearer depth
     }
     vec4 clip = PROJECTION_MATRIX * view;
-    if (clip.w > 0.0) {
+    if (!xr_smooth && clip.w > 0.0) {
         vec2 half_res = snap_resolution * 0.5;
         vec2 ndc = clip.xy / clip.w;
         ndc = floor(ndc * half_res + 0.5) / half_res;
@@ -114,7 +116,7 @@ void fragment() {
     col *= world_tint + door_light(world_pos, vec3(0.0, 1.0, 0.0));
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
-    float dith = (bayer[bi] / 16.0 - 0.5) / color_levels;
+    float dith = xr_smooth ? 0.0 : (bayer[bi] / 16.0 - 0.5) / color_levels;
     col = floor((col + dith) * color_levels + 0.5) / color_levels;
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
