@@ -62,6 +62,9 @@ public partial class ChatManager : Node
 
     /// <summary>Client-side only: where <c>/spawn</c> puts items, and the towns <c>/city</c> offline looks in.</summary>
     public Items.Inventory? Inventory { get; set; }
+
+    /// <summary>Adds a stack, dropping what does not fit on the ground; returns how many went nowhere. Falls back to a plain add.</summary>
+    public Func<Items.ItemStack, int>? GiveOrDrop { get; set; }
     public PlaceSearchUi? PlaceSearch { get; set; }
 
     /// <summary>
@@ -139,6 +142,11 @@ public partial class ChatManager : Node
     public void Send(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
+        if (LocalClock(text.Trim()) is { } clock)
+        {
+            LineReceived?.Invoke(clock, ChatKind.Private);
+            return;
+        }
         if (IsLocal)
         {
             text = text.Trim();
@@ -149,11 +157,23 @@ public partial class ChatManager : Node
         RpcId(1, MethodName.SubmitLine, text);
     }
 
-    /// <summary>Asks the server who is online, so names can be completed. The answer lands in <see cref="PlayerNames"/>.</summary>
+    /// <summary>
+    /// Asks the server who is online, so names can be completed. The answer lands in
+    /// <see cref="PlayerNames"/>. Completion asks on every keystroke, so this sends at most once a second.
+    /// </summary>
     public void RequestPlayerNames()
     {
-        if (!IsLocal) RpcId(1, MethodName.SubmitNamesRequest);
+        if (IsLocal) return;
+        ulong now = Time.GetTicksMsec();
+        if (_namesAskedAt != 0 && now - _namesAskedAt < 1000) return;
+        _namesAskedAt = now;
+        RpcId(1, MethodName.SubmitNamesRequest);
     }
+
+    private ulong _namesAskedAt;
+
+    /// <summary>Client: the server's list of names changed; completions can be refreshed.</summary>
+    public event Action? NamesReceived;
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -166,7 +186,12 @@ public partial class ChatManager : Node
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReceiveNames(string[] names) => _playerNames = names;
+    private void ReceiveNames(string[] names)
+    {
+        bool changed = !names.SequenceEqual(_playerNames);
+        _playerNames = names;
+        if (changed) NamesReceived?.Invoke();
+    }
 
     /// <summary>Client: the server granted items (<c>/spawn</c>, an admin's choice); they go in this machine's inventory.</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
@@ -183,9 +208,10 @@ public partial class ChatManager : Node
     {
         if (Inventory is null) return "No inventory to put that in.";
 
-        int left = Inventory.Add(def.Id, count);
+        int room = Math.Min(count, Inventory.Room(def.Id));
+        int left = GiveOrDrop?.Invoke(new Items.ItemStack(def.Id, count)) ?? Inventory.Add(def.Id, count);
         return left == 0
-            ? $"Spawned {count} x {def.Name}."
+            ? room < count ? $"Spawned {count} x {def.Name}; {count - room} dropped at your feet." : $"Spawned {count} x {def.Name}."
             : left == count
                 ? $"No room for {def.Name}."
                 : $"Spawned {count - left} x {def.Name}; {left} did not fit.";
@@ -214,7 +240,7 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help":
-                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /occasion  — Tab completes.", ChatKind.Private);
+                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /occasion  /time  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 
@@ -240,6 +266,10 @@ public partial class ChatManager : Node
             case "spawn":
                 if (Items.ItemLookup.TryParse(rest, out var def, out int count, out string error)) Show(Give(def, count), ChatKind.Admin);
                 else Show(error, ChatKind.Error);
+                return;
+
+            case "time":
+                Show(LocalTime(parts[1..], out bool failed), failed ? ChatKind.Error : ChatKind.Admin);
                 return;
 
             case "occasion" or "occasions":
@@ -434,6 +464,8 @@ public partial class ChatManager : Node
             case "me":
                 if (rest.Length > 0) Broadcast($"* {NameOf(sender)} {Scrub(rest)}", ChatKind.System);
                 return;
+            // anyone may ask; set/add/speed are checked inside, against the same IsAdmin
+            case "time": CommandTime(sender, parts[1..]); return;
             // anyone may list; start/stop/auto are checked inside, against the same IsAdmin
             case "occasion" or "occasions":
                 if (Occasions.OccasionManager.Instance is not { } occasions)
@@ -477,7 +509,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /occasion", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /occasion  /time", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -486,7 +518,8 @@ public partial class ChatManager : Node
             ReplyTo(sender,
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
                 + "/kick <player> [reason]  /admin list|add <name>|remove <name>  "
-                + "/occasion start|stop <id>|auto  /spawn <item> [count]  — Tab completes",
+                + "/occasion start|stop <id>|auto  /spawn <item> [count]  "
+                + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  — Tab completes",
                 ChatKind.Private);
     }
 
@@ -720,6 +753,124 @@ public partial class ChatManager : Node
 
         RpcId(target.PeerId, MethodName.ForceTeleport, e, n, me.Name);
         Broadcast($"{me.Name} brought {target.Name} to them", ChatKind.Admin);
+    }
+
+    // ---- /time --------------------------------------------------------------------------
+
+    /// <summary>
+    /// Server: the world's clock once an admin has set it — the hour at <c>At</c> (this process's
+    /// seconds) and how fast it runs. Null until then, and each client keeps its own clock.
+    /// </summary>
+    private (double Hour, double At, float MinutesPerDay)? _worldClock;
+
+    private static double Now => Time.GetTicksMsec() / 1000.0;
+
+    private static double WorldHour((double Hour, double At, float MinutesPerDay) c) =>
+        World.TimeCommand.Advance(c.Hour, Now - c.At, c.MinutesPerDay);
+
+    /// <summary>
+    /// Client: <c>/time</c> or <c>/time query</c> is answered from the clock on this screen, which
+    /// is the one the player is asking about. Null when it is another command, or there is no clock.
+    /// </summary>
+    private static string? LocalClock(string text)
+    {
+        if (!text.StartsWith('/') || World.DayNight.Instance is not { } clock) return null;
+        string[] parts = text[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || !parts[0].Equals("time", StringComparison.OrdinalIgnoreCase)) return null;
+        if (!World.TimeCommand.TryParse(parts[1..], out var op, out _, out _) || op != World.TimeOp.Query) return null;
+        return $"It is {clock.Clock} ({World.TimeCommand.DescribeSpeed(clock.MinutesPerDay)}).";
+    }
+
+    /// <summary>Offline <c>/time</c>: this machine's clock, with operator rights. The reply, and whether it failed.</summary>
+    private static string LocalTime(string[] args, out bool failed)
+    {
+        failed = true;
+        if (World.DayNight.Instance is not { } clock) return "There is no clock here.";
+        if (!World.TimeCommand.TryParse(args, out var op, out double value, out string error)) return error;
+
+        failed = false;
+        switch (op)
+        {
+            case World.TimeOp.Set: clock.Hour = value; break;
+            case World.TimeOp.Add: clock.Hour = World.TimeCommand.Wrap(clock.Hour + value); break;
+            case World.TimeOp.Speed: clock.DayLengthOverride = (float)value; break;
+        }
+        return op == World.TimeOp.Speed
+            ? $"The clock runs at {World.TimeCommand.DescribeSpeed(clock.MinutesPerDay)}."
+            : $"Time set to {clock.Clock}.";
+    }
+
+    /// <summary>
+    /// Server <c>/time</c>. Changing it is an admin's, and it changes it for everyone: the server
+    /// keeps the clock from then on and sends it to each client, and to whoever joins later
+    /// (<see cref="SendWorldTimeTo"/>). The first change starts from the server's own day length.
+    /// </summary>
+    private void CommandTime(long sender, string[] args)
+    {
+        if (!World.TimeCommand.TryParse(args, out var op, out double value, out string error))
+        {
+            ReplyTo(sender, error, ChatKind.Error);
+            return;
+        }
+
+        if (op == World.TimeOp.Query)
+        {
+            // a player's own client answers this; this is the console's, or a client with no clock
+            ReplyTo(sender, _worldClock is { } c
+                ? $"It is {World.TimeCommand.Format(WorldHour(c))} ({World.TimeCommand.DescribeSpeed(c.MinutesPerDay)})."
+                : "Nobody has set the time on this server: each player keeps their own clock.",
+                ChatKind.Private);
+            return;
+        }
+
+        if (!IsAdmin(sender))
+        {
+            ReplyTo(sender, "Changing the time is an admin command.", ChatKind.Error);
+            return;
+        }
+
+        if (_worldClock is null && op != World.TimeOp.Set)
+        {
+            ReplyTo(sender, "Nobody has set the time on this server yet: /time set <hour> first.", ChatKind.Error);
+            return;
+        }
+
+        double hour = _worldClock is { } now ? WorldHour(now) : 0;
+        float speed = _worldClock?.MinutesPerDay ?? GameSettings.Current.DayLengthMinutes;
+        switch (op)
+        {
+            case World.TimeOp.Set: hour = value; break;
+            case World.TimeOp.Add: hour = World.TimeCommand.Wrap(hour + value); break;
+            case World.TimeOp.Speed: speed = (float)value; break;
+        }
+        _worldClock = (hour, Now, speed);
+        Rpc(MethodName.WorldTime, hour, speed);
+        GD.Print($"[admin] {NameOf(sender)} set the clock to {World.TimeCommand.Format(hour)}, {World.TimeCommand.DescribeSpeed(speed)}");
+
+        string who = NameOf(sender);
+        Broadcast(op != World.TimeOp.Speed ? $"{who} set the time to {World.TimeCommand.Format(hour)}"
+            : speed > 0 ? $"{who} set the day to {World.TimeCommand.DescribeSpeed(speed)}"
+            : $"{who} stopped the clock at {World.TimeCommand.Format(hour)}", ChatKind.Admin);
+    }
+
+    /// <summary>Server: tells a newly connected peer the world's time, if an admin has set one.</summary>
+    public void SendWorldTimeTo(long peerId)
+    {
+        if (_worldClock is { } c) RpcId(peerId, MethodName.WorldTime, WorldHour(c), c.MinutesPerDay);
+    }
+
+    /// <summary>
+    /// Client: the world's time, now. Sent as the current hour rather than a timestamp: a day of
+    /// 24 minutes moves a game minute a second, so the trip over the wire does not show.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void WorldTime(double hour, float minutesPerDay)
+    {
+        if (World.DayNight.Instance is not { } clock) return;
+        clock.Hour = World.TimeCommand.Wrap(hour);
+        clock.DayLengthOverride = Math.Clamp(minutesPerDay, 0f, World.TimeCommand.MaxMinutesPerDay);
+        GD.Print($"[time] the server's clock: {clock.Clock}, {World.TimeCommand.DescribeSpeed(clock.MinutesPerDay)}");
     }
 
     /// <summary>

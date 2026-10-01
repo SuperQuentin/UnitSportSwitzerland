@@ -25,6 +25,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- the coarse heightmap the generated terrain is shaped on (tools/swiss_relief.py); LogicalName
+         and WithCulture because MSBuild otherwise reads ".bin"-like infixes as a culture -->
+    <EmbeddedResource Include="src/Terrain/swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
     <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
   </ItemGroup>
 

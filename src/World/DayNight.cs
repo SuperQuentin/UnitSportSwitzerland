@@ -83,10 +83,17 @@ public partial class DayNight : Node
         Apply(0);
     }
 
+    /// <summary>
+    /// Real minutes per day when <c>/time speed</c> or the server's world clock has decided it;
+    /// null = this player's setting (<see cref="GameSettings.DayLengthMinutes"/>).
+    /// </summary>
+    public float? DayLengthOverride { get; set; }
+
+    public float MinutesPerDay => DayLengthOverride ?? GameSettings.Current.DayLengthMinutes;
+
     public override void _Process(double delta)
     {
-        float minutes = GameSettings.Current.DayLengthMinutes;
-        if (minutes > 0) Hour = (Hour + delta * 24.0 / (minutes * 60.0)) % 24.0;
+        Hour = TimeCommand.Advance(Hour, delta, MinutesPerDay);
         Apply((float)delta);
         if (GetViewport()?.GetCamera3D() is { } cam) cam.Environment = EnvironmentAt(cam.GlobalPosition);
     }

@@ -1,6 +1,6 @@
 # Steering wheel
 
-- **Steering wheel** (`Core/SteeringWheel`, `WheelSettings`, `WheelPresets`, `WheelPanel`; issue #68):
+- **Steering wheel** (`Core/SteeringWheel`, `WheelSettings`, `WheelPresets`, `Ui/WheelPanel`; issue #68):
   sim-racing wheels and pedals are read through **SDL3** (NuGet `ppy.SDL3-CS`, native libs for
   Windows/Linux/macOS land in `runtimes/<rid>/native`; `dotnet publish -r win-x64` puts `SDL3.dll` next
   to the game), not Godot's joypad API: that caps a device at ten axes, cannot tell which end a pedal
@@ -12,12 +12,14 @@
   throttle/brake/`clutch` is the max of the bindings and the pedal; `WheelHandbrake` (lever or a
   button bound to `handbrake`) ORs into the car's handbrake. Wheel buttons are raised as
   `InputEventAction`s, so a bound button is that action everywhere a key is.
-- **Direct steering** (`Car.Step`): with a wheel angle the road wheels are `−angle / SteeringRatio`
-  clamped to `MaxSteer`, and the keyboard helpers are skipped — rack easing, speed-scaled lock and
-  the Game counter-steer assist. Game grip, power and the yaw catch past 35° stay. `SteeringRatio` =
-  half of `CarSpec.LockTurns` (turns lock to lock) over `MaxSteer`; `Car.SteeringWheelAngle` is what
-  a cockpit wheel (#69) shows. Only three `LockTurns` are published figures (BNR32 2.7, CT9A 2.2,
-  NA6CE 2.9); the rest are marked `est.` in `CarCatalog`.
+- **Direct steering** (`Car.Step`, `Truck.Step`): with a wheel angle the road wheels are
+  `−angle / ratio` clamped to `MaxSteer`, and the keyboard helpers are skipped — rack easing,
+  speed-scaled lock and the Game counter-steer assist. Game grip, power and the yaw catch past 35°
+  stay. A car's ratio is `CarSpec.SteerRatio`, **derived** from `LockTurns` (turns lock to lock, half
+  of it over `MaxSteer`), so the cockpit wheel (#69, `WheelTurn = SteerAngle · SteerRatio`) shows
+  the real wheel's angle. Only three `LockTurns` are published figures (BNR32 2.7, CT9A 2.2, NA6CE
+  2.9); the rest are marked `est.` in `CarCatalog`. Trucks and buses use the cab's
+  `HeavyCockpit.SteerRatio` (20:1): ~1800° lock to lock for a 0.78 rad box.
 - **Range**: `WheelSettings.RangeDeg` (270–1800°) must match the wheel's driver. 1:1 when the range
   covers the vehicle's lock; a smaller range is stretched over the lock so full lock is reachable
   (900° wheel in the 1260° AE86: 1.4x). Soft lock at the vehicle's lock comes with force feedback.
@@ -27,9 +29,12 @@
   copy per *other* connected pad, rebuilt on every connection change, and restores the −1 events
   when the set empties.
 - **Bindings**: raw SDL axis/button indices per device, saved in `settings.json` under `wheel`. A
-  preset (G29/G923, HORI truck wheel — both first guesses until checked on the hardware) applies when
+  preset (G29/G923 from Logitech's documented layout; HORI Truck Control System recorded on the
+  device: steer 0, clutch/brake/gas 4/5/6 resting at −1, 54 buttons, 1 hat) applies when
   a new device is claimed; pedal rest ends are flipped from `SDL_GetJoystickAxisInitialState` if the
-  preset had them backwards. Settings → Steering wheel: device picker, range, live bars, and
+  preset had them backwards. **Until a wheel sends its first report every SDL axis reads 0** (the HORI's
+  pedals rest at −1, so 0 is half pressed): a pedal reads 0 until its axis has read non-zero once.
+  Settings → **Wheel** tab: device picker, range, live bars, and
   **Assign** = move the control (turn right / press the pedal / press the button); an axis resting
   mid-travel binds as half of a combined gas/brake axis. Hats are buttons from `HatBase` (1000).
 - Gearbox (paddles, H-shifter, clutch) waits for the trucks (#70), which add those actions.

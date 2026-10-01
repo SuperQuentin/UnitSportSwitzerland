@@ -18,7 +18,9 @@ namespace UnitSport.Player;
 /// transform, the on-foot hand (a proxy for pose and gait phase together) and the bike's crank.
 /// Non-zero exit if any drifts past what one update interval explains. The car stage also flips the
 /// NA6CE's headlights and soft top through the real key actions (#48): the mirror's must match the
-/// owner's on every fresh frame, and both switches must have been seen on.
+/// owner's on every fresh frame, and both switches must have been seen on. And the cockpit (#69):
+/// the mirror's car must have a driver in it, whose steering wheel is turned exactly as far as the
+/// owner's, right foot on the throttle to within an eighth, and on the brake when the owner brakes.
 /// </para>
 ///
 /// <para>
@@ -64,6 +66,9 @@ public partial class SyncProbe : Node
     // which states the owner went through (1 top down, 2 lights on, 4 lights off again after that)
     private (bool Roof, bool Lights)? _ownerSwitches;
     private int _switchMismatch, _switchSeen, _switchPressed;
+    private (float Turn, float Throttle, bool Braking)? _ownerCockpit;
+    private int _cockpitFrames, _cockpitMismatch, _driverless;
+    private float _cockpitTurnErr, _cockpitTurnMax;
     private static readonly (double At, string Action)[] SwitchPresses =
         { (20.0, PlayerInput.RoofToggle), (20.5, PlayerInput.LightsToggle), (23.0, PlayerInput.LightsToggle) };
     private readonly System.Collections.Generic.Dictionary<string, (float Basis, float Hand, float Crank, int N, float Speed, int Poses)> _byStage = new();
@@ -146,6 +151,16 @@ public partial class SyncProbe : Node
         if (_copiedLastFrame && _ownerSwitches is { } sw && _mirror.Visual is Avatar.CarRig mirrorCar
             && (mirrorCar.RoofOpen != sw.Roof || mirrorCar.Headlights != sw.Lights))
             _switchMismatch++;
+        if (_copiedLastFrame && _ownerCockpit is { } cockpit && _mirror.Visual is Avatar.CarRig seen && _mirror.Ride == _ownerKind)
+        {
+            _cockpitFrames++;
+            float turnErr = Mathf.Abs(seen.WheelTurn - cockpit.Turn);
+            _cockpitTurnErr = Math.Max(_cockpitTurnErr, turnErr);
+            _cockpitTurnMax = Math.Max(_cockpitTurnMax, Mathf.Abs(cockpit.Turn));
+            if (turnErr > 1e-3f || Mathf.Abs(seen.Throttle - cockpit.Throttle) > 0.5f / 7f + 1e-3f || (seen.Brake > 0.5f) != cockpit.Braking)
+                _cockpitMismatch++;
+            if (!seen.HasNode("Body/Driver") || seen.View != Avatar.CockpitView.Outside) _driverless++;
+        }
 
         // 2. the owner's picture now
         _lastDelta = delta;
@@ -162,6 +177,7 @@ public partial class SyncProbe : Node
         };
         _ownerCadence = _owner.Visual is Avatar.Cyclist cc ? cc.CadenceRpm : 0f;
         _ownerSwitches = _owner.Visual is Avatar.CarRig oc2 ? (oc2.RoofOpen, oc2.Headlights) : null;
+        _ownerCockpit = _owner.Visual is Avatar.CarRig oc3 ? (oc3.WheelTurn, oc3.Throttle, oc3.BrakeLights) : null;
         if (_ownerSwitches is { } now)
             _switchSeen |= (now.Roof ? 1 : 0) | (now.Lights ? 2 : 0) | (!now.Lights && (_switchSeen & 2) != 0 ? 4 : 0);
 
@@ -279,7 +295,10 @@ public partial class SyncProbe : Node
             + $"hand {_freshHand:F4} m (< {FreshErr}), crank {_freshCrank:F3} rad (< {FreshCrank})");
         GD.Print($"[synccheck] car switches: owner went top down {(_switchSeen & 1) != 0}, lights on {(_switchSeen & 2) != 0}, "
             + $"lights off again {(_switchSeen & 4) != 0}; fresh frames where the mirror differed: {_switchMismatch} (must be 0)");
-        bool ok = _switchSeen == 7 && _switchMismatch == 0 && _samples > 200 && _basisErr < MaxBasisErr && _handErr < MaxHandErr && _crankErr < MaxCrankErr
+        GD.Print($"[synccheck] cockpit: {_cockpitFrames} fresh frames, steering wheel up to {Mathf.RadToDeg(_cockpitTurnMax):F0}° "
+            + $"off by {Mathf.RadToDeg(_cockpitTurnErr):F3}°, frames where the wheel or a pedal differed: {_cockpitMismatch} (must be 0), "
+            + $"without a driver: {_driverless} (must be 0)");
+        bool ok = _switchSeen == 7 && _switchMismatch == 0 && _cockpitFrames > 20 && _cockpitMismatch == 0 && _driverless == 0 && _samples > 200 && _basisErr < MaxBasisErr && _handErr < MaxHandErr && _crankErr < MaxCrankErr
             && _freshBasis < FreshErr && _freshHand < FreshErr && _freshCrank < FreshCrank
             && _byStage.ContainsKey("bike") && _byStage.ContainsKey("moto") && _byStage.ContainsKey("africa") && _byStage.ContainsKey("plane");
         GD.Print($"[synccheck] max pose {_basisErr:F3} (< {MaxBasisErr}), hand {_handErr:F3} m (< {MaxHandErr}), "

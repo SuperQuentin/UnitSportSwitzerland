@@ -148,8 +148,9 @@ public partial class PhotoUi : CanvasLayer
     private void PrintCopy()
     {
         if (_viewing == null) return;
-        if (_items.Inventory.Add(new ItemStack(ItemId.Photo, 1, _viewing)) > 0) _items.Ui.Toast("No room in your pack.");
-        else _items.Ui.Toast("A fresh print is in your pack.");
+        bool room = _items.Inventory.Room(ItemId.Photo, _viewing) >= 1;
+        if (_items.Give(new ItemStack(ItemId.Photo, 1, _viewing)) > 0) _items.Ui.Toast("No room in your pack.");
+        else if (room) _items.Ui.Toast("A fresh print is in your pack.");
         CloseViewer();
         RefreshAlbum();
     }

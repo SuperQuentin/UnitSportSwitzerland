@@ -6,14 +6,13 @@ public sealed partial class ProceduralWorld
 {
     // ---- layout ------------------------------------------------------------------------------
     //
-    // Villages sit on the main road, one per 2.6 km slot along the valley (slot 0, at the centre,
-    // always exists). Each is a row of houses either side of the road plus one or two side
-    // streets climbing away from the river. Farms are scattered on their own over the floor and
-    // the lower slopes, with alpine huts higher up. Everything is planned in LV95 and handed to
-    // whichever tile holds a building's centre, as the real extractor does.
+    // Villages stand on the valley roads, in the slots the network placed (Network.Villages).
+    // Each is a row of houses either side of the road plus one or two side streets climbing away
+    // from the river. Farms are scattered on their own over the floors and the lower slopes, with
+    // alpine huts higher up. Everything is planned in LV95 and handed to whichever tile holds a
+    // building's centre, as the real extractor does.
 
-    private const double VillageSpacing = 2600;
-    private const double RoadStep = 3;   // polyline spacing in x; under the 4 m the drape expects
+    private const double RoadStep = 3;   // drawn polyline spacing; under the 4 m the drape expects
 
     private sealed record Street(List<(double E, double N)> Points, RoadClass Class);
 
@@ -23,66 +22,71 @@ public sealed partial class ProceduralWorld
     private sealed record Plan(Footprint Rect, BuildingKind Kind, double WallHeight, double Pitch,
         byte Floors, ushort Year, bool Tower = false);
 
-    private sealed record Village(double X, double HalfLength, List<Street> Streets, List<Plan> Buildings);
+    private sealed record Village(VillageSlot Slot, List<Street> Streets, List<Plan> Buildings);
 
-    private readonly Dictionary<int, Village?> _villages = new();
+    private readonly Dictionary<int, Village> _villages = new();
 
-    private Village? VillageAt(int slot)
+    private Village VillageAt(int id)
     {
         lock (_villages)
-            if (_villages.TryGetValue(slot, out var cached)) return cached;
-        var village = PlanVillage(slot);
-        lock (_villages) _villages[slot] = village;
+            if (_villages.TryGetValue(id, out var cached)) return cached;
+        var village = PlanVillage(Network.Instance.Villages[id]);
+        lock (_villages) _villages[id] = village;
         return village;
     }
 
-    private IEnumerable<Village> VillagesNear(double minX, double maxX)
+    private IEnumerable<Village> VillagesNear(double minE, double minN, double maxE, double maxN)
     {
-        int first = (int)Math.Floor((minX - 1200) / VillageSpacing);
-        int last = (int)Math.Ceiling((maxX + 1200) / VillageSpacing);
-        for (int slot = first; slot <= last; slot++)
-            if (VillageAt(slot) is { } v && v.X + v.HalfLength + 450 >= minX && v.X - v.HalfLength - 450 <= maxX)
-                yield return v;
+        foreach (int id in Network.Instance.VillageIndex.In(minE, minN, maxE, maxN))
+            yield return VillageAt(id);
     }
 
     /// <summary>
     /// The generated villages, as the stand-in for <c>places.json</c> (which a generated world does
-    /// not have): each village's centre on the main road, in LV95, with its building count.
+    /// not have): each village's centre on its road, in LV95, with its building count.
     /// </summary>
     public IEnumerable<(double E, double N, int Buildings, string Name)> VillageCentres()
     {
         double half = RadiusTiles * 1000.0;
-        foreach (var v in VillagesNear(-half, half))
+        foreach (var v in VillagesNear(CenterE - half, CenterN - half, CenterE + half, CenterN + half))
         {
-            var (p, _, _) = RoadFrame(v.X);
-            yield return (p.E, p.N, v.Buildings.Count, $"Village {Math.Round(v.X / VillageSpacing):+0;-0;0}");
+            var s = v.Slot;
+            if (Math.Abs(s.E - CenterE) > half || Math.Abs(s.N - CenterN) > half) continue;
+            yield return (s.E, s.N, v.Buildings.Count, $"Village {s.Id}");
         }
     }
 
-    /// <summary>A point on the main road and its unit direction and north-side normal, in LV95.</summary>
-    private ((double E, double N) P, (double E, double N) T, (double E, double N) Nrm) RoadFrame(double x)
+    /// <summary>
+    /// A point on a line at an arc length, its unit direction, and the normal pointing away from
+    /// the river it follows, in LV95.
+    /// </summary>
+    private static ((double E, double N) P, (double E, double N) T, (double E, double N) Nrm) RoadFrame(
+        Line line, double s)
     {
-        double slope = AxisSlope(x);
-        double len = Math.Sqrt(1 + slope * slope);
-        var t = (1 / len, slope / len);
-        return ((CenterE + x, CenterN + Axis(x)), t, (-t.Item2, t.Item1));
+        int i = Array.BinarySearch(line.S, s);
+        if (i < 0) i = ~i - 1;
+        i = Math.Clamp(i, 0, line.Count - 2);
+        double dx = line.E[i + 1] - line.E[i], dy = line.N[i + 1] - line.N[i];
+        double len = Math.Max(1e-9, Math.Sqrt(dx * dx + dy * dy));
+        var t = (dx / len, dy / len);
+        return (Network.PointAt(line, s), t, (-t.Item2 * line.Side, t.Item1 * line.Side));
     }
 
-    private Village? PlanVillage(int slot)
+    private static Village PlanVillage(VillageSlot slot)
     {
-        var rng = new Random(unchecked(slot * 7919 + 104729));
-        if (slot != 0 && rng.NextDouble() > 0.8) return null;
-        double x = slot * VillageSpacing + (slot == 0 ? 0 : (rng.NextDouble() - 0.5) * 1400);
-        double halfLength = slot == 0 ? 330 : 160 + rng.NextDouble() * 260;
+        var line = Network.Instance.Lines[slot.Line];
+        var rng = new Random(unchecked(slot.Id * 7919 + 104729));
+        double x = slot.S;
+        double halfLength = slot.HalfLength;
         var streets = new List<Street>();
         var plans = new List<Plan>();
 
-        // side streets, north of the road, away from the river
+        // side streets, away from the river
         var streetXs = new List<double> { x + 25 };
         if (halfLength > 260) streetXs.Add(x + (rng.NextDouble() < 0.5 ? -1 : 1) * halfLength * 0.6);
         foreach (double sx in streetXs)
         {
-            var (p, t, nrm) = RoadFrame(sx);
+            var (p, t, nrm) = RoadFrame(line, sx);
             double length = 170 + rng.NextDouble() * 150;
             double bend = (rng.NextDouble() - 0.5) * 0.5;   // radians over the street's length
             var points = new List<(double E, double N)>();
@@ -109,9 +113,17 @@ public sealed partial class ProceduralWorld
                     double width = 9 + rng.NextDouble() * 4, depth = 10 + rng.NextDouble() * 3;
                     double setback = 7 + rng.NextDouble() * 3 + depth / 2;
                     var c = (E: a.E + left.Item1 * side * setback, N: a.N + left.Item2 * side * setback);
-                    if (rng.NextDouble() < 0.85)
+                    bool house = rng.NextDouble() < 0.85;
+                    if (house)
                         plans.Add(House(rng, c, dir, width, depth, s < 80 ? 0.2 : 0.0));
-                    s += width + 5 + rng.NextDouble() * 10;
+                    double gap = 5 + rng.NextDouble() * 10;
+                    // a garage beside some of the houses, in the gap before the next one (which is
+                    // at most 13 m wide), its front in line with the house's and its door to the street
+                    double gs = s + width / 2 + 2.5;
+                    if (house && gap >= 11.5 - width / 2 && gs < length - 4
+                        && Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 211) < 0.5)
+                        plans.Add(Garage(points, gs, side, setback - depth / 2 + GarageHalfDepth));
+                    s += width + gap;
                 }
         }
 
@@ -132,7 +144,7 @@ public sealed partial class ProceduralWorld
                 double edge = Math.Abs(cx - x) / halfLength;
                 if (rng.NextDouble() > 0.92 - 0.5 * edge * edge) continue;
 
-                var (p, t, nrm) = RoadFrame(cx);
+                var (p, t, nrm) = RoadFrame(line, cx);
                 double setback = 9 + rng.NextDouble() * 5 + depth / 2;
                 var c = (E: p.E + nrm.E * side * setback, N: p.N + nrm.N * side * setback);
                 // barns at the ends of the village, a few apartment blocks in the middle
@@ -144,9 +156,9 @@ public sealed partial class ProceduralWorld
             }
         }
 
-        // the church, beside the first side street, turned to face down the valley
+        // the church, beside the first side street, turned to face along the valley
         {
-            var (p, t, nrm) = RoadFrame(mainStreet + 32);
+            var (p, t, nrm) = RoadFrame(line, mainStreet + 32);
             var c = (E: p.E + nrm.E * 26, N: p.N + nrm.N * 26);
             plans.Add(new Plan(new Footprint(c.E, c.N, nrm.E, nrm.N, 12, 5.5), BuildingKind.Sacral,
                 9, 40, 0, 1650));
@@ -155,7 +167,29 @@ public sealed partial class ProceduralWorld
                 24, 0, 0, 1650, Tower: true));
         }
 
-        return new Village(x, halfLength, streets, plans);
+        return new Village(slot, streets, plans);
+    }
+
+    private const double GarageHalfWidth = 1.7, GarageHalfDepth = 3.1;
+
+    /// <summary>
+    /// A flat-roofed single garage <paramref name="along"/> metres up a street, on its
+    /// <paramref name="side"/>, its middle <paramref name="setback"/> metres off the centre line:
+    /// one car wide and deep, tall enough for its door and the sign over it.
+    /// </summary>
+    private static Plan Garage(List<(double E, double N)> points, double along, int side, double setback)
+    {
+        int i = Math.Min((int)(along / RoadStep), points.Count - 2);
+        var a = points[i];
+        var b = points[i + 1];
+        double dl = Math.Sqrt((b.E - a.E) * (b.E - a.E) + (b.N - a.N) * (b.N - a.N));
+        var dir = ((b.E - a.E) / dl, (b.N - a.N) / dl);
+        var left = (-dir.Item2, dir.Item1);
+        double off = along - i * RoadStep;
+        var c = (E: a.E + dir.Item1 * off + left.Item1 * side * setback, N: a.N + dir.Item2 * off + left.Item2 * side * setback);
+        var year = (ushort)(1955 + (int)(Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 223) * 60));
+        return new Plan(new Footprint(c.E, c.N, dir.Item1, dir.Item2, GarageHalfWidth, GarageHalfDepth),
+            BuildingKind.Garage, 3.3, 0, 1, year);
     }
 
     private static Plan House(Random rng, (double E, double N) c, (double E, double N) along,
@@ -175,6 +209,18 @@ public sealed partial class ProceduralWorld
             5.2 + rng.NextDouble() * 1.4, 28 + rng.NextDouble() * 12, 2, (ushort)(1850 + rng.Next(170)));
     }
 
+    /// <summary>Whether a point is in or beside a village: its stretch of road and the streets off it.</summary>
+    private static bool NearVillage(double e, double n)
+    {
+        var net = Network.Instance;
+        foreach (int id in net.VillageIndex.At(e, n))
+        {
+            var v = net.Villages[id];
+            if (Sq(e - v.E) + Sq(n - v.N) < Sq(v.HalfLength + 420)) return true;
+        }
+        return false;
+    }
+
     /// <summary>Farms and alpine huts on a jittered 350 m grid, wherever the ground allows.</summary>
     private IEnumerable<Plan> FarmsNear(Site site, double minE, double minN, double maxE, double maxN)
     {
@@ -185,15 +231,12 @@ public sealed partial class ProceduralWorld
                 if (Noise.Hash01(gi, gj, 101) > 0.3) continue;
                 double e = (gi + 0.15 + 0.7 * Noise.Hash01(gi, gj, 103)) * cell;
                 double n = (gj + 0.15 + 0.7 * Noise.Hash01(gi, gj, 107)) * cell;
-                double x = e - CenterE, y = n - CenterN;
-                var column = ColumnAt(x);
 
-                // clear of the road, the river, the railway and the villages
-                double fromRoad = y - column.Axis;
-                if (Math.Abs(fromRoad) < 45 || Math.Abs(fromRoad - RiverOffset) < 50
-                    || Math.Abs(fromRoad - RailOffset) < 35) continue;
-                if (Math.Abs(fromRoad) < 420
-                    && VillagesNear(x, x).Any(v => Math.Abs(x - v.X) < v.HalfLength + 80)) continue;
+                // clear of the roads, the railways, the rivers, the lakes and the villages
+                if (NearestLine(e, n).Distance < 45) continue;
+                if (FineNear(e, n).Dr < 50) continue;
+                if (SampleCoarse(site.Lattice, e, n).Lake > 0.1) continue;
+                if (NearVillage(e, n)) continue;
 
                 double angle = Noise.Hash01(gi, gj, 109) * Math.PI;
                 var u = (Math.Cos(angle), Math.Sin(angle));
@@ -224,50 +267,90 @@ public sealed partial class ProceduralWorld
         double h = Ground(site, e, n);
         double gx = (Ground(site, e + d, n) - Ground(site, e - d, n)) / (2 * d);
         double gy = (Ground(site, e, n + d) - Ground(site, e, n - d)) / (2 * d);
-        double x = e - CenterE, y = n - CenterN;
-        var column = ColumnAt(x);
         bool waterOk = site.Blend == null || site.Blend.WaterAllowed(e, n);
-        return Classify((float)h, (float)(Math.Atan(Math.Sqrt(gx * gx + gy * gy)) * 180 / Math.PI),
-            (float)Noise.Fbm(x / 650, y / 650, 3, 51), (float)Noise.Fbm(x / 420, y / 420, 2, 67),
-            (float)(h - column.Floor), y - column.Axis, Math.Abs(y - (column.Axis + RiverOffset)), waterOk);
+        return Classify(Inputs(e, n, h, gx, gy, SampleCoarse(site.Lattice, e, n), FineNear(e, n), waterOk));
     }
 
     private IEnumerable<Plan> PlansNear(Site site, double minE, double minN, double maxE, double maxN)
     {
-        foreach (var v in VillagesNear(minE - CenterE, maxE - CenterE))
+        bool In(Plan p) => p.Rect.E >= minE && p.Rect.E < maxE && p.Rect.N >= minN && p.Rect.N < maxN;
+        var villages = VillagesNear(minE, minN, maxE, maxN).ToList();
+        foreach (var v in villages)
             foreach (var p in v.Buildings)
-                if (p.Rect.E >= minE && p.Rect.E < maxE && p.Rect.N >= minN && p.Rect.N < maxN)
-                    yield return p;
+                if (In(p) && p.Kind != BuildingKind.Garage) yield return p;
         foreach (var p in FarmsNear(site, minE, minN, maxE, maxN))
-            if (p.Rect.E >= minE && p.Rect.E < maxE && p.Rect.N >= minN && p.Rect.N < maxN)
-                yield return p;
+            if (In(p)) yield return p;
+        // garages last: they came later, and must not move any other building's index in its tile
+        foreach (var v in villages)
+            foreach (var p in v.Buildings)
+                if (In(p) && p.Kind == BuildingKind.Garage) yield return p;
     }
 
     // ---- roads -------------------------------------------------------------------------------
 
-    /// <summary>World polylines passing near a box: the valley road, the railway, side streets.</summary>
+    /// <summary>
+    /// The nearest valley road or railway to a point, within <see cref="Network.LineReach"/>: its
+    /// distance and class, or the reach and null. Village streets are not in it.
+    /// </summary>
+    private static (double Distance, RoadClass? Class) NearestLine(double e, double n)
+    {
+        var net = Network.Instance;
+        double best = Network.LineReach;
+        RoadClass? cls = null;
+        foreach (int item in net.LineSegs.At(e, n))
+        {
+            var line = net.Lines[item >> 16];
+            int i = item & 0xFFFF;
+            var (d, _) = SegmentDistance(e, n, line.E[i], line.N[i], line.E[i + 1], line.N[i + 1]);
+            if (d < best)
+            {
+                best = d;
+                cls = line.Class;
+            }
+        }
+        return (best, cls);
+    }
+
+    /// <summary>
+    /// World polylines passing near a box: the valley roads and railways, drawn as a Catmull-Rom
+    /// through their points every <see cref="RoadStep"/>, and the village streets. A segment is
+    /// cut into the same steps whichever tile asks, so pieces meet at a seam.
+    /// </summary>
     private IEnumerable<(List<(double E, double N)> Points, RoadClass Class)> LinesNear(
         double minE, double minN, double maxE, double maxN)
     {
-        // the valley runs on as far as the fill domain does: no end of its own
-        double x0 = Math.Floor((minE - CenterE - 2 * RoadStep) / RoadStep) * RoadStep;
-        double x1 = Math.Ceiling((maxE - CenterE + 2 * RoadStep) / RoadStep) * RoadStep;
-        if (x1 > x0)
+        var net = Network.Instance;
+        var items = net.LineSegs.In(minE, minN, maxE, maxN);
+        for (int k = 0; k < items.Count;)
         {
-            var road = new List<(double, double)>();
-            var rail = new List<(double, double)>();
-            // the x lattice is global, so both tiles at a seam cut the same segment
-            for (double x = x0; x <= x1 + 1e-6; x += RoadStep)
+            int l = items[k] >> 16;
+            var line = net.Lines[l];
+            // a run of consecutive segments of one line
+            int first = items[k] & 0xFFFF, last = first;
+            k++;
+            while (k < items.Count && items[k] >> 16 == l && (items[k] & 0xFFFF) == last + 1)
             {
-                double axis = Axis(x);
-                road.Add((CenterE + x, CenterN + axis));
-                rail.Add((CenterE + x, CenterN + axis + RailOffset));
+                last++;
+                k++;
             }
-            yield return (road, RoadClass.Road);
-            yield return (rail, RoadClass.Railway);
+            var points = new List<(double E, double N)>();
+            for (int i = first; i <= last; i++)
+            {
+                int i0 = Math.Max(0, i - 1), i3 = Math.Min(line.Count - 1, i + 2);
+                double len = Math.Sqrt(Sq(line.E[i + 1] - line.E[i]) + Sq(line.N[i + 1] - line.N[i]));
+                int steps = Math.Max(1, (int)Math.Ceiling(len / RoadStep));
+                for (int s = 0; s < steps; s++)
+                {
+                    double t = s / (double)steps;
+                    points.Add((CatmullRom(line.E[i0], line.E[i], line.E[i + 1], line.E[i3], t),
+                        CatmullRom(line.N[i0], line.N[i], line.N[i + 1], line.N[i3], t)));
+                }
+            }
+            points.Add((line.E[last + 1], line.N[last + 1]));
+            yield return (points, line.Class);
         }
 
-        foreach (var v in VillagesNear(minE - CenterE, maxE - CenterE))
+        foreach (var v in VillagesNear(minE, minN, maxE, maxN))
             foreach (var s in v.Streets)
                 yield return (s.Points, s.Class);
     }
@@ -275,7 +358,8 @@ public sealed partial class ProceduralWorld
     public RoadTile? BuildRoads(TileId id, Blend? blend = null)
     {
         CheckBlend(id, blend);
-        var site = new Site(null, blend);
+        blend?.PrepareLattice();
+        var site = new Site(LatticeFor(id, fine: false), blend);
         double maxE = id.MinE + ChunkFormat.TileSizeM;
         var segments = new List<RoadSegment>();
         foreach (var (points, cls) in LinesNear(id.MinE, id.MinN, maxE, id.MaxN))
@@ -352,7 +436,8 @@ public sealed partial class ProceduralWorld
     public BuildingTile? BuildBuildings(TileId id, Blend? blend = null)
     {
         CheckBlend(id, blend);
-        var site = new Site(null, blend);
+        blend?.PrepareLattice();
+        var site = new Site(LatticeFor(id, fine: false), blend);
         var buildings = new List<Building>();
         foreach (var plan in PlansNear(site, id.MinE, id.MinN, id.MinE + ChunkFormat.TileSizeM, id.MaxN))
             if (Solid(plan, id, site) is { } b) buildings.Add(b);
@@ -386,9 +471,14 @@ public sealed partial class ProceduralWorld
             low = Math.Min(low, g);
             high = Math.Max(high, g);
         }
-        // a house does not stand on a cliff, nor in the river
-        if (high - low > 4.5 || Math.Abs(f.N - CenterN - (Axis(f.E - CenterE) + RiverOffset)) < RiverBank + f.HalfWidth + 4)
-            return null;
+        // a house does not stand on a cliff, in a river or a lake, or on a road
+        if (high - low > 4.5) return null;
+        var channel = FineNear(f.E, f.N);
+        if (channel.Dr < channel.Bank + Math.Max(f.HalfLength, f.HalfWidth) + 4) return null;
+        if (SampleCoarse(site.Lattice, f.E, f.N).Lake > 0.1) return null;
+        foreach (var p in ring.Append((f.E, f.N)))
+            if (NearestLine(p.Item1, p.Item2) is (var d, { } cls) && d < RoadFormat.DefaultWidth(cls) / 2 + 1.5)
+                return null;
 
         double baseY = low - 0.8, eave = high + plan.WallHeight;
         var tris = new List<float>(64 * 9);

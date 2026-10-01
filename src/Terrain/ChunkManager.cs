@@ -11,7 +11,7 @@ namespace UnitSport.Terrain;
 /// Godot resources per frame to avoid hitches. With BuildMeshes=false (dedicated server)
 /// only ChunkGrid data is loaded, which is all height queries need.
 /// </summary>
-public partial class ChunkManager : Node3D
+public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 {
     [Export] public bool BuildMeshes { get; set; } = true;
     [Export] public bool BuildCollision { get; set; } = true;
@@ -46,11 +46,57 @@ public partial class ChunkManager : Node3D
     public LodPolicy Lod { get; set; } = new();
 
     /// <summary>
-    /// Where the player is looking, unit length, or zero for no preference. Tiles behind the
-    /// camera are queued later than tiles in front of it at the same distance - never
-    /// skipped, just deferred - so a turn does not wait on the ground behind your back.
+    /// Where the player is looking, unit length, or zero for no preference. Tiles outside the
+    /// camera's view cone are queued later than tiles inside it - never skipped, just
+    /// deferred - so what is on screen does not wait on the ground behind your back.
+    /// Set by <see cref="SetView"/>.
     /// </summary>
-    public Vector3 ViewDirection { get; set; }
+    public Vector3 ViewDirection { get; private set; }
+
+    /// <summary>Where the view cone starts: the live camera's global position.</summary>
+    public Vector3 ViewPosition { get; private set; }
+
+    /// <summary>Half the camera's horizontal field of view, in degrees.</summary>
+    public double ViewHalfFovDeg { get; private set; } = 55;
+
+    /// <summary>
+    /// How much later a tile straight behind the camera is queued: its ring distance is
+    /// multiplied by this, so at 4 a tile four rings behind waits for the sixteenth ring in
+    /// front. The weight climbs from 1 at the edge of the view cone over
+    /// <see cref="ViewRampDeg"/>, so the sides wait less than the back.
+    /// </summary>
+    public double ViewBehindWeight { get; set; } = 4;
+
+    /// <summary>Degrees past the cone's edge over which the weight climbs to <see cref="ViewBehindWeight"/>.</summary>
+    public double ViewRampDeg { get; set; } = 60;
+
+    /// <summary>
+    /// Degrees added to the cone: covers the 16-sector rounding of the view direction (up to
+    /// 11.25°) and a little turning, so the tile at the edge of the screen is not the one
+    /// left waiting.
+    /// </summary>
+    private const double ViewMarginDeg = 15;
+
+    /// <summary>
+    /// Rings that ignore the view altogether: the ground underfoot, its collision, and what a
+    /// turn of the head shows first. A third-person camera can sit across a tile boundary from
+    /// its player, and none of these may wait on which way it points.
+    /// </summary>
+    private const int ViewExemptRings = 2;
+
+    /// <summary>Points the loader's view cone along <paramref name="camera"/>. Main thread, every frame.</summary>
+    public void SetView(Camera3D camera)
+    {
+        ViewPosition = camera.GlobalPosition;
+        ViewDirection = -camera.GlobalTransform.Basis.Z;
+        var size = camera.GetViewport().GetVisibleRect().Size;
+        double aspect = size.Y > 0 ? size.X / size.Y : 16.0 / 9.0;
+        double half = Mathf.DegToRad(camera.Fov) / 2;
+        // Fov is the vertical angle unless the camera keeps its width
+        if (camera.KeepAspect == Camera3D.KeepAspectEnum.Height)
+            half = Math.Atan(Math.Tan(half) * aspect);
+        ViewHalfFovDeg = Mathf.RadToDeg(half);
+    }
 
     /// <summary>
     /// Whether tiles are coming over the network right now. Decides the auto build cap: six
@@ -444,6 +490,7 @@ public partial class ChunkManager : Node3D
     /// </summary>
     public void SetOccupancy(Vector4[] boxes, Vector4[] axes, int count)
     {
+        _occupancy = (boxes, axes, count);
         if (_buildingMaterial is not ShaderMaterial shader) return;
         shader.SetShaderParameter("occupied_box", boxes);
         shader.SetShaderParameter("occupied_axis", axes);
@@ -456,11 +503,44 @@ public partial class ChunkManager : Node3D
     /// </summary>
     public void SetOpenDoors(Vector4[] boxes, Vector4[] axes, int count)
     {
+        _openDoors = (boxes, axes, count);
         if (_buildingMaterial is not ShaderMaterial shader) return;
         shader.SetShaderParameter("open_door_box", boxes);
         shader.SetShaderParameter("open_door_axis", axes);
         shader.SetShaderParameter("open_door_count", Math.Min(count, Interiors.DoorPortals.MaxOpenDoors));
     }
+
+    private (Vector4[] Boxes, Vector4[] Axes, int Count)? _occupancy, _openDoors;
+
+    /// <summary>
+    /// The origin moved (#185). The tiles are children and have moved already; what remains is
+    /// what this keeps in world space elsewhere: the view, the door index, and the boxes the
+    /// building shader was handed, which their owners only push again when they change.
+    /// </summary>
+    public void OnOriginShifted(OriginShift shift)
+    {
+        ViewPosition = shift.Point(ViewPosition);
+        ViewDirection = shift.Direction(ViewDirection);
+        Interiors.DoorIndex.Shift(shift);
+        if (_occupancy is { } o) SetOccupancy(ShiftBoxes(o.Boxes, shift), ShiftAxes(o.Axes, shift), o.Count);
+        if (_openDoors is { } d) SetOpenDoors(ShiftBoxes(d.Boxes, shift), ShiftAxes(d.Axes, shift), d.Count);
+    }
+
+    /// <summary>Boxes of (world x, world z, half width, half depth), moved by a shift.</summary>
+    private static Vector4[] ShiftBoxes(Vector4[] boxes, OriginShift shift) =>
+        boxes.Select(b =>
+        {
+            var p = shift.Point(new Vector3(b.X, 0, b.Y));
+            return new Vector4(p.X, p.Z, b.Z, b.W);
+        }).ToArray();
+
+    /// <summary>Axes of (cos, sin, ...) in the XZ plane, turned by a shift.</summary>
+    private static Vector4[] ShiftAxes(Vector4[] axes, OriginShift shift) =>
+        axes.Select(a =>
+        {
+            var v = shift.Direction(new Vector3(a.X, 0, a.Y));
+            return new Vector4(v.X, v.Z, a.Z, a.W);
+        }).ToArray();
 
     /// <summary>
     /// Adds tiles the client did not know about, so they become streamable.
@@ -602,8 +682,10 @@ public partial class ChunkManager : Node3D
     {
         foreach (var id in _chunks.Keys.ToList()) UnloadTile(id);
         _desired.Clear();
-        _ordered.Clear();
-        _orderedKey = "";
+        _wanted = [];
+        _ordered = [];
+        _desiredKey = "";
+        _orderedView = null;
         _worldVersion++;
         _sinceEval = double.MaxValue;
         _invalidate?.Invoke(null);
@@ -745,6 +827,51 @@ public partial class ChunkManager : Node3D
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// How many of the tiles within <paramref name="rings"/> of <paramref name="eye"/> are built,
+    /// of how many are wanted there: the loading screen's progress bar. Counted the way
+    /// <see cref="SettledNear"/> decides, so done == total is the same moment it turns true.
+    /// </summary>
+    public (int Done, int Total) ProgressNear(Vector3 eye, int rings)
+    {
+        if (_origin == null) return (0, 0);
+        var centre = _origin.TileAt(eye);
+        int done = 0, total = 0;
+        foreach (var id in _desired)
+        {
+            if (LodPolicy.Distance(id, centre) > rings) continue;
+            total++;
+            if (_chunks.TryGetValue(id, out var state) && state.PendingStride < 0
+                && (!BuildMeshes || state.ActiveStride >= 0))
+                done++;
+        }
+        return (done, total);
+    }
+
+    /// <summary>
+    /// How many of the tiles within <paramref name="rings"/> of <paramref name="eye"/> are
+    /// playable, of how many are wanted there: the loading screen's bar. Far weaker than
+    /// <see cref="ProgressNear"/> on purpose: a tile counts once any mesh is drawn (an interim or
+    /// coarse one will do; refinement, roads and buildings stream in while you play), and a tile
+    /// a body stands on also needs its collision. The fly camera wants none, so it never waits on it.
+    /// </summary>
+    public (int Done, int Total) PlayableNear(Vector3 eye, int rings)
+    {
+        if (_origin == null) return (0, 0);
+        var centre = _origin.TileAt(eye);
+        int done = 0, total = 0;
+        foreach (var (id, want) in _wanted)
+        {
+            if (LodPolicy.Distance(id, centre) > rings) continue;
+            total++;
+            if (!_chunks.TryGetValue(id, out var state)) continue;
+            if (BuildMeshes && state.ActiveStride < 0) continue;
+            if (want.Collision && !state.HasCollision) continue;
+            done++;
+        }
+        return (done, total);
     }
 
     /// <summary>Why <see cref="Settled"/> is false, for diagnosing a stalled export.</summary>
@@ -1027,33 +1154,69 @@ public partial class ChunkManager : Node3D
     private readonly record struct Want(int Stride, bool Collision, bool Roads, bool Buildings, int Dist);
 
     /// <summary>
-    /// The ring evaluation's expensive half - the square scan, the sort, the unload pass - is
-    /// only redone when something it depends on has changed: an anchor's tile, the ring table,
-    /// the view sector, the set of known tiles. Between those it walks the cached order, which
-    /// at 40 rings is 6,561 dictionary lookups rather than a 6,561-entry sort every 0.1 s and
-    /// again after every commit - measured as a 51 ms frame at the largest render distance.
+    /// The ring evaluation's expensive half - the square scan and the unload pass - is only
+    /// redone when something it depends on has changed: an anchor's tile, the ring table, the
+    /// set of known tiles. The sort is redone on those too, and on its own when the view turns
+    /// to another sector or the camera crosses into another tile; that is one key per tile and
+    /// an array sort. Between those it walks the cached order, which at 40 rings is 6,561
+    /// dictionary lookups rather than a 6,561-entry scan and sort every 0.1 s and again after
+    /// every commit - measured as a 51 ms frame at the largest render distance.
     /// </summary>
-    private List<KeyValuePair<TileId, Want>> _ordered = new();
-    private string _orderedKey = "";
+    private KeyValuePair<TileId, Want>[] _wanted = [];
+    private KeyValuePair<TileId, Want>[] _ordered = [];
+    private double[] _orderKeys = [];
+    private string _desiredKey = "";
+    private ViewCone? _orderedView;
+
+    /// <summary>
+    /// The view as the sort sees it: the camera's tile, its heading rounded to one of
+    /// <see cref="ViewSectors"/>, and its half field of view rounded to 5°. Coarse on purpose -
+    /// it only changes, and the queue is only re-sorted, when one of those does.
+    /// <c>Sector</c> is -1 for no preference.
+    /// </summary>
+    private readonly record struct ViewCone(TileId Tile, int Sector, int HalfFovDeg);
+
+    private const int ViewSectors = 16;
+
+    /// <summary>Half a tile's diagonal, in tiles: how far from its centre a tile still reaches.</summary>
+    private const double TileHalfDiagonal = 0.7071;
+
+    private ViewCone CurrentView()
+    {
+        // LV95 east and north; world -Z is north
+        double e = ViewDirection.X, n = -ViewDirection.Z;
+        // Nearly straight down (or up) there is no "in front": every heading is as visible as the next.
+        if (e * e + n * n < 0.04)
+        {
+            var primary = _anchors.Count > 0 ? _origin!.TileAt(_anchors[0].GlobalPosition) : default;
+            return new ViewCone(primary, -1, 0);
+        }
+        double step = 2 * Math.PI / ViewSectors;
+        int sector = ((int)Math.Round(Math.Atan2(n, e) / step) % ViewSectors + ViewSectors) % ViewSectors;
+        return new ViewCone(_origin!.TileAt(ViewPosition), sector, (int)Math.Round(ViewHalfFovDeg / 5) * 5);
+    }
 
     private void EvaluateRings()
     {
-        var view = ViewDirection;
-        // eight sectors: enough to keep "in front of me first" without re-sorting on every
-        // degree of mouse movement
-        int sector = view == Vector3.Zero ? -1
-            : (int)Math.Floor((Math.Atan2(view.Z, view.X) + Math.PI) / (Math.PI / 4)) & 7;
         var keyBuilder = new System.Text.StringBuilder();
         foreach (var anchor in _anchors)
             keyBuilder.Append(_origin!.TileAt(anchor.GlobalPosition)).Append(_collisionAnchors.Contains(anchor) ? 'p' : 'c').Append(';');
-        keyBuilder.Append('|').Append(Lod.GetHashCode()).Append('|').Append(sector)
+        keyBuilder.Append('|').Append(Lod.GetHashCode())
             .Append('|').Append(_worldVersion).Append('|').Append(BuildMeshes);
         string key = keyBuilder.ToString();
 
-        if (key != _orderedKey)
+        if (key != _desiredKey)
         {
-            _orderedKey = key;
-            RecomputeDesired(view);
+            _desiredKey = key;
+            _orderedView = null;
+            RecomputeDesired();
+        }
+
+        var view = CurrentView();
+        if (_orderedView != view)
+        {
+            _orderedView = view;
+            SortByView(view);
         }
 
         foreach (var (id, want) in _ordered)
@@ -1107,7 +1270,7 @@ public partial class ChunkManager : Node3D
         }
     }
 
-    private void RecomputeDesired(Vector3 view)
+    private void RecomputeDesired()
     {
         // desired stride per tile = finest over all anchors (0 = grid-only when meshes are off)
         var desired = new Dictionary<TileId, Want>();
@@ -1140,22 +1303,9 @@ public partial class ChunkManager : Node3D
                 }
         }
 
-        // Nearest first. With everything on local disk the order barely matters, but when the
-        // data is streaming it decides what the player sees: unordered, the tile underfoot
-        // queues behind up to 360 others nine rings out, and you stand in a hole for a minute
-        // while the horizon fills in. Tiles behind the camera are pushed three rings back in
-        // the queue - what is in front of you is what you are waiting for.
-        var primary = _anchors.Count > 0 ? _origin!.TileAt(_anchors[0].GlobalPosition) : default;
-        double Priority(TileId id, int dist)
-        {
-            if (dist <= 2 || view == Vector3.Zero) return dist;
-            var to = new Vector3(id.E - primary.E, 0, -(id.N - primary.N)).Normalized();
-            return to.Dot(view) < -0.3 ? dist + 3 : dist;
-        }
-        _ordered = desired.OrderBy(kv => Priority(kv.Key, kv.Value.Dist)).ToList();
-
+        _wanted = desired.ToArray();
         _desired.Clear();
-        foreach (var (id, _) in _ordered) _desired.Add(id);
+        foreach (var (id, _) in _wanted) _desired.Add(id);
 
         // unload with hysteresis
         var toRemove = new List<TileId>();
@@ -1169,6 +1319,51 @@ public partial class ChunkManager : Node3D
                 toRemove.Add(id);
         }
         foreach (var id in toRemove) UnloadTile(id);
+    }
+
+    /// <summary>
+    /// Orders the wanted tiles: nearest ring first, and tiles off screen later.
+    ///
+    /// <para>
+    /// With everything on local disk the order barely matters, but when the data is streaming it
+    /// decides what the player sees: unordered, the tile underfoot queues behind up to 360
+    /// others nine rings out, and you stand in a hole for a minute while the horizon fills in.
+    /// The same goes for direction - what is in front of you is what you are waiting for, and
+    /// the ground behind your back is already drawn by the horizon lattice. So a tile's ring
+    /// distance is multiplied by a weight: 1 while any of it is inside the camera's view cone
+    /// (horizontal field of view plus <see cref="ViewMarginDeg"/>), climbing to
+    /// <see cref="ViewBehindWeight"/> over <see cref="ViewRampDeg"/> past its edge. The angle
+    /// is taken from the camera, not the player, which a third-person or fly camera can be far
+    /// from, and the innermost <see cref="ViewExemptRings"/> rings are never weighted.
+    /// </para>
+    /// </summary>
+    private void SortByView(ViewCone view)
+    {
+        double step = 2 * Math.PI / ViewSectors;
+        double dirE = Math.Cos(view.Sector * step), dirN = Math.Sin(view.Sector * step);
+        double camE = view.Tile.E + 0.5, camN = view.Tile.N + 0.5;
+        double edge = view.HalfFovDeg + ViewMarginDeg;
+
+        if (_orderKeys.Length != _wanted.Length) _orderKeys = new double[_wanted.Length];
+        var ordered = (KeyValuePair<TileId, Want>[])_wanted.Clone();
+        for (int i = 0; i < ordered.Length; i++)
+        {
+            var (id, want) = ordered[i];
+            double de = id.E + 0.5 - camE, dn = id.N + 0.5 - camN;
+            double r = Math.Sqrt(de * de + dn * dn);
+            double weight = 1;
+            if (view.Sector >= 0 && want.Dist > ViewExemptRings && r > TileHalfDiagonal)
+            {
+                // the angle to the tile's nearest edge, not its centre: a tile half on screen is on screen
+                double off = Mathf.RadToDeg(Math.Acos(Math.Clamp((de * dirE + dn * dirN) / r, -1, 1))
+                    - Math.Asin(TileHalfDiagonal / r)) - edge;
+                if (off > 0) weight = 1 + (ViewBehindWeight - 1) * Math.Min(1, off / ViewRampDeg);
+            }
+            // nearest first among equals, so a re-sort does not reshuffle them
+            _orderKeys[i] = want.Dist * weight + r * 1e-3;
+        }
+        Array.Sort(_orderKeys, ordered);
+        _ordered = ordered;
     }
 
     private void UnloadTile(TileId id)
@@ -1206,8 +1401,7 @@ public partial class ChunkManager : Node3D
         r.Roads?.Dispose();
         r.Buildings?.Dispose();
         r.Water?.Dispose();
-        r.Trees?.Conifers?.Dispose();
-        r.Trees?.Broadleaves?.Dispose();
+        r.Trees?.Dispose();
     }
 
     private void StartBuild(TileId id, ChunkState state, int stride, bool wantCollision,
@@ -1393,73 +1587,31 @@ public partial class ChunkManager : Node3D
                 // ConcavePolygonShape3D is a BVH build on the main thread (up to 80 ms for a
                 // town tile), and only the tile a body stands on needs one. Empty faces still
                 // mark the tile done, so it is not asked again.
-                bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
-                bool visualBlend = surfaceCore != null && roadTile != null && nearField;
-
-                // one corridor pass, applied twice at different clearances
-                var blend = roadTile != null && (wantCollision || visualBlend)
-                    ? TerrainMeshBuilder.ComputeRoadBlend(roadTile) : null;
-
                 ArrayMesh? buildings = null;
                 Vector3[]? buildingFaces = null;
                 Interiors.DoorSpot[]? doors = null;
-                // the ground carved under drive-in garages that this tile's holes do not have yet
-                bool newGarageCells = false;
                 if (wantBuildings || wantCollision)
                 {
                     var bTile = await source.LoadBuildingsAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
                     Lap(StBldgLoad, stageMs, clock);
 
-                    // A garage's drive-in bay cuts its facade, its collision and the ground under it
-                    // alike, and hangs off its door: a collision-only build computes the doors too,
-                    // from the same roads and grid, so the hole and the wall around it agree.
-                    bool drawBuildings = wantBuildings && bTile != null && buildingMaterial != null;
-                    bool garages = bTile != null && bTile.Buildings.Any(b => b.Kind == BuildingKind.Garage);
-                    Interiors.DoorSpot[]? allDoors = null;
-                    if (bTile != null && (drawBuildings || (wantCollision && garages)))
+                    if (wantBuildings && bTile != null && buildingMaterial != null)
                     {
                         // Doors face the street, so they need the road tile even when the roads
                         // themselves are already drawn; it is cached, and without it the door
                         // choice would depend on load order and disagree between peers.
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
-                        allDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null);
-                    }
-                    var bays = allDoors?.Where(d => d.Bay != null).Select(d => d.Bay!).ToList();
-                    bool hasBays = bays is { Count: > 0 } && grid.Stride == 1;
-                    var fileHoles = holes;
-
-                    if (drawBuildings)
-                    {
-                        doors = allDoors;
-                        var ground = hasBays
-                            ? TerrainMeshBuilder.GroundHeights(grid, visualBlend ? blend : null, TerrainMeshBuilder.VisualBlendClearance)
-                            : null;
-                        var groundColor = ground != null ? TerrainMeshBuilder.GroundColors(cover, ground) : null;
-                        if (BuildingMeshBuilder.Build(bTile!, doors, ground, fileHoles, groundColor) is { } buildingData)
+                        doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null);
+                        if (BuildingMeshBuilder.Build(bTile, doors) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
-                            buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial!);
+                            buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
                         }
                     }
                     if (wantCollision)
-                        buildingFaces = bTile != null
-                            ? BuildingMeshBuilder.BuildCollisionFaces(bTile, allDoors,
-                                hasBays ? TerrainMeshBuilder.GroundHeights(grid, blend, 0.0) : null, fileHoles)
-                            : [];
-
-                    if (hasBays)
-                    {
-                        var cells = Interiors.GarageBay.HoleCells(bays!);
-                        newGarageCells = holes == null || !cells.IsSubsetOf(holes);
-                        if (newGarageCells)
-                        {
-                            // a copy: the loaded set may be shared through the tile cache
-                            if (holes != null) cells.UnionWith(holes);
-                            holes = cells;
-                        }
-                    }
+                        buildingFaces = bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : [];
                     Lap(StBldgMesh, stageMs, clock);
                 }
 
@@ -1476,6 +1628,12 @@ public partial class ChunkManager : Node3D
                 // or the mesh z-fights the road ribbon. The mesh is patched, not rebuilt: only
                 // the vertices under corridors move (measured ~33% of all worker time when it
                 // rebuilt every vertex of a stride-1 tile a second time).
+                bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
+                bool visualBlend = surfaceCore != null && roadTile != null && nearField;
+
+                // one corridor pass, applied twice at different clearances
+                var blend = roadTile != null && (wantCollision || visualBlend)
+                    ? TerrainMeshBuilder.ComputeRoadBlend(roadTile) : null;
 
                 float[]? blendedCollision = null;
                 Vector3[]? bridgeCollision = null;
@@ -1486,31 +1644,26 @@ public partial class ChunkManager : Node3D
                     // bridges get their own small collision body alongside the blended ground.
                     bridgeCollision = RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile);
                 }
-                else if (wantCollision && (!publishInterimCollision || newGarageCells))
+                else if (wantCollision && !publishInterimCollision)
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes); // no road tile after all
 
                 ArrayMesh? tailMesh = null;
-                // the interim surface was built before the garages' cells were known
-                bool garageRebuild = newGarageCells && surfaceCore != null && nearField;
-                if (visualBlend || garageRebuild)
+                if (visualBlend)
                 {
                     // Tunnel portal walls close the mouth from the same hole mask the carve
                     // used, so they need the tile's tunnel geometry - computed once here from
                     // the same source RoadMeshBuilder's own bore extrusion uses, so both agree.
-                    var portals = roadTile != null ? RoadMeshBuilder.ComputeTunnelPortals(roadTile, grid) : [];
-                    bool hasCorridors = visualBlend && blend!.Cells.Length > 0;
+                    var portals = RoadMeshBuilder.ComputeTunnelPortals(roadTile!, grid);
+                    bool hasCorridors = blend!.Cells.Length > 0;
                     bool hasPortalWalls = holes is { Count: > 0 } && portals.Count > 0;
                     // Nothing to change on a tile with no at-grade road and no portal: the
                     // surface already committed is the final one.
-                    if (hasCorridors || hasPortalWalls || garageRebuild)
+                    if (hasCorridors || hasPortalWalls)
                     {
-                        var baseCore = garageRebuild
-                            ? TerrainMeshBuilder.BuildSurfaceCore(grid, stride, holes, cover)
-                            : surfaceCore!;
                         var core = hasCorridors
-                            ? TerrainMeshBuilder.PatchSurface(baseCore, grid, stride, cover, blend!,
+                            ? TerrainMeshBuilder.PatchSurface(surfaceCore!, grid, stride, cover, blend,
                                 TerrainMeshBuilder.VisualBlendClearance)
-                            : baseCore;
+                            : surfaceCore!;
                         ct.ThrowIfCancellationRequested();
                         tailMesh = ChunkNode.ToArrayMesh(
                             TerrainMeshBuilder.FinishSurface(core, grid, stride, holes, portals), terrainMaterial!);

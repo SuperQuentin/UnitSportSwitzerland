@@ -6,29 +6,22 @@ namespace UnitSport.Occasions;
 /// <summary>
 /// Falling snow around the camera while the top occasion's <see cref="OccasionAtmosphere.Snowfall"/>
 /// is above zero (Christmas). One static mesh animated entirely by <c>ps1_snowfall.gdshader</c>;
-/// this node only builds it once, sets its density — heavier at altitude — and hides it indoors.
-/// Client only.
+/// this node only builds it once and sets its density. The shader thins it at low altitude and
+/// draws nothing indoors, per camera, so a door portal looking out shows the street's snow. Client only.
 /// </summary>
-public partial class OccasionPrecip : Node3D
+public partial class OccasionPrecip : Node3D, Core.IOriginContainer
 {
     private const int Flakes = 4000;
     private const float Box = 60f;
 
-    private readonly Func<bool> _indoors;
     private MeshInstance3D _snow = null!;
     private ShaderMaterial _material = null!;
 
-    public OccasionPrecip(Func<bool> indoors)
-    {
-        Name = "OccasionPrecip";
-        _indoors = indoors;
-    }
-
-    public OccasionPrecip() : this(() => false) { }
+    public OccasionPrecip() => Name = "OccasionPrecip";
 
     public override void _Ready()
     {
-        _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_snowfall.gdshader") };
+        _material = Styles.StyleKit.Material(Styles.MaterialRole.Precip);
         _material.SetShaderParameter("box", Box);
         FogUniforms.Apply(_material);
         _snow = new MeshInstance3D
@@ -45,11 +38,8 @@ public partial class OccasionPrecip : Node3D
     public override void _Process(double delta)
     {
         float snowfall = OccasionManager.Instance?.Atmosphere?.Atmosphere.Snowfall ?? 0f;
-        bool show = snowfall > 0f && !_indoors();
-        _snow.Visible = show;
-        if (!show) return;
-        float altitude = GetViewport()?.GetCamera3D()?.GlobalPosition.Y ?? 0f;
-        _material.SetShaderParameter("density", snowfall * Mathf.Lerp(0.45f, 1f, Mathf.SmoothStep(700f, 1800f, altitude)));
+        _snow.Visible = snowfall > 0f;
+        if (_snow.Visible) _material.SetShaderParameter("density", snowfall);
     }
 
     /// <summary>Every flake a quad whose corners carry its home, its corner and its hash; placed by the shader.</summary>

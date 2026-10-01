@@ -74,6 +74,14 @@ public enum ItemId
 
     // ---- radio (src/Items/Radio*, src/Audio/Cd) ----
     Radio = 52,
+
+    // 53-60 are taken by the Battle Royale weapons and the flare gun (#178, #198)
+
+    // ---- bags (docs/notes/items/bags.md): worn in the bag slot, each adds pack slots ----
+    BeltPouch = 61,
+    Handbag = 62,
+    Backpack = 63,
+    HikingPack = 64,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -102,6 +110,8 @@ public enum ItemUse
     Print,
     /// <summary>Use throws it into the world, where it stays as a thing (<see cref="RadioManager"/>).</summary>
     Throw,
+    /// <summary>Worn in the bag slot, it adds <see cref="ItemDef.PackSlots"/> to the pack (<see cref="Inventory.Bag"/>).</summary>
+    Bag,
 }
 
 /// <summary>
@@ -120,7 +130,9 @@ public sealed record ItemDef(
     float Heal = 0f,
     ItemCategory Category = ItemCategory.Gear,
     /// <summary>Worth in Swiss francs, for trade later on.</summary>
-    float Value = 0f);
+    float Value = 0f,
+    /// <summary>A bag's extra pack slots while it is worn (<see cref="ItemUse.Bag"/>).</summary>
+    int PackSlots = 0);
 
 public static class ItemDefs
 {
@@ -128,8 +140,8 @@ public static class ItemDefs
     {
         new(ItemId.Binoculars, "Binoculars", "Hold {aim_item} to look through them. 8x.",
             ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN"),
-        new(ItemId.SmartBinoculars, "Smart binoculars", "Hold {aim_item} to look through them. {use_item} picks a target item: buildings in view show the chance it drops from their containers.",
-            ItemUse.Optic, 1, new Color(0.20f, 0.42f, 0.50f), "SB", 0, ItemCategory.Gear, 250f),
+        new(ItemId.SmartBinoculars, "Smart binoculars", "Hold them at a building's door, or inside: they read out what its containers can hold and the chance of finding each item.",
+            ItemUse.Readout, 1, new Color(0.20f, 0.42f, 0.50f), "SB", 0, ItemCategory.Gear, 250f),
         new(ItemId.Camera, "Camera", "A Polaroid. Hold {aim_item} to frame, {use_item} to take a photo: it prints, develops, and goes in your pack.",
             ItemUse.Photo, 1, new Color(0.18f, 0.18f, 0.20f), "CM"),
         new(ItemId.Gps, "GPS", "Shows your LV95 coordinates, altitude and heading while held.",
@@ -197,9 +209,19 @@ public static class ItemDefs
         new(ItemId.Photo, "Photo", "A Polaroid you took. {use_item} to look at it; {aim_item} + {use_item} sticks it on a wall or the ground, {use_item} on it again takes it back.",
             ItemUse.Print, 1, new Color(0.96f, 0.95f, 0.90f), "PH"),
         // radio (#104): thrown into the world, plays burned CDs for whoever stands near
-        new(ItemId.Radio, "Radio", "{use_item} throws it. Stand beside it and press {interact_mount} to play a CD or pick it up.",
+        new(ItemId.Radio, "Radio", "{use_item} opens it in your hand: it plays as you carry it. {aim_item} + {use_item} throws it; stand beside it and press {interact_mount} to play a CD or pick it up.",
             ItemUse.Throw, 1, new Color(0.16f, 0.17f, 0.19f), "RD", 0, ItemCategory.Gear, 80f),
+
+        // bags (#208): found in houses, worn in the bag slot, one row of the pack per 9 slots
+        Bag(ItemId.BeltPouch, "Belt pouch", "#6a5a3a", "BP", 9, 15),
+        Bag(ItemId.Handbag, "Handbag", "#8a2a3a", "HB", 18, 40),
+        Bag(ItemId.Backpack, "Backpack", "#2a5a8a", "BK", 27, 70),
+        Bag(ItemId.HikingPack, "Hiking backpack", "#c8602a", "HK", 36, 150),
     };
+
+    private static ItemDef Bag(ItemId id, string name, string tint, string glyph, int slots, float value) =>
+        new(id, name, $"Wear it in the bag slot for {slots} more pack slots. {{use_item}} or a click on the bag slot puts it on.",
+            ItemUse.Bag, 1, new Color(tint), glyph, 0, ItemCategory.Gear, value, slots);
 
     private static ItemDef Eat(ItemId id, string name, int stack, string tint, string glyph, float heal,
         ItemCategory category, float value) =>
@@ -220,6 +242,14 @@ public static class ItemDefs
     private static readonly Dictionary<ItemId, ItemDef> ById = All.ToDictionary(d => d.Id);
 
     public static ItemDef? Get(ItemId id) => ById.GetValueOrDefault(id);
+
+    /// <summary>
+    /// Aim + Use throws it (<see cref="ThrowAim"/>): anything whose Aim means nothing else. Optics,
+    /// cameras and guns aim, a print aims where it sticks, a flag where it is planted, and a GPS or
+    /// money is not something to lob at a hillside.
+    /// </summary>
+    public static bool Throwable(ItemDef? def) =>
+        def != null && def.Id != ItemId.Francs && def.Use is ItemUse.Throw or ItemUse.Consume or ItemUse.Material or ItemUse.Wear;
 
     // ------------------------------------------------------------------------------------
     // meshes

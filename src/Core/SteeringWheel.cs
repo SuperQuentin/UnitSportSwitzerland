@@ -116,8 +116,7 @@ public partial class SteeringWheel : Node
         {
             PlayerInput.Throttle => Throttle,
             PlayerInput.Brake => Brake,
-            // the trucks' clutch action (#70)
-            "clutch" => Clutch,
+            PlayerInput.Clutch => Clutch,
             _ => 0f,
         };
     }

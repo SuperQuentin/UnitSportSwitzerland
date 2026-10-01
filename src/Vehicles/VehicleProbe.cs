@@ -249,6 +249,15 @@ public partial class VehicleProbe : Node
         if (_groundExit % 2 == 0)
         {
             if (!p.IsOnFloor() || p.Ride != RideKind.OnFoot || _t < 1) return false;
+            // clear of what the earlier steps left standing here: a craft put down on top of the
+            // parked bike is shoved out of it by the solver, which reads as a crash or not
+            // depending on the solver's body order, not on what this step tests
+            if (All.Any(v => v.GlobalPosition.DistanceTo(p.GlobalPosition) < 8f))
+            {
+                p.GlobalPosition += Vector3.Right * 14f + Vector3.Up * 1f;
+                _t = 0;
+                return false;
+            }
             p.SetRide(kind);
             _mark = -1;
             _t = 0;

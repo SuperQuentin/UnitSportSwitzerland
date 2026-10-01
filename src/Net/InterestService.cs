@@ -141,7 +141,8 @@ public partial class InterestService : Node
             bool first = !_sets.TryGetValue(viewer, out var set);
             if (first) _sets[viewer] = set = new HashSet<long>();
             var view = _views.TryGetValue(viewer, out var v) ? v : Interest.View.Default;
-            var eye = viewerNode.GlobalPosition + Vector3.Up * 1.7f;
+            // someone inside a building is 3 km under it: seen, and seeing, from where the building is
+            var eye = Where(viewerNode) + Vector3.Up * 1.7f;
             _changed.Clear();
 
             foreach (var (target, targetNode) in _targets)
@@ -149,7 +150,7 @@ public partial class InterestService : Node
                 if (target == viewer) continue;
                 bool was = set.Contains(target);
                 if (first) _changed.Add(target);
-                var at = targetNode.GlobalPosition + Vector3.Up;
+                var at = Where(targetNode) + Vector3.Up;
                 float agl = Ground?.Invoke(at) is { } g ? at.Y - g : 0f;
                 bool now_ = Interest.Relevant(eye, at, targetNode.Ride, agl, view, was,
                     Together?.Invoke(viewer, target) == true, Ground == null ? null : LineOfSight);
@@ -177,14 +178,14 @@ public partial class InterestService : Node
         foreach (var (target, targetNode) in _targets)
         {
             _near.Clear(); _far.Clear();
-            var at = targetNode.GlobalPosition;
+            var at = Where(targetNode);
             _nearOf.TryGetValue(target, out var lastNear);
             foreach (var (viewer, viewerNode) in _scratch)
             {
                 if (viewer == target || !_sets.TryGetValue(viewer, out var set) || !set.Contains(target)) continue;
                 float radius = lastNear != null && lastNear.Contains(viewer) ? NearRadius * 1.2f : NearRadius;
                 bool near = Together?.Invoke(viewer, target) == true
-                    || viewerNode.GlobalPosition.DistanceSquaredTo(at) < radius * radius;
+                    || Where(viewerNode).DistanceSquaredTo(at) < radius * radius;
                 (near ? _near : _far).Add(viewer);
             }
             if (lastNear != null && _farOf.TryGetValue(target, out var lastFar)
@@ -208,6 +209,9 @@ public partial class InterestService : Node
     private readonly Dictionary<long, HashSet<long>> _nearOf = new(), _farOf = new();
 
     private bool LineOfSight(Vector3 eye, Vector3 target) => Interest.Clear(eye, target, Ground!);
+
+    /// <summary>Where a player is for interest: up in the world, even inside a building (<see cref="Interiors.InteriorManager.SurfacePoint"/>).</summary>
+    private Vector3 Where(Node3D player) => Interiors.InteriorManager.SurfacePoint(player.GlobalPosition, Ground);
 
     /// <summary>Client → server: the lens this client views the world through.</summary>
     public void ReportView(float far, float fovDeg)

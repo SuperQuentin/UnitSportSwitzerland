@@ -16,7 +16,13 @@ public enum RideKind
     Plane = 7,
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
     // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too.
-    // The next other mount is 96.
+    // 96..119 are trucks and buses: HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
+    /// <summary>
+    /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
+    /// says which). Nobody rides it; a truck backs under it and couples.
+    /// </summary>
+    Trailer = 120,
+    // The next other mount is 121.
 }
 
 /// <summary>
@@ -223,6 +229,64 @@ public abstract class Rideable
     public virtual float BodyHeight => 1.78f;
 
     /// <summary>
+    /// The two hull boxes in the visual's rest frame, when cutting the mesh by height would not do
+    /// (a tractor: its cab, and the chassis behind it only up to the fifth wheel, so it backs under
+    /// a trailer's nose). Null: measured from the mesh.
+    /// </summary>
+    public virtual (Aabb Lower, Aabb Upper)? HullBoxes => null;
+
+    /// <summary>
+    /// A collision box measured from section <paramref name="section"/>'s mesh, cut back to what is
+    /// solid enough to collide with (a bus's mirrors, out on their arms over a walker's head, are
+    /// not a wall down its whole length). As measured by default.
+    /// </summary>
+    public virtual Aabb Solid(Aabb measured, int section) => measured;
+
+    /// <summary>Bottom of the collision hull above the ground, m: bumps of the terrain lattice must not catch it.</summary>
+    public virtual float HullLift => 0.45f;
+
+    /// <summary>
+    /// Where a player gets in, in the visual's frame: measured from here to decide who is in reach.
+    /// The middle by default; a truck's cab door or a bus's front door is metres from its middle.
+    /// </summary>
+    public virtual Vector3 EntryPoint => Vector3.Zero;
+
+    /// <summary>The driver climbs out on the left (a left-hand-drive cab), not the right.</summary>
+    public virtual bool ExitLeft => false;
+
+    // ---- passengers (#158) ----------------------------------------------------------------
+    /// <summary>
+    /// The seats players can take, the driver's first; empty for a ride one person uses. Read
+    /// from the drawn model, once per kind (the server builds it headless too).
+    /// </summary>
+    public virtual Avatar.SeatAnchor[] Seats => System.Array.Empty<Avatar.SeatAnchor>();
+
+    /// <summary>
+    /// Rolls on under its own physics with nobody at the wheel and its passengers aboard (a car, a
+    /// truck). A motorbike does not: its pillion gets off with the rider.
+    /// </summary>
+    public virtual bool Driverless => false;
+
+    /// <summary>Seat <paramref name="i"/>'s hip in this ride's node frame, the train straight: for picking the nearest seat.</summary>
+    public virtual Vector3 SeatPosition(int i) => Seats[i].Hip;
+
+    private static readonly System.Collections.Generic.Dictionary<object, Avatar.SeatAnchor[]> _seats = new();
+
+    /// <summary>The seats of a model, read once per key from a throwaway build, freed at once.</summary>
+    protected static Avatar.SeatAnchor[] SeatsOf(object key, System.Func<Avatar.SeatAnchor[]> read)
+    {
+        if (_seats.TryGetValue(key, out var known)) return known;
+        return _seats[key] = read();
+    }
+
+    /// <summary>
+    /// Collision boxes besides <see cref="ParkedBox"/> when it stands in the world: a parked train's
+    /// trailer, a drawbar trailer's body behind its dolly. Pose and box in the node's space.
+    /// </summary>
+    public virtual IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes() =>
+        System.Array.Empty<(Transform3D, Vector3, Vector3)>();
+
+    /// <summary>
     /// Collision box of the vehicle standing empty in the world: centre and size, node space.
     /// Measured from the parked mesh by default, so it cannot drift from what is drawn — the
     /// bike's hand-typed box was 1.1 m tall and centred 0.55 m up while the bike stands 1.0 m.
@@ -365,6 +429,7 @@ public abstract class Rideable
         RideKind.Plane => new Plane(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
+        _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),
         _ => null,
     };
 }

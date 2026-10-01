@@ -37,7 +37,8 @@ public partial class RideProbe : Node
     private double _sinceReport;
     private float _topSpeed;
     private float _startAltitude;
-    private Vector3 _start;
+    /// <summary>Where the ride started, kept in LV95: the origin may move under it (#185).</summary>
+    private GlobalPos _start;
     private bool _mounted;
     private bool _done;
     private bool _midShot;
@@ -87,6 +88,9 @@ public partial class RideProbe : Node
                 "monster" => (RideKind)(MotorbikeCatalog.First + 1),
                 // moto:N = MotorbikeCatalog.All[N]
                 _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => (RideKind)(MotorbikeCatalog.First + b),
+                // truck:N = HeavyCatalog.All[N]; --trailer M couples TrailerCatalog.All[M], full
+                _ when name.StartsWith("truck") => (RideKind)(HeavyCatalog.First
+                    + (name.Length > 6 && int.TryParse(name[6..], out int h) ? h : 0)),
                 // car = the first in the roster, car:N = CarCatalog.All[N]
                 _ when name.StartsWith("car") => (RideKind)(CarCatalog.First
                     + (name.Length > 4 && int.TryParse(name[4..], out int n) ? n : 0)),
@@ -124,7 +128,7 @@ public partial class RideProbe : Node
                 _player.Rotation = new Vector3(0, -Mathf.DegToRad(bearing), 0);
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, ground + 1.5f, at.Z);
-            _start = _player.GlobalPosition;
+            _start = _origin.ToGlobal(_player.GlobalPosition);
             _startAltitude = ground;
             GD.Print($"[ride] spawned at LV95 {e:F0}/{n:F0}, ground {ground:F1} m");
             return;
@@ -158,12 +162,20 @@ public partial class RideProbe : Node
                 GD.Print(setup != null && _player.SetCarSetup(setup.Id) ? $"[ride] preset {setup.Name}" : "[ride] PRESET REFUSED");
             }
 
-            // full throttle, straight ahead — the probe measures the model, not the steering
+            var a = OS.GetCmdlineUserArgs();
+            int ti = System.Array.IndexOf(a, "--trailer");
+            if (_mounted && ti >= 0 && ti + 1 < a.Length && int.TryParse(a[ti + 1], out int trailer))
+                GD.Print(_player.SpawnTrailer(trailer, 1f) ? $"[ride] coupled {TrailerCatalog.All[trailer].Label}" : "[ride] TRAILER REFUSED");
+            // full throttle, straight ahead — the probe measures the model, not the steering —
+            // unless --steer asks for a turn (−1 left .. 1 right)
+            int st = System.Array.IndexOf(a, "--steer");
+            float steer = st >= 0 && st + 1 < a.Length && float.TryParse(a[st + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float asked) ? asked : 0f;
             float brakeAt = Arg("--brake-at") ?? float.MaxValue;
             // (the brake, held at a standstill, would reverse: let go once stopped)
             _player.RideControls = () =>
             {
-                if (_elapsed < brakeAt) return new RideInput(1f, 0f, 0f, false);
+                if (_elapsed < brakeAt) return new RideInput(steer != 0f && _player.RideSpeed > 5f ? 0f : 1f, 0f, steer, false);
                 _stopped |= Mathf.Abs(_player.RideSpeed) < 0.3f;
                 return new RideInput(0f, _stopped ? 0f : 1f, 0f, false, Handbrake: _stopped);
             };
@@ -198,22 +210,25 @@ public partial class RideProbe : Node
                 + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
                 + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
                 + (_player.Vehicle is Car car ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {car.Gear}" : "")
+                + (_player.Vehicle is Truck truck ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
+                    + $"  joints {string.Join(" ", truck.Articulation.Take(truck.SectionCount - 1).Select(j => $"{Mathf.RadToDeg(j):F0}°"))}" : "")
                 + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : "")
-                + (Interiors.DoorIndex.GarageAround(p) is { } inG ? $"  inside garage {inG.Key}" : "")
-                + (_kind == RideKind.OnFoot && Interiors.DoorIndex.NearestEntrance(p, 1.6f) is { } door ? $"  [E] door {door.Key}" : ""));
+                + (Inside() is { } inside ? $"  inside {inside.DressedKind()} {inside.Key}" : "")
+                + (_kind == RideKind.OnFoot && Interiors.DoorIndex.Nearest(p, 1.6f) is { } door ? $"  [E] door {door.Key}" : ""));
         }
 
         if (_elapsed < _seconds) return;
         _done = true;
 
         var end = _player.GlobalPosition;
-        float travelled = new Vector2(end.X - _start.X, end.Z - _start.Z).Length();
+        float travelled = (float)_origin.ToGlobal(end).HorizontalDistanceTo(_start);
         bool underground = _chunks.TryGetHeight(end, out float endGround) && end.Y < endGround - 1.5f;
-        if (Interiors.DoorIndex.GarageAround(end) is { } garage)
+        if (Inside() is { } building)
         {
-            // the terrain under a garage is carved away: the floor slab is the ground in there
-            underground = end.Y < garage.Bay!.Sill + garage.TileOrigin.Y - 1.5f;
-            GD.Print($"[ride] ended inside garage {garage.Key}, {end.Y - garage.Bay.Sill - garage.TileOrigin.Y:F2} m over its floor, "
+            // driven in through the door's portal: the interior's floor is the ground in there
+            float floor = Interiors.InteriorManager.Instance?.CurrentNode?.GlobalPosition.Y ?? Interiors.InteriorManager.InteriorBaseY;
+            underground = end.Y < floor - 1.5f;
+            GD.Print($"[ride] ended inside {building.DressedKind()} {building.Key}, {end.Y - floor:F2} m over its floor, "
                 + $"speed {_player.RideSpeed:F1} m/s");
         }
 
@@ -238,4 +253,7 @@ public partial class RideProbe : Node
 
         GetTree().Quit(travelled > 5 && !underground ? 0 : 1);
     }
+
+    /// <summary>The interior the rider is in (walked or driven in through its door), if any.</summary>
+    private Interiors.InteriorLayout? Inside() => _player?.Indoors == true ? Interiors.InteriorManager.Instance?.Current : null;
 }

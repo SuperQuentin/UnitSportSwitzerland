@@ -127,6 +127,9 @@ public sealed class GameSettings
     public bool TyreWear { get; set; }
     /// <summary>Cars' brakes heat up and fade, and their pads wear (off by default).</summary>
     public bool BrakeWear { get; set; }
+    /// <summary>How trucks and buses are shifted (#70): automatic, sequential, with the clutch, H-pattern.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Player.HeavyShift HeavyGearbox { get; set; } = Player.HeavyShift.Automatic;
 
     // --- world ---
     /// <summary>Real minutes for a whole day; 0 stops the clock at <see cref="StartHour"/>.</summary>
@@ -155,6 +158,10 @@ public sealed class GameSettings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public Audio.EngineVoice EngineVoice { get; set; } = Audio.EngineVoice.Ps1;
 
+    /// <summary>How the world looks (<see cref="Styles.StyleKit"/>). Client-only, never replicated.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Styles.VisualStyle VisualStyle { get; set; } = Styles.VisualStyle.Ps1;
+
     /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
     public float ScreenShake { get; set; } = 1f;
 
@@ -163,6 +170,48 @@ public sealed class GameSettings
 
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
+
+    // --- network ---
+    /// <summary>List the dedicated servers found on the LAN over mDNS in the main menu (<see cref="Net.LanDiscovery"/>).</summary>
+    public bool LanDiscovery { get; set; } = true;
+
+    /// <summary>The server last joined from the menu, so the field is not reset to localhost every launch.</summary>
+    public string LastHost { get; set; } = "127.0.0.1";
+
+    /// <summary>
+    /// The name asked for when joining a server, set the first time the Multiplayer screen opens.
+    /// Empty until then; <c>--name</c> overrides it for one run without saving.
+    /// </summary>
+    public string PlayerName { get; set; } = "";
+
+    /// <summary>GPX files replayed recently, newest first (the Play solo track picker lists them).</summary>
+    public List<string> RecentGpx { get; set; } = new();
+
+    /// <summary>
+    /// Play in a VR headset (#186, OpenXR, a Quest over Link). OpenXR only starts with the engine,
+    /// so turning this on or off relaunches the game (<see cref="XR.XrSession.Relaunch"/>), and a
+    /// launch from the title with it on relaunches itself into VR.
+    /// </summary>
+    public bool VrMode { get; set; }
+
+    /// <summary>What the monitor shows while in VR (<see cref="XR.XrMonitor"/>); F7 cycles it.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public XR.MonitorView VrMonitor { get; set; } = XR.MonitorView.FirstPerson;
+
+    // --- cockpit: first person at the wheel of a car (#69) ---
+    /// <summary>Your own arms and legs at the wheel. V cycles chase → cockpit with them → cockpit without.</summary>
+    public bool CockpitBody { get; set; } = true;
+    /// <summary>Working rear-view and door mirrors: each a small extra render of the world.</summary>
+    public bool CockpitMirrors { get; set; } = true;
+    /// <summary>Speed, gear and rpm on the HUD in the cockpit too; off, the dashboard shows them.</summary>
+    public bool CockpitHud { get; set; }
+    /// <summary>Vertical field of view from the driver's seat, degrees.</summary>
+    public float CockpitFov { get; set; } = 70f;
+    /// <summary>The eye moved up (+) or down, and forward (+) or back, from where the seat puts it, m.</summary>
+    public float SeatHeight { get; set; }
+    public float SeatForward { get; set; }
+    /// <summary>The head sways with the car's accelerations: back under power, forward braking, out in a bend.</summary>
+    public bool CockpitHeadMotion { get; set; } = true;
 
     /// <summary>Window size when windowed; 0 leaves whatever size the window already has.</summary>
     public int WindowWidth { get; set; }
@@ -242,16 +291,21 @@ public sealed class GameSettings
         TrafficCars = Math.Clamp(TrafficCars, 0, 150);
         ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
+        CockpitFov = Math.Clamp(CockpitFov, 50f, 100f);
+        SeatHeight = Math.Clamp(SeatHeight, -0.1f, 0.1f);
+        SeatForward = Math.Clamp(SeatForward, -0.15f, 0.15f);
         WindowWidth = Math.Clamp(WindowWidth, 0, 7680);
         WindowHeight = Math.Clamp(WindowHeight, 0, 4320);
         OccasionPreferences ??= new();
+        RecentGpx ??= new();
+        PlayerName ??= "";
         Wheel ??= new();
         Wheel.Clamp();
     }
 
     /// <summary>
     /// "--rings N", "--horizon km", "--fog on|off", "--detail low|medium|high",
-    /// "--generated on|off" — for
+    /// "--generated on|off", "--style ps1|cartoon|real-|real+" — for
     /// screenshotting one configuration against another without touching the saved file.
     /// </summary>
     private void ApplyCommandLine(string[] args)
@@ -272,6 +326,14 @@ public sealed class GameSettings
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
                 case "--tyrewear": TyreWear = v is "on" or "1" or "true"; break;
                 case "--brakewear": BrakeWear = v is "on" or "1" or "true"; break;
+                case "--gearbox":
+                    HeavyGearbox = v.ToLowerInvariant() switch
+                    {
+                        "seq" => Player.HeavyShift.Sequential, "seqclutch" => Player.HeavyShift.SequentialClutch,
+                        "hsplit" => Player.HeavyShift.HPatternSplitter, "h" => Player.HeavyShift.HPattern,
+                        _ => Player.HeavyShift.Automatic,
+                    };
+                    break;
                 case "--wheel": Wheel.Enabled = v is "on" or "1" or "true"; break;
                 case "--wheelrange" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float deg):
                     Wheel.RangeDeg = deg; break;
@@ -283,11 +345,31 @@ public sealed class GameSettings
                         _ => Audio.EngineVoice.Realistic,
                     };
                     break;
+                case "--style":
+                    VisualStyle = v.ToLowerInvariant() switch
+                    {
+                        "cartoon" => Styles.VisualStyle.Cartoon,
+                        "real-" or "realistic-" => Styles.VisualStyle.RealisticLow,
+                        "real+" or "realistic+" => Styles.VisualStyle.RealisticHigh,
+                        _ => Styles.VisualStyle.Ps1,
+                    };
+                    break;
                 // a fixed time of day, for screenshots: --time 21.5 is half past nine at night
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
                     StartHour = hour; DayLengthMinutes = 0; break;
                 case "--traffic" when int.TryParse(v, out int cars): TrafficCars = cars; break;
-                case "--view": ThirdPerson = v != "first" && v != "1st"; break;
+                // first | third, or in a car's cockpit with (body) or without (bare) your own figure
+                case "--view":
+                    ThirdPerson = v is not ("first" or "1st" or "body" or "bare");
+                    if (v is "body" or "bare") CockpitBody = v == "body";
+                    break;
+                case "--mirrors": CockpitMirrors = v is "on" or "1" or "true"; break;
+                // what the monitor shows in VR (#186): off | first | eyes | third
+                case "--vrmonitor":
+                    VrMonitor = v switch { "off" => XR.MonitorView.Off, "eyes" => XR.MonitorView.BothEyes,
+                        "third" => XR.MonitorView.ThirdPerson, _ => XR.MonitorView.FirstPerson };
+                    break;
+                case "--vsync": VSync = v is "on" or "1" or "true"; break;
                 case "--perf":
                     PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,
                         "fps" => PerfOverlayMode.Fps, _ => PerfOverlayMode.Off };

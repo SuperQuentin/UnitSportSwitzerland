@@ -18,12 +18,15 @@ namespace UnitSport.Terrain;
 /// tunnel floor or a carved portal.
 /// </para>
 /// </summary>
-public partial class HorizonLayer : Node3D
+public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
 {
     private const int BlockTiles = TerrainMeshBuilder.HorizonBlockTiles;
     private const double BlockM = BlockTiles * ChunkFormat.TileSizeM;
     private const double UnloadSlackM = 10_000;
-    private const int MaxBuildsInFlight = 4;
+    private static readonly int MaxBuildsInFlight = Math.Clamp(System.Environment.ProcessorCount / 2, 2, 8);
+
+    /// <summary>Main-thread time a frame may spend committing blocks; one always goes through.</summary>
+    private const double CommitBudgetMs = 3;
 
     /// <summary>Metres beyond which no block is loaded. 0 turns the layer off.</summary>
     public double DistanceM { get; set; }
@@ -168,13 +171,23 @@ public partial class HorizonLayer : Node3D
         _coverMinE = minE; _coverMaxN = maxN; _coverCols = cols; _coverRows = rows;
         _coverTexture = ImageTexture.CreateFromImage(image);
 
-        var nw = _origin!.ToWorld(minE * ChunkFormat.TileSizeM, (maxN + 1) * ChunkFormat.TileSizeM, 0);
         _material?.SetShaderParameter("detail_cover", _coverTexture);
-        _material?.SetShaderParameter("cover_origin", new Vector2(nw.X, nw.Z));
+        PushCoverOrigin();
         _material?.SetShaderParameter("cover_extent",
             new Vector2((float)(cols * ChunkFormat.TileSizeM), (float)(rows * ChunkFormat.TileSizeM)));
         _material?.SetShaderParameter("use_cover", true);
     }
+
+    /// <summary>The coverage texture is sampled by world XZ, so its corner moves with the origin.</summary>
+    private void PushCoverOrigin()
+    {
+        if (_coverImage == null) return;
+        var nw = _origin!.ToWorld(_coverMinE * ChunkFormat.TileSizeM, (_coverMaxN + 1) * ChunkFormat.TileSizeM, 0);
+        _material?.SetShaderParameter("cover_origin", new Vector2(nw.X, nw.Z));
+    }
+
+    /// <summary>The blocks are children and have moved already (#185); the coverage has not.</summary>
+    public void OnOriginShifted(OriginShift shift) => PushCoverOrigin();
 
     /// <summary>Marks a tile as drawn by real terrain (or not); the texture uploads next frame.</summary>
     public void SetCovered(TileId id, bool covered)
@@ -196,16 +209,21 @@ public partial class HorizonLayer : Node3D
 
         if (_index == null || _origin == null || _anchors == null) return;
 
-        // one block a frame: a 101x101 ArrayMesh is small, but a teleport wants ~100 of them
-        if (_ready.TryDequeue(out var done))
+        // a 101x101 ArrayMesh is small, but a teleport wants ~170 of them: commit within a budget
+        long start = System.Diagnostics.Stopwatch.GetTimestamp();
+        while (_ready.TryDequeue(out var done))
         {
             _building.Remove(done.Key);
+            // a slot is free: refill it this frame, not on the next half-second tick, or the
+            // whole horizon trickles in at eight blocks a second
+            _sinceEval = double.MaxValue;
             if (done.Epoch == _epoch && _blocks.ContainsKey(done.Key))
             {
                 Commit(done.Key, done.Mesh);
                 // meshed from a lattice that has since been replaced: drawn, and rebuilt again
                 if (done.Generation == _indexGeneration) _stale.Remove(done.Key);
             }
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds > CommitBudgetMs) break;
         }
 
         _sinceEval += delta;
@@ -214,26 +232,26 @@ public partial class HorizonLayer : Node3D
         Evaluate();
     }
 
+    /// <summary>
+    /// How many of the blocks within <see cref="DistanceM"/> are drawn from the current lattice,
+    /// of how many are wanted: what the loading screen waits on. Null while the lattice is still
+    /// being read or generated; (0, 0) when there is no horizon to draw.
+    /// </summary>
+    public (int Done, int Total)? Progress()
+    {
+        if (_loading) return null;
+        if (_index == null || _origin == null || _anchors == null) return (0, 0);
+        var wanted = WantedBlocks(_anchors().ToList());
+        int done = 0;
+        foreach (var key in wanted.Keys)
+            if (_blocks.ContainsKey(key) && !_building.Contains(key) && !_stale.Contains(key)) done++;
+        return (done, wanted.Count);
+    }
+
     private void Evaluate()
     {
         var anchors = _anchors!().ToList();
-        var wanted = new Dictionary<(int E, int N), double>();
-
-        if (DistanceM > 0)
-            foreach (var a in anchors)
-            {
-                var (ae, an) = _origin!.ToLv95(a);
-                int span = (int)Math.Ceiling(DistanceM / BlockM) + 1;
-                int cE = (int)Math.Floor(ae / BlockM), cN = (int)Math.Floor(an / BlockM);
-                for (int bn = cN - span; bn <= cN + span; bn++)
-                    for (int be = cE - span; be <= cE + span; be++)
-                    {
-                        double d = BlockDistance(be, bn, ae, an);
-                        if (d > DistanceM) continue;
-                        var key = (be * BlockTiles, bn * BlockTiles);
-                        if (!wanted.TryGetValue(key, out double cur) || d < cur) wanted[key] = d;
-                    }
-            }
+        var wanted = WantedBlocks(anchors);
 
         foreach (var (key, _) in wanted.OrderBy(kv => kv.Value))
         {
@@ -272,6 +290,28 @@ public partial class HorizonLayer : Node3D
             _blocks[key]?.QueueFree();
             _blocks.Remove(key);
         }
+    }
+
+    /// <summary>The blocks within <see cref="DistanceM"/> of any anchor, with their distance in metres.</summary>
+    private Dictionary<(int E, int N), double> WantedBlocks(List<Vector3> anchors)
+    {
+        var wanted = new Dictionary<(int E, int N), double>();
+        if (DistanceM > 0)
+            foreach (var a in anchors)
+            {
+                var (ae, an) = _origin!.ToLv95(a);
+                int span = (int)Math.Ceiling(DistanceM / BlockM) + 1;
+                int cE = (int)Math.Floor(ae / BlockM), cN = (int)Math.Floor(an / BlockM);
+                for (int bn = cN - span; bn <= cN + span; bn++)
+                    for (int be = cE - span; be <= cE + span; be++)
+                    {
+                        double d = BlockDistance(be, bn, ae, an);
+                        if (d > DistanceM) continue;
+                        var key = (be * BlockTiles, bn * BlockTiles);
+                        if (!wanted.TryGetValue(key, out double cur) || d < cur) wanted[key] = d;
+                    }
+            }
+        return wanted;
     }
 
     /// <summary>Metres from a point to the nearest edge of a block (0 inside it).</summary>

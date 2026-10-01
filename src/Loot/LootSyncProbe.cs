@@ -89,7 +89,7 @@ public partial class LootSyncProbe : Node
 
         // the first ground-floor container with something in it this restock period
         long epoch = LootTables.Epoch(layout.Key, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-        int index = layout.Furniture.FindIndex(f => f.Floor == 0 && LootTables.IsLootable(f.Type)
+        int index = layout.Furniture.FindIndex(f => f.Floor == 0 && LootTables.IsLootable(f.Type) && !LootTables.IsLocked(f.Type)
             && LootTables.ContentsOf(layout, layout.Furniture.IndexOf(f), epoch).Count >= 2);
         if (index < 0) { Fail("no ground-floor container holding two stacks"); return; }
         var f = layout.Furniture[index];

@@ -22,7 +22,7 @@ namespace UnitSport.Player;
 /// dead ends. Neither adds a new top speed on flat ground — see <see cref="AirDrag"/>.
 /// </para>
 /// </summary>
-public partial class FootPlayer : CharacterBody3D
+public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 {
     public const string Group = "players";
 
@@ -140,6 +140,28 @@ public partial class FootPlayer : CharacterBody3D
     /// hand held up to a face. The inventory itself is local and is never sent.
     /// </summary>
     [Export] public int HeldItemId { get; set; }
+
+    /// <summary>
+    /// The CD a radio in the hand plays (<c>Items.RadioPlay</c>), empty when silent; written by
+    /// the owner from the stack's data. Replicated so everyone near hears it (#168).
+    /// </summary>
+    [Export] public string HeldRadio { get; set; } = "";
+
+    /// <summary>
+    /// The live station the car or truck this player drives is tuned to (<c>Audio.Live.Stations</c>,
+    /// 0 = off), set by the driver (U / P). Replicated so everyone near hears it, in sync (#179).
+    /// </summary>
+    [Export] public int CarRadio { get; set; }
+
+    /// <summary>The station this body's vehicle plays, 0 when it drives none or the radio is off.</summary>
+    public int PlayingCarRadio => RidingWith == 0 && CarRadio > 0 && HasCarRadio((RideKind)RideKindId) ? CarRadio : 0;
+
+    /// <summary>Cars, trucks and buses have a radio; bikes, mounts, aircraft and trailers do not.</summary>
+    public static bool HasCarRadio(RideKind kind) =>
+        CarCatalog.For(kind) != null || kind != RideKind.Trailer && HeavyCatalog.For(kind) != null;
+
+    /// <summary>Local driver: the radio was retuned, with the station's name, for a line on screen.</summary>
+    public event Action<string>? CarRadioTuned;
 
     // --- pose, replicated (see _Ready) ---
     // Everything a remote copy draws comes from these three, written by the owner every frame.
@@ -386,6 +408,28 @@ public partial class FootPlayer : CharacterBody3D
 
     public bool IsFirstPerson => !_thirdPerson;
 
+    /// <summary>
+    /// 0..1: an item held ready to throw wants the close over-the-shoulder camera (set every frame by
+    /// <see cref="Items.ItemController"/>, like <see cref="FovOverride"/>). In first person the view
+    /// is lent to third person for as long as it lasts, pulled out of the head and back.
+    /// </summary>
+    public float ThrowAim { get; set; }
+
+    /// <summary>Camera tremble in radians, set every frame (a fully wound-up throw shakes).</summary>
+    public float CameraShake { get; set; }
+
+    /// <summary>The throw camera's eased weight.</summary>
+    private float _throwBlend;
+
+    /// <summary>Third person lent to a throw from first person: given back when the throw camera has eased out.</summary>
+    private bool _borrowedThird;
+
+    /// <summary>In a car's, a truck's or a bus's driver's seat, looking out through the windscreen (not the chase camera, not the garage's orbit).</summary>
+    public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null && SeatIndex == 0;
+
+    /// <summary>What is ridden has a driver's seat with a cockpit (#69 cars, #157 trucks and buses).</summary>
+    private bool HasCockpit => _ride is Car or Truck;
+
     private Rideable? _ride;
     private RideMotion _motion;
     private float _slipCam;
@@ -405,7 +449,7 @@ public partial class FootPlayer : CharacterBody3D
     public float? ShowroomYaw { get; set; }
 
     /// <summary>The replicated pose properties, in one place for the synchronizer and <c>--synccheck</c>.</summary>
-    public static readonly string[] PoseProperties = { ".:BodyPose", ".:PoseKind", ".:Anim" };
+    public static readonly string[] PoseProperties = { ".:BodyPose", ".:PoseKind", ".:Anim", ".:TrainPose" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -421,6 +465,10 @@ public partial class FootPlayer : CharacterBody3D
 
     /// <summary>Free look while riding. Steering owns the body's yaw, so the eyes get their own.</summary>
     private float _lookYaw;
+    /// <summary>Seconds since the mouse or the right stick last looked: the cockpit's look springs back only once they let go.</summary>
+    private float _lookIdle;
+    /// <summary>Cockpit: the head's sway from the car's accelerations, eased (node space: +X right, +Z back).</summary>
+    private Vector3 _headSway;
 
     // --- third person on foot ---
     /// <summary>
@@ -432,7 +480,7 @@ public partial class FootPlayer : CharacterBody3D
     private float _viewYaw;
 
     /// <summary>Third person (over the shoulder / chase) or first. Toggled with V / R3, saved.</summary>
-    private bool _thirdPerson = Core.GameSettings.Current.ThirdPerson;
+    private bool _thirdPerson = Core.GameSettings.Current.ThirdPerson && !XR.XrSession.Active;
 
     /// <summary>Smoothed camera pivot height, so a step up or a hop does not jerk the view.</summary>
     private float _pivotY = float.NaN;
@@ -509,7 +557,7 @@ public partial class FootPlayer : CharacterBody3D
     public RideInput LastRideInput { get; private set; }
 
     /// <summary>The camera this player is looking through is the one on screen.</summary>
-    public bool IsViewing => _camera is { Current: true };
+    public bool IsViewing => _camera is { Current: true } || (_camera != null && XR.XrSession.Anchor == _camera);
 
     /// <summary>The building this player is inside (<see cref="Interiors.BuildingKey"/> text), or null outdoors.</summary>
     public string? InteriorKey { get; private set; }
@@ -529,8 +577,7 @@ public partial class FootPlayer : CharacterBody3D
         GlobalPosition = at;
         _viewYaw = yaw;
         Rotation = new Vector3(0, yaw, 0);
-        _lastSafe = at;
-        _hasSafe = true;
+        RememberSafe(at);
     }
 
     /// <summary>
@@ -544,9 +591,10 @@ public partial class FootPlayer : CharacterBody3D
         GlobalPosition = at;
         Velocity = map * Velocity;
         _viewYaw += turn;
+        // mounted, the machine's heading is what sets the body's yaw every step
+        _motion.Yaw += turn;
         Rotation = new Vector3(Rotation.X, Rotation.Y + turn, Rotation.Z);
-        _lastSafe = at;
-        _hasSafe = true;
+        RememberSafe(at);
         _pivotY = float.NaN;
     }
 
@@ -559,8 +607,7 @@ public partial class FootPlayer : CharacterBody3D
         GlobalPosition = p;
         _viewYaw = yaw;
         Rotation = new Vector3(0, yaw, 0);
-        _lastSafe = p;
-        _hasSafe = true;
+        RememberSafe(p);
     }
 
     /// <summary>Downward speed while mounted and airborne, for the ride landing.</summary>
@@ -594,6 +641,16 @@ public partial class FootPlayer : CharacterBody3D
 
     /// <summary>The vehicle instance, for the feel layer to read its tuning (null on foot).</summary>
     public Rideable? Vehicle => _ride;
+
+    /// <summary>
+    /// Mounted on anything that rolls or slides, the box it passes a doorway with (a garage's or a
+    /// barn's, <see cref="Interiors.InteriorManager"/>): half its width and length and its height,
+    /// measured from its model. Null on foot, and flying: a craft never goes through a door.
+    /// </summary>
+    public (float HalfWidth, float HalfLength, float Height)? DoorwayBox =>
+        _ride is { } ride and not Flyer
+            ? (ride.ParkedBox.Size.X / 2, ride.ParkedBox.Size.Z / 2, Mathf.Max(ride.ParkedBox.Size.Y, ride.BodyHeight))
+            : null;
 
     /// <summary>
     /// For the flight probe: put an already-mounted craft in the air at a position and velocity,
@@ -659,6 +716,8 @@ public partial class FootPlayer : CharacterBody3D
     private const float EjectBlastCap = 55f;
     private Vector3 _lastSafe;
     private bool _hasSafe;
+    /// <summary>The space <see cref="_lastSafe"/> was recorded in: an interior key, or null outside.</summary>
+    private string? _safeSpace;
     private double _safeTimer;
     private float _deadTimer;
 
@@ -865,11 +924,18 @@ public partial class FootPlayer : CharacterBody3D
         replication.AddProperty(".:CarSetupId");
         replication.AddProperty(".:TuningBits");
         replication.AddProperty(".:DoorsOpen");
+        replication.AddProperty(".:TrailerCode");
+        // a passenger's host and seat (#158): drawn and moved from the host's copy on every peer
+        replication.AddProperty(".:RidingWith");
+        replication.AddProperty(".:SeatIndex");
         replication.AddProperty(".:HeldItemId");
         replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
         replication.AddProperty(".:DanceId");
+        replication.AddProperty(".:HeldRadio");
+        replication.AddProperty(".:CarRadio");
+        replication.AddProperty(".:CarCd");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -878,7 +944,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId", ".:HeldRadio", ".:CarRadio", ".:CarCd" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1050,7 +1116,7 @@ public partial class FootPlayer : CharacterBody3D
     {
         var kind = (RideKind)RideKindId;
         // a car is redrawn when its preset or garage parts change too (the garage's live preview, a remote tune)
-        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup) return;
+        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup && TrailerCode == _visualTrailer) return;
 
         _visual?.QueueFree();
         _visual = null;
@@ -1060,13 +1126,16 @@ public partial class FootPlayer : CharacterBody3D
         _visualSetup = CarSetupId;
         _visualTuning = TuningBits;
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
+        // the sections behind a truck's cab: their own bodies, whatever else is drawn
+        FitSections(kind);
 
         // an NPC keeps its jersey whoever simulates it: the colours of the client that asked for it
         int rider = Npc && NetId(Name) is long npcId && npcId < 0 ? (int)Net.PlayerReplication.NpcOwner(npcId) : GetMultiplayerAuthority();
 
         if (kind == RideKind.OnFoot)
         {
-            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) return;   // first person: nothing to draw
+            // first person: nothing to draw, except in VR for the monitor's third-person view (#186)
+            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson && !XR.XrSession.Active) return;
             _walkPalette = Avatar.HumanPalette.ForRider(rider);
             _walker = new MeshInstance3D
             {
@@ -1074,6 +1143,7 @@ public partial class FootPlayer : CharacterBody3D
                 Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f, hat: Hat),
                 MaterialOverride = Avatar.HumanMeshBuilder.Material(),
             };
+            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) _walker.Layers = XR.XrSession.SpectatorOnlyLayer;
             _visual = _walker;
         }
         else
@@ -1142,14 +1212,14 @@ public partial class FootPlayer : CharacterBody3D
         // measured at rest: the pose is applied per frame, so the visual's own transform is undone
         var pose = _visual!.Transform;
         _visual.Transform = Transform3D.Identity;
-        var (lower, upper) = Avatar.MeshBounds.Split(_visual, HullCut);
+        var (lower, upper) = ride!.HullBoxes ?? Avatar.MeshBounds.Split(_visual, HullCut);
         _visual.Transform = pose;
-        _hullLeans = ride is not Car;   // lean-steered: yaw and pitch only (see AlignHull)
-        var parts = new[] { lower, upper };
+        _hullLeans = ride is not (Car or Truck);   // lean-steered: yaw and pitch only (see AlignHull)
+        var parts = new[] { ride.Solid(lower, 0), ride.Solid(upper, 0) };
         for (int i = 0; i < 2; i++)
         {
             var box = parts[i];
-            float bottom = Mathf.Max(box.Position.Y, HullLift);
+            float bottom = Mathf.Max(box.Position.Y, ride!.HullLift);
             float top = box.End.Y;
             if (top - bottom < 0.1f || box.Size.X < 0.05f) { _hull[i]?.QueueFree(); _hull[i] = null; continue; }
             _hull[i] ??= new CollisionShape3D { Name = i == 0 ? "HullLow" : "HullHigh" };
@@ -1196,6 +1266,13 @@ public partial class FootPlayer : CharacterBody3D
             NetTime = Time.GetTicksUsec() / 1e6;
             float dt = (float)delta;
             ApplyStickLook(dt);
+            if (RidingWith != 0)
+            {
+                // a passenger (#158): in its seat on the host's vehicle, looking out of it
+                UpdateSeated();
+                UpdateSeatCamera(dt);
+                return;
+            }
             if (_ride != null)
             {
                 if (_visual != null)
@@ -1205,17 +1282,24 @@ public partial class FootPlayer : CharacterBody3D
                     BodyPose = _visual.Transform;
                     AlignHull();
                     Anim = _ride.WritePose(_visual, _motion, _flight);
+                    if (_ride is Truck heavy) PublishTrain(heavy);
                 }
+                UpdateSeated();   // sat in it driverless, not at the wheel
                 return;
             }
 
             // published whatever the view: first person draws no body, but everyone else does
             PublishFootPose(dt);
+            StepThrowView(dt);
 
             // Render rate, not physics rate: the look has to answer the mouse the frame it
             // moves, the way rotating the body directly always did.
             if (!_thirdPerson)
+            {
                 Rotation = new Vector3(0, _viewYaw, 0);
+                // the body only the monitor's third-person camera sees (#186)
+                if (XR.XrSession.Active) ApplyFootPose();
+            }
             else if (ScopeView && _camera != null)
             {
                 // looking through something held to the eye: first person for as long as it lasts
@@ -1228,7 +1312,8 @@ public partial class FootPlayer : CharacterBody3D
             }
             else
             {
-                if (_walker != null) _walker.Visible = true;
+                // borrowed from first person for a throw: the body only shows once the lens is out of the head
+                if (_walker != null) _walker.Visible = !_borrowedThird || _throwBlend > 0.3f;
                 ApplyFootPose();
                 UpdateThirdPersonCamera(dt);
             }
@@ -1248,9 +1333,17 @@ public partial class FootPlayer : CharacterBody3D
         // crashed or frozen, and ENet takes up to 30 s to say so. Its body, frozen mid-road, must
         // not be a wall the whole field piles into (#50: every car stopped on a crashed leader).
         bool silent = Time.GetTicksMsec() / 1000.0 - LastNetState > SilentSeconds;
-        if (_body.Disabled != silent) _body.Disabled = silent;
+        // a passenger has no body of its own: it is in the vehicle
+        bool off = silent || RidingWith != 0;
+        if (_body.Disabled != off) _body.Disabled = off;
 
-        if (_interp.HasData)
+        if (RidingWith != 0 && Host is { } host)
+        {
+            // where its host's copy is, exactly: not its own interpolated stream, which would shake in the seat
+            Position = host.Position;
+            Rotation = host.Rotation;
+        }
+        else if (_interp.HasData)
         {
             var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
             Position = p;
@@ -1258,6 +1351,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         RefreshVisual();
         AnimateRemote((float)delta);
+        UpdateSeated();
     }
 
     /// <summary>
@@ -1283,7 +1377,9 @@ public partial class FootPlayer : CharacterBody3D
         _visual.Transform = BodyPose;
         AlignHull();
         _remoteRide?.AnimateRemote(_visual, Anim, dt);
-        if (_visual is Avatar.CarRig rig) rig.DoorsOpen = DoorsOpen;
+        AnimateRemoteSections(dt);
+        if (_visual is Avatar.CarRig rig) { rig.DoorsOpen = DoorsOpen; rig.DriverShown = SeatIndex == 0; }
+        else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
         SetRemoteEngine(_remoteRide as Flyer);
     }
 
@@ -1329,6 +1425,9 @@ public partial class FootPlayer : CharacterBody3D
     /// <summary>The arm pose the held item and <see cref="ItemAction"/> call for, the same on every peer.</summary>
     private Avatar.ItemArmPose TargetArmPose()
     {
+        // a throw (#206): wound up with anything, and the follow-through once it has left the hand
+        if (ItemAction == 3) return Avatar.ItemArmPose.ThrowWindup;
+        if (ItemAction == 4) return Avatar.ItemArmPose.ThrowRelease;
         var def = Items.ItemDefs.Get((Items.ItemId)HeldItemId);
         if (def == null) return Avatar.ItemArmPose.None;
         bool aim = ItemAction == 1, use = ItemAction == 2;
@@ -1357,6 +1456,8 @@ public partial class FootPlayer : CharacterBody3D
             _itemArmBlend = target;
             return;
         }
+        // the release whips straight out of the wind-up: no easing out of one into the other
+        if (want == Avatar.ItemArmPose.ThrowRelease && _itemArmCur == Avatar.ItemArmPose.ThrowWindup) _itemArmCur = want;
         if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first
         else if (want != _itemArmCur) _itemArmCur = want;
         _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / 0.18f);
@@ -1489,25 +1590,65 @@ public partial class FootPlayer : CharacterBody3D
     /// a camera parented to that turn would swing round every time the player changed direction.
     /// </para>
     /// </summary>
+    private const float ThrowCamHeight = 1.62f, ThrowCamOffset = 0.62f, ThrowCamDistance = 1.7f;
+
+    /// <summary>
+    /// Eases the throw camera toward <see cref="ThrowAim"/>, lending third person to a first-person
+    /// player for as long as it is out (the body has to be built to be seen) and handing it back once
+    /// the lens is home in the head.
+    /// </summary>
+    private void StepThrowView(float dt)
+    {
+        float want = ScopeView ? 0f : Mathf.Clamp(ThrowAim, 0f, 1f);
+        _throwBlend = Mathf.Lerp(_throwBlend, want, 1f - Mathf.Exp(-(want > _throwBlend ? 9f : 7f) * dt));
+        if (want == 0f && _throwBlend < 0.01f) _throwBlend = 0f;
+        if (!_thirdPerson && want > 0f)
+        {
+            _borrowedThird = true;
+            _thirdPerson = true;
+            _pivotY = float.NaN;
+            _armBlend = 1f;
+            RefreshVisual(force: true);
+        }
+        else if (_borrowedThird && want == 0f && _throwBlend == 0f)
+        {
+            _borrowedThird = false;
+            _thirdPerson = false;
+            if (_camera != null) _camera.Transform = new Transform3D(Basis.Identity, new Vector3(0, EyeHeight, 0));
+            RefreshVisual(force: true);
+        }
+    }
+
     private void UpdateThirdPersonCamera(float dt)
     {
         if (_camera == null) return;
 
         // The pivot drops with the slide, and its height is eased so a step, a kerb or the top
         // of a jump does not jerk the whole picture; far off (a teleport), it snaps.
-        float pivotTarget = GlobalPosition.Y + Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend);
+        // A throw pulls the lens in close over the right shoulder (#206); lent from first person,
+        // the arm grows out of the eye instead of shrinking from the chase distance.
+        float tb = _throwBlend;
+        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend), ThrowCamHeight, tb);
+        float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
             : Mathf.Lerp(_pivotY, pivotTarget, 1f - Mathf.Exp(-10f * dt));
         var pivot = new Vector3(GlobalPosition.X, _pivotY, GlobalPosition.Z);
 
         var view = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, _pitch + _punch);
+        if (CameraShake > 0f)
+        {
+            // two incommensurate wobbles per axis: a tremble, not a wave
+            float now = (float)Time.GetTicksMsec() / 1000f;
+            view = view * new Basis(Vector3.Right, CameraShake * (Mathf.Sin(now * 61f) + 0.6f * Mathf.Sin(now * 97f)))
+                        * new Basis(Vector3.Up, CameraShake * (Mathf.Sin(now * 53f + 1f) + 0.6f * Mathf.Sin(now * 89f)));
+        }
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
-        float distance = ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f;
+        float distance = Mathf.Lerp(_borrowedThird ? 0f : ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f, ThrowCamDistance, tb);
 
-        var shoulder = pivot + view.X * ShoulderOffset;
+        var shoulder = pivot + view.X * Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset, ThrowCamOffset, tb);
         var wanted = shoulder + view.Z * distance;
 
         // cast from the body's centre, not the shoulder, so a wall at the player's right does not
@@ -1553,10 +1694,38 @@ public partial class FootPlayer : CharacterBody3D
         _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
     }
 
-    /// <summary>Switches first/third person, rebuilding the local body and saving the choice.</summary>
+    /// <summary>
+    /// Switches first/third person, rebuilding the local body and saving the choice. At the wheel
+    /// of a car, a truck or a bus it is a cycle of three: chase camera, the cockpit with your own
+    /// arms and legs, the cockpit without them.
+    /// </summary>
     private void ToggleView()
     {
+        // mid-throw from first person: the lent view is given back first, then toggled as usual
+        if (_borrowedThird)
+        {
+            _borrowedThird = false;
+            _thirdPerson = false;
+        }
+        var settings = Core.GameSettings.Current;
+        // VR is first person only (#186): at the wheel, V still shows or hides your own body
+        if (XR.XrSession.Active)
+        {
+            if (HasCockpit)
+            {
+                settings.CockpitBody = !settings.CockpitBody;
+                settings.Save();
+            }
+            return;
+        }
+        if (HasCockpit && !_thirdPerson && settings.CockpitBody)
+        {
+            settings.CockpitBody = false;
+            settings.Save();
+            return;
+        }
         _thirdPerson = !_thirdPerson;
+        if (HasCockpit && !_thirdPerson) settings.CockpitBody = true;
         Core.GameSettings.Current.ThirdPerson = _thirdPerson;
         Core.GameSettings.Current.Save();
 
@@ -1612,29 +1781,50 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public bool TryInteract()
     {
+        if (RidingWith != 0) return TryLeaveSeat();
         if (_ride is { IsVehicle: true })
         {
             ExitVehicle();
             return true;
         }
+        // what the view points at and the border outlines (#206): a dropped item is picked up
+        if (_ride == null && !_mantling && _deadTimer <= 0 && Items.Highlight.Pointed is Items.DroppedItem dropped
+            && IsInstanceValid(dropped) && Items.ItemController.Instance is { } items)
+        {
+            items.PickUp(dropped);
+            return true;
+        }
         // inside, E is the front door or nothing: no mount picker in a living room
-        // (or the cupboard in front of you: searching comes first, the door is by the door)
+        // (or the cupboard in front of you: searching comes first, the door is by the door),
+        // but a car parked in the garage is got into like anywhere else
         if (Indoors)
         {
+            if (_ride == null && !_mantling && _deadTimer <= 0 && Vehicles?.Nearest(GlobalPosition, EnterReach) is { } parked)
+            {
+                Vehicles.Claim(parked, EnterVehicle);
+                return true;
+            }
             var interiors = Interiors.InteriorManager.Instance;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             return interiors?.TryDoor(this) ?? true;
         }
         if (_ride != null || _mantling || _deadTimer > 0) return false;
 
-        // a radio within reach: its panel (play a CD, burn one, pick it up)
-        if (Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach) is { } radio)
+        // a radio within reach, the one pointed at first: its panel (play a CD, burn one, pick it up)
+        if ((Items.Highlight.Pointed as Items.RadioBody ?? Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach)) is { } radio)
         {
             Items.RadioUi.Instance?.Open(radio);
             return true;
         }
 
         var vehicle = Vehicles?.Nearest(GlobalPosition, EnterReach);
+        // someone else's vehicle, being driven: a seat in it (#158), when it is nearer than a parked one
+        if (OnlineSeats && DrivenVehicleInReach(EnterReach) is { } driven
+            && (vehicle == null || driven.GlobalPosition.DistanceTo(GlobalPosition) < vehicle.GlobalPosition.DistanceTo(GlobalPosition)))
+        {
+            PassengerService.Instance!.AskSeat(driven);
+            return true;
+        }
         if (vehicle == null)
         {
             // music in earshot: E starts or stops the dance
@@ -1659,6 +1849,13 @@ public partial class FootPlayer : CharacterBody3D
         // driver's door opens to let them in, and once seated every door shuts (and stays shut:
         // nobody drives with a door open, see TryToggleCarDoor)
         ApplyRide(state.Kind, state.Velocity, state.Tuning, state.Setup);
+        if (HeavyCatalog.For(state.Kind) != null && state.CreateRide() is Truck train)
+        {
+            // the truck as it was left: its trailer, its angles, its doors and display, its load
+            _ride = train;
+            TrailerCode = train.TrailerCode;
+            RefreshVisual(force: true);
+        }
         if (_ride is Car)
         {
             DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor);
@@ -1672,6 +1869,8 @@ public partial class FootPlayer : CharacterBody3D
             car.Headlights = state.Headlights;
             car.RoofOpen = state.RoofOpen && car.HasSoftTop;
         }
+        CarRadio = state.Radio;
+        CarCd = state.Cd;
         _placed = true;
     }
 
@@ -1687,7 +1886,10 @@ public partial class FootPlayer : CharacterBody3D
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
-            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId);
+            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId,
+            Train: _ride is Truck t ? t.TrailerCode : 0, Angles: _ride is Truck ta ? ta.Angles : default,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd);
     }
 
     /// <summary>
@@ -1730,7 +1932,7 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public bool TryToggleCarDoor()
     {
-        if (_ride != null || Indoors || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
             return false;
         var (bit, distance) = rig.NearestDoor(GlobalPosition);
         if (bit == 0 || distance > VehicleManager.DoorReach) return false;
@@ -1749,33 +1951,55 @@ public partial class FootPlayer : CharacterBody3D
         var state = CaptureVehicle(wrecked: false);
         var right = GlobalTransform.Basis.X with { Y = 0 };
         right = right.LengthSquared() > 1e-6f ? right.Normalized() : Vector3.Right;
+        // a left-hand-drive cab: out of the left door
+        if (vehicle.ExitLeft) right = -right;
         // clear of the whole machine — past the wing of a plane, not 2 m into it
         float side = Mathf.Max(vehicle.BodyRadius, vehicle.ParkedBox.Size.X * 0.5f) + BodyRadius + 0.5f;
+        // beside the door, not the middle: a bus's front door is six metres ahead of it
+        var door = vehicle.EntryPoint == Vector3.Zero ? state.Position : ToGlobal(new Vector3(0, 0, vehicle.EntryPoint.Z));
         bool grounded = IsOnFloor();
+        var frame = GlobalTransform;
         // out of a car through the driver's door: it opens, and shuts behind (unless left open)
         if (vehicle is Car && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
             state = state with { DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor | VehicleState.DriverDoorShuts) };
 
-        Vehicles?.Park(state);
+        // with people aboard (or sat in it driverless) it is not parked: it rolls on with them (#158)
+        if (OnlineSeats && (SeatIndex > 0 || Riders.Any())) PassengerService.Instance!.HostLeaving(state);
+        else Vehicles?.Park(state);
+        SeatIndex = 0;
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
-        GlobalPosition = FindExit(state.Position, right, side, grounded);
+        GlobalPosition = FindExit(door, right, side, frame, vehicle, grounded);
     }
 
     /// <summary>
-    /// A clear spot beside the vehicle: its right, else its left, else on top. In the air there
-    /// is nothing to stand on either side, so the right side it is.
+    /// A clear spot beside the vehicle: its right, else its left, else behind or in front of it (a
+    /// car in a garage one car wide), else on top. In the air there is nothing to stand on either
+    /// side, so the right side it is. <paramref name="at"/> is the door the sides are taken from;
+    /// behind, ahead and on top are the vehicle's own box in <paramref name="frame"/>, its node.
     /// </summary>
-    private Vector3 FindExit(Vector3 at, Vector3 right, float side, bool grounded)
+    private Vector3 FindExit(Vector3 at, Vector3 right, float side, Transform3D frame, Rideable? vehicle, bool grounded)
     {
         if (!grounded) return at + right * side;
         _standProbe ??= new CapsuleShape3D { Radius = BodyRadius - 0.03f, Height = StandHeight };
-        foreach (var raw in new[] { at + right * side, at - right * side, at + Vector3.Up * 2.8f })
+        var ahead = -frame.Basis.Z with { Y = 0 };
+        ahead = ahead.LengthSquared() > 1e-6f ? ahead.Normalized() : Vector3.Forward;
+        // from the box's middle, not the door: a bus's front door is 5.6 m ahead of its middle, and
+        // "behind the door" was 1.3 m inside the bus (a tractor's, inside its cab)
+        var (centre, size) = vehicle?.ParkedBox ?? (new Vector3(0, 1.35f, 0), new Vector3(2f, 2.7f, 4.8f));
+        var middle = frame * (centre with { Y = 0 });
+        float end = size.Z * 0.5f + BodyRadius + 0.3f;
+        var over = middle + Vector3.Up * (centre.Y + size.Y * 0.5f + 0.1f);
+        foreach (var raw in new[] { at + right * side, at - right * side, middle - ahead * end, middle + ahead * end, over })
         {
+            // the vehicle just left is not in the physics yet (online the server spawns it), so a
+            // spot inside it reads clear: the player was put there, then shoved onto its roof
+            if (raw != over && InsideVehicle(raw, frame, vehicle)) continue;
             // on a slope the ground beside the seat is not at the seat's height: stand on it,
             // or the uphill side reads as blocked and the player is put on the vehicle's roof
+            // (indoors the terrain is 3 km overhead: the floor is at the seat's height)
             var candidate = raw;
-            if (raw.Y <= at.Y + 0.01f && Terrain != null && Terrain.TryGetHeight(raw, out float g))
+            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && Terrain.TryGetHeight(raw, out float g))
                 candidate = raw with { Y = Mathf.Max(raw.Y, g) };
             var query = new PhysicsShapeQueryParameters3D
             {
@@ -1787,7 +2011,25 @@ public partial class FootPlayer : CharacterBody3D
             if (GetWorld3D().DirectSpaceState.IntersectShape(query, 1).Count == 0)
                 return candidate + Vector3.Up * 0.1f;
         }
-        return at + Vector3.Up * 3f;
+        return over + Vector3.Up * 0.2f;
+    }
+
+    /// <summary>Whether a player standing at <paramref name="feet"/> would be in one of the vehicle's own boxes.</summary>
+    private bool InsideVehicle(Vector3 feet, Transform3D frame, Rideable? vehicle)
+    {
+        if (vehicle == null) return false;
+        var local = frame.AffineInverse() * feet;
+        bool In(Transform3D pose, Vector3 centre, Vector3 size)
+        {
+            var p = pose.AffineInverse() * local - centre;
+            return Mathf.Abs(p.X) < size.X * 0.5f + BodyRadius && Mathf.Abs(p.Z) < size.Z * 0.5f + BodyRadius
+                && p.Y < size.Y * 0.5f && p.Y + StandHeight > -size.Y * 0.5f;
+        }
+        var (c, s) = vehicle.ParkedBox;
+        if (In(Transform3D.Identity, c, s)) return true;
+        foreach (var (pose, centre, size) in vehicle.ExtraBoxes())
+            if (In(pose, centre, size)) return true;
+        return false;
     }
 
     /// <summary>
@@ -1806,6 +2048,9 @@ public partial class FootPlayer : CharacterBody3D
         GlobalPosition = state.Position + Vector3.Up * 1.5f + away * 1.5f;
         _stunTimer = 1.5f;
         _ejected = 2.0;
+        // everyone aboard goes out with the driver
+        if (OnlineSeats && (SeatIndex > 0 || Riders.Any())) PassengerService.Instance!.Wrecked(state.Velocity);
+        SeatIndex = 0;
         Vehicles?.Park(state);
         if (Vehicles == null) Explosion.Spawn(GetParent(), state.Position + Vector3.Up);
     }
@@ -1887,10 +2132,38 @@ public partial class FootPlayer : CharacterBody3D
     private void Revive()
     {
         Health = MaxHealth;
-        if (_hasSafe) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
+        if (HasSafeHere) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
         Velocity = Vector3.Zero;
         RequestReplacement();
     }
+
+    /// <summary>
+    /// The origin moved (#185). The body has moved with it; these are the world positions it keeps
+    /// besides: where to put it back down, and a mantle in progress. Directions turn with the frame.
+    /// </summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        _lastSafe = shift.Point(_lastSafe);
+        _mantleFrom = shift.Point(_mantleFrom);
+        _mantleRise = shift.Point(_mantleRise);
+        _mantleTo = shift.Point(_mantleTo);
+        _mantleForward = shift.Direction(_mantleForward);
+        _camFwd = shift.Direction(_camFwd);
+        Velocity = shift.Direction(Velocity);
+    }
+
+    private void RememberSafe(Vector3 at)
+    {
+        _lastSafe = at;
+        _hasSafe = true;
+        _safeSpace = InteriorKey;
+    }
+
+    /// <summary>
+    /// A safe spot in the space the player is in now: one recorded inside a house is not a place
+    /// to put someone who is outside (it is 3 km under the street), nor the reverse.
+    /// </summary>
+    private bool HasSafeHere => _hasSafe && _safeSpace == InteriorKey;
 
     /// <summary>Regeneration, the safe spot to wake up at, and the respawn countdown.</summary>
     private void TickHealth(float dt, bool onFloor)
@@ -1905,8 +2178,7 @@ public partial class FootPlayer : CharacterBody3D
             && Velocity.LengthSquared() < 40f)
         {
             _safeTimer = 0;
-            _lastSafe = GlobalPosition;
-            _hasSafe = true;
+            RememberSafe(GlobalPosition);
         }
 
         if (_deadTimer > 0)
@@ -1952,7 +2224,12 @@ public partial class FootPlayer : CharacterBody3D
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
+        // a truck or bus from the picker comes with the load chosen there
+        if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
         RideKindId = (int)kind;
+        // the radio belongs to the vehicle: getting out leaves it tuned in the parked one
+        CarRadio = 0;
+        CarCd = "";
         // the parts and the doors belong to one car: changing car (the picker), getting out or a
         // wreck leaves them with that car
         TuningBits = _ride is Car car ? car.Tuning.Pack() : 0;
@@ -1960,6 +2237,8 @@ public partial class FootPlayer : CharacterBody3D
         DoorsOpen = 0;
         _shutDriverIn = 0f;
         ShowroomYaw = null;
+        TrailerCode = _ride is Truck fresh ? fresh.TrailerCode : 0;
+        _truckPitch = 0f;
         // The pose travels with the kind, and each kind reads Anim its own way: left as it was, the
         // next update would hand a bike its rider's stride phase as a crank angle (seen: 0.93 rad).
         Anim = default;
@@ -1985,7 +2264,7 @@ public partial class FootPlayer : CharacterBody3D
         // a craft skimming the ground must not be snapped onto it
         // a car stays on its wheels over a crest the way a suspension keeps it there; 0.5 m let every
         // Jura hump launch it for a second at 100 km/h, and a car in the air cannot steer
-        FloorSnapLength = _ride switch { Flyer => 0.05f, Car or Motorbike => 1.2f, _ => 0.5f };
+        FloorSnapLength = _ride switch { Flyer => 0.05f, Car or Motorbike or Truck => 1.2f, _ => 0.5f };
 
         // the body is the machine's size while in it — a helicopter is not a 0.3 m person
         if (_capsule != null && !_sliding)
@@ -2021,7 +2300,15 @@ public partial class FootPlayer : CharacterBody3D
             return;
         }
 
-        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is { HasEngine: true })
+        // a passenger, or sat in one's own driverless vehicle: the driver's seat, if it is free (#158)
+        if (@event.IsActionPressed(PlayerInput.TakeWheel) && !@event.IsEcho() && (RidingWith != 0 || SeatIndex > 0))
+        {
+            PassengerService.Instance?.AskWheel();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is { HasEngine: true } && SeatIndex == 0)
         {
             EngineOn = !EngineOn;
             EngineToggled?.Invoke(EngineOn);
@@ -2032,6 +2319,22 @@ public partial class FootPlayer : CharacterBody3D
         // not consumed when there is no door: G held is also gathering
         if (@event.IsActionPressed(PlayerInput.CarDoor) && !@event.IsEcho() && TryToggleCarDoor())
         {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_ride is Truck truck && HandleTruckInput(@event, truck))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if ((@event.IsActionPressed(PlayerInput.RadioNext) || @event.IsActionPressed(PlayerInput.RadioPrev)) && !@event.IsEcho()
+            && _ride != null && SeatIndex == 0 && HasCarRadio((RideKind)RideKindId))
+        {
+            CarCd = "";
+            CarRadio = Audio.Live.Stations.Step(CarRadio, @event.IsActionPressed(PlayerInput.RadioNext) ? 1 : -1);
+            CarRadioTuned?.Invoke(Audio.Live.Stations.Name(CarRadio));
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -2056,7 +2359,8 @@ public partial class FootPlayer : CharacterBody3D
             // and letting the mouse turn it would mean looking over your shoulder steered you
             // into the ditch. The mouse gets its own yaw, which recentres itself.
             float rate = 0.0022f * LookScale;
-            if (_ride != null && !LookSteersRide)
+            _lookIdle = 0f;
+            if (_ride != null && !LookSteersRide || RidingWith != 0)
                 _lookYaw = Mathf.Clamp(_lookYaw - motion.Relative.X * rate, -2.4f, 2.4f);
             else
                 _viewYaw -= motion.Relative.X * rate;
@@ -2073,8 +2377,9 @@ public partial class FootPlayer : CharacterBody3D
     {
         var look = PlayerInput.LookRate * LookScale;
         if (look == Vector2.Zero) return;
+        _lookIdle = 0f;
 
-        if (_ride != null && !LookSteersRide)
+        if (_ride != null && !LookSteersRide || RidingWith != 0)
             _lookYaw = Mathf.Clamp(_lookYaw - look.X * dt, -2.4f, 2.4f);
         else
             _viewYaw -= look.X * dt;
@@ -2088,6 +2393,8 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     private float ClampPitch(float pitch) => _ride is Flyer
         ? Mathf.Clamp(pitch, -1.2f, 1.2f)
+        : InCockpit
+        ? Mathf.Clamp(pitch, -0.9f, 0.7f)
         : _thirdPerson && _ride == null
         ? Mathf.Clamp(pitch, -1.25f, 0.9f)
         : Mathf.Clamp(pitch, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
@@ -2105,8 +2412,14 @@ public partial class FootPlayer : CharacterBody3D
             GlobalPosition = new Vector3(GlobalPosition.X, Mathf.Max(GlobalPosition.Y, g + 1f), GlobalPosition.Z);
             _placed = true;
         }
+        // a passenger is carried by the vehicle it sits in (#158)
+        if (RidingWith != 0) { RideAlong(); return; }
+        // before any path runs, so none of them (mantle, a thrown-out NPC) can skip it
+        if (RescueFromVoid(delta)) return;
 
         float dt = (float)delta;
+        // inside another player (a shared spawn): ease apart rather than be shoved out (#203)
+        SeparateFromPlayers(dt);
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         TickHealth(dt, onFloor);
@@ -2353,7 +2666,6 @@ public partial class FootPlayer : CharacterBody3D
 
         if (_thirdPerson) FaceTravel(dt, direction);
         UpdateCameraFeel(dt, running, onFloor);
-        ClampAboveTerrain(delta);
     }
 
     /// <summary>
@@ -2394,16 +2706,46 @@ public partial class FootPlayer : CharacterBody3D
         };
         if (space.IntersectShape(room, 1).Count > 0) return false;
 
+        // and a clear way there: the pull-up moves the body directly, so nothing else stops it.
+        // Under a low ceiling (a car in a garage, a wall up to a room's ceiling) the rays above
+        // start on its far side and take its top for a ledge: this sweep meets its underside.
+        var rise = new Vector3(feet.X, top.Y + 0.08f, feet.Z);
+        var to = top + forward * 0.3f + Vector3.Up * 0.05f;
+        if (!ClearSweep(space, feet + Vector3.Up * 0.3f, rise, exclude)
+            || !ClearSweep(space, rise, to, exclude))
+            return false;
+
         _mantling = true;
         _mantleT = 0;
         _mantleForward = forward;
         _mantleFrom = feet;
-        _mantleRise = new Vector3(feet.X, top.Y + 0.08f, feet.Z);
-        _mantleTo = top + forward * 0.3f + Vector3.Up * 0.05f;
+        _mantleRise = rise;
+        _mantleTo = to;
         _mantleExitSpeed = Mathf.Max(speed, 2.5f);
         Velocity = Vector3.Zero;
         Mantled?.Invoke();
         return true;
+    }
+
+    /// <summary>
+    /// Whether a standing body (radius shaved 3 cm, clear of the face it is pressed against)
+    /// moves from feet at <paramref name="from"/> to feet at <paramref name="to"/> without
+    /// touching anything. The start is tested on its own: a cast ignores what it starts inside.
+    /// </summary>
+    private bool ClearSweep(PhysicsDirectSpaceState3D space, Vector3 from, Vector3 to,
+        Godot.Collections.Array<Rid> exclude)
+    {
+        _standProbe ??= new CapsuleShape3D { Radius = BodyRadius - 0.03f, Height = StandHeight };
+        var sweep = new PhysicsShapeQueryParameters3D
+        {
+            Shape = _standProbe,
+            Transform = new Transform3D(Basis.Identity, from + Vector3.Up * (StandHeight * 0.5f + 0.03f)),
+            CollisionMask = CollisionMask,
+            Exclude = exclude,
+        };
+        if (space.IntersectShape(sweep, 1).Count > 0) return false;
+        sweep.Motion = to - from;
+        return space.CastMotion(sweep)[0] >= 1f;
     }
 
     /// <summary>
@@ -2442,6 +2784,12 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     private void FaceTravel(float dt, Vector3 moveDirection)
     {
+        // winding up a throw: square up to where the view points, whatever the feet do
+        if (_throwBlend > 0.05f)
+        {
+            Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, _viewYaw, 1f - Mathf.Exp(-18f * dt)), 0);
+            return;
+        }
         var flat = new Vector3(Velocity.X, 0, Velocity.Z);
         Vector3 facing;
         if (!_sliding && moveDirection.LengthSquared() > 0.01f) facing = moveDirection;
@@ -2455,21 +2803,63 @@ public partial class FootPlayer : CharacterBody3D
         Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, target, 1f - Mathf.Exp(-rate * dt)), 0);
     }
 
-    /// <summary>Safety net: never end up under the terrain surface, on foot or mounted.</summary>
-    private void ClampAboveTerrain(double delta)
-    {
-        if (Indoors || Terrain == null || !Terrain.TryGetHeight(GlobalPosition, out float ground)
-            || GlobalPosition.Y >= ground - 2f) return;
+    /// <summary>
+    /// Outdoors with no terrain height known here, below this nothing is ground: the lowest in
+    /// Switzerland is 193 m, and interiors are at <see cref="Interiors.InteriorManager.InteriorBaseY"/>.
+    /// </summary>
+    private const float VoidY = -500f;
+    /// <summary>This far under an interior's ground floor, the player has fallen through it.</summary>
+    private const float InteriorFallDepth = 10f;
 
+    /// <summary>
+    /// Safety net for a player who glitched through the world, on foot, mounted or flying:
+    /// <list type="bullet">
+    /// <item>outdoors, more than 2 m under the terrain: straight up onto it;</item>
+    /// <item>outdoors, far below any ground and no height known here (the tile has not streamed, or
+    /// there is no data): back to the last safe spot outside, or held here until the ground arrives;</item>
+    /// <item>indoors, under the interior's floor: back where they last stood in it.</item>
+    /// </list>
+    /// Every rescue is a teleport (<see cref="RequestReplacement"/>): stopped, no fall charged, and
+    /// put down on the ground by the placement pass. True when it moved the player.
+    /// </summary>
+    private bool RescueFromVoid(double delta)
+    {
         _sinceSnapWarning += delta;
+        Vector3 to;
+        if (Indoors)
+        {
+            if (GlobalPosition.Y > Interiors.InteriorManager.InteriorBaseY - InteriorFallDepth) return false;
+            if (HasSafeHere) to = _lastSafe + Vector3.Up * 0.5f;
+            else
+            {
+                // nowhere known in here: out to the street above, and down onto it
+                Interiors.InteriorManager.Instance?.Leave(this);
+                InteriorKey = null;
+                to = GlobalPosition with { Y = 0f };
+            }
+        }
+        else if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground))
+        {
+            if (GlobalPosition.Y >= ground - 2f) return false;
+            to = GlobalPosition with { Y = ground + 1f };
+        }
+        else
+        {
+            if (GlobalPosition.Y > VoidY) return false;
+            to = HasSafeHere ? _lastSafe + Vector3.Up * 0.5f : GlobalPosition with { Y = 0f };
+        }
+
         if (_sinceSnapWarning > 2)
         {
             _sinceSnapWarning = 0;
-            GD.Print($"[player] {Name} below terrain ({GlobalPosition.Y:F1} < {ground:F1}), snapping up");
+            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}");
         }
-        GlobalPosition = new Vector3(GlobalPosition.X, ground + 1f, GlobalPosition.Z);
-        Velocity = Vector3.Zero;
-        _motion.Speed = 0f;
+        RequestReplacement();
+        _flight.Velocity = Vector3.Zero;
+        GlobalPosition = to;
+        // indoors the placement pass stands down: this is where the player stays
+        if (Indoors) _placed = true;
+        return true;
     }
 
     /// <summary>
@@ -2561,7 +2951,6 @@ public partial class FootPlayer : CharacterBody3D
 
         if (_visual != null) flyer.Pose(_visual, _flight.Yaw, _flight);
         UpdateFlightCamera(dt, flyer);
-        ClampAboveTerrain(dt);
     }
 
     /// <summary>
@@ -2664,6 +3053,18 @@ public partial class FootPlayer : CharacterBody3D
             Handbrake: _ride is { CanHop: false } && (PlayerInput.Held(PlayerInput.Jump) || PlayerInput.WheelHandbrake > 0.5f),
             WheelAngle: _ride is { WheelLock: > 0f } wheeled ? PlayerInput.WheelAngle(wheeled.WheelLock) : float.NaN);
 
+        // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
+        if (_ride is Skis && XR.XrSession.Active && RideControls == null)
+            input = input with
+            {
+                Steer = Mathf.Clamp(input.Steer + XR.XrSession.SkiSteer, -1f, 1f),
+                Throttle = Mathf.Max(input.Throttle, XR.XrSession.SkiPole),
+                Effort = input.Effort || XR.XrSession.SkiTuck,
+            };
+
+        // nobody at the wheel (the driver jumped out, #158): no pedal, the wheel let go
+        if (SeatIndex != 0) input = new RideInput(0f, 0f, 0f, false);
+
         // After a bail the rider is on the ground, not riding: no drive, no steering.
         if (_bailTimer > 0)
         {
@@ -2705,12 +3106,14 @@ public partial class FootPlayer : CharacterBody3D
         // a motorbike's or a car's grip depends on what is under it (cached lookup: road, else cover).
         // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
-        var surface = (_ride is Motorbike || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
+        var surface = (_ride is Motorbike or Truck || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
-        Draft = onFloor && _ride is Car or Motorbike && _motion.Speed > 10f
+        Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
+        if (_ride is Truck driving) PrepareTruck(driving);
         _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
+        if (_ride is Truck driven && AfterTruckStep(driven)) return;
         if (_ride is Car)
         {
             // doors: once seated every door shuts, sooner if the car pulls away before then
@@ -2721,7 +3124,7 @@ public partial class FootPlayer : CharacterBody3D
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
         // Game profile only; in Sim the watts are the rider's, and nothing else may add to them.
-        Boosting = Rideable.Arcade && _bailTimer <= 0 && BoostMeter > 0.01f
+        Boosting = Rideable.Arcade && _ride is not Truck && _bailTimer <= 0 && BoostMeter > 0.01f
             && !Npc && PlayerInput.Held(PlayerInput.Boost);
         if (Boosting)
         {
@@ -2751,7 +3154,14 @@ public partial class FootPlayer : CharacterBody3D
         LastRideInput = input;
 
         Velocity = velocity;
+        // a garage's or a barn's open doorway: let through the shell, then carried across the sill
+        var interiors = Interiors.InteriorManager.Instance;
+        var from = GlobalPosition;
+        interiors?.BeforeMove(this);
         MoveAndSlide();
+        interiors?.AfterMove(this, from);
+        // the sections behind a truck's cab follow it, and report what they hit
+        if (_ride is Truck train) StepSections(train, dt);
 
         // Hitting something has to cost the speed, or the vehicle grinds along the wall at
         // 50 km/h and shoots off the moment the wall ends.
@@ -2817,7 +3227,6 @@ public partial class FootPlayer : CharacterBody3D
         _rideWasOnFloor = nowOnFloor;
 
         UpdateRideCamera(dt);
-        ClampAboveTerrain(dt);
     }
 
     /// <summary>
@@ -2891,11 +3300,35 @@ public partial class FootPlayer : CharacterBody3D
     private void PoseRideVisual()
     {
         if (_visual == null) return;
-        if (_visual is Avatar.CarRig rig) rig.DoorsOpen = DoorsOpen;
+        if (_visual is Avatar.CarRig rig)
+        {
+            rig.DoorsOpen = DoorsOpen;
+            rig.EngineRunning = EngineOn;
+            var settings = Core.GameSettings.Current;
+            rig.View = !InCockpit ? Avatar.CockpitView.Outside
+                : settings.CockpitBody ? Avatar.CockpitView.Body : Avatar.CockpitView.Bare;
+            rig.MirrorsOn = settings.CockpitMirrors;
+            rig.DriverShown = SeatIndex == 0;
+        }
+        else if (_visual is Avatar.HeavyRig cab)
+        {
+            var settings = Core.GameSettings.Current;
+            cab.DriverShown = SeatIndex == 0;
+            cab.EngineRunning = EngineOn;
+            cab.View = !InCockpit ? Avatar.CockpitView.Outside
+                : settings.CockpitBody ? Avatar.CockpitView.Body : Avatar.CockpitView.Bare;
+            cab.MirrorsOn = settings.CockpitMirrors;
+        }
         // a bail lays the rider over on their side for as long as it lasts
         float roll = _bailTimer > 0 ? 1.35f : _motion.Lean;
-        var basis = new Basis(Vector3.Up, _airSpin) * new Basis(Vector3.Right, _airPitch)
+        var basis = new Basis(Vector3.Up, _airSpin) * new Basis(Vector3.Right, _airPitch + _truckPitch)
             * new Basis(Vector3.Back, roll);
+        // a truck pitches about its wheels on the ground, not about a rider's middle
+        if (_ride is Truck)
+        {
+            _visual.Transform = new Transform3D(basis, Vector3.Zero);
+            return;
+        }
         var pivot = Vector3.Up * (_bailTimer > 0 ? 0.3f : 0.9f);
         _visual.Transform = new Transform3D(basis, pivot - basis * pivot);
     }
@@ -2906,6 +3339,15 @@ public partial class FootPlayer : CharacterBody3D
             PoseRideVisual();
 
         if (_camera == null || _ride == null) return;
+        // sat in it while it rolls on driverless: the view from that seat
+        if (SeatIndex > 0) { UpdateSeatCamera(dt); return; }
+
+        _lookIdle += dt;
+        if (InCockpit && ((_visual as Avatar.CarRig)?.EyeFrame ?? (_visual as Avatar.HeavyRig)?.EyeFrame) is { } eyeFrame)
+        {
+            UpdateCockpitCamera(eyeFrame, dt);
+            return;
+        }
 
         // the free look springs back to centre, so letting go of the mouse puts the road ahead
         _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
@@ -2918,7 +3360,8 @@ public partial class FootPlayer : CharacterBody3D
             // only part of that roll — all of it at 40° of lean is a recipe for seasickness.
             // the visual is rolled by Rotation.Z = Lean, i.e. about +Z
             _camera.Position = new Basis(Vector3.Back, _motion.Lean) * _ride.FirstPersonEye;
-            _camera.Rotation = new Vector3(_pitch, _lookYaw, _motion.Lean * 0.5f);
+            // in VR the eye stays level and the head looks for itself: you lean with your body (#186)
+            _camera.Rotation = XR.XrSession.Active ? Vector3.Zero : new Vector3(_pitch, _lookYaw, _motion.Lean * 0.5f);
             ApplyRideFov(dt);
             return;
         }
@@ -2932,7 +3375,7 @@ public partial class FootPlayer : CharacterBody3D
         float slip = Mathf.Wrap(_motion.Slip, -Mathf.Pi, Mathf.Pi);
         _slipCam = Mathf.Lerp(_slipCam, Mathf.Abs(slip) < 1.4f ? slip * _ride.ChaseFollowsTravel : 0f, 1f - Mathf.Exp(-4f * dt));
         // the garage walks the camera all the way round the car instead
-        float orbit = ShowroomYaw ?? _lookYaw + _turnLag + _slipCam;
+        float orbit = ShowroomYaw ?? _lookYaw + _turnLag + _slipCam + (_ride is Truck { } swing ? swing.ChaseSwing : 0f);
 
         // both are local to the body, which is yaw-only, so the camera stays level
         var eye = new Vector3(0, _ride.EyeHeight, 0);
@@ -2947,15 +3390,36 @@ public partial class FootPlayer : CharacterBody3D
         var to = GlobalPosition + basis * back;
 
         float wanted = 1f;
-        var query = PhysicsRayQueryParameters3D.Create(from, to,
-            CameraMask, new Godot.Collections.Array<Rid> { GetRid() });
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.Count > 0)
+        float span = Mathf.Max(0.01f, (to - from).Length());
+        var space = GetWorld3D().DirectSpaceState;
+        var exclude = new Godot.Collections.Array<Rid> { GetRid() };
+        ExcludeTrain(exclude);   // a truck's own trailer is not in the way
+        // An arm reaching back through an open doorway (a car in a garage, looking out) goes on in
+        // the space on the other side, as the third-person arm does: the lens ends up out there.
+        float through = 2f;
+        var across = Transform3D.Identity;
+        if (Interiors.InteriorManager.Instance?.ArmThroughDoor(this, from, to, out float t, out var map, out var shell) == true)
         {
-            float span = Mathf.Max(0.01f, (to - from).Length());
+            if (shell.IsValid) exclude.Add(shell);
+            var near = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, from.Lerp(to, t), CameraMask, exclude));
+            if (near.Count > 0)
+                wanted = Mathf.Clamp((near["position"].AsVector3() - from).Length() / span * 0.85f, 0.15f, 1f);
+            else
+            {
+                through = t;
+                across = map;
+                var far = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                    map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, CameraMask, exclude));
+                if (far.Count > 0)
+                    wanted = Mathf.Clamp((t * span + (far["position"].AsVector3() - map * from.Lerp(to, t)).Length()) / span * 0.85f, 0.15f, 1f);
+            }
+        }
+        else
+        {
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to, CameraMask, exclude));
             // 0.85 keeps the lens off the rock face it just found
-            wanted = Mathf.Clamp((hit["position"].AsVector3() - from).Length() / span * 0.85f,
-                0.15f, 1f);
+            if (hit.Count > 0)
+                wanted = Mathf.Clamp((hit["position"].AsVector3() - from).Length() / span * 0.85f, 0.15f, 1f);
         }
 
         // ease out, snap in: arriving late at a wall means a frame with the camera inside it
@@ -2970,9 +3434,59 @@ public partial class FootPlayer : CharacterBody3D
         // Rotated by the same orbit angle as its position, so it still looks straight through the
         // rider's axis and they stay centred while the view swings.
         _camera.Rotation = new Vector3(_pitch + _ride.ChasePitch, orbit, _motion.Lean * 0.35f);
+        if (_chaseBlend > through) _camera.GlobalTransform = across * _camera.GlobalTransform;
 
         ApplyRideFov(dt);
     }
+
+    /// <summary>
+    /// The driver's own eye (<see cref="Avatar.CarRig.EyeFrame"/>, <see cref="Avatar.HeavyRig.EyeFrame"/>),
+    /// on the vehicle's body so the dash stays put in the lens when the nose dips, moved by the seat
+    /// settings. The head sways with the accelerations on a soft spring, leans a little into a look
+    /// over the shoulder, and keeps half the body roll off the horizon. The look springs back only
+    /// once the mouse or stick has let go of it, so a glance to the side can be held.
+    /// </summary>
+    private void UpdateCockpitCamera(Transform3D eye, float dt)
+    {
+        if (_camera == null || _ride == null) return;
+        var settings = Core.GameSettings.Current;
+        if (_lookIdle > 0.6f)
+        {
+            float back = 1f - Mathf.Exp(-5f * dt);
+            _lookYaw = Mathf.Lerp(_lookYaw, 0f, back);
+            _pitch = Mathf.Lerp(_pitch, _ride is Truck ? HeavyCockpitPitch : CockpitPitch, back);
+        }
+
+        var sway = Vector3.Zero;
+        var (ax, ay) = _ride switch { Car car => (car.AccelX, car.AccelY), Truck truck => (truck.AccelX, truck.AccelY), _ => (0f, 0f) };
+        if (settings.CockpitHeadMotion)
+            // thrown back by acceleration and forward by braking (+AccelX forward, the head to +Z),
+            // out of a bend (+AccelY left, the head to +X)
+            sway = new Vector3(Mathf.Clamp(ay * 0.006f, -0.06f, 0.06f), 0f, Mathf.Clamp(ax * 0.005f, -0.05f, 0.05f));
+        _headSway = _headSway.Lerp(sway, 1f - Mathf.Exp(-6f * dt));
+        // looking over a shoulder, the head goes a little that way and forward, past the pillar
+        var lean = new Vector3(-Mathf.Sin(_lookYaw) * 0.07f, 0f, -Mathf.Abs(Mathf.Sin(_lookYaw)) * 0.05f);
+        var seat = new Vector3(0f, settings.SeatHeight, -settings.SeatForward);
+
+        var head = new Basis(Vector3.Up, _lookYaw) * new Basis(Vector3.Right, _pitch)
+            * new Basis(Vector3.Back, -_motion.Lean * 0.5f - _headSway.X * 1.5f);
+        // in VR the real head looks and sways; the eye is the seat, fixed to the car (#186)
+        if (XR.XrSession.Active)
+        {
+            head = Basis.Identity;
+            lean = Vector3.Zero;
+        }
+        _camera.Transform = _visual!.Transform * new Transform3D(eye.Basis * head,
+            eye.Origin + seat + (XR.XrSession.Active ? Vector3.Zero : _headSway) + lean);
+
+        float t = Mathf.Clamp(_motion.Speed / _ride.FovSpeed, 0f, 1f);
+        _camera.Fov = Mathf.Lerp(_camera.Fov, settings.CockpitFov + 6f * t * t, 1f - Mathf.Exp(-3f * dt));
+    }
+
+    /// <summary>Resting look from the seat: a touch down, so the bonnet and the dials share the view with the road.</summary>
+    private const float CockpitPitch = -0.1f;
+    /// <summary>A truck or bus: sat high over a flat wheel, the look rests lower, so the wheel and dials are in the view with the road.</summary>
+    private const float HeavyCockpitPitch = -0.24f;
 
     /// <summary>FOV widens with speed — the cheapest, strongest sense of pace there is.</summary>
     private void ApplyRideFov(float dt)
@@ -3136,7 +3650,13 @@ public partial class FootPlayer : CharacterBody3D
 
         // third person places its own camera in _Process; the bob, dip and FOV here still run
         // for it, because the body squash and the FOV kick read them
-        if (!_thirdPerson)
+        if (!_thirdPerson && XR.XrSession.Active)
+        {
+            // no bob, dip, roll or pitch in VR: the eye moves only when the body does (#186)
+            _camera.Position = new Vector3(0, eye, 0);
+            _camera.Rotation = Vector3.Zero;
+        }
+        else if (!_thirdPerson)
         {
             _camera.Position = new Vector3(bobSide, eye + bobUp + _landingDip, 0);
             _camera.Rotation = new Vector3(_pitch + _punch, 0, roll + lean);

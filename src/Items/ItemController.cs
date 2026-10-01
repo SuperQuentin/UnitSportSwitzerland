@@ -30,7 +30,15 @@ public partial class ItemController : Node
     private readonly WorldOrigin _origin;
     private InventoryUi _ui = null!;
     private SmartBinocularsHud _smart = null!;
+    public SmartBinocularsHud SmartHud => _smart;
     private FlagGhost _flagGhost = null!;
+    private ThrowAim _throw = null!;
+
+    /// <summary>The live controller (the local player's), for the E key's pick-up; null when none.</summary>
+    public static ItemController? Instance { get; private set; }
+
+    /// <summary>The throw in progress, for probes and the prompt bar.</summary>
+    public ThrowAim Throw => _throw;
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
     private bool _forceAim;
@@ -45,6 +53,7 @@ public partial class ItemController : Node
     private const float FocalMin = 24f, FocalMax = 200f, ZoomStep = 1.12f;
     private float _focalMm = 35f;
     private bool _aimingPhoto;
+    private bool _aimingScope;   // Aim held on a scoped item (optic / camera / gun): the wheel belongs to it
 
     // the Polaroid: the print coming out and developing (DevelopSeconds), then the Photo item
     public const float DevelopSeconds = 3f;
@@ -66,6 +75,9 @@ public partial class ItemController : Node
     public Inventory Inventory => _inventory;
     public InventoryUi Ui => _ui;
     public PhotoUi PhotoUi => _photoUi;
+
+    /// <summary>Holds Use down as if pressed, for the throw's wind-up (<c>--dropcheck</c>).</summary>
+    public bool ForceUse { get; set; }
 
     /// <summary>Holds Aim down as if pressed ("--aim", and the photo probes).</summary>
     public bool ForceAim { get => _forceAim; set => _forceAim = value; }
@@ -97,6 +109,10 @@ public partial class ItemController : Node
         AddChild(_smart);
         _flagGhost = new FlagGhost { Name = "FlagGhost" };
         AddChild(_flagGhost);
+        _throw = new ThrowAim { Name = "ThrowAim" };
+        AddChild(_throw);
+        Instance = this;
+        DroppedItems.Refused += OnDropRefused;
 
         _inventory.Changed += () => _ui.Refresh();
 
@@ -123,18 +139,30 @@ public partial class ItemController : Node
     private void OnRadioRefused(string text)
     {
         _ui.Toast(text);
-        if (text.Contains("throw", StringComparison.OrdinalIgnoreCase)) _inventory.Add(ItemId.Radio, 1);
+        if (text.Contains("throw", StringComparison.OrdinalIgnoreCase)) Give(new ItemStack(ItemId.Radio, 1));
     }
 
-    public override void _ExitTree() => RadioManager.Refused -= OnRadioRefused;
+    private void OnDropRefused(string text, ItemStack back)
+    {
+        _ui.Toast(text);
+        if (!back.IsEmpty) _inventory.Add(back);
+    }
 
-    /// <summary>The player if items can be used right now: on foot, on screen, not in a menu.</summary>
+    public override void _ExitTree()
+    {
+        RadioManager.Refused -= OnRadioRefused;
+        DroppedItems.Refused -= OnDropRefused;
+        if (Instance == this) Instance = null;
+        Highlight.Point(null);
+    }
+
+    /// <summary>The player if items can be used right now: on foot (not in a passenger seat), on screen, not in a menu.</summary>
     public FootPlayer? UsablePlayer
     {
         get
         {
             var p = CurrentPlayer();
-            return p is { IsViewing: true } && p.Ride == RideKind.OnFoot ? p : null;
+            return p is { IsViewing: true, RidingAlong: false } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 
@@ -155,6 +183,8 @@ public partial class ItemController : Node
         if (player == null)
         {
             ShowGhost(null);
+            Highlight.Point(null);
+            _throw.Step(null, false, false, (float)delta);
             return;
         }
 
@@ -168,6 +198,8 @@ public partial class ItemController : Node
         _wasKnockedOut = player.KnockedOut;
 
         player.HeldItemId = (int)_inventory.HeldId;
+        // a radio plays in the hand too: everyone near hears what the stack's data says (#168)
+        player.HeldRadio = _inventory.HeldId == ItemId.Radio ? _inventory.Held.Data ?? "" : "";
         var visual = player.GetNodeOrNull<HeldItemVisual>("HeldItem");
         if (visual != null) visual.HeldData = _inventory.Held.Data;
 
@@ -180,14 +212,14 @@ public partial class ItemController : Node
 
         var def = ItemDefs.Get(_inventory.HeldId);
         bool usable = UsablePlayer != null;
-        bool picking = _smart.PickerOpen && _inventory.HeldId == ItemId.SmartBinoculars;   // stays raised while a target is picked
-        bool aiming = usable && (!UiFocus.TextEntryActive || picking)
-                      && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim || picking)
+        bool aiming = usable && !UiFocus.TextEntryActive
+                      && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim)
                       && def?.Use is ItemUse.Optic or ItemUse.Photo or ItemUse.Shoot;
 
         // everything pushed onto the player is re-asserted every frame, so letting go of Aim,
         // switching item or getting on a bike all fall back to normal without a special case
         _aimingPhoto = aiming && def!.Use == ItemUse.Photo;
+        _aimingScope = aiming;
         _ui.PhotoFocalMm = _focalMm;
         // binoculars breathe: a slow tiny zoom drift, and the overlay drifts with it
         float breath = (float)Time.GetTicksMsec() / 1000f;
@@ -214,16 +246,19 @@ public partial class ItemController : Node
                 _ => ViewPose.Eye,
             });
             if (!aiming && def?.Use == ItemUse.Readout) visual.SetPose(ViewPose.Read);   // the GPS is held up to read
-            visual.ScreenText = def?.Use == ItemUse.Readout && usable ? GpsScreen(player) : null;
-            visual.Suppressed = _capturing || (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
+            visual.ScreenText = _inventory.HeldId == ItemId.Gps && usable ? GpsScreen(player) : null;
+            visual.Suppressed = (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
         }
 
         // the viewfinder / binocular overlay appears once the item has been raised
         _ui.Scope = aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def.Use : null;
+        StepThrow(player, def, usable, aiming, (float)delta);
+
+        // the smart binoculars read out the building at hand while held (#165): no aiming
         _smart.Held = usable && _inventory.HeldId == ItemId.SmartBinoculars;
-        _smart.Active = _smart.Held && _ui.Scope == ItemUse.Optic;
+        _smart.Player = UsablePlayer;
         // in first person the readout is on the device's own screen; the HUD panel is for third person
-        _ui.Readout = usable && def?.Use == ItemUse.Readout && !player.IsFirstPerson ? GpsReadout(player) : null;
+        _ui.Readout = usable && _inventory.HeldId == ItemId.Gps && !player.IsFirstPerson ? GpsReadout(player) : null;
     }
 
     public override void _UnhandledInput(InputEvent e)
@@ -239,6 +274,11 @@ public partial class ItemController : Node
             UseHeld(player);
             GetViewport().SetInputAsHandled();
         }
+        else if (e.IsActionPressed(PlayerInput.DropItem))
+        {
+            DropHeld(player, all: e is InputEventKey { CtrlPressed: true });
+            GetViewport().SetInputAsHandled();
+        }
         else if (_aimingPhoto && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
         {
             // aiming the camera, the wheel / D-pad zoom instead of cycling the hotbar: wheel up = in
@@ -246,6 +286,11 @@ public partial class ItemController : Node
             bool pad = e is InputEventJoypadButton;
             if (pad && next && _focalMm >= FocalMax - 0.5f) _focalMm = FocalMin;   // the pad has one key: wrap
             else _focalMm = Mathf.Clamp(_focalMm * (next == pad ? ZoomStep : 1f / ZoomStep), FocalMin, FocalMax);
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_aimingScope && e is InputEventMouseButton && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
+        {
+            // aiming an optic or gun: the wheel is not a hotbar scroll, but it is still not left to leak elsewhere
             GetViewport().SetInputAsHandled();
         }
         else if (e.IsActionPressed(PlayerInput.NextItem))
@@ -286,6 +331,12 @@ public partial class ItemController : Node
 
     private void UseHeld(FootPlayer player)
     {
+        // aiming a throw: Use winds it up, letting go throws (StepThrow)
+        if (_throw.Active)
+        {
+            _throw.BeginCharge();
+            return;
+        }
         // an empty hand takes back a photo of yours you are looking at
         if (_inventory.Held.IsEmpty)
         {
@@ -293,6 +344,21 @@ public partial class ItemController : Node
             return;
         }
         UseSlot(player, _inventory.Selected);
+    }
+
+    /// <summary>
+    /// Puts something new in the inventory (a developed photo, a flag picked up, a spawned item):
+    /// what does not fit is dropped on the ground in front of the player rather than lost. Returns
+    /// how many could go nowhere at all (no player, nowhere to drop).
+    /// </summary>
+    public int Give(ItemStack stack)
+    {
+        int left = _inventory.Add(stack);
+        if (left <= 0) return 0;
+        var rest = stack with { Count = left };
+        if (!DropStack(null, rest)) return left;
+        _ui.Toast($"No room in your pack: {ItemDefs.Get(stack.Id)?.Name ?? "it"} dropped at your feet.");
+        return 0;
     }
 
     /// <summary>Uses whatever is in <paramref name="slot"/>; the inventory panel calls this for "Use" on any slot.</summary>
@@ -324,16 +390,14 @@ public partial class ItemController : Node
                 break;
 
             case ItemUse.Photo:
-                if (!_capturing) TakePhoto(player);
+                // the picture is what the viewfinder frames: the camera shoots from the eye only
+                if (_ui.Scope != ItemUse.Photo)
+                    _ui.Toast(InputHints.Format("Hold Aim ({aim_item}) to look through the viewfinder, then {use_item} takes the picture."));
+                else if (!_capturing) TakePhoto(player);
                 break;
 
             case ItemUse.Place:
                 PlaceOrPickUpFlag(player, slot);
-                break;
-
-            case ItemUse.Optic when stack.Id == ItemId.SmartBinoculars:
-                if (_smart.Active) _smart.OpenPicker();
-                else _ui.Toast(InputHints.Format("Hold Aim ({aim_item}), then {use_item} picks the target item."));
                 break;
 
             case ItemUse.Optic:
@@ -377,25 +441,26 @@ public partial class ItemController : Node
 
             case ItemUse.Throw:
             {
-                if (RadioManager.Instance is not { } radios)
+                // Use alone opens the radio's panel in the hand; Aim + Use throws it (#168)
+                if (!PlayerInput.Held(PlayerInput.AimItem) && !_forceAim && slot == _inventory.Selected)
                 {
-                    _ui.Toast("Nowhere to throw it.");
+                    RadioUi.Instance?.OpenHeld(slot);
                     break;
                 }
-                // from the eye, along the view: the body, not the chase camera, is the origin in third person
-                var forward = -player.Camera.GlobalTransform.Basis.Z;
-                var origin = player.GlobalPosition + Vector3.Up * 1.5f + forward * 0.6f;
-                float yaw = Mathf.Atan2(-forward.X, -forward.Z);
-                var velocity = forward * 8f + Vector3.Up * 3f + player.Velocity;
-                _inventory.TakeOne(slot);
-                radios.Throw(new RadioState("", 0, origin, yaw, velocity));
-                Kick(player);
-                Play(SfxSynth.Whoosh, 0.8f);
+                // Aim + Use from the pack panel (no wind-up there): a medium throw
+                ThrowSlot(player, slot, 0.45f);
                 break;
             }
 
             case ItemUse.Material:
                 _ui.Toast($"{def.Name}: keep it for trading or building.");
+                break;
+
+            case ItemUse.Bag:
+                // worn: off into the pack; carried: on, swapping with the one worn
+                if (slot == Inventory.BagSlot) _inventory.QuickMove(slot);
+                else if (_inventory.WearBag(slot)) _ui.Toast($"You put on the {def.Name.ToLowerInvariant()}: {_inventory.PackSize} pack slots.");
+                Play(SfxSynth.Tick, 1.1f);
                 break;
 
             case ItemUse.Print:
@@ -430,6 +495,185 @@ public partial class ItemController : Node
 
     private ulong _nextShotMs;
 
+    // ------------------------------------------------------------------------------------
+    // throwing, dropping, picking up (#206)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The throw, every frame: Aim held with a throwable item brings out <see cref="ThrowAim"/>, which
+    /// in turn pushes the shoulder camera, the FOV, the shake and the wind-up arm pose onto the player
+    /// (re-asserted each frame, like everything else here). Also moves the pointing border.
+    /// </summary>
+    private void StepThrow(FootPlayer player, ItemDef? def, bool usable, bool aiming, float dt)
+    {
+        bool throwing = usable && !aiming && !UiFocus.TextEntryActive && !_ui.IsOpen && !_useBusy && !_planting
+                        && ItemDefs.Throwable(def) && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+        if (_throw.Step(player, throwing, PlayerInput.Held(PlayerInput.UseItem) || ForceUse, dt))
+            ThrowSlot(player, _inventory.Selected, _throw.ReleasePower);
+
+        player.ThrowAim = _throw.Active ? 1f : 0f;
+        player.CameraShake = _throw.Shake;
+        if (!aiming && _throw.Fov is { } fov) player.FovOverride = fov;
+        if (_throw.Active)
+        {
+            player.LookScale = 0.75f;
+            player.ItemAction = 3;
+        }
+        else if (_throw.SinceRelease < 0.4f) player.ItemAction = 4;
+
+        Highlight.Point(usable && !_throw.Active && !_ui.IsOpen ? Highlight.Find(player) : null);
+    }
+
+    /// <summary>Throws one from <paramref name="slot"/> out of the hand along the view, at <paramref name="power"/> 0..1.</summary>
+    private void ThrowSlot(FootPlayer player, int slot, float power)
+    {
+        if (_inventory[slot].IsEmpty) return;
+        if (!Release(player, slot, 1, ThrowAim.Origin(player), ThrowAim.Launch(player, power), power)) return;
+        Kick(player);
+        player.Punch(Mathf.DegToRad(1.2f + 2.5f * power));
+        var bank = SfxSynth.WhooshBank;
+        Play(bank.Variants[SfxRng.Next(bank.Variants.Length)], Mathf.Lerp(0.75f, 1.35f, power));
+    }
+
+    /// <summary>Drops one of the item in hand at the player's feet (<paramref name="all"/>: the whole stack).</summary>
+    private void DropHeld(FootPlayer player, bool all)
+    {
+        if (_throw.Charging || _useBusy || _planting) return;
+        DropSlot(player, _inventory.Selected, all);
+    }
+
+    /// <summary>Drops from any slot, a little ahead of the player: the hand's Q, and the pack panel's Drop.</summary>
+    public void DropSlot(FootPlayer? player, int slot, bool all)
+    {
+        player ??= UsablePlayer;
+        var stack = _inventory[slot];
+        if (player == null || stack.IsEmpty || !CanRelease(stack)) return;
+        DropStack(player, _inventory.TakeFrom(slot, all ? stack.Count : 1));
+    }
+
+    /// <summary>
+    /// Drops a stack that is in no slot (the cursor's, a print with no room in the pack) a little
+    /// ahead of <paramref name="player"/> (null: the local one), the same toss as Q. Keeps
+    /// <see cref="ItemStack.Data"/>. False when there is nobody or nowhere to put it: the caller
+    /// still holds the stack then.
+    /// </summary>
+    public bool DropStack(FootPlayer? player, ItemStack stack)
+    {
+        player ??= CurrentPlayer();
+        if (player == null || stack.IsEmpty || !CanRelease(stack)) return false;
+        var view = player.Camera.GlobalTransform.Basis;
+        var ahead = new Vector3(-view.Z.X, 0, -view.Z.Z).Normalized();
+        var origin = player.GlobalPosition + Vector3.Up * 1.15f + ahead * 0.45f;
+        var velocity = ahead * 1.8f + Vector3.Up * 1.4f + player.Velocity;
+        Launch(player, stack, origin, velocity, 0.1f);
+        Kick(player);
+        Play(SfxSynth.Whoosh, 1.5f);
+        return true;
+    }
+
+    /// <summary>Whether the world can take <paramref name="stack"/> now (its manager exists); toasts when not.</summary>
+    private bool CanRelease(ItemStack stack)
+    {
+        if (stack.Id == ItemId.Radio ? RadioManager.Instance != null : DroppedItems.Instance != null) return true;
+        _ui.Toast("Nowhere to put it.");
+        return false;
+    }
+
+    /// <summary>Takes <paramref name="count"/> out of <paramref name="slot"/> and launches it (<see cref="Launch"/>). False when there is nowhere to put it.</summary>
+    private bool Release(FootPlayer player, int slot, int count, Vector3 origin, Vector3 velocity, float power)
+    {
+        var stack = _inventory[slot];
+        if (stack.IsEmpty || !CanRelease(stack)) return false;
+        Launch(player, _inventory.TakeFrom(slot, count), origin, velocity, power);
+        return true;
+    }
+
+    /// <summary>
+    /// Puts <paramref name="stack"/> in the world at <paramref name="origin"/>, moving at
+    /// <paramref name="velocity"/>: radios as <see cref="RadioBody"/> (each its own body, playing on
+    /// where it lands), anything else as one <see cref="DroppedItem"/> tumbling end over end.
+    /// <see cref="CanRelease"/> first.
+    /// </summary>
+    private void Launch(FootPlayer player, ItemStack stack, Vector3 origin, Vector3 velocity, float power)
+    {
+        var flat = new Vector3(velocity.X, 0, velocity.Z);
+        var ahead = flat.LengthSquared() > 1e-4f ? flat.Normalized() : -player.GlobalTransform.Basis.Z;
+        float yaw = Mathf.Atan2(-ahead.X, -ahead.Z);
+        if (stack.Id == ItemId.Radio)
+        {
+            var play = RadioPlay.Decode(stack.Data);
+            for (int i = 0; i < stack.Count; i++)
+                RadioManager.Instance!.Throw(new RadioState("", 0, origin + Vector3.Up * (0.25f * i), yaw, velocity,
+                    play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
+            return;
+        }
+        var right = ahead.Cross(Vector3.Up);
+        var spin = right * -(3f + 14f * power)
+                   + new Vector3(SfxRng.NextSingle() - 0.5f, SfxRng.NextSingle() - 0.5f, SfxRng.NextSingle() - 0.5f) * 3f;
+        DroppedItems.Instance!.Drop(stack, origin, velocity, new Vector3(0, yaw, 0), spin);
+    }
+
+    /// <summary>
+    /// E on a dropped item: room checked first, then the server asked (one winner). Here it flies
+    /// into the hand at once; it goes in the pack when the server says so.
+    /// </summary>
+    public void PickUp(DroppedItem item)
+    {
+        if (DroppedItems.Instance is not { } dropped || UsablePlayer is not { } player) return;
+        var stack = item.Stack;
+        if (_inventory.Room(stack.Id, stack.Data) < stack.Count)
+        {
+            _ui.Toast("No room in your pack.");
+            Play(SfxSynth.Tick, 0.5f);
+            return;
+        }
+        if (item.Visual is { } visual)
+        {
+            FlyToHand(player, visual);
+            visual.Visible = false;
+        }
+        Highlight.Point(null);
+        Play(SfxSynth.Tick, 1.9f);
+        dropped.PickUp(item, got =>
+        {
+            int left = _inventory.Add(got);
+            if (left > 0)
+            {
+                // filled up in the meantime: what does not fit falls back down
+                dropped.Drop(got with { Count = left }, player.GlobalPosition + Vector3.Up, Vector3.Up, Vector3.Zero, Vector3.Zero);
+                _ui.Toast("Your pack is full: some of it fell back down.");
+            }
+            else _ui.Toast($"+ {(ItemDefs.Get(got.Id)?.Name ?? "item")}{(got.Count > 1 ? $" ×{got.Count}" : "")}");
+            Play(SfxSynth.Chime, 1.8f);
+            Kick(player);
+        });
+    }
+
+    /// <summary>A copy of the picked-up item sucked into the player's hand, spinning and shrinking.</summary>
+    private void FlyToHand(FootPlayer player, MeshInstance3D visual)
+    {
+        var ghost = new MeshInstance3D
+        {
+            Name = "PickedUp", Mesh = visual.Mesh, MaterialOverride = visual.MaterialOverride, TopLevel = true,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        AddChild(ghost);
+        var start = visual.GlobalTransform;
+        var turn = start.Basis.GetRotationQuaternion();
+        ghost.GlobalTransform = start;
+        var tween = ghost.CreateTween();
+        tween.TweenMethod(Callable.From<float>(t =>
+        {
+            if (!IsInstanceValid(player)) return;
+            var hand = player.GlobalPosition + Vector3.Up * 1.15f;
+            float e = t * t;
+            var at = start.Origin.Lerp(hand, e) + Vector3.Up * (Mathf.Sin(t * Mathf.Pi) * 0.35f);
+            var basis = new Basis(turn) * new Basis(Vector3.Up, t * 5f);
+            ghost.GlobalTransform = new Transform3D(basis.Scaled(Vector3.One * Mathf.Lerp(1f, 0.2f, e)), at);
+        }), 0f, 1f, 0.26f);
+        tween.TweenCallback(Callable.From(ghost.QueueFree));
+    }
+
     /// <summary>A shotgun's kick: the viewmodel jolts, the view punches up a few degrees, the action cycles.</summary>
     private static void Recoil(FootPlayer player)
     {
@@ -448,25 +692,18 @@ public partial class ItemController : Node
     }
 
     /// <summary>
-    /// Saves the frame as it is on screen, minus the inventory UI and the item itself, to
-    /// <c>user://photos/</c>. Waits for <see cref="RenderingServer.FramePostDraw"/>: reading the
-    /// viewport from <c>_Process</c> returns whatever the render thread last left there, which is
-    /// the frame <i>before</i> the UI was hidden (the exporter learned this the hard way).
+    /// Takes the picture the viewfinder frames (<see cref="PhotoCapture"/>: rendered from the eye
+    /// at the focal length, no HUD, no held item), saves the full frame to <c>user://photos/</c>
+    /// and prints the Polaroid. Only called with the camera at the eye (see <see cref="UseSlot"/>).
     /// </summary>
     private async void TakePhoto(FootPlayer player)
     {
         _capturing = true;
-        _ui.Visible = false;
-        if (player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v) v.Suppressed = true;
-
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-
         string path = "";
         string? photo = null;
         try
         {
-            var image = GetViewport().GetTexture().GetImage();
+            var image = await PhotoCapture.Render(this, player.Camera, FovFromFocal(_focalMm));
             DirAccess.MakeDirRecursiveAbsolute("user://photos");
             path = $"user://photos/photo_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
             image.SavePng(path);
@@ -482,7 +719,6 @@ public partial class ItemController : Node
             GD.PushWarning($"[items] photo failed: {e.Message}");
         }
 
-        _ui.Visible = true;
         _capturing = false;
         if (!IsInstanceValid(player)) return;
         // the flash others see (and a light pulse here) — after the capture, not in it
@@ -496,8 +732,8 @@ public partial class ItemController : Node
             _ui.Toast("Photo failed.");
             return;
         }
-        // two frames for the camera hidden during the capture to be drawn again, so the print
-        // knows whether it can come out of it
+        // two frames for a camera lowered right after the shot to be drawn again, so the print
+        // comes out of it
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         if (IsInstanceValid(player)) StartDevelop(player, photo);
@@ -540,10 +776,13 @@ public partial class ItemController : Node
         _developing = null;
         _photoUi.EndDevelop();
         if (CurrentPlayer()?.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v) v.HidePrint();
-        if (_inventory.Add(new ItemStack(ItemId.Photo, 1, photo)) > 0)
-            _ui.Toast("Pack full: the photo is only in your album.");
+        if (_inventory.Room(ItemId.Photo, photo) < 1)
+        {
+            if (Give(new ItemStack(ItemId.Photo, 1, photo)) > 0) _ui.Toast("Pack full: the photo is only in your album.");
+        }
         else
         {
+            Give(new ItemStack(ItemId.Photo, 1, photo));
             Play(SfxSynth.Chime, 1.5f);
             _ui.Toast("Photo developed: in your pack.");
         }
@@ -598,7 +837,7 @@ public partial class ItemController : Node
         {
             if (!r.Ok)
             {
-                _inventory.Add(stack with { Count = 1 });   // refused: the print comes back
+                Give(stack with { Count = 1 });   // refused: the print comes back
                 _ui.Toast($"Cannot stick it here: {r.Refused}");
                 return;
             }
@@ -611,11 +850,6 @@ public partial class ItemController : Node
     public void PickUpPhoto(long id)
     {
         if (PlacedObjects.Instance is not { } placed || !placed.All.TryGetValue(id, out var o)) return;
-        if (_inventory.Room(ItemId.Photo, o.Payload) < 1)
-        {
-            _ui.Toast("No room in your pack.");
-            return;
-        }
         placed.RequestRemove(id, r =>
         {
             if (!r.Ok)
@@ -623,8 +857,8 @@ public partial class ItemController : Node
                 _ui.Toast($"Cannot take it: {r.Refused}");
                 return;
             }
-            if (_inventory.Add(new ItemStack(ItemId.Photo, 1, o.Payload)) > 0) _ui.Toast("No room in your pack: the photo is lost.");
-            else _ui.Toast("Photo taken back.");
+            if (_inventory.Room(ItemId.Photo, o.Payload) >= 1) _ui.Toast("Photo taken back.");
+            Give(new ItemStack(ItemId.Photo, 1, o.Payload));
             Play(SfxSynth.Whoosh, 1.6f);
         });
     }
@@ -641,7 +875,7 @@ public partial class ItemController : Node
         {
             _ghost = new MeshInstance3D
             {
-                Name = "PhotoGhost", Mesh = PhotoVisuals.Card, TopLevel = true,
+                Name = "PhotoGhost", TopLevel = true,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             };
             AddChild(_ghost);
@@ -654,6 +888,7 @@ public partial class ItemController : Node
                 Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             };
+        _ghost.Mesh = PhotoVisuals.MeshFor(at.Value);   // a poster on a wall, a Polaroid on the ground
         _ghost.GlobalTransform = at.Value;
         _ghost.Visible = true;
     }
@@ -677,11 +912,6 @@ public partial class ItemController : Node
 
         if (aim.Kind == FlagAimKind.PickUp)
         {
-            if (_inventory.Room(ItemId.SwissFlag) < 1)
-            {
-                _ui.Toast("No room in your pack.");
-                return;
-            }
             await Stroke(player, raise: false, () => placed.RequestRemove(aim.Id, r =>
             {
                 if (!r.Ok)
@@ -689,8 +919,8 @@ public partial class ItemController : Node
                     _ui.Toast($"Cannot pick it up: {r.Refused}");
                     return;
                 }
-                if (_inventory.Add(ItemId.SwissFlag, 1) > 0) _ui.Toast("No room in your pack: the flag is lost.");
-                else _ui.Toast("Flag picked up.");
+                if (_inventory.Room(ItemId.SwissFlag) >= 1) _ui.Toast("Flag picked up.");
+                Give(new ItemStack(ItemId.SwissFlag, 1));
                 Play(SfxSynth.Whoosh, 1.3f);
             }));
             return;
@@ -712,7 +942,7 @@ public partial class ItemController : Node
             {
                 if (!r.Ok)
                 {
-                    _inventory.Add(ItemId.SwissFlag, 1);   // the server said no: the flag comes back
+                    Give(new ItemStack(ItemId.SwissFlag, 1));   // the server said no: the flag comes back
                     _ui.Toast($"Cannot plant it here: {r.Refused}");
                     return;
                 }

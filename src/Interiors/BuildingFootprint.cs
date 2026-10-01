@@ -26,11 +26,8 @@ public readonly record struct BuildingKey(int TileE, int TileN, int Index)
 /// </summary>
 public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outward, float Width, float Height)
 {
-    /// <summary>The building's kind, so door consumers (garage doors) need not keep the tile.</summary>
+    /// <summary>The building's kind, so door consumers need not keep the tile.</summary>
     public BuildingKind Kind { get; init; }
-
-    /// <summary>A garage's drive-in room behind this door (<see cref="GarageBay"/>), null for every other door.</summary>
-    public GarageBay.Bay? Bay { get; init; }
 }
 
 /// <summary>
@@ -101,12 +98,23 @@ public static class BuildingFootprint
 
     /// <summary>
     /// The door's height in a building whose ground floor has <paramref name="clear"/> metres of
-    /// headroom: a barn's as tall as its hall allows, others as <see cref="DoorHeightFor(BuildingKind)"/>.
-    /// A barn's facade door is also kept under the eave, and the interior plan takes the height
-    /// the footprint settled on (<see cref="DoorSpot.Height"/>), so the two openings match.
+    /// headroom: a barn's as tall as its hall allows, a garage's too up to its usual height, others
+    /// as <see cref="DoorHeightFor(BuildingKind)"/>. A barn's facade door is also kept under the
+    /// eave, and the interior plan takes the height the footprint settled on
+    /// (<see cref="DoorSpot.Height"/>), so the two openings match.
     /// </summary>
-    public static float DoorHeightFor(BuildingKind kind, float clear) =>
-        kind == BuildingKind.Agricultural ? clear - 0.15f : DoorHeightFor(kind);
+    public static float DoorHeightFor(BuildingKind kind, float clear) => kind switch
+    {
+        BuildingKind.Agricultural => clear - 0.15f,
+        BuildingKind.Garage => Math.Min(DoorHeightFor(kind), clear - 0.15f),
+        _ => DoorHeightFor(kind),
+    };
+
+    /// <summary>
+    /// Whether a building's front door is driven through: a garage's or a barn's. It opens for a
+    /// vehicle driving up to it, a vehicle crosses its portal, and the room behind keeps a lane clear.
+    /// </summary>
+    public static bool VehicleDoor(BuildingKind kind) => kind is BuildingKind.Garage or BuildingKind.Agricultural;
 
     /// <summary>The front door's leaf, linear: the facade's baked leaf and the interior's swinging one.</summary>
     public static Color DoorLeafColorFor(BuildingKind kind) => (kind switch
@@ -130,13 +138,7 @@ public static class BuildingFootprint
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
         var doors = new DoorSpot[tile.Buildings.Count];
         for (int i = 0; i < doors.Length; i++)
-        {
-            var d = (Compute(tile, i, roadIndex, grid)?.Door ?? default) with { Kind = tile.Buildings[i].Kind };
-            // a bay needs the sill on the real ground: only with the full-resolution grid
-            if (grid != null && d.Kind == BuildingKind.Garage && GarageBay.Plan(tile, i, d) is (var fitted, { } bay))
-                d = fitted with { Bay = bay };
-            doors[i] = d;
-        }
+            doors[i] = (Compute(tile, i, roadIndex, grid)?.Door ?? default) with { Kind = tile.Buildings[i].Kind };
         return doors;
     }
 

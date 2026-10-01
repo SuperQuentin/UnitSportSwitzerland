@@ -10,7 +10,7 @@ namespace UnitSport.Gpx;
 /// clock, so they all start together and you can see who is ahead at any moment — which
 /// is the point of ghost racing.
 /// </summary>
-public partial class Runner : Node3D
+public partial class Runner : Node3D, Core.IOriginShiftAware
 {
     public GpxTrack Track { get; private set; } = null!;
 
@@ -34,6 +34,8 @@ public partial class Runner : Node3D
     private MeshInstance3D? _body;
     private UnitSport.Avatar.Cyclist? _cyclist;
     private UnitSport.Avatar.CarRig? _car;
+    /// <summary>The replayed car's steering ratio: its wheel turns with the front wheels.</summary>
+    private float _steerRatio = 15f;
     private UnitSport.Avatar.HumanMeshBuilder.GaitMounts _carMounts;
 
     /// <summary>
@@ -83,6 +85,9 @@ public partial class Runner : Node3D
     private UnitSport.Avatar.HumanPalette _palette = null!;
     private float _stridePhase;
     private Vector3 _smoothPos;
+
+    /// <summary>The origin moved (#185): the smoothed position it eases toward the track follows.</summary>
+    public void OnOriginShifted(Core.OriginShift shift) => _smoothPos = shift.Point(_smoothPos);
     private bool _placed;
 
     /// <summary>
@@ -178,7 +183,10 @@ public partial class Runner : Node3D
         if (CarCatalog.For(Track.Kind) is { } car)
         {
             // a car recorded by the drive check: the same rig the player drives
-            _car = UnitSport.Avatar.CarRig.Create(car.Body, car.Wheelbase);
+            // with someone at the wheel in the runner's colour: the glass shows the seat
+            _car = UnitSport.Avatar.CarRig.Create(car.Body, car.Wheelbase, car.Gauges,
+                UnitSport.Avatar.HumanPalette.Default with { Jersey = Tint });
+            _steerRatio = car.SteerRatio;
             _carMounts = CarMounts(car);
             Avatar.AddChild(_car);
         }
@@ -303,6 +311,7 @@ public partial class Runner : Node3D
             float travelYaw = Mathf.Atan2(-Heading.X, -Heading.Z);
             // counter-steer: the fronts point down the direction of travel, as far as the lock allows
             _car.SteerAngle = Mathf.Clamp(Mathf.Wrap(travelYaw - yaw, -Mathf.Pi, Mathf.Pi), -0.6f, 0.6f);
+            _car.WheelTurn = _car.SteerAngle * _steerRatio;
         }
         Avatar.GlobalTransform = new Transform3D(basis, pos);
 

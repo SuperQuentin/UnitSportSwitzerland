@@ -648,15 +648,15 @@ public sealed partial class ProceduralWorld
     // ---- the site: everything a height query needs ---------------------------------------------
 
     /// <summary>
-    /// What a height query on a tile reads: the tile's noise lattice (or none, to evaluate on the
+    /// What a height query on a tile reads: the tile's field lattices (or none, to evaluate on the
     /// spot, which gives the same bits) and its blend (or none). Every query about ground, from the
     /// grid to a tree, a road vertex or a farm's footing, goes through <see cref="Ground"/>.
     /// </summary>
-    private readonly record struct Site(Lattice? Noise, Blend? Blend);
+    private readonly record struct Site(Lattice? Lattice, Blend? Blend);
 
-    private double Ground(in Site site, double e, double n)
+    private static double Ground(in Site site, double e, double n)
     {
-        double h = Height(site.Noise, e, n);
+        double h = Height(site.Lattice, e, n);
         return site.Blend is { } b ? h + b.Correction(e, n, h) : h;
     }
 }

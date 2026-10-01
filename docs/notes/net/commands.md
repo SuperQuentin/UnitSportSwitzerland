@@ -8,3 +8,7 @@
   UDP rule and TCP-only tunnels (ngrok free, Cloudflare Tunnel) cannot carry it.
   `--stream-bandwidth <MB/s>` caps terrain streaming per client; the 3 MB/s default is
   24 Mbit/s each and is a LAN figure.
+- Status query (LAN lists, players, ping; `net/server-query`): `--server-name <n>` (default: the
+  machine name), `--query-port N` (default port + 1), `--query-bind <ip>`, `--no-query`.
+  `--parent-pid <pid>`: quit when that process is gone (servers hosted from the menu, `net/hosting`).
+- Deploying the server to a Linux host (tmux console, cron, firewall, mDNS): `general/linux-deploy`.

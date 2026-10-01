@@ -51,6 +51,8 @@ public partial class ItemEvents : Node
 
     /// <summary>Raised on every peer that runs an event (owner included), after its handler. For probes and logs.</summary>
     public static event Action<ItemEvent>? Received;
+    /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
+    internal static void ResetEvents() => Received = null;
 
     private static readonly Dictionary<ItemEventKind, Action<ItemEvents, ItemEvent>> Handlers = new()
     {

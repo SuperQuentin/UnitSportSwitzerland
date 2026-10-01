@@ -68,10 +68,18 @@ public sealed record CarSpec
     /// sets the steering ratio. 2.5 (900°) when not given.
     /// </summary>
     public float LockTurns { get; init; } = 2.5f;
+    /// <summary>
+    /// Steering-wheel turn over road-wheel angle, from <see cref="LockTurns"/>: half the lock-to-lock
+    /// over the lock. What the cockpit's wheel turns and what a real steering wheel steers through.
+    /// </summary>
+    public float SteerRatio => LockTurns * Mathf.Pi / MaxSteer;
     /// <summary>Drag area Cd·A, m².</summary>
     public float DragArea { get; init; } = 0.65f;
 
     public float Wheelbase => FrontAxle + RearAxle;
+
+    /// <summary>The dials' full scales: round numbers above the published top speed and the redline.</summary>
+    public CarGauges Gauges => CarGauges.For(RefTopKmh > 0 ? RefTopKmh : 220f, Redline > 0 ? Redline : 7000f);
 
     // ---- the real car, as published ----
     /// <summary>Engine torque curve at the crank, (rpm, N·m) ascending. Empty: a generic curve peaking at <see cref="PeakKw"/>.</summary>
@@ -192,14 +200,13 @@ public sealed class Car : Rideable, IEngined
     public override bool CanHop => false;
     public override float MaxHealth => 160f;
     public override float WheelLock => Spec.LockTurns * Mathf.Tau;
-    /// <summary>Steering-wheel radians per radian of road wheel.</summary>
-    public float SteeringRatio => WheelLock * 0.5f / Spec.MaxSteer;
-    /// <summary>The steering wheel's angle, radians, + left like <see cref="SteerAngle"/>: what a cockpit wheel shows.</summary>
-    public float SteeringWheelAngle => SteerAngle * SteeringRatio;
 
-    // the driver's seat, in the visual's frame (faces −Z, so +X is the driver's right):
-    // these are Japanese-market cars, right-hand drive
-    public override Vector3 FirstPersonEye => new(0.36f, 1.08f + Spec.Body.Lift, 0.15f);
+    // the driver's own eye, in the visual's frame (faces −Z, so +X is the driver's right): the
+    // seat is derived from the body (CarCabin), right-hand drive — these are Japanese-market cars
+    public override Vector3 FirstPersonEye => _eye ??=
+        HumanMeshBuilder.MountsForDriver(CarMeshBuilder.SeatFor(Spec.Body, Spec.Wheelbase)).Eye
+        + new Vector3(0, Spec.Body.Lift - Spec.Body.Drop, 0);
+    private Vector3? _eye;
     public override float EyeHeight => 1.1f;
     // Up and behind, looking down ~25° over the roof: from a level camera at roof height the car
     // itself hid the road you were about to drive onto.
@@ -269,6 +276,9 @@ public sealed class Car : Rideable, IEngined
     /// <summary>Accumulated wheel rotation, radians, for the rig.</summary>
     public float WheelSpin { get; private set; }
     public bool Braking { get; private set; }
+    /// <summary>The brake pedal, 0..1 (in reverse, the gas pedal against the motion), and the handbrake lever: for the cockpit.</summary>
+    public float BrakePedal { get; private set; }
+    public bool HandbrakeOn { get; private set; }
     /// <summary>Headlights on (pop-ups raised), as the driver set them: L / D-pad right.</summary>
     public bool Headlights { get; set; }
     /// <summary>Soft top down, as the driver set it: O / D-pad left. Only ever true on a car that has one.</summary>
@@ -315,7 +325,21 @@ public sealed class Car : Rideable, IEngined
     /// </summary>
     public Car Clone() => (Car)MemberwiseClone();
 
-    public override Node3D BuildVisual(int riderIndex) => CarRig.Create(Spec.Body, Spec.Wheelbase);
+    public override Node3D BuildVisual(int riderIndex) =>
+        CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges, HumanPalette.ForRider(riderIndex));
+
+    public override Avatar.SeatAnchor[] Seats => SeatsOf((Kind, Spec.SetupId), () =>
+    {
+        var rig = CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges);
+        var seats = rig.Seats;
+        rig.Free();
+        return seats;
+    });
+
+    public override bool Driverless => true;
+
+    /// <summary>Left in the world: the same car with nobody at the wheel.</summary>
+    public override Node3D BuildParkedVisual(int riderIndex) => CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges);
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
@@ -349,6 +373,8 @@ public sealed class Car : Rideable, IEngined
         if (reverse && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
         Throttle = pedal;
         Braking = brake > 0.05f;
+        BrakePedal = brake;
+        HandbrakeOn = input.Handbrake;
 
         float slipNow = Mathf.Wrap(motion.Slip, -Mathf.Pi, Mathf.Pi);
         float delta;
@@ -357,7 +383,7 @@ public sealed class Car : Rideable, IEngined
             // A steering wheel: the rack follows the driver's hands through the steering ratio, to
             // the lock stop. None of the helpers below: the easing, the speed-scaled lock and the
             // counter-steer assist all stand in for hands a wheel already has.
-            delta = Mathf.Clamp(-input.WheelAngle / SteeringRatio, -s.MaxSteer, s.MaxSteer);
+            delta = Mathf.Clamp(-input.WheelAngle / s.SteerRatio, -s.MaxSteer, s.MaxSteer);
             _steer = -delta / s.MaxSteer;
         }
         else
@@ -549,16 +575,20 @@ public sealed class Car : Rideable, IEngined
 
     /// <summary>
     /// What another player needs to draw this car's moving parts: the body's slide already travels
-    /// in the replicated transform, so these are the front-wheel angle, the wheels' spin RATE (each
-    /// peer turns its own wheels by it — an accumulated angle would wrap and stutter), rpm for the
-    /// rev needle and engine note, and the lamps and roof as bit flags in W (<see cref="PoseBrake"/>…):
-    /// small integers are exact in a float, and <c>Anim</c> is taken as-is, never blended.
+    /// in the replicated transform, so these are the front-wheel angle (which also turns the
+    /// driver's wheel and hands), the wheels' spin RATE (each peer turns its own wheels by it — an
+    /// accumulated angle would wrap and stutter), rpm for the rev needle and engine note, and in W
+    /// the lamps and roof as bit flags (<see cref="PoseBrake"/>…) and the throttle in eighths for
+    /// the driver's right foot: small integers are exact in a float, and <c>Anim</c> is taken
+    /// as-is, never blended.
     /// </summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
         new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01,
-            (Braking ? PoseBrake : 0) | (Headlights ? PoseHeadlights : 0) | (RoofOpen ? PoseRoof : 0));
+            (Braking ? PoseBrake : 0) | (Headlights ? PoseHeadlights : 0) | (RoofOpen ? PoseRoof : 0)
+            | Mathf.RoundToInt(Mathf.Clamp(Throttle, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift);
 
     private const int PoseBrake = 1, PoseHeadlights = 2, PoseRoof = 4;
+    private const int PoseThrottleShift = 3, PoseThrottleSteps = 7;
 
     private float _remoteSpin;
 
@@ -573,6 +603,11 @@ public sealed class Car : Rideable, IEngined
         rig.Headlights = (flags & PoseHeadlights) != 0;
         rig.RoofOpen = (flags & PoseRoof) != 0;
         Rpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
+        rig.WheelTurn = pose.X * Spec.SteerRatio;
+        rig.Throttle = ((flags >> PoseThrottleShift) & PoseThrottleSteps) / (float)PoseThrottleSteps;
+        rig.Brake = rig.BrakeLights ? 1f : 0f;
+        rig.Rpm = Rpm;
+        rig.SpeedKmh = pose.Y * WheelRadius * 3.6f;
     }
 
     public override void Animate(Node3D visual, in RideMotion motion, float dt)
@@ -584,5 +619,12 @@ public sealed class Car : Rideable, IEngined
         rig.BrakeLights = Braking;
         rig.Headlights = Headlights;
         rig.RoofOpen = RoofOpen;
+        rig.WheelTurn = SteerAngle * Spec.SteerRatio;
+        rig.Throttle = Throttle;
+        rig.Brake = BrakePedal;
+        rig.Handbrake = HandbrakeOn;
+        rig.Rpm = Rpm;
+        rig.Gear = Gear;
+        rig.SpeedKmh = motion.Speed * Mathf.Cos(motion.Slip) * 3.6f;
     }
 }

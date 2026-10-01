@@ -24,7 +24,7 @@ namespace UnitSport.Interiors;
 /// interior. Non-zero exit on any failure.
 /// </para>
 /// </summary>
-public partial class InteriorProbe : Node
+public partial class InteriorProbe : Node, Core.IOriginShiftAware
 {
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
@@ -278,7 +278,7 @@ public partial class InteriorProbe : Node
             {
                 var li = interiors.Current!;
                 var ni = interiors.CurrentNode!;
-                _lootIndex = li.Furniture.FindIndex(f => f.Floor == 0 && Loot.LootTables.IsLootable(f.Type));
+                _lootIndex = li.Furniture.FindIndex(f => f.Floor == 0 && Loot.LootTables.IsLootable(f.Type) && !Loot.LootTables.IsLocked(f.Type));
                 if (Online)
                 {
                     GD.Print("[interior] (online: loot not tested here)");
@@ -932,6 +932,19 @@ public partial class InteriorProbe : Node
     private readonly List<DoorIndex.Entry> _queue = new();
     private int _queueAt;
     private (DoorIndex.Entry? A, DoorIndex.Entry? B) _same, _facing;
+
+    /// <summary>The origin moved (#185): the doors this check noted are somewhere else in world space.</summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        DoorIndex.Entry Move(DoorIndex.Entry e) => e with { World = shift.Point(e.World), Outward = shift.Direction(e.Outward) };
+        DoorIndex.Entry? MoveOrNull(DoorIndex.Entry? e) => e is { } d ? Move(d) : null;
+        _door = Move(_door);
+        _churchIn = Move(_churchIn);
+        _churchOut = Move(_churchOut);
+        for (int i = 0; i < _queue.Count; i++) _queue[i] = Move(_queue[i]);
+        _same = (MoveOrNull(_same.A), MoveOrNull(_same.B));
+        _facing = (MoveOrNull(_facing.A), MoveOrNull(_facing.B));
+    }
     private double _crossedAt = -1;
     private double _walkT;
 

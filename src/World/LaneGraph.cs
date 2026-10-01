@@ -25,6 +25,12 @@ public sealed class LaneEdge
 
     public float Length => Cumulative[^1];
 
+    /// <summary>The origin moved (#185): the line is somewhere else in world space, the same shape.</summary>
+    public void Shift(OriginShift shift)
+    {
+        for (int i = 0; i < Points.Length; i++) Points[i] = shift.Point(Points[i]);
+    }
+
     /// <summary>Position and unit tangent at arc length <paramref name="s"/> along the drawing order.</summary>
     public (Vector3 Pos, Vector3 Tangent) Sample(float s)
     {
@@ -56,43 +62,57 @@ public sealed class LaneEdge
 /// seam carries on into the next tile instead of ending there.
 ///
 /// <para>
-/// Immutable once built. The traffic manager rebuilds it as the player moves and simply swaps
-/// the reference; a vehicle keeps the edge it is on and finds its next one by the endpoint key,
-/// which means the same junction in any rebuild.
+/// Immutable once built, except that it follows the origin (<see cref="Shift"/>). The traffic
+/// manager rebuilds it as the player moves and simply swaps the reference; a vehicle keeps the
+/// edge it is on and finds its next one by the endpoint key, which means the same junction in any
+/// rebuild: keys are cells of the LV95 grid, so they do not change when the origin moves (#185).
 /// </para>
 /// </summary>
 public sealed class LaneGraph
 {
     public List<LaneEdge> Edges { get; } = new();
+
+    /// <summary>The origin frame the edges' points are in.</summary>
+    public OriginFrame Frame { get; private set; }
     private readonly Dictionary<long, List<(LaneEdge Edge, bool AtStart)>> _incident = new();
 
     private const float Snap = 0.5f;
 
-    public static long KeyOf(Vector3 p) =>
-        ((long)Mathf.RoundToInt(p.X / Snap) << 32) ^ (uint)Mathf.RoundToInt(p.Z / Snap);
+    private LaneGraph(OriginFrame frame) => Frame = frame;
 
-    public static LaneGraph Build(IEnumerable<RoadTile> tiles, WorldOrigin origin, Func<RoadSegment, bool> keep)
+    /// <summary>The snap cell of an LV95 point, laid out like world X/Z (east, then south).</summary>
+    private static long Key(double e, double n) =>
+        ((long)(int)Math.Round(e / Snap) << 32) ^ (uint)(int)Math.Round(-n / Snap);
+
+    /// <summary>
+    /// Builds in one origin frame, taken once by the caller (a worker must not read a live origin
+    /// that may move under it). Shift the result if the origin has moved since.
+    /// </summary>
+    public static LaneGraph Build(IEnumerable<RoadTile> tiles, OriginFrame origin, Func<RoadSegment, bool> keep)
     {
-        var g = new LaneGraph();
+        var g = new LaneGraph(origin);
         foreach (var tile in tiles)
             foreach (var seg in tile.Segments)
             {
                 if (seg.PointCount < 2 || !keep(seg)) continue;
                 var pts = new Vector3[seg.PointCount];
                 var cum = new float[seg.PointCount];
+                long keyStart = 0, keyEnd = 0;
                 for (int i = 0; i < pts.Length; i++)
                 {
                     double e = tile.Id.MinE + seg.Points[i * 3];
                     double n = tile.Id.MaxN - seg.Points[i * 3 + 2];
                     pts[i] = origin.ToWorld(e, n, seg.Points[i * 3 + 1]);
                     if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
+                    if (i == 0) keyStart = Key(e, n);
+                    if (i == pts.Length - 1) keyEnd = Key(e, n);
                 }
                 if (cum[^1] < 1f) continue;
 
                 var edge = new LaneEdge
                 {
                     Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags,
-                    Width = seg.Width, KeyStart = KeyOf(pts[0]), KeyEnd = KeyOf(pts[^1]),
+                    Width = seg.Width, KeyStart = keyStart, KeyEnd = keyEnd,
                 };
                 g.Edges.Add(edge);
                 g.Link(edge.KeyStart, edge, true);
@@ -108,11 +128,84 @@ public sealed class LaneGraph
         list.Add((edge, atStart));
     }
 
+    /// <summary>How many edge ends meet at a point: 2 is a road carrying on (a tile seam, a split line), 3 or more a junction.</summary>
+    public int Degree(long key) => Incident(key).Count();
+
+    /// <summary>
+    /// Joins road ends that stop short of each other with a straight connector edge: the road
+    /// generator trims every road back from its junction polygon, so the roads meeting at a junction
+    /// no longer share an endpoint (<see cref="UnitSport.Player.RaceRoute"/> looks 18 m around for the
+    /// same reason). Without it every such junction was a dead end to the traffic: cars turned round on
+    /// the spot in the middle of the junction, in front of the racers (#85). Only ends nothing else
+    /// meets, only within <paramref name="reach"/> m, and only where both roads point at the gap (no
+    /// connector turns a car back the way it came).
+    /// </summary>
+    public void JoinTrimmedEnds(float reach = 18f)
+    {
+        var ends = new List<(LaneEdge Edge, bool AtStart, Vector3 At, Vector3 Out)>();
+        foreach (var e in Edges)
+        {
+            if (Degree(e.KeyStart) == 1) ends.Add((e, true, e.Points[0], -e.Sample(0f).Tangent));
+            if (Degree(e.KeyEnd) == 1) ends.Add((e, false, e.Points[^1], e.Sample(e.Length).Tangent));
+        }
+        for (int i = 0; i < ends.Count; i++)
+            for (int j = i + 1; j < ends.Count; j++)
+            {
+                var (a, b) = (ends[i], ends[j]);
+                if (a.Edge == b.Edge) continue;
+                var gap = b.At - a.At;
+                float d = new Vector2(gap.X, gap.Z).Length();
+                if (d < 1f || d > reach || Mathf.Abs(gap.Y) > 3f) continue;
+                var dir = new Vector3(gap.X, 0, gap.Z) / d;
+                if (new Vector3(a.Out.X, 0, a.Out.Z).Normalized().Dot(dir) < 0.3f
+                    || new Vector3(b.Out.X, 0, b.Out.Z).Normalized().Dot(-dir) < 0.3f) continue;
+                var link = new LaneEdge
+                {
+                    Points = new[] { a.At, b.At }, Cumulative = new[] { 0f, gap.Length() },
+                    Class = (RoadClass)Mathf.Max((int)a.Edge.Class, (int)b.Edge.Class),
+                    Width = Mathf.Min(a.Edge.Width, b.Edge.Width),
+                    KeyStart = a.AtStart ? a.Edge.KeyStart : a.Edge.KeyEnd,
+                    KeyEnd = b.AtStart ? b.Edge.KeyStart : b.Edge.KeyEnd,
+                };
+                Edges.Add(link);
+                Link(link.KeyStart, link, true);
+                Link(link.KeyEnd, link, false);
+            }
+    }
+
+    /// <summary>
+    /// The origin moved (#185): every edge follows, and the graph is in the frame <paramref name="now"/>.
+    /// <paramref name="done"/> holds edges already moved, since a vehicle may still drive on an edge
+    /// of an older graph, and an edge must move exactly once.
+    /// </summary>
+    public void Shift(OriginShift shift, OriginFrame now, HashSet<LaneEdge> done)
+    {
+        foreach (var e in Edges)
+            if (done.Add(e)) e.Shift(shift);
+        Frame = now;
+    }
+
+    /// <summary>Road ends with nothing joining them: cul-de-sacs, and the edge of what is loaded.</summary>
+    public int DeadEnds => Edges.Sum(e => (Degree(e.KeyStart) == 1 ? 1 : 0) + (Degree(e.KeyEnd) == 1 ? 1 : 0));
+
+    /// <summary>
+    /// The edge ends at a point: its snap cell and the eight around it. Two ends 0.1 m apart can round
+    /// into neighbouring 0.5 m cells, and a road then "ended" there — measured on the Mollendruz pass,
+    /// traffic turned round on the spot in mid-road in front of the racers (#85).
+    /// </summary>
+    private IEnumerable<(LaneEdge Edge, bool AtStart)> Incident(long key)
+    {
+        int x = (int)(key >> 32), z = (int)(uint)key;
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = -1; dz <= 1; dz++)
+                if (_incident.TryGetValue(((long)(x + dx) << 32) ^ (uint)(z + dz), out var list))
+                    foreach (var end in list) yield return end;
+    }
+
     /// <summary>Everything leaving a junction that may be driven away from it.</summary>
     public IEnumerable<(LaneEdge Edge, bool Forward)> Leaving(long key)
     {
-        if (!_incident.TryGetValue(key, out var list)) yield break;
-        foreach (var (edge, atStart) in list)
+        foreach (var (edge, atStart) in Incident(key))
         {
             bool forward = atStart;   // leaving from its start means driving in drawing order
             if (edge.OneWay == 1 && !forward) continue;

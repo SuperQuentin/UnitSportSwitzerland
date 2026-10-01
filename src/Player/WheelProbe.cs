@@ -59,10 +59,12 @@ public partial class WheelProbe : Node
                 float angle = Mathf.DegToRad(30f);
                 var m = new RideMotion { Speed = 25f, Slip = 0.3f, YawRate = 0.4f };
                 car.Step(new RideInput(0.5f, 0f, 0f, false, WheelAngle: angle), new RideGround(true, 0f), Dt, ref m);
-                float want = Mathf.Clamp(-angle / car.SteeringRatio, -spec.MaxSteer, spec.MaxSteer);
+                float want = Mathf.Clamp(-angle / car.Spec.SteerRatio, -spec.MaxSteer, spec.MaxSteer);
                 Expect(Mathf.Abs(car.SteerAngle - want) < 1e-5f,
                     $"{profile} {spec.Label}: 30° of wheel gave {Mathf.RadToDeg(car.SteerAngle):F2}° of road wheel, want {Mathf.RadToDeg(want):F2}°");
-                Expect(Mathf.Abs(car.SteeringWheelAngle + angle) < 1e-4f, $"{profile} {spec.Label}: cockpit wheel angle {car.SteeringWheelAngle:F3}");
+                // the cockpit turns its wheel by SteerAngle·SteerRatio: it must show the real wheel's angle
+                float shown = car.SteerAngle * car.Spec.SteerRatio;
+                Expect(Mathf.Abs(shown + angle) < 1e-4f, $"{profile} {spec.Label}: cockpit wheel shows {shown:F3} rad for {angle:F3}");
 
                 var lockM = new RideMotion { Speed = 5f };
                 car.Step(new RideInput(0f, 0f, 0f, false, WheelAngle: -car.WheelLock * 0.5f), new RideGround(true, 0f), Dt, ref lockM);
@@ -76,8 +78,23 @@ public partial class WheelProbe : Node
             }
         }
         GameSettings.Current.RideProfile = profileWas;
+
+        // trucks and buses steer through the cab's ratio, to their own stop
+        foreach (var heavy in HeavyCatalog.All)
+        {
+            if (Rideable.Create(heavy.Kind) is not Truck truck) { Expect(false, $"{heavy.Label}: no truck"); continue; }
+            float angle = Mathf.DegToRad(200f);
+            var m = new RideMotion { Speed = 15f };
+            truck.Step(new RideInput(0f, 0f, 0f, false, WheelAngle: angle), new RideGround(true, 0f), Dt, ref m);
+            float want = Mathf.Clamp(-angle / Avatar.HeavyCockpit.SteerRatio, -heavy.MaxSteer, heavy.MaxSteer);
+            Expect(Mathf.Abs(truck.SteerAngle - want) < 1e-5f,
+                $"{heavy.Label}: 200° of wheel gave {Mathf.RadToDeg(truck.SteerAngle):F2}°, want {Mathf.RadToDeg(want):F2}°");
+            truck.Step(new RideInput(0f, 0f, 0f, false, WheelAngle: truck.WheelLock * 0.5f), new RideGround(true, 0f), Dt, ref m);
+            Expect(Mathf.Abs(truck.SteerAngle + heavy.MaxSteer) < 1e-5f, $"{heavy.Label}: full right lock gave {truck.SteerAngle:F3}");
+        }
+        GD.Print($"[wheel] {HeavyCatalog.All[0].Label}: {Mathf.RadToDeg(((Truck)Rideable.Create(HeavyCatalog.All[0].Kind)!).WheelLock):F0}° lock to lock");
         var ae86 = new Car(CarCatalog.All[0]);
-        GD.Print($"[wheel] {CarCatalog.All[0].Label}: {CarCatalog.All[0].LockTurns * 360f:F0}° lock to lock, ratio {ae86.SteeringRatio:F1}:1");
+        GD.Print($"[wheel] {CarCatalog.All[0].Label}: {CarCatalog.All[0].LockTurns * 360f:F0}° lock to lock, ratio {ae86.Spec.SteerRatio:F1}:1");
 
         // a 900° wheel in a 1260° car is stretched to reach the lock; a 1080° one in a 900° car is 1:1
         float r900 = Mathf.DegToRad(900f), r1260 = Mathf.DegToRad(1260f), r1080 = Mathf.DegToRad(1080f);
@@ -172,8 +189,10 @@ public partial class WheelProbe : Node
         if (me.Vehicle is not Car car) { Finish(false, "A is not in a car"); return; }
 
         _driven += delta;
-        // the step that just ran used this frame's wheel angle (same frame: _Process read it first)
-        float want = Mathf.Clamp(-SteeringWheel.GameAngle(car.WheelLock) / car.SteeringRatio, -car.Spec.MaxSteer, car.Spec.MaxSteer);
+        // what the last step was given, so a frame hitch is not counted as steering lag
+        float fed = me.LastRideInput.WheelAngle;
+        if (float.IsNaN(fed)) { Finish(false, "the car was not given the wheel's angle"); return; }
+        float want = Mathf.Clamp(-fed / car.Spec.SteerRatio, -car.Spec.MaxSteer, car.Spec.MaxSteer);
         if (_driven > 0.5)
         {
             _worstError = Mathf.Max(_worstError, Mathf.Abs(car.SteerAngle - want));
@@ -187,9 +206,8 @@ public partial class WheelProbe : Node
         }
         if (_driven >= DriveSeconds)
         {
-            // the wheel is read in _Process and the car steps in _PhysicsProcess: one frame of lag at most
-            bool ok = _worstError < Mathf.DegToRad(1.5f) && _max > 0.1f && _min < -0.1f;
-            Finish(ok, $"worst lag {Mathf.RadToDeg(_worstError):F2}°, road wheel {Mathf.RadToDeg(_min):F1}°..{Mathf.RadToDeg(_max):F1}°");
+            bool ok = _worstError < Mathf.DegToRad(0.05f) && _max > 0.1f && _min < -0.1f;
+            Finish(ok, $"worst error {Mathf.RadToDeg(_worstError):F3}°, road wheel {Mathf.RadToDeg(_min):F1}°..{Mathf.RadToDeg(_max):F1}°");
         }
     }
 
