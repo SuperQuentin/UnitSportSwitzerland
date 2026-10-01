@@ -278,7 +278,7 @@ public partial class InteriorProbe : Node
             {
                 var li = interiors.Current!;
                 var ni = interiors.CurrentNode!;
-                _lootIndex = li.Furniture.FindIndex(f => f.Floor == 0 && Loot.LootTables.IsLootable(f.Type));
+                _lootIndex = li.Furniture.FindIndex(f => f.Floor == 0 && Loot.LootTables.IsLootable(f.Type) && !Loot.LootTables.IsLocked(f.Type));
                 if (Online)
                 {
                     GD.Print("[interior] (online: loot not tested here)");

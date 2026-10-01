@@ -3,9 +3,12 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Terrain;
 
 /// <summary>
-/// A generated stand-in for terrain the game has no data for: an alpine valley with a river, a
-/// road and a railway along its floor, villages strung along the road, farms, forest up to a
-/// tree line, rock and snow above it, vineyards on the sunny side.
+/// A generated stand-in for terrain the game has no data for, shaped on the real country: the
+/// macro relief is a 500 m heightmap of Switzerland and its borders (<see cref="Relief"/>), the
+/// rivers follow its real drainage, valley floors are flattened along them, and roads, railways
+/// and villages run up the valleys (<see cref="Network"/>). Rougher ground gets more generated
+/// detail, lakes are flat water, forest grows to a wandering tree line, rock, scree and glacier
+/// above it, vineyards on sunny slopes.
 ///
 /// <para>
 /// A fresh clone has no <c>terrain_chunks/</c> (the generated data is 5.3 GB and not in the
@@ -19,11 +22,9 @@ namespace UnitSport.Terrain;
 /// <para>
 /// Everything is a pure function of LV95 position, so it is thread-safe, needs no state per tile,
 /// and a vertex on a tile edge gets the same height from both tiles that share it — the seams are
-/// bit-identical after quantisation for the same reason the real ones are. Distances along the
-/// valley are measured from <see cref="CenterE"/>/<see cref="CenterN"/>, the anchor: the game puts
-/// it at the default spawn (Riddes) on every peer, so a client and the server generate the same
-/// world. The valley runs east-west through it for ever; far to the north or south the ground is
-/// high massif.
+/// bit-identical after quantisation for the same reason the real ones are. The world does not
+/// depend on the anchor (<see cref="CenterE"/>/<see cref="CenterN"/>, the default spawn on every
+/// peer), which only bounds the villages offered as towns.
 /// </para>
 /// </summary>
 public sealed partial class ProceduralWorld
@@ -40,114 +41,261 @@ public sealed partial class ProceduralWorld
     public double CenterE { get; }
     public double CenterN { get; }
 
+    // noise is evaluated relative to a fixed point, so the numbers stay small and the world is
+    // the same whatever the anchor
+    private const double NoiseE = 2600000, NoiseN = 1200000;
+
     public ProceduralWorld(double centerE, double centerN)
     {
         CenterE = centerE;
         CenterN = centerN;
-        _axis0 = RawAxis(0);
+        // deriving the rivers from the heightmap takes a second or two: start now, on a worker,
+        // so the first tile does not wait for all of it
+        ThreadPool.QueueUserWorkItem(_ => _ = Network.Instance);
     }
 
-    // ---- the valley ------------------------------------------------------------------------
+    // ---- the fields ----------------------------------------------------------------------------
     //
-    // One valley running roughly east-west through the centre. Along it everything is a
-    // function of x (metres east of the centre) alone, so a grid evaluates it once per column.
+    // A height is made of two fields sampled on world-anchored lattices and interpolated:
+    //
+    //  - the coarse field, every 25 m: the macro height plus the relief-scaled detail, the valleys
+    //    pressed into it (as h = P + Q f), the lakes, and what the cover needs from the valleys.
+    //    All of it varies over hundreds of metres, and the valleys' distance tests are the
+    //    expensive part, so they are done 1 700 times a tile instead of 41 000.
+    //  - the fine field, every 5 m: the ground's roughness f (its finest octave is 60 m across)
+    //    and the river channel — how far the nearest one is, its level, width and depth.
+    //
+    // At every 5 m point the two make a height: h = P + Q f, then the lake shore, then the channel
+    // carved in. Between them the height is bilinear, so a full grid costs one interpolation a
+    // vertex; a channel's flat bottom stays flat, being the same height at every point across it.
+    //
+    // Both lattices are anchored to LV95 multiples of their spacing, so their values are a function
+    // of position alone: two tiles interpolate the same numbers at a shared edge, and a point on a
+    // lattice point reads the corner unchanged — every stride-10 sample is on the 5 m lattice and
+    // every horizon sample on both, which keeps the coarse tile equal to the decimated full one.
 
-    private const double RiverOffset = -200;     // river, south of the road
-    private const double RailOffset = -330;      // railway, across the river from the road
-    private const double FloorOffset = -150;     // middle of the flat floor
-    private const double RiverHalf = 11;         // flat bed, water drawn inside it
-    private const double RiverBank = 20;         // bank top
-    private const double WallSpan = 4200;        // floor edge to the top of the valley wall
+    private const int FineM = 5;
+    private const int CoarseM = 25;
+    private const int FineBorder = 2;     // cells beyond the tile, for slopes at its edges
+    private const int CoarseBorder = 4;   // 100 m: farms and trees just past the edge still hit it
+    private const int FineSide = (int)(ChunkFormat.TileSizeM / FineM) + 1 + 2 * FineBorder;
+    private const int CoarseSide = (int)(ChunkFormat.TileSizeM / CoarseM) + 1 + 2 * CoarseBorder;
 
-    private readonly double _axis0;
+    /// <summary>Distance recorded where no channel is near.</summary>
+    private const double NoChannel = 1e4;
 
-    private static double RawAxis(double x) => 1400 * Math.Sin(x / 4300 + 0.4) + 380 * Math.Sin(x / 1650 + 1.9);
-
-    /// <summary>The main road's northing offset at x; 0 at the centre.</summary>
-    private double Axis(double x) => RawAxis(x) - _axis0;
-
-    /// <summary>dAxis/dx, for the road's direction.</summary>
-    private static double AxisSlope(double x) =>
-        1400 / 4300.0 * Math.Cos(x / 4300 + 0.4) + 380 / 1650.0 * Math.Cos(x / 1650 + 1.9);
-
-    private readonly record struct Column(double Axis, double Floor, double HalfWidth);
-
-    private Column ColumnAt(double x) => new(
-        Axis(x),
-        // falls gently toward the west, monotonic so the river always runs one way
-        520 + 0.0035 * x + 25 * Math.Sin(x / 9000),
-        520 + 180 * Math.Sin(x / 2900 + 0.7));
-
-    /// <summary>Terrain height in metres at an LV95 position.</summary>
-    public double Height(double e, double n) => Height(null, e, n);
-
-    private double Height(Lattice? lattice, double e, double n)
+    /// <summary>The coarse field at a point.</summary>
+    private struct Coarse
     {
-        double x = e - CenterE;
-        var (massif, detail) = SampleNoise(lattice, e, n);
-        return HeightAt(x, n - CenterN, ColumnAt(x), massif, detail);
+        public double P, Q;       // the height before lakes and channels is P + Q f
+        public double Lake;       // how far into a lake, 0..1; water above 0.5
+        public double Level;      // that lake's level, where Lake > 0
+        public double Valley;     // how much of the strongest valley floor is here, 0..1
+        public double Floor;      // that valley's floor level, where Valley > 0
     }
 
-    private static double HeightAt(double x, double y, in Column c, double massif, double detail)
+    /// <summary>The fine field at a point.</summary>
+    private struct Fine
     {
-        // Distance beyond the edge of the flat floor, then an S-shaped rise over a few km: a
-        // gentle foot where the fans spill onto the floor, walls of 35-40 degrees in the middle,
-        // easing off into the high massif.
-        double d = Math.Abs(y - (c.Axis + FloorOffset)) - c.HalfWidth;
-        double rise = d <= 0 ? 0 : d >= WallSpan ? 1 : SmoothStep(0, WallSpan, d);
-        double h = c.Floor + massif * rise + detail * (1.0 + 40 * rise);
-
-        // the river: a flat bed a couple of metres below the floor, so the water surface built
-        // from it (WaterMeshBuilder) is level across and sits inside its banks
-        double dr = Math.Abs(y - (c.Axis + RiverOffset));
-        if (dr < RiverBank)
-        {
-            double bed = c.Floor - 2.2;
-            h = bed + (h - bed) * SmoothStep(RiverHalf, RiverBank, dr);
-        }
-        return h;
+        public double F;          // roughness noise, roughly -1..1
+        public double Dr;         // distance to the nearest channel, or NoChannel
+        public double Level;      // its bed there (the water level of its flat bottom)
+        public double Half;       // half-width of its flat bottom
+        public double Bank;       // distance to the top of its bank
+        public double Depth;      // how far the bottom sits below the bank
+        public double Wet;        // 1 where it carries water
+        public double Keep;       // 0 under a road or railway: a culvert, no channel
     }
-
-    // ---- the noise lattice -----------------------------------------------------------------
-    //
-    // The mountains and the ground's roughness are noise, and noise is the expensive part: ten
-    // octaves per vertex made a full-resolution tile on a slope take 320 ms. The finest octave
-    // is 60 m across, so sampling it on a 5 m lattice and interpolating loses nothing a 1 m mesh
-    // can show, and costs 41 thousand evaluations per tile instead of a million.
-    //
-    // The lattice is anchored to LV95 multiples of 5 m, so its values are a function of position
-    // alone: two tiles interpolate the same numbers at a shared edge, and every stride-10 and
-    // horizon sample lands exactly on a lattice point, where interpolation returns the corner
-    // unchanged - which is what keeps the coarse tile equal to the decimated full one.
-
-    private const int LatticeM = 5;
-    private const int LatticeBorder = 2;   // cells beyond the tile, for slopes at its edges
-    private const int LatticeSide = (int)(ChunkFormat.TileSizeM / LatticeM) + 1 + 2 * LatticeBorder;
 
     private sealed class Lattice
     {
-        public long I0, J0;   // lattice index of the first sample, east and north
-        public readonly double[] Massif = new double[LatticeSide * LatticeSide];
-        public readonly double[] Detail = new double[LatticeSide * LatticeSide];
+        public long CI0, CJ0;                                   // coarse index of the first sample
+        public readonly Coarse[] C = new Coarse[CoarseSide * CoarseSide];
+        public long FI0, FJ0;
+        public double[]? H;                                     // heights every 5 m, for full grids
     }
 
-    private double MassifNoise(long i, long j)
+    // ---- the coarse field ------------------------------------------------------------------------
+
+    // Small per-thread memos: a point query reads four corners, its neighbour mostly the same four.
+    // The values are a pure function of (i, j), so a hit is the same bits as a recomputation.
+    private const int MemoSize = 1024;
+    [ThreadStatic] private static (long I, long J, Coarse C)[]? _coarseMemo;
+    [ThreadStatic] private static (long I, long J, Fine F)[]? _fineMemo;
+
+    private static int MemoSlot(long i, long j) => (int)((uint)(i * 73856093 ^ j * 19349663) % MemoSize);
+
+    private static Coarse CoarseAt(long i, long j)
     {
-        double x = i * (double)LatticeM - CenterE, y = j * (double)LatticeM - CenterN;
-        return 1900 + 700 * Noise.Fbm(x / 6500, y / 6500, 3, 11) + 1500 * Noise.Ridged(x / 2700, y / 2700, 4, 23);
+        var memo = _coarseMemo ??= InitMemo<Coarse>();
+        ref var slot = ref memo[MemoSlot(i, j)];
+        if (slot.I == i && slot.J == j) return slot.C;
+        var c = ComputeCoarse(i, j);
+        slot = (i, j, c);
+        return c;
     }
 
-    private double DetailNoise(long i, long j)
+    private static Fine FineAt(long i, long j)
     {
-        double x = i * (double)LatticeM - CenterE, y = j * (double)LatticeM - CenterN;
-        return Noise.Fbm(x / 240, y / 240, 3, 37);
+        var memo = _fineMemo ??= InitMemo<Fine>();
+        ref var slot = ref memo[MemoSlot(i, j)];
+        if (slot.I == i && slot.J == j) return slot.F;
+        var f = ComputeFine(i, j);
+        slot = (i, j, f);
+        return f;
     }
 
-    private static (long Index, double Frac) Cell(double v)
+    private static (long, long, T)[] InitMemo<T>()
     {
-        double cell = Math.Floor(v / LatticeM);
-        return ((long)cell, (v - cell * LatticeM) / LatticeM);
+        var memo = new (long, long, T)[MemoSize];
+        Array.Fill(memo, (long.MinValue, long.MinValue, default!));
+        return memo;
     }
+
+    private static Coarse ComputeCoarse(long i, long j)
+    {
+        double e = i * (double)CoarseM, n = j * (double)CoarseM;
+        var relief = Relief.Instance;
+        var net = Network.Instance;
+        double x = e - NoiseE, y = n - NoiseN;
+
+        // the real country, and generated detail in proportion to how rough it is there: gentle
+        // on the Plateau, ridges and gullies in the Alps
+        double macro = relief.Macro(e, n);
+        double rough = relief.RoughAt(e, n);
+        double ridges = Math.Clamp(0.12 * rough, 2, 110) * (Noise.Ridged(x / 1600, y / 1600, 4, 23) - 0.3);
+        double swell = Math.Clamp(0.05 * rough, 2, 30) * Noise.Fbm(x / 700, y / 700, 2, 29);
+        double t = macro + ridges + swell;
+        double q = Math.Clamp(0.02 * rough, 1, 12);
+
+        // The valleys, each pressing its floor into the ground by its weight V: h <- (1 - V) h + V F,
+        // smaller rivers first so a main valley's floor wins where they meet. Composed, that is
+        // h = A t + B. V is the strongest of the segments' (1 at the floor, 0 past the reach), F
+        // the bed at every segment in reach weighted by inverse distance to the 8th power: next
+        // to nearest-point, but continuous where the nearest point jumps on the inside of a bend.
+        double a = 1, b = 0, strongest = 0, strongestFloor = 0;
+        int river = -1;
+        double v = 0, sw = 0, swb = 0;
+        void Flush()
+        {
+            if (v <= 0) return;
+            double floor = swb / sw;
+            a *= 1 - v;
+            b = b * (1 - v) + floor * v;
+            if (v >= strongest)
+            {
+                strongest = v;
+                strongestFloor = floor;
+            }
+        }
+        foreach (int s in net.Valleys.At(e, n))
+        {
+            if (net.RiverOf[s] != river)
+            {
+                Flush();
+                river = net.RiverOf[s];
+                v = sw = swb = 0;
+            }
+            var (d, u) = SegmentDistance(e, n, net.PE[s], net.PN[s], net.PE[s + 1], net.PN[s + 1]);
+            double reach = net.Reach[s] + (net.Reach[s + 1] - net.Reach[s]) * u;
+            if (d >= reach) continue;
+            double floorHalf = net.Floor[s] + (net.Floor[s + 1] - net.Floor[s]) * u;
+            v = Math.Max(v, 1 - SmoothStep(floorHalf, reach, d));
+            double w = 1 / (d * d + 1);
+            w *= w;
+            w *= w;
+            sw += w;
+            swb += w * (net.Bed[s] + (net.Bed[s + 1] - net.Bed[s]) * u);
+        }
+        Flush();
+
+        var c = new Coarse
+        {
+            P = a * t + b,
+            // the floor keeps a trace of roughness, a few decimetres
+            Q = a * q + (1 - a) * 0.8,
+            Valley = strongest,
+            Floor = strongestFloor,
+        };
+
+        // lakes: a ragged shore, but no lake where the heightmap has none
+        double lake = relief.LakeWeight(e, n, out double level);
+        if (lake > 0)
+        {
+            lake = Math.Clamp(lake + 0.6 * lake * (1 - lake) * Noise.Fbm(x / 400, y / 400, 3, 41), 0, 1);
+            c.Lake = lake;
+            c.Level = level;
+        }
+        return c;
+    }
+
+    /// <summary>
+    /// Between two coarse samples; exactly the first at t = 0, so interpolating on a lattice point
+    /// returns the corner unchanged (the lake level and the valley floor are picked, not mixed).
+    /// </summary>
+    private static Coarse Lerp(in Coarse a, in Coarse b, double t)
+    {
+        if (t == 0) return a;
+        return new Coarse
+        {
+            P = a.P + (b.P - a.P) * t,
+            Q = a.Q + (b.Q - a.Q) * t,
+            Lake = a.Lake + (b.Lake - a.Lake) * t,
+            Level = Math.Max(a.Level, b.Level),
+            Valley = a.Valley + (b.Valley - a.Valley) * t,
+            Floor = a.Valley >= b.Valley ? a.Floor : b.Floor,
+        };
+    }
+
+    private static Coarse Bilerp(in Coarse a, in Coarse b, in Coarse c, in Coarse d, double u, double v)
+    {
+        var south = Lerp(a, b, u);
+        var north = Lerp(c, d, u);
+        return Lerp(south, north, v);
+    }
+
+    // ---- the fine field --------------------------------------------------------------------------
+
+    private static Fine ComputeFine(long i, long j)
+    {
+        double e = i * (double)FineM, n = j * (double)FineM;
+        var net = Network.Instance;
+        var f = new Fine
+        {
+            F = Noise.Fbm((e - NoiseE) / 240, (n - NoiseN) / 240, 3, 37),
+            Dr = NoChannel,
+            Keep = 1,
+        };
+
+        // the nearest channel among those whose bank reaches this bucket, however far: a lattice
+        // cell with one corner in reach then has real values at all four
+        double best = double.MaxValue;
+        foreach (int s in net.Channels.At(e, n))
+        {
+            var (d, u) = SegmentDistance(e, n, net.PE[s], net.PN[s], net.PE[s + 1], net.PN[s + 1]);
+            if (d >= best) continue;
+            best = d;
+            f.Dr = d;
+            f.Level = net.Bed[s] + (net.Bed[s + 1] - net.Bed[s]) * u;
+            f.Half = net.Half[s] + (net.Half[s + 1] - net.Half[s]) * u;
+            f.Bank = net.Bank[s] + (net.Bank[s + 1] - net.Bank[s]) * u;
+            f.Depth = net.Depth[s] + (net.Depth[s + 1] - net.Depth[s]) * u;
+            f.Wet = net.Water[s] && net.Water[s + 1] ? 1 : 0;
+        }
+        // where a road or railway crosses, the river goes under it: the ground stays whole
+        if (f.Dr < f.Bank + 2 * FineM)
+        {
+            var (dl, cls) = NearestLine(e, n);
+            if (cls is { } k)
+            {
+                double half = RoadFormat.DefaultWidth(k) / 2;
+                f.Keep = SmoothStep(half + 2, half + 8, dl);
+            }
+        }
+        return f;
+    }
+
+    // ---- sampling ----------------------------------------------------------------------------------
 
     private static double Bilerp(double a, double b, double c, double d, double u, double v)
     {
@@ -156,59 +304,141 @@ public sealed partial class ProceduralWorld
         return south + (north - south) * v;
     }
 
-    /// <summary>
-    /// Massif and roughness at a point: from a tile's lattice when it covers the point, else
-    /// from the four corners evaluated on the spot. Both paths do the same arithmetic on the
-    /// same corner values, so they agree to the bit.
-    /// </summary>
-    private (double Massif, double Detail) SampleNoise(Lattice? lattice, double e, double n)
+    private static (long Index, double Frac) Cell(double v, int spacing)
     {
-        var (i, u) = Cell(e);
-        var (j, v) = Cell(n);
+        double cell = Math.Floor(v / spacing);
+        return ((long)cell, (v - cell * spacing) / spacing);
+    }
+
+    /// <summary>
+    /// The coarse field at a point: from a tile's lattice when it covers the point, else from the
+    /// four corners evaluated on the spot. Both do the same arithmetic on the same corner values,
+    /// so they agree to the bit.
+    /// </summary>
+    private static Coarse SampleCoarse(Lattice? lattice, double e, double n)
+    {
+        var (i, u) = Cell(e, CoarseM);
+        var (j, v) = Cell(n, CoarseM);
         if (lattice != null)
         {
-            long li = i - lattice.I0, lj = j - lattice.J0;
-            if (li >= 0 && lj >= 0 && li + 1 < LatticeSide && lj + 1 < LatticeSide)
+            long li = i - lattice.CI0, lj = j - lattice.CJ0;
+            if (li >= 0 && lj >= 0 && li + 1 < CoarseSide && lj + 1 < CoarseSide)
             {
-                int k = (int)(lj * LatticeSide + li);
-                var m = lattice.Massif;
-                var d = lattice.Detail;
-                return (Bilerp(m[k], m[k + 1], m[k + LatticeSide], m[k + LatticeSide + 1], u, v),
-                    Bilerp(d[k], d[k + 1], d[k + LatticeSide], d[k + LatticeSide + 1], u, v));
+                int k = (int)(lj * CoarseSide + li);
+                var c = lattice.C;
+                return Bilerp(c[k], c[k + 1], c[k + CoarseSide], c[k + CoarseSide + 1], u, v);
             }
         }
-        return (Bilerp(MassifNoise(i, j), MassifNoise(i + 1, j), MassifNoise(i, j + 1), MassifNoise(i + 1, j + 1), u, v),
-            Bilerp(DetailNoise(i, j), DetailNoise(i + 1, j), DetailNoise(i, j + 1), DetailNoise(i + 1, j + 1), u, v));
+        return Bilerp(CoarseAt(i, j), CoarseAt(i + 1, j), CoarseAt(i, j + 1), CoarseAt(i + 1, j + 1), u, v);
     }
+
+    /// <summary>The fine field at the 5 m lattice point nearest a point: for siting, not for heights.</summary>
+    private static Fine FineNear(double e, double n) =>
+        FineAt((long)Math.Round(e / FineM), (long)Math.Round(n / FineM));
+
+    /// <summary>The height from the two fields: the valleys' ground, the lake shore, the channel.</summary>
+    private static double Combine(in Coarse c, in Fine f)
+    {
+        double h = c.P + c.Q * f.F;
+
+        if (c.Lake > 0)
+        {
+            // low ground near a lake is lifted clear of it, then the shore comes down to the level
+            h += Math.Max(0, c.Level + 0.5 - h) * SmoothStep(0.05, 0.3, c.Lake);
+            if (c.Lake >= 0.5) return c.Level;
+            h = c.Level + (h - c.Level) * SmoothStep(0.5, 0.3, c.Lake);
+        }
+
+        if (f.Dr < f.Bank)
+        {
+            // a flat bottom below the floor, so the water drawn on it is level from bank to bank
+            // (only ever down: a channel whose bed is above the ground here is not dug at all)
+            double carve = (1 - SmoothStep(f.Half, f.Bank, f.Dr)) * f.Keep * (1 - SmoothStep(0.3, 0.5, c.Lake));
+            double bed = f.Level - f.Depth;
+            if (h > bed) h -= (h - bed) * carve;
+        }
+        return h;
+    }
+
+    /// <summary>Terrain height in metres at an LV95 position.</summary>
+    public double Height(double e, double n) => Height(null, e, n);
+
+    /// <summary>The height at a 5 m lattice point, its coarse field from a tile's lattice or on the spot.</summary>
+    private static double FineHeight(Lattice? lattice, long i, long j) =>
+        Combine(SampleCoarse(lattice, i * (double)FineM, j * (double)FineM), FineAt(i, j));
+
+    /// <summary>
+    /// The height at a point: bilinear between the 5 m lattice heights, from a tile's lattice when
+    /// it has them, else computed on the spot — the same arithmetic on the same corners.
+    /// </summary>
+    private static double Height(Lattice? lattice, double e, double n)
+    {
+        var (i, u) = Cell(e, FineM);
+        var (j, v) = Cell(n, FineM);
+        if (lattice?.H is { } h)
+        {
+            long li = i - lattice.FI0, lj = j - lattice.FJ0;
+            if (li >= 0 && lj >= 0 && li + 1 < FineSide && lj + 1 < FineSide)
+            {
+                int k = (int)(lj * FineSide + li);
+                return Bilerp(h[k], h[k + 1], h[k + FineSide], h[k + FineSide + 1], u, v);
+            }
+        }
+        return Bilerp(FineHeight(lattice, i, j), FineHeight(lattice, i + 1, j),
+            FineHeight(lattice, i, j + 1), FineHeight(lattice, i + 1, j + 1), u, v);
+    }
+
+    /// <summary>The height exactly at a point on both lattices (every 25 m), as interpolating there returns it.</summary>
+    private static double HeightOnLattice(double e, double n) =>
+        Combine(CoarseAt((long)Math.Floor(e / CoarseM), (long)Math.Floor(n / CoarseM)),
+            FineAt((long)Math.Floor(e / FineM), (long)Math.Floor(n / FineM)));
+
+    // ---- the lattice cache -------------------------------------------------------------------
 
     private readonly Dictionary<TileId, Lattice> _lattices = new();
     private readonly Queue<TileId> _latticeOrder = new();
 
-    /// <summary>A tile's lattice, kept for a few tiles: its grid, cover and trees all read it.</summary>
-    private Lattice LatticeFor(TileId id)
+    /// <summary>
+    /// A tile's lattices, kept for a few tiles: its grid, cover, trees, roads and buildings all
+    /// read them. The coarse one is cheap and always there; the fine one only when asked for.
+    /// </summary>
+    private Lattice LatticeFor(TileId id, bool fine)
     {
+        Lattice? lattice;
         lock (_lattices)
-            if (_lattices.TryGetValue(id, out var cached)) return cached;
+            _lattices.TryGetValue(id, out lattice);
 
-        var lattice = new Lattice
+        if (lattice == null)
         {
-            I0 = (long)(id.MinE / LatticeM) - LatticeBorder,
-            J0 = (long)(id.MinN / LatticeM) - LatticeBorder,
-        };
-        for (int lj = 0; lj < LatticeSide; lj++)
-            for (int li = 0; li < LatticeSide; li++)
+            lattice = new Lattice
             {
-                lattice.Massif[lj * LatticeSide + li] = MassifNoise(lattice.I0 + li, lattice.J0 + lj);
-                lattice.Detail[lj * LatticeSide + li] = DetailNoise(lattice.I0 + li, lattice.J0 + lj);
+                CI0 = (long)(id.MinE / CoarseM) - CoarseBorder,
+                CJ0 = (long)(id.MinN / CoarseM) - CoarseBorder,
+                FI0 = (long)(id.MinE / FineM) - FineBorder,
+                FJ0 = (long)(id.MinN / FineM) - FineBorder,
+            };
+            for (int lj = 0; lj < CoarseSide; lj++)
+                for (int li = 0; li < CoarseSide; li++)
+                    lattice.C[lj * CoarseSide + li] = CoarseAt(lattice.CI0 + li, lattice.CJ0 + lj);
+            lock (_lattices)
+            {
+                if (_lattices.TryGetValue(id, out var raced)) lattice = raced;
+                else
+                {
+                    _lattices[id] = lattice;
+                    _latticeOrder.Enqueue(id);
+                    while (_latticeOrder.Count > 16) _lattices.Remove(_latticeOrder.Dequeue());
+                }
             }
+        }
 
-        lock (_lattices)
+        if (fine && lattice.H == null)
         {
-            if (_lattices.TryAdd(id, lattice))
-            {
-                _latticeOrder.Enqueue(id);
-                while (_latticeOrder.Count > 16) _lattices.Remove(_latticeOrder.Dequeue());
-            }
+            var h = new double[FineSide * FineSide];
+            for (int lj = 0; lj < FineSide; lj++)
+                for (int li = 0; li < FineSide; li++)
+                    h[lj * FineSide + li] = FineHeight(lattice, lattice.FI0 + li, lattice.FJ0 + lj);
+            lattice.H = h;   // a reference write: a racing reader sees null or all of it
         }
         return lattice;
     }
@@ -225,13 +455,11 @@ public sealed partial class ProceduralWorld
         int size = (ChunkFormat.GridSize - 1) / stride + 1;
         var heights = new ushort[size * size];
         double step = ChunkFormat.SpacingM * stride;
-        // coarse samples sit on lattice points: no reason to fill the whole lattice for them
-        bool onLattice = step % LatticeM == 0;
-        var lattice = onLattice ? null : LatticeFor(id);
-        if (blend != null && !onLattice) blend.PrepareLattice();
+        // coarse samples sit on fine lattice points: no reason to fill the whole fine lattice
+        bool onFine = step % FineM == 0;
+        var lattice = LatticeFor(id, fine: !onFine);
+        if (blend != null && !onFine) blend.PrepareLattice();
 
-        var columns = new Column[size];
-        for (int c = 0; c < size; c++) columns[c] = ColumnAt(id.MinE + c * step - CenterE);
         // at stride 1 the blend is applied a row at a time: the same numbers as Correction per point
         var row = new double[size];
         bool byRow = blend != null && stride == 1;
@@ -243,10 +471,9 @@ public sealed partial class ProceduralWorld
             for (int c = 0; c < size; c++)
             {
                 double e = id.MinE + c * step;
-                var (massif, detail) = onLattice
-                    ? OnLattice(e, n)
-                    : SampleNoise(lattice, e, n);
-                double h = HeightAt(e - CenterE, n - CenterN, columns[c], massif, detail);
+                double h = onFine
+                    ? FineHeight(lattice, (long)Math.Floor(e / FineM), (long)Math.Floor(n / FineM))
+                    : Height(lattice, e, n);
                 if (blend != null && !byRow) h += blend.Correction(e, n, h);
                 row[c] = h;
             }
@@ -280,13 +507,6 @@ public sealed partial class ProceduralWorld
             throw new ArgumentException($"Blend for {blend.Tile} used to build {id}");
     }
 
-    /// <summary>The noise at a lattice point, which is exactly what interpolating there returns.</summary>
-    private (double Massif, double Detail) OnLattice(double e, double n)
-    {
-        long i = (long)Math.Floor(e / LatticeM), j = (long)Math.Floor(n / LatticeM);
-        return (MassifNoise(i, j), DetailNoise(i, j));
-    }
-
     /// <summary>
     /// One tile's 11x11 horizon samples. A blend needs only its real knots here: at a 100 m point
     /// D is exactly zero, and a sample on a real tile's edge copies that tile's knot, so these are
@@ -300,12 +520,10 @@ public sealed partial class ProceduralWorld
         for (int c = 0; c < side; c++)
         {
             double e = id.MinE + c * HorizonFormat.SpacingM;
-            var column = ColumnAt(e - CenterE);
             for (int r = 0; r < side; r++)
             {
                 double n = id.MaxN - r * HorizonFormat.SpacingM;
-                var (massif, detail) = OnLattice(e, n);
-                double h = HeightAt(e - CenterE, n - CenterN, column, massif, detail);
+                double h = HeightOnLattice(e, n);
                 if (blend != null)
                 {
                     bool edge = c == 0 || r == 0 || c == side - 1 || r == side - 1;
@@ -327,10 +545,10 @@ public sealed partial class ProceduralWorld
     /// <summary>
     /// Spacing, in grid cells, of the fields the cover is classified from. Every tile in the rings
     /// asks for cover, most of them far off and drawn one vertex in ten or fifty, so it must not
-    /// need the tile's whole 5 m noise lattice: at 10 m every sample is a lattice point, evaluated
+    /// need the tile's whole fine lattice: at 10 m every sample is a fine lattice point, evaluated
     /// on its own, a quarter of the work.
     /// </summary>
-    private const int CoverStep = 2 * LatticeM;
+    private const int CoverStep = 2 * FineM;
 
     // keyed by the blend's version too: the same tile blends differently once the real set changes
     // (the full and the coarse blend classify alike: the raster reads 10 m points only)
@@ -361,15 +579,22 @@ public sealed partial class ProceduralWorld
         return cells;
     }
 
+    /// <summary>Everything a cover class is decided from, at one point.</summary>
+    private struct CoverInputs
+    {
+        public float Alt, Slope, Forest, Crop, Above, South, Vines, Road, River, Half, Wet, Lake, Bed;
+        public bool WaterOk;
+    }
+
     /// <summary>
-    /// Classifies a 1001^2 raster from altitude and slope sampled every 10 m.
+    /// Classifies a 1001^2 raster from fields sampled every 10 m.
     ///
     /// <para>
     /// The fields are evaluated ten thousand times rather than a million. A 10 m square whose
     /// four corners agree is filled whole; one on a boundary is classified cell by cell from
-    /// bilinear fields, so class edges come out as smooth lines rather than 10 m stairs. The
-    /// river is tested against its exact distance everywhere, because its water has to sit on
-    /// the flat bed <see cref="HeightAt"/> carved, not near it.
+    /// bilinear fields, so class edges come out as smooth lines rather than 10 m stairs. Squares
+    /// near a channel are always done cell by cell, because its water has to sit on the flat bed
+    /// <see cref="Combine"/> carved, not near it.
     /// </para>
     /// </summary>
     private byte[] ClassifyTile(TileId id, Blend? blend)
@@ -380,61 +605,51 @@ public sealed partial class ProceduralWorld
 
         // heights at the samples, border included; the border is exactly the blend's lattice
         blend?.PrepareLattice();
+        var lattice = LatticeFor(id, fine: false);
         var h = new double[ext * ext];
         var corr = blend == null ? null : new double[ext * ext];
-        var axis = new double[ext];
-        var floor = new double[ext];
-        for (int i = 0; i < ext; i++)
+        var coarse = new Coarse[ext * ext];
+        var fine = new Fine[ext * ext];
+        for (int j = 0; j < ext; j++)
         {
-            double e = id.MinE + (i - 1) * CoverStep;
-            var column = ColumnAt(e - CenterE);
-            axis[i] = column.Axis;
-            floor[i] = column.Floor;
-            for (int j = 0; j < ext; j++)
+            double n = id.MaxN - (j - 1) * CoverStep;
+            for (int i = 0; i < ext; i++)
             {
-                double n = id.MaxN - (j - 1) * CoverStep;
-                var (massif, detail) = OnLattice(e, n);
-                h[j * ext + i] = HeightAt(e - CenterE, n - CenterN, column, massif, detail);
+                double e = id.MinE + (i - 1) * CoverStep;
+                int k = j * ext + i;
+                coarse[k] = SampleCoarse(lattice, e, n);
+                fine[k] = FineAt((long)Math.Floor(e / FineM), (long)Math.Floor(n / FineM));
+                h[k] = Combine(coarse[k], fine[k]);
                 if (blend != null)
                 {
-                    double c = blend.Correction(e, n, h[j * ext + i]);
-                    h[j * ext + i] += c;
-                    corr![j * ext + i] = c;
+                    double c = blend.Correction(e, n, h[k]);
+                    h[k] += c;
+                    corr![k] = c;
                 }
             }
         }
 
-        // fields per lattice point
-        var alt = new float[lat * lat];
-        var slope = new float[lat * lat];
-        var forest = new float[lat * lat];
-        var crop = new float[lat * lat];
-        var above = new float[lat * lat];
-        var tilt = new float[lat * lat];
+        // fields per sample
+        var inputs = new CoverInputs[lat * lat];
         var classes = new byte[lat * lat];
         for (int j = 0; j < lat; j++)
             for (int i = 0; i < lat; i++)
             {
                 int k = j * lat + i;
-                int e = (j + 1) * ext + i + 1;
-                double gx = (h[e + 1] - h[e - 1]) / (2 * CoverStep);
-                double gy = (h[e + ext] - h[e - ext]) / (2 * CoverStep);
-                double x = id.MinE + i * CoverStep - CenterE;
-                double y = id.MaxN - j * CoverStep - CenterN;
-                alt[k] = (float)h[e];
-                slope[k] = (float)(Math.Atan(Math.Sqrt(gx * gx + gy * gy)) * 180 / Math.PI);
-                forest[k] = (float)Noise.Fbm(x / 650, y / 650, 3, 51);
-                crop[k] = (float)Noise.Fbm(x / 420, y / 420, 2, 67);
-                above[k] = (float)(h[e] - floor[i + 1]);
-                // how steeply the blend leans the ground here, to keep water off tilted river beds
+                int x = (j + 1) * ext + i + 1;
+                double gx = (h[x + 1] - h[x - 1]) / (2 * CoverStep);
+                double gy = (h[x - ext] - h[x + ext]) / (2 * CoverStep);   // north is up the rows
+                double tilt = 0;
+                // how steeply the blend leans the ground here, to keep water off tilted beds
                 if (corr != null)
                 {
-                    double cx = (corr[e + 1] - corr[e - 1]) / (2 * CoverStep);
-                    double cy = (corr[e + ext] - corr[e - ext]) / (2 * CoverStep);
-                    tilt[k] = (float)Math.Sqrt(cx * cx + cy * cy);
+                    double cx = (corr[x + 1] - corr[x - 1]) / (2 * CoverStep);
+                    double cy = (corr[x + ext] - corr[x - ext]) / (2 * CoverStep);
+                    tilt = Math.Sqrt(cx * cx + cy * cy);
                 }
-                classes[k] = (byte)Classify(alt[k], slope[k], forest[k], crop[k], above[k],
-                    y - axis[i + 1], Math.Abs(y - (axis[i + 1] + RiverOffset)), Blend.WaterAllowed(tilt[k]));
+                inputs[k] = Inputs(id.MinE + i * CoverStep, id.MaxN - j * CoverStep, h[x], gx, gy,
+                    coarse[x], fine[x], Blend.WaterAllowed(tilt));
+                classes[k] = (byte)Classify(inputs[k]);
             }
 
         var cells = new byte[size * size];
@@ -443,10 +658,9 @@ public sealed partial class ProceduralWorld
             {
                 int k00 = j * lat + i, k10 = k00 + 1, k01 = k00 + lat, k11 = k01 + 1;
                 byte c = classes[k00];
-                double yTop = id.MaxN - j * CoverStep - CenterN;
-                double riverAt = axis[i + 1] + RiverOffset;
-                bool nearRiver = Math.Abs(yTop - riverAt) < RiverBank + 2 * CoverStep + 30;
-                bool uniform = !nearRiver && classes[k10] == c && classes[k01] == c && classes[k11] == c;
+                bool nearWater = Math.Min(Math.Min(inputs[k00].River, inputs[k10].River),
+                    Math.Min(inputs[k01].River, inputs[k11].River)) < 60;
+                bool uniform = !nearWater && classes[k10] == c && classes[k01] == c && classes[k11] == c;
 
                 int r0 = j * CoverStep, c0 = i * CoverStep;
                 // the last square also owns the tile's last row/column
@@ -462,50 +676,97 @@ public sealed partial class ProceduralWorld
                         if (uniform) { cells[row * size + col] = c; continue; }
 
                         float u = dc / (float)CoverStep;
-                        float Lerp(float[] f) =>
-                            (f[k00] * (1 - u) + f[k10] * u) * (1 - v) + (f[k01] * (1 - u) + f[k11] * u) * v;
-
-                        double x = id.MinE + col - CenterE;
-                        double y = id.MaxN - row - CenterN;
-                        double ax = axis[i + 1] + (axis[i + 2] - axis[i + 1]) * u;
-                        cells[row * size + col] = (byte)Classify(Lerp(alt), Lerp(slope), Lerp(forest),
-                            Lerp(crop), Lerp(above), y - ax, Math.Abs(y - (ax + RiverOffset)),
-                            corr == null || Blend.WaterAllowed(Lerp(tilt)));
+                        var at = Mix(inputs[k00], inputs[k10], inputs[k01], inputs[k11], u, v);
+                        cells[row * size + col] = (byte)Classify(at);
                     }
                 }
             }
         return cells;
     }
 
-    /// <param name="fromRoad">Signed offset from the main road; positive is the north side.</param>
-    /// <param name="waterOk">False where a blend has tilted the river bed: no water on a slope.</param>
-    private static CoverClass Classify(float alt, float slope, float forest, float crop, float above,
-        double fromRoad, double fromRiver, bool waterOk)
+    /// <summary>Cover inputs inside a 10 m square, bilinear from its corners.</summary>
+    private static CoverInputs Mix(in CoverInputs a, in CoverInputs b, in CoverInputs c, in CoverInputs d,
+        float u, float v)
     {
-        if (fromRiver < RiverHalf - 0.5 && waterOk) return CoverClass.Water;
-
-        if (alt > 2950 && slope < 30) return CoverClass.Glacier;
-        if (alt > 2750 && slope < 22 && forest > 0.1f) return CoverClass.Snowfield;
-        if (slope > 42 || (slope > 34 && alt > 2150)) return CoverClass.Rock;
-        if (alt > 2350 && slope > 24) return CoverClass.Scree;
-        if (alt > 2550) return CoverClass.LooseScree;
-
-        // the tree line wanders by a couple of hundred metres, as real ones do
-        float treeLine = 1900 + 120 * crop;
-        if (above > 15 + 60 * (crop + 0.5f) && slope > 4 && alt < treeLine + 120)
+        float wa = (1 - u) * (1 - v), wb = u * (1 - v), wc = (1 - u) * v, wd = u * v;
+        return new CoverInputs
         {
-            if (alt > treeLine) return forest > 0.2f ? CoverClass.Shrub : CoverClass.Open;
-            if (forest > -0.12f)
-                return alt > treeLine - 160 ? CoverClass.OpenForest : CoverClass.Forest;
-        }
+            Alt = a.Alt * wa + b.Alt * wb + c.Alt * wc + d.Alt * wd,
+            Slope = a.Slope * wa + b.Slope * wb + c.Slope * wc + d.Slope * wd,
+            Forest = a.Forest * wa + b.Forest * wb + c.Forest * wc + d.Forest * wd,
+            Crop = a.Crop * wa + b.Crop * wb + c.Crop * wc + d.Crop * wd,
+            Above = a.Above * wa + b.Above * wb + c.Above * wc + d.Above * wd,
+            South = a.South * wa + b.South * wb + c.South * wc + d.South * wd,
+            Vines = a.Vines * wa + b.Vines * wb + c.Vines * wc + d.Vines * wd,
+            Road = a.Road * wa + b.Road * wb + c.Road * wc + d.Road * wd,
+            River = a.River * wa + b.River * wb + c.River * wc + d.River * wd,
+            Half = a.Half * wa + b.Half * wb + c.Half * wc + d.Half * wd,
+            Wet = a.Wet * wa + b.Wet * wb + c.Wet * wc + d.Wet * wd,
+            Lake = a.Lake * wa + b.Lake * wb + c.Lake * wc + d.Lake * wd,
+            Bed = a.Bed * wa + b.Bed * wb + c.Bed * wc + d.Bed * wd,
+            WaterOk = (a.WaterOk ? wa : 0) + (b.WaterOk ? wb : 0) + (c.WaterOk ? wc : 0) + (d.WaterOk ? wd : 0) > 0.5f,
+        };
+    }
 
-        // Valais-style vineyards: the lower slope on the north side, facing the sun
-        if (fromRoad > 250 && above > 15 && slope is > 7 and < 32 && alt < 1050 && crop > -0.05f)
+    /// <summary>The cover inputs at a point, from its height, gradient and fields.</summary>
+    private static CoverInputs Inputs(double e, double n, double h, double gx, double gy,
+        in Coarse c, in Fine f, bool waterOk)
+    {
+        double x = e - NoiseE, y = n - NoiseN;
+        double grade = Math.Sqrt(gx * gx + gy * gy);
+        var inputs = new CoverInputs
+        {
+            Alt = (float)h,
+            Slope = (float)(Math.Atan(grade) * 180 / Math.PI),
+            Forest = (float)Noise.Fbm(x / 650, y / 650, 3, 51),
+            Crop = (float)Noise.Fbm(x / 420, y / 420, 2, 67),
+            // off a valley floor, or no valley at all: well above it
+            Above = (float)(c.Valley > 0.02 ? h - c.Floor : 1000),
+            // 1 on a slope facing due south, -1 facing north
+            South = (float)(grade > 1e-6 ? gy / grade : 0),
+            Vines = (float)Noise.Fbm(x / 9000, y / 9000, 2, 227),
+            River = (float)f.Dr,
+            Half = (float)f.Half,
+            Wet = (float)(f.Wet * f.Keep),
+            Lake = (float)c.Lake,
+            Bed = (float)(f.Level - f.Depth),
+            WaterOk = waterOk,
+        };
+        // orchards want to know how far the road is; only worth asking on a candidate
+        inputs.Road = inputs.Above < 15 && inputs.Slope < 8 && inputs.Crop > 0.32f
+            ? (float)NearestLine(e, n).Distance : (float)Network.LineReach;
+        return inputs;
+    }
+
+    private static CoverClass Classify(in CoverInputs p)
+    {
+        // a river only where the ground really is its flat bottom: not where a road crosses it, nor
+        // where its bed would be above the ground and it was never dug
+        if (p.WaterOk && (p.Lake > 0.5f || (p.River < p.Half - 0.5f && p.Wet > 0.5f && p.Alt < p.Bed + 0.5f)))
+            return CoverClass.Water;
+
+        if (p.Alt > 2950 && p.Slope < 30) return CoverClass.Glacier;
+        if (p.Alt > 2750 && p.Slope < 22 && p.Forest > 0.1f) return CoverClass.Snowfield;
+        if (p.Slope > 42 || (p.Slope > 34 && p.Alt > 2150)) return CoverClass.Rock;
+        if (p.Alt > 2350 && p.Slope > 24) return CoverClass.Scree;
+        if (p.Alt > 2550) return CoverClass.LooseScree;
+
+        // vineyards: low slopes facing the sun, in the regions that grow them
+        if (p.South > 0.45f && p.Vines > 0.12f && p.Above > 15 && p.Slope is > 7 and < 32
+            && p.Alt < 1000 && p.Crop > -0.05f)
             return CoverClass.Vineyard;
 
-        // orchards on the floor around the villages
-        if (Math.Abs(fromRoad) is > 40 and < 360 && fromRiver > 45 && above < 15 && slope < 8
-            && crop > 0.32f)
+        // the tree line wanders by a couple of hundred metres, as real ones do
+        float treeLine = 1900 + 120 * p.Crop;
+        if (p.Above > 15 + 60 * (p.Crop + 0.5f) && p.Slope > 4 && p.Alt < treeLine + 120)
+        {
+            if (p.Alt > treeLine) return p.Forest > 0.2f ? CoverClass.Shrub : CoverClass.Open;
+            if (p.Forest > -0.12f)
+                return p.Alt > treeLine - 160 ? CoverClass.OpenForest : CoverClass.Forest;
+        }
+
+        // orchards on the valley floor, near the road
+        if (p.Road is > 20 and < 360 && p.River > 45 && p.Above < 15 && p.Slope < 8 && p.Crop > 0.32f)
             return CoverClass.Orchard;
 
         return CoverClass.Open;
@@ -525,7 +786,7 @@ public sealed partial class ProceduralWorld
         const int size = CoverFormat.Size;
         var cells = BuildCover(id, blend);
         blend?.PrepareLattice();
-        var site = new Site(LatticeFor(id), blend);
+        var site = new Site(LatticeFor(id, fine: true), blend);
         var blocked = BuildTreeMask(id, site);
         var trees = new List<TreeInstance>();
 
@@ -552,7 +813,7 @@ public sealed partial class ProceduralWorld
                 double n = id.MaxN - row + (Noise.Hash01(ge, gn, 79) - 0.5);
                 // field trees stand in clumps and lines along field edges, not evenly sprinkled
                 if (cls == CoverClass.Open
-                    && Math.Abs(Noise.Fbm((e - CenterE) / 90, (n - CenterN) / 90, 2, 97)) > 0.06)
+                    && Math.Abs(Noise.Fbm((e - NoiseE) / 90, (n - NoiseN) / 90, 2, 97)) > 0.06)
                     continue;
                 double h = Ground(site, e, n);
                 if (cls == CoverClass.Open && h > 1700) continue;

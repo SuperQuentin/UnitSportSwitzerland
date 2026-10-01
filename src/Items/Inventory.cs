@@ -162,6 +162,15 @@ public sealed class Inventory
         return room;
     }
 
+    /// <summary>Rewrites a stack's per-instance data (a radio's CD). False if the slot is empty.</summary>
+    public bool SetData(int slot, string? data)
+    {
+        if (_slots[slot].IsEmpty) return false;
+        _slots[slot] = _slots[slot] with { Data = data };
+        Notify();
+        return true;
+    }
+
     /// <summary>Takes one from a slot (eating, planting). False if it was empty.</summary>
     public bool TakeOne(int slot)
     {

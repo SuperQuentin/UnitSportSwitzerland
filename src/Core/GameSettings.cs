@@ -124,6 +124,9 @@ public sealed class GameSettings
     public bool TyreWear { get; set; }
     /// <summary>Cars' brakes heat up and fade, and their pads wear (off by default).</summary>
     public bool BrakeWear { get; set; }
+    /// <summary>How trucks and buses are shifted (#70): automatic, sequential, with the clutch, H-pattern.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Player.HeavyShift HeavyGearbox { get; set; } = Player.HeavyShift.Automatic;
 
     // --- world ---
     /// <summary>Real minutes for a whole day; 0 stops the clock at <see cref="StartHour"/>.</summary>
@@ -160,6 +163,21 @@ public sealed class GameSettings
 
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
+
+    // --- cockpit: first person at the wheel of a car (#69) ---
+    /// <summary>Your own arms and legs at the wheel. V cycles chase → cockpit with them → cockpit without.</summary>
+    public bool CockpitBody { get; set; } = true;
+    /// <summary>Working rear-view and door mirrors: each a small extra render of the world.</summary>
+    public bool CockpitMirrors { get; set; } = true;
+    /// <summary>Speed, gear and rpm on the HUD in the cockpit too; off, the dashboard shows them.</summary>
+    public bool CockpitHud { get; set; }
+    /// <summary>Vertical field of view from the driver's seat, degrees.</summary>
+    public float CockpitFov { get; set; } = 70f;
+    /// <summary>The eye moved up (+) or down, and forward (+) or back, from where the seat puts it, m.</summary>
+    public float SeatHeight { get; set; }
+    public float SeatForward { get; set; }
+    /// <summary>The head sways with the car's accelerations: back under power, forward braking, out in a bend.</summary>
+    public bool CockpitHeadMotion { get; set; } = true;
 
     /// <summary>Window size when windowed; 0 leaves whatever size the window already has.</summary>
     public int WindowWidth { get; set; }
@@ -239,6 +257,9 @@ public sealed class GameSettings
         TrafficCars = Math.Clamp(TrafficCars, 0, 150);
         ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
+        CockpitFov = Math.Clamp(CockpitFov, 50f, 100f);
+        SeatHeight = Math.Clamp(SeatHeight, -0.1f, 0.1f);
+        SeatForward = Math.Clamp(SeatForward, -0.15f, 0.15f);
         WindowWidth = Math.Clamp(WindowWidth, 0, 7680);
         WindowHeight = Math.Clamp(WindowHeight, 0, 4320);
         OccasionPreferences ??= new();
@@ -267,6 +288,14 @@ public sealed class GameSettings
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
                 case "--tyrewear": TyreWear = v is "on" or "1" or "true"; break;
                 case "--brakewear": BrakeWear = v is "on" or "1" or "true"; break;
+                case "--gearbox":
+                    HeavyGearbox = v.ToLowerInvariant() switch
+                    {
+                        "seq" => Player.HeavyShift.Sequential, "seqclutch" => Player.HeavyShift.SequentialClutch,
+                        "hsplit" => Player.HeavyShift.HPatternSplitter, "h" => Player.HeavyShift.HPattern,
+                        _ => Player.HeavyShift.Automatic,
+                    };
+                    break;
                 case "--voice":
                     EngineVoice = v.ToLowerInvariant() switch
                     {
@@ -279,7 +308,13 @@ public sealed class GameSettings
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
                     StartHour = hour; DayLengthMinutes = 0; break;
                 case "--traffic" when int.TryParse(v, out int cars): TrafficCars = cars; break;
-                case "--view": ThirdPerson = v != "first" && v != "1st"; break;
+                // first | third, or in a car's cockpit with (body) or without (bare) your own figure
+                case "--view":
+                    ThirdPerson = v is not ("first" or "1st" or "body" or "bare");
+                    if (v is "body" or "bare") CockpitBody = v == "body";
+                    break;
+                case "--mirrors": CockpitMirrors = v is "on" or "1" or "true"; break;
+                case "--vsync": VSync = v is "on" or "1" or "true"; break;
                 case "--perf":
                     PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,
                         "fps" => PerfOverlayMode.Fps, _ => PerfOverlayMode.Off };

@@ -54,6 +54,21 @@ public partial class LootService : Node
     /// <summary>Containers seen empty this session: the prompt says so before you search again.</summary>
     private readonly Dictionary<(string, int), long> _seenEmpty = new();
 
+    /// <summary>
+    /// Bit of the saved take mask that says a locked container (gun locker, safe) has been cracked
+    /// this restock period. Stacks use the low bits, so a cracked container's mask still works as a
+    /// take mask, and a restock (new epoch) relocks it for free.
+    /// </summary>
+    public const int UnlockedBit = 1 << 30;
+
+    private LockPickUi? _lockUi;
+    /// <summary>Client: the building whose lock states <see cref="_unlocked"/> holds, and the cracked containers in it.</summary>
+    private string _lockKey = "";
+    private InteriorNode? _lockNode;
+    private readonly HashSet<int> _unlocked = new();
+    /// <summary>The container being cracked: which one, in which restock period.</summary>
+    private (string Key, int Furniture, long Epoch)? _picking;
+
     public static LootService Create(Node world)
     {
         var s = new LootService { Name = NodeName };
@@ -74,6 +89,8 @@ public partial class LootService : Node
         if (DisplayServer.GetName() == "headless" && Multiplayer.IsServer() && Online) return;
         _ui = new LootUi(this) { Name = "LootUi" };
         AddChild(_ui);
+        _lockUi = new LockPickUi(this) { Name = "LockPickUi" };
+        AddChild(_lockUi);
     }
 
     public override void _ExitTree()
@@ -130,8 +147,11 @@ public partial class LootService : Node
         if (InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return null;
         int i = NearestContainer(p, layout, node);
         if (i < 0) return null;
+        if (_lockUi?.IsOpen == true) return null;
         string what = LootTables.Describe(layout.Furniture[i].Type);
         string key = InputHints.Tag(PlayerInput.InteractMount);
+        if (LootTables.IsLocked(layout.Furniture[i].Type) && !IsUnlocked(layout.Key, i))
+            return $"{key} Crack the {what}";
         bool empty = _seenEmpty.TryGetValue((layout.Key, i), out long ep)
             && ep == LootTables.Epoch(layout.Key, Now);
         return empty ? $"{key} Search the {what} (empty)" : $"{key} Search the {what}";
@@ -141,9 +161,15 @@ public partial class LootService : Node
     public bool TrySearch(FootPlayer p)
     {
         if (_ui?.IsOpen == true) { Close(); return true; }
+        if (_lockUi?.IsOpen == true) { StopPicking(); return true; }
         if (InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return false;
         int i = NearestContainer(p, layout, node);
         if (i < 0) return false;
+        if (LootTables.IsLocked(layout.Furniture[i].Type) && !IsUnlocked(layout.Key, i))
+        {
+            StartPicking(p, layout, i);
+            return true;
+        }
 
         _open = (layout.Key, i);
         _searcher = p;
@@ -168,6 +194,9 @@ public partial class LootService : Node
 
     public override void _Process(double delta)
     {
+        SyncLocks();
+        if (_picking is { } pick && (_searcher is not { } sp || !IsInstanceValid(sp) || !sp.IsViewing
+            || InteriorManager.Instance?.Current?.Key != pick.Key)) StopPicking();
         if (_open == null) return;
         var p = _searcher;
         var interior = InteriorManager.Instance;
@@ -282,6 +311,11 @@ public partial class LootService : Node
         long epoch = LootTables.Epoch(key, Now);
         var stacks = LootTables.ContentsOf(layout, furniture, epoch);
         int mask = MaskOf(key, furniture, epoch);
+        if (LootTables.IsLocked(layout.Furniture[furniture].Type) && (mask & UnlockedBit) == 0)
+        {
+            Reply(peer, MethodName.Locked, key, furniture);
+            return;
+        }
         Reply(peer, MethodName.Contents, key, furniture, epoch,
             stacks.Select(s => (int)s.Id).ToArray(), stacks.Select(s => s.Count).ToArray(), mask);
     }
@@ -293,6 +327,11 @@ public partial class LootService : Node
         long now = LootTables.Epoch(key, Now);
         var stacks = LootTables.ContentsOf(layout, furniture, now);
         int mask = MaskOf(key, furniture, now);
+        if (LootTables.IsLocked(layout.Furniture[furniture].Type) && (mask & UnlockedBit) == 0)
+        {
+            Reply(peer, MethodName.Locked, key, furniture);
+            return;
+        }
         // restocked since the panel opened, or someone else was quicker: send what is there now
         if (epoch != now || index < 0 || index >= stacks.Count || (mask & (1 << index)) != 0)
         {
@@ -319,6 +358,161 @@ public partial class LootService : Node
         _openMask |= mask;
         if (!OpenContents().Any()) _seenEmpty[(key, furniture)] = epoch;
         _ui?.Refresh();
+    }
+
+    // ---- gun lockers and safes (#165) -------------------------------------------------------------
+
+    /// <summary>Client: whether this client knows the locked container to be cracked this period.</summary>
+    public bool IsUnlocked(string key, int furniture) => key == _lockKey && _unlocked.Contains(furniture);
+
+    public bool Picking => _picking != null;
+    public LockPickUi? LockUi => _lockUi;
+
+    private void StartPicking(FootPlayer p, InteriorLayout layout, int furniture)
+    {
+        long epoch = LootTables.Epoch(layout.Key, Now);
+        var type = layout.Furniture[furniture].Type;
+        _picking = (layout.Key, furniture, epoch);
+        _searcher = p;
+        _lockUi?.Open(LootTables.Describe(type), LootTables.Combination(layout.Key, furniture, epoch, type),
+            type == FurnitureType.Safe ? 1.0f : 1.6f);
+    }
+
+    public void StopPicking()
+    {
+        _picking = null;
+        _lockUi?.Close();
+    }
+
+    /// <summary>
+    /// Client: the dial has been worked through; ask the server to open it. The server checks the
+    /// numbers against its own <see cref="LootTables.Combination"/> and that the player is in the building.
+    /// </summary>
+    public void SubmitCombination(int[] combo)
+    {
+        if (_picking is not { } pick) return;
+        if (Online) RpcId(1, MethodName.RequestUnlock, pick.Key, pick.Furniture, pick.Epoch, combo);
+        else ServeUnlock(1, pick.Key, pick.Furniture, pick.Epoch, combo);
+    }
+
+    /// <summary>Client: track the building the player is in, and ask the server which of its locks are open.</summary>
+    private void SyncLocks()
+    {
+        var node = InteriorManager.Instance?.CurrentNode;
+        if (_lockNode != null && !IsInstanceValid(_lockNode)) _lockNode = null;   // the interior was freed
+        if (node == _lockNode) return;
+        _lockNode = node;
+        _unlocked.Clear();
+        _lockKey = node?.Layout.Key ?? "";
+        if (node == null || !node.Layout.Furniture.Any(f => LootTables.IsLocked(f.Type))) return;
+        if (Online) RpcId(1, MethodName.RequestLocks, _lockKey);
+        else ServeLocks(1, _lockKey);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestLocks(string key) => ServeLocks(Multiplayer.GetRemoteSenderId(), key);
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestUnlock(string key, int furniture, long epoch, int[] combo) =>
+        ServeUnlock(Multiplayer.GetRemoteSenderId(), key, furniture, epoch, combo);
+
+    /// <summary>Server: which locked containers of a building are cracked this restock period. Only a door's state, so anyone may ask.</summary>
+    private void ServeLocks(long peer, string key)
+    {
+        if (!BuildingKey.TryParse(key, out var k)) return;
+        long epoch = LootTables.Epoch(key, Now);
+        var open = new List<int>();
+        if (TileFor(k).Buildings.TryGetValue(k.Index.ToString(), out var b))
+            foreach (var (fi, e) in b)
+                if (e.Length == 2 && e[0] == epoch && (e[1] & UnlockedBit) != 0 && int.TryParse(fi, out int idx))
+                    open.Add(idx);
+        Reply(peer, MethodName.LockStates, key, epoch, open.ToArray());
+    }
+
+    private async void ServeUnlock(long peer, string key, int furniture, long epoch, int[] combo)
+    {
+        var layout = await LayoutFor(peer, key);
+        if (layout == null || furniture < 0 || furniture >= layout.Furniture.Count) return;
+        var type = layout.Furniture[furniture].Type;
+        if (!LootTables.IsLocked(type)) return;
+        long now = LootTables.Epoch(key, Now);
+        int mask = MaskOf(key, furniture, now);
+        bool right = epoch == now && combo.SequenceEqual(LootTables.Combination(key, furniture, now, type));
+        if (!right && (mask & UnlockedBit) == 0)
+        {
+            GD.Print($"[loot] peer {peer} gave a wrong combination for {key} #{furniture}");
+            Reply(peer, MethodName.UnlockRefused, key, furniture);
+            return;
+        }
+        if ((mask & UnlockedBit) == 0) SetMask(key, furniture, now, mask | UnlockedBit);
+        GD.Print($"[loot] {key} #{furniture} ({type}) cracked by peer {peer}");
+
+        // everyone in the building sees the door swing: the cracker first, then the others
+        Reply(peer, MethodName.Unlocked, key, furniture, now, true);
+        if (!Online || InteriorManager.Instance is not { } interiors) return;
+        foreach (int other in Multiplayer.GetPeers())
+            if (other != peer && interiors.SpaceOf(other) == key)
+                RpcId(other, MethodName.Unlocked, key, furniture, now, false);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void LockStates(string key, long epoch, int[] open)
+    {
+        if (key != _lockKey) return;
+        _unlocked.Clear();
+        foreach (int i in open) _unlocked.Add(i);
+        if (_lockNode == null) return;
+        for (int i = 0; i < _lockNode.Layout.Furniture.Count; i++)
+            if (LootTables.IsLocked(_lockNode.Layout.Furniture[i].Type)) _lockNode.SetLockOpen(i, _unlocked.Contains(i), false);
+    }
+
+    /// <summary>Client: a locked container in this building was cracked (by this player when <paramref name="mine"/>).</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Unlocked(string key, int furniture, long epoch, bool mine)
+    {
+        if (key == _lockKey)
+        {
+            _unlocked.Add(furniture);
+            _lockNode?.SetLockOpen(furniture, true, true);
+            PlayAt(SfxSynth.DoorOpenBank.Variants[0], 1.6f, -10);
+        }
+        if (!mine || _picking is not { } pick || pick.Key != key || pick.Furniture != furniture) return;
+        var p = _searcher;
+        StopPicking();
+        if (p != null && IsInstanceValid(p)) TrySearch(p);   // straight into its contents
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void UnlockRefused(string key, int furniture)
+    {
+        _lockUi?.Refused();
+        Items?.Ui.Toast("The lock does not give.");
+    }
+
+    /// <summary>Client: the server says a container this client thought open is still locked.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Locked(string key, int furniture)
+    {
+        if (key == _lockKey)
+        {
+            _unlocked.Remove(furniture);
+            _lockNode?.SetLockOpen(furniture, false, false);
+        }
+        if (_open is { } open && open.Key == key && open.Furniture == furniture)
+        {
+            Close();
+            Items?.Ui.Toast("It is locked.");
+        }
+    }
+
+    /// <summary>A sound for the lock and the dial (client only: the dedicated server has no UI).</summary>
+    public void PlayAt(AudioStreamWav? stream, float pitch, float db)
+    {
+        if (stream == null || _ui == null) return;
+        var player = new AudioStreamPlayer { Stream = stream, PitchScale = pitch, VolumeDb = db, Bus = SfxBus.Name };
+        AddChild(player);
+        player.Finished += player.QueueFree;
+        player.Play();
     }
 
     private void Reply(long peer, StringName method, params Variant[] args)

@@ -8,6 +8,8 @@
 set -u
 AT=${1:-}
 PORT=7796
+GODOT=${GODOT:-godot}   # the Godot executable (a full path on Windows: docs/notes/general/godot-exe.md)
+EXTRA=${EXTRA:-}        # more client args, e.g. EXTRA="--time 13" for a daylight shot
 OUT=test_output
 cd "$(dirname "$0")/.."
 mkdir -p "$OUT"
@@ -16,11 +18,11 @@ ATARG=()
 CHARG=()
 [ -n "${CHUNKS:-}" ] && CHARG=(--chunks "$CHUNKS")
 C1=$(mktemp -d); C2=$(mktemp -d)
-timeout 200 godot --headless --path . -- --server --port $PORT --admin-password switchcheck ${CHARG[@]+"${CHARG[@]}"} > $OUT/switchcheck_server.log 2>&1 &
+timeout 200 "$GODOT" --headless --path . -- --server --port $PORT --admin-password switchcheck ${CHARG[@]+"${CHARG[@]}"} > $OUT/switchcheck_server.log 2>&1 &
 sleep 6
-timeout 190 godot --headless --path . -- --connect 127.0.0.1:$PORT --name Driver --cache "$C1" --switchcheck driver switchcheck ${ATARG[@]+"${ATARG[@]}"} ${CHARG[@]+"${CHARG[@]}"} --traffic 0 > $OUT/switchcheck_driver.log 2>&1 &
+timeout 190 "$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT --name Driver --cache "$C1" --switchcheck driver switchcheck ${ATARG[@]+"${ATARG[@]}"} ${CHARG[@]+"${CHARG[@]}"} --traffic 0 $EXTRA > $OUT/switchcheck_driver.log 2>&1 &
 sleep 2
-timeout 185 godot --path . -- --connect 127.0.0.1:$PORT --name Watcher --cache "$C2" --switchcheck watch $OUT/switchcheck_watch.png ${ATARG[@]+"${ATARG[@]}"} ${CHARG[@]+"${CHARG[@]}"} --traffic 0 > $OUT/switchcheck_watch.log 2>&1
+timeout 185 "$GODOT" --path . -- --connect 127.0.0.1:$PORT --name Watcher --cache "$C2" --switchcheck watch $OUT/switchcheck_watch.png ${ATARG[@]+"${ATARG[@]}"} ${CHARG[@]+"${CHARG[@]}"} --traffic 0 $EXTRA > $OUT/switchcheck_watch.log 2>&1
 code=$?
 sleep 2
 grep -h "\[switchcheck\]" $OUT/switchcheck_driver.log $OUT/switchcheck_watch.log

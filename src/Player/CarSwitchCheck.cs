@@ -22,6 +22,14 @@ namespace UnitSport.Player;
 /// it — both times in the Rally-raid preset, raised on its big wheels; non-zero exit after two
 /// minutes otherwise. <c>--switchcheck watch out.png</c> saves what the watcher sees at the end.
 /// </para>
+///
+/// <para>
+/// The cockpit (#69): the driver weaves the wheel while it sits in the car. The watcher must see a
+/// driver in the other player's car, drawn whole (their view from the seat is theirs alone), with
+/// the steering wheel turned by the replicated front-wheel angle times the steering ratio, and
+/// turned well off centre at some point; it saves a close-up through the driver's window as
+/// <c>out_cockpit.png</c>.
+/// </para>
 /// </summary>
 public partial class CarSwitchCheck : Node
 {
@@ -35,6 +43,11 @@ public partial class CarSwitchCheck : Node
     private bool _doorSeenOpen;
     private static int Preset => CarSetups.Parse("rally-raid")!.Id;
     private bool _drivingOk;
+    private bool _driverSeen;
+    private float _turnSeen;
+    private int _turnMismatch;
+    private Camera3D? _shotCamera, _restore;
+    private int _shotFrames = -1;
 
     private CarSwitchCheck(bool driver, Func<FootPlayer?> local, Func<Node?> players)
     {
@@ -95,6 +108,8 @@ public partial class CarSwitchCheck : Node
             case 1 when t > 5:
                 Press(PlayerInput.RoofToggle);
                 Press(PlayerInput.LightsToggle);
+                // standing, the wheel from lock to lock: the watcher sees it turn, and the hands with it
+                me.RideControls = () => new RideInput(0f, 0f, Mathf.Sin((float)_t * 1.5f), false);
                 _step++;
                 break;
             case 2 when t > 6:
@@ -104,6 +119,7 @@ public partial class CarSwitchCheck : Node
                 _step++;
                 break;
             case 3 when t > 12:
+                me.RideControls = null;
                 GD.Print($"[switchcheck] driver: get out: {me.TryInteract()}");
                 _step++;
                 break;
@@ -130,7 +146,9 @@ public partial class CarSwitchCheck : Node
             if (now != _seenDriving) GD.Print($"[switchcheck] watch: the other player's car: roof open {now.Item1}, lights {now.Item2}, preset {now.Item3}, lift {now.Item4:F2}, doors {now.Item5}");
             _seenDriving = now;
             _drivingOk |= now.Item1 && now.Item2 && now.Item3 == Preset && now.Item4 > 0.1f;
+            WatchCockpit(other, driving);
         }
+        TakeCockpitShot();
 
         foreach (var node in VehicleManager.Instance?.GetChildren() ?? new Godot.Collections.Array<Node>())
             if (node is VehicleBody body && body.GetNodeOrNull<CarRig>("Visual") is { } parked)
@@ -141,12 +159,58 @@ public partial class CarSwitchCheck : Node
                 _seenParked = now;
                 _doorSeenOpen |= (body.DoorsOpen & CarRig.DriverDoor) != 0;
                 // the garage doors (#56) with a preset on: out through the driver's door, which shuts behind
-                if (_drivingOk && now.Item1 && now.Item2 && now.Item3 == Preset && now.Item4 > 0.1f && _doorSeenOpen && body.DoorsOpen == 0)
+                if (_drivingOk && now.Item1 && now.Item2 && now.Item3 == Preset && now.Item4 > 0.1f && _doorSeenOpen && body.DoorsOpen == 0
+                    && _shotCamera == null)
                 {
+                    GD.Print($"[switchcheck] watch: cockpit: driver seen {_driverSeen}, wheel turned up to {Mathf.RadToDeg(_turnSeen):F0}°, "
+                        + $"frames where it disagreed with the front wheels: {_turnMismatch} (must be 0)");
+                    if (!_driverSeen || _turnSeen < 0.5f || _turnMismatch > 0)
+                        Finish(false, "the driver or their steering wheel was not seen right");
                     Shot();
                     Finish(true, "saw it driven and parked with the top down, the lights on and the Rally-raid preset, its door opened and shut");
                 }
             }
+    }
+
+    /// <summary>The other player's cockpit as this peer draws it: a whole driver, the wheel at the front wheels' angle times the ratio.</summary>
+    private void WatchCockpit(FootPlayer other, CarRig rig)
+    {
+        _driverSeen |= rig.GetNodeOrNull<Node3D>("Body/Driver") is { Visible: true } && rig.GetNodeOrNull<Node3D>("Body/DriverHead") is { Visible: true };
+        if (CarCatalog.For(other.Ride) is not { } spec) return;
+        if (Mathf.Abs(rig.WheelTurn - rig.SteerAngle * spec.SteerRatio) > 1e-3f) _turnMismatch++;
+        _turnSeen = Mathf.Max(_turnSeen, Mathf.Abs(rig.WheelTurn));
+        if (_shotFrames < 0 && Mathf.Abs(rig.WheelTurn) > 1.2f && _shotCamera == null)
+        {
+            // from outside the driver's door, a little ahead, at eye height: the driver, the wheel, the hands
+            var eye = rig.GlobalTransform * rig.EyeFrame.Origin;
+            var basis = rig.GlobalTransform.Basis;
+            _restore = GetViewport().GetCamera3D();
+            _shotCamera = new Camera3D { Fov = 40, Near = 0.05f };
+            GetTree().Root.AddChild(_shotCamera);
+            _shotCamera.GlobalPosition = eye + basis.X * 2.4f - basis.Z * 0.9f + Vector3.Up * 0.3f;
+            _shotCamera.LookAt(eye - Vector3.Up * 0.25f - basis.Z * 0.2f, Vector3.Up);
+            _shotCamera.MakeCurrent();
+            // our own figure is not in the way of the lens
+            if (_local()?.Visual is { } own) own.Visible = false;
+            _shotFrames = 0;
+        }
+    }
+
+    /// <summary>A couple of frames after the close-up camera went in (it has to have drawn), save and put the view back.</summary>
+    private void TakeCockpitShot()
+    {
+        if (_shotCamera == null || ++_shotFrames < 3) return;
+        var args = OS.GetCmdlineUserArgs();
+        int i = Array.IndexOf(args, "--switchcheck");
+        if (i + 2 < args.Length && args[i + 2].EndsWith(".png"))
+        {
+            var path = args[i + 2][..^4] + "_cockpit.png";
+            GD.Print($"[switchcheck] watch: wrote {path}: {GetViewport().GetTexture().GetImage().SavePng(path)}");
+        }
+        _restore?.MakeCurrent();
+        if (_local()?.Visual is { } own) own.Visible = true;
+        _shotCamera.QueueFree();
+        _shotCamera = null;
     }
 
     private void Shot()
