@@ -306,9 +306,17 @@ public partial class BirdNetProbe : Node
         if (DisplayServer.GetName() == "headless") return;
         await Aim(me, at());
         float normal = me.Camera.Fov;
+        var home = me.Camera.Transform;
+        // in a town the view from where the player stands is often a wall: look from a clear spot near the target
+        Vector3? eye = Blocked(me, me.Camera.GlobalPosition, at()) ? ClearSpot(me, at()) : null;
         float Fov() => width > 0f ? Mathf.Clamp(Mathf.RadToDeg(2f * Mathf.Atan(width * 0.5f / Mathf.Max(1f, me.Camera.GlobalPosition.DistanceTo(at())))), 2f, 70f) : normal;
         // the direction holds when set after the player's own _Process; the FOV only right before the draw
-        Action lens = () => { if (IsInstanceValid(me)) me.Camera.LookAt(at()); };
+        Action lens = () =>
+        {
+            if (!IsInstanceValid(me)) return;
+            if (eye is { } e) me.Camera.GlobalPosition = e;
+            me.Camera.LookAt(at());
+        };
         Action fov = () => { if (IsInstanceValid(me)) me.Camera.Fov = Fov(); };
         RenderingServer.FramePreDraw += fov;
         _lens = lens;
@@ -318,7 +326,31 @@ public partial class BirdNetProbe : Node
         GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, $"birdnet_{_role}_{name}.png"));
         _lens = null;
         RenderingServer.FramePreDraw -= fov;
+        if (eye != null && IsInstanceValid(me)) me.Camera.Transform = home;
         GD.Print($"[birdnet {_role}] picture {name}");
+    }
+
+    private static bool Blocked(FootPlayer me, Vector3 from, Vector3 to)
+    {
+        var space = me.GetWorld3D().DirectSpaceState;
+        var ex = new Godot.Collections.Array<Rid> { me.GetRid() };
+        var end = to + (from - to).Normalized() * 0.6f;   // stop short of the bird's own perch
+        // both ways: a ray that starts inside a building does not hit its walls from within
+        return space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, end, uint.MaxValue, ex)).Count > 0
+            || space.IntersectRay(PhysicsRayQueryParameters3D.Create(end, from, uint.MaxValue, ex)).Count > 0;
+    }
+
+    /// <summary>A camera spot 8–20 m from <paramref name="target"/>, a little above it, with a clear line to it; null if none.</summary>
+    private static Vector3? ClearSpot(FootPlayer me, Vector3 target)
+    {
+        foreach (float dist in new[] { 8f, 14f, 20f })
+            for (int k = 0; k < 16; k++)
+            {
+                float a = k * Mathf.Tau / 16f;
+                var e = target + new Vector3(Mathf.Cos(a) * dist, dist * 0.35f, Mathf.Sin(a) * dist);
+                if (!Blocked(me, e, target)) return e;
+            }
+        return null;
     }
 
     /// <summary><c>--birdtown</c>: the town part of #143 instead of the hunt (tools/birdnetcheck.sh with TOWN=1).</summary>
@@ -409,6 +441,8 @@ public partial class BirdNetProbe : Node
         bool heard = false;
         for (int i = 0; i < 30 && !heard; i++) { Say("ready"); heard = await Heard("A", "town", 3); }
         Expect(heard, "heard A");
+        // counted before the pictures: A may already stand under its pigeon (and be hit) while B takes them
+        int drops = life.DropsOnOthers;
         // what B sees of the town: a bird high on a roof, one on the street, and a flock aloft
         var roof = life.Birds.Where(b => b.Town && b.State == Bird.Mode.Perched).OrderByDescending(b => Above(life, b)).FirstOrDefault();
         if (roof != null) await Snap(me, "town_roof", () => roof.Centre, 14f);
@@ -419,7 +453,6 @@ public partial class BirdNetProbe : Node
 
         // A stands under a pigeon: B must see the dropping land on A
         Expect(await Heard("A", "under", 150), "A stands under a pigeon");
-        int drops = life.DropsOnOthers;
         Expect(await Heard("A", "splat", 70) || _heard.Any(l => l.Contains("PN A nosplat")), "A says how it went");
         bool seen = await Until(() => life.DropsOnOthers > drops, 5);
         Expect(seen, $"B saw a dropping land on A (peer {life.LastVictim})");

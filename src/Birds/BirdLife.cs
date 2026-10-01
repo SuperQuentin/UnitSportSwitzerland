@@ -334,6 +334,9 @@ public partial class BirdLife : Node3D
         var tile = _origin.TileAt(p);
         EnsureTrees(tile);
         EnsureTown(tile);
+        // wait for the buildings: spawning before they are read filled a town with farm birds that
+        // then held the whole budget (2 town birds of 32 at Sion)
+        if (_townLoading.Contains(tile)) return (Habitat.None, 0);
         // the cover reads a village as farmland: the buildings say it is a town. Most of a town's
         // birds are its own (pigeons, sparrows, swifts) on roofs, ledges and streets; the rest are
         // the garden birds of the Town habitat.

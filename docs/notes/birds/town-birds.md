@@ -6,6 +6,8 @@
   sloping roof faces, facing out), window ledges (each 3 m storey of a wall face, 0.18 m out) and
   street spots (3–5 m out from the foot of a wall, never inside a building's flat box). At most 10
   ridge, 10 eave, 8 ledge and 6 street perches a building. Bucketed in 16 m cells like tree tops.
+  **No spawn on a tile whose buildings are still being read** (`TrySpawn`): before that, Sion filled
+  its whole budget with farm birds first (2 town birds of 32, and they stayed).
 - **The town test**: the cover raster reads a village as Farm, so a spawn point is a town when the
   3×3 cells of 64 m around it (a 192 m square) hold ≥ `TownBuildings` (14) real buildings (no barns,
   annexes, garages or sites). There, 75 % of spawns are town flocks, the rest `Pick(Habitat.Town)`
@@ -36,4 +38,8 @@
 - **Check**: `TOWN=1 [WINDOWED=1] SERVER_ARGS= UNITSPORT_CHUNKS=<dir> tools/birdnetcheck.sh E,N` —
   town birds come, A stands under a pigeon until it drops on A (A's screen), B sees it land on A,
   a tame street bird lets A within its flush distance + 3 m, takes off nearer, and lands again on
-  B's screen. Pictures `test_output/birdnet_{A,B}_town_*.png`, `_splat_*`.
+  B's screen. Pictures `test_output/birdnet_{A,B}_town_*.png`, `_splat_*` (taken from a clear spot near
+  the bird when a wall is in the way: in a town's streets it nearly always is). Passed at Riddes
+  (2583250,1113250) and Sion old town (2593900,1120250), also with `SWARM=3`: at Sion 10–12 town
+  birds (pigeons, sparrows, crows, a wagtail), a pigeon 7–16 m up on an eave let go on A and B saw it
+  land on A, a tame sparrow/crow let A within 7–8 m, took off at 1.4–1.9 m and landed again.

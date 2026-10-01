@@ -33,7 +33,14 @@
 - **Cost**, 16 players at Riddes (`tools/loadtest.sh 16`): server busy p99 199 ms (195 without
   birds; 460 before the server birds lost their meshes and the tree tops were bucketed in 16 m cells),
   net out +35 KB/s for 16 peers. Swarm bots carry a `BirdNet` with no `BirdLife` to take the RPCs.
-- **Check**: `tools/birdnetcheck.sh [E,N]` (server `--generated-world`; `SERVER_ARGS= UNITSPORT_CHUNKS=<dir>`
-  for real terrain): two clients get the same birds, A shoots one through the item path (killed for
+  **With the town birds** (Windows, `PORT=8043 AT=2583250,1113250 tools/loadtest.sh 16`, 120 s, the
+  same run with server spawning off for the baseline): busy p50 3.9 ms (2.8 without birds), p99
+  140 vs 172 ms and max 162 vs 277 ms (both dominated by ~100 ms spikes every 5 s window that are
+  there without birds too, GC pause 0 in most of them: not the birds), working set 435 vs 318 MB,
+  heap 210 vs 142 MB, GC 34/22/7 vs 26/17/6 collections, pause total 169 vs 152 ms (max window 82
+  vs 91 ms, both at startup), net out 88 vs 60 KB/s avg, 0 UDP drops, 0 disconnects.
+- **Check**: `tools/birdnetcheck.sh [E,N]` (server `--generated-world`; `SERVER_ARGS="--chunks <dir>"
+  UNITSPORT_CHUNKS=<dir>` for real terrain; on Windows run it from Git Bash with `GODOT=<console exe>`;
+  `SWARM=3` adds swarm bots: hunt and town both pass at Riddes and Sion with 3 bots on): two clients get the same birds, A shoots one through the item path (killed for
   both, in A's journal only), A's air shot flushes resting birds on B's screen, an aircraft round
   through a bird kills it. Kills are logged `[birds] killed #id`, client shots `[birds] shot: ...`.

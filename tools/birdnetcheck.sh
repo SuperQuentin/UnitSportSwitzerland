@@ -12,26 +12,29 @@ cd "$(dirname "$0")/.."
 OUT=test_output
 mkdir -p "$OUT"
 # SERVER_ARGS= (empty) serves the real terrain of UNITSPORT_CHUNKS instead of the generated world
-timeout 360 "$GODOT" --headless --path . -- --title "#143 birdnet server" --server ${SERVER_ARGS---generated-world} --port $PORT > "$OUT/birdnet_server.log" 2>&1 & SERVER=$!
+timeout 480 "$GODOT" --headless --path . -- --title "#143 birdnet server" --server ${SERVER_ARGS---generated-world} --port $PORT > "$OUT/birdnet_server.log" 2>&1 & SERVER=$!
 sleep 12
 # WINDOWED=1: the clients open windows and save pictures of each step (test_output/birdnet_A_*.png, _B_)
 HEADLESS=--headless; [ -n "${WINDOWED:-}" ] && HEADLESS=
 # TOWN=1: the town birds instead of the hunt (perches, a dropping on A seen by B, a tame bird flushed and landing)
 EXTRA=; [ -n "${TOWN:-}" ] && EXTRA=--birdtown
-client() { timeout 300 "$GODOT" $HEADLESS --path . -- --title "#143 birdnet client $1" --connect 127.0.0.1:$PORT --name "Bird$1" --cache "$OUT/birdnet_cache_$1" \
+client() { timeout 420 "$GODOT" $HEADLESS --path . -- --title "#143 birdnet client $1" --connect 127.0.0.1:$PORT --name "Bird$1" --cache "$OUT/birdnet_cache_$1" \
     --at "$AT" --view first --birdnetcheck "$1" $EXTRA > "$OUT/birdnet_$1.log" 2>&1; }
 # SWARM=n: n swarm bots join as well (src/Net/Swarm.cs), for a light multiplayer check
 SWARMPID=
 if [ -n "${SWARM:-}" ]; then
-    timeout 300 "$GODOT" --headless --path . -- --title "#143 birdnet swarm" --swarm "$SWARM" --first 0 --total "$SWARM" --seed 1 \
-        --connect 127.0.0.1:$PORT --cache "$OUT/birdnet_cache_swarm" --seconds 280 > "$OUT/birdnet_swarm.log" 2>&1 & SWARMPID=$!
+    timeout 420 "$GODOT" --headless --path . -- --title "#143 birdnet swarm" --swarm "$SWARM" --first 0 --total "$SWARM" --seed 1 \
+        --connect 127.0.0.1:$PORT --cache "$OUT/birdnet_cache_swarm" --seconds 400 > "$OUT/birdnet_swarm.log" 2>&1 & SWARMPID=$!
 fi
 client A & A=$!
 client B & B=$!
 wait $A $B
 # a headless Godot may ignore SIGTERM (and may exit 139 after its result): kill hard, read RESULT lines
 # only what this script started: the server and its timeout wrapper, by PID (never by pattern)
-for P in $SERVER $SWARMPID; do pkill -9 -P $P 2>/dev/null; kill -9 $P 2>/dev/null; done
+# (children found through ps -ef, which Linux and Git Bash on Windows both have; no pkill there)
+for P in $SERVER $SWARMPID; do
+    for C in $(ps -ef | awk -v p=$P '$3 == p { print $2 }'); do kill -9 $C 2>/dev/null; done; kill -9 $P 2>/dev/null
+done
 grep -h "\[birdnet\|\[birds\] killed" "$OUT/birdnet_A.log" "$OUT/birdnet_B.log"
 if [ "$(grep -h "RESULT: ok" "$OUT/birdnet_A.log" "$OUT/birdnet_B.log" | wc -l)" -eq 2 ]; then echo "[birdnetcheck] RESULT: ok"; exit 0; fi
 echo "[birdnetcheck] RESULT: FAILED (see $OUT/birdnet_*.log)"; exit 1
