@@ -48,5 +48,7 @@
   - Snap turn of 30° on foot (right stick X). In vehicles the head is the free look.
   - A vignette (`shaders/xr_vignette.gdshader`, a clip-space quad per eye) driven by the anchor's
     speed and yaw rate. It is halved in a first-person mount or cockpit.
+  - `XrRig.Blink()`: black at once, clear again in 0.4 s (the vignette's `blackout`), to hide a cut. Used by the
+    crash view (`player/crash-ragdoll`).
   - Teleport is not done yet.
 - Hands are small boxes until the avatar's arms are driven (phase 2, see `roadmap`).
