@@ -58,7 +58,7 @@ godot --path . -- --goto Lausanne          # by name
 godot --path . -- --at 2538000,1152000     # or by LV95 easting/northing
 ```
 
-- **WASD + mouse** — fly around. **Space** up, **Shift** down, **Ctrl** boost. Click to take the mouse back after a menu
+- **WASD + mouse** — fly around. **Space** up, **Shift** down, **Q** boost. Click to take the mouse back after a menu
 - **T** — drop onto the ground and walk. **T** again to fly
 - On foot: **Shift** run, **Space** jump, **Ctrl** slide, **Space** against a wall to wall jump
 - **M** — search for a town and teleport there (only places with terrain are listed)
@@ -97,6 +97,21 @@ C:\ProgramData\chocolatey\lib\godot-mono\tools\godot_v4.7.1-stable_mono_win64\go
 
 ---
 
+## What is in the game
+
+Beyond walking and flying, the world has (each system has notes in `docs/notes/<area>/`):
+
+- **Vehicles**: cars (tuning, garages, setups), motorbikes, trucks and buses with trailers, planes
+  and helicopters, bikes and skis; first-person cockpits, passengers, damage and wrecks.
+- **Races** between players and NPCs on roads or air gates, traffic, trains and day/night.
+- **Interiors, loot and items**: enterable buildings with lootable furniture, gun lockers and
+  safes, an inventory, a radio and CDs, a camera that prints photos, flags to plant.
+- **Combat and birds**: aerial combat, hunting and bird strikes.
+- **Occasions**: seasonal events such as Halloween and Christmas.
+- **Synthesised audio**: all sound is generated at startup, no audio files are shipped.
+
+---
+
 ## Replaying a GPX track
 
 Press **G**, then pick one or more `.gpx` files — selecting several starts a **ghost race**
@@ -106,7 +121,7 @@ where they all begin together and you watch the gaps open.
 | ------------------------- | ----------------------------------------------------- |
 | **G**                     | add track(s)                                          |
 | **Space**                 | play / pause                                          |
-| **C**                     | cycle camera: chase → first person → cinematic → free |
+| **C**                     | cycle camera: chase → first person → cinematic → free → Absolute Cinema → Absolute Racing |
 | **F**                     | follow the next runner                                |
 | **H** / *Hide UI* button  | show or hide the interface                            |
 | timeline slider           | scrub anywhere in the race                            |
@@ -362,6 +377,7 @@ Two things worth knowing before extending the pipeline:
 # dedicated server
 godot --headless --path . -- --server [--port 7777] [--admin-password <pw>]
                                       [--bind <ip>] [--stream-bandwidth <MB/s>]
+                                      [--generated-world]
 
 # client
 godot --path . -- --connect 127.0.0.1 [--name Syra]
