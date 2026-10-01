@@ -85,7 +85,7 @@ public sealed class RoadExtractor
     private static readonly string[] RailColumns =
     {
         "objektart", "kunstbaute", "anzahl_spuren", "verkehrsmittel",
-        "zahnradbahn", "standseilbahn", "ausser_betrieb",
+        "zahnradbahn", "standseilbahn", "ausser_betrieb", "auf_strasse",
     };
 
     /// <summary>Aerial ropeways carry only the type and the geometry.</summary>
@@ -330,8 +330,10 @@ public sealed class RoadExtractor
             float width = (flags & RoadFlags.DoubleTrack) != 0 ? 9.0f
                 : (flags & RoadFlags.NarrowGauge) != 0 ? 3.6f : 4.6f;
 
+            // auf_strasse: the track runs in a street (#124); the network stage embeds it
+            var attrFlags = IsTrue(Str(reader, 7)) ? RoadAttrFlags.OnStreet : RoadAttrFlags.None;
             Collect(reader, RoadClass.Railway, RoadSurface.Unknown, flags, width,
-                new RoadAttributes(Layer: RoadFormat.LayerFor(null, flags)));
+                new RoadAttributes(Flags: attrFlags, Layer: RoadFormat.LayerFor(null, flags)));
         }
     }
 
