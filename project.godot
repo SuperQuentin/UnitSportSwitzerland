@@ -98,7 +98,7 @@ world_door_light_3={
 }
 portal_clip_eye_0={
 "type": "vec3",
-"value": Vector3(0, 1e+09, 0)
+"value": Vector3(0, 1000000000, 0)
 }
 portal_clip_plane_0={
 "type": "vec4",
@@ -106,7 +106,7 @@ portal_clip_plane_0={
 }
 portal_clip_eye_1={
 "type": "vec3",
-"value": Vector3(0, 1e+09, 0)
+"value": Vector3(0, 1000000000, 0)
 }
 portal_clip_plane_1={
 "type": "vec4",
@@ -114,7 +114,7 @@ portal_clip_plane_1={
 }
 portal_clip_eye_2={
 "type": "vec3",
-"value": Vector3(0, 1e+09, 0)
+"value": Vector3(0, 1000000000, 0)
 }
 portal_clip_plane_2={
 "type": "vec4",
@@ -122,7 +122,7 @@ portal_clip_plane_2={
 }
 portal_clip_eye_3={
 "type": "vec3",
-"value": Vector3(0, 1e+09, 0)
+"value": Vector3(0, 1000000000, 0)
 }
 portal_clip_plane_3={
 "type": "vec4",
