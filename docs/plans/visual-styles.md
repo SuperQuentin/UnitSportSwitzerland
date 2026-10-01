@@ -339,7 +339,7 @@ Decide the default (PS1 or Cartoon) from the phase 2 and 3 results and player fe
 Phase 0, branch `feat/181-visual-styles-prototype` (issue #181). Riddes (VS), tiles 2582–2583 /
 1112–1113, 14:00 and 19:20. Measured on an **Apple M1 Pro** (1152×648 window, render scale
 0.75), the only machine available. Screenshots and logs: `test_output/styles/` in the worktree;
-the side-by-side is `test_output/styles/styles_comparison.png` (rows PS1, Cartoon, Realistic−,
+the side-by-side is `docs/plans/visual-styles-phase0.jpg` on that branch (rows PS1, Cartoon, Realistic−,
 Realistic+; columns street, chase cam, valley). The shot and timing scripts are in
 `tools/style-proto/` (`run.sh`, `perf.sh`) on that branch. Every timing run pins the origin to
 `--origin 2590000,1116500`; runs whose frames stalled (see finding 8) are discarded.
