@@ -11,6 +11,7 @@ touches its topic; search with `grep -ril <word> docs/notes/loot`.
 - `gathering` — Gathering: (`src/Loot/Gathering.cs`, hold G / pad X on foot outdoors — pad X is only tuck/sprint when mounted): a...
 - `room-loot` — Pools by room (a garage shelf is tools, a cellar shelf supplies), kind extras, budget per kind, plan v7 (#165)
 - `locked-containers` — Gun lockers and safes: dial mini-game, unlock bit in the take mask, server checks the combination, door replicated; `tools/locksynccheck.sh`
+- `banks` — Banks (#213): IsBank pick + door sign, teller desk is the only place to deposit/withdraw (server checks InBank), vault safes = dial + Simon (length by value); `tools/bankcheck.sh`
 - `two-players-one-container` — Two players, one container: server grants each stack once and pushes `Taken` to others inside...
 
 ## Gotchas

@@ -61,17 +61,20 @@ public partial class BankSigns : Node
                 Mesh = new BoxMesh { Size = new Vector3(w, 0.55f, 0.08f) },
                 MaterialOverride = _plate,
             });
-            sign.AddChild(new Label3D
-            {
-                Text = "BANK",
-                FontSize = 96,
-                PixelSize = 0.0035f,
-                OutlineSize = 0,
-                Modulate = new Color(0.98f, 0.84f, 0.38f),
-                Shaded = false,
-                DoubleSided = false,
-                Position = new Vector3(0, 0, 0.045f),
-            });
+            // lettering on both faces: whichever way the facade's outward runs, one reads from the street
+            foreach (float side in new[] { 1f, -1f })
+                sign.AddChild(new Label3D
+                {
+                    Text = "BANK",
+                    FontSize = 96,
+                    PixelSize = 0.0035f,
+                    OutlineSize = 0,
+                    Modulate = new Color(0.98f, 0.84f, 0.38f),
+                    Shaded = false,
+                    DoubleSided = false,
+                    RenderPriority = 1,
+                    Transform = new Transform3D(new Basis(Vector3.Up, side > 0 ? 0 : Mathf.Pi), new Vector3(0, 0, 0.06f * side)),
+                });
             root.AddChild(sign);
         }
         node.AddChild(root);

@@ -103,7 +103,7 @@ public static class LootTables
         [FurnitureType.GunLocker] = new(0.15f, 1, 2, new[] { P(Guns, 40), P(Ammo, 60) }),
         [FurnitureType.Safe] = new(0.10f, 1, 2, new[] { P(Gadgets, 35), P(Ammo, 20), P(Medical, 15), P(Optics, 8), P(Guns, 6) }, 0.90f, 50, 400),
         // a bank vault's: mostly money, sometimes a lot (#213); cracked with the dial, then Simon
-        [FurnitureType.VaultSafe] = new(0.05f, 0, 2, new[] { P(Gadgets, 40), P(Optics, 15), P(Guns, 10), P(Ammo, 15), P(Medical, 20) }, 1.0f, 200, 4000),
+        [FurnitureType.VaultSafe] = new(0.05f, 0, 2, new[] { P(Gadgets, 40), P(Optics, 15), P(Guns, 10), P(Ammo, 15), P(Medical, 20) }, 1.0f, 150, 2500),
         // #213: cellars, music rooms, playrooms
         [FurnitureType.WashingMachine] = new(0.55f, 0, 1, new[] { P(Cloth, 80), P(Sweets, 10), P(Gadgets, 10) }, 0.25f, 1, 20),   // forgotten in a pocket
         [FurnitureType.Dryer] = new(0.55f, 0, 1, new[] { P(Cloth, 100) }, 0.15f, 1, 10),

@@ -5,8 +5,8 @@
 - `<godot> --path . -- --ride foot,60 --invuicheck`: synthetic mouse events at the real slot
   rectangles (drag and drop, click-carry, spread, shift-click, right-click).
 - `--connect <host> --econcheck <admin password>` against a server started with that password:
-  non-admin vehicle refused, `/login` flips the flag, admin vehicle spawned, cash claimed to the
-  server account. Leaves its test deposit in the server's accounts file.
+  non-admin vehicle refused, `/login` flips the flag, admin vehicle spawned, cash
+  deposit refused outside a bank (#213); the counter itself: `tools/bankcheck.sh` (loot `banks` note).
 - `--invuicheck`/`--econcheck` use a scratch inventory (`Inventory.Scratch`, `Persist = false`).
 - `GODOT=<exe> tools/useanimcheck.sh`: loopback server + A (first person: drink, eat, GPS, hat) + B (remote: sees Mouth arm pose, hat); screenshots in `test_output/useanim_*.png`.
 - `<godot> --headless --path . -- --iconsheet`: renders every item icon to `test_output/iconsheet.png` (see `pixel-icons`).
