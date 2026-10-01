@@ -344,6 +344,8 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         {
             Name = $"Horizon_{key.E}_{key.N}",
             Mesh = mesh,
+            // ground: never a sun-shadow caster (lit styles)
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             // NW corner of the block, like a tile
             Position = _origin!.ToWorld(key.E * ChunkFormat.TileSizeM, (key.N + BlockTiles) * ChunkFormat.TileSizeM, 0),
         };

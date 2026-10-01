@@ -1,8 +1,11 @@
 // Tree body, shared by ps1_tree (the 3D trees, near) and ps1_treefar (billboards, far:
-// TREE_BILLBOARD). Each wrapper is shader_type, render_mode, its defines, then this include.
+// TREE_BILLBOARD), and their cartoon_ wrappers. Each wrapper is shader_type, render_mode, its
+// defines, then this include. Cartoon's trees are ChunkNode's High-detail meshes, so its
+// billboards trace those shapes instead of PS1's.
 
 #include "res://shaders/common/world.gdshaderinc"
 #include "res://shaders/common/retro.gdshaderinc"
+#include "res://shaders/common/style.gdshaderinc"
 #include "res://shaders/common/sightline.gdshaderinc"
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/door_light.gdshaderinc"
@@ -157,6 +160,62 @@ float hit_trunk(vec3 o, vec3 d, float top, out vec3 n) {
     clip_plane(vec3(0.0, -1.0, 0.0), 0.0, o, d, t_in, t_out, n);
     return t_in <= t_out ? t_in : 1e30;
 }
+
+#ifdef STYLE_CARTOON
+// Cartoon's unit meshes (Terrain/ChunkNode, MeshDetail.High). Change those and these together.
+
+// One 7-sided tier of TieredConeMesh: rim of radius r at height base (corners at angles TAU i / 7),
+// apex at top. Its underside is a shallow dent in the mesh, traced flat here.
+float hit_tier(vec3 o, vec3 d, float base, float top, float r, out vec3 n) {
+    float apothem = r * cos(PI / 7.0);
+    float t_in = -1e30, t_out = 1e30;
+    n = vec3(0.0, -1.0, 0.0);
+    for (int i = 0; i < 7; i++) {
+        float a = TAU * (float(i) + 0.5) / 7.0;
+        clip_plane(vec3(cos(a) * (top - base), apothem, sin(a) * (top - base)), apothem * top,
+            o, d, t_in, t_out, n);
+    }
+    clip_plane(vec3(0.0, -1.0, 0.0), -base, o, d, t_in, t_out, n);
+    return t_in <= t_out ? t_in : 1e30;
+}
+
+// One puff of PuffCrownMesh, an ellipsoid (the mesh's 6x4 one, traced smooth).
+float hit_puff(vec3 o, vec3 d, vec3 c, vec3 radii, out vec3 n) {
+    vec3 oc = (o - c) / radii;
+    vec3 dd = d / radii;
+    float a = dot(dd, dd);
+    float b = dot(oc, dd);
+    float disc = b * b - a * (dot(oc, oc) - 1.0);
+    n = vec3(0.0, 1.0, 0.0);
+    if (disc < 0.0) {
+        return 1e30;
+    }
+    float t = (-b - sqrt(disc)) / a;
+    n = (oc + dd * t) / radii;
+    return t;
+}
+
+// The 6-sided trunk prism of both, corners at radius r, from 0 up to top.
+float hit_trunk6(vec3 o, vec3 d, float r, float top, out vec3 n) {
+    float t_in = -1e30, t_out = 1e30;
+    n = vec3(0.0, 1.0, 0.0);
+    for (int i = 0; i < 6; i++) {
+        float a = TAU * (float(i) + 0.5) / 6.0;
+        clip_plane(vec3(cos(a), 0.0, sin(a)), r * cos(PI / 6.0), o, d, t_in, t_out, n);
+    }
+    clip_plane(vec3(0.0, 1.0, 0.0), top, o, d, t_in, t_out, n);
+    clip_plane(vec3(0.0, -1.0, 0.0), 0.0, o, d, t_in, t_out, n);
+    return t_in <= t_out ? t_in : 1e30;
+}
+
+// The nearer of two hits.
+void nearer(float t, vec3 n, inout float best, inout vec3 best_n) {
+    if (t < best) {
+        best = t;
+        best_n = n;
+    }
+}
+#endif
 #endif
 
 void fragment() {
@@ -165,12 +224,28 @@ void fragment() {
     vec3 ray = normalize(world_pos - CAMERA_POSITION_WORLD);
     vec3 o = (CAMERA_POSITION_WORLD - bb_origin) / bb_scale;
     vec3 d = ray / bb_scale;
-    // ChunkNode's meshes: conifer rim 0.28 over a neck at 0.22, broadleaf waist 0.62 over 0.34
     bool broadleaf = bb_kind > 0.5;
-    float neck = broadleaf ? 0.34 : 0.22;
     vec3 crown_n, trunk_n;
+#ifdef STYLE_CARTOON
+    // three puffs on a 0.5 trunk, or three tiers on a 0.3 one
+    float t_crown = 1e30;
+    vec3 hit_n;
+    if (broadleaf) {
+        nearer(hit_puff(o, d, vec3(0.0, 0.70, 0.0), vec3(0.72, 0.28, 0.72), hit_n), hit_n, t_crown, crown_n);
+        nearer(hit_puff(o, d, vec3(0.34, 0.56, 0.18), vec3(0.52, 0.22, 0.52), hit_n), hit_n, t_crown, crown_n);
+        nearer(hit_puff(o, d, vec3(-0.30, 0.58, -0.22), vec3(0.55, 0.23, 0.55), hit_n), hit_n, t_crown, crown_n);
+    } else {
+        nearer(hit_tier(o, d, 0.22, 0.62, 1.0, hit_n), hit_n, t_crown, crown_n);
+        nearer(hit_tier(o, d, 0.45, 0.82, 0.75, hit_n), hit_n, t_crown, crown_n);
+        nearer(hit_tier(o, d, 0.66, 1.0, 0.5, hit_n), hit_n, t_crown, crown_n);
+    }
+    float t_trunk = hit_trunk6(o, d, broadleaf ? 0.07 : 0.06, broadleaf ? 0.5 : 0.3, trunk_n);
+#else
+    // ChunkNode's meshes: conifer rim 0.28 over a neck at 0.22, broadleaf waist 0.62 over 0.34
+    float neck = broadleaf ? 0.34 : 0.22;
     float t_crown = hit_crown(o, d, broadleaf ? 0.62 : 0.28, neck, crown_n);
     float t_trunk = hit_trunk(o, d, neck, trunk_n);
+#endif
     float t = min(t_crown, t_trunk);
     if (t > 1e29) {
         discard;
@@ -185,10 +260,12 @@ void fragment() {
     if (portal_clipped(wpos, CAMERA_POSITION_WORLD)) {
         discard;
     }
-    float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
-    float light = retro_steps(ndl, 3.0) * 0.45 + 0.6;
     // snow settles on the upper faces of a crown (a running occasion's world_snow)
-    vec3 col = occasion_snow_amount(COLOR.rgb, smoothstep(0.25, 0.75, abs(n.y)) * 0.8) * light;
+    vec3 col = occasion_snow_amount(COLOR.rgb, smoothstep(0.25, 0.75, abs(n.y)) * 0.8);
+#ifndef STYLE_LIT
+    float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
+    col *= retro_steps(ndl, 3.0) * 0.45 + 0.6;
+#endif
 
     // dissolve anything between the camera and its subject, or right in front of the lens, and
     // crossfade 3D and billboard, using the same 4x4 Bayer pattern the colour quantiser below
@@ -208,6 +285,17 @@ void fragment() {
         discard;
     }
 
+#ifdef STYLE_LIT
+    // valley mist of a running occasion; a no-op on an ordinary day
+    col = style_grade(occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX)));
+    ALBEDO = col;
+#ifdef TREE_BILLBOARD
+    // the traced facet; the 3D trees light by their mesh's own normals
+    NORMAL = style_view_normal(VIEW_MATRIX, n);
+#endif
+    ROUGHNESS = 1.0;
+    EMISSION = col * door_light(wpos, n);
+#else
     col *= world_tint + door_light(wpos, n);
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
@@ -215,4 +303,5 @@ void fragment() {
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
     ALBEDO = mix(col, world_sky, fog);
+#endif
 }

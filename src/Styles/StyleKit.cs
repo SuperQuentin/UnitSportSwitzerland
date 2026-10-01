@@ -118,7 +118,18 @@ public static class StyleKit
             [MaterialRole.Path] = "res://shaders/ps1_path.gdshader",
             [MaterialRole.Precip] = "res://shaders/ps1_snowfall.gdshader",
         },
-        [VisualStyle.Cartoon] = new(),
+        // ps1_road waits for the road network stack's split (#237); interiors and snowfall are
+        // unshaded on purpose: rooms float in the dark under the terrain, out of the sun
+        [VisualStyle.Cartoon] = new()
+        {
+            [MaterialRole.Terrain] = "res://shaders/cartoon_terrain.gdshader",
+            [MaterialRole.Building] = "res://shaders/cartoon_building.gdshader",
+            [MaterialRole.Tree] = "res://shaders/cartoon_tree.gdshader",
+            [MaterialRole.TreeFar] = "res://shaders/cartoon_treefar.gdshader",
+            [MaterialRole.Water] = "res://shaders/cartoon_water.gdshader",
+            [MaterialRole.Prop] = "res://shaders/cartoon_prop.gdshader",
+            [MaterialRole.Path] = "res://shaders/cartoon_path.gdshader",
+        },
         [VisualStyle.RealisticLow] = new(),
         [VisualStyle.RealisticHigh] = new(),
     };
@@ -141,8 +152,11 @@ public static class StyleKit
     {
         var m = new ShaderMaterial();
         Configure(m, role, Applied);
-        Live.RemoveAll(l => !l.Material.TryGetTarget(out _));
-        Live.Add((new System.WeakReference<ShaderMaterial>(m), role));
+        lock (Live)
+        {
+            Live.RemoveAll(l => !l.Material.TryGetTarget(out _));
+            Live.Add((new System.WeakReference<ShaderMaterial>(m), role));
+        }
         return m;
     }
 
@@ -161,11 +175,67 @@ public static class StyleKit
     {
         if (_applied == Style) return false;
         _applied = Style;
-        Live.RemoveAll(l => !l.Material.TryGetTarget(out _));
-        foreach (var (weak, role) in Live)
-            if (weak.TryGetTarget(out var m))
-                Configure(m, role, Applied);
+        lock (Live)
+        {
+            Live.RemoveAll(l => !l.Material.TryGetTarget(out _));
+            foreach (var (weak, role) in Live)
+                if (weak.TryGetTarget(out var m))
+                    Configure(m, role, Applied);
+        }
+        lock (Figures)
+        {
+            Figures.RemoveAll(f => !f.Material.TryGetTarget(out _));
+            foreach (var (weak, plain) in Figures)
+                if (weak.TryGetTarget(out var m))
+                    Shade(m, plain);
+        }
         return true;
+    }
+
+    // --- avatars, vehicles, birds and items ----------------------------------------------------
+
+    /// <summary>What a figure material was built with, for PS1 and for going back to it.</summary>
+    private readonly record struct PlainFigure(BaseMaterial3D.DiffuseModeEnum Diffuse,
+        BaseMaterial3D.SpecularModeEnum Specular, float Roughness, bool Rim, float RimAmount, float RimTint);
+
+    private static readonly List<(System.WeakReference<StandardMaterial3D> Material, PlainFigure Plain)> Figures = new();
+
+    /// <summary>
+    /// The vertex-coloured standard material of avatars, vehicles, birds and items
+    /// (<c>Avatar/HumanMeshBuilder.Material</c>), shaded for the applied style: PS1's as built,
+    /// Cartoon's with a toon diffuse and a rim. Kept like the shader materials, so a restyle
+    /// reaches it. Any thread (mesh builders make figures on workers).
+    /// </summary>
+    public static StandardMaterial3D Figure(StandardMaterial3D m)
+    {
+        var plain = new PlainFigure(m.DiffuseMode, m.SpecularMode, m.Roughness, m.RimEnabled, m.Rim, m.RimTint);
+        lock (Figures)
+        {
+            Figures.RemoveAll(f => !f.Material.TryGetTarget(out _));
+            Figures.Add((new System.WeakReference<StandardMaterial3D>(m), plain));
+        }
+        Shade(m, plain);
+        return m;
+    }
+
+    private static void Shade(StandardMaterial3D m, PlainFigure plain)
+    {
+        if (StyleFinish == Finish.Cartoon)
+        {
+            m.DiffuseMode = BaseMaterial3D.DiffuseModeEnum.Toon;
+            m.SpecularMode = BaseMaterial3D.SpecularModeEnum.Toon;
+            m.Roughness = 0.9f;
+            m.RimEnabled = true;
+            m.Rim = 0.35f;
+            m.RimTint = 0.6f;
+            return;
+        }
+        m.DiffuseMode = plain.Diffuse;
+        m.SpecularMode = plain.Specular;
+        m.Roughness = plain.Roughness;
+        m.RimEnabled = plain.Rim;
+        m.Rim = plain.RimAmount;
+        m.RimTint = plain.RimTint;
     }
 
     private static void Configure(ShaderMaterial m, MaterialRole role, VisualStyle style)
@@ -200,12 +270,24 @@ public static class StyleKit
     // terrain's geometry. Each item walks the fallback chain on its own, like the roles.
 
     /// <summary>A style's look beyond its shaders; null borrows the parent's.</summary>
-    private sealed record Look(MeshDetail? Detail = null, int? FinestStride = null, bool? Sun = null);
+    private sealed record Look(MeshDetail? Detail = null, int? FinestStride = null, bool? Sun = null, Finish? Finish = null);
+
+    /// <summary>
+    /// A style's finish outside its shaders: how its sky, ambient light and haze are made and
+    /// driven through the day, and how avatars and vehicles are shaded (<see cref="Figure"/>).
+    /// </summary>
+    private enum Finish
+    {
+        /// <summary>PS1: a flat background colour, ambient light for the avatars only, plain figures.</summary>
+        Flat,
+        /// <summary>A gradient sky, filmic tonemap, cool blue shade, strong aerial haze; toon figures.</summary>
+        Cartoon,
+    }
 
     private static readonly Dictionary<VisualStyle, Look> Looks = new()
     {
-        [VisualStyle.Ps1] = new(MeshDetail.Low, FinestStride: 1, Sun: false),
-        [VisualStyle.Cartoon] = new(),
+        [VisualStyle.Ps1] = new(MeshDetail.Low, FinestStride: 1, Sun: false, Finish: Finish.Flat),
+        [VisualStyle.Cartoon] = new(MeshDetail.High, Sun: true, Finish: Finish.Cartoon),
         // Textures carry the surface detail, so 2 m quads underfoot rather than 1 m: the
         // prototype's biggest geometry lever (Realistic-, Riddes, M1 Pro: ~25 -> 11-20 ms)
         [VisualStyle.RealisticLow] = new(FinestStride: 2),
@@ -233,16 +315,75 @@ public static class StyleKit
     /// <summary>Whether the applied style lights the world with a real sun (a shadowed <see cref="DirectionalLight3D"/>).</summary>
     public static bool HasSun => Pick(Applied, l => l.Sun).Value;
 
+    private static Finish StyleFinish => Pick(Applied, l => l.Finish).Value;
+
     /// <summary>
-    /// A new environment for the applied style; <c>World/DayNight</c> drives its colours every
-    /// frame. Only PS1's exists: a flat sky colour and no tonemapping, with ambient light for the
-    /// avatars and vehicles (the world shaders are unshaded).
+    /// A new environment for the applied style; <see cref="DriveEnvironment"/> sets its colours
+    /// every frame. PS1: a flat sky colour and no tonemapping, ambient light for the avatars and
+    /// vehicles (the world shaders are unshaded). Cartoon: a gradient sky, a filmic tonemap and
+    /// the aerial haze that is half the look, ridges going blue and then pale with distance.
     /// </summary>
-    public static Godot.Environment NewEnvironment() => new()
+    public static Godot.Environment NewEnvironment()
     {
-        BackgroundMode = Godot.Environment.BGMode.Color,
-        BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
-    };
+        var env = new Godot.Environment
+        {
+            BackgroundMode = Godot.Environment.BGMode.Color,
+            BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
+        };
+        if (StyleFinish == Finish.Cartoon)
+        {
+            env.BackgroundMode = Godot.Environment.BGMode.Sky;
+            env.Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial { SunAngleMax = 20f, SkyCurve = 0.12f } };
+            env.TonemapMode = Godot.Environment.ToneMapper.Filmic;
+            env.TonemapExposure = 1.05f;
+            env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+            env.ReflectedLightSource = Godot.Environment.ReflectionSource.Disabled;
+            env.FogEnabled = true;
+            env.FogMode = Godot.Environment.FogModeEnum.Exponential;
+            env.FogDensity = 0.00011f;
+            env.FogAerialPerspective = 0.35f;
+            env.FogSkyAffect = 0f;
+        }
+        return env;
+    }
+
+    /// <summary>
+    /// Every frame, from <c>World/DayNight</c>: the environment's colours and the sun (null when
+    /// the style has none) for the hour. <paramref name="shade"/> is the direction the shaders
+    /// light from (the sun, or the moon at night), <paramref name="tint"/> and
+    /// <paramref name="sky"/> the palette's light and sky colours as seen (sRGB).
+    /// </summary>
+    public static void DriveEnvironment(Godot.Environment env, DirectionalLight3D? sun, Vector3 shade,
+        Color tint, Color sky, float night, float sunElevationDeg)
+    {
+        if (sun != null)
+        {
+            // it shines along -shade, as the shaders light; the light's own -Z is where it shines
+            var down = -shade.Normalized();
+            sun.Basis = Basis.LookingAt(down, Mathf.Abs(down.Y) > 0.999f ? Vector3.Forward : Vector3.Up);
+            sun.LightColor = tint;
+            sun.LightEnergy = Mathf.Lerp(1.0f, 0.3f, night);
+        }
+        if (StyleFinish == Finish.Cartoon && env.Sky?.SkyMaterial is ProceduralSkyMaterial gradient)
+        {
+            // a clear day sky, sliding into the palette's own at dusk and night
+            float dusk = Mathf.Clamp(1f - (sunElevationDeg - 2f) / 18f, 0f, 1f);
+            gradient.SkyTopColor = new Color(0.24f, 0.47f, 0.85f).Lerp(sky.Darkened(0.2f), dusk);
+            gradient.SkyHorizonColor = new Color(0.72f, 0.84f, 0.95f).Lerp(sky.Lightened(0.2f), dusk);
+            gradient.GroundHorizonColor = gradient.SkyHorizonColor;
+            gradient.GroundBottomColor = gradient.SkyHorizonColor.Darkened(0.3f);
+            env.FogLightColor = new Color(0.68f, 0.79f, 0.93f).Lerp(sky.Lightened(0.15f), dusk);
+            // BotW's shade is bright and cool: the shadow side is the sky's blue, not black
+            env.AmbientLightColor = new Color(0.50f, 0.60f, 0.92f).Lerp(sky, 0.2f);
+            env.AmbientLightEnergy = Mathf.Lerp(0.8f, 0.4f, night);
+            env.BackgroundColor = sky;
+            return;
+        }
+        env.BackgroundColor = sky;
+        env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+        env.AmbientLightColor = sky.Lerp(new Color(tint.R, tint.G, tint.B), 0.5f);
+        env.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.55f, night);
+    }
 
     /// <summary>
     /// The applied style's sun, or null when it has none (PS1: the shaders light themselves from
@@ -254,7 +395,15 @@ public static class StyleKit
             Name = "Sun",
             ShadowEnabled = true,
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel2Splits,
+            // about the 3D trees' reach: the billboards beyond cast none
             DirectionalShadowMaxDistance = 400f,
+            // hard: the soft filter's noise turns into hatching under the cel band
+            ShadowBlur = 0f,
+            // the cel light reads attenuation as a hard band: any acne becomes stripes on the crowns
+            ShadowBias = 0.2f,
+            ShadowNormalBias = 4f,
+            // an angular size (PCSS) washed the shadows out entirely in the prototype
+            LightAngularDistance = 0f,
         }
         : null;
 
@@ -309,6 +458,9 @@ public static class StyleKit
     /// <summary>The crossfade's width, as in the tree shaders' <c>tree_fade</c>.</summary>
     private const float TreeFade = 40f;
 
+    /// <summary>How far any 3D tree can show: the handover plus its crossfade (<c>Terrain/NearTrees</c>).</summary>
+    public static float TreeReach => TreeNear + TreeFade;
+
     /// <summary>
     /// The billboard material the tile builds put their far trees in; null leaves every tree 3D.
     /// Set on the main thread before the first tile builds, read by the build workers.
@@ -326,7 +478,7 @@ public static class StyleKit
     public static int Report()
     {
         int failures = 0;
-        if (Looks[Base] is not { Detail: not null, FinestStride: not null, Sun: not null })
+        if (Looks[Base] is not { Detail: not null, FinestStride: not null, Sun: not null, Finish: not null })
         {
             GD.PrintErr($"[style-report] FAIL: the base style {Base} has an incomplete look");
             failures++;
@@ -364,6 +516,7 @@ public static class StyleKit
                 LookItem("detail", l => l.Detail);
                 LookItem("finest-stride", l => l.FinestStride);
                 LookItem("sun", l => l.Sun);
+                LookItem("finish", l => l.Finish);
                 GD.Print($"[style-report] {style}: {(borrowed.Count == 0 ? "complete" : $"borrows {borrowed.Count}: {string.Join(" ", borrowed)}")}");
             }
         }

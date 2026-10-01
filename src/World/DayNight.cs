@@ -110,7 +110,12 @@ public partial class DayNight : Node
     {
         Hour = TimeCommand.Advance(Hour, delta, MinutesPerDay);
         Apply((float)delta);
-        if (GetViewport()?.GetCamera3D() is { } cam) cam.Environment = EnvironmentAt(cam.GlobalPosition);
+        if (GetViewport()?.GetCamera3D() is { } cam)
+        {
+            cam.Environment = EnvironmentAt(cam.GlobalPosition);
+            // the rooms under the terrain are out of the sun (nothing down there casts its shadow)
+            if (Sun != null) Sun.Visible = cam.Environment == null;
+        }
     }
 
     /// <summary>"14:05", for the HUD and chat.</summary>
@@ -164,23 +169,10 @@ public partial class DayNight : Node
         RenderingServer.GlobalShaderParameterSet("world_night", Night);
         ApplyOccasionGlobals(atmo, tintLinear, delta);
 
-        if (Sun != null)
-        {
-            // it shines along -shade, as the shaders light: from the sun by day, from the moon
-            // at night; the light's own -Z is the direction it shines
-            var down = -shade.Normalized();
-            Sun.Basis = Basis.LookingAt(down, Mathf.Abs(down.Y) > 0.999f ? Vector3.Forward : Vector3.Up);
-            Sun.LightColor = tint;
-            Sun.LightEnergy = Mathf.Lerp(1.0f, 0.2f, Night);
-        }
 
+        // the visual style's sky, ambient, haze and sun
         if (_environment != null)
-        {
-            _environment.BackgroundColor = sky;
-            _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
-            _environment.AmbientLightColor = sky.Lerp(new Color(tint.R, tint.G, tint.B), 0.5f);
-            _environment.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.55f, Night);
-        }
+            Styles.StyleKit.DriveEnvironment(_environment, Sun, shade, tint, sky, Night, SunElevationDeg);
         if (_indoor != null)
         {
             _indoor.BackgroundColor = sky;

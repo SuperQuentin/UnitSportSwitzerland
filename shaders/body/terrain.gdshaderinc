@@ -3,6 +3,7 @@
 
 #include "res://shaders/common/world.gdshaderinc"
 #include "res://shaders/common/retro.gdshaderinc"
+#include "res://shaders/common/style.gdshaderinc"
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
@@ -95,6 +96,20 @@ void fragment() {
     float rockiness = smoothstep(0.62, 0.38, n.y);
     col = mix(col, vec3(0.30, 0.28, 0.26), rockiness * 0.75);
 
+#ifdef STYLE_LIT
+    // valley mist of a running occasion; a no-op on an ordinary day
+    col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
+    col = style_grade(col);
+#ifdef STYLE_CARTOON
+    // big painted patches of lighter and darker ground
+    vec2 paint_xz = pattern_xz(world_pos);
+    col *= mix(0.9, 1.1, style_paint_noise(paint_xz / 38.0) * 0.6 + style_paint_noise(paint_xz / 9.0) * 0.4);
+#endif
+    ALBEDO = col;
+    NORMAL = style_view_normal(VIEW_MATRIX, n);
+    ROUGHNESS = 1.0;
+    EMISSION = col * door_light(world_pos, n);
+#else
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     // cliffs get a harder light ramp so faceting reads as rock rather than soft ground
     float levels = mix(light_levels, 3.0, rockiness);
@@ -108,4 +123,5 @@ void fragment() {
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
     ALBEDO = mix(col, world_sky, fog);
+#endif
 }

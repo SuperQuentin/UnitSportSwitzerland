@@ -38,6 +38,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private WorldEnvironment? _worldEnvironment;
     private World.DayNight? _dayNight;
     private DirectionalLight3D? _sun;
+    private ShaderMaterial? _treeMaterial;
+    private NearTrees? _nearTrees;
 
     /// <summary>The session this world is built for: the title screen's choice, or the command line's.</summary>
     public WorldLaunch Launch { get; init; } = WorldLaunch.FromArgs();
@@ -206,7 +208,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var material = StyleKit.Material(MaterialRole.Terrain);
         var roadMaterial = StyleKit.Material(MaterialRole.Road);
         var buildingMaterial = StyleKit.Material(MaterialRole.Building);
-        var treeMaterial = StyleKit.Material(MaterialRole.Tree);
+        var treeMaterial = _treeMaterial = StyleKit.Material(MaterialRole.Tree);
         var waterMaterial = StyleKit.Material(MaterialRole.Water);
         // far trees as billboards, before the first tile builds them
         var treeFarMaterial = StyleKit.Material(MaterialRole.TreeFar);
@@ -259,6 +261,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         ClientTerrainSync.MergeCachedIndex(_chunks, origin);
 
         AddChild(_chunks);
+        ApplyNearTrees();
         Audio.Surfaces.Origin = origin;
         var chunksForAudio = _chunks;
         AddChild(new Audio.ReverbZones(() => GetViewport().GetCamera3D(), () => LocalPlayer?.Indoors == true, chunksForAudio)
@@ -938,6 +941,25 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _dayNight?.SetEnvironment(environment);
         }
         ApplySun();
+        ApplyNearTrees();
+    }
+
+    /// <summary>
+    /// The 3D trees near the camera, culled per tree, while the style's trees are too heavy to
+    /// leave per tile (<see cref="MeshDetail.High"/>). The tiles hand their trees over as they
+    /// rebuild at the new detail (<see cref="ChunkManager.RebuildVisuals"/>).
+    /// </summary>
+    private void ApplyNearTrees()
+    {
+        bool want = StyleKit.Detail == MeshDetail.High && StyleKit.TreeLod && _chunks != null && _treeMaterial != null;
+        if (want == (_nearTrees != null)) return;
+        _nearTrees?.QueueFree();
+        _nearTrees = null;
+        if (!want) return;
+        var (conifer, broadleaf) = ChunkNode.HighDetailTrees(_treeMaterial!);
+        _nearTrees = new NearTrees(conifer, broadleaf, StyleKit.TreeReach);
+        // under the terrain, an origin container: the floating origin moves it with the tiles
+        _chunks!.AddChild(_nearTrees);
     }
 
     /// <summary>The style's sun, or none: made here, pointed by <see cref="World.DayNight"/>.</summary>

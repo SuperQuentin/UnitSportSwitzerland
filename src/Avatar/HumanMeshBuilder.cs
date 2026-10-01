@@ -997,16 +997,17 @@ public static class HumanMeshBuilder
     };
 
     /// <summary>
-    /// Unlit, vertex-coloured, backface-culled. Matches how the rest of the world is shaded:
-    /// the terrain gets its form from flat facets and dither, not from specular highlights.
+    /// Vertex-coloured, backface-culled, no specular. Matches how the rest of the world is shaded:
+    /// the terrain gets its form from flat facets and dither, not from specular highlights. The
+    /// visual style shades it its own way (<see cref="Styles.StyleKit.Figure"/>: toon in Cartoon).
     /// </summary>
-    public static StandardMaterial3D Material() => new()
+    public static StandardMaterial3D Material() => Styles.StyleKit.Figure(new()
     {
         VertexColorUseAsAlbedo = true,
         ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
         SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
         Roughness = 1f,
-    };
+    });
 
     // =====================================================================================
     // Dance layer. The spec (conventions, every move's joint formulas, moving variants) is
