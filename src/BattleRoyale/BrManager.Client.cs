@@ -121,6 +121,7 @@ public partial class BrManager
             _zoneKey = key;
         }
         if (s.Phase == BrPhase.Idle) _feed.Clear();
+        SetMatchLoot(s);
         if (s.Phase != BrPhase.Idle && _mapFor != (s.AreaE, s.AreaN, s.Side)) BuildMap(s.Area);
         if (before != BrPhase.Ended && s.Phase == BrPhase.Ended && s.Winner == Me && InMatch)
             LocalPlayer()?.Announce("WINNER WINNER RACLETTE DINNER", true);
@@ -293,7 +294,14 @@ public partial class BrManager
             _ => killer != 0 ? BrOut.Killed : BrOut.Other,
         };
         GD.Print($"[br] died ({why}), killer {killer}");
-        RpcId(1, MethodName.ReportDeath, killer, (int)why);
+        // what you carried goes into your death box (#194): it leaves your pack now
+        var inv = Inventory();
+        var stacks = new List<ItemStack>();
+        if (inv != null)
+            for (int i = 0; i < Items.Inventory.Size; i++)
+                if (!inv[i].IsEmpty && inv[i].Data == null) stacks.Add(inv[i]);
+        RpcId(1, MethodName.ReportDeath, killer, (int)why, stacks.Select(s => (int)s.Id).ToArray(), stacks.Select(s => s.Count).ToArray());
+        inv?.Clear();
     }
 
     // ------------------------------------------------------------------------------------

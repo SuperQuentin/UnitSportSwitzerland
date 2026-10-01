@@ -16,11 +16,13 @@ CH=(); [ -n "${CHUNKS:-}" ] && CH=(--chunks "$CHUNKS")
 timeout 200 "$GODOT" --headless --path . -- "${CH[@]}" --brcheck > "$OUT/br_selfcheck.log" 2>&1
 grep -h "\[brcheck\]" "$OUT/br_selfcheck.log"
 
-timeout 400 "$GODOT" --headless --path . -- --server --generated-world --port $PORT --admin-password brcheck --brpace 0.05 \
+# REAL=1 (with CHUNKS): the match on real Swiss terrain, a random region anywhere, instead of a generated world
+WORLD=(--generated-world); [ -n "${REAL:-}" ] && WORLD=("${CH[@]}")
+timeout 400 "$GODOT" --headless --path . -- --server "${WORLD[@]}" --port $PORT --admin-password brcheck --brpace 0.05 \
     > "$OUT/br_server.log" 2>&1 & SERVER=$!
 trap 'kill $SERVER 2>/dev/null' EXIT
-sleep 12
-client() { timeout 300 "$GODOT" --path . -- --connect 127.0.0.1:$PORT --name "BR$1" --cache "$OUT/br_cache_$1" \
+sleep ${SERVER_WAIT:-12}
+client() { timeout 300 "$GODOT" --path . -- "${CH[@]}" --connect 127.0.0.1:$PORT --name "BR$1" --cache "$OUT/br_cache_$1" \
     --at "$2" --brprobe "$1" > "$OUT/br_$1.log" 2>&1; }
 client A "$AT" & A=$!
 client B "$AT_B"

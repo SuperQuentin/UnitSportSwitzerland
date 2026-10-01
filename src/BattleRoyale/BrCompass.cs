@@ -79,10 +79,14 @@ public partial class BrCompass : Control
             var goal = z.Phase == 0 ? z.Centre : z.NextCentre;
             float radius = z.Phase == 0 ? z.Radius : z.NextRadius;
             float dist = view.Position.DistanceTo(goal) - radius;
-            if (dist > 0) Marker(font, heading, goal - view.Position, BrMapDraw.Storm with { A = 1f }, $"{dist:F0} m", diamond: true);
+            if (dist > 0) Marker(font, heading, goal - view.Position, BrMapDraw.Storm with { A = 1f }, $"{dist:F0} m", diamond: true, row: 0);
         }
+        // the nearest supply drop within 2 km
+        if (_br.Watching == 0 && BrMapDraw.Airdrops(_br).Select(d => d.At).OrderBy(d => d.DistanceTo(view.Position)).FirstOrDefault() is var drop
+            && drop != Vector2.Zero && drop.DistanceTo(view.Position) < 2000f)
+            Marker(font, heading, drop - view.Position, BrMapDraw.Drop, $"drop {drop.DistanceTo(view.Position):F0} m", diamond: false, row: 2);
         if (_br.Waypoint is { } wp && _br.Watching == 0)
-            Marker(font, heading, wp - view.Position, BrMapDraw.Waypoint, $"{view.Position.DistanceTo(wp):F0} m", diamond: false);
+            Marker(font, heading, wp - view.Position, BrMapDraw.Waypoint, $"{view.Position.DistanceTo(wp):F0} m", diamond: false, row: 1);
 
         // the centre mark and the exact bearing under it
         DrawColoredPolygon(new[] { new Vector2(mid, Height - 2), new Vector2(mid - 6, Height + 7), new Vector2(mid + 6, Height + 7) }, Colors.White);
@@ -92,7 +96,8 @@ public partial class BrCompass : Control
         DrawString(font, new Vector2(mid - bw * 0.5f, Height + 22), b, HorizontalAlignment.Left, -1, 14, Colors.White);
     }
 
-    private void Marker(Font font, float heading, Vector2 toward, Color color, string label, bool diamond)
+    /// <param name="row">Which line under the strip its label goes on, so labels pinned to one edge do not overlap.</param>
+    private void Marker(Font font, float heading, Vector2 toward, Color color, string label, bool diamond, int row)
     {
         if (toward.LengthSquared() < 1f) return;
         float rel = Mathf.Wrap(Bearing(toward) - heading, -180f, 180f);
@@ -111,6 +116,6 @@ public partial class BrCompass : Control
             DrawColoredPolygon(new[] { new Vector2(x + s * 14, y + 1), new Vector2(x + s * 8, y - 4), new Vector2(x + s * 8, y + 6) }, color);
         }
         float w = font.GetStringSize(label, HorizontalAlignment.Left, -1, 11).X;
-        DrawString(font, new Vector2(Mathf.Clamp(x - w * 0.5f, 0, Width - w), Height + 40), label, HorizontalAlignment.Left, -1, 11, color);
+        DrawString(font, new Vector2(Mathf.Clamp(x - w * 0.5f, 0, Width - w), Height + 40 + row * 13), label, HorizontalAlignment.Left, -1, 11, color);
     }
 }

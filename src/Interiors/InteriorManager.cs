@@ -954,6 +954,8 @@ public partial class InteriorManager : Node3D
             else if (!p.Indoors) door = OutsideDoorInReach(p.GlobalPosition);
             if (door != null)
                 text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
+            // a Battle Royale crate at your feet comes first, as E opens it first (#194)
+            if (BattleRoyale.BrCrates.Instance?.PromptFor(p) is { } crate) text = crate;
         }
         _prompt.Visible = text != null;
         if (text != null) _prompt.Text = text;

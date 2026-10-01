@@ -39,8 +39,8 @@ public static class BrRegion
         var towns = places.Where(p => p.Kind == PlaceKind.Town && p.Buildings >= 15).ToList();
         if (towns.Count == 0 || tiles.Count == 0)
         {
-            // generated ground: somewhere within 5 km of the default spawn
-            double e = fallback.E + (rng.NextDouble() * 2 - 1) * 5000, n = fallback.N + (rng.NextDouble() * 2 - 1) * 5000;
+            // generated ground: around the default spawn, whose valley the generated network serves
+            double e = fallback.E + (rng.NextDouble() * 2 - 1) * 1500, n = fallback.N + (rng.NextDouble() * 2 - 1) * 1500;
             return new BrArea(Math.Round(e / 50) * 50, Math.Round(n / 50) * 50, side, "Generated valley");
         }
 

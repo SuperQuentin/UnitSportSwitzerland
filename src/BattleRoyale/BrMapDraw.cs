@@ -14,6 +14,13 @@ public static class BrMapDraw
     public static readonly Color Next = new(1f, 1f, 1f, 0.75f);
     public static readonly Color Waypoint = new(1f, 0.82f, 0.2f);
     public static readonly Color Me = new(0.2f, 0.85f, 1f);
+    public static readonly Color Drop = new(0.25f, 0.5f, 1f);
+
+    /// <summary>The supply drops of the match: zone position, and whether still falling.</summary>
+    public static IEnumerable<(Vector2 At, bool Falling)> Airdrops(BrManager br) =>
+        BrCrates.Instance?.All.Where(c => c.Style == CrateStyle.Airdrop)
+            .Select(c => (new Vector2((float)(c.E - br.State.AreaE), (float)(c.N - br.State.AreaN)), !BrCrates.Instance.Landed(c)))
+        ?? Enumerable.Empty<(Vector2, bool)>();
 
     /// <summary>A screen direction for a zone direction: north is up.</summary>
     public static Vector2 Screen(Vector2 zoneDir) => new(zoneDir.X, -zoneDir.Y);
@@ -29,6 +36,15 @@ public static class BrMapDraw
             c.DrawArc(centre, r + reach * 0.5f, 0, Mathf.Tau, 128, Storm, reach);
             c.DrawArc(centre, r, 0, Mathf.Tau, 128, Edge, 2f);
             if (z.Phase > 0 && !z.Over) Dashed(c, toScreen(z.NextCentre), z.NextRadius * ppm, Next);
+        }
+
+        // supply drops (#194): a blue crate, with its canopy while it is still coming down
+        foreach (var drop in Airdrops(br))
+        {
+            var p = toScreen(drop.At);
+            if (drop.Falling) c.DrawArc(p + new Vector2(0, -9), 7f, Mathf.Pi, Mathf.Tau, 8, Colors.White, 2f);
+            c.DrawRect(new Rect2(p - new Vector2(5, 5), new Vector2(10, 10)), Drop);
+            c.DrawRect(new Rect2(p - new Vector2(5, 5), new Vector2(10, 10)), Colors.Black, false, 1.2f);
         }
 
         if (br.Waypoint is { } wp) Pin(c, toScreen(wp), Waypoint);

@@ -1719,6 +1719,9 @@ public partial class FootPlayer : CharacterBody3D
             ExitVehicle();
             return true;
         }
+        // a Battle Royale crate at your feet (#194), indoors or out: a death box falls where its owner did
+        if (_ride == null && !_mantling && _deadTimer <= 0 && BattleRoyale.BrCrates.Instance?.TryOpen(this) == true) return true;
+
         // inside, E is the front door or nothing: no mount picker in a living room
         // (or the cupboard in front of you: searching comes first, the door is by the door),
         // but a car parked in the garage is got into like anywhere else

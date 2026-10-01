@@ -75,11 +75,18 @@ public partial class BrProbe : Node
         Chat.Send("/br start");
         if (!await Dropped()) return;
 
-        // where the last circle closes: inside every circle until the very end
+        // the loot (#194): crates and vehicles came with the drop; a supply crate, emptied
         var me = Me!;
+        await LootSupplyCrate(me);
+
+        // where the last circle closes: inside every circle until the very end
         var c = Br.Zone!.CentreOf(ZoneSchedule.Phases);
         Br.Teleport(Br.State.AreaE + c.X, Br.State.AreaN + c.Y, "final zone");
         await Seconds(3.0);
+
+        // the first supply drop comes down at phase 2: seen before the duel ends the match
+        await Until(() => _sawDrop, 40);
+        Snap("a_drop");
 
         // wait for B next to us, then stab it until it goes down
         Say(Fmt($"posA {me.GlobalPosition.X:F2} {me.GlobalPosition.Y:F2} {me.GlobalPosition.Z:F2}"));
@@ -99,6 +106,7 @@ public partial class BrProbe : Node
             await Seconds(0.6);
         }
         Expect(await Until(() => b.Down != 0, 3), "B is down");
+        await LootDeathBox(me);
         await Ended();
     }
 
@@ -148,6 +156,10 @@ public partial class BrProbe : Node
         var (e, n) = Br.Origin!.ToLv95(Me!.GlobalPosition);
         Expect(s.Area.Contains(e, n), Fmt($"landed in the region ({e:F0}/{n:F0} in {s.AreaName} {s.AreaE:F0}/{s.AreaN:F0})"));
         Expect(await Until(() => Br.MapTexture != null, 40), "the region's map is built (minimap)");
+        Expect(await Until(() => BrCrates.Instance?.All.Count(c => c.Style == CrateStyle.Supply) > 20, 8),
+            $"supply crates by the roads ({BrCrates.Instance?.All.Count(c => c.Style == CrateStyle.Supply)} supply, "
+            + $"{BrCrates.Instance?.All.Count(c => c.Style == CrateStyle.Military)} army)");
+        Expect(await Until(() => Vehicles() > 0, 6), $"vehicles parked in the region ({Vehicles()})");
         Br.Waypoint = new Vector2(400, 300);
         await Seconds(1.0);
         Snap($"{_role.ToLowerInvariant()}_dropped");
@@ -167,6 +179,7 @@ public partial class BrProbe : Node
         if (!await Until(() => Br!.State.Phase == BrPhase.Ended, 30)) { Expect(false, "the match ended"); return; }
         var s = Br!.State;
         Expect(s.Winner == PeerOf("A") && s.Find(s.Winner)?.Kills == 1, $"A won with one kill (winner {s.Find(s.Winner)?.Name})");
+        Expect(_sawDrop && _heard.Any(l => l.Contains("supply drop is coming down")), "a supply drop came down, announced and on the map");
         await Seconds(1.0);
         Snap($"{_role.ToLowerInvariant()}_results");
     }
@@ -178,12 +191,62 @@ public partial class BrProbe : Node
         Expect(!_items.Inventory.InMatch && _items.Inventory.Contains(ItemId.Binoculars) && !_items.Inventory.Contains(ItemId.Knife),
             "the free-roam pack is back, the knife is gone");
         Expect(!Permissions.RidesLocked, "the travel menu is open again");
+        Expect(await Until(() => BrCrates.Instance?.All.Any() != true && Vehicles() == 0, 10),
+            $"the match's crates and vehicles are gone ({BrCrates.Instance?.All.Count()} crates, {Vehicles()} vehicles)");
         await Seconds(5.0);
         var me = Me!;
         Expect(!me.Eliminated && !me.KnockedOut, "standing again");
         float d = new Vector2(me.GlobalPosition.X - start.X, me.GlobalPosition.Z - start.Z).Length();
         Expect(d < 30f, $"back where it started ({d:F0} m away)");
     }
+
+    private bool _sawDrop;
+
+    public override void _Process(double delta)
+    {
+        if (Br != null && BrMapDraw.Airdrops(Br).Any()) _sawDrop = true;
+    }
+
+    private static int Vehicles() =>
+        UnitSport.Vehicles.VehicleManager.Instance?.GetChildren().Count(n => n.Name.ToString().StartsWith(BrLoot.VehiclePrefix)) ?? 0;
+
+    /// <summary>A: to the nearest supply crate, E, take everything; the pack grows and the crate goes.</summary>
+    private async Task LootSupplyCrate(FootPlayer me)
+    {
+        var crates = BrCrates.Instance!;
+        var (e, n) = Br!.Origin!.ToLv95(me.GlobalPosition);
+        var crate = crates.All.Where(c => c.Style == CrateStyle.Supply).MinBy(c => (c.E - e) * (c.E - e) + (c.N - n) * (c.N - n));
+        if (crate == null) { Expect(false, "a supply crate to loot"); return; }
+        Br.Teleport(crate.E + 1.0, crate.N, "supply crate");
+        await Until(() => crates.NearestTo(me)?.Id == crate.Id, 20);
+        await Seconds(1.5);   // the server learns where we stand a moment after the teleport
+        int before = Count();
+        var stacks = crate.Stacks();
+        Expect(crates.TryOpen(me) && Loot.LootService.Instance?.IsOpen == true, $"E opens {crate.Label} ({string.Join(", ", stacks.Select(s => $"{s.Count} {s.Id}"))})");
+        Loot.LootService.Instance?.TakeAll();
+        bool emptied = await Until(() => !crates.All.Any(c => c.Id == crate.Id), 10);
+        Expect(emptied && Count() == before + stacks.Sum(s => s.Count), $"took it all: the crate is gone, the pack {before} -> {Count()}");
+        Loot.LootService.Instance?.Close();
+        Snap("a_crate");
+    }
+
+    /// <summary>A: B's death box lies where B fell, with B's knife and bandages in it.</summary>
+    private async Task LootDeathBox(FootPlayer me)
+    {
+        var crates = BrCrates.Instance!;
+        if (!await Until(() => crates.All.Any(c => c.Style == CrateStyle.DeathBox), 10)) { Expect(false, "B's death box appeared"); return; }
+        var box = crates.All.First(c => c.Style == CrateStyle.DeathBox);
+        await Until(() => crates.NearestTo(me)?.Id == box.Id, 10);
+        int knives = CountOf(ItemId.Knife);
+        Snap("a_deathbox");
+        Expect(crates.TryOpen(me), $"E opens {box.Label}: {string.Join(", ", box.Stacks().Select(s => $"{s.Count} {s.Id}"))}");
+        Loot.LootService.Instance?.TakeAll();
+        Expect(await Until(() => CountOf(ItemId.Knife) == knives + 1, 10), $"B's knife is now A's ({knives} -> {CountOf(ItemId.Knife)})");
+        Loot.LootService.Instance?.Close();
+    }
+
+    private int Count() => Enumerable.Range(0, Inventory.Size).Sum(i => _items.Inventory[i].Count);
+    private int CountOf(ItemId id) => Enumerable.Range(0, Inventory.Size).Where(i => _items.Inventory[i].Id == id).Sum(i => _items.Inventory[i].Count);
 
     private long PeerOf(string role)
     {

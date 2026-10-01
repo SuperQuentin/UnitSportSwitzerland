@@ -29,6 +29,7 @@ public partial class ServerWorld : Node3D
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
+    private BattleRoyale.BrCrates? _brCrates;
 
     public override async void _Ready()
     {
@@ -140,8 +141,9 @@ public partial class ServerWorld : Node3D
         _chat.Race = race;
 
         // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
+        _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
         var br = _br = BattleRoyale.BrManager.CreateServer(_chat, _players, places?.Places ?? new(), manifest.Tiles,
-            (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N));
+            (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), source, _brCrates);
         br.Origin = origin;
         AddChild(br);
         _chat.BattleRoyale = br;
@@ -269,6 +271,7 @@ public partial class ServerWorld : Node3D
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
         _br?.SendTo(id);
+        _brCrates?.SendTo(id);
     }
 
     private void OnPeerDisconnected(long id)

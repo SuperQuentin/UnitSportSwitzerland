@@ -183,8 +183,53 @@ public partial class LootService : Node
         return true;
     }
 
+    // ---- client: a Battle Royale crate in the same panel (#194) --------------------------------
+
+    /// <summary>The crate (<c>BattleRoyale.BrCrates</c>) open in the panel instead of furniture, if any.</summary>
+    private long? _crate;
+
+    /// <summary>Opens a crate's contents in the loot panel; taking goes to the crate's server.</summary>
+    public void OpenCrate(FootPlayer p, long id, string title)
+    {
+        Close();
+        _crate = id;
+        _searcher = p;
+        _ui?.Open(title);
+        Play(SfxSynth.Tick, 0.6f);
+    }
+
+    /// <summary>The open crate's contents changed (someone took from it): redraw.</summary>
+    public void CrateChanged(long id)
+    {
+        if (_crate == id) _ui?.Refresh();
+    }
+
+    /// <summary>The server gave this player a stack of a crate.</summary>
+    public void CrateGranted(long id, ItemStack stack)
+    {
+        _waiting = false;
+        if (Items != null)
+        {
+            int left = Items.Inventory.Add(stack);
+            Items.Ui.Toast($"+{stack.Count - left} {ItemDefs.Get(stack.Id)?.Name}");
+        }
+        Play(SfxSynth.Chime, 1.5f);
+        if (_crate != id) return;
+        _ui?.Refresh();
+        if (_pendingAll) { _pendingAll = false; TakeAll(); }
+    }
+
+    /// <summary>The server said no (someone was quicker): the panel shows what is left.</summary>
+    public void CrateRefused(long id)
+    {
+        _waiting = false;
+        _pendingAll = false;
+        if (_crate == id) _ui?.Refresh();
+    }
+
     public void Close()
     {
+        _crate = null;
         _open = null;
         _searcher = null;
         _waiting = false;
@@ -195,6 +240,12 @@ public partial class LootService : Node
     public override void _Process(double delta)
     {
         SyncLocks();
+        if (_crate is long crate)
+        {
+            if (_searcher is not { } cp || !IsInstanceValid(cp) || !cp.IsViewing
+                || BattleRoyale.BrCrates.Instance?.InReach(crate, cp.GlobalPosition, 1.4f) != true) Close();
+            return;
+        }
         if (_picking is { } pick && (_searcher is not { } sp || !IsInstanceValid(sp) || !sp.IsViewing
             || InteriorManager.Instance?.Current?.Key != pick.Key)) StopPicking();
         if (_open == null) return;
@@ -213,16 +264,36 @@ public partial class LootService : Node
     /// <summary>The stacks still in the open container, with their index in the roll.</summary>
     public IEnumerable<(int Index, ItemStack Stack)> OpenContents()
     {
+        if (_crate is long crate)
+        {
+            var stacks = BattleRoyale.BrCrates.Instance?.StacksOf(crate) ?? new List<ItemStack>();
+            for (int i = 0; i < stacks.Count; i++) yield return (i, stacks[i]);
+            yield break;
+        }
         for (int i = 0; i < _openStacks.Count; i++)
             if ((_openMask & (1 << i)) == 0) yield return (i, _openStacks[i]);
     }
 
     public bool Waiting => _waiting;
-    public bool IsOpen => _open != null;
+    public bool IsOpen => _open != null || _crate != null;
 
     /// <summary>Asks for one stack of the open container. Refused locally when it would not fit.</summary>
     public void Take(int index)
     {
+        if (_crate is long crate)
+        {
+            if (_waiting || Items == null || BattleRoyale.BrCrates.Instance is not { } crates) return;
+            var stacks = crates.StacksOf(crate);
+            if (index < 0 || index >= stacks.Count) return;
+            if (Items.Inventory.Room(stacks[index].Id, stacks[index].Data) < stacks[index].Count)
+            {
+                Items.Ui.Toast("No room in your pack.");
+                return;
+            }
+            _waiting = true;
+            crates.Take(crate, index, stacks[index]);
+            return;
+        }
         if (_open is not { } open || _waiting || index < 0 || index >= _openStacks.Count) return;
         if ((_openMask & (1 << index)) != 0 || Items == null) return;
         var stack = _openStacks[index];
@@ -543,8 +614,16 @@ public partial class LootService : Node
         public Dictionary<string, Dictionary<string, long[]>> Buildings { get; set; } = new();
     }
 
+    /// <summary>Server: what was taken in a Battle Royale match's buildings, kept in memory only (#194).</summary>
+    private readonly Dictionary<(string, int), (long Epoch, int Mask)> _matchMasks = new();
+
+    /// <summary>Server: a match is over; its taken marks go.</summary>
+    public void ForgetMatch() => _matchMasks.Clear();
+
     private int MaskOf(string key, int furniture, long epoch)
     {
+        if (LootTables.MatchEpoch?.Invoke(key) != null)
+            return _matchMasks.TryGetValue((key, furniture), out var m) && m.Epoch == epoch ? m.Mask : 0;
         if (!BuildingKey.TryParse(key, out var k)) return 0;
         var tile = TileFor(k);
         return tile.Buildings.TryGetValue(k.Index.ToString(), out var b)
@@ -554,6 +633,11 @@ public partial class LootService : Node
 
     private void SetMask(string key, int furniture, long epoch, int mask)
     {
+        if (LootTables.MatchEpoch?.Invoke(key) != null)
+        {
+            _matchMasks[(key, furniture)] = (epoch, mask);
+            return;
+        }
         if (!BuildingKey.TryParse(key, out var k)) return;
         var tile = TileFor(k);
         if (!tile.Buildings.TryGetValue(k.Index.ToString(), out var b))

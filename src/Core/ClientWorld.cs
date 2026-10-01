@@ -869,6 +869,9 @@ public partial class ClientWorld : Node3D
         br.AddAnchor = node => _chunks?.AddAnchor(node);
         br.RemoveAnchor = node => _chunks?.RemoveAnchor(node);
         br.Source = () => _chunks?.Source;
+        // the match's crates (#194): drawn on this client's own ground
+        var crates = BattleRoyale.BrCrates.Create(this, _worldOrigin!, server: false);
+        crates.GroundAt = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
         br.Places = () => (IEnumerable<Terrain.Format.Place>?)_places?.All ?? Array.Empty<Terrain.Format.Place>();
         AddChild(br);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);

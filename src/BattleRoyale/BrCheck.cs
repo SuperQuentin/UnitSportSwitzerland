@@ -31,6 +31,7 @@ public static class BrCheck
         Regions();
         StateJson();
         Lend();
+        Loot();
         GD.Print(_failures == 0 ? "[brcheck] RESULT PASS" : $"[brcheck] RESULT FAIL ({_failures})");
         return _failures == 0 ? 0 : 1;
     }
@@ -125,6 +126,7 @@ public static class BrCheck
         image.SavePng(file);
         int colours = bytes.Chunk(4).Select(p => (p[0], p[1], p[2])).Distinct().Count();
         Expect(colours > 40, $"the map of {mapped.Name} built in {timer.ElapsedMilliseconds} ms, {colours} colours, {file}");
+        Roadside(places, tiles);
     }
 
     private static (List<Place> Places, List<ManifestTile> Tiles) LoadWorld()
@@ -153,6 +155,50 @@ public static class BrCheck
         var back = BrState.FromJson(s.ToJson());
         Expect(back is { Phase: BrPhase.Playing, Seed: 42, AliveCount: 1 } && back.Find(7)?.Kills == 2 && back.Area.Name == "Riddes",
             "the match state survives JSON");
+    }
+
+    private static void Loot()
+    {
+        // guns always come with rounds; the locked containers and the drops always hold their prize
+        bool ammo = true, locker = true, drop = true;
+        int full = 0;
+        for (int seed = 0; seed < 4000; seed++)
+        {
+            foreach (var t in Enum.GetValues<UnitSport.Loot.MatchTable>())
+            {
+                var stacks = UnitSport.Loot.MatchLoot.Roll(t, new Random(seed * 13 + (int)t));
+                foreach (var s in stacks)
+                    if (Weapons.Get(s.Id) is { Melee: false } w && !stacks.Any(o => o.Id == w.Ammo)) ammo = false;
+                if (t == UnitSport.Loot.MatchTable.GunLocker && !stacks.Any(s => s.Id is ItemId.Rifle or ItemId.HuntingRifle)) locker = false;
+                if (t == UnitSport.Loot.MatchTable.Airdrop && !stacks.Any(s => s.Id is ItemId.Rifle or ItemId.HuntingRifle) ) drop = false;
+                if (t == UnitSport.Loot.MatchTable.Furniture && stacks.Count > 0) full++;
+            }
+        }
+        Expect(ammo, "every gun found comes with rounds for it");
+        Expect(locker && drop, "gun lockers and supply drops always hold a rifle");
+        Expect(full is > 1800 and < 2200, $"half the furniture holds something ({full / 40.0:F1} %)");
+
+        int drops = BrLoot.DropPhases.Sum(p => BrLoot.DropsAt(p, 6000));
+        Expect(drops == 3 && BrLoot.DropsAt(3, 6000) == 0 && BrLoot.DropPhases.Sum(p => BrLoot.DropsAt(p, 5000)) == 2,
+            $"supply drops: {drops} at 6 km over phases 2/4/6, 2 at 5 km");
+
+        var s0 = new BrState { Phase = BrPhase.Playing, AreaE = 2583250, AreaN = 1113250, Side = 5000, Seed = 9 };
+        BrManager.SetMatchLoot(s0);
+        bool inside = UnitSport.Loot.LootTables.MatchEpoch?.Invoke("2583_1113_4") != null;
+        bool outside = UnitSport.Loot.LootTables.MatchEpoch?.Invoke("2590_1113_4") == null;
+        BrManager.SetMatchLoot(null);
+        Expect(inside && outside && UnitSport.Loot.LootTables.MatchEpoch == null, "match loot only in the region's buildings, and only during the match");
+    }
+
+    private static void Roadside(IReadOnlyList<Place> places, IReadOnlyList<ManifestTile> tiles)
+    {
+        var area = BrRegion.Pick(5, 6000, places, tiles, new List<(double, double)>(), (0, 0));
+        var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
+        var roads = Task.Run(() => BrLoot.RoadPoints(source, area)).GetAwaiter().GetResult();
+        var crates = BrLoot.RoadsideCrates(roads, area, 5);
+        int supply = crates.Count(c => c.Style == CrateStyle.Supply), army = crates.Count(c => c.Style == CrateStyle.Military);
+        Expect(roads.Count > 500 && supply > 200 && army >= 3 && crates.All(c => area.Contains(c.E, c.N) || Math.Abs(c.E - area.E) < area.Side / 2 + 10),
+            $"{area.Name}: {roads.Count} road points, {supply} supply crates, {army} army crates");
     }
 
     private static void Lend()

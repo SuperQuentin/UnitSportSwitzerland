@@ -40,13 +40,22 @@ public partial class BrManager : Node
     private double _endedAt;
     private readonly Random _rng = new();
 
+    // ---- server: the match's loot (#194) ----
+    private Terrain.IChunkSource? _source;
+    private BrCrates? _crates;
+    private readonly HashSet<int> _dropped = new();
+    private int _match;
+
     public static BrManager CreateServer(ChatManager chat, Node3D players, IReadOnlyList<Place> places,
-        IReadOnlyList<ManifestTile> tiles, (double E, double N) fallback)
+        IReadOnlyList<ManifestTile> tiles, (double E, double N) fallback, Terrain.IChunkSource? source = null, BrCrates? crates = null)
     {
         var m = new BrManager
         {
             Name = NodeName, _server = true, _chat = chat, _players = players, _places = places, _tiles = tiles, _fallback = fallback,
+            _source = source, _crates = crates,
         };
+        // the living may loot, the winner during the results too
+        if (crates != null) crates.MayLoot = peer => m._state.Running && m._state.Find(peer) is { Alive: true };
         Combat.PvpRules.HitRelayed += m.OnHit;
         return m;
     }
@@ -219,6 +228,7 @@ public partial class BrManager : Node
             case BrPhase.Playing:
                 // the zone has closed and someone is still standing (a draw cannot linger)
                 var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace);
+                Airdrops(zone);
                 if (_state.AliveCount <= 1 || Now - _state.Started > zone.Duration + 120) End();
                 break;
             case BrPhase.Ended when Now - _endedAt >= ResultsSeconds:
@@ -240,6 +250,8 @@ public partial class BrManager : Node
         _state.Phase = BrPhase.Playing;
         _state.Started = Now;
         Combat.PvpRules.Override = Allowed;
+        SetMatchLoot(_state);
+        SpawnLoot(_state.Area, _state.Seed);
         // a ground drop until the cargo plane (part 5): spread over the first circle, seeded
         var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace);
         var rng = new Random(_state.Seed ^ 0x5bd1e995);
@@ -269,12 +281,102 @@ public partial class BrManager : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReportDeath(long killer, int cause)
+    private void ReportDeath(long killer, int cause, int[] ids, int[] counts)
     {
         if (!_server || _state.Phase != BrPhase.Playing) return;
         long sender = Multiplayer.GetRemoteSenderId();
         if (_state.Find(sender) is not { Alive: true } e) return;
+        DeathBox(e, ids, counts);
         Eliminate(e, killer, (BrOut)Math.Clamp(cause, 0, (int)BrOut.Other));
+    }
+
+    // ------------------------------------------------------------------------------------
+    // server: loot (#194)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Buildings whose tile touches the region roll match loot, under the match's own epoch: they
+    /// restock for every match, and free-roam loot (and its files) is left alone.
+    /// </summary>
+    public static void SetMatchLoot(BrState? s)
+    {
+        if (s == null || s.Phase is BrPhase.Idle or BrPhase.Lobby or BrPhase.Countdown)
+        {
+            Loot.LootTables.MatchEpoch = null;
+            return;
+        }
+        double half = s.Side * 0.5, w = s.AreaE - half, e = s.AreaE + half, so = s.AreaN - half, no = s.AreaN + half;
+        long epoch = 1_000_000_000L + s.Seed;
+        Loot.LootTables.MatchEpoch = key =>
+            Interiors.BuildingKey.TryParse(key, out var k)
+            && k.TileE * 1000.0 < e && k.TileE * 1000.0 + 1000 > w && k.TileN * 1000.0 < no && k.TileN * 1000.0 + 1000 > so
+                ? epoch : null;
+    }
+
+    private async void SpawnLoot(BrArea area, int seed)
+    {
+        int match = ++_match;
+        _dropped.Clear();
+        if (_source == null || Origin == null) return;
+        try
+        {
+            var roads = await BrLoot.RoadPoints(_source, area);
+            if (match != _match || _state.Phase != BrPhase.Playing) return;
+            var crates = BrLoot.RoadsideCrates(roads, area, seed);
+            _crates?.Spawn(crates);
+            int vehicles = BrLoot.ParkVehicles(roads, area, seed, Origin);
+            GD.Print($"[br] loot: {roads.Count} road points, {crates.Count} crates, {vehicles} vehicles");
+        }
+        catch (Exception ex) { GD.PushWarning($"[br] loot: {ex.Message}"); }
+    }
+
+    /// <summary>At the start of phases 2, 4 and 6 supply drops come down inside the next circle.</summary>
+    private void Airdrops(ZoneSchedule zone)
+    {
+        var z = zone.At(Now - _state.Started);
+        if (z.Shrinking || _dropped.Contains(z.Phase)) return;
+        _dropped.Add(z.Phase);
+        int n = BrLoot.DropsAt(z.Phase, _state.Side);
+        if (n == 0 || _crates == null) return;
+        var rng = new Random(_state.Seed + z.Phase * 7727);
+        double fall = BrCrates.DropHeight / BrCrates.FallSpeed;
+        var drops = Enumerable.Range(0, n).Select(_ => BrLoot.Airdrop(_state.Area, z, rng, Now, fall)).ToList();
+        _crates.Spawn(drops);
+        foreach (var d in drops)
+            Broadcast($"A supply drop is coming down in {Cell(d.E - _state.AreaE, d.N - _state.AreaN)}!");
+    }
+
+    /// <summary>The full map's grid square of a zone point ("C4").</summary>
+    private string Cell(double x, double y)
+    {
+        float half = _state.Side * 0.5f, step = _state.Side / Mathf.Ceil(_state.Side / 1000f);
+        int col = (int)Math.Floor((x + half) / step), row = (int)Math.Floor((half - y) / step);
+        return $"{(char)('A' + Math.Clamp(col, 0, 25))}{row + 1}";
+    }
+
+    /// <summary>Everything the player carried, in a box where they fell.</summary>
+    private void DeathBox(BrEntrant e, int[] ids, int[] counts)
+    {
+        if (_crates == null || Origin == null || _players?.GetNodeOrNull<Node3D>(e.Peer.ToString()) is not { } body) return;
+        var stacks = new List<Items.ItemStack>();
+        for (int i = 0; i < Math.Min(Math.Min(ids.Length, counts.Length), Items.Inventory.Size); i++)
+            if (Items.ItemDefs.Get((Items.ItemId)ids[i]) is { } def && def.Id != Items.ItemId.Francs && counts[i] > 0)
+                stacks.Add(new Items.ItemStack(def.Id, Math.Min(counts[i], def.MaxStack)));
+        if (stacks.Count == 0) return;
+        var (pe, pn) = Origin.ToLv95(body.GlobalPosition);
+        var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = body.GlobalPosition.Y, Label = $"{e.Name}'s things" };
+        box.SetStacks(stacks);
+        _crates.Spawn(new[] { box });
+    }
+
+    /// <summary>The match's crates and vehicles go; its buildings go back to free-roam loot.</summary>
+    private void ClearLoot()
+    {
+        _match++;
+        _crates?.ClearAll();
+        BrLoot.RemoveVehicles();
+        Loot.LootTables.MatchEpoch = null;
+        Loot.LootService.Instance?.ForgetMatch();
     }
 
     private void Eliminate(BrEntrant e, long killer, BrOut cause)
@@ -329,6 +431,7 @@ public partial class BrManager : Node
     {
         var was = _state;
         Combat.PvpRules.Override = null;
+        ClearLoot();
         _state = new BrState();
         foreach (var e in was.Entrants)
             if (Multiplayer.GetPeers().Contains((int)e.Peer)) RpcId(e.Peer, MethodName.Release);
