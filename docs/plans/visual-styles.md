@@ -296,9 +296,12 @@ the tile shaders and `ChunkManager` at the same time:
   billboards, the tile-level cut, `world_cam_pos`), and the timing check
   (`tools/style-shots.sh`, `--origin`, `g` heights, `frame=` per shot). `NearTrees` waits for
   phase 2, where Cartoon is its first user.
-- **Part 2 (#212):** the role bodies and neutral switches, `shaders/common/`, `DayNight`
-  driving the kit's environment, rebuild in place, `MeshDetail`, per-style terrain LOD. #185 has
-  landed, so it can start; only `ps1_road` waits for the road network stack (#114).
+- **Part 2 (#212):** role bodies for terrain, building and water (`shaders/body/`),
+  `shaders/common/` (world globals, the `retro` switch, the sightline cut), the kit's environment
+  and sun driven by `DayNight`, live restyle and rebuild in place (`/style`), `MeshDetail` in the
+  tile builds, per-style finest terrain stride (Realistic− 2 m). PS1 pixel-identical to `main`.
+  **Left after it:** splitting `ps1_road` once the road network stack (#114) lands, and frame
+  times for part 1 on a quiet machine.
 
 The original scope:
 

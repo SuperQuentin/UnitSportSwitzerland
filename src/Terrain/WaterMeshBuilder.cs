@@ -32,7 +32,9 @@ public static class WaterMeshBuilder
     /// </summary>
     private const int Stride = 2;
 
-    public static MeshData? Build(ChunkGrid grid, byte[] cover, RoadTile? roads = null)
+    /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    public static MeshData? Build(ChunkGrid grid, byte[] cover, RoadTile? roads = null,
+        Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
         // The water surface *is* the terrain height at a water cell, sampled per 2 m vertex.
         grid.RequireFull(nameof(WaterMeshBuilder));

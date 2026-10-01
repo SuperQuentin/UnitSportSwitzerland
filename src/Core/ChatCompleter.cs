@@ -48,6 +48,7 @@ public sealed class ChatCompleter
         ("city", false, true, "<town>"),
         ("occasion", false, true, "[list | start | stop | auto] [id]"),
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
+        ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("spawn", true, true, "<item> [count]"),
         ("name", false, false, "<name>"),
         ("login", false, false, "<password>"),
@@ -170,6 +171,10 @@ public sealed class ChatCompleter
                     1 when mayTime && words[1].ToLowerInvariant() == "set" => World.TimeCommand.Named.Select(n => n.Name),
                     _ => [],
                 };
+                break;
+
+            case "style":
+                options = argIndex == 0 ? Styles.StyleCommand.Words : [];
                 break;
 
             case "occasion":
