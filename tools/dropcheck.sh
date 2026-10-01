@@ -6,6 +6,7 @@
 # (screenshot of the outline: test_output/dropcheck_point.png) and pick them up.
 #   tools/dropcheck.sh                 (terrain_chunks/ in this checkout)
 #   CHUNKS=/path/to/terrain_chunks tools/dropcheck.sh   (a worktree without terrain data)
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 PORT=7798
 OUT=test_output
