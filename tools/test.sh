@@ -79,6 +79,7 @@ CHANGED=$(changed_files)
 CHECKS=()
 RPC=
 while read -r prefix tier check; do
+  check=${check%$'\r'}  # a CRLF checkout must not glue a CR to the check
   [ -z "$prefix" ] || [[ $prefix == \#* ]] && continue
   [[ $WANT == *" $tier "* ]] || continue
   if [ -n "$AREA" ]; then
