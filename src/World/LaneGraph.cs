@@ -108,11 +108,71 @@ public sealed class LaneGraph
         list.Add((edge, atStart));
     }
 
+    /// <summary>How many edge ends meet at a point: 2 is a road carrying on (a tile seam, a split line), 3 or more a junction.</summary>
+    public int Degree(long key) => Incident(key).Count();
+
+    /// <summary>
+    /// Joins road ends that stop short of each other with a straight connector edge: the road
+    /// generator trims every road back from its junction polygon, so the roads meeting at a junction
+    /// no longer share an endpoint (<see cref="UnitSport.Player.RaceRoute"/> looks 18 m around for the
+    /// same reason). Without it every such junction was a dead end to the traffic: cars turned round on
+    /// the spot in the middle of the junction, in front of the racers (#85). Only ends nothing else
+    /// meets, only within <paramref name="reach"/> m, and only where both roads point at the gap (no
+    /// connector turns a car back the way it came).
+    /// </summary>
+    public void JoinTrimmedEnds(float reach = 18f)
+    {
+        var ends = new List<(LaneEdge Edge, bool AtStart, Vector3 At, Vector3 Out)>();
+        foreach (var e in Edges)
+        {
+            if (Degree(e.KeyStart) == 1) ends.Add((e, true, e.Points[0], -e.Sample(0f).Tangent));
+            if (Degree(e.KeyEnd) == 1) ends.Add((e, false, e.Points[^1], e.Sample(e.Length).Tangent));
+        }
+        for (int i = 0; i < ends.Count; i++)
+            for (int j = i + 1; j < ends.Count; j++)
+            {
+                var (a, b) = (ends[i], ends[j]);
+                if (a.Edge == b.Edge) continue;
+                var gap = b.At - a.At;
+                float d = new Vector2(gap.X, gap.Z).Length();
+                if (d < 1f || d > reach || Mathf.Abs(gap.Y) > 3f) continue;
+                var dir = new Vector3(gap.X, 0, gap.Z) / d;
+                if (new Vector3(a.Out.X, 0, a.Out.Z).Normalized().Dot(dir) < 0.3f
+                    || new Vector3(b.Out.X, 0, b.Out.Z).Normalized().Dot(-dir) < 0.3f) continue;
+                var link = new LaneEdge
+                {
+                    Points = new[] { a.At, b.At }, Cumulative = new[] { 0f, gap.Length() },
+                    Class = (RoadClass)Mathf.Max((int)a.Edge.Class, (int)b.Edge.Class),
+                    Width = Mathf.Min(a.Edge.Width, b.Edge.Width),
+                    KeyStart = KeyOf(a.At), KeyEnd = KeyOf(b.At),
+                };
+                Edges.Add(link);
+                Link(link.KeyStart, link, true);
+                Link(link.KeyEnd, link, false);
+            }
+    }
+
+    /// <summary>Road ends with nothing joining them: cul-de-sacs, and the edge of what is loaded.</summary>
+    public int DeadEnds => Edges.Sum(e => (Degree(e.KeyStart) == 1 ? 1 : 0) + (Degree(e.KeyEnd) == 1 ? 1 : 0));
+
+    /// <summary>
+    /// The edge ends at a point: its snap cell and the eight around it. Two ends 0.1 m apart can round
+    /// into neighbouring 0.5 m cells, and a road then "ended" there — measured on the Mollendruz pass,
+    /// traffic turned round on the spot in mid-road in front of the racers (#85).
+    /// </summary>
+    private IEnumerable<(LaneEdge Edge, bool AtStart)> Incident(long key)
+    {
+        int x = (int)(key >> 32), z = (int)(uint)key;
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = -1; dz <= 1; dz++)
+                if (_incident.TryGetValue(((long)(x + dx) << 32) ^ (uint)(z + dz), out var list))
+                    foreach (var end in list) yield return end;
+    }
+
     /// <summary>Everything leaving a junction that may be driven away from it.</summary>
     public IEnumerable<(LaneEdge Edge, bool Forward)> Leaving(long key)
     {
-        if (!_incident.TryGetValue(key, out var list)) yield break;
-        foreach (var (edge, atStart) in list)
+        foreach (var (edge, atStart) in Incident(key))
         {
             bool forward = atStart;   // leaving from its start means driving in drawing order
             if (edge.OneWay == 1 && !forward) continue;

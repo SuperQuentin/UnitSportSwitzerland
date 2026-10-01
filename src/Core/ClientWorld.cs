@@ -299,9 +299,13 @@ public partial class ClientWorld : Node3D
         _traffic = new World.Traffic(_chunks, origin)
         {
             Focus = () => GetViewport().GetCamera3D()?.GlobalPosition,
-            Obstacles = () => LocalPlayer is { } p ? new[] { p.GlobalPosition } : Array.Empty<Vector3>(),
+            // every player it can meet — the local one, remote racers, race NPCs — with how each moves:
+            // the traffic makes way for a race going through it (#85)
+            Obstacles = () => GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
+                .Select(p => (p.GlobalPosition, p.WorldVelocity)),
         };
         AddChild(_traffic);
+        if (World.NpcWatch.FromArgs() is { } npcWatch) AddChild(npcWatch);
         if (World.TrafficProbe.ParseArgs() is { Requested: true } tcheck)
         {
             var tcam = new Camera3D { Name = "TrafficCam", Far = GameSettings.Current.CameraFar };
