@@ -20,15 +20,21 @@ namespace UnitSport.Terrain.Format;
 /// </summary>
 public static class RoadCodec
 {
+    /// <summary>Pre-#116b payloads: still read, written only for the format self-check.</summary>
     public static readonly uint TagAttributes = FourCC("ATTR");
     public static readonly uint TagPaint = FourCC("PANT");
+    /// <summary>#116b: distinct attribute records once, a varint index per segment.</summary>
+    public static readonly uint TagAttributePalette = FourCC("ATR2");
+    /// <summary>#116b: a style palette, lines along a segment by reference, other geometry quantised.</summary>
+    public static readonly uint TagPaintCompact = FourCC("PNT2");
     public static readonly uint TagPointProps = FourCC("PPRP");
     public static readonly uint TagLinearProps = FourCC("LPRP");
     public static readonly uint TagAreaProps = FourCC("APRP");
 
     private static uint FourCC(string s) => BitConverter.ToUInt32(Encoding.ASCII.GetBytes(s));
 
-    public static void Encode(RoadTile tile, Stream output)
+    /// <param name="legacySections">Write the pre-#116b ATTR and PANT payloads (format self-check only).</param>
+    public static void Encode(RoadTile tile, Stream output, bool legacySections = false)
     {
         using var w = new BinaryWriter(output, Encoding.ASCII, leaveOpen: true);
         w.Write(RoadFormat.Magic);
@@ -62,36 +68,17 @@ public static class RoadCodec
         }
 
         // ---- v3 sections. Attributes always; the layers only when they hold something.
-        var sections = new List<(uint Tag, byte[] Payload)>
+        var sections = new List<(uint Tag, byte[] Payload)>();
+        if (legacySections)
         {
-            (TagAttributes, Section(s =>
-            {
-                s.Write((uint)tile.Segments.Count);
-                s.Write((ushort)RoadAttributes.RecordSize);
-                s.Write((ushort)0);
-                foreach (var seg in tile.Segments) WriteAttributes(s, seg.Attributes);
-            })),
-        };
-        if (tile.Paint.Count > 0)
-            sections.Add((TagPaint, Section(s =>
-            {
-                s.Write((uint)tile.Paint.Count);
-                foreach (var p in tile.Paint)
-                {
-                    s.Write((byte)p.Shape);
-                    s.Write((byte)p.Type);
-                    s.Write(p.Variant);
-                    s.Write((byte)0);
-                    s.Write(p.Rgba);
-                    s.Write(p.Width);
-                    s.Write(p.Dash);
-                    s.Write(p.Gap);
-                    s.Write(checked((ushort)(p.Vertices.Length / 3)));
-                    s.Write(checked((ushort)p.Indices.Length));
-                    WriteFloats(s, p.Vertices);
-                    foreach (ushort i in p.Indices) s.Write(i);
-                }
-            })));
+            sections.Add((TagAttributes, Section(s => WriteLegacyAttributes(s, tile))));
+            if (tile.Paint.Count > 0) sections.Add((TagPaint, Section(s => WriteLegacyPaint(s, tile))));
+        }
+        else
+        {
+            sections.Add((TagAttributePalette, Section(s => WriteAttributePalette(s, tile))));
+            if (tile.Paint.Count > 0) sections.Add((TagPaintCompact, Section(s => WritePaint(s, tile))));
+        }
         if (tile.PointProps.Count > 0)
             sections.Add((TagPointProps, Section(s =>
             {
@@ -197,6 +184,7 @@ public static class RoadCodec
         }
 
         RoadAttributes[]? attributes = null;
+        List<(int Paint, int Segment)>? references = null;
         var tile = new RoadTile
         {
             Id = id, Segments = new List<RoadSegment>((int)count), Junctions = junctions,
@@ -224,6 +212,25 @@ public static class RoadCodec
                         attributes[i] = ReadAttributes(r);
                         Skip(r, recordSize - RoadAttributes.RecordSize);
                     }
+                }
+                else if (tag == TagAttributePalette)
+                {
+                    int distinct = r.Read7BitEncodedInt();
+                    int recordSize = r.ReadByte();
+                    if (recordSize < RoadAttributes.RecordSize)
+                        throw new InvalidDataException($"Bad attribute palette record size {recordSize}");
+                    var palette = new RoadAttributes[distinct];
+                    for (int i = 0; i < distinct; i++)
+                    {
+                        palette[i] = ReadAttributes(r);
+                        Skip(r, recordSize - RoadAttributes.RecordSize);
+                    }
+                    attributes = new RoadAttributes[count];
+                    for (int i = 0; i < count; i++) attributes[i] = palette[r.Read7BitEncodedInt()];
+                }
+                else if (tag == TagPaintCompact)
+                {
+                    references = ReadPaint(r, tile.Paint);
                 }
                 else if (tag == TagPaint)
                 {
@@ -308,7 +315,170 @@ public static class RoadCodec
                 Attributes = attributes?[i] ?? default,
             });
         }
+        if (references is not null)
+            foreach (var (pi, si) in references)
+            {
+                if (si >= tile.Segments.Count) throw new InvalidDataException($"Paint references segment {si} of {tile.Segments.Count}");
+                var p = tile.Paint[pi];
+                tile.Paint[pi] = RoadPaint.AlongSegment(tile.Segments[si], p.Type, p.Rgba, p.Width, p.Dash, p.Gap, p.Offset, p.From, p.To, p.Variant);
+            }
         return tile;
+    }
+
+    private static void WriteLegacyAttributes(BinaryWriter s, RoadTile tile)
+    {
+        s.Write((uint)tile.Segments.Count);
+        s.Write((ushort)RoadAttributes.RecordSize);
+        s.Write((ushort)0);
+        foreach (var seg in tile.Segments) WriteAttributes(s, seg.Attributes);
+    }
+
+    private static void WriteLegacyPaint(BinaryWriter s, RoadTile tile)
+    {
+        s.Write((uint)tile.Paint.Count);
+        foreach (var p in tile.Paint)
+        {
+            s.Write((byte)p.Shape);
+            s.Write((byte)p.Type);
+            s.Write(p.Variant);
+            s.Write((byte)0);
+            s.Write(p.Rgba);
+            s.Write(p.Width);
+            s.Write(p.Dash);
+            s.Write(p.Gap);
+            s.Write(checked((ushort)(p.Vertices.Length / 3)));
+            s.Write(checked((ushort)p.Indices.Length));
+            WriteFloats(s, p.Vertices);
+            foreach (ushort i in p.Indices) s.Write(i);
+        }
+    }
+
+    /// <summary>ATR2: <c>distinct varint, recordSize u8</c>, the distinct 24 B records, then a varint index per segment.</summary>
+    private static void WriteAttributePalette(BinaryWriter s, RoadTile tile)
+    {
+        var index = new Dictionary<RoadAttributes, int>();
+        var order = new List<RoadAttributes>();
+        foreach (var seg in tile.Segments)
+            if (index.TryAdd(seg.Attributes, order.Count)) order.Add(seg.Attributes);
+        s.Write7BitEncodedInt(order.Count);
+        s.Write((byte)RoadAttributes.RecordSize);
+        foreach (var a in order) WriteAttributes(s, a);
+        foreach (var seg in tile.Segments) s.Write7BitEncodedInt(index[seg.Attributes]);
+    }
+
+    private readonly record struct PaintStyle(PaintShape Shape, PaintType Type, byte Variant, uint Rgba, float Width, float Dash, float Gap);
+
+    /// <summary>
+    /// PNT2 (#116b). <c>styleCount varint</c>, styles of 19 B (<c>shape, type, variant u8, rgba u32,
+    /// width, dash, gap f32</c>); <c>count varint</c>, then per primitive <c>style * 2 + kind</c>
+    /// varint and: kind 1, a line along a segment: <c>segment varint, offset zigzag mm, from varint
+    /// cm, to varint cm (0 = to the end)</c>, the decoder rebuilds its vertices
+    /// (<see cref="RoadPaintGeometry.Along"/>); kind 0, geometry: <c>vertexCount, indexCount varint</c>,
+    /// xyz as zigzag varint mm deltas from the previous vertex (the first from 0), indices varint.
+    /// </summary>
+    private static void WritePaint(BinaryWriter s, RoadTile tile)
+    {
+        var segments = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);
+        for (int i = 0; i < tile.Segments.Count; i++) segments[tile.Segments[i]] = i;
+        var styles = new Dictionary<PaintStyle, int>();
+        var order = new List<PaintStyle>();
+        int StyleOf(RoadPaint p)
+        {
+            var key = new PaintStyle(p.Shape, p.Type, p.Variant, p.Rgba, p.Width, p.Dash, p.Gap);
+            if (!styles.TryGetValue(key, out int k)) { styles[key] = k = order.Count; order.Add(key); }
+            return k;
+        }
+        var ids = tile.Paint.Select(StyleOf).ToArray();
+
+        s.Write7BitEncodedInt(order.Count);
+        foreach (var st in order)
+        {
+            s.Write((byte)st.Shape); s.Write((byte)st.Type); s.Write(st.Variant);
+            s.Write(st.Rgba); s.Write(st.Width); s.Write(st.Dash); s.Write(st.Gap);
+        }
+        s.Write7BitEncodedInt(tile.Paint.Count);
+        for (int k = 0; k < tile.Paint.Count; k++)
+        {
+            var p = tile.Paint[k];
+            // a reference to a segment this tile does not hold (replaced since) falls back to geometry
+            if (p.Segment is { } seg && p.Shape == PaintShape.Polyline && segments.TryGetValue(seg, out int si))
+            {
+                s.Write7BitEncodedInt(ids[k] * 2 + 1);
+                s.Write7BitEncodedInt(si);
+                WriteZigzag(s, (int)Math.Round(p.Offset * 1000.0));
+                s.Write7BitEncodedInt((int)Math.Round(p.From * 100.0));
+                s.Write7BitEncodedInt(float.IsPositiveInfinity(p.To) ? 0 : Math.Max(1, (int)Math.Round(p.To * 100.0)));
+                continue;
+            }
+            s.Write7BitEncodedInt(ids[k] * 2);
+            s.Write7BitEncodedInt(p.Vertices.Length / 3);
+            s.Write7BitEncodedInt(p.Indices.Length);
+            long x = 0, y = 0, z = 0;
+            for (int i = 0; i + 2 < p.Vertices.Length; i += 3)
+            {
+                long qx = Mm(p.Vertices[i]), qy = Mm(p.Vertices[i + 1]), qz = Mm(p.Vertices[i + 2]);
+                WriteZigzag(s, checked((int)(qx - x))); WriteZigzag(s, checked((int)(qy - y))); WriteZigzag(s, checked((int)(qz - z)));
+                (x, y, z) = (qx, qy, qz);
+            }
+            foreach (ushort i in p.Indices) s.Write7BitEncodedInt(i);
+        }
+    }
+
+    private static long Mm(float v) => (long)Math.Round(v * 1000.0);
+
+    /// <summary>Reads PNT2 into <paramref name="into"/>; returns the lines along a segment, rebuilt once the segments are read.</summary>
+    private static List<(int Paint, int Segment)> ReadPaint(BinaryReader r, List<RoadPaint> into)
+    {
+        int styleCount = r.Read7BitEncodedInt();
+        var styles = new PaintStyle[styleCount];
+        for (int i = 0; i < styleCount; i++)
+            styles[i] = new PaintStyle((PaintShape)r.ReadByte(), (PaintType)r.ReadByte(), r.ReadByte(), r.ReadUInt32(),
+                r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+        var references = new List<(int, int)>();
+        int n = r.Read7BitEncodedInt();
+        for (int k = 0; k < n; k++)
+        {
+            int head = r.Read7BitEncodedInt();
+            var st = styles[head >> 1];
+            if ((head & 1) != 0)
+            {
+                int segment = r.Read7BitEncodedInt();
+                float offset = ReadZigzag(r) / 1000f;
+                float from = (float)(r.Read7BitEncodedInt() / 100.0);
+                int to = r.Read7BitEncodedInt();
+                references.Add((into.Count, segment));
+                into.Add(new RoadPaint
+                {
+                    Shape = st.Shape, Type = st.Type, Variant = st.Variant, Rgba = st.Rgba, Width = st.Width, Dash = st.Dash, Gap = st.Gap,
+                    Offset = offset, From = from, To = to == 0 ? float.PositiveInfinity : (float)(to / 100.0), Vertices = [],
+                });
+                continue;
+            }
+            int vertexCount = r.Read7BitEncodedInt(), indexCount = r.Read7BitEncodedInt();
+            var v = new float[vertexCount * 3];
+            long x = 0, y = 0, z = 0;
+            for (int i = 0; i < v.Length; i += 3)
+            {
+                x += ReadZigzag(r); y += ReadZigzag(r); z += ReadZigzag(r);
+                v[i] = (float)(x / 1000.0); v[i + 1] = (float)(y / 1000.0); v[i + 2] = (float)(z / 1000.0);
+            }
+            var indices = new ushort[indexCount];
+            for (int i = 0; i < indexCount; i++) indices[i] = checked((ushort)r.Read7BitEncodedInt());
+            into.Add(new RoadPaint
+            {
+                Shape = st.Shape, Type = st.Type, Variant = st.Variant, Rgba = st.Rgba, Width = st.Width, Dash = st.Dash, Gap = st.Gap,
+                Vertices = v, Indices = indices,
+            });
+        }
+        return references;
+    }
+
+    private static void WriteZigzag(BinaryWriter w, int v) => w.Write7BitEncodedInt((v << 1) ^ (v >> 31));
+
+    private static int ReadZigzag(BinaryReader r)
+    {
+        uint u = (uint)r.Read7BitEncodedInt();
+        return (int)(u >> 1) ^ -(int)(u & 1);
     }
 
     private static void WriteAttributes(BinaryWriter w, RoadAttributes a)
