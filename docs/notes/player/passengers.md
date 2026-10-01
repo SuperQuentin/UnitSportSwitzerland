@@ -16,14 +16,15 @@
   rides with whom in boarding order, and moves the vehicle from host to host. `VehicleManager`'s
   per-peer vehicle count goes with it (`TransferDriving`), or the new host could not park it.
 - **Getting in**: E beside someone's vehicle (`DrivenVehicleInReach`, nearer than any parked one) asks
-  for a seat. The first person into an empty vehicle still drives it (the old claim).
+  for a seat; not a bus, which is walked into and sat down in from the aisle (#162, `walk-aboard`). The first person into an empty vehicle still drives it (the old claim).
 - **Riding**: the passenger's node is set to the host's position every frame on **every peer**, not
   from its own interpolated stream; its body is disabled; its figure (`SeatedFigure`: back on the
   seat, hands on the thighs, feet on the floor; astride on a pillion) is a **child of the host's
   rig** at `SeatedFigure.FrameOf`, so it moves with the body's pitch and kneel exactly. A
   passenger's copy is processed after its host's (`ProcessPriority` 10), or it trails a frame
   (measured 7–9 cm at 47 km/h on a third peer). Camera: from the seat's eye with a free look that
-  stays where it is put, or behind the vehicle (V). No items in a seat. HUD: the vehicle's speed, and
+  stays where it is put, or behind the vehicle (V). No items in a seat. In a walkable vehicle E stands
+  up into the aisle (`StandUp`) instead of getting out. HUD: the vehicle's speed, and
   "nobody at the wheel: F takes it".
 - **The driver gets out (or bails) at any speed with people aboard**: not handed to a passenger, not
   parked. `HostLeaving` sends the state; the server makes the **first rider** the host, sat where it

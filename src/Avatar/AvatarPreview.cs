@@ -142,10 +142,29 @@ public partial class AvatarPreview : Node3D
             rig.Retarder = 2;
             rig.Headlights = args.Contains("--lights");
             string view = args.Contains("--outside") ? "outside" : args.Contains("--side") ? "side" : args.Contains("--saloon") ? "saloon"
-                : args.Contains("--front") ? "front" : "eye";
+                : args.Contains("--front") ? "front" : args.Contains("--door") ? "door" : "eye";
             rig.View = view != "eye" ? CockpitView.Outside : args.Contains("--bare") ? CockpitView.Bare : CockpitView.Body;
             rig.MirrorsOn = args.Contains("--mirrors");
             AddChild(rig);
+            // --deck (#162): what the walk collides with, see-through: solid grey, shut doors red, door steps green
+            if (args.Contains("--deck") && rig.Deck is { } deck)
+                foreach (var box in deck.Boxes)
+                    rig.AddChild(new MeshInstance3D
+                    {
+                        Mesh = new BoxMesh { Size = box.Size },
+                        Transform = new Transform3D(box.Basis, box.Centre),
+                        MaterialOverride = new StandardMaterial3D
+                        {
+                            AlbedoColor = box.Part switch
+                            {
+                                DeckPart.DoorShut => new Color(1f, 0.2f, 0.2f, 0.5f),
+                                DeckPart.DoorStep => new Color(0.2f, 1f, 0.3f, 0.7f),
+                                _ => new Color(0.6f, 0.6f, 0.9f, 0.35f),
+                            },
+                            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                        },
+                    });
             // --fill (#158): somebody in every other seat, as passengers sit
             if (args.Contains("--fill"))
                 for (int i = 1; i < rig.Seats.Length; i++)
@@ -171,6 +190,11 @@ public partial class AvatarPreview : Node3D
                     cam.Fov = 55;
                     cam.Position = new Vector3(-(s.Length * 0.75f + 2f), 2.2f, (front + back) * 0.5f);
                     cam.LookAt(new Vector3(0, 1.6f, (front + back) * 0.5f), Vector3.Up);
+                    break;
+                case "door":
+                    // the right side, at the middle of the section, low: the doors and their steps
+                    cam.Fov = 60;
+                    cam.LookAtFromPosition(new Vector3(4.5f, 1.2f, (front + back) * 0.5f + 1.5f), new Vector3(1.2f, 0.4f, (front + back) * 0.5f), Vector3.Up);
                     break;
                 case "front":
                     // up close through the windscreen, as --heavynet's watcher shoots it

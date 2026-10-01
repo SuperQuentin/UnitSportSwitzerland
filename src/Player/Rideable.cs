@@ -248,6 +248,14 @@ public abstract class Rideable
     /// </summary>
     public virtual bool Driverless => false;
 
+    /// <summary>
+    /// The decks a player can walk about on, one per section that has one (#162): a bus's saloon.
+    /// Empty: not walkable. Read from the drawn model, once per kind.
+    /// </summary>
+    public virtual Avatar.VehicleDeck[] Decks => System.Array.Empty<Avatar.VehicleDeck>();
+
+    public bool Walkable => Decks.Length > 0;
+
     /// <summary>Seat <paramref name="i"/>'s hip in this ride's node frame, the train straight: for picking the nearest seat.</summary>
     public virtual Vector3 SeatPosition(int i) => Seats[i].Hip;
 

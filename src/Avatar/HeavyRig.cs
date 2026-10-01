@@ -21,6 +21,8 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
     public SeatAnchor[] Seats { get; init; } = System.Array.Empty<SeatAnchor>();
     /// <summary>A bus's saloon lights, unshaded: lit with the headlights. Null where there are none.</summary>
     public ArrayMesh? Glow { get; init; }
+    /// <summary>What a walking player collides with inside and how far aboard reaches (#162), or null: not walkable.</summary>
+    public VehicleDeck? Deck { get; init; }
 }
 
 /// <summary>
@@ -69,6 +71,8 @@ public partial class HeavyRig : Node3D
     public bool MirrorsOn { get; set; }
     /// <summary>The seats in this section, node space, the driver's first where there is one.</summary>
     public SeatAnchor[] Seats { get; private set; } = System.Array.Empty<SeatAnchor>();
+    /// <summary>This section's deck, for walking about in it (#162); null when it has none.</summary>
+    public VehicleDeck? Deck { get; private set; }
     /// <summary>Somebody at the wheel: off while it rolls on driverless with its passengers (#158).</summary>
     public bool DriverShown { get; set; } = true;
     /// <summary>The cockpit this section was built with (the first of a truck or bus), or null.</summary>
@@ -111,7 +115,7 @@ public partial class HeavyRig : Node3D
 
     private static HeavyRig Assemble(HeavyParts p, HumanPalette? driver)
     {
-        var rig = new HeavyRig { Name = "Heavy", _driverPalette = driver, Seats = p.Seats };
+        var rig = new HeavyRig { Name = "Heavy", _driverPalette = driver, Seats = p.Seats, Deck = p.Deck };
         var body = HumanMeshBuilder.Material();
         var glass = rig._glass = CarRig.GlassMaterial();
         rig._head = TrafficMeshBuilder.LampMaterial();

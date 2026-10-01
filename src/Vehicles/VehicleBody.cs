@@ -52,6 +52,12 @@ public partial class VehicleBody : CharacterBody3D
 
     public long Owner { get; private set; }
 
+    /// <summary>What is drawn, the frame of its first section (a parked train's others are its children named <c>Section{k}</c>).</summary>
+    public Node3D? Visual => _visual;
+
+    /// <summary>A parked bus's doors as its driver left them, one bit each (#162: open, they can be walked through).</summary>
+    public byte BusDoors => (byte)((_initial.Flags >> 4) & 15);
+
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
 
@@ -240,8 +246,12 @@ public partial class VehicleBody : CharacterBody3D
         _shutDriverIn = 0f;   // a door someone chose to leave open stays open
     }
 
+    private readonly HashSet<FootPlayer> _guests = new();
+
     public override void _PhysicsProcess(double delta)
     {
+        // a parked bus: people walking in it or up to its doors do not shove it (#162)
+        if (Ride.Walkable) FootPlayer.WatchGuests(this, Ride, _guests, new PhysicsBody3D[] { this }, k => k == 0 ? Visual ?? this : Visual?.GetNodeOrNull<Node3D>($"Section{k}"));
         float dt = (float)delta;
         _life += dt;
         if (_life > SettleTime && _ignoring.Count > 0)

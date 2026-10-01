@@ -338,17 +338,31 @@ public sealed class Truck : Rideable, IEngined
     public override Node3D BuildVisual(int riderIndex) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex));
 
     /// <summary>Every seat of the truck's own sections (a bus's both halves), the driver's first (#158).</summary>
-    public override SeatAnchor[] Seats => SeatsOf(Kind, () =>
+    public override SeatAnchor[] Seats => Model.Seats;
+
+    /// <summary>The bus's saloon, each half of it, for walking about in (#162); none on a truck.</summary>
+    public override VehicleDeck[] Decks => Model.Decks;
+
+    private static readonly Dictionary<RideKind, (SeatAnchor[] Seats, VehicleDeck[] Decks)> _models = new();
+
+    /// <summary>The seats and decks of this kind's sections, read once from a throwaway build of each.</summary>
+    private (SeatAnchor[] Seats, VehicleDeck[] Decks) Model
     {
-        var seats = new List<SeatAnchor>();
-        for (int k = 0; k < Spec.Sections.Length; k++)
+        get
         {
-            var rig = HeavyRig.Create(Spec, k, 0.5f);
-            seats.AddRange(rig.Seats);
-            rig.Free();
+            if (_models.TryGetValue(Kind, out var known)) return known;
+            var seats = new List<SeatAnchor>();
+            var decks = new List<VehicleDeck>();
+            for (int k = 0; k < Spec.Sections.Length; k++)
+            {
+                var rig = HeavyRig.Create(Spec, k, 0.5f);
+                seats.AddRange(rig.Seats);
+                if (rig.Deck != null) decks.Add(rig.Deck);
+                rig.Free();
+            }
+            return _models[Kind] = (seats.ToArray(), decks.ToArray());
         }
-        return seats.ToArray();
-    });
+    }
 
     public override bool Driverless => true;
 

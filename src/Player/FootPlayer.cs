@@ -875,6 +875,9 @@ public partial class FootPlayer : CharacterBody3D
     public override void _Ready()
     {
         CollisionMask |= World.TreeColliders.Layer;   // trunks are solid (layer 2)
+        // and the decks of walkable vehicles (#162), which only exist on a walking player's own peer
+        CollisionMask |= DeckLayer;
+        _walkMask = CollisionMask;
         // authority pushes its transform to everyone else (server relays)
         var replication = new SceneReplicationConfig();
         replication.AddProperty(".:NetPos");
@@ -901,9 +904,14 @@ public partial class FootPlayer : CharacterBody3D
             replication.AddProperty(".:SimPeer");
             replication.PropertySetReplicationMode(".:SimPeer", SceneReplicationConfig.ReplicationMode.Never);
         }
+        // walking about in a vehicle (#162): its key and section on change, the spot in its frame every send
+        replication.AddProperty(".:DeckOn");
+        replication.AddProperty(".:DeckSection");
+        replication.AddProperty(".:DeckPos");
+        replication.AddProperty(".:DeckYaw");
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1223,6 +1231,8 @@ public partial class FootPlayer : CharacterBody3D
             NetTime = Time.GetTicksUsec() / 1e6;
             float dt = (float)delta;
             ApplyStickLook(dt);
+            // walkable vehicles nearby: their decks where they are drawn, and this player with one it stands on
+            CarryOnDeck(dt);
             if (RidingWith != 0)
             {
                 // a passenger (#158): in its seat on the host's vehicle, looking out of it
@@ -1284,16 +1294,20 @@ public partial class FootPlayer : CharacterBody3D
         // crashed or frozen, and ENet takes up to 30 s to say so. Its body, frozen mid-road, must
         // not be a wall the whole field piles into (#50: every car stopped on a crashed leader).
         bool silent = Time.GetTicksMsec() / 1000.0 - LastNetState > SilentSeconds;
-        // a passenger has no body of its own: it is in the vehicle
-        bool off = silent || RidingWith != 0;
+        // a passenger has no body of its own: it is in the vehicle; one walking about in it must not
+        // be a wall the vehicle runs into on its driver's peer
+        bool off = silent || RidingWith != 0 || DeckOn != "";
         if (_body.Disabled != off) _body.Disabled = off;
 
+        // off a deck, the spot it last stood on one is forgotten: the next is taken as it comes
+        if (DeckOn == "") _deckShownValid = false;
         if (RidingWith != 0 && Host is { } host)
         {
             // where its host's copy is, exactly: not its own interpolated stream, which would shake in the seat
             Position = host.Position;
             Rotation = host.Rotation;
         }
+        else if (DeckOn != "" && PlaceOnDeck((float)delta)) { }
         else if (_interp.HasData)
         {
             var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
@@ -1671,7 +1685,8 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public bool TryInteract()
     {
-        if (RidingWith != 0) return TryLeaveSeat();
+        // a walkable vehicle's passenger stands up into the aisle; any other gets out
+        if (RidingWith != 0) return StandUp() || TryLeaveSeat();
         if (_ride is { IsVehicle: true })
         {
             ExitVehicle();
@@ -1692,6 +1707,8 @@ public partial class FootPlayer : CharacterBody3D
             return interiors?.TryDoor(this) ?? true;
         }
         if (_ride != null || _mantling || _deadTimer > 0) return false;
+        // walking about in a vehicle: a seat, or the wheel (#162)
+        if (Aboard) return TryDeckSeat();
 
         // a radio within reach: its panel (play a CD, burn one, pick it up)
         if (Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach) is { } radio)
@@ -1845,13 +1862,17 @@ public partial class FootPlayer : CharacterBody3D
         if (vehicle is Car && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
             state = state with { DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor | VehicleState.DriverDoorShuts) };
 
+        // a vehicle you can walk about in (#162): up from the seat into it, not out beside it
+        var aisle = vehicle.Walkable ? AisleSpot(this, vehicle, SeatIndex) : null;
+
         // with people aboard (or sat in it driverless) it is not parked: it rolls on with them (#158)
         if (OnlineSeats && (SeatIndex > 0 || Riders.Any())) PassengerService.Instance!.HostLeaving(state);
         else Vehicles?.Park(state);
         SeatIndex = 0;
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
-        GlobalPosition = FindExit(door, right, side, ahead, end, grounded);
+        if (aisle is { } spot) StandIn(spot, state.Velocity);
+        else GlobalPosition = FindExit(door, right, side, ahead, end, grounded);
     }
 
     /// <summary>
@@ -2238,6 +2259,8 @@ public partial class FootPlayer : CharacterBody3D
         }
         // a passenger is carried by the vehicle it sits in (#158)
         if (RidingWith != 0) { RideAlong(); return; }
+        // aboard a walkable vehicle, or about to be (#162)
+        if (_ride == null && DeckPhysics((float)delta)) return;
         // before any path runs, so none of them (mantle, a thrown-out NPC) can skip it
         if (RescueFromVoid(delta)) return;
 
@@ -2857,6 +2880,8 @@ public partial class FootPlayer : CharacterBody3D
 
     private void RidePhysics(float dt, bool onFloor)
     {
+        // a bus: people walking in it or up to its doors are not in its hull's way (#162)
+        IgnoreGuests();
         // Triggers are analog, and the vehicles already take 0..1: half a trigger is half the
         // watts. Pushing the stick forward or back does the same, for anyone who expects it to.
         var stick = PlayerInput.Move;

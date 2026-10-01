@@ -140,7 +140,7 @@ public partial class PassengerProbe : Node
             var seated = host.Visual.FindChild($"Seated_{p.Name}", true, false) as Node3D
                 ?? host.FindChild($"Seated_{p.Name}", true, false) as Node3D;
             string key = $"{p.Name}-{host.Name}-{p.SeatIndex}";
-            if (_seen.Add(key) || (gap > 0.01f && _seen.Add(key + "gap")))
+            if (Settled(key) && (_seen.Add(key) || (gap > 0.01f && _seen.Add(key + "gap"))))
                 Check(gap <= 0.01f && seated is { Visible: true } || p == me && seated != null,
                     $"{p.Name} in {host.Name}'s seat {p.SeatIndex}: {gap:F3} m from its host, figure {(seated == null ? "MISSING" : "on the rig")} at {host.WorldVelocity.Length() * 3.6f:F0} km/h");
         }
@@ -150,13 +150,21 @@ public partial class PassengerProbe : Node
         {
             bool shown = rig.FindChild("Driver", true, false) is Node3D { Visible: true } || rig.View != Avatar.CockpitView.Outside;
             string key = $"driver-{car.Name}-{car.SeatIndex}";
-            if (_seen.Add(key))
+            if (Settled(key) && _seen.Add(key))
                 Check(shown == (car.SeatIndex == 0) || rig.View != Avatar.CockpitView.Outside,
                     $"{car.Name}'s car: driver {(shown ? "drawn" : "not drawn")} with {(car.SeatIndex == 0 ? "somebody" : "nobody")} at the wheel");
         }
     }
 
     private readonly HashSet<string> _seen = new();
+    private readonly Dictionary<string, double> _since = new();
+
+    /// <summary>A state is judged once it has lasted half a second: a hand-over's own frame has the old drawing and the new state.</summary>
+    private bool Settled(string key)
+    {
+        if (!_since.TryGetValue(key, out double first)) _since[key] = first = _t;
+        return _t - first > 0.5;
+    }
 
     // ---- a: drives, then jumps out ----------------------------------------------------------
 

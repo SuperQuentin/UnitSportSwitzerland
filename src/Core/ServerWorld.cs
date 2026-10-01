@@ -258,6 +258,7 @@ public partial class ServerWorld : Node3D
         if (node is Node3D player)
             _chunks!.AddAnchor(player);
         _interiors?.SendTableTo(id);
+        _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
     }
