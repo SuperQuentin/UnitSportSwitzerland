@@ -84,4 +84,4 @@
   both clients spawn on one spot (b was inside a's bus and was carried off), a headless client has
   no parked models (the parked vehicle's own node is the frame then).
 - **Limits**: buses only; no hand on a pole is drawn; the ~0.4 m jump when the vehicle changes hands
-  under a walker; a parked train's trailer boxes take its pose only once it is at rest.
+  under a walker; a rolling parked train's trailer boxes take its pose only once it is at rest (#173).
