@@ -18,11 +18,18 @@ namespace UnitSport.Terrain.Format;
 /// <para>
 /// Wall prop convention: the points are the FACE line (the exposed vertical side) with the foot
 /// height at each point and the wall's height above it. The solid is on the LEFT of the point
-/// order (seen from above, walking the points), <see cref="WallThickness"/> deep; the open air is
-/// on the right. A fill wall therefore runs with the road on its left, a cut wall with the road on
-/// its right. The heightfield cannot hold a vertical step, so the runtime blend releases the
-/// ground from the road's slopes past the <em>free line</em>, half the thickness inside the solid:
-/// the one-cell steep transition between shelf and foot then lies inside the wall.
+/// order (seen from above, walking the points); the open air is on the right. A fill wall
+/// therefore runs with the road on its left, a cut wall with the road on its right.
+/// </para>
+///
+/// <para>
+/// The visible wall is its crown, <see cref="WallCrown"/> thick (the stored <c>Thickness</c>).
+/// The heightfield cannot hold a vertical step: its one-cell transition is up to a lattice
+/// diagonal wide, wherever the line falls. So the face side is kept clean (the ground is released
+/// or levelled out to <see cref="FreeDepth"/> inside the solid, more than a diagonal) and the
+/// transition lies on the solid side, under a cover <see cref="CoverDepth"/> deep from the face:
+/// under the road behind a fill wall, under the levelled backfill behind a cut wall. The cover is
+/// part of the wall's mesh and collision (<c>RoadWallBuilder</c>).
 /// </para>
 /// </summary>
 public static class RoadEmbankment
@@ -37,20 +44,47 @@ public static class RoadEmbankment
     public const double RoadReachM = 7.0;
 
     /// <summary>
-    /// The same for everything else (tracks, paths, rail, squares): no wall ever, so a longer reach
+    /// The same for everything else (tracks, paths, squares): no wall ever, so a longer reach
     /// only builds a longer ledge over the cliff a mountain path runs along
     /// (<c>draped-centreline-cliff-lip-spike</c>). The old smoothstep corridor's falloff.
     /// </summary>
     public const double MinorReachM = 3.0;
 
-    /// <summary>Depth of a retaining wall's solid, face to back. Hides the one-cell transition.</summary>
-    public const float WallThickness = 3.0f;
+    // Swiss retaining-wall dimensions: Kanton Bern TBA, "Arbeitshilfe Entwurf und Gestaltung von
+    // Stuetzmauern" (2023-08-01, after ASTRA FHB K / VSS): valley-side (fill) crown 40 cm, at least
+    // 35 (45 with the VRS 2211 restraint), standing 6 cm over the asphalt; hill-side (cut) crown at
+    // least 35 cm, 20 cm over the finished ground behind, which is a 50 cm level maintenance path;
+    // 50 cm lateral clearance between the edge line and the wall, asphalt up to the wall.
 
-    /// <summary>A fill wall's face stands this far out from the edge (its cap is the shoulder).</summary>
-    public const double FillFaceOffset = 2.0;
+    /// <summary>Thickness of the visible wall, its crown: the 40 cm rule (Bern TBA).</summary>
+    public const float WallCrown = 0.40f;
 
-    /// <summary>A cut wall's face stands this far out from the edge (a small gutter).</summary>
-    public const double CutFaceOffset = 0.2;
+    /// <summary>Lateral clearance between the carriageway edge and the wall (Bern TBA: 50 cm).</summary>
+    public const double WallClearance = 0.5;
+
+    /// <summary>A fill wall's crown stands this far over the road it carries (Bern TBA: 6 cm).</summary>
+    public const float FillCrownLift = 0.06f;
+
+    /// <summary>A cut wall's crown stands this far over the ground behind it (Bern TBA: 20 cm).</summary>
+    public const float CutCrownOver = 0.20f;
+
+    /// <summary>
+    /// How far inside the solid, from the face, the ground stays released (fill) or level with the
+    /// road (cut): more than a lattice diagonal, so no transition triangle reaches the face side.
+    /// </summary>
+    public const double FreeDepth = 1.5;
+
+    /// <summary>
+    /// How deep the wall's cover reaches from the face: <see cref="FreeDepth"/> plus a lattice
+    /// diagonal, so it lies over every transition triangle.
+    /// </summary>
+    public const float CoverDepth = 3.0f;
+
+    /// <summary>A fill wall's face stands this far out from the edge: clearance, then the crown.</summary>
+    public const double FillFaceOffset = WallClearance + WallCrown;
+
+    /// <summary>A cut wall's face stands this far out from the edge: the clearance (paved gutter).</summary>
+    public const double CutFaceOffset = WallClearance;
 
     /// <summary>A slope that misses the ground at its reach by less than this needs no wall.</summary>
     public const double MinWallDrop = 0.5;
@@ -67,8 +101,18 @@ public static class RoadEmbankment
     /// </summary>
     public const byte VariantTlmWall = 1;
 
-    /// <summary>Classes that may get a retaining wall: the drivable roads.</summary>
-    public static bool AllowsWall(RoadClass c) => c <= RoadClass.Lane;
+    /// <summary>Classes that may get a retaining wall: the drivable roads and railway lines.</summary>
+    public static bool AllowsWall(RoadClass c) => c <= RoadClass.Lane || c == RoadClass.Railway;
+
+    /// <summary>
+    /// Whether this segment may stand on retaining walls: a drivable road or a railway line, at
+    /// grade, not a ford or stairs, not a tram, funicular or a rail piece inside a carriageway
+    /// (the road there decides).
+    /// </summary>
+    public static bool AllowsWall(RoadSegment seg) =>
+        AllowsWall(seg.Class) && IsAtGrade(seg)
+        && (seg.Flags & (RoadFlags.Ford | RoadFlags.Stairs | RoadFlags.Tramway | RoadFlags.Funicular)) == 0
+        && (seg.Attributes.Flags & RoadAttrFlags.Embedded) == 0;
 
     /// <summary>Whether a segment gets an embankment at all (at-grade ground surfaces only).</summary>
     public static bool IsAtGrade(RoadSegment seg) =>

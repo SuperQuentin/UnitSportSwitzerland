@@ -49,7 +49,13 @@ public interface IEngined
 /// <param name="Steer">-1 left .. +1 right.</param>
 /// <param name="Effort">Shift: sprint on a bike, tuck on skis.</param>
 /// <param name="Handbrake">Space on a car (<see cref="Rideable.CanHop"/> false): locks the rear wheels.</param>
-public readonly record struct RideInput(float Throttle, float Brake, float Steer, bool Effort, bool Handbrake = false);
+/// <param name="WheelAngle">
+/// A steering wheel's angle, radians, + right (<see cref="Core.PlayerInput.WheelAngle"/>): a vehicle
+/// with a <see cref="Rideable.WheelLock"/> steers from it directly, with no rack easing and no
+/// assists. NaN when the steer comes from keys, a stick or a scripted driver.
+/// </param>
+public readonly record struct RideInput(float Throttle, float Brake, float Steer, bool Effort, bool Handbrake = false,
+    float WheelAngle = float.NaN);
 
 /// <summary>
 /// The ground under the vehicle.
@@ -209,6 +215,12 @@ public abstract class Rideable
     /// <summary>Space hops (bike, skis). False on a car, where Space is the handbrake.</summary>
     public virtual bool CanHop => true;
 
+    /// <summary>
+    /// How far its steering wheel turns from lock to lock, radians; 0 for anything not steered by a
+    /// wheel. A vehicle with one takes a real steering wheel's angle directly (<see cref="RideInput.WheelAngle"/>).
+    /// </summary>
+    public virtual float WheelLock => 0f;
+
     /// <summary>The mesh as it stands with nobody on it (a bike without its rider).</summary>
     public virtual Node3D BuildParkedVisual(int riderIndex) => BuildVisual(riderIndex);
 
@@ -222,6 +234,13 @@ public abstract class Rideable
     /// a trailer's nose). Null: measured from the mesh.
     /// </summary>
     public virtual (Aabb Lower, Aabb Upper)? HullBoxes => null;
+
+    /// <summary>
+    /// A collision box measured from section <paramref name="section"/>'s mesh, cut back to what is
+    /// solid enough to collide with (a bus's mirrors, out on their arms over a walker's head, are
+    /// not a wall down its whole length). As measured by default.
+    /// </summary>
+    public virtual Aabb Solid(Aabb measured, int section) => measured;
 
     /// <summary>Bottom of the collision hull above the ground, m: bumps of the terrain lattice must not catch it.</summary>
     public virtual float HullLift => 0.45f;

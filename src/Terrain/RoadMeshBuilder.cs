@@ -68,6 +68,10 @@ public static class RoadMeshBuilder
                 AppendBridgeStructure(seg, tile.Id, grid, vertices, colors, uvs, uv2s, indices);
         }
         RoadWallBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // retaining walls (#125)
+        RailingBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);    // guardrails and fences (#126)
+        IslandBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);     // roundabout islands (#122)
+        PavementBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // turn lane widenings (#123)
+        RoadSignBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // junction signs (#121)
         RoadStreetBuilder.Append(tile, vertices, colors, uvs, uv2s, indices); // sidewalks (#119)
 
         return vertices.Count == 0

@@ -4,7 +4,7 @@
   © OpenStreetMap contributors under the Open Database License 1.0
   (https://www.openstreetmap.org/copyright, https://opendatacommons.org/licenses/odbl/1-0/).
 - **Attribution**: "© OpenStreetMap contributors" with the copyright link, in the README data
-  table and on the in-game Settings > Licenses page. The overlay file carries it in its header.
+  table and on the in-game Settings > About tab. The overlay file carries it in its header.
 - **Share-alike**: road tiles (`.road`) built with the overlay are a derived database. If built
   `terrain_chunks` are ever distributed (a download, a release asset), they must be offered under
   the ODbL, with the attribution. A region built without `--layers osm` holds no OSM data and is

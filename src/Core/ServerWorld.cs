@@ -11,7 +11,7 @@ namespace UnitSport.Core;
 /// lifecycle of player nodes. Transforms are client-authoritative and relayed by ENet.
 /// Ground with no terrain data is generated here exactly as on the clients.
 /// </summary>
-public partial class ServerWorld : Node3D
+public partial class ServerWorld : Node3D, IOriginContainer
 {
     private InterestService? _interest;
     private Vehicles.PassengerService? _passengers;
@@ -20,6 +20,7 @@ public partial class ServerWorld : Node3D
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
+    private Items.DroppedItems? _dropped;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
@@ -82,6 +83,7 @@ public partial class ServerWorld : Node3D
         AddChild(_chunks);
 
         _players = new Node3D { Name = "Players" };
+        _players.AddToGroup(OriginShifter.ContainerGroup);
         AddChild(_players);
         // who may see whom: decided here for everyone, before any player node exists (each
         // player's synchronizer looks it up in _Ready). Line of sight from the 100 m horizon lattice.
@@ -103,8 +105,13 @@ public partial class ServerWorld : Node3D
         // radios thrown into the world, and the CDs they play; the clock everyone plays them by
         _radios = Items.RadioManager.Create(this);
         _radios.PlayerPositions = _vehicles.PlayerPositions;
+        // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
+        _dropped = Items.DroppedItems.Create(this);
+        _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
         Net.ClockSync.Create(this);
+        // live stations in cars: tuned here once each, relayed to whoever listens (#179)
+        Audio.Live.WebRadio.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
         AddChild(new World.AfricaTwinEgg(_chunks));
 
@@ -139,13 +146,31 @@ public partial class ServerWorld : Node3D
         AddChild(race);
         _chat.Race = race;
 
-        // claimed cash, kept per player name on this server
+        // deposited cash, kept per player name on this server
         var bank = Items.Bank.Create(this, null, server: true);
         bank.NameOf = _chat.NameOfPeer;
+        // money moves only at a bank's teller desk (#213)
+        bank.InBank = peer => Loot.LootService.Instance?.InBank(peer) ?? Task.FromResult(false);
 
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here
         Items.ItemEvents.Create(this, server: true);
+
+        // the birds everybody shares (#143): simulated here around every player, sent to those near
+        var birds = new Birds.BirdLife(_chunks, origin, null)
+        {
+            Headless = true,
+            // fills the birds' reused list: no allocation per frame (GC pauses at 16 players)
+            Observers = list =>
+            {
+                for (int i = 0; i < _players!.GetChildCount(); i++)
+                    if (_players.GetChild(i) is Player.FootPlayer { Npc: false } p)
+                        list.Add(new Birds.BirdLife.Observer(p.GlobalPosition, p.NetVel, p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
+                            or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit, p.GetMultiplayerAuthority()));
+            },
+        };
+        AddChild(birds);
+        Birds.BirdNet.Create(this, birds, server: true);
         // stuck Polaroids' images: uploaded by their owner, kept here, served to the others
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
@@ -192,7 +217,24 @@ public partial class ServerWorld : Node3D
 
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;
+
+        // status queries on port + 1: LAN lists find this server, saved lists show it is up
+        // and how full it is (Net/QueryResponder, docs/notes/net/server-query.md)
+        if (QueryResponder.ParsePort(port) is { } queryPort)
+        {
+            string name = QueryResponder.ParseServerName();
+            string version = (string)ProjectSettings.GetSetting("application/config/version", "");
+            string world = manifest.Tiles.Count > 0 ? "real" : "generated";
+            var registry = _registry;
+            AddChild(new QueryResponder(queryPort, () => new ServerStatus(
+                name, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients, version, world), QueryResponder.ParseBind()));
+        }
+        _parentPid = HostedServer.ParseParentPid();
     }
+
+    /// <summary>The client that started this server from its menu, if any: the server goes when it does.</summary>
+    private int? _parentPid;
+    private double _sinceParentCheck;
 
     /// <summary>
     /// Reads "--stream-bandwidth &lt;MB/s&gt;", the per-client terrain streaming cap.
@@ -234,6 +276,16 @@ public partial class ServerWorld : Node3D
 
     public override void _Process(double delta)
     {
+        if (_parentPid is { } parent && (_sinceParentCheck += delta) >= 1)
+        {
+            _sinceParentCheck = 0;
+            if (!HostedServer.Alive(parent))
+            {
+                GD.Print($"[server] the client that hosted this server (pid {parent}) is gone; stopping");
+                GetTree().Quit(0);
+                return;
+            }
+        }
         if (_players == null) return;
         _sinceStatus += delta;
         if (_sinceStatus < 5) return;
@@ -260,6 +312,7 @@ public partial class ServerWorld : Node3D
         _interiors?.SendTableTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _chat?.SendWorldTimeTo(id);
     }
 
     private void OnPeerDisconnected(long id)
@@ -270,6 +323,7 @@ public partial class ServerWorld : Node3D
         _passengers?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
+        _dropped?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);

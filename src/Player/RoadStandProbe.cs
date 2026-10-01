@@ -218,6 +218,17 @@ public partial class RoadStandProbe : Node
                 if (!_chunks.HasCollisionAt(p)) continue;
                 result.Add((p, $"{s.Class}/{s.Surface}", Kind.Body));
             }
+        if (Bridges) return result;
+        // turn lane widenings (#123): a body on the strip's widest triangle, at its centroid
+        foreach (var strip in tile.AreaProps.Where(a => a.Type == AreaPropType.Pavement).Take(4))
+        {
+            Vector3 V(int i) => new(strip.Vertices[i * 3], strip.Vertices[i * 3 + 1], strip.Vertices[i * 3 + 2]);
+            var widest = Enumerable.Range(0, strip.Indices.Length / 3)
+                .Select(t => (V(strip.Indices[t * 3]), V(strip.Indices[t * 3 + 1]), V(strip.Indices[t * 3 + 2])))
+                .MaxBy(t => (t.Item2 - t.Item1).Cross(t.Item3 - t.Item1).Length());
+            var p = basePos + (widest.Item1 + widest.Item2 + widest.Item3) / 3f;
+            if (_chunks.HasCollisionAt(p)) result.Add((p, "turn lane strip", Kind.Body));
+        }
         return result;
     }
 
@@ -294,7 +305,7 @@ public partial class RoadStandProbe : Node
                 int c = Math.Clamp((int)Math.Round(o.X), 0, last), rr = Math.Clamp((int)Math.Round(o.Z), 0, last);
                 // a retaining wall there (#125): its cap is the floor, not the blend
                 bool walled = walls.Any(wl => Enumerable.Range(0, wl.PointCount).Any(m =>
-                    new Vector2(wl.Points[m * 4] - c, wl.Points[m * 4 + 2] - rr).Length() < RoadEmbankment.WallThickness + 2f));
+                    new Vector2(wl.Points[m * 4] - c, wl.Points[m * 4 + 2] - rr).Length() < RoadEmbankment.CoverDepth + 2f));
                 var past = new Vector3(c, ground(c, rr), rr);
                 if (!walled && !OnSidewalk(tile, past, except: s)) Add(past, $"{s.Class} past sidewalk", Kind.Floor);
             }
@@ -347,9 +358,18 @@ public partial class RoadStandProbe : Node
             var dir = new Vector3(w.Points[b * 4] - w.Points[a * 4], 0, w.Points[b * 4 + 2] - w.Points[a * 4 + 2]).Normalized();
             var left = new Vector3(dir.Z, 0, -dir.X);   // the solid's side, X east and Z south
             float top = w.Points[m * 4 + 1] + w.Points[m * 4 + 3];
-            string name = w.Type == LinearPropType.RetainingWallFill ? "fill" : "cut";
-            var cap = basePos + face + left * 1.0f + Vector3.Up * top;
-            if (_chunks.HasCollisionAt(cap)) result.Add((cap, $"wall {name} cap", Kind.Body));
+            bool fill = w.Type == LinearPropType.RetainingWallFill;
+            string name = fill ? "fill" : "cut";
+            // the crown, and the cover behind it (the road over a fill wall, the backfill of a cut)
+            float crown = fill ? top + RoadEmbankment.FillCrownLift : top;
+            float cover = fill ? top : top - RoadEmbankment.CutCrownOver;
+            var cap = basePos + face + left * (w.Thickness * 0.5f) + Vector3.Up * crown;
+            // a railing on the crown (#126) leaves no room to stand there: a body rests on its top
+            bool railed = tile.LinearProps.Any(r => RoadRailing.IsRailing(r) && Enumerable.Range(0, r.PointCount).Any(k =>
+                new Vector2(basePos.X + r.Points[k * 4] - cap.X, basePos.Z + r.Points[k * 4 + 2] - cap.Z).Length() < 1.5f));
+            if (!railed && _chunks.HasCollisionAt(cap)) result.Add((cap, $"wall {name} crown", Kind.Body));
+            var back = basePos + face + left * (RoadEmbankment.CoverDepth * 0.6f) + Vector3.Up * cover;
+            if (_chunks.HasCollisionAt(back)) result.Add((back, $"wall {name} cover", Kind.Body));
             if (w.Points[m * 4 + 3] >= 1.5f)
             {
                 var edge = basePos + face - left * 0.4f + Vector3.Up * top;
@@ -365,7 +385,7 @@ public partial class RoadStandProbe : Node
         foreach (var s in tile.Segments)
         {
             if (slopes >= 8) break;
-            if (!RoadEmbankment.AllowsWall(s.Class) || !RoadEmbankment.IsAtGrade(s) || s.PointCount < 3) continue;
+            if (!RoadEmbankment.AllowsWall(s) || s.PointCount < 3) continue;
             int i = s.PointCount / 2;
             var p = new Vector3(s.Points[i * 3], 0, s.Points[i * 3 + 2]);
             var d = new Vector3(s.Points[i * 3 + 3] - s.Points[i * 3 - 3], 0, s.Points[i * 3 + 5] - s.Points[i * 3 - 1]).Normalized();
@@ -375,7 +395,7 @@ public partial class RoadStandProbe : Node
                 var q = p + (r ? right : -right) * (float)(RoadEmbankment.EdgeOffset(s, r) + 2.0);
                 // a walled side has no slope: its cap is there instead
                 bool walled = walls.Any(w => Enumerable.Range(0, w.PointCount).Any(k =>
-                    new Vector2(w.Points[k * 4] - q.X, w.Points[k * 4 + 2] - q.Z).Length() < RoadEmbankment.WallThickness + 2f));
+                    new Vector2(w.Points[k * 4] - q.X, w.Points[k * 4 + 2] - q.Z).Length() < RoadEmbankment.CoverDepth + 2f));
                 if (!walled && !OnSidewalk(tile, q)) Lattice(q.X, q.Z, $"{s.Class} slope");
             }
             slopes++;

@@ -48,6 +48,20 @@ public static class RoadPaintBuilder
                 continue;
             }
 
+            if (paint.Type == PaintType.SharkTooth)   // a Wartelinie row stored as its base line (#121)
+            {
+                foreach (var t in RoadPaintGeometry.Teeth(paint))
+                    for (int k = 0; k < 9; k += 3)
+                    {
+                        indices.Add(vertices.Count);
+                        vertices.Add(new Vector3(t[k], t[k + 1] + Lift, t[k + 2]));
+                        colors.Add(colour);
+                        uvs.Add(Vector2.Zero);
+                        uv2s.Add(new Vector2(Style, 0f));
+                    }
+                continue;
+            }
+
             float half = paint.Width * 0.5f;
             foreach (var run in RoadPaintGeometry.Runs(paint))
                 AppendRibbon(run, half, colour, vertices, colors, uvs, uv2s, indices);

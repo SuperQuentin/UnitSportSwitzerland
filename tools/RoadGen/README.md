@@ -201,15 +201,14 @@ Whole region: 6,487 tiles, 366,105 segments, **156,384 junctions**, in under a m
 ## Not done
 
 - `TerrainPreprocessor` still writes v1, so `--roads-only` has to be followed by `--rewrite`.
-- Roundabouts are not recognised as a shape; a small ring of links becomes several ordinary
-  junctions rather than one island.
+- Roundabouts (#122) are recognised by their TLM/OSM flag only, not by shape: an unflagged
+  small ring of links still becomes several ordinary junctions.
 - No lane-level topology (which arm connects to which), so `MarkingPlan` infers lines from width
   and cannot place turn arrows or lane drops.
 - `--divided-scale` defaults to 1.0. swissTLM3D draws a direction-separated road as two
   centrelines and the preprocessor gives each the full class width, which is where nearly all
   the remaining carriageway overlap comes from — but narrowing every dual carriageway changes
   how the whole world looks, so the tool measures it and leaves the call open.
-- Roundabouts are not recognised as a shape; a small ring of links becomes several ordinary
-  junctions.
-- No lane-level topology (turn lanes, which arm connects to which), so `MarkingPlan` infers
-  lines from width and cannot place turn arrows or lane drops.
+- No lane-level topology (which arm connects to which), so `MarkingPlan` infers lines from
+  width. Left-turn pockets and their arrows (#123) are planned by the network stage from the
+  junction priority instead, and traffic does not know about them.

@@ -1,7 +1,7 @@
 # Licenses page
 
-- **Settings > About > Licenses** (`Core/Licenses.cs` list, drawn by `SettingsMenu.ShowLicenses`,
-  `--licenses` opens it for a screenshot). One entry per data source, engine or bundled component:
+- **Settings > About tab** (`Core/Licenses.cs` list, drawn by `Ui/SettingsScreen.LicenseRows` since
+  the menu rework #184; `--licenses` opens Settings on that tab for a screenshot). One entry per data source, engine or bundled component:
   name, attribution, what it is used for, licence and a link. To add one, append to
   `Licenses.All`. Below the list the page prints Godot's own `Engine.GetLicenseText()` and the
   component/licence pairs from `Engine.GetCopyrightInfo()`, which is what Godot asks a game to show.

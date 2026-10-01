@@ -225,6 +225,36 @@ public sealed class RoadPaint
     public float Gap { get; init; }
     /// <summary>xyz triples, same frame as <see cref="RoadSegment.Points"/>.</summary>
     public required float[] Vertices { get; init; }
+
+    /// <summary>
+    /// A polyline that lies along a segment of its tile: then <see cref="Vertices"/> are
+    /// <see cref="RoadPaintGeometry.Along"/>(Segment, Offset, From, To), and the file stores only
+    /// this reference (#116b), the decoder rebuilds the vertices. Null: the file stores the vertices.
+    /// Build one with <see cref="AlongSegment"/>, which rounds the numbers to what the file keeps.
+    /// </summary>
+    public RoadSegment? Segment { get; init; }
+    /// <summary>Metres right of the segment's drawing direction (mm in the file).</summary>
+    public float Offset { get; init; }
+    /// <summary>Horizontal metres along the offset line (cm in the file); To past the end (infinity) = to the end.</summary>
+    public float From { get; init; }
+    public float To { get; init; } = float.PositiveInfinity;
+
+    /// <summary>An offset rounded to the millimetre the file keeps.</summary>
+    public static float FileOffset(double offset) => MathF.Round((float)offset * 1000f) / 1000f;
+
+    /// <summary>A line along <paramref name="seg"/>, its numbers rounded as the file stores them.</summary>
+    public static RoadPaint AlongSegment(RoadSegment seg, PaintType type, uint rgba, float width, float dash, float gap,
+        double offset, double from = 0, double to = double.PositiveInfinity, byte variant = 0)
+    {
+        float o = FileOffset(offset);
+        float f = (float)(Math.Round(Math.Max(0, from) * 100) / 100);
+        float t = double.IsPositiveInfinity(to) ? float.PositiveInfinity : (float)(Math.Max(1, Math.Round(to * 100)) / 100);
+        return new RoadPaint
+        {
+            Shape = PaintShape.Polyline, Type = type, Variant = variant, Rgba = rgba, Width = width, Dash = dash, Gap = gap,
+            Segment = seg, Offset = o, From = f, To = t, Vertices = RoadPaintGeometry.Along(seg, o, f, t),
+        };
+    }
     /// <summary>Triangle list for <see cref="PaintShape.Triangles"/>; empty for a polyline.</summary>
     public ushort[] Indices { get; init; } = [];
 }
@@ -234,6 +264,7 @@ public enum PointPropType : byte
     None = 0,
     YieldSign = 1,       // Swiss "Kein Vortritt", inverted triangle (#121)
     RoundaboutSign = 2,  // Swiss 2.41.1 (#122)
+    MainRoadSign = 3,    // Swiss 3.03 "Hauptstrasse", yellow diamond (#121)
 }
 
 /// <summary>A prop at one point: a sign on a pole. Y is its foot on the ground.</summary>
@@ -289,6 +320,7 @@ public enum AreaPropType : byte
     Island = 1,       // roundabout centre island (#122)
     SplitterIsland = 2, // raised island at a roundabout entry (#122)
     Sidewalk = 3,     // a sidewalk patch not carried by a segment, e.g. a junction corner (#119)
+    Pavement = 4,     // flush carriageway beside a segment: a turn lane's widening (#123); Height 0
 }
 
 /// <summary>A raised surface: a triangulated polygon lifted by <see cref="Height"/> with a kerb face.</summary>

@@ -208,14 +208,13 @@ public partial class FootPlayer
         var at = host?.GlobalPosition ?? GlobalPosition;
         var right = (host ?? this).GlobalTransform.Basis.X with { Y = 0 };
         right = right.LengthSquared() > 1e-6f ? right.Normalized() : Vector3.Right;
-        var ahead = -(host ?? this).GlobalTransform.Basis.Z with { Y = 0 };
-        ahead = ahead.LengthSquared() > 1e-6f ? ahead.Normalized() : Vector3.Forward;
-        float side = 1.5f, end = 3f;
+        var frame = (host ?? this).GlobalTransform;
+        float side = 1.5f;
+        Rideable? leaving = null;
         if (host != null && VehicleOf(host) is { } vehicle && SeatIndex < vehicle.Seats.Length)
         {
-            var box = vehicle.ParkedBox.Size;
-            side = box.X * 0.5f + BodyRadius + 0.4f;
-            end = box.Z * 0.5f + BodyRadius + 0.3f;
+            leaving = vehicle;
+            side = vehicle.ParkedBox.Size.X * 0.5f + BodyRadius + 0.4f;
             var seat = vehicle.SeatPosition(SeatIndex);
             if (vehicle is Truck { IsBus: true })
                 // a bus is left by its doors, on its right
@@ -238,7 +237,7 @@ public partial class FootPlayer
         _viewYaw = yaw;
         Rotation = new Vector3(0, yaw, 0);
         Velocity = velocity;
-        GlobalPosition = FindExit(at, right, side, ahead, end, grounded: true);
+        GlobalPosition = FindExit(at, right, side, frame, leaving, grounded: true);
         RefreshVisual(force: true);
         _walkerHidden = false;
     }

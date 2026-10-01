@@ -105,6 +105,9 @@ public static partial class TerrainMeshBuilder
         float[] coreDist = floats.Rent(n * n);
         // on a slope, the distance out from the nearest edge (for the clearance's fade)
         float[] edgeDist = floats.Rent(n * n);
+        // 0 = full clearance: every pass that does not measure an edge distance (islands, walls)
+        // keeps the old behaviour; the pool hands back old values otherwise
+        Array.Clear(edgeDist, 0, n * n);
         byte[] seen = System.Buffers.ArrayPool<byte>.Shared.Rent(n * n);
         Array.Clear(seen, 0, n * n);
         var touched = new List<int>(16384);
@@ -137,6 +140,12 @@ public static partial class TerrainMeshBuilder
             foreach (var wall in roadTile.LinearProps)
                 if (wall.Type is LinearPropType.RetainingWallFill or LinearPropType.RetainingWallCut)
                     FreeBehindWall(scratch, wall);
+
+            foreach (var island in roadTile.AreaProps)
+                if (island.Type == AreaPropType.Island && island.Height > 0 && island.Vertices.Length >= 9)
+                    HoldUnderIsland(scratch, island);
+                else if (island.Type == AreaPropType.Pavement && island.Vertices.Length >= 9)
+                    HoldUnderPavement(scratch, island);
 
             // tunnels (#119): the ground over a bore never lies under its crown, so a mouth always has
             // a roof and a shallow tunnel never shows its tube (the hole is the mouth only). Last,
@@ -470,10 +479,17 @@ public static partial class TerrainMeshBuilder
     }
 
     /// <summary>
-    /// Releases the ground on a wall's open side of its free line from every road slope: past a
-    /// fill wall's face lies the valley floor, behind a cut wall the hillside. A road's own
-    /// surface (a core cell) is never released. The one-cell drop from the shelf to the released
-    /// ground then lies inside the wall's solid (<see cref="RoadEmbankment"/>).
+    /// Shapes the ground at a retaining wall so the heightfield's one-cell transition lies on the
+    /// wall's solid side, under its cover, and the face side is clean (<see cref="RoadEmbankment"/>).
+    /// Depth is measured from the face into the solid (left of the points).
+    /// Fill wall: every cell shallower than <see cref="RoadEmbankment.FreeDepth"/>, the valley floor
+    /// past the face included, loses its lower bound (the fill slope, or the road itself in the
+    /// strip under the road's edge): the ground falls to the valley floor and the cover holds the
+    /// road over it. The last <see cref="RoadEmbankment.FreeDepth"/> of a run keeps its road cells,
+    /// so no dip opens under the road past the cover's end.
+    /// Cut wall: every slope cell from just in front of the face to that depth is levelled with the
+    /// road (the paved gutter, and the shelf under the crown); deeper, the hillside is released.
+    /// A road's surface is never raised or lowered by a cut wall.
     /// </summary>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
     private static void FreeBehindWall(Scratch s, RoadLinearProp wall)
@@ -481,22 +497,27 @@ public static partial class TerrainMeshBuilder
         int count = wall.PointCount;
         if (count < 2) return;
         bool fill = wall.Type == LinearPropType.RetainingWallFill;
-        double half = wall.Thickness * 0.5 / ChunkFormat.SpacingM;
-        // the side released, as signed distance to the left of the face: fill everything right of
-        // the free line out past the slopes' reach, cut everything left of it
-        double reach = (RoadEmbankment.RoadReachM + wall.Thickness) / ChunkFormat.SpacingM;
-        double q0 = fill ? -reach : half, q1 = fill ? half : wall.Thickness / ChunkFormat.SpacingM + reach;
+        double sp = ChunkFormat.SpacingM;
+        double free = RoadEmbankment.FreeDepth / sp;
+        double q0 = fill ? -(RoadEmbankment.RoadReachM + 1.0) / sp : -(RoadEmbankment.CutFaceOffset + 0.5) / sp;
+        double q1 = fill ? free : (RoadEmbankment.CoverDepth + RoadEmbankment.RoadReachM) / sp;
         int n = s.N;
 
+        double total = 0;
+        for (int i = 0; i < count - 1; i++)
+            total += Math.Sqrt(Sq(wall.Points[(i + 1) * 4] - wall.Points[i * 4]) + Sq(wall.Points[(i + 1) * 4 + 2] - wall.Points[i * 4 + 2])) / sp;
+
+        double start = 0;
         for (int i = 0; i < count - 1; i++)
         {
-            double ax = wall.Points[i * 4] / ChunkFormat.SpacingM, az = wall.Points[i * 4 + 2] / ChunkFormat.SpacingM;
-            double bx = wall.Points[(i + 1) * 4] / ChunkFormat.SpacingM, bz = wall.Points[(i + 1) * 4 + 2] / ChunkFormat.SpacingM;
+            double ax = wall.Points[i * 4] / sp, az = wall.Points[i * 4 + 2] / sp;
+            double bx = wall.Points[(i + 1) * 4] / sp, bz = wall.Points[(i + 1) * 4 + 2] / sp;
+            float fa = wall.Points[i * 4 + 1], fb = wall.Points[(i + 1) * 4 + 1];
             double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
             if (len < 1e-6) continue;
             double ux = (bx - ax) / len, uz = (bz - az) / len;
             double lx = uz, lz = -ux;   // left, X east and Z south
-            double a0 = i == 0 ? 0 : -PieceOverlapM, a1 = i + 1 == count - 1 ? len : len + PieceOverlapM;
+            double a0 = i == 0 ? 0 : -PieceOverlapM / sp, a1 = i + 1 == count - 1 ? len : len + PieceOverlapM / sp;
 
             double minZ = double.MaxValue, maxZ = double.MinValue;
             foreach (var (al, q) in (ReadOnlySpan<(double, double)>)[(a0, q0), (a0, q1), (a1, q0), (a1, q1)])
@@ -511,20 +532,115 @@ public static partial class TerrainMeshBuilder
                 double dz = r - az;
                 double xMin = double.MinValue, xMax = double.MaxValue;
                 if (!ClipRange(ux, dz * uz, a0, a1, ref xMin, ref xMax)) continue;
-                // strictly past the free line: the shelf cell sitting on it stays
                 if (!ClipRange(lx, dz * lz, q0, q1, ref xMin, ref xMax)) continue;
                 int c0 = Math.Max(0, (int)Math.Ceiling(ax + xMin)), c1 = Math.Min(n - 1, (int)Math.Floor(ax + xMax));
                 int row = r * n;
                 for (int c = c0; c <= c1; c++)
                 {
                     int idx = row + c;
-                    if (s.Seen[idx] == 0 || s.CoreDist[idx] < float.PositiveInfinity) continue;
-                    s.Lo[idx] = float.NegativeInfinity;
-                    s.Hi[idx] = float.PositiveInfinity;
+                    if (s.Seen[idx] == 0) continue;
+                    bool core = s.CoreDist[idx] < float.PositiveInfinity;
+                    double dx = c - ax, along = dx * ux + dz * uz, q = dx * lx + dz * lz;
+                    if (fill)
+                    {
+                        if (q >= free) continue;
+                        if (core)
+                        {
+                            // only this road's own cells inside the face: the planner keeps every
+                            // other line out from under the cover
+                            if (q < 0) continue;
+                            double at = start + along;
+                            if (at < free || at > total - free) continue;
+                        }
+                        s.Lo[idx] = float.NegativeInfinity;
+                    }
+                    else if (!core)
+                    {
+                        if (q < free)
+                        {
+                            float foot = (float)(fa + (fb - fa) * Math.Clamp(along / len, 0, 1));
+                            s.Lo[idx] = s.Hi[idx] = foot;
+                        }
+                        else
+                        {
+                            s.Lo[idx] = float.NegativeInfinity;
+                            s.Hi[idx] = float.PositiveInfinity;
+                        }
+                    }
                 }
             }
+            start += len;
         }
     }
+
+    private static double Sq(double v) => v * v;
+
+    /// <summary>
+    /// A flush strip of carriageway beside a segment (#123, a turn lane's widening): its cells are
+    /// road, held at the strip's height like a ribbon's core, so no slope reaches under them.
+    /// </summary>
+    private static void HoldUnderPavement(Scratch s, RoadAreaProp strip) =>
+        Rasterise(s, strip, (idx, y) =>
+        {
+            if (s.Seen[idx] == 0) { s.Seen[idx] = 1; s.Touched.Add(idx); }
+            else if (s.CoreDist[idx] < float.PositiveInfinity) return;   // a ribbon's own cell stays the ribbon's
+            s.CoreDist[idx] = 0.5f;
+            s.Lo[idx] = s.Hi[idx] = y;
+        });
+
+    /// <summary>Calls <paramref name="cell"/> for every lattice cell inside one of the prop's triangles, with the surface height there.</summary>
+    private static void Rasterise(Scratch s, RoadAreaProp prop, Action<int, float> cell)
+    {
+        var v = prop.Vertices;
+        var ix = prop.Indices;
+        double sp = ChunkFormat.SpacingM;
+        int n = s.N;
+        for (int t = 0; t + 2 < ix.Length; t += 3)
+        {
+            int a = ix[t] * 3, b = ix[t + 1] * 3, c = ix[t + 2] * 3;
+            double ax = v[a] / sp, az = v[a + 2] / sp, bx = v[b] / sp, bz = v[b + 2] / sp, cx = v[c] / sp, cz = v[c + 2] / sp;
+            double det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+            if (Math.Abs(det) < 1e-12) continue;
+            int c0 = Math.Max(0, (int)Math.Ceiling(Math.Min(ax, Math.Min(bx, cx)))), c1 = Math.Min(n - 1, (int)Math.Floor(Math.Max(ax, Math.Max(bx, cx))));
+            int r0 = Math.Max(0, (int)Math.Ceiling(Math.Min(az, Math.Min(bz, cz)))), r1 = Math.Min(n - 1, (int)Math.Floor(Math.Max(az, Math.Max(bz, cz))));
+            for (int r = r0; r <= r1; r++)
+                for (int col = c0; col <= c1; col++)
+                {
+                    double wa = ((bz - cz) * (col - cx) + (cx - bx) * (r - cz)) / det;
+                    double wb = ((cz - az) * (col - cx) + (ax - cx) * (r - cz)) / det;
+                    double wc = 1 - wa - wb;
+                    if (wa < -1e-9 || wb < -1e-9 || wc < -1e-9) continue;
+                    cell(r * n + col, (float)(wa * v[a + 1] + wb * v[b + 1] + wc * v[c + 1]));
+                }
+        }
+    }
+
+    /// <summary>How far under a raised island's top the ground is held.</summary>
+    private const float IslandClearance = 0.05f;
+
+    /// <summary>
+    /// Holds the ground under a raised roundabout island (#122) below its top, so a mound in the
+    /// terrain does not poke through the island's surface: each cell inside one of its triangles
+    /// may lie no higher than the top there less <see cref="IslandClearance"/>. A road's own cell
+    /// is never touched; the island's kerb and top are <c>IslandBuilder</c>'s mesh and collision.
+    /// </summary>
+    private static void HoldUnderIsland(Scratch s, RoadAreaProp island) =>
+        Rasterise(s, island, (idx, y) =>
+        {
+            float top = y + island.Height - IslandClearance;
+            if (s.Seen[idx] == 0)
+            {
+                s.Seen[idx] = 1;
+                s.Touched.Add(idx);
+                s.CoreDist[idx] = float.PositiveInfinity;
+                s.Lo[idx] = float.NegativeInfinity;
+                s.Hi[idx] = top;
+                return;
+            }
+            if (s.CoreDist[idx] < float.PositiveInfinity) return;
+            if (top < s.Hi[idx]) s.Hi[idx] = top;
+            if (s.Lo[idx] > s.Hi[idx]) s.Lo[idx] = s.Hi[idx];
+        });
 
     /// <summary>Narrows [xMin, xMax] to where <c>k·x + c</c> lies in [lo, hi]; false if empty.</summary>
     private static bool ClipRange(double k, double c, double lo, double hi, ref double xMin, ref double xMax)

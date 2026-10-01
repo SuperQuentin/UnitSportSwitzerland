@@ -23,7 +23,8 @@ public partial class FlightCheckProbe : Node
     private FootPlayer? _player;
     private double _t, _report, _wait;
     private bool _started, _crashed, _done;
-    private Vector3 _from;
+    /// <summary>Where the sortie started, kept in LV95: the origin may move under it (#185).</summary>
+    private GlobalPos _from;
     private string _last = "";
 
     public FlightCheckProbe(ChunkManager chunks, WorldOrigin origin, string kind, string? shot)
@@ -111,8 +112,8 @@ public partial class FlightCheckProbe : Node
                 p.DebugLaunch(p.GlobalPosition + Vector3.Up * 400f, new Vector3(0, 0, -50));
                 break;
         }
-        _from = p.GlobalPosition;
-        GD.Print($"[flycheck] {_kind}: start agl {Agl(_from):F0} m");
+        _from = _origin.ToGlobal(p.GlobalPosition);
+        GD.Print($"[flycheck] {_kind}: start agl {Agl(p.GlobalPosition):F0} m");
     }
 
     /// <summary>The sortie: which buttons are held when.</summary>
@@ -158,8 +159,8 @@ public partial class FlightCheckProbe : Node
         if (_done) return;
         _done = true;
         var p = _player!.GlobalPosition;
-        float dist = new Vector2(p.X - _from.X, p.Z - _from.Z).Length();
-        float drop = _from.Y - p.Y;
+        float dist = (float)_origin.ToGlobal(p).HorizontalDistanceTo(_from);
+        float drop = (float)_from.Alt - p.Y;
         bool under = _chunks.TryGetHeight(p, out float g) && p.Y < g - 1.5f;
         GD.Print($"[flycheck] END {how}: {dist:F0} m flown, {drop:F0} m lost"
             + (drop > 1 ? $", overall glide {dist / drop:F1}" : "") + $", now {_player.Ride}");

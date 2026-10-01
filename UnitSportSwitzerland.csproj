@@ -7,6 +7,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <!-- SDL3 (steering wheel, SteeringWheel.cs) is a C API: its handles are pointers -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- keep the offline tools and data folders out of the game assembly's wildcard compile -->
     <DefaultItemExcludes>$(DefaultItemExcludes);tools/**;terrain_chunks/**;ressources/**</DefaultItemExcludes>
   </PropertyGroup>
@@ -26,6 +28,7 @@
     <!-- the coarse heightmap the generated terrain is shaped on (tools/swiss_relief.py); LogicalName
          and WithCulture because MSBuild otherwise reads ".bin"-like infixes as a culture -->
     <EmbeddedResource Include="src/Terrain/swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
+    <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
   </ItemGroup>
 
 </Project>

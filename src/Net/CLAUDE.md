@@ -15,11 +15,14 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `remote-interpolation` — Remote players are interpolated (NetPos/NetVel/NetTime at 30 Hz, Hermite, bounded extrapolation, smooth render clock)
 - `load-testing` — Load testing: --swarm bots, --serverstats, --netsmooth, tools/loadtest.sh; before/after numbers at 32 players and a 30-min soak
 - `lean-dedicated-server` — Dedicated server: proxy players, fps cap, coarse grids, asset prep off the main thread, throttled vehicles
+- `lan-discovery` — mDNS browse for `_unitsport._udp` (avahi on the server); the Multiplayer screen lists LAN servers, legacy unicast queries, `--discovercheck`
+- `server-query` — UDP status query on port + 1 (`USQ1`/`USR1` + JSON): LAN broadcast list, saved servers' players and ping, `--server-name`, `--query-bind`
+- `hosting` — Host from the menu: the client starts itself headless as a server (`--parent-pid` watchdog), joins it, kills it on leave
 - `clock-sync` — One shared clock: `ClockSync.ServerNow` from min-RTT ping/pong samples; song position and beat phase are functions of it, never of anything local
 
 ## Commands
 
-- `commands` — Commands: --admin-password, --bind, --headless, --name, --path, --server, --stream-bandwidth
+- `commands` — Commands: --admin-password, --bind, --headless, --name, --path, --server, --stream-bandwidth, --server-name, --query-port, --query-bind, --no-query, --parent-pid
 
 ## Gotchas
 
@@ -32,4 +35,5 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `places-json-one-asset-ui` — `places.json` is the one asset the UI reads, not the streamer
 - `client-needs-own-request-budget` — The client needs its own request budget, not just the server's
 - `multiplayersynchronizer-s-own-authority-decides` — A MultiplayerSynchronizer's own authority decides who sends
+- `netlink-dead-peer` — A dead ENet peer: GetUniqueId/IsServer/RPC each log an error, per frame a flood; `NetLink.Ready/Online/IsServer`, `GetLocalNetPlayer` null while down
 - `loopback-server-test-leaves-manifest` — A loopback server test leaves its manifest in the client's chunk cache

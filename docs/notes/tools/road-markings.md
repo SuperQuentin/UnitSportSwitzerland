@@ -1,5 +1,12 @@
 # Road markings
 
+- **Reference drawings** (check shapes here before drawing a marking): Wikimedia Commons
+  [Diagrams of road markings of Switzerland](https://commons.wikimedia.org/wiki/Category:Diagrams_of_road_markings_of_Switzerland),
+  one SVG per SSV marking number, e.g. 6.06 Einspurpfeile
+  [CH-Markierung-606-Einspurpfeile.svg](https://upload.wikimedia.org/wikipedia/commons/4/4b/CH-Markierung-606-Einspurpfeile.svg):
+  their path data can be traced directly (the #123 lane arrows are). Dimensions: the Stadt Bern
+  Normalien C 2.10.x sheets (e.g. 2.10.17 Einspurpfeile, revised 2019). A first attempt from
+  memory drew the old Swiss turn arrow (a branch bent off the shaft); the current one jogs.
 - **No dataset**: swisstopo publishes NO lane/marking dataset (`tlm_strassen_strasseninfo` is
   junctions and POIs, not lanes). Markings are *inferred* at build time.
 - **v1/v2 tiles**: a `MarkingStyle` from width class + `belagsart` + `richtungsgetrennt`, baked

@@ -341,13 +341,18 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
                 var a = seg.Attributes;
                 var l = left[first];
                 var r = right[first];
+                // the yield bits belong to the segment's ends (#121): only its first piece starts
+                // there, only its last ends there
+                var flags = a.Flags;
+                if (first > 0) flags &= ~RoadAttrFlags.YieldAtStart;
+                if (station < st.Count) flags &= ~RoadAttrFlags.YieldAtEnd;
                 pieces.Add(new RoadSegment
                 {
                     Class = seg.Class, Surface = seg.Surface, Flags = seg.Flags, Width = seg.Width,
                     Points = points,
                     Attributes = a with
                     {
-                        Flags = l.Urban || r.Urban ? a.Flags | RoadAttrFlags.Urban : a.Flags,
+                        Flags = l.Urban || r.Urban ? flags | RoadAttrFlags.Urban : flags,
                         Left = Side(a.Left, l, seg.Class),
                         Right = Side(a.Right, r, seg.Class),
                     },

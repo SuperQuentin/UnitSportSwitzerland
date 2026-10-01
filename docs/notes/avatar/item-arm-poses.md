@@ -7,7 +7,7 @@
   the rig's -X wrist (the figure's right once the mesh faces -Z); pass `arm` + `armBlend` to
   `BuildStride` / `MountsFor` / `BuildPosed` / `MountsForPose`.
 - Nothing arm-related is sent. Every peer derives the pose from `HeldItemId` (kind via `ItemDefs`) plus
-  ONE replicated int, `FootPlayer.ItemAction` (0 idle, 1 aim, 2 use), which the owner's
+  ONE replicated int, `FootPlayer.ItemAction` (0 idle, 1 aim, 2 use, 3 throw wind-up, 4 throw release: `throw-drop`), which the owner's
   `ItemController` writes (today: aim = 1). Idle held item = `Hold`; aim: `Shoot` -> `ShoulderAim`,
   `Optic`/`Photo` -> `TwoHandEye`; use: `Consume` -> `Mouth`, `Place` -> `Plant`.
 - Blend eases in/out over ~0.18 s per peer (`StepArmPose`: out of the old pose, then into the new). A

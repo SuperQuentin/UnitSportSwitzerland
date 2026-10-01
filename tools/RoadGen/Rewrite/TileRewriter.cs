@@ -23,7 +23,7 @@ using UnitSport.Tools.RoadGen.Network;
 /// seconds instead of a fourteen-minute rebuild.
 /// </para>
 /// </summary>
-public static class TileRewriter
+public static partial class TileRewriter
 {
     /// <param name="BlockSize">Tiles per side processed together.</param>
     /// <param name="Halo">
@@ -71,15 +71,28 @@ public static class TileRewriter
         public int Roads, OneWay, Divided, DividedResolved, Urban, Osm, Roundabout, OsmTiles;
         public double RoadKm, OneWayKm, UrbanKm, OsmKm;
         public long Bytes, DeflatedBytes;
+        /// <summary>Per part of the file ("v2" = header, segments, junctions; then each v3 section tag): raw bytes, and deflated alone.</summary>
+        public readonly SortedDictionary<string, (long Raw, long Deflated)> Parts = new(StringComparer.Ordinal);
+        /// <summary>Paint stored as a segment reference / as geometry, and primitives the decoder rebuilt differently (must be 0).</summary>
+        public int PaintRefs, PaintGeometry, PaintMismatch;
         /// <summary>Overlap area per class pair (<c>--measure</c>), e.g. "motorway+motorway".</summary>
         public SortedDictionary<string, double> OverlapPairs = new(StringComparer.Ordinal);
         public readonly CrossSectionPlanner.Stats Carriageways = new();
+        public readonly RoundaboutShaper.Stats Roundabouts = new();
+        public readonly TurnLaneStats TurnLanes = new();
         /// <summary>Terrain under each shifted carriageway vertex vs under the TLM line it came from.</summary>
         public HeightAudit Shifted = HeightAudit.Empty;
         public int MaxBytes;
         public string MaxBytesTile = "";
         public readonly PaintEmitter.Tally Paint = new();
         public readonly RailRoadOverlap.Tally Rail = new();
+        public readonly PriorityPlanner.Stats Priority = new();
+
+        private string FormatParts(int tiles) => "    parts     " + string.Join(", ", Parts.Select(kv =>
+            string.Create(CultureInfo.InvariantCulture,
+                $"{kv.Key} {kv.Value.Raw / 1024.0 / Math.Max(1, tiles):F2}/{kv.Value.Deflated / 1024.0 / Math.Max(1, tiles):F2}")))
+            + " KB/tile raw/deflated alone\n"
+            + $"    paint encoding: {PaintRefs:N0} lines along a segment, {PaintGeometry:N0} as geometry, {PaintMismatch} decoded differently";
 
         public string Format(int tiles)
         {
@@ -91,7 +104,7 @@ public static class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Rail.Format();
+                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format();
         }
     }
 
@@ -242,6 +255,8 @@ public static class TileRewriter
         var streetStats = new StreetPlanner.Stats();
         var cornerStats = new CornerPlanner.Stats();
         var heightStats = new RoadHeights.Stats();
+        var railings = new RailingPlanner.Stats();
+        var buildings = new Footprints(chunkDir);
 
         foreach (var block in blocks)
         {
@@ -286,12 +301,23 @@ public static class TileRewriter
             var facades = new Facades(chunkDir);   // building walls, for the streets
             var field = new UrbanField(facades);
             RoadHeights.Apply(lines, field, heightStats, count: true);
+            // roundabout rings rebuilt as arcs before anything is built from them (#122)
+            var islands = new Dictionary<TileId, List<RoadAreaProp>>();
+            foreach (var ring in RoundaboutShaper.Shape(lines, netStats.Roundabouts))
+            {
+                var at = TileId.FromLv95(ring.Centre.X, ring.Centre.Y);
+                if (!block.Contains(at) || RoundaboutShaper.Island(ring, at) is not { } island) continue;
+                if (!islands.TryGetValue(at, out var list)) islands[at] = list = new List<RoadAreaProp>();
+                list.Add(island);
+                netStats.Roundabouts.Islands++;
+            }
             foreach (var line in lines) AddSegment(net, line, options.DividedScale);
 
             var rails = new RailRoadOverlap(lines, netStats.Rail);
             var output = new Dictionary<TileId, List<RoadSegment>>();
             var caps = new Dictionary<TileId, List<RoadJunction>>();
             var paint = new Dictionary<TileId, List<RoadPaint>>();
+            var signs = new Dictionary<TileId, List<RoadPointProp>>();
 
             // the full-res terrain of the block and its halo: the height audit and the walls (#125)
             var grids = LoadGrids(chunkDir, context);
@@ -310,7 +336,10 @@ public static class TileRewriter
                     BuildJunctions: true,
                     SimplifyTolerance: options.SimplifyTolerance,
                     ChordTolerance: options.ChordTolerance,
-                    Analyze: options.Measure));
+                    Analyze: options.Measure,
+                    JoinNearEnds: MayJoinNearEnd));
+                netStats.Priority.NearEndsJoined += result.NearEndsJoined;
+                var priority = PlanPriority(result);
 
                 overlapAfter += result.Report.OverlapArea;
                 foreach (var (pair, area) in result.Report.TopOverlapPairs ?? [])
@@ -321,7 +350,7 @@ public static class TileRewriter
 
                 // Final plan of every ribbon, halo included: the halo's divided carriageways are
                 // the partners the block's ones take their direction from.
-                var plans = new List<(Source Source, List<Vec2> Plan, bool Write)>();
+                var plans = new List<(Source Source, List<Vec2> Plan, bool Write, int LinkId)>();
                 foreach (var ribbon in result.Ribbons)
                 {
                     var link = result.Network.Links[ribbon.LinkId];
@@ -339,9 +368,10 @@ public static class TileRewriter
                         // the terrain would measure the bridge, not the smoothing
                         audit.Add(plan, source, terrain);
                     }
-                    plans.Add((source, plan, write));
+                    plans.Add((source, plan, write, link.Id));
                 }
 
+                var segmentOf = new Dictionary<int, (RoadSegment, TileId)>();   // turn lanes (#123)
                 // what a sidewalk stops at (#119): every ground-level line of the block and its halo
                 var obstacles = new StreetPlanner.Obstacles();
                 for (int k = 0; k < plans.Count; k++)
@@ -363,7 +393,7 @@ public static class TileRewriter
                     }
                 // tunnel mouths of the block (#119): their approach roads run between walls as wide as the bore
                 var mouths = new List<(Vec2 At, Vec2 Out, double Half)>();
-                foreach (var (src, pl, _) in plans)
+                foreach (var (src, pl, _, _) in plans)
                 {
                     var ts = src.Segment;
                     if ((ts.Flags & RoadFlags.Tunnel) == 0 || ts.Class > RoadClass.Square || pl.Count < 2) continue;
@@ -377,12 +407,13 @@ public static class TileRewriter
                         mouths.Add((end, dir / dir.Length, RoadFormat.TunnelWidth(ts.Class) * 0.5));
                     }
                 }
+                var streetPieces = new Dictionary<RoadSegment, List<RoadSegment>>(ReferenceEqualityComparer.Instance);
                 var streets = new StreetPlanner(facades, field, obstacles, streetStats,
                     grids is null ? null : (e, n) => SampleGround(grids, e, n));
 
                 for (int k = 0; k < plans.Count; k++)
                 {
-                    var (source, plan, write) = plans[k];
+                    var (source, plan, write, linkId) = plans[k];
                     // rails inside a carriageway (#124); halo rails too, their track zone may reach into the block
                     var pieces = source.Segment.Class == RoadClass.Railway
                         ? rails.Split(plan, source.SampleHeight, source.Segment, count: write) : null;
@@ -420,12 +451,17 @@ public static class TileRewriter
                             key.FromM + source.AlongOf(plan[0]), key.FromM + source.AlongOf(plan[^1])) is { } row)
                         attributes = CrossSectionPlanner.Finish(OsmOverlayReader.Apply(attributes, row), source.Line);
 
+                    attributes = attributes with { Flags = attributes.Flags | priority.FlagsOf(linkId) };   // #121
                     var segment = ToSegment(plan, source, attributes);
-                    // sidewalks (#119): the segment is cut where its cross-section changes; its paint
-                    // is laid on the whole line first, so dashes run on across the cuts
+                    // sidewalks (#119): the segment is planned here (its paint follows the built-up
+                    // rules) but written whole until the turn lanes (#123) have read it; then it is cut
+                    // where its cross-section changes. Paint is laid on the whole line, so dashes run on
+                    // across the cuts.
                     var street = streets.Plan(segment, source.Tile, k, out bool urban);
                     if (mouths.Count > 0) street = street.Select(piece => RampShoulders(piece, source.Tile, mouths)).ToList();
-                    list.AddRange(street);
+                    list.Add(segment);
+                    if (street.Count != 1 || !ReferenceEquals(street[0], segment)) streetPieces[segment] = street;
+                    segmentOf[linkId] = (segment, source.Tile);
                     written += street.Count;
 
                     var paintOn = urban && !attributes.Has(RoadAttrFlags.Urban)
@@ -445,6 +481,23 @@ public static class TileRewriter
                     list.Add(record);
                     junctionCount++;
                 }
+
+                EmitPriority(priority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
+                EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs, netStats.TurnLanes);
+
+                // now the streets are cut into their sidewalk pieces (#119); a side whose sidewalk
+                // would stand on a turn lane's widening (#123) has none there
+                foreach (var (tileId, list) in output)
+                {
+                    var strips = islands.TryGetValue(tileId, out var props)
+                        ? props.Where(a => a.Type == AreaPropType.Pavement).ToList() : [];
+                    for (int i = list.Count - 1; i >= 0; i--)
+                        if (streetPieces.TryGetValue(list[i], out var pieces))
+                        {
+                            list.RemoveAt(i);
+                            list.InsertRange(i, strips.Count == 0 ? pieces : pieces.Select(x => OffPavement(x, strips)));
+                        }
+                }
             }
 
             foreach (var id in block)
@@ -460,14 +513,21 @@ public static class TileRewriter
                 var flags = RoadTileFlags.Network;
                 if (segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) flags |= RoadTileFlags.Osm;
                 streetStats.Tiles++;
-                var walls = grids is null ? new List<RoadLinearProp>()
-                    : EmbankmentPlanner.Plan(id, segments, (e, n) => SampleGround(grids, e, n), embankments);
+                var walls = new List<RoadLinearProp>();
+                if (grids is not null)
+                {
+                    var owners = new List<int>();
+                    walls = EmbankmentPlanner.Plan(id, segments, (e, n) => SampleGround(grids, e, n), embankments, owners);
+                    walls.AddRange(RailingPlanner.Plan(id, segments, walls, owners, (e, n) => SampleGround(grids, e, n), railings));
+                }
                 var tile = new RoadTile
                 {
                     Id = id, Segments = segments, Junctions = junctions, Flags = flags,
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
-                    AreaProps = CornerPlanner.Plan(id, segments, junctions, facades, cornerStats),
+                    AreaProps = [.. islands.TryGetValue(id, out var isl) ? isl : [],
+                        .. CornerPlanner.Plan(id, segments, junctions, facades, cornerStats)],   // sidewalk corners (#119)
+                    PointProps = signs.TryGetValue(id, out var sp) ? sp : new List<RoadPointProp>(),
                 };
                 rails.ClearTrackZones(tile.Paint, id);
                 var bytes = Encode(tile);
@@ -494,6 +554,7 @@ public static class TileRewriter
         log(streetStats.Format());
         log(cornerStats.Format());
         log(embankments.Format());
+        log(railings.Format());
         return new Stats(tilesRead, tilesWritten, junctionCount, written, dropped,
             overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, netStats);
     }
@@ -523,6 +584,58 @@ public static class TileRewriter
             File.Copy(path, raw);
         }
         return (tile, null);
+    }
+
+    /// <summary>The piece with no sidewalk on a side whose sidewalk band crosses one of <paramref name="strips"/>.</summary>
+    private static RoadSegment OffPavement(RoadSegment seg, List<RoadAreaProp> strips)
+    {
+        var a = seg.Attributes;
+        if (a.Left.SidewalkDm == 0 && a.Right.SidewalkDm == 0) return seg;
+        bool Crosses(bool right)
+        {
+            var side = right ? a.Right : a.Left;
+            if (side.SidewalkDm == 0) return false;
+            double off = seg.Width * 0.5 + side.SidewalkDm / 20.0, sign = right ? 1 : -1;
+            var p = seg.Points;
+            for (int i = 0; i + 1 < seg.PointCount; i++)
+            {
+                double fx = p[i * 3 + 3] - p[i * 3], fz = p[i * 3 + 5] - p[i * 3 + 2], l = Math.Sqrt(fx * fx + fz * fz);
+                if (l < 1e-6) continue;
+                for (double t = 0; t <= l; t += 1.0)
+                {
+                    // right of travel, tile-local: (-fz, fx)
+                    double x = p[i * 3] + fx * t / l - fz / l * off * sign, z = p[i * 3 + 2] + fz * t / l + fx / l * off * sign;
+                    if (strips.Any(strip => InsideArea(strip, x, z))) return true;
+                }
+            }
+            return false;
+        }
+        bool left = Crosses(false), right = Crosses(true);
+        if (!left && !right) return seg;
+        return new RoadSegment
+        {
+            Class = seg.Class, Surface = seg.Surface, Flags = seg.Flags, Width = seg.Width, Points = seg.Points,
+            Attributes = a with
+            {
+                Left = left ? a.Left with { SidewalkDm = 0, KerbCm = 0 } : a.Left,
+                Right = right ? a.Right with { SidewalkDm = 0, KerbCm = 0 } : a.Right,
+            },
+        };
+    }
+
+    private static bool InsideArea(RoadAreaProp prop, double x, double z)
+    {
+        var v = prop.Vertices;
+        for (int t = 0; t + 2 < prop.Indices.Length; t += 3)
+        {
+            int i0 = prop.Indices[t] * 3, i1 = prop.Indices[t + 1] * 3, i2 = prop.Indices[t + 2] * 3;
+            double d1 = (x - v[i1]) * (v[i0 + 2] - v[i1 + 2]) - (v[i0] - v[i1]) * (z - v[i1 + 2]);
+            double d2 = (x - v[i2]) * (v[i1 + 2] - v[i2 + 2]) - (v[i1] - v[i2]) * (z - v[i2 + 2]);
+            double d3 = (x - v[i0]) * (v[i2 + 2] - v[i0 + 2]) - (v[i2] - v[i0]) * (z - v[i0 + 2]);
+            bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+            if (!(neg && pos)) return true;
+        }
+        return false;
     }
 
     /// <summary>How far out from a mouth its approach road gets the bore's width.</summary>
@@ -593,6 +706,56 @@ public static class TileRewriter
         return ms.ToArray();
     }
 
+    private static long DeflatedLength(ReadOnlySpan<byte> bytes)
+    {
+        using var ms = new MemoryStream();
+        using (var deflate = new DeflateStream(ms, CompressionLevel.Fastest, leaveOpen: true)) deflate.Write(bytes);
+        return Math.Min(ms.Length, bytes.Length);
+    }
+
+    /// <summary>Decodes the tile again: every paint primitive must come back as drawn (geometry within its 0.5 mm rounding).</summary>
+    private static void CheckPaint(NetworkStats st, RoadTile tile, byte[] bytes)
+    {
+        if (tile.Paint.Count == 0) return;
+        RoadTile back;
+        using (var ms = new MemoryStream(bytes)) back = RoadCodec.Decode(ms);
+        var segments = new HashSet<RoadSegment>(tile.Segments, ReferenceEqualityComparer.Instance);
+        for (int i = 0; i < tile.Paint.Count; i++)
+        {
+            var a = tile.Paint[i];
+            bool reference = a.Segment is { } seg && segments.Contains(seg);
+            if (reference) st.PaintRefs++; else st.PaintGeometry++;
+            var b = i < back.Paint.Count ? back.Paint[i] : null;
+            bool same = b is not null && b.Type == a.Type && b.Width == a.Width && b.Dash == a.Dash && b.Gap == a.Gap
+                && b.Rgba == a.Rgba && b.Vertices.Length == a.Vertices.Length && b.Indices.SequenceEqual(a.Indices)
+                && (reference ? b.Vertices.AsSpan().SequenceEqual(a.Vertices)
+                    : a.Vertices.Zip(b.Vertices).All(x => Math.Abs(x.First - x.Second) <= 6e-4f));
+            if (!same) st.PaintMismatch++;
+        }
+    }
+
+    /// <summary>Splits the encoded tile at its v3 section boundaries for the per-part table.</summary>
+    private static void CountParts(NetworkStats st, RoadTile tile, byte[] bytes)
+    {
+        void Add(string key, ReadOnlySpan<byte> part)
+        {
+            st.Parts.TryGetValue(key, out var v);
+            st.Parts[key] = (v.Raw + part.Length, v.Deflated + DeflatedLength(part));
+        }
+        int at = RoadFormat.HeaderSize + tile.Segments.Sum(s => 12 + s.Points.Length * 4)
+            + tile.Junctions.Sum(j => 8 + j.Vertices.Length * 4 + j.Indices.Length * 2);
+        Add("v2", bytes.AsSpan(0, at));
+        uint count = BitConverter.ToUInt32(bytes, at);
+        at += 4;
+        for (uint i = 0; i < count; i++)
+        {
+            string tag = System.Text.Encoding.ASCII.GetString(bytes, at, 4);
+            int length = BitConverter.ToInt32(bytes, at + 4);
+            Add(tag, bytes.AsSpan(at, 8 + length));
+            at += 8 + length;
+        }
+    }
+
     private static void Count(NetworkStats st, RoadTile tile, byte[] bytes)
     {
         st.Bytes += bytes.Length;
@@ -604,6 +767,8 @@ public static class TileRewriter
                 deflate.Write(bytes);
             st.DeflatedBytes += Math.Min(ms.Length, bytes.Length);
         }
+        CountParts(st, tile, bytes);
+        CheckPaint(st, tile, bytes);
         if ((tile.Flags & RoadTileFlags.Osm) != 0) st.OsmTiles++;
         st.Paint.Add(tile);
 

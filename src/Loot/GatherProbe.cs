@@ -61,7 +61,8 @@ public partial class GatherProbe : Node
         var source = _chunks.Source!;
 
         // look for one of each over the 5x5 tiles around the spawn, nearest tiles first
-        (Vector3 Stand, Vector3 Face)? water = null, stone = null, tree = null;
+        // kept in LV95: the origin moves when the player is put down near them (#185)
+        (GlobalPos Stand, GlobalPos Face)? water = null, stone = null, tree = null;
         var tiles = new List<TileId>();
         for (int r = 0; r <= 2; r++)
             for (int dx = -r; dx <= r; dx++)
@@ -105,7 +106,7 @@ public partial class GatherProbe : Node
             {
                 var t = trees.FirstOrDefault(t => t.Kind == 0 || t.Kind == 3);
                 var at = _origin.ToWorld(id.MinE + t.X, id.MaxN - t.Z, t.Y);
-                tree = (at + new Vector3(1.4f, 0, 0), at);
+                tree = (_origin.ToGlobal(at + new Vector3(1.4f, 0, 0)), _origin.ToGlobal(at));
             }
         }
 
@@ -134,10 +135,10 @@ public partial class GatherProbe : Node
         return true;
     }
 
-    private Vector3 World(TileId id, ChunkGrid grid, int col, int row) =>
-        _origin.ToWorld(id.MinE + col * ChunkFormat.SpacingM, id.MaxN - row * ChunkFormat.SpacingM, grid.HeightMetersAt(col, row));
+    private static GlobalPos World(TileId id, ChunkGrid grid, int col, int row) =>
+        new(id.MinE + col * ChunkFormat.SpacingM, id.MaxN - row * ChunkFormat.SpacingM, grid.HeightMetersAt(col, row));
 
-    private async Task Visit(string what, (Vector3 Stand, Vector3 Face)? spot, Gathering.Resource expected, params ItemId[] gives)
+    private async Task Visit(string what, (GlobalPos Stand, GlobalPos Face)? spot, Gathering.Resource expected, params ItemId[] gives)
     {
         if (spot is not { } s)
         {
@@ -145,10 +146,11 @@ public partial class GatherProbe : Node
             return;
         }
         _tested++;
-        GD.Print($"[gather] {what}: standing at {s.Stand:F1}");
-        var face = s.Face - s.Stand;
+        GD.Print($"[gather] {what}: standing at {s.Stand}");
+        var stand = _origin.ToWorld(s.Stand);
+        var face = _origin.ToWorld(s.Face) - stand;
         float yaw = Mathf.Atan2(-face.X, -face.Z);
-        _player!.LeaveInterior(s.Stand + Vector3.Up * 1.5f, yaw);
+        _player!.LeaveInterior(stand + Vector3.Up * 1.5f, yaw);
         _player.Velocity = Vector3.Zero;
 
         // wait for collision under the new spot, then for the gatherer to notice
@@ -159,7 +161,7 @@ public partial class GatherProbe : Node
             t += GetProcessDeltaTime();
             if (t > 20 && !_player.IsOnFloor()) break;
         }
-        Check(_gathering.Target == expected, $"{what}: offered {_gathering.Target} (want {expected}) at {_player.GlobalPosition:F1}, moved {(_player.GlobalPosition - s.Stand).Length():F1} m");
+        Check(_gathering.Target == expected, $"{what}: offered {_gathering.Target} (want {expected}) at {_player.GlobalPosition:F1}, moved {_origin.ToGlobal(_player.GlobalPosition).HorizontalDistanceTo(s.Stand):F1} m");
         if (_gathering.Target != expected) return;
 
         if (_shot != null && expected == Gathering.Resource.TreeWood)

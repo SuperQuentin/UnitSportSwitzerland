@@ -6,5 +6,4 @@
   `RoadMaxDist` is cancelled on the spot — the worker slot frees now instead of when the chain it was
   reading finishes, and `CommitReadyResults` drops any result whose generation is stale. Measured: 12
   in-flight Riddes builds cancelled within one evaluation of a 50 km jump (`SettleReport` prints
-  `cancelled=`). Tiles **behind the camera** (`ChunkManager.ViewDirection`, set per frame from the live
-  camera) are queued three rings later than those in front, never skipped.
+  `cancelled=`). Tiles **off screen** are queued later, never skipped: `view-cone-priority`.
