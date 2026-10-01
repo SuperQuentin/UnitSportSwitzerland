@@ -209,5 +209,6 @@ Whole region: 6,487 tiles, 366,105 segments, **156,384 junctions**, in under a m
   centrelines and the preprocessor gives each the full class width, which is where nearly all
   the remaining carriageway overlap comes from — but narrowing every dual carriageway changes
   how the whole world looks, so the tool measures it and leaves the call open.
-- No lane-level topology (turn lanes, which arm connects to which), so `MarkingPlan` infers
-  lines from width and cannot place turn arrows or lane drops.
+- No lane-level topology (which arm connects to which), so `MarkingPlan` infers lines from
+  width. Left-turn pockets and their arrows (#123) are planned by the network stage from the
+  junction priority instead, and traffic does not know about them.

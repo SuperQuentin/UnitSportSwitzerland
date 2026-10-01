@@ -116,6 +116,8 @@ public static partial class TerrainMeshBuilder
             foreach (var island in roadTile.AreaProps)
                 if (island.Type == AreaPropType.Island && island.Height > 0 && island.Vertices.Length >= 9)
                     HoldUnderIsland(scratch, island);
+                else if (island.Type == AreaPropType.Pavement && island.Vertices.Length >= 9)
+                    HoldUnderPavement(scratch, island);
 
             var cells = new List<int>(touched.Count);
             var los = new List<float>(touched.Count);
@@ -384,19 +386,24 @@ public static partial class TerrainMeshBuilder
 
     private static double Sq(double v) => v * v;
 
-    /// <summary>How far under a raised island's top the ground is held.</summary>
-    private const float IslandClearance = 0.05f;
-
     /// <summary>
-    /// Holds the ground under a raised roundabout island (#122) below its top, so a mound in the
-    /// terrain does not poke through the island's surface: each cell inside one of its triangles
-    /// may lie no higher than the top there less <see cref="IslandClearance"/>. A road's own cell
-    /// is never touched; the island's kerb and top are <c>IslandBuilder</c>'s mesh and collision.
+    /// A flush strip of carriageway beside a segment (#123, a turn lane's widening): its cells are
+    /// road, held at the strip's height like a ribbon's core, so no slope reaches under them.
     /// </summary>
-    private static void HoldUnderIsland(Scratch s, RoadAreaProp island)
+    private static void HoldUnderPavement(Scratch s, RoadAreaProp strip) =>
+        Rasterise(s, strip, (idx, y) =>
+        {
+            if (s.Seen[idx] == 0) { s.Seen[idx] = 1; s.Touched.Add(idx); }
+            else if (s.CoreDist[idx] < float.PositiveInfinity) return;   // a ribbon's own cell stays the ribbon's
+            s.CoreDist[idx] = 0.5f;
+            s.Lo[idx] = s.Hi[idx] = y;
+        });
+
+    /// <summary>Calls <paramref name="cell"/> for every lattice cell inside one of the prop's triangles, with the surface height there.</summary>
+    private static void Rasterise(Scratch s, RoadAreaProp prop, Action<int, float> cell)
     {
-        var v = island.Vertices;
-        var ix = island.Indices;
+        var v = prop.Vertices;
+        var ix = prop.Indices;
         double sp = ChunkFormat.SpacingM;
         int n = s.N;
         for (int t = 0; t + 2 < ix.Length; t += 3)
@@ -414,23 +421,37 @@ public static partial class TerrainMeshBuilder
                     double wb = ((cz - az) * (col - cx) + (ax - cx) * (r - cz)) / det;
                     double wc = 1 - wa - wb;
                     if (wa < -1e-9 || wb < -1e-9 || wc < -1e-9) continue;
-                    float top = (float)(wa * v[a + 1] + wb * v[b + 1] + wc * v[c + 1]) + island.Height - IslandClearance;
-                    int idx = r * n + col;
-                    if (s.Seen[idx] == 0)
-                    {
-                        s.Seen[idx] = 1;
-                        s.Touched.Add(idx);
-                        s.CoreDist[idx] = float.PositiveInfinity;
-                        s.Lo[idx] = float.NegativeInfinity;
-                        s.Hi[idx] = top;
-                        continue;
-                    }
-                    if (s.CoreDist[idx] < float.PositiveInfinity) continue;
-                    if (top < s.Hi[idx]) s.Hi[idx] = top;
-                    if (s.Lo[idx] > s.Hi[idx]) s.Lo[idx] = s.Hi[idx];
+                    cell(r * n + col, (float)(wa * v[a + 1] + wb * v[b + 1] + wc * v[c + 1]));
                 }
         }
     }
+
+    /// <summary>How far under a raised island's top the ground is held.</summary>
+    private const float IslandClearance = 0.05f;
+
+    /// <summary>
+    /// Holds the ground under a raised roundabout island (#122) below its top, so a mound in the
+    /// terrain does not poke through the island's surface: each cell inside one of its triangles
+    /// may lie no higher than the top there less <see cref="IslandClearance"/>. A road's own cell
+    /// is never touched; the island's kerb and top are <c>IslandBuilder</c>'s mesh and collision.
+    /// </summary>
+    private static void HoldUnderIsland(Scratch s, RoadAreaProp island) =>
+        Rasterise(s, island, (idx, y) =>
+        {
+            float top = y + island.Height - IslandClearance;
+            if (s.Seen[idx] == 0)
+            {
+                s.Seen[idx] = 1;
+                s.Touched.Add(idx);
+                s.CoreDist[idx] = float.PositiveInfinity;
+                s.Lo[idx] = float.NegativeInfinity;
+                s.Hi[idx] = top;
+                return;
+            }
+            if (s.CoreDist[idx] < float.PositiveInfinity) return;
+            if (top < s.Hi[idx]) s.Hi[idx] = top;
+            if (s.Lo[idx] > s.Hi[idx]) s.Lo[idx] = s.Hi[idx];
+        });
 
     /// <summary>Narrows [xMin, xMax] to where <c>k·x + c</c> lies in [lo, hi]; false if empty.</summary>
     private static bool ClipRange(double k, double c, double lo, double hi, ref double xMin, ref double xMax)

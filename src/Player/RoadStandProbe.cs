@@ -185,6 +185,17 @@ public partial class RoadStandProbe : Node
                 if (!_chunks.HasCollisionAt(p)) continue;
                 result.Add((p, $"{s.Class}/{s.Surface}", Kind.Body));
             }
+        if (Bridges) return result;
+        // turn lane widenings (#123): a body on the strip's widest triangle, at its centroid
+        foreach (var strip in tile.AreaProps.Where(a => a.Type == AreaPropType.Pavement).Take(4))
+        {
+            Vector3 V(int i) => new(strip.Vertices[i * 3], strip.Vertices[i * 3 + 1], strip.Vertices[i * 3 + 2]);
+            var widest = Enumerable.Range(0, strip.Indices.Length / 3)
+                .Select(t => (V(strip.Indices[t * 3]), V(strip.Indices[t * 3 + 1]), V(strip.Indices[t * 3 + 2])))
+                .MaxBy(t => (t.Item2 - t.Item1).Cross(t.Item3 - t.Item1).Length());
+            var p = basePos + (widest.Item1 + widest.Item2 + widest.Item3) / 3f;
+            if (_chunks.HasCollisionAt(p)) result.Add((p, "turn lane strip", Kind.Body));
+        }
         return result;
     }
 
