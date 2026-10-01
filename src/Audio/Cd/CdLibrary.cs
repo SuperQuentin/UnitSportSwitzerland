@@ -301,9 +301,8 @@ public partial class CdLibrary : Node
     {
         try
         {
-            System.IO.Directory.CreateDirectory(directory);
             var list = cds.Values.OrderBy(c => c.Id).ToList();
-            File.WriteAllText(Path.Combine(directory, IndexFile), System.Text.Json.JsonSerializer.Serialize(list, IndexJson));
+            Core.JsonStore.Save(Path.Combine(directory, IndexFile), list, IndexJson);
         }
         catch (Exception e)
         {

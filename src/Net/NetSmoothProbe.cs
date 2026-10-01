@@ -69,9 +69,40 @@ public partial class NetSmoothProbe : Node
             Pick(local);
             return;
         }
-        if (!GodotObject.IsInstanceValid(_target)) { Finish("target left"); return; }
+        if (!GodotObject.IsInstanceValid(_target) || !_target.IsInsideTree()) { Finish("target left"); return; }
         _rec.Add((_t, dt, _target.GlobalPosition));
+        FloorGap(_target);
         if (_t - _rec[0].T >= _seconds) Finish(null);
+    }
+
+    // the remote's height over the collision floor this client has under it (#125: does a
+    // replicated car stay on a road carried by a retaining wall, or hover and sink?)
+    private readonly List<double> _gaps = new();
+    private int _noFloor;
+    private readonly List<string> _gapRows = new() { "t,x,y,z,gap" };   // world frame
+    private Godot.Collections.Array<Rid>? _exclude;
+
+    private void FloorGap(Node3D target)
+    {
+        if (_exclude == null)
+        {
+            _exclude = new Godot.Collections.Array<Rid>();
+            var stack = new Stack<Node>();
+            stack.Push(target);
+            while (stack.Count > 0)
+            {
+                var node = stack.Pop();
+                if (node is CollisionObject3D body) _exclude.Add(body.GetRid());
+                foreach (Node child in node.GetChildren()) stack.Push(child);
+            }
+        }
+        var p = target.GlobalPosition;
+        var q = PhysicsRayQueryParameters3D.Create(p + Vector3.Up * 2f, p - Vector3.Up * 6f);
+        q.Exclude = _exclude;
+        var hit = target.GetWorld3D().DirectSpaceState.IntersectRay(q);
+        if (hit.Count == 0) { _noFloor++; return; }
+        _gaps.Add(p.Y - hit["position"].AsVector3().Y);
+        _gapRows.Add(string.Format(CultureInfo.InvariantCulture, "{0:F2},{1:F1},{2:F1},{3:F1},{4:F3}", _t, p.X, p.Y, p.Z, _gaps[^1]));
     }
 
     /// <summary>Watches every remote for PickWindow seconds, then takes the nearest one that moved.</summary>
@@ -97,7 +128,9 @@ public partial class NetSmoothProbe : Node
             float d = new Vector2(off.X, off.Z).Length();
             if (d < best) { best = d; _target = p; }
         }
-        if (_target == null && _t > PickAfter + PickWindow + 30) Finish("no moving remote player found");
+        // up to 90 s: a scripted driver (--garagecheck drive) starts once this client has landed
+        // from its spawn drop and has collision under the remote
+        if (_target == null && _t > PickAfter + PickWindow + 90) Finish("no moving remote player found");
         else if (_target != null)
         {
             _targetInfo = $"{_target.Name} ({(CarCatalog.For(((FootPlayer)_target).Ride)?.Label ?? ((FootPlayer)_target).Ride.ToString())}) at {best:F0} m";
@@ -125,6 +158,10 @@ public partial class NetSmoothProbe : Node
             string dir = ProjectSettings.GlobalizePath($"res://test_output/loadtest/{_label}");
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "netsmooth.txt"), sb.ToString());
+            File.WriteAllLines(Path.Combine(dir, "floorgap.csv"), _gapRows);
+            // the raw track, for profiles the summary does not cover (a bump at a level crossing, #124)
+            File.WriteAllLines(Path.Combine(dir, "netsmooth_track.csv"), _rec.Select(r =>
+                string.Create(inv, $"{r.T:F4},{r.P.X:F3},{r.P.Y:F3},{r.P.Z:F3}")));
         }
         catch (Exception e) { GD.PushWarning($"[netsmooth] cannot write result: {e.Message}"); }
         GetTree().Quit();
@@ -186,5 +223,7 @@ public partial class NetSmoothProbe : Node
         sb.AppendLine(string.Format(inv, "freeze_frames {0}  (step < 5% of v*dt while v > 2 m/s)", freezes));
         sb.AppendLine(string.Format(inv, "freeze_longest_ms {0:F0}", longestFreeze));
         sb.AppendLine(string.Format(inv, "snap_frames {0}  (step > 3x v*dt)", snaps));
+        sb.AppendLine(string.Format(inv, "floor_gap_m p1 {0:F3} p50 {1:F3} p99 {2:F3}  (remote height over the collision under it; {3} frames with no floor loaded)",
+            Pct(_gaps, 0.01), Pct(_gaps, 0.5), Pct(_gaps, 0.99), _noFloor));
     }
 }

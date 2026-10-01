@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Rewrite;
 
 namespace UnitSport.Tools.Preprocessor;
 
@@ -77,12 +78,14 @@ public sealed class RoadExtractor
     {
         "uuid", "objektart", "belagsart", "wanderwege",
         "verkehrsbeschraenkung", "richtungsgetrennt", "kunstbaute",
+        // v3 attributes; value domains in docs/notes/tools/tlm-road-attribute-domains.md
+        "kreisel", "verkehrsbedeutung", "eigentuemer", "stufe",
     };
 
     private static readonly string[] RailColumns =
     {
         "objektart", "kunstbaute", "anzahl_spuren", "verkehrsmittel",
-        "zahnradbahn", "standseilbahn", "ausser_betrieb",
+        "zahnradbahn", "standseilbahn", "ausser_betrieb", "auf_strasse",
     };
 
     /// <summary>Aerial ropeways carry only the type and the geometry.</summary>
@@ -127,14 +130,42 @@ public sealed class RoadExtractor
     /// <summary>Terrain quads to drop so tunnel portals are open; filled during Extract.</summary>
     public Dictionary<TileId, HashSet<int>> Holes { get; } = new();
 
+    /// <summary>
+    /// Where each emitted segment came from, aligned with <see cref="RoadTile.Segments"/>: the TLM
+    /// uuid, the part (LineString index) and the 2D distance along that part to the segment's
+    /// first point, in the key format of the OSM overlay (docs/notes/tools/osm-overlay.md).
+    /// Null for features that are not TLM road lines. Read by the road network stage.
+    /// </summary>
+    public Dictionary<TileId, List<RawRoads.Key?>> SourceKeys { get; } = new();
+
     /// <summary>One TLM line with its resolved attributes, held until the join index is built.</summary>
     private sealed record PendingLine(GeoPackageReader.Polyline Line, RoadClass Cls,
-        RoadSurface Surface, RoadFlags Flags, float Width)
+        RoadSurface Surface, RoadFlags Flags, float Width, RoadAttributes Attr, string? Uuid, int Part)
     {
         public bool IsStructure => (Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0;
     }
 
     private readonly List<PendingLine> _pending = new();
+    private readonly HashSet<(long, long)> _openEnds = new(), _lonelyTunnelEnds = new();
+
+    /// <summary>
+    /// The portals of a tunnel line: its ends that meet a road or a rail, or nothing, where the bore
+    /// meets the surface (<see cref="RoadTunnels.AtSurface"/>: not a gap in an underground line).
+    /// </summary>
+    private List<(double E, double N)> Portals(GeoPackageReader.Polyline line, RoadClass cls,
+        Func<double, double, double?> heightOf)
+    {
+        var portals = new List<(double E, double N)>();
+        foreach (int i in new[] { 0, line.Count - 1 })
+        {
+            var key = JoinKey(line.E[i], line.N[i]);
+            if (!_openEnds.Contains(key) && !_lonelyTunnelEnds.Contains(key)) continue;
+            double ground = heightOf(line.E[i], line.N[i]) ?? double.NaN;
+            if (!RoadTunnels.AtSurface(ground, line.Z[i], RoadFormat.TunnelHeight(cls))) continue;
+            portals.Add((line.E[i], line.N[i]));
+        }
+        return portals;
+    }
 
     /// <summary>
     /// Surveyed height at each structure endpoint, so an approach road knows what it has to
@@ -158,6 +189,8 @@ public sealed class RoadExtractor
         double minN = tiles.Min(t => t.MinN), maxN = tiles.Max(t => t.MinN) + ChunkFormat.TileSizeM;
 
         _pending.Clear();
+        SourceKeys.Clear();
+        foreach (var t in tiles) SourceKeys[t] = new List<RawRoads.Key?>();
         _structureEnds.Clear();
         _structureEndCount.Clear();
 
@@ -181,6 +214,21 @@ public sealed class RoadExtractor
                 _structureEndCount[key] = _structureEndCount.GetValueOrDefault(key) + 1;
             }
         }
+
+        // Every end of a non-tunnel line, and how many tunnel lines end at each point: a tunnel
+        // end that meets a road or a rail (or nothing at all) is a portal; one that only meets
+        // the next tunnel feature is not, and no ground is carved there.
+        _openEnds.Clear();
+        var tunnelEnds = new Dictionary<(long, long), int>();
+        foreach (var p in _pending)
+            foreach (int i in new[] { 0, p.Line.Count - 1 })
+            {
+                var key = JoinKey(p.Line.E[i], p.Line.N[i]);
+                if ((p.Flags & RoadFlags.Tunnel) != 0) tunnelEnds[key] = tunnelEnds.GetValueOrDefault(key) + 1;
+                else _openEnds.Add(key);
+            }
+        _lonelyTunnelEnds.Clear();
+        foreach (var (key, count) in tunnelEnds) if (count == 1) _lonelyTunnelEnds.Add(key);
 
         foreach (var p in _pending)
             Emit(p, result, heightOf);
@@ -210,7 +258,12 @@ public sealed class RoadExtractor
                 if (_mtbUuids.Contains(uuid)) flags |= RoadFlags.MountainBike;
             }
 
-            Collect(reader, cls, surface, flags, RoadFormat.WidthFor(cls, flags));
+            var attr = new RoadAttributes(
+                Flags: RoadFormat.ParseAttrFlags(Str(reader, 7), Str(reader, 9)),
+                Layer: RoadFormat.LayerFor(Str(reader, 10), flags),
+                Priority: RoadFormat.PriorityFor(cls, Str(reader, 8)),
+                WidthCm: RoadFormat.NominalWidthCm(Str(reader, 1)));
+            Collect(reader, cls, surface, flags, RoadFormat.WidthFor(cls, flags), attr, uuid);
         }
     }
 
@@ -312,19 +365,23 @@ public sealed class RoadExtractor
             float width = (flags & RoadFlags.DoubleTrack) != 0 ? 9.0f
                 : (flags & RoadFlags.NarrowGauge) != 0 ? 3.6f : 4.6f;
 
-            Collect(reader, RoadClass.Railway, RoadSurface.Unknown, flags, width);
+            // auf_strasse: the track runs in a street (#124); the network stage embeds it
+            var attrFlags = IsTrue(Str(reader, 7)) ? RoadAttrFlags.OnStreet : RoadAttrFlags.None;
+            Collect(reader, RoadClass.Railway, RoadSurface.Unknown, flags, width,
+                new RoadAttributes(Flags: attrFlags, Layer: RoadFormat.LayerFor(null, flags)));
         }
     }
 
     private void Collect(SqliteDataReader reader, RoadClass cls, RoadSurface surface,
-        RoadFlags flags, float width)
+        RoadFlags flags, float width, RoadAttributes attr = default, string? uuid = null)
     {
         int geomIndex = reader.FieldCount - 1;
         if (reader.IsDBNull(geomIndex)) return;
 
-        foreach (var line in GeoPackageReader.ParseLines((byte[])reader.GetValue(geomIndex)))
-            if (line.Count >= 2)
-                _pending.Add(new PendingLine(line, cls, surface, flags, width));
+        var parts = GeoPackageReader.ParseLines((byte[])reader.GetValue(geomIndex));
+        for (int part = 0; part < parts.Count; part++)
+            if (parts[part].Count >= 2)
+                _pending.Add(new PendingLine(parts[part], cls, surface, flags, width, attr, uuid, part));
     }
 
     private void Emit(PendingLine p, Dictionary<TileId, RoadTile> result,
@@ -332,8 +389,15 @@ public sealed class RoadExtractor
     {
         var (line, cls, surface, flags, width) = (p.Line, p.Cls, p.Surface, p.Flags, p.Width);
         {
+            // 2D distance along the TLM part to the current piece's first point (overlay key)
+            double pieceFrom = 0;
             foreach (var piece in PolylineClipper.SplitByTile(line))
             {
+                double from = pieceFrom;
+                for (int i = 1; i < piece.Points.Count; i++)
+                    pieceFrom += Math.Sqrt(
+                        (piece.Points[i].E - piece.Points[i - 1].E) * (piece.Points[i].E - piece.Points[i - 1].E) +
+                        (piece.Points[i].N - piece.Points[i - 1].N) * (piece.Points[i].N - piece.Points[i - 1].N));
                 if (!result.TryGetValue(piece.Tile, out var tile)) continue;
 
                 // bridges, tunnels and aerial ropeways keep their surveyed height; everything
@@ -362,7 +426,7 @@ public sealed class RoadExtractor
 
                 if ((flags & RoadFlags.Tunnel) != 0)
                     TunnelCarver.Carve(piece.Points, RoadFormat.TunnelWidth(cls),
-                        RoadFormat.TunnelHeight(cls), heightOf, Holes);
+                        RoadFormat.TunnelHeight(cls), heightOf, Holes, Portals(line, cls, heightOf));
 
                 var draped = DrapeHeights(dense, heightOf, DrapeOffset + ClassLift(cls));
                 LimitGrade(dense, draped, MaxGrade(cls, flags));
@@ -407,7 +471,10 @@ public sealed class RoadExtractor
                     tile.Segments.Add(new RoadSegment
                     {
                         Class = cls, Surface = surface, Flags = flags, Width = width, Points = pts,
+                        Attributes = p.Attr,
                     });
+                    SourceKeys[piece.Tile].Add(p.Uuid is null ? null
+                        : new RawRoads.Key(p.Uuid, p.Part, from + along[start]));
                 }
             }
         }

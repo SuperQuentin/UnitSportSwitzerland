@@ -4,21 +4,23 @@
 
 - Never build a physics shape for a tile inside `CommitReadyResults`. A build result only
   *queues* its collision on the tile's `ChunkState` (`QueuedHeight` + `HeightCellsQueued`,
-  `QueuedBridgeFaces`, `QueuedBuildingCells` + `BuildingCellsQueued`) and adds the tile to
+  `QueuedRoadCells` + `RoadCellsQueued`, `QueuedBuildingCells` + `BuildingCellsQueued`) and adds the tile to
   `_collisionQueue`;
   `ChunkManager.CommitCollisionPieces` commits the pieces, at least one a frame and more only
   while the frame's `CommitBudgetMs` lasts, the piece nearest a collision anchor first.
 - The ground is 16 `HeightMapShape3D` cells of 251² (`ChunkNode.SetCollisionCell`, cell order
   `ChunkNode.CollisionCell(col,row)`), never one 1001² shape. Building faces are sorted into the
   same 16 cells on the worker (`ChunkNode.SplitByCell`) and committed per cell
-  (`SetBuildingCell`), all under the one `BuildingBody`.
+  (`SetBuildingCell`), all under the one `BuildingBody`; so are the road faces (bridge decks,
+  walls, railings, islands, sign poles, kerbs: `SetRoadCell`, under the one `RoadBody`).
 - A new per-tile collision layer (walls, railings, props, anything with a `ConcavePolygonShape3D`)
-  is a new piece: a `Queued…` field on `ChunkState` (include it in `CollisionQueued`), a piece id
-  next to `PieceBridge`/`PieceBuildings`, a `Consider(...)` line with its rect and tie-break, a
-  branch in the commit `if`, and a name in `PieceKinds` (it is the `kind` column of `commits.csv`).
-  A piece that can cost more than ~5 ms is split spatially like the height cells.
-- Ground a body can stand on (the height cells, bridges) must gate `HasCollisionAt`: bodies wait
-  on it before they are placed or move (`FootPlayer`, `VehicleBody`, probes).
+  either joins the road faces (`bridgeCollision` in `StartBuild`, already split by cell) or becomes
+  its own cell set: `Queued…Cells` + `…CellsQueued` on `ChunkState` (include it in
+  `CollisionQueued`), a piece id range next to `PieceRoads`/`PieceBuildings`, a `Consider(...)`
+  line with its tie-break, a branch in the commit `if`, and a name in `PieceKinds` (the `kind`
+  column of `commits.csv`). Always split by `SplitByCell` on the worker.
+- Ground a body can stand on (height cells, road cells) gates `HasCollisionAt`: bodies wait on
+  it before they are placed or move (`FootPlayer`, `VehicleBody`, probes).
 
 ## Why
 
@@ -28,11 +30,12 @@ TBD before/after table (worst commit ms, frames > 33 ms, commit hitches, builds.
 
 ## Same logic, preserved
 
-- What collides is unchanged: same map, same faces, same bodies (`BuildingBody` is still the one
-  body doors make exceptions for; bridges keep `BackfaceCollision`).
+- What collides is unchanged: same map, same faces, same bodies, only more shapes per body
+  (`BuildingBody` is still the one body doors make exceptions for; `RoadBody` keeps its name for
+  `TunnelProbe` and its `BackfaceCollision`).
 - `HasCollision` (tile) still means "all the ground is there" (`PlayableNear`, the loading
-  screen); `HasCollisionAt` now asks for the **cell** under the point plus the tile's bridges, so
-  a body is placed as soon as its own cell lands.
+  screen); `HasCollisionAt` now asks for the **cell** under the point (ground and road), so a
+  body is placed as soon as its own cell lands.
 - A rebuild never opens a hole: `HeightCellsDone` bits are never cleared, the old cell's shape
   stays until its replacement is added. A newer result overwrites a queued older one, so an
   interim map never lands after the blended one.
@@ -44,15 +47,13 @@ TBD before/after table (worst commit ms, frames > 33 ms, commit hitches, builds.
 
 ## Migrating old code / open branches
 
-- grep `SetCollision(` and `SetBuildingCollision(` — both gone; the queue calls
-  `SetCollisionCell(map, cell)` / `SetBuildingCell(faces, cell)`, never call them directly.
-  `BuildResult.BuildingFaces` is now `Vector3[][]` (16 cells): wrap new faces in `SplitByCell`.
+- grep `SetCollision(`, `SetBuildingCollision(`, `SetRoadCollision(` — all gone; the queue calls
+  `SetCollisionCell` / `SetRoadCell` / `SetBuildingCell`, never call them directly.
+  `BuildResult.BuildingFaces` and `RoadCollisionFaces` are now `Vector3[][]` (16 cells): a branch
+  adding faces to either adds them inside the `SplitByCell(...)` call.
 - grep `CollisionCommitsPerFrame`, `collisionBudget` — gone; the budget is `CommitBudgetMs`.
 - grep `CommitLogged` — its third argument is now a `string kind` ("ground", "tail",
   "coll-height", "coll-bridge", "coll-bldg"), not `bool interim`; `PerfRecorder.OnCommit` follows.
-- A branch that adds faces to `RoadCollisionFaces` (#230 adds walls, railings, islands, sign
-  poles to the bridge faces) needs nothing: they ride the bridge piece. If that piece gets
-  expensive (commits.csv `coll-bridge` > ~5 ms), give it its own piece.
 - #229 deletes `ChunkNode.ClearRoads/ClearCollision` around the old `SetCollision`: on conflict,
   keep this branch's `SetCollisionCell` block and drop both dead methods.
 

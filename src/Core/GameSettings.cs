@@ -118,6 +118,9 @@ public sealed class GameSettings
     /// <summary>Controller rumble on landings, impacts and speed.</summary>
     public bool Vibration { get; set; } = true;
 
+    /// <summary>Steering wheel, pedals and their bindings (<see cref="SteeringWheel"/>).</summary>
+    public WheelSettings Wheel { get; set; } = new();
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public RideProfile RideProfile { get; set; } = RideProfile.Game;
     /// <summary>Cars' tyres wear with the sliding they do and lose grip (off by default).</summary>
@@ -194,6 +197,18 @@ public sealed class GameSettings
     /// <summary>What the monitor shows while in VR (<see cref="XR.XrMonitor"/>); F7 cycles it.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public XR.MonitorView VrMonitor { get; set; } = XR.MonitorView.FirstPerson;
+
+    // --- the headset's picture (#244): what a streamed headset (Air Link) needs ---
+    /// <summary>
+    /// Headset MSAA samples: 0, 2, 4 or 8. Aliased edges shimmer, and shimmer is what the Link
+    /// video encoder turns into blocks.
+    /// </summary>
+    public int VrMsaa { get; set; } = 4;
+    /// <summary>The headset's 3D resolution, relative to the eye size the runtime asks for.</summary>
+    public float VrRenderScale { get; set; } = 1f;
+    public const float MinVrRenderScale = 0.5f, MaxVrRenderScale = 1.5f;
+    /// <summary>Foveated rendering: coarser shading towards the edge of each eye (variable rate shading).</summary>
+    public bool VrFoveation { get; set; } = true;
 
     // --- cockpit: first person at the wheel of a car (#69) ---
     /// <summary>Your own arms and legs at the wheel. V cycles chase → cockpit with them → cockpit without.</summary>
@@ -279,6 +294,8 @@ public sealed class GameSettings
         MaxConcurrentBuilds = Math.Clamp(MaxConcurrentBuilds, 0, MaxBuildsCap);
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
         RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
+        VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
+        VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
@@ -296,6 +313,8 @@ public sealed class GameSettings
         OccasionPreferences ??= new();
         RecentGpx ??= new();
         PlayerName ??= "";
+        Wheel ??= new();
+        Wheel.Clamp();
     }
 
     /// <summary>
@@ -329,6 +348,9 @@ public sealed class GameSettings
                         _ => Player.HeavyShift.Automatic,
                     };
                     break;
+                case "--wheel": Wheel.Enabled = v is "on" or "1" or "true"; break;
+                case "--wheelrange" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float deg):
+                    Wheel.RangeDeg = deg; break;
                 case "--voice":
                     EngineVoice = v.ToLowerInvariant() switch
                     {

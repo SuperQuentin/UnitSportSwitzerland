@@ -230,6 +230,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var relay = new MultiplayerSynchronizer
         {
             Name = name, RootPath = new NodePath(".."), ReplicationConfig = config, ReplicationInterval = interval,
+            // refreshed when the audience changes (RefreshRelays): Idle ran the filter every frame for every peer
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         relay.SetMultiplayerAuthority(1);
         return relay;
@@ -958,6 +960,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // 30 Hz is plenty once the receiver interpolates; the frame rate was the old rate,
             // which is 144 packets a second per viewer from a fast machine
             ReplicationInterval = 1f / 30f,
+            // a fixed filter (the server only): Godot evaluates it on join, SetSimulator on handoff
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _sync = sync;
         // the synchronizer's own authority decides who sends; children added after the
@@ -1010,6 +1014,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // for every peer, 30 000 managed calls a second at 32 players
             ReplicationInterval = 3600f,
             DeltaInterval = 3600f,
+            // refreshed per viewer when its set changes (RefreshNetVisibility), not every frame
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _vis.SetMultiplayerAuthority(1);
         if (NetProxy && netId != 0)
@@ -1961,6 +1967,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         return true;
     }
 
+    /// <summary>How near the middle of a car door a VR hand must be to work it, m (#243).</summary>
+    private const float HandDoorReach = 0.6f;
+
+    /// <summary>
+    /// A VR hand gripping a car door (#243): as <see cref="TryToggleCarDoor()"/>, but the door the
+    /// hand is at, and only when the hand is really there.
+    /// </summary>
+    public bool TryToggleCarDoor(Vector3 hand)
+    {
+        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+            return false;
+        var (bit, distance) = rig.NearestDoor(hand);
+        if (bit == 0 || distance > HandDoorReach) return false;
+        Vehicles.ToggleDoor(vehicle, bit);
+        return true;
+    }
+
     /// <summary>
     /// Gets out, anywhere — including in the air. The vehicle stays in the world with its
     /// momentum; the player steps out beside the seat with the same momentum and a small push
@@ -2018,9 +2041,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (raw != over && InsideVehicle(raw, frame, vehicle)) continue;
             // on a slope the ground beside the seat is not at the seat's height: stand on it,
             // or the uphill side reads as blocked and the player is put on the vehicle's roof
-            // (indoors the terrain is 3 km overhead: the floor is at the seat's height)
+            // (indoors, or in a tunnel, the terrain is overhead: the floor is at the seat's height)
             var candidate = raw;
-            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && Terrain.TryGetHeight(raw, out float g))
+            // in a tunnel, out beside the vehicle only within the bore: past its wall is the hill
+            if (Terrain != null && Terrain.InTunnel(at) && !Terrain.InTunnel(raw)) continue;
+            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && !Terrain.InTunnel(raw) && Terrain.TryGetHeight(raw, out float g))
                 candidate = raw with { Y = Mathf.Max(raw.Y, g) };
             var query = new PhysicsShapeQueryParameters3D
             {
@@ -2848,7 +2873,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>
     /// Safety net for a player who glitched through the world, on foot, mounted or flying:
     /// <list type="bullet">
-    /// <item>outdoors, more than 2 m under the terrain: straight up onto it;</item>
+    /// <item>outdoors, more than 2 m under the terrain, not inside a tunnel bore and with no floor
+    /// under them (a ramp the road blend cut into the ground): straight up onto it;</item>
     /// <item>outdoors, far below any ground and no height known here (the tile has not streamed, or
     /// there is no data): back to the last safe spot outside, or held here until the ground arrives;</item>
     /// <item>indoors, under the interior's floor: back where they last stood in it.</item>
@@ -2874,7 +2900,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground))
         {
-            if (GlobalPosition.Y >= ground - 2f) return false;
+            if (GlobalPosition.Y >= ground - 2f || Terrain.InTunnel(GlobalPosition)
+                || Terrain.FloorBelow(this, GlobalPosition, GetRid())) return false;
             to = GlobalPosition with { Y = ground + 1f };
         }
         else
@@ -2886,7 +2913,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_sinceSnapWarning > 2)
         {
             _sinceSnapWarning = 0;
-            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}");
+            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}"
+                + (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float gh) ? $" (ground {gh:F1}, in a tunnel: {Terrain.InTunnel(GlobalPosition)}, y {GlobalPosition.Y:F2})" : ""));
         }
         RequestReplacement();
         _flight.Velocity = Vector3.Zero;
@@ -3083,8 +3111,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
             Steer: SteerInput(),
             Effort: PlayerInput.Held(PlayerInput.TuckBoost),
-            // Space is a hop on a bike and the handbrake in a car
-            Handbrake: _ride is { CanHop: false } && PlayerInput.Held(PlayerInput.Jump));
+            // Space is a hop on a bike and the handbrake in a car, as is a wheel's lever
+            Handbrake: _ride is { CanHop: false } && (PlayerInput.Held(PlayerInput.Jump) || PlayerInput.WheelHandbrake > 0.5f),
+            WheelAngle: _ride is { WheelLock: > 0f } wheeled ? PlayerInput.WheelAngle(wheeled.WheelLock) : float.NaN);
 
         // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
         if (_ride is Skis && XR.XrSession.Active && RideControls == null)
@@ -3094,6 +3123,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 Throttle = Mathf.Max(input.Throttle, XR.XrSession.SkiPole),
                 Effort = input.Effort || XR.XrSession.SkiTuck,
             };
+        // VR hands on the steering wheel (#243): the wheel's angle, as a real wheel's (#68)
+        if (_ride is { WheelLock: > 0f } && XR.XrSession.Active && RideControls == null && !float.IsNaN(XR.XrSession.WheelAngle))
+            input = input with { WheelAngle = XR.XrSession.WheelAngle };
 
         // nobody at the wheel (the driver jumped out, #158): no pedal, the wheel let go
         if (SeatIndex != 0) input = new RideInput(0f, 0f, 0f, false);

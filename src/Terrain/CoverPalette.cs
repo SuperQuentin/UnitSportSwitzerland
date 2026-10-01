@@ -57,6 +57,8 @@ public static class CoverPalette
             CoverClass.ParkingPublic or CoverClass.RestArea => new Color(0.34f, 0.34f, 0.33f),
             CoverClass.ParkingPrivate => new Color(0.37f, 0.36f, 0.34f),
             CoverClass.PavedArea => new Color(0.36f, 0.36f, 0.35f),
+            CoverClass.TownPaving => new Color(0.50f, 0.50f, 0.48f),   // stone and concrete slabs
+            CoverClass.TunnelRoof => new Color(0.60f, 0.60f, 0.57f),   // poured concrete
             _ => OpenGround(altitude),
         };
 

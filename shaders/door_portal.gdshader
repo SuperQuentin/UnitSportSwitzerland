@@ -15,6 +15,9 @@ render_mode unshaded, cull_disabled;
 #include "res://shaders/portal_clip.gdshaderinc"
 
 uniform sampler2D view : source_color, filter_nearest;
+// In a headset (#244): one picture per eye, each from that eye's own frustum; `view` is the left.
+uniform sampler2D view_right : source_color, filter_nearest;
+uniform bool stereo = false;
 uniform bool live = false;
 uniform vec3 dark : source_color = vec3(0.07, 0.06, 0.05);
 // the quad's mouth: xyz toward the side it is seen from, w = dot(normal, a point on it)
@@ -34,5 +37,11 @@ void fragment() {
     if (dot(CAMERA_POSITION_WORLD, facing.xyz) < facing.w) {
         discard;
     }
-    ALBEDO = live ? texture(view, SCREEN_UV).rgb : dark;
+    if (!live) {
+        ALBEDO = dark;
+    } else if (stereo && VIEW_INDEX == VIEW_RIGHT) {
+        ALBEDO = texture(view_right, SCREEN_UV).rgb;
+    } else {
+        ALBEDO = texture(view, SCREEN_UV).rgb;
+    }
 }

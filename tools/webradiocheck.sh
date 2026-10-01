@@ -5,6 +5,7 @@
 # print a fingerprint of the audio due at every 5 s mark: they must agree on every common mark.
 #   tools/webradiocheck.sh                 (terrain_chunks/ in this checkout)
 #   CHUNKS=/path/to/terrain_chunks tools/webradiocheck.sh   (a worktree without terrain data)
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 PORT=7798
 PW=webradiopw

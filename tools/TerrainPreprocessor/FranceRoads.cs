@@ -47,6 +47,7 @@ public static class FranceRoads
             var flags = Flags(feature);
             var surface = Surface(feature);
             float width = Width(feature, cls.Value, flags);
+            var attributes = Attributes(feature, cls.Value, flags);
 
             foreach (var ring in feature.Rings)
             {
@@ -87,6 +88,7 @@ public static class FranceRoads
                         Flags = flags,
                         Width = width,
                         Points = points,
+                        Attributes = attributes,
                     });
 
                     stats.Segments++;
@@ -192,6 +194,40 @@ public static class FranceRoads
         double? measured = feature.Number("largeur_de_chaussee");
         if (measured is > 1.0 and < 40.0) return (float)measured.Value;
         return RoadFormat.WidthFor(cls, flags);
+    }
+
+    /// <summary>
+    /// v3 attributes straight from BD TOPO (#117), which records what TLM does not:
+    /// <c>sens_de_circulation</c> (one-way in or against the drawing direction),
+    /// <c>nombre_de_voies</c> (lanes, both directions together), <c>largeur_de_chaussee</c>
+    /// and <c>importance</c> (1 national .. 6 local). The network stage keeps values a source sets.
+    /// </summary>
+    private static RoadAttributes Attributes(BdFeature feature, RoadClass cls, RoadFlags flags)
+    {
+        sbyte oneWay = feature.Text("sens_de_circulation") switch
+        {
+            "Sens direct" => 1,
+            "Sens inverse" => -1,
+            _ => 0,
+        };
+        int lanes = (int)Math.Clamp(feature.Number("nombre_de_voies") ?? 0, 0, 12);
+        int fwd = oneWay > 0 ? lanes : oneWay < 0 ? 0 : lanes / 2;
+        int bwd = oneWay < 0 ? lanes : oneWay > 0 ? 0 : lanes - lanes / 2;
+        double? measured = feature.Number("largeur_de_chaussee");
+        int importance = (int)(feature.Number("importance") ?? 0) switch
+        {
+            1 or 2 => 3,
+            3 => 2,
+            4 => 1,
+            _ => 0,
+        };
+        return new RoadAttributes(
+            Flags: feature.Text("nature") == "Rond-point" ? RoadAttrFlags.Roundabout : RoadAttrFlags.None,
+            OneWay: oneWay,
+            Layer: RoadFormat.LayerFor(null, flags),
+            LanesForward: (byte)fwd, LanesBackward: (byte)bwd,
+            Priority: (byte)(importance << 4 | (RoadFormat.PriorityFor(cls, null) & 0x0F)),
+            WidthCm: measured is > 1.0 and < 40.0 ? (ushort)Math.Round(measured.Value * 100) : (ushort)0);
     }
 
     /// <summary>Same per-class depth bias the Swiss extractor uses, so junctions do not z-fight.</summary>
