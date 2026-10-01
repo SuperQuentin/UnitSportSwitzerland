@@ -563,7 +563,45 @@ public static partial class InteriorGenerator
 
     private sealed record Piece(FurnitureType Type, float W, float D, float H, bool Wall);
 
-    private static IEnumerable<Piece> Pieces(RoomType t, RoomPlan r, Random rng) => t switch
+    /// <summary>A room's pieces: what any room of its type has, then what its building kind adds (<see cref="KindExtras"/>).</summary>
+    private static IEnumerable<Piece> Pieces(RoomType t, RoomPlan r, Random rng, BuildingKind kind) =>
+        BasePieces(t, r, rng).Concat(KindExtras(t, kind));
+
+    /// <summary>
+    /// Stock that depends on what the building is for: a shop's back room is racks of goods, a
+    /// works' store racks and crates, a farm's store sacks and bales, an office building's office
+    /// another filing shelf. Added after the room's own pieces, so they only fill space left over.
+    /// </summary>
+    private static IEnumerable<Piece> KindExtras(RoomType t, BuildingKind kind) => (t, kind) switch
+    {
+        (RoomType.Storage, BuildingKind.Commercial) => new[]
+        {
+            new Piece(FurnitureType.Rack, 1.8f, 0.5f, 1.8f, true),
+            new Piece(FurnitureType.Crate, 0.8f, 0.8f, 0.7f, true),
+        },
+        (RoomType.Storage, BuildingKind.Industrial) or (RoomType.Workshop, BuildingKind.Industrial) => new[]
+        {
+            new Piece(FurnitureType.Rack, 2.0f, 0.6f, 2.2f, true),
+            new Piece(FurnitureType.Crate, 1.0f, 1.0f, 0.9f, false),
+        },
+        (RoomType.Storage or RoomType.Workshop, BuildingKind.Agricultural) => new[]
+        {
+            new Piece(FurnitureType.HayBale, 1.2f, 1.0f, 1.0f, true),
+            new Piece(FurnitureType.Crate, 1.0f, 0.8f, 0.8f, true),
+        },
+        (RoomType.Office, BuildingKind.Commercial or BuildingKind.Industrial or BuildingKind.Civic) => new[]
+        {
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
+        },
+        (RoomType.Kitchen, BuildingKind.Commercial) => new[]   // a restaurant's kitchen
+        {
+            new Piece(FurnitureType.Fridge, 0.6f, 0.65f, 1.8f, true),
+            new Piece(FurnitureType.Shelf, 1.2f, 0.45f, 1.9f, true),
+        },
+        _ => Array.Empty<Piece>(),
+    };
+
+    private static IEnumerable<Piece> BasePieces(RoomType t, RoomPlan r, Random rng) => t switch
     {
         RoomType.Living => new[]
         {
@@ -670,6 +708,7 @@ public static partial class InteriorGenerator
 
     private static void Furnish(InteriorLayout l, Random rng)
     {
+        var rooms = new List<(int Floor, RoomPlan Room, List<RectPlan> Placed, List<RectPlan> Blocked)>();
         for (int f = 0; f < l.Floors.Count; f++)
         {
             var floor = l.Floors[f];
@@ -678,6 +717,7 @@ public static partial class InteriorGenerator
                 var r = floor.Rooms[ri];
                 var placed = new List<RectPlan>();
                 var blocked = new List<RectPlan>();
+                rooms.Add((f, r, placed, blocked));
                 foreach (var o in r.Openings)
                     if (o.Kind != OpeningKind.Window) blocked.Add(Clearance(r, o));
                 // a garage or a barn is driven into: a lane from its door, as wide, kept clear
@@ -697,8 +737,86 @@ public static partial class InteriorGenerator
                 if (r.Type == RoomType.Nave) { Pews(l, f, r, placed, blocked); continue; }
                 if (r.Type == RoomType.Classroom) Desks(l, f, r, placed, blocked);
 
-                foreach (var p in Pieces(r.Type, r, rng))
+                foreach (var p in Pieces(r.Type, r, rng, l.Kind))
                     TryPlace(l, f, r, p, placed, blocked, rng);
+            }
+        }
+        Secure(l, rooms);
+    }
+
+    private static readonly Piece LockerPiece = new(FurnitureType.GunLocker, 0.6f, 0.45f, 1.8f, true);
+    private static readonly Piece SafePiece = new(FurnitureType.Safe, 0.6f, 0.6f, 0.85f, true);
+
+    /// <summary>
+    /// Gun lockers and safes (#165): what a kind of building keeps locked away, as (piece, chance,
+    /// the rooms it may stand in, best first). Swiss militia and hunters keep a rifle at home, so
+    /// houses and farms often have a gun locker; shops, offices and works a safe.
+    /// </summary>
+    private static IEnumerable<(Piece Piece, double Chance, RoomType[] Rooms)> SecureFor(InteriorLayout l)
+    {
+        var homeLocker = new[] { RoomType.Bedroom, RoomType.Storage, RoomType.Office, RoomType.Living, RoomType.Hall };
+        switch (l.Kind)
+        {
+            case BuildingKind.House:
+            case BuildingKind.Other:
+                yield return (LockerPiece, 0.40, homeLocker);
+                yield return (SafePiece, 0.15, new[] { RoomType.Office, RoomType.Bedroom, RoomType.Living, RoomType.Storage });
+                break;
+            case BuildingKind.Apartment:
+                for (int i = 0; i < Math.Max(1, l.Floors.Count); i++) yield return (LockerPiece, 0.25, homeLocker);
+                yield return (SafePiece, 0.10, new[] { RoomType.Office, RoomType.Bedroom, RoomType.Storage });
+                break;
+            case BuildingKind.Agricultural:
+                yield return (LockerPiece, 0.55, new[] { RoomType.Storage, RoomType.Workshop, RoomType.Bedroom, RoomType.Living, RoomType.Barn });
+                break;
+            case BuildingKind.Commercial:
+                yield return (SafePiece, 0.75, new[] { RoomType.Office, RoomType.Shop, RoomType.Storage, RoomType.Lobby });
+                break;
+            case BuildingKind.Industrial:
+                yield return (SafePiece, 0.50, new[] { RoomType.Office, RoomType.Storage, RoomType.Workshop });
+                break;
+            case BuildingKind.Civic:
+                yield return (SafePiece, 0.30, new[] { RoomType.Office, RoomType.Storage });
+                yield return (LockerPiece, 0.20, new[] { RoomType.Office, RoomType.Storage });
+                break;
+            case BuildingKind.Annex:
+                yield return (LockerPiece, 0.12, new[] { RoomType.Storage, RoomType.Workshop, RoomType.Garage, RoomType.Barn });
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Places the locked containers after everything else, from their own seed so the rest of the
+    /// plan does not depend on them: a random room of the first preferred type that has space,
+    /// then the next type. A room gets at most one.
+    /// </summary>
+    private static void Secure(InteriorLayout l, List<(int Floor, RoomPlan Room, List<RectPlan> Placed, List<RectPlan> Blocked)> rooms)
+    {
+        var rng = new Random(StableHash(l.Key + "|secure"));
+        var used = new HashSet<RoomPlan>();
+        foreach (var (piece, chance, types) in SecureFor(l).ToList())
+        {
+            if (rng.NextDouble() >= chance) continue;
+            bool done = false;
+            foreach (var type in types)
+            {
+                var candidates = rooms.Where(x => x.Room.Type == type && !used.Contains(x.Room)).ToList();
+                // shuffle, so it is not always the first bedroom
+                for (int i = candidates.Count - 1; i > 0; i--)
+                {
+                    int j = rng.Next(i + 1);
+                    (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
+                }
+                foreach (var c in candidates)
+                {
+                    int before = l.Furniture.Count;
+                    TryPlace(l, c.Floor, c.Room, piece, c.Placed, c.Blocked, rng);
+                    if (l.Furniture.Count == before) continue;
+                    used.Add(c.Room);
+                    done = true;
+                    break;
+                }
+                if (done) break;
             }
         }
     }
