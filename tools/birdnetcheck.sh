@@ -2,7 +2,7 @@
 # Shared birds over loopback (src/Birds/BirdNetProbe, #143): a dedicated server (--generated-world) and two
 # headless clients. Both must be sent the same birds by the server; A shoots one through the real item path
 # (killed on the server, scored in A's journal only, falling on B's screen too); A's air shot flushes the
-# birds for B. Output in test_output/birdnet_*.log.  GODOT=<exe> [PORT=] [SERVER_ARGS=] [WINDOWED=1] [TOWN=1] tools/birdnetcheck.sh [E,N]
+# birds for B. Output in test_output/birdnet_*.log.  GODOT=<exe> [PORT=] [SERVER_ARGS=] [WINDOWED=1] [TOWN=1] [SWARM=n] tools/birdnetcheck.sh [E,N]
 # WARNING: the clients write the real user://birds.json of this machine (a kill scores in A's journal).
 set -u
 AT=${1:-2583250,1113250}
@@ -20,12 +20,18 @@ HEADLESS=--headless; [ -n "${WINDOWED:-}" ] && HEADLESS=
 EXTRA=; [ -n "${TOWN:-}" ] && EXTRA=--birdtown
 client() { timeout 300 "$GODOT" $HEADLESS --path . -- --title "#143 birdnet client $1" --connect 127.0.0.1:$PORT --name "Bird$1" --cache "$OUT/birdnet_cache_$1" \
     --at "$AT" --view first --birdnetcheck "$1" $EXTRA > "$OUT/birdnet_$1.log" 2>&1; }
+# SWARM=n: n swarm bots join as well (src/Net/Swarm.cs), for a light multiplayer check
+SWARMPID=
+if [ -n "${SWARM:-}" ]; then
+    timeout 300 "$GODOT" --headless --path . -- --title "#143 birdnet swarm" --swarm "$SWARM" --first 0 --total "$SWARM" --seed 1 \
+        --connect 127.0.0.1:$PORT --cache "$OUT/birdnet_cache_swarm" --seconds 280 > "$OUT/birdnet_swarm.log" 2>&1 & SWARMPID=$!
+fi
 client A & A=$!
 client B & B=$!
 wait $A $B
 # a headless Godot may ignore SIGTERM (and may exit 139 after its result): kill hard, read RESULT lines
 # only what this script started: the server and its timeout wrapper, by PID (never by pattern)
-pkill -9 -P $SERVER 2>/dev/null; kill -9 $SERVER 2>/dev/null
+for P in $SERVER $SWARMPID; do pkill -9 -P $P 2>/dev/null; kill -9 $P 2>/dev/null; done
 grep -h "\[birdnet\|\[birds\] killed" "$OUT/birdnet_A.log" "$OUT/birdnet_B.log"
 if [ "$(grep -h "RESULT: ok" "$OUT/birdnet_A.log" "$OUT/birdnet_B.log" | wc -l)" -eq 2 ]; then echo "[birdnetcheck] RESULT: ok"; exit 0; fi
 echo "[birdnetcheck] RESULT: FAILED (see $OUT/birdnet_*.log)"; exit 1

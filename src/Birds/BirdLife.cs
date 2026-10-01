@@ -589,7 +589,8 @@ public partial class BirdLife : Node3D
     /// <summary>Draws where a town bird of this kind goes: 0 roof, 1 ledge, 2 street, 3 air.</summary>
     private int Placement(BirdSpecies s, bool air)
     {
-        var row = Array.FindIndex(TownBirds, t => t.Species == s);
+        int row = -1;
+        for (int i = 0; i < TownBirds.Length && row < 0; i++) if (TownBirds[i].Species == s) row = i;
         var (roof, ledge, street, fly) = row >= 0 ? (TownBirds[row].Roof, TownBirds[row].Ledge, TownBirds[row].Street, TownBirds[row].Air) : (0.5f, 0f, 0.5f, 0f);
         if (!air) fly = 0f;
         double r = _rng.NextDouble() * (roof + ledge + street + fly);
@@ -915,13 +916,16 @@ public partial class BirdLife : Node3D
     }
 
     private readonly MemoryStream _snapshotBuffer = new();
+    /// <summary>Reused: the caller sends the packets before asking for the next peer's.</summary>
+    private readonly List<byte[]> _snapshotChunks = new();
     private BinaryWriter _snapshotWriter => _writer ??= new BinaryWriter(_snapshotBuffer);
     private BinaryWriter? _writer;
 
     /// <summary>Server: what <see cref="BirdNet"/> sends one peer: the birds within range of <paramref name="focus"/>.</summary>
     public List<byte[]> Snapshot(Vector3 focus, int tick)
     {
-        var chunks = new List<byte[]>();
+        var chunks = _snapshotChunks;
+        chunks.Clear();
         var ms = _snapshotBuffer;
         var w = _snapshotWriter;
         ms.SetLength(0);

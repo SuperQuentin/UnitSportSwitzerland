@@ -157,9 +157,9 @@ public partial class ServerWorld : Node3D
             Observers = list =>
             {
                 for (int i = 0; i < _players!.GetChildCount(); i++)
-                    if (_players.GetChild(i) is Player.FootPlayer { Npc: false } p && long.TryParse(p.Name, out long peer))
+                    if (_players.GetChild(i) is Player.FootPlayer { Npc: false } p)
                         list.Add(new Birds.BirdLife.Observer(p.GlobalPosition, p.NetVel, p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
-                            or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit, peer));
+                            or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit, p.GetMultiplayerAuthority()));
             },
         };
         AddChild(birds);
