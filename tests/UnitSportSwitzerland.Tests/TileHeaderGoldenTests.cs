@@ -38,6 +38,22 @@ public class TileHeaderGoldenTests
         Assert.Equal("33C8125A24193E7AC78B6F15A5677249C63BA9D7DF158652BC495DE69FD53C5E", Sha(s => ChunkCodec.Encode(Grid(10), s)));
 
     [Fact]
+    public void Chunk_ReadHeader_splits_the_count_word_into_grid_size_and_stride()
+    {
+        using var ms = new MemoryStream();
+        ChunkCodec.Encode(Grid(10), ms);
+        var h = ChunkCodec.ReadHeader(ms.ToArray());
+        Assert.Equal(new TileHeader(ChunkFormat.Magic, ChunkFormat.Version, 0, Id, ChunkFormat.GridSize | 10u << 16), h.Tile);
+        Assert.Equal((ChunkFormat.GridSize, (ushort)10, 10), (h.GridSize, h.RawStride, h.Stride));
+        Assert.Equal((372.5f, 1234.25f), (h.MinHeight, h.MaxHeight));
+
+        var legacy = new TileHeader(ChunkFormat.Magic, ChunkFormat.Version, 0, Id, ChunkFormat.GridSize);
+        var bytes = new byte[ChunkFormat.HeaderSize];
+        legacy.Write(bytes);
+        Assert.Equal((0, 1), (ChunkCodec.ReadHeader(bytes).RawStride, ChunkCodec.ReadHeader(bytes).Stride));
+    }
+
+    [Fact]
     public void Holes_bytes_unchanged() =>
         Assert.Equal("1E53A7E212BC6EC8304C1FC9E5601BC8D0DB7BE17B1244F17DE96E832A362089", Sha(s => HoleFormat.Encode(Id, new[] { 0, 1, 499, 500, 124_999, 249_999 }, s)));
 
