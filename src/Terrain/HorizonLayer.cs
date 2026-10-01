@@ -302,6 +302,7 @@ public partial class HorizonLayer : Node3D
 
         var instance = new MeshInstance3D
         {
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Name = $"Horizon_{key.E}_{key.N}",
             Mesh = mesh,
             // NW corner of the block, like a tile

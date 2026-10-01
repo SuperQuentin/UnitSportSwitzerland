@@ -1,4 +1,5 @@
 shader_type spatial;
-render_mode unshaded, cull_disabled;
-#define STYLE_PS1
+render_mode cull_disabled;
+#define STYLE_LIT
+#define STYLE_REAL
 #include "res://shaders/body/water.gdshaderinc"

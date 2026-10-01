@@ -144,8 +144,20 @@ public partial class ClientWorld : Node3D
         var origin = hasLocalTerrain
             ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
             : new WorldOrigin(startE, startN);
+        // prototype #181: "--origin E,N" pins the origin, so screenshots and timings at one place
+        // do not move (or lose float precision) when the manifest's suggested origin changes
+        int oi = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--origin");
+        if (oi >= 0 && oi + 1 < OS.GetCmdlineUserArgs().Length
+            && OS.GetCmdlineUserArgs()[oi + 1].Split(',') is [var oe, var on]
+            && double.TryParse(oe, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double pe)
+            && double.TryParse(on, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double pn))
+        {
+            origin = new WorldOrigin(pe, pn);
+            GD.Print($"[world] origin pinned by --origin to {pe}/{pn}");
+        }
 
         _worldOrigin = origin;
+        VisualStyleKit.Origin = origin;
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
 
         if (!hasLocalTerrain)
@@ -154,28 +166,13 @@ public partial class ClientWorld : Node3D
                 + "with tools/TerrainPreprocessor, or join a server and it will stream in. "
                 + "See the README.");
 
-        var material = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_terrain.gdshader"),
-        };
-        var roadMaterial = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_road.gdshader"),
-        };
-        var buildingMaterial = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_building.gdshader"),
-        };
+        var material = VisualStyleKit.WorldMaterial("terrain");
+        var roadMaterial = VisualStyleKit.WorldMaterial("road");
+        var buildingMaterial = VisualStyleKit.WorldMaterial("building");
 
-        var treeMaterial = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_tree.gdshader"),
-        };
+        var treeMaterial = VisualStyleKit.WorldMaterial("tree");
 
-        var waterMaterial = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_water.gdshader"),
-        };
+        var waterMaterial = VisualStyleKit.WorldMaterial("water");
 
         // Fog is a setting now (off by default: the far horizon is the point). Every world
         // material carries the uniforms, so the toggle just re-pushes two floats to each.
@@ -290,6 +287,8 @@ public partial class ClientWorld : Node3D
             BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
         };
         AddChild(new WorldEnvironment { Environment = environment });
+        // prototype #181: sky, fog, tonemap and a real sun in the lit styles
+        VisualStyleKit.Setup(this, environment);
 
         // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
         // word online. Before the clock, which reads its sun and sky from it.
@@ -752,6 +751,7 @@ public partial class ClientWorld : Node3D
             _spectator.SetProcess(false);
             _spectator.SetProcessUnhandledInput(false);
             Input.MouseMode = Input.MouseModeEnum.Visible;
+            ShotRunner.GroundHeight = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
             AddChild(ShotRunner.ForQueue(_spectator, queue));
         }
     }

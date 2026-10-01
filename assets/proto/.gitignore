@@ -1,0 +1,5 @@
+# Binary prototype assets stay local (issue #181): ASSETS.md lists where each one comes from,
+# trees/gen.mjs regenerates the EZ-Tree meshes.
+*.jpg
+*.png
+trees/*_game.json

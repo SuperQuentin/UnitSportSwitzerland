@@ -155,6 +155,10 @@ public sealed class GameSettings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public Audio.EngineVoice EngineVoice { get; set; } = Audio.EngineVoice.Ps1;
 
+    /// <summary>How the world looks (<see cref="VisualStyleKit"/>). Prototype, issue #181.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public VisualStyle VisualStyle { get; set; } = VisualStyle.Ps1;
+
     /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
     public float ScreenShake { get; set; } = 1f;
 
@@ -307,6 +311,13 @@ public sealed class GameSettings
                 // a fixed time of day, for screenshots: --time 21.5 is half past nine at night
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
                     StartHour = hour; DayLengthMinutes = 0; break;
+                case "--style":
+                    VisualStyle = v.ToLowerInvariant() switch
+                    {
+                        "cartoon" => VisualStyle.Cartoon, "real-" or "realistic-" => VisualStyle.RealisticLow,
+                        "real+" or "realistic+" or "real" => VisualStyle.RealisticHigh, _ => VisualStyle.Ps1,
+                    };
+                    break;
                 case "--traffic" when int.TryParse(v, out int cars): TrafficCars = cars; break;
                 // first | third, or in a car's cockpit with (body) or without (bare) your own figure
                 case "--view":

@@ -142,7 +142,9 @@ public partial class DayNight : Node
         RenderingServer.GlobalShaderParameterSet("world_night", Night);
         ApplyOccasionGlobals(atmo, tintLinear, delta);
 
-        if (_environment != null)
+        // prototype #181: a lit style owns the world environment and steers a real sun
+        VisualStyleKit.UpdateLighting(shade, tint, sky, Night, SunElevationDeg, _environment);
+        if (_environment != null && !VisualStyleKit.Lit)
         {
             _environment.BackgroundColor = sky;
             _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;

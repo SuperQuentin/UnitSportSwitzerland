@@ -19,7 +19,11 @@ namespace UnitSport.Core;
 /// </summary>
 public partial class ShotRunner : Node
 {
-    private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath);
+    private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath,
+        float? AboveGround = null);
+
+    /// <summary>Prototype #181: ground height for a "g&lt;metres&gt;" y in a queued shot.</summary>
+    public static System.Func<Vector3, float?>? GroundHeight { get; set; }
 
     private readonly Camera3D _camera;
     private readonly bool _hideHud = HideHudRequested();
@@ -33,6 +37,8 @@ public partial class ShotRunner : Node
     private int _consumedLines;
     private double _sincePoll = double.MaxValue;
     private bool _failed;
+    private double _gpuMs, _cpuMs, _frameMs;
+    private int _samples;
 
     public ShotRunner(Camera3D camera, Vector3 position, float pitchDeg, float yawDeg,
         double settleSeconds, string outPath)
@@ -99,6 +105,19 @@ public partial class ShotRunner : Node
             foreach (var layer in GetTree().Root.FindChildren("*", "CanvasLayer", true, false))
                 ((CanvasLayer)layer).Visible = false;
         _elapsed += delta;
+        // prototype #181: average GPU / render-CPU ms over the last second of each settle
+        var vrid = GetViewport().GetViewportRid();
+        RenderingServer.ViewportSetMeasureRenderTime(vrid, true);
+        if (_elapsed > _shot!.Value.SettleSeconds - 1.0)
+        {
+            _gpuMs += RenderingServer.ViewportGetMeasuredRenderTimeGpu(vrid);
+            _cpuMs += RenderingServer.ViewportGetMeasuredRenderTimeCpu(vrid) + RenderingServer.GetFrameSetupTimeCpu();
+            _frameMs += delta * 1000.0;
+            _samples++;
+        }
+        // "g1.7": stand that far above the ground, once the ground under the camera has loaded
+        if (_shot!.Value.AboveGround is { } above && GroundHeight?.Invoke(_camera.Position) is { } g)
+            _camera.Position = _camera.Position with { Y = g + above };
         if (_elapsed < _shot!.Value.SettleSeconds) return;
 
         bool ok = Save(_shot.Value.OutPath);
@@ -173,14 +192,16 @@ public partial class ShotRunner : Node
         var inv = CultureInfo.InvariantCulture;
         if (p.Length != 7
             || !float.TryParse(p[0], NumberStyles.Float, inv, out float x)
-            || !float.TryParse(p[1], NumberStyles.Float, inv, out float y)
+            || !(float.TryParse(p[1], NumberStyles.Float, inv, out float y)
+                 || (p[1].StartsWith('g') && float.TryParse(p[1][1..], NumberStyles.Float, inv, out y)))
             || !float.TryParse(p[2], NumberStyles.Float, inv, out float z)
             || !float.TryParse(p[3], NumberStyles.Float, inv, out float pitch)
             || !float.TryParse(p[4], NumberStyles.Float, inv, out float yaw)
             || !double.TryParse(p[5], NumberStyles.Float, inv, out double seconds)
             || p[6].Trim().Length == 0)
             return false;
-        shot = new Shot(new Vector3(x, y, z), pitch, yaw, seconds, p[6].Trim());
+        bool ground = p[1].StartsWith('g');
+        shot = new Shot(new Vector3(x, ground ? 2000f : y, z), pitch, yaw, seconds, p[6].Trim(), ground ? y : null);
         return true;
     }
 
@@ -212,7 +233,9 @@ public partial class ShotRunner : Node
         GD.Print($"[shot] fps={Engine.GetFramesPerSecond()} " +
                  $"prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} " +
                  $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} " +
-                 $"mem={Performance.GetMonitor(Performance.Monitor.MemoryStatic) / 1048576.0:F0}MB");
+                 $"mem={Performance.GetMonitor(Performance.Monitor.MemoryStatic) / 1048576.0:F0}MB "
+                 + (_samples > 0 ? $"frame={_frameMs / _samples:F1}ms gpu={_gpuMs / _samples:F1}ms cpu={_cpuMs / _samples:F1}ms" : ""));
+        _gpuMs = _cpuMs = _frameMs = 0; _samples = 0;
         return err == Error.Ok;
     }
 }
