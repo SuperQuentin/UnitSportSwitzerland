@@ -56,6 +56,8 @@ public static class RoadMeshBuilder
                 continue;
             }
 
+            // a rail embedded in a carriageway (#124) is the road's RailGroove paint: no ballast, no raised rails
+            if (seg.Class == RoadClass.Railway && seg.Attributes.Has(RoadAttrFlags.Embedded)) continue;
             AppendSegment(seg, joins[i], painted, vertices, colors, uvs, uv2s, indices);
             if (seg.Class == RoadClass.Railway)
                 AppendRails(seg, vertices, colors, uvs, uv2s, indices);

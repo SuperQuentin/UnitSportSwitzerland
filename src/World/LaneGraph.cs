@@ -69,6 +69,9 @@ public sealed class LaneGraph
 
     private const float Snap = 0.5f;
 
+    /// <summary>RoadMeshBuilder's raised rail height (0.18) less the paint lift (0.02).</summary>
+    private const float EmbeddedRailSink = 0.16f;
+
     public static long KeyOf(Vector3 p) =>
         ((long)Mathf.RoundToInt(p.X / Snap) << 32) ^ (uint)Mathf.RoundToInt(p.Z / Snap);
 
@@ -81,11 +84,14 @@ public sealed class LaneGraph
                 if (seg.PointCount < 2 || !keep(seg)) continue;
                 var pts = new Vector3[seg.PointCount];
                 var cum = new float[seg.PointCount];
+                // a rail embedded in a road (#124) lies at the road's height and its rail head is
+                // the groove paint, not the raised rail a train's lift is measured from
+                float sink = seg.Attributes.Has(RoadAttrFlags.Embedded) ? EmbeddedRailSink : 0f;
                 for (int i = 0; i < pts.Length; i++)
                 {
                     double e = tile.Id.MinE + seg.Points[i * 3];
                     double n = tile.Id.MaxN - seg.Points[i * 3 + 2];
-                    pts[i] = origin.ToWorld(e, n, seg.Points[i * 3 + 1]);
+                    pts[i] = origin.ToWorld(e, n, seg.Points[i * 3 + 1] - sink);
                     if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
                 }
                 if (cum[^1] < 1f) continue;
