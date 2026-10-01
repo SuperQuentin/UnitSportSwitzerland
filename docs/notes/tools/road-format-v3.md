@@ -9,6 +9,10 @@
 - **Header flags word** (reserved before v3): `Osm` (1) = some segment carries OSM attributes,
   the tile is an ODbL derived database; `Network` (2) = written by the network stage. A v3 tile
   without `Network` is raw extractor output, the only valid stage input.
+- **`ATR2`** (always, #116b; replaces `ATTR`, which readers still accept): `distinct varint`
+  (7-bit, `BinaryWriter.Write7BitEncodedInt`), `recordSize u8` (24; readers skip a longer
+  record's tail), the distinct records, then one varint index per segment. Record layout = the
+  `ATTR` record below. Region: 2.25 -> 0.37 KB/tile raw (most segments share a few records).
 - **`ATTR`** (always): `count u32` (= segments), `recordSize u16` (24; readers skip a longer
   record's tail), pad u16, then per segment, in drawing direction:
   `flags u16` (`RoadAttrFlags`: Urban, Roundabout, Osm, Tram, YieldAtStart, YieldAtEnd,
@@ -21,7 +25,19 @@
   decided by the network stage: rules in `road-widths-lanes-oneway`; lanes lie inside it by
   `RoadCrossSection`), left and right side 6 B each: `sidewalkDm, bikeKind, bikeDm, kerbCm,
   vergeDm, pad`, pad u16.
-- **`PANT`** paint (#116): `count u32`, per primitive `shape u8` (0 polyline ribboned at runtime,
+- **`PNT2`** paint (#116b; replaces `PANT`, still read): `styleCount varint`, styles of 19 B
+  (`shape, type, variant u8, rgba u32, width, dash, gap f32`), `count varint`, per primitive a
+  varint `style * 2 + kind`. Kind 1, a line **along a segment** of the tile: `segment varint,
+  offset zigzag-varint mm, from varint cm, to varint cm (0 = to the end)`; the decoder rebuilds
+  the vertices with `RoadPaintGeometry.Along` (segment line offset like the ribbon edges, bridge
+  lift, cut, 2 cm Douglas-Peucker), the same call the network stage made, so the game draws the
+  stage's exact vertices (`RoadGen --rewrite` re-decodes every tile: "0 decoded differently").
+  Kind 0, geometry (rail grooves, #121 teeth and give-way lines, anything not along a segment):
+  `vertexCount, indexCount varint`, xyz as zigzag-varint mm deltas from the previous vertex
+  (first from 0), varint indices. In memory a referenced line is a `RoadPaint` with `Segment`
+  set (`RoadPaint.AlongSegment`); a reference to a segment the tile no longer holds is written
+  as geometry. Region: PANT 1.03 -> 0.09 KB/tile raw, 0.74 -> 0.06 deflated.
+- **`PANT`** paint (#116, pre-#116b, still read): `count u32`, per primitive `shape u8` (0 polyline ribboned at runtime,
   1 triangle list), `type u8` (`PaintType`: WhiteSolid, WhiteDashed, YellowDashed, YellowSolid,
   SharkTooth, Arrow, BikeSymbol, StopLine, GiveWayLine, RailGroove, Hatch), `variant u8`
   (arrow bits Left/Straight/Right), pad, `rgba u32`, `width f32`, `dash f32`, `gap f32`,
@@ -53,3 +69,14 @@
 - **Size** (Martigny-Sion, 513 tiles, with OSM): 49.5 -> 51.8 KB/tile raw (+4.6 %), on the
   wire (deflate Fastest, net8 as the game) 39.0 -> 39.3 KB/tile (+0.7 %): the 24 B record is
   mostly zeros. Worst tile x1.83 (a tile of almost only short segments). Budget: +10 % raw.
+- **Size after #116b** (513 tiles, net8 `RoadGen --rewrite --dry-run`; KB/tile raw / deflated alone):
+
+  | Part | before | after |
+  |---|---|---|
+  | v2 bytes (header, segments, junctions) | 49.54 / 39.04 | 49.54 / 39.04 |
+  | ATTR -> ATR2 | 2.25 / 0.21 | 0.37 / 0.13 |
+  | PANT -> PNT2 | 1.03 / 0.74 | 0.09 / 0.06 |
+  | LPRP (#125 walls, untouched) | 1.52 / 1.33 | 1.52 / 1.33 |
+  | whole tile | 54.3 (+9.6 %) / 41.4 | 51.5 (+4.0 %) / 40.6 |
+
+  The per-part line is printed by `--rewrite` ("parts"). Next target: LPRP (floats, deflates badly).

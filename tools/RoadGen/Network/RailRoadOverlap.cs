@@ -335,7 +335,10 @@ public sealed class RailRoadOverlap
         {
             var paintLine = paint[pi];
             if (paintLine.Shape != PaintShape.Polyline || paintLine.Type == PaintType.RailGroove) continue;
-            var v = paintLine.Vertices;
+            // a line along its segment is cut on its unsimplified line, and stays a reference
+            var v = paintLine.Segment is { } along
+                ? RoadPaintGeometry.Cut(RoadPaintGeometry.Offset(along, paintLine.Offset), paintLine.From, paintLine.To)
+                : paintLine.Vertices;
             double length = Length(v);
             int samples = Math.Max(1, (int)Math.Ceiling(length / 0.25));
             var keep = new List<(double A, double B)>();
@@ -364,6 +367,14 @@ public sealed class RailRoadOverlap
                 // a dashed piece after a cut starts on its next dash, keeping the phase
                 if (paintLine.Dash > 0 && a > 0) a = Math.Ceiling(a / period - 1e-9) * period;
                 if (b - a < 0.3) continue;
+                if (paintLine.Segment is { } seg)
+                {
+                    paint.Insert(pi, RoadPaint.AlongSegment(seg, paintLine.Type, paintLine.Rgba, paintLine.Width,
+                        paintLine.Dash, paintLine.Gap, paintLine.Offset, paintLine.From + a,
+                        b >= length - 1e-3 && float.IsPositiveInfinity(paintLine.To) ? double.PositiveInfinity : paintLine.From + b,
+                        paintLine.Variant));
+                    continue;
+                }
                 paint.Insert(pi, new RoadPaint
                 {
                     Shape = paintLine.Shape, Type = paintLine.Type, Variant = paintLine.Variant, Rgba = paintLine.Rgba,
