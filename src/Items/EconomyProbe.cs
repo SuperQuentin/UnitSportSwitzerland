@@ -14,9 +14,10 @@ namespace UnitSport.Items;
 /// is refused by the server (<c>VehicleManager.RequestPark</c>);</item>
 /// <item><c>/login</c> flips the admin flag through <c>ChatManager.AdminStatus</c>, and the same
 /// park is then spawned by the server;</item>
-/// <item>cash claimed goes to the server-kept account and leaves the pocket only on its answer.</item>
+/// <item>cash deposited away from a bank is refused by the server and stays in the pocket (#213:
+/// money moves only at a bank's counter; <c>tools/bankcheck.sh</c> checks the counter itself).</item>
 /// </list>
-/// Runs on a scratch inventory. Leaves one test deposit in the server's <c>user://bank/accounts.json</c>.
+/// Runs on a scratch inventory.
 /// </summary>
 public partial class EconomyProbe : ChatProbe
 {
@@ -73,9 +74,9 @@ public partial class EconomyProbe : ChatProbe
         _inventory.Add(ItemId.Francs, 25);
         Bank.Instance!.ClaimAll();
         Expect(Bank.Instance.Pending && _inventory.Cash == 25, "cash stays in the pocket until the server answers");
-        Expect(await Until(() => !Bank.Instance.Pending, 5), "the server answered the claim");
-        Expect(_inventory.Cash == 0 && Bank.Instance.Balance == before + 25,
-            $"account {before} -> {Bank.Instance.Balance}, pocket empty");
+        Expect(await Until(() => !Bank.Instance.Pending, 5), "the server answered the deposit");
+        Expect(_inventory.Cash == 25 && Bank.Instance.Balance == before,
+            $"refused outside a bank: account {before} -> {Bank.Instance.Balance}, pocket {_inventory.Cash}");
 
         await Finish(0);
     }

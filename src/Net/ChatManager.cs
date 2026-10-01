@@ -62,6 +62,9 @@ public partial class ChatManager : Node
 
     /// <summary>Client-side only: where <c>/spawn</c> puts items, and the towns <c>/city</c> offline looks in.</summary>
     public Items.Inventory? Inventory { get; set; }
+
+    /// <summary>Adds a stack, dropping what does not fit on the ground; returns how many went nowhere. Falls back to a plain add.</summary>
+    public Func<Items.ItemStack, int>? GiveOrDrop { get; set; }
     public PlaceSearchUi? PlaceSearch { get; set; }
 
     /// <summary>
@@ -144,6 +147,12 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(clock, ChatKind.Private);
             return;
         }
+        // the visual style is this screen's alone: never a server's business
+        if (Styles.StyleCommand.Run(text.Trim()) is { } style)
+        {
+            LineReceived?.Invoke(style, ChatKind.Private);
+            return;
+        }
         if (IsLocal)
         {
             text = text.Trim();
@@ -205,9 +214,10 @@ public partial class ChatManager : Node
     {
         if (Inventory is null) return "No inventory to put that in.";
 
-        int left = Inventory.Add(def.Id, count);
+        int room = Math.Min(count, Inventory.Room(def.Id));
+        int left = GiveOrDrop?.Invoke(new Items.ItemStack(def.Id, count)) ?? Inventory.Add(def.Id, count);
         return left == 0
-            ? $"Spawned {count} x {def.Name}."
+            ? room < count ? $"Spawned {count} x {def.Name}; {count - room} dropped at your feet." : $"Spawned {count} x {def.Name}."
             : left == count
                 ? $"No room for {def.Name}."
                 : $"Spawned {count - left} x {def.Name}; {left} did not fit.";
@@ -236,7 +246,7 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help":
-                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /occasion  /time  — Tab completes.", ChatKind.Private);
+                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /occasion  /time  /style  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 

@@ -109,8 +109,7 @@ public static class PhotoStore
             FocalMm = MathF.Round(focalMm), Source = source,
         };
         // System.Text.Json writes numbers culture-invariantly
-        File.WriteAllText(Path.Combine(LocalDir, id + ".json"),
-            JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
+        Core.JsonStore.Save(Path.Combine(LocalDir, id + ".json"), meta, Core.JsonStore.Indented);
         Metas[id] = meta;
         Textures[id] = ImageTexture.CreateFromImage(card);
         return id;

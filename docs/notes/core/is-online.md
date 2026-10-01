@@ -11,7 +11,7 @@
 
 ## Why
 
-#221 PR 1: the same two lines were copied in 16 files although `NetLink.Online` already existed
+#221 PR 1: the same two lines were copied in 17 files (12 migrated) although `NetLink.Online` already existed
 (issue #221 asked for a `NetworkManager.IsOnline`; adding a second helper would have been a 17th copy).
 
 ## Same logic, preserved
@@ -23,10 +23,9 @@
 
 - grep `and not OfflineMultiplayerPeer` in `src/`: replace the expression with `NetLink.Online(this)`
   (add `using UnitSport.Net;` outside that namespace).
-- Not migrated yet, because open PRs edit them (do it when you next touch the file): `Audio/Cd/CdLibrary`
-  (#228), `Interiors/InteriorManager` (#197, #219), `Items/Bank` (#219), `Items/ItemEvents` (#180, #188, #201),
-  `Items/PlacedObjects` (#228), `Items/RadioManager` (#222, #225), `Loot/LootService` (#197, #201, #219),
-  `Vehicles/PassengerService` and `Vehicles/VehicleManager` (#169).
+- Not migrated yet, because open PRs edit them (do it when you next touch the file):
+  `Interiors/InteriorManager` (#197), `Items/ItemEvents` (#180, #188, #201), `Loot/LootService` (#197, #201),
+  `Vehicles/PassengerService` (#169), `Vehicles/VehicleManager` (#169, #233).
 
 ## How to check
 

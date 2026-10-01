@@ -5,6 +5,7 @@
 # open after leaving and coming back (src/Loot/LockSyncProbe).
 #   CHUNKS=<terrain_chunks> GODOT=<exe> tools/locksynccheck.sh [epoch] [E,N]   (default: a random restock period, Riddes)
 # WARNING: the server writes the lock/take masks to the real user://loot of this project (a fresh epoch keeps them apart).
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 EP=${1:-$((800000 + RANDOM * 8 + RANDOM % 8))}
 AT=${2:-2583250,1113250}

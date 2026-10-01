@@ -149,8 +149,7 @@ public static class OccasionConfig
     {
         try
         {
-            using var file = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
-            file.StoreString(JsonSerializer.Serialize(new OccasionConfigFile { Occasions = entries }, JsonOptions));
+            Core.JsonStore.Save(File, new OccasionConfigFile { Occasions = entries }, JsonOptions);
         }
         catch (Exception e)
         {

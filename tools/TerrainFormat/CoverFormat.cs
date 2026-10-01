@@ -62,6 +62,10 @@ public enum CoverClass : byte
     Runway = 35,      // Hartbelagpiste / Rollfeld Hartbelag
     GrassStrip = 36,  // Graspiste / Rollfeld Gras
     Platform = 37,    // Perron
+
+    // --- generated, not from TLM ---
+    TownPaving = 38,  // open ground along a town's streets: islands, medians, plazas (#119, CoverStage)
+    TunnelRoof = 39,  // the concrete deck of a shallow (cut-and-cover) tunnel, where little ground covers it (#119, CoverStage)
 }
 
 /// <summary>

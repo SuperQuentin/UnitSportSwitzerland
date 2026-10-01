@@ -436,6 +436,7 @@ Layers AskLayers(Layers current)
         (Layers.Cadastre, "Building use, age and storeys  [grey](GWR register)[/]"),
         (Layers.Routes, gdal ? "Cycle and MTB route flags  [grey](ASTRA, ~90 MB; GDAL)[/]" : "Cycle routes  [red](needs GDAL — unavailable, see docs/notes/tools/gdal-setup.md)[/]"),
         (Layers.Places, "Place index for the in-game search  [grey](needs the GWR register)[/]"),
+        (Layers.Osm, "OpenStreetMap road attributes: one-way, lanes, sidewalks  [grey](Geofabrik, ~550 MB once; ODbL, needs roads)[/]"),
     };
     var prompt = new MultiSelectionPrompt<string>()
         .Title("Terrain is always included. [bold]What else?[/] [grey](space toggles, enter confirms)[/]")
@@ -466,8 +467,10 @@ static Layers ParseLayers(string text)
             "cadastre" or "gwr" => Layers.Cadastre,
             "routes" => Layers.Routes,
             "places" => Layers.Places | Layers.Cadastre,
+            // never part of "all": tiles built with it fall under the ODbL (docs/notes/tools/osm-odbl-licence.md)
+            "osm" => Layers.Osm | Layers.Roads,
             "all" => Layers.Roads | Layers.Buildings | Layers.Cadastre | Layers.Routes | Layers.Places,
-            _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, all)"),
+            _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, osm, all)"),
         };
     return result;
 }
@@ -545,7 +548,8 @@ static void PrintHelp()
           --tiles-file FILE            one "E-N" per line
           --resume                     the last selection and layers
         Layers:
-          --layers terrain,roads,buildings,cadastre,routes,places|all
+          --layers terrain,roads,buildings,cadastre,routes,places,osm|all
+                                       (osm is optional and never implied by all)
         Folders:
           --data DIR                   source data instead of ressources/data (dataset subfolders inside)
           --chunks DIR                 built tiles instead of terrain_chunks (state goes to DIR_temp)

@@ -3,6 +3,7 @@
 # client A holds the flag (ghost valid / red, plants, pulls up: test_output/plant_a_*.png), client B screenshots
 # the body of A and the spawned flag in frames after the "go" of A (test_output/plant_b_NN.png).
 #   GODOT=<exe> tools/plantcheck.sh
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 AT=2583250,1113250
 PORT=7796
