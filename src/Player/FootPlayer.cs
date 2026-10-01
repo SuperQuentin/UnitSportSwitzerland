@@ -1529,24 +1529,36 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
         if (dance != null && ItemAction == 0) { arm = Avatar.ItemArmPose.None; blend = 0f; }
         bool armed = arm != Avatar.ItemArmPose.None && blend > 0.001f;
-        Avatar.HumanMeshBuilder.GaitMounts mounts;
-        switch (PoseKind)
+        if (!armed) { arm = Avatar.ItemArmPose.None; blend = 0f; }   // what the builder does with them anyway
+        // Rebuilt only when what it shows changes (#221): a figure standing still is built once, and
+        // a remote one far away or out of view at most 15 times a second. The speed is keyed to the
+        // centimetre per second, so a standing figure's float noise does not rebuild it.
+        _poseWait += dt;
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat);
+        if (key != _poseKey && !HoldRemoteFigure())
         {
-            case PoseTucked:
-                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(_walkPalette, Avatar.HumanPose.Tucked, arm, blend, Hat)
-                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked, hat: Hat);
-                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend);
-                break;
-            case PoseAir:
-                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(_walkPalette, Avatar.HumanPose.Running, arm, blend, Hat)
-                    : _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running, hat: Hat);
-                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend);
-                break;
-            default:
-                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend, dance: dance);
-                mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance);
-                break;
+            _poseKey = key;
+            _poseWait = 0f;
+            switch (PoseKind)
+            {
+                case PoseTucked:
+                    _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(_walkPalette, Avatar.HumanPose.Tucked, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
+                        : _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked, hat: Hat);
+                    _poseMounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend);
+                    break;
+                case PoseAir:
+                    _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(_walkPalette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
+                        : _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running, hat: Hat);
+                    _poseMounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend);
+                    break;
+                default:
+                    _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
+                        dance: dance, into: _poseMesh ??= new ArrayMesh());
+                    _poseMounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance);
+                    break;
+            }
         }
+        var mounts = _poseMounts;
         _walker.Transform = BodyPose;
         if (_jolt > 0.01f)
         {
@@ -1556,6 +1568,37 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _walker.Transform = BodyPose * new Transform3D(Basis.Identity, hip) * t * new Transform3D(Basis.Identity, -hip);
         }
         PlaceHand(mounts);
+    }
+
+    /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
+    private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
+        Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat);
+
+    private FootPoseKey _poseKey;
+    private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;
+    /// <summary>The animated figure's one mesh, rebuilt in place (the cached held poses aside).</summary>
+    private ArrayMesh? _poseMesh;
+    private float _poseWait;
+
+    /// <summary>
+    /// Whether a remote figure keeps last frame's mesh: beyond 40 m or outside the camera's view
+    /// cone it is rebuilt at 15 Hz, not every frame. Not frozen: mirrors, portals and photos see
+    /// what the main camera does not. The cone holds the whole screen and the figure's size, so a
+    /// figure at the edge of the picture still counts as in view.
+    /// </summary>
+    private bool HoldRemoteFigure()
+    {
+        if (IsMultiplayerAuthority() || _poseWait >= 1f / 15f || XR.XrSession.Active) return false;
+        var cam = GetViewport().GetCamera3D();
+        if (cam == null || _walker == null) return false;
+        var to = _walker.GlobalPosition + new Vector3(0, 0.9f, 0) - cam.GlobalPosition;
+        float d = to.Length();
+        if (d > 40f) return true;
+        if (d < 2f) return false;
+        var size = GetViewport().GetVisibleRect().Size;
+        float aspect = Mathf.Max(size.X / Mathf.Max(size.Y, 1f), size.Y / Mathf.Max(size.X, 1f));
+        float halfDiagonal = Mathf.Atan(Mathf.Tan(Mathf.DegToRad(cam.Fov) * 0.5f) * Mathf.Sqrt(1f + aspect * aspect));
+        return (-cam.GlobalBasis.Z).AngleTo(to) > halfDiagonal + Mathf.Asin(1.2f / d);
     }
 
     /// <summary>

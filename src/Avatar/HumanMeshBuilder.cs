@@ -152,22 +152,34 @@ public static class HumanMeshBuilder
     /// <param name="phase">Gait cycle position, 0..1. Both feet complete one step each per cycle.</param>
     /// <param name="dance">Beat-driven dance layer over the gait (<see cref="ApplyDance"/>); null = no dance.
     /// The caller passes <c>arm = None</c> while dancing, the dance owns the arms.</param>
+    /// <param name="into">A mesh to rebuild in place (an animated figure keeps one), or null for a new one.</param>
     public static ArrayMesh BuildStride(HumanPalette palette, float speed, float phase,
         bool helmet = false, Headwear hat = Headwear.None,
-        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null)
+        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, ArrayMesh? into = null)
     {
-        var scratch = new MeshScratch();
+        var scratch = ScratchFor(into);
         AppendRig(scratch, palette, ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), includeLegs: true, helmet, hat);
-        return scratch.Build();
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
     }
 
     /// <summary>A fixed pose with the item arm override on top (uncached: the blend changes every frame).</summary>
     public static ArrayMesh BuildPosed(HumanPalette palette, HumanPose pose, ItemArmPose arm, float armBlend,
-        Headwear hat = Headwear.None)
+        Headwear hat = Headwear.None, ArrayMesh? into = null)
     {
-        var scratch = new MeshScratch();
+        var scratch = ScratchFor(into);
         AppendRig(scratch, palette, ApplyArms(RigFor(pose), arm, armBlend), includeLegs: true, helmet: false, hat);
-        return scratch.Build();
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
+    }
+
+    // one scratch per thread for in-place rebuilds, emptied each time: its lists keep their capacity
+    [ThreadStatic] private static MeshScratch? _reused;
+
+    private static MeshScratch ScratchFor(ArrayMesh? into)
+    {
+        if (into == null) return new MeshScratch();
+        var scratch = _reused ??= new MeshScratch();
+        scratch.Clear();
+        return scratch;
     }
 
     /// <summary>
@@ -947,14 +959,22 @@ public static class HumanMeshBuilder
     /// <summary>
     /// Unlit, vertex-coloured, backface-culled. Matches how the rest of the world is shaded:
     /// the terrain gets its form from flat facets and dither, not from specular highlights.
+    ///
+    /// <para>
+    /// One shared instance (#221): every caller used to get an identical new one, one per figure,
+    /// vehicle and preview. Never modify it; a variant (the soot of a burnt vehicle,
+    /// <c>VehicleBody.Char</c>) is a material of its own.
+    /// </para>
     /// </summary>
-    public static StandardMaterial3D Material() => new()
+    public static StandardMaterial3D Material() => _material ??= new()
     {
         VertexColorUseAsAlbedo = true,
         ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
         SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
         Roughness = 1f,
     };
+
+    private static StandardMaterial3D? _material;
 
     // =====================================================================================
     // Dance layer. The spec (conventions, every move's joint formulas, moving variants) is

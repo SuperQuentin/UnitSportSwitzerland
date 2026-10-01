@@ -206,6 +206,29 @@ public sealed class MeshScratch
         return mesh;
     }
 
+    /// <summary>
+    /// Empties the scratch for the next figure: a figure redrawn every frame reuses one scratch
+    /// (and its lists' capacity) instead of a new one per frame (#221).
+    /// </summary>
+    public void Clear()
+    {
+        _vertices.Clear(); _colors.Clear(); _indices.Clear();
+        _glassVertices.Clear(); _glassColors.Clear(); _glassIndices.Clear();
+    }
+
+    /// <summary>
+    /// As <see cref="Build()"/>, into <paramref name="mesh"/>, whose surfaces are replaced: an
+    /// animated figure keeps one <see cref="ArrayMesh"/> (one RID) for its whole life rather than
+    /// a new one per frame left to the finalizer (#221).
+    /// </summary>
+    public ArrayMesh BuildInto(ArrayMesh mesh)
+    {
+        mesh.ClearSurfaces();
+        AddSurface(mesh, _vertices, _colors, _indices, Vector3.Zero, "body");
+        AddSurface(mesh, _glassVertices, _glassColors, _glassIndices, Vector3.Zero, GlassSurface);
+        return mesh;
+    }
+
     private static void AddSurface(ArrayMesh mesh, List<Vector3> vertices, List<Color> colors, List<int> indices,
         Vector3 pivot, string name)
     {
@@ -217,7 +240,7 @@ public sealed class MeshScratch
             facing[i] = new Vector3(-v.X, v.Y, -v.Z);
         }
 
-        var arrays = new Godot.Collections.Array();
+        using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = facing;
         arrays[(int)Mesh.ArrayType.Color] = colors.ToArray();
