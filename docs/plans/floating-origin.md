@@ -78,6 +78,11 @@ top of it if a reason appears.
   live shift does the same job without `ChunkManager.ResetAll` and without
   `ClientWorld.RespawnAfterRebase`.
 
+**Make the shift a rigid transform from day one.** `Shifted` carries a `Transform3D` (identity
+rotation for now), and subscribers apply the whole transform, not just `+ delta`. The follow-up
+`docs/plans/spherical-world.md` adds a small rotation to each shift (the local "up" follows the
+Earth's surface). Doing it this way now means the cached-position audit is done once, not twice.
+
 A new **`GlobalPos`** value type (`double E, N, Alt`) is the origin-independent position, with
 `WorldOrigin.ToWorld(GlobalPos)` and `ToGlobal(Vector3)`. Anything that **stores** a position
 across frames should store a `GlobalPos`, or store a `Vector3` and subscribe to `Shifted`.
