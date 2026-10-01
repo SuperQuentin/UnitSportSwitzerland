@@ -43,7 +43,11 @@ public partial class FootPlayer
     /// </summary>
     private void FitSections(RideKind kind)
     {
-        foreach (var s in _sections) s.QueueFree();
+        foreach (var s in _sections)
+        {
+            if (IsInstanceValid(s)) RemoveCollisionExceptionWith(s);
+            s.QueueFree();
+        }
         _sections.Clear();
         _visualTrailer = TrailerCode;
         var truck = _ride as Truck;
@@ -83,8 +87,11 @@ public partial class FootPlayer
             }
             AddChild(body);
             body.GlobalTransform = GlobalTransform * truck.NodeLocal(k);
+            // both ways: a body's own motion only honours its own list, and the cab moving into
+            // its own trailer's nose was pushed up onto it, and kept climbing
             body.AddCollisionExceptionWith(this);
-            foreach (var other in _sections) body.AddCollisionExceptionWith(other);
+            AddCollisionExceptionWith(body);
+            foreach (var other in _sections) { body.AddCollisionExceptionWith(other); other.AddCollisionExceptionWith(body); }
             _sections.Add(body);
         }
         for (int j = 0; j < _shownAngles.Length; j++) _shownAngles[j] = truck.Articulation[j];
