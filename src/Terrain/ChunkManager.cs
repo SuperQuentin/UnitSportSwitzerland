@@ -351,10 +351,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         // so a rebuild keeps the old cell standing until its replacement lands.
         public float[]? QueuedHeight;
         public int HeightCellsQueued, HeightCellsDone;
-        public Vector3[]? QueuedBridgeFaces, QueuedBuildingFaces;
+        public Vector3[]? QueuedBridgeFaces;
+        public Vector3[][]? QueuedBuildingCells;
+        public int BuildingCellsQueued;
         public bool BridgeDone;
         public bool CollisionQueued =>
-            HeightCellsQueued != 0 || QueuedBridgeFaces != null || QueuedBuildingFaces != null;
+            HeightCellsQueued != 0 || QueuedBridgeFaces != null || BuildingCellsQueued != 0;
 
         public ChunkGrid? Grid;
         public HashSet<int>? Holes;   // tunnel portals; null until the tile is first loaded
@@ -392,7 +394,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         ArrayMesh? Mesh, float[]? CollisionMap,
         ArrayMesh? Roads, bool RoadsRequested,
         HashSet<int>? Holes, byte[]? Cover,
-        ArrayMesh? Buildings, Vector3[]? BuildingFaces, bool BuildingsRequested,
+        ArrayMesh? Buildings, Vector3[][]? BuildingFaces, bool BuildingsRequested,
         ChunkNode.TreeMeshes? Trees, ArrayMesh? Water,
         Vector3[]? RoadCollisionFaces = null, long[]? StageMs = null,
         Interiors.DoorSpot[]? Doors = null);
@@ -1151,7 +1153,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             }
             if (result.BuildingFaces != null)
             {
-                state.QueuedBuildingFaces = result.BuildingFaces.Length > 0 ? result.BuildingFaces : null;
+                // every cell, empty ones too: an empty one clears what a rebuild replaces
+                state.QueuedBuildingCells = result.BuildingFaces;
+                state.BuildingCellsQueued = ChunkNode.AllCollisionCells;
                 state.HasBuildingCollision = true;
             }
             if (result.RoadCollisionFaces != null)
@@ -1202,6 +1206,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private readonly List<Vector3> _anchorScratch = new();
     private readonly List<TileId> _staleScratch = new();
 
+    // piece ids: 0-15 height cells, 16 the bridges, 17-32 building cells
     private const int PieceBridge = ChunkNode.CollisionCellCount, PieceBuildings = PieceBridge + 1;
     private static readonly string[] PieceKinds = ["coll-height", "coll-bridge", "coll-bldg"];
 
@@ -1236,13 +1241,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     continue;
                 }
                 var corner = s.Node.GlobalPosition;
+                // the kind breaks a tie in distance: the ground under a body, then its bridge,
+                // then the buildings around it
                 for (int cell = 0; cell < ChunkNode.CollisionCellCount; cell++)
+                {
                     if ((s.HeightCellsQueued & (1 << cell)) != 0)
                         Consider(s, id, cell, ChunkNode.CollisionCellRect(cell), corner, 0f);
-                // the kind breaks a tie in distance: the ground under a body, then its bridge
+                    if ((s.BuildingCellsQueued & (1 << cell)) != 0)
+                        Consider(s, id, PieceBuildings + cell, ChunkNode.CollisionCellRect(cell), corner, 1f);
+                }
                 var tile = new Rect2(0, 0, ChunkNode.TileSizeM, ChunkNode.TileSizeM);
                 if (s.QueuedBridgeFaces != null) Consider(s, id, PieceBridge, tile, corner, 0.5f);
-                if (s.QueuedBuildingFaces != null) Consider(s, id, PieceBuildings, tile, corner, 1f);
             }
             foreach (var id in _staleScratch) _collisionQueue.Remove(id);
             if (best == null) break;
@@ -1257,10 +1266,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 best.BridgeDone = true;
                 kind = 1;
             }
-            else if (bestPiece == PieceBuildings)
+            else if (bestPiece >= PieceBuildings)
             {
-                node.SetBuildingCollision(best.QueuedBuildingFaces!);
-                best.QueuedBuildingFaces = null;
+                int cell = bestPiece - PieceBuildings;
+                node.SetBuildingCell(best.QueuedBuildingCells![cell], cell);
+                best.BuildingCellsQueued &= ~(1 << cell);
+                if (best.BuildingCellsQueued == 0) best.QueuedBuildingCells = null;
                 kind = 2;
             }
             else
@@ -1753,7 +1764,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // town tile), and only the tile a body stands on needs one. Empty faces still
                 // mark the tile done, so it is not asked again.
                 ArrayMesh? buildings = null;
-                Vector3[]? buildingFaces = null;
+                Vector3[][]? buildingFaces = null;
                 Interiors.DoorSpot[]? doors = null;
                 if (wantBuildings || wantCollision)
                 {
@@ -1776,7 +1787,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         }
                     }
                     if (wantCollision)
-                        buildingFaces = bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : [];
+                        buildingFaces = ChunkNode.SplitByCell(bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : []);
                     Lap(StBldgMesh, stageMs, clock);
                 }
 

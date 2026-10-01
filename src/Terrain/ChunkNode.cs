@@ -129,17 +129,42 @@ public partial class ChunkNode : Node3D
     /// <summary>The buildings' collision shape — one place, so <c>--hitboxcheck</c> tests exactly what the world gets.</summary>
     public static ConcavePolygonShape3D BuildingShape(Vector3[] faces) => new() { Data = faces };
 
-    public void SetBuildingCollision(Vector3[] faces)
+    private CollisionShape3D?[]? _buildingCells;
+
+    /// <summary>
+    /// Sorts collision triangles into the ground's 4×4 cells by centroid, on the build worker:
+    /// a town tile's one BVH was up to 56 ms on the main thread, a cell's is a fraction of it.
+    /// </summary>
+    public static Vector3[][] SplitByCell(Vector3[] faces)
     {
-        var shape = BuildingShape(faces);
+        var cells = new List<Vector3>[CollisionCellCount];
+        for (int c = 0; c < CollisionCellCount; c++) cells[c] = new List<Vector3>();
+        float spacing = (float)ChunkFormat.SpacingM;
+        for (int t = 0; t + 2 < faces.Length; t += 3)
+        {
+            var mid = (faces[t] + faces[t + 1] + faces[t + 2]) / 3f;
+            var list = cells[CollisionCell((int)(mid.X / spacing), (int)(mid.Z / spacing))];
+            list.Add(faces[t]); list.Add(faces[t + 1]); list.Add(faces[t + 2]);
+        }
+        var result = new Vector3[CollisionCellCount][];
+        for (int c = 0; c < CollisionCellCount; c++) result[c] = cells[c].ToArray();
+        return result;
+    }
+
+    /// <summary>Builds (or clears, when empty) one cell of the building collision.</summary>
+    public void SetBuildingCell(Vector3[] faces, int cell)
+    {
         if (_buildingBody == null)
         {
             _buildingBody = new StaticBody3D { Name = "BuildingBody" };
             AddChild(_buildingBody);
         }
-        foreach (Node child in _buildingBody.GetChildren())
-            child.QueueFree();
-        _buildingBody.AddChild(new CollisionShape3D { Shape = shape });
+        _buildingCells ??= new CollisionShape3D?[CollisionCellCount];
+        _buildingCells[cell]?.QueueFree();
+        _buildingCells[cell] = null;
+        if (faces.Length == 0) return;
+        _buildingCells[cell] = new CollisionShape3D { Shape = BuildingShape(faces) };
+        _buildingBody.AddChild(_buildingCells[cell]);
     }
 
     private StaticBody3D? _roadBody;
