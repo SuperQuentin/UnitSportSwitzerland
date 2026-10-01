@@ -67,9 +67,13 @@ public static partial class InteriorMeshBuilder
         void B(float xa, float ya, float za, float xb, float yb, float zb, Color col) =>
             box(new Vector3(cx + xa, ya, za), new Vector3(cx + xb, yb, zb), col);
         var skin = Skins[h % Skins.Length];
-        var hair = Hairs[(h >> 4) % Hairs.Length];
+        int hairIx = (h >> 4) % Hairs.Length;
+        var hair = Hairs[hairIx];
         var cloth = Clothes[(h >> 8) % Clothes.Length];
-        var ear = Ears[(h >> 12) % Ears.Length];
+        // black ears vanish into black or brown hair: those get white, pink or orange ears
+        int earIx = (h >> 12) % Ears.Length;
+        if (hairIx <= 1 && earIx == 0) earIx = 1 + (h >> 20) % (Ears.Length - 1);
+        var ear = Ears[earIx];
         var shoe = C(0.15f, 0.12f, 0.12f);
         var pink = C(0.98f, 0.62f, 0.72f);
         // eyes and mouths step through their lists along the row, so neighbours never match
