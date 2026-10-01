@@ -109,7 +109,8 @@ public static class FormatCheck
 
     /// <summary>
     /// #124: a 6 m road at 10 m crossed square by a rail at 9 m. The rail piece inside the road
-    /// (6 m + 1 m each side) is embedded at 10 m, the rail is back at 9 m 8 m further out, two
+    /// (6 m + 1 m each side) is embedded at 10 m, the ballast line meets it at 9.84 m and is back at 9 m
+    /// 8 m further out, two
     /// grooves are painted and the road's centre dash leaves the track zone free.
     /// </summary>
     private static bool RailCrossingIsEmbedded()
@@ -133,9 +134,12 @@ public static class FormatCheck
         double length = Geometry.Polyline.Length(inside.Plan);
         if (Math.Abs(length - 8) > 0.6 || inside.Height.Any(h => Math.Abs(h - 10) > 1e-3)) return false;
         if (pieces[0].Height[0] != 9f || pieces[^1].Height[^1] != 9f) return false;
-        // continuous: each piece starts where the last one ended, at the same height
+        // continuous: each piece starts where the last one ended; the ballast line meets the road
+        // RailTop lower, so the raised rails' heads are flush with the grooves
         for (int i = 1; i < pieces.Count; i++)
-            if (pieces[i].Plan[0] != pieces[i - 1].Plan[^1] || pieces[i].Height[0] != pieces[i - 1].Height[^1]) return false;
+            if (pieces[i].Plan[0] != pieces[i - 1].Plan[^1]
+                || Math.Abs(pieces[i].Height[0] - pieces[i - 1].Height[^1]) - (pieces[i].Embedded != pieces[i - 1].Embedded ? Network.RailRoadOverlap.RailTop : 0) is > 1e-4f or < -1e-4f)
+                return false;
 
         var paint = new List<RoadPaint>();
         Meshing.PaintEmitter.Emit(road, 0, paint);

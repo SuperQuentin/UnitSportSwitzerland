@@ -27,11 +27,11 @@ using UnitSport.Tools.RoadGen.Geometry;
 /// </summary>
 public sealed class RailRoadOverlap
 {
-    /// <summary>Dark steel with its groove, sRGB.</summary>
-    public const uint GrooveRgba = 0x34322FFF;
+    /// <summary>Polished rail head, sRGB: a dark groove vanished into the asphalt at 0.35x.</summary>
+    public const uint GrooveRgba = 0x9A9893FF;
 
     /// <summary>Rail head plus groove (~0.12 m real) drawn a little wider, like the road lines.</summary>
-    public const float GrooveWidth = 0.16f;
+    public const float GrooveWidth = 0.2f;
 
     private const double Step = 0.5;          // sampling along the rail
     private const double MinRun = 1.0;        // shorter covered runs are ignored (a road edge grazed)
@@ -43,6 +43,14 @@ public sealed class RailRoadOverlap
     private const double ZoneMargin = 0.5;    // road paint kept this far outside the outer rail
     private const double Cell = 20.0;
     private const float TileSize = 1000f;
+
+    /// <summary>
+    /// The raised rails' height over the line (RoadMeshBuilder 0.18) less the paint lift (0.02).
+    /// Outside the road the line starts this far below the road, so the raised rails meet the
+    /// grooves flush; inside it the file keeps the road's height (the collision blend reads it)
+    /// and <c>LaneGraph</c> sinks it by this for the trains.
+    /// </summary>
+    public const float RailTop = 0.16f;
 
     private sealed record Road(Vec2[] Plan, float[] Height, double Half);
 
@@ -188,8 +196,8 @@ public sealed class RailRoadOverlap
         var points = at.Select(s => Polyline.PointAt(plan, arc, s)).ToList();
         var heights = new float[at.Count];
         var edgeHeight = merged.Select(r => (
-            RoadHeight(Polyline.PointAt(plan, arc, r.A), height(Polyline.PointAt(plan, arc, r.A))),
-            RoadHeight(Polyline.PointAt(plan, arc, r.B), height(Polyline.PointAt(plan, arc, r.B))))).ToList();
+            RoadHeight(Polyline.PointAt(plan, arc, r.A), height(Polyline.PointAt(plan, arc, r.A))) - RailTop,
+            RoadHeight(Polyline.PointAt(plan, arc, r.B), height(Polyline.PointAt(plan, arc, r.B))) - RailTop)).ToList();
         for (int k = 0; k < at.Count; k++)
         {
             double s = at[k];
@@ -199,11 +207,12 @@ public sealed class RailRoadOverlap
             for (int r = 0; r < merged.Count; r++)
             {
                 var (a, b) = merged[r];
-                if (s >= a - 1e-9 && s <= b + 1e-9) { h = RoadHeight(points[k], own); bestD = 0; break; }
-                double d = s < a ? a - s : s - b;
+                // strictly inside: the boundary vertex belongs to the blend piece's height
+                if (s > a + 1e-6 && s < b - 1e-6) { h = RoadHeight(points[k], own); bestD = 0; break; }
+                double d = s <= a ? a - s : s - b;
                 if (d >= Blend || d >= bestD) continue;
                 bestD = d;
-                float edge = s < a ? edgeHeight[r].Item1 : edgeHeight[r].Item2;
+                float edge = s <= a ? edgeHeight[r].Item1 : edgeHeight[r].Item2;
                 double w = d / Blend;
                 w = w * w * (3 - 2 * w);
                 h = (float)(edge + (own - edge) * w);
@@ -220,8 +229,13 @@ public sealed class RailRoadOverlap
             bool boundary = k == at.Count - 1 || merged.Any(r => Math.Abs(at[k] - r.A) < 1e-6 || Math.Abs(at[k] - r.B) < 1e-6);
             if (!boundary) continue;
             if (k > from)
-                pieces.Add(new Piece(points.GetRange(from, k - from + 1), heights[from..(k + 1)],
-                    Inside(0.5 * (at[from] + at[k]))));
+            {
+                var h = heights[from..(k + 1)];
+                bool embedded = Inside(0.5 * (at[from] + at[k]));
+                // an embedded piece's ends are on the road too; the blend pieces end RailTop lower
+                if (embedded) { h[0] += RailTop; h[^1] += RailTop; }
+                pieces.Add(new Piece(points.GetRange(from, k - from + 1), h, embedded));
+            }
             from = k;
         }
 
