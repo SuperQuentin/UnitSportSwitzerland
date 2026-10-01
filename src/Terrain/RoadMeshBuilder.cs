@@ -67,6 +67,7 @@ public static class RoadMeshBuilder
                 AppendBridgeStructure(seg, tile.Id, grid, vertices, colors, uvs, uv2s, indices);
         }
         RoadWallBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // retaining walls (#125)
+        RailingBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);    // guardrails and fences (#126)
 
         return vertices.Count == 0
             ? null

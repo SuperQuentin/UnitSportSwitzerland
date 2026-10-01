@@ -249,6 +249,7 @@ public static class TileRewriter
         var shiftAudit = new HeightAuditor();
         var netStats = new NetworkStats();
         var embankments = new EmbankmentPlanner.Stats();
+        var railings = new RailingPlanner.Stats();
 
         foreach (var block in blocks)
         {
@@ -405,8 +406,13 @@ public static class TileRewriter
 
                 var flags = RoadTileFlags.Network;
                 if (segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) flags |= RoadTileFlags.Osm;
-                var walls = grids is null ? new List<RoadLinearProp>()
-                    : EmbankmentPlanner.Plan(id, segments, (e, n) => SampleGround(grids, e, n), embankments);
+                var walls = new List<RoadLinearProp>();
+                if (grids is not null)
+                {
+                    var owners = new List<int>();
+                    walls = EmbankmentPlanner.Plan(id, segments, (e, n) => SampleGround(grids, e, n), embankments, owners);
+                    walls.AddRange(RailingPlanner.Plan(id, segments, walls, owners, (e, n) => SampleGround(grids, e, n), railings));
+                }
                 var tile = new RoadTile
                 {
                     Id = id, Segments = segments, Junctions = junctions, Flags = flags,
@@ -435,6 +441,7 @@ public static class TileRewriter
 
         netStats.Shifted = shiftAudit.Result();
         log(embankments.Format());
+        log(railings.Format());
         return new Stats(tilesRead, tilesWritten, junctionCount, written, dropped,
             overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, netStats);
     }

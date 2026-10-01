@@ -49,8 +49,10 @@ public static class EmbankmentPlanner
     /// The walls for one tile's final segments (tile-local, as written). <paramref name="ground"/>
     /// is the bare terrain at an LV95 point, NaN where no tile is loaded.
     /// </summary>
+    /// <param name="owners">If given, gets the index in <paramref name="segments"/> of the line
+    /// each returned wall stands beside, in the same order (the railing planner needs it).</param>
     public static List<RoadLinearProp> Plan(TileId id, IReadOnlyList<RoadSegment> segments,
-        Func<double, double, double> ground, Stats stats)
+        Func<double, double, double> ground, Stats stats, List<int>? owners = null)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var props = new List<RoadLinearProp>();
@@ -73,7 +75,9 @@ public static class EmbankmentPlanner
                 for (int i = 0; i < stations.Count; i++)
                     needs[i] = Judge(stations[i], right, edge, si, lines, Ground);
                 CloseGaps(needs);
+                int before = props.Count;
                 EmitRuns(seg, si, stations, needs, right, lines, Ground, props, stats);
+                for (int k = before; k < props.Count; k++) owners?.Add(si);
             }
         }
 
@@ -92,14 +96,14 @@ public static class EmbankmentPlanner
         return len;
     }
 
-    private readonly record struct Station(double X, double Z, double Y, double Fx, double Fz)
+    internal readonly record struct Station(double X, double Z, double Y, double Fx, double Fz)
     {
         /// <summary>Unit vector to one side, X east and Z south.</summary>
         public (double X, double Z) Side(bool right) => right ? (-Fz, Fx) : (Fz, -Fx);
     }
 
     /// <summary>Points every <see cref="Step"/> metres along the line, both ends included.</summary>
-    private static List<Station> Stations(RoadSegment seg)
+    internal static List<Station> Stations(RoadSegment seg)
     {
         var result = new List<Station>();
         var p = seg.Points;
@@ -339,7 +343,7 @@ public static class EmbankmentPlanner
     /// The tile's lines in 16 m buckets: which other ground-level line covers a point (its height
     /// there), and whether a surveyed TLM wall runs near one.
     /// </summary>
-    private sealed class LineIndex
+    internal sealed class LineIndex
     {
         private const double Cell = 16;
         private readonly Dictionary<(int, int), List<int>> _buckets = new();
@@ -379,11 +383,18 @@ public static class EmbankmentPlanner
         /// counts as another line only away from where it is asking from (its station at sx, sz):
         /// the other leg of a hairpin is, the piece the station sits on is not.
         /// </summary>
-        public double? Covering(double x, double z, int self, double sx, double sz, double near)
+        public double? Covering(double x, double z, int self, double sx, double sz, double near) =>
+            Cover(x, z, self, sx, sz, near) is { } c ? c.Height : null;
+
+        /// <summary>
+        /// The same, with which line it is and its drawing direction there (a unit vector, X east
+        /// and Z south).
+        /// </summary>
+        public (int Seg, double Height, double Fx, double Fz)? Cover(double x, double z, int self, double sx, double sz, double near)
         {
             if (!_buckets.TryGetValue(((int)Math.Floor(x / Cell), (int)Math.Floor(z / Cell)), out var list)) return null;
             double best = double.MaxValue;
-            double? height = null;
+            (int, double, double, double)? found = null;
             foreach (int k in list)
             {
                 var pc = _pieces[k];
@@ -392,9 +403,10 @@ public static class EmbankmentPlanner
                 double d = Distance(pc.Ax, pc.Az, pc.Bx, pc.Bz, x, z, out double t);
                 if (d > pc.Half || d >= best) continue;
                 best = d;
-                height = pc.Ay + (pc.By - pc.Ay) * t;
+                double len = Math.Max(1e-9, Math.Sqrt((pc.Bx - pc.Ax) * (pc.Bx - pc.Ax) + (pc.Bz - pc.Az) * (pc.Bz - pc.Az)));
+                found = (pc.Seg, pc.Ay + (pc.By - pc.Ay) * t, (pc.Bx - pc.Ax) / len, (pc.Bz - pc.Az) / len);
             }
-            return height;
+            return found;
         }
 
         public bool TlmWallNear(double x, double z, double radius)
