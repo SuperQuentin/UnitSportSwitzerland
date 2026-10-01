@@ -337,6 +337,24 @@ public sealed class Truck : Rideable, IEngined
 
     public override Node3D BuildVisual(int riderIndex) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex));
 
+    /// <summary>Every seat of the truck's own sections (a bus's both halves), the driver's first (#158).</summary>
+    public override SeatAnchor[] Seats => SeatsOf(Kind, () =>
+    {
+        var seats = new List<SeatAnchor>();
+        for (int k = 0; k < Spec.Sections.Length; k++)
+        {
+            var rig = HeavyRig.Create(Spec, k, 0.5f);
+            seats.AddRange(rig.Seats);
+            rig.Free();
+        }
+        return seats.ToArray();
+    });
+
+    public override bool Driverless => true;
+
+    /// <summary>A seat in the cab's frame, the train as it stands (a bus's rear half where its joint puts it).</summary>
+    public override Vector3 SeatPosition(int i) => Seats[i].Section == 0 ? Seats[i].Hip : NodeLocal(Seats[i].Section) * Seats[i].Hip;
+
     /// <summary>Parked: every section, posed at the angles it was left at.</summary>
     public override Node3D BuildParkedVisual(int riderIndex)
     {

@@ -322,6 +322,16 @@ public sealed class Car : Rideable, IEngined
     public override Node3D BuildVisual(int riderIndex) =>
         CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges, HumanPalette.ForRider(riderIndex));
 
+    public override Avatar.SeatAnchor[] Seats => SeatsOf((Kind, Spec.SetupId), () =>
+    {
+        var rig = CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges);
+        var seats = rig.Seats;
+        rig.Free();
+        return seats;
+    });
+
+    public override bool Driverless => true;
+
     /// <summary>Left in the world: the same car with nobody at the wheel.</summary>
     public override Node3D BuildParkedVisual(int riderIndex) => CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges);
 

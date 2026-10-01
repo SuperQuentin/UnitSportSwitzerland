@@ -132,7 +132,7 @@ public static class BusMeshBuilder
         if (first)
         {
             cockpit = DriverPlace(m, spec, s, cg, hw, inner, floor, roof, coach);
-            seats.Add(new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip), cockpit.Seat.Recline));
+            seats.Add(new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip), cockpit.Seat.Recline, cockpit.Frame.Floor));
             seatsFrom = Mathf.Max(seatsFrom, cg - cockpit.Seat.Hip.Z + 0.6f);
         }
         float pitch = coach ? 0.86f : 0.78f;
@@ -155,7 +155,7 @@ public static class BusMeshBuilder
                 {
                     var hip = new Vector3(side * (inner - col), under + 0.5f, cg - at);
                     float recline = HeavyCabin.PassengerSeat(m, hip, under, seatColour, coach);
-                    seats.Add(new SeatAnchor(section, CarMeshBuilder.Turned(hip), recline));
+                    seats.Add(new SeatAnchor(section, CarMeshBuilder.Turned(hip), recline, under));
                 }
                 if (!coach && row % 2 == 0)
                     // a pole at the aisle end of every other row

@@ -75,7 +75,7 @@ public sealed record CarCabin(
     HingedPart SteeringWheel, Vector3 ColumnAxis,
     CarNeedle Tach, CarNeedle Speedo, CarGauges Gauges,
     ArrayMesh[] GearDigits, ArrayMesh[] Lamps, HingedPart[] Pedals,
-    CarMirror[] Mirrors, DriverSeat Seat, Vector3 Eye)
+    CarMirror[] Mirrors, DriverSeat Seat, Vector3 Eye, SeatAnchor[] Seats)
 {
     /// <summary>Index into <see cref="GearDigits"/>: reverse, neutral, then 1..6.</summary>
     public static int DigitFor(int gear) => gear < 0 ? 0 : Mathf.Clamp(gear + 1, 1, 7);
@@ -168,13 +168,23 @@ public static partial class CarMeshBuilder
         c.Box(new Vector3(0, FloorY + 0.08f, mid), new Vector3(0.24f, 0.16f, len), Cabin);
 
         // ---- seats: the driver's and the passenger's the same, a bench behind if there is room ----
+        // (each one a seat a player can take, #158: the driver's first)
+        var seats = new List<SeatAnchor>();
         foreach (float side in new[] { 1f, -1f })
+        {
             Bucket(c, seat.Hip with { X = seat.Hip.X * side }, seat.Recline);
+            seats.Add(new SeatAnchor(0, Turned(seat.Hip with { X = seat.Hip.X * side }), seat.Recline, FloorY));
+        }
         if (body.Shape is not (BodyShape.Roadster or BodyShape.Midship))
         {
             float front = seat.Hip.Z - 0.3f, rear = back + 0.1f;
             if (front - rear > 0.3f)
             {
+                // two places on the bench, sat back against it no higher than the front seats (the
+                // roof is no higher there) and a little more reclined
+                foreach (float side in new[] { 1f, -1f })
+                    seats.Add(new SeatAnchor(0, Turned(new Vector3(side * Mathf.Min(0.36f, inner - 0.26f),
+                        Mathf.Min(FloorY + 0.37f, seat.Hip.Y), rear + 0.28f)), seat.Recline + 0.1f, FloorY));
                 float cushionY = FloorY + 0.22f;
                 c.Box(new Vector3(0, cushionY, (front + rear) * 0.5f + 0.04f), new Vector3(inner * 2f - 0.06f, 0.12f, front - rear - 0.08f), Seat);
                 float h = d.Belt + 0.12f - cushionY;
@@ -311,7 +321,7 @@ public static partial class CarMeshBuilder
         return new CarCabin(c.Build(), inst.Build(),
             new HingedPart(wheel.Build(wc), Turned(wc)), Turned(n),
             BuildNeedle(tachAt), BuildNeedle(speedoAt), gauges, digits, lamps, pedals,
-            mirrors.ToArray(), seat, Turned(eye));
+            mirrors.ToArray(), seat, Turned(eye), seats.ToArray());
     }
 
     /// <summary>A bucket seat for a hip at <paramref name="hip"/>: cushion, a back reclined with the driver, headrest.</summary>

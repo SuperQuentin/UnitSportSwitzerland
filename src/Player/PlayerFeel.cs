@@ -774,10 +774,16 @@ public partial class PlayerFeel : Node3D
               + (heavy.Box.ClutchPedal > 0.5f ? "    CLUTCH" : "")
               + $"    {heavy.Train.Mass / 1000f:0.0} t"
             : "";
+        // a passenger (#158): the vehicle's speed, and the wheel when nobody holds it
+        var carrier = _player.Host;
+        bool aboard = carrier != null || _player.RollingDriverless;
         // the dashboard has no tyre or brake gauges: those stay on the HUD
-        _speedLabel.Visible = ride != RideKind.OnFoot && (!dash || wear != "");
+        _speedLabel.Visible = ride != RideKind.OnFoot && (!dash || wear != "") || aboard;
         if (_speedLabel.Visible)
-            _speedLabel.Text = dash ? wear.Trim()
+            _speedLabel.Text = aboard
+                ? $"{(carrier?.WorldVelocity.Length() ?? speed) * 3.6f:0} km/h    "
+                  + (carrier is { SeatIndex: 0 } ? "passenger" : Core.InputHints.Format("nobody at the wheel: {take_wheel} takes it"))
+                : dash ? wear.Trim()
                 : _player.IsFlying
                 ? $"{speed * 3.6f:0} km/h    {_player.Clearance:0} m"
                 + (ride == RideKind.Plane ? $"    {_player.Flight.Control * 100:0}%" : "")

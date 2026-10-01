@@ -235,6 +235,31 @@ public abstract class Rideable
     /// <summary>The driver climbs out on the left (a left-hand-drive cab), not the right.</summary>
     public virtual bool ExitLeft => false;
 
+    // ---- passengers (#158) ----------------------------------------------------------------
+    /// <summary>
+    /// The seats players can take, the driver's first; empty for a ride one person uses. Read
+    /// from the drawn model, once per kind (the server builds it headless too).
+    /// </summary>
+    public virtual Avatar.SeatAnchor[] Seats => System.Array.Empty<Avatar.SeatAnchor>();
+
+    /// <summary>
+    /// Rolls on under its own physics with nobody at the wheel and its passengers aboard (a car, a
+    /// truck). A motorbike does not: its pillion gets off with the rider.
+    /// </summary>
+    public virtual bool Driverless => false;
+
+    /// <summary>Seat <paramref name="i"/>'s hip in this ride's node frame, the train straight: for picking the nearest seat.</summary>
+    public virtual Vector3 SeatPosition(int i) => Seats[i].Hip;
+
+    private static readonly System.Collections.Generic.Dictionary<object, Avatar.SeatAnchor[]> _seats = new();
+
+    /// <summary>The seats of a model, read once per key from a throwaway build, freed at once.</summary>
+    protected static Avatar.SeatAnchor[] SeatsOf(object key, System.Func<Avatar.SeatAnchor[]> read)
+    {
+        if (_seats.TryGetValue(key, out var known)) return known;
+        return _seats[key] = read();
+    }
+
     /// <summary>
     /// Collision boxes besides <see cref="ParkedBox"/> when it stands in the world: a parked train's
     /// trailer, a drawbar trailer's body behind its dolly. Pose and box in the node's space.

@@ -99,8 +99,8 @@ public static class TruckMeshBuilder
             HeavyDriveline.AirLow, HeavyDriveline.AirMax, mirrors);
         var seats = new[]
         {
-            new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip), cockpit.Seat.Recline),
-            new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip with { X = -cockpit.Seat.Hip.X }), cockpit.Seat.Recline),
+            new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip), cockpit.Seat.Recline, floorY),
+            new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip with { X = -cockpit.Seat.Hip.X }), cockpit.Seat.Recline, floorY),
         };
         // head lamps low in the bumper corners, amber indicators beside them
         foreach (float sx in new[] { -1f, 1f })

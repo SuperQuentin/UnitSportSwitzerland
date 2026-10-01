@@ -3,12 +3,22 @@ using static UnitSport.Avatar.HeavyMesh;
 
 namespace UnitSport.Avatar;
 
+/// <summary>How someone sits in a seat: on a chair (a car, a cab, a bus), or astride (a motorbike's pillion).</summary>
+public enum SeatPose { Seated, Straddle }
+
 /// <summary>
-/// A seat someone can sit in (#157, for the passengers of #158): the hip's midpoint over the
-/// cushion and how far the back reclines, in the node space of section <see cref="Section"/>'s rig
-/// (−Z forward, ground origin under that section's centre of mass). Every seat faces forward.
+/// A seat someone can sit in (#157, the passengers of #158): the hip's midpoint over the cushion
+/// (astride: the seat surface under the pelvis), how far the back reclines and the floor the feet
+/// rest on (y), in the node space of section <see cref="Section"/>'s rig (−Z forward; a car's cabin
+/// frame, before its shell offset). Every seat faces forward. A vehicle's first seat is the driver's.
 /// </summary>
-public sealed record SeatAnchor(int Section, Vector3 Hip, float Recline);
+public sealed record SeatAnchor(int Section, Vector3 Hip, float Recline, float Floor)
+{
+    public SeatPose Pose { get; init; }
+    /// <summary>Astride: what the hands hold and where the feet rest, node space.</summary>
+    public Vector3 Grip { get; init; }
+    public Vector3 Peg { get; init; }
+}
 
 /// <summary>
 /// What a truck's cab or a bus's driver's place is to its cockpit, authored like the body (+Z

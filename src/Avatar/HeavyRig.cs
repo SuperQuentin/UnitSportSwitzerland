@@ -69,6 +69,8 @@ public partial class HeavyRig : Node3D
     public bool MirrorsOn { get; set; }
     /// <summary>The seats in this section, node space, the driver's first where there is one.</summary>
     public SeatAnchor[] Seats { get; private set; } = System.Array.Empty<SeatAnchor>();
+    /// <summary>Somebody at the wheel: off while it rolls on driverless with its passengers (#158).</summary>
+    public bool DriverShown { get; set; } = true;
     /// <summary>The cockpit this section was built with (the first of a truck or bus), or null.</summary>
     public HeavyCockpit? Cockpit => _cockpit;
 
@@ -226,6 +228,9 @@ public partial class HeavyRig : Node3D
     public Transform3D EyeFrame => _cockpit == null ? Transform3D.Identity
         : _body.Transform * new Transform3D(Basis.Identity, _cockpit.Eye);
 
+    /// <summary>A seat's hip in the rig's own frame, on the kneeling, rolling body: where someone sitting in it goes.</summary>
+    public Transform3D SeatFrame(SeatAnchor seat) => _body.Transform * new Transform3D(Basis.Identity, seat.Hip);
+
     private void ApplyLamps()
     {
         _tail.AlbedoColor = BrakeLights ? Colors.White : new Color(0.42f, 0.42f, 0.42f);
@@ -275,8 +280,8 @@ public partial class HeavyRig : Node3D
         _mirrors?.Update(View != CockpitView.Outside, MirrorsOn);
 
         if (_driverBody == null || _driverHead == null || _driverPalette is not { } palette) return;
-        _driverBody.Visible = View != CockpitView.Bare;
-        _driverHead.Visible = View == CockpitView.Outside;
+        _driverBody.Visible = DriverShown && View != CockpitView.Bare;
+        _driverHead.Visible = DriverShown && View == CockpitView.Outside;
         if (!_driverBody.Visible) return;
         var pose = (Mathf.RoundToInt(WheelTurn / 0.03f), Mathf.RoundToInt(Throttle * 8f), Mathf.RoundToInt(Brake * 8f));
         if (pose == _driverPose) return;
