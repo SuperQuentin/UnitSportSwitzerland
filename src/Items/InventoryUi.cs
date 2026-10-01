@@ -80,7 +80,7 @@ public partial class InventoryUi : CanvasLayer
     private Label _bagName = null!, _bagInfo = null!;
     private TextureRect _infoIcon = null!;
     private Label _infoName = null!, _infoKind = null!, _infoBlurb = null!, _infoValue = null!;
-    private Button _useButton = null!, _handButton = null!, _dropButton = null!, _claimButton = null!;
+    private Button _useButton = null!, _handButton = null!, _dropButton = null!;
     private Label _cashLine = null!, _accountLine = null!;
     private int _inspect;
     private CarriedView _carried = null!;
@@ -408,10 +408,9 @@ public partial class InventoryUi : CanvasLayer
         money.AddChild(_cashLine);
         money.AddChild(_accountLine);
         money.AddChild(UiKit.Spacer(4));
-        _claimButton = UiKit.Button("", primary: true);
-        _claimButton.Pressed += () => Bank.Instance?.ClaimAll();
-        money.AddChild(_claimButton);
-        money.AddChild(UiKit.Text("Cash you carry is lost if you are knocked out.", UiTheme.FontTiny, UiTheme.TextFaint, wrap: true));
+        // cash is deposited and drawn only at a bank's counter (#213, BankCounterUi)
+        money.AddChild(UiKit.Text("Cash you carry is lost if you are knocked out. Deposit it at a bank counter to keep it safe.",
+            UiTheme.FontTiny, UiTheme.TextFaint, wrap: true));
         right.AddChild(UiKit.Card(money, 0.55f, 14));
 
         // the Polaroids: every photo in the pack and every one taken here (PhotoUi)
@@ -511,12 +510,9 @@ public partial class InventoryUi : CanvasLayer
     private void RefreshMoney()
     {
         long balance = Bank.Instance?.Balance ?? 0;
-        bool pending = Bank.Instance?.Pending == true;
         _cashLine.Text = $"Cash on you:  {Chf(Inv.Cash)}";
         _accountLine.Text = $"Account:  {Chf(balance)}";
-        _claimButton.Text = pending ? "Claiming…" : Inv.Cash > 0 ? $"Claim {Chf(Inv.Cash)}" : "No cash to claim";
-        _claimButton.Disabled = pending || Inv.Cash <= 0 || Bank.Instance == null;
-        _cashHud.Text = Inv.Cash > 0 ? $"{Chf(Inv.Cash)}\n{InputHints.Tag(PlayerInput.Inventory)} claim" : "";
+        _cashHud.Text = Inv.Cash > 0 ? $"{Chf(Inv.Cash)}\nnot banked" : "";
     }
 
     private void RefreshDropHint()
@@ -542,7 +538,7 @@ public partial class InventoryUi : CanvasLayer
 
     private void OnBalanceChanged(long deposited)
     {
-        if (deposited > 0) Toast($"+{Chf(deposited)} claimed — account {Chf(Bank.Instance?.Balance ?? 0)}");
+        if (deposited > 0) Toast($"+{Chf(deposited)} deposited — account {Chf(Bank.Instance?.Balance ?? 0)}");
         RefreshMoney();
     }
 

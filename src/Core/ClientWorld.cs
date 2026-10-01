@@ -337,6 +337,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Occasions.OccasionManager.Create(this);
         // their props, dressed onto each tile as its buildings load
         AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
+        // a sign over every bank door (#213)
+        AddChild(new Interiors.BankSigns(_chunks));
         // …the creatures in the air around the camera, and their sounds
         AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
         AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
@@ -442,7 +444,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
-            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null
+            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
@@ -460,6 +462,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
+        if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
         if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));

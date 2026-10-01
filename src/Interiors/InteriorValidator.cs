@@ -18,12 +18,12 @@ public static class InteriorValidator
         if (l.Floors.Count == 0) { errors.Add("no floors"); return errors; }
         if (l.Entrances.Count == 0)
         {
-            if (!l.Floors[0].Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && o.Side == Side.Front)))
+            if (!l.GroundFloor.Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && o.Side == Side.Front)))
                 errors.Add("no entry door on the front wall");
         }
         else
             foreach (var e in l.Entrances)
-                if (!l.Floors[0].Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(r, o, e.X, e.Z))))
+                if (!l.GroundFloor.Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(r, o, e.X, e.Z))))
                     errors.Add($"entrance for {e.Door} has no doorway at {e.X:F1},{e.Z:F1}");
 
         for (int f = 0; f < l.Floors.Count; f++)
@@ -170,6 +170,11 @@ public static class InteriorValidator
                     RoomType.Kitchen => "#c9e2b8",
                     RoomType.Bedroom => "#b8cde2",
                     RoomType.Bathroom or RoomType.WC => "#a8e0e0",
+                    RoomType.Shelter or RoomType.Vault => "#9aa29a",
+                    RoomType.BankHall => "#efe2a8",
+                    RoomType.Carnotzet or RoomType.Cellar or RoomType.Pantry => "#d8b89a",
+                    RoomType.HomeCinema or RoomType.MusicRoom => "#b9a8d8",
+                    RoomType.GuestRoom or RoomType.Playroom or RoomType.Study => "#c8d8f0",
                     _ => "#ddd",
                 };
                 sb.Append($"<rect x=\"{N(X(r.X0))}\" y=\"{N(Y(r.Z1))}\" width=\"{N(r.Width * S)}\" height=\"{N(r.Depth * S)}\" fill=\"{fill}\" stroke=\"#333\" stroke-width=\"2\"/>");
@@ -199,8 +204,10 @@ public static class InteriorValidator
                 bool odd = p.Turns % 2 == 1;
                 float w = odd ? p.D : p.W, d = odd ? p.W : p.D;
                 sb.Append($"<rect x=\"{N(X(p.X - w / 2))}\" y=\"{N(Y(p.Z + d / 2))}\" width=\"{N(w * S)}\" height=\"{N(d * S)}\" fill=\"#8a6\" fill-opacity=\"0.6\" stroke=\"#453\"/>");
+                sb.Append($"<text x=\"{N(X(p.X))}\" y=\"{N(Y(p.Z) + 3)}\" text-anchor=\"middle\" font-size=\"7\" fill=\"#222\">{p.Type}</text>");
             }
-            sb.Append($"<text x=\"{N(ox - fw / 2)}\" y=\"{N(oy + fd / 2 + 14)}\">floor {f}</text>");
+            string level = f < l.Below ? "cellar" : f == l.Below ? "ground floor" : $"floor {f - l.Below}";
+            sb.Append($"<text x=\"{N(ox - fw / 2)}\" y=\"{N(oy + fd / 2 + 14)}\">{level} (street at the bottom)</text>");
         }
         sb.Append("</svg>");
         return sb.ToString();

@@ -159,7 +159,7 @@ public static class ItemDefs
         Eat(ItemId.Cheese, "Gruyère", 5, "#f0d060", "GR", 35, ItemCategory.Food, 8),
         Eat(ItemId.Chocolate, "Chocolate", 10, "#5a3220", "CH", 15, ItemCategory.Food, 3),
         Eat(ItemId.MineralWater, "Mineral water", 5, "#6ec8e8", "MW", 25, ItemCategory.Water, 3),
-        new(ItemId.Francs, "Swiss francs", "Money. Never takes a slot: it is counted as cash, and claimed to your account from the inventory.",
+        new(ItemId.Francs, "Swiss francs", "Money. Never takes a slot: it is counted as cash, and deposited to your account at a bank counter.",
             ItemUse.Material, 9999, new Color(0.80f, 0.70f, 0.35f), "CHF", 0, ItemCategory.Money, 1f),
         Eat(ItemId.Bandage, "Bandage", 10, "#f2eee6", "BD", 25, ItemCategory.Medical, 5),
         Eat(ItemId.FirstAidKit, "First-aid kit", 3, "#d02828", "+", 100, ItemCategory.Medical, 30),
