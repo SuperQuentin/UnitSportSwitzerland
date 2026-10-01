@@ -7,8 +7,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <!-- keep the offline tools and data folders out of the game assembly's wildcard compile -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);tools/**;terrain_chunks/**;ressources/**</DefaultItemExcludes>
+    <!-- keep the offline tools, the tests and the data folders out of the game assembly's wildcard compile -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tools/**;tests/**;terrain_chunks/**;ressources/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
