@@ -54,10 +54,25 @@ public partial class DayNight : Node
     public DayNight(Godot.Environment? environment)
     {
         Name = "DayNight";
-        _environment = environment;
-        _indoor = environment?.Duplicate() as Godot.Environment;
+        SetEnvironment(environment);
         Hour = GameSettings.Current.StartHour;
     }
+
+    /// <summary>
+    /// The visual style's environment (<see cref="Styles.StyleKit.NewEnvironment"/>), driven from
+    /// here every frame; a restyle hands over a new one. The indoor copy follows it.
+    /// </summary>
+    public void SetEnvironment(Godot.Environment? environment)
+    {
+        _environment = environment;
+        _indoor = environment?.Duplicate() as Godot.Environment;
+    }
+
+    /// <summary>
+    /// The visual style's sun (<see cref="Styles.StyleKit.NewSun"/>), pointed and coloured here
+    /// every frame like the shaders' <c>world_sun_dir</c>; null when the style has none (PS1).
+    /// </summary>
+    public DirectionalLight3D? Sun { get; set; }
 
     /// <summary>
     /// The environment a camera at this point sees by. Rooms are lit (<c>ps1_interior</c> never
@@ -148,6 +163,16 @@ public partial class DayNight : Node
         RenderingServer.GlobalShaderParameterSet("world_sky", new Vector3(skyLinear.R, skyLinear.G, skyLinear.B));
         RenderingServer.GlobalShaderParameterSet("world_night", Night);
         ApplyOccasionGlobals(atmo, tintLinear, delta);
+
+        if (Sun != null)
+        {
+            // it shines along -shade, as the shaders light: from the sun by day, from the moon
+            // at night; the light's own -Z is the direction it shines
+            var down = -shade.Normalized();
+            Sun.Basis = Basis.LookingAt(down, Mathf.Abs(down.Y) > 0.999f ? Vector3.Forward : Vector3.Up);
+            Sun.LightColor = tint;
+            Sun.LightEnergy = Mathf.Lerp(1.0f, 0.2f, Night);
+        }
 
         if (_environment != null)
         {

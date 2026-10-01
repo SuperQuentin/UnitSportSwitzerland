@@ -5,7 +5,7 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Interiors;
 
 /// <summary>What a group of buildings is, beyond the per-solid <see cref="BuildingKind"/>.</summary>
-public enum BuildingType : byte { None = 0, Church = 1 }
+public enum BuildingType : byte { None = 0, Church = 1, Bank = 2 }
 
 /// <summary>The role one solid plays in its group.</summary>
 public enum BuildingPart : byte { None = 0, Nave = 1, Tower = 2 }

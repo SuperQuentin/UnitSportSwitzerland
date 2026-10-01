@@ -18,10 +18,25 @@ public sealed class LaneEdge
 
     /// <summary>
     /// Which way traffic may use it: +1 only in drawing order, −1 only against it, 0 both.
-    /// Set for one carriageway of a divided road from where its partner lies (see
-    /// <see cref="LaneGraph.OrientDivided"/>); everything else is two-way.
+    /// Read from the tile (v3 <see cref="RoadAttributes.OneWay"/>); a divided carriageway the
+    /// tile gives no direction (v1/v2) gets one from where its partner lies (see
+    /// <see cref="LaneGraph.OrientDivided"/>).
     /// </summary>
     public int OneWay { get; set; }
+
+    /// <summary>
+    /// Metres right of the centreline, in the direction of travel, of the rightmost lane when the
+    /// edge is one-way (<see cref="RoadCrossSection.RightLaneOffset"/>, #117); 0 for a v1/v2 tile's
+    /// narrow carriageway.
+    /// </summary>
+    public float RightLane { get; init; }
+
+    /// <summary>
+    /// Traffic leaving this edge at its first (<see cref="RoadAttrFlags.YieldAtStart"/>) or last
+    /// point (<see cref="RoadAttrFlags.YieldAtEnd"/>) gives way there: the side road of a junction
+    /// with a main road (#121, v3 tiles; none in v1/v2).
+    /// </summary>
+    public RoadAttrFlags Yield { get; init; }
 
     public float Length => Cumulative[^1];
 
@@ -78,6 +93,9 @@ public sealed class LaneGraph
 
     private const float Snap = 0.5f;
 
+    /// <summary>RoadMeshBuilder's raised rail height (0.18) less the paint lift (0.02): RoadGen's RailRoadOverlap.RailTop.</summary>
+    private const float EmbeddedRailSink = 0.16f;
+
     private LaneGraph(OriginFrame frame) => Frame = frame;
 
     /// <summary>The snap cell of an LV95 point, laid out like world X/Z (east, then south).</summary>
@@ -97,12 +115,15 @@ public sealed class LaneGraph
                 if (seg.PointCount < 2 || !keep(seg)) continue;
                 var pts = new Vector3[seg.PointCount];
                 var cum = new float[seg.PointCount];
+                // a rail embedded in a road (#124) lies at the road's height and its rail head is
+                // the groove paint, not the raised rail a train's lift is measured from
+                float sink = seg.Attributes.Has(RoadAttrFlags.Embedded) ? EmbeddedRailSink : 0f;
                 long keyStart = 0, keyEnd = 0;
                 for (int i = 0; i < pts.Length; i++)
                 {
                     double e = tile.Id.MinE + seg.Points[i * 3];
                     double n = tile.Id.MaxN - seg.Points[i * 3 + 2];
-                    pts[i] = origin.ToWorld(e, n, seg.Points[i * 3 + 1]);
+                    pts[i] = origin.ToWorld(e, n, seg.Points[i * 3 + 1] - sink);
                     if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
                     if (i == 0) keyStart = Key(e, n);
                     if (i == pts.Length - 1) keyEnd = Key(e, n);
@@ -113,6 +134,10 @@ public sealed class LaneGraph
                 {
                     Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags,
                     Width = seg.Width, KeyStart = keyStart, KeyEnd = keyEnd,
+                    OneWay = seg.Attributes.OneWay,
+                    Yield = seg.Attributes.Flags & (RoadAttrFlags.YieldAtStart | RoadAttrFlags.YieldAtEnd),
+                    RightLane = RoadCrossSection.RightLaneOffset(seg.Class, seg.Width,
+                        Math.Max(seg.Attributes.LanesForward, seg.Attributes.LanesBackward)),
                 };
                 g.Edges.Add(edge);
                 g.Link(edge.KeyStart, edge, true);
@@ -238,6 +263,7 @@ public sealed class LaneGraph
 
         foreach (var e in divided)
         {
+            if (e.OneWay != 0) continue;   // stored in the tile (v3): the build already decided
             var (mid, t) = e.Sample(e.Length * 0.5f);
             var right = new Vector3(-t.Z, 0, t.X).Normalized();
             float votes = 0;

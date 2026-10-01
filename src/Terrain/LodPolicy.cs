@@ -67,9 +67,10 @@ public sealed class LodPolicy
     /// A policy from the player's settings: the preset fixes the inner rings and how far roads
     /// and buildings reach, and the render distance sets where the last, stride-50 ring ends.
     /// The stride-50 ring always starts one past the preset's last fine ring, so a radius below
-    /// that just truncates the table.
+    /// that just truncates the table. <paramref name="finestStride"/> is the visual style's
+    /// (<see cref="Styles.StyleKit.FinestStride"/>): no ring is drawn finer than it.
     /// </summary>
-    public static LodPolicy Create(DetailPreset detail, int maxRings)
+    public static LodPolicy Create(DetailPreset detail, int maxRings, int finestStride = 1)
     {
         (Ring[] inner, int roads, int buildings) = detail switch
         {
@@ -80,7 +81,7 @@ public sealed class LodPolicy
 
         var rings = new List<Ring>();
         foreach (var r in inner)
-            if (r.MaxDist < maxRings) rings.Add(r);
+            if (r.MaxDist < maxRings) rings.Add(r with { Stride = Math.Max(r.Stride, finestStride) });
         rings.Add(new Ring(maxRings, FarStride));
 
         return new LodPolicy
@@ -91,5 +92,6 @@ public sealed class LodPolicy
         };
     }
 
-    public static LodPolicy FromSettings(GameSettings s) => Create(s.Detail, s.RenderDistanceRings);
+    public static LodPolicy FromSettings(GameSettings s) =>
+        Create(s.Detail, s.RenderDistanceRings, Styles.StyleKit.FinestStride);
 }

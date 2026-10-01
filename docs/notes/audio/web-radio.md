@@ -4,6 +4,9 @@
   (keyboard only, no pad button is free in a car). 14 live MP3 streams in `Audio/Live/Stations`
   (SRF 1/3/Virus, La 1ère, Couleur 3, Rete Uno, RTR, Radio Swiss Pop/Jazz/Classic, Energy Bern,
   One FM, FIP, Radio Paradise; URLs checked Oct 2026). Ids are replicated: append only.
+- **A CD instead (#211).** The radio panel opens in a car too (R): live stations and CDs in one
+  list. A CD is `FootPlayer.CarCd` beside `CarRadio`, one or the other; it plays from the car on
+  the boombox's speaker, clock-driven, no relay (`docs/notes/items/radio.md`).
 - **Who owns the station.** The driver's replicated `FootPlayer.CarRadio` (OnChange, owner
   authority, like `HeldRadio`); `PlayingCarRadio` is 0 unless the body drives a car/truck/bus and is
   not a passenger. `ApplyRide` clears it (any change of ride); `CaptureVehicle` puts it in

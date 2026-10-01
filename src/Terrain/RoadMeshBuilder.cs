@@ -35,6 +35,8 @@ public static class RoadMeshBuilder
             AppendJunction(junction, vertices, colors, uvs, uv2s, indices);
 
         var joins = FindTypeJoins(tile);
+        // the network stage's tiles carry their markings as paint (RoadPaintBuilder), not stripes
+        bool painted = (tile.Flags & RoadTileFlags.Network) != 0;
 
         for (int i = 0; i < tile.Segments.Count; i++)
         {
@@ -54,7 +56,9 @@ public static class RoadMeshBuilder
                 continue;
             }
 
-            AppendSegment(seg, joins[i], vertices, colors, uvs, uv2s, indices);
+            // a rail embedded in a carriageway (#124) is the road's RailGroove paint: no ballast, no raised rails
+            if (seg.Class == RoadClass.Railway && seg.Attributes.Has(RoadAttrFlags.Embedded)) continue;
+            AppendSegment(seg, joins[i], painted, vertices, colors, uvs, uv2s, indices);
             if (seg.Class == RoadClass.Railway)
                 AppendRails(seg, vertices, colors, uvs, uv2s, indices);
             if ((seg.Flags & RoadFlags.Tunnel) != 0)
@@ -62,6 +66,11 @@ public static class RoadMeshBuilder
             if ((seg.Flags & RoadFlags.Bridge) != 0)
                 AppendBridgeStructure(seg, tile.Id, grid, vertices, colors, uvs, uv2s, indices);
         }
+        RoadWallBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // retaining walls (#125)
+        RailingBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);    // guardrails and fences (#126)
+        IslandBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);     // roundabout islands (#122)
+        PavementBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // turn lane widenings (#123)
+        RoadSignBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // junction signs (#121)
 
         return vertices.Count == 0
             ? null
@@ -502,7 +511,7 @@ public static class RoadMeshBuilder
             ends[key] = (segment, atStart, 1);
     }
 
-    private static void AppendSegment(RoadSegment seg, in RoadJoin join, List<Vector3> vertices,
+    private static void AppendSegment(RoadSegment seg, in RoadJoin join, bool painted, List<Vector3> vertices,
         List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices)
     {
         int n = seg.PointCount;
@@ -531,7 +540,7 @@ public static class RoadMeshBuilder
         // Per-vertex offset direction = bisector of adjacent segment directions, so the
         // ribbon stays continuous through corners instead of tearing at each joint.
         int baseIndex = vertices.Count;
-        float style = (float)MarkingStyleFor(seg);
+        float style = (float)MarkingStyleFor(seg, painted);
 
         for (int i = 0; i < n; i++)
         {
@@ -605,11 +614,13 @@ public static class RoadMeshBuilder
         Motorway = 3,      // edge lines plus a dashed lane divider
         RailBallast = 4,   // sleeper stripes
         RailSteel = 5,     // the rails themselves
+        // 6: v3 paint, a separate surface (RoadPaintBuilder.Style)
     }
 
-    private static MarkingStyle MarkingStyleFor(RoadSegment seg)
+    private static MarkingStyle MarkingStyleFor(RoadSegment seg, bool painted)
     {
         if (seg.Class == RoadClass.Railway) return MarkingStyle.RailBallast;
+        if (painted) return MarkingStyle.None;
         // unpaved surfaces and anything narrower than a lane are never marked
         if (seg.Surface != RoadSurface.Paved) return MarkingStyle.None;
         if (seg.Class >= RoadClass.Track) return MarkingStyle.None;
