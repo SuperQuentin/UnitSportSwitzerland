@@ -138,7 +138,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         if (ChatCheck.Requested)
         {
-            GetTree().Quit(ChatCheck.Run());
+            GetTree().Quit(ChatCheck.Run(this));
             return;
         }
         if (StyleKit.ReportRequested)

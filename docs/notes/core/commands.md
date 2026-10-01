@@ -27,7 +27,7 @@
   the manifest's suggested origin moves (offline; a server's origin wins online).
 - `--nocapture`: never grab the mouse (`Core/MouseCapture`). Every probe and tool run implies it,
   so a check running in a window leaves the pointer to whoever is using the machine.
-- `--chatcheck`: chat tab completion and `/spawn` parsing, headless, RESULT PASS/FAIL (`Core/ChatCheck`).
+- `--chatcheck`: chat tab completion, `/spawn` parsing and Up/Down history (a real `ChatUi`), headless, RESULT PASS/FAIL (`Core/ChatCheck`).
 - Floating origin (`floating-origin`): `--origincheck` (headless, RESULT PASS/FAIL), `--originstress <m>`
   (shift past `m` metres, to the metre: add it to any probe), `--originshift <m>` (another threshold,
   still snapped to whole km).
