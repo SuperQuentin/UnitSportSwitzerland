@@ -47,6 +47,7 @@ public partial class PlayerFeel : Node3D
     private float _rumbleTimer;
 
     // --- screen ---
+    private static readonly StringName IntensityParam = "intensity", AspectParam = "aspect";
     private ShaderMaterial _lines = null!;
     private ColorRect _linesRect = null!;
     private CanvasLayer _screen = null!;
@@ -193,7 +194,7 @@ public partial class PlayerFeel : Node3D
         // boosting always shows them: the meter was earned, and spending it should look like it
         float lines = Mathf.Clamp((excite - 0.35f) / 0.65f, 0f, 1f);
         if (_player.Boosting) lines = Mathf.Max(lines, 0.75f);
-        _lines.SetShaderParameter("intensity", GameSettings.Current.SpeedLines ? lines : 0f);
+        _lines.SetShaderParameter(IntensityParam, GameSettings.Current.SpeedLines ? lines : 0f);
 
         if (_player.Boosting && !_wasBoosting)
         {
@@ -202,7 +203,7 @@ public partial class PlayerFeel : Node3D
         }
         _wasBoosting = _player.Boosting;
         var size = GetViewport().GetVisibleRect().Size;
-        _lines.SetShaderParameter("aspect", size.X / Mathf.Max(1f, size.Y));
+        _lines.SetShaderParameter(AspectParam, size.X / Mathf.Max(1f, size.Y));
     }
 
     /// <summary>0 at a mount's everyday pace, 1 where it starts to feel fast, beyond that above.</summary>
@@ -759,46 +760,90 @@ public partial class PlayerFeel : Node3D
         return label;
     }
 
+    private readonly System.Text.StringBuilder _wear = new(), _speedText = new(), _engineText = new();
+    private string _speedShown = "", _engineShown = "";
+
+    /// <summary>Pushes <paramref name="sb"/> to the label only when it differs from what it shows.</summary>
+    private static void SetText(Label label, System.Text.StringBuilder sb, ref string shown)
+    {
+        if (sb.Equals(shown.AsSpan())) return;
+        shown = sb.ToString();
+        label.Text = shown;
+    }
+
+    private static void AppendRetarder(System.Text.StringBuilder sb, Truck t)
+    {
+        int level = t.Box.RetarderLevel;
+        if (level == 1) sb.Append("    EXH");
+        else if (level > 1) sb.Append("    RET ").Append(level - 1);
+    }
+
     private void UpdateHud(float dt, RideKind ride, float speed)
     {
         // mounted only: on foot the pace is the walk, and a number would be clutter; in the
         // cockpit the dashboard shows it, unless the setting wants it here too
         bool dash = _player.InCockpit && !Core.GameSettings.Current.CockpitHud;
-        string wear = _player.Vehicle is Car worn
-            ? (Core.GameSettings.Current.TyreWear ? $"    tyres F {(1f - worn.TyreWearFront) * 100:0}% R {(1f - worn.TyreWearRear) * 100:0}%" : "")
-              + (Core.GameSettings.Current.BrakeWear ? $"    brakes {worn.BrakeTemp:0}°C{(worn.BrakeFactor < 0.95f ? " FADE" : "")}" : "")
-            : _player.Vehicle is Truck heavy
+        // Built into reused builders and turned into a string only when the text changed (#221):
+        // the readouts are rounded, so most frames print the same thing as the last one.
+        var wear = _wear.Clear();
+        if (_player.Vehicle is Car worn)
+        {
+            if (Core.GameSettings.Current.TyreWear)
+                wear.Append($"    tyres F {(1f - worn.TyreWearFront) * 100:0}% R {(1f - worn.TyreWearRear) * 100:0}%");
+            if (Core.GameSettings.Current.BrakeWear)
+                wear.Append($"    brakes {worn.BrakeTemp:0}°C").Append(worn.BrakeFactor < 0.95f ? " FADE" : "");
+        }
+        else if (_player.Vehicle is Truck heavy)
+        {
             // a truck's dash has its air gauge and lamps, but no stage number, hold or weight
-            ? (heavy.Box.RetarderLevel > 0 ? $"    {(heavy.Box.RetarderLevel == 1 ? "EXH" : $"RET {heavy.Box.RetarderLevel - 1}")}" : "")
-              + (!heavy.Box.SpringBrakes && heavy.HillHold ? "    HOLD" : "")
-              + (heavy.Box.ClutchPedal > 0.5f ? "    CLUTCH" : "")
-              + $"    {heavy.Train.Mass / 1000f:0.0} t"
-            : "";
+            AppendRetarder(wear, heavy);
+            if (!heavy.Box.SpringBrakes && heavy.HillHold) wear.Append("    HOLD");
+            if (heavy.Box.ClutchPedal > 0.5f) wear.Append("    CLUTCH");
+            wear.Append($"    {heavy.Train.Mass / 1000f:0.0} t");
+        }
         // a passenger (#158): the vehicle's speed, and the wheel when nobody holds it
         var carrier = _player.Host;
         bool aboard = carrier != null || _player.RollingDriverless;
         // the dashboard has no tyre or brake gauges: those stay on the HUD
-        _speedLabel.Visible = ride != RideKind.OnFoot && (!dash || wear != "") || aboard;
+        _speedLabel.Visible = ride != RideKind.OnFoot && (!dash || wear.Length > 0) || aboard;
         if (_speedLabel.Visible)
-            _speedLabel.Text = aboard
-                ? $"{(carrier?.WorldVelocity.Length() ?? speed) * 3.6f:0} km/h    "
-                  + (carrier is { SeatIndex: 0 } ? "passenger" : Core.InputHints.Format("nobody at the wheel: {take_wheel} takes it"))
-                : dash ? wear.Trim()
-                : _player.IsFlying
-                ? $"{speed * 3.6f:0} km/h    {_player.Clearance:0} m"
-                + (ride == RideKind.Plane ? $"    {_player.Flight.Control * 100:0}%" : "")
-                : _player.Vehicle is Truck t
-                    ? $"{speed * 3.6f:0} km/h    {t.GearLabel}    {t.Rpm:0} rpm"
-                      + (t.Box.RetarderLevel > 0 ? $"    {(t.Box.RetarderLevel == 1 ? "EXH" : $"RET {t.Box.RetarderLevel - 1}")}" : "")
-                      + $"    AIR {t.Box.AirTank:0.0} bar{(t.Box.AirTank < HeavyDriveline.AirLow ? " LOW" : "")}"
-                      + (t.Box.SpringBrakes ? "    PARK" : t.HillHold ? "    HOLD" : "")
-                      + (t.Box.ClutchPedal > 0.5f ? "    CLUTCH" : "")
-                      + $"    {t.Train.Mass / 1000f:0.0} t"
-                : _player.Vehicle is Car c
-                    ? $"{speed * 3.6f:0} km/h    {(c.Gear < 0 ? "R" : c.Gear.ToString())}    {c.Rpm:0} rpm" + wear
-                    : _player.Vehicle is IEngined e
-                        ? $"{speed * 3.6f:0} km/h    {e.Gear}    {e.Rpm:0} rpm"
-                        : $"{speed * 3.6f:0} km/h";
+        {
+            var sb = _speedText.Clear();
+            if (aboard)
+                sb.Append($"{(carrier?.WorldVelocity.Length() ?? speed) * 3.6f:0} km/h    ")
+                  .Append(carrier is { SeatIndex: 0 } ? "passenger" : Core.InputHints.Format("nobody at the wheel: {take_wheel} takes it"));
+            else if (dash)
+            {
+                int lead = 0;
+                while (lead < wear.Length && char.IsWhiteSpace(wear[lead])) lead++;
+                sb.Append(wear, lead, wear.Length - lead);
+            }
+            else if (_player.IsFlying)
+            {
+                sb.Append($"{speed * 3.6f:0} km/h    {_player.Clearance:0} m");
+                if (ride == RideKind.Plane) sb.Append($"    {_player.Flight.Control * 100:0}%");
+            }
+            else if (_player.Vehicle is Truck t)
+            {
+                sb.Append($"{speed * 3.6f:0} km/h    {t.GearLabel}    {t.Rpm:0} rpm");
+                AppendRetarder(sb, t);
+                sb.Append($"    AIR {t.Box.AirTank:0.0} bar").Append(t.Box.AirTank < HeavyDriveline.AirLow ? " LOW" : "");
+                sb.Append(t.Box.SpringBrakes ? "    PARK" : t.HillHold ? "    HOLD" : "");
+                if (t.Box.ClutchPedal > 0.5f) sb.Append("    CLUTCH");
+                sb.Append($"    {t.Train.Mass / 1000f:0.0} t");
+            }
+            else if (_player.Vehicle is Car c)
+            {
+                sb.Append($"{speed * 3.6f:0} km/h    ");
+                if (c.Gear < 0) sb.Append('R'); else sb.Append(c.Gear);
+                sb.Append($"    {c.Rpm:0} rpm").Append(wear);
+            }
+            else if (_player.Vehicle is IEngined e)
+                sb.Append($"{speed * 3.6f:0} km/h    {e.Gear}    {e.Rpm:0} rpm");
+            else
+                sb.Append($"{speed * 3.6f:0} km/h");
+            SetText(_speedLabel, sb, ref _speedShown);
+        }
 
         // the rev counter, amber turning red toward the limit
         _rpmBar.Visible = _player.Vehicle is IEngined && !dash;
@@ -816,8 +861,13 @@ public partial class PlayerFeel : Node3D
         var vehicle = _player.Vehicle;
         _engineLabel.Visible = vehicle is { IsVehicle: true };
         if (_engineLabel.Visible)
-            _engineLabel.Text = (vehicle!.HasEngine ? (_player.EngineOn ? "ENGINE ON  " : "ENGINE OFF  ") + Core.InputHints.Tag(Core.PlayerInput.EngineToggle) + "\n" : "")
-                + $"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%    {Core.InputHints.Tag(Core.PlayerInput.InteractMount)} get out";
+        {
+            var sb = _engineText.Clear();
+            if (vehicle!.HasEngine)
+                sb.Append(_player.EngineOn ? "ENGINE ON  " : "ENGINE OFF  ").Append('[').Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append("]\n");
+            sb.Append($"DAMAGE {100f - _player.VehicleHealth / vehicle.MaxHealth * 100f:0}%    [{Core.InputHints.Label(Core.PlayerInput.InteractMount)}] get out");
+            SetText(_engineLabel, sb, ref _engineShown);
+        }
 
         UpdateHint(dt, ride);
 

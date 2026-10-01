@@ -93,7 +93,6 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     /// </summary>
     public Action<Vector4[], Vector4[], int>? OpenDoors { get; set; }
     public const int MaxOpenDoors = 16;
-    private string _openKey = "";
 
     public DoorPortals(Func<IEnumerable<DoorLink>> links, Func<Vector3, string?> planAt)
     {
@@ -227,15 +226,20 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
 
     public override void _Process(double delta)
     {
-        var links = _links().ToList();
+        var links = _linkList;
+        links.Clear();
+        links.AddRange(_links());
         foreach (var l in links)
             for (int d = 0; d < QuadLayers.Length; d++)
             {
                 bool shown = l.Swing > 0.001f;
-                if (l.OutsideQuads[d] is { } o) { o.Visible = shown; Show(o, null); }
-                if (l.InsideQuads[d] is { } i) { i.Visible = shown; Show(i, null); }
+                if (l.OutsideQuads[d] is { } o) o.Visible = shown;
+                if (l.InsideQuads[d] is { } i) i.Visible = shown;
             }
         _shown.Clear();
+        // the quads given a picture last frame: any not given one again this frame goes dark below
+        (_wasLive, _live) = (_live, _wasLive);
+        _live.Clear();
 
         var cam = GetViewport().GetCamera3D();
         SendOpenDoors(links, cam);
@@ -250,7 +254,9 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         }
         float far = cam == null ? 4000f : _shortened == cam ? _far : cam.Far;
 
-        var direct = cam != null ? Seen(cam, cam.GlobalTransform, links, null, Width) : new List<(DoorLink, bool)>();
+        var direct = _direct;
+        direct.Clear();
+        if (cam != null) Seen(cam, cam.GlobalTransform, links, null, Width, direct);
         var screen = GetViewport().GetVisibleRect().Size;
         for (int i = 0; i < Width; i++)
         {
@@ -261,7 +267,9 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
                 var lens = (fromInside ? link.ToOutside : link.ToInside) * cam.GlobalTransform;
                 Aim(view, link, fromInside, lens, cam, far, screen);
                 // a camera sent in through a door is in that door's building, whatever is nearest
-                var through = Seen(view.Camera, lens, links, link, 1, fromInside ? null : link.Plan);
+                var through = _through;
+                through.Clear();
+                Seen(view.Camera, lens, links, link, 1, through, fromInside ? null : link.Plan);
                 if (through.Count > 0)
                 {
                     var (next, nextInside) = through[0];
@@ -275,7 +283,20 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
                 Idle(view.Nested!);
             }
         }
+        foreach (var q in _wasLive)
+            if (!_live.Contains(q) && IsInstanceValid(q) && q.MaterialOverride is ShaderMaterial m)
+                m.SetShaderParameter(LiveParam, false);
     }
+
+    // Reused every frame (#221): the frame used to allocate its lists through LINQ.
+    private readonly List<DoorLink> _linkList = new(), _openList = new();
+    private readonly List<(DoorLink Link, bool Inside)> _direct = new(), _through = new();
+    private readonly List<(float D, DoorLink Link)> _found = new();
+    private HashSet<MeshInstance3D> _live = new(), _wasLive = new();
+    private readonly HashSet<DoorLink> _openSet = new();
+    private static readonly StringName LiveParam = "live", ViewParam = "view";
+    private static readonly StringName[] ClipEye = Enumerable.Range(0, 4).Select(i => new StringName($"portal_clip_eye_{i}")).ToArray();
+    private static readonly StringName[] ClipPlane = Enumerable.Range(0, 4).Select(i => new StringName($"portal_clip_plane_{i}")).ToArray();
 
     /// <summary>
     /// Near an open doorway (<see cref="NearZone"/>), the screen's camera gets a near plane of
@@ -323,12 +344,20 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     {
         if (OpenDoors == null) return;
         var eye = cam?.GlobalPosition ?? Vector3.Zero;
-        var open = links.Where(l => l.Swing > 0.001f)
-            .OrderBy(l => l.Outside.Origin.DistanceSquaredTo(eye))
-            .Take(MaxOpenDoors).ToList();
-        string key = string.Join(";", open.Select(l => l.Door).Order());
-        if (key == _openKey) return;
-        _openKey = key;
+        var open = _openList;
+        open.Clear();
+        foreach (var l in links) if (l.Swing > 0.001f) open.Add(l);
+        if (open.Count > MaxOpenDoors)
+        {
+            open.Sort((a, b) => a.Outside.Origin.DistanceSquaredTo(eye).CompareTo(b.Outside.Origin.DistanceSquaredTo(eye)));
+            open.RemoveRange(MaxOpenDoors, open.Count - MaxOpenDoors);
+        }
+        // the same doors as last time: nothing to send
+        bool same = open.Count == _openSet.Count;
+        if (same) foreach (var l in open) if (!_openSet.Contains(l)) { same = false; break; }
+        if (same) return;
+        _openSet.Clear();
+        foreach (var l in open) _openSet.Add(l);
         var boxes = new Vector4[MaxOpenDoors];
         var axes = new Vector4[MaxOpenDoors];
         for (int i = 0; i < open.Count; i++)
@@ -370,13 +399,14 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     /// The open doorways a camera at <paramref name="lens"/> sees on its own side, nearest first:
     /// the door, and whether the camera is inside its building.
     /// </summary>
-    private List<(DoorLink Link, bool Inside)> Seen(Camera3D cam, Transform3D lens, List<DoorLink> links, DoorLink? through, int max,
-        string? inPlan = null)
+    private void Seen(Camera3D cam, Transform3D lens, List<DoorLink> links, DoorLink? through, int max,
+        List<(DoorLink Link, bool Inside)> into, string? inPlan = null)
     {
         var eye = lens.Origin;
         bool inside = eye.Y < InteriorManager.InteriorBaseY + 1000f;
         string? plan = inside ? inPlan ?? _planAt(eye) : null;
-        var found = new List<(float D, DoorLink Link)>();
+        var found = _found;
+        found.Clear();
         foreach (var l in links)
         {
             if (l == through || l.Swing <= 0.001f || (inside && l.Plan != plan)) continue;
@@ -389,7 +419,8 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
                     inside ? l.InsideHeight : l.OutsideHeight, d)) continue;
             found.Add((d, l));
         }
-        return found.OrderBy(f => f.D).Take(max).Select(f => (f.Link, inside)).ToList();
+        if (found.Count > 1) found.Sort(static (a, b) => a.D.CompareTo(b.D));
+        for (int i = 0; i < found.Count && i < max; i++) into.Add((found[i].Link, inside));
     }
 
     /// <summary>Points a view through a doorway, and shows its picture in that doorway's quad of the depth above.</summary>
@@ -417,7 +448,11 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         view.Port.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
 
         var quad = (fromInside ? link.InsideQuads : link.OutsideQuads)[view.Depth - 1];
-        if (quad != null) Show(quad, view.Port.GetTexture());
+        if (quad != null && quad.MaterialOverride is ShaderMaterial m)
+        {
+            if (_live.Add(quad) && !_wasLive.Contains(quad)) m.SetShaderParameter(LiveParam, true);
+            m.SetShaderParameter(ViewParam, view.Port.GetTexture());
+        }
         if (view.Depth == 1) _shown.Add(link);
         // whatever is on the camera's side of the doorway it looks through is not in its picture:
         // the facade's closed shell looking out, other interiors in the shared space looking in
@@ -429,13 +464,6 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         view.Link = null;
         view.Port.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
         SetClip(view.Slot, null, null, false);
-    }
-
-    private static void Show(MeshInstance3D quad, Texture2D? picture)
-    {
-        if (quad.MaterialOverride is not ShaderMaterial m) return;
-        m.SetShaderParameter("live", picture != null);
-        if (picture != null) m.SetShaderParameter("view", picture);
     }
 
     /// <summary>
@@ -475,8 +503,9 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         cam.GlobalTransform = lens;
         float hw = width / 2;
         bool seen = false;
-        foreach (var p in new[] { new Vector3(0, height / 2, 0), new Vector3(-hw, 0, 0), new Vector3(hw, 0, 0),
-                     new Vector3(-hw, height, 0), new Vector3(hw, height, 0) })
+        Span<Vector3> corners = stackalloc Vector3[] { new(0, height / 2, 0), new(-hw, 0, 0), new(hw, 0, 0),
+            new(-hw, height, 0), new(hw, height, 0) };
+        foreach (var p in corners)
             if (cam.IsPositionInFrustum(frame * p)) { seen = true; break; }
         cam.GlobalTransform = saved;
         return seen;
@@ -495,7 +524,7 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         {
             if (!_clipping[slot]) return;
             _clipping[slot] = false;
-            RenderingServer.GlobalShaderParameterSet($"portal_clip_eye_{slot}", new Vector3(0, 1e9f, 0));
+            RenderingServer.GlobalShaderParameterSet(ClipEye[slot], new Vector3(0, 1e9f, 0));
             return;
         }
         _clipping[slot] = true;
@@ -511,7 +540,7 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
             n = -link.Inside.Basis.Z;
             w = n.Dot(link.Inside.Origin) - 0.02f;
         }
-        RenderingServer.GlobalShaderParameterSet($"portal_clip_eye_{slot}", cam.GlobalPosition);
-        RenderingServer.GlobalShaderParameterSet($"portal_clip_plane_{slot}", new Vector4(n.X, n.Y, n.Z, w));
+        RenderingServer.GlobalShaderParameterSet(ClipEye[slot], cam.GlobalPosition);
+        RenderingServer.GlobalShaderParameterSet(ClipPlane[slot], new Vector4(n.X, n.Y, n.Z, w));
     }
 }

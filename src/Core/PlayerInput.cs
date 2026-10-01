@@ -142,6 +142,17 @@ public partial class PlayerInput : Node
     /// <summary>Raised when the player switches between keyboard and pad, so on-screen key hints can follow.</summary>
     public static event Action? DeviceChanged;
 
+    // Per-frame reads: a string action converts to a new StringName on every call (#221).
+    private static readonly StringName NLeft = MoveLeft, NRight = MoveRight, NForward = MoveForward, NBack = MoveBack,
+        NLookLeft = LookLeft, NLookRight = LookRight, NLookUp = LookUp, NLookDown = LookDown;
+    private static readonly Dictionary<string, StringName> Names = new();
+
+    private static StringName ActionName(string action)
+    {
+        if (!Names.TryGetValue(action, out var name)) Names[action] = name = action;
+        return name;
+    }
+
     /// <summary>True when the player cannot be steering, because a text field has the keyboard.</summary>
     private static bool Blocked => UiFocus.TextEntryActive;
 
@@ -152,7 +163,7 @@ public partial class PlayerInput : Node
     /// </summary>
     public static Vector2 Move => Blocked
         ? Vector2.Zero
-        : Input.GetVector(MoveLeft, MoveRight, MoveForward, MoveBack);
+        : Input.GetVector(NLeft, NRight, NForward, NBack);
 
     /// <summary>
     /// Right-stick look for this frame, in radians per second: x yaw right, y pitch down.
@@ -165,7 +176,7 @@ public partial class PlayerInput : Node
         get
         {
             if (Blocked) return Vector2.Zero;
-            var v = Input.GetVector(LookLeft, LookRight, LookUp, LookDown);
+            var v = Input.GetVector(NLookLeft, NLookRight, NLookUp, NLookDown);
             float m = v.Length();
             if (m < 1e-4f) return Vector2.Zero;
             var s = GameSettings.Current;
@@ -176,16 +187,16 @@ public partial class PlayerInput : Node
     }
 
     /// <summary>Held, for buttons. For an axis-bound action it means past the deadzone.</summary>
-    public static bool Held(string action) => !Blocked && Input.IsActionPressed(action);
+    public static bool Held(string action) => !Blocked && Input.IsActionPressed(ActionName(action));
 
     /// <summary>0..1 — a trigger's travel, or 1 for a pressed key.</summary>
-    public static float Strength(string action) => Blocked ? 0f : Input.GetActionStrength(action);
+    public static float Strength(string action) => Blocked ? 0f : Input.GetActionStrength(ActionName(action));
 
     /// <summary>
     /// Steering axis −1 left .. +1 right, from the left stick or A/D. Kept separate from
     /// <see cref="Move"/> because a vehicle only wants the one axis, unnormalised.
     /// </summary>
-    public static float Steer => Blocked ? 0f : Input.GetAxis(MoveLeft, MoveRight);
+    public static float Steer => Blocked ? 0f : Input.GetAxis(NLeft, NRight);
 
     /// <summary>
     /// Rumble on every connected pad. Silently nothing on keyboard, or when vibration is off in
@@ -383,6 +394,7 @@ public partial class PlayerInput : Node
         foreach (var group in groups)
             foreach (var e in group)
                 if (!InputMap.ActionHasEvent(action, e)) InputMap.ActionAddEvent(action, e);
+        InputHints.Invalidate();
     }
 
     /// <summary>
