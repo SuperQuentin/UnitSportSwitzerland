@@ -12,7 +12,7 @@
 
 The unpack was written four times (`src/Gpx/RoadNetwork.cs`, `src/World/LaneGraph.cs`,
 `RoadTileImporter`, `TileRewriter`) and the class-to-profile table twice; the copies had already
-drifted (see below). Pure consolidation, no runtime cost change. PR #PRNUM.
+drifted (see below). Pure consolidation, no runtime cost change. PR #240.
 
 ## Same logic, preserved
 

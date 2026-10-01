@@ -17,7 +17,7 @@
 
 Five hand-written copies (Cover, Hole, Tree, ChunkCodec, plus `TerrainBuild.IsValidTerr` /
 `ReadHeaderTile`) of the same layout; one diverging offset corrupts every tile on disk. No runtime
-cost change (same stackalloc, same writes). PR #PRNUM.
+cost change (same stackalloc, same writes). PR #240.
 
 ## Same logic, preserved
 
