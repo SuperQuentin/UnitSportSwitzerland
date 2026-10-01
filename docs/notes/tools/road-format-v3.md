@@ -23,7 +23,10 @@
   SharkTooth, Arrow, BikeSymbol, StopLine, GiveWayLine, RailGroove, Hatch), `variant u8`
   (arrow bits Left/Straight/Right), pad, `rgba u32`, `width f32`, `dash f32`, `gap f32`,
   `vertexCount u16`, `indexCount u16`, xyz f32 vertices, u16 indices. Tile-local, heights on the
-  surface painted.
+  surface painted (a bridge deck's included: + `BridgeLift` 0.15). Colour sRGB. A polyline's
+  dash pattern starts with a dash at its first vertex (the writer phases it by where it starts
+  the line, `road-markings`); `dash` 0 = solid. Written by `PaintEmitter` (#116): white lines
+  only so far; #120/#121/#123/#124 add types through the same layer.
 - **`PPRP`** point props (#121 yield sign, #122 roundabout sign): `count u32`, `recordSize u16`,
   pad, records of 24 B: `type u8, variant u8, flags u16 (Solid), x, y (foot), z, heading
   (rad about +Y, 0 = -Z), height f32`.
