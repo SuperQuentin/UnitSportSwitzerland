@@ -134,6 +134,8 @@ public partial class BrCrates : Node3D
         if (!_crates.TryGetValue(id, out var c) || !MayLoot(peer) || ClockSync.ServerNow < c.LandsAt
             || GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body || !Near(c, body.GlobalPosition, Reach + 2.5f))
         {
+            var at = GetNodeOrNull<Node3D>("../Players/" + peer)?.GlobalPosition;
+            GD.Print($"[br crates] take from {peer} refused: crate {id} {(c == null ? "gone" : c.Label)}, may loot {MayLoot(peer)}, body at {at}");
             RpcId(peer, MethodName.Refused, id);
             return;
         }

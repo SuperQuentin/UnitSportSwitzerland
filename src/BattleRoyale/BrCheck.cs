@@ -28,6 +28,7 @@ public static class BrCheck
     {
         Zone();
         Durations();
+        Flights();
         Regions();
         StateJson();
         Lend();
@@ -65,16 +66,51 @@ public static class BrCheck
         Expect(s.At(s.Duration + 1).Over, "the zone is over once the last shrink ends");
     }
 
+    private static double FlightMinutes(float side)
+    {
+        var f = new BrFlight(1, side, 1f, 0, 0);
+        return f.ClosesAt / 60.0;
+    }
+
+    /// <summary>The cargo plane's line (#207): the doors open and close inside the square, long enough, seeded.</summary>
+    private static void Flights()
+    {
+        int bad = 0;
+        double shortest = double.MaxValue, longest = 0, slowest = 0;
+        for (int seed = 1; seed <= 300; seed++)
+            foreach (float side in new[] { 5000f, 6000f, 7000f })
+            {
+                var f = new BrFlight(seed, side, 1f, 100, 2000);
+                var g = new BrFlight(seed, side, 1f, 100, 2000);
+                var (open, shut) = f.JumpStretch;
+                float h = side * 0.5f + 1f;
+                bool inside = Math.Abs(open.X) <= h && Math.Abs(open.Y) <= h && Math.Abs(shut.X) <= h && Math.Abs(shut.Y) <= h;
+                float stretch = open.DistanceTo(shut);
+                bool outsideBefore = Math.Abs(f.From.X) > h - 2 || Math.Abs(f.From.Y) > h - 2;
+                if (!inside || !outsideBefore || stretch < side * 0.55f || f.From != g.From || f.Dir != g.Dir) bad++;
+                shortest = Math.Min(shortest, stretch / side);
+                longest = Math.Max(longest, stretch / side);
+                slowest = Math.Max(slowest, f.ClosesAt - f.Start);
+            }
+        Expect(bad == 0 && slowest < 150, FormattableString.Invariant($"plane lines: 900 seeded, doors open and close inside the square, a jump stretch of {shortest:F2}-{longest:F2} × the side, at most {slowest:F0} s to the doors closing ({bad} bad)"));
+        var fast = new BrFlight(3, 5000, 0.05f, 0, 0);
+        Expect(fast.Speed == BrFlight.Cruise * 2 && fast.At(fast.OpensAt).DistanceTo(fast.JumpStretch.A) < 1f,
+            FormattableString.Invariant($"a test pace flies 2 × faster; the plane is at the door point when they open"));
+        float alt = BrFlight.AltitudeOver(3, 6000, _ => 2900);
+        Expect(alt == 2900 + BrFlight.Clearance && BrFlight.AltitudeOver(3, 6000, _ => 300) == BrFlight.MinAltitude,
+            FormattableString.Invariant($"altitude: {BrFlight.Clearance:F0} m over the highest ground under the line, never under {BrFlight.MinAltitude:F0} m"));
+    }
+
     private static void Durations()
     {
         foreach (int players in new[] { 4, 8, 16, 32 })
         {
             float side = BrRegion.SideFor(players);
-            // + 1 min countdown and about 1 min to land
-            double minutes = new ZoneSchedule(1, side, 1f).Duration / 60.0 + 2;
+            // + 1 min countdown, the flight to the doors closing (#207), about 1 min to land
+            double minutes = new ZoneSchedule(1, side, 1f).Duration / 60.0 + 2 + FlightMinutes(side);
             Expect(minutes is >= 25 and <= 45, $"{players} players: {side / 1000:F0} km, a round of {minutes:F0} min");
         }
-        double six = new ZoneSchedule(1, 6000, 1f).Duration / 60.0 + 2;
+        double six = new ZoneSchedule(1, 6000, 1f).Duration / 60.0 + 2 + FlightMinutes(6000);
         Expect(six is >= 30 and <= 45, $"6 km normal: {six:F0} min, in the 30-45 min target");
     }
 
@@ -202,6 +238,30 @@ public static class BrCheck
         var roads = Task.Run(() => BrLoot.RoadPoints(source, area)).GetAwaiter().GetResult();
         var crates = BrLoot.RoadsideCrates(roads, area, 5);
         int supply = crates.Count(c => c.Style == CrateStyle.Supply), army = crates.Count(c => c.Style == CrateStyle.Military);
+        // the plane (#207): its altitude from the 100 m lattice clears the real ground under its line
+        var horizonIndex = Task.Run(() => source.LoadHorizonAsync()).GetAwaiter().GetResult();
+        foreach (int seed in new[] { 5, 41, 77 })
+        {
+            var region = BrRegion.Pick(seed, 6000, places, tiles, new List<(double, double)>(), (0, 0));
+            float alt = BrFlight.AltitudeOver(seed, region.Side, p => BrMapImage.Height(horizonIndex, region.E + p.X, region.N + p.Y));
+            var line = new BrFlight(seed, region.Side, 1f, 0, alt);
+            double top = Task.Run(async () =>
+            {
+                var grids = new Dictionary<TileId, Terrain.Format.ChunkGrid?>();
+                double best = double.MinValue;
+                for (float t = 0; t <= line.Gone; t += 50f)
+                {
+                    var at = line.From + line.Dir * t;
+                    double e = region.E + at.X, n = region.N + at.Y;
+                    var id = TileId.FromLv95(e, n);
+                    if (!grids.TryGetValue(id, out var g)) grids[id] = g = await source.LoadCoarseChunkAsync(id) ?? await source.LoadChunkAsync(id);
+                    if (g != null) best = Math.Max(best, g.SampleHeight(e, n));
+                }
+                return best;
+            }).GetAwaiter().GetResult();
+            Expect(alt - top > 300, FormattableString.Invariant($"the plane over {region.Name} flies at {alt:F0} m, {alt - top:F0} m over the highest ground under its line ({top:F0} m)"));
+        }
+
         // the outdoor sites (#198) of two real regions
         foreach (int seed in new[] { 5, 41 })
         {

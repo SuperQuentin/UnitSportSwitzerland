@@ -863,10 +863,10 @@ public partial class PlayerFeel : Node3D
             case RideKind.Wingsuit:
                 urgent = _player.Clearance < 80f;
                 text = $"{jump}  open PARACHUTE" + (urgent ? "  — NOW!" : "")
-                    + $"\n{(pad ? "left stick" : "W / S")} dive · flare     {(pad ? "left stick" : "A / D")} turn";
+                    + $"\n{(pad ? "left stick" : "W / S")} dive · flare     {(pad ? "left stick" : "A / D")} turn · {(pad ? "look" : "mouse")} leans";
                 break;
             case RideKind.Parachute:
-                text = $"{(pad ? "left stick" : "A / D")} steer     {(pad ? "pull back" : "S")} brake — hold it to flare the landing";
+                text = $"{(pad ? "left stick" : "A / D")} steer · {(pad ? "look" : "mouse")} leans     {(pad ? "pull back" : "S")} brake — hold it to flare the landing";
                 break;
             case var _ when _player.Heavy is { } truck && truck.Trailer == null && _player.GroundSpeed < 1.5f
                 && _player.CoupleCandidate(truck) != null:

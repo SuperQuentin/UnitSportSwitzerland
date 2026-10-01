@@ -129,13 +129,12 @@ public partial class BrManager
         StateChanged?.Invoke();
     }
 
-    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Drop(double e, double n)
+    /// <summary>Into the match at GO (<see cref="Board"/>): the lent pack, no revive, no travel menu.</summary>
+    private void EnterMatch(FootPlayer me)
     {
-        if (_server || LocalPlayer() is not { } me || Origin == null) return;
         if (!InMatch)
         {
-            (_returnE, _returnN) = Origin.ToLv95(me.GlobalPosition);
+            (_returnE, _returnN) = Origin!.ToLv95(me.GlobalPosition);
             InMatch = true;
             // the free-roam pack stays on disk and comes back at the end; a match starts with a knife
             if (Inventory() is { } inv)
@@ -147,8 +146,6 @@ public partial class BrManager
             FootPlayer.StayDown = _ => InMatch && _state.Phase == BrPhase.Playing;
             Permissions.SetRidesLocked(true);
         }
-        GD.Print(FormattableString.Invariant($"[br] dropped at {e:F0}/{n:F0}"));
-        Teleport(e, n, _state.AreaName);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -179,6 +176,8 @@ public partial class BrManager
     {
         if (_server || !InMatch) return;
         InMatch = false;
+        LeaveHold(LocalPlayer());
+        ShowHidden();
         FootPlayer.StayDown = null;
         Permissions.SetRidesLocked(false);
         StopSpectating();
@@ -268,6 +267,8 @@ public partial class BrManager
             if (me != null) me.Died += OnLocalDied;
         }
 
+        FlightTick(me);
+
         var zone = ZoneNow;
         if (_wall != null)
         {
@@ -318,7 +319,15 @@ public partial class BrManager
 
     public override void _UnhandledInput(InputEvent e)
     {
-        if (_server || _spectator is not { Current: true } || !e.IsPressed() || e.IsEcho()) return;
+        if (_server || !e.IsPressed() || e.IsEcho()) return;
+        // E in the plane's hold jumps (#207); Space is left alone, it opens the parachute a moment later
+        if (_aboard && e.IsActionPressed(PlayerInput.InteractMount))
+        {
+            JumpOut();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        if (_spectator is not { Current: true }) return;
         if (e.IsActionPressed("ui_left")) _watchIndex--;
         else if (e.IsActionPressed("ui_right")) _watchIndex++;
         else return;

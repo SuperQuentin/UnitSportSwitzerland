@@ -8,7 +8,7 @@ namespace UnitSport.BattleRoyale;
 
 /// <summary>
 /// <c>--brprobe A|B</c> with <c>--connect</c> (driven by <c>tools/brcheck.sh</c>): one whole match over loopback
-/// against a server started with <c>--admin-password brcheck --brpace 0.05</c> (a match in about a minute).
+/// against a server started with <c>--admin-password brcheck --brpace 0.08</c> (a match in under two minutes).
 /// <list type="bullet">
 /// <item>A logs in as admin, opens a lobby and starts the match once B has joined.</item>
 /// <item>Both are dropped in the region with an empty pack, a knife and bandages; the travel menu is locked.</item>
@@ -86,7 +86,7 @@ public partial class BrProbe : Node
         await Seconds(3.0);
 
         // the first supply drop comes down at phase 2: seen before the duel ends the match
-        await Until(() => _sawDrop, 40);
+        await Until(() => _sawDrop, 100);   // the zone clock starts when the plane's doors close (#207)
         Snap("a_drop");
 
         // wait for B next to us, then stab it until it goes down
@@ -146,12 +146,75 @@ public partial class BrProbe : Node
     }
 
     /// <summary>The countdown runs, then this player lands in the region with a fresh match pack.</summary>
+    /// <summary>
+    /// The cargo plane (#207): aboard and hidden; A jumps as soon as the doors open (refused before),
+    /// B waits to be pushed out when they close; each sees the other's body hidden while aboard and
+    /// shown once out. Then down to the ground under the jump, at once: a test pace has no time for a glide.
+    /// </summary>
+    private async Task<bool> Flown()
+    {
+        var me = Me!;
+        var br = Br!;
+        if (br.State.Flight is not { } flight) { Fail("no flight in the match state"); return false; }
+        Expect(br.Aboard && me.Carrier != null, Fmt($"aboard the cargo plane at {flight.Altitude:F0} m, doors open in {flight.OpensAt - ClockSync.ServerNow:F0} s"));
+        await Seconds(1.0);
+        var plane = br.PlaneFrame(flight, ClockSync.ServerNow).At;
+        Expect(me.GlobalPosition.DistanceTo(plane) < 8f + flight.Speed * 0.25f && !me.Visible,
+            Fmt($"held in the hold, hidden ({me.GlobalPosition.DistanceTo(plane):F1} m from the plane)"));
+        Snap($"{_role.ToLowerInvariant()}_plane");
+        string other = _role == "A" ? "B" : "A";
+        var them = GetParent().GetNodeOrNull<FootPlayer>("Players/" + PeerOf(other));
+        if (_role == "A")
+        {
+            Expect(ClockSync.ServerNow >= flight.OpensAt || !br.JumpOut(), "E before the doors open is refused");
+            await Until(() => flight.DoorsOpen(ClockSync.ServerNow), 60);
+            Expect(br.JumpOut() && me.Ride == RideKind.Wingsuit && !br.Aboard, "E with the doors open: out of the ramp in a wingsuit");
+            Expect(me.IsViewing, $"the player's camera right after the jump ({GetViewport().GetCamera3D()?.GetPath()})");
+            await Seconds(0.5);
+            Expect(them != null && !them.Visible && br.State.Find(PeerOf("B"))?.Jumped == false, "B is still aboard: its body is hidden here");
+            // the mouse steers the suit a bit (#207): looking left banks it left
+            float yaw0 = me.GlobalRotation.Y;
+            // (the look-left action: the same free look the mouse moves, and a test window cannot capture the mouse)
+            Input.ActionPress(PlayerInput.LookLeft);
+            await Seconds(1.2);
+            Input.ActionRelease(PlayerInput.LookLeft);
+            await Seconds(0.3);
+            float turned = Mathf.AngleDifference(yaw0, me.GlobalRotation.Y);
+            Expect(turned > 0.12f, Fmt($"looking left turns the wingsuit left ({Mathf.RadToDeg(turned):F0}°)"));
+            Snap("a_wingsuit");
+            Expect(await Until(() => br.State.Find(PeerOf("B"))?.Jumped == true && them is { Visible: true }, 90),
+                "B was pushed out when the doors closed, and shows again here");
+        }
+        else
+        {
+            bool pushed = await Until(() => !br.Aboard, 90);
+            Expect(pushed && ClockSync.ServerNow >= flight.ClosesAt - 0.5 && me.Ride == RideKind.Wingsuit,
+                Fmt($"pushed out in a wingsuit when the doors closed ({ClockSync.ServerNow - flight.ClosesAt:F1} s after)"));
+            Expect(br.State.Find(PeerOf("A"))?.Jumped == true && them is { Visible: true }, "A jumped earlier and shows here");
+            await Seconds(1.0);
+            Snap("b_pushed");
+        }
+        // down under the jump, inside the region
+        var s = br.State;
+        var (e, n) = br.Origin!.ToLv95(me.GlobalPosition);
+        double h = s.Side * 0.45;
+        e = Math.Clamp(e, s.AreaE - h, s.AreaE + h);
+        n = Math.Clamp(n, s.AreaN - h, s.AreaN + h);
+        Expect(me.Ride == RideKind.Wingsuit && !me.Eliminated, $"still gliding, unhurt ({me.Ride}, {me.Health:F0} HP)");
+        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);   // out of the wingsuit first: a teleport onto the ground in one is a SPLAT
+        br.Teleport(e, n, "under the jump");
+        Expect(await Until(() => me.IsOnFloor() && me.Ride == RideKind.OnFoot, 30), $"on the ground, on foot ({me.Ride})");
+        Expect(me.IsViewing, $"seen through the player's own camera again ({GetViewport().GetCamera3D()?.GetPath()})");
+        return true;
+    }
+
     private async Task<bool> Dropped()
     {
         if (!await Until(() => Br!.InMatch, 60)) { Fail("never dropped"); return false; }
         Expect(_items.Inventory.InMatch && _items.Inventory.Contains(ItemId.Knife) && !_items.Inventory.Contains(ItemId.Binoculars),
             "a match pack: a knife, nothing from free roam");
         Expect(Permissions.RidesLocked, "the travel menu is locked");
+        if (!await Flown()) return false;
         await Seconds(4.0);
         var s = Br!.State;
         var (e, n) = Br.Origin!.ToLv95(Me!.GlobalPosition);

@@ -1315,7 +1315,7 @@ public partial class FootPlayer : CharacterBody3D
 
         // someone in another building (or out while we are in) is not here: hidden, and their
         // last replicated position must not stand in a doorway as an invisible wall
-        bool here = Interiors.InteriorManager.Instance?.SameSpaceAsLocal(GetMultiplayerAuthority()) != false;
+        bool here = !Stowed && Interiors.InteriorManager.Instance?.SameSpaceAsLocal(GetMultiplayerAuthority()) != false;
         if (Visible != here)
         {
             Visible = here;
@@ -2330,6 +2330,8 @@ public partial class FootPlayer : CharacterBody3D
 
     public override void _PhysicsProcess(double delta)
     {
+        // held by the Battle Royale cargo plane (#207): it moves the body, nothing else does
+        if (Carried()) return;
         // drop onto the terrain surface once its height data is available
         if (!_placed && !Indoors)
         {
@@ -2803,8 +2805,13 @@ public partial class FootPlayer : CharacterBody3D
         _jumpHeld = jumpDown;
         bool downHeld = PlayerInput.Held(PlayerInput.CrouchSlide);
 
+        // a wingsuit or canopy also leans toward where the free look points (#207)
+        var stick = PlayerInput.Move;
+        if (flyer.LookBank > 0f && !typing && !onFloor)
+            stick.X = Mathf.Clamp(stick.X - Mathf.Clamp(_lookYaw / 0.8f, -1f, 1f) * flyer.LookBank, -1f, 1f);
+
         var input = new FlightInput(
-            Stick: PlayerInput.Move,
+            Stick: stick,
             Up: Mathf.Max(jumpDown ? 1f : 0f, tr),
             Down: Mathf.Max(downHeld ? 1f : 0f, tl),
             LeverUp: Mathf.Max(PlayerInput.Held(PlayerInput.Sprint) ? 1f : 0f, tr),

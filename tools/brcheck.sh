@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One whole Battle Royale match over loopback (src/BattleRoyale/BrProbe, #183), on a generated world at 1/20 of
+# One whole Battle Royale match over loopback (src/BattleRoyale/BrProbe, #183), on a generated world at 1/12 of
 # the normal pace: A opens and starts it, both drop in, B is hurt by the zone, A knifes B, B spectates, A wins,
 # both go back where they started with their own packs. Plus the headless --brcheck self-test.
 #   GODOT=<exe> tools/brcheck.sh   [CHUNKS=<terrain_chunks dir> from a worktree, for --brcheck's real regions]
@@ -7,7 +7,7 @@
 set -u
 AT=2583250,1113250
 AT_B=2583256,1113250   # never on top of A: two bodies spawned in one place throw each other kilometres
-PORT=7799
+PORT=${PORT:-7799}
 GODOT=${GODOT:-godot}
 cd "$(dirname "$0")/.."
 OUT=test_output
@@ -19,7 +19,7 @@ grep -h "\[brcheck\]" "$OUT/br_selfcheck.log"
 # REAL=1 (with CHUNKS): the match on real Swiss terrain, a random region anywhere, instead of a generated world.
 # SITES=1: also the outdoor sites (crack a bunker, shoot a crate open, fire a flare); wants REAL=1 and BRPACE=0.2.
 WORLD=(--generated-world); [ -n "${REAL:-}" ] && WORLD=("${CH[@]}")
-timeout 400 "$GODOT" --headless --path . -- --server "${WORLD[@]}" --port $PORT --admin-password brcheck --brpace ${BRPACE:-0.05} \
+timeout 400 "$GODOT" --headless --path . -- --server "${WORLD[@]}" --port $PORT --admin-password brcheck --brpace ${BRPACE:-0.08} \
     > "$OUT/br_server.log" 2>&1 & SERVER=$!
 trap 'kill $SERVER 2>/dev/null' EXIT
 sleep ${SERVER_WAIT:-12}

@@ -10,15 +10,17 @@
   alive, kills, damage, place and seconds survived.
 - **Phases**: `Idle -> Lobby -> Countdown -> Playing -> Ended -> Idle`, ticked in `ServerTick`.
   - Lobby: the countdown starts once 2 have joined (60 s); `/br start` shortens it to 10 s.
-  - Go: entrants who left are dropped from the list. The rest get `Drop(e, n)` (seeded points in 85 % of the first circle).
+  - Go: waits (30 s at most) for the server's terrain lattice, for the plane's altitude. Entrants who left are
+    dropped from the list. The rest get `Board()`: into the cargo plane (`plane` note). The zone's clock
+    (`Started`) starts when the plane's doors close; `FlightStart` is GO.
   - Playing ends when at most 1 is alive, or when the zone has been over for 120 s.
   - Ended: results shown for 20 s, then `Release` to every entrant.
-- **Client at Drop**:
+- **Client at Board** (`EnterMatch`):
   - Stores where it stood (LV95).
   - `Inventory.BeginMatch()`, then a knife + 3 bandages.
   - Sets `FootPlayer.StayDown` (an eliminated player stays down).
   - `Permissions.SetRidesLocked(true)`: `RideUi.Open` refuses, so you ride only what you find.
-  - Teleports (`Core/Teleporter`).
+  - Is carried in the plane's hold until it jumps (`plane` note).
 - **Client at Release**: undoes all of that. `Inventory.EndMatch()`, `Respawn` if eliminated, then
   teleport back. Cash is never lost to a knockout in a match.
 - **Inventory lending**: `BeginMatch` saves the free-roam pack, puts it aside and empties the
@@ -34,13 +36,13 @@
   Its node is added as a chunk anchor. Left / right (`ui_left` / `ui_right`) switch who is followed.
 - **HUD** (`BrHud`, CanvasLayer 10, drawn), from top to bottom:
   - phase line (timer, alive, kills) and the area name;
-  - out-of-zone red edge + warning;
+  - in the plane: when the doors open / close, the jump keys, how many are aboard;
+  - out-of-zone red edge + warning (only where the zone hurts, never in the plane);
   - arrow and distance to the safe zone (the next circle once shown);
   - kill feed top right (9 s);
   - armour + held gun's rounds bottom left;
   - "Spectating X";
   - results table.
-- **Server flags**: `--brpace f` scales every match's timing (the loopback check runs at 0.05).
+- **Server flags**: `--brpace f` scales every match's timing (the loopback check runs at 0.08, short: 0.064).
   `user://br/history.json` holds the last 5 region centres.
-- Not yet (later parts): the cargo plane drop (part 5), match loot, death boxes and vehicles (part 4),
-  the minimap (part 3), teams, spectating for players who were never in the match.
+- Not yet: teams, spectating for players who were never in the match, a warm-up in the hold during the lobby.

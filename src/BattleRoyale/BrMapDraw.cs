@@ -16,6 +16,7 @@ public static class BrMapDraw
     public static readonly Color Me = new(0.2f, 0.85f, 1f);
     public static readonly Color Drop = new(0.25f, 0.5f, 1f);
     public static readonly Color Rare = new(1f, 0.6f, 0.2f);
+    public static readonly Color Plane = new(0.95f, 0.95f, 0.85f);
 
     /// <summary>The supply drops of the match: zone position, and whether still falling.</summary>
     public static IEnumerable<(Vector2 At, bool Falling)> Airdrops(BrManager br) =>
@@ -37,6 +38,15 @@ public static class BrMapDraw
             c.DrawArc(centre, r + reach * 0.5f, 0, Mathf.Tau, 128, Storm, reach);
             c.DrawArc(centre, r, 0, Mathf.Tau, 128, Edge, 2f);
             if (z.Phase > 0 && !z.Over) Dashed(c, toScreen(z.NextCentre), z.NextRadius * ppm, Next);
+        }
+
+        // the cargo plane (#207) while it is over the region: its line, the stretch the doors are open, the plane
+        if (br.State.Flight is { } flight && Net.ClockSync.ServerNow < flight.ClosesAt)
+        {
+            var (open, shut) = flight.JumpStretch;
+            DashedLine(c, toScreen(flight.From), toScreen(open), Plane with { A = 0.6f });
+            c.DrawLine(toScreen(open), toScreen(shut), Plane, 2.5f);
+            Arrow(c, toScreen(flight.At(Net.ClockSync.ServerNow)), flight.Dir, Plane);
         }
 
         // supply drops (#194): a blue crate, with its canopy while it is still coming down

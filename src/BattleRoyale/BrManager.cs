@@ -171,6 +171,7 @@ public partial class BrManager : Node
             Phase = BrPhase.Lobby, AreaE = area.E, AreaN = area.N, Side = area.Side, AreaName = area.Name, Seed = seed, Pace = pace,
         };
         double minutes = new ZoneSchedule(seed, area.Side, pace).Duration / 60.0;
+        _horizon ??= _source?.LoadHorizonAsync();   // for the plane's altitude at GO
         GD.Print(FormattableString.Invariant($"[br] lobby open: {area.Name} at {area.E:F0}/{area.N:F0}, {area.Side:F0} m, pace {pace}, zone {minutes:F0} min"));
         Broadcast($"Battle Royale lobby open: {area.Name} ({area.Side / 1000:F0} × {area.Side / 1000:F0} km, about {minutes + 2:F0} min). Type /br join to play!");
         Push();
@@ -222,10 +223,19 @@ public partial class BrManager : Node
     {
         switch (_state.Phase)
         {
-            case BrPhase.Countdown when Now >= _state.CountdownEnds:
+            // GO waits (30 s at most) for the terrain lattice the plane's altitude is read from
+            case BrPhase.Countdown when Now >= _state.CountdownEnds
+                                        && (_horizon is null or { IsCompleted: true } || Now > _state.CountdownEnds + 30):
                 Go();
                 break;
             case BrPhase.Playing:
+                // the doors have closed: whoever is still aboard was pushed out by their own client
+                if (!_pushedOut && _state.Flight is { } flight && Now >= flight.ClosesAt + 1)
+                {
+                    _pushedOut = true;
+                    foreach (var e in _state.Entrants.Where(e => !e.Jumped)) e.Jumped = true;
+                    Push();
+                }
                 // the zone has closed and someone is still standing (a draw cannot linger)
                 var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace);
                 Airdrops(zone);
@@ -248,22 +258,52 @@ public partial class BrManager : Node
             return;
         }
         _state.Phase = BrPhase.Playing;
-        _state.Started = Now;
+        // everyone boards the cargo plane (#207); the zone's clock starts when its doors close
+        _state.FlightStart = Now;
+        _state.FlightAlt = PlaneAltitude();
+        var flight = new BrFlight(_state);
+        _state.Started = flight.ClosesAt;
+        _pushedOut = false;
         Combat.PvpRules.Override = Allowed;
         SetMatchLoot(_state);
         SpawnLoot(_state.Area, _state.Seed);
-        // a ground drop until the cargo plane (part 5): spread over the first circle, seeded
         var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace);
-        var rng = new Random(_state.Seed ^ 0x5bd1e995);
-        float r = Math.Min(zone.RadiusOf(0), _state.Side * 0.5f) * 0.85f;
         Push();
-        foreach (var e in _state.Entrants)
-        {
-            float d = r * MathF.Sqrt((float)rng.NextDouble()), a = (float)(rng.NextDouble() * Math.Tau);
-            RpcId(e.Peer, MethodName.Drop, _state.AreaE + d * MathF.Cos(a), _state.AreaN + d * MathF.Sin(a));
-        }
-        Broadcast($"GO! {_state.Entrants.Count} players in {_state.AreaName}. The zone shows in {ZoneSchedule.LootSeconds * zone.Scale / 60:F0} min.");
-        GD.Print($"[br] go: {_state.Entrants.Count} players");
+        foreach (var e in _state.Entrants) RpcId(e.Peer, MethodName.Board);
+        Broadcast($"GO! {_state.Entrants.Count} players aboard the plane to {_state.AreaName}. Jump once the doors open over the region "
+            + $"(in {flight.OpensAt - Now:F0} s); the zone shows {ZoneSchedule.LootSeconds * zone.Scale / 60:F0} min after they close.");
+        GD.Print(FormattableString.Invariant($"[br] go: {_state.Entrants.Count} players, plane at {flight.Altitude:F0} m, doors {flight.OpensAt - Now:F0}-{flight.ClosesAt - Now:F0} s"));
+    }
+
+    private bool _pushedOut;
+    private Task<HorizonIndex?>? _horizon;
+
+    /// <summary>
+    /// The plane's altitude over this match's line, from the terrain's 100 m lattice, asked for when the
+    /// lobby opened; the countdown holds GO until it is in (<c>ServerTick</c>). Never blocked on here
+    /// (its continuations want this very thread): still not in after 30 s, the plane flies at
+    /// <see cref="BrFlight.MinAltitude"/>, with a warning.
+    /// </summary>
+    private float PlaneAltitude()
+    {
+        var horizon = _horizon is { IsCompletedSuccessfully: true } done ? done.Result : null;
+        if (horizon == null) GD.PushWarning("[br] the terrain lattice is not loaded yet: the plane flies at its lowest");
+        double e0 = _state.AreaE, n0 = _state.AreaN;
+        return BrFlight.AltitudeOver(_state.Seed, _state.Side, p => BrMapImage.Height(horizon, e0 + p.X, n0 + p.Y));
+    }
+
+    /// <summary>Server: out of the plane (#207). Recorded so every peer shows the body again; the jump itself is the client's.</summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Jump()
+    {
+        if (!_server || _state.Phase != BrPhase.Playing || _state.Flight is not { } flight) return;
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (_state.Find(peer) is not { Alive: true, Jumped: false } e) return;
+        if (!flight.DoorsOpen(Now) && Now < flight.OpensAt - 2)
+            GD.PushWarning($"[br] {e.Name} jumped {flight.OpensAt - Now:F1} s before the doors opened");
+        e.Jumped = true;
+        GD.Print($"[br] {e.Name} jumped");
+        Push();
     }
 
     /// <summary>PvP in a match: between two living entrants; whoever is not in the match leaves it alone.</summary>
@@ -417,7 +457,7 @@ public partial class BrManager : Node
     private void Eliminate(BrEntrant e, long killer, BrOut cause)
     {
         e.Alive = false;
-        e.Survived = Now - _state.Started;
+        e.Survived = Now - _state.FlightStart;
         e.Place = _state.AliveCount + 1;
         var k = killer != e.Peer ? _state.Find(killer) : null;
         if (k is { Alive: true }) k.Kills++;
@@ -444,7 +484,7 @@ public partial class BrManager : Node
                      ?? _state.Entrants.OrderBy(e => e.Place).FirstOrDefault();
         foreach (var e in _state.Entrants.Where(e => e.Alive))
         {
-            e.Survived = Now - _state.Started;
+            e.Survived = Now - _state.FlightStart;
             e.Place = 1;
             e.Alive = e == winner;
         }

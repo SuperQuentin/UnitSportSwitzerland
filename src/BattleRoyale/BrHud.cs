@@ -78,6 +78,14 @@ public partial class BrHud : CanvasLayer
                     top = $"BATTLE ROYALE · {s.AreaName} · starts in {Clock(s.CountdownEnds - now)}";
                     sub = mine == null ? $"{s.Entrants.Count} players · /br join" : $"{s.Entrants.Count} players";
                     break;
+                case BrPhase.Playing when br.Aboard && s.Flight is { } plane:
+                    // in the cargo plane's hold (#207)
+                    top = now < plane.OpensAt
+                        ? $"IN THE PLANE · doors open over {s.AreaName} in {Clock(plane.OpensAt - now)}"
+                        : $"DOORS OPEN · jump before they close in {Clock(plane.ClosesAt - now)}";
+                    sub = Core.InputHints.Prompt(Core.PlayerInput.InteractMount, "jump (wingsuit)") + "   ·   in the air "
+                        + Core.InputHints.Prompt(Core.PlayerInput.Jump, "opens the parachute") + $"   ·   {s.Entrants.Count(e => !e.Jumped)} aboard";
+                    break;
                 case BrPhase.Playing when br.ZoneNow is { } z:
                     string zone = z.Phase == 0 ? $"Zone appears in {Clock(z.Left)}"
                         : z.Over ? "Final zone"
@@ -100,7 +108,8 @@ public partial class BrHud : CanvasLayer
             if (s.Phase == BrPhase.Playing && br.ZoneNow is { } zn && me != null && br.InMatch && br.MeAlive)
             {
                 var at = br.ZonePoint(me.GlobalPosition);
-                bool outside = zn.Outside(at);
+                // no warning where the zone does no harm yet (the plane starts outside the square)
+                bool outside = zn.Outside(at) && zn.Dps > 0 && !br.Aboard;
                 if (outside)
                 {
                     // a red edge, pulsing
