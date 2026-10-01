@@ -46,6 +46,15 @@ public static class EmbankmentPlanner
     private enum Need : byte { None, Fill, Cut }
 
     /// <summary>
+    /// On a tunnel's approach (within <see cref="RampReach"/> of a tunnel line's end) the ground is
+    /// judged this far past the edge, and a wall stands wherever it lies more than
+    /// <see cref="RampWallDrop"/> above or below the road there: an underpass ramp runs between
+    /// walls (#119). Judged on the ground as it is: the terrain data already holds the trench,
+    /// whose sides otherwise read as bare earth.
+    /// </summary>
+    public const double RampJudgeM = 3.0, RampWallDrop = 1.2, RampReach = 60.0;
+
+    /// <summary>
     /// The walls for one tile's final segments (tile-local, as written). <paramref name="ground"/>
     /// is the bare terrain at an LV95 point, NaN where no tile is loaded.
     /// </summary>
@@ -58,6 +67,14 @@ public static class EmbankmentPlanner
         var props = new List<RoadLinearProp>();
         double Ground(double x, double z) => ground(id.MinE + x, id.MaxN - z);
         var lines = new LineIndex(segments);
+        var tunnelEnds = new List<(double X, double Z)>();
+        foreach (var s in segments)
+            if ((s.Flags & RoadFlags.Tunnel) != 0 && s.PointCount >= 2 && s.Class <= RoadClass.Square)
+            {
+                tunnelEnds.Add((s.Points[0], s.Points[2]));
+                tunnelEnds.Add((s.Points[^3], s.Points[^1]));
+            }
+        bool OnRamp(double x, double z) => tunnelEnds.Any(t => (t.X - x) * (t.X - x) + (t.Z - z) * (t.Z - z) <= RampReach * RampReach);
 
         for (int si = 0; si < segments.Count; si++)
         {
@@ -73,7 +90,10 @@ public static class EmbankmentPlanner
                 double edge = RoadEmbankment.EdgeOffset(seg, right);
                 var needs = new Need[stations.Count];
                 for (int i = 0; i < stations.Count; i++)
-                    needs[i] = Judge(stations[i], right, edge, si, lines, Ground);
+                {
+                    var st = stations[i];
+                    needs[i] = Judge(st, right, edge, si, lines, Ground, OnRamp(st.X, st.Z));
+                }
                 CloseGaps(needs);
                 int before = props.Count;
                 EmitRuns(seg, si, stations, needs, right, lines, Ground, props, stats);
@@ -129,10 +149,10 @@ public static class EmbankmentPlanner
 
     /// <summary>Whether one side of one station needs a wall, and which.</summary>
     private static Need Judge(Station st, bool right, double edge, int self, LineIndex lines,
-        Func<double, double, double> ground)
+        Func<double, double, double> ground, bool ramp)
     {
         var (sx, sz) = st.Side(right);
-        double reach = RoadEmbankment.RoadReachM;
+        double reach = ramp ? RampJudgeM : RoadEmbankment.RoadReachM;
         // the slope runs into another line first: judged against it; only the upper road builds
         for (double d = 0.5; d <= reach; d += 0.5)
         {
@@ -143,6 +163,7 @@ public static class EmbankmentPlanner
         }
         double g = ground(st.X + sx * (edge + reach), st.Z + sz * (edge + reach));
         if (double.IsNaN(g)) return Need.None;
+        if (ramp) return st.Y - g > RampWallDrop ? Need.Fill : g - st.Y > RampWallDrop ? Need.Cut : Need.None;
         if (st.Y - RoadEmbankment.FillSlope * reach - g > RoadEmbankment.MinWallDrop) return Need.Fill;
         if (g - (st.Y + RoadEmbankment.CutSlope * reach) > RoadEmbankment.MinWallDrop) return Need.Cut;
         return Need.None;
@@ -197,6 +218,10 @@ public static class EmbankmentPlanner
             bool blocked = false;
             for (double d = 0; d <= 1.0 && !blocked; d += 1.0 / 3)
                 blocked = lines.Covering(x + sx * inward * d, z + sz * inward * d, self, st.X, st.Z, edge + 1.0) is not null;
+            // nor its face, nor the half metre in front of it (#119): a street's wall over a lower
+            // road beside it put its face on that road's carriageway
+            for (double d = 0; d <= 0.5 && !blocked; d += 0.25)
+                blocked = lines.Covering(x - sx * Math.Sign(inward) * d, z - sz * Math.Sign(inward) * d, self, st.X, st.Z, edge + 1.0) is not null;
             if (blocked)
             {
                 Write(seg, type, right, pts, tlm, props, stats);
@@ -358,7 +383,9 @@ public static class EmbankmentPlanner
                 // the ground-level lines a slope must not bury, and the walls that make one needless
                 if (!wall && !(RoadEmbankment.IsAtGrade(seg) || (RoadFormat.IsWatercourse(seg.Class)
                         && (seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) == 0))) continue;
-                double half = wall ? 0 : seg.Width * 0.5 + 0.3;
+                // a street's sidewalks are part of it: no wall stands on them (#119)
+                double half = wall ? 0 : seg.Width * 0.5 + 0.3
+                    + Math.Max(seg.Attributes.Left.SidewalkDm, seg.Attributes.Right.SidewalkDm) / 10.0;
                 var p = seg.Points;
                 for (int i = 0; i < seg.PointCount - 1; i++)
                 {
