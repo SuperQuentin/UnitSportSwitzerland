@@ -258,11 +258,10 @@ public static partial class TerrainMeshBuilder
     private const float PortalSideMargin = 1.6f;
 
     /// <summary>
-    /// Lines the sides of a carved opening with vertical walls, so the ground mesh is
-    /// closed instead of ending at a raw edge with daylight behind it. At each tunnel
-    /// <paramref name="portals"/> end, an arched portal wall (the same profile the bore
-    /// itself is extruded from, see <see cref="RoadMeshBuilder.BoreProfile"/>) replaces the
-    /// flat wall instead of stacking behind it — see <see cref="AppendPortalWall"/>.
+    /// Closes each tunnel <paramref name="portals"/> end with an arched portal block (the same
+    /// profile the bore itself is extruded from, see <see cref="RoadMeshBuilder.BoreProfile"/>),
+    /// see <see cref="AppendPortalWall"/>. It used to line every edge of the carved opening with
+    /// a flat wall too, when the carve was a trench.
     ///
     /// The walls are derived from the hole mask and the same height grid the surface uses,
     /// which is the whole point: geometry built separately from the road centreline could
@@ -289,60 +288,10 @@ public static partial class TerrainMeshBuilder
         var idx = new List<int>(mesh.Indices);
         var linear = CutWallColor.SrgbToLinear();
 
-        bool Carved(int c, int r) =>
-            (uint)c < m - 1 && (uint)r < m - 1 && IsHole(holes, c, r, stride);
-
-        // an edge within a portal's own carve radius of its mouth is the disc-shaped cap the
-        // offline carve stamped there — the arch wall covers it, so the flat wall must not
-        bool InPortalWindow(Vector3 p)
-        {
-            if (portals == null) return false;
-            foreach (var portal in portals)
-            {
-                float radius = portal.HalfWidth + PortalSideMargin;
-                float dx = p.X - portal.Mouth.X, dz = p.Z - portal.Mouth.Z;
-                if (dx * dx + dz * dz <= radius * radius) return true;
-            }
-            return false;
-        }
-
-        // for every carved quad, wall off each side that faces uncarved ground
-        for (int r = 0; r < m - 1; r++)
-            for (int c = 0; c < m - 1; c++)
-            {
-                if (!Carved(c, r)) continue;
-
-                AddSide(c, r, -1, 0);   // west
-                AddSide(c, r, 1, 0);    // east
-                AddSide(c, r, 0, -1);   // north
-                AddSide(c, r, 0, 1);    // south
-
-                void AddSide(int cc, int rr, int dc, int dr)
-                {
-                    if (Carved(cc + dc, rr + dr)) return;
-
-                    // shared edge between this quad and its uncarved neighbour
-                    int c0 = dc > 0 ? cc + 1 : cc;
-                    int r0 = dr > 0 ? rr + 1 : rr;
-                    int c1 = dc != 0 ? c0 : cc + 1;
-                    int r1 = dr != 0 ? r0 : rr + 1;
-
-                    var a = mesh.Vertices[r0 * m + c0];
-                    var b = mesh.Vertices[r1 * m + c1];
-                    if (InPortalWindow((a + b) * 0.5f)) return;
-
-                    int i0 = verts.Count;
-                    verts.Add(a);
-                    verts.Add(b);
-                    verts.Add(new Vector3(a.X, floor, a.Z));
-                    verts.Add(new Vector3(b.X, floor, b.Z));
-                    for (int k = 0; k < 4; k++) cols.Add(linear);
-                    // cull_disabled, so winding only needs to be consistent
-                    idx.Add(i0); idx.Add(i0 + 1); idx.Add(i0 + 2);
-                    idx.Add(i0 + 1); idx.Add(i0 + 3); idx.Add(i0 + 2);
-                }
-            }
-
+        // No flat walls along the hole's edges any more (#119): the hole is a short punch through
+        // the mouth (TunnelCarver), roofed and flanked by the portal block below; lining its inner
+        // edge stood a wall across the bore just inside the mouth, from the ground over the crown
+        // down to the cut's floor.
         if (portals != null)
             foreach (var portal in portals)
                 AppendPortalWall(portal, grid, floor, verts, cols, idx);
@@ -405,7 +354,33 @@ public static partial class TerrainMeshBuilder
             idx.Add(a); idx.Add(a + 1); idx.Add(a + 2);
             idx.Add(a + 1); idx.Add(a + 3); idx.Add(a + 2);
         }
+
+        // The portal block's top (#119): a concrete slab from the face back over the hole the mouth
+        // punched (TunnelCarver: 0.5 m out to 1.5 m in), so no gap shows down onto the bore. Its
+        // sides go down to the arch's springing, below which the cut walls line the hole.
+        float topY = portal.Mouth.Y + faceTopRel;
+        var slabColor = PortalTopColor.SrgbToLinear();
+        var f0 = portal.Mouth;
+        var f1 = portal.Mouth + forward * PortalDepth;
+        var l0 = f0 - side * outerRadius; var r0 = f0 + side * outerRadius;
+        var l1 = f1 - side * outerRadius; var r1 = f1 + side * outerRadius;
+        void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color col)
+        {
+            int i0 = verts.Count;
+            verts.Add(a); verts.Add(b); verts.Add(c); verts.Add(d);
+            for (int k = 0; k < 4; k++) cols.Add(col);
+            idx.Add(i0); idx.Add(i0 + 1); idx.Add(i0 + 2);
+            idx.Add(i0); idx.Add(i0 + 2); idx.Add(i0 + 3);
+        }
+        var springing = new Vector3(0, portal.Mouth.Y + 0.35f * portal.Height, 0);
+        Quad(l0 with { Y = topY }, r0 with { Y = topY }, r1 with { Y = topY }, l1 with { Y = topY }, slabColor);
+        Quad(l0 with { Y = springing.Y }, l0 with { Y = topY }, l1 with { Y = topY }, l1 with { Y = springing.Y }, linear);
+        Quad(r0 with { Y = springing.Y }, r0 with { Y = topY }, r1 with { Y = topY }, r1 with { Y = springing.Y }, linear);
     }
+
+    /// <summary>How far back over the bore the portal block's slab reaches (covers the punched hole).</summary>
+    private const float PortalDepth = 3.0f;
+    private static readonly Color PortalTopColor = new Color(0.60f, 0.60f, 0.57f);   // as the tunnel-roof cover
 
     private static float SampleMaxHeightNear(ChunkGrid grid, Vector3 local, float radius)
     {

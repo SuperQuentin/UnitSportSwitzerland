@@ -50,5 +50,9 @@
   slopes = the blend at lattice vertices to 5 cm). Multiplayer: `--walloff[,s]` on a connected
   client steps the local player off the nearest wall; `--netsmooth` prints `floor_gap_m`, the remote
   player's height over the collision under it.
+- **#119**: tunnel approach ramps (within 60 m of a tunnel end) get a wall wherever the ground 3 m
+  past the edge is > 1.2 m off the road (the terrain holds the trench, so the slope rule never
+  fired), 1.5 m thick; no wall's solid or face stands on another line or a street's sidewalk.
+  Blend changes for sidewalks, caps and bores: `sidewalks-tunnels-runtime`.
 - **Not done**: steeper cut in rock cover, walls instead of slopes that would bury a building,
   slopes and walls from a road in the neighbouring tile (the blend sees one tile's segments, as before).

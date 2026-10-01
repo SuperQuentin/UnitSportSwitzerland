@@ -23,11 +23,19 @@ public static partial class TerrainMeshBuilder
     /// floor at clearance 0 and to the visual mesh at <see cref="VisualBlendClearance"/> — which
     /// is why the clearance is not baked in.
     /// </summary>
-    public sealed record RoadBlend(int[] Cells, float[] Lo, float[] Hi);
+    public sealed record RoadBlend(int[] Cells, float[] Lo, float[] Hi, float[] Clear);
+
+    /// <summary>
+    /// The visual clearance holds under a road, its sidewalks and corners, and fades out over this
+    /// many metres of its slopes: a road lying at the ground (#119) would otherwise sit in a trench
+    /// as deep as the clearance along both edges.
+    /// </summary>
+    private const double ClearanceFadeM = 1.5;
 
     private static float BlendedHeight(float ground, RoadBlend blend, int k, double clearance)
     {
-        float lo = (float)(blend.Lo[k] - clearance), hi = (float)(blend.Hi[k] - clearance);
+        double c = clearance * blend.Clear[k];
+        float lo = (float)(blend.Lo[k] - c), hi = (float)(blend.Hi[k] - c);
         return ground < lo ? lo : ground > hi ? hi : ground;
     }
 
@@ -48,6 +56,9 @@ public static partial class TerrainMeshBuilder
     /// bends and the line's two ends get a disc as well.
     /// </summary>
     private const double PieceOverlapM = 1.0;
+
+    /// <summary>The ground past a sidewalk's outer edge starts this far under its top (#119).</summary>
+    private const double SlabEdgeDrop = 0.08;
 
     /// <summary>
     /// The ground under and beside every at-grade road, path and rail line: the road's embankment
@@ -92,30 +103,51 @@ public static partial class TerrainMeshBuilder
         float[] hi = floats.Rent(n * n);
         // distance to the centreline of the road whose core holds the cell, or +inf on a slope
         float[] coreDist = floats.Rent(n * n);
+        // on a slope, the distance out from the nearest edge (for the clearance's fade)
+        float[] edgeDist = floats.Rent(n * n);
         byte[] seen = System.Buffers.ArrayPool<byte>.Shared.Rent(n * n);
         Array.Clear(seen, 0, n * n);
         var touched = new List<int>(16384);
-        var scratch = new Scratch(lo, hi, coreDist, seen, touched, n);
+        var scratch = new Scratch(lo, hi, coreDist, edgeDist, seen, touched, n);
 
         try
         {
-            foreach (var seg in roadTile.Segments)
+            var carries = CarriedOn(roadTile);
+            for (int si = 0; si < roadTile.Segments.Count; si++)
             {
+                var seg = roadTile.Segments[si];
                 if (!RoadEmbankment.IsAtGrade(seg) || seg.PointCount < 2) continue;
-                var line = new Line(seg);
+                var line = new Line(seg, carries.Contains((si, true)), carries.Contains((si, false)));
                 for (int i = 0; i < seg.PointCount - 1; i++)
                     line.Piece(scratch, i);
                 for (int i = 0; i < seg.PointCount; i++)
                     if (line.NeedsDisc(i)) line.Disc(scratch, i);
             }
 
+            // junction caps: their ground is the cap, as a carriageway's is the carriageway. The arms
+            // stop at the cap's edge and only their round ends reached in; with roads at the ground
+            // (#119) a cell left on their slopes stood at the cap's own height and showed through it
+            foreach (var cap in roadTile.Junctions)
+                if (cap.Layer == 0) UnderSurface(scratch, cap.Vertices, cap.Indices, core: true);
+            // sidewalk corners (#119): the ground under a patch is its base, so it never pokes through
+            foreach (var area in roadTile.AreaProps)
+                if (area.Type == AreaPropType.Sidewalk)
+                    UnderSurface(scratch, area.Vertices, area.Indices, core: false);
+
             foreach (var wall in roadTile.LinearProps)
                 if (wall.Type is LinearPropType.RetainingWallFill or LinearPropType.RetainingWallCut)
                     FreeBehindWall(scratch, wall);
 
+            // tunnels (#119): the ground over a bore never lies under its crown, so a mouth always has
+            // a roof and a shallow tunnel never shows its tube (the hole is the mouth only). Last,
+            // so no wall frees it again
+            foreach (var (pts, count, half, height) in RoadTunnels.Bores(roadTile))
+                OverBore(scratch, pts, count, half, height);
+
             var cells = new List<int>(touched.Count);
             var los = new List<float>(touched.Count);
             var his = new List<float>(touched.Count);
+            var clears = new List<float>(touched.Count);
             foreach (int idx in touched)
             {
                 float l = lo[idx], h = hi[idx];
@@ -126,35 +158,94 @@ public static partial class TerrainMeshBuilder
                 cells.Add(idx);
                 los.Add(l);
                 his.Add(h);
+                clears.Add(coreDist[idx] < float.PositiveInfinity ? 1f
+                    : (float)Math.Max(0, 1 - edgeDist[idx] / ClearanceFadeM));
             }
-            return new RoadBlend(cells.ToArray(), los.ToArray(), his.ToArray());
+            return new RoadBlend(cells.ToArray(), los.ToArray(), his.ToArray(), clears.ToArray());
         }
         finally
         {
             floats.Return(lo);
             floats.Return(hi);
             floats.Return(coreDist);
+            floats.Return(edgeDist);
             System.Buffers.ArrayPool<byte>.Shared.Return(seen);
         }
     }
 
-    private sealed record Scratch(float[] Lo, float[] Hi, float[] CoreDist, byte[] Seen, List<int> Touched, int N);
+    /// <summary>
+    /// The segment ends where the line simply carries on into exactly one other at-grade segment,
+    /// straight (the network stage cuts a street wherever its sidewalks change, #119, always on a
+    /// straight run). Such an end is no end: no round disc (a whole slope radius of cells, for
+    /// nothing) and no line-end treatment; the next piece covers its own side of the cut.
+    /// </summary>
+    private static HashSet<(int Seg, bool AtStart)> CarriedOn(RoadTile tile)
+    {
+        var ends = new Dictionary<(int, int), List<(int Seg, bool AtStart, double Ox, double Oz)>>();
+        for (int s = 0; s < tile.Segments.Count; s++)
+        {
+            var seg = tile.Segments[s];
+            if (!RoadEmbankment.IsAtGrade(seg) || seg.PointCount < 2) continue;
+            var p = seg.Points;
+            foreach (bool atStart in (ReadOnlySpan<bool>)[true, false])
+            {
+                int i = atStart ? 0 : seg.PointCount - 1, j = atStart ? 1 : seg.PointCount - 2;
+                // outward: from the next point in toward this end
+                double ox = p[i * 3] - p[j * 3], oz = p[i * 3 + 2] - p[j * 3 + 2], ol = Math.Sqrt(ox * ox + oz * oz);
+                if (ol < 1e-6) continue;
+                var key = ((int)Math.Round(p[i * 3] * 100), (int)Math.Round(p[i * 3 + 2] * 100));
+                if (!ends.TryGetValue(key, out var list)) ends[key] = list = new();
+                list.Add((s, atStart, ox / ol, oz / ol));
+            }
+        }
+        var result = new HashSet<(int, bool)>();
+        foreach (var list in ends.Values)
+        {
+            if (list.Count != 2) continue;
+            var (a, b) = (list[0], list[1]);
+            if (a.Ox * b.Ox + a.Oz * b.Oz > -0.9998) continue;   // a bend, not a cut
+            result.Add((a.Seg, a.AtStart));
+            result.Add((b.Seg, b.AtStart));
+        }
+        return result;
+    }
 
-    /// <summary>One segment's centreline, in lattice units (1 m), with its two edge offsets.</summary>
+    private sealed record Scratch(float[] Lo, float[] Hi, float[] CoreDist, float[] EdgeDist, byte[] Seen, List<int> Touched, int N);
+
+    /// <summary>
+    /// One segment's centreline, in lattice units (1 m), with its two edge offsets and, per side,
+    /// the kerb of a sidewalk (#119): the ground under the slab (<c>RoadStreetBuilder</c>, whose
+    /// own collision is what is stood on) stays at the road's height, and that side's slopes start
+    /// at the sidewalk's top past its outer edge, so stepping off it carries on level and the one
+    /// cell from road to slope height lies under the slab. Raising the ground under the slab
+    /// itself let it poke through on the outside of a climbing bend, where the blend's
+    /// perpendicular-foot height and the slab's level cross-section part by centimetres. Only
+    /// alongside the piece, not round its ends: past an open end lies a junction mouth.
+    /// </summary>
     private readonly struct Line
     {
         private readonly float[] _p;
         private readonly int _count;
-        private readonly double _left, _right, _reach, _radius;
+        private readonly double _left, _right, _reach, _radius, _raiseLeft, _raiseRight, _endEdge;
+        // the line really ends there (no straight continuation into another segment)
+        private readonly bool _startOpen, _endOpen;
 
-        public Line(RoadSegment seg)
+        public Line(RoadSegment seg, bool startCarries, bool endCarries)
         {
+            _startOpen = !startCarries;
+            _endOpen = !endCarries;
             _p = seg.Points;
             _count = seg.PointCount;
             _left = RoadEmbankment.EdgeOffset(seg, right: false);
             _right = RoadEmbankment.EdgeOffset(seg, right: true);
             _reach = RoadEmbankment.Reach(seg.Class);
             _radius = Math.Max(_left, _right) + _reach;
+            var a = seg.Attributes;
+            // round the line's ends only the carriageway is level: a sidewalk stops at the end of
+            // its piece, and past it may lie a corner patch (or nothing) at another height
+            _endEdge = Math.Max(Math.Max(seg.Width, a.WidthCm / 100.0) * 0.5, ChunkFormat.SpacingM);
+            _raiseLeft = a.Left.SidewalkDm > 0 ? a.Left.KerbCm / 100.0 : 0;
+            _raiseRight = a.Right.SidewalkDm > 0 ? a.Right.KerbCm / 100.0 : 0;
         }
 
         private double X(int i) => _p[i * 3] / ChunkFormat.SpacingM;
@@ -169,7 +260,8 @@ public static partial class TerrainMeshBuilder
             if (len < 1e-6) return;
             // past each end by what the bend there needs: the outside of a turn of θ opens a gap
             // of θ·radius at the slope's reach, which the two pieces close half each
-            Strip(s, ax, az, Y(i), Y(i + 1), (bx - ax) / len, (bz - az) / len, len, -Overlap(i), len + Overlap(i + 1));
+            Strip(s, ax, az, Y(i), Y(i + 1), (bx - ax) / len, (bz - az) / len, len, -Overlap(i), len + Overlap(i + 1),
+                startEnd: i == 0 && _startOpen, endEnd: i + 1 == _count - 1 && _endOpen);
         }
 
         /// <summary>Every cell within the radius of vertex i, at that vertex's height: a strip of no length.</summary>
@@ -180,24 +272,27 @@ public static partial class TerrainMeshBuilder
             double fx = X(b) - X(a), fz = Z(b) - Z(a), fl = Math.Sqrt(fx * fx + fz * fz);
             if (fl < 1e-6) return;
             double rad = _radius / ChunkFormat.SpacingM;
-            Strip(s, X(i), Z(i), Y(i), Y(i), fx / fl, fz / fl, 0, -rad, rad);
+            Strip(s, X(i), Z(i), Y(i), Y(i), fx / fl, fz / fl, 0, -rad, rad, startEnd: i == 0, endEnd: i == _count - 1);
         }
 
         /// <summary>
         /// Every cell within the radius of the piece from (ax, az) along (ux, uz) for len, whose
         /// position along it lies in [a0, a1]: under the road (nearest centreline wins) or on its
         /// slope (tightest bound wins). One loop with the cell logic inline: it runs a few hundred
-        /// thousand times a tile, and a Debug build does not inline a call.
+        /// thousand times a tile, and a Debug build does not inline a call. <paramref name="startEnd"/>
+        /// / <paramref name="endEnd"/>: the strip's start / end is the line's own end (not a bend
+        /// between two pieces, whose outside wedge only these overhangs cover).
         /// </summary>
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
         private void Strip(Scratch s, double ax, double az, double ay, double by, double ux, double uz,
-            double len, double a0, double a1)
+            double len, double a0, double a1, bool startEnd, bool endEnd)
         {
-            float[] lo = s.Lo, hi = s.Hi, coreDist = s.CoreDist;
+            float[] lo = s.Lo, hi = s.Hi, coreDist = s.CoreDist, edgeDist = s.EdgeDist;
             byte[] seen = s.Seen;
             var touched = s.Touched;
             int n = s.N;
             double left = _left, right = _right, reach = _reach, spacing = ChunkFormat.SpacingM;
+            double raiseLeft = _raiseLeft, raiseRight = _raiseRight, endEdge = _endEdge;
             double fill = RoadEmbankment.FillSlope, cut = RoadEmbankment.CutSlope;
             // right of the drawing direction, X east and Z south
             double rx = -uz, rz = ux;
@@ -231,10 +326,16 @@ public static partial class TerrainMeshBuilder
                     double d2 = perp * perp + over * over;
                     if (d2 > rad2) continue;   // the round ends
                     double dist = (over > 0 ? Math.Sqrt(d2) : Math.Abs(perp)) * spacing;
-                    double fromEdge = dist - (perp >= 0 ? right : left);
+                    bool pastEnd = (along < 0 && startEnd) || (along > len && endEnd);
+                    double fromEdge = dist - (pastEnd ? Math.Min(endEdge, perp >= 0 ? right : left) : perp >= 0 ? right : left);
                     if (fromEdge > reach) continue;
                     double y = len <= 0 || along <= 0 ? ay : along >= len ? by : ay + (by - ay) * (along / len);
                     int idx = row + c;
+                    // a kerbed sidewalk's side, alongside the piece: its slopes start just under the
+                    // sidewalk's top (the lattice cell across its outer edge interpolates toward the
+                    // slope, and on a climbing street would rise through the slab's last metre)
+                    double raise = pastEnd ? 0 : perp >= 0 ? raiseRight : raiseLeft;
+                    if (raise > 0 && fromEdge > 0) y += Math.Max(0, raise - SlabEdgeDrop);
 
                     if (fromEdge <= 0)
                     {
@@ -252,6 +353,7 @@ public static partial class TerrainMeshBuilder
                         seen[idx] = 1;
                         touched.Add(idx);
                         coreDist[idx] = float.PositiveInfinity;
+                        edgeDist[idx] = (float)fromEdge;
                         lo[idx] = l;
                         hi[idx] = h;
                         continue;
@@ -259,6 +361,7 @@ public static partial class TerrainMeshBuilder
                     if (coreDist[idx] < float.PositiveInfinity) continue;   // a slope never reaches under a road
                     if (l > lo[idx]) lo[idx] = l;
                     if (h < hi[idx]) hi[idx] = h;
+                    if (fromEdge < edgeDist[idx]) edgeDist[idx] = (float)fromEdge;
                 }
             }
         }
@@ -267,7 +370,8 @@ public static partial class TerrainMeshBuilder
         /// Whether vertex i needs a round cap: the line's two ends, and bends sharp enough that the
         /// pieces' overlap leaves a wedge on the outside at the slope's full reach.
         /// </summary>
-        public bool NeedsDisc(int i) => i == 0 || i == _count - 1 || Turn(i) * _radius * 0.5 > PieceOverlapM;
+        public bool NeedsDisc(int i) =>
+            i == 0 ? _startOpen : i == _count - 1 ? _endOpen : Turn(i) * _radius * 0.5 > PieceOverlapM;
 
         /// <summary>How far the pieces meeting at vertex i run on past it: 0 at the line's ends.</summary>
         private double Overlap(int i) =>
@@ -280,6 +384,88 @@ public static partial class TerrainMeshBuilder
             double lu = Math.Sqrt(ux * ux + uz * uz), lv = Math.Sqrt(vx * vx + vz * vz);
             if (lu < 1e-6 || lv < 1e-6) return 0;
             return Math.Acos(Math.Clamp((ux * vx + uz * vz) / (lu * lv), -1, 1));
+        }
+    }
+
+    /// <summary>
+    /// Every cell over a bore (its half width and a metre, plan) is lifted to at least the crown plus
+    /// <see cref="RoadTunnels.GroundOverCrown"/>; a road's own surface is left alone (a street
+    /// crossing over is the bore's roof, and the bore is sized under it). No visual clearance there:
+    /// the ground is the roof.
+    /// </summary>
+    private static void OverBore(Scratch s, float[] p, int count, float half, float height)
+    {
+        int n = s.N;
+        double sp = ChunkFormat.SpacingM, reach = half + 1.0;
+        for (int i = 0; i + 1 < count; i++)
+        {
+            double ax = p[i * 3], az = p[i * 3 + 2], bx = p[i * 3 + 3], bz = p[i * 3 + 5];
+            int c0 = Math.Max(0, (int)Math.Floor((Math.Min(ax, bx) - reach) / sp)), c1 = Math.Min(n - 1, (int)Math.Ceiling((Math.Max(ax, bx) + reach) / sp));
+            int r0 = Math.Max(0, (int)Math.Floor((Math.Min(az, bz) - reach) / sp)), r1 = Math.Min(n - 1, (int)Math.Ceiling((Math.Max(az, bz) + reach) / sp));
+            double dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+            for (int r = r0; r <= r1; r++)
+                for (int c = c0; c <= c1; c++)
+                {
+                    double x = c * sp, z = r * sp;
+                    double raw = l2 < 1e-12 ? 0 : ((x - ax) * dx + (z - az) * dz) / l2;
+                    // not round the line's ends: past a mouth lies its approach, at road height
+                    if ((i == 0 && raw < 0) || (i == count - 2 && raw > 1)) continue;
+                    double t = Math.Clamp(raw, 0, 1);
+                    double ex = ax + dx * t - x, ez = az + dz * t - z;
+                    if (ex * ex + ez * ez > reach * reach) continue;
+                    int idx = r * n + c;
+                    if (s.Seen[idx] != 0 && s.CoreDist[idx] < float.PositiveInfinity) continue;   // a road surface
+                    float lift = (float)(p[i * 3 + 1] + (p[i * 3 + 4] - p[i * 3 + 1]) * t + height + RoadTunnels.GroundOverCrown);
+                    if (s.Seen[idx] == 0)
+                    {
+                        s.Seen[idx] = 1;
+                        s.Touched.Add(idx);
+                        s.CoreDist[idx] = float.PositiveInfinity;
+                        s.Lo[idx] = lift;
+                        s.Hi[idx] = float.PositiveInfinity;
+                    }
+                    else
+                    {
+                        if (lift > s.Lo[idx]) s.Lo[idx] = lift;
+                        if (s.Hi[idx] < s.Lo[idx]) s.Hi[idx] = s.Lo[idx];
+                    }
+                    s.EdgeDist[idx] = float.PositiveInfinity;   // no clearance: the ground is the roof
+                }
+        }
+    }
+
+    /// <summary>
+    /// The cells under a triangulated surface take its height there (the plane through each
+    /// triangle's vertices), with the full clearance; a road's own surface keeps its height. A
+    /// <paramref name="core"/> surface (a junction cap) becomes road surface itself: no slope
+    /// reaches under it afterwards and walls never free it.
+    /// </summary>
+    private static void UnderSurface(Scratch s, float[] v, ushort[] indices, bool core)
+    {
+        int n = s.N;
+        double sp = ChunkFormat.SpacingM;
+        for (int k = 0; k + 2 < indices.Length; k += 3)
+        {
+            int i0 = indices[k] * 3, i1 = indices[k + 1] * 3, i2 = indices[k + 2] * 3;
+            double ax = v[i0] / sp, az = v[i0 + 2] / sp, bx = v[i1] / sp, bz = v[i1 + 2] / sp, cx = v[i2] / sp, cz = v[i2 + 2] / sp;
+            double det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+            if (Math.Abs(det) < 1e-9) continue;
+            int c0 = Math.Max(0, (int)Math.Ceiling(Math.Min(ax, Math.Min(bx, cx)))), c1 = Math.Min(n - 1, (int)Math.Floor(Math.Max(ax, Math.Max(bx, cx))));
+            int r0 = Math.Max(0, (int)Math.Ceiling(Math.Min(az, Math.Min(bz, cz)))), r1 = Math.Min(n - 1, (int)Math.Floor(Math.Max(az, Math.Max(bz, cz))));
+            for (int r = r0; r <= r1; r++)
+                for (int c = c0; c <= c1; c++)
+                {
+                    double l0 = ((bz - cz) * (c - cx) + (cx - bx) * (r - cz)) / det;
+                    double l1 = ((cz - az) * (c - cx) + (ax - cx) * (r - cz)) / det;
+                    double l2 = 1 - l0 - l1;
+                    if (l0 < -1e-9 || l1 < -1e-9 || l2 < -1e-9) continue;
+                    int idx = r * n + c;
+                    if (s.Seen[idx] != 0 && s.CoreDist[idx] < float.PositiveInfinity) continue;
+                    if (s.Seen[idx] == 0) { s.Seen[idx] = 1; s.Touched.Add(idx); }
+                    s.CoreDist[idx] = core ? 0f : float.PositiveInfinity;
+                    s.EdgeDist[idx] = 0;   // under the surface: the full clearance
+                    s.Lo[idx] = s.Hi[idx] = (float)(l0 * v[i0 + 1] + l1 * v[i1 + 1] + l2 * v[i2 + 1]);
+                }
         }
     }
 

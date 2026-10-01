@@ -185,7 +185,7 @@ public partial class BirdLife : Node3D
         CoverClass.Glacier or CoverClass.Snowfield => Habitat.Snow,
         CoverClass.Vineyard => Habitat.Vineyard,
         CoverClass.Orchard or CoverClass.Nursery => Habitat.Orchard,
-        CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea
+        CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea or CoverClass.TownPaving or CoverClass.TunnelRoof
             or CoverClass.Institution or CoverClass.Industrial or CoverClass.Landfill or CoverClass.SportsField
             or CoverClass.Pool or CoverClass.Campsite or CoverClass.Leisure or CoverClass.Runway
             or CoverClass.Platform => Habitat.Town,

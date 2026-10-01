@@ -300,6 +300,8 @@ public partial class ChunkManager : Node3D
         public bool HasBuildingCollision;
         public ChunkGrid? Grid;
         public HashSet<int>? Holes;   // tunnel portals; null until the tile is first loaded
+        /// <summary>The tile's tunnel bores (#119), with its collision: a body inside one is not under the ground.</summary>
+        public List<(float[] Points, int Count, float Half, float Height)>? Bores;
         public bool HolesLoaded;
         public byte[]? Cover;
         public bool CoverLoaded;
@@ -337,7 +339,8 @@ public partial class ChunkManager : Node3D
         ArrayMesh? Buildings, Vector3[]? BuildingFaces, bool BuildingsRequested,
         ChunkNode.TreeMeshes? Trees, ArrayMesh? Water,
         Vector3[]? RoadCollisionFaces = null, long[]? StageMs = null,
-        Interiors.DoorSpot[]? Doors = null);
+        Interiors.DoorSpot[]? Doors = null,
+        List<(float[] Points, int Count, float Half, float Height)>? Bores = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -817,6 +820,32 @@ public partial class ChunkManager : Node3D
     }
 
     /// <summary>
+    /// Whether a body at <paramref name="worldPos"/> has collision under it within
+    /// <paramref name="depth"/> metres (excluding <paramref name="self"/>): the road blend cuts
+    /// ramps and streets metres under the raw terrain the safety nets compare against (#119), and a
+    /// body standing on that is not under the world.
+    /// </summary>
+    public bool FloorBelow(Node3D body, Vector3 worldPos, Rid self, float depth = 4f)
+    {
+        var q = PhysicsRayQueryParameters3D.Create(worldPos + Vector3.Up * 0.5f, worldPos - Vector3.Up * depth);
+        q.Exclude = new Godot.Collections.Array<Rid> { self };
+        return body.GetWorld3D().DirectSpaceState.IntersectRay(q).Count > 0;
+    }
+
+    /// <summary>
+    /// Whether a world position lies inside a tunnel bore of a tile whose collision is built (#119):
+    /// there a body is legitimately under the terrain surface, and no safety net may lift it out.
+    /// </summary>
+    public bool InTunnel(Vector3 worldPos)
+    {
+        if (_origin == null) return false;
+        var (e, n) = _origin.ToLv95(worldPos);
+        var id = TileId.FromLv95(e, n);
+        return _chunks.TryGetValue(id, out var state) && state.Bores is { Count: > 0 } bores
+            && RoadTunnels.Inside(bores, e - id.MinE, worldPos.Y, id.MaxN - n);
+    }
+
+    /// <summary>
     /// Whether the tile under a world position has its collision shape committed. A body
     /// placed before that falls through the ground it can see.
     /// </summary>
@@ -975,6 +1004,7 @@ public partial class ChunkManager : Node3D
             }
             if (result.RoadCollisionFaces != null)
                 EnsureNode(result.Id, state).SetRoadCollision(result.RoadCollisionFaces);
+            if (result.Bores != null) state.Bores = result.Bores;
             if (result.RoadsRequested)
             {
                 if (result.Roads != null)
@@ -1443,14 +1473,17 @@ public partial class ChunkManager : Node3D
 
                 float[]? blendedCollision = null;
                 Vector3[]? bridgeCollision = null;
+                List<(float[] Points, int Count, float Half, float Height)>? bores = null;
                 if (wantCollision && roadTile != null)
                 {
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes, blend);
                     // A heightfield cannot hold a deck floating above the terrain it crosses, so
                     // bridges get their own small collision body alongside the blended ground.
-                    // and retaining walls (#125): a heightfield cannot stand a vertical face either
+                    // and retaining walls (#125) and kerbs (#119): a heightfield cannot stand a vertical face either
                     bridgeCollision = [.. RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile),
-                        .. RoadWallBuilder.BuildCollisionFaces(roadTile)];
+                        .. RoadWallBuilder.BuildCollisionFaces(roadTile),
+                        .. RoadStreetBuilder.BuildCollisionFaces(roadTile)];
+                    bores = RoadTunnels.Bores(roadTile);
                 }
                 else if (wantCollision && !publishInterimCollision)
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes); // no road tile after all
@@ -1483,7 +1516,7 @@ public partial class ChunkManager : Node3D
                 _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: false,
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
-                    bridgeCollision, stageMs, doors));
+                    bridgeCollision, stageMs, doors, bores));
             }
             catch (OperationCanceledException)
             {

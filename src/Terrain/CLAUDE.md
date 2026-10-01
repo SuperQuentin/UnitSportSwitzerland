@@ -8,6 +8,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 ## Architecture
 
 - `roads-merged-into-terrain-collision` — Roads are merged into terrain collision, not just draped over it
+- `sidewalks-tunnels-runtime` — #119 runtime: sidewalk slabs + chamfered kerb collision, blend under slabs/caps/bores, road depth bias, tunnel mouths (punch at surface ends only), bore floor/wall collision, safety nets skip bores and cut ramps, checks
 - `road-embankments-walls` — Road embankments (#125): level cross-section, 2:3 fill / 1:1 cut clamp in RoadBlend, retaining walls planned in RoadGen (LPRP), free line inside a 3 m solid, cost
 - `surface-patterns` — Surface patterns: `CoverPalette` writes a `SurfacePattern` code into vertex-colour alpha in quarter steps (0 none,...
 - `water` — Water: built at runtime from the Water cover class, not a separate file — swissALTI3D already models lakes/rivers as...
@@ -27,7 +28,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 
 ## Commands
 
-- `commands` — Commands: --builds, --fly, --horizon, --path, --probe, --rings, --shot, BlendCheck, --generated
+- `commands` — Commands: --builds, --fly, --horizon, --path, --probe, --rings, --shot, BlendCheck, --generated, --roadcheck --sidewalks/--floorat, --roadperf
 
 ## Gotchas
 

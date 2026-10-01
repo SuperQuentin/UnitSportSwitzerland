@@ -79,7 +79,7 @@ public static class Surfaces
             or CoverClass.Military or CoverClass.Campsite => Surface.Gravel,
         CoverClass.Forest or CoverClass.OpenForest or CoverClass.Woodland or CoverClass.Shrub => Surface.Forest,
         CoverClass.Water or CoverClass.Wetland => Surface.Water,
-        CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea
+        CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea or CoverClass.TownPaving or CoverClass.TunnelRoof
             or CoverClass.Industrial or CoverClass.Runway or CoverClass.Platform => Surface.Asphalt,
         _ => Surface.Grass,
     };

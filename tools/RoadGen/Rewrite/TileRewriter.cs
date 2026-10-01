@@ -239,6 +239,9 @@ public static class TileRewriter
         var shiftAudit = new HeightAuditor();
         var netStats = new NetworkStats();
         var embankments = new EmbankmentPlanner.Stats();
+        var streetStats = new StreetPlanner.Stats();
+        var cornerStats = new CornerPlanner.Stats();
+        var heightStats = new RoadHeights.Stats();
 
         foreach (var block in blocks)
         {
@@ -279,6 +282,10 @@ public static class TileRewriter
             }
 
             CrossSectionPlanner.Plan(lines, overlay, netStats.Carriageways);
+            // road heights against the ground (#119), before anything reads them
+            var facades = new Facades(chunkDir);   // building walls, for the streets
+            var field = new UrbanField(facades);
+            RoadHeights.Apply(lines, field, heightStats, count: true);
             foreach (var line in lines) AddSegment(net, line, options.DividedScale);
 
             var rails = new RailRoadOverlap(lines, netStats.Rail);
@@ -335,8 +342,47 @@ public static class TileRewriter
                     plans.Add((source, plan, write));
                 }
 
-                foreach (var (source, plan, write) in plans)
+                // what a sidewalk stops at (#119): every ground-level line of the block and its halo
+                var obstacles = new StreetPlanner.Obstacles();
+                for (int k = 0; k < plans.Count; k++)
                 {
+                    var seg = plans[k].Source.Segment;
+                    if ((seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) continue;
+                    // a track laid in the street (auf_strasse) is inside the carriageway, not beside it
+                    if (seg.Class == RoadClass.Railway && seg.Attributes.Has(RoadAttrFlags.OnStreet)) continue;
+                    obstacles.Add(plans[k].Plan, plans[k].Source.Line.Width * 0.5, k, StreetPlanner.IsCandidate(seg),
+                        footway: seg.Class is RoadClass.Path or RoadClass.Track,
+                        carriageway: seg.Class <= RoadClass.Lane || seg.Class == RoadClass.Railway);
+                }
+                foreach (var (tileId, kept) in passthrough)
+                    foreach (var seg in kept)
+                    {
+                        if (RoadFormat.IsWall(seg.Class)) obstacles.Add(seg, tileId, 0.3, -1);
+                        else if (RoadFormat.IsWatercourse(seg.Class) && (seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) == 0)
+                            obstacles.Add(seg, tileId, seg.Width * 0.5, -1);
+                    }
+                // tunnel mouths of the block (#119): their approach roads run between walls as wide as the bore
+                var mouths = new List<(Vec2 At, Vec2 Out, double Half)>();
+                foreach (var (src, pl, _) in plans)
+                {
+                    var ts = src.Segment;
+                    if ((ts.Flags & RoadFlags.Tunnel) == 0 || ts.Class > RoadClass.Square || pl.Count < 2) continue;
+                    foreach (bool atStart in new[] { true, false })
+                    {
+                        var end = atStart ? pl[0] : pl[^1];
+                        var inner = end;
+                        for (int q = 1; q < pl.Count && inner.DistanceTo(end) < 3; q++) inner = atStart ? pl[q] : pl[pl.Count - 1 - q];
+                        var dir = end - inner;
+                        if (dir.Length < 1e-6) continue;
+                        mouths.Add((end, dir / dir.Length, RoadFormat.TunnelWidth(ts.Class) * 0.5));
+                    }
+                }
+                var streets = new StreetPlanner(facades, field, obstacles, streetStats,
+                    grids is null ? null : (e, n) => SampleGround(grids, e, n));
+
+                for (int k = 0; k < plans.Count; k++)
+                {
+                    var (source, plan, write) = plans[k];
                     // rails inside a carriageway (#124); halo rails too, their track zone may reach into the block
                     var pieces = source.Segment.Class == RoadClass.Railway
                         ? rails.Split(plan, source.SampleHeight, source.Segment, count: write) : null;
@@ -348,11 +394,23 @@ public static class TileRewriter
                     {
                         foreach (var piece in pieces)
                         {
-                            var flags = source.Segment.Attributes.Flags | (piece.Embedded ? RoadAttrFlags.Embedded : 0);
+                            bool bed = !piece.Embedded && IsTownTram(source.Segment, piece.Plan, field);
+                            var flags = source.Segment.Attributes.Flags | (piece.Embedded ? RoadAttrFlags.Embedded : 0)
+                                | (bed ? RoadAttrFlags.PavedBed : 0);
                             list.Add(ToSegment(piece.Plan, source, source.Segment.Attributes with { Flags = flags }, piece.Height));
                             written++;
                             if (piece.Embedded) rails.EmitGrooves(piece, source.Segment, source.Tile, painted);
+                            else if (bed) rails.EmitGrooves(piece, source.Segment, source.Tile, painted, ownHeight: true);
                         }
+                        continue;
+                    }
+                    if (source.Segment.Class == RoadClass.Railway && IsTownTram(source.Segment, plan, field))
+                    {
+                        var heights = plan.Select(source.SampleHeight).ToArray();
+                        var bedAttributes = source.Segment.Attributes with { Flags = source.Segment.Attributes.Flags | RoadAttrFlags.PavedBed };
+                        list.Add(ToSegment(plan, source, bedAttributes, heights));
+                        written++;
+                        rails.EmitGrooves(new RailRoadOverlap.Piece(plan, heights, false), source.Segment, source.Tile, painted, ownHeight: true);
                         continue;
                     }
 
@@ -363,10 +421,16 @@ public static class TileRewriter
                         attributes = CrossSectionPlanner.Finish(OsmOverlayReader.Apply(attributes, row), source.Line);
 
                     var segment = ToSegment(plan, source, attributes);
-                    list.Add(segment);
-                    written++;
+                    // sidewalks (#119): the segment is cut where its cross-section changes; its paint
+                    // is laid on the whole line first, so dashes run on across the cuts
+                    var street = streets.Plan(segment, source.Tile, k, out bool urban);
+                    if (mouths.Count > 0) street = street.Select(piece => RampShoulders(piece, source.Tile, mouths)).ToList();
+                    list.AddRange(street);
+                    written += street.Count;
 
-                    PaintEmitter.Emit(segment, source.Key is { } k ? k.FromM + source.AlongOf(plan[0]) : 0, painted);
+                    var paintOn = urban && !attributes.Has(RoadAttrFlags.Urban)
+                        ? ToSegment(plan, source, attributes with { Flags = attributes.Flags | RoadAttrFlags.Urban }) : segment;
+                    PaintEmitter.Emit(paintOn, source.Key is { } at ? at.FromM + source.AlongOf(plan[0]) : 0, painted);
                 }
 
                 foreach (var junction in result.Junctions)
@@ -395,6 +459,7 @@ public static class TileRewriter
 
                 var flags = RoadTileFlags.Network;
                 if (segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) flags |= RoadTileFlags.Osm;
+                streetStats.Tiles++;
                 var walls = grids is null ? new List<RoadLinearProp>()
                     : EmbankmentPlanner.Plan(id, segments, (e, n) => SampleGround(grids, e, n), embankments);
                 var tile = new RoadTile
@@ -402,6 +467,7 @@ public static class TileRewriter
                     Id = id, Segments = segments, Junctions = junctions, Flags = flags,
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
+                    AreaProps = CornerPlanner.Plan(id, segments, junctions, facades, cornerStats),
                 };
                 rails.ClearTrackZones(tile.Paint, id);
                 var bytes = Encode(tile);
@@ -424,6 +490,9 @@ public static class TileRewriter
         }
 
         netStats.Shifted = shiftAudit.Result();
+        log(heightStats.Format());
+        log(streetStats.Format());
+        log(cornerStats.Format());
         log(embankments.Format());
         return new Stats(tilesRead, tilesWritten, junctionCount, written, dropped,
             overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, netStats);
@@ -454,6 +523,61 @@ public static class TileRewriter
             File.Copy(path, raw);
         }
         return (tile, null);
+    }
+
+    /// <summary>How far out from a mouth its approach road gets the bore's width.</summary>
+    private const double RampShoulderReach = 60.0;
+
+    /// <summary>
+    /// A tunnel's approach road (#119): an at-grade piece running out of a mouth along its axis
+    /// (within 30 deg, within 1.5 m of the axis, up to <see cref="RampShoulderReach"/>) gets flush
+    /// paved shoulders out to the bore's half width (<c>SidewalkDm</c>, no kerb). The road blend
+    /// levels the ground across them and the ramp's walls (#125) stand at their edge, in line with
+    /// the bore's walls; on a 2.2 m divided carriageway into a 6 m bore they stood inside the mouth.
+    /// </summary>
+    private static RoadSegment RampShoulders(RoadSegment seg, TileId id, List<(Vec2 At, Vec2 Out, double Half)> mouths)
+    {
+        if (!RoadEmbankment.IsAtGrade(seg) || seg.Class > RoadClass.Lane || seg.PointCount < 2) return seg;
+        var p = seg.Points;
+        var a = new Vec2(id.MinE + p[0], id.MaxN - p[2]);
+        var b = new Vec2(id.MinE + p[^3], id.MaxN - p[^1]);
+        var heading = b - a;
+        if (heading.Length < 1e-6) return seg;
+        heading = heading / heading.Length;
+        foreach (var (at, dir, half) in mouths)
+        {
+            if (Math.Abs(heading.Dot(dir)) < 0.866) continue;
+            bool on = false;
+            foreach (var q in new[] { a, b, (a + b) * 0.5 })
+            {
+                var d = q - at;
+                double along = d.Dot(dir), lateral = Math.Abs(d.Cross(dir));
+                if (along >= -1 && along <= RampShoulderReach && lateral <= 1.5) { on = true; break; }
+            }
+            if (!on) continue;
+            byte shoulder = (byte)Math.Clamp(Math.Round((half - seg.Width * 0.5) * 10), 0, 255);
+            if (shoulder == 0) return seg;
+            var attr = seg.Attributes;
+            RoadSide Widen(RoadSide s) => s.SidewalkDm >= shoulder ? s : s with { SidewalkDm = shoulder, KerbCm = 0 };
+            return new RoadSegment
+            {
+                Class = seg.Class, Surface = seg.Surface, Flags = seg.Flags, Width = seg.Width, Points = seg.Points,
+                Attributes = attr with { Left = Widen(attr.Left), Right = Widen(attr.Right) },
+            };
+        }
+        return seg;
+    }
+
+    /// <summary>
+    /// A tram line (at grade) in a town: its track lies in paving, not on ballast (#119). Judged
+    /// at the middle of the piece by the urban field the streets are lowered by.
+    /// </summary>
+    private static bool IsTownTram(RoadSegment rail, List<Vec2> plan, UrbanField field)
+    {
+        if (rail.Class != RoadClass.Railway || (rail.Flags & RoadFlags.Tramway) == 0 || plan.Count < 2
+            || (rail.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) return false;
+        var mid = plan[plan.Count / 2];
+        return field.Density(mid.X, mid.Y) >= UrbanField.UrbanAt;
     }
 
     /// <summary>The carriageways traffic drives and orients (<c>Traffic.IsCarRoad</c>), divided ones only.</summary>

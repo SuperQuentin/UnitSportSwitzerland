@@ -146,6 +146,26 @@ public sealed class RoadExtractor
     }
 
     private readonly List<PendingLine> _pending = new();
+    private readonly HashSet<(long, long)> _openEnds = new(), _lonelyTunnelEnds = new();
+
+    /// <summary>
+    /// The portals of a tunnel line: its ends that meet a road or a rail, or nothing, where the bore
+    /// meets the surface (<see cref="RoadTunnels.AtSurface"/>: not a gap in an underground line).
+    /// </summary>
+    private List<(double E, double N)> Portals(GeoPackageReader.Polyline line, RoadClass cls,
+        Func<double, double, double?> heightOf)
+    {
+        var portals = new List<(double E, double N)>();
+        foreach (int i in new[] { 0, line.Count - 1 })
+        {
+            var key = JoinKey(line.E[i], line.N[i]);
+            if (!_openEnds.Contains(key) && !_lonelyTunnelEnds.Contains(key)) continue;
+            double ground = heightOf(line.E[i], line.N[i]) ?? double.NaN;
+            if (!RoadTunnels.AtSurface(ground, line.Z[i], RoadFormat.TunnelHeight(cls))) continue;
+            portals.Add((line.E[i], line.N[i]));
+        }
+        return portals;
+    }
 
     /// <summary>
     /// Surveyed height at each structure endpoint, so an approach road knows what it has to
@@ -194,6 +214,21 @@ public sealed class RoadExtractor
                 _structureEndCount[key] = _structureEndCount.GetValueOrDefault(key) + 1;
             }
         }
+
+        // Every end of a non-tunnel line, and how many tunnel lines end at each point: a tunnel
+        // end that meets a road or a rail (or nothing at all) is a portal; one that only meets
+        // the next tunnel feature is not, and no ground is carved there.
+        _openEnds.Clear();
+        var tunnelEnds = new Dictionary<(long, long), int>();
+        foreach (var p in _pending)
+            foreach (int i in new[] { 0, p.Line.Count - 1 })
+            {
+                var key = JoinKey(p.Line.E[i], p.Line.N[i]);
+                if ((p.Flags & RoadFlags.Tunnel) != 0) tunnelEnds[key] = tunnelEnds.GetValueOrDefault(key) + 1;
+                else _openEnds.Add(key);
+            }
+        _lonelyTunnelEnds.Clear();
+        foreach (var (key, count) in tunnelEnds) if (count == 1) _lonelyTunnelEnds.Add(key);
 
         foreach (var p in _pending)
             Emit(p, result, heightOf);
@@ -391,7 +426,7 @@ public sealed class RoadExtractor
 
                 if ((flags & RoadFlags.Tunnel) != 0)
                     TunnelCarver.Carve(piece.Points, RoadFormat.TunnelWidth(cls),
-                        RoadFormat.TunnelHeight(cls), heightOf, Holes);
+                        RoadFormat.TunnelHeight(cls), heightOf, Holes, Portals(line, cls, heightOf));
 
                 var draped = DrapeHeights(dense, heightOf, DrapeOffset + ClassLift(cls));
                 LimitGrade(dense, draped, MaxGrade(cls, flags));

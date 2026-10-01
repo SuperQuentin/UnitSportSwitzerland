@@ -1874,9 +1874,11 @@ public partial class FootPlayer : CharacterBody3D
         {
             // on a slope the ground beside the seat is not at the seat's height: stand on it,
             // or the uphill side reads as blocked and the player is put on the vehicle's roof
-            // (indoors the terrain is 3 km overhead: the floor is at the seat's height)
+            // (indoors, or in a tunnel, the terrain is overhead: the floor is at the seat's height)
             var candidate = raw;
-            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && Terrain.TryGetHeight(raw, out float g))
+            // in a tunnel, out beside the vehicle only within the bore: past its wall is the hill
+            if (Terrain != null && Terrain.InTunnel(at) && !Terrain.InTunnel(raw)) continue;
+            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && !Terrain.InTunnel(raw) && Terrain.TryGetHeight(raw, out float g))
                 candidate = raw with { Y = Mathf.Max(raw.Y, g) };
             var query = new PhysicsShapeQueryParameters3D
             {
@@ -2637,7 +2639,8 @@ public partial class FootPlayer : CharacterBody3D
     /// <summary>
     /// Safety net for a player who glitched through the world, on foot, mounted or flying:
     /// <list type="bullet">
-    /// <item>outdoors, more than 2 m under the terrain: straight up onto it;</item>
+    /// <item>outdoors, more than 2 m under the terrain, not inside a tunnel bore and with no floor
+    /// under them (a ramp the road blend cut into the ground): straight up onto it;</item>
     /// <item>outdoors, far below any ground and no height known here (the tile has not streamed, or
     /// there is no data): back to the last safe spot outside, or held here until the ground arrives;</item>
     /// <item>indoors, under the interior's floor: back where they last stood in it.</item>
@@ -2663,7 +2666,8 @@ public partial class FootPlayer : CharacterBody3D
         }
         else if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground))
         {
-            if (GlobalPosition.Y >= ground - 2f) return false;
+            if (GlobalPosition.Y >= ground - 2f || Terrain.InTunnel(GlobalPosition)
+                || Terrain.FloorBelow(this, GlobalPosition, GetRid())) return false;
             to = GlobalPosition with { Y = ground + 1f };
         }
         else
@@ -2675,7 +2679,8 @@ public partial class FootPlayer : CharacterBody3D
         if (_sinceSnapWarning > 2)
         {
             _sinceSnapWarning = 0;
-            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}");
+            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}"
+                + (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float gh) ? $" (ground {gh:F1}, in a tunnel: {Terrain.InTunnel(GlobalPosition)}, y {GlobalPosition.Y:F2})" : ""));
         }
         RequestReplacement();
         _flight.Velocity = Vector3.Zero;
