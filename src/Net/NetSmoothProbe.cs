@@ -79,6 +79,7 @@ public partial class NetSmoothProbe : Node
     // replicated car stay on a road carried by a retaining wall, or hover and sink?)
     private readonly List<double> _gaps = new();
     private int _noFloor;
+    private readonly List<string> _gapRows = new() { "t,x,y,z,gap" };   // world frame
     private Godot.Collections.Array<Rid>? _exclude;
 
     private void FloorGap(Node3D target)
@@ -101,6 +102,7 @@ public partial class NetSmoothProbe : Node
         var hit = target.GetWorld3D().DirectSpaceState.IntersectRay(q);
         if (hit.Count == 0) { _noFloor++; return; }
         _gaps.Add(p.Y - hit["position"].AsVector3().Y);
+        _gapRows.Add(string.Format(CultureInfo.InvariantCulture, "{0:F2},{1:F1},{2:F1},{3:F1},{4:F3}", _t, p.X, p.Y, p.Z, _gaps[^1]));
     }
 
     /// <summary>Watches every remote for PickWindow seconds, then takes the nearest one that moved.</summary>
@@ -154,6 +156,7 @@ public partial class NetSmoothProbe : Node
             string dir = ProjectSettings.GlobalizePath($"res://test_output/loadtest/{_label}");
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "netsmooth.txt"), sb.ToString());
+            File.WriteAllLines(Path.Combine(dir, "floorgap.csv"), _gapRows);
         }
         catch (Exception e) { GD.PushWarning($"[netsmooth] cannot write result: {e.Message}"); }
         GetTree().Quit();

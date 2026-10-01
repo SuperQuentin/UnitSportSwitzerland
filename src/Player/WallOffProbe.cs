@@ -7,7 +7,8 @@ namespace UnitSport.Player;
 
 /// <summary>
 /// <c>--walloff[,seconds]</c> on a connected client (#125): that long after joining (default 20 s)
-/// the local player is put on the cap of the nearest retaining wall of the tile it stands in, must
+/// the local player gets out of any vehicle and is put on the cap of the retaining wall nearest
+/// the spawn point (<c>--at</c>), in that tile; it must
 /// come to rest there, then steps 0.4 m past the face and must fall to the ground below and stand
 /// on it, not hover over the drop. The player is the replicated one, so the other peers see the
 /// fall. Prints <c>[walloff] RESULT</c>; never quits (the run's other probe decides when to end).
@@ -22,6 +23,7 @@ public partial class WallOffProbe : Node
     private int _stage;
     private Task<RoadTile?>? _roads;
     private Vector3 _cap, _edge;
+    private readonly double _spawnE, _spawnN;
     private float _top;
 
     public WallOffProbe(Node3D players, ChunkManager chunks, WorldOrigin origin, double after)
@@ -30,6 +32,7 @@ public partial class WallOffProbe : Node
         _chunks = chunks;
         _origin = origin;
         _after = after;
+        (_spawnE, _spawnN) = SpawnPoint.ParseTarget();
     }
 
     public static double? ParseArgs()
@@ -55,7 +58,9 @@ public partial class WallOffProbe : Node
         switch (_stage)
         {
             case 0:
-                _roads = _chunks.Source!.LoadRoadsAsync(_origin.TileAt(me.GlobalPosition));
+                // out of whatever it rides first (a car after a race)
+                if (me.Ride != RideKind.OnFoot) { me.SetRide(RideKind.OnFoot); return; }
+                _roads = _chunks.Source!.LoadRoadsAsync(TileId.FromLv95(_spawnE, _spawnN));
                 Next();
                 break;
             case 1:
@@ -76,7 +81,9 @@ public partial class WallOffProbe : Node
                 if (_stageT < 3.0) return;
                 float floor = FloorBelow(me);
                 float fell = _top - me.GlobalPosition.Y, above = me.GlobalPosition.Y - floor;
-                bool ok = fell > 1.0f && Math.Abs(above) < 0.1f && me.IsOnFloor();
+                // the ground under a fill wall is a steep hillside, and a capsule resting on a 45°
+                // slope has its centre line 0.12 m over the contact plane: hovering is more than that
+                bool ok = fell > 1.0f && Math.Abs(above) < 0.2f && me.IsOnFloor();
                 GD.Print($"[walloff] stepped off: fell {fell:F2} m, body {above:+0.000;-0.000} m above the floor under it, onFloor={me.IsOnFloor()} at {Lv95(me.GlobalPosition)}");
                 GD.Print(ok ? "[walloff] RESULT: fell off the wall and stands on the ground" : "[walloff] RESULT: FAILED");
                 _stage = 9;
@@ -92,7 +99,7 @@ public partial class WallOffProbe : Node
         me.Velocity = Vector3.Zero;
     }
 
-    /// <summary>The nearest drawn wall at least 2 m high: a point on its cap and one just past its face.</summary>
+    /// <summary>The drawn wall at least 2 m high nearest the spawn point (<c>--at</c>): a point on its cap and one just past its face.</summary>
     private bool Pick(RoadTile? tile, FootPlayer me)
     {
         if (tile == null) return false;
@@ -105,7 +112,7 @@ public partial class WallOffProbe : Node
             {
                 if (w.Points[k * 4 + 3] < 2f) continue;
                 var face = basePos + new Vector3(w.Points[k * 4], 0, w.Points[k * 4 + 2]);
-                var off = face - me.GlobalPosition;
+                var off = face - _origin.ToWorld(_spawnE, _spawnN, 0);
                 float d = new Vector2(off.X, off.Z).Length();
                 if (d >= best) continue;
                 best = d;
