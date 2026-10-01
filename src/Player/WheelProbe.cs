@@ -165,6 +165,14 @@ public partial class WheelProbe : Node
         expect(parked86.Weight > parkedFd.Weight && parkedFd.Weight > 0f, $"parked: unassisted AE86 {parked86.Weight:F2}, FD3S {parkedFd.Weight:F2}");
         GD.Print($"[wheel] AE86 at 72 km/h, 30° right: torque {Hold(ae86, 30f, 20f).Torque:F2}; on ice {Hold(ae86, 30f, 20f, Audio.Surface.Ice).Torque:F2}; "
             + $"road gravel {gravel.Road:F2} / tarmac {tarmac.Road:F2}; parked weight {parked86.Weight:F2}");
+        // the parked and crawling feel, for reading: aligning torque by speed and wheel angle
+        foreach (float v in new[] { 0f, 0.5f, 1f, 2f, 4f, 8f })
+        {
+            var line = new System.Text.StringBuilder($"[wheel] AE86 torque at {v,3:F1} m/s:");
+            foreach (float deg in new[] { 45f, 90f, 180f, 360f, 540f, 620f })
+                line.Append($"  {deg:F0}° {Hold(ae86, deg, v, seconds: 1f).Torque,5:F2}");
+            GD.Print(line.ToString());
+        }
         GameSettings.Current.RideProfile = profileWas;
 
         // the tyre curve through the trail: past the peak the wheel goes light

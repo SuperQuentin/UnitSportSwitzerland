@@ -551,6 +551,10 @@ public sealed class Car : Rideable, IEngined
             float rKin = u * Mathf.Tan(delta) / L;
             r = Mathf.Lerp(rKin, r, k);
             w = Mathf.Lerp(0f, w, k);
+            // the wheel's feel follows the same blend: crawling, the fronts carry only the side force
+            // the turn needs (front mass × u × yaw rate), not the tyre curve's force at noise-sized
+            // slip angles — that made a parked wheel pull back harder the further it turned (#68)
+            feelFy = Mathf.Lerp(m * b / L * u * rKin, feelFy, k);
 
             slideAccum += Mathf.Clamp(Mathf.Max(Mathf.Abs(alphaR), Mathf.Abs(alphaF) * 0.6f) * 3f
                 + wheelspin + (input.Handbrake && Mathf.Abs(u) > 2f ? 0.6f : 0f), 0f, 1f);
