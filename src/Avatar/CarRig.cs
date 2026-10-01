@@ -479,23 +479,29 @@ public partial class CarRig : Node3D
     }
 
     /// <summary>
-    /// Puts a mirror's camera at the eye's reflection in its plane, looking through it: what that
-    /// camera sees, flipped left for right (the face's UVs), is what the mirror shows. The near
-    /// plane sits at the glass, so the reflection of the car in front of it is not drawn.
+    /// Puts a mirror's camera at the eye's reflection in its plane: what that camera sees through
+    /// the glass, flipped left for right (the face's UVs), is what the mirror shows. It looks
+    /// square through the mirror (along its normal) with an off-axis frustum framing exactly the
+    /// glass, so its near plane IS the glass: nothing behind the mirror — its own housing, the dash,
+    /// the door — is drawn. A camera aimed at the mirror's middle had its near plane square to the
+    /// line of sight instead, which at a door mirror's slant let the housing into the picture as
+    /// a black box.
     /// </summary>
     private static void Aim(Mirror m, Vector3 eye)
     {
         var face = m.Face.GlobalTransform;
         var centre = face.Origin;
         var normal = face.Basis.Z.Normalized();
-        var image = eye - 2f * (eye - centre).Dot(normal) * normal;
-        var look = centre - image;
-        float distance = look.Length();
-        if (distance < 0.05f) return;
-        var up = face.Basis.Y.Normalized();
-        m.Camera.GlobalTransform = new Transform3D(Basis.LookingAt(look / distance, up), image);
-        m.Camera.Fov = Mathf.RadToDeg(2f * Mathf.Atan(m.Mount.Size.Y * 0.5f / distance)) * 1.15f;
-        m.Camera.Near = distance * 0.95f;
+        float depth = (eye - centre).Dot(normal);   // the eye's distance in front of the glass
+        if (depth < 0.05f) return;   // behind or on the mirror: nothing to see in it
+        var image = eye - 2f * depth * normal;
+        // looking along the normal (−Z is the view), up the mirror's own up
+        var z = -normal;
+        var y = (face.Basis.Y - z * face.Basis.Y.Dot(z)).Normalized();
+        var basis = new Basis(y.Cross(z), y, z);
+        m.Camera.GlobalTransform = new Transform3D(basis, image);
+        var local = basis.Transposed() * (centre - image);
+        m.Camera.SetFrustum(m.Mount.Size.Y, new Vector2(local.X, local.Y), depth + 0.002f, MirrorFar);
     }
 
     /// <summary>

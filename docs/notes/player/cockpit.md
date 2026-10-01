@@ -25,8 +25,10 @@
   unless `CockpitHud` is on; tyre and brake wear, which the dash has no gauge for, stay.
 - **Mirrors** (`CarRig` mirrors, setting on by default, `--mirrors on|off`): rear-view and both
   door mirrors, each a `SubViewport` 48 px tall (PS1 look, nearest filtering) rendering from the
-  **eye's reflection** in the mirror plane through the glass, near plane at the glass so the car in
-  front of it is not drawn; the quad flips U. Only the local driver in the cockpit has them, built
+  **eye's reflection** in the mirror plane, looking square through it (along its normal) with an
+  off-axis frustum (`SetFrustum`) framing exactly the glass, so the near plane IS the glass; the
+  quad flips U. A camera aimed at the mirror's middle had its near plane square to the line of
+  sight, and at a door mirror's slant its own housing showed as a black box in the middle. Only the local driver in the cockpit has them, built
   on first use. One mirror re-renders a frame, in turn (each at a third of the frame rate), with
   a 400 m far plane and without the viewmodel and door-portal layers. **Cost**, measured with
   `--ride car:0,75,x.png --brake-at 0 --view body --time 13 --vsync off --mirrorperf` (mirrors
