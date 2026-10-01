@@ -816,6 +816,31 @@ public partial class ChunkManager : Node3D
         return (done, total);
     }
 
+    /// <summary>
+    /// How many of the tiles within <paramref name="rings"/> of <paramref name="eye"/> are
+    /// playable, of how many are wanted there: the loading screen's bar. Far weaker than
+    /// <see cref="ProgressNear"/> on purpose: a tile counts once any mesh is drawn (an interim or
+    /// coarse one will do; refinement, roads and buildings stream in while you play), and the
+    /// tile under the eye also needs its collision, so you land on ground.
+    /// </summary>
+    public (int Done, int Total) PlayableNear(Vector3 eye, int rings)
+    {
+        if (_origin == null) return (0, 0);
+        var centre = _origin.TileAt(eye);
+        int done = 0, total = 0;
+        foreach (var id in _desired)
+        {
+            int ring = LodPolicy.Distance(id, centre);
+            if (ring > rings) continue;
+            total++;
+            if (!_chunks.TryGetValue(id, out var state)) continue;
+            if (BuildMeshes && state.ActiveStride < 0) continue;
+            if (ring == 0 && !state.HasCollision) continue;
+            done++;
+        }
+        return (done, total);
+    }
+
     /// <summary>Why <see cref="Settled"/> is false, for diagnosing a stalled export.</summary>
     public string SettleReport()
     {

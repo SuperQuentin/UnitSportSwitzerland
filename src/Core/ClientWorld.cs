@@ -796,9 +796,9 @@ public partial class ClientWorld : Node3D
 
     /// <summary>
     /// Works out how far the session is from playable: connected, terrain synced, our player
-    /// spawned, the spawn on the ground, and the tiles within three rings of the camera built.
-    /// A world that cannot finish the last step in 45 s goes ahead anyway: the rest streams in
-    /// while you play.
+    /// spawned, the spawn on the ground, and the nine tiles around the camera drawn (any detail;
+    /// the one underfoot with collision). A world that cannot finish the last step in 15 s goes
+    /// ahead anyway: everything else streams in while you play.
     /// </summary>
     private void TrackLoading(double delta)
     {
@@ -839,11 +839,11 @@ public partial class ClientWorld : Node3D
         }
 
         var eye = GetViewport().GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
-        var (done, total) = _chunks.ProgressNear(eye, 3);
+        var (done, total) = _chunks.PlayableNear(eye, 1);
         _terrainClock += delta;
         Report(LoadStage.BuildingTerrain, total > 0 ? 0.35f + 0.65f * done / total : 0.35f,
             total > 0 ? $"{done} / {total} tiles around you" : "");
-        if ((total > 0 && done >= total) || _terrainClock > 45 || (total == 0 && _terrainClock > 6))
+        if ((total > 0 && done >= total) || _terrainClock > 15 || (total == 0 && _terrainClock > 6))
         {
             Stage = LoadStage.Ready;
             LoadFraction = 1;
