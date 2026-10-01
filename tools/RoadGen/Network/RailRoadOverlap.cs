@@ -36,7 +36,8 @@ public sealed class RailRoadOverlap
     private const double Step = 0.5;          // sampling along the rail
     private const double MinRun = 1.0;        // shorter covered runs are ignored (a road edge grazed)
     private const double MergeGap = 3.0;      // two runs this close are one (a narrow island)
-    private const double Extend = 1.0;        // embed this far past the centreline's exit: the outer rail is still inside
+    private const double Extend = 1.0;        // embed at least this far past the centreline's exit: the outer rail is still inside
+    private const double MaxExtend = 15.0;    // ... and on until the ballast's collision core clears the road, at most this
     private const double Blend = 8.0;         // back to the rail's own height over this, outside the road
     private const double StreetMargin = 1.5;  // auf_strasse lines: track and road centrelines are apart
     private const double StreetRunMin = 25.0;
@@ -101,7 +102,7 @@ public sealed class RailRoadOverlap
                 _roads.Add(new Road(plan, height, seg.Width * 0.5));
                 for (int i = 1; i < plan.Length; i++)
                 {
-                    double pad = seg.Width * 0.5 + StreetMargin;
+                    double pad = seg.Width * 0.5 + StreetMargin + 5.0;   // every margin Covered is asked with
                     long x0 = (long)Math.Floor((Math.Min(plan[i - 1].X, plan[i].X) - pad) / Cell);
                     long x1 = (long)Math.Floor((Math.Max(plan[i - 1].X, plan[i].X) + pad) / Cell);
                     long y0 = (long)Math.Floor((Math.Min(plan[i - 1].Y, plan[i].Y) - pad) / Cell);
@@ -178,7 +179,18 @@ public sealed class RailRoadOverlap
         merged.RemoveAll(r => r.B - r.A < MinRun);
         if (merged.Count == 0) return null;
         for (int i = 0; i < merged.Count; i++)
-            merged[i] = (Math.Max(0, merged[i].A - Extend), Math.Min(total, merged[i].B + Extend));
+        {
+            // On until the ballast ribbon's core (its half width, what the collision road blend
+            // flattens to the rail's line) no longer reaches into any carriageway: at an oblique
+            // crossing it would otherwise pull the road edge down to the ballast line.
+            double clear = margin + Math.Max(rail.Width * 0.5, 1.0) + 0.3;
+            double a = Math.Max(0, merged[i].A - Extend), b = Math.Min(total, merged[i].B + Extend);
+            for (double lim = a - MaxExtend; a > 0 && a > lim && Covered(Polyline.PointAt(plan, arc, a), clear, out _);) a = Math.Max(0, a - Step);
+            for (double lim = b + MaxExtend; b < total && b < lim && Covered(Polyline.PointAt(plan, arc, b), clear, out _);) b = Math.Min(total, b + Step);
+            merged[i] = (a, b);
+        }
+        for (int i = merged.Count - 1; i > 0; i--)
+            if (merged[i].A <= merged[i - 1].B) { merged[i - 1] = (merged[i - 1].A, Math.Max(merged[i].B, merged[i - 1].B)); merged.RemoveAt(i); }
 
         // stations: the original vertices, every metre around each run, and the cuts themselves
         var stations = new SortedSet<double>(arc);

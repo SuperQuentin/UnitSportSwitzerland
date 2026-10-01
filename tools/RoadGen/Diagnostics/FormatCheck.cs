@@ -109,7 +109,7 @@ public static class FormatCheck
 
     /// <summary>
     /// #124: a 6 m road at 10 m crossed square by a rail at 9 m. The rail piece inside the road
-    /// (6 m + 1 m each side) is embedded at 10 m, the ballast line meets it at 9.84 m and is back at 9 m
+    /// is embedded at 10 m out to where the 4.6 m ballast clears the road by 0.3 m (12 m), the ballast line meets it at 9.84 m and is back at 9 m
     /// 8 m further out, two
     /// grooves are painted and the road's centre dash leaves the track zone free.
     /// </summary>
@@ -132,7 +132,7 @@ public static class FormatCheck
         if (pieces is null || pieces.Count(p => p.Embedded) != 1) return false;
         var inside = pieces.Single(p => p.Embedded);
         double length = Geometry.Polyline.Length(inside.Plan);
-        if (Math.Abs(length - 8) > 0.6 || inside.Height.Any(h => Math.Abs(h - 10) > 1e-3)) return false;
+        if (Math.Abs(length - 12) > 0.6 || inside.Height.Any(h => Math.Abs(h - 10) > 1e-3)) return false;
         if (pieces[0].Height[0] != 9f || pieces[^1].Height[^1] != 9f) return false;
         // continuous: each piece starts where the last one ended; the ballast line meets the road
         // RailTop lower, so the raised rails' heads are flush with the grooves
