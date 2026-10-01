@@ -194,7 +194,24 @@ public partial class ServerWorld : Node3D
 
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;
+
+        // status queries on port + 1: LAN lists find this server, saved lists show it is up
+        // and how full it is (Net/QueryResponder, docs/notes/net/server-query.md)
+        if (QueryResponder.ParsePort(port) is { } queryPort)
+        {
+            string name = QueryResponder.ParseServerName();
+            string version = (string)ProjectSettings.GetSetting("application/config/version", "");
+            string world = manifest.Tiles.Count > 0 ? "real" : "generated";
+            var registry = _registry;
+            AddChild(new QueryResponder(queryPort, () => new ServerStatus(
+                name, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients, version, world), QueryResponder.ParseBind()));
+        }
+        _parentPid = HostedServer.ParseParentPid();
     }
+
+    /// <summary>The client that started this server from its menu, if any: the server goes when it does.</summary>
+    private int? _parentPid;
+    private double _sinceParentCheck;
 
     /// <summary>
     /// Reads "--stream-bandwidth &lt;MB/s&gt;", the per-client terrain streaming cap.
@@ -236,6 +253,16 @@ public partial class ServerWorld : Node3D
 
     public override void _Process(double delta)
     {
+        if (_parentPid is { } parent && (_sinceParentCheck += delta) >= 1)
+        {
+            _sinceParentCheck = 0;
+            if (!HostedServer.Alive(parent))
+            {
+                GD.Print($"[server] the client that hosted this server (pid {parent}) is gone; stopping");
+                GetTree().Quit(0);
+                return;
+            }
+        }
         if (_players == null) return;
         _sinceStatus += delta;
         if (_sinceStatus < 5) return;

@@ -747,6 +747,27 @@ public partial class ChunkManager : Node3D
         return true;
     }
 
+    /// <summary>
+    /// How many of the tiles within <paramref name="rings"/> of <paramref name="eye"/> are built,
+    /// of how many are wanted there: the loading screen's progress bar. Counted the way
+    /// <see cref="SettledNear"/> decides, so done == total is the same moment it turns true.
+    /// </summary>
+    public (int Done, int Total) ProgressNear(Vector3 eye, int rings)
+    {
+        if (_origin == null) return (0, 0);
+        var centre = _origin.TileAt(eye);
+        int done = 0, total = 0;
+        foreach (var id in _desired)
+        {
+            if (LodPolicy.Distance(id, centre) > rings) continue;
+            total++;
+            if (_chunks.TryGetValue(id, out var state) && state.PendingStride < 0
+                && (!BuildMeshes || state.ActiveStride >= 0))
+                done++;
+        }
+        return (done, total);
+    }
+
     /// <summary>Why <see cref="Settled"/> is false, for diagnosing a stalled export.</summary>
     public string SettleReport()
     {

@@ -1,13 +1,13 @@
 # Modes
 
-- **Modes** (`Core/MainMenu`, `GameMode`): Explore / GpxReplay / Multiplayer. `ClientWorld`
-  owns the switching; **Esc** opens the picker, and it is shown at boot unless a mode was
-  named on the command line (`--connect`, `--gpx`) or a verification tool is running
-  (`--shot`, `--probe`). Each mode owns the camera while it runs, so `GpxSession.Begin`/`End`
-  activate the playback camera + HUD and hand the previous camera back on the way out —
-  `SetReturnCamera` matters because Explore may have swapped to the on-foot camera since.
-  The menu also owns the mouse: opening releases the pointer, closing recaptures it, which
-  is why `SpectatorCamera` no longer handles Esc. `--menu` forces the picker open (and is
-  how it gets screenshotted).
-  Under the server field the menu lists LAN servers found over mDNS (`net/lan-discovery`); the field
-  starts on the last joined host (`GameSettings.LastHost`).
+- **Modes** (`GameMode` in `Core/WorldLaunch`): Explore / GpxReplay / Multiplayer. The title screen
+  picks one (`ui/screens`) and builds a `ClientWorld` for it with a `WorldLaunch` (mode, endpoint,
+  GPX paths, name, hosted). The command line does the same with `WorldLaunch.FromArgs()`
+  (`--connect [host]`, `--gpx <path>` repeatable, else Explore). `ClientWorld.StartLaunch` starts it,
+  and `EnterMode` switches inside the world (replay goes back to Explore when it ends). Each mode owns
+  the camera while it runs, so `GpxSession.Begin`/`End` activate the playback camera + HUD and hand
+  the previous camera back on the way out; `SetReturnCamera` matters because Explore may have swapped
+  to the on-foot camera since.
+- **Esc** in the world opens the pause menu (`ui/screens`), which owns the mouse: opening releases
+  the pointer, closing recaptures it (`ClientWorld.ResumeControl`), which is why `SpectatorCamera`
+  does not handle Esc. Another mode means leaving to the title (`ui/teardown`).

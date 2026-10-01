@@ -101,6 +101,10 @@ public partial class PlacedObjects : Node
     public event Action<long>? Removed;
 
     private bool _server;
+
+    /// <summary>This client will join a server (title screen's Multiplayer, or --connect), so the offline objects stay on disk.</summary>
+
+    private bool _networked;
     private WorldOrigin _origin = null!;
     private string _storePath = "";
     private long _nextId = 1;
@@ -109,9 +113,9 @@ public partial class PlacedObjects : Node
     private readonly Dictionary<int, Action<PlacedResult>> _pending = new();
     private int _nextRequest = 1;
 
-    public static PlacedObjects Create(Node world, WorldOrigin origin, bool server)
+    public static PlacedObjects Create(Node world, WorldOrigin origin, bool server, bool networked = false)
     {
-        var p = new PlacedObjects { Name = NodeName, _server = server, _origin = origin };
+        var p = new PlacedObjects { Name = NodeName, _server = server, _origin = origin, _networked = networked };
         world.AddChild(p);
         if (!server) Instance = p;
         return p;
@@ -125,7 +129,7 @@ public partial class PlacedObjects : Node
             return;
         }
         // a client that is going to connect shows the server's list, not the offline one
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--connect") < 0) Load("user://placed/offline.json");
+        if (!_networked) Load("user://placed/offline.json");
         Multiplayer.ServerDisconnected += FailPending;
     }
 
