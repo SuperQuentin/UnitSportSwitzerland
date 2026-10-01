@@ -7,7 +7,8 @@
   `ItemCategory`, CHF `Value` for later trade) — `ItemId` 7–36, appended. **Contents are computed,
   never stored**: `LootTables.Roll` is seeded by building key + furniture index + restock epoch
   (24 h, staggered per building by its hash), so the server (`World/Loot`, offline the client
-  itself) only remembers a *taken* bitmask per container in `user://loot/E_N.json`, and only
+  itself) only remembers a *taken* bitmask per container in `user://loot/E_N.json` (as `[epoch, mask, plan version]`;
+  a record from another `InteriorLayout.CurrentVersion` is ignored, since regenerated plans renumber furniture, #213), and only
   grants a take to a peer standing in that interior. Tables = item tier × container pools ×
   `BuildingKind` factor, scaled by `LootTables.Abundance`: a house has ~24 lootable pieces (six
   wardrobes, six nightstands) and a school a desk per classroom, so each building is budgeted

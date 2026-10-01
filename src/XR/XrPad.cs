@@ -36,6 +36,10 @@ internal sealed class XrPad
     /// <summary>Set by the rig while the right stick is held for a recentre: R3 is not sent then.</summary>
     public bool RecentreHeld { get; set; }
 
+    /// <summary>Set by the hands (#243) while a grip holds the wheel or worked a door: it is not a shoulder then.</summary>
+    public bool LeftGripBusy { get; set; }
+    public bool RightGripBusy { get; set; }
+
     public XrPad(XRController3D left, XRController3D right)
     {
         _left = left;
@@ -66,7 +70,7 @@ internal sealed class XrPad
 
         // --- triggers and grips ---
         float lt = _left.GetFloat("trigger"), rt = uiActive ? 0f : _right.GetFloat("trigger");
-        float lg = _left.GetFloat("grip"), rg = _right.GetFloat("grip");
+        float lg = LeftGripBusy ? 0f : _left.GetFloat("grip"), rg = RightGripBusy ? 0f : _right.GetFloat("grip");
         if (onFoot)
         {
             Axis(JoyAxis.TriggerLeft, 0f);

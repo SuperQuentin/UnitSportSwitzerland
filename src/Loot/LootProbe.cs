@@ -119,7 +119,41 @@ public partial class LootProbe : Node
         }
 
         bool ok = true;
+
+        // #213: cellars, shelters, the room mix, banks; and any plan the validator rejects
+        GD.Print($"[rooms] {"kind",-18}{"cellar%",8}{"shelter%",9}");
+        foreach (var g in layouts.GroupBy(l => l.Kind).OrderByDescending(g => g.Count()))
+        {
+            int count = g.Count();
+            GD.Print($"[rooms] {g.Key,-18}{100.0 * g.Count(l => l.Below > 0) / count,8:F1}"
+                + $"{100.0 * g.Count(l => l.Floors.Any(f => f.Rooms.Any(r => r.Type == RoomType.Shelter))) / count,9:F1}");
+        }
+        var roomMix = layouts.SelectMany(l => l.Floors.SelectMany(f => f.Rooms)).GroupBy(r => r.Type)
+            .OrderByDescending(g => g.Count()).Select(g => $"{g.Key} {g.Count()}");
+        GD.Print("[rooms] mix: " + string.Join(", ", roomMix));
+        var banks = layouts.Where(l => l.IsBank).ToList();
+        GD.Print($"[rooms] {banks.Count} bank(s); " + string.Join("; ", banks.Select(b =>
+            $"{b.Key} {b.Floors.Count} floor(s), counter {b.Furniture.Count(f => f.Type == FurnitureType.TellerDesk)}, "
+            + $"vault safes {b.Furniture.Count(f => f.Type == FurnitureType.VaultSafe)} (Simon "
+            + string.Join("/", b.Furniture.Select((f, i) => (f, i)).Where(x => x.f.Type == FurnitureType.VaultSafe)
+                .Select(x => LootTables.SimonSequence(b, x.i, 0).Length)) + ")")));
+        int invalid = 0;
+        foreach (var l in layouts)
+            if (InteriorValidator.Validate(l) is { Count: > 0 } problems)
+            {
+                if (invalid++ < 8) GD.Print($"[rooms] invalid {l.Key} ({l.Kind}, {l.Below} below): {string.Join("; ", problems.Take(3))}");
+            }
+        GD.Print($"[rooms] {invalid} of {layouts.Count} plans fail validation");
+        // a few plans to look at: banks, cellars with a shelter, a block of flats
+        string svgDir = ProjectSettings.GlobalizePath("res://test_output/rooms");
+        Directory.CreateDirectory(svgDir);
+        foreach (var l in banks.Concat(layouts.Where(l => l.Kind == BuildingKind.House && l.Below > 0).Take(6))
+            .Concat(layouts.Where(l => l.Kind == BuildingKind.Apartment && l.Below > 0).Take(2)))
+            File.WriteAllText(Path.Combine(svgDir, $"{(l.IsBank ? "Bank" : l.Kind.ToString())}_{l.Key}.svg"), InteriorValidator.ToSvg(l));
+        GD.Print($"[rooms] plans written to {svgDir}");
+
         if (tallies.TryGetValue(BuildingKind.House, out var house))
+
         {
             double per = (double)house.Buildings * _epochs;
             GD.Print("[loot] house furniture: " + string.Join(", ", house.Types.OrderByDescending(kv => kv.Value)

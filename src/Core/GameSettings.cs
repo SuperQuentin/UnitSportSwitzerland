@@ -118,6 +118,9 @@ public sealed class GameSettings
     /// <summary>Controller rumble on landings, impacts and speed.</summary>
     public bool Vibration { get; set; } = true;
 
+    /// <summary>Steering wheel, pedals and their bindings (<see cref="SteeringWheel"/>).</summary>
+    public WheelSettings Wheel { get; set; } = new();
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public RideProfile RideProfile { get; set; } = RideProfile.Game;
     /// <summary>Cars' tyres wear with the sliding they do and lose grip (off by default).</summary>
@@ -296,6 +299,8 @@ public sealed class GameSettings
         OccasionPreferences ??= new();
         RecentGpx ??= new();
         PlayerName ??= "";
+        Wheel ??= new();
+        Wheel.Clamp();
     }
 
     /// <summary>
@@ -329,6 +334,9 @@ public sealed class GameSettings
                         _ => Player.HeavyShift.Automatic,
                     };
                     break;
+                case "--wheel": Wheel.Enabled = v is "on" or "1" or "true"; break;
+                case "--wheelrange" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float deg):
+                    Wheel.RangeDeg = deg; break;
                 case "--voice":
                     EngineVoice = v.ToLowerInvariant() switch
                     {
@@ -338,13 +346,8 @@ public sealed class GameSettings
                     };
                     break;
                 case "--style":
-                    VisualStyle = v.ToLowerInvariant() switch
-                    {
-                        "cartoon" => Styles.VisualStyle.Cartoon,
-                        "real-" or "realistic-" => Styles.VisualStyle.RealisticLow,
-                        "real+" or "realistic+" => Styles.VisualStyle.RealisticHigh,
-                        _ => Styles.VisualStyle.Ps1,
-                    };
+                    Styles.StyleKit.TryParse(v, out var style);
+                    VisualStyle = style;
                     break;
                 // a fixed time of day, for screenshots: --time 21.5 is half past nine at night
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
