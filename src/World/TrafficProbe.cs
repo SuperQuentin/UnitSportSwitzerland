@@ -23,6 +23,8 @@ public partial class TrafficProbe : Node
     private int _maxCars, _maxTrains;
     private float _maxSpeed;
     private int _wrongWay;
+    /// <summary>Most cars giving way at a side road's Wartelinie at once (#121); reported, not judged.</summary>
+    private int _givingWay;
     private readonly bool _crossing = OS.GetCmdlineUserArgs().Contains("--crossing");
     private Vector3 _at;
     private bool _spawned;
@@ -91,16 +93,17 @@ public partial class TrafficProbe : Node
         _maxTrains = Math.Max(_maxTrains, _traffic.TrainCount);
         _maxSpeed = Math.Max(_maxSpeed, _traffic.AverageCarSpeed);
         _wrongWay = Math.Max(_wrongWay, _traffic.WrongWayCars);
+        _givingWay = Math.Max(_givingWay, _traffic.GivingWayCars);
         if ((int)(_t / 5) != (int)((_t - delta) / 5))
             GD.Print($"[trafficcheck] t={_t:F0}s cars {_traffic.CarCount} (avg {_traffic.AverageCarSpeed * 3.6f:F0} km/h), "
                 + $"trains {_traffic.TrainCount} (avg {_traffic.AverageTrainSpeed * 3.6f:F0} km/h), "
-                + $"one-way edges {_traffic.OneWayEdges}, cars against one-way {_traffic.WrongWayCars}");
+                + $"one-way edges {_traffic.OneWayEdges}, cars against one-way {_traffic.WrongWayCars}, giving way {_traffic.GivingWayCars}");
 
         if (_t < 40) return;
         if (_shot != null && GetViewport().GetTexture().GetImage().SavePng(_shot) == Error.Ok)
             GD.Print($"[trafficcheck] wrote {_shot}");
         bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0;
-        GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way)"
+        GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way, up to {_givingWay} giving way)"
                     : _wrongWay > 0 ? $"[trafficcheck] RESULT: FAILED — up to {_wrongWay} cars against a one-way"
                     : "[trafficcheck] RESULT: FAILED — no moving traffic");
         GetTree().Quit(ok ? 0 : 1);

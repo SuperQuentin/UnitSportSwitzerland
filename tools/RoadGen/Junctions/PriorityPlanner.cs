@@ -426,7 +426,9 @@ public static class PriorityPlanner
                 Check(s.Facing.Dot(u) > 0.99, "T: 3.02 faces the approaching driver");
             }
             Check(p.Signs.Count(s => s.Type == PointPropType.MainRoadSign) == 2, "T: 3.03 on the main road, once per direction");
-            Check(p.CentreLine is { Count: > 2 }, "T: the main road's centre line carries on across the mouth");
+            // straight through, the line simplifies to its two ends
+            Check(p.CentreLine is { Count: >= 2 } cl && cl[0].DistanceTo(cl[^1]) > RoadProfile.Minor.Width,
+                "T: the main road's centre line carries on across the mouth");
             var clear = new Clearance(t.Ribbons, t.Junctions);
             Check(p.Signs.All(s => clear.IsClear(s.At, 0.25)), "T: signs stand clear of every carriageway");
             Check(!clear.IsClear(j.Centre, 0) && !clear.IsClear(V(50, 0.5), 0), "T: clearance sees the junction and the road");
