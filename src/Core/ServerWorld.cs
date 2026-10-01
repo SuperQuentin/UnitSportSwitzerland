@@ -268,6 +268,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _sinceStatus += delta;
         if (_sinceStatus < 5) return;
         _sinceStatus = 0;
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         foreach (var child in _players.GetChildren())
             if (child is Node3D p)
             {
@@ -277,6 +278,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
                     : "ground not loaded";
                 GD.Print($"[server] player {p.Name} at {p.GlobalPosition}, {ground}");
             }
+        ServerStats.Ran("player status", t0);
     }
 
     private void OnPeerConnected(long id)

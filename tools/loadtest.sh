@@ -25,12 +25,14 @@ BOTS=$((PLAYERS - 1))
 
 # the default user cache must not keep a server manifest from this run (see
 # docs/notes/net/loopback-server-test-leaves-manifest.md); every process gets its own --cache
-USER_MANIFEST="$HOME/.local/share/godot/app_userdata/UnitSportSwitzerland/chunk_cache/server-manifest.json"
+USERDATA="$HOME/.local/share/godot/app_userdata"; [ -n "${APPDATA:-}" ] && USERDATA="$(cygpath -u "$APPDATA")/Godot/app_userdata"   # Linux / Windows (Git Bash)
+USER_MANIFEST="$USERDATA/UnitSportSwitzerland/chunk_cache/server-manifest.json"
 HAD_MANIFEST=0; [ -f "$USER_MANIFEST" ] && HAD_MANIFEST=1
 
 # the machine may be shared: say how much memory there was, and warn when it is short (a full
 # client takes ~2 GB and the OOM killer invalidates a run by killing one of its processes)
-avail_mb() { awk '/MemAvailable/ { printf "%d", $2 / 1024 }' /proc/meminfo; }
+# (Git Bash has no MemAvailable: MemFree there)
+avail_mb() { awk '/MemAvailable/ { a = $2 } /MemFree/ { f = $2 } END { printf "%d", (a ? a : f) / 1024 }' /proc/meminfo; }
 MEM_START=$(avail_mb); MEM_MIN=$MEM_START
 (( MEM_START < 5000 )) && echo "[loadtest] WARNING: only $MEM_START MB available"
 echo "[loadtest] $LABEL: $BOTS bots + 1 observer, ${SECONDS_RUN}s, chunks $CHUNKS, $MEM_START MB available"
@@ -59,8 +61,23 @@ OBS_SECONDS=$(( SECONDS_RUN > 40 ? SECONDS_RUN - 20 : 20 ))
     --traffic 0 --chunks "$CHUNKS" --cache "$OUT/observer_cache" > "$OUT/observer.log" 2>&1 &
 OBSERVER=$!
 
-# CPU time of the swarm processes over the steady part of the run
-cpu_s() { ps -o times= -p "$1" 2>/dev/null | tr -d ' '; }
+# CPU time of the swarm processes over the steady part of the run. Git Bash's ps has no -o, and
+# its pid is godot's console wrapper: read the Godot process it started instead (integers only,
+# no locale decimals)
+if [ -r "/proc/$SERVER/winpid" ]; then
+    declare -A WPID
+    for p in "${SWARMS[@]}"; do
+        w=$(cat /proc/$p/winpid)
+        c=$(powershell.exe -NoProfile -Command "(Get-CimInstance Win32_Process -Filter \"ParentProcessId=$w AND Name LIKE 'Godot%'\" | Select-Object -First 1).ProcessId" 2>/dev/null | tr -d '\r')
+        WPID[$p]=${c:-$w}
+    done
+    wps() { powershell.exe -NoProfile -Command "\$p = Get-Process -Id ${WPID[$1]:-0} -ErrorAction SilentlyContinue; if (\$p) { \$p.TotalProcessorTime.Ticks; \$p.WorkingSet64 }" 2>/dev/null | tr -d '\r'; }
+    cpu_s() { wps $1 | sed -n 1p | awk '{ printf "%.2f", $1 / 1e7 }'; }
+    rss_kb() { wps $1 | sed -n 2p | awk '{ printf "%d", $1 / 1024 }'; }
+else
+    cpu_s() { ps -o times= -p "$1" 2>/dev/null | tr -d ' '; }
+    rss_kb() { ps -o rss= -p "$1" 2>/dev/null | tr -d ' '; }
+fi
 sleep 10
 declare -A CPU0; T0=$(date +%s.%N)
 for p in "${SWARMS[@]}"; do CPU0[$p]=$(cpu_s $p); done
@@ -68,7 +85,7 @@ declare -A RSS_PEAK
 END=$(( $(date +%s) + OBS_SECONDS ))
 while (( $(date +%s) < END )); do
     for p in "${SWARMS[@]}"; do
-        r=$(ps -o rss= -p $p 2>/dev/null | tr -d ' '); r=${r:-0}
+        r=$(rss_kb $p); r=${r:-0}
         (( r > ${RSS_PEAK[$p]:-0} )) && RSS_PEAK[$p]=$r
     done
     m=$(avail_mb); (( m < MEM_MIN )) && MEM_MIN=$m

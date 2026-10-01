@@ -299,6 +299,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         if (_housekeeping < 5) return;
         double step = _housekeeping;
         _housekeeping = 0;
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // a car parked in a garage is 3 km under it: measured from up in the world
         float? Ground(Vector3 at) => Terrain != null && Terrain.TryGetHeight(at, out float g) ? g : null;
@@ -312,5 +313,6 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
             v.LonelyFor = near ? 0 : v.LonelyFor + step;
             if (v.LonelyFor > LonelyTime) v.QueueFree();
         }
+        Net.ServerStats.Ran("vehicle housekeeping", t0);
     }
 }
