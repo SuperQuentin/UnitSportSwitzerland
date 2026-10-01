@@ -824,7 +824,7 @@ public partial class InventoryUi : CanvasLayer
 
         _binoculars.Visible = Scope == ItemUse.Optic;
         _viewfinder.Visible = Scope == ItemUse.Photo;
-        _crosshair.Visible = Scope == ItemUse.Shoot;
+        _crosshair.Visible = false;   // no reticle for the shotgun: the barrel is the aim
         if (_binoculars.Visible && _binoculars.Material is ShaderMaterial sm)
         {
             sm.SetShaderParameter("aspect", _root.Size.X / Mathf.Max(1f, _root.Size.Y));

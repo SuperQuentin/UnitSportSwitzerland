@@ -45,6 +45,7 @@ public partial class ItemController : Node
     private const float FocalMin = 24f, FocalMax = 200f, ZoomStep = 1.12f;
     private float _focalMm = 35f;
     private bool _aimingPhoto;
+    private bool _aimingScope;   // Aim held on a scoped item (optic / camera / gun): the wheel belongs to it
 
     // the Polaroid: the print coming out and developing (DevelopSeconds), then the Photo item
     public const float DevelopSeconds = 3f;
@@ -188,6 +189,7 @@ public partial class ItemController : Node
         // everything pushed onto the player is re-asserted every frame, so letting go of Aim,
         // switching item or getting on a bike all fall back to normal without a special case
         _aimingPhoto = aiming && def!.Use == ItemUse.Photo;
+        _aimingScope = aiming;
         _ui.PhotoFocalMm = _focalMm;
         // binoculars breathe: a slow tiny zoom drift, and the overlay drifts with it
         float breath = (float)Time.GetTicksMsec() / 1000f;
@@ -246,6 +248,11 @@ public partial class ItemController : Node
             bool pad = e is InputEventJoypadButton;
             if (pad && next && _focalMm >= FocalMax - 0.5f) _focalMm = FocalMin;   // the pad has one key: wrap
             else _focalMm = Mathf.Clamp(_focalMm * (next == pad ? ZoomStep : 1f / ZoomStep), FocalMin, FocalMax);
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_aimingScope && e is InputEventMouseButton && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
+        {
+            // aiming an optic or gun: the wheel is not a hotbar scroll, but it is still not left to leak elsewhere
             GetViewport().SetInputAsHandled();
         }
         else if (e.IsActionPressed(PlayerInput.NextItem))

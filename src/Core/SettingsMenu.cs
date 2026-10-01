@@ -252,6 +252,7 @@ public partial class SettingsMenu : PanelContainer
         {
             MinValue = min, MaxValue = max, Step = step, Value = value,
             CustomMinimumSize = new Vector2(0, 20),
+            Scrollable = false,   // the wheel scrolls the menu, it does not nudge the slider under the pointer
         };
         // the label tracks the drag; the world only re-applies once the mouse is let go, so a
         // slow drag across the render-distance slider does not start forty ring evaluations
