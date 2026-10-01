@@ -38,7 +38,8 @@ public partial class ChatUi : CanvasLayer
     /// <summary>Floating lines on screen at once; an older one leaves early.</summary>
     private const int MaxFloating = 7;
 
-    private const int Width = 480, Left = 16, PanelBottom = -24, PanelMargin = 10;
+    // PanelBottom clears the hotbar (Items/InventoryUi: 50 px slots, 14 px off the bottom) on a narrow window
+    private const int Width = 480, Left = 16, PanelBottom = -76, PanelMargin = 10;
     /// <summary>Between the input and the scrollback above it, and between two lines (both lists).</summary>
     private const int ColumnGap = 8, LineGap = 3;
 
