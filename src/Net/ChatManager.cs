@@ -249,7 +249,7 @@ public partial class ChatManager : Node
                         Show(line, ChatKind.Private);
                 return;
 
-            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp":
+            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
@@ -375,6 +375,9 @@ public partial class ChatManager : Node
     /// <summary>Races (<c>/race</c>), wired by ServerWorld.</summary>
     public World.RaceManager? Race { get; set; }
 
+    /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
+    public BattleRoyale.BrManager? BattleRoyale { get; set; }
+
     /// <summary>For races: the place index (air courses to a town), a player by name, a private line.</summary>
     public PlaceIndex? Places => _places;
     public long PeerByName(string name) => _registry?.FindByName(name)?.PeerId ?? -1;
@@ -442,6 +445,10 @@ public partial class ChatManager : Node
                     foreach (string line in occasions.RunCommand(parts[1..], IsAdmin(sender)))
                         ReplyTo(sender, line, ChatKind.Private);
                 return;
+            case "br":
+                if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
+                return;
             case "race":
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId && !rest.StartsWith("cancel") && !rest.StartsWith("list")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
@@ -498,7 +505,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /occasion", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /br join|leave|status  /occasion", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);

@@ -137,8 +137,8 @@ public partial class ItemEvents : Node
     /// </summary>
     private void RelayHit(long sender, Vector3 position, Vector3 direction, string extra)
     {
-        if (!Combat.PvpRules.Enabled) return;
         if (PlayerHits.Hit.Parse(extra) is not { } hit || hit.Victim == sender) return;
+        if (!Combat.PvpRules.Allows(sender, hit.Victim)) return;
         if (Weapons.Get(hit.Weapon) is not { } weapon || hit.Damage > weapon.MaxHit + 0.5f) return;
         var shooter = GetNodeOrNull<FootPlayer>("../Players/" + sender);
         var victim = GetNodeOrNull<FootPlayer>("../Players/" + hit.Victim);

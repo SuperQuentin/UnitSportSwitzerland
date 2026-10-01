@@ -44,6 +44,7 @@ public sealed class ChatCompleter
         ("login", false, false),
         ("stream", false, false),
         ("race", false, false),
+        ("br", false, false),
         ("say", true, false),
         ("admin", true, false),
         ("tp", true, false),
@@ -118,6 +119,16 @@ public sealed class ChatCompleter
                 {
                     0 => ["list", "add", "remove"],
                     1 when words[1].ToLowerInvariant() is "add" or "remove" => PlayerNames(),
+                    _ => [],
+                };
+                break;
+
+            case "br":
+                bool admin = Permissions.IsAdmin;
+                options = argIndex switch
+                {
+                    0 => admin ? ["join", "leave", "status", "open", "start", "cancel"] : ["join", "leave", "status"],
+                    _ when admin && words[1].ToLowerInvariant() == "open" => ["here", "short", "normal", "long", "5", "6", "7"],
                     _ => [],
                 };
                 break;

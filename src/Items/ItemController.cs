@@ -164,7 +164,7 @@ public partial class ItemController : Node
         }
 
         // cash you carry is lost when you go down; what you claimed to the account is not
-        if (player.KnockedOut && !_wasKnockedOut && _inventory.Cash > 0)
+        if (player.KnockedOut && !_wasKnockedOut && _inventory.Cash > 0 && !_inventory.InMatch)
         {
             int lost = _inventory.Cash;
             _inventory.TakeCash(lost);

@@ -110,6 +110,11 @@ public partial class ClientWorld : Node3D
             GetTree().Quit(ChatCheck.Run());
             return;
         }
+        if (BattleRoyale.BrCheck.Requested)
+        {
+            GetTree().Quit(BattleRoyale.BrCheck.Run());
+            return;
+        }
         if (Occasions.OccasionProbe.Requested)
         {
             GetTree().Quit(Occasions.OccasionProbe.Run());
@@ -400,6 +405,7 @@ public partial class ClientWorld : Node3D
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null
             || Items.PlacedProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.PvpProbe.Role != null
+            || BattleRoyale.BrProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
@@ -422,6 +428,7 @@ public partial class ClientWorld : Node3D
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
         if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
+        if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
         Vehicles.PassengerService.Said += message => items.Ui.Toast(message);
 
@@ -853,6 +860,15 @@ public partial class ClientWorld : Node3D
         var race = World.RaceManager.CreateClient();
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
+
+        // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
+        var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
+        br.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+        br.Inventory = () => _items?.Inventory;
+        br.Teleport = (e, n, label) => _teleporter?.TeleportTo(e, n, label) == true;
+        br.AddAnchor = node => _chunks?.AddAnchor(node);
+        br.RemoveAnchor = node => _chunks?.RemoveAnchor(node);
+        AddChild(br);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
         if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
 

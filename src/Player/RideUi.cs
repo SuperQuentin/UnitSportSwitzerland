@@ -284,6 +284,7 @@ public partial class RideUi : CanvasLayer
 
     public void Open()
     {
+        if (Permissions.RidesLocked) return;   // in a Battle Royale match you ride what you find
         // marks what you are already on, so the panel answers "what am I riding" too, and greys
         // the vehicles for a non-admin on a server
         Relabel();
