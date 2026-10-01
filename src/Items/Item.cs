@@ -83,6 +83,8 @@ public enum ItemId
     Ammo9mm = 57,
     Ammo75 = 58,
     ArmorVest = 59,
+    /// <summary>One flare: fired, it calls a Battle Royale supply drop where you stand (#198).</summary>
+    FlareGun = 60,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -115,6 +117,8 @@ public enum ItemUse
     Melee,
     /// <summary>Use puts it on: body armour, used up as it absorbs hits (<see cref="Player.FootPlayer.Armor"/>).</summary>
     Armor,
+    /// <summary>Use fires it into the sky: a flare that calls a supply drop (<see cref="ItemId.FlareGun"/>).</summary>
+    Signal,
 }
 
 /// <summary>
@@ -228,6 +232,8 @@ public static class ItemDefs
             ItemUse.Material, 90, new Color(0.70f, 0.52f, 0.22f), "75", 0, ItemCategory.Gear, 1f),
         new(ItemId.ArmorVest, "Armour vest", "{use_item} to put it on: it takes half of every hit until it has soaked up 50.",
             ItemUse.Armor, 1, new Color(0.30f, 0.34f, 0.24f), "AV", 0, ItemCategory.Gear, 200f),
+        new(ItemId.FlareGun, "Flare gun", "{use_item} fires its one flare into the sky: in a Battle Royale, a supply drop comes down where you stand. Everyone sees the flare.",
+            ItemUse.Signal, 1, new Color(0.95f, 0.45f, 0.10f), "FG", 0, ItemCategory.Gear, 60f),
     };
 
     private static ItemDef Eat(ItemId id, string name, int stack, string tint, string glyph, float heal,
@@ -399,6 +405,14 @@ public static class ItemDefs
             {
                 s.Box(new Vector3(0, 0.0f, 0.0f), new Vector3(0.022f, 0.028f, 0.10f), new Color(0.80f, 0.10f, 0.12f));   // the red handle
                 s.Box(new Vector3(0, 0.003f, 0.10f), new Vector3(0.006f, 0.022f, 0.10f), new Color(0.80f, 0.82f, 0.86f)); // blade
+                break;
+            }
+            case ItemId.FlareGun:
+            {
+                var orange = new Color(0.95f, 0.45f, 0.10f);
+                s.Box(new Vector3(0, -0.045f, -0.01f), new Vector3(0.03f, 0.09f, 0.035f), orange);
+                s.Tube(new Vector3(0, 0.02f, -0.03f), new Vector3(0, 0.02f, 0.16f), 0.022f, orange, 8);
+                s.Tube(new Vector3(0, 0.02f, 0.16f), new Vector3(0, 0.02f, 0.17f), 0.018f, new Color(0.15f, 0.15f, 0.15f), 8);
                 break;
             }
             case ItemId.ArmorVest:

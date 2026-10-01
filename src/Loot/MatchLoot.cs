@@ -4,7 +4,12 @@ using UnitSport.Items;
 namespace UnitSport.Loot;
 
 /// <summary>The kinds of thing a Battle Royale match fills (#194). Sent as an int: append only.</summary>
-public enum MatchTable { Furniture = 0, GunLocker = 1, Safe = 2, Supply = 3, Military = 4, Airdrop = 5 }
+public enum MatchTable
+{
+    Furniture = 0, GunLocker = 1, Safe = 2, Supply = 3, Military = 4, Airdrop = 5,
+    // the outdoor sites (#198)
+    Bunker = 6, HighSeat = 7, HayStash = 8, SacBox = 9, Wreck = 10, FishingHut = 11,
+}
 
 /// <summary>
 /// What a Battle Royale match puts in its containers and crates (#194): weapons with rounds for
@@ -61,6 +66,38 @@ public static class MatchLoot
                 Supply(found, rng, ItemId.ArmorVest);
                 Supply(found, rng, ItemId.FirstAidKit);
                 if (rng.NextDouble() < 0.5) Weapon(found, rng, ItemId.Pistol);
+                break;
+            case MatchTable.Bunker:
+                Weapon(found, rng, ItemId.HuntingRifle);
+                Supply(found, rng, ItemId.ArmorVest);
+                Supply(found, rng, ItemId.FirstAidKit);
+                if (rng.NextDouble() < 0.5) Weapon(found, rng, ItemId.Rifle);
+                break;
+            case MatchTable.HighSeat:
+                Weapon(found, rng, rng.NextDouble() < 0.45 ? ItemId.HuntingRifle : ItemId.Shotgun);
+                if (rng.NextDouble() < 0.5) found[ItemId.Binoculars] = 1;
+                break;
+            case MatchTable.HayStash:
+                Supply(found, rng, ItemId.Bandage);
+                Supply(found, rng, rng.NextDouble() < 0.5 ? ItemId.Apple : ItemId.Cheese);
+                if (rng.NextDouble() < 0.4) Weapon(found, rng, ItemId.Knife);
+                if (rng.NextDouble() < 0.3) Weapon(found, rng, ItemId.Pistol);
+                break;
+            case MatchTable.SacBox:
+                Supply(found, rng, ItemId.FirstAidKit);
+                Supply(found, rng, ItemId.Bandage);
+                if (rng.NextDouble() < 0.35) found[ItemId.FlareGun] = 1;
+                break;
+            case MatchTable.Wreck:
+                Weapon(found, rng, ItemId.Rifle);
+                found[ItemId.Ammo75] = found.GetValueOrDefault(ItemId.Ammo75) + 20;
+                Supply(found, rng, ItemId.ArmorVest);
+                if (rng.NextDouble() < 0.5) found[ItemId.FlareGun] = 1;
+                break;
+            case MatchTable.FishingHut:
+                Supply(found, rng, Pick(new[] { (ItemId.Ammo9mm, 1f), (ItemId.Shells, 1f), (ItemId.Ammo75, 0.6f) }, rng));
+                Supply(found, rng, ItemId.CannedFood);
+                if (rng.NextDouble() < 0.25) Weapon(found, rng, ItemId.Shotgun);
                 break;
             case MatchTable.Airdrop:
                 Weapon(found, rng, rng.NextDouble() < 0.5 ? ItemId.HuntingRifle : ItemId.Rifle);

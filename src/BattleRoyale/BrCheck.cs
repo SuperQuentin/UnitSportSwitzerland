@@ -177,6 +177,11 @@ public static class BrCheck
         Expect(ammo, "every gun found comes with rounds for it");
         Expect(locker && drop, "gun lockers and supply drops always hold a rifle");
         Expect(full is > 1800 and < 2200, $"half the furniture holds something ({full / 40.0:F1} %)");
+        int flares = Enumerable.Range(0, 2000).Count(i => UnitSport.Loot.MatchLoot.Roll(UnitSport.Loot.MatchTable.SacBox, new Random(i)).Any(st => st.Id == ItemId.FlareGun));
+        bool bunkers = Enumerable.Range(0, 2000).All(i => UnitSport.Loot.MatchLoot.Roll(UnitSport.Loot.MatchTable.Bunker, new Random(i)).Any(st => st.Id == ItemId.HuntingRifle));
+        Expect(bunkers && flares is > 500 and < 900, $"bunkers always hold a hunting rifle; SAC boxes a flare gun {flares / 20.0:F0} % of the time");
+        Expect(BrCrates.Combination(12, 99).SequenceEqual(BrCrates.Combination(12, 99)) && !BrCrates.Combination(12, 99).SequenceEqual(BrCrates.Combination(13, 99)),
+            "a locked crate's dial numbers are the same everywhere, and differ between crates");
 
         int drops = BrLoot.DropPhases.Sum(p => BrLoot.DropsAt(p, 6000));
         Expect(drops == 3 && BrLoot.DropsAt(3, 6000) == 0 && BrLoot.DropPhases.Sum(p => BrLoot.DropsAt(p, 5000)) == 2,
@@ -197,6 +202,22 @@ public static class BrCheck
         var roads = Task.Run(() => BrLoot.RoadPoints(source, area)).GetAwaiter().GetResult();
         var crates = BrLoot.RoadsideCrates(roads, area, 5);
         int supply = crates.Count(c => c.Style == CrateStyle.Supply), army = crates.Count(c => c.Style == CrateStyle.Military);
+        // the outdoor sites (#198) of two real regions
+        foreach (int seed in new[] { 5, 41 })
+        {
+            var region = BrRegion.Pick(seed, 6000, places, tiles, new List<(double, double)>(), (0, 0));
+            var regionRoads = Task.Run(() => BrLoot.RoadPoints(source, region)).GetAwaiter().GetResult();
+            var w = System.Diagnostics.Stopwatch.StartNew();
+            var sites = Task.Run(() => BrSites.Place(source, region, seed, regionRoads)).GetAwaiter().GetResult();
+            int Of(CrateStyle st) => sites.Crates.Count(c => c.Style == st);
+            Expect(Of(CrateStyle.Bunker) >= 1 && Of(CrateStyle.HighSeat) >= 5 && Of(CrateStyle.Wreck) == 1
+                && Of(CrateStyle.HayStash) + Of(CrateStyle.FishingHut) > 0 && sites.Crates.Where(c => c.Style == CrateStyle.Bunker).All(c => c.Locked)
+                && sites.Crates.All(c => region.Contains(c.E, c.N) || Math.Abs(c.N - region.N) < region.Side / 2 + 20),
+                $"{region.Name} sites in {w.ElapsedMilliseconds} ms: {Of(CrateStyle.Bunker)} bunker(s), {Of(CrateStyle.HighSeat)} high seats, "
+                + $"{Of(CrateStyle.HayStash)} hay stashes ({sites.Bikes.Count} bikes), {Of(CrateStyle.SacBox)} SAC boxes, "
+                + $"{Of(CrateStyle.Wreck)} wreck, {Of(CrateStyle.FishingHut)} fishing huts");
+        }
+
         Expect(roads.Count > 500 && supply > 200 && army >= 3 && crates.All(c => area.Contains(c.E, c.N) || Math.Abs(c.E - area.E) < area.Side / 2 + 10),
             $"{area.Name}: {roads.Count} road points, {supply} supply crates, {army} army crates");
     }

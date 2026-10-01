@@ -323,9 +323,20 @@ public partial class BrManager : Node
             var roads = await BrLoot.RoadPoints(_source, area);
             if (match != _match || _state.Phase != BrPhase.Playing) return;
             var crates = BrLoot.RoadsideCrates(roads, area, seed);
+            if (_crates != null) _crates.Seed = seed;
             _crates?.Spawn(crates);
             int vehicles = BrLoot.ParkVehicles(roads, area, seed, Origin);
             GD.Print($"[br] loot: {roads.Count} road points, {crates.Count} crates, {vehicles} vehicles");
+
+            // the outdoor sites (#198): bunkers, high seats, hay stashes, SAC boxes, the wreck, fishing huts
+            var sites = await BrSites.Place(_source, area, seed, roads);
+            if (match != _match || _state.Phase != BrPhase.Playing) return;
+            _crates?.Spawn(sites.Crates);
+            int bikes = 0;
+            foreach (var (e, n, alt, yaw) in sites.Bikes)
+                if (BrLoot.PlaceBike(Origin, e, n, alt, yaw, seed + bikes, $"{BrLoot.VehiclePrefix}barn{bikes}")) bikes++;
+            GD.Print("[br] sites: " + string.Join(", ", sites.Crates.GroupBy(c => c.Style).Select(g => $"{g.Count()} {g.Key}"))
+                + $", {bikes} motorbikes by barns");
         }
         catch (Exception ex) { GD.PushWarning($"[br] loot: {ex.Message}"); }
     }
@@ -345,6 +356,30 @@ public partial class BrManager : Node
         foreach (var d in drops)
             Broadcast($"A supply drop is coming down in {Cell(d.E - _state.AreaE, d.N - _state.AreaN)}!");
     }
+
+    /// <summary>Server: a living entrant fired a flare (#198): a supply drop comes down where they stand.</summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestDrop()
+    {
+        if (!_server || _state.Phase != BrPhase.Playing || _crates == null || Origin == null) return;
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (_state.Find(peer) is not { Alive: true } e || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
+        if (_lastFlare.TryGetValue(peer, out double last) && Now - last < 20) return;
+        _lastFlare[peer] = Now;
+        var (pe, pn) = Origin.ToLv95(body.GlobalPosition);
+        var rng = new Random(_state.Seed ^ (int)peer ^ (int)Now);
+        float a = (float)(rng.NextDouble() * Math.Tau), r = 20f + (float)rng.NextDouble() * 30f;
+        var drop = new Crate
+        {
+            Style = CrateStyle.Airdrop, E = pe + Math.Cos(a) * r, N = pn + Math.Sin(a) * r,
+            LandsAt = Now + BrCrates.DropHeight / BrCrates.FallSpeed, Label = "the supply drop",
+        };
+        drop.SetStacks(Loot.MatchLoot.Roll(Loot.MatchTable.Airdrop, rng));
+        _crates.Spawn(new[] { drop });
+        Broadcast($"{e.Name} fired a flare: a supply drop is coming down in {Cell(drop.E - _state.AreaE, drop.N - _state.AreaN)}!");
+    }
+
+    private readonly Dictionary<long, double> _lastFlare = new();
 
     /// <summary>The full map's grid square of a zone point ("C4").</summary>
     private string Cell(double x, double y)

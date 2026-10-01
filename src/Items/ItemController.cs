@@ -386,7 +386,23 @@ public partial class ItemController : Node
                 Kick(player);
                 Play(SfxSynth.WhooshBank.Variants[SfxRng.Next(SfxSynth.WhooshBank.Variants.Length)], 1.3f);
                 var (eye, aim) = AimFrom(player, blade.Range);
-                PlayerHits.Stab(player, eye, aim, blade);
+                if (!PlayerHits.Stab(player, eye, aim, blade)) BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, blade.Range);
+                break;
+            }
+
+            case ItemUse.Signal:
+            {
+                // a flare calls a supply drop (#198): only where there is a match to drop into
+                if (BattleRoyale.BrManager.Instance?.CallDrop() != true)
+                {
+                    _ui.Toast("The flare would only call a supply drop in a Battle Royale.");
+                    break;
+                }
+                _inventory.TakeOne(slot);
+                Kick(player);
+                var up = (Vector3.Up * 3f - player.Camera.GlobalTransform.Basis.Z).Normalized();
+                ItemEvents.Instance?.Send(ItemEventKind.Flare, ItemEvents.MuzzleOf(player, up), up);
+                _ui.Toast("Flare up: a supply drop is on its way.");
                 break;
             }
 
@@ -534,6 +550,8 @@ public partial class ItemController : Node
             Play(stream, pitch * weapon.Pitch);
         }
         PlayerHits.Shoot(player, eye, aim, weapon);
+        // a shot through a supply crate breaks it open (#198)
+        BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, weapon.Range);
         if (weapon.Id == ItemId.Shotgun) Fire?.Invoke(player, eye, aim);
     }
 

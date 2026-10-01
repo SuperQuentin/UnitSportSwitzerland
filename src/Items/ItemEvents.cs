@@ -17,6 +17,8 @@ public enum ItemEventKind
     /// <see cref="PlayerHits.Hit"/>. Delivered to the victim only, and only while PvP is on.
     /// </summary>
     Hit = 3,
+    /// <summary>A flare fired into the sky (#198). Position = the muzzle; it climbs and burns red.</summary>
+    Flare = 4,
 }
 
 /// <summary>
@@ -62,6 +64,7 @@ public partial class ItemEvents : Node
         [ItemEventKind.Shot] = (n, e) => n.ShotEffect(e),
         [ItemEventKind.PhotoFlash] = (n, e) => n.FlashEffect(e),
         [ItemEventKind.Hit] = PlayerHits.OnHit,
+        [ItemEventKind.Flare] = (n, e) => n.FlareEffect(e),
     };
 
     /// <summary>
@@ -205,6 +208,28 @@ public partial class ItemEvents : Node
             Sound3D(shooter != null && IsInstanceValid(shooter) ? shooter.GlobalPosition + Vector3.Up * 1.3f : at,
                 stream, pitch, db - 4f, unitSize: 6f, maxDistance: 250f);
         };
+    }
+
+    /// <summary>A red flare climbing about 140 m over four seconds, a light on it, a pop and a hiss.</summary>
+    private void FlareEffect(ItemEvent e)
+    {
+        Sound3D(e.Position, SfxSynth.Shotgun.Pick(_rng).Stream, 1.9f, -6f, unitSize: 12f, maxDistance: 1500f);
+        var flare = new MeshInstance3D
+        {
+            Mesh = new SphereMesh { Radius = 0.6f, Height = 1.2f, RadialSegments = 8, Rings = 4 },
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = new Color(1f, 0.25f, 0.15f),
+            },
+            TopLevel = true,
+        };
+        flare.AddChild(new OmniLight3D { LightColor = new Color(1f, 0.3f, 0.2f), LightEnergy = 8f, OmniRange = 60f, ShadowEnabled = false });
+        AddChild(flare);
+        flare.GlobalPosition = e.Position;
+        var t = flare.CreateTween();
+        t.TweenProperty(flare, "global_position", e.Position + Vector3.Up * 140f, 4.0).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Quad);
+        t.TweenInterval(2.0);
+        t.TweenCallback(Callable.From(flare.QueueFree));
     }
 
     private void FlashEffect(ItemEvent e)

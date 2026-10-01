@@ -9,7 +9,12 @@ using UnitSport.Player;
 namespace UnitSport.BattleRoyale;
 
 /// <summary>What a crate is, for its look and its name. Sent as an int: append only.</summary>
-public enum CrateStyle { DeathBox = 0, Supply = 1, Military = 2, Airdrop = 3 }
+public enum CrateStyle
+{
+    DeathBox = 0, Supply = 1, Military = 2, Airdrop = 3,
+    // the outdoor sites (#198), and what is left of a supply crate shot open
+    Bunker = 4, HighSeat = 5, HayStash = 6, SacBox = 7, Wreck = 8, FishingHut = 9, Pile = 10,
+}
 
 /// <summary>One crate of a match. <see cref="Alt"/> = <see cref="BrCrates.Ground"/>: on the ground wherever that is.</summary>
 public sealed class Crate
@@ -22,6 +27,10 @@ public sealed class Crate
     /// <summary>Server clock at which it is on the ground and can be opened (an airdrop falls first).</summary>
     public double LandsAt { get; set; }
     public string Label { get; set; } = "";
+    /// <summary>Which way it faces (rad, node yaw: see <see cref="BrSites.YawFacing"/>); NaN for "any".</summary>
+    public float Yaw { get; set; } = float.NaN;
+    /// <summary>Closed with a dial (a bunker door): cracked with the lock-picking dial first.</summary>
+    public bool Locked { get; set; }
     public int[] Ids { get; set; } = Array.Empty<int>();
     public int[] Counts { get; set; } = Array.Empty<int>();
 
@@ -85,7 +94,11 @@ public partial class BrCrates : Node3D
     // server
     // ------------------------------------------------------------------------------------
 
-    private static readonly JsonSerializerOptions Json = new();
+    /// <summary>A crate's yaw is NaN for "any way round": plain JSON has no NaN.</summary>
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals,
+    };
 
     /// <summary>Server: puts crates into the match and tells everyone.</summary>
     public void Spawn(IEnumerable<Crate> crates)
@@ -142,6 +155,46 @@ public partial class BrCrates : Node3D
         }
         else Rpc(MethodName.Changed, id, c.Ids, c.Counts);
         RpcId(peer, MethodName.Granted, id, item, count);
+    }
+
+    /// <summary>The dial's numbers for a locked crate: the same on the server and every client, never sent.</summary>
+    public static int[] Combination(long id, int seed) =>
+        Loot.LootTables.Combination($"crate{id}", 0, seed, Interiors.FurnitureType.Safe);
+
+    /// <summary>Server: the match seed, for the combinations.</summary>
+    public int Seed { get; set; }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestUnlock(long id, int[] combo)
+    {
+        if (!_server) return;
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (!_crates.TryGetValue(id, out var c) || !c.Locked || !MayLoot(peer)
+            || GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body || !Near(c, body.GlobalPosition, Reach + 2.5f))
+            return;
+        if (!combo.SequenceEqual(Combination(id, Seed)))
+        {
+            GD.Print($"[br] peer {peer} gave a wrong combination for crate {id}");
+            RpcId(peer, MethodName.UnlockRefused, id);
+            return;
+        }
+        c.Locked = false;
+        GD.Print($"[br] crate {id} ({c.Style}) unlocked by peer {peer}");
+        Rpc(MethodName.Unlocked, id, peer);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestBreak(long id)
+    {
+        if (!_server) return;
+        long peer = Multiplayer.GetRemoteSenderId();
+        // a supply crate within a rifle's reach of a living entrant
+        if (!_crates.TryGetValue(id, out var c) || c.Style != CrateStyle.Supply || !MayLoot(peer)
+            || GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body || !Near(c, body.GlobalPosition, 320f))
+            return;
+        c.Style = CrateStyle.Pile;
+        c.Label = "the broken crate";
+        Rpc(MethodName.Broken, id);
     }
 
     /// <summary>Whether <paramref name="at"/> stands at the crate: horizontally, and in height when the crate has one.</summary>
@@ -201,6 +254,88 @@ public partial class BrCrates : Node3D
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Unlocked(long id, long by)
+    {
+        if (_server || !_crates.TryGetValue(id, out var c)) return;
+        c.Locked = false;
+        if (_nodes.TryGetValue(id, out var node))
+        {
+            Draw(c);
+            Sound(node.GlobalPosition, Audio.SfxSynth.DoorOpenBank.Variants[0], 0.7f, 0f);
+        }
+        Loot.LootService.Instance?.CrateUnlocked(id, by == Multiplayer.GetUniqueId());
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void UnlockRefused(long id) => Loot.LootService.Instance?.CrateUnlockRefused(id);
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Broken(long id)
+    {
+        if (_server || !_crates.TryGetValue(id, out var c)) return;
+        c.Style = CrateStyle.Pile;
+        c.Label = "the broken crate";
+        if (!_nodes.TryGetValue(id, out var node)) return;
+        var at = node.GlobalPosition;
+        Draw(c);
+        Splinters(at);
+        Sound(at, Audio.SfxSynth.ImpactBank.Pick(Rng).Stream, 0.7f, 2f);
+    }
+
+    /// <summary>Asks the server to crack a crate's dial with these numbers.</summary>
+    public void Unlock(long id, int[] combo) => RpcId(1, MethodName.RequestUnlock, id, combo);
+
+    /// <summary>
+    /// A shot or a stab from <paramref name="from"/> along <paramref name="dir"/>: the first supply
+    /// crate within <paramref name="range"/> it passes through is broken open (asked of the server).
+    /// True when one was hit.
+    /// </summary>
+    public bool TryBreak(Vector3 from, Vector3 dir, float range)
+    {
+        long best = 0;
+        float bestT = range;
+        foreach (var (id, node) in _nodes)
+        {
+            if (!_crates.TryGetValue(id, out var c) || c.Style != CrateStyle.Supply) continue;
+            var centre = node.GlobalPosition + Vector3.Up * 0.25f;
+            float t = (centre - from).Dot(dir);
+            if (t < 0 || t > bestT || (from + dir * t).DistanceTo(centre) > 0.45f) continue;
+            best = id;
+            bestT = t;
+        }
+        if (best == 0) return false;
+        RpcId(1, MethodName.RequestBreak, best);
+        return true;
+    }
+
+    private static readonly Random Rng = new();
+
+    private void Sound(Vector3 at, AudioStream stream, float pitch, float db)
+    {
+        var s = new AudioStreamPlayer3D { Stream = stream, PitchScale = pitch, VolumeDb = db, UnitSize = 10f, MaxDistance = 300f, Bus = Audio.SfxBus.Name, TopLevel = true };
+        AddChild(s);
+        s.GlobalPosition = at;
+        s.Finished += s.QueueFree;
+        s.Play();
+    }
+
+    /// <summary>Planks flying off a crate shot open.</summary>
+    private void Splinters(Vector3 at)
+    {
+        var burst = new CpuParticles3D
+        {
+            Emitting = true, OneShot = true, Amount = 18, Lifetime = 1.4f, Explosiveness = 1f,
+            Direction = Vector3.Up, Spread = 70f, InitialVelocityMin = 3f, InitialVelocityMax = 6f, Gravity = new Vector3(0, -9.8f, 0),
+            AngularVelocityMin = -400f, AngularVelocityMax = 400f,
+            Mesh = new BoxMesh { Size = new Vector3(0.35f, 0.03f, 0.08f), Material = new StandardMaterial3D { AlbedoColor = new Color(0.62f, 0.44f, 0.24f) } },
+            TopLevel = true,
+        };
+        AddChild(burst);
+        burst.GlobalPosition = at + Vector3.Up * 0.3f;
+        GetTree().CreateTimer(2.0).Timeout += burst.QueueFree;
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Granted(long id, int item, int count) =>
         Loot.LootService.Instance?.CrateGranted(id, new ItemStack((ItemId)item, count));
 
@@ -237,13 +372,22 @@ public partial class BrCrates : Node3D
     /// <summary>E at a crate: opens it in the loot panel. False when there is none in reach.</summary>
     public bool TryOpen(FootPlayer p)
     {
-        if (NearestTo(p) is not { } c || Loot.LootService.Instance is not { } loot) return false;
-        loot.OpenCrate(p, c.Id, c.Label);
+        if (Loot.LootService.Instance is not { } loot) return false;
+        // E again shuts the panel or the dial
+        if (loot.IsOpen || loot.LockUi?.IsOpen == true)
+        {
+            loot.Close();
+            loot.StopPicking();
+            return true;
+        }
+        if (NearestTo(p) is not { } c) return false;
+        if (c.Locked) loot.PickCrate(p, c.Id, c.Label, Combination(c.Id, BrManager.Instance?.State.Seed ?? 0));
+        else loot.OpenCrate(p, c.Id, c.Label);
         return true;
     }
 
     public string? PromptFor(FootPlayer p) =>
-        NearestTo(p) is { } c ? InputHints.Prompt(PlayerInput.InteractMount, $"Search {c.Label}") : null;
+        NearestTo(p) is { } c ? InputHints.Prompt(PlayerInput.InteractMount, c.Locked ? $"Crack {c.Label}" : $"Search {c.Label}") : null;
 
     /// <summary>Asks the server for one stack of a crate.</summary>
     public void Take(long id, int index, ItemStack stack) =>
@@ -259,12 +403,14 @@ public partial class BrCrates : Node3D
     {
         if (_nodes.Remove(c.Id, out var old)) old.QueueFree();
         var node = new Node3D { Name = $"C{c.Id}" };
-        node.AddChild(new MeshInstance3D { Mesh = MeshOf(c.Style), MaterialOverride = ItemDefs.Material });
+        node.AddChild(new MeshInstance3D { Mesh = BrSiteMeshes.For(c.Style, c.Locked) ?? MeshOf(c.Style), MaterialOverride = ItemDefs.Material });
         if (c.Style == CrateStyle.Airdrop)
         {
             node.AddChild(new MeshInstance3D { Name = "Canopy", Mesh = Canopy(), MaterialOverride = ItemDefs.Material, Position = Vector3.Up * 6f });
-            node.AddChild(Smoke());
+            node.AddChild(Smoke(new Color(0.95f, 0.35f, 0.25f, 0.55f)));
         }
+        // the wreck still smokes: you see it from far off, and find it by it
+        if (c.Style == CrateStyle.Wreck) node.AddChild(Smoke(new Color(0.25f, 0.25f, 0.27f, 0.6f)));
         AddChild(node);
         _nodes[c.Id] = node;
         Place(c, node);
@@ -305,7 +451,7 @@ public partial class BrCrates : Node3D
         double left = c.LandsAt - ClockSync.ServerNow;
         if (left > 0) at.Y += Mathf.Min(DropHeight, (float)left * FallSpeed);
         node.GlobalPosition = at;
-        node.Rotation = new Vector3(0, (c.Id * 0.7f) % Mathf.Tau, 0);
+        node.Rotation = new Vector3(0, float.IsNaN(c.Yaw) ? (c.Id * 0.7f) % Mathf.Tau : c.Yaw, 0);
     }
 
     private static readonly Dictionary<CrateStyle, ArrayMesh> Meshes = new();
@@ -371,7 +517,7 @@ public partial class BrCrates : Node3D
     }
 
     /// <summary>A column of coloured smoke you can see from far off.</summary>
-    private static Node3D Smoke() => new CpuParticles3D
+    private static Node3D Smoke(Color colour) => new CpuParticles3D
     {
         Name = "Smoke",
         Amount = 60,
@@ -383,7 +529,7 @@ public partial class BrCrates : Node3D
         InitialVelocityMax = 4f,
         ScaleAmountMin = 2f,
         ScaleAmountMax = 4.5f,
-        Color = new Color(0.95f, 0.35f, 0.25f, 0.55f),
+        Color = colour,
         Mesh = new QuadMesh
         {
             Size = Vector2.One,

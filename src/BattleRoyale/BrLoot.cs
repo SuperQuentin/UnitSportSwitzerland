@@ -136,6 +136,19 @@ public static class BrLoot
         return vehicles.Place(state, name) != null;
     }
 
+    /// <summary>A motorbike standing at an exact spot (by a barn, #198).</summary>
+    public static bool PlaceBike(WorldOrigin origin, double e, double n, float alt, float yaw, int seed, string name)
+    {
+        if (VehicleManager.Instance is not { } vehicles) return false;
+        var bikes = MotorbikeCatalog.All.Select(b => b.Kind).ToArray();
+        if (bikes.Length == 0) return false;
+        var kind = bikes[new Random(seed).Next(bikes.Length)];
+        if (Rideable.Create(kind) is not { IsVehicle: true } ride) return false;
+        var state = new VehicleState(kind, origin.ToWorld(e, n, alt + 0.6f), yaw, Vector3.Zero, ride.MaxHealth,
+            EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
+        return vehicles.Place(state, name) != null;
+    }
+
     /// <summary>The match's vehicles, wrecks included, out of the world.</summary>
     public static void RemoveVehicles()
     {

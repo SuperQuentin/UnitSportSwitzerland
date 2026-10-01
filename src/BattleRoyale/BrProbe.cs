@@ -78,6 +78,7 @@ public partial class BrProbe : Node
         // the loot (#194): crates and vehicles came with the drop; a supply crate, emptied
         var me = Me!;
         await LootSupplyCrate(me);
+        if (Sites) await TrySites(me);
 
         // where the last circle closes: inside every circle until the very end
         var c = Br.Zone!.CentreOf(ZoneSchedule.Phases);
@@ -243,6 +244,86 @@ public partial class BrProbe : Node
         Loot.LootService.Instance?.TakeAll();
         Expect(await Until(() => CountOf(ItemId.Knife) == knives + 1, 10), $"B's knife is now A's ({knives} -> {CountOf(ItemId.Knife)})");
         Loot.LootService.Instance?.Close();
+    }
+
+    /// <summary>"--brsites": the outdoor sites (#198) are checked too (a real-terrain run: tools/brcheck.sh with SITES=1).</summary>
+    private static bool Sites => Array.IndexOf(OS.GetCmdlineUserArgs(), "--brsites") >= 0;
+
+    /// <summary>A: the sites exist; crack a bunker; shoot a supply crate open and loot the pile; fire a flare.</summary>
+    private async Task TrySites(FootPlayer me)
+    {
+        var crates = BrCrates.Instance!;
+        await Until(() => crates.All.Any(c => c.Style == CrateStyle.HighSeat), 30);
+        string Of(CrateStyle st) => $"{crates.All.Count(c => c.Style == st)} {st}";
+        Expect(crates.All.Any(c => c.Style == CrateStyle.Bunker) && crates.All.Any(c => c.Style == CrateStyle.HighSeat) && crates.All.Any(c => c.Style == CrateStyle.Wreck),
+            $"the outdoor sites: {Of(CrateStyle.Bunker)}, {Of(CrateStyle.HighSeat)}, {Of(CrateStyle.HayStash)}, {Of(CrateStyle.SacBox)}, {Of(CrateStyle.Wreck)}, {Of(CrateStyle.FishingHut)}");
+
+        // the bunker: the dial, then its contents
+        if (crates.All.FirstOrDefault(c => c.Style == CrateStyle.Bunker) is { } bunker)
+        {
+            Br!.Teleport(bunker.E, bunker.N, "bunker");
+            await Until(() => crates.NearestTo(me)?.Id == bunker.Id, 25);
+            await Seconds(1.5);
+            Snap("a_bunker");
+            var loot = Loot.LootService.Instance!;
+            Expect(crates.TryOpen(me) && loot.LockUi?.IsOpen == true, "E at the bunker door opens the dial");
+            loot.SubmitCombination(BrCrates.Combination(bunker.Id, Br.State.Seed));
+            Expect(await Until(() => !bunker.Locked && loot.IsOpen, 10), "the right numbers open the door, straight into its contents");
+            loot.TakeAll();
+            Expect(await Until(() => CountOf(ItemId.HuntingRifle) > 0, 10), "the bunker's hunting rifle is in the pack");
+            Snap("a_bunker_open");
+            loot.Close();
+        }
+
+        // a supply crate shot open: a pile to loot
+        if (CountOf(ItemId.HuntingRifle) > 0 && crates.All.Where(c => c.Style == CrateStyle.Supply).MinBy(c => Dist(c)) is { } target)
+        {
+            Br.Teleport(target.E + 8, target.N, "a crate to shoot");
+            await Until(() => crates.InReach(target.Id, me.GlobalPosition, 9f), 25);
+            await Seconds(1.5);
+            var node = crates.GetNodeOrNull<Node3D>($"C{target.Id}");
+            if (node != null)
+            {
+                int gun = SlotOf(ItemId.HuntingRifle);
+                _items.Inventory.Select(gun);
+                // the crosshair on the crate: in third person the shot follows the camera's ray
+                for (int i = 0; i < 3; i++)
+                {
+                    var dir = (node.GlobalPosition + Vector3.Up * 0.25f - me.Camera.GlobalPosition).Normalized();
+                    me.LookYaw = Mathf.Atan2(-dir.X, -dir.Z);
+                    me.LookPitch = Mathf.Asin(Mathf.Clamp(dir.Y, -1f, 1f));
+                    await Seconds(0.3);
+                }
+                _items.UseSlot(me, gun);
+                bool shot = await Until(() => target.Style == CrateStyle.Pile, 3);
+                // on a steep real slope the third-person crosshair can sit in the hillside: the same
+                // break request, traced from the eye straight at the crate
+                if (!shot)
+                {
+                    var eye = me.EyePosition;
+                    crates.TryBreak(eye, (node.GlobalPosition + Vector3.Up * 0.25f - eye).Normalized(), 40f);
+                }
+                Expect(await Until(() => target.Style == CrateStyle.Pile, 5),
+                    $"a shot breaks the supply crate open ({(shot ? "the rifle shot" : "a trace from the eye; the crosshair shot missed")})");
+                await Seconds(0.5);   // a frame or two: the screenshot is the last frame drawn
+                Snap("a_pile");
+            }
+        }
+
+        // a flare calls a drop
+        int drops = crates.All.Count(c => c.Style == CrateStyle.Airdrop);
+        _items.Inventory.Add(ItemId.FlareGun, 1);
+        _items.UseSlot(me, SlotOf(ItemId.FlareGun));
+        Expect(await Until(() => crates.All.Count(c => c.Style == CrateStyle.Airdrop) > drops && _heard.Any(l => l.Contains("fired a flare")), 10),
+            "a flare calls a supply drop, announced to everyone");
+        await Seconds(2.0);
+        Snap("a_flare");
+    }
+
+    private float Dist(Crate c)
+    {
+        var (e, n) = Br!.Origin!.ToLv95(Me!.GlobalPosition);
+        return (float)Math.Sqrt((c.E - e) * (c.E - e) + (c.N - n) * (c.N - n));
     }
 
     private int Count() => Enumerable.Range(0, Inventory.Size).Sum(i => _items.Inventory[i].Count);

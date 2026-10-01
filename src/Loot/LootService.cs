@@ -198,6 +198,33 @@ public partial class LootService : Node
         Play(SfxSynth.Tick, 0.6f);
     }
 
+    /// <summary>The locked crate whose dial is being worked (a bunker door), if any.</summary>
+    private long? _pickingCrate;
+
+    /// <summary>Opens the dial on a locked crate; the numbers it settles on go to the crate's server.</summary>
+    public void PickCrate(FootPlayer p, long id, string title, int[] combo)
+    {
+        Close();
+        StopPicking();
+        _pickingCrate = id;
+        _searcher = p;
+        _lockUi?.Open(title, combo, 1.0f);
+    }
+
+    /// <summary>A crate's dial was cracked; by this player: straight into its contents.</summary>
+    public void CrateUnlocked(long id, bool mine)
+    {
+        if (!mine || _pickingCrate != id) return;
+        var p = _searcher;
+        StopPicking();
+        if (p != null && IsInstanceValid(p)) BattleRoyale.BrCrates.Instance?.TryOpen(p);
+    }
+
+    public void CrateUnlockRefused(long id)
+    {
+        if (_pickingCrate == id) _lockUi?.Refused();
+    }
+
     /// <summary>The open crate's contents changed (someone took from it): redraw.</summary>
     public void CrateChanged(long id)
     {
@@ -240,6 +267,8 @@ public partial class LootService : Node
     public override void _Process(double delta)
     {
         SyncLocks();
+        if (_pickingCrate is long locked && (_searcher is not { } lp || !IsInstanceValid(lp) || !lp.IsViewing
+            || BattleRoyale.BrCrates.Instance?.InReach(locked, lp.GlobalPosition, 1.4f) != true)) StopPicking();
         if (_crate is long crate)
         {
             if (_searcher is not { } cp || !IsInstanceValid(cp) || !cp.IsViewing
@@ -452,6 +481,7 @@ public partial class LootService : Node
     public void StopPicking()
     {
         _picking = null;
+        _pickingCrate = null;
         _lockUi?.Close();
     }
 
@@ -461,6 +491,11 @@ public partial class LootService : Node
     /// </summary>
     public void SubmitCombination(int[] combo)
     {
+        if (_pickingCrate is long crate)
+        {
+            BattleRoyale.BrCrates.Instance?.Unlock(crate, combo);
+            return;
+        }
         if (_picking is not { } pick) return;
         if (Online) RpcId(1, MethodName.RequestUnlock, pick.Key, pick.Furniture, pick.Epoch, combo);
         else ServeUnlock(1, pick.Key, pick.Furniture, pick.Epoch, combo);

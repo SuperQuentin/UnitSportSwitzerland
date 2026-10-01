@@ -8,4 +8,5 @@ its topic; search with `grep -ril <word> docs/notes/br`. Weapons and PvP: `docs/
 - `region` — BrRegion.Pick: random square from places.json towns + manifest tiles, hard rules, scoring, 8 km anti-repeat
 - `map` — BrMapImage (hillshade + cover + roads + buildings from the chunk source), Minimap, BrCompass strip, BrMap on M (grid, towns, zoom/pan, waypoint), no /city in a match
 - `loot` — MatchLoot tables + LootTables.MatchEpoch (region buildings, in-memory masks), BrCrates (death boxes, supply/army crates, airdrops; loot panel crate mode; Changed before Granted), BrLoot (road points, crates, vehicles, drops)
+- `sites` — BrSites rules (bunker/high seat/hay stash/SAC box/wreck/fishing hut), BrSiteMeshes + yaw, locked crates (dial), breaking crates, flare gun, ? markers, memoised horizon
 - `commands` — /br verbs, --brcheck, tools/brcheck.sh

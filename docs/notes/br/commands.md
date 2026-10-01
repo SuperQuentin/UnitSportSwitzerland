@@ -11,4 +11,4 @@
 - `GODOT=<exe> [CHUNKS=<dir>] tools/brcheck.sh`: `--brcheck`, then one whole match over loopback on a
   generated world at pace 0.05 (`BrProbe`): admin opens and starts, both drop in the region with a
   knife-only pack, B is hurt outside the zone, A knifes B, B stays down and spectates, A wins, both go
-  back to where they started with their own packs. Also: minimap built, waypoint set, M opens and closes the match map; crates and vehicles appear, A empties a supply crate and B's death box, a supply drop is announced and drawn, everything is gone after. `REAL=1 SERVER_WAIT=40 CHUNKS=<dir>` plays it on real terrain (a random Swiss region). Screenshots: `test_output/br_*.png`.
+  back to where they started with their own packs. Also: minimap built, waypoint set, M opens and closes the match map; crates and vehicles appear, A empties a supply crate and B's death box, a supply drop is announced and drawn, everything is gone after. `REAL=1 SERVER_WAIT=40 CHUNKS=<dir>` plays it on real terrain (a random Swiss region); add `SITES=1 BRPACE=0.2` for the outdoor sites (crack a bunker, break a crate, fire a flare). Screenshots: `test_output/br_*.png`.

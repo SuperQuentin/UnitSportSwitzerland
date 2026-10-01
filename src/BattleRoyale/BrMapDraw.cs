@@ -15,6 +15,7 @@ public static class BrMapDraw
     public static readonly Color Waypoint = new(1f, 0.82f, 0.2f);
     public static readonly Color Me = new(0.2f, 0.85f, 1f);
     public static readonly Color Drop = new(0.25f, 0.5f, 1f);
+    public static readonly Color Rare = new(1f, 0.6f, 0.2f);
 
     /// <summary>The supply drops of the match: zone position, and whether still falling.</summary>
     public static IEnumerable<(Vector2 At, bool Falling)> Airdrops(BrManager br) =>
@@ -45,6 +46,18 @@ public static class BrMapDraw
             if (drop.Falling) c.DrawArc(p + new Vector2(0, -9), 7f, Mathf.Pi, Mathf.Tau, 8, Colors.White, 2f);
             c.DrawRect(new Rect2(p - new Vector2(5, 5), new Vector2(10, 10)), Drop);
             c.DrawRect(new Rect2(p - new Vector2(5, 5), new Vector2(10, 10)), Colors.Black, false, 1.2f);
+        }
+
+        // rare sites (#198): the wreck always (its smoke shows it), a bunker once you are within 400 m
+        var here = br.ViewPoint()?.Position;
+        foreach (var site in BrCrates.Instance?.All.Where(x => x.Style is CrateStyle.Wreck or CrateStyle.Bunker) ?? Enumerable.Empty<Crate>())
+        {
+            var spot = new Vector2((float)(site.E - br.State.AreaE), (float)(site.N - br.State.AreaN));
+            if (site.Style == CrateStyle.Bunker && (here is not { } h || h.DistanceTo(spot) > 400f)) continue;
+            var p = toScreen(spot);
+            c.DrawCircle(p, 8f, new Color(0, 0, 0, 0.7f));
+            c.DrawArc(p, 8f, 0, Mathf.Tau, 16, Rare, 1.5f);
+            c.DrawString(ThemeDB.FallbackFont, p + new Vector2(-4, 5), "?", HorizontalAlignment.Left, -1, 14, Rare);
         }
 
         if (br.Waypoint is { } wp) Pin(c, toScreen(wp), Waypoint);

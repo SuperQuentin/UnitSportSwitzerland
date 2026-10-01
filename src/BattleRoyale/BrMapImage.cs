@@ -118,7 +118,7 @@ public static class BrMapImage
     private static byte Q(float v) => (byte)(((int)(Mathf.Clamp(v, 0f, 1f) * 255f) & 0xF8) | 0x04);
 
     /// <summary>Terrain height from the 100 m lattice, bilinear; 500 m where there is no data.</summary>
-    private static double Height(HorizonIndex? horizon, double e, double n)
+    internal static double Height(HorizonIndex? horizon, double e, double n)
     {
         var id = TileId.FromLv95(e, n);
         if (horizon == null || !horizon.Contains(id)) return 500;

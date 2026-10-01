@@ -1076,6 +1076,22 @@ public static class ItemIcons
             ".kkkkkkkkkkkkkk.",
         };
 
+        d[ItemId.FlareGun] = new[]
+        {
+            "................",
+            "................",
+            "..kkkkkkkkkkkk..",
+            ".koooooooooodk..",
+            ".kqoooooooooOdk.",
+            ".kOOOOOOOOOOOdk.",
+            "..kkkkkkkkkkkk..",
+            "..koooOk.kGk....",
+            "..kooOOkkkk.....",
+            "..kooOk.........",
+            "..kooOk.........",
+            "..kkkkk.........",
+        };
+
         d[ItemId.Radio] = new[]
         {
             "............kw..",

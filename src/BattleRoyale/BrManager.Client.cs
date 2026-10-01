@@ -221,6 +221,14 @@ public partial class BrManager
         catch (Exception e) { GD.PushWarning($"[br] map: {e.Message}"); }
     }
 
+    /// <summary>A flare fired (#198): asks the server for a drop here. False when not alive in a running match.</summary>
+    public bool CallDrop()
+    {
+        if (!InMatch || _state.Phase != BrPhase.Playing || !MeAlive) return false;
+        RpcId(1, MethodName.RequestDrop);
+        return true;
+    }
+
     /// <summary>M during a match: the full map instead of the place search. False when not in a match.</summary>
     public bool ToggleMap()
     {
