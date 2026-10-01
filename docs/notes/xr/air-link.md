@@ -20,7 +20,7 @@ Quest. The two ways the picture breaks:
   Compatibility renderer only, so it is not used.
 - `xr/openxr/submit_depth_buffer=true`: the runtime gets depth for its reprojection.
 - **PS1 finish off** (`xr_smooth` global, set by `XrSession`): no vertex snap, no colour dither,
-  colour steps kept (`common/retro.gdshaderinc`, `ps1_road.gdshader`). The dissolve dithers
+  colour steps kept (`common/retro.gdshaderinc`, which every PS1 body uses). The dissolve dithers
   (sightline, tree LOD) stay: they are functional.
 - **Chunk commits** capped at 2 ms per frame in VR (`ChunkManager.VrCommitBudgetMs`).
 - **Stereo door portals:** see `docs/notes/terrain/door-portals.md`.
