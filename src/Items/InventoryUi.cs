@@ -68,7 +68,7 @@ public partial class InventoryUi : CanvasLayer
     private readonly SlotButton[] _panelSlots = new SlotButton[Inventory.Size];
     private SlotButton _trash = null!;
     private Label _infoName = null!, _infoBlurb = null!, _infoValue = null!;
-    private Button _useButton = null!, _handButton = null!, _claimButton = null!;
+    private Button _useButton = null!, _handButton = null!;
     private Label _cashLine = null!, _accountLine = null!, _controlsHint = null!, _hotbarCaption = null!;
     private int _inspect;
     private CarriedView _carried = null!;
@@ -356,10 +356,8 @@ public partial class InventoryUi : CanvasLayer
         _accountLine.AddThemeFontSizeOverride("font_size", 14);
         _accountLine.AddThemeColorOverride("font_color", new Color(0.7f, 0.86f, 0.72f));
         right.AddChild(_accountLine);
-        _claimButton = new Button();
-        _claimButton.Pressed += () => Bank.Instance?.ClaimAll();
-        right.AddChild(_claimButton);
-        var moneyHint = Caption("Cash you carry is lost if you are knocked out.\nClaimed money is safe in your account.");
+        // cash is deposited and drawn only at a bank's counter (#213, BankCounterUi)
+        var moneyHint = Caption("Cash you carry is lost if you are knocked out.\nDeposit it at a bank counter to keep it safe.");
         right.AddChild(moneyHint);
     }
 
@@ -452,12 +450,9 @@ public partial class InventoryUi : CanvasLayer
     private void RefreshMoney()
     {
         long balance = Bank.Instance?.Balance ?? 0;
-        bool pending = Bank.Instance?.Pending == true;
         _cashLine.Text = $"Cash on you:  {Chf(Inv.Cash)}";
         _accountLine.Text = $"Account:  {Chf(balance)}";
-        _claimButton.Text = pending ? "Claiming…" : Inv.Cash > 0 ? $"Claim {Chf(Inv.Cash)} to account" : "No cash to claim";
-        _claimButton.Disabled = pending || Inv.Cash <= 0 || Bank.Instance == null;
-        _cashHud.Text = Inv.Cash > 0 ? $"{Chf(Inv.Cash)}\n{InputHints.Tag(PlayerInput.Inventory)} claim" : "";
+        _cashHud.Text = Inv.Cash > 0 ? $"{Chf(Inv.Cash)}\nnot banked" : "";
     }
 
     private static string Chf(long amount) =>
@@ -479,7 +474,7 @@ public partial class InventoryUi : CanvasLayer
 
     private void OnBalanceChanged(long deposited)
     {
-        if (deposited > 0) Toast($"+{Chf(deposited)} claimed — account {Chf(Bank.Instance?.Balance ?? 0)}");
+        if (deposited > 0) Toast($"+{Chf(deposited)} deposited — account {Chf(Bank.Instance?.Balance ?? 0)}");
         RefreshMoney();
     }
 

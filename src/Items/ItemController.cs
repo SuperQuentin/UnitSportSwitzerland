@@ -165,7 +165,7 @@ public partial class ItemController : Node
         {
             int lost = _inventory.Cash;
             _inventory.TakeCash(lost);
-            _ui.Toast($"You dropped {lost} CHF you had not claimed.");
+            _ui.Toast($"You dropped {lost} CHF you had not banked.");
         }
         _wasKnockedOut = player.KnockedOut;
 
