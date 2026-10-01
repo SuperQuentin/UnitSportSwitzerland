@@ -468,7 +468,8 @@ public partial class PlayerFeel : Node3D
     private void UpdateAir(float dt, bool grounded)
     {
         // on foot only: time spent flying a plane is not a jump
-        if (_player.Ride != RideKind.OnFoot) _airTime = 0;
+        // and neither is being thrown through a windscreen (#214)
+        if (_player.Ride != RideKind.OnFoot || _player.Ragdolled) _airTime = 0;
         else if (!grounded) _airTime += dt;
         else if (!_wasGrounded)
         {

@@ -4,8 +4,10 @@ using Godot;
 namespace UnitSport.Items;
 
 /// <summary>
-/// The player's account: where claimed cash goes, at <c>World/Bank</c> on the server and on every
+/// The player's account: where deposited cash goes, at <c>World/Bank</c> on the server and on every
 /// client. RPCs route by node path, so the name matches on both sides, as for <c>World/Loot</c>.
+/// Money moves only at a bank's teller desk (#213, <see cref="BankCounterUi"/>): the server checks
+/// the player stands in a bank (<see cref="InBank"/>) before every deposit and withdrawal.
 ///
 /// <para>
 /// <b>Cash and account.</b> Francs you pick up are <see cref="Inventory.Cash"/>: carried, and lost
@@ -35,11 +37,17 @@ public partial class Bank : Node
     /// <summary>Server: the display name of a peer, which keys its account.</summary>
     public Func<long, string>? NameOf { get; set; }
 
+    /// <summary>Server: whether a peer is inside a bank, where money may move. Null lets it anywhere.</summary>
+    public Func<long, Task<bool>>? InBank { get; set; }
+
+    /// <summary>Client: the pocket the cash comes from and goes to.</summary>
+    public Inventory? Pocket => _inventory;
+
     /// <summary>This client's balance as the bank last reported it.</summary>
     public long Balance { get; private set; }
 
-    /// <summary>A claim is on its way and has not been answered.</summary>
-    public bool Pending => _pending > 0;
+    /// <summary>A deposit or a withdrawal is on its way and has not been answered.</summary>
+    public bool Pending => _pending != 0;
 
     /// <summary>Client: the balance changed; the argument is how much was just deposited (0 for a plain refresh).</summary>
     public event Action<long>? BalanceChanged;
@@ -90,7 +98,7 @@ public partial class Bank : Node
     /// </summary>
     public void ClaimAll()
     {
-        if (_inventory is not { Cash: > 0 } inv || _pending > 0) return;
+        if (_inventory is not { Cash: > 0 } inv || _pending != 0) return;
         int amount = inv.Cash;
         if (!Online)
         {
@@ -102,6 +110,25 @@ public partial class Bank : Node
         }
         _pending = amount;
         RpcId(1, MethodName.RequestDeposit, amount);
+    }
+
+    /// <summary>
+    /// Draws francs from the account into the pocket. Online the cash arrives with the server's
+    /// answer, and only if the balance covers it.
+    /// </summary>
+    public void Withdraw(int amount)
+    {
+        if (_inventory == null || _pending > 0 || amount <= 0 || amount > Balance) return;
+        if (!Online)
+        {
+            Balance = _accounts[LocalName] = Balance - amount;
+            SaveAccounts(LocalFile);
+            _inventory.Add(ItemId.Francs, amount);
+            BalanceChanged?.Invoke(0);
+            return;
+        }
+        _pending = -amount;
+        RpcId(1, MethodName.RequestWithdraw, amount);
     }
 
     /// <summary>Asks the server for this player's balance again.</summary>
@@ -128,17 +155,28 @@ public partial class Bank : Node
         BalanceChanged?.Invoke(amount);
     }
 
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Withdrawn(int amount, long balance)
+    {
+        if (amount > 0 && _pending == -amount) _inventory?.Add(ItemId.Francs, amount);
+        _pending = 0;
+        Balance = balance;
+        BalanceChanged?.Invoke(0);
+    }
+
     // ---- server ---------------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestDeposit(int amount)
+    private async void RequestDeposit(int amount)
     {
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
         string who = Account(sender);
+        bool there = InBank == null || await InBank(sender);
         // a pocket holds what one session can plausibly pick up; anything past that is not a claim
-        if (amount <= 0 || amount > 1_000_000)
+        if (!there || amount <= 0 || amount > 1_000_000)
         {
+            if (!there) GD.Print($"[bank] {who} tried to deposit outside a bank");
             RpcId(sender, MethodName.Deposited, 0, _accounts.GetValueOrDefault(who));
             return;
         }
@@ -149,7 +187,28 @@ public partial class Bank : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private async void RequestWithdraw(int amount)
+    {
+        if (!_server) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        string who = Account(sender);
+        long had = _accounts.GetValueOrDefault(who);
+        bool there = InBank == null || await InBank(sender);
+        if (!there || amount <= 0 || amount > had)
+        {
+            GD.Print($"[bank] {who} withdrawal of {amount} CHF refused ({(there ? "balance " + had : "not in a bank")})");
+            RpcId(sender, MethodName.Withdrawn, 0, had);
+            return;
+        }
+        long balance = _accounts[who] = had - amount;
+        SaveAccounts(ServerFile);
+        GD.Print($"[bank] {who} withdrew {amount} CHF, balance {balance}");
+        RpcId(sender, MethodName.Withdrawn, amount, balance);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestBalance()
+
     {
         if (!_server) return;
         SendBalance(Multiplayer.GetRemoteSenderId());

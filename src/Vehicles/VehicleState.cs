@@ -34,7 +34,11 @@ public readonly record struct VehicleState(
     Vector3 Angles = default,
     // a truck's or a bus's lamps, doors, kneel and destination (Truck.PackFlags), and its own load 0..1
     int Flags = 0,
-    float Load = 0.5f)
+    float Load = 0.5f,
+    // the live station its radio was left on (Audio.Live.Stations id, 0 = off; #179)
+    int Radio = 0,
+    // the CD in its stereo (Items.RadioPlay, empty = none; #211)
+    string Cd = "")
 {
     /// <summary>The ride this state is: a car with its preset and parts, a truck with its trailer, a lone trailer.</summary>
     public Rideable? CreateRide()
@@ -75,6 +79,8 @@ public readonly record struct VehicleState(
         ["angles"] = Angles,
         ["flags"] = Flags,
         ["load"] = Load,
+        ["radio"] = Radio,
+        ["cd"] = Cd,
     };
 
     public static VehicleState FromDict(Godot.Collections.Dictionary d) => new(
@@ -100,7 +106,11 @@ public readonly record struct VehicleState(
         d.TryGetValue("train", out var train) ? TrailerCatalog.Clean(train.AsInt32()) : 0,
         d.TryGetValue("angles", out var angles) ? angles.AsVector3() : default,
         d.TryGetValue("flags", out var flags) ? flags.AsInt32() : 0,
-        d.TryGetValue("load", out var load) ? Mathf.Clamp(load.AsSingle(), 0f, 1f) : 0.5f);
+        d.TryGetValue("load", out var load) ? Mathf.Clamp(load.AsSingle(), 0f, 1f) : 0.5f,
+        // from another peer: an unknown station reads as off
+        d.TryGetValue("radio", out var radio) && Audio.Live.Stations.For(radio.AsInt32()) != null ? radio.AsInt32() : 0,
+        // from another peer: anything but a well-formed play reads as no CD
+        d.TryGetValue("cd", out var cd) && Items.RadioPlay.Decode(cd.AsString()) is { } play ? play.Encode() : "");
 
     /// <summary>
     /// In <see cref="DoorsOpen"/> of a car just got out of: the driver's door is only open because

@@ -12,6 +12,7 @@ touches its topic; search with `grep -ril <word> docs/notes/loot`.
 - `room-loot` — Pools by room (a garage shelf is tools, a cellar shelf supplies), kind extras, budget per kind, plan v7 (#165)
 - `br/loot` (in docs/notes/br/) — a Battle Royale match overrides the epoch and the tables of the buildings in its region (LootTables.MatchEpoch, MatchLoot), masks in memory only; crates reuse the loot panel (LootService.OpenCrate)
 - `locked-containers` — Gun lockers and safes: dial mini-game, unlock bit in the take mask, server checks the combination, door replicated; `tools/locksynccheck.sh`
+- `banks` — Banks (#213): IsBank pick + door sign, teller desk is the only place to deposit/withdraw (server checks InBank), vault safes = dial + Simon (length by value); `tools/bankcheck.sh`
 - `two-players-one-container` — Two players, one container: server grants each stack once and pushes `Taken` to others inside...
 
 ## Gotchas

@@ -30,6 +30,8 @@ public sealed class PlayerInfo
     /// The server's chat tells that client, which is how its menus learn what they may offer.
     /// </summary>
     public static event Action<PlayerInfo>? AdminChanged;
+    /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
+    internal static void ResetEvents() => AdminChanged = null;
 
     public DateTimeOffset JoinedAt { get; } = DateTimeOffset.UtcNow;
 

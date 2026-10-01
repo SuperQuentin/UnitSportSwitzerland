@@ -45,7 +45,7 @@ namespace UnitSport.Interiors;
 /// would lift it.
 /// </para>
 /// </summary>
-public partial class InteriorManager : Node3D
+public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOriginShiftAware
 {
     public const string NodeName = "Interiors";
 
@@ -621,7 +621,7 @@ public partial class InteriorManager : Node3D
             // mesh arrays off the main thread; a tall block is a few thousand boxes
             var data = await Task.Run(() => InteriorMeshBuilder.Build(layout));
             if (!IsInsideTree() || _built.ContainsKey(layout.Key)) return;
-            _material ??= new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_interior.gdshader") };
+            _material ??= Styles.StyleKit.Material(Styles.MaterialRole.Interior);
             var node = InteriorNode.Create(layout, data, _material, PlacementFor(layout, Origin));
             AddChild(node);
             _built[layout.Key] = node;
@@ -769,7 +769,7 @@ public partial class InteriorManager : Node3D
     {
         if (!player.Indoors || _current == null || CurrentNode is not { } node) return null;
         var local = node.ToLocal(player.GlobalPosition);
-        if (local.Y > _current.StoreyHeight - 0.5f) return null;
+        if (local.Y > _current.StoreyHeight - 0.5f || local.Y < -0.5f) return null;   // ground floor only, not a cellar
         var at = new Vector2(local.X, local.Z);
         var kind = _current.DressedKind();
         // to the doorway, not its centre: a barn's is 10 m wide. An open leaf swung into the
@@ -856,6 +856,17 @@ public partial class InteriorManager : Node3D
             axes[i] = new Vector4(o.Axis.X, o.Axis.Y, Mathf.Clamp(0.5f + 0.25f * (o.Count - 1), 0f, 1f), 0);
         }
         OccupancySink(boxes, axes, count);
+    }
+
+    /// <summary>
+    /// The origin moved (#185). The interiors and their doorway quads are nodes and have moved;
+    /// the doorway frames and the occupied buildings' boxes are kept here.
+    /// </summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        foreach (var link in _links.Values) link.Shift(shift);
+        foreach (var plan in _boxes.Keys.ToList())
+            if (_boxes[plan] is { } box) _boxes[plan] = box with { Center = shift.Point(box.Center) };
     }
 
     private async void FetchBox(string plan)
@@ -1085,7 +1096,7 @@ public partial class InteriorNode : Node3D
             if (!node.IsInsideTree()) continue;
             var local = node.ToLocal(at);
             if (Math.Abs(local.X) <= node.Layout.Width / 2 + 0.5f && Math.Abs(local.Z) <= node.Layout.Depth / 2 + 0.5f
-                && local.Y > -1f && local.Y < node.Layout.StoreyHeight * Math.Max(1, node.Layout.Floors.Count) + 1f)
+                && local.Y > node.Layout.FloorY(0) - 1f && local.Y < node.Layout.FloorY(Math.Max(1, node.Layout.Floors.Count)) + 1f)
                 return node;
         }
         return null;
@@ -1122,7 +1133,7 @@ public partial class InteriorNode : Node3D
         for (int i = 0; i < l.Furniture.Count; i++)
         {
             var f = l.Furniture[i];
-            if (f.Type is not (FurnitureType.GunLocker or FurnitureType.Safe)) continue;
+            if (!Loot.LootTables.IsLocked(f.Type)) continue;
             var data = InteriorMeshBuilder.LockDoor(f);
             using var arrays = new Godot.Collections.Array();
             arrays.Resize((int)Mesh.ArrayType.Max);
@@ -1132,7 +1143,7 @@ public partial class InteriorNode : Node3D
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
             mesh.SurfaceSetMaterial(0, material);
             // the piece's frame (back to -Z, turned), then its left front edge: the hinge
-            var piece = new Transform3D(new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2), new Vector3(f.X, f.Floor * l.StoreyHeight + f.Lift, f.Z));
+            var piece = new Transform3D(new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2), new Vector3(f.X, l.FloorY(f.Floor) + f.Lift, f.Z));
             var mount = new Node3D { Name = $"Lock{i}", Transform = piece * new Transform3D(Basis.Identity, new Vector3(-f.W / 2, 0, f.D / 2)) };
             var hinge = new Node3D { Name = "Hinge" };
             hinge.AddChild(new MeshInstance3D { Name = "Door", Mesh = mesh });

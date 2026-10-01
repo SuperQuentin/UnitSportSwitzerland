@@ -1108,6 +1108,87 @@ public static class ItemIcons
             ".kkkkkkkkkkkkkk.",
         };
 
+        // bags (#208)
+        d[ItemId.BeltPouch] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            "..kkkkkkkkkkkk..",
+            "..kNNNNNNNNNNk..",
+            "..kkkkkkkkkkkk..",
+            "...knnnnnnnnk...",
+            "..knttttttttnk..",
+            "..knnnnyynnnNk..",
+            "..knnnnnnnnnNk..",
+            "..knnnnnnnnnNk..",
+            "..knnnnnnnnnNk..",
+            "..kNnnnnnnnNNk..",
+            "...kNNNNNNNNk...",
+            "....kkkkkkkk....",
+            "................",
+        };
+
+        d[ItemId.Handbag] = new[]
+        {
+            "................",
+            "......kkkk......",
+            ".....k....k.....",
+            "....k......k....",
+            "....k......k....",
+            "..kkkkkkkkkkkk..",
+            ".kqrrrrrrrrrrRk.",
+            ".krrrrrrrrrrrRk.",
+            ".krrrrryyrrrrRk.",
+            ".krrrrrrrrrrrRk.",
+            ".krrrrrrrrrrrRk.",
+            ".krrrrrrrrrrRRk.",
+            ".kRrrrrrrrrRRRk.",
+            "..kRRRRRRRRRRk..",
+            "...kkkkkkkkkk...",
+            "................",
+        };
+
+        d[ItemId.Backpack] = new[]
+        {
+            "................",
+            "......kkkk......",
+            ".....k....k.....",
+            "...kkkkkkkkkk...",
+            "..kcbbbbbbbbBk..",
+            "..kbbbbbbbbbBk..",
+            "..kbkkkkkkkkBk..",
+            "..kbkcbbbbBkBk..",
+            "..kbkbbyybBkBk..",
+            "..kbkbbbbbBkBk..",
+            "..kbkkkkkkkkBk..",
+            "..kbbbbbbbbbBk..",
+            "..kBbbbbbbbBBk..",
+            "..kkBBBBBBBBkk..",
+            "...kk......kk...",
+            "................",
+        };
+
+        d[ItemId.HikingPack] = new[]
+        {
+            "................",
+            "...kkkkkkkkkk...",
+            "..kaggggggggGk..",
+            "..kgGGGGGGGGGk..",
+            "...kkkkkkkkkk...",
+            "...koooooooOk...",
+            "..kooooooooOOk..",
+            "..kokkkkkkkkOk..",
+            "..kokooooOOkOk..",
+            "..kokoyyoOOkOk..",
+            "..kokkkkkkkkOk..",
+            "..koooooooooOk..",
+            "..kOoooooooOOk..",
+            "..kOkkkkkkkkOk..",
+            "..kkOOOOOOOOkk..",
+            "...kk......kk...",
+        };
+
         return d;
     }
 }

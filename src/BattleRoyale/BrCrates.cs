@@ -375,8 +375,8 @@ public partial class BrCrates : Node3D
     public bool TryOpen(FootPlayer p)
     {
         if (Loot.LootService.Instance is not { } loot) return false;
-        // E again shuts the panel or the dial
-        if (loot.IsOpen || loot.LockUi?.IsOpen == true)
+        // E again shuts a crate's panel or dial (only a crate's: a house's searches have E of their own)
+        if (loot.CrateOpen)
         {
             loot.Close();
             loot.StopPicking();

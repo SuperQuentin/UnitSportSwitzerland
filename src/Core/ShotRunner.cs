@@ -16,12 +16,35 @@ namespace UnitSport.Core;
 /// The queue form stays up and takes one shot per line appended to the file (same seven
 /// fields as --shot; blank lines and # comments skipped, "quit" exits). On macOS every
 /// launch brings Godot to the front, so a series of pictures should cost one launch.
+/// A queued shot's y may be "g1.7": that high above the ground, once it has streamed in.
+/// A line starting with '/' is typed into the chat between two shots (<c>/style cartoon</c>,
+/// <c>/time set 19:30</c>), so one launch can picture a live change.
+/// Each shot logs the frame time averaged over its last second of settling.
 /// </summary>
 public partial class ShotRunner : Node
 {
-    private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath);
+    private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath,
+        float? AboveGround = null, string? Command = null);
+
+    /// <summary>Runs a queued chat line ("/style cartoon"); the client world sends it to its chat.</summary>
+    public System.Action<string>? RunCommand { get; set; }
+
+    /// <summary>The ground height under a point, once loaded; for the "g" heights of queued shots.</summary>
+    public System.Func<Vector3, float?>? GroundHeight { get; set; }
 
     private readonly Camera3D _camera;
+
+    /// <summary>
+    /// Shot positions are world space as the game started (the manifest's origin), as they always
+    /// were; the origin moves since (#185), so each is mapped from that first frame when it is aimed.
+    /// </summary>
+    public WorldOrigin? Origin
+    {
+        get => _origin;
+        init { _origin = value; _start = value?.Frame; }
+    }
+    private readonly WorldOrigin? _origin;
+    private readonly OriginFrame? _start;
     private readonly bool _hideHud = HideHudRequested();
     private Shot? _shot;
     private double _elapsed;
@@ -33,6 +56,10 @@ public partial class ShotRunner : Node
     private int _consumedLines;
     private double _sincePoll = double.MaxValue;
     private bool _failed;
+
+    // frame time over the last second of a shot's settle
+    private double _frameMs;
+    private int _frames;
 
     public ShotRunner(Camera3D camera, Vector3 position, float pitchDeg, float yawDeg,
         double settleSeconds, string outPath)
@@ -47,10 +74,10 @@ public partial class ShotRunner : Node
         _queuePath = queuePath;
     }
 
-    public static ShotRunner ForQueue(Camera3D camera, string queuePath)
+    public static ShotRunner ForQueue(Camera3D camera, string queuePath, WorldOrigin? origin = null)
     {
         GD.Print($"[shot-queue] watching {queuePath}");
-        return new ShotRunner(camera, queuePath);
+        return new ShotRunner(camera, queuePath) { Origin = origin };
     }
 
     /// <summary>Parses "--shot x,y,z,pitch,yaw,seconds,path" from the command line.</summary>
@@ -81,7 +108,7 @@ public partial class ShotRunner : Node
     {
         _shot = shot;
         _elapsed = 0;
-        _camera.Position = shot.Position;
+        _camera.Position = _origin != null && _start != null ? _origin.Since(_start).Point(shot.Position) : shot.Position;
         _camera.Rotation = new Vector3(Mathf.DegToRad(shot.PitchDeg), Mathf.DegToRad(shot.YawDeg), 0);
     }
 
@@ -99,7 +126,14 @@ public partial class ShotRunner : Node
             foreach (var layer in GetTree().Root.FindChildren("*", "CanvasLayer", true, false))
                 ((CanvasLayer)layer).Visible = false;
         _elapsed += delta;
-        if (_elapsed < _shot!.Value.SettleSeconds) return;
+        if (_elapsed > _shot!.Value.SettleSeconds - 1.0)
+        {
+            _frameMs += delta * 1000.0;
+            _frames++;
+        }
+        if (_shot.Value.AboveGround is { } above && GroundHeight?.Invoke(_camera.Position) is { } ground)
+            _camera.Position = _camera.Position with { Y = ground + above };
+        if (_elapsed < _shot.Value.SettleSeconds) return;
 
         bool ok = Save(_shot.Value.OutPath);
         _failed |= !ok;
@@ -123,6 +157,12 @@ public partial class ShotRunner : Node
         if (_pending.Count == 0) return false;
 
         var next = _pending.Dequeue();
+        if (next is { Command: { } command })
+        {
+            GD.Print($"[shot-queue] {command}");
+            RunCommand?.Invoke(command);
+            return false;
+        }
         if (next is { } shot)
         {
             Aim(shot);
@@ -155,6 +195,7 @@ public partial class ShotRunner : Node
             string line = lines[i].Trim();
             if (line.Length == 0 || line.StartsWith('#')) continue;
             if (line == "quit") _pending.Enqueue(null);
+            else if (line.StartsWith('/')) _pending.Enqueue(new Shot(default, 0, 0, 0, "", Command: line));
             else if (TryParse(line, out var shot)) _pending.Enqueue(shot);
             else
             {
@@ -173,14 +214,18 @@ public partial class ShotRunner : Node
         var inv = CultureInfo.InvariantCulture;
         if (p.Length != 7
             || !float.TryParse(p[0], NumberStyles.Float, inv, out float x)
-            || !float.TryParse(p[1], NumberStyles.Float, inv, out float y)
+            || !(float.TryParse(p[1], NumberStyles.Float, inv, out float y)
+                || (p[1].StartsWith('g') && float.TryParse(p[1][1..], NumberStyles.Float, inv, out y)))
             || !float.TryParse(p[2], NumberStyles.Float, inv, out float z)
             || !float.TryParse(p[3], NumberStyles.Float, inv, out float pitch)
             || !float.TryParse(p[4], NumberStyles.Float, inv, out float yaw)
             || !double.TryParse(p[5], NumberStyles.Float, inv, out double seconds)
             || p[6].Trim().Length == 0)
             return false;
-        shot = new Shot(new Vector3(x, y, z), pitch, yaw, seconds, p[6].Trim());
+        // above the ground: start high, so nothing is clipped while the ground streams in
+        bool aboveGround = p[1].StartsWith('g');
+        shot = new Shot(new Vector3(x, aboveGround ? 2000f : y, z), pitch, yaw, seconds, p[6].Trim(),
+            aboveGround ? y : null);
         return true;
     }
 
@@ -212,7 +257,10 @@ public partial class ShotRunner : Node
         GD.Print($"[shot] fps={Engine.GetFramesPerSecond()} " +
                  $"prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)} " +
                  $"draws={Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} " +
-                 $"mem={Performance.GetMonitor(Performance.Monitor.MemoryStatic) / 1048576.0:F0}MB");
+                 $"mem={Performance.GetMonitor(Performance.Monitor.MemoryStatic) / 1048576.0:F0}MB" +
+                 (_frames > 0 ? $" frame={_frameMs / _frames:F1}ms" : ""));
+        _frameMs = 0;
+        _frames = 0;
         return err == Error.Ok;
     }
 }

@@ -85,6 +85,12 @@ public enum ItemId
     ArmorVest = 59,
     /// <summary>One flare: fired, it calls a Battle Royale supply drop where you stand (#198).</summary>
     FlareGun = 60,
+
+    // ---- bags (docs/notes/items/bags.md): worn in the bag slot, each adds pack slots ----
+    BeltPouch = 61,
+    Handbag = 62,
+    Backpack = 63,
+    HikingPack = 64,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -119,6 +125,8 @@ public enum ItemUse
     Armor,
     /// <summary>Use fires it into the sky: a flare that calls a supply drop (<see cref="ItemId.FlareGun"/>).</summary>
     Signal,
+    /// <summary>Worn in the bag slot, it adds <see cref="ItemDef.PackSlots"/> to the pack (<see cref="Inventory.Bag"/>).</summary>
+    Bag,
 }
 
 /// <summary>
@@ -137,7 +145,9 @@ public sealed record ItemDef(
     float Heal = 0f,
     ItemCategory Category = ItemCategory.Gear,
     /// <summary>Worth in Swiss francs, for trade later on.</summary>
-    float Value = 0f);
+    float Value = 0f,
+    /// <summary>A bag's extra pack slots while it is worn (<see cref="ItemUse.Bag"/>).</summary>
+    int PackSlots = 0);
 
 public static class ItemDefs
 {
@@ -164,7 +174,7 @@ public static class ItemDefs
         Eat(ItemId.Cheese, "Gruyère", 5, "#f0d060", "GR", 35, ItemCategory.Food, 8),
         Eat(ItemId.Chocolate, "Chocolate", 10, "#5a3220", "CH", 15, ItemCategory.Food, 3),
         Eat(ItemId.MineralWater, "Mineral water", 5, "#6ec8e8", "MW", 25, ItemCategory.Water, 3),
-        new(ItemId.Francs, "Swiss francs", "Money. Never takes a slot: it is counted as cash, and claimed to your account from the inventory.",
+        new(ItemId.Francs, "Swiss francs", "Money. Never takes a slot: it is counted as cash, and deposited to your account at a bank counter.",
             ItemUse.Material, 9999, new Color(0.80f, 0.70f, 0.35f), "CHF", 0, ItemCategory.Money, 1f),
         Eat(ItemId.Bandage, "Bandage", 10, "#f2eee6", "BD", 25, ItemCategory.Medical, 5),
         Eat(ItemId.FirstAidKit, "First-aid kit", 3, "#d02828", "+", 100, ItemCategory.Medical, 30),
@@ -234,7 +244,16 @@ public static class ItemDefs
             ItemUse.Armor, 1, new Color(0.30f, 0.34f, 0.24f), "AV", 0, ItemCategory.Gear, 200f),
         new(ItemId.FlareGun, "Flare gun", "{use_item} fires its one flare into the sky: in a Battle Royale, a supply drop comes down where you stand. Everyone sees the flare.",
             ItemUse.Signal, 1, new Color(0.95f, 0.45f, 0.10f), "FG", 0, ItemCategory.Gear, 60f),
+        // bags (#208): found in houses, worn in the bag slot, one row of the pack per 9 slots
+        Bag(ItemId.BeltPouch, "Belt pouch", "#6a5a3a", "BP", 9, 15),
+        Bag(ItemId.Handbag, "Handbag", "#8a2a3a", "HB", 18, 40),
+        Bag(ItemId.Backpack, "Backpack", "#2a5a8a", "BK", 27, 70),
+        Bag(ItemId.HikingPack, "Hiking backpack", "#c8602a", "HK", 36, 150),
     };
+
+    private static ItemDef Bag(ItemId id, string name, string tint, string glyph, int slots, float value) =>
+        new(id, name, $"Wear it in the bag slot for {slots} more pack slots. {{use_item}} or a click on the bag slot puts it on.",
+            ItemUse.Bag, 1, new Color(tint), glyph, 0, ItemCategory.Gear, value, slots);
 
     private static ItemDef Eat(ItemId id, string name, int stack, string tint, string glyph, float heal,
         ItemCategory category, float value) =>
@@ -255,6 +274,14 @@ public static class ItemDefs
     private static readonly Dictionary<ItemId, ItemDef> ById = All.ToDictionary(d => d.Id);
 
     public static ItemDef? Get(ItemId id) => ById.GetValueOrDefault(id);
+
+    /// <summary>
+    /// Aim + Use throws it (<see cref="ThrowAim"/>): anything whose Aim means nothing else. Optics,
+    /// cameras and guns aim, a print aims where it sticks, a flag where it is planted, and a GPS or
+    /// money is not something to lob at a hillside.
+    /// </summary>
+    public static bool Throwable(ItemDef? def) =>
+        def != null && def.Id != ItemId.Francs && def.Use is ItemUse.Throw or ItemUse.Consume or ItemUse.Material or ItemUse.Wear;
 
     // ------------------------------------------------------------------------------------
     // meshes

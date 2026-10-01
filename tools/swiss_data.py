@@ -17,6 +17,7 @@ Usage:
     python tools/swiss_data.py swissbuildings3d --bbox 2579000 1109000 2586000 1115000
     python tools/swiss_data.py gwr --canton vs
     python tools/swiss_data.py veloland
+    python tools/swiss_data.py osm          # OpenStreetMap extract (ODbL), newest dated Geofabrik file
     python tools/swiss_data.py --dry-run swissalti3d --bbox 2579000 1109000 2586000 1115000
     python tools/swiss_data.py swissalti3d --tiles-file my_tiles.txt       # "2583-1113" per line
     python tools/swiss_data.py --out D:/swissalti3d swissalti3d --bbox 2485000 1075000 2834000 1296000
@@ -690,6 +691,27 @@ def _resolve_stac_gdb(collection):
     return resolver
 
 
+GEOFABRIK_EUROPE = "https://download.geofabrik.de/europe/"
+
+
+def resolve_osm(args):
+    """Geofabrik's Switzerland extract. `switzerland-latest.osm.pbf` has been seen answering with a
+    301 to itself (a redirect loop), so take the newest dated `switzerland-YYMMDD.osm.pbf` the
+    index lists, and only fall back to -latest when the index shows none."""
+    try:
+        if SSL_CONTEXT is not None:
+            resp = _open("GET", GEOFABRIK_EUROPE)
+            html = resp.read().decode("utf-8", "replace")
+        else:
+            html = _curl([GEOFABRIK_EUROPE]).stdout.decode("utf-8", "replace")
+    except (RuntimeError, http.client.HTTPException, OSError) as e:
+        print(f"warning: could not list {GEOFABRIK_EUROPE}: {e}", file=sys.stderr)
+        html = ""
+    dates = sorted(set(re.findall(r"switzerland-(\d{6})\.osm\.pbf", html)))
+    name = f"switzerland-{dates[-1]}.osm.pbf" if dates else "switzerland-latest.osm.pbf"
+    yield GEOFABRIK_EUROPE + name, name, None
+
+
 DATASETS = {
     "swissalti3d": {
         "subdir": "swiss_chunks",
@@ -719,6 +741,12 @@ DATASETS = {
         "subdir": "routes",
         "resolve": _resolve_stac_gdb("ch.astra.veloland"),
         "help": "ASTRA Veloland cycling network (STAC, nationwide)",
+        "needs_bbox": False,
+    },
+    "osm": {
+        "subdir": "osm",
+        "resolve": resolve_osm,
+        "help": "OpenStreetMap Switzerland extract (Geofabrik, ODbL; optional road attribute overlay)",
         "needs_bbox": False,
     },
     "mountainbikeland": {

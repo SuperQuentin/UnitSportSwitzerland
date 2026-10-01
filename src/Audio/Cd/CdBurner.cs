@@ -141,7 +141,7 @@ public sealed class CdBurner
     private static async Task<(string File, string Title)?> DownloadAsync(string url, string temp, CancellationToken ct)
     {
         var lines = new List<string>();
-        int code = await RunAsync("yt-dlp", new[]
+        int code = await RunAsync("yt-dlp", BundledTools.YtDlpJsArgs().Concat(new[]
         {
             "--no-playlist", "--no-simulate", "--quiet", "--no-warnings",
             "-f", "bestaudio/best",
@@ -149,7 +149,7 @@ public sealed class CdBurner
             "--print", "title", "--print", "after_move:filepath",
             "-o", Path.Combine(temp, "dl.%(ext)s"),
             "--", url,
-        }, line => lines.Add(line), null, ct);
+        }).ToArray(), line => lines.Add(line), null, ct);
         if (code != 0 || lines.Count < 2) return null;
         string file = lines[^1].Trim();
         if (!File.Exists(file))

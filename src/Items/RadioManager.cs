@@ -19,7 +19,7 @@ namespace UnitSport.Items;
 /// <see cref="RadioSpeaker"/> on every player holding a playing radio (<see cref="UpdateHeld"/>).
 /// </para>
 /// </summary>
-public partial class RadioManager : Node3D
+public partial class RadioManager : Node3D, Core.IOriginContainer
 {
     public const string NodeName = "Radios";
 
@@ -46,6 +46,8 @@ public partial class RadioManager : Node3D
 
     /// <summary>Client: the server refused something, with a line for the player.</summary>
     public static event Action<string>? Refused;
+    /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
+    internal static void ResetEvents() => Refused = null;
 
     private MultiplayerSpawner? _spawner;
     private int _counter;
@@ -173,7 +175,8 @@ public partial class RadioManager : Node3D
         if (!Multiplayer.IsServer() || _spawner == null) return;
         long sender = Multiplayer.GetRemoteSenderId();
         var thrown = RadioState.FromDict(data);
-        if (thrown.Velocity.Length() > 30f || !thrown.Position.IsFinite())
+        // a full-strength throw (ThrowAim.MaxSpeed) from a sprint, with room to spare
+        if (thrown.Velocity.Length() > 40f || !thrown.Position.IsFinite())
         {
             RpcId(sender, MethodName.ThrowRefused);
             return;
@@ -264,7 +267,7 @@ public partial class RadioManager : Node3D
     public override void _Process(double delta)
     {
         if (!NetworkManager.DedicatedServer && DisplayServer.GetName() != "headless") UpdateHeld();
-        if (Online && !Multiplayer.IsServer()) return;
+        if (!NetLink.IsServer(this)) return;   // a client, or the link is down (#211)
         _housekeeping += delta;
         if (_housekeeping < 1) return;
         double step = _housekeeping;
@@ -274,7 +277,7 @@ public partial class RadioManager : Node3D
         foreach (var node in GetChildren())
         {
             if (node is not RadioBody r) continue;
-            if (r.Playing && r.WantedPosition >= r.Length) r.Playing = false;
+            if (r.Playing && r.WantedPosition >= r.Length) Ended(r);
             bool near = players.Count == 0 || players.Any(p => p.DistanceTo(r.GlobalPosition) < LonelyDistance);
             r.LonelyFor = near ? 0 : r.LonelyFor + step;
             if (r.LonelyFor > LonelyTime) r.QueueFree();

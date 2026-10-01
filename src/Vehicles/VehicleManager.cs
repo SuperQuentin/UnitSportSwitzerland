@@ -16,7 +16,7 @@ namespace UnitSport.Vehicles;
 /// it — client authority, as for the players themselves.
 /// </para>
 /// </summary>
-public partial class VehicleManager : Node3D
+public partial class VehicleManager : Node3D, Core.IOriginContainer
 {
     public const string NodeName = "Vehicles";
 
@@ -41,6 +41,8 @@ public partial class VehicleManager : Node3D
 
     /// <summary>Client: the server refused to park a vehicle this player spawned.</summary>
     public static event Action<string>? Refused;
+    /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
+    internal static void ResetEvents() => Refused = null;
     private double _housekeeping;
 
     /// <summary>Wrecks are cleared this long after they burn.</summary>

@@ -204,10 +204,21 @@ public partial class PvpProbe : Node
     /// <summary>B stands <paramref name="d"/> m in front of A (A faces -Z) and waits to settle.</summary>
     private async Task StandAt(FootPlayer me, float d)
     {
-        me.GlobalPosition = _a + new Vector3(0f, 1.0f, -d);
-        me.Velocity = Vector3.Zero;
-        me.RequestReplacement();
-        await Until(() => me.IsOnFloor(), 10);
+        // after this client's own spawn has settled: a spawn still pending puts the body back on its point
+        await Until(() => !GetParent().GetChildren().OfType<Core.SpawnPoint>().Any() && me.IsOnFloor(), 60);
+        await Seconds(0.5);
+        var want = _a + new Vector3(0f, 1.0f, -d);
+        // set down again until it stays: under load the arrival from the spawn can still land late
+        for (int tries = 0; tries < 4; tries++)
+        {
+            me.GlobalPosition = want;
+            me.Velocity = Vector3.Zero;
+            me.RequestReplacement();
+            await Until(() => me.IsOnFloor(), 10);
+            await Seconds(1.5);
+            if (Flat(me.GlobalPosition - want) < 1.5f) break;
+            GD.Print(Fmt($"[pvp {_role}] put back at {me.GlobalPosition.X:F1},{me.GlobalPosition.Z:F1}: again"));
+        }
         me.LookYaw = Mathf.Pi;   // facing A
         await Seconds(1.0);
     }

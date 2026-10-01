@@ -26,7 +26,7 @@ namespace UnitSport.Combat;
 /// which a client cannot forge. The server relays and otherwise ignores the whole thing.
 /// </para>
 /// </summary>
-public partial class CombatManager : Node3D
+public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOriginShiftAware
 {
     public const string NodeName = "Combat";
 
@@ -72,6 +72,20 @@ public partial class CombatManager : Node3D
     private bool _server;
     private struct Tracer { public Vector3 Pos, Vel; public float Age; public long Shooter; }
     private readonly List<Tracer> _tracers = new();
+
+    /// <summary>The origin moved (#185): rounds in flight, and where the guns point, move with it.</summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        for (int i = 0; i < _tracers.Count; i++)
+        {
+            var t = _tracers[i];
+            t.Pos = shift.Point(t.Pos);
+            t.Vel = shift.Direction(t.Vel);
+            _tracers[i] = t;
+        }
+        AimPoint = shift.Point(AimPoint);
+        if (LeadPoint is { } lead) LeadPoint = shift.Point(lead);
+    }
     private MultiMeshInstance3D _draw = null!;
     private readonly AudioStreamPlayer3D[] _voices = new AudioStreamPlayer3D[6];
     private int _voice, _barrel;

@@ -65,12 +65,28 @@ public partial class InventoryUiProbe : Node
         // 4: shift-click sends a hotbar stack to the pack
         var gps = Inv[2];
         await Click(2, MouseButton.Left, shift: true);
-        Expect(Inv[2].IsEmpty && Enumerable.Range(pack, Inventory.BackpackSize).Any(i => Inv[i] == gps), "shift-click to the pack");
+        Expect(Inv[2].IsEmpty && Enumerable.Range(pack, Inv.PackSize).Any(i => Inv[i] == gps), "shift-click to the pack");
 
         // 5: right click takes half
         await Click(15, MouseButton.Right);
         Expect(!Inv.Carried.IsEmpty, $"right click takes half ({Inv.Carried.Count})");
         Inv.ReturnCarried();
+
+        // 6: a click outside the panel with a stack on the cursor drops it on the ground (#208, #206)
+        int dropSlot = Enumerable.Range(0, Inv.Capacity).First(i => !Inv[i].IsEmpty && Inv[i].Id != ItemId.Radio);
+        var dropped = Inv[dropSlot];
+        int before = DroppedItems.Instance?.GetChildCount() ?? -1;
+        await Click(dropSlot, MouseButton.Left);
+        var outside = new Vector2(6, 6);
+        Push(new InputEventMouseMotion { Position = outside, GlobalPosition = outside });
+        await Frames(2);
+        Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = outside, GlobalPosition = outside });
+        await Frames(2);
+        Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = outside, GlobalPosition = outside });
+        await Frames(20);
+        int after = DroppedItems.Instance?.GetChildCount() ?? -1;
+        Expect(Inv.Carried.IsEmpty && Inv[dropSlot].IsEmpty && after > before && before >= 0,
+            $"click outside drops {dropped} on the ground (dropped items {before} -> {after})");
 
         _items.Ui.Close();
         GD.Print(_failures == 0 ? "[invui] RESULT: ok" : $"[invui] RESULT: FAILED ({_failures})");
