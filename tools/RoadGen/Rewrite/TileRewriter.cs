@@ -415,7 +415,7 @@ public static partial class TileRewriter
                 }
 
                 EmitPriority(priority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
-                EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, netStats.TurnLanes);
+                EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs, netStats.TurnLanes);
             }
 
             foreach (var id in block)

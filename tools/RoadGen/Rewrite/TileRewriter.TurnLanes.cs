@@ -24,10 +24,10 @@ public static partial class TileRewriter
 {
     public sealed class TurnLaneStats
     {
-        public int Candidates, Placed, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars;
+        public int Candidates, Placed, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars, SignsMoved;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper, {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes; " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper, {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes, {SignsMoved:N0} signs moved off the widening; " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}\n");
 
         public void Reject(string why)
@@ -60,7 +60,8 @@ public static partial class TileRewriter
     private static void EmitTurnLanes(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
-        Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas, TurnLaneStats stats)
+        Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
+        Dictionary<TileId, List<RoadPointProp>> signs, TurnLaneStats stats)
     {
         var net = result.Network;
         var indexes = new Dictionary<TileId, EmbankmentPlanner.LineIndex>();
@@ -113,9 +114,37 @@ public static partial class TileRewriter
                 approach.Pocket(Get(paint, inSeg.Tile), right, stats);
                 departure.Emit(Get(paint, outSeg.Tile), Get(areas, outSeg.Tile));
                 departure.Median(Get(paint, outSeg.Tile), stats);
+                Across(approach, departure, inSeg.Tile, Get(paint, inSeg.Tile), Get(areas, inSeg.Tile), edgeLine: !right);
+                // a sign beside the old edge (#121's 3.03) would now stand on the widening
+                stats.SignsMoved += approach.PushOut(Get(signs, inSeg.Tile)) + departure.PushOut(Get(signs, outSeg.Tile));
                 stats.Placed++;
             }
         }
+    }
+
+    /// <summary>
+    /// The through lane across the junction: the junction polygon only covers the original road,
+    /// so the lane's outer part, from the approach strip's mouth to the exit strip's, is paved as
+    /// one more strip (in the approach's tile), with its edge line where no road leaves on that side.
+    /// </summary>
+    private static void Across(Widening approach, Widening exit, TileId tile, List<RoadPaint> paint,
+        List<RoadAreaProp> areas, bool edgeLine)
+    {
+        var (ai, ao) = approach.Mouth(tile);
+        var (ei, eo) = exit.Mouth(tile);
+        areas.Add(new RoadAreaProp
+        {
+            Type = AreaPropType.Pavement, Flags = PropFlags.None, Height = 0f,
+            Vertices = [.. ai, .. ao, .. eo, .. ei], Indices = [0, 1, 2, 0, 2, 3],
+        });
+        if (!edgeLine) return;
+        var (_, aEdge) = approach.Mouth(tile, PaintEmitter.EdgeLineInset);
+        var (_, eEdge) = exit.Mouth(tile, PaintEmitter.EdgeLineInset);
+        paint.Add(new RoadPaint
+        {
+            Shape = PaintShape.Polyline, Type = PaintType.WhiteSolid, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
+            Vertices = [.. aEdge, .. eEdge],
+        });
     }
 
     /// <summary>A main-road arm a pocket can be built on: two-way, paved, at grade, Major or Road.</summary>
@@ -177,6 +206,56 @@ public static partial class TileRewriter
         {
             var (x, y, z, sx, sz) = At(dist);
             return [(float)(x + sx * offset), (float)y, (float)(z + sz * offset)];
+        }
+
+        /// <summary>
+        /// The strip's inner and outer corners at the mouth (less <paramref name="inset"/> on the
+        /// outer one), as points in <paramref name="frame"/>'s tile-local frame.
+        /// </summary>
+        public (float[] Inner, float[] Outer) Mouth(TileId frame, double inset = 0)
+        {
+            float[] In(float[] p) =>
+                [(float)(p[0] + _tile.MinE - frame.MinE), p[1], (float)(p[2] + frame.MaxN - _tile.MaxN)];
+            return (In(Point(0, _half)), In(Point(0, _half + TurnLane - inset)));
+        }
+
+        /// <summary>
+        /// Moves the point props of the segment's tile that stand beside the old edge along the
+        /// widening out by the widening there, so they keep their clearance from the new edge.
+        /// Returns how many moved.
+        /// </summary>
+        public int PushOut(List<RoadPointProp> props)
+        {
+            int moved = 0;
+            var p = _seg.Points;
+            for (int i = 0; i < props.Count; i++)
+            {
+                var prop = props[i];
+                // nearest point of the segment, and the prop's offset toward the widened side
+                double best = double.MaxValue, at = 0, offset = 0;
+                for (int k = 1; k < _seg.PointCount; k++)
+                {
+                    double ax = p[k * 3 - 3], az = p[k * 3 - 1], dx = p[k * 3] - ax, dz = p[k * 3 + 2] - az;
+                    double l2 = dx * dx + dz * dz;
+                    if (l2 < 1e-12) continue;
+                    double t = Math.Clamp(((prop.X - ax) * dx + (prop.Z - az) * dz) / l2, 0, 1);
+                    double px = ax + dx * t, pz = az + dz * t, d2 = Sq(prop.X - px) + Sq(prop.Z - pz);
+                    if (d2 >= best) continue;
+                    best = d2;
+                    at = _along[k - 1] + Math.Sqrt(l2) * t;
+                    double len = Math.Sqrt(l2);
+                    offset = ((prop.X - px) * (-dz / len) + (prop.Z - pz) * (dx / len)) * _side;   // right of the drawing is (-dz, dx)
+                }
+                double dist = _atEnd ? _total - at : at;
+                if (dist < -1 || dist > _length) continue;
+                double w = Widen(Math.Clamp(dist, 0, _length));
+                if (w < 0.05 || offset < _half - 0.3 || offset > _half + w + 2.0) continue;
+                var (x, _, z, sx, sz) = At(Math.Clamp(dist, 0, _length));
+                double o = offset + w;
+                props[i] = prop with { X = (float)(x + sx * o), Z = (float)(z + sz * o) };
+                moved++;
+            }
+            return moved;
         }
 
         /// <summary>Along-segment metres of a distance from the mouth.</summary>
@@ -285,8 +364,9 @@ public static partial class TileRewriter
             });
             stats.StopBars++;
 
-            // two per lane, in the storage length: left in the pocket, straight (and right) in the through lane
-            foreach (double back in (ReadOnlySpan<double>)[5, 13])
+            // two per lane in the storage length, tips 5 m and 13 m from the stop bar: left in the
+            // pocket, straight (and right) in the through lane
+            foreach (double back in (ReadOnlySpan<double>)[5 + ArrowLength, 13 + ArrowLength])
             {
                 var (x, y, z, sx, sz) = At(back);
                 // the through lane lies on the driver's right (sx, sz): their forward is that turned a quarter left
@@ -365,10 +445,16 @@ public static partial class TileRewriter
         }
     }
 
+    /// <summary>Length of a lane arrow, tail to tip.</summary>
+    private const double ArrowLength = 6.5;
+
     /// <summary>
-    /// A road arrow (#123) as paint triangles, 5 m long, its tail at (x, z) and pointing along
-    /// (fx, fz) (tile-local, X east and Z south): a straight shaft with a head, a left or right
-    /// branch bent off it at 45 degrees with its own head.
+    /// A lane arrow (#123, SSV 6.06) as paint triangles, its tail at (x, z) and pointing along
+    /// (fx, fz) (tile-local, X east and Z south), after the current Swiss drawing (Stadt Bern
+    /// Normalien C 2.10.17, revised 2019): straight, a 0.15 m shaft and a head 2.55 m long and
+    /// 0.80 m wide, 6.50 m in all; a turn, the shaft jogging aside near its end into a short head
+    /// at 45 degrees, staying about a metre from the lane's middle (the older design bent a branch
+    /// off the shaft). A combined arrow is both drawn on one shaft.
     /// </summary>
     private static RoadPaint Arrow(double x, double y, double z, double fx, double fz, PaintArrow kind)
     {
@@ -391,22 +477,30 @@ public static partial class TileRewriter
             Pt(f0, l0); Pt(f1, l1); Pt(f2, l2);
             idx.AddRange([b, (ushort)(b + 1), (ushort)(b + 2)]);
         }
-        const double W = 0.09, Head = 1.4, HeadW = 0.35;
+        // half the 0.15 m shaft; the straight head; the turn's shaft, jog and head
+        const double Shaft = 0.075, Head = 2.55, HeadHalf = 0.40;
+        const double TurnShaft = 4.6, JogF = 0.6, JogL = 0.35, TurnHead = 1.0, TurnHeadHalf = 0.3;
+        // a 0.15 m band from (f0, l0) to (f1, l1)
+        void Band(double f0, double l0, double f1, double l1)
+        {
+            double df = f1 - f0, dl = l1 - l0, n = Math.Sqrt(df * df + dl * dl);
+            double nf = -dl / n * Shaft, nl = df / n * Shaft;
+            Quad(f0 - nf, l0 - nl, f1 - nf, l1 - nl, f1 + nf, l1 + nl, f0 + nf, l0 + nl);
+        }
+
         bool straight = (kind & PaintArrow.Straight) != 0;
-        double shaft = straight ? 5.0 - Head : 2.6;
-        Quad(0, -W, shaft, -W, shaft, W, 0, W);
-        if (straight) Tri(shaft, -HeadW, 5.0, 0, shaft, HeadW);
+        Band(0, 0, straight ? ArrowLength - Head : TurnShaft, 0);
+        if (straight) Tri(ArrowLength - Head, -HeadHalf, ArrowLength, 0, ArrowLength - Head, HeadHalf);
         foreach (var (bit, sign) in (ReadOnlySpan<(PaintArrow, int)>)[(PaintArrow.Left, 1), (PaintArrow.Right, -1)])
         {
             if ((kind & bit) == 0) continue;
-            // a 45 degree branch from 2.6 m up the shaft, 1.4 m long, then its head; (bf, bl) its
-            // way and (nf, nl) across it, in forward/left metres
-            const double F0 = 2.6, Branch = 1.4, BranchHead = 1.2;
+            // the jog off the shaft, then a head at 45 degrees from the jog's end
+            double jf = TurnShaft + JogF, jl = sign * JogL;
+            Band(TurnShaft, 0, jf, jl);
             double c = Math.Sqrt(0.5);
-            double bf = c, bl = sign * c, nf = -sign * c, nl = c;
-            double ef = F0 + bf * Branch, el = bl * Branch;
-            Quad(F0 - nf * W, -nl * W, ef - nf * W, el - nl * W, ef + nf * W, el + nl * W, F0 + nf * W, nl * W);
-            Tri(ef - nf * HeadW, el - nl * HeadW, ef + bf * BranchHead, el + bl * BranchHead, ef + nf * HeadW, el + nl * HeadW);
+            double df = c, dl = sign * c, nf = -sign * c, nl = c;   // the head's way, and across it
+            Tri(jf - nf * TurnHeadHalf, jl - nl * TurnHeadHalf, jf + df * TurnHead, jl + dl * TurnHead,
+                jf + nf * TurnHeadHalf, jl + nl * TurnHeadHalf);
         }
         return new RoadPaint
         {
