@@ -29,7 +29,7 @@ public sealed record Flock(CritterKind Kind, int Count, float NightFrom, float N
 /// and every creature is placed from its own index and the clock, so there is no state to keep.
 /// Purely cosmetic and local: nobody else needs to see the same bat. Client only.
 /// </summary>
-public partial class OccasionCreatures : Node3D
+public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOriginShiftAware
 {
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
@@ -42,6 +42,14 @@ public partial class OccasionCreatures : Node3D
     private static readonly bool LogFlocks = OS.GetCmdlineUserArgs().Contains("--decorlog");
     private double _logIn;
     private Vector3 _crowCentre;
+
+    /// <summary>The origin moved (#185): the points the creatures gather round moved with it.</summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        _crowCentre = shift.Point(_crowCentre);
+        foreach (var anchors in _anchors.Values)
+            for (int i = 0; i < anchors.Length; i++) anchors[i] = shift.Point(anchors[i]);
+    }
     private bool _crowPlaced;
 
     public OccasionCreatures(ChunkManager chunks, WorldOrigin origin, Func<Node3D?> camera)

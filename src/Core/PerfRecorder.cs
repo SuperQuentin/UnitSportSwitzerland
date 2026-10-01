@@ -36,7 +36,7 @@ namespace UnitSport.Core;
 /// otherwise every commit hitch would be blamed on the frame after the one that caused it.
 /// </para>
 /// </summary>
-public partial class PerfRecorder : Node
+public partial class PerfRecorder : Node, IOriginShiftAware
 {
     public const double HitchMs = 33.4;
     private const string Root = "user://perf_logs";
@@ -54,6 +54,12 @@ public partial class PerfRecorder : Node
     private readonly int[] _gcFrame = new int[3];
     private double _gpuSum, _renderCpuSum;
     private Vector3? _lastCam;
+
+    /// <summary>The origin moved (#185): not a jump of the camera, so not a speed or a teleport.</summary>
+    public void OnOriginShifted(OriginShift shift)
+    {
+        if (_lastCam is { } last) _lastCam = shift.Point(last);
+    }
     private string _lastMode = "";
 
     // the previous frame's commits and GC, which this frame's delta paid for

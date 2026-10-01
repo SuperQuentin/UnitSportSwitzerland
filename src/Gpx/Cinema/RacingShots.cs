@@ -46,6 +46,15 @@ public abstract class DroneShot : Shot
 
     protected Vector3 Pos;
     private Vector3 _vel, _lastTarget, _targetVel, _aim;
+
+    public override void Shift(Core.OriginShift shift)
+    {
+        Pos = shift.Point(Pos);
+        _vel = shift.Direction(_vel);
+        _lastTarget = shift.Point(_lastTarget);
+        _targetVel = shift.Direction(_targetVel);
+        _aim = shift.Point(_aim);
+    }
     private float _climb;
     private bool _flying;
 
@@ -181,6 +190,12 @@ public abstract class DroneShot : Shot
 public sealed class ApexCut : DroneShot
 {
     private Vector3 _hover;
+
+    public override void Shift(Core.OriginShift shift)
+    {
+        base.Shift(shift);
+        _hover = shift.Point(_hover);
+    }
     private double _apexTime;
     public override string Name => "Drone apex cut";
     public override ShotScale Scale => ShotScale.Wide;

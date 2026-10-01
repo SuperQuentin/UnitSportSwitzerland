@@ -25,6 +25,14 @@ public static class DoorIndex
 
     public static void ClearTile(TileId id) => Tiles.Remove(id);
 
+    /// <summary>The origin moved (#185): every door is now somewhere else in world space.</summary>
+    public static void Shift(Core.OriginShift shift)
+    {
+        foreach (var doors in Tiles.Values)
+            for (int i = 0; i < doors.Length; i++)
+                doors[i] = doors[i] with { World = shift.Point(doors[i].World), Outward = shift.Direction(doors[i].Outward) };
+    }
+
     /// <summary>A given building's door, if its tile is drawn and it has one.</summary>
     public static Entry? Find(BuildingKey key)
     {

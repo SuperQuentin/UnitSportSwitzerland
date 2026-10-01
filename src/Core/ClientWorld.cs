@@ -10,7 +10,7 @@ namespace UnitSport.Core;
 /// Client bootstrap: loads the terrain manifest, sets up the chunk manager with the
 /// PS1 terrain material, sky/fog environment, and a spectator camera over the valley.
 /// </summary>
-public partial class ClientWorld : Node3D
+public partial class ClientWorld : Node3D, IOriginContainer
 {
     private ChunkManager? _chunks;
     private Audio.Ambience? _ambience;
@@ -59,6 +59,8 @@ public partial class ClientWorld : Node3D
 
     /// <summary>Players on the server, for the pause menu's status line (null offline).</summary>
     public int? Players => _networked && _players != null ? _players.GetChildCount() : null;
+    /// <summary>The origin the world started with: the server's frame, until positions on the wire are global.</summary>
+    private (double E, double N)? _startOrigin;
 
     public override async void _Ready()
     {
@@ -128,6 +130,11 @@ public partial class ClientWorld : Node3D
             GetTree().Quit(Items.InventoryCheck.Run());
             return;
         }
+        if (OriginCheck.Requested)
+        {
+            OriginCheck.Run(this);
+            return;
+        }
         if (ChatCheck.Requested)
         {
             GetTree().Quit(ChatCheck.Run());
@@ -169,7 +176,12 @@ public partial class ClientWorld : Node3D
             : new WorldOrigin(startE, startN);
 
         _worldOrigin = origin;
+        _startOrigin = (origin.E, origin.N);
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
+
+        // The floating origin (#185): world space follows the camera, so float32 stays precise
+        // however far it goes. Offline only until positions on the wire are origin-independent.
+        AddChild(new OriginShifter(origin, () => GetViewport().GetCamera3D()?.GlobalPosition, () => !_networked));
 
         if (!hasLocalTerrain)
             GD.PushWarning(
@@ -738,14 +750,14 @@ public partial class ClientWorld : Node3D
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             AddChild(new ShotRunner(_spectator,
                 new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
-                float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]));
+                float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]) { Origin = _worldOrigin });
         }
         else if (ShotRunner.ParseQueueArg() is { } queue)
         {
             _spectator.SetProcess(false);
             _spectator.SetProcessUnhandledInput(false);
             Input.MouseMode = Input.MouseModeEnum.Visible;
-            AddChild(ShotRunner.ForQueue(_spectator, queue));
+            AddChild(ShotRunner.ForQueue(_spectator, queue, _worldOrigin));
         }
     }
 
@@ -971,6 +983,10 @@ public partial class ClientWorld : Node3D
     private void StartNetworking(string host)
     {
         if (_networked) return;
+        // Positions on the wire are still world space (#185, phase 2), so online every peer must be
+        // in the frame the server is in: a game that travelled offline puts its origin back where
+        // it started before anything is sent. The shifter is off from here on.
+        if (_startOrigin is { } start) OriginShifter.Instance?.ShiftTo(start.E, start.N, exact: true);
         _networked = true;
 
         // The chat node (World/Chat, made at boot) is already where the server's RPCs route.
@@ -1019,6 +1035,7 @@ public partial class ClientWorld : Node3D
         // before any player arrives: each one's synchronizer asks it whom to send to
         InterestService.CreateClient(this);
         _players = new Node3D { Name = "Players" };
+        _players.AddToGroup(OriginShifter.ContainerGroup);
         _players.ChildEnteredTree += node =>
         {
             if (node.Name == Multiplayer.GetUniqueId().ToString() && node is FootPlayer player)

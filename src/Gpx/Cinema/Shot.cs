@@ -240,4 +240,7 @@ public abstract class Shot
 
     /// <summary>False once the shot stops working — subject behind terrain, or too far away.</summary>
     public virtual bool StillGood(ShotContext ctx) => true;
+
+    /// <summary>The origin moved (#185): whatever world positions the shot steers by move with it.</summary>
+    public virtual void Shift(Core.OriginShift shift) { }
 }

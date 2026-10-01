@@ -45,7 +45,7 @@ namespace UnitSport.Interiors;
 /// would lift it.
 /// </para>
 /// </summary>
-public partial class InteriorManager : Node3D
+public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOriginShiftAware
 {
     public const string NodeName = "Interiors";
 
@@ -856,6 +856,17 @@ public partial class InteriorManager : Node3D
             axes[i] = new Vector4(o.Axis.X, o.Axis.Y, Mathf.Clamp(0.5f + 0.25f * (o.Count - 1), 0f, 1f), 0);
         }
         OccupancySink(boxes, axes, count);
+    }
+
+    /// <summary>
+    /// The origin moved (#185). The interiors and their doorway quads are nodes and have moved;
+    /// the doorway frames and the occupied buildings' boxes are kept here.
+    /// </summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        foreach (var link in _links.Values) link.Shift(shift);
+        foreach (var plan in _boxes.Keys.ToList())
+            if (_boxes[plan] is { } box) _boxes[plan] = box with { Center = shift.Point(box.Center) };
     }
 
     private async void FetchBox(string plan)

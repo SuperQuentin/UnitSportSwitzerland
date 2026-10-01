@@ -166,6 +166,9 @@ public partial class TrackRibbon : MeshInstance3D
 
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, arrays);
+        // built in the current origin frame: an origin shift (#185) moved the node to keep the old
+        // mesh in place, and the new one needs it back at the identity
+        Transform = Transform3D.Identity;
         Mesh = mesh;
     }
 

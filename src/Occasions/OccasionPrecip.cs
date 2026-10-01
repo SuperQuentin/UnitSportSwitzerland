@@ -9,7 +9,7 @@ namespace UnitSport.Occasions;
 /// this node only builds it once and sets its density. The shader thins it at low altitude and
 /// draws nothing indoors, per camera, so a door portal looking out shows the street's snow. Client only.
 /// </summary>
-public partial class OccasionPrecip : Node3D
+public partial class OccasionPrecip : Node3D, Core.IOriginContainer
 {
     private const int Flakes = 4000;
     private const float Box = 60f;

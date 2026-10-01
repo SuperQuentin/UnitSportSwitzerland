@@ -18,7 +18,7 @@ namespace UnitSport.Terrain;
 /// tunnel floor or a carved portal.
 /// </para>
 /// </summary>
-public partial class HorizonLayer : Node3D
+public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
 {
     private const int BlockTiles = TerrainMeshBuilder.HorizonBlockTiles;
     private const double BlockM = BlockTiles * ChunkFormat.TileSizeM;
@@ -168,13 +168,23 @@ public partial class HorizonLayer : Node3D
         _coverMinE = minE; _coverMaxN = maxN; _coverCols = cols; _coverRows = rows;
         _coverTexture = ImageTexture.CreateFromImage(image);
 
-        var nw = _origin!.ToWorld(minE * ChunkFormat.TileSizeM, (maxN + 1) * ChunkFormat.TileSizeM, 0);
         _material?.SetShaderParameter("detail_cover", _coverTexture);
-        _material?.SetShaderParameter("cover_origin", new Vector2(nw.X, nw.Z));
+        PushCoverOrigin();
         _material?.SetShaderParameter("cover_extent",
             new Vector2((float)(cols * ChunkFormat.TileSizeM), (float)(rows * ChunkFormat.TileSizeM)));
         _material?.SetShaderParameter("use_cover", true);
     }
+
+    /// <summary>The coverage texture is sampled by world XZ, so its corner moves with the origin.</summary>
+    private void PushCoverOrigin()
+    {
+        if (_coverImage == null) return;
+        var nw = _origin!.ToWorld(_coverMinE * ChunkFormat.TileSizeM, (_coverMaxN + 1) * ChunkFormat.TileSizeM, 0);
+        _material?.SetShaderParameter("cover_origin", new Vector2(nw.X, nw.Z));
+    }
+
+    /// <summary>The blocks are children and have moved already (#185); the coverage has not.</summary>
+    public void OnOriginShifted(OriginShift shift) => PushCoverOrigin();
 
     /// <summary>Marks a tile as drawn by real terrain (or not); the texture uploads next frame.</summary>
     public void SetCovered(TileId id, bool covered)

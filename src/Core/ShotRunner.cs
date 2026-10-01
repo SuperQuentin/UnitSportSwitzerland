@@ -22,6 +22,18 @@ public partial class ShotRunner : Node
     private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath);
 
     private readonly Camera3D _camera;
+
+    /// <summary>
+    /// Shot positions are world space as the game started (the manifest's origin), as they always
+    /// were; the origin moves since (#185), so each is mapped from that first frame when it is aimed.
+    /// </summary>
+    public WorldOrigin? Origin
+    {
+        get => _origin;
+        init { _origin = value; _start = value?.Frame; }
+    }
+    private readonly WorldOrigin? _origin;
+    private readonly OriginFrame? _start;
     private readonly bool _hideHud = HideHudRequested();
     private Shot? _shot;
     private double _elapsed;
@@ -47,10 +59,10 @@ public partial class ShotRunner : Node
         _queuePath = queuePath;
     }
 
-    public static ShotRunner ForQueue(Camera3D camera, string queuePath)
+    public static ShotRunner ForQueue(Camera3D camera, string queuePath, WorldOrigin? origin = null)
     {
         GD.Print($"[shot-queue] watching {queuePath}");
-        return new ShotRunner(camera, queuePath);
+        return new ShotRunner(camera, queuePath) { Origin = origin };
     }
 
     /// <summary>Parses "--shot x,y,z,pitch,yaw,seconds,path" from the command line.</summary>
@@ -81,7 +93,7 @@ public partial class ShotRunner : Node
     {
         _shot = shot;
         _elapsed = 0;
-        _camera.Position = shot.Position;
+        _camera.Position = _origin != null && _start != null ? _origin.Since(_start).Point(shot.Position) : shot.Position;
         _camera.Rotation = new Vector3(Mathf.DegToRad(shot.PitchDeg), Mathf.DegToRad(shot.YawDeg), 0);
     }
 
