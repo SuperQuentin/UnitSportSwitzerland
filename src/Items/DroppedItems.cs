@@ -11,7 +11,7 @@ namespace UnitSport.Items;
 /// the authority over its fall, a pick-up removes it for everyone and only one player wins it.
 /// Not saved: like radios, what lies about is gone with the server.
 /// </summary>
-public partial class DroppedItems : Node3D
+public partial class DroppedItems : Node3D, Core.IOriginContainer
 {
     public const string NodeName = "Dropped";
 

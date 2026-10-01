@@ -21,7 +21,7 @@ namespace UnitSport.Gpx;
 /// the HUD (10), so the controls are never covered.
 /// </para>
 /// </summary>
-public partial class ZoomBubble : CanvasLayer
+public partial class ZoomBubble : CanvasLayer, Core.IOriginShiftAware
 {
     /// <summary>Distance beyond which the runner counts as hard to spot.</summary>
     private const float ShowBeyond = 35f;
@@ -64,6 +64,9 @@ public partial class ZoomBubble : CanvasLayer
     private Vector2 _center, _tip;
     private bool _placed;              // false until the first visible frame, so it snaps into place
     private Vector3 _camPos;
+
+    /// <summary>The origin moved (#185): the inset camera's eased position follows.</summary>
+    public void OnOriginShifted(Core.OriginShift shift) => _camPos = shift.Point(_camPos);
     private bool _camPlaced;
 
     /// <summary>Master on/off. Disabling eases the bubble out rather than snapping it away.</summary>

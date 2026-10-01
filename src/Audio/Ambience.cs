@@ -21,7 +21,7 @@ namespace UnitSport.Audio;
 /// byte packing happens on the main thread. Bird species are baked lazily — a few ms each.
 /// </para>
 /// </summary>
-public partial class Ambience : Node
+public partial class Ambience : Node, IOriginShiftAware
 {
     private const float SampleInterval = 0.5f;
     private const int PoolSize = 12;
@@ -43,7 +43,11 @@ public partial class Ambience : Node
 
     private double _now;
     private double _envTimer;
-    private readonly List<(double Due, Action Act)> _queue = new();
+    /// <summary>
+    /// Sounds to come, each with the origin frame it was planned in: by the time one plays the
+    /// origin may have moved (#185), and its action is handed the shift since.
+    /// </summary>
+    private readonly List<(double Due, OriginFrame Frame, Action<OriginShift> Act)> _queue = new();
 
     // what the last environment sample found
     private float _pasture, _wooded, _altitude, _ground;
@@ -230,9 +234,9 @@ public partial class Ambience : Node
         for (int i = _queue.Count - 1; i >= 0; i--)
             if (_queue[i].Due <= _now)
             {
-                var act = _queue[i].Act;
+                var (_, frame, act) = _queue[i];
                 _queue.RemoveAt(i);
-                act();
+                act(Origin!.Since(frame));
             }
 
         PumpBrook(delta, pos);
@@ -342,7 +346,10 @@ public partial class Ambience : Node
         // pool exhausted: dropping an ambient sound is inaudible, stealing a voice would click
     }
 
-    private void At(double delay, Action act) => _queue.Add((_now + delay, act));
+    private void At(double delay, Action<OriginShift> act) => _queue.Add((_now + delay, Origin!.Frame, act));
+
+    /// <summary>The origin moved (#185): the brook drifts toward a spot that moved with it.</summary>
+    public void OnOriginShifted(OriginShift shift) => _brookTarget = shift.Point(_brookTarget);
 
     private float Rand(float a, float b) => a + (float)_rng.NextDouble() * (b - a);
 
@@ -388,7 +395,7 @@ public partial class Ambience : Node
             var at = start + new Vector3(Rand(-2, 2), 0, Rand(-2, 2)) * (1 + i * 0.4f);
             float pitch = cow.Pitch * (1f + Rand(-0.012f, 0.012f));
             float db = cow.Db + Rand(-3f, 1f);
-            At(t, () => Speak(bell, at + Vector3.Up * 0.9f, pitch, db, 10f, 420f));
+            At(t, shift => Speak(bell, shift.Point(at + Vector3.Up * 0.9f), pitch, db, 10f, 420f));
         }
         float silence = Rand(6f, 32f) / (0.25f + _herdActivity) / (0.4f + chance);
         _cowNext = _now + t + silence;
@@ -424,10 +431,10 @@ public partial class Ambience : Node
             Speak(stream, s + Vector3.Up * Rand(4f, 15f), pitch, db - 8f, 5f, 200f);
 
             if (_rng.NextDouble() < 0.3)   // another bird answers from somewhere else
-                At(Rand(0.7f, 2f), () =>
+                At(Rand(0.7f, 2f), shift =>
                 {
                     int other = _birdSet[_rng.Next(_birdSet.Length)];
-                    if (Spot(pos, 15f, 90f, CoverFormat.IsWooded) is { } s2)
+                    if (Spot(shift.Point(pos), 15f, 90f, CoverFormat.IsWooded) is { } s2)
                     {
                         var (st, pi, d) = BirdBank(other).Pick(_rng);
                         Speak(st, s2 + Vector3.Up * Rand(4f, 15f), pi, d - 9f, 5f, 200f);
@@ -470,7 +477,7 @@ public partial class Ambience : Node
             for (int i = 0; i < strikes; i++)
             {
                 double when = offset + i * Rand(2.4f, 2.6f);
-                At(when, () => Speak(bell, new Vector3(wx, ground + 22f, wz), 1f + Rand(-0.002f, 0.002f), 4f, 90f, 2400f));
+                At(when, shift => Speak(bell, shift.Point(new Vector3(wx, ground + 22f, wz)), 1f + Rand(-0.002f, 0.002f), 4f, 90f, 2400f));
             }
         }
     }

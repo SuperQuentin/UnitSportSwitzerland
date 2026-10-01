@@ -35,7 +35,9 @@ public sealed class RaceRoute
     public static async Task<RaceRoute?> BuildAsync(IChunkSource source, WorldOrigin origin, Vector3 at,
         CancellationToken ct = default, RoadClass smallest = RoadClass.Minor)
     {
-        var (e, n) = origin.ToLv95(at);
+        // one origin frame for the whole build, which runs off the main thread (#185)
+        var frame = origin.Frame;
+        var (e, n) = frame.ToLv95(at);
         var here = TileId.FromLv95(e, n);
         var tiles = new List<RoadTile>();
         for (int de = -4; de <= 4; de++)
@@ -44,7 +46,7 @@ public sealed class RaceRoute
                 try { if (await source.LoadRoadsAsync(new TileId(here.E + de, here.N + dn), ct) is { } t) tiles.Add(t); }
                 catch (System.Exception) { /* no roads there */ }
             }
-        var graph = LaneGraph.Build(tiles, origin, s =>
+        var graph = LaneGraph.Build(tiles, frame, s =>
             s.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Major or RoadClass.Road or RoadClass.Minor
             && s.Class <= smallest && (s.Flags & (RoadFlags.Stairs | RoadFlags.Tunnel)) == 0);
 

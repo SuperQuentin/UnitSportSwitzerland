@@ -11,7 +11,7 @@ namespace UnitSport.Combat;
 /// why hitting one needs no authority check. Kinematic (an <see cref="AnimatableBody3D"/>), so the
 /// tracers' ray queries hit it and a player who rams one crashes like into anything else.
 /// </summary>
-public partial class TargetDrone : AnimatableBody3D
+public partial class TargetDrone : AnimatableBody3D, Core.IOriginShiftAware
 {
     public const string Group = "combat_drones";
     private const float MaxHealth = 60f;
@@ -37,6 +37,13 @@ public partial class TargetDrone : AnimatableBody3D
     {
         Name = "Drone", _centre = at, Velocity = velocity,
     };
+
+    /// <summary>The origin moved (#185): so did the point it circles or flies on from.</summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        _centre = shift.Point(_centre);
+        Velocity = shift.Direction(Velocity);
+    }
 
     public override void _Ready()
     {
