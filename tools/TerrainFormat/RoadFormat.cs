@@ -263,6 +263,7 @@ public enum PointPropType : byte
     None = 0,
     YieldSign = 1,       // Swiss "Kein Vortritt", inverted triangle (#121)
     RoundaboutSign = 2,  // Swiss 2.41.1 (#122)
+    MainRoadSign = 3,    // Swiss 3.03 "Hauptstrasse", yellow diamond (#121)
 }
 
 /// <summary>A prop at one point: a sign on a pole. Y is its foot on the ground.</summary>
