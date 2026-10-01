@@ -33,7 +33,6 @@ public sealed class PlayerInfo
     /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
     internal static void ResetEvents() => AdminChanged = null;
 
-    public DateTimeOffset JoinedAt { get; } = DateTimeOffset.UtcNow;
 
     public override string ToString() => IsAdmin ? $"{Name} (admin)" : Name;
 }

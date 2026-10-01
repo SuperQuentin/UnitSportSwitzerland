@@ -468,12 +468,6 @@ public partial class ChunkNode : Node3D
         }
     }
 
-    public void ClearRoads()
-    {
-        _roadInstance?.QueueFree();
-        _roadInstance = null;
-    }
-
     public void SetCollision(float[] collisionMap)
     {
         var shape = new HeightMapShape3D
@@ -501,11 +495,5 @@ public partial class ChunkNode : Node3D
         foreach (Node child in _body.GetChildren())
             child.QueueFree();
         _body.AddChild(collisionShape);
-    }
-
-    public void ClearCollision()
-    {
-        _body?.QueueFree();
-        _body = null;
     }
 }

@@ -85,7 +85,7 @@ else if (args.Contains("--rewrite"))
     double dividedScale = double.Parse(ArgValue("--divided-scale") ?? "1.0", CultureInfo.InvariantCulture);
     bool dryRun = args.Contains("--dry-run");
 
-    var ids = ArgValue("--tiles-file") is { } file ? ReadTilesFile(file)
+    var ids = ArgValue("--tiles-file") is { } file ? TileId.ReadList(file)
         : ArgValue("--tiles") is { } spec ? ParseTiles(spec) : DiscoverTiles(chunks);
     if (args.Contains("--skip-rewritten"))
     {
@@ -234,19 +234,6 @@ static List<TileId> DiscoverTiles(string chunkDir)
         var bits = Path.GetFileNameWithoutExtension(path).Split('_');
         if (bits.Length == 3 && int.TryParse(bits[1], out int e) && int.TryParse(bits[2], out int n))
             ids.Add(new TileId(e, n));
-    }
-    return ids;
-}
-
-static List<TileId> ReadTilesFile(string path)
-{
-    var ids = new List<TileId>();
-    foreach (var raw in File.ReadLines(path))
-    {
-        var line = raw.Split('#')[0].Trim();
-        if (line.Length == 0) continue;
-        var parts = line.Split('-', '_', ',');
-        ids.Add(new TileId(int.Parse(parts[0]), int.Parse(parts[1])));
     }
     return ids;
 }

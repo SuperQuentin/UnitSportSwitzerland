@@ -289,7 +289,7 @@ int RunFeatures(TerrainManifest existing)
     var ordered = existing.Tiles.OrderBy(t => t.E).ThenBy(t => t.N).ToList();
     if (tilesFile != null)
     {
-        var wanted = ReadTilesFile(tilesFile);
+        var wanted = TileId.ReadList(tilesFile).ToHashSet();
         ordered = ordered.Where(t => wanted.Contains(t.Id)).ToList();
         Console.WriteLine($"--tiles-file: {ordered.Count} of {wanted.Count} listed tiles are built");
         if (ordered.Count == 0) return 0;
@@ -330,17 +330,4 @@ int RunFeatures(TerrainManifest existing)
         }
     }
     return 0;
-}
-
-static HashSet<TileId> ReadTilesFile(string path)
-{
-    var tiles = new HashSet<TileId>();
-    foreach (var raw in File.ReadLines(path))
-    {
-        var line = raw.Split('#')[0].Trim();
-        if (line.Length == 0) continue;
-        var parts = line.Split('-', '_', ',');
-        tiles.Add(new TileId(int.Parse(parts[0]), int.Parse(parts[1])));
-    }
-    return tiles;
 }

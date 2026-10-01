@@ -88,7 +88,6 @@ public sealed class RoadNetwork
     private const double NodeSnap = 0.5;
 
     public IReadOnlyList<RoadEdge> Edges => _edges;
-    public int NodeCount => _adjacency.Count;
 
     /// <summary>
     /// Whether a GPS track could plausibly have been recorded on this kind of feature.
