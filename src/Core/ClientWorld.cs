@@ -63,92 +63,61 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// <summary>The origin the world started with: the server's frame, until positions on the wire are global.</summary>
     private (double E, double N)? _startOrigin;
 
+    private static bool Has(string flag) => Array.IndexOf(OS.GetCmdlineUserArgs(), flag) >= 0;
+
+    /// <summary>The value after <c>--soundcheck</c> (its output directory), or null.</summary>
+    private static string? SoundcheckDir
+    {
+        get
+        {
+            var args = OS.GetCmdlineUserArgs();
+            int i = Array.IndexOf(args, "--soundcheck");
+            return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        }
+    }
+
+    private static int Verdict(string tag, bool ok)
+    {
+        GD.Print(ok ? $"[{tag}] RESULT: ok" : $"[{tag}] RESULT: FAILED");
+        return ok ? 0 : 1;
+    }
+
+    /// <summary>Self-checks that build no world: the first one requested runs, and the game quits with its exit code.</summary>
+    private static readonly (Func<bool> Requested, Func<int> Run)[] QuickChecks =
+    {
+        (() => SoundcheckDir != null, () => Audio.Soundcheck.Run(SoundcheckDir!)),
+        (() => Has("--driftcheck"), Player.DriftCheck.Run),
+        (() => Has("--tuningcheck"), Player.GarageProbe.Check),
+        (() => Has("--meshcheck"), Avatar.MeshScratch.Check),
+        (() => Has("--cockpitcheck"), Player.CockpitCheck.Run),
+        (() => Has("--spincheck"), Player.DriftCheck.Spin),
+        (() => Has("--setupcheck"), Player.CarSetups.Check),
+        (() => Has("--motocheck"), Player.Motorbike.Check),
+        (() => Has("--truckcheck"), Player.HeavyCheck.Run),
+        (() => Items.IconSheet.Requested, Items.IconSheet.Run),
+        (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
+        (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
+        (() => ChatCheck.Requested, ChatCheck.Run),
+        (() => StyleKit.ReportRequested, StyleKit.Report),
+        (() => Occasions.OccasionProbe.Requested, Occasions.OccasionProbe.Run),
+        // the network rules' own self-checks: vision interest and remote interpolation
+        (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
+        // the CD beat analyser's self-test: synthetic clicks at known tempos
+        (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck())),
+    };
+
     public override async void _Ready()
     {
         Audio.SfxBus.Ensure();
-        {
-            var scArgs = OS.GetCmdlineUserArgs();
-            int sc = Array.IndexOf(scArgs, "--soundcheck");
-            if (sc >= 0 && sc + 1 < scArgs.Length)
+        foreach (var (requested, run) in QuickChecks)
+            if (requested())
             {
-                int code = Audio.Soundcheck.Run(scArgs[sc + 1]);
-                GetTree().Quit(code);
+                GetTree().Quit(run());
                 return;
             }
-            if (Array.IndexOf(scArgs, "--driftcheck") >= 0)
-            {
-                GetTree().Quit(Player.DriftCheck.Run());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--tuningcheck") >= 0)
-            {
-                GetTree().Quit(Player.GarageProbe.Check());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--meshcheck") >= 0)
-            {
-                GetTree().Quit(Avatar.MeshScratch.Check());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--cockpitcheck") >= 0)
-            {
-                GetTree().Quit(Player.CockpitCheck.Run());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--spincheck") >= 0)
-            {
-                GetTree().Quit(Player.DriftCheck.Spin());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--setupcheck") >= 0)
-            {
-                GetTree().Quit(Player.CarSetups.Check());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--motocheck") >= 0)
-            {
-                GetTree().Quit(Player.Motorbike.Check());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--truckcheck") >= 0)
-            {
-                GetTree().Quit(Player.HeavyCheck.Run());
-                return;
-            }
-        }
-        if (Items.IconSheet.Requested)
-        {
-            GetTree().Quit(Items.IconSheet.Run());
-            return;
-        }
-        if (Loot.LootChanceCheck.Requested)
-        {
-            GetTree().Quit(Loot.LootChanceCheck.Run());
-            return;
-        }
-        if (Items.InventoryCheck.Requested)
-        {
-            GetTree().Quit(Items.InventoryCheck.Run());
-            return;
-        }
         if (OriginCheck.Requested)
         {
             OriginCheck.Run(this);
-            return;
-        }
-        if (ChatCheck.Requested)
-        {
-            GetTree().Quit(ChatCheck.Run());
-            return;
-        }
-        if (StyleKit.ReportRequested)
-        {
-            GetTree().Quit(StyleKit.Report());
-            return;
-        }
-        if (Occasions.OccasionProbe.Requested)
-        {
-            GetTree().Quit(Occasions.OccasionProbe.Run());
             return;
         }
         // idempotent: the shell, which owns the window settings, has usually installed it already
@@ -364,25 +333,102 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot));
         }
 
-        // Start somewhere with something to look at, not at the world origin — after a
+        var chunks = _chunks;
+        var cache = _cache;
+        // The verification tools that start in place of a spawn, in the order they are tried: one list
+        // says both whether one runs (placedByTool) and how it starts (at the end of _Ready).
+        ToolRun[] tools =
+        {
+            new(() => World.TrafficProbe.ParseArgs().Requested, ToolAnchor.Own, null),   // started above, with its own camera
+            // pure analysis: it loads the tiles it needs itself, so it neither waits for streaming
+            // nor cares where the spectator is
+            new(() => Gpx.Cinema.CinemaProbe.ParseArgs() != null, ToolAnchor.Own, _ => new Gpx.Cinema.CinemaProbe(
+                Gpx.Cinema.CinemaProbe.ParseArgs()!, origin, streamedSource, manifest.Tiles.Select(t => t.Id).ToHashSet())),
+            new(() => Vehicles.VehicleProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Vehicles.VehicleProbe(chunks, origin, Vehicles.VehicleProbe.ParseArgs().Shot)),
+            new(() => Loot.GatherProbe.ParseArgs().Requested, ToolAnchor.Dropped,
+                k => new Loot.GatherProbe(chunks, origin, k.Gathering, k.Items, Loot.GatherProbe.ParseArgs().Shot)),
+            new(() => Birds.BirdProbe.ParseArgs().Requested, ToolAnchor.Dropped,
+                k => new Birds.BirdProbe(chunks, origin, k.Birds, k.Items, Birds.BirdProbe.ParseArgs().Shot)),
+            // tables only: no terrain wanted, and quitting mid-stream races the tile workers
+            new(() => Loot.LootProbe.ParseArgs() != null, ToolAnchor.Dropped, _ => new Loot.LootProbe(cache, chunks, Loot.LootProbe.ParseArgs()!.Value)),
+            new(() => Interiors.InteriorProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Interiors.InteriorProbe(chunks, origin, cache, Interiors.InteriorProbe.ParseArgs().Shot)),
+            new(() => Interiors.DoorWatchProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Interiors.DoorWatchProbe(chunks, origin, Interiors.DoorWatchProbe.ParseArgs().Shot)),
+            new(() => Birds.BirdStrikeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                k => new Birds.BirdStrikeProbe(chunks, origin, k.Birds, Birds.BirdStrikeProbe.ParseArgs().Shot)),
+            new(() => Combat.CombatProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Combat.CombatProbe(chunks, origin, Combat.CombatProbe.ParseArgs().Shot)),
+            new(() => FlightCheckProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
+            {
+                var f = FlightCheckProbe.ParseArgs()!.Value;
+                return new FlightCheckProbe(chunks, origin, f.Kind, f.Shot);
+            }),
+            new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
+            new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
+            new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
+            new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(chunks, origin)),
+            new(RoadStandProbe.Requested, ToolAnchor.AtTarget, _ => new RoadStandProbe(chunks, origin)),
+            new(() => DriveProbe.ParseArgs().Requested, ToolAnchor.AtTarget, _ =>
+            {
+                var d = DriveProbe.ParseArgs();
+                return new DriveProbe(chunks, origin, d.Shot, d.Car, d.Seconds);
+            }),
+            new(() => World.ArrivalProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new World.ArrivalProbe(chunks, origin, World.ArrivalProbe.ParseArgs().Prefix)),
+            new(() => World.TreeCheck.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new World.TreeCheck(chunks, origin, World.TreeCheck.ParseArgs().Shot)),
+            new(() => TruckProbe.Requested, ToolAnchor.AtTarget, _ => new TruckProbe(chunks, origin)),
+            // the anchor on the spawn, so the tile under the rider arrives with collision: without
+            // it the probe drops through an empty world and measures gravity
+            new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
+            {
+                var r = RideProbe.ParseArgs()!.Value;
+                return new RideProbe(chunks, origin, r.Kind, r.Seconds, r.Shot);
+            }),
+            new(() => TunnelProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var probe = TunnelProbe.ParseArgs()!;
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                double e = double.Parse(probe[0], inv), n = double.Parse(probe[1], inv);
+                // park the anchor on the portal so its chunk streams in with collision
+                _spectator!.Position = origin.ToWorld(e, n, 1200);
+                return new TunnelProbe(chunks, origin, e, n, double.Parse(probe[2], inv));
+            }),
+            new(() => FlightProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var fly = FlightProbe.ParseArgs()!;
+                FreeSpectator();
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                return new FlightProbe(_spectator!, chunks,
+                    new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
+                    float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv));
+            }),
+            new(() => ShotRunner.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var shot = ShotRunner.ParseArgs()!;
+                FreeSpectator();
+                // InvariantCulture: this project is developed on a fr-CH machine where the
+                // default decimal separator would reject "1500.5"
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                return new ShotRunner(_spectator!,
+                    new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
+                    float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]) { Origin = _worldOrigin };
+            }),
+            new(() => ShotRunner.ParseQueueArg() != null, ToolAnchor.Own, _ =>
+            {
+                FreeSpectator();
+                var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
+                runner.GroundHeight = at => chunks.TryGetHeight(at, out float h) ? h : null;
+                return runner;
+            }),
+        };
+        // Start somewhere with something to look at, not at the world origin: after a
         // large import that is usually empty space. "--at E,N" overrides it (LV95 metres).
         // --shot and --probe place the camera themselves, and a spawn drop would fight
         // them for the height.
-        bool placedByTool = ShotRunner.ParseArgs() != null || ShotRunner.ParseQueueArg() != null
-            || TunnelProbe.ParseArgs() != null
-            || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || TruckProbe.Requested || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
-            || Gpx.Cinema.CinemaProbe.ParseArgs() != null
-            || RoadStandProbe.Requested() || MantleProbe.Requested() || VoidProbe.Requested()
-            || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
-            || Interiors.InteriorProbe.ParseArgs().Requested || Interiors.DoorWatchProbe.ParseArgs().Requested
-            || Loot.LootProbe.ParseArgs() != null
-            || Loot.GatherProbe.ParseArgs().Requested
-            || Birds.BirdProbe.ParseArgs().Requested
-            || World.TrafficProbe.ParseArgs().Requested
-            || Combat.CombatProbe.ParseArgs().Requested
-            || Birds.BirdStrikeProbe.ParseArgs().Requested
-            || SyncProbe.Requested() || HitboxProbe.Requested();
+        bool placedByTool = tools.Any(t => t.Requested());
         // a check running in a window must leave the pointer to whoever is using the machine
         MouseCapture.Disabled |= placedByTool;
 
@@ -558,210 +604,36 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // camera back for itself.
         StartLaunch(placedByTool);
 
-        // Pure analysis: it loads the tiles it needs itself, so it neither waits for streaming
-        // nor cares where the spectator is.
-        if (Gpx.Cinema.CinemaProbe.ParseArgs() is { } cinemaTrack)
+        var kit = new ToolKit(items, gathering, birds);
+        foreach (var tool in tools)
         {
-            AddChild(new Gpx.Cinema.CinemaProbe(cinemaTrack, origin, streamedSource,
-                manifest.Tiles.Select(t => t.Id).ToHashSet()));
+            if (tool.Start == null || !tool.Requested()) continue;
+            if (tool.Anchor == ToolAnchor.AtTarget)
+            {
+                var (e, n) = SpawnPoint.ParseTarget();
+                _spectator.Position = origin.ToWorld(e, n, 1200);
+            }
+            else if (tool.Anchor == ToolAnchor.Dropped) _chunks.RemoveAnchor(_spectator);
+            AddChild(tool.Start(kit));
             return;
         }
+    }
 
-        if (Vehicles.VehicleProbe.ParseArgs() is { Requested: true } vcheck)
-        {
-            var (vE, vN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(vE, vN, 1200);
-            AddChild(new Vehicles.VehicleProbe(_chunks, origin, vcheck.Shot));
-            return;
-        }
+    /// <summary>Where a verification tool wants the streaming anchor: on the <c>--at</c> spot, gone, or left to the tool.</summary>
+    private enum ToolAnchor { AtTarget, Dropped, Own }
 
-        if (Loot.GatherProbe.ParseArgs() is { Requested: true } gcheck)
-        {
-            _chunks.RemoveAnchor(_spectator);
-            AddChild(new Loot.GatherProbe(_chunks, origin, gathering, items, gcheck.Shot));
-            return;
-        }
+    /// <summary>A verification tool: whether the command line asks for it, and how it starts (null: started elsewhere).</summary>
+    private readonly record struct ToolRun(Func<bool> Requested, ToolAnchor Anchor, Func<ToolKit, Node>? Start);
 
-        if (Birds.BirdProbe.ParseArgs() is { Requested: true } bcheck)
-        {
-            _chunks.RemoveAnchor(_spectator);
-            AddChild(new Birds.BirdProbe(_chunks, origin, birds, items, bcheck.Shot));
-            return;
-        }
+    /// <summary>What some tools need that only exists once the items are built.</summary>
+    private readonly record struct ToolKit(Items.ItemController Items, Loot.Gathering Gathering, Birds.BirdLife Birds);
 
-        if (Loot.LootProbe.ParseArgs() is { } lootEpochs)
-        {
-            // tables only: no terrain wanted, and quitting mid-stream races the tile workers
-            _chunks.RemoveAnchor(_spectator);
-            AddChild(new Loot.LootProbe(_cache, _chunks, lootEpochs));
-            return;
-        }
-
-        if (Interiors.InteriorProbe.ParseArgs() is { Requested: true } icheck)
-        {
-            var (iE, iN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(iE, iN, 1200);
-            AddChild(new Interiors.InteriorProbe(_chunks, origin, _cache, icheck.Shot));
-            return;
-        }
-
-        if (Interiors.DoorWatchProbe.ParseArgs() is { Requested: true } watch)
-        {
-            var (wE, wN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(wE, wN, 1200);
-            AddChild(new Interiors.DoorWatchProbe(_chunks, origin, watch.Shot));
-            return;
-        }
-
-        if (Birds.BirdStrikeProbe.ParseArgs() is { Requested: true } scheck)
-        {
-            var (sE, sN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(sE, sN, 1200);
-            AddChild(new Birds.BirdStrikeProbe(_chunks, origin, birds, scheck.Shot));
-            return;
-        }
-
-        if (Combat.CombatProbe.ParseArgs() is { Requested: true } ccheck)
-        {
-            var (cE, cN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(cE, cN, 1200);
-            AddChild(new Combat.CombatProbe(_chunks, origin, ccheck.Shot));
-            return;
-        }
-
-        if (FlightCheckProbe.ParseArgs() is { } flycheck)
-        {
-            var (fE, fN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(fE, fN, 1200);
-            AddChild(new FlightCheckProbe(_chunks, origin, flycheck.Kind, flycheck.Shot));
-            return;
-        }
-
-        if (HitboxProbe.Requested())
-        {
-            AddChild(new HitboxProbe(_chunks, origin));
-            return;
-        }
-
-        if (SyncProbe.Requested())
-        {
-            var (sE, sN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(sE, sN, 1200);
-            AddChild(new SyncProbe(_chunks, origin));
-            return;
-        }
-
-        if (MantleProbe.Requested())
-        {
-            var (mE, mN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(mE, mN, 1200);
-            AddChild(new MantleProbe(_chunks, origin));
-            return;
-        }
-
-        if (VoidProbe.Requested())
-        {
-            var (vE, vN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(vE, vN, 1200);
-            AddChild(new VoidProbe(_chunks, origin));
-            return;
-        }
-
-        if (RoadStandProbe.Requested())
-        {
-            var (checkE, checkN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(checkE, checkN, 1200);
-            AddChild(new RoadStandProbe(_chunks, origin));
-            return;
-        }
-
-        if (DriveProbe.ParseArgs() is { Requested: true } drive)
-        {
-            var (driveE, driveN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(driveE, driveN, 1200);
-            AddChild(new DriveProbe(_chunks, origin, drive.Shot, drive.Car, drive.Seconds));
-            return;
-        }
-
-        if (World.ArrivalProbe.ParseArgs() is { Requested: true } arrival)
-        {
-            var (arrE, arrN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(arrE, arrN, 1200);
-            AddChild(new World.ArrivalProbe(_chunks, origin, arrival.Prefix));
-            return;
-        }
-
-        if (World.TreeCheck.ParseArgs() is { Requested: true } treeCheck)
-        {
-            var (treeE, treeN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(treeE, treeN, 1200);
-            AddChild(new World.TreeCheck(_chunks, origin, treeCheck.Shot));
-            return;
-        }
-
-        if (TruckProbe.Requested)
-        {
-            var (truckE, truckN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(truckE, truckN, 1200);
-            AddChild(new TruckProbe(_chunks, origin));
-            return;
-        }
-
-        if (RideProbe.ParseArgs() is { } ride)
-        {
-            // park the streaming anchor on the spawn so the tile under the rider arrives with
-            // collision — without it the probe drops through an empty world and measures gravity
-            var (rideE, rideN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(rideE, rideN, 1200);
-            AddChild(new RideProbe(_chunks, origin, ride.Kind, ride.Seconds, ride.Shot));
-            return;
-        }
-
-        if (TunnelProbe.ParseArgs() is { } probe)
-        {
-            var inv0 = System.Globalization.CultureInfo.InvariantCulture;
-            // park the anchor on the portal so its chunk streams in with collision
-            _spectator.Position = origin.ToWorld(
-                double.Parse(probe[0], inv0), double.Parse(probe[1], inv0), 1200);
-            AddChild(new TunnelProbe(_chunks, origin,
-                double.Parse(probe[0], inv0), double.Parse(probe[1], inv0),
-                double.Parse(probe[2], inv0)));
-            return;
-        }
-
-        if (FlightProbe.ParseArgs() is { } fly)
-        {
-            _spectator.SetProcess(false);
-            _spectator.SetProcessUnhandledInput(false);
-            Input.MouseMode = Input.MouseModeEnum.Visible;
-            var inv = System.Globalization.CultureInfo.InvariantCulture;
-            AddChild(new FlightProbe(_spectator, _chunks,
-                new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
-                float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv)));
-            return;
-        }
-
-        if (ShotRunner.ParseArgs() is { } shot)
-        {
-            _spectator.SetProcess(false);
-            _spectator.SetProcessUnhandledInput(false);
-            Input.MouseMode = Input.MouseModeEnum.Visible;
-            // InvariantCulture: this project is developed on a fr-CH machine where the
-            // default decimal separator would reject "1500.5"
-            var inv = System.Globalization.CultureInfo.InvariantCulture;
-            AddChild(new ShotRunner(_spectator,
-                new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
-                float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]) { Origin = _worldOrigin });
-        }
-        else if (ShotRunner.ParseQueueArg() is { } queue)
-        {
-            _spectator.SetProcess(false);
-            _spectator.SetProcessUnhandledInput(false);
-            Input.MouseMode = Input.MouseModeEnum.Visible;
-            var runner = ShotRunner.ForQueue(_spectator, queue, _worldOrigin);
-            runner.GroundHeight = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
-            AddChild(runner);
-        }
+    /// <summary>A tool that drives the spectator camera itself: no fly controls, the pointer free.</summary>
+    private void FreeSpectator()
+    {
+        _spectator!.SetProcess(false);
+        _spectator.SetProcessUnhandledInput(false);
+        Input.MouseMode = Input.MouseModeEnum.Visible;
     }
 
     /// <summary>
