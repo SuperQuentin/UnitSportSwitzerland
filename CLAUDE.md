@@ -28,6 +28,8 @@ occasions, core, general. New knowledge goes in a new or existing note plus one 
   3. Branch from up-to-date `main` as `feat/<issue#>-name`, in a **worktree**
      (`../UnitSportSwitzerland-<issue#>`): the main checkout stays on `main`
      (`docs/notes/general/worktrees.md`). Never commit features on `main`; `Closes #N` in the PR.
+     **Push local commits on feature branches whenever possible**, so others can build on them
+     and a local crash loses nothing.
 - **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
   in the main checkout and push. No issue, branch, worktree or PR.
   4. **Test in multiplayer**: dedicated server + client on loopback, check the feature on the
