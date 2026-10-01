@@ -36,16 +36,25 @@ public static class PaintEmitter
     /// </summary>
     public const float LineWidth = 0.15f;
 
-    /// <summary>Randlinie of a motorway/expressway carriageway (Breitstrich, ASTRA 11001; see the note).</summary>
-    public const float HighSpeedEdgeWidth = 0.30f;
+    /// <summary>
+    /// Randlinie of a motorway/expressway carriageway: 0.20 m (0.20-0.25 m, ASTRA 15002 (2023)
+    /// Abb. 5.4/6.2 after SN 640 854a; see the note).
+    /// </summary>
+    public const float HighSpeedEdgeWidth = 0.20f;
 
     /// <summary>
-    /// Leitlinie dash and gap: 3 m / 3 m in built-up areas, 3 m / 6 m outside (SN 640 850a via
-    /// LU 653.201, BE handbook, ZH ABC); motorways and expressways 6 m / 12 m (see the note).
+    /// Leitlinie dash and gap: 3 m / 6 m, the SN 640 850a "Regelfall" in and out of built-up areas
+    /// (BE Handbuch Markierung 1, Stadt Bern Normalien C 2.10.8; LU's 3 m / 3 m in town is a
+    /// cantonal variant); motorways and expressways 6 m / 12 m (ASTRA 15002 Abb. 5.4).
     /// </summary>
     public static (float Dash, float Gap) Leitlinie(RoadSegment seg) =>
-        RoadCrossSection.IsHighSpeed(seg.Class) ? (6f, 12f)
-        : seg.Attributes.Has(RoadAttrFlags.Urban) ? (3f, 3f) : (3f, 6f);
+        RoadCrossSection.IsHighSpeed(seg.Class) ? (6f, 12f) : (3f, 6f);
+
+    /// <summary>
+    /// A rural Randlinie's axis lies this far in from the carriageway edge: 0.15 m clear, then the
+    /// 0.15 m line (BE Handbuch Markierung 1 ch. 21).
+    /// </summary>
+    public const float EdgeLineInset = 0.225f;
 
     /// <summary>
     /// Two-way roads narrower than this get no centre line: 5.5 m in built-up areas, 6 m outside
@@ -125,6 +134,9 @@ public static class PaintEmitter
             int back = Math.Max(1, (int)a.LanesBackward), fwd = Math.Max(1, (int)a.LanesForward);
             float w = 2 * half / (back + fwd);
             for (int k = 1; k < back + fwd; k++) Line(-half + k * w, true);   // k == back is the centre
+            // Randlinien outside built-up areas, on roads wide enough for a centre line too (BE
+            // Handbuch Markierung 1 p. 17, Stadt Bern C 2.10.11; inside a town only exceptionally)
+            if (!a.Has(RoadAttrFlags.Urban)) { Line(-half + EdgeLineInset, false); Line(half - EdgeLineInset, false); }
         }
     }
 

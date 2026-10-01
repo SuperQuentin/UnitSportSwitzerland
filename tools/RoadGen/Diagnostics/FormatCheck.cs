@@ -108,6 +108,8 @@ public static class FormatCheck
         var east = new List<RoadPaint>();
         Meshing.PaintEmitter.Emit(Seg(900), 0, west);
         Meshing.PaintEmitter.Emit(Seg(0), 100, east);
+        west.RemoveAll(p => p.Type != PaintType.WhiteDashed);   // the edge lines are solid
+        east.RemoveAll(p => p.Type != PaintType.WhiteDashed);
         var painted = west.SelectMany(RoadPaintGeometry.Runs).Select(r => (r[0] - 900, r[^3] - 900))
             .Concat(east.SelectMany(RoadPaintGeometry.Runs).Select(r => (r[0] + 100, r[^3] + 100))).ToList();
         for (double u = 0.25; u < 200; u += 0.5)
@@ -120,9 +122,9 @@ public static class FormatCheck
 
     /// <summary>
     /// A 10.5 m two-lane motorway carriageway drawn east (x 0..100 at z 500): driven with the
-    /// drawing, 0.30 m edge lines just outside the lanes (inner margin 0.5 m on the left, 2.5 m
+    /// drawing, 0.20 m edge lines just outside the lanes (inner margin 0.5 m on the left, 2.5 m
     /// shoulder on the right), one dash between the lanes; driven against it, the same mirrored. A 5 m two-way
-    /// road gets no centre line, a 6 m one does.
+    /// road gets no centre line, a 6 m rural one a centre line and Randlinien 0.225 m in, a 6 m town one the centre line only.
     /// </summary>
     private static bool PaintFollowsCrossSection()
     {
@@ -143,10 +145,14 @@ public static class FormatCheck
             a.Length == b.Length && a.Zip(b).All(x => Math.Abs(x.First - x.Second) < 1e-3f);
 
         float w = RoadCrossSection.OneWayWidth(RoadClass.Motorway, 2);
-        return Near(Offsets(Seg(RoadClass.Motorway, w, 1, 2)), -4.9f, -1f, 2.9f)
-            && Near(Offsets(Seg(RoadClass.Motorway, w, -1, 2)), -2.9f, 1f, 4.9f)
+        var town = Seg(RoadClass.Road, 6, 0, 0);
+        town = new RoadSegment { Class = town.Class, Surface = town.Surface, Width = 6, Points = town.Points,
+            Attributes = new RoadAttributes(RoadAttrFlags.Urban) };
+        return Near(Offsets(Seg(RoadClass.Motorway, w, 1, 2)), -4.85f, -1f, 2.85f)
+            && Near(Offsets(Seg(RoadClass.Motorway, w, -1, 2)), -2.85f, 1f, 4.85f)
             && Offsets(Seg(RoadClass.Road, 5, 0, 0)).Length == 0
-            && Near(Offsets(Seg(RoadClass.Road, 6, 0, 0)), 0f);
+            && Near(Offsets(Seg(RoadClass.Road, 6, 0, 0)), -2.775f, 0f, 2.775f)
+            && Near(Offsets(town), 0f);
     }
 
     /// <summary>
