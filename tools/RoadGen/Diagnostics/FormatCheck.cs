@@ -67,8 +67,43 @@ public static class FormatCheck
         BinaryPrimitives.WriteUInt32LittleEndian(withUnknown.AsSpan(v3.Length + 8), 0xDEADBEEF);
         Check(Encode(Decode(withUnknown)).AsSpan().SequenceEqual(v3), "unknown section skipped");
 
+        // paint (#116): dash runs, and a centre dash that keeps its phase across a tile seam
+        var runs = RoadPaintGeometry.Runs(new RoadPaint
+        {
+            Shape = PaintShape.Polyline, Dash = 6, Gap = 3, Vertices = [0, 0, 0, 30, 0, 0],
+        });
+        Check(runs.Count == 4 && runs[0][3] == 6 && runs[1][0] == 9 && runs[3][0] == 27 && runs[3][3] == 30,
+            "paint dash runs");
+        Check(PaintSeamIsContinuous(), "paint dashes continue across a tile seam, no stub at a dead end");
+
         log(failures == 0 ? "format check passed" : $"format check: {failures} failure(s)");
         return failures == 0;
+    }
+
+    /// <summary>
+    /// A 200 m two-way road cut at a seam after 100 m: west half at x 900..1000 of its tile
+    /// (station 0), east half at x 0..100 of the next (station 100). Painted where
+    /// (station mod 9) &lt; 6, except the last dash stub before the dead end.
+    /// </summary>
+    private static bool PaintSeamIsContinuous()
+    {
+        RoadSegment Seg(float x0) => new()
+        {
+            Class = RoadClass.Road, Surface = RoadSurface.Paved, Width = 6,
+            Points = [x0, 0, 500, x0 + 50, 0, 500, x0 + 100, 0, 500],
+        };
+        var west = new List<RoadPaint>();
+        var east = new List<RoadPaint>();
+        Meshing.PaintEmitter.Emit(Seg(900), 0, west);
+        Meshing.PaintEmitter.Emit(Seg(0), 100, east);
+        var painted = west.SelectMany(RoadPaintGeometry.Runs).Select(r => (r[0] - 900, r[^3] - 900))
+            .Concat(east.SelectMany(RoadPaintGeometry.Runs).Select(r => (r[0] + 100, r[^3] + 100))).ToList();
+        for (double u = 0.25; u < 200; u += 0.5)
+        {
+            bool expected = u % 9 < 6 && u < 198;
+            if (painted.Any(r => u >= r.Item1 && u <= r.Item2) != expected) return false;
+        }
+        return true;
     }
 
     private static byte[] Encode(RoadTile tile)
