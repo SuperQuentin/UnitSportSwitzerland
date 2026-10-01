@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Tiered test runner (docs/notes/general/testing.md).
 #   tools/test.sh unit            tier 0: dotnet test tests/UnitSportSwitzerland.Tests, no Godot
-#   tools/test.sh quick [area]    unit + the headless no-map checks the change calls for
-#   tools/test.sh net [area]      quick + the headless network tier, if the change touches it
+#   tools/test.sh quick [area]    unit + the headless no-map checks the change calls for: tier 0.5
+#                                 (--world flat, --systems) and tier 1 (fixture courses), never the map
+#   tools/test.sh net [area]      quick + the headless network tier on the fixture world, if the change touches it
 #   tools/test.sh full [area]     every check in tools/lib/checkmap.txt, windowed and load scripts too
 # The checks come from tools/lib/checkmap.txt, matched against the files changed since origin/main
 # (plus uncommitted and untracked ones); [area] (e.g. Loot, src/Player/) matches it instead.
@@ -99,16 +100,16 @@ record "unit (dotnet test)" "$(verdict $? "$OUT/unit.log")" $((SECONDS - t0)) "$
 grep -aE "^(Passed|Failed)!" "$OUT/unit.log" | tail -1
 
 # --- Godot tiers ------------------------------------------------------------------------------
-netsmoke() { # headless dedicated server on a generated world + a headless client joining and leaving it
+netsmoke() { # headless dedicated server on the flat fixture world + a headless client joining and leaving it
   local port=${TEST_PORT:-7821} slog=$OUT/netsmoke_server.log
-  "$GODOT" --headless --path . -- --server --port "$port" --generated-world > "$slog" 2>&1 < /dev/null &
+  "$GODOT" --headless --path . -- --server --port "$port" --world fixture > "$slog" 2>&1 < /dev/null &
   SERVER=$!
   for _ in $(seq 1 120); do
     grep -q "server listening" "$slog" 2>/dev/null && break
     kill -0 "$SERVER" 2>/dev/null || break
     sleep 1
   done
-  guard_run "$TIMEOUT" "$1" "$GODOT" --headless --path . -- --leavecheck connect "127.0.0.1:$port"
+  guard_run "$TIMEOUT" "$1" "$GODOT" --headless --path . -- --leavecheck connect "127.0.0.1:$port" --world fixture
   local code=$?
   _guard_kill_tree "$SERVER"
   wait "$SERVER" 2>/dev/null
@@ -135,11 +136,9 @@ if [ ${#CHECKS[@]} -gt 0 ]; then
       for entry in "${CHECKS[@]}"; do
         tier=${entry%% *}
         check=${entry#* }
-        name=${check%% *}
-        name=${name##*/}
-        name=${name#--}
-        name=${name#@}
-        name=${name%.sh}
+        # the whole check in the log's name: one flag runs in several worlds
+        name=${check//[^A-Za-z0-9]/_}
+        name=${name#"${name%%[!_]*}"}
         log=$OUT/$name.log
         if [ "$tier" = quick ]; then
           guard_wait_ram "${TEST_RAM_GB:-3}" || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
