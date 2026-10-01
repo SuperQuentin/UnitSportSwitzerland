@@ -13,6 +13,12 @@
   Height 0) along the segment's edge: 20 m taper, then 20 m storage to the junction mouth; the
   segment must be 45 m long (5 m clear of whatever is at its other end). The original approach
   lane becomes the left-turn pocket, through traffic moves into the new lane.
+- **Exit** (asked for after a playtest: without it the through lane ran into the grass past the
+  junction): the main road's other arm takes the shifted lane on. Its departing side gets the
+  same 3 m strip at the mouth, tapering to nothing over 30 m, and a hatched median (`PaintType.Hatch`
+  triangles, 45 deg stripes every 2.5 m) between the centre line and the through lane's left edge,
+  a lane wide at the mouth and closing at 30 m, bordered by solid lines (the centre line turns
+  solid along it). A pocket is placed only when its exit fits too (`Widening.Check` on both).
 - **Room**: every 2.5 m where the strip is over 0.3 m wide, at its middle and 0.5 m past its
   outer edge: inside the tile, no building footprint, no other line covering it, the raw ground
   within 1.2 m of the road (0.6 rejected 5 of 13 in Sion, where roads sit on low embankments; the
@@ -28,9 +34,11 @@
 - **Not done**: lane-level topology in the format (which lane goes where); traffic still drives
   the original lane and so turns left from it, and goes straight from it too. Right-turn lanes,
   pockets across a tile seam, OSM `turn:lanes`.
-- **6-tile test region**: 13 main-road approaches with a left turn, 6 pockets placed (1 Riddes,
-  5 Sion), 24 arrows; rejected: approach too short 6, ground 1. Rebuild byte-identical;
+- **6-tile test region**: 13 main-road approaches with a left turn, 4 pockets placed with their
+  exits (1 Riddes, 3 Sion), 16 arrows, 40 median stripes; rejected: approach or exit too short 8,
+  ground 1 (6 pockets fitted before the exit was required). Rebuild byte-identical;
   `--format-check` and `--priority-check` pass; paint round-trip "0 decoded differently".
 - **Checks**: screenshots from above of a Riddes and two Sion pockets (taper on the right, new
   edge line, divider, left and straight arrows). `--roadcheck --at E,N` now also drops a body on
-  up to 4 strips of the tile (widest triangle): 5 strips, body within 1 mm of the strip.
+  up to 4 strips of the tile (widest triangle): approach and exit strips, body within 1 mm.
+  Screenshots from above of a Sion and the Riddes pocket with their exits.
