@@ -146,6 +146,16 @@ public partial class AvatarPreview : Node3D
             rig.View = view != "eye" ? CockpitView.Outside : args.Contains("--bare") ? CockpitView.Bare : CockpitView.Body;
             rig.MirrorsOn = args.Contains("--mirrors");
             AddChild(rig);
+            // --fill (#158): somebody in every other seat, as passengers sit
+            if (args.Contains("--fill"))
+                for (int i = 1; i < rig.Seats.Length; i++)
+                    if (rig.Seats[i].Section == section)
+                        rig.AddChild(new MeshInstance3D
+                        {
+                            Mesh = SeatedFigure.Build(HumanPalette.ForRider(i + 2), rig.Seats[i]),
+                            MaterialOverride = HumanMeshBuilder.Material(),
+                            Transform = SeatedFigure.FrameOf(rig, rig.Seats[i]),
+                        });
             _mirrorRig = rig.MirrorsOn ? rig : null;
             var cam = new Camera3D { Fov = view == "eye" ? 70 : 40, Near = 0.05f };
             AddChild(cam);
@@ -206,6 +216,15 @@ public partial class AvatarPreview : Node3D
             rig.View = outside ? CockpitView.Outside : args.Contains("--bare") ? CockpitView.Bare : CockpitView.Body;
             rig.MirrorsOn = args.Contains("--mirrors");
             AddChild(rig);
+            // --fill (#158): somebody in every other seat, as passengers sit
+            if (args.Contains("--fill"))
+                for (int i = 1; i < rig.Seats.Length; i++)
+                    rig.AddChild(new MeshInstance3D
+                    {
+                        Mesh = SeatedFigure.Build(HumanPalette.ForRider(i + 2), rig.Seats[i]),
+                        MaterialOverride = HumanMeshBuilder.Material(),
+                        Transform = SeatedFigure.FrameOf(rig, rig.Seats[i]),
+                    });
             _mirrorRig = rig.MirrorsOn ? rig : null;
             if (rig.MirrorsOn)
                 // something to see behind the car: posts in a row, red on its left, blue on its right

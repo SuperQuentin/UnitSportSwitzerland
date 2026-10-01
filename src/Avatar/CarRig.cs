@@ -129,6 +129,10 @@ public partial class CarRig : Node3D
     public CockpitView View { get; set; }
     /// <summary>Draw the mirrors (local driver, first person, the setting on): each a small extra render.</summary>
     public bool MirrorsOn { get; set; }
+    /// <summary>Somebody at the wheel: off while it rolls on driverless with its passengers (#158).</summary>
+    public bool DriverShown { get; set; } = true;
+    /// <summary>The seats a player can take, the driver's first (#158).</summary>
+    public SeatAnchor[] Seats => _cabin.Seats;
 
     public const byte DoorLeft = 1, DoorRight = 2, DoorRearLeft = 4, DoorRearRight = 8;
     /// <summary>These are right-hand-drive cars: the driver gets in and out on the right.</summary>
@@ -333,6 +337,9 @@ public partial class CarRig : Node3D
     /// </summary>
     public Transform3D EyeFrame => _body.Transform * new Transform3D(Basis.Identity, _cabin.Eye + ShellOffset);
 
+    /// <summary>A seat's hip in the rig's own frame, on the pitching body: where someone sitting in it goes.</summary>
+    public Transform3D SeatFrame(SeatAnchor seat) => _body.Transform * new Transform3D(Basis.Identity, seat.Hip + ShellOffset);
+
     /// <summary>The bit of the door whose middle is nearest a world point, and how far it is.</summary>
     public (byte Bit, float Distance) NearestDoor(Vector3 point)
     {
@@ -399,8 +406,8 @@ public partial class CarRig : Node3D
         _glass.AlbedoColor = Colors.White with { A = View == CockpitView.Outside ? 1f : GlassFromSeat };
 
         if (_driverBody == null || _driverHead == null || _driverPalette is not { } palette) return;
-        _driverBody.Visible = View != CockpitView.Bare;
-        _driverHead.Visible = View == CockpitView.Outside;
+        _driverBody.Visible = DriverShown && View != CockpitView.Bare;
+        _driverHead.Visible = DriverShown && View == CockpitView.Outside;
         if (!_driverBody.Visible) return;
         var pose = (Mathf.RoundToInt(WheelTurn / 0.03f), Mathf.RoundToInt(Throttle * 8f), Mathf.RoundToInt(Brake * 8f));
         if (pose == _driverPose) return;

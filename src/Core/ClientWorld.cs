@@ -238,6 +238,8 @@ public partial class ClientWorld : Node3D
         // Vehicles left standing in the world. Same node path as on the server, so parking and
         // claiming work over the network; offline it just holds the nodes.
         var vehicles = Vehicles.VehicleManager.Create(this, _chunks);
+        // seats in vehicles other players drive (#158): same path as the server's
+        Vehicles.PassengerService.Create(this);
         vehicles.PlayerPositions = () =>
         {
             var at = new List<Vector3>();
@@ -382,6 +384,7 @@ public partial class ClientWorld : Node3D
         AddChild(_garage);
         if (Player.GarageProbe.ParseArgs() is { } garageRole) AddChild(new Player.GarageProbe(garageRole, () => LocalPlayer));
         if (Player.HeavyNetProbe.ParseArgs() is { } heavyRole) AddChild(new Player.HeavyNetProbe(heavyRole, () => LocalPlayer));
+        if (Player.PassengerProbe.ParseArgs() is { } passengerRole) AddChild(new Player.PassengerProbe(passengerRole, () => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
@@ -409,6 +412,7 @@ public partial class ClientWorld : Node3D
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
+        Vehicles.PassengerService.Said += message => items.Ui.Toast(message);
 
         // Chat exists from boot, not only once connected: offline it runs its commands itself
         // (/city, /spawn ...), and StartNetworking just keeps using it. World/Chat is also the

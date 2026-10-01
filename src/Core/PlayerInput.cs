@@ -65,6 +65,8 @@ public partial class PlayerInput : Node
     // --- trucks and buses (#70) ---
     /// <summary>Couple or uncouple a trailer (<see cref="Player.Truck.Couple"/>).</summary>
     public const string Couple = "couple";
+    /// <summary>A passenger moves into the free driver's seat (#158).</summary>
+    public const string TakeWheel = "take_wheel";
     /// <summary>A bus kneels (lowers its door side) or rises.</summary>
     public const string Kneel = "kneel";
     /// <summary>The next destination on a bus's display.</summary>
@@ -273,6 +275,8 @@ public partial class PlayerInput : Node
         // which only mean tuck and slide elsewhere), the clutch takes C / B, and the H-pattern's
         // gates the number keys, which only pick hotbar slots on foot.
         Bind(Couple, Keys(Key.H), Button(JoyButton.DpadLeft));
+        // a passenger never does tricks: the trick keys are free in a seat
+        Bind(TakeWheel, Keys(Key.F), Button(JoyButton.RightShoulder));
         Bind(Kneel, Keys(Key.K));
         Bind(Destination, Keys(Key.N));
         Bind(ShiftUp, Keys(Key.Shift), Button(JoyButton.RightShoulder));

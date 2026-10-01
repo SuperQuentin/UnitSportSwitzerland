@@ -128,13 +128,13 @@ public partial class ItemController : Node
 
     public override void _ExitTree() => RadioManager.Refused -= OnRadioRefused;
 
-    /// <summary>The player if items can be used right now: on foot, on screen, not in a menu.</summary>
+    /// <summary>The player if items can be used right now: on foot (not in a passenger seat), on screen, not in a menu.</summary>
     public FootPlayer? UsablePlayer
     {
         get
         {
             var p = CurrentPlayer();
-            return p is { IsViewing: true } && p.Ride == RideKind.OnFoot ? p : null;
+            return p is { IsViewing: true, RidingAlong: false } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 

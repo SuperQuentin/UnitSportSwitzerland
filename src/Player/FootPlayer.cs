@@ -387,7 +387,7 @@ public partial class FootPlayer : CharacterBody3D
     public bool IsFirstPerson => !_thirdPerson;
 
     /// <summary>In a car's, a truck's or a bus's driver's seat, looking out through the windscreen (not the chase camera, not the garage's orbit).</summary>
-    public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null;
+    public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null && SeatIndex == 0;
 
     /// <summary>What is ridden has a driver's seat with a cockpit (#69 cars, #157 trucks and buses).</summary>
     private bool HasCockpit => _ride is Car or Truck;
@@ -887,6 +887,9 @@ public partial class FootPlayer : CharacterBody3D
         replication.AddProperty(".:TuningBits");
         replication.AddProperty(".:DoorsOpen");
         replication.AddProperty(".:TrailerCode");
+        // a passenger's host and seat (#158): drawn and moved from the host's copy on every peer
+        replication.AddProperty(".:RidingWith");
+        replication.AddProperty(".:SeatIndex");
         replication.AddProperty(".:HeldItemId");
         replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
@@ -900,7 +903,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1220,6 +1223,13 @@ public partial class FootPlayer : CharacterBody3D
             NetTime = Time.GetTicksUsec() / 1e6;
             float dt = (float)delta;
             ApplyStickLook(dt);
+            if (RidingWith != 0)
+            {
+                // a passenger (#158): in its seat on the host's vehicle, looking out of it
+                UpdateSeated();
+                UpdateSeatCamera(dt);
+                return;
+            }
             if (_ride != null)
             {
                 if (_visual != null)
@@ -1231,6 +1241,7 @@ public partial class FootPlayer : CharacterBody3D
                     Anim = _ride.WritePose(_visual, _motion, _flight);
                     if (_ride is Truck heavy) PublishTrain(heavy);
                 }
+                UpdateSeated();   // sat in it driverless, not at the wheel
                 return;
             }
 
@@ -1273,9 +1284,17 @@ public partial class FootPlayer : CharacterBody3D
         // crashed or frozen, and ENet takes up to 30 s to say so. Its body, frozen mid-road, must
         // not be a wall the whole field piles into (#50: every car stopped on a crashed leader).
         bool silent = Time.GetTicksMsec() / 1000.0 - LastNetState > SilentSeconds;
-        if (_body.Disabled != silent) _body.Disabled = silent;
+        // a passenger has no body of its own: it is in the vehicle
+        bool off = silent || RidingWith != 0;
+        if (_body.Disabled != off) _body.Disabled = off;
 
-        if (_interp.HasData)
+        if (RidingWith != 0 && Host is { } host)
+        {
+            // where its host's copy is, exactly: not its own interpolated stream, which would shake in the seat
+            Position = host.Position;
+            Rotation = host.Rotation;
+        }
+        else if (_interp.HasData)
         {
             var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
             Position = p;
@@ -1283,6 +1302,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         RefreshVisual();
         AnimateRemote((float)delta);
+        UpdateSeated();
     }
 
     /// <summary>
@@ -1309,7 +1329,8 @@ public partial class FootPlayer : CharacterBody3D
         AlignHull();
         _remoteRide?.AnimateRemote(_visual, Anim, dt);
         AnimateRemoteSections(dt);
-        if (_visual is Avatar.CarRig rig) rig.DoorsOpen = DoorsOpen;
+        if (_visual is Avatar.CarRig rig) { rig.DoorsOpen = DoorsOpen; rig.DriverShown = SeatIndex == 0; }
+        else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
         SetRemoteEngine(_remoteRide as Flyer);
     }
 
@@ -1650,6 +1671,7 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     public bool TryInteract()
     {
+        if (RidingWith != 0) return TryLeaveSeat();
         if (_ride is { IsVehicle: true })
         {
             ExitVehicle();
@@ -1679,6 +1701,13 @@ public partial class FootPlayer : CharacterBody3D
         }
 
         var vehicle = Vehicles?.Nearest(GlobalPosition, EnterReach);
+        // someone else's vehicle, being driven: a seat in it (#158), when it is nearer than a parked one
+        if (OnlineSeats && DrivenVehicleInReach(EnterReach) is { } driven
+            && (vehicle == null || driven.GlobalPosition.DistanceTo(GlobalPosition) < vehicle.GlobalPosition.DistanceTo(GlobalPosition)))
+        {
+            PassengerService.Instance!.AskSeat(driven);
+            return true;
+        }
         if (vehicle == null)
         {
             // music in earshot: E starts or stops the dance
@@ -1816,7 +1845,10 @@ public partial class FootPlayer : CharacterBody3D
         if (vehicle is Car && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
             state = state with { DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor | VehicleState.DriverDoorShuts) };
 
-        Vehicles?.Park(state);
+        // with people aboard (or sat in it driverless) it is not parked: it rolls on with them (#158)
+        if (OnlineSeats && (SeatIndex > 0 || Riders.Any())) PassengerService.Instance!.HostLeaving(state);
+        else Vehicles?.Park(state);
+        SeatIndex = 0;
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
         GlobalPosition = FindExit(door, right, side, ahead, end, grounded);
@@ -1868,6 +1900,9 @@ public partial class FootPlayer : CharacterBody3D
         GlobalPosition = state.Position + Vector3.Up * 1.5f + away * 1.5f;
         _stunTimer = 1.5f;
         _ejected = 2.0;
+        // everyone aboard goes out with the driver
+        if (OnlineSeats && (SeatIndex > 0 || Riders.Any())) PassengerService.Instance!.Wrecked(state.Velocity);
+        SeatIndex = 0;
         Vehicles?.Park(state);
         if (Vehicles == null) Explosion.Spawn(GetParent(), state.Position + Vector3.Up);
     }
@@ -2099,7 +2134,15 @@ public partial class FootPlayer : CharacterBody3D
             return;
         }
 
-        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is { HasEngine: true })
+        // a passenger, or sat in one's own driverless vehicle: the driver's seat, if it is free (#158)
+        if (@event.IsActionPressed(PlayerInput.TakeWheel) && !@event.IsEcho() && (RidingWith != 0 || SeatIndex > 0))
+        {
+            PassengerService.Instance?.AskWheel();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is { HasEngine: true } && SeatIndex == 0)
         {
             EngineOn = !EngineOn;
             EngineToggled?.Invoke(EngineOn);
@@ -2141,7 +2184,7 @@ public partial class FootPlayer : CharacterBody3D
             // into the ditch. The mouse gets its own yaw, which recentres itself.
             float rate = 0.0022f * LookScale;
             _lookIdle = 0f;
-            if (_ride != null && !LookSteersRide)
+            if (_ride != null && !LookSteersRide || RidingWith != 0)
                 _lookYaw = Mathf.Clamp(_lookYaw - motion.Relative.X * rate, -2.4f, 2.4f);
             else
                 _viewYaw -= motion.Relative.X * rate;
@@ -2160,7 +2203,7 @@ public partial class FootPlayer : CharacterBody3D
         if (look == Vector2.Zero) return;
         _lookIdle = 0f;
 
-        if (_ride != null && !LookSteersRide)
+        if (_ride != null && !LookSteersRide || RidingWith != 0)
             _lookYaw = Mathf.Clamp(_lookYaw - look.X * dt, -2.4f, 2.4f);
         else
             _viewYaw -= look.X * dt;
@@ -2193,6 +2236,8 @@ public partial class FootPlayer : CharacterBody3D
             GlobalPosition = new Vector3(GlobalPosition.X, Mathf.Max(GlobalPosition.Y, g + 1f), GlobalPosition.Z);
             _placed = true;
         }
+        // a passenger is carried by the vehicle it sits in (#158)
+        if (RidingWith != 0) { RideAlong(); return; }
         // before any path runs, so none of them (mantle, a thrown-out NPC) can skip it
         if (RescueFromVoid(delta)) return;
 
@@ -2823,6 +2868,9 @@ public partial class FootPlayer : CharacterBody3D
             // Space is a hop on a bike and the handbrake in a car
             Handbrake: _ride is { CanHop: false } && PlayerInput.Held(PlayerInput.Jump));
 
+        // nobody at the wheel (the driver jumped out, #158): no pedal, the wheel let go
+        if (SeatIndex != 0) input = new RideInput(0f, 0f, 0f, false);
+
         // After a bail the rider is on the ground, not riding: no drive, no steering.
         if (_bailTimer > 0)
         {
@@ -3066,10 +3114,12 @@ public partial class FootPlayer : CharacterBody3D
             rig.View = !InCockpit ? Avatar.CockpitView.Outside
                 : settings.CockpitBody ? Avatar.CockpitView.Body : Avatar.CockpitView.Bare;
             rig.MirrorsOn = settings.CockpitMirrors;
+            rig.DriverShown = SeatIndex == 0;
         }
         else if (_visual is Avatar.HeavyRig cab)
         {
             var settings = Core.GameSettings.Current;
+            cab.DriverShown = SeatIndex == 0;
             cab.EngineRunning = EngineOn;
             cab.View = !InCockpit ? Avatar.CockpitView.Outside
                 : settings.CockpitBody ? Avatar.CockpitView.Body : Avatar.CockpitView.Bare;
@@ -3095,6 +3145,8 @@ public partial class FootPlayer : CharacterBody3D
             PoseRideVisual();
 
         if (_camera == null || _ride == null) return;
+        // sat in it while it rolls on driverless: the view from that seat
+        if (SeatIndex > 0) { UpdateSeatCamera(dt); return; }
 
         _lookIdle += dt;
         if (InCockpit && ((_visual as Avatar.CarRig)?.EyeFrame ?? (_visual as Avatar.HeavyRig)?.EyeFrame) is { } eyeFrame)

@@ -318,7 +318,7 @@ void fragment() {{
         float dt = (float)delta;
 
         var id = (ItemId)_player.HeldItemId;
-        bool onFoot = _player.Ride == RideKind.OnFoot;
+        bool onFoot = _player.Ride == RideKind.OnFoot && !_player.RidingAlong;
         if (id != _shown || HeldData != _shownData)
         {
             if (id != _shown)

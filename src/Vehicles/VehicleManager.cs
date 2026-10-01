@@ -201,6 +201,27 @@ public partial class VehicleManager : Node3D
         _spawner.Spawn(state.ToDict());
     }
 
+    /// <summary>
+    /// Server: puts a vehicle into the world for <paramref name="owner"/>, who simulates it, as if it
+    /// had asked to park it: a host whose passengers had all gone by the time it got out (#158).
+    /// </summary>
+    public void ParkFor(long owner, VehicleState parked)
+    {
+        if (!Multiplayer.IsServer() || _spawner == null) return;
+        if (_driving.TryGetValue(owner, out int driving)) _driving[owner] = Math.Max(0, driving - parked.Units);
+        _spawner.Spawn((parked with { Owner = owner, Name = $"veh_{owner}_{++_counter}", SpawnedAt = VehicleState.Now }).ToDict());
+    }
+
+    /// <summary>
+    /// Server: a vehicle being driven moved from one player to another (a passenger who goes on with
+    /// it, #158): the right to put it back into the world goes with it.
+    /// </summary>
+    public void TransferDriving(long from, long to, int units)
+    {
+        if (_driving.TryGetValue(from, out int had)) _driving[from] = Math.Max(0, had - units);
+        _driving[to] = _driving.GetValueOrDefault(to) + units;
+    }
+
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestClaim(string name)
     {
