@@ -195,18 +195,37 @@ public sealed class AutoPilot
         if (kind == Mount.Foot) player.WalkControls = Walk;
     }
 
-    private float[] ComputeProfile()
+    private float[] ComputeProfile() => ComputeProfile(Skill);
+
+    /// <summary>Seconds a driver of skill 1 would take for the first <paramref name="distance"/> m on this line (the yardstick of <c>--drivecheck</c>'s pace index).</summary>
+    public float ReferenceSeconds(float distance)
+    {
+        var line = Route.Line;
+        var v = ComputeProfile(1f);
+        float t = 0f;
+        for (int i = 1; i < line.Arc.Count && line.Arc[i] <= distance; i++)
+            t += (line.Arc[i] - line.Arc[i - 1]) / Mathf.Max(0.5f * (v[i] + v[i - 1]), 1f);
+        return t;
+    }
+
+    /// <summary>
+    /// What a driver of <paramref name="skill"/> can hold: a share of the tyre limit in corners, and of the braking
+    /// limit, that grows with skill. The default driver (1.0) is the reference (×1, ×1); a novice (0.8)
+    /// corners at ×0.90 and brakes at ×0.85 of it (was ×0.94 / ×0.92: the grid's skills hardly showed in
+    /// the pace, #159); an ace (1.1) at ×1.03 and ×1.04, the braking share capped at 0.9 of the rear-lockup
+    /// limit whatever the temper.
+    /// </summary>
+    private float[] ComputeProfile(float skill)
     {
         var line = Route.Line;
         float g = Rideable.Gravity;
+        float lo = Mathf.Clamp((skill - 0.8f) / 0.2f, 0f, 1f), hi = Mathf.Clamp((skill - 1f) / 0.1f, 0f, 1f);
+        float cornerShare = Mathf.Lerp(0.90f, 1f, lo) * Mathf.Lerp(1f, 1.03f, hi), brakeShare = Mathf.Lerp(0.85f, 1f, lo) * Mathf.Lerp(1f, 1.04f, hi);
         return Kind switch
         {
             // a share of the tyre limit: a narrow road with camber and bumps is not a flat skidpad
-            // a lesser driver corners and brakes a little short of the car; an aggressive one brakes later
-            // (an ace, skill 1.1, carries the trend on: ×1.03 corner and ×1.04 braking share, and the
-            // braking share never above 0.9 of the rear-lockup limit, whatever the temper)
-            Mount.Car => line.SpeedProfile(S, Rideable.Arcade, (S.Style == DriveStyle.Grip ? 0.64f : 0.6f) * Mathf.Lerp(0.94f, 1f, (Skill - 0.8f) / 0.2f),
-                Mathf.Min(0.9f, 0.85f * Mathf.Lerp(0.92f, 1f, (Skill - 0.8f) / 0.2f) + 0.04f * Aggression)),
+            Mount.Car => line.SpeedProfile(S, Rideable.Arcade, (S.Style == DriveStyle.Grip ? 0.64f : 0.6f) * cornerShare,
+                Mathf.Min(0.9f, 0.85f * brakeShare + 0.04f * Aggression)),
             // v = √(g·R·tan φ): 65% of the lean it can hold (measured upright on the flat: braking
             // into a bend takes grip off the lean, and at 80% two R1s ran wide off a R 50 m bend at
             // 93 km/h on full lock), 85% of its brakes
@@ -439,7 +458,7 @@ public sealed class AutoPilot
             var n = RaceLine.Normal(Route.Centre, qi);
             float mine = line.Offset[qi] + D.Lateral;   // where this car is headed as it reaches them
 
-            if (along < -1f)
+            if (along < -1f && !(q.Civil && q.Speed < 6f))
             {
                 // coming the other way
                 if (ahead < 1f) continue;   // gone by
@@ -476,7 +495,9 @@ public sealed class AutoPilot
 
             // (a traffic car creeping along the edge for the race is gone round like a standing one: followed
             // as a car ahead at 2 km/h, it held racers up until they were reset, #85)
-            if (q.Wreck || q.Speed < 0.5f || (q.Civil && q.Speed < 3f))
+            // and one coming the other way at a walk, stopping at the edge for the race: met as a standing car
+            // (slowed for in time), not as an oncoming one — at 90 km/h a racer met one that had just stopped (#159)
+            if (q.Wreck || q.Speed < 0.5f || (q.Civil && (q.Speed < 3f || (along < 0f && q.Speed < 6f))))
             {
                 // stopped: just clear of it — on the side this car is on if that is a way through, else the roomier
                 if (ahead < 1f) continue;
@@ -509,7 +530,9 @@ public sealed class AutoPilot
                 // A traffic car standing in the road is passed at 50 km/h at most: at 90 the car's own line
                 // (the steering aims 20 m on, past the car) swung it 2 m back towards the traffic in the
                 // last 15 m, too late to stop — five racers thrown off that way in one run (#85)
-                if (need <= 0f) CapBy(q.Civil ? Mathf.Max(14f, StopWithin(ahead - 12f)) : Mathf.Max(8f, StopWithin(ahead - 12f)));
+                // (at 14 m/s by 12 m short of it, braked for from as far as that takes: one met at 80-90 km/h was
+                // only capped 13 m short, too late to get down to it, and was thrown off at 66 km/h, #159)
+                if (need <= 0f) CapBy(q.Civil ? Mathf.Sqrt(14f * 14f + 2f * EasyBrake * Mathf.Max(0f, ahead - 12f)) : Mathf.Max(8f, StopWithin(ahead - 12f)));
                 else if (q.Civil)
                 {
                     // not across yet: slow to a crawl by where the metres left are just enough to get across
@@ -575,7 +598,10 @@ public sealed class AutoPilot
             int apex = line.IndexAt(apexAt);
             bool inside = k > 0f ? fitsL && theirs + beside <= RoomL(apex) : fitsR && theirs - beside >= -RoomR(apex);
             bool diveHere = !straight && k != 0f && Aggression > 0.3f && ahead < 15f && inside;
-            if ((straight && (fitsL || fitsR)) || diveHere || easyL || easyR)
+            // no racer-vs-racer pass above 90 km/h (#159): one at ~120 km/h on a fast descent ended in the trees.
+            // Behind the car ahead at its pace, the pass waits for a straight where it is slower
+            bool tooFast = !q.Civil && v > 25f;
+            if (((straight && (fitsL || fitsR)) || diveHere) && !tooFast || easyL || easyR)
             {
                 float side = diveHere ? (k > 0f ? l : r)
                     : !straight ? (easyL ? l : r)
@@ -594,6 +620,11 @@ public sealed class AutoPilot
         // drove into such a gap because nothing but the corridor said it was shut (#85)
         if (lo > hi + 0.1f && Mathf.Min(loAt, hiAt) > 3f && Mathf.Abs(loAt - hiAt) < 20f)
             CapBy(StopWithin(Mathf.Min(loAt, hiAt) - 8f));
+        // one bound from a rival alongside or just behind (no chop), the other from something ahead: the
+        // car cannot get over to its side of it, so it stops short of that — not, as before, keep the line
+        // into it: three racers in one run hit traffic standing in its lane at 44-59 km/h that way (#159)
+        else if (lo > hi + 0.1f && Mathf.Max(loAt, hiAt) > 3f && Mathf.Min(loAt, hiAt) <= 3f)
+            CapBy(StopWithin(Mathf.Max(loAt, hiAt) - 8f));
         // boxed in short of a traffic car, too close to steer round it: back off a little and try again —
         // not with a car right behind (a queue of racers backing into each other on the grid, #85)
         _boxed = boxed && !tailed && v < 0.5f ? _boxed + dt : 0f;
@@ -619,7 +650,7 @@ public sealed class AutoPilot
         D.Pressure = pressure;
         D.Crowded = crowded;
         if (nearest == float.MaxValue) Seen = "";
-        else Seen += $" | onc {oncoming} stop {stopped} pass {D.Passing} cap {(D.Cap < 1e9f ? D.Cap * 3.6f : 0f):F0} corridor {lo:F1}..{hi:F1}";
+        else Seen += $" | onc {oncoming} stop {stopped} pass {D.Passing} cap {(D.Cap < 1e9f ? D.Cap * 3.6f : 0f):F0} corridor {lo:F1}..{hi:F1} (at {(loAt < 1e9f ? loAt : 0f):F0}/{(hiAt < 1e9f ? hiAt : 0f):F0} m)";
         // over quickly for a car coming the other way or a wreck: 1.2 m/s is a lane change in two
         // seconds, and closing at 30 m/s from 60 m there is one
         D.Lateral = Mathf.MoveToward(D.Lateral, target - line.Offset[ai], urgency * dt);
@@ -1158,9 +1189,10 @@ public sealed class AutoPilot
         }
         var at = line.PointAt(s);
         var fwd = RaceRoute.Flat(line.PointAt(s + 2f) - line.PointAt(s - 2f)).Normalized();
-        Player.GlobalPosition = at + Vector3.Up * 1.2f;
-        Player.Rotation = new Vector3(0, Mathf.Atan2(-fwd.X, -fwd.Z), 0);
-        Player.Velocity = Vector3.Zero;
+        // PlaceAt, not Rotation: a car's step writes its rotation back from its own heading, so a car reset
+        // that way kept the heading it had in the ditch and drove straight back off the road — at 100 km/h
+        // into the trees 40 m from the line, or reset after reset at the same spot (#159)
+        Player.PlaceAt(at + Vector3.Up * 1.2f, Mathf.Atan2(-fwd.X, -fwd.Z));
         D.Lost = 0; D.Recovering = false; D.Reversing = 0; D.Stuck = 0; D.Drifting = false;
         D.Near = line.IndexAt(s);
         Resets++;

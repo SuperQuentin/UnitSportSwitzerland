@@ -75,8 +75,12 @@ public sealed class Route
         }
     }
 
-    /// <summary>The first junction (3+ road ends meeting) within <paramref name="within"/> m ahead on the legs chosen: where, and how far.</summary>
-    public (Vector3 At, float Distance)? NextJunction(LaneGraph g, float within)
+    /// <summary>
+    /// The first junction (3+ road ends meeting) within <paramref name="within"/> m ahead on the legs chosen: where, how
+    /// far, and whether this car gives way there (#159): a road meeting a more important one (a lower
+    /// <see cref="RoadClass"/>). ponytail: class only; stored one-way and yield arms (#117 / #121) when the road overhaul lands.
+    /// </summary>
+    public (Vector3 At, float Distance, bool Yields)? NextJunction(LaneGraph g, float within)
     {
         float d = Legs[Leg].Edge.Length - Arc;
         for (int i = Leg; i < Legs.Count; i++)
@@ -84,7 +88,9 @@ public sealed class Route
             if (i > Leg) d += Legs[i].Edge.Length;
             if (d > within) break;
             var (edge, fwd) = Legs[i];
-            if (g.Degree(fwd ? edge.KeyEnd : edge.KeyStart) >= 3) return (fwd ? edge.Points[^1] : edge.Points[0], d);
+            long key = fwd ? edge.KeyEnd : edge.KeyStart;
+            if (g.Degree(key) >= 3)
+                return (fwd ? edge.Points[^1] : edge.Points[0], d, g.GivesWay(key, edge));
         }
         return null;
     }
@@ -395,7 +401,7 @@ public partial class Traffic : Node3D
         float mine = keep + car.Pull;   // this car's centre, right of the centreline
         float wantPull = 0f, makeWay = float.MaxValue;
         bool yield = false, hold = false, blocked = false, stopFor = false;
-        (Vector3 At, float Distance)? junction = null;
+        (Vector3 At, float Distance, bool Yields)? junction = null;
         bool junctionLooked = false;
         // what this driver has noticed: someone in sight (no crest, hillside or building between), and then
         // only after its reaction time. Seen late — little time left — it is startled (see below)
@@ -416,8 +422,8 @@ public partial class Traffic : Node3D
         foreach (var (oPos, oVel) in obstacles)
         {
             var rel = oPos - pos;
-            // a racer 7 s from a junction at 40 m/s is 280 m away
-            if (new Vector2(rel.X, rel.Z).LengthSquared() > 300f * 300f) continue;
+            // a racer 9 s from a junction at 50 m/s is 450 m away
+            if (new Vector2(rel.X, rel.Z).LengthSquared() > 450f * 450f) continue;
             float oSpeed = new Vector2(oVel.X, oVel.Z).Length();
 
             // where it is on this car's road (bends and all): metres ahead (- behind), and right of the centreline
@@ -493,12 +499,17 @@ public partial class Traffic : Node3D
             // off this road: someone fast about to pass through the junction ahead? wait short of it
             if (oSpeed < 2f) continue;
             if (!junctionLooked) { junction = car.Route.NextJunction(_roads!, 60f); junctionLooked = true; }
-            if (junction is not var (j, dj)) continue;
+            if (junction is not var (j, dj, gives)) continue;
             var toJ = Flat(j - oPos);
             float dJ = toJ.Length(), towards = dJ > 0.1f ? (oVel.X * toJ.X + oVel.Z * toJ.Z) / dJ : oSpeed;
-            if (dJ > 15f && (towards < 3f || dJ / towards > 7f)) continue;
+            // giving way (#159): look left and right over what a racer covers while this car pulls out (from the
+            // line to clear the main road: ~3.5 s from standing, and a margin) — 9 s, not 7
+            if (dJ > 15f && (towards < 3f || dJ / towards > (gives ? 9f : 7f))) continue;
             // committed (the nose is in it): clear it rather than stop across the road
-            if (dj < 5f || !Noticed(oPos, towards > 0.5f ? dJ / towards : 99f, brake: true)) continue;
+            if (dj < 5f) continue;
+            // a driver at the line has stopped to look: no reaction time, and a crest or a bend hiding the
+            // racer (the line of sight rule) is no excuse to pull out in front of it
+            if (!gives && !Noticed(oPos, towards > 0.5f ? dJ / towards : 99f, brake: true)) continue;
             hold = true;
             target = Mathf.Min(target, StopWithin(dj - 12f));
         }

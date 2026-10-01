@@ -23,6 +23,7 @@ public partial class NpcWatch : Node
     private Vector3 _last, _heading = Vector3.Forward;
     private double _moving = -1, _sinceShot;
     private int _frame, _sim, _jumps;
+    private readonly bool _headless = DisplayServer.GetName() == "headless";
 
     private NpcWatch(string prefix, double before, double after)
     {
@@ -101,7 +102,8 @@ public partial class NpcWatch : Node
         var at = _cam.GlobalPosition.DistanceTo(eye) > 30f ? eye : _cam.GlobalPosition.Lerp(eye, 1f - Mathf.Exp(-6f * (float)delta));
         _cam.GlobalTransform = new Transform3D(Flyer.Orient(_npc.GlobalPosition + Vector3.Up - at, Vector3.Up, Vector3.Forward), at);
         _cam.MakeCurrent();
-        if (_sinceHandoff >= _after || (_sinceShot += delta) < 0.1) return;
+        // headless: no picture, the log lines (speed per drawn frame around the handoff) still come
+        if (_headless || _sinceHandoff >= _after || (_sinceShot += delta) < 0.1) return;
         _sinceShot = 0;
         var image = GetViewport().GetTexture().GetImage();
         image.Resize(640, 640 * image.GetHeight() / Mathf.Max(image.GetWidth(), 1));

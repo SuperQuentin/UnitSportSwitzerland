@@ -10,7 +10,7 @@ namespace UnitSport.Player;
 /// <summary>
 /// <c>godot --path . -- --drivecheck[,out_prefix] [--cars 0,1,3,4 | --car N] [--seconds S] [--finish M]
 /// [--record prefix] [--trace] [--tyrewear on] [--brakewear on] [--at E,N] [--traffic 0]
-/// [--mount K [--riders N]] [--verge 0] [--setups 0,4,3]</c>
+/// [--mount K [--riders N]] [--verge 0] [--setups 0,4,3] [--to E,N]</c>
 ///
 /// <para>
 /// A race down the real road from the spawn (<see cref="RaceRoute"/>): every listed car on a
@@ -27,7 +27,8 @@ namespace UnitSport.Player;
 /// <see cref="RideKind"/> number, 0 on foot, 1 the road bike, 2 skis — each on the pilot
 /// <see cref="AutoPilot.For"/> picks for it. <c>--verge 0</c> skips the verge survey, so the line
 /// keeps to the tarmac (for comparison). <c>--setups</c> gives each listed car a preset
-/// (<see cref="CarSetups"/> id or name, in the order of <c>--cars</c>; one value for all).
+/// (<see cref="CarSetups"/> id or name, in the order of <c>--cars</c>; one value for all). <c>--to E,N</c>
+/// (LV95): the road from the spawn toward that point, finishing level with it (overrides <c>--finish</c>).
 /// </para>
 /// </summary>
 public partial class DriveProbe : Node
@@ -143,14 +144,25 @@ public partial class DriveProbe : Node
             var (e, n) = SpawnPoint.ParseTarget();
             var at = _origin.ToWorld(e, n, 0);
             var source = _chunks.Source!;
+            // --to E,N: the race runs from the spawn toward that point and finishes level with it
+            Vector3? to = ArgAfter("--to")?.Split(',') is [var te, var tn]
+                && double.TryParse(te, NumberStyles.Float, CultureInfo.InvariantCulture, out double toE)
+                && double.TryParse(tn, NumberStyles.Float, CultureInfo.InvariantCulture, out double toN) ? _origin.ToWorld(toE, toN, 0) : null;
             _ = System.Threading.Tasks.Task.Run(async () =>
             {
-                var route = await RaceRoute.BuildAsync(source, _origin, at);
+                var route = await RaceRoute.BuildAsync(source, _origin, at, toward: to);
                 if (route != null && ArgAfter("--verge") != "0") route.Line = await RaceLine.Widen(route, source, _origin);
                 Callable.From(() =>
                 {
                     if (route == null) { GD.Print("[drive] no road near the spawn"); Finish(1); return; }
                     _route = route;
+                    if (to is { } end)
+                    {
+                        var pts = route.Line.Points;
+                        int k = Enumerable.Range(0, pts.Count).MinBy(i => RaceRoute.Flat(pts[i] - end).LengthSquared());
+                        _finish = route.Line.Arc[k];
+                        GD.Print($"[drive] --to: finish at {_finish:F0} m, {RaceRoute.Flat(pts[k] - end).Length():F0} m from the point");
+                    }
                     _finish = Mathf.Min(_finish, route.Length - 40f);
                     GD.Print($"[drive] route: {route.Class}, {route.Arc[^1]:F0} m, racing line {route.Length:F0} m "
                         + $"(max {route.Line.RoomLeft.Concat(route.Line.RoomRight).DefaultIfEmpty(0).Max():F1} m of room to a side)");
@@ -480,6 +492,15 @@ public partial class DriveProbe : Node
             + $"impacts {(hits.Count == 0 ? "0" : string.Join(" ", hits.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} {kv.Value}")))}, "
             + $"passes {_entries.Sum(e => e.Passes)}, spins {_entries.Sum(e => e.Pilot?.Spins ?? 0)}, mistakes {_entries.Sum(e => e.Pilot?.Mistakes ?? 0)}, "
             + $"resets {_entries.Sum(e => e.Pilot?.Resets ?? 0)}, out {_entries.Count(e => e.Out)}");
+        // pace index (#159): a finisher's time against what a skill-1 driver of the same car would do on the same
+        // line with a clear road (> 100% = faster); the ace (best skill) against the other finishers
+        string Index(IEnumerable<Entry> es)
+        {
+            var l = es.Where(e => e.FinishTime >= 0 && e.Pilot != null).Select(e => e.Pilot!.ReferenceSeconds(_finish) / e.FinishTime * 100.0).ToList();
+            return l.Count == 0 ? "n/a" : $"{l.Average():F1}%";
+        }
+        float best = _entries.Max(e => e.Pilot?.Skill ?? 0f);
+        GD.Print($"[drive] PACE ace (skill {best:F2}) {Index(_entries.Where(e => (e.Pilot?.Skill ?? 0f) >= best))}, others {Index(_entries.Where(e => (e.Pilot?.Skill ?? 0f) < best))}");
         bool anyFinish = _entries.Any(e => e.FinishTime >= 0);
         bool driftOk = _entries.All(e => e.Spec == null || e.Grip) || _entries.Any(e => e.Pilot?.Drifts > 0);
         bool ok = anyFinish && driftOk;

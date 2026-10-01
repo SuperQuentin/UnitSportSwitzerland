@@ -1320,6 +1320,10 @@ public partial class FootPlayer : CharacterBody3D
         }
         else if (_interp.HasData)
         {
+            // a race NPC whose simulator went silent rolls on a little longer until the server hands it over
+            // (#159: it stood still for the ~3 s before); not much longer: carried straight on through a bend,
+            // 0.6 s at 20 m/s on R 50 m is 1.4 m off the line, and the new simulator takes it over where it is drawn
+            _interp.MaxAhead = Npc ? 0.6f : Net.RemoteInterpolator.MaxExtrapolation;
             var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
             Position = p;
             Rotation = new Vector3(0, yaw, 0);
