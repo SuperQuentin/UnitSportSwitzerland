@@ -172,8 +172,10 @@ public partial class Traffic : Node3D
             var rails = LaneGraph.Build(tiles, origin, IsRail);
             int divided = roads.Edges.Count(x => (x.Flags & RoadFlags.Divided) != 0);
             int oriented = roads.Edges.Count(x => (x.Flags & RoadFlags.Divided) != 0 && x.OneWay != 0);
+            // origin-free fingerprint of every one-way edge's direction, so two peers can be compared
+            long directions = roads.Edges.Where(x => x.OneWay != 0).Sum(x => (long)Mathf.RoundToInt(x.Length * 10) * 3 + x.OneWay);
             GD.Print($"[traffic] around {here}: {roads.Edges.Count} road edges ({oriented}/{divided} divided "
-                + $"carriageways oriented), {rails.Edges.Count} rail edges");
+                + $"carriageways oriented), {rails.Edges.Count} rail edges, one-way fingerprint {directions}");
             Callable.From(() =>
             {
                 if (epoch != _epoch) return;   // built from the world that was replaced
