@@ -35,6 +35,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private ClientTerrainSync? _terrainSync;
     private WorldOrigin? _worldOrigin;
     private ShaderMaterial[] _worldMaterials = Array.Empty<ShaderMaterial>();
+    private WorldEnvironment? _worldEnvironment;
+    private World.DayNight? _dayNight;
+    private DirectionalLight3D? _sun;
 
     /// <summary>The session this world is built for: the title screen's choice, or the command line's.</summary>
     public WorldLaunch Launch { get; init; } = WorldLaunch.FromArgs();
@@ -197,7 +200,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 + "with tools/TerrainPreprocessor, or join a server and it will stream in. "
                 + "See the README.");
 
-        GD.Print($"[style] {StyleKit.Style}");
+        // the style chosen since the last world, if it changed at the title screen
+        StyleKit.Restyle();
+        GD.Print($"[style] {StyleKit.Applied}");
         var material = StyleKit.Material(MaterialRole.Terrain);
         var roadMaterial = StyleKit.Material(MaterialRole.Road);
         var buildingMaterial = StyleKit.Material(MaterialRole.Building);
@@ -214,6 +219,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
         // a named handler, unsubscribed in _ExitTree: the event is static and outlives this world
         GameSettings.Changed += OnSettingsChanged;
+        StyleCommand.RebuildRequested += OnRebuildRequested;
+        StyleKit.Chosen += OnStyleChosen;
 
         // The streamer exists even offline. Its fetches short-circuit to null with no peer, so
         // single player is unaffected — but the on-disk cache is still consulted, which means
@@ -317,12 +324,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             vehicles.Visible = shown;
         };
 
-        var environment = new Godot.Environment
-        {
-            BackgroundMode = Godot.Environment.BGMode.Color,
-            BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
-        };
-        AddChild(new WorldEnvironment { Environment = environment });
+        var environment = StyleKit.NewEnvironment();
+        _worldEnvironment = new WorldEnvironment { Environment = environment };
+        AddChild(_worldEnvironment);
 
         // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
         // word online. Before the clock, which reads its sun and sky from it.
@@ -337,10 +341,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // the clock: sun, light colour, sky and night for every shader and the environment
         var chunksForSky = _chunks;
-        AddChild(new World.DayNight(environment)
+        _dayNight = new World.DayNight(environment)
         {
             GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
-        });
+        };
+        AddChild(_dayNight);
+        ApplySun();
 
         // cars on the roads and trains on the railway, around wherever the view is
         _traffic = new World.Traffic(_chunks, origin)
@@ -756,6 +762,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Input.MouseMode = Input.MouseModeEnum.Visible;
             var runner = ShotRunner.ForQueue(_spectator, queue, _worldOrigin);
             runner.GroundHeight = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
+            runner.RunCommand = line => _chat?.Send(line);
             AddChild(runner);
         }
     }
@@ -890,10 +897,49 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private void OnSettingsChanged()
     {
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
+        // before the terrain takes the settings: its rings and mesh detail are the style's
+        if (StyleKit.Restyle()) ApplyStyle();
         _chunks?.ApplySettings(GameSettings.Current);
         _chunks?.SetFallbackEnabled(GameSettings.Current.GeneratedFill);
         if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume);
         SetCameraFar(GameSettings.Current.CameraFar);
+    }
+
+    /// <summary>
+    /// The rest of the world after <see cref="StyleKit.Restyle"/> moved every material over: the
+    /// style's environment and sun. The terrain's rings and mesh detail follow in
+    /// <see cref="ChunkManager.ApplySettings"/>, which rebuilds the tiles in place when the detail
+    /// changed. The network session, the player and physics are untouched.
+    /// </summary>
+    private void ApplyStyle()
+    {
+        GD.Print($"[style] {StyleKit.Applied}");
+        if (_worldEnvironment != null)
+        {
+            var environment = StyleKit.NewEnvironment();
+            _worldEnvironment.Environment = environment;
+            _dayNight?.SetEnvironment(environment);
+        }
+        ApplySun();
+    }
+
+    /// <summary>The style's sun, or none: made here, pointed by <see cref="World.DayNight"/>.</summary>
+    private void ApplySun()
+    {
+        _sun?.QueueFree();
+        _sun = StyleKit.NewSun();
+        if (_sun != null) AddChild(_sun);
+        if (_dayNight != null) _dayNight.Sun = _sun;
+    }
+
+    private void OnRebuildRequested() => _chunks?.RebuildVisuals();
+
+    /// <summary><c>/style</c> picked a style for this session.</summary>
+    private void OnStyleChosen()
+    {
+        if (!StyleKit.Restyle()) return;
+        ApplyStyle();
+        _chunks?.ApplySettings(GameSettings.Current);
     }
 
     private void Toast(string message) => _items?.Ui.Toast(message);
@@ -905,6 +951,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     public override void _ExitTree()
     {
         GameSettings.Changed -= OnSettingsChanged;
+        StyleCommand.RebuildRequested -= OnRebuildRequested;
+        StyleKit.Chosen -= OnStyleChosen;
         Vehicles.VehicleManager.Refused -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         if (_networked)
