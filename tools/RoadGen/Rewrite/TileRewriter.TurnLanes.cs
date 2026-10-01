@@ -24,10 +24,10 @@ public static partial class TileRewriter
 {
     public sealed class TurnLaneStats
     {
-        public int Candidates, Placed, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes;
+        public int Candidates, Placed, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper, {Arrows:N0} arrows, {Stripes:N0} median stripes; " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper, {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes; " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}\n");
 
         public void Reject(string why)
@@ -44,7 +44,10 @@ public static partial class TileRewriter
     }
 
     // an urban-sized pocket: 20 m taper, 20 m storage, 5 m kept clear of whatever is at the other end
-    private const double TurnTaper = 20, TurnStorage = 20, TurnLane = 3.0, TurnSolid = 15, TurnClear = 5;
+    private const double TurnTaper = 20, TurnStorage = 20, TurnLane = 3.0, TurnSolid = 10, TurnClear = 5;
+
+    /// <summary>The stop bar across the end of the left-turn lane.</summary>
+    private const float StopBar = 0.4f;
 
     /// <summary>Past the junction the through lane comes back to its place over this length.</summary>
     private const double TurnExit = 30;
@@ -255,17 +258,38 @@ public static partial class TileRewriter
                 offset, Math.Min(a, b), Math.Max(a, b));
         }
 
-        /// <summary>The approach: a divider along the old edge (dashed, solid near the mouth) and arrows.</summary>
+        /// <summary>
+        /// The approach, from far to near. Over the taper the strip widens on the right while a
+        /// hatched median opens between the centre line and the through lane, carrying the lane
+        /// across by a lane width. Where the hatch closes, the left-turn lane appears beside the
+        /// through lane, whose left edge carries on as a dashed line (taking the pocket is a lane
+        /// change), solid for the last <see cref="TurnSolid"/> m. A stop bar closes the pocket at
+        /// the mouth; arrows in both lanes; the centre line is solid along all of it.
+        /// </summary>
         public void Pocket(List<RoadPaint> paint, bool rightTurn, TurnLaneStats stats)
         {
+            double storage = _length - _taper;
+            SolidCentre(paint);
+            Hatch(paint, stats, storage, _length, d => _half * Math.Clamp((_length - d) / _taper, 0, 1));
+
             double offset = _side * _half;
-            paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, offset, TurnSolid, _length - _taper));
+            paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, offset, TurnSolid, storage));
             paint.Add(Line(PaintType.WhiteSolid, 0, 0, offset, 0, TurnSolid));
-            // two per lane: left in the pocket, straight (and right) in the new lane
-            foreach (double back in (ReadOnlySpan<double>)[6, 21])
+
+            // across the pocket, just short of the mouth
+            double bar = StopBar * 0.5 + 0.1;
+            paint.Add(new RoadPaint
+            {
+                Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = StopBar,
+                Vertices = [.. Point(bar, 0.1), .. Point(bar, _half - 0.1)],
+            });
+            stats.StopBars++;
+
+            // two per lane, in the storage length: left in the pocket, straight (and right) in the through lane
+            foreach (double back in (ReadOnlySpan<double>)[5, 13])
             {
                 var (x, y, z, sx, sz) = At(back);
-                // the new lane lies on the driver's right (sx, sz): their forward is that turned a quarter left
+                // the through lane lies on the driver's right (sx, sz): their forward is that turned a quarter left
                 double fx = sz, fz = -sx;
                 paint.Add(Arrow(x + sx * _half * 0.5, y, z + sz * _half * 0.5, fx, fz, PaintArrow.Left));
                 paint.Add(Arrow(x + sx * (_half + TurnLane * 0.5), y, z + sz * (_half + TurnLane * 0.5), fx, fz,
@@ -276,41 +300,59 @@ public static partial class TileRewriter
 
         /// <summary>
         /// The exit: the through lane comes out of the junction on the strip and eases back over
-        /// the taper. Between the centre line and the lane's left edge, a hatched median: a
-        /// triangle a lane wide at the mouth, closing where the lane is back in place, with solid
-        /// borders (the centre line turns solid along it).
+        /// the taper. Between the centre line and the lane's left edge, a hatched median a lane
+        /// wide at the mouth, closing where the lane is back in place; the centre line is solid
+        /// along it.
         /// </summary>
         public void Median(List<RoadPaint> paint, TurnLaneStats stats)
         {
-            double Border(double dist) => _half * Math.Clamp(1 - dist / _length, 0, 1);
+            SolidCentre(paint);
+            Hatch(paint, stats, 0, _length, d => _half * Math.Clamp(1 - d / _length, 0, 1));
+        }
 
+        /// <summary>The dashed centre line along the widening turned solid: no overtaking into the junction.</summary>
+        private void SolidCentre(List<RoadPaint> paint)
+        {
             var centre = paint.FirstOrDefault(q => q.Segment == _seg && q.Dash > 0 && Math.Abs(q.Offset) < 0.3);
-            if (centre is not null)
-            {
-                Cut(paint, centre);
-                paint.Add(Line(PaintType.WhiteSolid, 0, 0, centre.Offset, 0, _length));
-            }
+            if (centre is null) return;
+            Cut(paint, centre);
+            paint.Add(Line(PaintType.WhiteSolid, 0, 0, centre.Offset, 0, _length));
+        }
 
-            var border = new List<float>();
-            foreach (double dist in _dists) border.AddRange(Point(dist, Border(dist)));
+        /// <summary>
+        /// A hatched median between the centre line and <paramref name="border"/> (an offset that
+        /// closes to 0 at <paramref name="far"/>), from <paramref name="near"/> to
+        /// <paramref name="far"/> metres from the mouth: the solid border, and stripes at 45
+        /// degrees from the centre line outward and away from the mouth.
+        /// </summary>
+        private void Hatch(List<RoadPaint> paint, TurnLaneStats stats, double near, double far, Func<double, double> border)
+        {
+            var line = new List<float>();
+            foreach (double dist in _dists.Where(x => x >= near - 1e-6 && x <= far + 1e-6))
+                line.AddRange(Point(dist, border(dist)));
             paint.Add(new RoadPaint
             {
                 Shape = PaintShape.Polyline, Type = PaintType.WhiteSolid, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
-                Vertices = border.ToArray(),
+                Vertices = line.ToArray(),
             });
 
-            // stripes at 45 degrees, from the centre line outward and away from the mouth
             var v = new List<float>();
             var idx = new List<ushort>();
-            double slope = _half / _length;
             double h = HatchWidth * Math.Sqrt(0.5);   // half the stripe's width, along the road
-            for (double d0 = 0.6; ; d0 += HatchStep)
+            for (double d0 = near + 0.6; d0 < far; d0 += HatchStep)
             {
-                double d1 = (d0 + _half) / (1 + slope);   // where the stripe meets the border
+                // where the stripe meets the border: border(d1) = d1 - d0, by bisection
+                double lo = d0, hi = far;
+                for (int k = 0; k < 40; k++)
+                {
+                    double mid = (lo + hi) * 0.5;
+                    if (border(mid) > mid - d0) lo = mid; else hi = mid;
+                }
+                double d1 = lo;
                 if (d1 - d0 < 0.4) break;
                 ushort b = (ushort)(v.Count / 3);
-                v.AddRange(Point(d0 - h, 0)); v.AddRange(Point(d1 - h, Border(d1 - h)));
-                v.AddRange(Point(d1 + h, Border(d1 + h))); v.AddRange(Point(d0 + h, 0));
+                v.AddRange(Point(d0 - h, 0)); v.AddRange(Point(d1 - h, border(d1 - h)));
+                v.AddRange(Point(d1 + h, border(d1 + h))); v.AddRange(Point(d0 + h, 0));
                 idx.AddRange([b, (ushort)(b + 1), (ushort)(b + 2), b, (ushort)(b + 2), (ushort)(b + 3)]);
                 stats.Stripes++;
             }

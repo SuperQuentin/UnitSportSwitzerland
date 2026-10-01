@@ -23,11 +23,16 @@
   outer edge: inside the tile, no building footprint, no other line covering it, the raw ground
   within 1.2 m of the road (0.6 rejected 5 of 13 in Sion, where roads sit on low embankments; the
   blend flattens the strip anyway).
-- **Paint**: the approach side's edge line (rural roads only have one) is cut where the taper
-  starts and a new edge line follows the strip's outer edge; a lane divider along the old edge,
-  3/3 m dashed from the taper's end, solid for the last 15 m; arrows two per lane (tails 6 and
-  21 m back from the mouth, 5 m long), left in the pocket, straight (or straight + right) in the
-  new lane, as `PaintType.Arrow` triangles (variant = `PaintArrow` bits).
+- **Paint** (reworked after a playtest, mirror of the exit): approaching, from far to near: over
+  the 20 m taper the strip widens on the right while a hatched median opens between the centre
+  line and the through lane (solid border, 45 deg stripes), carrying the through lane across by a
+  lane width; where the hatch closes the left-turn lane appears beside it, and the through lane's
+  left edge carries on as a 3/3 m dashed line (taking the pocket is a lane change), solid for the
+  last 10 m. A 0.4 m stop bar closes the pocket at the mouth; the centre line is solid along the
+  whole pocket (and along the exit taper); the right edge line is cut where the strip starts and a
+  new one follows it. Arrows two per lane in the 20 m storage (tails 5 and 13 m back, 5 m long):
+  left in the pocket, straight (or straight + right) in the through lane, as `PaintType.Arrow`
+  triangles (variant = `PaintArrow` bits); the stop bar is a `StopLine` polyline.
 - **Runtime**: `src/Terrain/PavementBuilder.cs` draws the strip in the road's asphalt; the road
   blend (`HoldUnderPavement`, sharing `Rasterise` with `HoldUnderIsland`) holds its cells at the
   strip's height as road core, so the heightfield collision carries it like a ribbon.
@@ -35,7 +40,7 @@
   the original lane and so turns left from it, and goes straight from it too. Right-turn lanes,
   pockets across a tile seam, OSM `turn:lanes`.
 - **6-tile test region**: 13 main-road approaches with a left turn, 4 pockets placed with their
-  exits (1 Riddes, 3 Sion), 16 arrows, 40 median stripes; rejected: approach or exit too short 8,
+  exits (1 Riddes, 3 Sion), 16 arrows, 4 stop bars, 68 median stripes; rejected: approach or exit too short 8,
   ground 1 (6 pockets fitted before the exit was required). Rebuild byte-identical;
   `--format-check` and `--priority-check` pass; paint round-trip "0 decoded differently".
 - **Checks**: screenshots from above of a Riddes and two Sion pockets (taper on the right, new
