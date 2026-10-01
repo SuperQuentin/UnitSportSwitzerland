@@ -42,6 +42,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// so a teleport spent seconds committing far tiles one pair at a time.
     /// </summary>
     public double CommitBudgetMs { get; set; } = 4;
+    private const double VrCommitBudgetMs = 2;
 
     public LodPolicy Lod { get; set; } = new();
 
@@ -439,7 +440,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             Detail = Styles.StyleKit.Detail;
             RebuildVisuals();
         }
-        CommitBudgetMs = s.CommitBudgetMs;
+        // a headset frame is 11 ms at 90 Hz, and a missed one is warped and smeared over Link (#244)
+        CommitBudgetMs = XR.XrSession.Active ? Math.Min(s.CommitBudgetMs, VrCommitBudgetMs) : s.CommitBudgetMs;
         MaxConcurrentBuildsOverride = s.MaxConcurrentBuilds;
         if (Horizon != null)
         {

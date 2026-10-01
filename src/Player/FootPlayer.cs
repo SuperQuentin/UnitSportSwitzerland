@@ -230,6 +230,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var relay = new MultiplayerSynchronizer
         {
             Name = name, RootPath = new NodePath(".."), ReplicationConfig = config, ReplicationInterval = interval,
+            // refreshed when the audience changes (RefreshRelays): Idle ran the filter every frame for every peer
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         relay.SetMultiplayerAuthority(1);
         return relay;
@@ -958,6 +960,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // 30 Hz is plenty once the receiver interpolates; the frame rate was the old rate,
             // which is 144 packets a second per viewer from a fast machine
             ReplicationInterval = 1f / 30f,
+            // a fixed filter (the server only): Godot evaluates it on join, SetSimulator on handoff
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _sync = sync;
         // the synchronizer's own authority decides who sends; children added after the
@@ -1010,6 +1014,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // for every peer, 30 000 managed calls a second at 32 players
             ReplicationInterval = 3600f,
             DeltaInterval = 3600f,
+            // refreshed per viewer when its set changes (RefreshNetVisibility), not every frame
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _vis.SetMultiplayerAuthority(1);
         if (NetProxy && netId != 0)
@@ -1957,6 +1963,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return false;
         var (bit, distance) = rig.NearestDoor(GlobalPosition);
         if (bit == 0 || distance > VehicleManager.DoorReach) return false;
+        Vehicles.ToggleDoor(vehicle, bit);
+        return true;
+    }
+
+    /// <summary>How near the middle of a car door a VR hand must be to work it, m (#243).</summary>
+    private const float HandDoorReach = 0.6f;
+
+    /// <summary>
+    /// A VR hand gripping a car door (#243): as <see cref="TryToggleCarDoor()"/>, but the door the
+    /// hand is at, and only when the hand is really there.
+    /// </summary>
+    public bool TryToggleCarDoor(Vector3 hand)
+    {
+        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+            return false;
+        var (bit, distance) = rig.NearestDoor(hand);
+        if (bit == 0 || distance > HandDoorReach) return false;
         Vehicles.ToggleDoor(vehicle, bit);
         return true;
     }
@@ -3095,6 +3118,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 Throttle = Mathf.Max(input.Throttle, XR.XrSession.SkiPole),
                 Effort = input.Effort || XR.XrSession.SkiTuck,
             };
+        // VR hands on the steering wheel (#243): the wheel's angle, as a real wheel's (#68)
+        if (_ride is { WheelLock: > 0f } && XR.XrSession.Active && RideControls == null && !float.IsNaN(XR.XrSession.WheelAngle))
+            input = input with { WheelAngle = XR.XrSession.WheelAngle };
 
         // nobody at the wheel (the driver jumped out, #158): no pedal, the wheel let go
         if (SeatIndex != 0) input = new RideInput(0f, 0f, 0f, false);

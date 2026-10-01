@@ -21,7 +21,8 @@
   lines appended later picked up within 0.5 s; blank lines and `#` comments skipped, `quit`
   exits (code 1 if any shot or line failed). A file shorter than what was read is a new queue.
   Each PNG is written as `<out>.part` and renamed, so poll for the final name. Use it whenever
-  more than one picture is needed: every launch steals focus on macOS (`macos-launch-steals-focus`).
+  more than one picture is needed: every launch steals focus on macOS (`macos-launch-steals-focus`;
+  Windows: `windows-launch-focus`).
   A queued shot's y may be `g1.7` (that high above the ground, once it has streamed in), and each
   shot logs `frame=` ms, averaged over its last second of settling.
 - `--origin E,N` (LV95): pins the world origin, so shots at fixed world coordinates stay put when
