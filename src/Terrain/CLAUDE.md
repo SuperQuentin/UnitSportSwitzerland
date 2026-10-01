@@ -8,7 +8,8 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 ## Architecture
 
 - `roads-merged-into-terrain-collision` — Roads are merged into terrain collision, not just draped over it
-- `road-embankments-walls` — Road embankments (#125): level cross-section, 2:3 fill / 1:1 cut clamp in RoadBlend, retaining walls planned in RoadGen (LPRP), free line inside a 3 m solid, cost
+- `road-embankments-walls` — Road embankments (#125): level cross-section, 2:3 fill / 1:1 cut clamp in RoadBlend, retaining walls planned in RoadGen (LPRP), 40 cm crown with a cover over the heightfield step, cost
+- `road-railings` — Road railings (#126): guardrails on fill-wall crowns, above drops and as back-to-back median beams; fences; RailingBuilder mesh and collision strip, racing-line obstacle
 - `surface-patterns` — Surface patterns: `CoverPalette` writes a `SurfacePattern` code into vertex-colour alpha in quarter steps (0 none,...
 - `water` — Water: built at runtime from the Water cover class, not a separate file — swissALTI3D already models lakes/rivers as...
 - `windows` — Windows: `BuildingMeshBuilder` bakes facade UVs (metres along the wall, storey index) from the *triangle* normal;... fake rooms behind the glass, occupancy cues

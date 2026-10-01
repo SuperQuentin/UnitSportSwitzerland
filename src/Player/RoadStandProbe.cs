@@ -220,7 +220,10 @@ public partial class RoadStandProbe : Node
             float crown = fill ? top + RoadEmbankment.FillCrownLift : top;
             float cover = fill ? top : top - RoadEmbankment.CutCrownOver;
             var cap = basePos + face + left * (w.Thickness * 0.5f) + Vector3.Up * crown;
-            if (_chunks.HasCollisionAt(cap)) result.Add((cap, $"wall {name} crown", Kind.Body));
+            // a railing on the crown (#126) leaves no room to stand there: a body rests on its top
+            bool railed = tile.LinearProps.Any(r => RoadRailing.IsRailing(r) && Enumerable.Range(0, r.PointCount).Any(k =>
+                new Vector2(basePos.X + r.Points[k * 4] - cap.X, basePos.Z + r.Points[k * 4 + 2] - cap.Z).Length() < 1.5f));
+            if (!railed && _chunks.HasCollisionAt(cap)) result.Add((cap, $"wall {name} crown", Kind.Body));
             var back = basePos + face + left * (RoadEmbankment.CoverDepth * 0.6f) + Vector3.Up * cover;
             if (_chunks.HasCollisionAt(back)) result.Add((back, $"wall {name} cover", Kind.Body));
             if (w.Points[m * 4 + 3] >= 1.5f)
