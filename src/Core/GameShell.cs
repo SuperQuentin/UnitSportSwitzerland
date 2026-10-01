@@ -82,7 +82,7 @@ public partial class GameShell : Node
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near",
             "--menu", "--settings", "--licenses", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
-            "--leave-restart", "--autostart", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot",
+            "--leave-restart", "--autostart", "--wheellock", "--fakewheel", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;

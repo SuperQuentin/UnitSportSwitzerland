@@ -59,6 +59,7 @@ public partial class SteeringWheel
     private double _feelAge = double.MaxValue;
     private float _testLevel, _testTimer;
     private bool _softLogged;
+    private float _softDeepest, _softHardest;
     private float _lastAngle, _rate;
     private float _sentConstant = float.NaN, _sentRoad = float.NaN, _sentRoadHz, _sentDamper = float.NaN, _sentFriction = float.NaN;
 
@@ -70,8 +71,22 @@ public partial class SteeringWheel
     {
         if (_instance is not { } w) return;
         w._feel = feel;
-        w._lock = lockToLock;
+        w._lock = LockOverride ?? lockToLock;
         w._feelAge = 0;
+    }
+
+    /// <summary>
+    /// <c>--wheellock deg</c>: every vehicle's soft lock at this lock to lock instead of its own, to
+    /// feel the soft lock close to centre (180: a wall 90° either side). Steering is not changed.
+    /// </summary>
+    public static readonly float? LockOverride = ParseLockOverride();
+
+    private static float? ParseLockOverride()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int i = Array.IndexOf(args, "--wheellock");
+        return i >= 0 && i + 1 < args.Length && float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float deg) ? Mathf.DegToRad(deg) : null;
     }
 
     /// <summary>A knock through the rim, 0..1: a crash, a kerb, a hard landing.</summary>
@@ -161,12 +176,20 @@ public partial class SteeringWheel
             constant = Math.Clamp(constant + _testLevel * s.FfbStrength, -1f, 1f);
             if (!driving) damper = 0f;
         }
-        // say once per lock when the soft lock takes hold: the one force a player may never meet
+        // say when the soft lock takes hold and, on the way out, how deep and how hard it was
         float softAt = SoftLockAt(_lock, Mathf.DegToRad(s.RangeDeg));
         bool locked = driving && Mathf.Abs(Angle) > softAt;
         if (locked && !_softLogged)
+        {
             GD.Print($"[wheel] soft lock at {Mathf.RadToDeg(softAt):F0}° (vehicle {Mathf.RadToDeg(_lock):F0}° lock to lock, range {s.RangeDeg:F0}°)");
-        _softLogged = locked || (_softLogged && Mathf.Abs(Angle) > softAt - 0.2f);
+            (_softDeepest, _softHardest) = (0f, 0f);
+        }
+        if (locked)
+            (_softDeepest, _softHardest) = (Mathf.Max(_softDeepest, Mathf.Abs(Angle) - softAt), Mathf.Max(_softHardest, Mathf.Abs(constant)));
+        bool stillIn = locked || (_softLogged && Mathf.Abs(Angle) > softAt - 0.2f);
+        if (_softLogged && !stillIn)
+            GD.Print($"[wheel] soft lock left: {Mathf.RadToDeg(_softDeepest):F0}° deep at most, force up to {_softHardest:F2} (strength {s.FfbStrength:F2})");
+        _softLogged = stillIn;
         if (s.FfbInvert) constant = -constant;
 
         if ((int)_constant >= 0 && (MathF.Abs(constant - _sentConstant) > 1f / 512f || float.IsNaN(_sentConstant)))
