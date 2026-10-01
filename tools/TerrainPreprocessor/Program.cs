@@ -332,22 +332,29 @@ int RunFeatures(TerrainManifest existing)
         return new Dictionary<TileId, ChunkGrid>(grids);
     }
 
-    // roads first, every batch, then the network stage, which sees every batch at once (a junction
-    // on a batch seam needs both sides); cover masks trees off the network stage's final lines
-    if (tlmGpkg != null && !coverOnly)
+    // roads and buildings first, every batch, then the network stage, which sees every batch at
+    // once (a junction on a batch seam needs both sides) and measures streets against the facades
+    // (#119); cover masks trees off the network stage's final lines
+    bool roads = tlmGpkg != null && !coverOnly;
+    if (roads)
     {
         for (int b = 0; b < batches; b++)
         {
             var batch = LoadBatch(b, out var slice);
             Console.WriteLine($"=== roads, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
-            int rc = RoadStage.Run(tlmGpkg, routeKeys, outDir!, tempDir!, batch);
+            int rc = RoadStage.Run(tlmGpkg!, routeKeys, outDir!, tempDir!, batch);
             if (rc != 0) return rc;
+            if (buildingsGpkg != null)
+            {
+                rc = BuildingStage.Run(buildingsGpkg, gwrPath, outDir!, batch);
+                if (rc != 0) return rc;
+            }
         }
         int nrc = RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
         if (nrc != 0) return nrc;
     }
 
-    if (!doCover && buildingsGpkg == null) return 0;
+    if (!doCover && (buildingsGpkg == null || roads)) return 0;
     if (doCover && tlmGpkg == null)
     {
         Console.Error.WriteLine("--cover requires --tlm <swisstlm3d .gpkg>");
@@ -362,7 +369,7 @@ int RunFeatures(TerrainManifest existing)
             int rc = CoverStage.Run(tlmGpkg!, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!));
             if (rc != 0) return rc;
         }
-        if (buildingsGpkg != null)
+        if (buildingsGpkg != null && !roads)
         {
             int rc = BuildingStage.Run(buildingsGpkg, gwrPath, outDir!, batch);
             if (rc != 0) return rc;
