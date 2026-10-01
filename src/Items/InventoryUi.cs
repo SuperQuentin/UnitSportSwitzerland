@@ -1093,6 +1093,22 @@ public partial class ViewfinderView : Control
         var faint = new Color(1, 1, 1, 0.18f);
         float inset = s.Y * 0.08f, arm = s.Y * 0.07f;
 
+        // the print keeps the centre square of the frame (PhotoStore.Print): dim what it crops
+        float side = Mathf.Min(s.X, s.Y);
+        var keep = new Rect2((s - Vector2.One * side) * 0.5f, Vector2.One * side);
+        var dim = new Color(0, 0, 0, 0.35f);
+        if (s.X > side)
+        {
+            DrawRect(new Rect2(0, 0, keep.Position.X, s.Y), dim);
+            DrawRect(new Rect2(keep.End.X, 0, s.X - keep.End.X, s.Y), dim);
+        }
+        else if (s.Y > side)
+        {
+            DrawRect(new Rect2(0, 0, s.X, keep.Position.Y), dim);
+            DrawRect(new Rect2(0, keep.End.Y, s.X, s.Y - keep.End.Y), dim);
+        }
+        DrawRect(keep, new Color(1, 1, 1, 0.35f), false, 1f);
+
         for (int k = 1; k <= 2; k++)
         {
             DrawLine(new Vector2(s.X * k / 3f, inset), new Vector2(s.X * k / 3f, s.Y - inset), faint, 1f);

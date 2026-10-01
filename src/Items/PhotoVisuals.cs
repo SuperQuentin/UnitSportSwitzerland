@@ -8,22 +8,23 @@ namespace UnitSport.Items;
 /// </summary>
 public static class PhotoVisuals
 {
-    private static ArrayMesh? _card, _held;
+    private static ArrayMesh? _card, _held, _poster;
     private static ImageTexture? _blank;
     private static Shader? _develop3D, _develop2D;
     private static readonly Dictionary<string, StandardMaterial3D> Materials = new();
     private static StandardMaterial3D? _placeholder;
 
     /// <summary>
-    /// The card, centred on the origin (offset by <paramref name="centre"/>), facing +Z, 1 mm thick.
+    /// The card, centred on the origin (offset by <paramref name="centre"/>), facing +Z, 1 mm thick,
+    /// <paramref name="scale"/> times the Polaroid's size (the thickness does not scale).
     /// The front is UV-mapped to the whole print; the back and the edges point at a corner of the
     /// white frame, so one textured material draws all of it.
     /// </summary>
-    public static ArrayMesh BuildCard(Vector3 centre)
+    public static ArrayMesh BuildCard(Vector3 centre, float scale = 1f)
     {
         var st = new SurfaceTool();
         st.Begin(Mesh.PrimitiveType.Triangles);
-        float hw = PhotoStore.CardSize.X * 0.5f, hh = PhotoStore.CardSize.Y * 0.5f, t = 0.0005f;
+        float hw = PhotoStore.CardSize.X * 0.5f * scale, hh = PhotoStore.CardSize.Y * 0.5f * scale, t = 0.0005f;
         var white = new Vector2(0.01f, 0.99f);
 
         void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 n, Vector2 ua, Vector2 ub, Vector2 uc, Vector2 ud)
@@ -53,6 +54,27 @@ public static class PhotoVisuals
 
     /// <summary>A stuck photo: centred on its transform, 1 mm proud of the surface.</summary>
     public static ArrayMesh Card => _card ??= BuildCard(new Vector3(0, 0, 0.0015f));
+
+    /// <summary>
+    /// How much bigger than the Polaroid a print stuck on a wall is drawn: a poster (0.62 x 0.75 m),
+    /// readable from across a room. Same card, same aspect, same texture.
+    /// </summary>
+    public const float PosterScale = 7f;
+
+    /// <summary>A photo stuck on a wall, poster-sized; centred on its transform, 1 mm proud of the surface.</summary>
+    public static ArrayMesh Poster => _poster ??= BuildCard(new Vector3(0, 0, 0.0015f), PosterScale);
+
+    /// <summary>
+    /// A stuck photo's transform faces out of the surface (+Z, see <see cref="StickTransform"/>): a
+    /// wall when that is roughly level. Walls get posters, the ground and tables a Polaroid.
+    /// </summary>
+    public static bool IsWall(Transform3D at) => Mathf.Abs(at.Basis.Z.Normalized().Y) <= 0.7f;
+
+    /// <summary>The size factor a print stuck with this transform is drawn at.</summary>
+    public static float ScaleFor(Transform3D at) => IsWall(at) ? PosterScale : 1f;
+
+    /// <summary>The mesh a print stuck with this transform is drawn with (the ghost uses it too).</summary>
+    public static ArrayMesh MeshFor(Transform3D at) => IsWall(at) ? Poster : Card;
 
     /// <summary>The photo in the hand: its grip at the bottom edge, like the icon card items.</summary>
     public static ArrayMesh HeldCard => _held ??= BuildCard(new Vector3(0, 0.06f, 0.02f));
@@ -142,18 +164,22 @@ void fragment() {
     // ---- stuck on things ------------------------------------------------------------------------
 
     /// <summary>
-    /// The <see cref="PlacedKind.Photo"/> factory: the card with the print once this machine has it.
+    /// The <see cref="PlacedKind.Photo"/> factory: the card with the print once this machine has it,
+    /// poster-sized on a wall (<see cref="IsWall"/>).
     /// Until then the blank card, and the print is asked of the server (<see cref="PhotoTransfer"/>);
     /// it is swapped in when it arrives.
     /// </summary>
     public static Node3D Placed(PlacedObject o)
     {
+        // a poster on a wall: decided from the rotation alone, so every peer and late joiner agrees
+        var at = new Transform3D(new Basis(o.Rotation), Vector3.Zero);
+        float scale = ScaleFor(at);
         var body = new StaticBody3D();
-        var mesh = new MeshInstance3D { Name = "Card", Mesh = Card, MaterialOverride = Material(o.Payload) };
+        var mesh = new MeshInstance3D { Name = "Card", Mesh = MeshFor(at), MaterialOverride = Material(o.Payload) };
         body.AddChild(mesh);
         body.AddChild(new CollisionShape3D
         {
-            Shape = new BoxShape3D { Size = new Vector3(PhotoStore.CardSize.X, PhotoStore.CardSize.Y, 0.01f) },
+            Shape = new BoxShape3D { Size = new Vector3(PhotoStore.CardSize.X * scale, PhotoStore.CardSize.Y * scale, 0.01f) },
             Position = new Vector3(0, 0, 0.004f),
         });
 
