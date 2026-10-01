@@ -266,7 +266,7 @@ public partial class RadioManager : Node3D
     public override void _Process(double delta)
     {
         if (!NetworkManager.DedicatedServer && DisplayServer.GetName() != "headless") UpdateHeld();
-        if (Online && !Multiplayer.IsServer()) return;
+        if (!NetLink.IsServer(this)) return;   // a client, or the link is down (#211)
         _housekeeping += delta;
         if (_housekeeping < 1) return;
         double step = _housekeeping;
@@ -276,7 +276,7 @@ public partial class RadioManager : Node3D
         foreach (var node in GetChildren())
         {
             if (node is not RadioBody r) continue;
-            if (r.Playing && r.WantedPosition >= r.Length) r.Playing = false;
+            if (r.Playing && r.WantedPosition >= r.Length) Ended(r);
             bool near = players.Count == 0 || players.Any(p => p.DistanceTo(r.GlobalPosition) < LonelyDistance);
             r.LonelyFor = near ? 0 : r.LonelyFor + step;
             if (r.LonelyFor > LonelyTime) r.QueueFree();
