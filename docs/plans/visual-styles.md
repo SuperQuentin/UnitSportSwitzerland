@@ -317,6 +317,13 @@ before and after, pixel for pixel, at the shot-queue viewpoints. Includes the mu
 
 ### Phase 2: Cartoon (the candidate to replace PS1)
 
+**Status (#238):** built. Lit wrappers over every role body but interior and snowfall (unshaded on
+purpose), the cel light, grade, gradient sky and aerial haze, a 4-cascade sun with the ground out
+of the shadow pass, High-detail trees through `NearTrees` with traced billboards, toon figures,
+and the settings entry. Not yet: a smoother procedural avatar (the plan's last step), High
+detail in the building builders (roof overhangs), and the default-style decision.
+Details: `docs/notes/styles/cartoon.md`.
+
 BotW-like cel shaders for every role (the prototype's five plus interiors, props, paths,
 snowfall), the High detail level in the builders, sky and aerial haze, then a smoother procedural
 avatar. Then decide whether Cartoon becomes the default.
