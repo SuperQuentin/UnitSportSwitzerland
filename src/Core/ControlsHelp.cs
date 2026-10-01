@@ -44,7 +44,10 @@ public partial class ControlsHelp : CanvasLayer
         ("Items", new Row[]
         {
             new("Use the item in hand", PlayerInput.UseItem),
-            new("Aim (binoculars, camera, shotgun)", PlayerInput.AimItem),
+            new("Aim (binoculars, camera, shotgun); with anything else, a throw", PlayerInput.AimItem),
+            new("Throw: hold Aim, hold Use to wind up, let go", Keys: "{aim_item} + {use_item}", Pad: "LB + RB"),
+            new("Drop the item in hand (Ctrl: the whole stack)", PlayerInput.DropItem),
+            new("Pick up what you point at", PlayerInput.InteractMount),
             new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "D-pad →"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
             new("Inventory", PlayerInput.Inventory),

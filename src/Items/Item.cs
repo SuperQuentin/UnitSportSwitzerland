@@ -243,6 +243,14 @@ public static class ItemDefs
 
     public static ItemDef? Get(ItemId id) => ById.GetValueOrDefault(id);
 
+    /// <summary>
+    /// Aim + Use throws it (<see cref="ThrowAim"/>): anything whose Aim means nothing else. Optics,
+    /// cameras and guns aim, a print aims where it sticks, a flag where it is planted, and a GPS or
+    /// money is not something to lob at a hillside.
+    /// </summary>
+    public static bool Throwable(ItemDef? def) =>
+        def != null && def.Id != ItemId.Francs && def.Use is ItemUse.Throw or ItemUse.Consume or ItemUse.Material or ItemUse.Wear;
+
     // ------------------------------------------------------------------------------------
     // meshes
     // ------------------------------------------------------------------------------------

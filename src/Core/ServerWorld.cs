@@ -20,6 +20,7 @@ public partial class ServerWorld : Node3D
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
+    private Items.DroppedItems? _dropped;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
@@ -103,6 +104,9 @@ public partial class ServerWorld : Node3D
         // radios thrown into the world, and the CDs they play; the clock everyone plays them by
         _radios = Items.RadioManager.Create(this);
         _radios.PlayerPositions = _vehicles.PlayerPositions;
+        // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
+        _dropped = Items.DroppedItems.Create(this);
+        _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
         Net.ClockSync.Create(this);
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
@@ -299,6 +303,7 @@ public partial class ServerWorld : Node3D
         _passengers?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
+        _dropped?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);
