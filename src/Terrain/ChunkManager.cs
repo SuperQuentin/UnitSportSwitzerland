@@ -1347,7 +1347,7 @@ public partial class ChunkManager : Node3D
                         && RoadMeshBuilder.Build(roadTile, grid) is { } roadData)
                     {
                         ct.ThrowIfCancellationRequested();
-                        roads = ChunkNode.ToArrayMesh(roadData, roadMaterial);
+                        roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));
                     }
                     Lap(StRoadMesh, stageMs, clock);
                 }
