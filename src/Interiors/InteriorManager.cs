@@ -304,6 +304,28 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         return true;
     }
 
+    /// <summary>How near the doorway a VR hand must be to work a door from outside, m (#243).</summary>
+    private const float HandDoorReach = 0.7f;
+
+    /// <summary>
+    /// A VR hand gripping a door (#243): as <see cref="TryDoor"/>, but outside only the door the hand
+    /// is at, between its sill and its lintel, and never a hint: a grip that finds no door is not a
+    /// press of E. False when there is none, so the grip can do something else.
+    /// </summary>
+    public bool TryDoorByHand(FootPlayer player, Vector3 hand)
+    {
+        string? door;
+        if (player.Indoors) door = _current == null ? null : ExitAt(player)?.Door;
+        else
+        {
+            var e = DoorIndex.NearestEntrance(hand, HandDoorReach, OpenReachOutside);
+            door = e is { } d && hand.Y > d.World.Y + 0.3f && hand.Y < d.World.Y + d.Height + 0.3f ? d.Key.ToString() : null;
+        }
+        if (door == null) return false;
+        if (_requestingDoor == null) AskDoor(door, !_doors.ContainsKey(door));
+        return true;
+    }
+
     private void AskDoor(string door, bool open)
     {
         _requestingDoor = door;

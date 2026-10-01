@@ -40,9 +40,15 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
               --no-audit         skip the height audit against the terrain
               --no-shift         keep motorway carriageways on TLM's lines (median "before")
 
+          --street-svg E,N      plan view of built street tiles around an LV95 point (#119):
+                                 walls, carriageways, sidewalks by width, retaining walls
+              --chunks DIR       default terrain_chunks;  --size M (default 400);  --svg FILE
+
           --format-check        .road v1/v2/v3 codec self-check (round trips, unknown sections)
           --plan-check          width/lanes/one-way/motorway-offset self-check (synthetic lines)
           --priority-check      junction priority self-check: main road, Wartelinie, signs (#121)
+          --street-check        urban streets self-check: sidewalk widths against synthetic houses (#119)
+          --dump-street E,N     corner patches and segment ends near a point, with heights (--chunks DIR)
           --compare-v2 V2DIR --chunks V3DIR
                                  v3 tiles against a v2 build of the same region: same geometry,
                                  one-way agreement with the runtime inference, bytes per tile
@@ -89,9 +95,27 @@ else if (args.Contains("--synth"))
         () => TownGenerator.Generate(bounds, new TownGenerator.TownOptions(Seed: seed, Height: terrain)).Network,
         terrain);
 }
+else if (ArgValue("--street-svg") is { } at)
+{
+    var en = at.Split(',');
+    return StreetView.Run(ArgValue("--chunks") ?? "terrain_chunks",
+        double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture),
+        double.Parse(ArgValue("--size") ?? "400", CultureInfo.InvariantCulture),
+        ArgValue("--svg") ?? "street.svg", Console.WriteLine);
+}
+else if (ArgValue("--dump-street") is { } dumpAt)
+{
+    var en = dumpAt.Split(',');
+    return StreetView.Dump(ArgValue("--chunks") ?? "terrain_chunks",
+        double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture), Console.WriteLine);
+}
 else if (args.Contains("--format-check"))
 {
     return FormatCheck.Run(Console.WriteLine) ? 0 : 2;
+}
+else if (args.Contains("--street-check"))
+{
+    return UnitSport.Tools.RoadGen.Network.StreetPlanner.SelfCheck(Console.WriteLine) ? 0 : 2;
 }
 else if (args.Contains("--plan-check"))
 {
@@ -112,6 +136,12 @@ else if (args.Contains("--rewrite"))
     double dividedScale = double.Parse(ArgValue("--divided-scale") ?? "1.0", CultureInfo.InvariantCulture);
     bool dryRun = args.Contains("--dry-run");
     UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.ShiftCarriageways = !args.Contains("--no-shift");
+    if (ArgValue("--debug-street") is { } dbg)
+    {
+        var en = dbg.Split(',');
+        UnitSport.Tools.RoadGen.Network.StreetPlanner.Debug = UnitSport.Tools.RoadGen.Network.CornerPlanner.Debug =
+            (double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture));
+    }
 
     var ids = ArgValue("--tiles-file") is { } file ? ReadTilesFile(file)
         : ArgValue("--tiles") is { } spec ? ParseTiles(spec) : DiscoverTiles(chunks, RawRoads.DirFor(temp));

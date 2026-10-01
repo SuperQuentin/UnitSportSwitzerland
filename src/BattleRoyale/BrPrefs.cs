@@ -40,8 +40,7 @@ public sealed class BrPrefs
 
     public void Save()
     {
-        DirAccess.MakeDirRecursiveAbsolute("user://br");
-        using var f = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
-        f?.StoreString(JsonSerializer.Serialize(this));
+        try { Core.JsonStore.Save(File, this); }
+        catch (Exception e) { GD.PushWarning($"[br] settings: {e.Message}"); }
     }
 }

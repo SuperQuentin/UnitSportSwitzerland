@@ -11,6 +11,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TerrainFormat", "tools\Terr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TerrainPreprocessor", "tools\TerrainPreprocessor\TerrainPreprocessor.csproj", "{0212E70E-FA5C-4532-AEE7-E1907B43C0DB}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitSportSwitzerland.Tests", "tests\UnitSportSwitzerland.Tests\UnitSportSwitzerland.Tests.csproj", "{432C1145-E1B6-4075-A366-C7B03E340651}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -57,6 +61,18 @@ Global
 		{0212E70E-FA5C-4532-AEE7-E1907B43C0DB}.Release|x64.Build.0 = Release|Any CPU
 		{0212E70E-FA5C-4532-AEE7-E1907B43C0DB}.Release|x86.ActiveCfg = Release|Any CPU
 		{0212E70E-FA5C-4532-AEE7-E1907B43C0DB}.Release|x86.Build.0 = Release|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Debug|x64.Build.0 = Debug|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Debug|x86.Build.0 = Debug|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Release|Any CPU.Build.0 = Release|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Release|x64.ActiveCfg = Release|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Release|x64.Build.0 = Release|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Release|x86.ActiveCfg = Release|Any CPU
+		{432C1145-E1B6-4075-A366-C7B03E340651}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -64,5 +80,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{7E0BCB63-C4B8-4945-B2CA-7BB757939AF4} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 		{0212E70E-FA5C-4532-AEE7-E1907B43C0DB} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{432C1145-E1B6-4075-A366-C7B03E340651} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

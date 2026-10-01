@@ -23,6 +23,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `void-rescue` — Falling through the world (under terrain, into unstreamed void, under an interior floor) puts you back on the ground; safe spot per space; `--voidcheck`
 - `crash-ragdoll` — Crash ragdoll (#214): through the windscreen as verlet joints, crash camera, bone-break and glass sounds, `PoseRagdoll` replication, `--wall`, `tools/crashnetcheck.sh`
 - `player-overlap` — Two players set down on one spot ease apart (collision exception + 1.5 m/s nudge) instead of the solver throwing one kilometres (#203)
+- `perf-visibility-on-change` (net) — `FootPlayer`'s `Sync`/`RelayNear`/`RelayFar`/`Vis` keep `VisibilityUpdateMode.None`; any new visibility input must call `RefreshNetVisibility`/`RefreshRelays` on change
 
 - `passengers` — Passengers (#158): seats from the models, `PassengerService` hands them out, riders moved and drawn from the host's copy, driverless vehicles when the driver jumps out, take the wheel (F / RB), hand-over between players, `--passengernet a|b|c`
 - `trucks-buses` — Trucks and buses (#70): `HeavyCatalog` RideKind 96..119, trailers by code, a planar multi-body train (pins, per-axle tyres), sections as their own bodies, clutch/converter driveline in five shift modes, retarder, air, rollover, coupling, bus doors/kneel/destination, `--truckcheck`, `--truckprobe`, `--heavynet`

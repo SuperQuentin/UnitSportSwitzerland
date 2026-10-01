@@ -577,8 +577,7 @@ public partial class BrManager : Node
         var list = LoadHistory();
         list.Add((_state.AreaE, _state.AreaN));
         if (list.Count > 5) list.RemoveRange(0, list.Count - 5);
-        DirAccess.MakeDirRecursiveAbsolute(ProjectSettings.GlobalizePath("user://br"));
-        using var f = Godot.FileAccess.Open(HistoryFile, Godot.FileAccess.ModeFlags.Write);
-        f?.StoreString(JsonSerializer.Serialize(list.Select(p => new[] { p.E, p.N })));
+        try { Core.JsonStore.Save(HistoryFile, list.Select(p => new[] { p.E, p.N }).ToList()); }
+        catch (Exception e) { GD.PushWarning($"[br] history: {e.Message}"); }
     }
 }

@@ -23,6 +23,8 @@
   peer **0** = "everyone?" — answering true makes it broadcast; `ServerSees` must answer **true for
   the owner itself** or the owner loses its own player. `Vis` has `ReplicationInterval` 3600 s:
   empty or not, Godot asks its filter every frame for every peer otherwise.
+  All player synchronizers have `VisibilityUpdateMode = None`: filters run only on an explicit
+  `UpdateVisibility` (`perf-visibility-on-change`).
 - Race NPCs (`npc_<owner>_<n>`, `FootPlayer.NetId` = their negative entrant id) are interest targets of
   their own: seen and relayed from where the NPC is, whoever simulates it; their simulator (the node's
   authority) never gets the relays, always has the node (`Vis`). See `docs/notes/world/npc-handoff.md`.
