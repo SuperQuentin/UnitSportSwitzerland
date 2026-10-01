@@ -21,7 +21,11 @@
   "Hauptstrasse" per direction (inside localities before the junction, outside after; left out
   where only 3 m lanes join) and its centre line carried across the mouth when both main arms are
   two-way, paved, wide enough for one (`PaintEmitter.MinCentreLineWidth`) and turn less than
-  60 deg. A straight centre line simplifies to its two ends.
+  60 deg. A straight centre line simplifies to its two ends. With it, the main road's edges are
+  carried through the junction as guide lines (Führungslinien, SSV 6.16): curves from one main
+  arm's edge corner to the other's, inset like a Randlinie, dashed 1 m / 1 m on a side where a
+  road joins, solid on a side where none does (rural roads only: towns have no edge lines).
+  Test region: 60 guide lines on 30 junctions.
 - **Sign sizes** as `RoadSigns` states them, with the code's references (SSV SR 741.21): plate
   side 3.02 0.90 m (0.60 small, inside localities), 3.03 0.50 m (0.35); lower plate edge 1.5 m,
   2.2 m on a sidewalk; carriageway edge to plate 0.30 m inside localities, 0.50 m outside; 76 mm

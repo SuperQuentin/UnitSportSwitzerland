@@ -18,9 +18,14 @@ public static partial class TileRewriter
     {
         public readonly List<(Junction Junction, PriorityPlanner.Plan Plan)> Plans = new();
         public readonly Dictionary<int, RoadAttrFlags> Yield = new();
+        /// <summary>The guide lines written through junctions; a turn pocket (#123) replaces the one on its side.</summary>
+        public readonly HashSet<RoadPaint> Guides = new();
 
         public RoadAttrFlags FlagsOf(int linkId) => Yield.GetValueOrDefault(linkId);
     }
+
+    /// <summary>Dash and gap of a guide line (Führungslinie, SSV 6.16) through a junction.</summary>
+    private const float GuideDash = 1.0f;
 
     /// <summary>A sign must not stand where the ground is this far above or below the road: an embankment or a cut, no verge.</summary>
     private const double SignMaxGroundStep = 1.5;
@@ -110,6 +115,22 @@ public static partial class TileRewriter
                         Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
                     });
                     stats.CentreLines++;
+
+                    // the edges through the junction: dashed across a joining road's mouth
+                    foreach (var (guide, dashed) in plan.Guides)
+                    {
+                        if (!dashed && plan.CentreUrban) continue;   // no edge lines in towns
+                        var g = new RoadPaint
+                        {
+                            Shape = PaintShape.Polyline, Type = dashed ? PaintType.WhiteDashed : PaintType.WhiteSolid,
+                            Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
+                            Dash = dashed ? GuideDash : 0, Gap = dashed ? GuideDash : 0,
+                            Vertices = Local(home, guide, p => HeightAt(anchors, p), 0f),
+                        };
+                        Get(paint, home).Add(g);
+                        priority.Guides.Add(g);
+                        stats.Guides++;
+                    }
                 }
             }
 

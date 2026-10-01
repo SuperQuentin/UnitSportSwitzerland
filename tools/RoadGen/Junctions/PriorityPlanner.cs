@@ -50,6 +50,11 @@ public static class PriorityPlanner
         /// <summary>The main road's centre line carried across the junction (dashed), urban dash or not.</summary>
         public List<Vec2>? CentreLine;
         public bool CentreUrban;
+        /// <summary>
+        /// The main road's edges carried through the junction: dashed guide lines (Führungslinien,
+        /// SSV 6.16) on a side where a road joins, solid on a side where none does.
+        /// </summary>
+        public readonly List<(List<Vec2> Line, bool Dashed)> Guides = new();
     }
 
     /// <summary>The Wartelinie lies this far outside the main carriageway edge (BE handbook p. 41: 25 cm from the longitudinal line).</summary>
@@ -273,7 +278,32 @@ public static class PriorityPlanner
         }
         plan.CentreLine = Polyline.Simplify(line, 0.02);   // mostly straight: 2 points instead of 9
         plan.CentreUrban = infos[main[0]]!.Value.Attributes.Has(RoadAttrFlags.Urban);
+
+        // the edges: a's corner on one side meets b's corner on the same side of the road, which
+        // looking outward along b is its other hand; inset like an edge line (Randlinie)
+        var ua = Vec2.FromHeading(a.OutwardHeading);
+        foreach (var (ca, cb) in (ReadOnlySpan<(Vec2, Vec2)>)[(a.Left, b.Right), (a.Right, b.Left)])
+        {
+            var pa = ca + (from - ca).Normalized() * Meshing.PaintEmitter.EdgeLineInset;
+            var pb = cb + (to - cb).Normalized() * Meshing.PaintEmitter.EdgeLineInset;
+            var control = j.Centre + ((pa - from) + (pb - to)) * 0.5;
+            var edge = new List<Vec2>();
+            for (int k = 0; k <= Samples; k++)
+            {
+                double t = (double)k / Samples, mt = 1 - t;
+                edge.Add(pa * (mt * mt) + control * (2 * mt * t) + pb * (t * t));
+            }
+            // a road joining on this side: which side of the main road its arm leaves on
+            double side = Cross(ua, ca - from);
+            bool joined = false;
+            for (int k = 0; k < j.Arms.Count; k++)
+                if (k != main[0] && k != main[1] && Math.Sign(Cross(ua, Vec2.FromHeading(j.Arms[k].OutwardHeading))) == Math.Sign(side))
+                    joined = true;
+            plan.Guides.Add((Polyline.Simplify(edge, 0.02), joined));
+        }
     }
+
+    private static double Cross(Vec2 a, Vec2 b) => a.X * b.Y - a.Y * b.X;
 
     // ------------------------------------------------------------------ sign sites
 
@@ -477,7 +507,7 @@ public static class PriorityPlanner
     public sealed class Stats
     {
         public readonly int[] Kinds = new int[Enum.GetValues<Kind>().Length];
-        public int MainWithSideRoad, YieldingArms, YieldNoApproach, TeethRows, Teeth, NoTeethUnpaved, CentreLines, NearEndsJoined;
+        public int MainWithSideRoad, YieldingArms, YieldNoApproach, TeethRows, Teeth, NoTeethUnpaved, CentreLines, Guides, NearEndsJoined;
         public readonly SortedDictionary<string, int> Placed = new(StringComparer.Ordinal);
         public readonly SortedDictionary<string, int> Rejected = new(StringComparer.Ordinal);
 
@@ -496,7 +526,7 @@ public static class PriorityPlanner
             sb.Append(c, $"with a yielding road {MainWithSideRoad:N0}, roundabout {Kinds[(int)Kind.Roundabout]:N0}, right-before-left {Kinds[(int)Kind.RightBeforeLeft]:N0}, ");
             sb.Append(c, $"equal ranks {Kinds[(int)Kind.Unresolved]:N0}, motorway/ramp {Kinds[(int)Kind.HighSpeed]:N0}, ");
             sb.Append(c, $"one car road {Kinds[(int)Kind.Minor]:N0}, no road {Kinds[(int)Kind.NotRoad]:N0}\n");
-            sb.Append(c, $"      yielding arms {YieldingArms:N0} (+{YieldNoApproach:N0} one-way away), Wartelinien {TeethRows:N0} ({Teeth:N0} teeth), unpaved no teeth {NoTeethUnpaved:N0}, main centre lines {CentreLines:N0}, near ends joined {NearEndsJoined:N0}\n");
+            sb.Append(c, $"      yielding arms {YieldingArms:N0} (+{YieldNoApproach:N0} one-way away), Wartelinien {TeethRows:N0} ({Teeth:N0} teeth), unpaved no teeth {NoTeethUnpaved:N0}, main centre lines {CentreLines:N0} and {Guides:N0} edge guide lines, near ends joined {NearEndsJoined:N0}\n");
             sb.Append("      signs placed ");
             sb.Append(string.Join(", ", Placed.Select(kv => $"{kv.Key} {kv.Value:N0}")));
             sb.Append("; rejected ");
