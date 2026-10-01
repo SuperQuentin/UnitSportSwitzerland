@@ -13,10 +13,12 @@
   record's tail), pad u16, then per segment, in drawing direction:
   `flags u16` (`RoadAttrFlags`: Urban, Roundabout, Osm, Tram, YieldAtStart, YieldAtEnd,
   OwnerFederal, OwnerCanton), `oneWay i8` (+1 with drawing, -1 against, 0 both/unknown),
-  `layer i8` (TLM `stufe`, else bridge +1 / tunnel -1), `lanesFwd u8`, `lanesBwd u8` (0 = class
-  default), `priority u8` (high nibble `verkehrsbedeutung` rank 0..3, low nibble 12 - class),
-  pad u8, `widthCm u16` (TLM nominal class width or OSM width; 0 unknown; the render width stays
-  `RoadSegment.Width`), left and right side 6 B each: `sidewalkDm, bikeKind, bikeDm, kerbCm,
+  `layer i8` (TLM `stufe`, else bridge +1 / tunnel -1), `lanesFwd u8`, `lanesBwd u8` (per
+  direction; a one-way segment has all its lanes in its travel direction; 0 = none/unknown),
+  `priority u8` (high nibble `verkehrsbedeutung` rank 0..3, OSM highway where TLM has none; low
+  nibble 12 - class), pad u8, `widthCm u16` (paved carriageway width, = `RoadSegment.Width`, both
+  decided by the network stage: rules in `road-widths-lanes-oneway`; lanes lie inside it by
+  `RoadCrossSection`), left and right side 6 B each: `sidewalkDm, bikeKind, bikeDm, kerbCm,
   vergeDm, pad`, pad u16.
 - **`PANT`** paint (#116): `count u32`, per primitive `shape u8` (0 polyline ribboned at runtime,
   1 triangle list), `type u8` (`PaintType`: WhiteSolid, WhiteDashed, YellowDashed, YellowSolid,

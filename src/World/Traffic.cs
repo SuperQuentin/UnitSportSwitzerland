@@ -172,8 +172,10 @@ public partial class Traffic : Node3D
             var rails = LaneGraph.Build(tiles, origin, IsRail);
             int divided = roads.Edges.Count(x => (x.Flags & RoadFlags.Divided) != 0);
             int oriented = roads.Edges.Count(x => (x.Flags & RoadFlags.Divided) != 0 && x.OneWay != 0);
+            // origin-free fingerprint of every one-way edge's direction, so two peers can be compared
+            long directions = roads.Edges.Where(x => x.OneWay != 0).Sum(x => (long)Mathf.RoundToInt(x.Length * 10) * 3 + x.OneWay);
             GD.Print($"[traffic] around {here}: {roads.Edges.Count} road edges ({oriented}/{divided} divided "
-                + $"carriageways oriented), {rails.Edges.Count} rail edges");
+                + $"carriageways oriented), {rails.Edges.Count} rail edges, one-way fingerprint {directions}");
             Callable.From(() =>
             {
                 if (epoch != _epoch) return;   // built from the world that was replaced
@@ -300,7 +302,8 @@ public partial class Traffic : Node3D
 
     /// <summary>Right-hand traffic: an undivided road is shared, so each car keeps to its half.</summary>
     private static float KeepRight(LaneEdge e) =>
-        (e.Flags & RoadFlags.Divided) != 0 || e.Class == RoadClass.Ramp ? 0f
+        e.OneWay != 0 ? e.RightLane
+        : (e.Flags & RoadFlags.Divided) != 0 || e.Class == RoadClass.Ramp ? 0f
         : e.Width < 4.5f ? 0.3f : e.Width * 0.25f;
 
     private (LaneEdge, bool)? NextRoad((LaneEdge Edge, bool Forward) leg)
@@ -436,6 +439,9 @@ public partial class Traffic : Node3D
     public float AverageCarSpeed => _cars.Count == 0 ? 0f : _cars.Average(c => c.Speed);
     public float AverageTrainSpeed => _trains.Count == 0 ? 0f : _trains.Average(c => c.Speed);
     public int CarCount => _cars.Count;
+    /// <summary>Cars driving an edge against its stored or inferred one-way direction (must stay 0).</summary>
+    public int WrongWayCars => _cars.Count(c => c.Route.Edge.OneWay != 0 && c.Route.Forward != c.Route.Edge.OneWay > 0);
+    public int OneWayEdges => _roads?.Edges.Count(e => e.OneWay != 0) ?? 0;
     public int TrainCount => _trains.Count;
 
     /// <summary>One car, or one train of several units, riding one route.</summary>

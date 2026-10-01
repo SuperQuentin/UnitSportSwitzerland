@@ -80,7 +80,7 @@ public static class OsmOverlay
         string outPath = Path.Combine(tempDir, FileName);
         File.WriteAllText(outPath, Format(result.Rows, Path.GetFileName(pbfPath), Path.GetFileName(tlmGpkg), minE, minN, maxE, maxN));
         long peak = Process.GetCurrentProcess().PeakWorkingSet64;
-        string report = Report(result, tlm.Count, osm.Count)
+        string report = Report(result, tlm.Count, osm.Count) + MedianProbe(tlm, osm)
             + $"\ntiming: TLM {tlmSec:F1} s, OSM read {osmSec:F1} s, conflation {total - tlmSec - osmSec:F1} s, "
             + $"total {total:F1} s; peak working set {peak / 1048576.0:F0} MB\n";
         File.WriteAllText(Path.Combine(tempDir, ReportName), report);
@@ -353,6 +353,70 @@ public static class OsmOverlay
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Motorway median measurement (#117): along every TLM Autobahn line, every 5 m, the distance
+    /// to its partner carriageway and the signed offset of the OSM motorway way running the same
+    /// direction (positive = away from the partner). OSM carriageways are traced on orthophotos
+    /// at the middle of the lanes, so the offset says where the real carriageway lies relative to
+    /// TLM's line. Report only; nothing is written from it.
+    /// </summary>
+    public static string MedianProbe(IReadOnlyList<TlmLine> tlm, IReadOnlyList<OsmWay> osm) =>
+        "carriageway median probe (5 m stations; offset > 0 = OSM way lies away from the partner):\n"
+        + MedianProbe(tlm, osm, "Autobahn", ["motorway"])
+        + MedianProbe(tlm, osm, "Autostrasse", ["motorway", "trunk"])
+        + MedianProbe(tlm, osm, "Einfahrt", ["motorway_link", "trunk_link"]);
+
+    private static string MedianProbe(IReadOnlyList<TlmLine> tlm, IReadOnlyList<OsmWay> osm, string objektart, string[] highways)
+    {
+        var ways = new SegmentGrid();
+        for (int i = 0; i < osm.Count; i++)
+            if (highways.Contains(osm[i].Tags.GetValueOrDefault("highway"))) ways.Add(i, osm[i].E, osm[i].N);
+        var partners = new SegmentGrid();
+        for (int i = 0; i < tlm.Count; i++) if (tlm[i].Divided) partners.Add(i, tlm[i].E, tlm[i].N);
+
+        var sep = new List<double>();
+        var offset = new List<double>();
+        var osmSep = new List<double>();
+        for (int li = 0; li < tlm.Count; li++)
+        {
+            if (tlm[li].Objektart != objektart) continue;
+            var line = tlm[li];
+            var cum = Cumulative(line.E, line.N);
+            for (double s = StepM / 2; s < cum[^1]; s += StepM)
+            {
+                var (pe, pn, te, tn) = At(line.E, line.N, cum, s);
+                var (p, _, (qe, qn)) = partners.Search(pe, pn, te, tn, 25, 0.95, li);
+                if (p < 0) continue;
+                // beside it, not the next piece of the same carriageway just ahead
+                if (Math.Abs(te * (qe - pe) + tn * (qn - pn)) > 1) continue;
+                double left = te * (qn - pn) - tn * (qe - pe);   // > 0: partner on the left
+                double d = Math.Abs(left);
+                sep.Add(d);
+                // right-hand traffic: partner on the left means traffic runs in drawing order
+                bool forward = left > 0;
+                var (w, same, (we, wn)) = ways.Search(pe, pn, te, tn, 10, 0.95, -1);
+                if (w < 0 || same != forward || Math.Abs(te * (we - pe) + tn * (wn - pn)) > 1) continue;
+                double wLeft = te * (wn - pn) - tn * (we - pe);
+                double outward = forward ? -wLeft : wLeft;
+                offset.Add(outward);
+                osmSep.Add(d + 2 * outward);
+            }
+        }
+
+        static string Q(List<double> v)
+        {
+            if (v.Count == 0) return "none";
+            v.Sort();
+            double At(double f) => v[Math.Min(v.Count - 1, (int)(f * v.Count))];
+            return string.Create(CultureInfo.InvariantCulture,
+                $"p10 {At(0.1):F1}  p25 {At(0.25):F1}  median {At(0.5):F1}  p75 {At(0.75):F1}  p90 {At(0.9):F1} m ({v.Count} stations)");
+        }
+        return $"  {objektart}\n"
+            + $"    TLM partner distance         {Q(sep)}\n"
+            + $"    OSM way offset, outward      {Q(offset)}\n"
+            + $"    OSM carriageway separation   {Q(osmSep)}\n";
+    }
+
     private static int Lines(Result r, Func<Row, bool> pick) => r.Rows.Where(pick).Select(x => (x.Uuid, x.Part)).Distinct().Count();
 
     // ---- geometry -------------------------------------------------------------------------------
@@ -418,7 +482,7 @@ public static class OsmOverlay
             return (id, q);
         }
 
-        private (int, bool, (double, double)) Search(double pe, double pn, double te, double tn, double radius, double cosMax, int exclude)
+        public (int, bool, (double, double)) Search(double pe, double pn, double te, double tn, double radius, double cosMax, int exclude)
         {
             int best = -1;
             bool bestSame = false;
