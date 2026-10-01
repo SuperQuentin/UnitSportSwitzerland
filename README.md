@@ -323,7 +323,7 @@ godot --path . -- --probe lv95E,lv95N,seconds
 
 ## Where the source data comes from
 
-All of it is swisstopo / federal open data, free to use with attribution.
+All of it is swisstopo / federal open data, free to use with attribution (see [Licenses](#licenses)).
 
 | Dataset                         | Contents                                                                                               | Source                                                      |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
@@ -493,19 +493,49 @@ the first admin gets granted on a fresh server:
 
 ```
 src/
-  Core/      boot, world origin, screenshot + probe helpers
-  Terrain/   chunk streaming, mesh builders, LOD, cover palette
-  Player/    walking controller, spectator camera
-  Net/       ENet setup and player replication
-  Gpx/       GPX parsing, race clock, runners, cameras, HUD
+  Core/        boot, game modes and menu, input, settings, diagnostics, screenshot + probe helpers
+  Terrain/     chunk streaming, mesh builders, LOD, collision, generated terrain
+  Player/      on foot, mounts, flight, spectator camera
+  Vehicles/    machines left in the world, damage, wrecks
+  Avatar/      procedural human, bike and aircraft meshes and rigs
+  Net/         ENet setup, replication, terrain streaming, chat, admin
+  Gpx/         GPX parsing, race clock, runners, cameras, HUD, video export
+  World/       day/night, traffic, trees, races
+  Audio/       synthesised sound
+  Birds/ Combat/ Items/ Loot/ Interiors/ Occasions/   gameplay systems
 tools/
   TerrainFormat/       binary formats shared by preprocessor and game
   TerrainPreprocessor/ the offline pipeline
+  MapSetup/            region setup wizard
+  RoadGen/ BlendCheck/ road generation and terrain blend checks
+  swiss_data.py, swiss_relief.py    data downloader, 500 m relief for generated terrain
   export_buildings.py  FileGDB -> GeoPackage (needs GDAL)
   export_route_keys.py cycle route keys
-shaders/     ps1_terrain, ps1_road, ps1_building, ps1_tree, ps1_water
+  *check.sh            multiplayer feature checks (dedicated server + client)
+shaders/     ps1_* terrain, road, building, tree, water and other shaders
+docs/notes/  one topic per file, indexed by each directory's CLAUDE.md
 terrain_chunks/  generated output: .terr .road .cover .trees .bldg .holes
 ```
 
 `CLAUDE.md` holds the architecture notes and a list of hard-won gotchas — read it before
 changing the formats, the shaders, or anything that has to line up with the terrain grid.
+
+---
+
+## Licenses
+
+- **This project's code** has no license file yet, so by default all rights are reserved by its
+  authors. A `LICENSE` will be added once the maintainers pick one; tracked in
+  [#175](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/175).
+- **Third-party software** (Godot, .NET, Godot AI addon, Spectre.Console, Microsoft.Data.Sqlite) is MIT
+  licensed. Details and the MIT text are in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md); the
+  addon's own license is [`addons/godot_ai/LICENSE`](addons/godot_ai/LICENSE).
+- **Geodata** is open data and must be credited:
+  - Terrain, roads, rail, land cover, water, trees and buildings: **Source: swisstopo**
+    (swissALTI3D, swissALTIRegio, swissTLM3D, swissBUILDINGS3D).
+  - Building register: **Source: Federal Statistical Office (FSO), GWR**.
+  - Cycle routes: **Source: ASTRA / SwitzerlandMobility**.
+  - Optional French border data: **Source: IGN, BD TOPO®**, under Licence Ouverte 2.0.
+- No image, audio, font or model assets are bundled; everything is generated in code.
+
+See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for terms, links and the committed derived data files.
