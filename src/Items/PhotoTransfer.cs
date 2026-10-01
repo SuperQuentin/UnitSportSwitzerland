@@ -28,6 +28,8 @@ public partial class PhotoTransfer : Node
 
     /// <summary>Client: a print is now on this machine (its hash checked). The id.</summary>
     public static event Action<string>? Arrived;
+    /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
+    internal static void ResetEvents() => Arrived = null;
 
     private bool _server;
     private readonly HashSet<string> _asked = new();

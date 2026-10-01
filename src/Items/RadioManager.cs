@@ -19,7 +19,7 @@ namespace UnitSport.Items;
 /// <see cref="RadioSpeaker"/> on every player holding a playing radio (<see cref="UpdateHeld"/>).
 /// </para>
 /// </summary>
-public partial class RadioManager : Node3D
+public partial class RadioManager : Node3D, Core.IOriginContainer
 {
     public const string NodeName = "Radios";
 
@@ -46,6 +46,8 @@ public partial class RadioManager : Node3D
 
     /// <summary>Client: the server refused something, with a line for the player.</summary>
     public static event Action<string>? Refused;
+    /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
+    internal static void ResetEvents() => Refused = null;
 
     private MultiplayerSpawner? _spawner;
     private int _counter;

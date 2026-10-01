@@ -44,6 +44,7 @@ public sealed class HelmetPov : Shot
 public sealed class StabilisedHead : Shot
 {
     private Vector3 _aim;
+    public override void Shift(Core.OriginShift shift) => _aim = shift.Point(_aim);
     private bool _primed;
 
     public override string Name => "Stabilised head";
@@ -132,6 +133,7 @@ public sealed class AnkleCam : Shot
 public sealed class Handheld : Shot
 {
     private Vector3 _pos;
+    public override void Shift(Core.OriginShift shift) => _pos = shift.Point(_pos);
     private float _side, _phase;
     private bool _primed;
 
@@ -266,6 +268,7 @@ public sealed class DroneReveal : Shot
 public sealed class LockedOff : Shot
 {
     private Vector3 _anchor;
+    public override void Shift(Core.OriginShift shift) => _anchor = shift.Point(_anchor);
     private float _range = 160f;
 
     public override string Name => "Locked off";
@@ -304,6 +307,7 @@ public sealed class LockedOff : Shot
 public sealed class LowHeroPass : Shot
 {
     private Vector3 _anchor;
+    public override void Shift(Core.OriginShift shift) => _anchor = shift.Point(_anchor);
 
     public override string Name => "Low hero pass";
     public override ShotScale Scale => ShotScale.Close;
@@ -380,6 +384,7 @@ public sealed class TopDown : Shot
 public sealed class ChaseShot : Shot
 {
     private Vector3 _pos;
+    public override void Shift(Core.OriginShift shift) => _pos = shift.Point(_pos);
     private bool _primed;
 
     public override string Name => "Chase";

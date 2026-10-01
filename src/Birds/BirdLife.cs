@@ -38,7 +38,7 @@ namespace UnitSport.Birds;
 /// Every shot flushes every bird within <see cref="ShotFlushRadius"/>.
 /// </para>
 /// </summary>
-public partial class BirdLife : Node3D
+public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShiftAware
 {
     public const int Budget = 32;
     private const float SpawnMin = 35f, SpawnMax = 150f;
@@ -54,7 +54,8 @@ public partial class BirdLife : Node3D
     private readonly Dictionary<int, Bird> _byId = new();
     private int _nextId;
     private readonly Random _rng = new();
-    /// <summary>Tree tops per tile, bucketed in <see cref="TreeCell"/> m cells (a forest tile holds 100k+).</summary>
+    /// <summary>Tree tops per tile, relative to the tile's NW corner (so an origin shift leaves them be),
+    /// bucketed in <see cref="TreeCell"/> m cells (a forest tile holds 100k+).</summary>
     private readonly Dictionary<TileId, Dictionary<(int, int), List<Vector3>>?> _trees = new();
     private const float TreeCell = 16f;
     /// <summary>Server only: the lean server's terrain keeps no cover raster, so the birds load their own per tile.</summary>
@@ -120,6 +121,11 @@ public partial class BirdLife : Node3D
     }
 
     public BirdLife() : this(null!, null!, null) { }
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+    }
 
     public override void _Ready()
     {
@@ -459,13 +465,12 @@ public partial class BirdLife : Node3D
         try
         {
             var trees = await source.LoadTreesAsync(tile);
-            var origin = _origin;
             _trees[tile] = trees == null ? null : await Task.Run(() =>
             {
                 var cells = new Dictionary<(int, int), List<Vector3>>();
                 foreach (var t in trees)
                 {
-                    var top = origin.ToWorld(tile.MinE + t.X, tile.MaxN - t.Z, t.Y + t.Height * 0.92f);
+                    var top = new Vector3(t.X, t.Y + t.Height * 0.92f, t.Z);
                     var key = Cell(top);
                     if (!cells.TryGetValue(key, out var list)) cells[key] = list = new List<Vector3>();
                     list.Add(top);
@@ -486,21 +491,33 @@ public partial class BirdLife : Node3D
     /// <summary>The nearest tree top within <paramref name="reach"/> (at most <see cref="TreeCell"/>) on this tile.</summary>
     private Vector3? NearestTreeTop(Vector3 at, float reach)
     {
-        if (!_trees.TryGetValue(_origin.TileAt(at), out var cells) || cells == null) return null;
+        var tile = _origin.TileAt(at);
+        if (!_trees.TryGetValue(tile, out var cells) || cells == null) return null;
+        var corner = _origin.ToWorld(tile.MinE, tile.MaxN, 0);
+        var local = at - corner;
         Vector3? best = null;
         float bestD = reach;
-        var (cx, cz) = Cell(at);
+        var (cx, cz) = Cell(local);
         for (int dx = -1; dx <= 1; dx++)
             for (int dz = -1; dz <= 1; dz++)
             {
                 if (!cells.TryGetValue((cx + dx, cz + dz), out var tops)) continue;
                 foreach (var t in tops)
                 {
-                    float d = Flat(t - at);
+                    float d = Flat(t - local);
                     if (d < bestD) { bestD = d; best = t; }
                 }
             }
-        return best;
+        return best + corner;
+    }
+
+    /// <summary>The origin moved (#185): the birds' nodes have moved with it, their flight plans have not.</summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        foreach (var b in _birds) b.Shift(shift);
+        foreach (var f in _flockSpots.Keys.ToList()) _flockSpots[f] = (shift.Point(_flockSpots[f].At), _flockSpots[f].Until);
+        // ponytail: town perches are built in world space; reload them rather than shift every perch (shifts are rare)
+        _town.Clear();
     }
 
     // ------------------------------------------------------------------------------------
@@ -1266,6 +1283,14 @@ public sealed class Bird
 
     /// <summary>Where a shot aims: the middle of the body, not the feet.</summary>
     public Vector3 Centre => Node.GlobalPosition + Node.GlobalTransform.Basis * _parts.Shoulder;
+
+    /// <summary>The world positions this bird steers by, moved with the origin (#185).</summary>
+    public void Shift(Core.OriginShift shift)
+    {
+        _anchor = shift.Point(_anchor);
+        _walkTo = shift.Point(_walkTo);
+        _velocity = shift.Direction(_velocity);
+    }
 
     /// <summary>What the shot pattern has to touch: the body, plus the wings when they are spread.</summary>
     public float HitRadius => Species.Length * 0.4f + (Airborne ? Species.Wingspan * 0.25f : 0f);

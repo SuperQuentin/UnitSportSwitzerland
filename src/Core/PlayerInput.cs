@@ -192,6 +192,12 @@ public partial class PlayerInput : Node
     /// </summary>
     public static void Rumble(float weak, float strong, float seconds)
     {
+        // in VR the hands are the pad (#186)
+        if (XR.XrSession.Active)
+        {
+            XR.XrSession.Rumble(weak, strong, seconds);
+            return;
+        }
         if (!GameSettings.Current.Vibration || LastDevice != InputDevice.Gamepad) return;
         foreach (int pad in Input.GetConnectedJoypads())
             Input.StartJoyVibration(pad, Mathf.Clamp(weak, 0, 1), Mathf.Clamp(strong, 0, 1), seconds);
@@ -216,6 +222,13 @@ public partial class PlayerInput : Node
 
     public override void _Input(InputEvent e)
     {
+        // VR replays the controllers as a pad, and points at the UI panel with mouse events:
+        // the prompts stay on pad glyphs either way (#186)
+        if (XR.XrSession.Active)
+        {
+            LastDevice = InputDevice.Gamepad;
+            return;
+        }
         switch (e)
         {
             case InputEventJoypadButton:
