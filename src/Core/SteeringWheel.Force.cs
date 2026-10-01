@@ -59,6 +59,9 @@ public partial class SteeringWheel
     private double _feelAge = double.MaxValue;
     private float _testLevel, _testTimer;
     private bool _softLogged;
+    /// <summary><c>--ffblog</c>: a line every 2 s of what the wheel is being given.</summary>
+    private static readonly bool TraceForces = Array.IndexOf(OS.GetCmdlineUserArgs(), "--ffblog") >= 0;
+    private float _traceIn;
     private float _softDeepest, _softHardest;
     private float _lastAngle, _rate;
     private float _sentConstant = float.NaN, _sentRoad = float.NaN, _sentRoadHz, _sentDamper = float.NaN, _sentFriction = float.NaN;
@@ -98,8 +101,7 @@ public partial class SteeringWheel
         if (level < 0.02f) return;
         var e = Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, 70, level * (Settings.FfbInvert ? -1f : 1f), 160);
         e.periodic.fade_length = 120;
-        SDL_UpdateHapticEffect(w._haptic, w._knock, &e);
-        SDL_RunHapticEffect(w._haptic, w._knock, 1);
+        if (w.Send(w._knock, &e)) SDL_RunHapticEffect(w._haptic, w._knock, 1);
     }
 
     /// <summary>The settings panel's test: push the wheel one way, + right, for a moment.</summary>
@@ -161,6 +163,8 @@ public partial class SteeringWheel
         if (want && !_hapticOpen && _hapticSdl && !_hapticFailed) OpenHaptic();
         else if (!want && _hapticOpen) CloseHaptic();
         if (!_hapticOpen) return;
+        RecoverHaptic();
+        if (!_hapticOpen) return;
 
         _feelAge += dt;
         float constant, road, damper, friction;
@@ -195,6 +199,12 @@ public partial class SteeringWheel
             GD.Print($"[wheel] soft lock left: {Mathf.RadToDeg(_softDeepest):F0}° deep at most, force up to {_softHardest:F2} (strength {s.FfbStrength:F2})");
         _softLogged = stillIn;
         if (s.FfbInvert) constant = -constant;
+        if (TraceForces && (_traceIn -= dt) <= 0f)
+        {
+            _traceIn = 2f;
+            GD.Print($"[ffb] driving {driving} (feel {_feelAge:F2} s old)  torque {_feel.Torque:+0.00;-0.00}  road {_feel.Road:F2}  "
+                + $"weight {_feel.Weight:F2}  wheel {Mathf.RadToDeg(Angle):+0;-0}°  sent {constant:+0.00;-0.00}  refused {_sendFailures}");
+        }
 
         if ((int)_constant >= 0 && (MathF.Abs(constant - _sentConstant) > 1f / 512f || float.IsNaN(_sentConstant)))
         {
@@ -206,31 +216,63 @@ public partial class SteeringWheel
             // SDL (as DirectInput) gives the direction a force comes FROM: a positive level comes
             // from the right and pushes left, so + right is sent negative (measured with --ffbcheck)
             e.constant.level = Level(-constant);
-            SDL_UpdateHapticEffect(_haptic, _constant, &e);
+            Send(_constant, &e);
         }
         if ((int)_road >= 0 && (MathF.Abs(road - _sentRoad) > 0.01f || MathF.Abs(hz - _sentRoadHz) > 1f || float.IsNaN(_sentRoad)))
         {
             (_sentRoad, _sentRoadHz) = (road, hz);
             var e = Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, (ushort)Math.Clamp(1000f / Math.Max(hz, 1f), 20f, 500f), road, SDL_HAPTIC_INFINITY);
-            SDL_UpdateHapticEffect(_haptic, _road, &e);
+            Send(_road, &e);
         }
         if ((int)_damper >= 0 && (MathF.Abs(damper - _sentDamper) > 0.01f || float.IsNaN(_sentDamper)))
         {
             _sentDamper = damper;
             var e = Condition(SDL_HapticEffectType.SDL_HAPTIC_DAMPER, damper);
-            SDL_UpdateHapticEffect(_haptic, _damper, &e);
+            Send(_damper, &e);
         }
         if ((int)_friction >= 0 && (MathF.Abs(friction - _sentFriction) > 0.01f || float.IsNaN(_sentFriction)))
         {
             _sentFriction = friction;
             var e = Condition(SDL_HapticEffectType.SDL_HAPTIC_FRICTION, friction);
-            SDL_UpdateHapticEffect(_haptic, _friction, &e);
+            Send(_friction, &e);
         }
     }
 
     // ---------------------------------------------------------------------------------------
     // the device
     // ---------------------------------------------------------------------------------------
+
+    private int _sendFailures;
+    private double _reopenAt;
+
+    /// <summary>
+    /// Updates a running effect. Windows can take the forces away from the game (DirectInput hands
+    /// them to one program at a time): the update then fails, silently unless checked — the wheel
+    /// went dead while the log showed full force. A failed update is logged once, the effect is
+    /// started again, and if that fails too the device is closed and reopened a second later.
+    /// </summary>
+    private unsafe bool Send(SDL_HapticEffectID id, SDL_HapticEffect* e)
+    {
+        if (SDL_UpdateHapticEffect(_haptic, id, e)) return true;
+        if (_sendFailures++ == 0) GD.PushWarning($"[wheel] force feedback update refused: {SDL_GetError()}");
+        // a one-shot (the knock) is started by its caller; the others run for ever
+        if ((int)id != (int)_knock && SDL_RunHapticEffect(_haptic, id, SDL_HAPTIC_INFINITY) && SDL_UpdateHapticEffect(_haptic, id, e))
+            return true;
+        if (_reopenAt <= 0) _reopenAt = Time.GetTicksMsec() / 1000.0 + 1.0;
+        return false;
+    }
+
+    /// <summary>Closes and reopens the forces once a second while updates keep failing.</summary>
+    private void RecoverHaptic()
+    {
+        if (_reopenAt <= 0 || Time.GetTicksMsec() / 1000.0 < _reopenAt) return;
+        _reopenAt = 0;
+        GD.Print($"[wheel] force feedback lost ({_sendFailures} refused updates): reopening");
+        CloseHaptic();
+        _hapticFailed = false;
+        OpenHaptic();
+        _sendFailures = 0;
+    }
 
     private bool _hapticFailed;
 
