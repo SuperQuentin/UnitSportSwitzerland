@@ -252,7 +252,9 @@ public sealed class Truck : Rideable, IEngined
     public override bool CanHop => false;
     public override float MaxHealth => 400f;
     /// <summary>Lock to lock through the cab's ratio: ~1800° for a 0.78 rad box, what a truck wheel is set to.</summary>
-    public override float WheelLock => 2f * Spec.MaxSteer * HeavyCockpit.SteerRatio;
+    public override float WheelLock => Core.SteeringWheel.LockOverride ?? 2f * Spec.MaxSteer * HeavyCockpit.SteerRatio;
+    /// <summary>The cab's ratio, unless <c>--wheellock</c> sets another lock.</summary>
+    private float Ratio => WheelLock * 0.5f / Spec.MaxSteer;
     public override Core.WheelFeel Feel => _feel;
     private Core.WheelFeel _feel;
 
@@ -447,7 +449,7 @@ public sealed class Truck : Rideable, IEngined
         if (!float.IsNaN(input.WheelAngle))
         {
             // a steering wheel (#68): the box follows the driver's hands through the cab's ratio, to the stop
-            delta = Mathf.Clamp(-input.WheelAngle / HeavyCockpit.SteerRatio, -Spec.MaxSteer, Spec.MaxSteer);
+            delta = Mathf.Clamp(-input.WheelAngle / Ratio, -Spec.MaxSteer, Spec.MaxSteer);
             _steer = -delta / Spec.MaxSteer;
         }
         else
@@ -610,7 +612,7 @@ public sealed class Truck : Rideable, IEngined
     /// <summary>The cockpit's wheel, pedals and dials (#157), on the owner and every copy alike.</summary>
     private void DressCockpit(HeavyRig rig, float kmh, float rpm)
     {
-        rig.WheelTurn = SteerAngle * HeavyCockpit.SteerRatio;
+        rig.WheelTurn = SteerAngle * Ratio;
         rig.Throttle = ThrottlePedal;
         rig.Brake = BrakePedal;
         rig.SpeedKmh = kmh;

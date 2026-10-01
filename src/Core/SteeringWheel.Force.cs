@@ -71,13 +71,14 @@ public partial class SteeringWheel
     {
         if (_instance is not { } w) return;
         w._feel = feel;
-        w._lock = LockOverride ?? lockToLock;
+        w._lock = lockToLock;
         w._feelAge = 0;
     }
 
     /// <summary>
-    /// <c>--wheellock deg</c>: every vehicle's soft lock at this lock to lock instead of its own, to
-    /// feel the soft lock close to centre (180: a wall 90° either side). Steering is not changed.
+    /// <c>--wheellock deg</c>: every vehicle's lock to lock instead of its own (<c>Rideable.WheelLock</c>,
+    /// and with it the steering ratio and the cockpit wheel), to feel the soft lock close to centre
+    /// (180: the road wheels at their stop and a wall 90° either side).
     /// </summary>
     public static readonly float? LockOverride = ParseLockOverride();
 

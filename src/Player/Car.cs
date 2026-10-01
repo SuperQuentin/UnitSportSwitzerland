@@ -201,7 +201,9 @@ public sealed class Car : Rideable, IEngined
     public override bool HasEngine => true;
     public override bool CanHop => false;
     public override float MaxHealth => 160f;
-    public override float WheelLock => Spec.LockTurns * Mathf.Tau;
+    public override float WheelLock => Core.SteeringWheel.LockOverride ?? Spec.LockTurns * Mathf.Tau;
+    /// <summary>Steering-wheel turn over road-wheel angle: the spec's, unless <c>--wheellock</c> sets another lock.</summary>
+    private float Ratio => Core.SteeringWheel.LockOverride is { } l ? l * 0.5f / Spec.MaxSteer : Spec.SteerRatio;
     public override Core.WheelFeel Feel => _feel;
     private Core.WheelFeel _feel;
 
@@ -387,7 +389,7 @@ public sealed class Car : Rideable, IEngined
             // A steering wheel: the rack follows the driver's hands through the steering ratio, to
             // the lock stop. None of the helpers below: the easing, the speed-scaled lock and the
             // counter-steer assist all stand in for hands a wheel already has.
-            delta = Mathf.Clamp(-input.WheelAngle / s.SteerRatio, -s.MaxSteer, s.MaxSteer);
+            delta = Mathf.Clamp(-input.WheelAngle / Ratio, -s.MaxSteer, s.MaxSteer);
             _steer = -delta / s.MaxSteer;
         }
         else
@@ -622,7 +624,7 @@ public sealed class Car : Rideable, IEngined
         rig.Headlights = (flags & PoseHeadlights) != 0;
         rig.RoofOpen = (flags & PoseRoof) != 0;
         Rpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
-        rig.WheelTurn = pose.X * Spec.SteerRatio;
+        rig.WheelTurn = pose.X * Ratio;
         rig.Throttle = ((flags >> PoseThrottleShift) & PoseThrottleSteps) / (float)PoseThrottleSteps;
         rig.Brake = rig.BrakeLights ? 1f : 0f;
         rig.Rpm = Rpm;
@@ -638,7 +640,7 @@ public sealed class Car : Rideable, IEngined
         rig.BrakeLights = Braking;
         rig.Headlights = Headlights;
         rig.RoofOpen = RoofOpen;
-        rig.WheelTurn = SteerAngle * Spec.SteerRatio;
+        rig.WheelTurn = SteerAngle * Ratio;
         rig.Throttle = Throttle;
         rig.Brake = BrakePedal;
         rig.Handbrake = HandbrakeOn;
