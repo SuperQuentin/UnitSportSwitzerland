@@ -27,7 +27,9 @@
   `LootTables` (shelter shelf = emergency supplies, carnotzet = cheese, laundry = cloth...).
 - **Loot budget** counts storeys above ground only (`Floors.Count - Below`), or a cellar would
   make a house richer. House targets in `--lootstats` still pass.
-- **Plan version 8**: stored plans regenerate.
+- **Plan version 8**: stored plans regenerate. Saved loot records carry the plan version and older ones
+  are ignored (`LootService.Current`), so renumbered furniture never inherits another piece's taken or
+  cracked state.
 - **Check**: `--lootstats` also prints cellar/shelter rates per kind, the room mix, the banks, how
   many plans fail `InteriorValidator`, and writes SVG plans (banks, cellar houses, flats) to
   `test_output/rooms/` (render: Edge `--headless=new --screenshot=x.png file:///...svg`).

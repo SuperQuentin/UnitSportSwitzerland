@@ -251,7 +251,7 @@ public partial class BankProbe : Node
             foreach (var r in rooms.Where(r => r.Type is RoomType.Shelter or RoomType.MusicRoom or RoomType.Carnotzet or RoomType.HomeCinema))
             {
                 // from the middle of the room (first person: --view first), toward each of its four walls
-                var at = new Vector3((r.X0 + r.X1) / 2, l.FloorY(0) + 0.1f, (r.Z0 + r.Z1) / 2);
+                var at = FreeSpot(l, r);
                 foreach (var (dir, name) in new[] { (Vector3.Back, "back"), (Vector3.Forward, "front"), (Vector3.Left, "left"), (Vector3.Right, "right") })
                 {
                     var face = node.GlobalTransform.Basis * dir;
@@ -267,6 +267,25 @@ public partial class BankProbe : Node
             return;
         }
         Expect(false, "a house with a shelter near the spot");
+    }
+
+    /// <summary>A spot on the room's floor clear of its furniture (a carnotzet's table stands in the middle).</summary>
+    private static Vector3 FreeSpot(InteriorLayout l, RoomPlan r)
+    {
+        var spots = new List<Vector2>();
+        for (float fz = 0.5f; fz >= 0.15f; fz -= 0.05f)
+            foreach (float fx in new[] { 0.5f, 0.3f, 0.7f })
+                spots.Add(new Vector2(r.X0 + (r.X1 - r.X0) * fx, r.Z0 + (r.Z1 - r.Z0) * fz));
+        foreach (var p in spots)
+        {
+            bool clear = l.Furniture.Where(f => f.Floor == 0).All(f =>
+            {
+                float hw = (f.Turns % 2 == 0 ? f.W : f.D) / 2 + 0.45f, hd = (f.Turns % 2 == 0 ? f.D : f.W) / 2 + 0.45f;
+                return Mathf.Abs(p.X - f.X) > hw || Mathf.Abs(p.Y - f.Z) > hd;
+            });
+            if (clear) return new Vector3(p.X, l.FloorY(0) + 0.1f, p.Y);
+        }
+        return new Vector3(spots[0].X, l.FloorY(0) + 0.1f, spots[0].Y);
     }
 
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, DoorIndex.Entry door)

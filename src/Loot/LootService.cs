@@ -486,7 +486,7 @@ public partial class LootService : Node
         var open = new List<int>();
         if (TileFor(k).Buildings.TryGetValue(k.Index.ToString(), out var b))
             foreach (var (fi, e) in b)
-                if (e.Length == 2 && e[0] == epoch && (e[1] & UnlockedBit) != 0 && int.TryParse(fi, out int idx))
+                if (Current(e, epoch) && (e[1] & UnlockedBit) != 0 && int.TryParse(fi, out int idx))
                     open.Add(idx);
         Reply(peer, MethodName.LockStates, key, epoch, open.ToArray());
     }
@@ -608,18 +608,28 @@ public partial class LootService : Node
 
     // ---- server: what has been taken -------------------------------------------------------------
 
-    /// <summary>Per tile: building index → furniture index → (epoch, taken mask).</summary>
+    /// <summary>
+    /// Per tile: building index → furniture index → (epoch, taken mask, plan version). The masks
+    /// count stacks by the furniture's index in the plan, so a record written against an older
+    /// <see cref="InteriorLayout.CurrentVersion"/> (furniture renumbered when the plans were
+    /// regenerated) is ignored, as if never written: no container starts wrongly emptied, wrongly
+    /// full or wrongly cracked after an update. Records without a version are from before #213.
+    /// </summary>
     private sealed class TileState
     {
         public Dictionary<string, Dictionary<string, long[]>> Buildings { get; set; } = new();
     }
+
+    /// <summary>A saved record that still applies: this restock period, and plans of the current version.</summary>
+    private static bool Current(long[] e, long epoch) =>
+        e.Length >= 3 && e[0] == epoch && e[2] == InteriorLayout.CurrentVersion;
 
     private int MaskOf(string key, int furniture, long epoch)
     {
         if (!BuildingKey.TryParse(key, out var k)) return 0;
         var tile = TileFor(k);
         return tile.Buildings.TryGetValue(k.Index.ToString(), out var b)
-            && b.TryGetValue(furniture.ToString(), out var e) && e.Length == 2 && e[0] == epoch
+            && b.TryGetValue(furniture.ToString(), out var e) && Current(e, epoch)
             ? (int)e[1] : 0;
     }
 
@@ -629,7 +639,7 @@ public partial class LootService : Node
         var tile = TileFor(k);
         if (!tile.Buildings.TryGetValue(k.Index.ToString(), out var b))
             tile.Buildings[k.Index.ToString()] = b = new();
-        b[furniture.ToString()] = new[] { epoch, mask };
+        b[furniture.ToString()] = new[] { epoch, mask, InteriorLayout.CurrentVersion };
         Save(k, tile);
     }
 
