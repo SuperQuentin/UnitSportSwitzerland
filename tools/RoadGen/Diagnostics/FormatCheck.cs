@@ -75,6 +75,7 @@ public static class FormatCheck
         Check(runs.Count == 4 && runs[0][3] == 6 && runs[1][0] == 9 && runs[3][0] == 27 && runs[3][3] == 30,
             "paint dash runs");
         Check(PaintSeamIsContinuous(), "paint dashes continue across a tile seam, no stub at a dead end");
+        Check(PaintFollowsCrossSection(), "paint on the cross-section's lanes, no centre line on a narrow road");
         Check(RailCrossingIsEmbedded(), "level crossing: rail embedded at road height, blended back, grooves, road paint cut");
 
         log(failures == 0 ? "format check passed" : $"format check: {failures} failure(s)");
@@ -84,7 +85,7 @@ public static class FormatCheck
     /// <summary>
     /// A 200 m two-way road cut at a seam after 100 m: west half at x 900..1000 of its tile
     /// (station 0), east half at x 0..100 of the next (station 100). Painted where
-    /// (station mod 9) &lt; 6, except the last dash stub before the dead end.
+    /// (station mod 9) &lt; 3 (rural Leitlinie 3 m / 6 m).
     /// </summary>
     private static bool PaintSeamIsContinuous()
     {
@@ -101,10 +102,41 @@ public static class FormatCheck
             .Concat(east.SelectMany(RoadPaintGeometry.Runs).Select(r => (r[0] + 100, r[^3] + 100))).ToList();
         for (double u = 0.25; u < 200; u += 0.5)
         {
-            bool expected = u % 9 < 6 && u < 198;
+            bool expected = u % 9 < 3;   // rural Leitlinie 3 m / 6 m; the last dash (198..200) is 2 m, over 40 %
             if (painted.Any(r => u >= r.Item1 && u <= r.Item2) != expected) return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// A 10.5 m two-lane motorway carriageway drawn east (x 0..100 at z 500): driven with the
+    /// drawing, 0.30 m edge lines just outside the lanes (inner margin 0.5 m on the left, 2.5 m
+    /// shoulder on the right), one dash between the lanes; driven against it, the same mirrored. A 5 m two-way
+    /// road gets no centre line, a 6 m one does.
+    /// </summary>
+    private static bool PaintFollowsCrossSection()
+    {
+        RoadSegment Seg(RoadClass c, float width, sbyte oneWay, byte lanes) => new()
+        {
+            Class = c, Surface = RoadSurface.Paved, Width = width,
+            Points = [0, 0, 500, 50, 0, 500, 100, 0, 500],
+            Attributes = new RoadAttributes(OneWay: oneWay, LanesForward: lanes),
+        };
+        // drawn east: right of the drawing is south, +z
+        float[] Offsets(RoadSegment seg)
+        {
+            var paint = new List<RoadPaint>();
+            Meshing.PaintEmitter.Emit(seg, 0, paint);
+            return paint.Select(p => p.Vertices[2] - 500).Distinct().OrderBy(z => z).ToArray();
+        }
+        static bool Near(float[] a, params float[] b) =>
+            a.Length == b.Length && a.Zip(b).All(x => Math.Abs(x.First - x.Second) < 1e-3f);
+
+        float w = RoadCrossSection.OneWayWidth(RoadClass.Motorway, 2);
+        return Near(Offsets(Seg(RoadClass.Motorway, w, 1, 2)), -4.9f, -1f, 2.9f)
+            && Near(Offsets(Seg(RoadClass.Motorway, w, -1, 2)), -2.9f, 1f, 4.9f)
+            && Offsets(Seg(RoadClass.Road, 5, 0, 0)).Length == 0
+            && Near(Offsets(Seg(RoadClass.Road, 6, 0, 0)), 0f);
     }
 
     /// <summary>
