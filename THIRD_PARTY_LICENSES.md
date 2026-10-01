@@ -1,7 +1,6 @@
 # Third-party licenses and attribution
 
-UnitSportSwitzerland's own code has **no license file yet** (see the *Licenses* section of
-[README.md](README.md)). Everything below is third-party and keeps its own terms.
+UnitSportSwitzerland's own code is MIT licensed, see [LICENSE](LICENSE). Everything below is third-party and keeps its own terms.
 
 The repository ships no image, audio, font or 3D-model assets: the world, avatars, vehicles and
 sounds are generated in code and shaders. What does ship is software, two small derived data

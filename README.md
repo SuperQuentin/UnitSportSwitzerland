@@ -524,9 +524,8 @@ changing the formats, the shaders, or anything that has to line up with the terr
 
 ## Licenses
 
-- **This project's code** has no license file yet, so by default all rights are reserved by its
-  authors. A `LICENSE` will be added once the maintainers pick one; tracked in
-  [#175](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/175).
+- **This project's code and docs** are MIT licensed: see [LICENSE](LICENSE). Third-party software and data
+  keep their own terms, below.
 - **Third-party software** (Godot, .NET, Godot AI addon, Spectre.Console, Microsoft.Data.Sqlite) is MIT
   licensed. Details and the MIT text are in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md); the
   addon's own license is [`addons/godot_ai/LICENSE`](addons/godot_ai/LICENSE).
