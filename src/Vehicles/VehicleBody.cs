@@ -224,7 +224,10 @@ public partial class VehicleBody : CharacterBody3D
     public VehicleState Capture() => new(Kind, GlobalPosition,
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning, DoorsOpen, _initial.Setup,
-        _initial.Train, _initial.Angles, _initial.Flags, _initial.Load);
+        _initial.Train, _initial.Angles, _initial.Flags, _initial.Load, _initial.Radio);
+
+    /// <summary>The live station its radio plays, as the driver left it (spawn data only: nobody tunes a parked car).</summary>
+    public int Radio => _initial.Radio;
 
     /// <summary>A lone trailer standing here, waiting for a truck; null for anything else.</summary>
     public ParkedTrailer? Trailer => Ride as ParkedTrailer;

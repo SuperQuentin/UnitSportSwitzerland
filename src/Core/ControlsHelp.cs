@@ -63,6 +63,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Look behind", PlayerInput.LookBehind),
             new("Engine on / off", PlayerInput.EngineToggle),
             new("Car: headlights / pop-ups", PlayerInput.LightsToggle),
+            new("Car radio: next station", PlayerInput.RadioNext),
+            new("Car radio: previous station", PlayerInput.RadioPrev),
             new("Car: fold the soft top", PlayerInput.RoofToggle),
             new("Get out", PlayerInput.InteractMount),
         }),

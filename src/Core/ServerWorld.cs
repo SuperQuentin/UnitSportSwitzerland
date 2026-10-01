@@ -105,6 +105,8 @@ public partial class ServerWorld : Node3D
         _radios.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
         Net.ClockSync.Create(this);
+        // live stations in cars: tuned here once each, relayed to whoever listens (#179)
+        Audio.Live.WebRadio.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
         AddChild(new World.AfricaTwinEgg(_chunks));
 
