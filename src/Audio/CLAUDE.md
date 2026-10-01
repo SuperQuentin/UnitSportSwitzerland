@@ -8,4 +8,4 @@ touches its topic; search with `grep -ril <word> docs/notes/audio`.
 ## Architecture
 
 - `audio` — Audio: (`src/Audio/`, all synthesised, no audio files; every player routes to the `Sfx` bus that `SfxBus.Ensure()`...
-- `cd-beat` — CDs (`Audio/Cd/`): burnt on the server from a YouTube link (yt-dlp + ffmpeg, worker thread), C# beat/style analyser, `--beatcheck`, streamed as `AssetKind.Cd`
+- `cd-beat` — CDs (`Audio/Cd/`): burnt on the server from a YouTube link (yt-dlp + ffmpeg, worker thread), C# beat/style analyser, `--beatcheck`, streamed as `AssetKind.Cd`; personal CDs (negative ids, burnt on the client, `user://cds/personal`)

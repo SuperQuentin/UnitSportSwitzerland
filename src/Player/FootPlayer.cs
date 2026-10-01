@@ -141,6 +141,12 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     [Export] public int HeldItemId { get; set; }
 
+    /// <summary>
+    /// The CD a radio in the hand plays (<c>Items.RadioPlay</c>), empty when silent; written by
+    /// the owner from the stack's data. Replicated so everyone near hears it (#168).
+    /// </summary>
+    [Export] public string HeldRadio { get; set; } = "";
+
     // --- pose, replicated (see _Ready) ---
     // Everything a remote copy draws comes from these three, written by the owner every frame.
     // Before them a remote peer rebuilt the pose from the transform stream alone, so it never saw a
@@ -895,6 +901,7 @@ public partial class FootPlayer : CharacterBody3D
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
         replication.AddProperty(".:DanceId");
+        replication.AddProperty(".:HeldRadio");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -903,7 +910,7 @@ public partial class FootPlayer : CharacterBody3D
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId", ".:HeldRadio" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;

@@ -15,6 +15,13 @@ namespace UnitSport.Audio.Cd;
 /// shows. Burning is one at a time and rate-limited per player, because each burn runs two
 /// external tools on the server's CPU for a while.
 /// </para>
+///
+/// <para>
+/// A player can also keep CDs of their own (#168): burnt on their machine with the same
+/// <see cref="CdBurner"/>, kept under <c>user://cds/personal</c>, listed only for them. They have
+/// negative random ids so they never collide with the server's or another player's; a radio
+/// playing one is heard by its owner only, since nobody else has the file.
+/// </para>
 /// </summary>
 public partial class CdLibrary : Node
 {
@@ -23,6 +30,9 @@ public partial class CdLibrary : Node
     /// <summary>The CD folder on this machine, absolute.</summary>
     public static string Directory => ProjectSettings.GlobalizePath("user://cds");
 
+    /// <summary>This player's own CDs, on this machine, absolute.</summary>
+    public static string PersonalDirectory => Path.Combine(Directory, "personal");
+
     private const string IndexFile = "library.json";
     private const double BurnCooldown = 60;
 
@@ -30,8 +40,24 @@ public partial class CdLibrary : Node
 
     private readonly Dictionary<int, CdInfo> _all = new();
 
-    /// <summary>Every CD known here, by id.</summary>
+    /// <summary>Every shared CD known here, by id.</summary>
     public IReadOnlyDictionary<int, CdInfo> All => _all;
+
+    private readonly Dictionary<int, CdInfo> _personal = new();
+
+    /// <summary>This player's own CDs (negative ids), never sent anywhere.</summary>
+    public IReadOnlyDictionary<int, CdInfo> Personal => _personal;
+
+    /// <summary>A CD by id, shared or personal; null when this peer does not know it.</summary>
+    public CdInfo? Find(int id) => id < 0 ? _personal.GetValueOrDefault(id) : _all.GetValueOrDefault(id);
+
+    /// <summary>The Ogg of one of this player's own CDs, or null.</summary>
+    public string? PersonalPath(int id)
+    {
+        if (!_personal.ContainsKey(id)) return null;
+        string path = Path.Combine(PersonalDirectory, $"{id}.ogg");
+        return File.Exists(path) ? path : null;
+    }
 
     /// <summary>A CD was added (or the whole list arrived).</summary>
     public event Action? Changed;
@@ -47,7 +73,8 @@ public partial class CdLibrary : Node
     private int _nextId = 1;
     private readonly Dictionary<long, double> _lastBurn = new();
     private readonly ConcurrentQueue<(long Peer, string Text)> _status = new();
-    private readonly ConcurrentQueue<(long Peer, CdInfo? Cd)> _done = new();
+    private readonly ConcurrentQueue<(long Peer, CdInfo? Cd, bool Personal)> _done = new();
+    private readonly Queue<string> _fixtures = new();
 
     /// <summary><paramref name="server"/> for the dedicated server's copy, decided up front like <c>Bank</c>.</summary>
     public static CdLibrary Create(Node world, bool server)
@@ -62,6 +89,7 @@ public partial class CdLibrary : Node
     {
         // the server and the offline game own a library; a client's list comes from the server
         Load();
+        if (!_server) LoadPersonal();
         if (_server) Multiplayer.PeerConnected += SendAll;
         BurnFixture();
     }
@@ -80,14 +108,31 @@ public partial class CdLibrary : Node
 
     // ---- client ---------------------------------------------------------------------------------
 
-    /// <summary>Asks for a CD to be burnt from a link. Progress comes back on <see cref="BurnStatus"/>.</summary>
-    public void RequestBurn(string url)
+    /// <summary>
+    /// Asks for a CD to be burnt from a link: for everyone (on the server) or, when
+    /// <paramref name="personal"/>, for this player only, on this machine. Progress comes back on
+    /// <see cref="BurnStatus"/>.
+    /// </summary>
+    public void RequestBurn(string url, bool personal = false)
     {
         url = url.Trim();
         if (url.Length == 0) return;
-        if (!Owns) { RpcId(1, MethodName.RequestBurnRpc, url); return; }
-        Begin(0, url, out string refusal);
+        if (!personal && !Owns) { RpcId(1, MethodName.RequestBurnRpc, url); return; }
+        Begin(0, url, personal, out string refusal);
         if (refusal.Length > 0) BurnStatus?.Invoke(refusal);
+    }
+
+    /// <summary>Forgets one of this player's own CDs and deletes its files.</summary>
+    public void RemovePersonal(int id)
+    {
+        if (!_personal.Remove(id)) return;
+        foreach (string ext in new[] { ".ogg", ".json" })
+        {
+            try { File.Delete(Path.Combine(PersonalDirectory, $"{id}{ext}")); }
+            catch (Exception e) { GD.PushWarning($"[cd] could not delete personal CD {id}: {e.Message}"); }
+        }
+        SaveIndex(PersonalDirectory, _personal);
+        Changed?.Invoke();
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -130,7 +175,7 @@ public partial class CdLibrary : Node
         long sender = Multiplayer.GetRemoteSenderId();
         if (url.Length > 512) { RpcId(sender, MethodName.Status, "That is not a link."); return; }
         if (MayBurn != null && !MayBurn(sender)) { RpcId(sender, MethodName.Status, "You may not burn CDs on this server."); return; }
-        Begin(sender, url, out string refusal);
+        Begin(sender, url, false, out string refusal);
         if (refusal.Length > 0) RpcId(sender, MethodName.Status, refusal);
     }
 
@@ -144,12 +189,12 @@ public partial class CdLibrary : Node
     }
 
     /// <summary>Starts a burn on the worker, or says why not. <paramref name="peer"/> 0 = this process.</summary>
-    private void Begin(long peer, string url, out string refusal)
+    private void Begin(long peer, string url, bool personal, out string refusal)
     {
         refusal = "";
         bool localFile = peer == 0 && File.Exists(url);
         if (!localFile && !AllowedSource(url)) { refusal = "Only YouTube links can be burnt."; return; }
-        if (_burning) { refusal = "Someone is already burning a CD; try again in a minute."; return; }
+        if (_burning) { refusal = personal ? "Already burning a CD; try again when it is done." : "Someone is already burning a CD; try again in a minute."; return; }
         double now = Time.GetTicksMsec() / 1000.0;
         if (peer != 0 && _lastBurn.TryGetValue(peer, out double last) && now - last < BurnCooldown)
         {
@@ -160,17 +205,17 @@ public partial class CdLibrary : Node
 
         _burning = true;
         _lastBurn[peer] = now;
-        int id = _nextId++;
-        var burner = new CdBurner { CdDirectory = Directory };
+        int id = personal ? NewPersonalId() : _nextId++;
+        var burner = new CdBurner { CdDirectory = personal ? PersonalDirectory : Directory };
         var progress = new Progress<string>(text => _status.Enqueue((peer, text)));
-        GD.Print($"[cd] burning CD {id} for peer {peer}: {(localFile ? Path.GetFileName(url) : url)}");
+        GD.Print($"[cd] burning {(personal ? "personal " : "")}CD {id} for peer {peer}: {(localFile ? Path.GetFileName(url) : url)}");
         // The tools run for a while; RPCs must go out from _Process, so the results are queued.
         Task.Run(async () =>
         {
             CdInfo? cd = null;
             try { cd = await burner.BurnAsync(id, url, progress, CancellationToken.None); }
             catch (Exception e) { _status.Enqueue((peer, $"Burn failed: {e.Message}")); }
-            _done.Enqueue((peer, cd));
+            _done.Enqueue((peer, cd, personal));
         });
     }
 
@@ -185,11 +230,25 @@ public partial class CdLibrary : Node
         {
             _burning = false;
             if (d.Cd is not { } cd) continue;
+            if (d.Personal)
+            {
+                _personal[cd.Id] = cd;
+                SaveIndex(PersonalDirectory, _personal);
+                GD.Print($"[cd] personal CD {cd.Id} ready: {cd.Describe()}");
+                BurnStatus?.Invoke($"Burnt for you only: {cd.Title}");
+                Changed?.Invoke();
+                continue;
+            }
             _all[cd.Id] = cd;
             Save();
             GD.Print($"[cd] CD {cd.Id} ready: {cd.Describe()}");
             Changed?.Invoke();
             if (_server && Online) Rpc(MethodName.Added, cd.ToDict());
+        }
+        if (!_burning && _fixtures.TryDequeue(out string? next))
+        {
+            Begin(0, next, false, out string refusal);
+            if (refusal.Length > 0) GD.PushWarning($"[cd] fixture refused: {refusal}");
         }
     }
 
@@ -198,39 +257,67 @@ public partial class CdLibrary : Node
     private void Load()
     {
         if (!Owns) return;
-        try
+        foreach (var cd in LoadIndex(Directory))
         {
-            string path = Path.Combine(Directory, IndexFile);
-            if (!File.Exists(path)) return;
-            var list = System.Text.Json.JsonSerializer.Deserialize<List<CdInfo>>(File.ReadAllText(path),
-                new System.Text.Json.JsonSerializerOptions { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } });
-            foreach (var cd in list ?? new())
-                if (File.Exists(Path.Combine(Directory, $"{cd.Id}.ogg")))
-                {
-                    _all[cd.Id] = cd;
-                    _nextId = Math.Max(_nextId, cd.Id + 1);
-                }
-            GD.Print($"[cd] library: {_all.Count} CD(s) in {Directory}");
+            _all[cd.Id] = cd;
+            _nextId = Math.Max(_nextId, cd.Id + 1);
         }
-        catch (Exception e)
-        {
-            GD.PushWarning($"[cd] could not read the library: {e.Message}");
-        }
+        GD.Print($"[cd] library: {_all.Count} CD(s) in {Directory}");
     }
 
-    private void Save()
+    private void LoadPersonal()
+    {
+        foreach (var cd in LoadIndex(PersonalDirectory))
+            if (cd.Id < 0) _personal[cd.Id] = cd;
+        if (_personal.Count > 0) GD.Print($"[cd] {_personal.Count} personal CD(s) in {PersonalDirectory}");
+    }
+
+    private void Save() => SaveIndex(Directory, _all);
+
+    private static readonly System.Text.Json.JsonSerializerOptions IndexJson = new()
+    {
+        WriteIndented = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
+
+    /// <summary>The CDs listed in a folder's index whose audio is still there.</summary>
+    private static List<CdInfo> LoadIndex(string directory)
     {
         try
         {
-            System.IO.Directory.CreateDirectory(Directory);
-            var list = _all.Values.OrderBy(c => c.Id).ToList();
-            File.WriteAllText(Path.Combine(Directory, IndexFile), System.Text.Json.JsonSerializer.Serialize(list,
-                new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } }));
+            string path = Path.Combine(directory, IndexFile);
+            if (!File.Exists(path)) return new();
+            var list = System.Text.Json.JsonSerializer.Deserialize<List<CdInfo>>(File.ReadAllText(path), IndexJson) ?? new();
+            return list.Where(cd => File.Exists(Path.Combine(directory, $"{cd.Id}.ogg"))).ToList();
         }
         catch (Exception e)
         {
-            GD.PushWarning($"[cd] could not save the library: {e.Message}");
+            GD.PushWarning($"[cd] could not read {directory}: {e.Message}");
+            return new();
         }
+    }
+
+    private static void SaveIndex(string directory, Dictionary<int, CdInfo> cds)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(directory);
+            var list = cds.Values.OrderBy(c => c.Id).ToList();
+            File.WriteAllText(Path.Combine(directory, IndexFile), System.Text.Json.JsonSerializer.Serialize(list, IndexJson));
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[cd] could not save {directory}: {e.Message}");
+        }
+    }
+
+    /// <summary>A negative id nobody else will pick: random, so two players' own CDs never meet.</summary>
+    private int NewPersonalId()
+    {
+        int id;
+        do id = -Random.Shared.Next(1, int.MaxValue);
+        while (_personal.ContainsKey(id));
+        return id;
     }
 
     /// <summary>
@@ -241,13 +328,14 @@ public partial class CdLibrary : Node
     {
         if (!Owns) return;
         var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--cdfixture");
-        if (i < 0 || i + 1 >= args.Length) return;
-        string file = args[i + 1];
-        if (!File.Exists(file)) { GD.PushWarning($"[cd] fixture not found: {file}"); return; }
-        string title = Path.GetFileNameWithoutExtension(file);
-        if (_all.Values.Any(c => c.Title == title)) { GD.Print($"[cd] fixture already burnt: {title}"); return; }
-        Begin(0, file, out string refusal);
-        if (refusal.Length > 0) GD.PushWarning($"[cd] fixture refused: {refusal}");
+        for (int i = 0; i + 1 < args.Length; i++)
+        {
+            if (args[i] != "--cdfixture") continue;
+            string file = args[i + 1];
+            if (!File.Exists(file)) { GD.PushWarning($"[cd] fixture not found: {file}"); continue; }
+            string title = Path.GetFileNameWithoutExtension(file);
+            if (_all.Values.Any(c => c.Title == title)) { GD.Print($"[cd] fixture already burnt: {title}"); continue; }
+            _fixtures.Enqueue(file);   // one at a time, from _Process
+        }
     }
 }

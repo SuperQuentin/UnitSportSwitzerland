@@ -169,6 +169,8 @@ public partial class ItemController : Node
         _wasKnockedOut = player.KnockedOut;
 
         player.HeldItemId = (int)_inventory.HeldId;
+        // a radio plays in the hand too: everyone near hears what the stack's data says (#168)
+        player.HeldRadio = _inventory.HeldId == ItemId.Radio ? _inventory.Held.Data ?? "" : "";
         var visual = player.GetNodeOrNull<HeldItemVisual>("HeldItem");
         if (visual != null) visual.HeldData = _inventory.Held.Data;
 
@@ -387,6 +389,12 @@ public partial class ItemController : Node
 
             case ItemUse.Throw:
             {
+                // Use alone opens the radio's panel in the hand; Aim + Use throws it (#168)
+                if (!PlayerInput.Held(PlayerInput.AimItem) && !_forceAim && slot == _inventory.Selected)
+                {
+                    RadioUi.Instance?.OpenHeld(slot);
+                    break;
+                }
                 if (RadioManager.Instance is not { } radios)
                 {
                     _ui.Toast("Nowhere to throw it.");
@@ -398,7 +406,10 @@ public partial class ItemController : Node
                 float yaw = Mathf.Atan2(-forward.X, -forward.Z);
                 var velocity = forward * 8f + Vector3.Up * 3f + player.Velocity;
                 _inventory.TakeOne(slot);
-                radios.Throw(new RadioState("", 0, origin, yaw, velocity));
+                // what it played in the hand, it plays on where it lands
+                var play = RadioPlay.Decode(stack.Data);
+                radios.Throw(new RadioState("", 0, origin, yaw, velocity,
+                    play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
                 Kick(player);
                 Play(SfxSynth.Whoosh, 0.8f);
                 break;
