@@ -11,6 +11,9 @@ public enum RoomType
     Classroom, Nave, Workshop, Barn, Garage, Lobby, Landing,
     // stored plans hold these as numbers: new types go on the end
     Porch, Belfry,
+    // #213: more variety, basements, banks
+    Laundry, GuestRoom, HomeCinema, Carnotzet, MusicRoom, Shelter, Cellar, Playroom, Study, Pantry,
+    BankHall, Vault,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -97,6 +100,10 @@ public enum FurnitureType
     Bell, Lectern, Cross, Dais,
     // stored plans hold these as numbers: new types go on the end
     GunLocker, Safe,
+    // #213
+    WashingMachine, Dryer, BunkBed, WineRack, Barrel, DrumKit, Piano, Keyboard, GuitarStand,
+    AcousticFoam, CinemaScreen, Armchair, Bookcase, ToyBox, TellerDesk, VaultSafe, WaterTank,
+    IroningBoard, Amplifier,
 }
 
 public sealed class FurniturePlan
@@ -146,7 +153,7 @@ public sealed class EntrancePlan
 public sealed class InteriorLayout
 {
     /// <summary>Bumped whenever the generator changes enough that old plans should be regenerated.</summary>
-    public const int CurrentVersion = 7; // 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 8; // 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
@@ -181,6 +188,11 @@ public sealed class InteriorLayout
     public float EntryWidth { get; set; }
 
     public List<FloorPlan> Floors { get; set; } = new();
+    /// <summary>
+    /// How many of <see cref="Floors"/> are below ground (a cellar): floor <c>i</c> stands at
+    /// <see cref="FloorY"/>(i), and the entrances are on floor <see cref="Below"/>.
+    /// </summary>
+    public int Below { get; set; }
     public List<FurniturePlan> Furniture { get; set; } = new();
     /// <summary>Every way in. Empty on single-door plans, which use the fields above instead.</summary>
     public List<EntrancePlan> Entrances { get; set; } = new();
@@ -188,6 +200,14 @@ public sealed class InteriorLayout
     public bool Matches(Building b, string group) =>
         Version == CurrentVersion && TriangleCount == b.TriangleCount && Group == group
         && Math.Abs(MinY - b.MinY) < 0.01f && Math.Abs(MaxY - b.MaxY) < 0.01f;
+
+    /// <summary>Height of a floor's surface in the interior frame: the ground floor is 0, a cellar below it.</summary>
+    public float FloorY(int floor) => (floor - Below) * StoreyHeight;
+
+    /// <summary>The floor the entrances are on.</summary>
+    public FloorPlan GroundFloor => Floors[Math.Min(Below, Floors.Count - 1)];
+
+    public bool IsBank => Type == BuildingType.Bank;
 
     /// <summary>The kind its facade is dressed as (BuildingMeshBuilder.KindOf): a church as a church.</summary>
     public BuildingKind DressedKind() => Type == BuildingType.Church ? BuildingKind.Sacral : Kind;
@@ -219,7 +239,7 @@ public sealed class InteriorLayout
         (float Width, float Top) best = (e.Width, 2.1f);
         float bestD = float.MaxValue;
         if (Floors.Count == 0) return best;
-        foreach (var r in Floors[0].Rooms)
+        foreach (var r in GroundFloor.Rooms)
             foreach (var o in r.Openings)
             {
                 if (o.Kind != OpeningKind.Entry) continue;

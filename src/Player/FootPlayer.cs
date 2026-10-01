@@ -1288,6 +1288,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 return;
             }
 
+            // thrown from a crash (#214): limp, and the crash camera on the body
+            if (TickRagdoll(dt))
+            {
+                UpdateCrashCamera(dt);
+                return;
+            }
+
             // published whatever the view: first person draws no body, but everyone else does
             PublishFootPose(dt);
             StepThrowView(dt);
@@ -1317,6 +1324,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 ApplyFootPose();
                 UpdateThirdPersonCamera(dt);
             }
+            BlendOutCrashCamera(dt);
             return;
         }
 
@@ -1364,8 +1372,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (dt <= 0) return;
         var kind = (RideKind)RideKindId;
+        // thrown from a crash (#214): this peer's own ragdoll, started and stopped by the owner's pose
+        bool limp = TickRagdoll(dt);
         if (kind == RideKind.OnFoot)
         {
+            if (limp) { SetRemoteEngine(null); return; }
             if (Anim.Y != _seenPhase) _stridePhase = _seenPhase = Anim.Y;
             else if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, Anim.X, dt);
             ApplyFootPose();
@@ -1378,7 +1389,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         AlignHull();
         _remoteRide?.AnimateRemote(_visual, Anim, dt);
         AnimateRemoteSections(dt);
-        if (_visual is Avatar.CarRig rig) { rig.DoorsOpen = DoorsOpen; rig.DriverShown = SeatIndex == 0; }
+        if (_visual is Avatar.CarRig rig)
+        {
+            rig.DoorsOpen = DoorsOpen;
+            rig.DriverShown = SeatIndex == 0;
+            // where the driver sits, in case the next update throws them through the windscreen
+            _seenSeat = rig.DriverSeat;
+            _seenSeatFrame = GlobalTransform * _visual.Transform * rig.DriverFrame;
+            _seenSeatAt = Time.GetTicksMsec() / 1000.0;
+        }
         else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
         SetRemoteEngine(_remoteRide as Flyer);
     }
@@ -1754,7 +1773,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool SetRide(RideKind kind)
     {
         if (kind == (RideKind)RideKindId) return true;
-        if (!IsOnFloor() || _sliding || Indoors) return false;
+        if (!IsOnFloor() || _sliding || Indoors || Ragdolled) return false;
 
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
         float limit = _ride?.DismountSpeed ?? RunSpeed + 0.5f;
@@ -1781,6 +1800,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public bool TryInteract()
     {
+        // limp after a crash: nothing to do, and no picker either
+        if (Ragdolled) return true;
         if (RidingWith != 0) return TryLeaveSeat();
         if (_ride is { IsVehicle: true })
         {
@@ -2131,6 +2152,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void Revive()
     {
+        // knocked out while still tumbling from a crash (#214): up at the safe spot, not lying there
+        if (Ragdolled) { EndRagdoll(); _stunTimer = 0.3f; }
         Health = MaxHealth;
         if (HasSafeHere) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
         Velocity = Vector3.Zero;
@@ -2150,6 +2173,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _mantleForward = shift.Direction(_mantleForward);
         _camFwd = shift.Direction(_camFwd);
         Velocity = shift.Direction(Velocity);
+        ShiftCrash(shift);
     }
 
     private void RememberSafe(Vector3 at)
@@ -2223,6 +2247,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
+        // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
+        if (kind != RideKind.OnFoot) EndRagdoll();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
         if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
@@ -2423,6 +2449,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         TickHealth(dt, onFloor);
+
+        // limp after a crash (#214): the body goes where its hips are, so the replicated position follows the ragdoll
+        if (_ragdoll != null)
+        {
+            Velocity = Vector3.Zero;
+            GlobalPosition = _ragdoll.Pelvis;
+            return;
+        }
 
         // PlayerInput returns neutral while a text field has the keyboard, so typing in chat
         // does not walk the player around.
@@ -3184,6 +3218,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float achieved = new Vector2(real.X, real.Z).Length();
         _shortfall = Mathf.Lerp(_shortfall, Mathf.Max(0f, _motion.Speed - achieved), 1f - Mathf.Exp(-ImpactResponse * dt));
         _realSpeed = _motion.Speed - _shortfall;
+        // The settle after mounting is time, not contact: counted only while touching something,
+        // it swallowed the first second of the first real crash, and nobody was ever thrown (#214).
+        if (_settle > 0f) _settle -= dt;
         if (_realSpeed < _motion.Speed - ImpactTolerance)
         {
             float before = _motion.Speed;
@@ -3192,19 +3229,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             PlayerInput.Rumble(0.4f, Mathf.Clamp((before - _motion.Speed) * 0.6f, 0f, 1f), 0.12f);
             Impacted?.Invoke(before - _motion.Speed);
 
-            // A wall taken at speed throws the rider over the bars; the bike stays where it hit.
-            if (_settle > 0f) _settle -= dt;
-            else if (_ride is { IsVehicle: true } && before - _realSpeed > 9f)
+            // A wall taken at speed throws the rider over the bars, or through the windscreen
+            // (#214, FootPlayer.Crash.cs); the machine stays where it hit. A shortfall that
+            // persists (the smoothed one, so a bump is not a wall) and a big one right now: the
+            // smoothed figure alone, with the decel cap above, only just reached 9 m/s in a
+            // 56 km/h head-on hit, and whether it did came down to frame timing.
+            float stopped = _motion.Speed - achieved;
+            if (_settle <= 0f && _ride is { IsVehicle: true } && _shortfall > 3f && stopped > ThrowSpeed)
             {
-                float hit = before;
-                var fwd = -GlobalTransform.Basis.Z with { Y = 0 };
-                var state = CaptureVehicle(wrecked: false) with { Velocity = Vector3.Zero };
-                Vehicles?.Park(state);
-                Announced?.Invoke("THROWN OFF!", false);
-                ApplyRide(RideKind.OnFoot, fwd.Normalized() * hit * 0.25f + Vector3.Up * 4f);
-                GlobalPosition += Vector3.Up * 1.2f;
-                _stunTimer = 1.2f;
-                TakeDamage((hit - 8f) * 3f);
+                ThrowFromVehicle(before);
                 return;
             }
         }

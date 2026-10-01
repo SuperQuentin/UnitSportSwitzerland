@@ -346,13 +346,8 @@ public sealed class GameSettings
                     };
                     break;
                 case "--style":
-                    VisualStyle = v.ToLowerInvariant() switch
-                    {
-                        "cartoon" => Styles.VisualStyle.Cartoon,
-                        "real-" or "realistic-" => Styles.VisualStyle.RealisticLow,
-                        "real+" or "realistic+" => Styles.VisualStyle.RealisticHigh,
-                        _ => Styles.VisualStyle.Ps1,
-                    };
+                    Styles.StyleKit.TryParse(v, out var style);
+                    VisualStyle = style;
                     break;
                 // a fixed time of day, for screenshots: --time 21.5 is half past nine at night
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):

@@ -251,7 +251,7 @@ public partial class LockSyncProbe : Node
         foreach (float offset in new[] { 0.3f, 0.15f, 0f, 0.45f })
         {
             var side = turn * new Vector3(sign * offset, 0, 0);
-            me.EnterInterior(layout.Key, node.GlobalTransform * (new Vector3(f.X, f.Floor * layout.StoreyHeight + 0.1f, f.Z) + front + side), Mathf.Atan2(-face.X, -face.Z));
+            me.EnterInterior(layout.Key, node.GlobalTransform * (new Vector3(f.X, layout.FloorY(f.Floor) + 0.1f, f.Z) + front + side), Mathf.Atan2(-face.X, -face.Z));
             me.Velocity = Vector3.Zero;
             await Seconds(0.8);
             if (InteriorManager.Instance?.Current?.Key == layout.Key && LootService.NearestContainer(me, layout, node) == index) return true;

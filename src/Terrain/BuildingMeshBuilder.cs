@@ -39,7 +39,9 @@ public static class BuildingMeshBuilder
     /// after the facades, with no windows (uv.y &lt; 0), so a tile's buildings and all their doors
     /// stay one surface and one draw call.
     /// </summary>
-    public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors)
+    /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors,
+        Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
         var data = Build(tile);
         if (data == null || doors == null || doors.Length == 0) return data;

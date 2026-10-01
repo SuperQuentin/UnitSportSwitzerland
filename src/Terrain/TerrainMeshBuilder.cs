@@ -32,8 +32,9 @@ public static class TerrainMeshBuilder
     /// road-blended version can be made by <see cref="PatchSurface"/> — moving the few vertices
     /// under road corridors — instead of rebuilding a million vertices a second time.
     /// </summary>
+    /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
     public static MeshData BuildSurfaceCore(ChunkGrid grid, int stride, IReadOnlySet<int>? holes = null,
-        byte[]? cover = null, float[]? blendedHeights = null)
+        byte[]? cover = null, float[]? blendedHeights = null, Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
         int last = ChunkFormat.GridSize - 1;      // 1000
         if (last % stride != 0)

@@ -270,7 +270,9 @@ public partial class ChunkNode : Node3D
     /// computed: assigning a buffer makes the RenderingServer walk every instance for an AABB,
     /// 16 ms for a 60k-tree tile on the main thread, unless a custom one is already set.
     /// </summary>
-    public static TreeMeshes BuildTreeMeshes(TreeBuffers trees, Material material, Aabb bounds)
+    /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    public static TreeMeshes BuildTreeMeshes(TreeBuffers trees, Material material, Aabb bounds,
+        Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
         var conifers = Make(trees.Conifers, trees.ConiferCount, ConeMesh(material), bounds);
         var broadleaves = Make(trees.Broadleaves, trees.BroadleafCount, CrownMesh(material), bounds);
