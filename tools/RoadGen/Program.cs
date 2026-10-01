@@ -27,15 +27,25 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
               --chunks DIR       where the .road files are, default terrain_chunks
               --divided-scale F  width multiplier for direction-separated lines (default 1.0)
 
-          --rewrite             trim + junction existing .road tiles IN PLACE (format v2)
+          --rewrite             the road network stage: raw extractor output -> .road v3 tiles
+                                 (TerrainPreprocessor runs it itself after the road stage)
               --chunks DIR       default terrain_chunks;  --tiles limits which
+              --temp DIR         where roads_raw/ and osm_overlay.tsv live, default <chunks>_temp
               --tiles-file FILE  same, one "E-N" per line (for lists too long for a command line)
-              --skip-rewritten   leave tiles that already carry junctions alone instead of refusing
+              --skip-rewritten   leave rewritten tiles with no raw input alone instead of refusing
               --no-smooth        junctions only, leave centrelines alone
               --dry-run          measure without writing
-              --force            rewrite even if the tiles already carry junctions
+              --force            rewrite even rewritten tiles with no raw input (trims twice)
               --measure          also compute the overlap comparison (slow)
               --no-audit         skip the height audit against the terrain
+              --no-shift         keep motorway carriageways on TLM's lines (median "before")
+
+          --format-check        .road v1/v2/v3 codec self-check (round trips, unknown sections)
+          --plan-check          width/lanes/one-way/motorway-offset self-check (synthetic lines)
+          --priority-check      junction priority self-check: main road, Wartelinie, signs (#121)
+          --compare-v2 V2DIR --chunks V3DIR
+                                 v3 tiles against a v2 build of the same region: same geometry,
+                                 one-way agreement with the runtime inference, bytes per tile
 
           --out DIR             output directory, default roadgen_out
           --no-baseline         skip the untrimmed/unsmoothed comparison pass
@@ -79,24 +89,32 @@ else if (args.Contains("--synth"))
         () => TownGenerator.Generate(bounds, new TownGenerator.TownOptions(Seed: seed, Height: terrain)).Network,
         terrain);
 }
+else if (args.Contains("--format-check"))
+{
+    return FormatCheck.Run(Console.WriteLine) ? 0 : 2;
+}
+else if (args.Contains("--plan-check"))
+{
+    return UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.SelfCheck(Console.WriteLine) ? 0 : 2;
+}
+else if (args.Contains("--priority-check"))
+{
+    return UnitSport.Tools.RoadGen.Junctions.PriorityPlanner.SelfCheck(Console.WriteLine) ? 0 : 2;
+}
+else if (ArgValue("--compare-v2") is { } v2Dir)
+{
+    return V2Compare.Run(v2Dir, ArgValue("--chunks") ?? "terrain_chunks", Console.WriteLine);
+}
 else if (args.Contains("--rewrite"))
 {
     string chunks = ArgValue("--chunks") ?? "terrain_chunks";
+    string temp = ArgValue("--temp") ?? RawRoads.DefaultTempDir(chunks);
     double dividedScale = double.Parse(ArgValue("--divided-scale") ?? "1.0", CultureInfo.InvariantCulture);
     bool dryRun = args.Contains("--dry-run");
+    UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.ShiftCarriageways = !args.Contains("--no-shift");
 
     var ids = ArgValue("--tiles-file") is { } file ? ReadTilesFile(file)
-        : ArgValue("--tiles") is { } spec ? ParseTiles(spec) : DiscoverTiles(chunks);
-    if (args.Contains("--skip-rewritten"))
-    {
-        // tools/MapSetup re-runs over a selection that may overlap an earlier one: only the fresh
-        // tiles (a .road, no junctions yet) are safe to rewrite, and a tile with no roads has none
-        int before = ids.Count;
-        ids = ids.Where(id => File.Exists(Path.Combine(chunks, RoadFormat.FileName(id)))
-                              && !TileRewriter.HasJunctions(chunks, id)).ToList();
-        Console.WriteLine($"--skip-rewritten: {ids.Count} of {before} tiles are fresh");
-        if (ids.Count == 0) return 0;
-    }
+        : ArgValue("--tiles") is { } spec ? ParseTiles(spec) : DiscoverTiles(chunks, RawRoads.DirFor(temp));
     if (ids.Count == 0)
     {
         Console.Error.WriteLine($"no .road files found in '{chunks}'");
@@ -117,7 +135,10 @@ else if (args.Contains("--rewrite"))
         DryRun: dryRun,
         Force: args.Contains("--force"),
         Measure: args.Contains("--measure"),
-        AuditHeights: !args.Contains("--no-audit")), Console.WriteLine);
+        AuditHeights: !args.Contains("--no-audit"),
+        RawDir: RawRoads.DirFor(temp),
+        OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"),
+        SkipRewritten: args.Contains("--skip-rewritten")), Console.WriteLine);
     }
     catch (TileRewriter.AlreadyRewrittenException e)
     {
@@ -135,9 +156,15 @@ else if (args.Contains("--rewrite"))
             ? 0 : 100.0 * (1 - stats.OverlapAfter / stats.OverlapBefore);
         Console.WriteLine($"overlap {stats.OverlapBefore:N0} m² -> {stats.OverlapAfter:N0} m² "
                           + $"({removed:F1}% removed)");
+        foreach (var (pair, area) in stats.Network.OverlapPairs.OrderByDescending(kv => kv.Value).Take(8))
+            Console.WriteLine($"  overlap {pair,-22} {area,10:N0} m²");
     }
 
+    Console.WriteLine(stats.Network.Format(stats.TilesWritten));
     Console.WriteLine(stats.Heights.Format());
+    if (stats.Network.Shifted is { Samples: > 0 } sh)
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"  shifted carriageways: terrain under the shifted line vs under TLM's ({sh.Samples:N0} samples): mean {sh.MeanDelta:F2} m, p99 {sh.P99Delta:F2} m, worst {sh.WorstDelta:F2} m at {sh.WorstWhere}"));
     if (stats.VerticesReverted > 0)
         Console.WriteLine($"    {stats.VerticesReverted:N0} vertices put back on the surveyed line (cliff guard)");
     Console.WriteLine($"{stopwatch.Elapsed.TotalSeconds:F1} s");
@@ -224,18 +251,18 @@ string? ArgValue(string flag)
     return args[i + 1].StartsWith("--") ? null : args[i + 1];
 }
 
-static List<TileId> DiscoverTiles(string chunkDir)
+// every tile with a .road in the chunk dir or the raw dir, sorted so the order never depends on the file system
+static List<TileId> DiscoverTiles(params string[] dirs)
 {
-    var ids = new List<TileId>();
-    if (!Directory.Exists(chunkDir)) return ids;
-
-    foreach (string path in Directory.EnumerateFiles(chunkDir, "roads_*.road"))
-    {
-        var bits = Path.GetFileNameWithoutExtension(path).Split('_');
-        if (bits.Length == 3 && int.TryParse(bits[1], out int e) && int.TryParse(bits[2], out int n))
-            ids.Add(new TileId(e, n));
-    }
-    return ids;
+    var ids = new SortedSet<(int, int)>();
+    foreach (string dir in dirs.Where(Directory.Exists))
+        foreach (string path in Directory.EnumerateFiles(dir, "roads_*.road"))
+        {
+            var bits = Path.GetFileNameWithoutExtension(path).Split('_');
+            if (bits.Length == 3 && int.TryParse(bits[1], out int e) && int.TryParse(bits[2], out int n))
+                ids.Add((e, n));
+        }
+    return ids.Select(t => new TileId(t.Item1, t.Item2)).ToList();
 }
 
 static List<TileId> ReadTilesFile(string path)

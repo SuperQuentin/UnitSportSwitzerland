@@ -35,6 +35,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private ClientTerrainSync? _terrainSync;
     private WorldOrigin? _worldOrigin;
     private ShaderMaterial[] _worldMaterials = Array.Empty<ShaderMaterial>();
+    private WorldEnvironment? _worldEnvironment;
+    private World.DayNight? _dayNight;
+    private DirectionalLight3D? _sun;
 
     /// <summary>The session this world is built for: the title screen's choice, or the command line's.</summary>
     public WorldLaunch Launch { get; init; } = WorldLaunch.FromArgs();
@@ -138,7 +141,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         if (ChatCheck.Requested)
         {
-            GetTree().Quit(ChatCheck.Run());
+            GetTree().Quit(ChatCheck.Run(this));
             return;
         }
         if (StyleKit.ReportRequested)
@@ -153,6 +156,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // idempotent: the shell, which owns the window settings, has usually installed it already
         PlayerInput.Install(GetParent());
+        if (Player.WheelProbe.CheckRequested)
+        {
+            GetTree().Quit(Player.WheelProbe.Check());
+            return;
+        }
 
         // a hand-made street to show the door portals: no terrain, no server
         if (Interiors.PortalDemo.ParseArgs() is { Requested: true } portalDemo)
@@ -197,7 +205,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 + "with tools/TerrainPreprocessor, or join a server and it will stream in. "
                 + "See the README.");
 
-        GD.Print($"[style] {StyleKit.Style}");
+        // the style chosen since the last world, if it changed at the title screen
+        StyleKit.Restyle();
+        GD.Print($"[style] {StyleKit.Applied}");
         var material = StyleKit.Material(MaterialRole.Terrain);
         var roadMaterial = StyleKit.Material(MaterialRole.Road);
         var buildingMaterial = StyleKit.Material(MaterialRole.Building);
@@ -214,6 +224,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
         // a named handler, unsubscribed in _ExitTree: the event is static and outlives this world
         GameSettings.Changed += OnSettingsChanged;
+        StyleCommand.RebuildRequested += OnRebuildRequested;
+        StyleKit.Chosen += OnStyleChosen;
 
         // The streamer exists even offline. Its fetches short-circuit to null with no peer, so
         // single player is unaffected — but the on-disk cache is still consulted, which means
@@ -279,6 +291,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // server's; the clock the CDs run on (offline: this machine's own).
         var radios = Items.RadioManager.Create(this);
         radios.PlayerPositions = vehicles.PlayerPositions;
+        // items dropped and thrown on the ground (#206)
+        Items.DroppedItems.Create(this).PlayerPositions = vehicles.PlayerPositions;
+        var chunksForDrops = _chunks;
+        Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetHeight(p, out float y) ? y : null;
         // every body that may hold a radio that plays (#168): the remote players and this one
         radios.Players = () =>
         {
@@ -317,18 +333,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             vehicles.Visible = shown;
         };
 
-        var environment = new Godot.Environment
-        {
-            BackgroundMode = Godot.Environment.BGMode.Color,
-            BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
-        };
-        AddChild(new WorldEnvironment { Environment = environment });
+        var environment = StyleKit.NewEnvironment();
+        _worldEnvironment = new WorldEnvironment { Environment = environment };
+        AddChild(_worldEnvironment);
 
         // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
         // word online. Before the clock, which reads its sun and sky from it.
         Occasions.OccasionManager.Create(this);
         // their props, dressed onto each tile as its buildings load
         AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
+        // a sign over every bank door (#213)
+        AddChild(new Interiors.BankSigns(_chunks));
         // …the creatures in the air around the camera, and their sounds
         AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
         AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
@@ -337,10 +352,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // the clock: sun, light colour, sky and night for every shader and the environment
         var chunksForSky = _chunks;
-        AddChild(new World.DayNight(environment)
+        _dayNight = new World.DayNight(environment)
         {
             GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
-        });
+        };
+        AddChild(_dayNight);
+        ApplySun();
 
         // cars on the roads and trains on the railway, around wherever the view is
         _traffic = new World.Traffic(_chunks, origin)
@@ -361,7 +378,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _chunks.AddAnchor(tcam);
             var (tE, tN) = SpawnPoint.ParseTarget();
             tcam.Position = origin.ToWorld(tE, tN, 600);
-            AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot));
+            AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot)
+                { Origin = origin });
         }
 
         // Start somewhere with something to look at, not at the world origin — after a
@@ -383,6 +401,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Combat.CombatProbe.ParseArgs().Requested
             || Birds.BirdStrikeProbe.ParseArgs().Requested
             || SyncProbe.Requested() || HitboxProbe.Requested();
+        // --wheelwatch spawns normally, but must not grab the pointer either
+        MouseCapture.Disabled |= Player.WheelProbe.WatchRole != null;
         // a check running in a window must leave the pointer to whoever is using the machine
         MouseCapture.Disabled |= placedByTool;
 
@@ -425,15 +445,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(_garage);
         if (Player.GarageProbe.ParseArgs() is { } garageRole) AddChild(new Player.GarageProbe(garageRole, () => LocalPlayer));
         if (Player.HeavyNetProbe.ParseArgs() is { } heavyRole) AddChild(new Player.HeavyNetProbe(heavyRole, () => LocalPlayer));
+        if (Player.CrashNetProbe.ParseArgs() is { } crashRole) AddChild(new Player.CrashNetProbe(crashRole, () => LocalPlayer));
         if (Player.PassengerProbe.ParseArgs() is { } passengerRole) AddChild(new Player.PassengerProbe(passengerRole, () => LocalPlayer));
         if (Player.ExitProbe.Requested) AddChild(new Player.ExitProbe(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
-            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null
-            || Items.PlacedProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
-            || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null
+            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
@@ -449,11 +470,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
+        if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
+        if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
+        if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
         if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));
         if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
+            && Items.DropCheck.Requested && Items.DropCheck.Create(() => LocalPlayer, () => _players, items) is { } soloDrop)
+            AddChild(soloDrop);
         Vehicles.VehicleManager.Refused += Toast;
         Vehicles.PassengerService.Said += Toast;
 
@@ -463,6 +490,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chat = ChatManager.CreateClient();
         _chat.Teleporter = _teleporter;
         _chat.Inventory = inventory;
+        _chat.GiveOrDrop = items.Give;
         _chat.PlaceSearch = _places;
         AddChild(_chat);
         _chatUi = ChatUi.Create(_chat, new ChatCompleter
@@ -492,13 +520,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
         loot.Items = items;
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
+        _radioUi.Give = items.Give;
         AddChild(_radioUi);
+        if (Items.CarCdCheck.Create(() => LocalPlayer, () => _players, items.Inventory, networked: false) is { } carCdShots) AddChild(carCdShots);
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);
         // birds around the player, from the real land cover; the shotgun hunts them (J: journal)
         var birds = new Birds.BirdLife(_chunks, origin, items);
         AddChild(birds);
+        // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
+        Birds.BirdNet.Create(this, birds, server: false);
 
         // occasions: the treat / gift hunt (taken with the gather hold) and the seasonal hat
         AddChild(new Occasions.OccasionHunt());
@@ -756,6 +788,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Input.MouseMode = Input.MouseModeEnum.Visible;
             var runner = ShotRunner.ForQueue(_spectator, queue, _worldOrigin);
             runner.GroundHeight = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
+            runner.RunCommand = line => _chat?.Send(line);
             AddChild(runner);
         }
     }
@@ -890,10 +923,49 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private void OnSettingsChanged()
     {
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
+        // before the terrain takes the settings: its rings and mesh detail are the style's
+        if (StyleKit.Restyle()) ApplyStyle();
         _chunks?.ApplySettings(GameSettings.Current);
         _chunks?.SetFallbackEnabled(GameSettings.Current.GeneratedFill);
         if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume);
         SetCameraFar(GameSettings.Current.CameraFar);
+    }
+
+    /// <summary>
+    /// The rest of the world after <see cref="StyleKit.Restyle"/> moved every material over: the
+    /// style's environment and sun. The terrain's rings and mesh detail follow in
+    /// <see cref="ChunkManager.ApplySettings"/>, which rebuilds the tiles in place when the detail
+    /// changed. The network session, the player and physics are untouched.
+    /// </summary>
+    private void ApplyStyle()
+    {
+        GD.Print($"[style] {StyleKit.Applied}");
+        if (_worldEnvironment != null)
+        {
+            var environment = StyleKit.NewEnvironment();
+            _worldEnvironment.Environment = environment;
+            _dayNight?.SetEnvironment(environment);
+        }
+        ApplySun();
+    }
+
+    /// <summary>The style's sun, or none: made here, pointed by <see cref="World.DayNight"/>.</summary>
+    private void ApplySun()
+    {
+        _sun?.QueueFree();
+        _sun = StyleKit.NewSun();
+        if (_sun != null) AddChild(_sun);
+        if (_dayNight != null) _dayNight.Sun = _sun;
+    }
+
+    private void OnRebuildRequested() => _chunks?.RebuildVisuals();
+
+    /// <summary><c>/style</c> picked a style for this session.</summary>
+    private void OnStyleChosen()
+    {
+        if (!StyleKit.Restyle()) return;
+        ApplyStyle();
+        _chunks?.ApplySettings(GameSettings.Current);
     }
 
     private void Toast(string message) => _items?.Ui.Toast(message);
@@ -905,6 +977,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     public override void _ExitTree()
     {
         GameSettings.Changed -= OnSettingsChanged;
+        StyleCommand.RebuildRequested -= OnRebuildRequested;
+        StyleKit.Chosen -= OnStyleChosen;
         Vehicles.VehicleManager.Refused -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         if (_networked)
@@ -1017,6 +1091,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(race);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
         if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
+        if (_items != null && Items.CarCdCheck.Create(() => LocalPlayer, () => _players, _items.Inventory, networked: true) is { } carCdCheck) AddChild(carCdCheck);
+        if (Items.DropCheck.Create(() => LocalPlayer, () => _players, _items) is { } dropCheck) AddChild(dropCheck);
         if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: true) is { } webRadioCheck) AddChild(webRadioCheck);
 
         _chat!.Kicked += OnKicked;
@@ -1063,6 +1139,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(PlayerReplication.CreateSpawner());
         AddChild(World.RaceNpcs.CreateClient());   // World/Npcs: the path its RPC routes by
         if (NetSmoothProbe.ParseArgs() is { } smooth) AddChild(new NetSmoothProbe(_players, smooth.Seconds, smooth.Label));
+        if (WallOffProbe.ParseArgs() is { } wallOff) AddChild(new WallOffProbe(_players, _chunks!, _worldOrigin!, wallOff));
         var net = new NetworkManager { Name = "Net" };
         AddChild(net);
         // Handles bare hosts, host:port, and bracketed IPv6 — a plain colon split breaks on
@@ -1130,8 +1207,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     }
 
     /// <summary>My own networked player node, once the server has spawned it.</summary>
+    // not while the link is down: GetUniqueId on a dead peer logs an error, and this runs every frame (#211)
     private FootPlayer? GetLocalNetPlayer() =>
-        _players?.GetNodeOrNull<FootPlayer>(Multiplayer.GetUniqueId().ToString());
+        Net.NetLink.Ready(this) ? _players?.GetNodeOrNull<FootPlayer>(Multiplayer.GetUniqueId().ToString()) : null;
 
     public override void _UnhandledInput(InputEvent @event)
     {
@@ -1170,6 +1248,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // you: in a vehicle it gets out, beside a parked one it gets in. The picker is R's.
         if (@event.IsActionPressed(PlayerInput.RideMenu))
         {
+            // in a vehicle with a stereo R is the radio's (RadioPanel, same key): never both panels
+            if (LocalPlayer is { StereoOwner: not null }) return;
             _rides?.Open();
             return;
         }
@@ -1214,10 +1294,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         else if (viewer is { } p && IsInstanceValid(p))
         {
+            if (p.RidingAlong && p.StereoOwner != null) yield return (PlayerInput.RadioPanel, "Radio");
             if (p.Vehicle is { IsVehicle: true } vehicle)
             {
                 // the engine and "get out" are on the vehicle readout in the same corner
                 yield return (PlayerInput.CameraToggle, "Camera");
+                if (p.StereoOwner != null) yield return (PlayerInput.RadioPanel, "Radio");
                 if (vehicle is not Flyer && vehicle.CanHop)
                 {
                     yield return (PlayerInput.Trick, "Trick (in the air)");
@@ -1229,9 +1311,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (p.IsOnFloor()) yield return (PlayerInput.RideMenu, $"Take off the {gear.Label.ToLowerInvariant()}");
                 if (gear is not Flyer && gear.CanHop) yield return (PlayerInput.Trick, "Trick (in the air)");
             }
+            else if (Items.ItemController.Instance?.Throw.Active == true)
+            {
+                yield return (PlayerInput.UseItem, Items.ItemController.Instance.Throw.Charging ? "Let go to throw" : "Hold to wind up a throw");
+                yield return (PlayerInput.AimItem, "Release: put it away");
+            }
+            else if (Items.Highlight.Pointed is Items.DroppedItem pointed)
+                yield return (PlayerInput.InteractMount, $"Pick up {pointed.Label}");
             else if (!p.Indoors)
             {
-                if (Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
+                if (Items.Highlight.Pointed is Items.RadioBody || Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
                     yield return (PlayerInput.InteractMount, "Radio");
                 else if (Items.RadioManager.Instance?.NearestPlaying(p.GlobalPosition, Items.RadioManager.DanceRadius) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");

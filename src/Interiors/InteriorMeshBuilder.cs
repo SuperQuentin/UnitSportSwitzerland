@@ -95,6 +95,16 @@ public static class InteriorMeshBuilder
         RoomType.Lobby => (C(0.70f, 0.66f, 0.60f), C(0.86f, 0.84f, 0.80f), C(0.94f, 0.94f, 0.92f)),
         RoomType.Porch => (C(0.58f, 0.56f, 0.52f), C(0.84f, 0.82f, 0.76f), C(0.70f, 0.66f, 0.60f)),
         RoomType.Belfry => (C(0.46f, 0.36f, 0.26f), C(0.70f, 0.67f, 0.61f), C(0.40f, 0.31f, 0.22f)),
+        RoomType.Laundry or RoomType.Cellar or RoomType.Pantry => (Concrete, C(0.80f, 0.80f, 0.77f), C(0.70f, 0.70f, 0.68f)),
+        RoomType.Shelter => (C(0.52f, 0.53f, 0.52f), C(0.66f, 0.67f, 0.66f), C(0.58f, 0.59f, 0.58f)),
+        RoomType.GuestRoom => (C(0.60f, 0.48f, 0.38f), C(0.88f, 0.84f, 0.74f), C(0.94f, 0.93f, 0.90f)),
+        RoomType.HomeCinema => (C(0.30f, 0.14f, 0.14f), C(0.22f, 0.20f, 0.24f), C(0.14f, 0.14f, 0.16f)),
+        RoomType.Carnotzet => (C(0.50f, 0.38f, 0.30f), C(0.80f, 0.74f, 0.62f), C(0.42f, 0.30f, 0.20f)),
+        RoomType.MusicRoom => (C(0.34f, 0.32f, 0.36f), C(0.30f, 0.30f, 0.34f), C(0.26f, 0.26f, 0.30f)),
+        RoomType.Playroom => (C(0.60f, 0.70f, 0.52f), C(0.96f, 0.86f, 0.62f), C(0.95f, 0.95f, 0.92f)),
+        RoomType.Study => (C(0.42f, 0.28f, 0.18f), C(0.70f, 0.78f, 0.70f), C(0.92f, 0.92f, 0.88f)),
+        RoomType.BankHall => (C(0.82f, 0.80f, 0.76f), C(0.84f, 0.82f, 0.74f), C(0.94f, 0.94f, 0.92f)),
+        RoomType.Vault => (C(0.40f, 0.41f, 0.43f), C(0.50f, 0.52f, 0.55f), C(0.44f, 0.45f, 0.47f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -108,7 +118,7 @@ public static class InteriorMeshBuilder
         for (int f = 0; f < l.Floors.Count; f++)
         {
             var floor = l.Floors[f];
-            float y0 = f * h;
+            float y0 = l.FloorY(f);
             var above = HolesOf(f + 1);
             foreach (var room in floor.Rooms)
                 Room(s, room, y0, l.ClearOf(room), floor.Holes, HolesOf(f + room.Span));
@@ -129,7 +139,7 @@ public static class InteriorMeshBuilder
         }
 
         foreach (var p in l.Furniture)
-            Furniture(s, p, p.Floor * h + p.Lift);
+            Furniture(s, p, l.FloorY(p.Floor) + p.Lift);
 
         return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
     }
@@ -273,9 +283,42 @@ public static class InteriorMeshBuilder
                     R(s1, tr + 0.03f, depth - 0.01f), R(s0, tr + 0.03f, depth - 0.01f), frame, false);
             }
             // the front door's leaf is not baked: it swings (DoorLeaf, see Leaf below)
+            if (r.Type == RoomType.Shelter && o.Kind == OpeningKind.Door) BlastDoor(s, side, inner, s0, s1, ob, ot, b);
             cursor = s1;
         }
         Panel(cursor, b, y0, top);
+    }
+
+    private static readonly Color BlastSteel = C(0.36f, 0.40f, 0.36f);
+
+    /// <summary>
+    /// A shelter's door (#213): a thick steel frame round the opening and the armoured leaf, a
+    /// hand's width thick, standing open flat against the wall beside it with its wheel and its
+    /// two lever bolts. Baked: nobody shuts a shelter in peacetime. The generator keeps the strip
+    /// it stands on free of furniture (<c>InteriorGenerator.BlastLeaf</c>).
+    /// </summary>
+    private static void BlastDoor(Scratch s, Side side, RectPlan inner, float s0, float s1, float ob, float ot, float wallEnd)
+    {
+        Vector3 R(float u, float y, float d) => OnWall(side, inner, u, y, d);
+        void Block(float u0, float u1, float y0, float y1, float d0, float d1, Color col, bool collide = true)
+        {
+            var a = R(u0, y0, d0);
+            var b = R(u1, y1, d1);
+            s.Box(new Vector3(Math.Min(a.X, b.X), y0, Math.Min(a.Z, b.Z)), new Vector3(Math.Max(a.X, b.X), y1, Math.Max(a.Z, b.Z)), col, collide);
+        }
+        // the frame, standing proud of the wall into the room
+        Block(s0 - 0.12f, s0, ob, ot + 0.12f, -0.08f, 0, BlastSteel);
+        Block(s1, s1 + 0.12f, ob, ot + 0.12f, -0.08f, 0, BlastSteel);
+        Block(s0 - 0.12f, s1 + 0.12f, ot, ot + 0.12f, -0.08f, 0, BlastSteel);
+        // the leaf, swung open against the wall past the hinge jamb
+        float u0 = s1 + 0.14f, u1 = Math.Min(wallEnd - 0.02f, u0 + (s1 - s0) + 0.1f);
+        if (u1 - u0 < 0.4f) return;
+        Block(u0, u1, ob + 0.02f, ot + 0.08f, -0.2f, -0.02f, (BlastSteel * 0.92f) with { A = 1 });
+        float mid = (u0 + u1) / 2, hy = ob + (ot - ob) * 0.55f;
+        var dark = C(0.16f, 0.17f, 0.16f);
+        Block(mid - 0.18f, mid + 0.18f, hy - 0.18f, hy + 0.18f, -0.25f, -0.2f, dark, false);   // the wheel
+        Block(u1 - 0.18f, u1 - 0.06f, hy + 0.35f, hy + 0.47f, -0.27f, -0.2f, dark, false);     // lever bolts
+        Block(u1 - 0.18f, u1 - 0.06f, hy - 0.47f, hy - 0.35f, -0.27f, -0.2f, dark, false);
     }
 
     /// <summary>Rectangle minus a set of rectangles, as a list of rectangles (guillotine cuts).</summary>
@@ -343,7 +386,7 @@ public static class InteriorMeshBuilder
     public static MeshData LockDoor(FurniturePlan p)
     {
         var s = new Scratch();
-        bool safe = p.Type == FurnitureType.Safe;
+        bool safe = p.Type != FurnitureType.GunLocker;
         var steel = safe ? SafeSteel : LockerSteel;
         float w = p.W, H = p.H, t = safe ? 0.07f : 0.03f;
         void B(float xa, float ya, float za, float xb, float yb, float zb, Color col) =>
@@ -382,7 +425,8 @@ public static class InteriorMeshBuilder
         // one collision box for the whole piece: cheaper than per-part, and what a player hits
         // anyway; hung and wall-mounted pieces are overhead, and the chancel step has its own
         bool solid = p.Type is not (FurnitureType.Rug or FurnitureType.Plant or FurnitureType.Bell
-            or FurnitureType.Cross or FurnitureType.Dais);
+            or FurnitureType.Cross or FurnitureType.Dais or FurnitureType.AcousticFoam or FurnitureType.CinemaScreen
+            or FurnitureType.GuitarStand);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));
 
         var wood = C(0.52f, 0.36f, 0.22f);
@@ -483,9 +527,10 @@ public static class InteriorMeshBuilder
                 break;
             case FurnitureType.GunLocker:
             case FurnitureType.Safe:
+            case FurnitureType.VaultSafe:
             {
                 // an open-fronted steel box: the door is its own node (LockDoor), swung by the loot service
-                bool safe = p.Type == FurnitureType.Safe;
+                bool safe = p.Type != FurnitureType.GunLocker;
                 var steel = safe ? SafeSteel : LockerSteel;
                 var inside = (steel * 0.45f) with { A = 1f };
                 const float t = 0.04f;
@@ -513,7 +558,157 @@ public static class InteriorMeshBuilder
                 }
                 break;
             }
+            case FurnitureType.WashingMachine:
+            case FurnitureType.Dryer:
+            {
+                B(-w, 0, -d, w, H, d, white);
+                B(-w, H - 0.12f, d - 0.01f, w, H - 0.02f, d + 0.01f, C(0.70f, 0.72f, 0.74f));    // control strip
+                float r = Math.Min(w, H * 0.3f) * 0.75f, cy = H * 0.45f;
+                B(-r, cy - r, d - 0.01f, r, cy + r, d + 0.02f, metal);
+                B(-r * 0.7f, cy - r * 0.7f, d + 0.02f, r * 0.7f, cy + r * 0.7f, d + 0.03f,
+                    p.Type == FurnitureType.Dryer ? dark : C(0.40f, 0.56f, 0.70f));               // the porthole
+                break;
+            }
+            case FurnitureType.IroningBoard:
+                B(-w, H - 0.03f, -d, w, H, d, C(0.70f, 0.78f, 0.86f));
+                B(-w * 0.5f, 0, -0.02f, -w * 0.5f + 0.03f, H - 0.03f, 0.02f, metal);
+                B(w * 0.5f - 0.03f, 0, -0.02f, w * 0.5f, H - 0.03f, 0.02f, metal);
+                break;
+            case FurnitureType.BunkBed:
+                foreach (float by in new[] { 0.25f, 1.25f })
+                {
+                    B(-w, by, -d, w, by + 0.06f, d, BlastSteel);
+                    B(-w + 0.03f, by + 0.06f, -d + 0.03f, w - 0.03f, by + 0.2f, d - 0.03f, C(0.42f, 0.46f, 0.34f));   // army blanket
+                }
+                foreach (var (lx, lz) in new[] { (-w, -d), (w - 0.05f, -d), (-w, d - 0.05f), (w - 0.05f, d - 0.05f) })
+                    B(lx, 0, lz, lx + 0.05f, H, lz + 0.05f, BlastSteel);
+                break;
+            case FurnitureType.WaterTank:
+                B(-w, 0, -d, w, H, d, C(0.30f, 0.44f, 0.62f));
+                B(-0.06f, H, -0.06f, 0.06f, H + 0.08f, 0.06f, white);
+                break;
+            case FurnitureType.WineRack:
+                B(-w, 0, -d, -w + 0.04f, H, d, darkWood);
+                B(w - 0.04f, 0, -d, w, H, d, darkWood);
+                for (float y = 0.05f; y < H - 0.1f; y += 0.22f)
+                {
+                    B(-w, y, -d, w, y + 0.03f, d, darkWood);
+                    for (float x = -w + 0.1f; x < w - 0.08f; x += 0.16f)   // bottle ends
+                        B(x, y + 0.04f, d - 0.04f, x + 0.08f, y + 0.12f, d, (int)((x + y) * 10) % 3 == 0 ? C(0.40f, 0.12f, 0.16f) : C(0.18f, 0.30f, 0.16f));
+                }
+                break;
+            case FurnitureType.Barrel:
+            {
+                var oak = C(0.48f, 0.32f, 0.18f);
+                B(-w * 0.85f, 0, -d * 0.85f, w * 0.85f, H, d * 0.85f, oak);
+                B(-w, H * 0.2f, -d, w, H * 0.8f, d, (oak * 1.05f) with { A = 1 });
+                foreach (float hy in new[] { 0.12f, 0.5f, 0.85f })
+                    B(-w - 0.01f, H * hy, -d - 0.01f, w + 0.01f, H * hy + 0.04f, d + 0.01f, dark);
+                break;
+            }
+            case FurnitureType.DrumKit:
+            {
+                var shell = C(0.62f, 0.10f, 0.12f);
+                var chrome = C(0.82f, 0.82f, 0.84f);
+                B(-0.3f, 0, -0.1f, 0.3f, 0.55f, 0.3f, shell);                       // bass drum
+                B(-0.3f, 0.01f, 0.3f, 0.3f, 0.54f, 0.31f, white);                    // its head
+                B(-0.6f, 0.45f, 0.1f, -0.3f, 0.62f, 0.4f, shell);                   // snare
+                B(0.3f, 0.35f, 0.0f, 0.62f, 0.62f, 0.32f, shell);                    // floor tom
+                B(-0.25f, 0.6f, -0.05f, -0.02f, 0.78f, 0.18f, shell);                // rack toms
+                B(0.02f, 0.6f, -0.05f, 0.25f, 0.78f, 0.18f, shell);
+                foreach (var (cx, cz, cy) in new[] { (-0.7f, -0.2f, 0.95f), (0.65f, -0.35f, 1.05f) })
+                {
+                    B(cx - 0.01f, 0, cz - 0.01f, cx + 0.01f, cy, cz + 0.01f, chrome);
+                    B(cx - 0.22f, cy, cz - 0.22f, cx + 0.22f, cy + 0.015f, cz + 0.22f, C(0.80f, 0.66f, 0.30f));   // cymbal
+                }
+                B(-0.15f, 0, -0.55f, 0.15f, 0.48f, -0.3f, dark);                    // the stool
+                break;
+            }
+            case FurnitureType.Piano:
+                B(-w, 0, -d, w, H, d, dark);
+                B(-w, 0.68f, d, w, 0.74f, d + 0.25f, dark);                            // key bed
+                B(-w + 0.04f, 0.74f, d + 0.02f, w - 0.04f, 0.76f, d + 0.24f, white);   // keys
+                B(-w * 0.6f, 0, d + 0.3f, w * 0.6f, 0.48f, d + 0.6f, darkWood);       // bench
+                break;
+            case FurnitureType.Keyboard:
+                B(-w, H - 0.1f, -d, w, H, d, dark);
+                B(-w + 0.04f, H, -d + 0.08f, w - 0.04f, H + 0.015f, d - 0.04f, white);
+                B(-w + 0.1f, 0, -0.03f, -w + 0.14f, H - 0.1f, 0.03f, metal);            // X stand
+                B(w - 0.14f, 0, -0.03f, w - 0.1f, H - 0.1f, 0.03f, metal);
+                break;
+            case FurnitureType.GuitarStand:
+            {
+                var body = (p.X * 3.1f + p.Z) % 2 > 1 ? C(0.80f, 0.42f, 0.14f) : C(0.12f, 0.12f, 0.14f);
+                B(-0.18f, 0.08f, -0.06f, 0.18f, 0.5f, 0.06f, body);
+                B(-0.13f, 0.5f, -0.05f, 0.13f, 0.65f, 0.05f, body);
+                B(-0.025f, 0.65f, -0.02f, 0.025f, H - 0.12f, 0.02f, darkWood);       // neck
+                B(-0.05f, H - 0.12f, -0.025f, 0.05f, H, 0.025f, dark);               // head
+                B(-0.15f, 0, -0.1f, 0.15f, 0.08f, 0.1f, metal);
+                break;
+            }
+            case FurnitureType.Amplifier:
+                B(-w, 0, -d, w, H, d, dark);
+                B(-w + 0.05f, H * 0.2f, d, w - 0.05f, H * 0.85f, d + 0.01f, C(0.24f, 0.24f, 0.26f));
+                break;
+            case FurnitureType.AcousticFoam:
+                // wedge tiles in a checker, from knee height up, flat on the wall
+                for (float y = 0.4f; y < H - 0.25f; y += 0.3f)
+                    for (float x = -w; x < w - 0.25f; x += 0.3f)
+                    {
+                        bool up = ((int)((x + w) / 0.3f) + (int)(y / 0.3f)) % 2 == 0;
+                        B(x + 0.01f, y + 0.01f, -d, x + 0.29f, y + 0.29f, up ? d : d - 0.03f, up ? C(0.20f, 0.20f, 0.24f) : C(0.16f, 0.16f, 0.19f));
+                    }
+                break;
+            case FurnitureType.CinemaScreen:
+                B(-w, 0.7f, -d, w, H, -d + 0.04f, C(0.06f, 0.06f, 0.07f));
+                B(-w + 0.05f, 0.75f, -d + 0.04f, w - 0.05f, H - 0.05f, -d + 0.05f, C(0.88f, 0.90f, 0.95f));
+                break;
+            case FurnitureType.Armchair:
+            {
+                var fabric = (p.X + p.Z) % 2 > 1 ? C(0.36f, 0.42f, 0.30f) : C(0.50f, 0.30f, 0.24f);
+                B(-w, 0, -d, w, 0.42f, d, fabric);
+                B(-w, 0.42f, -d, w, H, -d + 0.2f, (fabric * 0.9f) with { A = 1 });
+                B(-w, 0.42f, -d, -w + 0.15f, 0.62f, d, (fabric * 0.9f) with { A = 1 });
+                B(w - 0.15f, 0.42f, -d, w, 0.62f, d, (fabric * 0.9f) with { A = 1 });
+                break;
+            }
+            case FurnitureType.Bookcase:
+                B(-w, 0, -d, w, H, -d + 0.03f, darkWood);
+                B(-w, 0, -d, -w + 0.04f, H, d, darkWood);
+                B(w - 0.04f, 0, -d, w, H, d, darkWood);
+                for (int i = 0; i <= 5; i++)
+                {
+                    float y = H * i / 5;
+                    B(-w, y, -d, w, y + 0.03f, d, darkWood);
+                    if (i == 5) break;
+                    for (float x = -w + 0.06f; x < w - 0.08f; x += 0.06f)   // book spines
+                    {
+                        float hue = (float)Math.Abs((x * 13.7 + y * 5.1 + p.X) % 1.0);
+                        B(x, y + 0.03f, -d + 0.04f, x + 0.05f, y + 0.03f + 0.22f + 0.08f * hue, d - 0.03f,
+                            Color.FromHsv(hue, 0.5f, 0.55f).SrgbToLinear());
+                    }
+                }
+                break;
+            case FurnitureType.ToyBox:
+                B(-w, 0, -d, w, H, d, C(0.90f, 0.70f, 0.20f));
+                B(-w - 0.01f, H - 0.06f, -d - 0.01f, w + 0.01f, H, d + 0.01f, C(0.24f, 0.46f, 0.80f));
+                B(-0.08f, H, -0.08f, 0.08f, H + 0.16f, 0.08f, C(0.84f, 0.20f, 0.18f));   // a block left on top
+                break;
+            case FurnitureType.TellerDesk:
+            {
+                // customers' side to +Z: a tall marble front with a counter, glass above it
+                var marble = C(0.84f, 0.82f, 0.78f);
+                B(-w, 0, -d, w, H, d, marble);
+                B(-w - 0.02f, H, -d, w + 0.02f, H + 0.05f, d + 0.06f, darkWood);
+                for (float x = -w; x <= w + 0.01f; x += Math.Max(0.6f, (2 * w) / Math.Max(1, (int)(2 * w / 1.2f))))
+                    B(x - 0.03f, H + 0.05f, d - 0.03f, x + 0.03f, H + 0.85f, d + 0.03f, metal);
+                B(-w, H + 0.05f, d - 0.01f, w, H + 0.85f, d + 0.0f, Glass);
+                B(-w, H + 0.85f, d - 0.03f, w, H + 0.9f, d + 0.03f, metal);
+                B(-0.35f, H + 0.06f, -d + 0.1f, 0.35f, H + 0.4f, -d + 0.15f, dark);   // a terminal
+                break;
+            }
             case FurnitureType.ShopCounter:
+
                 B(-w, 0, -d, w, H, d, C(0.62f, 0.44f, 0.30f));
                 B(-w, H, -d, w, H + 0.03f, d, dark);
                 break;

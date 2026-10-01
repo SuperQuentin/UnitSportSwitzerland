@@ -8,7 +8,7 @@ cockpit VR, first-person mounts, body skiing, haptics, `--xrsim`.
    (local to the body, 30 Hz, near relay only), plus `IsVr`. Feed them to the `Limb.Solve` arm
    targets so flat players see VR players look, wave and point. Drive the local first-person arms
    the same way.
-2. **Hand-held items.** Pose the camera, binoculars and shotgun from the real hands (two-hand aim).
+2. **Hand-held items.** (Wheel and doors by hand: done, #243.) Pose the camera, binoculars and shotgun from the real hands (two-hand aim).
 3. **Teleport** on foot, as the comfort alternative to smooth walking.
 4. **Room-scale walking** that moves the body. Today the body does not follow the head if you
    step away.

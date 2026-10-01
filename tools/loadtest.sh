@@ -25,16 +25,18 @@ BOTS=$((PLAYERS - 1))
 
 # the default user cache must not keep a server manifest from this run (see
 # docs/notes/net/loopback-server-test-leaves-manifest.md); every process gets its own --cache
-USER_MANIFEST="$HOME/.local/share/godot/app_userdata/UnitSportSwitzerland/chunk_cache/server-manifest.json"
+USERDATA="$HOME/.local/share/godot/app_userdata"; [ -n "${APPDATA:-}" ] && USERDATA="$(cygpath -u "$APPDATA")/Godot/app_userdata"   # Linux / Windows (Git Bash)
+USER_MANIFEST="$USERDATA/UnitSportSwitzerland/chunk_cache/server-manifest.json"
 HAD_MANIFEST=0; [ -f "$USER_MANIFEST" ] && HAD_MANIFEST=1
 
 # the machine may be shared: say how much memory there was, and warn when it is short (a full
 # client takes ~2 GB and the OOM killer invalidates a run by killing one of its processes)
-avail_mb() { awk '/MemAvailable/ { printf "%d", $2 / 1024 }' /proc/meminfo; }
+# (Git Bash has no MemAvailable: MemFree there; nor ps -o, so the swarm cpu/rss read 0 on Windows)
+avail_mb() { awk '/MemAvailable/ { a = $2 } /MemFree/ { f = $2 } END { printf "%d", (a ? a : f) / 1024 }' /proc/meminfo; }
 MEM_START=$(avail_mb); MEM_MIN=$MEM_START
 (( MEM_START < 5000 )) && echo "[loadtest] WARNING: only $MEM_START MB available"
 echo "[loadtest] $LABEL: $BOTS bots + 1 observer, ${SECONDS_RUN}s, chunks $CHUNKS, $MEM_START MB available"
-"$GODOT" --headless --path . -- --server --port $PORT --serverstats,$LABEL --chunks "$CHUNKS" \
+"$GODOT" --headless --path . -- --title "loadtest $LABEL server" --server --port $PORT --serverstats,$LABEL --chunks "$CHUNKS" \
     --seconds $((SECONDS_RUN + 40)) > "$OUT/server.log" 2>&1 &
 SERVER=$!
 for _ in $(seq 60); do grep -q "server listening" "$OUT/server.log" 2>/dev/null && break; sleep 0.5; done
@@ -45,7 +47,7 @@ SWARMS=(); COUNTS=()
 FIRST=0
 for ((k = 0; k < PROCS; k++)); do
     N=$(( BOTS / PROCS + (k < BOTS % PROCS ? 1 : 0) ))
-    "$GODOT" --headless --path . -- --swarm $N --first $FIRST --total $BOTS --seed $SEED \
+    "$GODOT" --headless --path . -- --title "loadtest $LABEL swarm$k" --swarm $N --first $FIRST --total $BOTS --seed $SEED \
         --connect 127.0.0.1:$PORT --chunks "$CHUNKS" --cache "$OUT/swarm${k}_cache" \
         --seconds $((SECONDS_RUN + 25)) > "$OUT/swarm$k.log" 2>&1 &
     SWARMS+=($!); COUNTS+=($N)
@@ -55,7 +57,7 @@ sleep $(( 4 + BOTS / 8 ))
 
 # the observer measures SECONDS_RUN-20 s once it has picked a target (after ~6 s)
 OBS_SECONDS=$(( SECONDS_RUN > 40 ? SECONDS_RUN - 20 : 20 ))
-"$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT --netsmooth,$OBS_SECONDS,$LABEL --at "$AT" \
+"$GODOT" --headless --path . -- --title "loadtest $LABEL observer" --connect 127.0.0.1:$PORT --netsmooth,$OBS_SECONDS,$LABEL --at "$AT" \
     --traffic 0 --chunks "$CHUNKS" --cache "$OUT/observer_cache" > "$OUT/observer.log" 2>&1 &
 OBSERVER=$!
 

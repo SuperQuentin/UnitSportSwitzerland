@@ -4,6 +4,7 @@
   v1 left reserved, so every v1 offset is unchanged and v1 files still decode. A region built
   before the rewrite renders exactly as it did. `RoadMeshBuilder.AppendJunction` draws the caps
   with no lane markings — painting them would put back the crossing lines the junction exists to
-  remove. **The rewrite is not idempotent and refuses to run twice**: the second pass trims
+  remove. **The rewrite is not idempotent on its own output**: a second pass trims
   already-trimmed roads and replaces the full-size caps with near-zero ones, leaving a hole at
-  every junction.
+  every junction. Since v3 (`road-format-v3`) the stage always reads the kept raw input instead,
+  and refuses a v2 tile that has none.
