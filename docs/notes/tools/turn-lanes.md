@@ -10,8 +10,9 @@
   lane's arrows straight + right. No OSM `turn:lanes` (none in the test region; not read yet).
 - **Shape**: the ribbon keeps one width per segment, so the approach widens by one 3 m lane on
   the driver's right as a flush `APRP` `Pavement` strip (new `AreaPropType.Pavement = 4`,
-  Height 0) along the segment's edge: 20 m taper, then 20 m storage to the junction mouth; the
-  segment must be 45 m long (5 m clear of whatever is at its other end). The original approach
+  Height 0) along the segment's edge: a taper, then storage to the junction mouth, as long as
+  fits (`PocketSizes`, tried longest first): 30 + 40 m, 25 + 30 m, else 20 + 20 m; the segment
+  must be that long plus 5 m clear of whatever is at its other end. The original approach
   lane becomes the left-turn pocket, through traffic moves into the new lane.
 - **Exit** (asked for after a playtest: without it the through lane ran into the grass past the
   junction): the main road's other arm takes the shifted lane on. Its departing side gets the
@@ -33,8 +34,8 @@
   new one follows it. Across the junction the through lane's outer part is one more strip, from
   the approach strip's mouth to the exit's (the junction polygon only covers the original road),
   and the junction's guide line on that side (`junction-priority`) moves out onto its edge. Signs beside the old edge (#121's 3.03)
-  move out by the widening there (8 in the test region). Arrows two per lane in the 20 m
-  storage, tips 5 and 13 m from the stop bar: left in the pocket, straight (or straight + right)
+  move out by the widening there (8 in the test region). Arrows two per lane in the storage,
+  tips 5 m from the stop bar and 15 m apart (Bern Normalien; 8 m apart in a 20 m pocket): left in the pocket, straight (or straight + right)
   in the through lane, as `PaintType.Arrow` triangles (variant = `PaintArrow` bits): outlines
   traced from the Commons SVG of SSV 6.06 (`road-markings` has the link), scaled so the straight
   arrow is 6.50 m, ear-clipped once; right and straight + left are mirrors. Straight: a slender
@@ -48,7 +49,7 @@
   the original lane and so turns left from it, and goes straight from it too. Right-turn lanes,
   pockets across a tile seam, OSM `turn:lanes`.
 - **6-tile test region**: 13 main-road approaches with a left turn, 4 pockets placed with their
-  exits (1 Riddes, 3 Sion), 16 arrows, 4 stop bars, 68 median stripes; rejected: approach or exit too short 8,
+  exits (1 Riddes, 3 Sion; 3 with 40 m storage, 1 with 20 m), 16 arrows, 4 stop bars, 77 median stripes; rejected: approach or exit too short 7,
   ground 1 (6 pockets fitted before the exit was required). Rebuild byte-identical;
   `--format-check` and `--priority-check` pass; paint round-trip "0 decoded differently".
 - **Checks**: screenshots from above of a Riddes and two Sion pockets (taper on the right, new

@@ -25,9 +25,11 @@ public static partial class TileRewriter
     public sealed class TurnLaneStats
     {
         public int Candidates, Placed, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars, SignsMoved;
+        /// <summary>Pockets placed per storage length, metres.</summary>
+        public readonly SortedDictionary<double, int> Storage = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper, {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes, {SignsMoved:N0} signs moved off the widening; " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes, {SignsMoved:N0} signs moved off the widening; " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}\n");
 
         public void Reject(string why)
@@ -43,8 +45,13 @@ public static partial class TileRewriter
         }
     }
 
-    // an urban-sized pocket: 20 m taper, 20 m storage, 5 m kept clear of whatever is at the other end
-    private const double TurnTaper = 20, TurnStorage = 20, TurnLane = 3.0, TurnSolid = 10, TurnClear = 5;
+    private const double TurnLane = 3.0, TurnSolid = 10, TurnClear = 5;
+
+    /// <summary>
+    /// Pocket sizes tried longest first, (taper, storage) in metres: the first that fits is built.
+    /// The last is an urban-sized one; 5 m stay clear of whatever is at the approach's other end.
+    /// </summary>
+    private static readonly (double Taper, double Storage)[] PocketSizes = [(30, 40), (25, 30), (20, 20)];
 
     /// <summary>The stop bar across the end of the left-turn lane.</summary>
     private const float StopBar = 0.4f;
@@ -98,17 +105,24 @@ public static partial class TileRewriter
                 if (!segmentOf.TryGetValue(arm.LinkId, out var inSeg) || !segmentOf.TryGetValue(plan.Arms[exit].LinkId, out var outSeg))
                 { stats.NoSegment++; continue; }
 
-                // approach: traffic drives toward the junction and keeps right
-                bool inAtEnd = arm.End == LinkEnd.End;
-                var approach = new Widening(inSeg.Segment, inSeg.Tile, output[inSeg.Tile].IndexOf(inSeg.Segment),
-                    junctionAtEnd: inAtEnd, side: inAtEnd ? 1 : -1, length: TurnTaper + TurnStorage, taper: TurnTaper);
                 // exit: traffic drives away from the junction and keeps right
                 bool outAtEnd = plan.Arms[exit].End == LinkEnd.End;
                 var departure = new Widening(outSeg.Segment, outSeg.Tile, output[outSeg.Tile].IndexOf(outSeg.Segment),
                     junctionAtEnd: outAtEnd, side: outAtEnd ? -1 : 1, length: TurnExit, taper: TurnExit);
+                if (departure.Check(Lines(outSeg.Tile), grids, buildings) is { } exitWhy) { stats.Reject(exitWhy); continue; }
 
-                if ((approach.Check(Lines(inSeg.Tile), grids, buildings) ?? departure.Check(Lines(outSeg.Tile), grids, buildings)) is { } why)
-                { stats.Reject(why); continue; }
+                // approach: traffic drives toward the junction and keeps right; as long a pocket as fits
+                bool inAtEnd = arm.End == LinkEnd.End;
+                Widening? approach = null;
+                string? why = null;
+                foreach (var (taper, storage) in PocketSizes)
+                {
+                    var candidate = new Widening(inSeg.Segment, inSeg.Tile, output[inSeg.Tile].IndexOf(inSeg.Segment),
+                        junctionAtEnd: inAtEnd, side: inAtEnd ? 1 : -1, length: taper + storage, taper: taper);
+                    why = candidate.Check(Lines(inSeg.Tile), grids, buildings);
+                    if (why is null) { approach = candidate; stats.Storage[storage] = stats.Storage.GetValueOrDefault(storage) + 1; break; }
+                }
+                if (approach is null) { stats.Reject(why!); continue; }
 
                 approach.Emit(Get(paint, inSeg.Tile), Get(areas, inSeg.Tile));
                 approach.Pocket(Get(paint, inSeg.Tile), right, stats);
@@ -373,9 +387,11 @@ public static partial class TileRewriter
             });
             stats.StopBars++;
 
-            // two per lane in the storage length, tips 5 m and 13 m from the stop bar: left in the
-            // pocket, straight (and right) in the through lane
-            foreach (double back in (ReadOnlySpan<double>)[5 + ArrowLength, 13 + ArrowLength])
+            // two per lane in the storage length, tips 5 m from the stop bar and 15 m apart (Bern
+            // Normalien C 2.10.17), closer in a short pocket: left in the pocket, straight (and
+            // right) in the through lane
+            double second = storage >= 20 + ArrowLength ? 20 : 13;
+            foreach (double back in (ReadOnlySpan<double>)[5 + ArrowLength, second + ArrowLength])
             {
                 var (x, y, z, sx, sz) = At(back);
                 // the through lane lies on the driver's right (sx, sz): their forward is that turned a quarter left
