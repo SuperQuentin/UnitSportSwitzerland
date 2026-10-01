@@ -1581,7 +1581,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         && RoadMeshBuilder.Build(roadTile, grid) is { } roadData)
                     {
                         ct.ThrowIfCancellationRequested();
-                        roads = ChunkNode.ToArrayMesh(roadData, roadMaterial);
+                        roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));
                     }
                     Lap(StRoadMesh, stageMs, clock);
                 }
@@ -1682,7 +1682,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes, blend);
                     // A heightfield cannot hold a deck floating above the terrain it crosses, so
                     // bridges get their own small collision body alongside the blended ground.
-                    bridgeCollision = RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile);
+                    // and retaining walls (#125): a heightfield cannot stand a vertical face either,
+                    // nor a railing (#126)
+                    bridgeCollision = [.. RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile),
+                        .. RoadWallBuilder.BuildCollisionFaces(roadTile), .. RailingBuilder.BuildCollisionFaces(roadTile),
+                        .. IslandBuilder.BuildCollisionFaces(roadTile),   // roundabout islands (#122)
+                        .. RoadSignBuilder.BuildCollisionFaces(roadTile)];   // sign poles (#121)
                 }
                 else if (wantCollision && !publishInterimCollision)
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes); // no road tile after all

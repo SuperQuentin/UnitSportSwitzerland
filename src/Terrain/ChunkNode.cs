@@ -33,16 +33,31 @@ public partial class ChunkNode : Node3D
         return Finish(arrays, material);
     }
 
-    public static ArrayMesh ToArrayMesh(RoadMeshBuilder.MeshData data, Material material)
+    /// <param name="paint">The v3 paint layer (<see cref="RoadPaintBuilder"/>), a second surface.</param>
+    public static ArrayMesh ToArrayMesh(RoadMeshBuilder.MeshData data, Material material,
+        RoadMeshBuilder.MeshData? paint = null)
     {
-        using var arrays = new Godot.Collections.Array();
+        using var main = RoadArrays(data);
+        var mesh = Finish(main, material);
+        if (paint != null)
+        {
+            using var arrays = RoadArrays(paint);
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            mesh.SurfaceSetMaterial(1, material);
+        }
+        return mesh;
+    }
+
+    private static Godot.Collections.Array RoadArrays(RoadMeshBuilder.MeshData data)
+    {
+        var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
         arrays[(int)Mesh.ArrayType.TexUV] = data.Uvs;
         arrays[(int)Mesh.ArrayType.TexUV2] = data.Uv2s;
         arrays[(int)Mesh.ArrayType.Index] = data.Indices;
-        return Finish(arrays, material);
+        return arrays;
     }
 
     public static ArrayMesh ToArrayMesh(BuildingMeshBuilder.MeshData data, Material material)

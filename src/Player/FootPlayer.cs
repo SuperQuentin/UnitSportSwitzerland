@@ -3083,8 +3083,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
             Steer: SteerInput(),
             Effort: PlayerInput.Held(PlayerInput.TuckBoost),
-            // Space is a hop on a bike and the handbrake in a car
-            Handbrake: _ride is { CanHop: false } && PlayerInput.Held(PlayerInput.Jump));
+            // Space is a hop on a bike and the handbrake in a car, as is a wheel's lever
+            Handbrake: _ride is { CanHop: false } && (PlayerInput.Held(PlayerInput.Jump) || PlayerInput.WheelHandbrake > 0.5f),
+            WheelAngle: _ride is { WheelLock: > 0f } wheeled ? PlayerInput.WheelAngle(wheeled.WheelLock) : float.NaN);
 
         // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
         if (_ride is Skis && XR.XrSession.Active && RideControls == null)
