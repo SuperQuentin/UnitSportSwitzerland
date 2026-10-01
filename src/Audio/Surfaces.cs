@@ -133,7 +133,8 @@ public static class Surfaces
     /// A <c>.road</c> tile also holds cableways, streams, walls and barriers; none of those is
     /// something a foot lands on. Tunnels stay: a tunnel floor is a road.
     /// </summary>
-    private static bool Walkable(RoadSegment s) => s.Class <= RoadClass.Railway && s.Class != RoadClass.Unknown;
+    private static bool Walkable(RoadSegment s) => s.Class <= RoadClass.Railway && s.Class != RoadClass.Unknown
+        && !s.Attributes.Has(RoadAttrFlags.Embedded);   // the road around an embedded rail is what you stand on
 
     private static int _epoch;
 

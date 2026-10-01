@@ -203,7 +203,7 @@ public static class QualityAnalyzer
             junctions.Sum(j => j.Arms.Count(a => a.TrimWasClamped)),
             carriageway, junctionArea, overlap, roadRoad, capCap, cross, corridors,
             worstTurn, 0, vertices, 0,
-            pairArea.OrderByDescending(kv => kv.Value).Take(6)
+            pairArea.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal)
                     .Select(kv => (kv.Key, kv.Value)).ToList());
     }
 

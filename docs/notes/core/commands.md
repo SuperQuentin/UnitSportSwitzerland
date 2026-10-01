@@ -13,8 +13,9 @@
   drop overwrites the requested y with ground + 220 m and every close-up shot comes back
   as an aerial one. `ShotRunner` also re-claims `Current` every frame — a mode entered from
   a deferred call (GPX replay) would otherwise steal the camera after the shot was set up.
-  Add `--menu` to capture the pause menu over the world (the title screen: `--uishot`, `ui/screens`). `--nohud` hides every `CanvasLayer` (chat, key hints,
-  menus) in the picture.
+  Add `--menu` to capture the pause menu over the world (the title screen: `--uishot`, `ui/screens`),
+  `--settings` or `--licenses` (Settings on its About tab) for those pages. `--nohud` hides every
+  `CanvasLayer` (chat, key hints, menus) in the picture.
 - Many screenshots, one launch: `<godot> --path . -- --shot-queue shots.txt [--nohud]` boots like
   `--shot`, then watches the file: one shot per line in the `--shot` syntax, taken in order,
   lines appended later picked up within 0.5 s; blank lines and `#` comments skipped, `quit`

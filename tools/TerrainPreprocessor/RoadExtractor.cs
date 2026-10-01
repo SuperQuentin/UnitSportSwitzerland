@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Rewrite;
 
 namespace UnitSport.Tools.Preprocessor;
 
@@ -77,12 +78,14 @@ public sealed class RoadExtractor
     {
         "uuid", "objektart", "belagsart", "wanderwege",
         "verkehrsbeschraenkung", "richtungsgetrennt", "kunstbaute",
+        // v3 attributes; value domains in docs/notes/tools/tlm-road-attribute-domains.md
+        "kreisel", "verkehrsbedeutung", "eigentuemer", "stufe",
     };
 
     private static readonly string[] RailColumns =
     {
         "objektart", "kunstbaute", "anzahl_spuren", "verkehrsmittel",
-        "zahnradbahn", "standseilbahn", "ausser_betrieb",
+        "zahnradbahn", "standseilbahn", "ausser_betrieb", "auf_strasse",
     };
 
     /// <summary>Aerial ropeways carry only the type and the geometry.</summary>
@@ -127,9 +130,17 @@ public sealed class RoadExtractor
     /// <summary>Terrain quads to drop so tunnel portals are open; filled during Extract.</summary>
     public Dictionary<TileId, HashSet<int>> Holes { get; } = new();
 
+    /// <summary>
+    /// Where each emitted segment came from, aligned with <see cref="RoadTile.Segments"/>: the TLM
+    /// uuid, the part (LineString index) and the 2D distance along that part to the segment's
+    /// first point, in the key format of the OSM overlay (docs/notes/tools/osm-overlay.md).
+    /// Null for features that are not TLM road lines. Read by the road network stage.
+    /// </summary>
+    public Dictionary<TileId, List<RawRoads.Key?>> SourceKeys { get; } = new();
+
     /// <summary>One TLM line with its resolved attributes, held until the join index is built.</summary>
     private sealed record PendingLine(GeoPackageReader.Polyline Line, RoadClass Cls,
-        RoadSurface Surface, RoadFlags Flags, float Width)
+        RoadSurface Surface, RoadFlags Flags, float Width, RoadAttributes Attr, string? Uuid, int Part)
     {
         public bool IsStructure => (Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0;
     }
@@ -158,6 +169,8 @@ public sealed class RoadExtractor
         double minN = tiles.Min(t => t.MinN), maxN = tiles.Max(t => t.MinN) + ChunkFormat.TileSizeM;
 
         _pending.Clear();
+        SourceKeys.Clear();
+        foreach (var t in tiles) SourceKeys[t] = new List<RawRoads.Key?>();
         _structureEnds.Clear();
         _structureEndCount.Clear();
 
@@ -210,7 +223,12 @@ public sealed class RoadExtractor
                 if (_mtbUuids.Contains(uuid)) flags |= RoadFlags.MountainBike;
             }
 
-            Collect(reader, cls, surface, flags, RoadFormat.WidthFor(cls, flags));
+            var attr = new RoadAttributes(
+                Flags: RoadFormat.ParseAttrFlags(Str(reader, 7), Str(reader, 9)),
+                Layer: RoadFormat.LayerFor(Str(reader, 10), flags),
+                Priority: RoadFormat.PriorityFor(cls, Str(reader, 8)),
+                WidthCm: RoadFormat.NominalWidthCm(Str(reader, 1)));
+            Collect(reader, cls, surface, flags, RoadFormat.WidthFor(cls, flags), attr, uuid);
         }
     }
 
@@ -312,19 +330,23 @@ public sealed class RoadExtractor
             float width = (flags & RoadFlags.DoubleTrack) != 0 ? 9.0f
                 : (flags & RoadFlags.NarrowGauge) != 0 ? 3.6f : 4.6f;
 
-            Collect(reader, RoadClass.Railway, RoadSurface.Unknown, flags, width);
+            // auf_strasse: the track runs in a street (#124); the network stage embeds it
+            var attrFlags = IsTrue(Str(reader, 7)) ? RoadAttrFlags.OnStreet : RoadAttrFlags.None;
+            Collect(reader, RoadClass.Railway, RoadSurface.Unknown, flags, width,
+                new RoadAttributes(Flags: attrFlags, Layer: RoadFormat.LayerFor(null, flags)));
         }
     }
 
     private void Collect(SqliteDataReader reader, RoadClass cls, RoadSurface surface,
-        RoadFlags flags, float width)
+        RoadFlags flags, float width, RoadAttributes attr = default, string? uuid = null)
     {
         int geomIndex = reader.FieldCount - 1;
         if (reader.IsDBNull(geomIndex)) return;
 
-        foreach (var line in GeoPackageReader.ParseLines((byte[])reader.GetValue(geomIndex)))
-            if (line.Count >= 2)
-                _pending.Add(new PendingLine(line, cls, surface, flags, width));
+        var parts = GeoPackageReader.ParseLines((byte[])reader.GetValue(geomIndex));
+        for (int part = 0; part < parts.Count; part++)
+            if (parts[part].Count >= 2)
+                _pending.Add(new PendingLine(parts[part], cls, surface, flags, width, attr, uuid, part));
     }
 
     private void Emit(PendingLine p, Dictionary<TileId, RoadTile> result,
@@ -332,8 +354,15 @@ public sealed class RoadExtractor
     {
         var (line, cls, surface, flags, width) = (p.Line, p.Cls, p.Surface, p.Flags, p.Width);
         {
+            // 2D distance along the TLM part to the current piece's first point (overlay key)
+            double pieceFrom = 0;
             foreach (var piece in PolylineClipper.SplitByTile(line))
             {
+                double from = pieceFrom;
+                for (int i = 1; i < piece.Points.Count; i++)
+                    pieceFrom += Math.Sqrt(
+                        (piece.Points[i].E - piece.Points[i - 1].E) * (piece.Points[i].E - piece.Points[i - 1].E) +
+                        (piece.Points[i].N - piece.Points[i - 1].N) * (piece.Points[i].N - piece.Points[i - 1].N));
                 if (!result.TryGetValue(piece.Tile, out var tile)) continue;
 
                 // bridges, tunnels and aerial ropeways keep their surveyed height; everything
@@ -407,7 +436,10 @@ public sealed class RoadExtractor
                     tile.Segments.Add(new RoadSegment
                     {
                         Class = cls, Surface = surface, Flags = flags, Width = width, Points = pts,
+                        Attributes = p.Attr,
                     });
+                    SourceKeys[piece.Tile].Add(p.Uuid is null ? null
+                        : new RawRoads.Key(p.Uuid, p.Part, from + along[start]));
                 }
             }
         }

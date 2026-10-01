@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Rewrite;
 
 namespace UnitSport.Tools.Preprocessor;
 
@@ -8,13 +9,13 @@ public static class CoverStage
     /// <summary>Clearance kept either side of a carriageway edge, in metres.</summary>
     private const double RoadClearance = 2.5;
 
-    /// <summary>Marks every lattice cell lying within a road corridor.</summary>
-    private static bool[] BuildRoadMask(RoadTile roads)
+    /// <summary>Marks every lattice cell lying within a road corridor of any of <paramref name="tiles"/>.</summary>
+    private static bool[] BuildRoadMask(IEnumerable<RoadTile> tiles)
     {
         var mask = new bool[CoverFormat.Size * CoverFormat.Size];
         double spacing = ChunkFormat.SpacingM;
 
-        foreach (var seg in roads.Segments)
+        foreach (var seg in tiles.SelectMany(t => t.Segments))
         {
             // tunnels and bridges need the widest clearance: their portals and abutments
             // are exactly where a stray tree ruins the shot
@@ -50,7 +51,8 @@ public static class CoverStage
         return mask;
     }
 
-    public static int Run(string tlmGpkg, string outDir, Dictionary<TileId, ChunkGrid> grids, string? overridesPath = null)
+    public static int Run(string tlmGpkg, string outDir, Dictionary<TileId, ChunkGrid> grids, string? overridesPath = null,
+        string? rawDir = null)
     {
         if (!File.Exists(tlmGpkg))
         {
@@ -63,13 +65,21 @@ public static class CoverStage
 
         var heightOf = TerrainSampler.For(grids);
 
-        // roads are written before this stage, so their corridors can be masked out
+        // roads are written before this stage, so their corridors can be masked out: the raw
+        // extractor lines (they run through the junction areas the network stage trims away) and
+        // the network stage's tile, whose motorway carriageways #117 moved outward and widened.
+        // The full build runs the network stage before this one.
         foreach (var id in grids.Keys)
         {
-            string roadPath = Path.Combine(outDir, RoadFormat.FileName(id));
-            if (!File.Exists(roadPath)) continue;
-            using var fs = File.OpenRead(roadPath);
-            extractor.RoadMask[id] = BuildRoadMask(RoadCodec.Decode(fs));
+            var tiles = new List<RoadTile>();
+            foreach (var path in new[] { rawDir != null ? RawRoads.RoadPath(rawDir, id) : null,
+                         Path.Combine(outDir, RoadFormat.FileName(id)) })
+            {
+                if (path is null || !File.Exists(path)) continue;
+                using var fs = File.OpenRead(path);
+                tiles.Add(RoadCodec.Decode(fs));
+            }
+            if (tiles.Count > 0) extractor.RoadMask[id] = BuildRoadMask(tiles);
         }
 
         extractor.Extract(grids.Keys.ToList(), heightOf);
