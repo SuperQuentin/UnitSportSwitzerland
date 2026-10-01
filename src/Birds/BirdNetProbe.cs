@@ -19,7 +19,9 @@ namespace UnitSport.Birds;
 /// birds take off;</item>
 /// <item>an aircraft gun round (<see cref="BirdLife.TracerHit"/>) through a live bird: the server kills it
 /// and A's journal scores it.</item>
+/// <item>A walks up to a resting bird (no shot): the server flushes it and B must see it take off.</item>
 /// </list>
+/// Windowed, each role saves zoomed pictures of those moments to <c>test_output/birdnet_&lt;role&gt;_*.png</c>.
 /// Roles talk through chat lines. Scratch inventory; the journal is the machine's real <c>user://birds.json</c>.
 /// </summary>
 public partial class BirdNetProbe : Node
@@ -49,6 +51,7 @@ public partial class BirdNetProbe : Node
     public override async void _Ready()
     {
         _role = Role ?? "A";
+        ProcessPriority = 1000;
         if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor() && Life != null && Life.Net != null, 150))
         {
             Fail("no player on the ground");
@@ -64,17 +67,24 @@ public partial class BirdNetProbe : Node
 
         Expect(await Until(() => life.Birds.Count(b => b.Remote) >= 3, 90), $"the server sent birds ({life.Birds.Count(b => b.Remote)})");
         await Seconds(2.0);
-        if (_role == "A") await RunA(Me!, life); else await RunB(Me!, life);
+        if (Town) { if (_role == "A") await TownA(Me!, life); else await TownB(Me!, life); }
+        else if (_role == "A") await RunA(Me!, life); else await RunB(Me!, life);
 
         GD.Print(_failures == 0 ? $"[birdnet {_role}] RESULT: ok" : $"[birdnet {_role}] RESULT: FAILED ({_failures})");
         await Seconds(1.0);
         GetTree().Quit(_failures == 0 ? 0 : 1);
     }
 
-    private string Ids(BirdLife life, FootPlayer me) => string.Join(";", life.Birds
-        .Where(b => b.Remote && b.Id > 0 && b.State is Bird.Mode.Ground or Bird.Mode.Perched or Bird.Mode.Swimming)
-        .OrderBy(b => b.Node.GlobalPosition.DistanceTo(me.GlobalPosition)).Take(10)
-        .Select(b => string.Create(CultureInfo.InvariantCulture, $"{b.Id}:{b.Node.GlobalPosition.X:F0}:{b.Node.GlobalPosition.Z:F0}")));
+    private int _firstId;
+
+    private string Ids(BirdLife life, FootPlayer me)
+    {
+        var near = life.Birds
+            .Where(b => b.Remote && b.Id > 0 && b.State is Bird.Mode.Ground or Bird.Mode.Perched or Bird.Mode.Swimming)
+            .OrderBy(b => b.Node.GlobalPosition.DistanceTo(me.GlobalPosition)).Take(10).ToList();
+        _firstId = near.Count > 0 ? near[0].Id : 0;
+        return string.Join(";", near.Select(b => string.Create(CultureInfo.InvariantCulture, $"{b.Id}:{b.Node.GlobalPosition.X:F0}:{b.Node.GlobalPosition.Z:F0}")));
+    }
 
     private async Task RunA(FootPlayer me, BirdLife life)
     {
@@ -86,6 +96,7 @@ public partial class BirdNetProbe : Node
             ready = await Heard("B", "ready", 3);
         }
         if (!ready) { Fail("B never joined"); return; }
+        if (life.Birds.FirstOrDefault(b => b.Id == _firstId) is { } first) await Snap(me, "shared", first);
 
         int gun = Enumerable.Range(0, Inventory.Size).FirstOrDefault(i => _items.Inventory[i].Id == ItemId.Shotgun, -1);
         if (gun < 0) { Fail("no shotgun"); return; }
@@ -101,11 +112,11 @@ public partial class BirdNetProbe : Node
             var target = life.Birds.Where(b => b.Remote && b.Id > 0 && !tried.Contains(b.Id)
                     && b.State is Bird.Mode.Ground or Bird.Mode.Perched or Bird.Mode.Swimming
                     && b.Node.GlobalPosition.DistanceTo(home) < 120f
-                    && 5f + 18f * Mathf.Sqrt(b.Species.Length) + 4f < 28f)
+                    && b.FlushDistance + 4f < 28f)
                 .OrderBy(b => b.Node.GlobalPosition.DistanceTo(home)).FirstOrDefault();
             if (target == null) break;
             tried.Add(target.Id);
-            float stand = 5f + 18f * Mathf.Sqrt(target.Species.Length) + 4f;
+            float stand = target.FlushDistance + 4f;
             var away = (home - target.Node.GlobalPosition) with { Y = 0 };
             var spot = target.Node.GlobalPosition + (away.LengthSquared() < 1f ? Vector3.Back : away.Normalized()) * stand;
             spot.Y = life.Ground(spot) + 1.5f;
@@ -133,6 +144,7 @@ public partial class BirdNetProbe : Node
         {
             Expect(await Until(() => killed.State is Bird.Mode.Falling or Bird.Mode.Dead, 3), $"the bird fell on A's screen ({killed.State})");
             Expect(await Until(() => killed.State == Bird.Mode.Dead, 8), "...and lies dead");
+            await Snap(me, "kill", killed);
             Say($"shot {killed.Id} {killed.Species.Name.Replace(' ', '_')}");
         }
         else Say("shot 0 none");
@@ -162,6 +174,24 @@ public partial class BirdNetProbe : Node
             Expect(await Until(() => life.Journal.Score != score, 4) && bird.State is Bird.Mode.Falling or Bird.Mode.Dead,
                 $"the server killed it and A's journal scored it ({bird.State})");
         }
+
+        // a flush by approach alone: A walks up to a resting bird, B watches it take off
+        Bird? Resting() => life.Birds.Where(b => b.Remote && b.State is Bird.Mode.Ground or Bird.Mode.Perched
+                && b.Node.GlobalPosition.DistanceTo(me.GlobalPosition) is > 25f and < 120f)
+            .OrderBy(b => b.Node.GlobalPosition.DistanceTo(me.GlobalPosition)).FirstOrDefault();
+        await Until(() => Resting() != null, 60);
+        var calm = Resting();
+        Expect(calm != null, "a resting bird to walk up to");
+        Say($"approach {calm?.Id ?? 0}");
+        if (calm == null || !await Heard("B", "watching", 30)) { Fail("B is not watching the approach"); return; }
+        float flushAt = calm.FlushDistance;
+        var from = (me.GlobalPosition - calm.Node.GlobalPosition) with { Y = 0 };
+        var near = calm.Node.GlobalPosition + (from.LengthSquared() < 1f ? Vector3.Back : from.Normalized()) * flushAt * 0.5f;
+        near.Y = life.Ground(near) + 1.5f;
+        me.LeaveInterior(near, 0f);
+        me.Velocity = Vector3.Zero;
+        Expect(await Until(() => calm.State == Bird.Mode.Flying, 6), $"#{calm.Id} took off when A came within {flushAt * 0.5f:F0} m ({calm.State})");
+        await Heard("B", "seen", 20);
     }
 
     private async Task RunB(FootPlayer me, BirdLife life)
@@ -185,6 +215,8 @@ public partial class BirdNetProbe : Node
             if (mine != null && Mathf.Abs(mine.Node.GlobalPosition.X - float.Parse(f[1], CultureInfo.InvariantCulture)) < 8f
                 && Mathf.Abs(mine.Node.GlobalPosition.Z - float.Parse(f[2], CultureInfo.InvariantCulture)) < 8f) shared++;
         }
+        if (theirs.Length > 0 && int.TryParse(theirs[0].Split(':')[0], out int firstId) && life.Birds.FirstOrDefault(b => b.Id == firstId) is { } first)
+            await Snap(me, "shared", first);
         Expect(shared >= 1, $"the same birds in the same places as A: {shared} of {theirs.Length} (ids {string.Join(" ", theirs.Select(t => t.Split(':')[0]))})");
 
         int score = life.Journal.Score;
@@ -198,6 +230,7 @@ public partial class BirdNetProbe : Node
             var bird = life.Birds.FirstOrDefault(b => b.Id == dead);
             Expect(bird == null || await Until(() => bird.State is Bird.Mode.Falling or Bird.Mode.Dead || bird.Gone, 6),
                 $"the same bird is down on B's screen too ({bird?.State.ToString() ?? "already gone"})");
+            if (bird != null) await Snap(me, "kill", bird);
         }
         Expect(life.Journal.Score == score, "the kill is not in B's journal");
 
@@ -216,6 +249,20 @@ public partial class BirdNetProbe : Node
         Expect(resting.Count > 0 && await Until(() => life.Birds.Count(b => resting.Contains(b.Id) && b.State is Bird.Mode.Flying) * 2 >= resting.Count, 6),
             $"resting birds took off on B's screen after A's shot ({life.Birds.Count(b => resting.Contains(b.Id) && b.State is Bird.Mode.Flying)} of {resting.Count})");
         Say("done");
+
+        // A walks up to a resting bird: it must take off on B's screen, A having fired nothing
+        Expect(await Heard("A", "approach", 120), "A picked a bird to walk up to");
+        var ap = (_heard.LastOrDefault(l => l.Contains("PN A approach")) ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var calm = ap.Length > 0 && int.TryParse(ap[^1], out int calmId) ? life.Birds.FirstOrDefault(b => b.Id == calmId) : null;
+        Expect(calm != null && calm.State is Bird.Mode.Ground or Bird.Mode.Perched, $"B has that bird at rest ({calm?.State.ToString() ?? "unknown"})");
+        if (calm != null) await Snap(me, "approach_before", calm);
+        Say("watching");
+        if (calm != null)
+        {
+            Expect(await Until(() => calm.State == Bird.Mode.Flying, 8), $"#{calm.Id} took off on B's screen when A walked up ({calm.State})");
+            await Snap(me, "approach_after", calm, zoom: false);
+        }
+        Say("seen");
     }
 
     /// <summary>Turns the view toward a point (yaw and pitch, either sign convention) until the camera looks at it.</summary>
@@ -223,13 +270,181 @@ public partial class BirdNetProbe : Node
     {
         var d = (at - me.EyePosition).Normalized();
         float pitch = Mathf.Asin(d.Y);
+        float sign = 1f;
         foreach (float yaw in new[] { Mathf.Atan2(-d.X, -d.Z), Mathf.Atan2(d.X, d.Z) })
         {
             me.LookYaw = yaw;
             me.LookPitch = pitch;
             await Seconds(0.25);
-            if (-me.Camera.GlobalTransform.Basis.Z.Dot(d) > 0.99f) return;
+            if (-me.Camera.GlobalTransform.Basis.Z.Dot(d) > 0.9f) break;
+            sign = -1f;
         }
+        // then close the last degrees from where the camera really is (it sits off the eye and bobs)
+        for (int i = 0; i < 6; i++)
+        {
+            var f = -me.Camera.GlobalTransform.Basis.Z;
+            d = (at - me.Camera.GlobalPosition).Normalized();
+            if (f.Dot(d) > 0.9998f) return;
+            var ff = new Vector2(f.X, f.Z); var df = new Vector2(d.X, d.Z);
+            float yawErr = Mathf.Atan2(ff.X * df.Y - ff.Y * df.X, ff.Dot(df));   // signed, about the vertical
+            me.LookYaw -= sign * yawErr;
+            me.LookPitch += Mathf.Asin(Mathf.Clamp(d.Y, -1f, 1f)) - Mathf.Asin(Mathf.Clamp(f.Y, -1f, 1f));
+            await Seconds(0.15);
+        }
+    }
+
+    /// <summary>Windowed only: looks at a bird through a narrow lens (a frame ~8 m across) and saves the picture.</summary>
+    private Task Snap(FootPlayer me, string name, Bird bird, bool zoom = true) => Snap(me, name, () => bird.Centre, zoom ? 8f : 0f);
+
+    /// <summary>Windowed only: looks at a point through a lens framing <paramref name="width"/> m there (0: the normal view) and saves the picture.</summary>
+    private Action? _lens;
+
+    public override void _Process(double delta) => _lens?.Invoke();
+
+    private async Task Snap(FootPlayer me, string name, Func<Vector3> at, float width)
+    {
+        if (DisplayServer.GetName() == "headless") return;
+        await Aim(me, at());
+        float normal = me.Camera.Fov;
+        float Fov() => width > 0f ? Mathf.Clamp(Mathf.RadToDeg(2f * Mathf.Atan(width * 0.5f / Mathf.Max(1f, me.Camera.GlobalPosition.DistanceTo(at())))), 2f, 70f) : normal;
+        // the direction holds when set after the player's own _Process; the FOV only right before the draw
+        Action lens = () => { if (IsInstanceValid(me)) me.Camera.LookAt(at()); };
+        Action fov = () => { if (IsInstanceValid(me)) me.Camera.Fov = Fov(); };
+        RenderingServer.FramePreDraw += fov;
+        _lens = lens;
+        await Seconds(0.6);
+        var dir = ProjectSettings.GlobalizePath("res://test_output");
+        System.IO.Directory.CreateDirectory(dir);
+        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, $"birdnet_{_role}_{name}.png"));
+        _lens = null;
+        RenderingServer.FramePreDraw -= fov;
+        GD.Print($"[birdnet {_role}] picture {name}");
+    }
+
+    /// <summary><c>--birdtown</c>: the town part of #143 instead of the hunt (tools/birdnetcheck.sh with TOWN=1).</summary>
+    private static bool Town => Array.IndexOf(OS.GetCmdlineUserArgs(), "--birdtown") >= 0;
+
+    private float Above(BirdLife life, Bird b) => b.Node.GlobalPosition.Y - life.Ground(b.Node.GlobalPosition);
+
+    /// <summary>
+    /// Town, A: pictures of the town birds; stands under a pigeon on an eave or a ledge until it lets go
+    /// on A (A's screen splat, B sees it land on A); then walks up to a town bird on the ground (it
+    /// lets A much closer than a field bird) and B watches it take off and land again.
+    /// </summary>
+    private async Task TownA(FootPlayer me, BirdLife life)
+    {
+        Expect(await Until(() => life.IsTown(me.GlobalPosition), 30), "the buildings here make a town");
+        Expect(await Until(() => life.Birds.Count(b => b.Remote && b.Town) >= 6, 90), $"town birds around ({life.Birds.Count(b => b.Remote && b.Town)})");
+        await Seconds(3.0);
+        var kinds = life.Birds.Where(b => b.Remote && b.Town).GroupBy(b => b.Species.Name).Select(g => $"{g.Key} x{g.Count()}");
+        GD.Print($"[birdnet A] town birds: {string.Join(", ", kinds)}");
+        bool ready = false;
+        for (int i = 0; i < 30 && !ready; i++) { Say("town"); ready = await Heard("B", "ready", 3); }
+        if (!ready) { Fail("B never joined"); return; }
+        var home = me.GlobalPosition;
+
+        // a pigeon high enough on a building that standing under it does not scare it
+        var space = me.GetWorld3D().DirectSpaceState;
+        Vector3? Under(Bird b)
+        {
+            var o = new Vector3(Mathf.Sin(b.Yaw), 0, Mathf.Cos(b.Yaw)) * 0.8f;
+            var top = b.Node.GlobalPosition + o;
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(top, top + Vector3.Down * 60f, uint.MaxValue, new Godot.Collections.Array<Rid> { me.GetRid() }));
+            if (hit.Count == 0) return null;
+            var floor = hit["position"].AsVector3();
+            return Mathf.Abs(floor.Y - life.Ground(floor)) < 0.6f ? floor : null;   // the street, not a lower roof
+        }
+        Bird? pigeon = null;
+        Vector3 spot = default;
+        await Until(() =>
+        {
+            foreach (var b in life.Birds.Where(b => b.Remote && b.Town && b.Species.Body == BodyPlan.Pigeon && b.State == Bird.Mode.Perched && Above(life, b) > 5.5f)
+                         .OrderBy(b => b.Node.GlobalPosition.DistanceTo(home)))
+                if (Under(b) is { } u) { pigeon = b; spot = u; return true; }
+            return false;
+        }, 120);
+        Expect(pigeon != null, "a pigeon on an eave or a ledge to stand under");
+        if (pigeon != null)
+        {
+            await Snap(me, "town_pigeon", pigeon);
+            Say($"under {pigeon.Id}");
+            me.LeaveInterior(spot + Vector3.Up * 0.3f, 0f);
+            me.Velocity = Vector3.Zero;
+            await Until(() => me.IsOnFloor(), 5);
+            int splats = life.Splats;
+            bool hit = await Until(() => life.Splats > splats || pigeon.State != Bird.Mode.Perched, 60) && life.Splats > splats;
+            Expect(hit, $"#{pigeon.Id} let go on A ({pigeon.State}, {me.GlobalPosition.DistanceTo(pigeon.Node.GlobalPosition):F1} m below)");
+            if (hit) await Snap(me, "splat_screen", () => me.EyePosition + -me.Camera.GlobalTransform.Basis.Z * 10f, 0f);
+            Say(hit ? "splat" : "nosplat");
+            await Heard("B", "seensplat", 20);
+            me.LeaveInterior(home, 0f);
+            await Seconds(2.0);
+        }
+
+        // a tame town bird on the street: A walks right up to it
+        Bird? Walker() => life.Birds.Where(b => b.Remote && b.Town && b.State == Bird.Mode.Ground && b.Node.GlobalPosition.DistanceTo(me.GlobalPosition) is > 15f and < 120f)
+            .OrderBy(b => b.Node.GlobalPosition.DistanceTo(me.GlobalPosition)).FirstOrDefault();
+        await Until(() => Walker() != null, 90);
+        var calm = Walker();
+        Expect(calm != null, "a town bird on the ground");
+        Say($"approach {calm?.Id ?? 0}");
+        if (calm == null || !await Heard("B", "watching", 30)) { Fail("B is not watching the approach"); return; }
+        // a field bird would have gone long before: a town bird sits until A is within a few metres
+        var from = (me.GlobalPosition - calm.Node.GlobalPosition) with { Y = 0 };
+        var dirAway = from.LengthSquared() < 1f ? Vector3.Back : from.Normalized();
+        var close = calm.Node.GlobalPosition + dirAway * (calm.FlushDistance + 3f);
+        me.LeaveInterior(close with { Y = life.Ground(close) + 1.5f }, 0f);
+        await Seconds(2.5);
+        Expect(calm.State == Bird.Mode.Ground, $"#{calm.Id} {calm.Species.Name} let A come within {calm.FlushDistance + 3f:F0} m ({calm.State})");
+        var nearer = calm.Node.GlobalPosition + dirAway * (calm.FlushDistance * 0.4f);
+        me.LeaveInterior(nearer with { Y = life.Ground(nearer) + 1.5f }, 0f);
+        Expect(await Until(() => calm.State == Bird.Mode.Flying, 6), $"#{calm.Id} took off when A came within {calm.FlushDistance * 0.4f:F1} m ({calm.State})");
+        me.LeaveInterior(home, 0f);
+        await Heard("B", "landed", 60);
+    }
+
+    private async Task TownB(FootPlayer me, BirdLife life)
+    {
+        Expect(await Until(() => life.Birds.Count(b => b.Remote && b.Town) >= 6, 90), "town birds around");
+        bool heard = false;
+        for (int i = 0; i < 30 && !heard; i++) { Say("ready"); heard = await Heard("A", "town", 3); }
+        Expect(heard, "heard A");
+        // what B sees of the town: a bird high on a roof, one on the street, and a flock aloft
+        var roof = life.Birds.Where(b => b.Town && b.State == Bird.Mode.Perched).OrderByDescending(b => Above(life, b)).FirstOrDefault();
+        if (roof != null) await Snap(me, "town_roof", () => roof.Centre, 14f);
+        var street = life.Birds.Where(b => b.Town && b.State == Bird.Mode.Ground).OrderBy(b => b.Node.GlobalPosition.DistanceTo(me.GlobalPosition)).FirstOrDefault();
+        if (street != null) await Snap(me, "town_street", () => street.Centre, 8f);
+        var aloft = life.Birds.Where(b => b.Town && b.State == Bird.Mode.Flying).OrderBy(b => b.Node.GlobalPosition.DistanceTo(me.GlobalPosition)).FirstOrDefault();
+        if (aloft != null) await Snap(me, "town_flying", () => aloft.Centre, 30f);
+
+        // A stands under a pigeon: B must see the dropping land on A
+        Expect(await Heard("A", "under", 150), "A stands under a pigeon");
+        int drops = life.DropsOnOthers;
+        Expect(await Heard("A", "splat", 70) || _heard.Any(l => l.Contains("PN A nosplat")), "A says how it went");
+        bool seen = await Until(() => life.DropsOnOthers > drops, 5);
+        Expect(seen, $"B saw a dropping land on A (peer {life.LastVictim})");
+        if (seen && life.GetNodeOrNull<Node3D>("../Players/" + life.LastVictim) is { } a)
+        {
+            await Seconds(1.0);
+            await Snap(me, "splat_on_A", () => a.GlobalPosition + Vector3.Up * 1.4f, 2.5f);
+        }
+        Say("seensplat");
+
+        // A walks up to a town bird: B sees it go, and come down again somewhere
+        Expect(await Heard("A", "approach", 150), "A picked a town bird to walk up to");
+        var ap = (_heard.LastOrDefault(l => l.Contains("PN A approach")) ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var calm = ap.Length > 0 && int.TryParse(ap[^1], out int calmId) ? life.Birds.FirstOrDefault(b => b.Id == calmId) : null;
+        if (calm != null) await Snap(me, "town_approach_before", calm);
+        Say("watching");
+        if (calm != null)
+        {
+            Expect(await Until(() => calm.State == Bird.Mode.Flying, 15), $"#{calm.Id} took off on B's screen ({calm.State})");
+            await Snap(me, "town_approach_after", () => calm.Centre, 20f);
+            bool down = await Until(() => calm.State is Bird.Mode.Perched or Bird.Mode.Ground || calm.Gone, 50) && !calm.Gone;
+            Expect(down, $"#{calm.Id} landed again ({calm.State}, {Above(life, calm):F1} m up)");
+            if (down) await Snap(me, "town_landed", calm);
+        }
+        Say("landed");
     }
 
     private int Shells() => Enumerable.Range(0, Inventory.Size).Where(i => _items.Inventory[i].Id == ItemId.Shells).Sum(i => _items.Inventory[i].Count);
