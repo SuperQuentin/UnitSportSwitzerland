@@ -117,7 +117,7 @@ public static class EmbankmentPlanner
         for (double d = 0.5; d <= reach; d += 0.5)
         {
             double x = st.X + sx * (edge + d), z = st.Z + sz * (edge + d);
-            if (lines.Covering(x, z, self) is not { } other) continue;
+            if (lines.Covering(x, z, self, st.X, st.Z, edge + 1.0) is not { } other) continue;
             double drop = st.Y - RoadEmbankment.FillSlope * d - other;
             return drop > RoadEmbankment.MinWallDrop ? Need.Fill : Need.None;
         }
@@ -161,6 +161,8 @@ public static class EmbankmentPlanner
         float thickness = RoadEmbankment.WallThickness;
         var pts = new List<(double X, double Z, double Foot, double Top)>();
         int tlm = 0;
+        // the solid, face to back: toward the road for a fill wall, into the hill for a cut wall
+        double inward = fill ? -thickness : thickness;
 
         for (int k = from; k <= to; k++)
         {
@@ -169,6 +171,18 @@ public static class EmbankmentPlanner
             double x = st.X + sx * face, z = st.Z + sz * face;
             // on the inside of a tight bend the face line folds back on itself: skip those points
             if (pts.Count > 0 && (x - pts[^1].X) * st.Fx + (z - pts[^1].Z) * st.Fz <= 0.05) continue;
+            // the solid must not stand on another line (a junction's other arm, the other leg of a
+            // hairpin): the run stops there and starts again past it
+            bool blocked = false;
+            for (double d = 0; d <= 1.0 && !blocked; d += 1.0 / 3)
+                blocked = lines.Covering(x + sx * inward * d, z + sz * inward * d, self, st.X, st.Z, edge + 1.0) is not null;
+            if (blocked)
+            {
+                Write(seg, type, right, pts, tlm, props, stats);
+                pts.Clear();
+                tlm = 0;
+                continue;
+            }
             if (lines.TlmWallNear(st.X + sx * (edge + 1.0), st.Z + sz * (edge + 1.0), 2.5)) tlm++;
 
             double foot, top;
@@ -194,7 +208,17 @@ public static class EmbankmentPlanner
             }
             pts.Add((x, z, foot, top));
         }
+        Write(seg, type, right, pts, tlm, props, stats);
+    }
+
+    /// <summary>One run of consecutive wall points as a prop, if it is long enough.</summary>
+    private static void Write(RoadSegment seg, LinearPropType type, bool right,
+        List<(double X, double Z, double Foot, double Top)> pts, int tlm, List<RoadLinearProp> props, Stats stats)
+    {
         if (pts.Count < 2) return;
+        bool fill = type == LinearPropType.RetainingWallFill;
+        float thickness = RoadEmbankment.WallThickness;
+        pts = new List<(double X, double Z, double Foot, double Top)>(pts);
 
         // the solid lies on the left of the point order: a fill wall's road, a cut wall's hill
         if (fill != right) pts.Reverse();
@@ -273,8 +297,12 @@ public static class EmbankmentPlanner
             }
         }
 
-        /// <summary>Height of the nearest other line whose width covers (x, z), or null.</summary>
-        public double? Covering(double x, double z, int self)
+        /// <summary>
+        /// Height of the nearest other line whose width covers (x, z), or null. The asking segment
+        /// counts as another line only away from where it is asking from (its station at sx, sz):
+        /// the other leg of a hairpin is, the piece the station sits on is not.
+        /// </summary>
+        public double? Covering(double x, double z, int self, double sx, double sz, double near)
         {
             if (!_buckets.TryGetValue(((int)Math.Floor(x / Cell), (int)Math.Floor(z / Cell)), out var list)) return null;
             double best = double.MaxValue;
@@ -282,7 +310,8 @@ public static class EmbankmentPlanner
             foreach (int k in list)
             {
                 var pc = _pieces[k];
-                if (pc.Seg == self || pc.Wall) continue;
+                if (pc.Wall) continue;
+                if (pc.Seg == self && Distance(pc.Ax, pc.Az, pc.Bx, pc.Bz, sx, sz, out _) < near) continue;
                 double d = Distance(pc.Ax, pc.Az, pc.Bx, pc.Bz, x, z, out double t);
                 if (d > pc.Half || d >= best) continue;
                 best = d;
