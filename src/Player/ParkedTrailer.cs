@@ -23,6 +23,8 @@ public sealed class ParkedTrailer : Rideable
     public Vector3 Angles { get; }
 
     private readonly HeavyTrain.Body[] _bodies;
+    /// <summary>Its sections as bodies, loaded: what <see cref="HeavyGround"/> stands on the ground.</summary>
+    public IReadOnlyList<HeavyTrain.Body> Bodies => _bodies;
 
     public ParkedTrailer(int code, Vector3 angles)
     {

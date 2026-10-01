@@ -84,6 +84,8 @@ public partial class HeavyNetProbe : Node
         Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = false });
     }
 
+    private static string Deg(Basis? b) => b is { } basis ? $"{Mathf.RadToDeg(basis.GetEuler().X):F1}°" : "-";
+
     private static string Train(FootPlayer p) => p.Heavy is { } t
         ? $"trailer {t.TrailerCode} joints {string.Join(" ", t.Articulation.Take(t.SectionCount - 1).Select(a => $"{Mathf.RadToDeg(a):F0}°"))} flags {t.PackFlags()}"
         : "no truck";
@@ -110,7 +112,12 @@ public partial class HeavyNetProbe : Node
         if (at(19) || at(23.5)) LogKingpin(me);
         if (at(24)) { Press(PlayerInput.Couple); }
         if (at(26)) Log($"coupled again from where it stood: {Train(me)}");
+        if (at(29.9))
+            Log($"driving pose: cab pitch {Deg(me.Visual?.GlobalBasis)} y {me.Visual?.GlobalPosition.Y:F2}, trailer pitch {Deg(me.GetNodeOrNull<Node3D>("Section1")?.GlobalBasis)} y {me.GetNodeOrNull<Node3D>("Section1")?.GlobalPosition.Y:F2}");
         if (at(30)) { me.ExitVehicle(); Log($"got out: ride {me.Ride} trailer {me.TrailerCode}"); }
+        if (at(33.5) && VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(x => x.Kind == Tractor) is { } parked
+            && parked.GetNodeOrNull<Node3D>("Visual") is { } shown)
+            Log($"parked pose: cab pitch {Deg(shown.GlobalBasis)} y {shown.GlobalPosition.Y:F2}, trailer pitch {Deg(shown.GetNodeOrNull<Node3D>("Section1")?.GlobalBasis)} y {shown.GetNodeOrNull<Node3D>("Section1")?.GlobalPosition.Y:F2}, hull pitch {Deg(parked.GetNodeOrNull<Node3D>("Hull")?.GlobalBasis)}");
         if (at(34))
         {
             var v = VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(x => x.Kind == Tractor);

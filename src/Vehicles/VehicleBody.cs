@@ -112,7 +112,7 @@ public partial class VehicleBody : CharacterBody3D
         Velocity = s.Velocity;
 
         var box = Ride.ParkedBox;
-        AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = box.Size }, Position = box.Centre });
+        AddChild(new CollisionShape3D { Name = "Hull", Shape = new BoxShape3D { Size = box.Size }, Position = box.Centre });
         // a parked train's trailer, a drawbar trailer's body: each section its own box, where it stands
         int extra = 0;
         foreach (var (pose, centre, size) in Ride.ExtraBoxes())
@@ -419,6 +419,7 @@ public partial class VehicleBody : CharacterBody3D
             rig.Headlights = _initial.Headlights && !Wrecked;
             rig.RoofOpen = _initial.RoofOpen;
         }
+        StandOnGround(dt);
         if (_visual is HeavyRig heavy && Ride is Truck truck)
         {
             // parked as the driver left it: lamps, doors, the display; every section's wheels roll
@@ -443,6 +444,61 @@ public partial class VehicleBody : CharacterBody3D
         // the fire burns out after half a minute; the smoke lingers until the wreck is cleared
         if (_fire != null && WreckAge > 30) _fire.Emitting = false;
         if (_smoke != null && WreckAge > 75) _smoke.Emitting = false;
+    }
+
+    private float _standIn;
+    private bool _stoodAsleep;
+
+    /// <summary>
+    /// A truck, a bus or a trailer stands on the ground as it did when driven: every section pitched
+    /// between its axles and its pin (<see cref="HeavyGround"/>), not dropped level. The drawn rigs
+    /// follow at a few hertz (every frame while it rolls); its collision boxes take the pose once it
+    /// is at rest — moved while it rolls, a pitched box would dig into the slope it slides on.
+    /// </summary>
+    private void StandOnGround(float dt)
+    {
+        IReadOnlyList<HeavyTrain.Body>? bodies = null;
+        System.Func<int, Transform3D>? local = null;
+        if (Ride is Truck t) { bodies = t.Train.Bodies; local = t.NodeLocal; }
+        else if (Ride is ParkedTrailer p) { bodies = p.Bodies; local = p.NodeLocal; }
+        if (bodies == null || local == null || _visual == null || Wrecked) return;
+        bool rolling = Velocity.LengthSquared() > 0.01f;
+        if (!rolling && (_standIn -= dt) > 0f) return;
+        _standIn = 0.25f;
+
+        var poses = HeavyGround.Stand(GlobalTransform, bodies, local, Ground);
+        _visual.GlobalTransform = poses[0];
+        for (int k = 1; k < poses.Length; k++)
+            if (_visual.GetNodeOrNull<Node3D>($"Section{k}") is { } rig) rig.GlobalTransform = poses[k];
+
+        // the boxes, at rest only (and once more when it settles): sections from their own pose
+        bool settled = _asleep || !IsMultiplayerAuthority();
+        if (!settled) { _stoodAsleep = false; return; }
+        if (_stoodAsleep) return;
+        _stoodAsleep = true;
+        if (GetNodeOrNull<CollisionShape3D>("Hull") is { } hull)
+            hull.GlobalTransform = poses[0] * new Transform3D(Basis.Identity, Ride.ParkedBox.Centre);
+        // the extra boxes are the sections behind, in order — after a semi-trailer's own running
+        // gear, which is part of its first section
+        bool gear = Ride is ParkedTrailer && bodies[0].Spec.Pivot != Coupling.Drawbar;
+        int extra = 0;
+        foreach (var (_, centre, _) in Ride.ExtraBoxes())
+        {
+            extra++;
+            int section = Mathf.Min(gear ? extra - 1 : extra, poses.Length - 1);
+            if (GetNodeOrNull<CollisionShape3D>($"Section{extra}") is { } shape)
+                shape.GlobalTransform = poses[section] * new Transform3D(Basis.Identity, centre);
+        }
+    }
+
+    /// <summary>The ground's height under a point: whatever is solid there (a road, a deck) but this vehicle, else the terrain.</summary>
+    private float Ground(Vector3 p)
+    {
+        var query = PhysicsRayQueryParameters3D.Create(p + Vector3.Up * 3f, p + Vector3.Down * 6f,
+            CollisionMask & ~World.TreeColliders.Layer, new Godot.Collections.Array<Rid> { GetRid() });
+        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        if (hit.Count > 0) return hit["position"].AsVector3().Y;
+        return Terrain != null && Terrain.TryGetHeight(p, out float g) ? g : p.Y;
     }
 
     /// <summary>Blows it up: the flag every peer watches. Only the authority calls this.</summary>

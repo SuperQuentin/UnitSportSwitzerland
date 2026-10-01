@@ -53,7 +53,7 @@
   (within 0.9 m, yaw within ~50°; a drawbar eye within 0.9 m, ~70°), the trailer is claimed
   through `VehicleManager` like getting into a vehicle. `H` again drops it where it stands (parked
   with its own angles). The picker's **Trailers** fold couples one at once behind a stopped truck
-  that takes it, or leaves it 14 m ahead. Getting out parks the whole train (`VehicleState.Train`,
+  that takes it, or leaves it 14 m ahead. Getting out parks the whole train (`VehicleState.Train`, stood on the slope as it was driven by `HeavyGround`;
   `Angles`, `Flags`, `Load`; the server counts it as two vehicles for `MayPark`).
 - **Buses**: `G` doors (all at once, stopped; a city bus kneels with them), `K` kneel, `N`
   destination (Label3D on the front, `HeavyLook.Destinations`). Door leaves swing out of real
