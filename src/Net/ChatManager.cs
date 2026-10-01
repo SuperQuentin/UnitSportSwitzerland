@@ -658,6 +658,11 @@ public partial class ChatManager : Node
 
     private void CommandCity(long sender, string query)
     {
+        if (BattleRoyale?.Playing(sender) == true)
+        {
+            ReplyTo(sender, "No teleporting out of a Battle Royale. /br leave to give up.", ChatKind.Error);
+            return;
+        }
         if (query.Length == 0)
         {
             ReplyTo(sender, "Usage: /city <town>", ChatKind.Error);

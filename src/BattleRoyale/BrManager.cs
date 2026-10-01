@@ -335,6 +335,9 @@ public partial class BrManager : Node
         Push();
     }
 
+    /// <summary>Server: <paramref name="peer"/> is alive in a running match (no teleporting out of it).</summary>
+    public bool Playing(long peer) => _state.Phase == BrPhase.Playing && _state.Find(peer) is { Alive: true };
+
     /// <summary>Server: a peer left the game. Out of the lobby, or out of the match.</summary>
     public void PeerLeft(long peer)
     {

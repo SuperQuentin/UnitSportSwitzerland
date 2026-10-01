@@ -113,6 +113,18 @@ public static class BrCheck
             names.Add(area.Name);
         }
         Expect(!close, $"five rounds, none within {BrRegion.RepeatKm} km of another: {string.Join(", ", names)}");
+
+        // the map of one of them, from the real tiles
+        var mapped = BrRegion.Pick(77, 6000, places, tiles, new List<(double, double)>(), (0, 0));
+        var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        var bytes = Task.Run(() => BrMapImage.BuildAsync(source, mapped)).GetAwaiter().GetResult();
+        var image = Image.CreateFromData(BrMapImage.Size, BrMapImage.Size, false, Image.Format.Rgba8, bytes);
+        string file = ProjectSettings.GlobalizePath("res://test_output/br_map_check.png");
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(file)!);
+        image.SavePng(file);
+        int colours = bytes.Chunk(4).Select(p => (p[0], p[1], p[2])).Distinct().Count();
+        Expect(colours > 40, $"the map of {mapped.Name} built in {timer.ElapsedMilliseconds} ms, {colours} colours, {file}");
     }
 
     private static (List<Place> Places, List<ManifestTile> Tiles) LoadWorld()

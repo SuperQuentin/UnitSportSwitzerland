@@ -147,7 +147,18 @@ public partial class BrProbe : Node
         var s = Br!.State;
         var (e, n) = Br.Origin!.ToLv95(Me!.GlobalPosition);
         Expect(s.Area.Contains(e, n), Fmt($"landed in the region ({e:F0}/{n:F0} in {s.AreaName} {s.AreaE:F0}/{s.AreaN:F0})"));
+        Expect(await Until(() => Br.MapTexture != null, 40), "the region's map is built (minimap)");
+        Br.Waypoint = new Vector2(400, 300);
+        await Seconds(1.0);
         Snap($"{_role.ToLowerInvariant()}_dropped");
+        if (_role == "A")
+        {
+            Expect(Br.ToggleMap() && Br.MapOpen, "M opens the match map");
+            await Seconds(1.0);
+            Snap("a_map");
+            Br.ToggleMap();
+            Expect(!Br.MapOpen, "M closes it");
+        }
         return true;
     }
 

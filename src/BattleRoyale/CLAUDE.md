@@ -6,4 +6,5 @@ its topic; search with `grep -ril <word> docs/notes/br`. Weapons and PvP: `docs/
 - `match` — BrManager at World/BattleRoyale: BrState JSON, phases, drop, lent inventory, StayDown, death report, PvpRules.Override, spectating, BrHud, --brpace
 - `zone` — ZoneSchedule (seeded, ServerNow-driven, nested circles, 8-phase timetable, damage on the owner), ZoneWall shader
 - `region` — BrRegion.Pick: random square from places.json towns + manifest tiles, hard rules, scoring, 8 km anti-repeat
+- `map` — BrMapImage (hillshade + cover + roads + buildings from the chunk source), Minimap, BrCompass strip, BrMap on M (grid, towns, zoom/pan, waypoint), no /city in a match
 - `commands` — /br verbs, --brcheck, tools/brcheck.sh

@@ -8,7 +8,6 @@ namespace UnitSport.BattleRoyale;
 /// The match on screen (CanvasLayer 10):
 /// <list type="bullet">
 /// <item>the phase line at the top: timer, players alive, your kills;</item>
-/// <item>an arrow and the distance to the safe zone;</item>
 /// <item>a red edge and a warning while you are outside the zone;</item>
 /// <item>the kill feed, top right;</item>
 /// <item>armour and ammunition, bottom left;</item>
@@ -49,6 +48,8 @@ public partial class BrHud : CanvasLayer
     private partial class View : Control
     {
         public BrHud Hud = null!;
+        /// <summary>Below the compass strip, while it shows.</summary>
+        private float Y0 => Hud._br.InMatch && Hud._br.State.Running ? BrCompass.Top + BrCompass.Height + 50 : 0;
         private static readonly Color Panel = new(0.05f, 0.05f, 0.08f, 0.62f);
         private static readonly Color Gold = new(1f, 0.82f, 0.25f);
         private static readonly Color Danger = new(1f, 0.25f, 0.2f);
@@ -92,18 +93,14 @@ public partial class BrHud : CanvasLayer
                     top = "BATTLE ROYALE";
                     break;
             }
-            Banner(font, new Vector2(w * 0.5f, 26), top, 20, Colors.White);
-            if (sub.Length > 0) Text(font, new Vector2(w * 0.5f, 52), sub, 14, new Color(1, 1, 1, 0.75f), HorizontalAlignment.Center);
+            Banner(font, new Vector2(w * 0.5f, Y0 + 26), top, 20, Colors.White);
+            if (sub.Length > 0) Text(font, new Vector2(w * 0.5f, Y0 + 52), sub, 14, new Color(1, 1, 1, 0.75f), HorizontalAlignment.Center);
 
             // ---- the zone, from where this player stands -----------------------------------
             if (s.Phase == BrPhase.Playing && br.ZoneNow is { } zn && me != null && br.InMatch && br.MeAlive)
             {
                 var at = br.ZonePoint(me.GlobalPosition);
                 bool outside = zn.Outside(at);
-                // head for the next circle once it shows, else the current one
-                var goal = zn.Phase == 0 ? zn.Centre : zn.NextCentre;
-                float goalR = zn.Phase == 0 ? zn.Radius : zn.NextRadius;
-                float toEdge = at.DistanceTo(goal) - goalR;
                 if (outside)
                 {
                     // a red edge, pulsing
@@ -114,22 +111,8 @@ public partial class BrHud : CanvasLayer
                     DrawRect(new Rect2(0, Size.Y - e, w, e), red);
                     DrawRect(new Rect2(0, 0, e, Size.Y), red);
                     DrawRect(new Rect2(w - e, 0, e, Size.Y), red);
-                    Banner(font, new Vector2(w * 0.5f, 92), $"OUTSIDE THE ZONE  −{zn.Dps:F0} HP/s", 18, Danger);
+                    Banner(font, new Vector2(w * 0.5f, Y0 + 92), $"OUTSIDE THE ZONE  −{zn.Dps:F0} HP/s", 18, Danger);
                 }
-                if (toEdge > 0 && GetViewport().GetCamera3D() is { } cam)
-                {
-                    // the arrow turns with the view: up = straight ahead
-                    var fwd = -cam.GlobalTransform.Basis.Z;
-                    var heading = br.ZonePoint(cam.GlobalPosition + fwd) - br.ZonePoint(cam.GlobalPosition);
-                    float ang = heading.Angle() - (goal - at).Angle();
-                    var c = new Vector2(w * 0.5f, outside ? 128 : 90);
-                    var dir = new Vector2(Mathf.Sin(ang), -Mathf.Cos(ang));
-                    var side = new Vector2(-dir.Y, dir.X);
-                    DrawColoredPolygon(new[] { c + dir * 14f, c - dir * 8f + side * 9f, c - dir * 3f, c - dir * 8f - side * 9f },
-                        outside ? Danger : Zone);
-                    Text(font, c + new Vector2(18, 6), $"safe zone {toEdge:F0} m", 13, outside ? Danger : Zone, HorizontalAlignment.Left);
-                }
-
                 // armour and the held gun's rounds, bottom left
                 var inv = br.Inventory();
                 string kit = me.Armor > 0 ? $"Armour {me.Armor:F0}" : "";
@@ -149,7 +132,7 @@ public partial class BrHud : CanvasLayer
 
             // ---- kill feed -----------------------------------------------------------------
             double t = Time.GetTicksMsec() / 1000.0;
-            float y = 90;
+            float y = Minimap.Margin + Minimap.Side + 24;
             foreach (var line in br.Feed)
             {
                 double age = t - line.At;

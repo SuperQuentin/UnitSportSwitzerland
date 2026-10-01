@@ -868,6 +868,8 @@ public partial class ClientWorld : Node3D
         br.Teleport = (e, n, label) => _teleporter?.TeleportTo(e, n, label) == true;
         br.AddAnchor = node => _chunks?.AddAnchor(node);
         br.RemoveAnchor = node => _chunks?.RemoveAnchor(node);
+        br.Source = () => _chunks?.Source;
+        br.Places = () => (IEnumerable<Terrain.Format.Place>?)_places?.All ?? Array.Empty<Terrain.Format.Place>();
         AddChild(br);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
         if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
@@ -978,6 +980,8 @@ public partial class ClientWorld : Node3D
         // while the search box has focus, keys belong to it
         if (@event.IsActionPressed(PlayerInput.Teleport))
         {
+            // in a Battle Royale match M is the match map, and there is no teleporting anyway
+            if (BattleRoyale.BrManager.Instance?.ToggleMap() == true) return;
             _places?.Toggle();
             return;
         }

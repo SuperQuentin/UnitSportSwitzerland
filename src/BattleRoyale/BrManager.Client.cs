@@ -25,6 +25,20 @@ public partial class BrManager
     public Func<double, double, string?, bool> Teleport { get; set; } = (_, _, _) => false;
     public Action<Node3D>? AddAnchor { get; set; }
     public Action<Node3D>? RemoveAnchor { get; set; }
+    /// <summary>Where the map image's tiles come from: the terrain's own source.</summary>
+    public Func<Terrain.IChunkSource?> Source { get; set; } = () => null;
+    /// <summary>The place index, for the town names on the map.</summary>
+    public Func<IEnumerable<Terrain.Format.Place>> Places { get; set; } = () => Array.Empty<Terrain.Format.Place>();
+
+    /// <summary>The region's map (<see cref="BrMapImage"/>), once built; null before and outside a match.</summary>
+    public Texture2D? MapTexture { get; private set; }
+    /// <summary>The waypoint this player set on the full map (zone metres); its own, never sent.</summary>
+    public Vector2? Waypoint { get; set; }
+    /// <summary>Towns inside the region: name, zone position, buildings.</summary>
+    public IReadOnlyList<(string Name, Vector2 At, int Buildings)> Towns { get; private set; } = Array.Empty<(string, Vector2, int)>();
+    private (double E, double N, float Side) _mapFor;
+    private CancellationTokenSource? _mapCancel;
+    private BrMap? _map;
 
     private ZoneSchedule? _zone;
     private (int Seed, float Side, float Pace) _zoneKey;
@@ -53,6 +67,10 @@ public partial class BrManager
         if (_server) return;
         _hud = new BrHud(this);
         AddChild(_hud);
+        _hud.AddChild(new BrCompass(this));
+        _hud.AddChild(new Minimap(this));
+        _map = new BrMap(this);
+        AddChild(_map);
         _wall = new ZoneWall { Name = "ZoneWall", Visible = false };
         AddChild(_wall);
     }
@@ -103,6 +121,7 @@ public partial class BrManager
             _zoneKey = key;
         }
         if (s.Phase == BrPhase.Idle) _feed.Clear();
+        if (s.Phase != BrPhase.Idle && _mapFor != (s.AreaE, s.AreaN, s.Side)) BuildMap(s.Area);
         if (before != BrPhase.Ended && s.Phase == BrPhase.Ended && s.Winner == Me && InMatch)
             LocalPlayer()?.Announce("WINNER WINNER RACLETTE DINNER", true);
         GD.Print($"[br] state {s.Phase}, {s.AliveCount}/{s.Entrants.Count} alive");
@@ -163,9 +182,67 @@ public partial class BrManager
         Permissions.SetRidesLocked(false);
         StopSpectating();
         Inventory()?.EndMatch();
+        Waypoint = null;
+        _map?.SetOpen(false);
         if (LocalPlayer() is { } me && me.Eliminated) me.Respawn(me.GlobalPosition);
         Teleport(_returnE, _returnN, "back from the Battle Royale");
         GD.Print("[br] released");
+    }
+
+    // ------------------------------------------------------------------------------------
+    // the map
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>Starts building the region's map image; it shows up in the minimap and on M once done.</summary>
+    private async void BuildMap(BrArea area)
+    {
+        _mapFor = (area.E, area.N, area.Side);
+        MapTexture = null;
+        Waypoint = null;
+        Towns = Places().Where(p => p.Kind == Terrain.Format.PlaceKind.Town && area.Contains(p.E, p.N))
+            .Select(p => (p.Name, new Vector2((float)(p.E - area.E), (float)(p.N - area.N)), p.Buildings)).ToList();
+        _mapCancel?.Cancel();
+        var cancel = _mapCancel = new CancellationTokenSource();
+        if (Source() is not { } source) return;
+        try
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var bytes = await BrMapImage.BuildAsync(source, area, cancel.Token);
+            // back on the main thread (Godot's synchronization context resumes awaits there)
+            if (cancel.IsCancellationRequested || !IsInsideTree()) return;
+            var image = Image.CreateFromData(BrMapImage.Size, BrMapImage.Size, false, Image.Format.Rgba8, bytes);
+            MapTexture = ImageTexture.CreateFromImage(image);
+            GD.Print($"[br] map of {area.Name} built in {watch.ElapsedMilliseconds} ms");
+            if (OS.GetCmdlineUserArgs().Contains("--brmapsave"))
+                image.SavePng(ProjectSettings.GlobalizePath("res://test_output/br_map.png"));
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception e) { GD.PushWarning($"[br] map: {e.Message}"); }
+    }
+
+    /// <summary>M during a match: the full map instead of the place search. False when not in a match.</summary>
+    public bool ToggleMap()
+    {
+        if (!InMatch || !_state.Running || _map == null) return false;
+        _map.Toggle();
+        return true;
+    }
+
+    public bool MapOpen => _map?.IsOpen == true;
+
+    /// <summary>
+    /// Where the map is centred and which way it faces: the player you are watching, or yourself
+    /// with your camera's heading. Zone metres; heading is a direction (east, north).
+    /// </summary>
+    public (Vector2 Position, Vector2 Heading)? ViewPoint()
+    {
+        if (Origin == null) return null;
+        if (Watching != 0 && GetNodeOrNull<FootPlayer>("../Players/" + Watching) is { } other)
+            return (ZonePoint(other.GlobalPosition), new Vector2(-Mathf.Sin(other.NetYaw), Mathf.Cos(other.NetYaw)));
+        if (LocalPlayer() is not { } me) return null;
+        var fwd = GetViewport().GetCamera3D() is { } cam ? -cam.GlobalTransform.Basis.Z : -me.GlobalTransform.Basis.Z;
+        var heading = new Vector2(fwd.X, -fwd.Z);
+        return (ZonePoint(me.GlobalPosition), heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector2.Up);
     }
 
     // ------------------------------------------------------------------------------------
