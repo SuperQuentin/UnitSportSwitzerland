@@ -51,9 +51,16 @@ void fragment() {
     float dx = cos(ground.x * 0.35 + t) * 0.35 * 0.5;
     float dz = -sin(ground.y * 0.27 - t * 0.8) * 0.27 * 0.5;
     vec3 ripple = normalize(vec3(-dx * 0.6, 1.0, -dz * 0.6));
-    ALBEDO = style_grade(occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX)));
     NORMAL = style_view_normal(VIEW_MATRIX, ripple);
+#ifdef STYLE_REAL
+    // dark and glossy: the sky's reflection and the sun's glint do the rest
+    ALBEDO = occasion_mist(deep_color * 0.6, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
+    ROUGHNESS = 0.05;
+    SPECULAR = 0.6;
+#else
+    ALBEDO = style_grade(occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX)));
     ROUGHNESS = 0.6;
+#endif
 #else
     col *= world_tint;
     // valley mist of a running occasion; a no-op on an ordinary day

@@ -146,6 +146,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             GetTree().Quit(ChatCheck.Run(this));
             return;
         }
+        if (ImpostorBake.Requested)
+        {
+            AddChild(new ImpostorBake());
+            return;
+        }
         if (StyleKit.ReportRequested)
         {
             GetTree().Quit(StyleKit.Report());
@@ -960,15 +965,28 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private void ApplyNearTrees()
     {
-        bool want = StyleKit.Detail == MeshDetail.High && StyleKit.TreeLod && _chunks != null && _treeMaterial != null;
-        if (want == (_nearTrees != null)) return;
+        // every restyle: each style has its own trees and range
         _nearTrees?.QueueFree();
         _nearTrees = null;
-        if (!want) return;
-        var (conifer, broadleaf) = ChunkNode.HighDetailTrees(_treeMaterial!);
-        _nearTrees = new NearTrees(conifer, broadleaf, StyleKit.TreeReach);
+        if (StyleKit.Detail != MeshDetail.High || !StyleKit.TreeLod || _chunks == null || _treeMaterial == null) return;
+        var (cone, crown) = ChunkNode.HighDetailTrees(_treeMaterial);
+        _nearTrees = new NearTrees(CatalogueTree(ModelCatalog.TreeConifer) ?? cone,
+            CatalogueTree(ModelCatalog.TreeBroadleaf) ?? crown, StyleKit.TreeReach);
         // under the terrain, an origin container: the floating origin moves it with the tiles
         _chunks!.AddChild(_nearTrees);
+    }
+
+    /// <summary>
+    /// The applied style's model for a tree (<see cref="ModelCatalog"/>), with its bark and leaf
+    /// materials; null where the style has none and the builders' trees serve.
+    /// </summary>
+    private static Mesh? CatalogueTree(string id)
+    {
+        if (ModelCatalog.Mesh(id) is not { } model) return null;
+        var mesh = (ArrayMesh)model.Duplicate();
+        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            mesh.SurfaceSetMaterial(s, StyleKit.TreeSurface(id, ImpostorBake.IsLeaves(mesh, s)));
+        return mesh;
     }
 
     /// <summary>The style's sun, or none: made here, pointed by <see cref="World.DayNight"/>.</summary>
@@ -1001,6 +1019,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         GameSettings.Changed -= OnSettingsChanged;
         StyleCommand.RebuildRequested -= OnRebuildRequested;
         StyleKit.Chosen -= OnStyleChosen;
+        NearTrees.Forget();
         Vehicles.VehicleManager.Refused -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         if (_networked)

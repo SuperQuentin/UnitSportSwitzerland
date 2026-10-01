@@ -74,8 +74,13 @@ public partial class NearTrees : Node3D, IOriginShiftAware
 
     public void OnOriginShifted(OriginShift shift) => _lastAt = new Vector3(float.MaxValue, 0, 0);
 
-    /// <summary>A style without these trees, or the world closing: the tiles' buffers go too.</summary>
-    public override void _ExitTree() => Tiles.Clear();
+    /// <summary>
+    /// The world is closing: the tiles' buffers go too. Not on this node's own exit: a restyle
+    /// replaces it while the tiles stay registered.
+    /// </summary>
+    public static void Forget() => Tiles.Clear();
+
+    public override void _Ready() => _tilesChanged = true;
 
     public override void _Process(double delta)
     {

@@ -4,6 +4,8 @@
 //                  of lighting itself from world_sun_dir and world_tint
 //   STYLE_CARTOON  (with STYLE_LIT) a cel light(): one soft terminator, sun shadows as the same
 //                  band, a faint rim; colours lifted toward pastel (style_grade)
+//   STYLE_REAL     (with STYLE_LIT) Godot's PBR light; CC0 textures tinted by the vertex colours
+//                  (style_tinted), normal maps (style_ground_normal)
 // Without STYLE_LIT a body keeps its unshaded PS1 path, and its retro finish follows `retro`.
 #ifndef COMMON_STYLE
 #define COMMON_STYLE
@@ -55,6 +57,25 @@ float style_paint_noise(vec2 p) {
 #else
 vec3 style_grade(vec3 col) {
     return col;
+}
+#endif
+
+#ifdef STYLE_REAL
+// A detail texture tinted by the baked vertex colour: the texture brings the grain, the vertex
+// colour keeps the land cover readable (and matches every other style's palette). The texture's
+// own average is its last mip, so the texture divided by it averages to 1. `weight` lets that
+// much of the texture's own colour through.
+vec3 style_tinted(sampler2D tex, vec2 uv, vec3 vcol, float weight) {
+    vec3 t = texture(tex, uv).rgb;
+    vec3 mean = textureLod(tex, vec2(0.5), 12.0).rgb;
+    return mix(vcol * t / max(mean, vec3(0.02)), t, weight);
+}
+
+// A world-space normal tilted by a normal map projected from above (uv = world xz / scale):
+// the map's x along world x, its green (OpenGL, up the image) along world -z.
+vec3 style_ground_normal(vec3 n, sampler2D nmap, vec2 uv, float strength) {
+    vec3 t = texture(nmap, uv).xyz * 2.0 - 1.0;
+    return normalize(n + vec3(t.x, 0.0, -t.y) * strength);
 }
 #endif
 #endif

@@ -87,7 +87,7 @@ public static class StyleKit
     }
 
     /// <summary>The styles the settings menu offers: those with a look of their own so far.</summary>
-    public static readonly VisualStyle[] MenuStyles = [VisualStyle.Ps1, VisualStyle.Cartoon];
+    public static readonly VisualStyle[] MenuStyles = [VisualStyle.Ps1, VisualStyle.Cartoon, VisualStyle.RealisticLow];
 
     /// <summary>"PS1", "Cartoon", "Realistic−", "Realistic+": for menus.</summary>
     public static string Label(VisualStyle style) => style switch
@@ -153,7 +153,16 @@ public static class StyleKit
             [MaterialRole.Prop] = "res://shaders/cartoon_prop.gdshader",
             [MaterialRole.Path] = "res://shaders/cartoon_path.gdshader",
         },
-        [VisualStyle.RealisticLow] = new(),
+        // prop and path borrow Cartoon's lit ones; interiors and snowfall stay PS1's
+        [VisualStyle.RealisticLow] = new()
+        {
+            [MaterialRole.Terrain] = "res://shaders/real_terrain.gdshader",
+            [MaterialRole.Road] = "res://shaders/real_road.gdshader",
+            [MaterialRole.Building] = "res://shaders/real_building.gdshader",
+            [MaterialRole.Tree] = "res://shaders/real_tree.gdshader",
+            [MaterialRole.TreeFar] = "res://shaders/real_treefar.gdshader",
+            [MaterialRole.Water] = "res://shaders/real_water.gdshader",
+        },
         [VisualStyle.RealisticHigh] = new(),
     };
 
@@ -243,6 +252,16 @@ public static class StyleKit
 
     private static void Shade(StandardMaterial3D m, PlainFigure plain)
     {
+        if (StyleFinish == Finish.Realistic)
+        {
+            // one material for paint, cloth and skin alike: a compromise until the builders give
+            // each its own surface
+            m.DiffuseMode = plain.Diffuse;
+            m.SpecularMode = BaseMaterial3D.SpecularModeEnum.SchlickGgx;
+            m.Roughness = 0.55f;
+            m.RimEnabled = false;
+            return;
+        }
         if (StyleFinish == Finish.Cartoon)
         {
             m.DiffuseMode = BaseMaterial3D.DiffuseModeEnum.Toon;
@@ -263,7 +282,8 @@ public static class StyleKit
 
     private static void Configure(ShaderMaterial m, MaterialRole role, VisualStyle style)
     {
-        var shader = GD.Load<Shader>(Resolve(style, role).Path);
+        var (from, path) = Resolve(style, role);
+        var shader = GD.Load<Shader>(path);
         if (m.Shader != shader) m.Shader = shader;
         // PS1's finish (shaders/common/retro.gdshaderinc) belongs to PS1: off wherever another
         // style draws with a PS1 body, borrowed or wrapped
@@ -278,6 +298,62 @@ public static class StyleKit
                 m.SetShaderParameter("tree_near", TreeNear);
                 break;
         }
+        // the realistic shaders' textures, wherever they are drawn (Realistic+ borrows them)
+        if (from == VisualStyle.RealisticLow)
+            foreach (var (name, file) in RealTextures(role))
+                if (ResourceLoader.Exists(file))
+                    m.SetShaderParameter(name, GD.Load<Texture2D>(file));
+    }
+
+    private const string RealTex = "res://assets/realistic/textures/";
+    private const string RealTrees = "res://assets/realistic/trees/";
+
+    /// <summary>The CC0 sets the realistic shaders sample, by role (assets/ASSETS.md).</summary>
+    private static (string Uniform, string File)[] RealTextures(MaterialRole role) => role switch
+    {
+        MaterialRole.Terrain =>
+        [
+            ("tex_grass", RealTex + "Grass004_1K-JPG_Color.jpg"), ("nrm_grass", RealTex + "Grass004_1K-JPG_NormalGL.jpg"),
+            ("tex_forest", RealTex + "Ground078_1K-JPG_Color.jpg"), ("nrm_forest", RealTex + "Ground078_1K-JPG_NormalGL.jpg"),
+            ("tex_gravel", RealTex + "Gravel023_1K-JPG_Color.jpg"), ("nrm_gravel", RealTex + "Gravel023_1K-JPG_NormalGL.jpg"),
+            ("tex_rock", RealTex + "Rock058_1K-JPG_Color.jpg"), ("tex_snow", RealTex + "Snow006_1K-JPG_Color.jpg"),
+        ],
+        MaterialRole.Road => [("tex_asphalt", RealTex + "Asphalt031_1K-JPG_Color.jpg"), ("tex_gravel", RealTex + "Gravel023_1K-JPG_Color.jpg")],
+        MaterialRole.Building => [("tex_plaster", RealTex + "Plaster001_1K-JPG_Color.jpg"), ("tex_roof", RealTex + "RoofingTiles006_1K-JPG_Color.jpg")],
+        MaterialRole.TreeFar =>
+        [
+            ("impostor_side_conifer", RealTrees + "conifer_side.png"), ("impostor_top_conifer", RealTrees + "conifer_top.png"),
+            ("impostor_side_broadleaf", RealTrees + "broadleaf_side.png"), ("impostor_top_broadleaf", RealTrees + "broadleaf_top.png"),
+        ],
+        _ => [],
+    };
+
+    /// <summary>
+    /// A material for one surface of a catalogue tree (<see cref="ModelCatalog"/>): its bark, or
+    /// its leaf cards, as the applied style's <see cref="MaterialRole.Tree"/> material with that
+    /// surface's textures. Restyled like every other material.
+    /// </summary>
+    public static ShaderMaterial TreeSurface(string id, bool leaves)
+    {
+        var m = Material(MaterialRole.Tree);
+        bool conifer = id == ModelCatalog.TreeConifer;
+        string bark = conifer ? "pine" : "oak";
+        m.SetShaderParameter("leaves", leaves);
+        // the instance colours vary around the kind's mean (ChunkNode.Pack)
+        if (conifer) m.SetShaderParameter("tint_ref", new Color(0.165f, 0.285f, 0.145f));
+        if (leaves)
+        {
+            m.SetShaderParameter("albedo_tex", GD.Load<Texture2D>(RealTrees + (conifer ? "leaves_pine.png" : "leaves_ash.png")));
+        }
+        else
+        {
+            m.SetShaderParameter("albedo_tex", GD.Load<Texture2D>(RealTrees + $"bark_{bark}_color.jpg"));
+            m.SetShaderParameter("normal_tex", GD.Load<Texture2D>(RealTrees + $"bark_{bark}_normal.jpg"));
+            m.SetShaderParameter("use_normal_map", true);
+            // the unit tree is squashed sideways: the bark tiles round the trunk, not along it
+            m.SetShaderParameter("uv_scale", conifer ? new Vector2(1f, 1f) : new Vector2(0.5f, 5f));
+        }
+        return m;
     }
 
     private static bool HasUniform(Shader shader, string name)
@@ -293,7 +369,8 @@ public static class StyleKit
     // terrain's geometry. Each item walks the fallback chain on its own, like the roles.
 
     /// <summary>A style's look beyond its shaders; null borrows the parent's.</summary>
-    private sealed record Look(MeshDetail? Detail = null, int? FinestStride = null, bool? Sun = null, Finish? Finish = null);
+    private sealed record Look(MeshDetail? Detail = null, int? FinestStride = null, bool? Sun = null, Finish? Finish = null,
+        float? TreeNear = null);
 
     /// <summary>
     /// A style's finish outside its shaders: how its sky, ambient light and haze are made and
@@ -305,15 +382,18 @@ public static class StyleKit
         Flat,
         /// <summary>A gradient sky, filmic tonemap, cool blue shade, strong aerial haze; toon figures.</summary>
         Cartoon,
+        /// <summary>A procedural sky lighting the scene, ACES tonemap, light haze, glow; PBR figures.</summary>
+        Realistic,
     }
 
     private static readonly Dictionary<VisualStyle, Look> Looks = new()
     {
-        [VisualStyle.Ps1] = new(MeshDetail.Low, FinestStride: 1, Sun: false, Finish: Finish.Flat),
+        [VisualStyle.Ps1] = new(MeshDetail.Low, FinestStride: 1, Sun: false, Finish: Finish.Flat, TreeNear: 220f),
         [VisualStyle.Cartoon] = new(MeshDetail.High, Sun: true, Finish: Finish.Cartoon),
         // Textures carry the surface detail, so 2 m quads underfoot rather than 1 m: the
         // prototype's biggest geometry lever (Realistic-, Riddes, M1 Pro: ~25 -> 11-20 ms)
-        [VisualStyle.RealisticLow] = new(FinestStride: 2),
+        // ...and 3D trees to 80 m only: an EZ-Tree is ~3k triangles against Cartoon's 50-120
+        [VisualStyle.RealisticLow] = new(FinestStride: 2, Finish: Finish.Realistic, TreeNear: 80f),
         [VisualStyle.RealisticHigh] = new(),
     };
 
@@ -353,6 +433,25 @@ public static class StyleKit
             BackgroundMode = Godot.Environment.BGMode.Color,
             BackgroundColor = new Color(0.72f, 0.78f, 0.86f),
         };
+        if (StyleFinish == Finish.Realistic)
+        {
+            env.BackgroundMode = Godot.Environment.BGMode.Sky;
+            env.Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial() };
+            env.TonemapMode = Godot.Environment.ToneMapper.Aces;
+            env.TonemapExposure = 0.8f;
+            env.AdjustmentEnabled = true;
+            env.AdjustmentContrast = 1.05f;
+            env.AmbientLightSource = Godot.Environment.AmbientSource.Sky;
+            env.ReflectedLightSource = Godot.Environment.ReflectionSource.Sky;
+            env.FogEnabled = true;
+            env.FogMode = Godot.Environment.FogModeEnum.Exponential;
+            env.FogDensity = 0.00004f;
+            env.FogAerialPerspective = 0.8f;
+            env.FogSkyAffect = 0f;
+            env.GlowEnabled = true;
+            env.GlowIntensity = 0.4f;
+            env.GlowHdrThreshold = 1.2f;
+        }
         if (StyleFinish == Finish.Cartoon)
         {
             env.BackgroundMode = Godot.Environment.BGMode.Sky;
@@ -400,6 +499,21 @@ public static class StyleKit
             env.AmbientLightColor = new Color(0.50f, 0.60f, 0.92f).Lerp(sky, 0.2f);
             env.AmbientLightEnergy = Mathf.Lerp(0.8f, 0.4f, night);
             env.BackgroundColor = sky;
+            return;
+        }
+        if (StyleFinish == Finish.Realistic && env.Sky?.SkyMaterial is ProceduralSkyMaterial real)
+        {
+            // a clear sky by day, the palette's own at dusk and night; it lights the scene
+            float dusk = Mathf.Clamp(1f - (sunElevationDeg - 2f) / 18f, 0f, 1f);
+            real.SkyTopColor = new Color(0.20f, 0.38f, 0.70f).Lerp(sky.Darkened(0.2f), dusk);
+            real.SkyHorizonColor = new Color(0.66f, 0.76f, 0.88f).Lerp(sky.Lightened(0.2f), dusk);
+            real.GroundHorizonColor = real.SkyHorizonColor;
+            real.GroundBottomColor = real.SkyHorizonColor.Darkened(0.4f);
+            real.SkyEnergyMultiplier = Mathf.Lerp(1.0f, 0.25f, night);
+            env.FogLightColor = new Color(0.66f, 0.76f, 0.88f).Lerp(sky.Lightened(0.15f), dusk);
+            env.AmbientLightSkyContribution = 1f;
+            env.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.35f, night);
+            if (sun != null) sun.LightEnergy = Mathf.Lerp(1.6f, 0.12f, night);
             return;
         }
         env.BackgroundColor = sky;
@@ -469,10 +583,15 @@ public static class StyleKit
     /// <summary>Whether far trees are billboards. "--tree-lod off" keeps every tree 3D, as before.</summary>
     public static bool TreeLod { get; } = ArgValue("--tree-lod") is not ("off" or "0" or "false");
 
-    /// <summary>Where the 3D trees hand over to billboards, in metres. "--tree-near m" overrides it.</summary>
-    public static float TreeNear { get; } =
+    /// <summary>
+    /// Where the 3D trees hand over to billboards in the applied style, in metres (PS1 and Cartoon
+    /// 220, the realistic styles 80). "--tree-near m" overrides it in every style.
+    /// </summary>
+    public static float TreeNear => TreeNearArg ?? Pick(Applied, l => l.TreeNear).Value;
+
+    private static readonly float? TreeNearArg =
         float.TryParse(ArgValue("--tree-near"), System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out float m) ? m : 220f;
+            System.Globalization.CultureInfo.InvariantCulture, out float m) ? m : null;
 
     /// <summary>
     /// Visibility range for a whole tile's 3D tree MultiMesh, whose trees lie in
@@ -505,7 +624,7 @@ public static class StyleKit
     public static int Report()
     {
         int failures = 0;
-        if (Looks[Base] is not { Detail: not null, FinestStride: not null, Sun: not null, Finish: not null })
+        if (Looks[Base] is not { Detail: not null, FinestStride: not null, Sun: not null, Finish: not null, TreeNear: not null })
         {
             GD.PrintErr($"[style-report] FAIL: the base style {Base} has an incomplete look");
             failures++;
@@ -518,6 +637,12 @@ public static class StyleKit
                 failures++;
             }
         }
+        foreach (var (style, id, path) in ModelCatalog.All())
+            if (!ResourceLoader.Exists(path))
+            {
+                GD.PrintErr($"[style-report] FAIL: {style} {id}: {path} does not exist");
+                failures++;
+            }
         foreach (var (style, roles) in Shaders)
             foreach (var (role, path) in roles)
                 if (!ResourceLoader.Exists(path))
@@ -544,6 +669,10 @@ public static class StyleKit
                 LookItem("finest-stride", l => l.FinestStride);
                 LookItem("sun", l => l.Sun);
                 LookItem("finish", l => l.Finish);
+                LookItem("tree-near", l => l.TreeNear);
+                foreach (var id in ModelCatalog.Ids)
+                    if (ModelCatalog.Resolve(style, id) is not { } model) borrowed.Add($"{id}<-builder");
+                    else if (model.From != style) borrowed.Add($"{id}<-{model.From}");
                 GD.Print($"[style-report] {style}: {(borrowed.Count == 0 ? "complete" : $"borrows {borrowed.Count}: {string.Join(" ", borrowed)}")}");
             }
         }

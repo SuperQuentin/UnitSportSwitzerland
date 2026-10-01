@@ -7,6 +7,7 @@
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
+#include "res://shaders/world_origin.gdshaderinc"
 
 // Roads share the terrain's PS1 treatment (vertex snap, dither, fog) and take their base
 // colour from baked vertex colours, so one material covers every road class in a tile.
@@ -27,6 +28,11 @@ uniform vec3 sleeper_color : source_color = vec3(0.26, 0.21, 0.16);
 // Paint is pulled this fraction of its distance toward the camera, so it wins the depth test
 // over the carriageway it lies on at any range, snapped vertices and all.
 uniform float paint_depth_bias = 0.002;
+
+#ifdef STYLE_REAL
+uniform sampler2D tex_asphalt : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_gravel : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+#endif
 
 varying vec2 surf;   // along, lateral
 varying float style;
@@ -49,6 +55,14 @@ void fragment() {
     }
     vec3 col = COLOR.rgb;
     int s = int(style + 0.5);
+#ifdef STYLE_REAL
+    // the carriageway asphalt, the ballast gravel; paint (style 6) and the markings drawn below
+    // keep their own colour
+    if (s != 6) {
+        vec2 ruv = pattern_xz(world_pos) / 3.0;
+        col = s == 4 ? style_tinted(tex_gravel, ruv, col, 0.3) : style_tinted(tex_asphalt, ruv, col, 0.25);
+    }
+#endif
     float along = surf.x;
     float lat = surf.y;
 
@@ -105,7 +119,11 @@ void fragment() {
     col = style_grade(occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX)));
     ALBEDO = col;
     NORMAL = style_view_normal(VIEW_MATRIX, n);
+#ifdef STYLE_REAL
+    ROUGHNESS = s == 6 ? 0.6 : 0.85;
+#else
     ROUGHNESS = 1.0;
+#endif
     EMISSION = col * door_light(world_pos, vec3(0.0, 1.0, 0.0));
 #else
     col *= world_tint + door_light(world_pos, vec3(0.0, 1.0, 0.0));

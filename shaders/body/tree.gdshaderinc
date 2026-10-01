@@ -59,6 +59,24 @@ uniform bool tree_lod = false;   // the 3D trees: collapse beyond tree_near (the
 uniform float tree_near = 220.0;
 uniform float tree_fade = 40.0;
 varying float lod_keep;
+#ifdef STYLE_REAL
+// The realistic trees (Styles/ModelCatalog: EZ-Tree meshes, two surfaces). Near: the bark or the
+// leaf cards; far: the impostors baked from the same meshes (--bake-impostors).
+uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform bool leaves = false;
+uniform bool use_normal_map = false;
+uniform vec2 uv_scale = vec2(1.0);
+uniform float alpha_cut = 0.45;
+// the instance colours (ChunkNode.Pack) vary around these, a broadleaf's and a conifer's: their
+// ratio varies each tree's leaves (StyleKit.TreeSurface picks the near trees' one)
+uniform vec3 tint_ref : source_color = vec3(0.20, 0.32, 0.15);
+uniform vec3 tint_ref_conifer : source_color = vec3(0.165, 0.285, 0.145);
+uniform sampler2D impostor_side_conifer : source_color, filter_linear_mipmap, repeat_disable;
+uniform sampler2D impostor_top_conifer : source_color, filter_linear_mipmap, repeat_disable;
+uniform sampler2D impostor_side_broadleaf : source_color, filter_linear_mipmap, repeat_disable;
+uniform sampler2D impostor_top_broadleaf : source_color, filter_linear_mipmap, repeat_disable;
+#endif
 #ifdef TREE_BILLBOARD
 varying vec3 bb_origin;    // the instance's base, world space
 varying vec3 bb_scale;     // (radius, height, radius): the instance basis is diagonal
@@ -216,6 +234,38 @@ void nearer(float t, vec3 n, inout float best, inout vec3 best_n) {
     }
 }
 #endif
+
+#ifdef STYLE_REAL
+// The impostor at this view ray (unit-mesh space, o + t d). Two baked pictures of the tree: side
+// on (x -1..1, y 0..1), on the vertical plane through the trunk that faces the camera, and from
+// above (x, z -1..1), on the horizontal plane at mid crown. Trees are near enough to bodies of
+// revolution that one side view serves every azimuth. The camera's elevation picks between
+// them. Returns the colour and coverage, the hit's t and a rounded-crown normal.
+vec4 impostor(vec3 o, vec3 d, bool broadleaf, float sin_e, out float t, out vec3 n) {
+    vec2 toward = length(o.xz) > 1e-4 ? normalize(o.xz) : vec2(0.0, 1.0);
+    vec2 across = vec2(-toward.y, toward.x);
+    float ts = -dot(o.xz, toward) / dot(d.xz, toward);
+    vec3 ps = o + d * ts;
+    vec2 side_uv = vec2(dot(ps.xz, across) * 0.5 + 0.5, 1.0 - ps.y);
+    vec4 side = vec4(0.0);
+    if (ts > 0.0 && side_uv == clamp(side_uv, vec2(0.0), vec2(1.0))) {
+        side = broadleaf ? texture(impostor_side_broadleaf, side_uv) : texture(impostor_side_conifer, side_uv);
+    }
+    float tt = abs(d.y) > 1e-5 ? (0.6 - o.y) / d.y : -1.0;
+    vec3 pt = o + d * tt;
+    vec2 top_uv = pt.xz * 0.5 + 0.5;
+    vec4 top = vec4(0.0);
+    if (tt > 0.0 && top_uv == clamp(top_uv, vec2(0.0), vec2(1.0))) {
+        top = broadleaf ? texture(impostor_top_broadleaf, top_uv) : texture(impostor_top_conifer, top_uv);
+    }
+    float w = smoothstep(0.55, 0.85, sin_e);
+    t = mix(ts, tt, w);
+    vec3 side_n = vec3(across.x, 0.0, across.y) * (side_uv.x * 2.0 - 1.0) * 0.7 + vec3(0.0, 0.45, 0.0)
+        + vec3(toward.x, 0.0, toward.y);
+    n = normalize(mix(side_n, vec3(0.0, 1.0, 0.0), w));
+    return mix(side, top, w);
+}
+#endif
 #endif
 
 void fragment() {
@@ -226,7 +276,16 @@ void fragment() {
     vec3 d = ray / bb_scale;
     bool broadleaf = bb_kind > 0.5;
     vec3 crown_n, trunk_n;
-#ifdef STYLE_CARTOON
+#ifdef STYLE_REAL
+    float t_imp;
+    vec3 imp_n;
+    vec4 imp = impostor(o, d, broadleaf, abs(ray.y), t_imp, imp_n);
+    if (imp.a < 0.5) {
+        discard;
+    }
+    float t_crown = t_imp, t_trunk = 1e30;
+    crown_n = imp_n;
+#elif defined(STYLE_CARTOON)
     // three puffs on a 0.5 trunk, or three tiers on a 0.3 one
     float t_crown = 1e30;
     vec3 hit_n;
@@ -262,6 +321,19 @@ void fragment() {
     }
     // snow settles on the upper faces of a crown (a running occasion's world_snow)
     vec3 col = occasion_snow_amount(COLOR.rgb, smoothstep(0.25, 0.75, abs(n.y)) * 0.8);
+#ifdef STYLE_REAL
+#ifdef TREE_BILLBOARD
+    vec3 vary = clamp(COLOR.rgb / (bb_kind > 0.5 ? tint_ref : tint_ref_conifer), vec3(0.75), vec3(1.3));
+    col = occasion_snow_amount(imp.rgb * vary, smoothstep(0.25, 0.75, abs(n.y)) * 0.8);
+#else
+    vec3 vary = clamp(COLOR.rgb / tint_ref, vec3(0.75), vec3(1.3));
+    vec4 surface = texture(albedo_tex, UV * uv_scale);
+    if (leaves && surface.a < alpha_cut) {
+        discard;
+    }
+    col = occasion_snow_amount(leaves ? surface.rgb * vary : surface.rgb, smoothstep(0.25, 0.75, abs(n.y)) * 0.8);
+#endif
+#endif
 #ifndef STYLE_LIT
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     col *= retro_steps(ndl, 3.0) * 0.45 + 0.6;
@@ -293,7 +365,18 @@ void fragment() {
     // the traced facet; the 3D trees light by their mesh's own normals
     NORMAL = style_view_normal(VIEW_MATRIX, n);
 #endif
+#ifdef STYLE_REAL
+#ifndef TREE_BILLBOARD
+    if (use_normal_map && !leaves) {
+        NORMAL_MAP = texture(normal_tex, UV * uv_scale).rgb;
+    }
+#endif
+    ROUGHNESS = leaves ? 0.8 : 0.95;
+    // sun through the leaves
+    BACKLIGHT = leaves ? vec3(0.22, 0.28, 0.10) : vec3(0.0);
+#else
     ROUGHNESS = 1.0;
+#endif
     EMISSION = col * door_light(wpos, n);
 #else
     col *= world_tint + door_light(wpos, n);
