@@ -74,6 +74,14 @@ public enum ItemId
 
     // ---- radio (src/Items/Radio*, src/Audio/Cd) ----
     Radio = 52,
+
+    // 53-60 are taken by the Battle Royale weapons and the flare gun (#178, #198)
+
+    // ---- bags (docs/notes/items/bags.md): worn in the bag slot, each adds pack slots ----
+    BeltPouch = 61,
+    Handbag = 62,
+    Backpack = 63,
+    HikingPack = 64,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -102,6 +110,8 @@ public enum ItemUse
     Print,
     /// <summary>Use throws it into the world, where it stays as a thing (<see cref="RadioManager"/>).</summary>
     Throw,
+    /// <summary>Worn in the bag slot, it adds <see cref="ItemDef.PackSlots"/> to the pack (<see cref="Inventory.Bag"/>).</summary>
+    Bag,
 }
 
 /// <summary>
@@ -120,7 +130,9 @@ public sealed record ItemDef(
     float Heal = 0f,
     ItemCategory Category = ItemCategory.Gear,
     /// <summary>Worth in Swiss francs, for trade later on.</summary>
-    float Value = 0f);
+    float Value = 0f,
+    /// <summary>A bag's extra pack slots while it is worn (<see cref="ItemUse.Bag"/>).</summary>
+    int PackSlots = 0);
 
 public static class ItemDefs
 {
@@ -199,7 +211,17 @@ public static class ItemDefs
         // radio (#104): thrown into the world, plays burned CDs for whoever stands near
         new(ItemId.Radio, "Radio", "{use_item} opens it in your hand: it plays as you carry it. {aim_item} + {use_item} throws it; stand beside it and press {interact_mount} to play a CD or pick it up.",
             ItemUse.Throw, 1, new Color(0.16f, 0.17f, 0.19f), "RD", 0, ItemCategory.Gear, 80f),
+
+        // bags (#208): found in houses, worn in the bag slot, one row of the pack per 9 slots
+        Bag(ItemId.BeltPouch, "Belt pouch", "#6a5a3a", "BP", 9, 15),
+        Bag(ItemId.Handbag, "Handbag", "#8a2a3a", "HB", 18, 40),
+        Bag(ItemId.Backpack, "Backpack", "#2a5a8a", "BK", 27, 70),
+        Bag(ItemId.HikingPack, "Hiking backpack", "#c8602a", "HK", 36, 150),
     };
+
+    private static ItemDef Bag(ItemId id, string name, string tint, string glyph, int slots, float value) =>
+        new(id, name, $"Wear it in the bag slot for {slots} more pack slots. {{use_item}} or a click on the bag slot puts it on.",
+            ItemUse.Bag, 1, new Color(tint), glyph, 0, ItemCategory.Gear, value, slots);
 
     private static ItemDef Eat(ItemId id, string name, int stack, string tint, string glyph, float heal,
         ItemCategory category, float value) =>

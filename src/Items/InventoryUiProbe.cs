@@ -65,7 +65,7 @@ public partial class InventoryUiProbe : Node
         // 4: shift-click sends a hotbar stack to the pack
         var gps = Inv[2];
         await Click(2, MouseButton.Left, shift: true);
-        Expect(Inv[2].IsEmpty && Enumerable.Range(pack, Inventory.BackpackSize).Any(i => Inv[i] == gps), "shift-click to the pack");
+        Expect(Inv[2].IsEmpty && Enumerable.Range(pack, Inv.PackSize).Any(i => Inv[i] == gps), "shift-click to the pack");
 
         // 5: right click takes half
         await Click(15, MouseButton.Right);
