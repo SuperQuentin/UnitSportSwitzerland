@@ -168,7 +168,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     /// <summary>A traffic car's state in a few words (for crash logs).</summary>
     public string? Describe(ulong body) => _byBody.TryGetValue(body, out var v)
-        ? $"{v.Speed * 3.6f:F0} km/h, {v.Route.Edge.Class} {v.Route.Edge.Width:F1} m, pull {v.Pull:F1}, hold {v.Holding}, yield {v.Yield}, startle {v.Startle > 0f}, alert {v.Alert:F1}, arc {v.Route.Arc:F0}/{v.Route.Edge.Length:F0}, end degree {_roads?.Degree(v.Route.Forward ? v.Route.Edge.KeyEnd : v.Route.Edge.KeyStart)}"
+        ? $"{v.Speed * 3.6f:F0} km/h, {v.Route.Edge.Class} {v.Route.Edge.Width:F1} m, pull {v.Pull:F1}, hold {v.Holding}, yield {v.Yield}, startle {v.Startle > 0f}, alert {v.Alert:F1}, arc {v.Route.Arc:F0}/{v.Route.Edge.Length:F0}, end degree {_roads?.Degree(v.Route.Forward ? v.Route.Edge.KeyEnd : v.Route.Edge.KeyStart)}, age {(Time.GetTicksMsec() - v.Born) / 1000f:F0} s"
         : null;
 
     private LaneGraph? _roads, _rails;
@@ -362,9 +362,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     private void SpawnCar(Vector3 focus, float minDist, IEnumerable<(Vector3 Pos, Vector3 Vel)>? obstacles)
     {
         if (_roads!.RandomSpot(_rng, focus, minDist, CarSpawnMax, CarWeight) is not var (edge, arc)) return;
-        // never out of thin air beside a player: a car filled in 5 m in front of a racer is a crash
+        // never out of thin air beside a player: a car filled in 5 m in front of a racer is a crash. 60 m
+        // and the 4 s a fast one covers: at 150 km/h 60 m is 1.4 s, less than a racer needs to see it and stop (#159)
         var (spot, _) = edge.Sample(arc);
-        if (obstacles != null && obstacles.Any(o => new Vector2(o.Pos.X - spot.X, o.Pos.Z - spot.Z).Length() < 60f)) return;
+        if (obstacles != null && obstacles.Any(o => new Vector2(o.Pos.X - spot.X, o.Pos.Z - spot.Z).Length() < 60f + 4f * new Vector2(o.Vel.X, o.Vel.Z).Length())) return;
         bool forward = edge.OneWay switch { 1 => true, -1 => false, _ => _rng.Next(2) == 0 };
         var route = new Route(edge, forward, forward ? arc : edge.Length - arc);
         bool van = _rng.NextDouble() < 0.18;
@@ -883,6 +884,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         /// <summary>The driver: reaction time (s), how long it has had someone in view, when it last saw
         /// them, when it looks again, and a fright (s left, and whether it brakes in it).</summary>
         public float Reaction = 0.75f, Alert, SawAgo = 99f, LookIn, Startle;
+        /// <summary>When it was spawned (ms): a car met just after it appeared (#159 logs).</summary>
+        public readonly ulong Born = Time.GetTicksMsec();
         public bool StartleBrake;
 
         public Vehicle(Route route, float cruise, float[] offsets, Node3D[] units)

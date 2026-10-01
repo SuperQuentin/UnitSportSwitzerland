@@ -774,9 +774,14 @@ public sealed class AutoPilot
             var along = RaceRoute.Flat(b - a);
             if (along.LengthSquared() < 1f) continue;
             float yaw = Mathf.Atan2(-along.X, -along.Z);
-            int ci = line.IndexAt(Arc + d);
+            int ci = line.IndexAt(Arc + d), cj = Mathf.Min(ci + 1, line.Arc.Count - 1);
+            // the centre THERE, between two points: across a bridged junction (points up to 18 m apart) every
+            // box sat on the point before it and left a hole in the middle — racers hit traffic standing in
+            // the junction without ever sensing it (#159: four of eleven traffic retirements)
+            float span = line.Arc[cj] - line.Arc[ci];
+            var centre = span > 0.01f ? Route.Centre[ci].Lerp(Route.Centre[cj], Mathf.Clamp((Arc + d - line.Arc[ci]) / span, 0f, 1f)) : Route.Centre[ci];
             _probe.Size = new Vector3(Route.Width[ci] + 1f, 1.2f, 5f);
-            query.Transform = new Transform3D(new Basis(Vector3.Up, yaw), Route.Centre[ci] with { Y = (a.Y + b.Y) * 0.5f } + Vector3.Up * 1.1f);
+            query.Transform = new Transform3D(new Basis(Vector3.Up, yaw), centre with { Y = (a.Y + b.Y) * 0.5f } + Vector3.Up * 1.1f);
             bool more = false;
             foreach (var hit in space.IntersectShape(query, 16))
             {

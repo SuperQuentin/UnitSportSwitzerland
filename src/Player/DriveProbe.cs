@@ -167,6 +167,10 @@ public partial class DriveProbe : Node
                     GD.Print($"[drive] route: {route.Class}, {route.Arc[^1]:F0} m, racing line {route.Length:F0} m "
                         + $"(max {route.Line.RoomLeft.Concat(route.Line.RoomRight).DefaultIfEmpty(0).Max():F1} m of room to a side)");
                     PrintVerge(route);
+                    // bridged junctions: centreline points further apart than the 2 m step
+                    var gaps = Enumerable.Range(1, route.Arc.Count - 1).Where(i => route.Arc[i] - route.Arc[i - 1] > 5f)
+                        .Select(i => $"{route.Arc[i - 1]:F0}+{route.Arc[i] - route.Arc[i - 1]:F0}").ToList();
+                    GD.Print($"[drive] route gaps over 5 m ({gaps.Count}): {string.Join(" ", gaps)}");
                     // where the route runs, to find a spot again (LV95 every 500 m)
                     GD.Print("[drive] route LV95: " + string.Join(", ", Enumerable.Range(0, (int)(route.Length / 500f) + 1)
                         .Select(k => { var (e, n) = _origin.ToLv95(route.Line.PointAt(k * 500f)); return $"{k * 500} m {e:F0},{n:F0}"; })));
