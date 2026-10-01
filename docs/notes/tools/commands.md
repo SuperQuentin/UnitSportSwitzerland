@@ -40,5 +40,5 @@
 - Cover only, for a few tiles (after editing `docs/data/cover_overrides.json`; run from the repo
   root): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --cover-only --tlm <tlm.gpkg> --tiles-file tiles.txt`
   (`tiles.txt`: one `E-N` per line). Skips the road stage. It rewrites the tile's `.trees` too;
-  the tree road mask comes from the raw roads in `<chunks>_temp/roads_raw/` when kept, so the
-  scatter is the same as the full build's.
+  the tree road mask comes from the raw roads in `<chunks>_temp/roads_raw/` plus the final
+  `.road` tile (`trees-masked-off-road-corridors`), so the scatter is the same as the full build's.

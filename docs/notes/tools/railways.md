@@ -8,7 +8,8 @@
   thousands of triangles per km for a few pixels.
 - **Rails embedded in the road (#124)**: the network stage (`tools/RoadGen/Network/RailRoadOverlap.cs`)
   cuts every ground-level rail (not bridge, tunnel or funicular) where its centreline runs inside a
-  carriageway (class Lane or wider, or Platz; raw untrimmed lines, so junction areas count). That
+  carriageway (class Lane or wider, or Platz; untrimmed lines at the #117 planned width and shifted plan, so junction areas count and a
+  rail meets the road where it is drawn). That
   piece is flagged ATTR `Embedded`: no ballast, no raised rails
   (`RoadMeshBuilder` skips it), `RailGroove` paint per rail instead (light steel 0.2 m line, the rail head: a dark one vanished in the asphalt; gauge and
   track offsets). The road's own

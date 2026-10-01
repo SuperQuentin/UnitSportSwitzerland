@@ -320,31 +320,46 @@ int RunFeatures(TerrainManifest existing)
     }
     int batches = (ordered.Count + BatchSize - 1) / BatchSize;
 
-    for (int b = 0; b < batches; b++)
+    Dictionary<TileId, ChunkGrid> LoadBatch(int b, out List<ManifestTile> slice)
     {
-        var slice = ordered.Skip(b * BatchSize).Take(BatchSize).ToList();
+        slice = ordered.Skip(b * BatchSize).Take(BatchSize).ToList();
         var grids = new System.Collections.Concurrent.ConcurrentDictionary<TileId, ChunkGrid>();
         Parallel.ForEach(slice, new ParallelOptions { MaxDegreeOfParallelism = jobs }, t =>
         {
             using var fs = File.OpenRead(Path.Combine(outDir!, ChunkFormat.ChunkFileName(t.Id)));
             grids[t.Id] = ChunkCodec.Decode(fs);
         });
-        var batch = new Dictionary<TileId, ChunkGrid>(grids);
-        Console.WriteLine($"=== batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
+        return new Dictionary<TileId, ChunkGrid>(grids);
+    }
 
-        if (tlmGpkg != null && !coverOnly)
+    // roads first, every batch, then the network stage, which sees every batch at once (a junction
+    // on a batch seam needs both sides); cover masks trees off the network stage's final lines
+    if (tlmGpkg != null && !coverOnly)
+    {
+        for (int b = 0; b < batches; b++)
         {
+            var batch = LoadBatch(b, out var slice);
+            Console.WriteLine($"=== roads, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
             int rc = RoadStage.Run(tlmGpkg, routeKeys, outDir!, tempDir!, batch);
             if (rc != 0) return rc;
         }
+        int nrc = RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
+        if (nrc != 0) return nrc;
+    }
+
+    if (!doCover && buildingsGpkg == null) return 0;
+    if (doCover && tlmGpkg == null)
+    {
+        Console.Error.WriteLine("--cover requires --tlm <swisstlm3d .gpkg>");
+        return 2;
+    }
+    for (int b = 0; b < batches; b++)
+    {
+        var batch = LoadBatch(b, out var slice);
+        Console.WriteLine($"=== batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
         if (doCover)
         {
-            if (tlmGpkg == null)
-            {
-                Console.Error.WriteLine("--cover requires --tlm <swisstlm3d .gpkg>");
-                return 2;
-            }
-            int rc = CoverStage.Run(tlmGpkg, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!));
+            int rc = CoverStage.Run(tlmGpkg!, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!));
             if (rc != 0) return rc;
         }
         if (buildingsGpkg != null)
@@ -353,10 +368,6 @@ int RunFeatures(TerrainManifest existing)
             if (rc != 0) return rc;
         }
     }
-
-    // the road network stage sees every batch at once: a junction on a batch seam needs both sides
-    if (tlmGpkg != null && !coverOnly)
-        return RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
     return 0;
 }
 
