@@ -16,7 +16,8 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
-`linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH).
+`linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
+`dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it).
 
 ## Rules
 
