@@ -9,11 +9,14 @@
 - **Rails embedded in the road (#124)**: the network stage (`tools/RoadGen/Network/RailRoadOverlap.cs`)
   cuts every ground-level rail (not bridge, tunnel or funicular) where its centreline runs inside a
   carriageway (class Lane or wider, or Platz; raw untrimmed lines, so junction areas count). That
-  piece (+1 m past the centreline's exit) is flagged ATTR `Embedded`: no ballast, no raised rails
+  piece is flagged ATTR `Embedded`: no ballast, no raised rails
   (`RoadMeshBuilder` skips it), `RailGroove` paint per rail instead (light steel 0.2 m line, the rail head: a dark one vanished in the asphalt; gauge and
   track offsets). The road's own
   paint is cut out of the track zone (outer rail + 0.5 m; a dashed line resumes on its next dash).
-  Heights: the embedded piece is at the road's height in the file (the collision road blend reads
+  The piece runs on past the road until the ballast's collision core (half its width + 0.3 m)
+  clears every carriageway (at most 15 m more): at an oblique crossing a shorter piece let the
+  ballast line pull the road edge 13 cm down (seen from a remote car in MP; now smooth). So the
+  grooves cross a few metres of flattened verge. Heights: the embedded piece is at the road's height in the file (the collision road blend reads
   it: no bump); the ballast line meets it `RailTop` (0.16 m) lower and blends back to its own
   height over 8 m, so the raised rails (line + 0.18) end flush with the grooves (road + 0.02).
   `LaneGraph` sinks embedded edges by the same 0.16, so a train (lift 0.2) rolls on the grooves.
@@ -24,9 +27,9 @@
   lines, leaving the track a gap (Martigny-Sion: 46 fewer junctions). TLM `auf_strasse` -> ATTR `OnStreet` (1.5 m wider
   tolerance); a run on such a line or longer than 25 m counts as street running, else a level
   crossing. Self-check: `RoadGen --format-check`.
-  - Martigny-Sion (513 tiles): 31 level crossings (255 m), 14 street-running runs (247 m),
-    92 groove lines, 25 road lines cut. TLM `auf_strasse` there: 1,797 m, almost all industrial
+  - Martigny-Sion (513 tiles): 28 level crossings (360 m), 16 street-running runs (425 m),
+    90 groove lines, 25 road lines cut. TLM `auf_strasse` there: 1,797 m, almost all industrial
     sidings (`anschlussgleis`) in Sion yards 10-70 m from any TLM road, so they keep ballast; only
-    178 m lie in a carriageway, among them the metre-gauge Martigny line (~2572200/1106080).
+    235 m lie in a carriageway, among them the metre-gauge Martigny line (~2572200/1106080).
     No OSM `railway=tram` in the region. One height blend is cut by a tile seam (the neighbour's
     piece of the line does not see the run; a small step there).
