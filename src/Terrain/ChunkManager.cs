@@ -1452,6 +1452,7 @@ public partial class ChunkManager : Node3D
                     // nor a railing (#126)
                     bridgeCollision = [.. RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile),
                         .. RoadWallBuilder.BuildCollisionFaces(roadTile), .. RailingBuilder.BuildCollisionFaces(roadTile),
+                        .. IslandBuilder.BuildCollisionFaces(roadTile),   // roundabout islands (#122)
                         .. RoadSignBuilder.BuildCollisionFaces(roadTile)];   // sign poles (#121)
                 }
                 else if (wantCollision && !publishInterimCollision)

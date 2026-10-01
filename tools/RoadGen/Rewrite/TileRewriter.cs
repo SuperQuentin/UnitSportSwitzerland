@@ -78,6 +78,7 @@ public static partial class TileRewriter
         /// <summary>Overlap area per class pair (<c>--measure</c>), e.g. "motorway+motorway".</summary>
         public SortedDictionary<string, double> OverlapPairs = new(StringComparer.Ordinal);
         public readonly CrossSectionPlanner.Stats Carriageways = new();
+        public readonly RoundaboutShaper.Stats Roundabouts = new();
         /// <summary>Terrain under each shifted carriageway vertex vs under the TLM line it came from.</summary>
         public HeightAudit Shifted = HeightAudit.Empty;
         public int MaxBytes;
@@ -102,7 +103,7 @@ public static partial class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Rail.Format() + "\n" + Priority.Format();
+                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format();
         }
     }
 
@@ -292,6 +293,16 @@ public static partial class TileRewriter
             }
 
             CrossSectionPlanner.Plan(lines, overlay, netStats.Carriageways);
+            // roundabout rings rebuilt as arcs before anything is built from them (#122)
+            var islands = new Dictionary<TileId, List<RoadAreaProp>>();
+            foreach (var ring in RoundaboutShaper.Shape(lines, netStats.Roundabouts))
+            {
+                var at = TileId.FromLv95(ring.Centre.X, ring.Centre.Y);
+                if (!block.Contains(at) || RoundaboutShaper.Island(ring, at) is not { } island) continue;
+                if (!islands.TryGetValue(at, out var list)) islands[at] = list = new List<RoadAreaProp>();
+                list.Add(island);
+                netStats.Roundabouts.Islands++;
+            }
             foreach (var line in lines) AddSegment(net, line, options.DividedScale);
 
             var rails = new RailRoadOverlap(lines, netStats.Rail);
@@ -427,6 +438,7 @@ public static partial class TileRewriter
                     Id = id, Segments = segments, Junctions = junctions, Flags = flags,
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
+                    AreaProps = islands.TryGetValue(id, out var isl) ? isl : new List<RoadAreaProp>(),
                     PointProps = signs.TryGetValue(id, out var sp) ? sp : new List<RoadPointProp>(),
                 };
                 rails.ClearTrackZones(tile.Paint, id);
