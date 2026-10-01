@@ -333,6 +333,7 @@ public sealed class RaceLine
             try
             {
                 if (await source.LoadRoadsAsync(t, ct) is { } roads)
+                {
                     foreach (var seg in roads.Segments)
                     {
                         var (why, r) = seg.Class switch
@@ -352,6 +353,19 @@ public sealed class RaceLine
                             for (int s = 0; s <= steps; s++) Add(a.Lerp(b, s / (float)steps), r, why);
                         }
                     }
+                    // retaining walls and railings (#125, #126): solid along their line
+                    foreach (var prop in roads.LinearProps)
+                    {
+                        var pts = prop.Points;
+                        for (int k = 0; k + 7 < pts.Length; k += 4)
+                        {
+                            var a = Xz(t, pts[k], pts[k + 1], pts[k + 2]);
+                            var b = Xz(t, pts[k + 4], pts[k + 5], pts[k + 6]);
+                            int steps = Mathf.Max(1, Mathf.CeilToInt(a.DistanceTo(b) / 0.5f));
+                            for (int s = 0; s <= steps; s++) Add(a.Lerp(b, s / (float)steps), 0.4f, Block.Wall);
+                        }
+                    }
+                }
             }
             catch (System.Exception) { }
             try

@@ -1,6 +1,6 @@
 # Inventory
 
-- **Inventory** (`src/Items/`): `Inventory` is pure data — a 6-slot hotbar plus an 18-slot pack,
+- **Inventory** (`src/Items/`): `Inventory` is pure data — a 6-slot hotbar plus a 27-slot pack (more with a bag: the `bags` note),
   stacks (`ItemStack(Id, Count, Data)`: `Data` is optional per-instance data, a photo id; stacks
   only merge when `SameKind` = same Id and same Data, in every cursor op, `Add(ItemStack)` and
   `Room(id, data)`), `Changed` — saved to `user://inventory.json` by item **name** plus `Data` when set (`ToJson`/`FromJson`; old saves without it load as
@@ -18,5 +18,5 @@
   camera in first person, else on `FootPlayer.HandLocal` (the wrist from the same rig the body is
   posed from). Controls: **1–6** / wheel / D-pad → select, **hold X / D-pad ←** radial quick wheel
   (aim with mouse or right stick, release), **I / Tab / Back** inventory (Minecraft-style: see
-  the `cursor-inventory` note; money: the `cash-account` note). Screenshot with `--ride foot,5,out.png` plus
+  the `cursor-inventory` note; money: the `cash-account` note). Something new that does not fit (a developed photo, a flag picked up, `/spawn`, a radio picked up, the hunting-season gun) goes through `ItemController.Give`: the rest is dropped on the ground in front of you instead of lost. Screenshot with `--ride foot,5,out.png` plus
   `--hold <item>`, `--aim`, `--inventory`.

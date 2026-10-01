@@ -25,7 +25,7 @@ namespace UnitSport.Loot;
 /// harvests and then grows back after <see cref="RegrowSeconds"/>, remembered for the session only.
 /// </para>
 /// </summary>
-public partial class Gathering : Node
+public partial class Gathering : Node, Core.IOriginShiftAware
 {
     public enum Resource { None, Stone, Water, TreeWood, Deadwood, Pumpkin, Treat }
 
@@ -324,7 +324,10 @@ public partial class Gathering : Node
 
         // a tree in reach, the nearest one
         if (NearestTree(tile, feet, ahead) is { } tree)
-            return (Resource.TreeWood, $"tree:{tree.X:F1}:{tree.Z:F1}", CoverClass.Forest);
+        {
+            var (te, tn) = _origin.ToLv95(tree);
+            return (Resource.TreeWood, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"tree:{te:F1}:{tn:F1}"), CoverClass.Forest);
+        }
 
         // stone underfoot or just ahead
         foreach (var at in new[] { ahead, feet })
@@ -338,8 +341,15 @@ public partial class Gathering : Node
         return (Resource.None, "", CoverClass.Open);
     }
 
-    private static string Spot(string kind, Vector3 at) =>
-        $"{kind}:{Mathf.FloorToInt(at.X / SpotCell)}:{Mathf.FloorToInt(at.Z / SpotCell)}";
+    /// <summary>
+    /// A spot's name, from its cell of the LV95 grid: the same place has the same name whatever the
+    /// origin is (#185), on every client.
+    /// </summary>
+    private string Spot(string kind, Vector3 at)
+    {
+        var (e, n) = _origin.ToLv95(at);
+        return $"{kind}:{(long)Math.Floor(e / SpotCell)}:{(long)Math.Floor(n / SpotCell)}";
+    }
 
     private void EnsureLoaded(TileId tile)
     {
@@ -371,17 +381,17 @@ public partial class Gathering : Node
         {
             var trees = await source.LoadTreesAsync(tile);
             var roads = await source.LoadRoadsAsync(tile);
-            // bucket the trees into 10 m cells, in world space: a tile holds tens of thousands
-            var origin = _origin;
+            // bucket the trees into 10 m cells of the tile, relative to its NW corner (as the file
+            // has them), so an origin shift (#185) leaves the index be: a tile holds tens of thousands
             var index = trees == null ? null : await Task.Run(() =>
             {
                 var cells = new Dictionary<long, List<Vector3>>();
                 foreach (var t in trees)
                 {
-                    var w = origin.ToWorld(tile.MinE + t.X, tile.MaxN - t.Z, t.Y);
-                    long key = CellKey(w);
+                    var local = new Vector3(t.X, t.Y, t.Z);
+                    long key = CellKey(local);
                     if (!cells.TryGetValue(key, out var list)) cells[key] = list = new();
-                    list.Add(w);
+                    list.Add(local);
                 }
                 return cells;
             });
@@ -399,12 +409,17 @@ public partial class Gathering : Node
         finally { if (epoch == _epoch) _loading.Remove(tile); }
     }
 
-    private static long CellKey(Vector3 w) =>
-        ((long)Mathf.FloorToInt(w.X / 10f) << 32) ^ (uint)Mathf.FloorToInt(w.Z / 10f);
+    /// <summary>A 10 m cell of a tile, from a point relative to the tile's NW corner.</summary>
+    private static long CellKey(Vector3 local) =>
+        ((long)Mathf.FloorToInt(local.X / 10f) << 32) ^ (uint)Mathf.FloorToInt(local.Z / 10f);
 
     private Vector3? NearestTree(TileId tile, Vector3 feet, Vector3 ahead)
     {
         if (!_trees.TryGetValue(tile, out var cells) || cells == null) return null;
+        // the index is relative to the tile: so is the search, and the answer goes back to world
+        var corner = _origin.ToWorld(tile.MinE, tile.MaxN, 0);
+        feet -= corner;
+        ahead -= corner;
         Vector3? best = null;
         float bestD = TreeReach;
         int cx = Mathf.FloorToInt(ahead.X / 10f), cz = Mathf.FloorToInt(ahead.Z / 10f);
@@ -422,7 +437,7 @@ public partial class Gathering : Node
                     if (d < bestD) { bestD = d; best = t; }
                 }
             }
-        return best;
+        return best + corner;
     }
 
     private bool NearStream(TileId tile, Vector3 feet, Vector3 ahead)
@@ -449,6 +464,9 @@ public partial class Gathering : Node
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
+
+    /// <summary>The origin moved (#185): where the current harvest started moved with it.</summary>
+    public void OnOriginShifted(Core.OriginShift shift) => _startedAt = shift.Point(_startedAt);
 
     /// <summary>For probes: runs one full harvest of whatever is in front of the player, instantly.</summary>
     public bool DebugHarvest(FootPlayer p)

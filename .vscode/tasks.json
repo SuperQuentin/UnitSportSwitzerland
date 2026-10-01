@@ -50,6 +50,17 @@
             "problemMatcher": []
         },
         {
+            "label": "run: game from worktree",
+            "detail": "Pick a local feature worktree in the terminal, build it and run the game from there",
+            "type": "process",
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools/run-worktree.ps1", "${config:godotTools.editorPath.godot4}", "${input:gameArgs}"],
+            "osx": { "command": "bash", "args": ["tools/run-worktree.sh", "/Applications/Godot_mono.app/Contents/MacOS/Godot", "${input:gameArgs}"] },
+            "linux": { "command": "bash", "args": ["tools/run-worktree.sh", "godot", "${input:gameArgs}"] },
+            "presentation": { "focus": true, "panel": "dedicated" },
+            "problemMatcher": "$msCompile"
+        },
+        {
             "label": "run: game at LV95",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
@@ -315,6 +326,7 @@
         { "id": "lv95", "type": "promptString", "description": "LV95 easting,northing", "default": "2583250,1113250" },
         { "id": "town", "type": "promptString", "description": "Town or summit name", "default": "Riddes" },
         { "id": "gpx", "type": "promptString", "description": "Path to a .gpx file" },
+        { "id": "gameArgs", "type": "promptString", "description": "Extra game args after --, e.g. --connect 127.0.0.1 (empty = main menu)", "default": "" },
         { "id": "host", "type": "promptString", "description": "Server host[:port]", "default": "127.0.0.1:7777" },
         { "id": "playerName", "type": "promptString", "description": "Player name", "default": "player" },
         { "id": "adminPassword", "type": "promptString", "description": "Operator password for /login", "password": true },

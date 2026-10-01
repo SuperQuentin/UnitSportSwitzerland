@@ -12,8 +12,8 @@ namespace UnitSport.Interiors;
 /// a room, furniture knocked, an inner door, all low-passed by the walls and placed on the wall
 /// nearest the listener. It is decided on this client from the server's table of who is where,
 /// so it costs no traffic: which room they are in is not known, and not needed.</item>
-/// <item>Inside, near a way out, the street comes through the front door: muffled while it is
-/// shut, clear while it stands open.</item>
+/// <item>Inside, near a way out, the street comes through the front door: muffled and
+/// fading as it swings shut and silent once it is, clear while it stands open.</item>
 /// </list>
 /// </summary>
 public partial class BuildingSounds : Node
@@ -79,11 +79,12 @@ public partial class BuildingSounds : Node
             Occupant(o, wall);
         }
 
-        if (street is { } s)
+        // a shut door keeps the street out: it fades with the door's swing and stops once latched
+        if (street is { Open: > 0.02f } s)
         {
             if (!_street.Playing) _street.Play();
             _street.GlobalPosition = s.At;
-            _street.VolumeDb = Mathf.Lerp(-20f, -6f, s.Open);
+            _street.VolumeDb = -6f + Mathf.LinearToDb(s.Open);
             _street.AttenuationFilterCutoffHz = Mathf.Lerp(450f, 8000f, s.Open);
         }
         else if (_street.Playing) _street.Stop();

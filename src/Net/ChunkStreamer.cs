@@ -172,8 +172,9 @@ public partial class ChunkStreamer : Node
         Callable.From(() =>
         {
             // Connectivity is only knowable on the main thread, so it is checked here rather
-            // than in the caller.
-            if (!Multiplayer.HasMultiplayerPeer()
+            // than in the caller. Out of the tree (the world was just left) there is no
+            // Multiplayer at all.
+            if (!IsInsideTree() || !Multiplayer.HasMultiplayerPeer()
                 || Multiplayer.MultiplayerPeer.GetConnectionStatus()
                    != MultiplayerPeer.ConnectionStatus.Connected
                 || Multiplayer.GetUniqueId() == 1)

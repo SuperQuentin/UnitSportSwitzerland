@@ -63,12 +63,21 @@ public partial class Main : Node
 				System.Globalization.CultureInfo.InvariantCulture, out wait);
 			var lan = new UnitSport.Net.LanDiscovery();
 			lan.Start();
+			// and the status query the Multiplayer screen uses: broadcast once a second
+			var query = new UnitSport.Net.ServerQuery();
+			query.Start();
+			var tick = new Godot.Timer { WaitTime = 1, Autostart = true };
+			tick.Timeout += () => query.Broadcast();
+			AddChild(tick);
 			GetTree().CreateTimer(wait).Timeout += () =>
 			{
 				lan.Poll();
-				foreach (var s in lan.Servers) GD.Print($"[discover] {s.Name} {s.Endpoint} version={s.Version}");
-				bool ok = lan.Servers.Count > 0;
+				query.Poll();
+				foreach (var s in lan.Servers) GD.Print($"[discover] mdns {s.Name} {s.Endpoint} version={s.Version}");
+				foreach (var r in query.Lan) GD.Print($"[discover] udp {r.Status.Name} {r.Endpoint} players={r.Status.Players}/{r.Status.Max} ping={r.PingMs}ms world={r.Status.World}");
+				bool ok = lan.Servers.Count > 0 || query.Lan.Count > 0;
 				lan.Dispose();
+				query.Dispose();
 				GD.Print(ok ? "[discover] RESULT: ok" : "[discover] RESULT: FAILED (no server answered)");
 				GetTree().Quit(ok ? 0 : 1);
 			};
@@ -127,8 +136,24 @@ public partial class Main : Node
 			|| OS.GetCmdlineUserArgs().Contains("--server");
 
 		if (isServer)
+		{
 			AddChild(new ServerWorld { Name = "World" });
-		else
-			AddChild(new ClientWorld { Name = "World" });
+			return;
+		}
+
+		// The client: the shell (menus, loading screen, window settings) and, once a mode is
+		// picked, the world beside it at /root/Main/World. A run that names a session or a tool on
+		// its command line skips the title and builds the world straight away (GameShell.UseTitle).
+		GameSettings.Load();
+		if (GameShell.UseTitle(OS.GetCmdlineUserArgs()))
+		{
+			AddChild(new GameShell { Name = "Shell" });
+			return;
+		}
+		var shell = new GameShell { Name = "Shell", Direct = true };
+		AddChild(shell);
+		var world = new ClientWorld { Name = "World", Launch = WorldLaunch.FromArgs() };
+		shell.Attach(world);
+		AddChild(world);
 	}
 }

@@ -118,6 +118,9 @@ public sealed class GameSettings
     /// <summary>Controller rumble on landings, impacts and speed.</summary>
     public bool Vibration { get; set; } = true;
 
+    /// <summary>Steering wheel, pedals and their bindings (<see cref="SteeringWheel"/>).</summary>
+    public WheelSettings Wheel { get; set; } = new();
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public RideProfile RideProfile { get; set; } = RideProfile.Game;
     /// <summary>Cars' tyres wear with the sliding they do and lose grip (off by default).</summary>
@@ -155,6 +158,10 @@ public sealed class GameSettings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public Audio.EngineVoice EngineVoice { get; set; } = Audio.EngineVoice.Ps1;
 
+    /// <summary>How the world looks (<see cref="Styles.StyleKit"/>). Client-only, never replicated.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Styles.VisualStyle VisualStyle { get; set; } = Styles.VisualStyle.Ps1;
+
     /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
     public float ScreenShake { get; set; } = 1f;
 
@@ -170,6 +177,26 @@ public sealed class GameSettings
 
     /// <summary>The server last joined from the menu, so the field is not reset to localhost every launch.</summary>
     public string LastHost { get; set; } = "127.0.0.1";
+
+    /// <summary>
+    /// The name asked for when joining a server, set the first time the Multiplayer screen opens.
+    /// Empty until then; <c>--name</c> overrides it for one run without saving.
+    /// </summary>
+    public string PlayerName { get; set; } = "";
+
+    /// <summary>GPX files replayed recently, newest first (the Play solo track picker lists them).</summary>
+    public List<string> RecentGpx { get; set; } = new();
+
+    /// <summary>
+    /// Play in a VR headset (#186, OpenXR, a Quest over Link). OpenXR only starts with the engine,
+    /// so turning this on or off relaunches the game (<see cref="XR.XrSession.Relaunch"/>), and a
+    /// launch from the title with it on relaunches itself into VR.
+    /// </summary>
+    public bool VrMode { get; set; }
+
+    /// <summary>What the monitor shows while in VR (<see cref="XR.XrMonitor"/>); F7 cycles it.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public XR.MonitorView VrMonitor { get; set; } = XR.MonitorView.FirstPerson;
 
     // --- cockpit: first person at the wheel of a car (#69) ---
     /// <summary>Your own arms and legs at the wheel. V cycles chase → cockpit with them → cockpit without.</summary>
@@ -270,11 +297,15 @@ public sealed class GameSettings
         WindowWidth = Math.Clamp(WindowWidth, 0, 7680);
         WindowHeight = Math.Clamp(WindowHeight, 0, 4320);
         OccasionPreferences ??= new();
+        RecentGpx ??= new();
+        PlayerName ??= "";
+        Wheel ??= new();
+        Wheel.Clamp();
     }
 
     /// <summary>
     /// "--rings N", "--horizon km", "--fog on|off", "--detail low|medium|high",
-    /// "--generated on|off" — for
+    /// "--generated on|off", "--style ps1|cartoon|real-|real+" — for
     /// screenshotting one configuration against another without touching the saved file.
     /// </summary>
     private void ApplyCommandLine(string[] args)
@@ -303,6 +334,9 @@ public sealed class GameSettings
                         _ => Player.HeavyShift.Automatic,
                     };
                     break;
+                case "--wheel": Wheel.Enabled = v is "on" or "1" or "true"; break;
+                case "--wheelrange" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float deg):
+                    Wheel.RangeDeg = deg; break;
                 case "--voice":
                     EngineVoice = v.ToLowerInvariant() switch
                     {
@@ -310,6 +344,10 @@ public sealed class GameSettings
                         "sid" => Audio.EngineVoice.Sid, "genesis" => Audio.EngineVoice.Genesis,
                         _ => Audio.EngineVoice.Realistic,
                     };
+                    break;
+                case "--style":
+                    Styles.StyleKit.TryParse(v, out var style);
+                    VisualStyle = style;
                     break;
                 // a fixed time of day, for screenshots: --time 21.5 is half past nine at night
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
@@ -321,6 +359,11 @@ public sealed class GameSettings
                     if (v is "body" or "bare") CockpitBody = v == "body";
                     break;
                 case "--mirrors": CockpitMirrors = v is "on" or "1" or "true"; break;
+                // what the monitor shows in VR (#186): off | first | eyes | third
+                case "--vrmonitor":
+                    VrMonitor = v switch { "off" => XR.MonitorView.Off, "eyes" => XR.MonitorView.BothEyes,
+                        "third" => XR.MonitorView.ThirdPerson, _ => XR.MonitorView.FirstPerson };
+                    break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;
                 case "--perf":
                     PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,

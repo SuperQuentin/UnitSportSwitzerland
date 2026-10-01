@@ -60,21 +60,29 @@ public partial class SpawnPoint : Node
     }
 
     /// <summary>Reads an optional "--at E,N" override, in LV95 metres.</summary>
-    public static (double E, double N) ParseTarget()
+    public static (double E, double N) ParseTarget() => ParseLv95("--at") ?? (DefaultLv95E, DefaultLv95N);
+
+    /// <summary>
+    /// Reads an optional "--origin E,N" (LV95 metres) that pins the world origin, so screenshots
+    /// and timings at fixed world coordinates stay put when the manifest's suggested origin moves.
+    /// </summary>
+    public static (double E, double N)? ParseOrigin() => ParseLv95("--origin");
+
+    private static (double E, double N)? ParseLv95(string flag)
     {
         var args = OS.GetCmdlineUserArgs();
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--at")
+            if (args[i] == flag)
             {
                 var parts = args[i + 1].Split(',');
                 if (parts.Length == 2
                     && double.TryParse(parts[0], System.Globalization.NumberStyles.Float, inv, out double e)
                     && double.TryParse(parts[1], System.Globalization.NumberStyles.Float, inv, out double n))
                     return (e, n);
-                GD.PushWarning($"[spawn] could not read --at {args[i + 1]}, expected E,N in LV95");
+                GD.PushWarning($"[spawn] could not read {flag} {args[i + 1]}, expected E,N in LV95");
             }
-        return (DefaultLv95E, DefaultLv95N);
+        return null;
     }
 
     public override void _Process(double delta)

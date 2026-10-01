@@ -11,7 +11,7 @@
   straight into `RideInput`), X tuck/sprint, Y interact (and the travel picker when there is nothing
   to interact with), R3 camera toggle, Start menu, D-pad down fly/foot toggle (and `tune`, the garage menu, in a stopped car at a garage — T too), D-pad ← / → soft top /
   headlights in a car (O / L; #48), U / P car radio next / previous station (keyboard only; #179), G / X `car_door` (a tap at a car; G / X held is still gathering). Menus call `PlayerInput.FocusFirst` on open so Godot's built-in
-  `ui_*` actions drive them with the D-pad, and `MainMenu` holds `UiFocus` while open or the
+  `ui_*` actions drive them with the D-pad, and `GameShell` holds `UiFocus` while any menu page is open or the
   stick navigating it would also walk the player. M (place search) stays keyboard-only: a pad
   can't type in it. The facade is the seam an OpenXR backend plugs into later.
   Godot's built-in `ui_accept`/`ui_cancel` have **no** face buttons by default (the D-pad moved

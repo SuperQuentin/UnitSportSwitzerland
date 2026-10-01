@@ -25,6 +25,8 @@ public partial class PassengerService : Node
 
     /// <summary>Client: something to tell the local player (a refused seat, too fast to get out).</summary>
     public static event Action<string>? Said;
+    /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
+    internal static void ResetEvents() => Said = null;
 
     public static void Say(string message) => Said?.Invoke(message);
 
