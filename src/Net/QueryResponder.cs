@@ -84,29 +84,19 @@ public partial class QueryResponder : Node
         Volatile.Write(ref _snapshot, json);
     }
 
-    private async Task Loop(UdpClient udp, CancellationToken token)
-    {
-        while (!token.IsCancellationRequested)
+    private Task Loop(UdpClient udp, CancellationToken token) =>
+        Udp.ReceiveLoop(udp, token, (p, from) =>
         {
-            UdpReceiveResult got;
-            try { got = await udp.ReceiveAsync(token); }
-            catch (OperationCanceledException) { return; }
-            catch (ObjectDisposedException) { return; }
-            catch (SocketException) { continue; }
-
-            var p = got.Buffer;
-            if (p.Length != 8 || !ServerQuery.Matches(p, ServerQuery.QueryMagic)) continue;
-            if (!Allow(got.RemoteEndPoint.Address)) continue;
+            if (p.Length != 8 || !ServerQuery.Matches(p, ServerQuery.QueryMagic)) return;
+            if (!Allow(from.Address)) return;
 
             byte[] body = Volatile.Read(ref _snapshot);
             var reply = new byte[8 + body.Length];
             Encoding.ASCII.GetBytes(ServerQuery.ReplyMagic, 0, 4, reply, 0);
             Buffer.BlockCopy(p, 4, reply, 4, 4);   // the nonce, echoed
             Buffer.BlockCopy(body, 0, reply, 8, body.Length);
-            try { await udp.SendAsync(reply, reply.Length, got.RemoteEndPoint); }
-            catch (Exception) { /* the asker went away */ }
-        }
-    }
+            udp.Send(reply, reply.Length, from);   // a send error (the asker went away) is swallowed by the loop
+        });
 
     private bool Allow(IPAddress from)
     {
