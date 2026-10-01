@@ -89,9 +89,8 @@ public static class XrSession
                 if (hz <= 90.5f && hz > best) best = hz;
             }
             if (best > 0f) openxr.DisplayRefreshRate = best;
-            // only some runtimes honour it (standalone Quest); harmless over Link
-            openxr.FoveationLevel = 2;
-            openxr.FoveationDynamic = true;
+            // (OpenXR's own foveation is for the Compatibility renderer only: the headset viewport
+            // gets variable rate shading instead, XrRig.ApplyQuality)
             GD.Print($"[xr] OpenXR on, {xr.GetName()} at {openxr.DisplayRefreshRate:F0} Hz");
         }
 
@@ -116,6 +115,9 @@ public static class XrSession
     private static bool Begin(Node root)
     {
         Active = true;
+        // the PS1 vertex snap and dither off (common/retro.gdshaderinc): the window's view too,
+        // which in VR is a spectator's
+        RenderingServer.GlobalShaderParameterSet("xr_smooth", true);
         Rig = new XrRig { Name = "XrRig" };
         // deferred: called from a node's _Ready, while the root is still adding its children
         root.CallDeferred(Node.MethodName.AddChild, Rig);
@@ -125,9 +127,11 @@ public static class XrSession
     /// <summary>
     /// Starts the game again, with OpenXR (<paramref name="vr"/>) or without: OpenXR can only
     /// come up with the engine. The user arguments carry over (minus <c>--vr</c> / <c>--xrsim</c>);
-    /// the caller quits this process when it returns true.
+    /// the caller quits this process when it returns true. <paramref name="asked"/>: the player
+    /// just chose VR, so a headset that does not answer is worth saying (<c>--vr-asked</c>); a
+    /// launch that only follows the saved setting falls back to the screen without a word.
     /// </summary>
-    public static bool Relaunch(bool vr)
+    public static bool Relaunch(bool vr, bool asked = false)
     {
         var args = new List<string>();
         // Vulkan is the well-trodden OpenXR path on Windows (the project default is d3d12)
@@ -135,14 +139,18 @@ public static class XrSession
         // run from the editor binary (`godot --path .`): it has to be told the project again
         if (OS.HasFeature("editor")) args.AddRange(new[] { "--path", ProjectSettings.GlobalizePath("res://") });
         args.Add("--");
-        args.AddRange(OS.GetCmdlineUserArgs().Where(a => a is not "--vr" and not "--xrsim"));
+        args.AddRange(OS.GetCmdlineUserArgs().Where(a => a is not "--vr" and not "--xrsim" and not AskedFlag));
         if (vr) args.Add("--vr");
+        if (vr && asked) args.Add(AskedFlag);
 
         int pid = OS.CreateProcess(OS.GetExecutablePath(), args.ToArray());
         GD.Print($"[xr] relaunching {(vr ? "in VR" : "on the screen")}: pid {pid}");
         if (pid <= 0) GD.PushError("[xr] could not start the game again");
         return pid > 0;
     }
+
+    /// <summary>On a relaunch into VR the player chose just now (<see cref="Relaunch"/>).</summary>
+    public const string AskedFlag = "--vr-asked";
 
     /// <summary>Rumble both hands; <see cref="Core.PlayerInput.Rumble"/> routes here in VR.</summary>
     public static void Rumble(float weak, float strong, float seconds) =>
