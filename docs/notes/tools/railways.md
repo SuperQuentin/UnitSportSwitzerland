@@ -29,7 +29,8 @@
   tolerance); a run on such a line or longer than 25 m counts as street running, else a level
   crossing. Self-check: `RoadGen --format-check`.
   - Martigny-Sion (513 tiles): 28 level crossings (360 m), 16 street-running runs (425 m),
-    90 groove lines, 25 road lines cut. TLM `auf_strasse` there: 1,797 m, almost all industrial
+    90 groove lines, 25 road lines cut (#114 integration, on the planned widths and Swiss
+    paint: 28 crossings, 354 m, 8 road lines cut). TLM `auf_strasse` there: 1,797 m, almost all industrial
     sidings (`anschlussgleis`) in Sion yards 10-70 m from any TLM road, so they keep ballast; only
     235 m lie in a carriageway, among them the metre-gauge Martigny line (~2572200/1106080).
     No OSM `railway=tram` in the region. One height blend is cut by a tile seam (the neighbour's

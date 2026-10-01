@@ -50,5 +50,9 @@
   - Cost before the Swiss rules (Martigny-Sion, 513 tiles): 13,977 primitives on 233 tiles, 505 game triangles/tile
     average, max 4,804; +1 draw call per road tile with paint (Riddes views: +29..35 draws on
     ~700, +0.2 % primitives). File +2.9 KB/tile raw, +2.0 KB deflated.
+  - Cost with the Swiss rules (#114 integration build, 513 tiles): 4,201 primitives on 145 tiles,
+    168 game triangles/tile (max 3,484); 4 m Minor roads lost their centre dash (under 5.5/6 m).
+    Tiles 54.3 KB raw, 41.4 KB deflated (net8 Fastest; the net9 TerrainPreprocessor prints 48.7
+    for the same bytes: its zlib-ng Fastest compresses worse, compare with `RoadGen --rewrite --dry-run`).
   - No paint LOD: roads are only built within `RoadMaxDist` (4 rings) and never rebuilt per
     stride, so a coarse-ring skip has nothing to hook into; the dither takes far lines out.
