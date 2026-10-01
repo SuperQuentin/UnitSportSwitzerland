@@ -14,6 +14,7 @@ namespace UnitSport.Core;
 public partial class ServerWorld : Node3D
 {
     private InterestService? _interest;
+    private Vehicles.PassengerService? _passengers;
     private ChunkManager? _chunks;
     private Node3D? _players;
     private MultiplayerSpawner? _spawner;
@@ -95,6 +96,9 @@ public partial class ServerWorld : Node3D
 
         // vehicles standing in the world; the server spawns and removes them for everyone
         _vehicles = Vehicles.VehicleManager.Create(this, null);
+        // who sits in whose vehicle (#158): handed out here
+        _passengers = Vehicles.PassengerService.Create(this);
+        _passengers.Players = _players;
         _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
         // radios thrown into the world, and the CDs they play; the clock everyone plays them by
         _radios = Items.RadioManager.Create(this);
@@ -129,7 +133,9 @@ public partial class ServerWorld : Node3D
         // car races between players: World/Race, like World/Chat, so the RPCs find it
         var race = World.RaceManager.CreateServer(_chat, _players, source, origin);
         // racers see each other however far apart the field spreads (Net/InterestService)
-        if (_interest != null) _interest.Together = race.SameRace;
+        // and everyone aboard one vehicle sees everyone else aboard it, wherever it goes
+        var passengers = _passengers;
+        if (_interest != null) _interest.Together = (a, b) => race.SameRace(a, b) || passengers.Together(a, b);
         AddChild(race);
         _chat.Race = race;
 
@@ -260,6 +266,8 @@ public partial class ServerWorld : Node3D
     {
         GD.Print($"[server] peer {id} disconnected");
         _chat?.ReportDisconnect(id);
+        // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
+        _passengers?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);

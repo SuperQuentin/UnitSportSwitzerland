@@ -1,20 +1,18 @@
 # Smart binoculars (`src/Items/SmartBinocularsHud.cs`, `ItemId.SmartBinoculars = 51`)
 
-- An `ItemUse.Optic` item: Aim gives the normal binocular overlay (9 deg), plus the HUD. Found as a very rare
-  loot entry (desk 1.5, shelf 1 of pool weight; ~5 per hundred houses), not sold.
-- **Target**: `LootTables.Targets()` (every pooled item + francs). **Use (LMB)** while aimed opens the picker:
-  type to search, wheel / arrows / D-pad move, Use / Enter picks, Esc / Tab closes. The choice is kept in
-  `user://smart_binoculars.cfg`. The picker holds `UiFocus` (typing never walks) and keeps the optic raised
-  (`ItemController`: `picking`).
-- **Markers**: every door in `DoorIndex` within 400 m and on screen (no occlusion test), at most 14, each a
-  boxed % coloured low (red) to high (green) via `BuildingChance`; the one nearest the screen centre also shows
-  its three best container types ("fridge x40 34%" = chance some piece of that type has it).
-- **Plans are fetched, not assumed**: `InteriorManager.GetOrCreate` (may generate on a worker), at most 3 starts
-  per second and 2 in flight, nearest the centre first; "..." until it lands; results cached by door key (cleared
-  past 400). Never blocks a frame; nothing runs on the dedicated server (client-only child of `ItemController`).
-- **Only odds, never contents**: the math is `LootTables.Chance` (see the `loot` note), no roll or taken mask is read.
-- Screenshot: `--ride foot,16,out.png --give SmartBinoculars --hold SmartBinoculars --view first --aim
-  --chunks <terrain_chunks> [--smarttarget Bread] [--smartpicker]`. `--give <item>` (dev) puts one in hotbar slot 1.
-- **Declutter** (#108): labels are placed nearest-first; the centre building's label stays put and its panel is
-  reserved next (`PanelRect`: beside the marker, right side first then left, never over the marker or the centre pip);
-  any other label overlapping a placed one is pushed up/down in label steps with a leader line and a dot on its building.
+- Reworked in #165: **no aiming, no zoom, no target picker**. The old optic (9 deg FOV, a % marker over every
+  building in view, a searchable target item) was unusable: too much zoom, and no way to tell which marker was
+  which building. Now an `ItemUse.Readout` item (held up like the GPS, `ViewPose.Read`) that reads out **one**
+  building: the one the player is inside, else the door within `DoorReach` (8 m, `DoorIndex.Nearest`).
+- Panel (top right, CanvasLayer 11, under the inventory): building kind, "N containers, M locked", and
+  `LootTables.BuildingTable(layout)` — every target item with P(at least one container has it when restocked),
+  best first, 12 rows, bar + %. Francs included; gun locker / safe contents included (they are just containers).
+- **Plans are fetched, not assumed**: `InteriorManager.GetOrCreate` (may generate on a worker or come from the
+  server); "scanning..." until it lands; plans and tables cached by key (tables recomputed after 60 s, as running
+  occasions change the odds). Nothing runs on the dedicated server (client-only child of `ItemController`).
+- **Only odds, never contents**: no roll or taken mask is read.
+- `ItemController`: `_smart.Held` + `_smart.Player` each frame; the GPS screen text / third-person readout are
+  gated on `ItemId.Gps`, not on `ItemUse.Readout`, so the binoculars do not show coordinates.
+- Found as a very rare loot entry (`Optics` pool: desk, some shelves, safes), not sold.
+- Checked by `tools/locksynccheck.sh` (client A reads the building at its door; the table must list what its
+  locked container gives) — see the loot `locked-containers` note. Screenshot `test_output/locksync_A_scan.png`.

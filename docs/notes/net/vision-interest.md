@@ -5,7 +5,7 @@
   width, cut at 1.5 px (walker ~0.9 km, car ~2.2 km, plane/heli ~5 km; ×1.6 above 25 m AGL — a
   silhouette against the sky carries), clamped to the viewer's reported `CameraFar`; line of sight
   over `horizon.bin` (100 m lattice, 12 m margin); always within 150 m and always for the same race
-  (`Together`); hysteresis ×1.15 and at most one flip per pair per second. A newcomer sees nobody
+  or the same vehicle (`Together`: `RaceManager.SameRace` or `PassengerService.Together`, #158); hysteresis ×1.15 and at most one flip per pair per second. A newcomer sees nobody
   until its first round (0.5 s) instead of being sent everyone and having most taken back.
 - **The server rebroadcasts; owners send once.** `Sync` (owner authority) goes to the server ONLY.
   The server's proxy copy carries two server-owned relays with the same properties: `RelayNear`

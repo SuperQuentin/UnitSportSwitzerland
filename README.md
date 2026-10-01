@@ -27,8 +27,9 @@ godot --path .
 
 > **A fresh clone has no terrain data.** The generated chunks are 5.3 GB and the source
 > geodata 155 GB, so neither is in the repository. The game starts anyway, on **generated
-> terrain**: an alpine valley with a river, a road, a railway, villages, farms, forest, rock and
-> snow, so everything can be tried. Wherever there is no real terrain it is generated, and it
+> terrain** shaped on a coarse (500 m) heightmap of the real country that ships with the code:
+> the real lakes, mountains and valleys, with rivers following the real drainage and roads,
+> railways, villages and farms along them, plus forest, rock and snow, so everything can be tried. Wherever there is no real terrain it is generated, and it
 > bends to meet the real tiles beside it, so a partial region is surrounded by land rather than
 > void (a small "generated terrain" note says which ground you are on; Settings → Generated
 > terrain or `--generated off` turns it off). Real terrain takes over tile by tile as you get
@@ -332,6 +333,7 @@ OpenStreetMap overlay (ODbL, below).
 | **swissBUILDINGS3D 3.0**        | LoD2 building solids                                                                                   | STAC `ch.swisstopo.swissbuildings3d_3_0` (14 GB nationwide) |
 | **GWR / RegBL**                 | building register: year, floors, category                                                              | `https://public.madd.bfs.admin.ch/{canton}.zip`             |
 | **Veloland / Mountainbikeland** | cycle route networks                                                                                   | STAC `ch.astra.veloland`, `ch.astra.mountainbikeland`       |
+| **swissALTIRegio**              | 10 m terrain incl. border areas, averaged to 500 m for the generated terrain (`tools/swiss_relief.py`) | STAC `ch.swisstopo.swissaltiregio` (one overview read)      |
 | **OpenStreetMap** (optional)    | one-way, lanes, width, sidewalks, cycleways, turn lanes on roads (`--layers osm`)                      | Geofabrik `switzerland-YYMMDD.osm.pbf`                      |
 
 The OpenStreetMap overlay is © OpenStreetMap contributors, available under the

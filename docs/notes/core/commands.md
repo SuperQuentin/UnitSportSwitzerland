@@ -13,7 +13,14 @@
   drop overwrites the requested y with ground + 220 m and every close-up shot comes back
   as an aerial one. `ShotRunner` also re-claims `Current` every frame — a mode entered from
   a deferred call (GPX replay) would otherwise steal the camera after the shot was set up.
-  Add `--menu` to capture the mode picker, `--settings` or `--licenses` for those pages.
+  Add `--menu` to capture the mode picker, `--settings` or `--licenses` for those pages. `--nohud`
+  hides every `CanvasLayer` (chat, key hints, menus) in the picture.
+- Many screenshots, one launch: `<godot> --path . -- --shot-queue shots.txt [--nohud]` boots like
+  `--shot`, then watches the file: one shot per line in the `--shot` syntax, taken in order,
+  lines appended later picked up within 0.5 s; blank lines and `#` comments skipped, `quit`
+  exits (code 1 if any shot or line failed). A file shorter than what was read is a new queue.
+  Each PNG is written as `<out>.part` and renamed, so poll for the final name. Use it whenever
+  more than one picture is needed: every launch steals focus on macOS (`macos-launch-steals-focus`).
 - `--nocapture`: never grab the mouse (`Core/MouseCapture`). Every probe and tool run implies it,
   so a check running in a window leaves the pointer to whoever is using the machine.
 - `--chatcheck`: chat tab completion and `/spawn` parsing, headless, RESULT PASS/FAIL (`Core/ChatCheck`).

@@ -21,5 +21,5 @@
   (= 1 - prod(1 - p_i), with a per-type breakdown) are the closed form of `Roll` (empty x abundance, roll count
   incl. `RollFactor` random rounding, per-pick weight, seasonal roll; shared `Candidates`, so they cannot drift).
   `--lootchancecheck` compares them with 200k sampled rolls per case (pass within 2 points; RESULT line). If you
-  change `Roll`, change `Chance`. Used by the smart binoculars (the items `smart-binoculars` note). Tip: seed
+  change `Roll`, change `Chance`. Both take the piece's room (`InteriorLayout.RoomOf`; the `room-loot` note). Used by the smart binoculars (the items `smart-binoculars` note). Tip: seed
   Monte-Carlo with hashed seeds, `new Random(i)` on consecutive ints correlates early draws.

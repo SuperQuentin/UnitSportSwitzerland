@@ -9,9 +9,9 @@ namespace UnitSport.Player;
 /// <para>
 /// A menu rather than a cycle key, for two reasons: the list is meant to grow, and a refusal
 /// needs somewhere to be explained. On a server, the vehicles in it (anything left in the world
-/// when you get out) are an admin's to spawn — see <see cref="Permissions"/>; the rows stay
+/// when you get out) are an admin's to spawn â€” see <see cref="Permissions"/>; the rows stay
 /// listed, greyed, so the reason is visible rather than the vehicles simply missing. You cannot get on a bike while airborne or step off skis at
-/// 70 km/h, and a key that silently does nothing in those moments reads as a broken key — so the
+/// 70 km/h, and a key that silently does nothing in those moments reads as a broken key â€” so the
 /// panel says why and stays open.
 /// </para>
 ///
@@ -94,6 +94,13 @@ public partial class RideUi : CanvasLayer
         Fold(rows, number, "Cars", CarCatalog.All.Select(c => (c.Kind, c.Label, c.Blurb)));
         SetupRow(rows);
         Fold(rows, number + 1, "Motorbikes", MotorbikeCatalog.All.Select(b => (b.Kind, b.Label, b.Blurb)));
+        Fold(rows, number + 2, "Trucks and buses", HeavyCatalog.All.Select(h => (h.Kind, h.Label,
+            h.Blurb + (h.Look.Operator.Length > 0 ? $" ({h.Look.Operator} colours)" : ""))));
+        // trailers are not mounts: each row couples one behind the truck being driven, or leaves it
+        // in the world ahead to back onto (RideKind.Trailer + its index, decoded in Choose)
+        Fold(rows, number + 3, "Trailers", TrailerCatalog.All.Select((t, i) => ((RideKind)(TrailerRow + i), t.Label,
+            t.Blurb + (t.Operator.Length > 0 ? $" ({t.Operator} colours)" : ""))));
+        LoadRow(rows);
 
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _status.AddThemeColorOverride("font_color", new Color(0.92f, 0.55f, 0.35f));
@@ -140,7 +147,7 @@ public partial class RideUi : CanvasLayer
     private void Fold(Container rows, int number, string name, IEnumerable<(RideKind Kind, string Label, string Blurb)> items)
     {
         var list = items.ToList();
-        string Title(bool open) => $"{number}.  {name}  ({list.Count})  {(open ? "▾" : "▸")}";
+        string Title(bool open) => $"{number}.  {name}  ({list.Count})  {(open ? "â–¾" : "â–¸")}";
         var button = new Button { Text = Title(false), CustomMinimumSize = new Vector2(0, 32), Alignment = HorizontalAlignment.Left };
         rows.AddChild(button);
         var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 380), Visible = false };
@@ -157,7 +164,7 @@ public partial class RideUi : CanvasLayer
             foreach (var (b, l) in _folds) l.Visible = false;
             scroll.Visible = open;
             for (int i = 0; i < _shortcuts; i++) _entries[i].Button.GetParent<Control>().Visible = !open;
-            foreach (var (b, l) in _folds) b.Text = b == button ? Title(open) : b.Text.Replace("▾", "▸");
+            foreach (var (b, l) in _folds) b.Text = b == button ? Title(open) : b.Text.Replace("â–¾", "â–¸");
             _lockNote.Visible = !Permissions.CanSpawnVehicles;
             if (open) PlayerInput.FocusFirst(scroll);
         };
@@ -191,6 +198,23 @@ public partial class RideUi : CanvasLayer
         };
     }
 
+    /// <summary>Picker rows for trailers carry this plus the trailer's index as their kind; never a real mount.</summary>
+    private const int TrailerRow = 1000;
+    private OptionButton _load = null!;
+    private static readonly (string Name, float Load)[] Loads = { ("Empty", 0f), ("Half", 0.5f), ("Full", 1f) };
+
+    /// <summary>How full the next truck, bus or trailer comes: cargo, or passengers.</summary>
+    private void LoadRow(Container rows)
+    {
+        var row = new HBoxContainer();
+        row.AddChild(new Label { Text = "Load (trucks, buses, trailers)" });
+        _load = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        foreach (var (name, _) in Loads) _load.AddItem(name);
+        _load.Select(1);
+        row.AddChild(_load);
+        rows.AddChild(row);
+    }
+
     private void Entry(Container into, int number, RideKind kind, string label, string blurb, bool vehicle)
     {
         var box = new VBoxContainer();
@@ -216,7 +240,7 @@ public partial class RideUi : CanvasLayer
         var player = ActivePlayer?.Invoke();
         if (player == null)
         {
-            _status.Text = InputHints.Format("Nothing to mount — press {toggle_mode} to drop out of the fly camera first.");
+            _status.Text = InputHints.Format("Nothing to mount â€” press {toggle_mode} to drop out of the fly camera first.");
             return;
         }
 
@@ -227,6 +251,16 @@ public partial class RideUi : CanvasLayer
             return;
         }
 
+        float load = Loads[Mathf.Clamp(_load.Selected, 0, Loads.Length - 1)].Load;
+        if ((int)kind >= TrailerRow)
+        {
+            if (player.SpawnTrailer((int)kind - TrailerRow, load)) { Close(); return; }
+            _status.Text = player.Vehicle is Truck t
+                ? (t.Trailer != null ? "Uncouple the trailer you have first." : "That trailer does not fit this vehicle, or it is moving.")
+                : "Get off first: a trailer is left 14 m ahead of you.";
+            return;
+        }
+        player.NextLoad = load;
         if (player.SetRide(kind))
         {
             if (CarCatalog.IsCar(kind)) player.SetCarSetup(_setup.GetSelectedId());
@@ -238,7 +272,7 @@ public partial class RideUi : CanvasLayer
         _status.Text = player.IsSliding
             ? "Not mid-slide."
             : player.IsOnFloor()
-                ? "Too fast — slow down first."
+                ? "Too fast â€” slow down first."
                 : "Not in the air.";
     }
 
@@ -288,7 +322,7 @@ public partial class RideUi : CanvasLayer
         if (@event is not InputEventKey key) return;
 
         // Key.Key1 is the physical "1", so the shortcuts land in the same place on an AZERTY
-        // keyboard as on a QWERTY one — the same reason the movement keys are read physically.
+        // keyboard as on a QWERTY one â€” the same reason the movement keys are read physically.
         int index = (int)key.PhysicalKeycode - (int)Key.Key1;
         if (index >= _shortcuts && index < _shortcuts + _folds.Count)
         {

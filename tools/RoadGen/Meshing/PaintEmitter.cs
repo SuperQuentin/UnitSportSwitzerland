@@ -36,16 +36,25 @@ public static class PaintEmitter
     /// </summary>
     public const float LineWidth = 0.15f;
 
-    /// <summary>Randlinie of a motorway/expressway carriageway (Breitstrich, ASTRA 11001; see the note).</summary>
-    public const float HighSpeedEdgeWidth = 0.30f;
+    /// <summary>
+    /// Randlinie of a motorway/expressway carriageway: 0.20 m (0.20-0.25 m, ASTRA 15002 (2023)
+    /// Abb. 5.4/6.2 after SN 640 854a; see the note).
+    /// </summary>
+    public const float HighSpeedEdgeWidth = 0.20f;
 
     /// <summary>
-    /// Leitlinie dash and gap: 3 m / 3 m in built-up areas, 3 m / 6 m outside (SN 640 850a via
-    /// LU 653.201, BE handbook, ZH ABC); motorways and expressways 6 m / 12 m (see the note).
+    /// Leitlinie dash and gap: 3 m / 6 m, the SN 640 850a "Regelfall" in and out of built-up areas
+    /// (BE Handbuch Markierung 1, Stadt Bern Normalien C 2.10.8; LU's 3 m / 3 m in town is a
+    /// cantonal variant); motorways and expressways 6 m / 12 m (ASTRA 15002 Abb. 5.4).
     /// </summary>
     public static (float Dash, float Gap) Leitlinie(RoadSegment seg) =>
-        RoadCrossSection.IsHighSpeed(seg.Class) ? (6f, 12f)
-        : seg.Attributes.Has(RoadAttrFlags.Urban) ? (3f, 3f) : (3f, 6f);
+        RoadCrossSection.IsHighSpeed(seg.Class) ? (6f, 12f) : (3f, 6f);
+
+    /// <summary>
+    /// A rural Randlinie's axis lies this far in from the carriageway edge: 0.15 m clear, then the
+    /// 0.15 m line (BE Handbuch Markierung 1 ch. 21).
+    /// </summary>
+    public const float EdgeLineInset = 0.225f;
 
     /// <summary>
     /// Two-way roads narrower than this get no centre line: 5.5 m in built-up areas, 6 m outside
@@ -56,16 +65,7 @@ public static class PaintEmitter
     /// <summary>Edge lines at this fraction of the half width, where the shader drew them.</summary>
     private const float EdgeFraction = 0.87f;
 
-    /// <summary>Mirror of <c>RoadMeshBuilder.BridgeLift</c>: a deck is drawn this far above its line.</summary>
-    private const float BridgeLift = 0.15f;
-
     private const float TileSize = 1000f;
-
-    /// <summary>
-    /// A paint line may leave the ribbon's vertices by this much (3D): the centrelines are dense
-    /// (5 cm chords, draped heights) and copying every vertex cost +7.5 % of the tile.
-    /// </summary>
-    private const float SimplifyTolerance = 0.02f;
 
     /// <summary>Region numbers: primitives and what the game will draw from them.</summary>
     public sealed class Tally
@@ -103,7 +103,6 @@ public static class PaintEmitter
 
         var a = seg.Attributes;
         float half = seg.Width * 0.5f;
-        float lift = (seg.Flags & RoadFlags.Bridge) != 0 ? BridgeLift : 0f;
         bool divided = (seg.Flags & RoadFlags.Divided) != 0;
         bool motorway = seg.Class is RoadClass.Motorway or RoadClass.Expressway;
         bool oneDirection = a.OneWay != 0 || divided || motorway || seg.Class == RoadClass.Ramp;
@@ -112,10 +111,8 @@ public static class PaintEmitter
         float solid = RoadCrossSection.IsHighSpeed(seg.Class) ? HighSpeedEdgeWidth : LineWidth;
         void Line(float offset, bool dashed)
         {
-            var line = Offset(seg, offset, lift);
-            if (line.Length < 6) return;
-            if (dashed) AddDashed(seg, line, station, into);
-            else Add(into, PaintType.WhiteSolid, line, solid, 0, 0);
+            if (dashed) AddDashed(seg, offset, station, into);
+            else Add(into, RoadPaint.AlongSegment(seg, PaintType.WhiteSolid, White, solid, 0, 0, offset));
         }
 
         if (CrossSectionLines(seg, Line)) return;
@@ -137,6 +134,9 @@ public static class PaintEmitter
             int back = Math.Max(1, (int)a.LanesBackward), fwd = Math.Max(1, (int)a.LanesForward);
             float w = 2 * half / (back + fwd);
             for (int k = 1; k < back + fwd; k++) Line(-half + k * w, true);   // k == back is the centre
+            // Randlinien outside built-up areas, on roads wide enough for a centre line too (BE
+            // Handbuch Markierung 1 p. 17, Stadt Bern C 2.10.11; inside a town only exceptionally)
+            if (!a.Has(RoadAttrFlags.Urban)) { Line(-half + EdgeLineInset, false); Line(half - EdgeLineInset, false); }
         }
     }
 
@@ -183,10 +183,12 @@ public static class PaintEmitter
         return true;
     }
 
-    private static void AddDashed(RoadSegment seg, float[] line, double station, List<RoadPaint> into)
+    private static void AddDashed(RoadSegment seg, float offset, double station, List<RoadPaint> into)
     {
         var (dash, gap) = Leitlinie(seg);
-        double length = Length(line);
+        var line = RoadPaintGeometry.Offset(seg, RoadPaint.FileOffset(offset));
+        if (line.Length < 6) return;
+        double length = RoadPaintGeometry.Length(line);
         double period = dash + gap;
         double phase = station - Math.Floor(station / period) * period;
         bool seamStart = OnSeam(seg.Points, 0), seamEnd = OnSeam(seg.Points, seg.PointCount - 1);
@@ -197,7 +199,8 @@ public static class PaintEmitter
         {
             double lead = Math.Min(dash - phase, length);
             if (seamStart || lead >= 0.4 * dash)
-                Add(into, PaintType.WhiteDashed, Cut(line, 0, lead), LineWidth, 0, 0);
+                Add(into, RoadPaint.AlongSegment(seg, PaintType.WhiteDashed, White, LineWidth, 0, 0, offset, 0,
+                    lead >= length ? double.PositiveInfinity : lead));
         }
 
         if (first >= length) return;
@@ -207,86 +210,14 @@ public static class PaintEmitter
             double lastStart = first + Math.Floor((length - first) / period) * period;
             if (length - lastStart < 0.4 * dash) end = lastStart - gap;
         }
-        if (end - first > 1e-3) Add(into, PaintType.WhiteDashed, Cut(line, first, end), LineWidth, dash, gap);
+        if (end - first > 1e-3)
+            Add(into, RoadPaint.AlongSegment(seg, PaintType.WhiteDashed, White, LineWidth, dash, gap, offset, first,
+                end >= length ? double.PositiveInfinity : end));
     }
 
-    private static void Add(List<RoadPaint> into, PaintType type, float[] line, float width, float dash, float gap)
+    private static void Add(List<RoadPaint> into, RoadPaint paint)
     {
-        if (line.Length < 6) return;
-        into.Add(new RoadPaint
-        {
-            Shape = PaintShape.Polyline, Type = type, Rgba = White,
-            Width = width, Dash = dash, Gap = gap, Vertices = Simplify(line),
-        });
-    }
-
-    /// <summary>
-    /// The line <paramref name="offset"/> metres to the right of the centreline, as the ribbon's
-    /// edges are built. A point whose offset edge runs backwards against the centreline (inside a
-    /// bend tighter than the offset) is dropped: a gap is honest, a bow-tie is not.
-    /// </summary>
-    private static float[] Offset(RoadSegment seg, float offset, float lift)
-    {
-        var p = seg.Points;
-        int n = seg.PointCount;
-        var result = new List<float>(n * 3);
-        for (int i = 0; i < n; i++)
-        {
-            int i0 = Math.Max(0, i - 1), i1 = Math.Min(n - 1, i + 1);
-            float fx = p[i1 * 3] - p[i0 * 3], fz = p[i1 * 3 + 2] - p[i0 * 3 + 2];
-            float fl = MathF.Sqrt(fx * fx + fz * fz);
-            if (fl < 1e-4f) { fx = 0; fz = -1; } else { fx /= fl; fz /= fl; }
-            float x = p[i * 3] - fz * offset, z = p[i * 3 + 2] + fx * offset;
-
-            if (result.Count >= 3 && i > 0)
-            {
-                float cx = p[i * 3] - p[i * 3 - 3], cz = p[i * 3 + 2] - p[i * 3 - 1];
-                if ((x - result[^3]) * cx + (z - result[^1]) * cz <= 0) continue;
-            }
-            result.Add(x); result.Add(p[i * 3 + 1] + lift); result.Add(z);
-        }
-        return result.ToArray();
-    }
-
-    /// <summary>Douglas-Peucker in 3D; the ends are kept exactly.</summary>
-    private static float[] Simplify(float[] v)
-    {
-        int n = v.Length / 3;
-        if (n <= 2) return v;
-        var keep = new bool[n];
-        keep[0] = keep[n - 1] = true;
-        var stack = new Stack<(int A, int B)>();
-        stack.Push((0, n - 1));
-        while (stack.Count > 0)
-        {
-            var (a, b) = stack.Pop();
-            float worst = SimplifyTolerance * SimplifyTolerance;
-            int at = -1;
-            for (int i = a + 1; i < b; i++)
-            {
-                float d = DistanceSquared(v, i, a, b);
-                if (d > worst) { worst = d; at = i; }
-            }
-            if (at < 0) continue;
-            keep[at] = true;
-            stack.Push((a, at));
-            stack.Push((at, b));
-        }
-        var result = new List<float>();
-        for (int i = 0; i < n; i++)
-            if (keep[i]) { result.Add(v[i * 3]); result.Add(v[i * 3 + 1]); result.Add(v[i * 3 + 2]); }
-        return result.ToArray();
-    }
-
-    private static float DistanceSquared(float[] v, int p, int a, int b)
-    {
-        float ax = v[a * 3], ay = v[a * 3 + 1], az = v[a * 3 + 2];
-        float dx = v[b * 3] - ax, dy = v[b * 3 + 1] - ay, dz = v[b * 3 + 2] - az;
-        float px = v[p * 3] - ax, py = v[p * 3 + 1] - ay, pz = v[p * 3 + 2] - az;
-        float len = dx * dx + dy * dy + dz * dz;
-        float t = len < 1e-12f ? 0 : Math.Clamp((px * dx + py * dy + pz * dz) / len, 0, 1);
-        px -= dx * t; py -= dy * t; pz -= dz * t;
-        return px * px + py * py + pz * pz;
+        if (paint.Vertices.Length >= 6) into.Add(paint);
     }
 
     private static bool OnSeam(float[] p, int i)
@@ -294,42 +225,5 @@ public static class PaintEmitter
         const float eps = 0.01f;
         float x = p[i * 3], z = p[i * 3 + 2];
         return MathF.Abs(x) < eps || MathF.Abs(z) < eps || MathF.Abs(x - TileSize) < eps || MathF.Abs(z - TileSize) < eps;
-    }
-
-    private static double Length(float[] v)
-    {
-        double s = 0;
-        for (int i = 3; i < v.Length; i += 3)
-        {
-            double dx = v[i] - v[i - 3], dz = v[i + 2] - v[i - 1];
-            s += Math.Sqrt(dx * dx + dz * dz);
-        }
-        return s;
-    }
-
-    /// <summary>The piece of a polyline between two horizontal distances along it.</summary>
-    private static float[] Cut(float[] v, double from, double to)
-    {
-        var result = new List<float>();
-        double s = 0;
-        for (int i = 3; i < v.Length; i += 3)
-        {
-            double dx = v[i] - v[i - 3], dz = v[i + 2] - v[i - 1];
-            double len = Math.Sqrt(dx * dx + dz * dz);
-            double s1 = s + len;
-            if (s1 >= from && s <= to && len > 1e-9)
-            {
-                if (result.Count == 0) Lerp(result, v, i - 3, Math.Max(0, (from - s) / len));
-                if (s1 < to) { result.Add(v[i]); result.Add(v[i + 1]); result.Add(v[i + 2]); }
-                else { Lerp(result, v, i - 3, (to - s) / len); break; }
-            }
-            s = s1;
-        }
-        return result.ToArray();
-    }
-
-    private static void Lerp(List<float> into, float[] v, int a, double t)
-    {
-        for (int k = 0; k < 3; k++) into.Add((float)(v[a + k] + (v[a + 3 + k] - v[a + k]) * t));
     }
 }

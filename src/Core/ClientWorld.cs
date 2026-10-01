@@ -59,14 +59,14 @@ public partial class ClientWorld : Node3D
                 GetTree().Quit(Player.GarageProbe.Check());
                 return;
             }
-            if (Array.IndexOf(scArgs, "--garagehole") >= 0)
-            {
-                GetTree().Quit(Interiors.GarageBay.Check());
-                return;
-            }
             if (Array.IndexOf(scArgs, "--meshcheck") >= 0)
             {
                 GetTree().Quit(Avatar.MeshScratch.Check());
+                return;
+            }
+            if (Array.IndexOf(scArgs, "--cockpitcheck") >= 0)
+            {
+                GetTree().Quit(Player.CockpitCheck.Run());
                 return;
             }
             if (Array.IndexOf(scArgs, "--spincheck") >= 0)
@@ -82,6 +82,11 @@ public partial class ClientWorld : Node3D
             if (Array.IndexOf(scArgs, "--motocheck") >= 0)
             {
                 GetTree().Quit(Player.Motorbike.Check());
+                return;
+            }
+            if (Array.IndexOf(scArgs, "--truckcheck") >= 0)
+            {
+                GetTree().Quit(Player.HeavyCheck.Run());
                 return;
             }
         }
@@ -233,6 +238,8 @@ public partial class ClientWorld : Node3D
         // Vehicles left standing in the world. Same node path as on the server, so parking and
         // claiming work over the network; offline it just holds the nodes.
         var vehicles = Vehicles.VehicleManager.Create(this, _chunks);
+        // seats in vehicles other players drive (#158): same path as the server's
+        Vehicles.PassengerService.Create(this);
         vehicles.PlayerPositions = () =>
         {
             var at = new List<Vector3>();
@@ -244,6 +251,13 @@ public partial class ClientWorld : Node3D
         // server's; the clock the CDs run on (offline: this machine's own).
         var radios = Items.RadioManager.Create(this);
         radios.PlayerPositions = vehicles.PlayerPositions;
+        // every body that may hold a radio that plays (#168): the remote players and this one
+        radios.Players = () =>
+        {
+            var all = _players?.GetChildren().OfType<FootPlayer>().ToList() ?? new List<FootPlayer>();
+            if (LocalPlayer is { } me && !all.Contains(me)) all.Add(me);
+            return all;
+        };
         Audio.Cd.CdLibrary.Create(this, server: false);
         Net.ClockSync.Create(this);
         // the Africa Twin at Riddes: placed here offline, by the server online
@@ -282,13 +296,11 @@ public partial class ClientWorld : Node3D
         Occasions.OccasionManager.Create(this);
         // their props, dressed onto each tile as its buildings load
         AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
-        // garage roll-up doors, opening for any car in front of them
-        AddChild(new Vehicles.GarageDoors(_chunks, origin));
         // …the creatures in the air around the camera, and their sounds
         AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
         AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
         // …and snow falling round the camera, except indoors
-        AddChild(new Occasions.OccasionPrecip(() => LocalPlayer?.Indoors == true));
+        AddChild(new Occasions.OccasionPrecip());
 
         // the clock: sun, light colour, sky and night for every shader and the environment
         var chunksForSky = _chunks;
@@ -301,9 +313,13 @@ public partial class ClientWorld : Node3D
         _traffic = new World.Traffic(_chunks, origin)
         {
             Focus = () => GetViewport().GetCamera3D()?.GlobalPosition,
-            Obstacles = () => LocalPlayer is { } p ? new[] { p.GlobalPosition } : Array.Empty<Vector3>(),
+            // every player it can meet — the local one, remote racers, race NPCs — with how each moves:
+            // the traffic makes way for a race going through it (#85)
+            Obstacles = () => GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
+                .Select(p => (p.GlobalPosition, p.WorldVelocity)),
         };
         AddChild(_traffic);
+        if (World.NpcWatch.FromArgs() is { } npcWatch) AddChild(npcWatch);
         if (World.TrafficProbe.ParseArgs() is { Requested: true } tcheck)
         {
             var tcam = new Camera3D { Name = "TrafficCam", Far = GameSettings.Current.CameraFar };
@@ -320,11 +336,12 @@ public partial class ClientWorld : Node3D
         // large import that is usually empty space. "--at E,N" overrides it (LV95 metres).
         // --shot and --probe place the camera themselves, and a spawn drop would fight
         // them for the height.
-        bool placedByTool = ShotRunner.ParseArgs() != null || TunnelProbe.ParseArgs() != null
+        bool placedByTool = ShotRunner.ParseArgs() != null || ShotRunner.ParseQueueArg() != null
+            || TunnelProbe.ParseArgs() != null
             || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
+            || RideProbe.ParseArgs() != null || TruckProbe.Requested || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
-            || RoadStandProbe.Requested() || MantleProbe.Requested()
+            || RoadStandProbe.Requested() || MantleProbe.Requested() || VoidProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Interiors.DoorWatchProbe.ParseArgs().Requested
             || Loot.LootProbe.ParseArgs() != null
@@ -366,18 +383,22 @@ public partial class ClientWorld : Node3D
         _rides.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_rides);
 
-        // T in a stopped car at a garage: the tuning menu (GarageUi.GarageNear says where garages are)
+        // T in a stopped car at a garage: the tuning menu (GarageUi.GarageNear says where garages are):
+        // in front of one, or parked inside it
         Vehicles.GarageUi.GarageNear = pos =>
-            Interiors.DoorIndex.Nearest(pos, 8f, Terrain.Format.BuildingKind.Garage, orInside: true) != null;
+            Interiors.DoorIndex.Nearest(pos, 8f, Terrain.Format.BuildingKind.Garage) != null
+            || Interiors.InteriorManager.Instance?.LayoutAt(pos)?.DressedKind() == Terrain.Format.BuildingKind.Garage;
         _garage = Vehicles.GarageUi.Create();
         _garage.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_garage);
         if (Player.GarageProbe.ParseArgs() is { } garageRole) AddChild(new Player.GarageProbe(garageRole, () => LocalPlayer));
+        if (Player.HeavyNetProbe.ParseArgs() is { } heavyRole) AddChild(new Player.HeavyNetProbe(heavyRole, () => LocalPlayer));
+        if (Player.PassengerProbe.ParseArgs() is { } passengerRole) AddChild(new Player.PassengerProbe(passengerRole, () => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
-            || Loot.LootSyncProbe.Role != null
+            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null
             || Items.PlacedProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
@@ -394,12 +415,14 @@ public partial class ClientWorld : Node3D
         _items = items;
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
+        if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));
         if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
         Vehicles.VehicleManager.Refused += message => items.Ui.Toast(message);
+        Vehicles.PassengerService.Said += message => items.Ui.Toast(message);
 
         // Chat exists from boot, not only once connected: offline it runs its commands itself
         // (/city, /spawn ...), and StartNetworking just keeps using it. World/Chat is also the
@@ -635,6 +658,14 @@ public partial class ClientWorld : Node3D
             return;
         }
 
+        if (VoidProbe.Requested())
+        {
+            var (vE, vN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(vE, vN, 1200);
+            AddChild(new VoidProbe(_chunks, origin));
+            return;
+        }
+
         if (RoadStandProbe.Requested())
         {
             var (checkE, checkN) = SpawnPoint.ParseTarget();
@@ -664,6 +695,14 @@ public partial class ClientWorld : Node3D
             var (treeE, treeN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(treeE, treeN, 1200);
             AddChild(new World.TreeCheck(_chunks, origin, treeCheck.Shot));
+            return;
+        }
+
+        if (TruckProbe.Requested)
+        {
+            var (truckE, truckN) = SpawnPoint.ParseTarget();
+            _spectator.Position = origin.ToWorld(truckE, truckN, 1200);
+            AddChild(new TruckProbe(_chunks, origin));
             return;
         }
 
@@ -712,6 +751,13 @@ public partial class ClientWorld : Node3D
             AddChild(new ShotRunner(_spectator,
                 new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
                 float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]));
+        }
+        else if (ShotRunner.ParseQueueArg() is { } queue)
+        {
+            _spectator.SetProcess(false);
+            _spectator.SetProcessUnhandledInput(false);
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+            AddChild(ShotRunner.ForQueue(_spectator, queue));
         }
     }
 
@@ -811,7 +857,7 @@ public partial class ClientWorld : Node3D
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
-        if (RadioSyncCheck.Create(() => LocalPlayer, () => _players) is { } radioCheck) AddChild(radioCheck);
+        if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
 
         _chat!.Kicked += reason => GD.Print($"[net] kicked: {reason}");
 

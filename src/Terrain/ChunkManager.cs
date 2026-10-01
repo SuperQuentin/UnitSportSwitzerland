@@ -1393,73 +1393,31 @@ public partial class ChunkManager : Node3D
                 // ConcavePolygonShape3D is a BVH build on the main thread (up to 80 ms for a
                 // town tile), and only the tile a body stands on needs one. Empty faces still
                 // mark the tile done, so it is not asked again.
-                bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
-                bool visualBlend = surfaceCore != null && roadTile != null && nearField;
-
-                // one corridor pass, applied twice at different clearances
-                var blend = roadTile != null && (wantCollision || visualBlend)
-                    ? TerrainMeshBuilder.ComputeRoadBlend(roadTile) : null;
-
                 ArrayMesh? buildings = null;
                 Vector3[]? buildingFaces = null;
                 Interiors.DoorSpot[]? doors = null;
-                // the ground carved under drive-in garages that this tile's holes do not have yet
-                bool newGarageCells = false;
                 if (wantBuildings || wantCollision)
                 {
                     var bTile = await source.LoadBuildingsAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
                     Lap(StBldgLoad, stageMs, clock);
 
-                    // A garage's drive-in bay cuts its facade, its collision and the ground under it
-                    // alike, and hangs off its door: a collision-only build computes the doors too,
-                    // from the same roads and grid, so the hole and the wall around it agree.
-                    bool drawBuildings = wantBuildings && bTile != null && buildingMaterial != null;
-                    bool garages = bTile != null && bTile.Buildings.Any(b => b.Kind == BuildingKind.Garage);
-                    Interiors.DoorSpot[]? allDoors = null;
-                    if (bTile != null && (drawBuildings || (wantCollision && garages)))
+                    if (wantBuildings && bTile != null && buildingMaterial != null)
                     {
                         // Doors face the street, so they need the road tile even when the roads
                         // themselves are already drawn; it is cached, and without it the door
                         // choice would depend on load order and disagree between peers.
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
-                        allDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null);
-                    }
-                    var bays = allDoors?.Where(d => d.Bay != null).Select(d => d.Bay!).ToList();
-                    bool hasBays = bays is { Count: > 0 } && grid.Stride == 1;
-                    var fileHoles = holes;
-
-                    if (drawBuildings)
-                    {
-                        doors = allDoors;
-                        var ground = hasBays
-                            ? TerrainMeshBuilder.GroundHeights(grid, visualBlend ? blend : null, TerrainMeshBuilder.VisualBlendClearance)
-                            : null;
-                        var groundColor = ground != null ? TerrainMeshBuilder.GroundColors(cover, ground) : null;
-                        if (BuildingMeshBuilder.Build(bTile!, doors, ground, fileHoles, groundColor) is { } buildingData)
+                        doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null);
+                        if (BuildingMeshBuilder.Build(bTile, doors) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
-                            buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial!);
+                            buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
                         }
                     }
                     if (wantCollision)
-                        buildingFaces = bTile != null
-                            ? BuildingMeshBuilder.BuildCollisionFaces(bTile, allDoors,
-                                hasBays ? TerrainMeshBuilder.GroundHeights(grid, blend, 0.0) : null, fileHoles)
-                            : [];
-
-                    if (hasBays)
-                    {
-                        var cells = Interiors.GarageBay.HoleCells(bays!);
-                        newGarageCells = holes == null || !cells.IsSubsetOf(holes);
-                        if (newGarageCells)
-                        {
-                            // a copy: the loaded set may be shared through the tile cache
-                            if (holes != null) cells.UnionWith(holes);
-                            holes = cells;
-                        }
-                    }
+                        buildingFaces = bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : [];
                     Lap(StBldgMesh, stageMs, clock);
                 }
 
@@ -1476,6 +1434,12 @@ public partial class ChunkManager : Node3D
                 // or the mesh z-fights the road ribbon. The mesh is patched, not rebuilt: only
                 // the vertices under corridors move (measured ~33% of all worker time when it
                 // rebuilt every vertex of a stride-1 tile a second time).
+                bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
+                bool visualBlend = surfaceCore != null && roadTile != null && nearField;
+
+                // one corridor pass, applied twice at different clearances
+                var blend = roadTile != null && (wantCollision || visualBlend)
+                    ? TerrainMeshBuilder.ComputeRoadBlend(roadTile) : null;
 
                 float[]? blendedCollision = null;
                 Vector3[]? bridgeCollision = null;
@@ -1488,31 +1452,26 @@ public partial class ChunkManager : Node3D
                     bridgeCollision = [.. RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile),
                         .. RoadWallBuilder.BuildCollisionFaces(roadTile)];
                 }
-                else if (wantCollision && (!publishInterimCollision || newGarageCells))
+                else if (wantCollision && !publishInterimCollision)
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes); // no road tile after all
 
                 ArrayMesh? tailMesh = null;
-                // the interim surface was built before the garages' cells were known
-                bool garageRebuild = newGarageCells && surfaceCore != null && nearField;
-                if (visualBlend || garageRebuild)
+                if (visualBlend)
                 {
                     // Tunnel portal walls close the mouth from the same hole mask the carve
                     // used, so they need the tile's tunnel geometry - computed once here from
                     // the same source RoadMeshBuilder's own bore extrusion uses, so both agree.
-                    var portals = roadTile != null ? RoadMeshBuilder.ComputeTunnelPortals(roadTile, grid) : [];
-                    bool hasCorridors = visualBlend && blend!.Cells.Length > 0;
+                    var portals = RoadMeshBuilder.ComputeTunnelPortals(roadTile!, grid);
+                    bool hasCorridors = blend!.Cells.Length > 0;
                     bool hasPortalWalls = holes is { Count: > 0 } && portals.Count > 0;
                     // Nothing to change on a tile with no at-grade road and no portal: the
                     // surface already committed is the final one.
-                    if (hasCorridors || hasPortalWalls || garageRebuild)
+                    if (hasCorridors || hasPortalWalls)
                     {
-                        var baseCore = garageRebuild
-                            ? TerrainMeshBuilder.BuildSurfaceCore(grid, stride, holes, cover)
-                            : surfaceCore!;
                         var core = hasCorridors
-                            ? TerrainMeshBuilder.PatchSurface(baseCore, grid, stride, cover, blend!,
+                            ? TerrainMeshBuilder.PatchSurface(surfaceCore!, grid, stride, cover, blend,
                                 TerrainMeshBuilder.VisualBlendClearance)
-                            : baseCore;
+                            : surfaceCore!;
                         ct.ThrowIfCancellationRequested();
                         tailMesh = ChunkNode.ToArrayMesh(
                             TerrainMeshBuilder.FinishSurface(core, grid, stride, holes, portals), terrainMaterial!);

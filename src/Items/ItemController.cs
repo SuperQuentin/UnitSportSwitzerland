@@ -30,6 +30,7 @@ public partial class ItemController : Node
     private readonly WorldOrigin _origin;
     private InventoryUi _ui = null!;
     private SmartBinocularsHud _smart = null!;
+    public SmartBinocularsHud SmartHud => _smart;
     private FlagGhost _flagGhost = null!;
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
@@ -45,6 +46,7 @@ public partial class ItemController : Node
     private const float FocalMin = 24f, FocalMax = 200f, ZoomStep = 1.12f;
     private float _focalMm = 35f;
     private bool _aimingPhoto;
+    private bool _aimingScope;   // Aim held on a scoped item (optic / camera / gun): the wheel belongs to it
 
     // the Polaroid: the print coming out and developing (DevelopSeconds), then the Photo item
     public const float DevelopSeconds = 3f;
@@ -128,13 +130,13 @@ public partial class ItemController : Node
 
     public override void _ExitTree() => RadioManager.Refused -= OnRadioRefused;
 
-    /// <summary>The player if items can be used right now: on foot, on screen, not in a menu.</summary>
+    /// <summary>The player if items can be used right now: on foot (not in a passenger seat), on screen, not in a menu.</summary>
     public FootPlayer? UsablePlayer
     {
         get
         {
             var p = CurrentPlayer();
-            return p is { IsViewing: true } && p.Ride == RideKind.OnFoot ? p : null;
+            return p is { IsViewing: true, RidingAlong: false } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 
@@ -168,6 +170,8 @@ public partial class ItemController : Node
         _wasKnockedOut = player.KnockedOut;
 
         player.HeldItemId = (int)_inventory.HeldId;
+        // a radio plays in the hand too: everyone near hears what the stack's data says (#168)
+        player.HeldRadio = _inventory.HeldId == ItemId.Radio ? _inventory.Held.Data ?? "" : "";
         var visual = player.GetNodeOrNull<HeldItemVisual>("HeldItem");
         if (visual != null) visual.HeldData = _inventory.Held.Data;
 
@@ -180,14 +184,14 @@ public partial class ItemController : Node
 
         var def = ItemDefs.Get(_inventory.HeldId);
         bool usable = UsablePlayer != null;
-        bool picking = _smart.PickerOpen && _inventory.HeldId == ItemId.SmartBinoculars;   // stays raised while a target is picked
-        bool aiming = usable && (!UiFocus.TextEntryActive || picking)
-                      && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim || picking)
+        bool aiming = usable && !UiFocus.TextEntryActive
+                      && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim)
                       && def?.Use is ItemUse.Optic or ItemUse.Photo or ItemUse.Shoot;
 
         // everything pushed onto the player is re-asserted every frame, so letting go of Aim,
         // switching item or getting on a bike all fall back to normal without a special case
         _aimingPhoto = aiming && def!.Use == ItemUse.Photo;
+        _aimingScope = aiming;
         _ui.PhotoFocalMm = _focalMm;
         // binoculars breathe: a slow tiny zoom drift, and the overlay drifts with it
         float breath = (float)Time.GetTicksMsec() / 1000f;
@@ -214,16 +218,17 @@ public partial class ItemController : Node
                 _ => ViewPose.Eye,
             });
             if (!aiming && def?.Use == ItemUse.Readout) visual.SetPose(ViewPose.Read);   // the GPS is held up to read
-            visual.ScreenText = def?.Use == ItemUse.Readout && usable ? GpsScreen(player) : null;
-            visual.Suppressed = _capturing || (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
+            visual.ScreenText = _inventory.HeldId == ItemId.Gps && usable ? GpsScreen(player) : null;
+            visual.Suppressed = (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
         }
 
         // the viewfinder / binocular overlay appears once the item has been raised
         _ui.Scope = aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def.Use : null;
+        // the smart binoculars read out the building at hand while held (#165): no aiming
         _smart.Held = usable && _inventory.HeldId == ItemId.SmartBinoculars;
-        _smart.Active = _smart.Held && _ui.Scope == ItemUse.Optic;
+        _smart.Player = UsablePlayer;
         // in first person the readout is on the device's own screen; the HUD panel is for third person
-        _ui.Readout = usable && def?.Use == ItemUse.Readout && !player.IsFirstPerson ? GpsReadout(player) : null;
+        _ui.Readout = usable && _inventory.HeldId == ItemId.Gps && !player.IsFirstPerson ? GpsReadout(player) : null;
     }
 
     public override void _UnhandledInput(InputEvent e)
@@ -246,6 +251,11 @@ public partial class ItemController : Node
             bool pad = e is InputEventJoypadButton;
             if (pad && next && _focalMm >= FocalMax - 0.5f) _focalMm = FocalMin;   // the pad has one key: wrap
             else _focalMm = Mathf.Clamp(_focalMm * (next == pad ? ZoomStep : 1f / ZoomStep), FocalMin, FocalMax);
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_aimingScope && e is InputEventMouseButton && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
+        {
+            // aiming an optic or gun: the wheel is not a hotbar scroll, but it is still not left to leak elsewhere
             GetViewport().SetInputAsHandled();
         }
         else if (e.IsActionPressed(PlayerInput.NextItem))
@@ -324,16 +334,14 @@ public partial class ItemController : Node
                 break;
 
             case ItemUse.Photo:
-                if (!_capturing) TakePhoto(player);
+                // the picture is what the viewfinder frames: the camera shoots from the eye only
+                if (_ui.Scope != ItemUse.Photo)
+                    _ui.Toast(InputHints.Format("Hold Aim ({aim_item}) to look through the viewfinder, then {use_item} takes the picture."));
+                else if (!_capturing) TakePhoto(player);
                 break;
 
             case ItemUse.Place:
                 PlaceOrPickUpFlag(player, slot);
-                break;
-
-            case ItemUse.Optic when stack.Id == ItemId.SmartBinoculars:
-                if (_smart.Active) _smart.OpenPicker();
-                else _ui.Toast(InputHints.Format("Hold Aim ({aim_item}), then {use_item} picks the target item."));
                 break;
 
             case ItemUse.Optic:
@@ -377,6 +385,12 @@ public partial class ItemController : Node
 
             case ItemUse.Throw:
             {
+                // Use alone opens the radio's panel in the hand; Aim + Use throws it (#168)
+                if (!PlayerInput.Held(PlayerInput.AimItem) && !_forceAim && slot == _inventory.Selected)
+                {
+                    RadioUi.Instance?.OpenHeld(slot);
+                    break;
+                }
                 if (RadioManager.Instance is not { } radios)
                 {
                     _ui.Toast("Nowhere to throw it.");
@@ -388,7 +402,10 @@ public partial class ItemController : Node
                 float yaw = Mathf.Atan2(-forward.X, -forward.Z);
                 var velocity = forward * 8f + Vector3.Up * 3f + player.Velocity;
                 _inventory.TakeOne(slot);
-                radios.Throw(new RadioState("", 0, origin, yaw, velocity));
+                // what it played in the hand, it plays on where it lands
+                var play = RadioPlay.Decode(stack.Data);
+                radios.Throw(new RadioState("", 0, origin, yaw, velocity,
+                    play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
                 Kick(player);
                 Play(SfxSynth.Whoosh, 0.8f);
                 break;
@@ -448,25 +465,18 @@ public partial class ItemController : Node
     }
 
     /// <summary>
-    /// Saves the frame as it is on screen, minus the inventory UI and the item itself, to
-    /// <c>user://photos/</c>. Waits for <see cref="RenderingServer.FramePostDraw"/>: reading the
-    /// viewport from <c>_Process</c> returns whatever the render thread last left there, which is
-    /// the frame <i>before</i> the UI was hidden (the exporter learned this the hard way).
+    /// Takes the picture the viewfinder frames (<see cref="PhotoCapture"/>: rendered from the eye
+    /// at the focal length, no HUD, no held item), saves the full frame to <c>user://photos/</c>
+    /// and prints the Polaroid. Only called with the camera at the eye (see <see cref="UseSlot"/>).
     /// </summary>
     private async void TakePhoto(FootPlayer player)
     {
         _capturing = true;
-        _ui.Visible = false;
-        if (player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v) v.Suppressed = true;
-
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-
         string path = "";
         string? photo = null;
         try
         {
-            var image = GetViewport().GetTexture().GetImage();
+            var image = await PhotoCapture.Render(this, player.Camera, FovFromFocal(_focalMm));
             DirAccess.MakeDirRecursiveAbsolute("user://photos");
             path = $"user://photos/photo_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
             image.SavePng(path);
@@ -482,7 +492,6 @@ public partial class ItemController : Node
             GD.PushWarning($"[items] photo failed: {e.Message}");
         }
 
-        _ui.Visible = true;
         _capturing = false;
         if (!IsInstanceValid(player)) return;
         // the flash others see (and a light pulse here) — after the capture, not in it
@@ -496,8 +505,8 @@ public partial class ItemController : Node
             _ui.Toast("Photo failed.");
             return;
         }
-        // two frames for the camera hidden during the capture to be drawn again, so the print
-        // knows whether it can come out of it
+        // two frames for a camera lowered right after the shot to be drawn again, so the print
+        // comes out of it
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         if (IsInstanceValid(player)) StartDevelop(player, photo);
@@ -641,7 +650,7 @@ public partial class ItemController : Node
         {
             _ghost = new MeshInstance3D
             {
-                Name = "PhotoGhost", Mesh = PhotoVisuals.Card, TopLevel = true,
+                Name = "PhotoGhost", TopLevel = true,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             };
             AddChild(_ghost);
@@ -654,6 +663,7 @@ public partial class ItemController : Node
                 Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             };
+        _ghost.Mesh = PhotoVisuals.MeshFor(at.Value);   // a poster on a wall, a Polaroid on the ground
         _ghost.GlobalTransform = at.Value;
         _ghost.Visible = true;
     }

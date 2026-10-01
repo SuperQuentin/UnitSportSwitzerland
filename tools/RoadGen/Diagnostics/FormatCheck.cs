@@ -26,8 +26,18 @@ public static class FormatCheck
         Check(back.Version == 3 && back.Flags == tile.Flags, "v3 header version and flags");
         Check(back.Segments.Select(s => s.Attributes).SequenceEqual(tile.Segments.Select(s => s.Attributes)),
             "per-segment attributes");
-        Check(back.Paint.Count == 2 && back.Paint[1].Indices.SequenceEqual(tile.Paint[1].Indices)
-              && back.Paint[0].Dash == 3f, "paint layer");
+        Check(back.Paint.Count == 3 && back.Paint[1].Indices.SequenceEqual(tile.Paint[1].Indices)
+              && back.Paint[0].Dash == 3f && back.Paint.Zip(tile.Paint).All(x => x.First.Vertices.SequenceEqual(x.Second.Vertices)),
+            "paint layer (PNT2): geometry and a line along a segment");
+        Check(back.Paint[2].Segment == back.Segments[0] && back.Paint[2].From == 1.5f && back.Paint[2].Offset == -1.25f,
+            "paint line along a segment decodes as a reference");
+
+        // the pre-#116b ATTR and PANT payloads still decode to the same tile
+        var legacy = Decode(Encode(tile, legacy: true));
+        Check(legacy.Segments.Select(s => s.Attributes).SequenceEqual(tile.Segments.Select(s => s.Attributes))
+              && legacy.Paint.Count == 3 && legacy.Paint.Zip(tile.Paint).All(x => x.First.Vertices.SequenceEqual(x.Second.Vertices)
+                  && x.First.Indices.SequenceEqual(x.Second.Indices) && x.First.Dash == x.Second.Dash),
+            "old ATTR and PANT payloads still decode");
         Check(back.PointProps.SequenceEqual(tile.PointProps), "point props");
         Check(back.LinearProps.Count == 1 && back.LinearProps[0].Points.SequenceEqual(tile.LinearProps[0].Points),
             "linear props");
@@ -98,6 +108,8 @@ public static class FormatCheck
         var east = new List<RoadPaint>();
         Meshing.PaintEmitter.Emit(Seg(900), 0, west);
         Meshing.PaintEmitter.Emit(Seg(0), 100, east);
+        west.RemoveAll(p => p.Type != PaintType.WhiteDashed);   // the edge lines are solid
+        east.RemoveAll(p => p.Type != PaintType.WhiteDashed);
         var painted = west.SelectMany(RoadPaintGeometry.Runs).Select(r => (r[0] - 900, r[^3] - 900))
             .Concat(east.SelectMany(RoadPaintGeometry.Runs).Select(r => (r[0] + 100, r[^3] + 100))).ToList();
         for (double u = 0.25; u < 200; u += 0.5)
@@ -110,9 +122,9 @@ public static class FormatCheck
 
     /// <summary>
     /// A 10.5 m two-lane motorway carriageway drawn east (x 0..100 at z 500): driven with the
-    /// drawing, 0.30 m edge lines just outside the lanes (inner margin 0.5 m on the left, 2.5 m
+    /// drawing, 0.20 m edge lines just outside the lanes (inner margin 0.5 m on the left, 2.5 m
     /// shoulder on the right), one dash between the lanes; driven against it, the same mirrored. A 5 m two-way
-    /// road gets no centre line, a 6 m one does.
+    /// road gets no centre line, a 6 m rural one a centre line and Randlinien 0.225 m in, a 6 m town one the centre line only.
     /// </summary>
     private static bool PaintFollowsCrossSection()
     {
@@ -133,10 +145,14 @@ public static class FormatCheck
             a.Length == b.Length && a.Zip(b).All(x => Math.Abs(x.First - x.Second) < 1e-3f);
 
         float w = RoadCrossSection.OneWayWidth(RoadClass.Motorway, 2);
-        return Near(Offsets(Seg(RoadClass.Motorway, w, 1, 2)), -4.9f, -1f, 2.9f)
-            && Near(Offsets(Seg(RoadClass.Motorway, w, -1, 2)), -2.9f, 1f, 4.9f)
+        var town = Seg(RoadClass.Road, 6, 0, 0);
+        town = new RoadSegment { Class = town.Class, Surface = town.Surface, Width = 6, Points = town.Points,
+            Attributes = new RoadAttributes(RoadAttrFlags.Urban) };
+        return Near(Offsets(Seg(RoadClass.Motorway, w, 1, 2)), -4.85f, -1f, 2.85f)
+            && Near(Offsets(Seg(RoadClass.Motorway, w, -1, 2)), -2.85f, 1f, 4.85f)
             && Offsets(Seg(RoadClass.Road, 5, 0, 0)).Length == 0
-            && Near(Offsets(Seg(RoadClass.Road, 6, 0, 0)), 0f);
+            && Near(Offsets(Seg(RoadClass.Road, 6, 0, 0)), -2.775f, 0f, 2.775f)
+            && Near(Offsets(town), 0f);
     }
 
     /// <summary>
@@ -188,10 +204,10 @@ public static class FormatCheck
             && paint.Any(p => p.Type == PaintType.WhiteDashed);
     }
 
-    private static byte[] Encode(RoadTile tile)
+    private static byte[] Encode(RoadTile tile, bool legacy = false)
     {
         using var ms = new MemoryStream();
-        RoadCodec.Encode(tile, ms);
+        RoadCodec.Encode(tile, ms, legacy);
         return ms.ToArray();
     }
 
@@ -203,20 +219,28 @@ public static class FormatCheck
         return tile;
     }
 
-    private static RoadTile Sample() => new()
+    private static RoadTile Sample()
+    {
+        var road = new RoadSegment
+        {
+            Class = RoadClass.Road, Surface = RoadSurface.Paved, Flags = RoadFlags.Divided | RoadFlags.Bridge, Width = 3.3f,
+            Points = [1, 480, 2, 50, 481, 3, 90, 482, 9],
+            Attributes = new RoadAttributes(RoadAttrFlags.Urban | RoadAttrFlags.Osm, OneWay: -1, Layer: 1,
+                LanesForward: 0, LanesBackward: 2, Priority: 0x28, WidthCm: 650,
+                Left: new RoadSide(15, BikeKind.Lane, 15, 12, 5), Right: new RoadSide(20)),
+        };
+        var tile = Sample(road);
+        tile.Paint.Add(RoadPaint.AlongSegment(road, PaintType.WhiteDashed, 0xE0DED1FF, 0.15f, 3, 6, -1.2504, 1.4951, 70.123));
+        return tile;
+    }
+
+    private static RoadTile Sample(RoadSegment road) => new()
     {
         Id = new TileId(2583, 1113),
         Flags = RoadTileFlags.Network | RoadTileFlags.Osm,
         Segments = new()
         {
-            new RoadSegment
-            {
-                Class = RoadClass.Road, Surface = RoadSurface.Paved, Flags = RoadFlags.Divided, Width = 3.3f,
-                Points = [1, 480, 2, 50, 481, 3, 90, 482, 9],
-                Attributes = new RoadAttributes(RoadAttrFlags.Urban | RoadAttrFlags.Osm, OneWay: -1, Layer: 1,
-                    LanesForward: 0, LanesBackward: 2, Priority: 0x28, WidthCm: 650,
-                    Left: new RoadSide(15, BikeKind.Lane, 15, 12, 5), Right: new RoadSide(20)),
-            },
+            road,
             new RoadSegment { Class = RoadClass.Watercourse, Width = 2.5f, Points = [0, 470, 0, 10, 470, 10] },
         },
         Junctions =

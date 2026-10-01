@@ -38,7 +38,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Slide (while running)", PlayerInput.CrouchSlide),
             new("Interact: get in or out, search, door", PlayerInput.InteractMount),
             new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "Y (nothing near)"),
-            new("First / third person", PlayerInput.CameraToggle),
+            new("First / third person (driving: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
             new("Base jump: jump again while falling", PlayerInput.Jump),
         }),
         ("Items", new Row[]
@@ -65,6 +65,25 @@ public partial class ControlsHelp : CanvasLayer
             new("Car: headlights / pop-ups", PlayerInput.LightsToggle),
             new("Car: fold the soft top", PlayerInput.RoofToggle),
             new("Get out", PlayerInput.InteractMount),
+        }),
+        ("Passengers (online)", new Row[]
+        {
+            new("Get into a seat of a vehicle someone drives / get out", PlayerInput.InteractMount),
+            new("Take the wheel, when nobody holds it", PlayerInput.TakeWheel),
+            new("Look round from your seat / chase view", PlayerInput.CameraToggle),
+        }),
+        ("Trucks and buses", new Row[]
+        {
+            new("Couple / uncouple a trailer", PlayerInput.Couple),
+            new("Shift up / splitter high", PlayerInput.ShiftUp),
+            new("Shift down / splitter low", PlayerInput.ShiftDown),
+            new("Clutch (hold)", PlayerInput.Clutch),
+            new("H-pattern gates, reverse, neutral", Keys: "1–6, ` , 0", Pad: "—"),
+            new("Retarder stalk more / less", Keys: "{retarder_up} / {retarder_down}", Pad: "—"),
+            new("Parking brake (hold)", PlayerInput.Jump),
+            new("Bus: doors", PlayerInput.CarDoor),
+            new("Bus: kneel", PlayerInput.Kneel),
+            new("Bus: destination display", PlayerInput.Destination),
         }),
         ("Flying", new Row[]
         {

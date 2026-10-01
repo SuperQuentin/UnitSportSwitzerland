@@ -55,6 +55,37 @@ public static class LootChanceCheck
             Row($"{c.Kind} {c.Type} ab{c.Abundance:F1} {c.Item}",
                 LootTables.Chance(c.Kind, c.Type, c.Abundance, c.Item), Sample(c.Kind, c.Type, c.Abundance, c.Item));
 
+        // the room a piece stands in picks its pools (#165), and the locked containers
+        var roomCases = new (BuildingKind Kind, FurnitureType Type, RoomType? Room, ItemId Item)[]
+        {
+            (BuildingKind.House, FurnitureType.Shelf, RoomType.Garage, ItemId.Screws),
+            (BuildingKind.House, FurnitureType.Shelf, RoomType.Garage, ItemId.Bread),          // 0: no food on a garage shelf
+            (BuildingKind.House, FurnitureType.Shelf, RoomType.Storage, ItemId.CannedFood),
+            (BuildingKind.House, FurnitureType.Shelf, RoomType.Office, ItemId.Francs),
+            (BuildingKind.House, FurnitureType.Desk, RoomType.Bedroom, ItemId.Chocolate),
+            (BuildingKind.Agricultural, FurnitureType.Crate, RoomType.Barn, ItemId.Firewood),
+            (BuildingKind.House, FurnitureType.GunLocker, null, ItemId.Shotgun),
+            (BuildingKind.House, FurnitureType.GunLocker, null, ItemId.Shells),
+            (BuildingKind.Commercial, FurnitureType.Safe, null, ItemId.Francs),
+            (BuildingKind.Commercial, FurnitureType.Safe, null, ItemId.Electronics),
+        };
+        foreach (var c in roomCases)
+            Row($"{c.Kind} {c.Type} in {c.Room?.ToString() ?? "-"} {c.Item}",
+                LootTables.Chance(c.Kind, c.Type, 1f, c.Item, null, c.Room), Sample(c.Kind, c.Type, 1f, c.Item, c.Room));
+
+        // a combination: right length, 0-99, neighbours apart, and the same on every call (server and client agree)
+        bool comboOk = true;
+        for (int i = 0; i < 2000; i++)
+        {
+            var type = i % 2 == 0 ? FurnitureType.GunLocker : FurnitureType.Safe;
+            var a = LootTables.Combination($"{i}_7_3", i % 17, 1000 + i, type);
+            var b = LootTables.Combination($"{i}_7_3", i % 17, 1000 + i, type);
+            comboOk &= a.Length == (type == FurnitureType.Safe ? 4 : 3) && a.SequenceEqual(b) && a.All(v => v is >= 0 and < 100);
+            for (int k = 1; k < a.Length; k++) comboOk &= LootTables.DialDistance(a[k], a[k - 1]) >= 15;
+        }
+        ok &= comboOk;
+        GD.Print($"[lootchance] {(comboOk ? "ok  " : "FAIL")} lock combinations: stable, 3/4 numbers, neighbours >= 15 apart");
+
         // a running occasion adds one more roll, drawn after the container is found non-empty
         var saved = LootTables.Seasonal;
         LootTables.Seasonal = _ => (0.3f, new[] { ItemId.Candy, ItemId.Bread });
@@ -103,11 +134,11 @@ public static class LootChanceCheck
         return (int)(x & 0x7FFFFFFF);
     }
 
-    private static double Sample(BuildingKind kind, FurnitureType type, float abundance, ItemId item)
+    private static double Sample(BuildingKind kind, FurnitureType type, float abundance, ItemId item, RoomType? room = null)
     {
         int hit = 0;
         for (int i = 0; i < Samples; i++)
-            if (LootTables.Roll(kind, type, new Random(Mix(i)), abundance).Any(s => s.Id == item)) hit++;
+            if (LootTables.Roll(kind, type, new Random(Mix(i)), abundance, room).Any(s => s.Id == item)) hit++;
         return (double)hit / Samples;
     }
 }

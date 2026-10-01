@@ -481,7 +481,7 @@ public static partial class TerrainMeshBuilder
     /// <summary>
     /// Full-resolution vertex height (column, row) as the surface draws it with
     /// <paramref name="blend"/> applied at <paramref name="clearance"/>: what geometry that has to
-    /// meet the terrain edge to edge (a garage's apron) stands on.
+    /// meet the terrain edge to edge stands on, and what a road probe checks a body against.
     /// </summary>
     public static Func<int, int, float> GroundHeights(ChunkGrid grid, RoadBlend? blend, double clearance)
     {
@@ -496,24 +496,6 @@ public static partial class TerrainMeshBuilder
         {
             float h = (float)grid.HeightMetersAt(c, r);
             return at != null && at.TryGetValue(r * ChunkFormat.GridSize + c, out int k) ? BlendedHeight(h, blend!, k, clearance) : h;
-        };
-    }
-
-    /// <summary>
-    /// The full-resolution surface's own vertex colour (column, row), linear and opaque: geometry
-    /// standing in for carved ground (a garage's apron) takes it, so it reads as the same field.
-    /// </summary>
-    public static Func<int, int, Color> GroundColors(byte[]? cover, Func<int, int, float> height)
-    {
-        int last = ChunkFormat.GridSize - 1;
-        return (c, r) =>
-        {
-            float alt = height(c, r);
-            var col = (cover == null
-                ? CoverPalette.ColorFor(CoverClass.Open, alt, CoverPalette.Hash(c, r))
-                : BoundaryBlendedColor(cover, c, r, alt, 1, last)).SrgbToLinear();
-            col.A = 1f;
-            return col;
         };
     }
 

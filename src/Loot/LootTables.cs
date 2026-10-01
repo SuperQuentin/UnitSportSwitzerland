@@ -44,6 +44,8 @@ public static class LootTables
         [ItemId.BikeChain] = Tier.Rare, [ItemId.Tyre] = Tier.Rare, [ItemId.CarBattery] = Tier.Rare,
         [ItemId.FuelCan] = Tier.Rare, [ItemId.EnginePart] = Tier.VeryRare,
         [ItemId.SmartBinoculars] = Tier.VeryRare,
+        // only in the locked containers (gun lockers, safes): category Gear, so no category pool picks them up
+        [ItemId.Shotgun] = Tier.Rare, [ItemId.Shells] = Tier.Common,
     };
 
     // ---- pools ------------------------------------------------------------------------------
@@ -67,6 +69,10 @@ public static class LootTables
     private static readonly ItemId[] Optics = { ItemId.SmartBinoculars };
     private static readonly ItemId[] Tins = { ItemId.CannedFood };
     private static readonly ItemId[] BarnStuff = { ItemId.Rope, ItemId.Firewood, ItemId.Apple };
+    private static readonly ItemId[] Fuel = { ItemId.Firewood, ItemId.Coal };
+    private static readonly ItemId[] Guns = { ItemId.Shotgun };
+    private static readonly ItemId[] Ammo = { ItemId.Shells };
+    private static readonly ItemId[] Pantry = { ItemId.CannedFood, ItemId.WaterBottle, ItemId.MineralWater };
 
     private readonly record struct Pool(ItemId[] Items, float Weight);
 
@@ -91,9 +97,43 @@ public static class LootTables
         [FurnitureType.HayBale] = new(0.60f, 0, 1, new[] { P(BarnStuff, 100) }),
         [FurnitureType.ShopCounter] = new(0.10f, 1, 3, new[] { P(Food, 50), P(Water, 30), P(Sweets, 20) }, 0.90f, 20, 150),
         [FurnitureType.Altar] = new(0.50f, 0, 0, Array.Empty<Pool>(), 0.70f, 1, 15),
+        // locked (IsLocked): cracked with the dial first, and stocked whatever the building's budget
+        [FurnitureType.GunLocker] = new(0.15f, 1, 2, new[] { P(Guns, 40), P(Ammo, 60) }),
+        [FurnitureType.Safe] = new(0.10f, 1, 2, new[] { P(Gadgets, 35), P(Ammo, 20), P(Medical, 15), P(Optics, 8), P(Guns, 6) }, 0.90f, 50, 400),
+    };
+
+    /// <summary>
+    /// The same furniture holds different things in different rooms: a shelf in a garage is
+    /// tools and parts, in a living room sweets and gadgets, in a cellar the emergency supplies
+    /// every Swiss household keeps. The room comes from the plan (<see cref="InteriorLayout.RoomOf"/>),
+    /// so this needs nothing stored; a type/room pair not listed falls back to <see cref="Containers"/>.
+    /// </summary>
+    private static readonly Dictionary<(FurnitureType, RoomType), Container> RoomContainers = new()
+    {
+        [(FurnitureType.Shelf, RoomType.Garage)] = new(0.25f, 1, 3, new[] { P(Hardware, 40), P(Parts, 25), P(Scrap, 30), P(Minerals, 5) }),
+        [(FurnitureType.Shelf, RoomType.Workshop)] = new(0.25f, 1, 3, new[] { P(Hardware, 40), P(Parts, 25), P(Scrap, 30), P(Minerals, 5) }),
+        [(FurnitureType.Shelf, RoomType.Storage)] = new(0.30f, 1, 3, new[] { P(Pantry, 40), P(Scrap, 20), P(Hardware, 10), P(Medical, 10), P(Minerals, 15), P(Parts, 5), P(Optics, 1) }),
+        [(FurnitureType.Shelf, RoomType.Living)] = new(0.40f, 1, 2, new[] { P(Sweets, 25), P(Gadgets, 30), P(Medical, 15), P(Cloth, 10), P(Food, 10), P(Fuel, 12), P(Parts, 4), P(Optics, 1) }, 0.15f, 1, 10),   // logs and coal for the stove
+        [(FurnitureType.Shelf, RoomType.Dining)] = new(0.40f, 1, 2, new[] { P(Food, 35), P(Water, 25), P(Sweets, 20), P(KitchenScrap, 20) }, 0.10f, 1, 5),
+        [(FurnitureType.Shelf, RoomType.Office)] = new(0.35f, 1, 2, new[] { P(Gadgets, 45), P(Wire, 20), P(Scrap, 25), P(Optics, 2) }, 0.15f, 5, 25),
+        // a hall shelf: shoes and coats, the winter road salt and firewood by the door, a bike part
+        [(FurnitureType.Shelf, RoomType.Hall)] = new(0.50f, 1, 1, new[] { P(Cloth, 25), P(Medical, 15), P(Sweets, 10), P(Minerals, 35), P(Parts, 15) }, 0.20f, 1, 5),
+        [(FurnitureType.Shelf, RoomType.Lobby)] = new(0.50f, 1, 1, new[] { P(Cloth, 25), P(Medical, 15), P(Sweets, 10), P(Minerals, 35), P(Parts, 15) }, 0.20f, 1, 5),
+        [(FurnitureType.Desk, RoomType.Bedroom)] = new(0.45f, 1, 1, new[] { P(Sweets, 40), P(Gadgets, 40), P(Cloth, 20) }, 0.30f, 2, 20),
+        [(FurnitureType.Desk, RoomType.Classroom)] = new(0.55f, 0, 1, new[] { P(Sweets, 35), P(Gadgets, 25), P(Scrap, 40) }, 0.10f, 1, 5),
+        [(FurnitureType.Crate, RoomType.Storage)] = new(0.25f, 1, 3, new[] { P(Pantry, 35), P(Scrap, 25), P(Minerals, 30), P(Parts, 10) }),
+        [(FurnitureType.Crate, RoomType.Barn)] = new(0.30f, 1, 3, new[] { P(BarnStuff, 55), P(Minerals, 30), P(Tins, 15) }),
+        [(FurnitureType.Workbench, RoomType.Garage)] = new(0.15f, 2, 4, new[] { P(Hardware, 40), P(Parts, 25), P(VehicleParts, 15), P(Scrap, 20) }),
     };
 
     public static bool IsLootable(FurnitureType type) => Containers.ContainsKey(type);
+
+    /// <summary>Opened with the dial (<see cref="LockPickUi"/>) before anything in it can be searched.</summary>
+    public static bool IsLocked(FurnitureType type) => type is FurnitureType.GunLocker or FurnitureType.Safe;
+
+    private static Container? ContainerFor(FurnitureType type, RoomType? room) =>
+        room is { } r && RoomContainers.TryGetValue((type, r), out var rc) ? rc
+        : Containers.TryGetValue(type, out var c) ? c : null;
 
     // ---- building kinds -----------------------------------------------------------------------
 
@@ -147,10 +187,10 @@ public static class LootTables
     /// server can always recompute what a container holds instead of storing it. Identical items
     /// are merged into one stack, so a container never lists "Bread 1, Bread 2".
     /// </summary>
-    public static List<ItemStack> Roll(BuildingKind kind, FurnitureType type, Random rng, float abundance = 1f)
+    public static List<ItemStack> Roll(BuildingKind kind, FurnitureType type, Random rng, float abundance = 1f, RoomType? room = null)
     {
         var result = new List<ItemStack>();
-        if (!Containers.TryGetValue(type, out var c)) return result;
+        if (ContainerFor(type, room) is not { } c) return result;
         if (rng.NextDouble() >= (1 - c.Empty) * abundance) return result;
 
         var candidates = Candidates(kind, c);
@@ -217,7 +257,7 @@ public static class LootTables
     // ---- exact chances (smart binoculars) -------------------------------------------------------
 
     /// <summary>Every item some container's pools can give, plus francs: what a target can be.</summary>
-    public static IReadOnlyList<ItemId> Targets() => _targets ??= Containers.Values
+    public static IReadOnlyList<ItemId> Targets() => _targets ??= Containers.Values.Concat(RoomContainers.Values)
         .SelectMany(c => c.Pools.SelectMany(p => p.Items)).Append(ItemId.Francs)
         .Distinct().OrderBy(id => ItemDefs.Get(id)!.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     private static ItemId[]? _targets;
@@ -229,10 +269,10 @@ public static class LootTables
     /// building's actual rolled contents or on what was taken, so it reveals nothing.
     /// <paramref name="now"/> is reserved: the occasions' treats follow the occasions running now.
     /// </summary>
-    public static double Chance(BuildingKind kind, FurnitureType type, float abundance, ItemId item, DateTime? now = null)
+    public static double Chance(BuildingKind kind, FurnitureType type, float abundance, ItemId item, DateTime? now = null, RoomType? room = null)
     {
-        if (item == ItemId.Francs) return ChanceFrancs(kind, type, abundance);
-        if (!Containers.TryGetValue(type, out var c)) return 0;
+        if (item == ItemId.Francs) return ChanceFrancs(kind, type, abundance, room);
+        if (ContainerFor(type, room) is not { } c) return 0;
 
         // everything below happens only in a container that was not empty, so work conditionally
         double any = 0;
@@ -259,19 +299,16 @@ public static class LootTables
     }
 
     /// <summary>Probability a container gives francs (they are cash, not an item: <see cref="Roll"/> stacks them as <see cref="ItemId.Francs"/>).</summary>
-    public static double ChanceFrancs(BuildingKind kind, FurnitureType type, float abundance) =>
-        Containers.TryGetValue(type, out var c) && c.FrancsChance > 0
+    public static double ChanceFrancs(BuildingKind kind, FurnitureType type, float abundance, RoomType? room = null) =>
+        ContainerFor(type, room) is { } c && c.FrancsChance > 0
             ? NonEmpty(c, abundance) * Math.Min(1.0, c.FrancsChance * FrancsFactor(kind))
             : 0;
 
     private static double NonEmpty(Container c, float abundance) => Math.Clamp((1 - c.Empty) * (double)abundance, 0, 1);
 
     /// <summary>One line of a building's chance breakdown: a furniture type, how many, and the chance per piece.</summary>
-    public readonly record struct ContainerChance(FurnitureType Type, int Count, double Each)
-    {
-        /// <summary>At least one of the <see cref="Count"/> pieces of this type yields it.</summary>
-        public double Group => 1 - Math.Pow(1 - Each, Count);
-    }
+    /// <summary><see cref="Each"/> is the mean per piece (pieces in different rooms differ); <see cref="Group"/> = at least one of the <see cref="Count"/> pieces yields it.</summary>
+    public readonly record struct ContainerChance(FurnitureType Type, int Count, double Each, double Group);
 
     /// <summary>The building's chance of the item in at least one container, and its container types best first (by the chance that some piece of the type has it).</summary>
     public readonly record struct BuildingOdds(double Any, IReadOnlyList<ContainerChance> Containers)
@@ -282,19 +319,37 @@ public static class LootTables
     /// <summary>P(at least one container in the building yields <paramref name="item"/>) = 1 − Π(1 − pᵢ), with the per-type breakdown.</summary>
     public static BuildingOdds BuildingChance(InteriorLayout layout, ItemId item, DateTime? now = null)
     {
-        float abundance = Abundance(layout);
         double none = 1;
-        var counts = new Dictionary<FurnitureType, int>();
-        foreach (var f in layout.Furniture)
+        var groups = new Dictionary<FurnitureType, (int Count, double Sum, double None)>();
+        for (int i = 0; i < layout.Furniture.Count; i++)
         {
+            var f = layout.Furniture[i];
             if (!IsLootable(f.Type)) continue;
-            none *= 1 - Chance(layout.Kind, f.Type, abundance, item, now);
-            counts[f.Type] = counts.GetValueOrDefault(f.Type) + 1;
+            double p = Chance(layout.Kind, f.Type, AbundanceFor(layout, f.Type), item, now, layout.RoomOf(f)?.Type);
+            none *= 1 - p;
+            var g = groups.GetValueOrDefault(f.Type, (0, 0, 1));
+            groups[f.Type] = (g.Count + 1, g.Sum + p, g.None * (1 - p));
         }
-        var list = counts
-            .Select(kv => new ContainerChance(kv.Key, kv.Value, Chance(layout.Kind, kv.Key, abundance, item, now)))
+        var list = groups
+            .Select(kv => new ContainerChance(kv.Key, kv.Value.Count, kv.Value.Sum / kv.Value.Count, 1 - kv.Value.None))
             .Where(x => x.Each > 0).OrderByDescending(x => x.Group).ToList();
         return new BuildingOdds(1 - none, list);
+    }
+
+    /// <summary>
+    /// What a scanner shows for one building: every item it can give with the chance that at
+    /// least one container has it, best first, francs included. Pure arithmetic, like <see cref="BuildingChance"/>.
+    /// </summary>
+    public static List<(ItemId Item, double Chance)> BuildingTable(InteriorLayout layout, DateTime? now = null)
+    {
+        var rows = new List<(ItemId, double)>();
+        foreach (var item in Targets())
+        {
+            double any = BuildingChance(layout, item, now).Any;
+            if (any > 0.0005) rows.Add((item, any));
+        }
+        rows.Sort((a, b) => b.Item2.CompareTo(a.Item2));
+        return rows;
     }
 
     /// <summary>
@@ -306,6 +361,7 @@ public static class LootTables
 
     private static int Quantity(ItemId id, Random rng)
     {
+        if (id == ItemId.Shells) return rng.Next(4, 13);   // a box, not a single shell
         int q = Tiers[id] switch
         {
             Tier.Common => rng.Next(1, 4),
@@ -323,10 +379,48 @@ public static class LootTables
     /// </summary>
     public static float Abundance(InteriorLayout layout)
     {
-        int lootable = layout.Furniture.Count(f => IsLootable(f.Type));
+        int lootable = layout.Furniture.Count(f => IsLootable(f.Type) && !IsLocked(f.Type));
         if (lootable == 0) return 1f;
-        float budget = 6f + 3f * Math.Max(1, layout.Floors.Count);
+        float budget = (6f + 3f * Math.Max(1, layout.Floors.Count)) * BudgetFactor(layout.Kind);
         return Math.Min(1f, budget / lootable);
+    }
+
+    /// <summary>A shop or a works keeps more stock than a home; a shed or a garage less.</summary>
+    private static float BudgetFactor(BuildingKind kind) => kind switch
+    {
+        BuildingKind.Commercial => 1.3f,
+        BuildingKind.Industrial => 1.2f,
+        BuildingKind.Annex or BuildingKind.Garage => 0.7f,
+        _ => 1f,
+    };
+
+    /// <summary>A locked container is always fully stocked: cracking it is the price, and it does not count against the building's budget.</summary>
+    public static float AbundanceFor(InteriorLayout layout, FurnitureType type) => IsLocked(type) ? 1f : Abundance(layout);
+
+    /// <summary>
+    /// The dial combination of a locked container this restock period: 3 numbers (gun locker) or
+    /// 4 (safe) on a 0–99 dial, each at least 15 from the one before. Derived like its contents,
+    /// so the server checks a claimed combination without storing one.
+    /// </summary>
+    public static int[] Combination(string buildingKey, int furnitureIndex, long epoch, FurnitureType type)
+    {
+        var rng = new Random(InteriorGenerator.StableHash($"{buildingKey}|{furnitureIndex}|{epoch}|lock"));
+        var combo = new int[type == FurnitureType.Safe ? 4 : 3];
+        for (int i = 0; i < combo.Length; i++)
+        {
+            int v;
+            do v = rng.Next(0, 100);
+            while (i > 0 && DialDistance(v, combo[i - 1]) < 15);
+            combo[i] = v;
+        }
+        return combo;
+    }
+
+    /// <summary>Distance between two dial numbers, the short way round.</summary>
+    public static float DialDistance(float a, float b)
+    {
+        float d = Math.Abs(a - b) % 100f;
+        return Math.Min(d, 100f - d);
     }
 
     // ---- restocking -------------------------------------------------------------------------
@@ -355,12 +449,13 @@ public static class LootTables
     {
         if (furnitureIndex < 0 || furnitureIndex >= layout.Furniture.Count) return new();
         var f = layout.Furniture[furnitureIndex];
-        return Roll(layout.Kind, f.Type, RngFor(layout.Key, furnitureIndex, epoch), Abundance(layout));
+        return Roll(layout.Kind, f.Type, RngFor(layout.Key, furnitureIndex, epoch), AbundanceFor(layout, f.Type), layout.RoomOf(f)?.Type);
     }
 
     /// <summary>A name for the prompt: "Search the fridge".</summary>
     public static string Describe(FurnitureType t) => t switch
     {
+        FurnitureType.GunLocker => "gun locker",
         FurnitureType.ShopCounter => "shop counter",
         FurnitureType.HayBale => "hay bale",
         FurnitureType.Car => "car",
