@@ -5,7 +5,6 @@ namespace UnitSport.Terrain;
 // The road blend: plain C# over TerrainFormat, no Godot types, so tools/BlendCheck compiles it.
 public static partial class TerrainMeshBuilder
 {
-
     /// <summary>
     /// The visual mesh's blend target sits this far below each road's own drawn surface —
     /// matching <c>RoadExtractor.DrapeOffset</c> (tools/TerrainPreprocessor, a separate
@@ -16,17 +15,21 @@ public static partial class TerrainMeshBuilder
     public const double VisualBlendClearance = 0.35;
 
     /// <summary>
-    /// Every lattice cell under an at-grade road corridor, with how strongly it is pulled toward
-    /// the road (<c>Weight</c>, 0..1) and the road height it is pulled to (<c>Target</c>,
-    /// clearance 0) — so a blended height is <c>ground + (Target - clearance - ground)·Weight</c>. Sparse: a tile's corridors cover a few percent of it.
-    /// Computed once per tile and applied twice — to the collision floor at clearance 0 and to
-    /// the visual mesh at <see cref="VisualBlendClearance"/> — which is why the clearance is not
-    /// baked in.
+    /// Every lattice cell an at-grade road's cross-section or slopes constrain, with the band the
+    /// ground is clamped into: <c>clamp(ground, Lo - clearance, Hi - clearance)</c>. Under a road
+    /// <c>Lo = Hi</c> = the road; on its embankment <c>Lo</c> is the fill slope and <c>Hi</c> the
+    /// cut slope, and ground already between them stays where it is. Sparse: a tile's corridors
+    /// cover a few percent of it. Computed once per tile and applied twice — to the collision
+    /// floor at clearance 0 and to the visual mesh at <see cref="VisualBlendClearance"/> — which
+    /// is why the clearance is not baked in.
     /// </summary>
-    public sealed record RoadBlend(int[] Cells, float[] Weight, float[] Target);
+    public sealed record RoadBlend(int[] Cells, float[] Lo, float[] Hi);
 
-    private static float BlendedHeight(float ground, RoadBlend blend, int k, double clearance) =>
-        (float)(ground + (blend.Target[k] - clearance - ground) * blend.Weight[k]);
+    private static float BlendedHeight(float ground, RoadBlend blend, int k, double clearance)
+    {
+        float lo = (float)(blend.Lo[k] - clearance), hi = (float)(blend.Hi[k] - clearance);
+        return ground < lo ? lo : ground > hi ? hi : ground;
+    }
 
     /// <summary>Applies a blend to a full-resolution height map in place.</summary>
     public static void ApplyRoadBlend(float[] map, RoadBlend blend, double clearance)
@@ -38,196 +41,311 @@ public static partial class TerrainMeshBuilder
         }
     }
 
-
-    /// <summary>How far past a road's own half-width the collision blend fades back to bare
-    /// terrain — the same "ramp the approach" idea RoadExtractor already applies to the visual
-    /// drape (see CLAUDE.md), applied here to the physics floor instead.</summary>
-    private const double CorridorFalloffM = 3.0;
+    /// <summary>
+    /// At most this far a piece is rasterised past each of its ends, so the slopes of two pieces
+    /// meeting at a gentle bend overlap instead of leaving an unconstrained wedge on the outside
+    /// of it (only as far as the bend needs: most pieces of a smoothed line barely turn). Sharper
+    /// bends and the line's two ends get a disc as well.
+    /// </summary>
+    private const double PieceOverlapM = 1.0;
 
     /// <summary>
-    /// Where the terrain is pulled toward each at-grade road/path/rail's own surveyed height, so
-    /// the ground a player stands on (and sees) matches the road — swissALTI3D does not model the
-    /// embankment climbing to a grade change, so without this the physics floor and the visible
-    /// tread silently disagree by however much grading did.
+    /// The ground under and beside every at-grade road, path and rail line: the road's embankment
+    /// (#125, <see cref="RoadEmbankment"/>). Shared by the collision floor and the visual mesh, so
+    /// what a player sees is what they stand on.
     ///
     /// <para>
-    /// Bridges and tunnels are excluded outright (<c>RoadFlags.Bridge/Tunnel</c>): a heightfield
-    /// has one height per (x, z) column, so it cannot represent a deck floating above a valley
-    /// floor at the same position — blending toward a bridge's deck height would fill in the
-    /// gorge it crosses. Those get dedicated collision geometry instead (bridge decks/piers);
-    /// tunnels keep working via the existing hole-carving at the portal. Aerial ropeways,
-    /// watercourses and walls are excluded too (<c>RoadFormat.IsAerial/IsWatercourse/IsWall</c>)
-    /// — none of them is a surface at ground level.
+    /// Cross-section: level at the centreline height out to each side's edge
+    /// (<see cref="RoadEmbankment.EdgeOffset"/>); a cell under a road takes the height of the
+    /// centreline at its own perpendicular foot, nearest segment wins (stamps a metre apart were
+    /// measured leaving 0.1-0.4 m of scatter). Past the edge the ground is clamped between the
+    /// fill slope below and the cut slope above, out to <see cref="RoadEmbankment.Reach"/>; ground
+    /// already inside that band is left alone, so a road on gentle ground changes nothing beside
+    /// it. Each cell keeps the tightest bound any road gives it (an envelope, so the order roads
+    /// are drawn in does not matter); a shoulder never reaches under another road's surface.
     /// </para>
     ///
     /// <para>
-    /// The shape is the original one: walk each polyline piece in 1 m steps and at every step
-    /// lerp a disc of cells toward the road by <c>w = 1 - smoothstep(half, half + 3 m, dist)</c>.
-    /// Because each stamp lerps the result of the previous one, the pull compounds — shoulder
-    /// cells end up much closer to the road than one smoothstep suggests. That shape is what is
-    /// in the game, so it is kept exactly; only the arithmetic changed. The recursion
-    /// <c>h = h + (y - h)·w</c> is linear in the ground height, so after every stamp a cell is
-    /// <c>ground·P + S</c> with <c>P = Π(1 - w)</c> and <c>S</c> the accumulated road term. Tracking
-    /// those two numbers instead of heights means one pass serves every clearance
-    /// (<c>S - clearance·(1 - P)</c>) and needs no height map at all; and the weights depend only
-    /// on the cell's offset from the stamp centre, so they come from a per-road table instead of
-    /// a sqrt and a smoothstep per cell per stamp.
+    /// Retaining walls (<see cref="LinearPropType.RetainingWallFill"/>/<c>Cut</c> props, placed
+    /// by the network stage) release the ground past their free line from every slope: beyond a
+    /// fill wall it is the valley floor, behind a cut wall the hillside. The wall itself is
+    /// <c>RoadWallBuilder</c>'s mesh and collision.
+    /// </para>
+    ///
+    /// <para>
+    /// Bridges and tunnels are excluded (<see cref="RoadEmbankment.IsAtGrade"/>): a heightfield
+    /// has one height per column, so blending toward a deck would fill the gorge it crosses.
+    /// Aerial ropeways, watercourses and walls are not ground surfaces.
+    /// </para>
+    ///
+    /// <para>
+    /// Each polyline piece is rasterised as one oriented strip, row by row, so a cell is visited
+    /// about once per piece rather than once per 1 m stamp of a disc around it.
     /// </para>
     /// </summary>
     public static RoadBlend ComputeRoadBlend(RoadTile roadTile)
     {
         int n = ChunkFormat.GridSize;
-        double spacing = ChunkFormat.SpacingM;
-        var pool = System.Buffers.ArrayPool<double>.Shared;
-        // dense scratch, pooled: 8 MB each, which would otherwise land on the large object heap
-        // once per tile build. keep starts at 1 and road at 0 for a cell never touched, so only
-        // the 1 MB mask needs clearing; the two value arrays are initialised on first touch.
-        double[] keep = pool.Rent(n * n);     // P: the fraction of the ground height left
-        double[] road = pool.Rent(n * n);     // S: the accumulated road term
+        var floats = System.Buffers.ArrayPool<float>.Shared;
+        // dense scratch, pooled (4 MB each); initialised on first touch, so only the mask is cleared
+        float[] lo = floats.Rent(n * n);
+        float[] hi = floats.Rent(n * n);
+        // distance to the centreline of the road whose core holds the cell, or +inf on a slope
+        float[] coreDist = floats.Rent(n * n);
         byte[] seen = System.Buffers.ArrayPool<byte>.Shared.Rent(n * n);
-        // Distance from a cell to the nearest centreline stamp that covered it with a road's full
-        // width, or +inf. A cell under a road takes THAT stamp's height and nothing else: letting
-        // the last stamp win, or a neighbouring road's fade-out, drag it was measured leaving the
-        // floor 0.1-0.4 m off the drawn ribbon, so feet sank into one path and hovered over the
-        // next. Initialised on first touch, like the two arrays above.
-        float[] coreDist = System.Buffers.ArrayPool<float>.Shared.Rent(n * n);
         Array.Clear(seen, 0, n * n);
-        var touched = new List<int>(8192);
-        // the stamp for the current road, as linear index offsets plus (1 - w) and w
-        var offDc = new List<int>(); var offDr = new List<int>();
-        var offLinear = new List<int>(); var offKeep = new List<double>(); var offW = new List<double>();
+        var touched = new List<int>(16384);
+        var scratch = new Scratch(lo, hi, coreDist, seen, touched, n);
 
         try
         {
             foreach (var seg in roadTile.Segments)
             {
-                if ((seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) continue;
-                if (RoadFormat.IsAerial(seg.Class) || RoadFormat.IsWatercourse(seg.Class)
-                    || RoadFormat.IsWall(seg.Class)) continue;
-
-                // At least one lattice spacing: a footpath 1.2 m wide is narrower than a cell's
-                // diagonal, so the four corners of the quad its centreline crosses could all fall
-                // outside its core and only be partly pulled — measured 0.1 m of sinking on paths
-                // alone. One spacing puts every corner of that quad under the road.
-                double half = Math.Max(seg.Width * 0.5, spacing);
-                double radius = half + CorridorFalloffM;
-                int cells = (int)Math.Ceiling(radius / spacing);
-
-                // the stamp, once per road: every offset inside the radius and its weight
-                offDc.Clear(); offDr.Clear(); offLinear.Clear(); offKeep.Clear(); offW.Clear();
-                for (int dr = -cells; dr <= cells; dr++)
-                    for (int dc = -cells; dc <= cells; dc++)
-                    {
-                        double dist = Math.Sqrt((double)(dc * dc + dr * dr)) * spacing;
-                        if (dist > radius) continue;
-                        double w = 1.0 - Smoothstep(half, radius, dist);
-                        if (w <= 0) continue;
-                        offDc.Add(dc); offDr.Add(dr); offLinear.Add(dr * n + dc);
-                        offKeep.Add(1.0 - w); offW.Add(w);
-                    }
-                var lin = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(offLinear);
-                var kp = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(offKeep);
-                var ww = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(offW);
-
+                if (!RoadEmbankment.IsAtGrade(seg) || seg.PointCount < 2) continue;
+                var line = new Line(seg);
                 for (int i = 0; i < seg.PointCount - 1; i++)
-                {
-                    double ax = seg.Points[i * 3], ay = seg.Points[i * 3 + 1], az = seg.Points[i * 3 + 2];
-                    double bx = seg.Points[(i + 1) * 3], by = seg.Points[(i + 1) * 3 + 1],
-                        bz = seg.Points[(i + 1) * 3 + 2];
-                    double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
-                    int steps = Math.Max(1, (int)Math.Ceiling(len / spacing));
-                    double segLen2 = len * len;
-
-                    for (int st = 0; st <= steps; st++)
-                    {
-                        double t = (double)st / steps;
-                        double x = ax + (bx - ax) * t, z = az + (bz - az) * t;
-                        // the segment's own stored Y already carries the approach-ramp blend
-                        // RoadExtractor baked in at preprocess time - no re-derivation needed
-                        double roadY = ay + (by - ay) * t;
-                        int c0 = (int)Math.Round(x / spacing), r0 = (int)Math.Round(z / spacing);
-
-                        // almost every stamp lies wholly inside the tile, and then no offset
-                        // needs its own bounds test
-                        bool inside = c0 - cells >= 0 && c0 + cells < n && r0 - cells >= 0 && r0 + cells < n;
-                        int centre = r0 * n + c0;
-                        for (int o = 0; o < lin.Length; o++)
-                        {
-                            int idx;
-                            if (inside) idx = centre + lin[o];
-                            else
-                            {
-                                int c = c0 + offDc[o], r = r0 + offDr[o];
-                                if ((uint)c >= (uint)n || (uint)r >= (uint)n) continue;
-                                idx = r * n + c;
-                            }
-                            bool core = ww[o] >= 0.999;
-                            if (core)
-                            {
-                                // Under the road: the height of the centreline at this cell's own
-                                // perpendicular foot on the segment, not at the stamp that happened
-                                // to reach it - stamps are a metre apart, which on a 30% alpine
-                                // path is 15 cm of error. Nearest segment wins outright.
-                                double cx = (idx % n) * spacing, cz = (idx / n) * spacing;
-                                double foot = segLen2 > 1e-9
-                                    ? Math.Clamp(((cx - ax) * (bx - ax) + (cz - az) * (bz - az)) / segLen2, 0, 1)
-                                    : 0;
-                                double px = ax + (bx - ax) * foot - cx, pz = az + (bz - az) * foot - cz;
-                                float perp = (float)Math.Sqrt(px * px + pz * pz);
-                                if (seen[idx] == 0)
-                                {
-                                    seen[idx] = 1;
-                                    touched.Add(idx);
-                                }
-                                else if (perp >= coreDist[idx]) continue;
-                                coreDist[idx] = perp;
-                                keep[idx] = 0;
-                                road[idx] = ay + (by - ay) * foot;
-                                continue;
-                            }
-                            if (seen[idx] == 0)
-                            {
-                                seen[idx] = 1;
-                                touched.Add(idx);
-                                coreDist[idx] = float.PositiveInfinity;
-                                keep[idx] = kp[o];
-                                road[idx] = roadY * ww[o];
-                                continue;
-                            }
-                            // a shoulder never reaches under another road's surface
-                            if (coreDist[idx] < float.PositiveInfinity) continue;
-                            keep[idx] *= kp[o];
-                            road[idx] = road[idx] * kp[o] + roadY * ww[o];
-                        }
-                    }
-                }
+                    line.Piece(scratch, i);
+                for (int i = 0; i < seg.PointCount; i++)
+                    if (line.NeedsDisc(i)) line.Disc(scratch, i);
             }
 
-            var result = new List<int>(touched.Count);
-            var weights = new List<float>(touched.Count);
-            var targets = new List<float>(touched.Count);
+            foreach (var wall in roadTile.LinearProps)
+                if (wall.Type is LinearPropType.RetainingWallFill or LinearPropType.RetainingWallCut)
+                    FreeBehindWall(scratch, wall);
+
+            var cells = new List<int>(touched.Count);
+            var los = new List<float>(touched.Count);
+            var his = new List<float>(touched.Count);
             foreach (int idx in touched)
             {
-                double weight = 1.0 - keep[idx];
-                if (weight <= 1e-9) continue;
-                result.Add(idx);
-                weights.Add((float)weight);
-                targets.Add((float)(road[idx] / weight));
+                float l = lo[idx], h = hi[idx];
+                if (float.IsNegativeInfinity(l) && float.IsPositiveInfinity(h)) continue;   // freed
+                // a fill slope from above meets a cut slope from below (two roads stacked on a
+                // hillside with no wall between them): split the difference
+                if (l > h) l = h = (l + h) * 0.5f;
+                cells.Add(idx);
+                los.Add(l);
+                his.Add(h);
             }
-            return new RoadBlend(result.ToArray(), weights.ToArray(), targets.ToArray());
+            return new RoadBlend(cells.ToArray(), los.ToArray(), his.ToArray());
         }
         finally
         {
-            pool.Return(keep);
-            pool.Return(road);
+            floats.Return(lo);
+            floats.Return(hi);
+            floats.Return(coreDist);
             System.Buffers.ArrayPool<byte>.Shared.Return(seen);
-            System.Buffers.ArrayPool<float>.Shared.Return(coreDist);
         }
     }
 
-    private static double Smoothstep(double edge0, double edge1, double x)
+    private readonly record struct Scratch(float[] Lo, float[] Hi, float[] CoreDist, byte[] Seen, List<int> Touched, int N)
     {
-        double t = Math.Clamp((x - edge0) / Math.Max(edge1 - edge0, 1e-6), 0.0, 1.0);
-        return t * t * (3.0 - 2.0 * t);
+        /// <summary>One road's say over one cell: under it (edge distance &lt;= 0) or on its slope.</summary>
+        public void Apply(int idx, double dist, double fromEdge, double y, double reach)
+        {
+            if (fromEdge <= 0)
+            {
+                if (Seen[idx] == 0) { Seen[idx] = 1; Touched.Add(idx); }
+                else if (dist >= CoreDist[idx]) return;
+                CoreDist[idx] = (float)dist;
+                Lo[idx] = Hi[idx] = (float)y;
+                return;
+            }
+            if (fromEdge > reach) return;
+            float l = (float)(y - RoadEmbankment.FillSlope * fromEdge);
+            float h = (float)(y + RoadEmbankment.CutSlope * fromEdge);
+            if (Seen[idx] == 0)
+            {
+                Seen[idx] = 1;
+                Touched.Add(idx);
+                CoreDist[idx] = float.PositiveInfinity;
+                Lo[idx] = l;
+                Hi[idx] = h;
+                return;
+            }
+            if (CoreDist[idx] < float.PositiveInfinity) return;   // a slope never reaches under a road
+            if (l > Lo[idx]) Lo[idx] = l;
+            if (h < Hi[idx]) Hi[idx] = h;
+        }
+    }
+
+    /// <summary>One segment's centreline, in lattice units (1 m), with its two edge offsets.</summary>
+    private readonly struct Line
+    {
+        private readonly float[] _p;
+        private readonly int _count;
+        private readonly double _left, _right, _reach, _radius;
+
+        public Line(RoadSegment seg)
+        {
+            _p = seg.Points;
+            _count = seg.PointCount;
+            _left = RoadEmbankment.EdgeOffset(seg, right: false);
+            _right = RoadEmbankment.EdgeOffset(seg, right: true);
+            _reach = RoadEmbankment.Reach(seg.Class);
+            _radius = Math.Max(_left, _right) + _reach;
+        }
+
+        private double X(int i) => _p[i * 3] / ChunkFormat.SpacingM;
+        private double Y(int i) => _p[i * 3 + 1];
+        private double Z(int i) => _p[i * 3 + 2] / ChunkFormat.SpacingM;
+
+        /// <summary>The strip around piece i (i to i+1): every cell within the radius whose foot is on it.</summary>
+        public void Piece(Scratch s, int i)
+        {
+            double ax = X(i), az = Z(i), bx = X(i + 1), bz = Z(i + 1);
+            double ay = Y(i), by = Y(i + 1);
+            double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
+            if (len < 1e-6) return;
+            double ux = (bx - ax) / len, uz = (bz - az) / len;
+            // right of the drawing direction, X east and Z south
+            double rx = -uz, rz = ux;
+            // past each end by what the bend there needs: the outside of a turn of θ opens a gap
+            // of θ·radius at the slope's reach, which the two pieces close half each
+            double a0 = -Overlap(i), a1 = len + Overlap(i + 1);
+            double rad = _radius / ChunkFormat.SpacingM;
+            int n = s.N;
+
+            // corners of the strip, for the row range
+            double minZ = double.MaxValue, maxZ = double.MinValue;
+            foreach (var (al, pe) in (ReadOnlySpan<(double, double)>)[(a0, -rad), (a0, rad), (a1, -rad), (a1, rad)])
+            {
+                double z = az + uz * al + rz * pe;
+                minZ = Math.Min(minZ, z);
+                maxZ = Math.Max(maxZ, z);
+            }
+            int r0 = Math.Max(0, (int)Math.Ceiling(minZ)), r1 = Math.Min(n - 1, (int)Math.Floor(maxZ));
+
+            for (int r = r0; r <= r1; r++)
+            {
+                double dz = r - az;
+                // along(x) = (x - ax)·ux + dz·uz in [a0, a1]; perp(x) = (x - ax)·rx + dz·rz in [-rad, rad]
+                double xMin = double.MinValue, xMax = double.MaxValue;
+                if (!ClipRange(ux, dz * uz, a0, a1, ref xMin, ref xMax)) continue;
+                if (!ClipRange(rx, dz * rz, -rad, rad, ref xMin, ref xMax)) continue;
+                int c0 = Math.Max(0, (int)Math.Ceiling(ax + xMin)), c1 = Math.Min(n - 1, (int)Math.Floor(ax + xMax));
+                int row = r * n;
+                for (int c = c0; c <= c1; c++)
+                {
+                    double dx = c - ax;
+                    double along = dx * ux + dz * uz, perp = dx * rx + dz * rz;
+                    double t = along <= 0 ? 0 : along >= len ? 1 : along / len;
+                    double over = along < 0 ? -along : along > len ? along - len : 0;
+                    double dist = (over > 0 ? Math.Sqrt(perp * perp + over * over) : Math.Abs(perp)) * ChunkFormat.SpacingM;
+                    double edge = perp >= 0 ? _right : _left;
+                    s.Apply(row + c, dist, dist - edge, ay + (by - ay) * t, _reach);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether vertex i needs a round cap: the line's two ends, and bends sharp enough that the
+        /// pieces' overlap leaves a wedge on the outside at the slope's full reach.
+        /// </summary>
+        public bool NeedsDisc(int i) => i == 0 || i == _count - 1 || Turn(i) * _radius * 0.5 > PieceOverlapM;
+
+        /// <summary>How far the pieces meeting at vertex i run on past it: 0 at the line's ends.</summary>
+        private double Overlap(int i) =>
+            i == 0 || i == _count - 1 ? 0 : Math.Min(PieceOverlapM, Turn(i) * _radius * 0.5 + 0.05) / ChunkFormat.SpacingM;
+
+        /// <summary>Angle the line turns through at interior vertex i, radians.</summary>
+        private double Turn(int i)
+        {
+            double ux = X(i) - X(i - 1), uz = Z(i) - Z(i - 1), vx = X(i + 1) - X(i), vz = Z(i + 1) - Z(i);
+            double lu = Math.Sqrt(ux * ux + uz * uz), lv = Math.Sqrt(vx * vx + vz * vz);
+            if (lu < 1e-6 || lv < 1e-6) return 0;
+            return Math.Acos(Math.Clamp((ux * vx + uz * vz) / (lu * lv), -1, 1));
+        }
+
+        /// <summary>Every cell within the radius of vertex i, at that vertex's height.</summary>
+        public void Disc(Scratch s, int i)
+        {
+            double vx = X(i), vz = Z(i), vy = Y(i);
+            // the side a cell is on, from the direction through the vertex
+            int a = Math.Max(0, i - 1), b = Math.Min(_count - 1, i + 1);
+            double fx = X(b) - X(a), fz = Z(b) - Z(a);
+            double rx = -fz, rz = fx;
+            double rad = _radius / ChunkFormat.SpacingM;
+            int n = s.N;
+            int c0 = Math.Max(0, (int)Math.Ceiling(vx - rad)), c1 = Math.Min(n - 1, (int)Math.Floor(vx + rad));
+            int r0 = Math.Max(0, (int)Math.Ceiling(vz - rad)), r1 = Math.Min(n - 1, (int)Math.Floor(vz + rad));
+            for (int r = r0; r <= r1; r++)
+                for (int c = c0; c <= c1; c++)
+                {
+                    double dx = c - vx, dz = r - vz;
+                    double d2 = dx * dx + dz * dz;
+                    if (d2 > rad * rad) continue;
+                    double dist = Math.Sqrt(d2) * ChunkFormat.SpacingM;
+                    double edge = dx * rx + dz * rz >= 0 ? _right : _left;
+                    s.Apply(r * n + c, dist, dist - edge, vy, _reach);
+                }
+        }
+    }
+
+    /// <summary>
+    /// Releases the ground on a wall's open side of its free line from every road slope: past a
+    /// fill wall's face lies the valley floor, behind a cut wall the hillside. A road's own
+    /// surface (a core cell) is never released. The one-cell drop from the shelf to the released
+    /// ground then lies inside the wall's solid (<see cref="RoadEmbankment"/>).
+    /// </summary>
+    private static void FreeBehindWall(Scratch s, RoadLinearProp wall)
+    {
+        int count = wall.PointCount;
+        if (count < 2) return;
+        bool fill = wall.Type == LinearPropType.RetainingWallFill;
+        double half = wall.Thickness * 0.5 / ChunkFormat.SpacingM;
+        // the side released, as signed distance to the left of the face: fill everything right of
+        // the free line out past the slopes' reach, cut everything left of it
+        double reach = (RoadEmbankment.RoadReachM + wall.Thickness) / ChunkFormat.SpacingM;
+        double q0 = fill ? -reach : half, q1 = fill ? half : wall.Thickness / ChunkFormat.SpacingM + reach;
+        int n = s.N;
+
+        for (int i = 0; i < count - 1; i++)
+        {
+            double ax = wall.Points[i * 4] / ChunkFormat.SpacingM, az = wall.Points[i * 4 + 2] / ChunkFormat.SpacingM;
+            double bx = wall.Points[(i + 1) * 4] / ChunkFormat.SpacingM, bz = wall.Points[(i + 1) * 4 + 2] / ChunkFormat.SpacingM;
+            double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
+            if (len < 1e-6) continue;
+            double ux = (bx - ax) / len, uz = (bz - az) / len;
+            double lx = uz, lz = -ux;   // left, X east and Z south
+            double a0 = i == 0 ? 0 : -PieceOverlapM, a1 = i + 1 == count - 1 ? len : len + PieceOverlapM;
+
+            double minZ = double.MaxValue, maxZ = double.MinValue;
+            foreach (var (al, q) in (ReadOnlySpan<(double, double)>)[(a0, q0), (a0, q1), (a1, q0), (a1, q1)])
+            {
+                double z = az + uz * al + lz * q;
+                minZ = Math.Min(minZ, z);
+                maxZ = Math.Max(maxZ, z);
+            }
+            int r0 = Math.Max(0, (int)Math.Ceiling(minZ)), r1 = Math.Min(n - 1, (int)Math.Floor(maxZ));
+            for (int r = r0; r <= r1; r++)
+            {
+                double dz = r - az;
+                double xMin = double.MinValue, xMax = double.MaxValue;
+                if (!ClipRange(ux, dz * uz, a0, a1, ref xMin, ref xMax)) continue;
+                // strictly past the free line: the shelf cell sitting on it stays
+                if (!ClipRange(lx, dz * lz, q0, q1, ref xMin, ref xMax)) continue;
+                int c0 = Math.Max(0, (int)Math.Ceiling(ax + xMin)), c1 = Math.Min(n - 1, (int)Math.Floor(ax + xMax));
+                int row = r * n;
+                for (int c = c0; c <= c1; c++)
+                {
+                    int idx = row + c;
+                    if (s.Seen[idx] == 0 || s.CoreDist[idx] < float.PositiveInfinity) continue;
+                    s.Lo[idx] = float.NegativeInfinity;
+                    s.Hi[idx] = float.PositiveInfinity;
+                }
+            }
+        }
+    }
+
+    /// <summary>Narrows [xMin, xMax] to where <c>k·x + c</c> lies in [lo, hi]; false if empty.</summary>
+    private static bool ClipRange(double k, double c, double lo, double hi, ref double xMin, ref double xMax)
+    {
+        if (Math.Abs(k) < 1e-12) return c >= lo && c <= hi;
+        double x0 = (lo - c) / k, x1 = (hi - c) / k;
+        if (x0 > x1) (x0, x1) = (x1, x0);
+        xMin = Math.Max(xMin, x0);
+        xMax = Math.Min(xMax, x1);
+        return xMin <= xMax;
     }
 }
