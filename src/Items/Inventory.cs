@@ -180,6 +180,17 @@ public sealed class Inventory
         return true;
     }
 
+    /// <summary>Takes up to <paramref name="count"/> from a slot (dropping, throwing): what was taken, data kept.</summary>
+    public ItemStack TakeFrom(int slot, int count)
+    {
+        var stack = _slots[slot];
+        if (stack.IsEmpty || count <= 0) return ItemStack.Empty;
+        int take = Math.Min(count, stack.Count);
+        _slots[slot] = Less(stack, take);
+        Notify();
+        return stack with { Count = take };
+    }
+
     /// <summary>
     /// Moves slot <paramref name="from"/> onto <paramref name="to"/>: merges when they are the
     /// same item and there is room, swaps otherwise. What the pad's "take in hand" does.

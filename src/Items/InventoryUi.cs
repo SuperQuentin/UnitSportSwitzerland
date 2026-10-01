@@ -68,7 +68,7 @@ public partial class InventoryUi : CanvasLayer
     private readonly SlotButton[] _panelSlots = new SlotButton[Inventory.Size];
     private SlotButton _trash = null!;
     private Label _infoName = null!, _infoBlurb = null!, _infoValue = null!;
-    private Button _useButton = null!, _handButton = null!, _claimButton = null!;
+    private Button _useButton = null!, _handButton = null!, _dropButton = null!, _claimButton = null!;
     private Label _cashLine = null!, _accountLine = null!, _controlsHint = null!, _hotbarCaption = null!;
     private int _inspect;
     private CarriedView _carried = null!;
@@ -321,6 +321,15 @@ public partial class InventoryUi : CanvasLayer
         _handButton.Pressed += TakeInHand;
         right.AddChild(_handButton);
 
+        // onto the ground in front of you, where anyone can pick it up (#206)
+        _dropButton = new Button { Text = "Drop on the ground" };
+        _dropButton.Pressed += () =>
+        {
+            _items.DropSlot(null, _inspect, all: true);
+            Inspect(_inspect);
+        };
+        right.AddChild(_dropButton);
+
         // the Polaroids: every photo in the pack and every one taken here (PhotoUi)
         var albumButton = new Button { Text = "Photo album" };
         albumButton.Pressed += () => _items.PhotoUi.OpenAlbum();
@@ -496,6 +505,7 @@ public partial class InventoryUi : CanvasLayer
         _infoValue.Text = def is { Value: > 0 } ? $"Worth about {def.Value * stack.Count:0.#} CHF" : "";
         _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear or ItemUse.Print);
         _handButton.Disabled = def == null || slot == Inv.Selected;
+        _dropButton.Disabled = def == null || !ItemsActive;
     }
 
     /// <summary>A backpack item is swapped into the selected hotbar slot; a hotbar item just becomes the selection.</summary>
