@@ -180,6 +180,17 @@ public sealed class GameSettings
     /// <summary>GPX files replayed recently, newest first (the Play solo track picker lists them).</summary>
     public List<string> RecentGpx { get; set; } = new();
 
+    /// <summary>
+    /// Play in a VR headset (#186, OpenXR, a Quest over Link). OpenXR only starts with the engine,
+    /// so turning this on or off relaunches the game (<see cref="XR.XrSession.Relaunch"/>), and a
+    /// launch from the title with it on relaunches itself into VR.
+    /// </summary>
+    public bool VrMode { get; set; }
+
+    /// <summary>What the monitor shows while in VR (<see cref="XR.XrMonitor"/>); F7 cycles it.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public XR.MonitorView VrMonitor { get; set; } = XR.MonitorView.FirstPerson;
+
     // --- cockpit: first person at the wheel of a car (#69) ---
     /// <summary>Your own arms and legs at the wheel. V cycles chase → cockpit with them → cockpit without.</summary>
     public bool CockpitBody { get; set; } = true;
@@ -332,6 +343,11 @@ public sealed class GameSettings
                     if (v is "body" or "bare") CockpitBody = v == "body";
                     break;
                 case "--mirrors": CockpitMirrors = v is "on" or "1" or "true"; break;
+                // what the monitor shows in VR (#186): off | first | eyes | third
+                case "--vrmonitor":
+                    VrMonitor = v switch { "off" => XR.MonitorView.Off, "eyes" => XR.MonitorView.BothEyes,
+                        "third" => XR.MonitorView.ThirdPerson, _ => XR.MonitorView.FirstPerson };
+                    break;
                 case "--vsync": VSync = v is "on" or "1" or "true"; break;
                 case "--perf":
                     PerfOverlay = v switch { "full" or "detailed" => PerfOverlayMode.Detailed,

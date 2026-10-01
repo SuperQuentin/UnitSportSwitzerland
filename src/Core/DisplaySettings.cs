@@ -24,10 +24,13 @@ public partial class DisplaySettings : Node
     private void Apply()
     {
         var s = GameSettings.Current;
+        // In VR the window is the monitor view: its render scale still applies, but the headset
+        // paces the frames, and a desktop vsync on top would hold it to the monitor's rate.
         GetViewport().Scaling3DScale = s.RenderScale;
-        DisplayServer.WindowSetVsyncMode(s.VSync
-            ? DisplayServer.VSyncMode.Enabled
-            : DisplayServer.VSyncMode.Disabled);
+        if (!XR.XrSession.Active)
+            DisplayServer.WindowSetVsyncMode(s.VSync
+                ? DisplayServer.VSyncMode.Enabled
+                : DisplayServer.VSyncMode.Disabled);
         ApplyWindow(s);
     }
 

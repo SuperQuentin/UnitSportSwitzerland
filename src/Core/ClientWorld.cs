@@ -1168,8 +1168,9 @@ public partial class ClientWorld : Node3D
         if (MenuOpen?.Invoke() == true || _gpx is { Active: true } || _rides is { IsOpen: true }) yield break;
 
         // whoever owns the camera on screen: the local player, or a body a probe made itself
-        var viewer = (_onFoot ? LocalPlayer : null) ?? GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
-        if (viewer == null && GetViewport().GetCamera3D() == _spectator)
+        var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
+        var viewer = (_onFoot ? LocalPlayer : null) ?? shown?.GetParent() as FootPlayer;
+        if (viewer == null && shown == _spectator)
         {
             yield return (PlayerInput.ToggleMode, "Walk");
             yield return (PlayerInput.FlyUp, "Up");
