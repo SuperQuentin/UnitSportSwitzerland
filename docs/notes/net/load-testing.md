@@ -5,6 +5,8 @@
   `SceneMultiplayer` on `/root/BotK`, a minimal mirror of the client tree, kinematic driving in
   `Swarm.Drive` — the one place to adapt when replication changes), one real observer client with
   `--netsmooth`. Every process has its own `--cache`. Output in `test_output/loadtest/<label>/`.
+  Runs on Windows from Git Bash too (`GODOT=<console exe>`); there the swarm cpu/rss columns read 0
+  (no `ps -o`) and the memory line is MemFree.
 - Swarm cost: ~190 MB per process + ~3 MB and ~1.5 % of a core per bot. A full client is ~2.2 GB:
   on a 15 GB machine several agents running clients at once get OOM-killed — check `free -g`,
   and a run with a process killed (exit 137) is invalid.

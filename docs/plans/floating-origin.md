@@ -3,8 +3,8 @@
 
 # Floating origin
 
-Status: **phase 1 in progress** (offline floating origin, branch `feat/185-floating-origin`; the
-working rules are in `docs/notes/core/floating-origin.md`). Issue: #185.
+Status: **phase 1 done** (offline floating origin, #215); **phase 2 next** (positions on the
+wire). The working rules are in `docs/notes/core/floating-origin.md`. Issue: #185.
 
 ## Why
 

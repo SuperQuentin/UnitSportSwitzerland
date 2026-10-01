@@ -65,6 +65,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Car: headlights / pop-ups", PlayerInput.LightsToggle),
             new("Car radio: next station", PlayerInput.RadioNext),
             new("Car radio: previous station", PlayerInput.RadioPrev),
+            new("Car radio: stations and CDs (passengers too)", PlayerInput.RadioPanel),
             new("Car: fold the soft top", PlayerInput.RoofToggle),
             new("Get out", PlayerInput.InteractMount),
         }),

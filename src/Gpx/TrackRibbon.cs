@@ -62,7 +62,7 @@ public partial class TrackRibbon : MeshInstance3D
 
     private static ShaderMaterial RibbonMaterial()
     {
-        var m = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_path.gdshader") };
+        var m = Styles.StyleKit.Material(Styles.MaterialRole.Path);
         Core.FogUniforms.Apply(m);
         return m;
     }
