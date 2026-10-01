@@ -149,11 +149,23 @@ public partial class ChatManager : Node
         RpcId(1, MethodName.SubmitLine, text);
     }
 
-    /// <summary>Asks the server who is online, so names can be completed. The answer lands in <see cref="PlayerNames"/>.</summary>
+    /// <summary>
+    /// Asks the server who is online, so names can be completed. The answer lands in
+    /// <see cref="PlayerNames"/>. Completion asks on every keystroke, so this sends at most once a second.
+    /// </summary>
     public void RequestPlayerNames()
     {
-        if (!IsLocal) RpcId(1, MethodName.SubmitNamesRequest);
+        if (IsLocal) return;
+        ulong now = Time.GetTicksMsec();
+        if (_namesAskedAt != 0 && now - _namesAskedAt < 1000) return;
+        _namesAskedAt = now;
+        RpcId(1, MethodName.SubmitNamesRequest);
     }
+
+    private ulong _namesAskedAt;
+
+    /// <summary>Client: the server's list of names changed; completions can be refreshed.</summary>
+    public event Action? NamesReceived;
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -166,7 +178,12 @@ public partial class ChatManager : Node
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReceiveNames(string[] names) => _playerNames = names;
+    private void ReceiveNames(string[] names)
+    {
+        bool changed = !names.SequenceEqual(_playerNames);
+        _playerNames = names;
+        if (changed) NamesReceived?.Invoke();
+    }
 
     /// <summary>Client: the server granted items (<c>/spawn</c>, an admin's choice); they go in this machine's inventory.</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
