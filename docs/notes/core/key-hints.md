@@ -7,6 +7,6 @@
   `{action}` placeholders, which is how item, mount and car blurbs name their controls.
   `PromptBar` (bottom right) asks `ClientWorld.Prompts` a few times a second what applies *now*
   ("Get in the helicopter [E]", "Travel [R]", fly-camera keys), resolving the player from the camera
-  so probes get it too. `ControlsHelp` (**F1**, main menu Controls) lists every action with a keyboard
+  so probes get it too. `ControlsHelp` (**F1**, or Controls on the title and pause menus) lists every action with a keyboard
   and a pad column from the live `InputMap`; it reads input in `_Input` because it opens over the
-  main menu, which would otherwise take its Esc. `--controls` opens it for a screenshot.
+  menus, which would otherwise take its Esc. `--controls` opens it for a screenshot.

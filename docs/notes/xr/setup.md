@@ -7,15 +7,28 @@
   Meta the active OpenXR runtime (Link app → Settings → General → OpenXR runtime). Then run
   `<godot> --xr-mode on --rendering-driver vulkan --path . -- --vr [--connect host:port]`.
   Vulkan is the well-tested OpenXR path on Windows; the project default is d3d12.
-- **What `XR/XrSession.TryStart` does.** It is called from `ClientWorld._Ready`, right after
-  `PlayerInput.Install`. It turns the client into a VR client only if OpenXR actually came up:
+- **From the menus (the normal way).** Use Settings → Video → *VR mode*, or *Play in VR* / *Leave VR*
+  on the title screen. Both ask first, save `GameSettings.VrMode`, and restart the game through
+  `XrSession.Relaunch`, because OpenXR only comes up with the engine:
+  - Going into VR relaunches with `--xr-mode on --rendering-driver vulkan -- <same user args> --vr`.
+  - Leaving VR relaunches with `--xr-mode off`.
+  - Run from the editor binary (`godot --path .`), the relaunch passes `--path` too.
+
+  A title launch with `VrMode` saved on relaunches itself into VR once. The relaunch carries
+  `--vr`, and a run with `--vr` never relaunches, so it cannot loop. If `--vr` was given but no
+  headset answered, the title shows "No VR headset" and turns `VrMode` off. `--vr` and `--xrsim`
+  are on `GameShell.UseTitle`'s list of harmless flags, so a VR launch lands on the title, which is
+  in the headset too.
+- **What `XR/XrSession.TryStart` does.** It is called from `GameShell._Ready`, right after
+  `PlayerInput.Install` and before any menu or camera exists, so the title is in VR. The rig is
+  added to `/root/Main` deferred. It turns the client into a VR client only if OpenXR actually came up:
   - `UseXR` on the root viewport
   - vsync off
   - render scale 1 (the runtime picks the eye resolution)
   - 90 Hz if the runtime offers it
   - foveation requested (only standalone runtimes honour it)
 
-  `ApplyViewportSettings` leaves scale and vsync alone while `XrSession.Active`.
+  `DisplaySettings` leaves scale and vsync alone while `XrSession.Active`.
 - **No headset connected.** The Oculus runtime answers `XR_ERROR_FORM_FACTOR_UNAVAILABLE`, and
   Godot shows a blocking alert, then starts flat. In that case `--vr` prints how to start it
   properly.

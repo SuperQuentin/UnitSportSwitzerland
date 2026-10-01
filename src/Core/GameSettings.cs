@@ -171,6 +171,22 @@ public sealed class GameSettings
     /// <summary>The server last joined from the menu, so the field is not reset to localhost every launch.</summary>
     public string LastHost { get; set; } = "127.0.0.1";
 
+    /// <summary>
+    /// The name asked for when joining a server, set the first time the Multiplayer screen opens.
+    /// Empty until then; <c>--name</c> overrides it for one run without saving.
+    /// </summary>
+    public string PlayerName { get; set; } = "";
+
+    /// <summary>GPX files replayed recently, newest first (the Play solo track picker lists them).</summary>
+    public List<string> RecentGpx { get; set; } = new();
+
+    /// <summary>
+    /// Play in a VR headset (#186, OpenXR, a Quest over Link). OpenXR only starts with the engine,
+    /// so turning this on or off relaunches the game (<see cref="XR.XrSession.Relaunch"/>), and a
+    /// launch from the title with it on relaunches itself into VR.
+    /// </summary>
+    public bool VrMode { get; set; }
+
     // --- cockpit: first person at the wheel of a car (#69) ---
     /// <summary>Your own arms and legs at the wheel. V cycles chase → cockpit with them → cockpit without.</summary>
     public bool CockpitBody { get; set; } = true;
@@ -270,6 +286,8 @@ public sealed class GameSettings
         WindowWidth = Math.Clamp(WindowWidth, 0, 7680);
         WindowHeight = Math.Clamp(WindowHeight, 0, 4320);
         OccasionPreferences ??= new();
+        RecentGpx ??= new();
+        PlayerName ??= "";
     }
 
     /// <summary>

@@ -5,7 +5,7 @@ OpenXR VR mode (#186), Quest 2 over Link. It is opt-in at launch: one rig follow
 Index only: one line per note in `docs/notes/xr/<name>.md`. Read a note only when the task
 touches its topic; search with `grep -ril <word> docs/notes/xr`.
 
-- `setup` — Launching (`--xr-mode on --rendering-driver vulkan -- --vr`), Meta as the OpenXR runtime, fallback with no headset, `--xrsim` for checks without a headset
+- `setup` — VR mode from the menus (Settings → Video, title *Play in VR*: saved and applied by relaunching), launching by hand (`--xr-mode on --rendering-driver vulkan -- --vr`), Meta as the OpenXR runtime, fallback with no headset, `--xrsim` for checks without a headset
 - `rig` — `XrRig`: anchor = whichever camera the game made current; calibration and recentre; VR-aware player eyes (no bob, pitch or roll); head written back for aiming; snap turn; vignette
 - `controls` — `XrPad` controller-to-pad layout; triggers on foot vs mounted; the flight trigger gap; the `XrUi` panel and hand pointer
 - `skiing` — Body skiing: lean to steer, crouch to tuck, pole push; merged in `RidePhysics`

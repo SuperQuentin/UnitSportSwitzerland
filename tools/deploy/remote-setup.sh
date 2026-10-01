@@ -88,8 +88,9 @@ else bad "mdns" "avahi-daemon not running"; fi
 act ufw allow "$SSH_PORT/tcp" comment 'ssh' >/dev/null
 for p in $WEB_PORTS; do act ufw allow "$p/tcp" comment 'web' >/dev/null; done
 act ufw allow "$GAME_PORT/udp" comment 'unitsport game' >/dev/null
+act ufw allow "$((GAME_PORT + 1))/udp" comment 'unitsport status query' >/dev/null
 act ufw allow 5353/udp comment 'mdns' >/dev/null
-if act ufw --force enable >/dev/null; then did "firewall" "ssh $SSH_PORT/tcp, web ${WEB_PORTS// /,}/tcp, game $GAME_PORT/udp, mdns 5353/udp"
+if act ufw --force enable >/dev/null; then did "firewall" "ssh $SSH_PORT/tcp, web ${WEB_PORTS// /,}/tcp, game $GAME_PORT/udp, status $((GAME_PORT + 1))/udp, mdns 5353/udp"
 else bad "firewall" "ufw enable failed (no iptables/nftables in this host?)"; fi
 
 # --- autostart ----------------------------------------------------------------

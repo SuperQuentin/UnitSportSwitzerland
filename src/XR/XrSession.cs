@@ -102,8 +102,31 @@ public static class XrSession
     {
         Active = true;
         Rig = new XrRig { Name = "XrRig" };
-        root.AddChild(Rig);
+        // deferred: called from a node's _Ready, while the root is still adding its children
+        root.CallDeferred(Node.MethodName.AddChild, Rig);
         return true;
+    }
+
+    /// <summary>
+    /// Starts the game again, with OpenXR (<paramref name="vr"/>) or without: OpenXR can only
+    /// come up with the engine. The user arguments carry over (minus <c>--vr</c> / <c>--xrsim</c>);
+    /// the caller quits this process when it returns true.
+    /// </summary>
+    public static bool Relaunch(bool vr)
+    {
+        var args = new List<string>();
+        // Vulkan is the well-trodden OpenXR path on Windows (the project default is d3d12)
+        args.AddRange(vr ? new[] { "--xr-mode", "on", "--rendering-driver", "vulkan" } : new[] { "--xr-mode", "off" });
+        // run from the editor binary (`godot --path .`): it has to be told the project again
+        if (OS.HasFeature("editor")) args.AddRange(new[] { "--path", ProjectSettings.GlobalizePath("res://") });
+        args.Add("--");
+        args.AddRange(OS.GetCmdlineUserArgs().Where(a => a is not "--vr" and not "--xrsim"));
+        if (vr) args.Add("--vr");
+
+        int pid = OS.CreateProcess(OS.GetExecutablePath(), args.ToArray());
+        GD.Print($"[xr] relaunching {(vr ? "in VR" : "on the screen")}: pid {pid}");
+        if (pid <= 0) GD.PushError("[xr] could not start the game again");
+        return pid > 0;
     }
 
     /// <summary>Rumble both hands; <see cref="Core.PlayerInput.Rumble"/> routes here in VR.</summary>
