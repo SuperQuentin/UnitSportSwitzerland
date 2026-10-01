@@ -168,6 +168,9 @@ public sealed class RemoteInterpolator
         if (t >= newest.T)
         {
             float ahead = (float)Math.Min(t - newest.T, MaxAhead);
+            // a long carry (a race NPC waiting for its handoff) eases off like a lift, to half its speed by the
+            // end of it, instead of rolling on flat out and then stopping dead (#159)
+            if (MaxAhead > MaxExtrapolation) ahead -= ahead * ahead / (4f * MaxAhead);
             return (newest.P + newest.V * ahead, newest.Yaw);
         }
         // walk back to the pair straddling t
