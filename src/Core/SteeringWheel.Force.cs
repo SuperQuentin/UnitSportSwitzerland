@@ -21,8 +21,9 @@ namespace UnitSport.Core;
 /// The game drives it from the local player's feel layer once a frame (<see cref="Drive"/>); a feel
 /// older than <see cref="StaleSeconds"/> (a menu, on foot, someone else's camera) leaves only a light
 /// damper. The wheel's own autocentre spring is switched off where it can be, or it would fight the
-/// aligning torque. Signs: + pushes the wheel right; <see cref="WheelSettings.FfbInvert"/> flips the
-/// device's sense if it reads the other way.
+/// aligning torque. Signs: + pushes the wheel right everywhere in the game; SDL's levels give the
+/// side a force comes from, so it is negated on the way out, and <see cref="WheelSettings.FfbInvert"/>
+/// flips it again for a device that still reads the other way.
 /// </para>
 /// </summary>
 public partial class SteeringWheel
@@ -146,7 +147,9 @@ public partial class SteeringWheel
             e.constant.type = SDL_HapticEffectType.SDL_HAPTIC_CONSTANT;
             e.constant.direction.type = SDL_HapticDirectionType.SDL_HAPTIC_STEERING_AXIS;
             e.constant.length = SDL_HAPTIC_INFINITY;
-            e.constant.level = Level(constant);
+            // SDL (as DirectInput) gives the direction a force comes FROM: a positive level comes
+            // from the right and pushes left, so + right is sent negative (measured with --ffbcheck)
+            e.constant.level = Level(-constant);
             SDL_UpdateHapticEffect(_haptic, _constant, &e);
         }
         if ((int)_road >= 0 && (MathF.Abs(road - _sentRoad) > 0.01f || MathF.Abs(hz - _sentRoadHz) > 1f || float.IsNaN(_sentRoad)))

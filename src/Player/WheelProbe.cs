@@ -358,8 +358,9 @@ public partial class WheelProbe : Node
     private void Finish(bool ok, string what)
     {
         _done = true;
-        GD.Print($"[wheelwatch] {_role} RESULT: {(ok ? "PASS" : "FAIL")} ({what})");
+        GD.Print(ForceCheckRequested ? $"[ffbcheck] RESULT: {(ok ? "PASS" : "FAIL")} ({what})"
+            : $"[wheelwatch] {_role} RESULT: {(ok ? "PASS" : "FAIL")} ({what})");
         // A lingers so B, still watching, sees the car keep steering
-        GetTree().CreateTimer(_role == "A" ? 15 : 1).Timeout += () => GetTree().Quit(ok ? 0 : 1);
+        GetTree().CreateTimer(_role == "A" && !ForceCheckRequested ? 15 : 1).Timeout += () => GetTree().Quit(ok ? 0 : 1);
     }
 }

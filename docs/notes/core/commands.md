@@ -38,4 +38,5 @@
   `--connect 127.0.0.1:P --wheelwatch B` and `--connect 127.0.0.1:P --wheelwatch A --fakewheel` (A drives
   a car on a swept simulated wheel, B must see it steer both ways). `--fakewheel` alone plays with that
   wheel; `--wheel on|off`, `--wheelrange deg` override for one run; `--settings wheel` opens Settings on
-  the Wheel tab.
+  the Wheel tab. `--ffbcheck` (window, real wheel, hands off): pushes it right then left at 30% for
+  0.5 s and reads back which way it turned; RESULT PASS/FAIL.
