@@ -1,12 +1,18 @@
 # The VR rig: following the game's camera (#186)
 
 - **`XR/XrRig`** is top-level, with `ProcessPriority` 1000 so it runs after every game node. It
-  holds an `XROrigin3D`, an `XRCamera3D` and two `XRController3D` (aim pose).
-- **The anchor.** The game keeps placing its cameras exactly as it does flat. Whenever one is made
-  current (`player.Camera.Current = true`, the spectator, a GPX shot), the rig takes it as the
-  **anchor** and makes its own camera current again. `XrSession.Anchor` is "the camera the game
-  wants to look through". Use it wherever code asked `GetViewport().GetCamera3D()` to find the
-  viewer (`ClientWorld.Prompts`, `FootPlayer.IsViewing`).
+  holds a `SubViewport` named `Headset` with `UseXR` on. Inside it are an `XROrigin3D`, an
+  `XRCamera3D` and two `XRController3D` (aim pose). The SubViewport shares the game's
+  `World3D`.
+  - The headset renders through that SubViewport, not the root viewport. This is the documented
+    Godot way to keep the desktop window free.
+  - The window keeps rendering the game's current camera, so it becomes the monitor view
+    (`monitor`).
+  - With `--xrsim`, the SubViewport is not updated.
+- **The anchor.** The game keeps placing its cameras exactly as it does flat. The window's current
+  camera (`player.Camera`, the spectator, a GPX shot) is the **anchor**. `XrSession.Anchor`
+  exposes it. When the rig adopts a camera as the anchor, it strips `HeadsetOnlyLayer` and
+  `SpectatorOnlyLayer` from that camera's cull mask.
 - **Calibration.** The tracking space is placed so that the head, at the yaw-only pose it had at
   the last recentre, sits exactly on the anchor: `origin = anchor * calib`, with
   `calib = inverse(head0)`.

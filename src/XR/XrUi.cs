@@ -23,7 +23,7 @@ public partial class XrUi : Node3D
     private const float FollowAngle = 0.6f;
 
     /// <summary>Screen-effect layers that mean nothing on a floating panel (speed lines, flashes).</summary>
-    private static readonly HashSet<string> Hidden = new() { "FeelScreen", "LensLayer" };
+    private static readonly HashSet<string> Hidden = new() { "FeelScreen", "LensLayer", XrMonitor.LayerName };
 
     private readonly XRCamera3D _head;
     private readonly XRController3D _hand;
@@ -77,6 +77,7 @@ public partial class XrUi : Node3D
             Mesh = new QuadMesh { Size = new Vector2(Width, Width * _size.Y / _size.X) },
             MaterialOverride = material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Layers = XrSession.HeadsetOnlyLayer,
         };
         AddChild(_panel);
 
@@ -92,6 +93,7 @@ public partial class XrUi : Node3D
             },
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Visible = false,
+            Layers = XrSession.HeadsetOnlyLayer,
         };
         AddChild(_ray);
 

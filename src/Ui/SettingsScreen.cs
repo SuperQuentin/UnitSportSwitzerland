@@ -221,6 +221,9 @@ public partial class SettingsScreen : Screen
             if (on == XR.XrSession.Active) return;
             AskVr(this, Shell, on, () => toggle.SetPressedNoSignal(!on));
         }, "Meta Quest over Link (OpenXR). Changing it restarts the game");
+        UiKit.OptionRow(rows, "Monitor view in VR", new[] { "Off", "First person", "Both eyes", "Third person" },
+            (int)GameSettings.Current.VrMonitor, i => GameSettings.Current.VrMonitor = (XR.MonitorView)i,
+            "What the computer screen shows while you play in the headset (F7 cycles it)");
     }
 
     /// <summary>

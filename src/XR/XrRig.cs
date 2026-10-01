@@ -32,6 +32,12 @@ public partial class XrRig : Node3D
 
     public Camera3D? Anchor { get; private set; }
 
+    /// <summary>The headset camera and tracking origin, for the monitor's eye views.</summary>
+    internal XRCamera3D Head => _camera;
+    internal XROrigin3D Origin => _origin;
+
+    private SubViewport _view = null!;
+    private XrMonitor _monitor = null!;
     private XROrigin3D _origin = null!;
     private XRCamera3D _camera = null!;
     private XRController3D _left = null!, _right = null!;
@@ -67,9 +73,28 @@ public partial class XrRig : Node3D
         ProcessMode = ProcessModeEnum.Always;
         TopLevel = true;
 
+        // The headset renders its own viewport (the documented way to keep the desktop window for
+        // something else): the window keeps showing the game's camera, which XrMonitor turns into
+        // the monitor view. Same World3D as the game: a SubViewport finds its parent's.
+        _view = new SubViewport
+        {
+            Name = "Headset",
+            UseXR = !XrSession.Simulated,
+            RenderTargetUpdateMode = XrSession.Simulated ? SubViewport.UpdateMode.Disabled : SubViewport.UpdateMode.Always,
+            GuiDisableInput = true,
+            Size = new Vector2I(1832, 1920),   // the runtime overrides it with the eye size
+        };
+        AddChild(_view);
         _origin = new XROrigin3D { Name = "Origin", Current = true };
-        AddChild(_origin);
-        _camera = new XRCamera3D { Name = "Head", Near = 0.05f, Far = Core.GameSettings.Current.CameraFar };
+        _view.AddChild(_origin);
+        _camera = new XRCamera3D
+        {
+            Name = "Head",
+            Near = 0.05f,
+            Far = Core.GameSettings.Current.CameraFar,
+            // the player's own body is for the monitor: from inside the head it fills the view
+            CullMask = 0xFFFFFu & ~XrSession.SpectatorOnlyLayer,
+        };
         _origin.AddChild(_camera);
         _left = new XRController3D { Name = "Left", Tracker = "left_hand", Pose = "aim" };
         _right = new XRController3D { Name = "Right", Tracker = "right_hand", Pose = "aim" };
@@ -92,14 +117,17 @@ public partial class XrRig : Node3D
             // the shader draws it over the whole view; it must never be culled
             ExtraCullMargin = 16384f,
             Visible = false,
+            Layers = XrSession.HeadsetOnlyLayer,
         };
         _camera.AddChild(_vignette);
 
         _pad = new XrPad(_left, _right);
         _ui = new XrUi(_camera, _right);
         AddChild(_ui);
+        _monitor = new XrMonitor(this) { Name = "Monitor" };
+        AddChild(_monitor);
 
-        _camera.MakeCurrent();
+        _camera.Current = true;
         Core.GameSettings.Changed += OnSettings;
     }
 
@@ -118,13 +146,15 @@ public partial class XrRig : Node3D
     public override void _Process(double delta)
     {
         float dt = (float)delta;
-        var viewport = GetViewport();
-
-        // someone made their camera current: that is now the view to carry, and ours goes back on
-        if (viewport.GetCamera3D() is { } current && current != _camera)
+        // the window's camera is the game's: the player's eye, a cockpit, the spectator, a shot
+        var current = GetViewport().GetCamera3D();
+        if (current != Anchor && current != null)
         {
             Anchor = current;
-            _camera.MakeCurrent();
+            // the window's copy of the game camera never shows the headset-only parts
+            // (with --xrsim the window is the only view, so it keeps them)
+            if (!XrSession.Simulated) Anchor.CullMask &= ~XrSession.HeadsetOnlyLayer;
+            Anchor.CullMask &= ~XrSession.SpectatorOnlyLayer;
         }
         if (Anchor != null && !IsInstanceValid(Anchor)) Anchor = null;
 

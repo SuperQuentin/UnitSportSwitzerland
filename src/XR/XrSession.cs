@@ -69,12 +69,9 @@ public static class XrSession
             return false;
         }
 
-        var viewport = root.GetViewport();
-        viewport.UseXR = true;
-        // the headset paces the frames; a desktop vsync on top of it only adds a wait
+        // The headset gets its own viewport (XrRig); the window stays the game's, for the monitor
+        // view (XrMonitor). The headset paces the frames: a desktop vsync on top only adds a wait.
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
-        // render scale is a flat-screen setting: the runtime picks the eye resolution
-        viewport.Scaling3DScale = 1f;
 
         if (xr is OpenXRInterface openxr)
         {
@@ -94,6 +91,18 @@ public static class XrSession
 
         return Begin(root);
     }
+
+    /// <summary>
+    /// Drawn only in the headset: the comfort vignette, the UI panel and its pointer. The monitor's
+    /// cameras leave it out (a clip-space vignette would cover any camera that saw it).
+    /// </summary>
+    public const uint HeadsetOnlyLayer = 1u << 14;
+
+    /// <summary>
+    /// Drawn only for the monitor's third-person camera: the VR player's own body on foot, which
+    /// first person otherwise does not draw at all. The headset and first-person views leave it out.
+    /// </summary>
+    public const uint SpectatorOnlyLayer = 1u << 15;
 
     /// <summary>True with <c>--xrsim</c>: VR mode with no headset, for checks on a desktop.</summary>
     public static bool Simulated { get; private set; }

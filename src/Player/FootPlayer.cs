@@ -1117,7 +1117,8 @@ public partial class FootPlayer : CharacterBody3D
 
         if (kind == RideKind.OnFoot)
         {
-            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) return;   // first person: nothing to draw
+            // first person: nothing to draw, except in VR for the monitor's third-person view (#186)
+            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson && !XR.XrSession.Active) return;
             _walkPalette = Avatar.HumanPalette.ForRider(rider);
             _walker = new MeshInstance3D
             {
@@ -1125,6 +1126,7 @@ public partial class FootPlayer : CharacterBody3D
                 Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f, hat: Hat),
                 MaterialOverride = Avatar.HumanMeshBuilder.Material(),
             };
+            if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) _walker.Layers = XR.XrSession.SpectatorOnlyLayer;
             _visual = _walker;
         }
         else
@@ -1275,7 +1277,11 @@ public partial class FootPlayer : CharacterBody3D
             // Render rate, not physics rate: the look has to answer the mouse the frame it
             // moves, the way rotating the body directly always did.
             if (!_thirdPerson)
+            {
                 Rotation = new Vector3(0, _viewYaw, 0);
+                // the body only the monitor's third-person camera sees (#186)
+                if (XR.XrSession.Active) ApplyFootPose();
+            }
             else if (ScopeView && _camera != null)
             {
                 // looking through something held to the eye: first person for as long as it lasts
