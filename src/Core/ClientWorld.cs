@@ -494,6 +494,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
         AddChild(_radioUi);
+        if (Items.CarCdCheck.Create(() => LocalPlayer, () => _players, items.Inventory, networked: false) is { } carCdShots) AddChild(carCdShots);
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);
@@ -1020,6 +1021,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(race);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
         if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
+        if (_items != null && Items.CarCdCheck.Create(() => LocalPlayer, () => _players, _items.Inventory, networked: true) is { } carCdCheck) AddChild(carCdCheck);
         if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: true) is { } webRadioCheck) AddChild(webRadioCheck);
 
         _chat!.Kicked += OnKicked;
@@ -1133,8 +1135,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     }
 
     /// <summary>My own networked player node, once the server has spawned it.</summary>
+    // not while the link is down: GetUniqueId on a dead peer logs an error, and this runs every frame (#211)
     private FootPlayer? GetLocalNetPlayer() =>
-        _players?.GetNodeOrNull<FootPlayer>(Multiplayer.GetUniqueId().ToString());
+        Net.NetLink.Ready(this) ? _players?.GetNodeOrNull<FootPlayer>(Multiplayer.GetUniqueId().ToString()) : null;
 
     public override void _UnhandledInput(InputEvent @event)
     {
@@ -1173,6 +1176,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // you: in a vehicle it gets out, beside a parked one it gets in. The picker is R's.
         if (@event.IsActionPressed(PlayerInput.RideMenu))
         {
+            // in a vehicle with a stereo R is the radio's (RadioPanel, same key): never both panels
+            if (LocalPlayer is { StereoOwner: not null }) return;
             _rides?.Open();
             return;
         }
@@ -1217,10 +1222,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         else if (viewer is { } p && IsInstanceValid(p))
         {
+            if (p.RidingAlong && p.StereoOwner != null) yield return (PlayerInput.RadioPanel, "Radio");
             if (p.Vehicle is { IsVehicle: true } vehicle)
             {
                 // the engine and "get out" are on the vehicle readout in the same corner
                 yield return (PlayerInput.CameraToggle, "Camera");
+                if (p.StereoOwner != null) yield return (PlayerInput.RadioPanel, "Radio");
                 if (vehicle is not Flyer && vehicle.CanHop)
                 {
                     yield return (PlayerInput.Trick, "Trick (in the air)");

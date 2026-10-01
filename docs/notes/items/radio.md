@@ -12,10 +12,27 @@
   The dedicated server never simulates (no ground): a radio whose thrower left is re-spawned by
   `ForgetOwner` server-owned and `Settled`. The **server** owns what plays (`State` synchronizer,
   authority 1: `CdId`, `StartedAt`, `Playing`, on-change and with the spawn for late joiners).
-- **E beside it** (`RadioManager.Reach` 2.5 m) opens `RadioUi`: CD list (shared, then "(mine)"), Play,
-  Stop, Remove (own CDs), Pick up (request/grant, one winner), volume slider, a link box to burn a CD
-  for everyone or "Just for me" (`docs/notes/audio/cd-beat.md`). `Nearest` in `TryInteract` runs
-  before the vehicle lookup; the prompt bar shows "Radio".
+- **E beside it** (`RadioManager.Reach` 2.5 m) opens `RadioUi`; `Nearest` in `TryInteract` runs
+  before the vehicle lookup; the prompt bar shows "Radio". Use opens it on the radio in the hand,
+  R on a car stereo (below).
+- **The panel is a music picker (#211)**, menu look (`UiTheme`/`UiKit`, glass 0.95, at most
+  700 x 660 px, re-fitted on resize): now playing (title, bpm/style, "CD n of m", elapsed / length
+  bar), previous / Play-Stop / next (round the list; on a station, the next station), the mode
+  button, a search box (words AND-matched on title and style, Enter plays the first hit, `/` or
+  Ctrl+F focuses it), rows as focusable buttons under "Shared CDs" / "My CDs" (bin on your own)
+  and, in a car, "Live stations". Playing row amber with a play mark. Arrows / D-pad move, Enter / A
+  play, Esc / B close. Pick up (world radio), volume, burn box with "Just for me"; the burn line maps
+  the burner's stages to a 3-step bar (Downloading / Analysing / Encoding), green when burnt, amber
+  on a refusal (`docs/notes/audio/cd-beat.md`).
+- **Modes (`RadioMode`, `RadioQueue`)**: Play once / Repeat this CD / Play the list (shared by id,
+  then mine by title) / Shuffle. Applied by **whoever owns the play state**: the server for a world
+  radio (`RadioBody.Mode`, a 5th property on the `State` synchronizer; `RadioManager.Queue`:
+  `SetMode` -> `RequestMode`, and `Ended` puts the next CD on when the 1 Hz housekeeping sees one
+  run out, so up to 1 s of gap; after a personal CD "the list" goes on with shared ones), and the
+  holder / driver for hand and car radios: `RadioUi.Changer` runs every frame, open or not, and
+  writes the next `RadioPlay` (the mode is its optional 4th field, `cd;at;len;mode`) starting where
+  the last one ended on the clock. A thrown radio starts on "once" (`RadioState` carries no mode);
+  a pick-up keeps it.
 - **Playback is clock-driven, not streamed.** `RadioSpeaker` (an `AudioStreamPlayer3D`, world or hand)
   fetches the Ogg once (`CdCache`, through `ChunkStreamer` as `AssetKind.Cd` — a CD is a file the
   client lacks, metered like a tile) and plays it from `ClockSync.ServerNow − StartedAt`, seeking
@@ -38,6 +55,26 @@
   (replicated int; prompt "Dance"/"Stop dancing"). The beat is never replicated: every peer calls
   `RadioBody.BeatAt(ClockSync.ServerNow)`, so figures on every screen step on the same beat, and a
   client still downloading the CD dances in silence. See `docs/notes/avatar/dance-moves.md`.
+- **Car stereo (#211):** `PlayerInput.RadioPanel` (R, keyboard only like U / P; shared with the travel picker: in a vehicle with a stereo R opens the radio and `ClientWorld` skips the picker, on foot R is the picker; F1 row, prompt
+  "Radio") opens the panel on `FootPlayer.StereoOwner`: yourself at the wheel of a car/truck/bus, or
+  the driver when riding along (read only: rows dimmed, "Only the driver changes the music"). A CD
+  is the driver's replicated `FootPlayer.CarCd` (a `RadioPlay`, OnChange, `FootPlayer.CarCd.cs`),
+  never together with `CarRadio`: picking either clears the other (U / P clear the CD too).
+  `ApplyRide` clears it, `CaptureVehicle` keeps it in `VehicleState.Cd` (`"cd"`, validated by
+  `RadioPlay.Decode`), so a parked car (`VehicleBody.Cd`, spawn data) plays on and getting back in
+  restores it. `WebRadio.Scan` hangs a `RadioSpeaker` "CarCd" (1 m up) on every source with a CD:
+  no relay, the boombox's clock-driven playback; not headless. A CD played "once" is taken out
+  when it ends; a parked car plays its CD to the end, nobody advances it. A car coasts while the
+  panel is open (it holds `UiFocus`, as chat does).
+- **No error flood when the link drops (#211):** `ClientWorld.GetLocalNetPlayer` (behind every
+  `LocalPlayer`, so `RadioManager.Players`, `WebRadio.Players`, `RadioUi`) and the per-frame
+  `IsServer` checks go through `Net/NetLink`; see `docs/notes/net/netlink-dead-peer.md`.
+- **Check:** `tools/carcdcheck.sh` (`CHUNKS=<dir>`, port 7811): a headless driver works the panel (a
+  station row, mode to "the list", CD A's row), A runs out and its changer puts on B, then it parks;
+  a windowed watcher must hear A and B from the car and B from the parked car within 0.1 s.
+  `<godot> --path . -- --carcdcheck shots` (offline, windowed) writes `test_output/radio_car.png`,
+  `radio_held.png` and `radio_world.png`. Both write the shared user dir (fixture CDs in `cds/`, a
+  radio in `inventory.json`): back those up.
 - **Check:** `tools/radiocheck.sh` (`CHUNKS=<dir>` in a worktree): server burns two fixture CDs of
   different lengths (`--cdfixture` twice), a headless thrower throws, plays A, dances, changes to B,
   picks up, plays A in the hand, burns and plays a personal CD (`--radiopersonal <wav>`); a windowed
