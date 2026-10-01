@@ -74,6 +74,7 @@ public static class TileRewriter
         public int MaxBytes;
         public string MaxBytesTile = "";
         public readonly PaintEmitter.Tally Paint = new();
+        public readonly RailRoadOverlap.Tally Rail = new();
 
         public string Format(int tiles)
         {
@@ -85,7 +86,7 @@ public static class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + Paint.Format(tiles);
+                """) + "\n" + Paint.Format(tiles) + "\n" + Rail.Format();
         }
     }
 
@@ -267,6 +268,7 @@ public static class TileRewriter
                 }
             }
 
+            var rails = new RailRoadOverlap(loaded, netStats.Rail);
             var output = new Dictionary<TileId, List<RoadSegment>>();
             var caps = new Dictionary<TileId, List<RoadJunction>>();
             var paint = new Dictionary<TileId, List<RoadPaint>>();
@@ -319,9 +321,24 @@ public static class TileRewriter
 
                 foreach (var (source, plan, write) in plans)
                 {
+                    // rails inside a carriageway (#124); halo rails too, their track zone may reach into the block
+                    var pieces = source.Segment.Class == RoadClass.Railway
+                        ? rails.Split(plan, source.SampleHeight, source.Segment, count: write) : null;
                     if (!write) continue;
                     if (!output.TryGetValue(source.Tile, out var list))
                         output[source.Tile] = list = new List<RoadSegment>();
+                    if (!paint.TryGetValue(source.Tile, out var painted)) paint[source.Tile] = painted = new List<RoadPaint>();
+                    if (pieces is not null)
+                    {
+                        foreach (var piece in pieces)
+                        {
+                            var flags = source.Segment.Attributes.Flags | (piece.Embedded ? RoadAttrFlags.Embedded : 0);
+                            list.Add(ToSegment(piece.Plan, source, source.Segment.Attributes with { Flags = flags }, piece.Height));
+                            written++;
+                            if (piece.Embedded) rails.EmitGrooves(piece, source.Segment, source.Tile, painted);
+                        }
+                        continue;
+                    }
 
                     var attributes = source.Segment.Attributes;
                     if (IsDividedCarRoad(source.Segment))
@@ -335,7 +352,6 @@ public static class TileRewriter
                     list.Add(segment);
                     written++;
 
-                    if (!paint.TryGetValue(source.Tile, out var painted)) paint[source.Tile] = painted = new List<RoadPaint>();
                     PaintEmitter.Emit(segment, source.Key is { } k ? k.FromM + source.AlongOf(plan[0]) : 0, painted);
                 }
 
@@ -370,6 +386,7 @@ public static class TileRewriter
                     Id = id, Segments = segments, Junctions = junctions, Flags = flags,
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                 };
+                rails.ClearTrackZones(tile.Paint, id);
                 var bytes = Encode(tile);
                 Count(netStats, tile, bytes);
 
@@ -698,18 +715,24 @@ public static class TileRewriter
         bool structure = (segment.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0;
         int layer = (segment.Flags & RoadFlags.Bridge) != 0 ? 1
             : (segment.Flags & RoadFlags.Tunnel) != 0 ? -1 : 0;
+        // Rails get their own layers (#124): a level crossing is not a junction. Noding it trimmed
+        // both lines back from a road-coloured cap and left the track with a gap there.
+        if (segment.Class == RoadClass.Railway) layer += RailLayer;
 
         net.AddLink(centreline, ProfileFor(segment, dividedScale), layer, source, allowSmoothing: !structure);
     }
 
-    private static RoadSegment ToSegment(List<Vec2> plan, Source source, RoadAttributes attributes)
+    /// <summary>Added to a rail link's layer so rails never node with roads (see <see cref="AddSegment"/>).</summary>
+    private const int RailLayer = 100;
+
+    private static RoadSegment ToSegment(List<Vec2> plan, Source source, RoadAttributes attributes, float[]? heights = null)
     {
         var id = source.Tile;
         var points = new float[plan.Count * 3];
         for (int i = 0; i < plan.Count; i++)
         {
             points[i * 3] = (float)(plan[i].X - id.MinE);
-            points[i * 3 + 1] = source.SampleHeight(plan[i]);
+            points[i * 3 + 1] = heights?[i] ?? source.SampleHeight(plan[i]);
             points[i * 3 + 2] = (float)(id.MaxN - plan[i].Y);
         }
 
@@ -777,7 +800,7 @@ public static class TileRewriter
         return new RoadJunction
         {
             Class = dominant,
-            Layer = (sbyte)junction.Layer,
+            Layer = (sbyte)(junction.Layer > RailLayer / 2 ? junction.Layer - RailLayer : junction.Layer),
             Vertices = vertices,
             Indices = indices,
         };
