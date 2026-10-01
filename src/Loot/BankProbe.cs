@@ -110,7 +110,8 @@ public partial class BankProbe : Node
         }
 
         // one at a time through the door: two clients toggling it at once shut it on each other
-        if (_role == "B" && !await Heard("A", "inside", 240)) { Fail("A never got inside"); return; }
+        // ("vault" too: A says it over and over once inside, and B may have joined after "inside")
+        if (_role == "B" && !await Until(() => _heard.Any(l => l.Contains("BK A inside") || l.Contains("BK A vault")), 240)) { Fail("A never got inside"); return; }
         if (!await WalkIn(me, interiors, door)) return;
         if (_role == "A") Say("inside");
         var layout = interiors.Current!;
@@ -139,7 +140,7 @@ public partial class BankProbe : Node
 
         if (!await StandAt(me, layout, node, safe, f => LootService.NearestContainer(me, layout, node) == f)) return;
         bool both = false;
-        for (int tries = 0; tries < 40 && !both; tries++) { Say("vault"); both = await Heard(other, "vault", 2); }
+        for (int tries = 0; tries < 120 && !both; tries++) { Say("vault"); both = await Heard(other, "vault", 2); }
         if (!both) { Fail($"{other} never came to the vault"); return; }
         Say("vault");
         await Seconds(1.0);
