@@ -16,17 +16,20 @@
 
   A title launch with `VrMode` saved on relaunches itself into VR once. The relaunch carries
   `--vr`, and a run with `--vr` never relaunches, so it cannot loop. If `--vr` was given but no
-  headset answered, the title shows "No VR headset" and turns `VrMode` off. `--vr` and `--xrsim`
+  headset answered, `VrMode` is saved off and the game stays flat. The title shows "No VR headset"
+  only when the player just chose VR (`AskVr` relaunches with `--vr-asked`, #244); a launch that
+  only followed the saved setting falls back silently. `--vr` and `--xrsim`
   are on `GameShell.UseTitle`'s list of harmless flags, so a VR launch lands on the title, which is
   in the headset too.
 - **What `XR/XrSession.TryStart` does.** It is called from `GameShell._Ready`, right after
   `PlayerInput.Install` and before any menu or camera exists, so the title is in VR. The rig is
   added to `/root/Main` deferred. It turns the client into a VR client only if OpenXR actually came up:
-  - `UseXR` on the root viewport
+  - the headset renders its own `Headset` SubViewport with `UseXR` (`XrRig`); the root viewport
+    stays the window's, for the monitor view
   - vsync off
-  - render scale 1 (the runtime picks the eye resolution)
   - 90 Hz if the runtime offers it
-  - foveation requested (only standalone runtimes honour it)
+  - the headset's MSAA, render scale and VRS foveation come from the VR settings (`air-link`)
+  - `xr_smooth` on: no PS1 vertex snap or dither (`air-link`)
 
   `DisplaySettings` leaves scale and vsync alone while `XrSession.Active`.
 - **No headset connected.** The Oculus runtime answers `XR_ERROR_FORM_FACTOR_UNAVAILABLE`, and

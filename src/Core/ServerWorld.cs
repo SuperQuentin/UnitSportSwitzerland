@@ -20,6 +20,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
+    private Items.DroppedItems? _dropped;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
@@ -104,6 +105,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // radios thrown into the world, and the CDs they play; the clock everyone plays them by
         _radios = Items.RadioManager.Create(this);
         _radios.PlayerPositions = _vehicles.PlayerPositions;
+        // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
+        _dropped = Items.DroppedItems.Create(this);
+        _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
         Net.ClockSync.Create(this);
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
@@ -142,9 +146,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(race);
         _chat.Race = race;
 
-        // claimed cash, kept per player name on this server
+        // deposited cash, kept per player name on this server
         var bank = Items.Bank.Create(this, null, server: true);
         bank.NameOf = _chat.NameOfPeer;
+        // money moves only at a bank's teller desk (#213)
+        bank.InBank = peer => Loot.LootService.Instance?.InBank(peer) ?? Task.FromResult(false);
 
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here
@@ -317,6 +323,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
+        _dropped?.ForgetOwner(id);
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);

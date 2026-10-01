@@ -28,7 +28,12 @@
   - The tallest tower that fits gets a switchback stair, 3.0 m (or 2.7 m) storeys at 47° or less,
     up to a two-storey `Belfry` with a bell.
   - Nave furniture: chancel `Dais` (collision ramp at its front), altar lifted onto it, cross,
-    lectern, pews facing the altar.
+    lectern, pews facing the altar, and the pastor rat (`FurnitureType.PastorRat`, the "Dorime" rat,
+    box-built in `InteriorMeshBuilder`) beside the altar, or at the step if the dais has no room (#241).
+    Chapels planned by the generic Sacral rules get one too.
+    The pew row nearest the altar is a `FrontPew`: chibi people in cat-ear headbands with pixel
+    kawaii faces (6 eye and 5 mouth maps, one 17x17 grid), built in `InteriorMeshBuilder.Congregation.cs`,
+    varied by a hash of the pew's position so every peer builds the same people.
 - **Stored plans**: `InteriorLayout.Group` holds `BuildingGroup.Fingerprint`, and `Matches`
   compares it. Bump `InteriorGenerator.ChurchRules` to re-plan churches only.
 - **Exterior** (`BuildingMeshBuilder`): every member is dressed as Sacral. The nave gets one tall

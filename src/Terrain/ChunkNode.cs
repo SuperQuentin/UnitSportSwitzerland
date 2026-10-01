@@ -33,16 +33,31 @@ public partial class ChunkNode : Node3D
         return Finish(arrays, material);
     }
 
-    public static ArrayMesh ToArrayMesh(RoadMeshBuilder.MeshData data, Material material)
+    /// <param name="paint">The v3 paint layer (<see cref="RoadPaintBuilder"/>), a second surface.</param>
+    public static ArrayMesh ToArrayMesh(RoadMeshBuilder.MeshData data, Material material,
+        RoadMeshBuilder.MeshData? paint = null)
     {
-        using var arrays = new Godot.Collections.Array();
+        using var main = RoadArrays(data);
+        var mesh = Finish(main, material);
+        if (paint != null)
+        {
+            using var arrays = RoadArrays(paint);
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            mesh.SurfaceSetMaterial(1, material);
+        }
+        return mesh;
+    }
+
+    private static Godot.Collections.Array RoadArrays(RoadMeshBuilder.MeshData data)
+    {
+        var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
         arrays[(int)Mesh.ArrayType.TexUV] = data.Uvs;
         arrays[(int)Mesh.ArrayType.TexUV2] = data.Uv2s;
         arrays[(int)Mesh.ArrayType.Index] = data.Indices;
-        return Finish(arrays, material);
+        return arrays;
     }
 
     public static ArrayMesh ToArrayMesh(BuildingMeshBuilder.MeshData data, Material material)
@@ -270,7 +285,9 @@ public partial class ChunkNode : Node3D
     /// computed: assigning a buffer makes the RenderingServer walk every instance for an AABB,
     /// 16 ms for a 60k-tree tile on the main thread, unless a custom one is already set.
     /// </summary>
-    public static TreeMeshes BuildTreeMeshes(TreeBuffers trees, Material material, Aabb bounds)
+    /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    public static TreeMeshes BuildTreeMeshes(TreeBuffers trees, Material material, Aabb bounds,
+        Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
         var conifers = Make(trees.Conifers, trees.ConiferCount, ConeMesh(material), bounds);
         var broadleaves = Make(trees.Broadleaves, trees.BroadleafCount, CrownMesh(material), bounds);

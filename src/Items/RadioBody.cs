@@ -138,6 +138,7 @@ public partial class RadioBody : RigidBody3D
             AddChild(new MeshInstance3D { Name = "Visual", Mesh = Mesh(), MaterialOverride = ItemDefs.Material });
             _speaker = new RadioSpeaker { Name = "Speaker" };
             AddChild(_speaker);
+            AddChild(new ImpactFx { Name = "Impact", Size = BodyW });
         }
     }
 
