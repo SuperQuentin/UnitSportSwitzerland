@@ -89,6 +89,8 @@ public sealed class HeavyTrain
         public readonly float[] AxleZ, StaticLoad, Load;
         /// <summary>Per axle, last step: forward speed at the axle (for the wheels' spin) and how hard it slid, 0..1.</summary>
         public readonly float[] AxleSpeed, AxleSlide;
+        /// <summary>Per axle, last substep: side force, N, + left, and slip angle, rad — a steering wheel's feel.</summary>
+        public readonly float[] AxleFy, AxleAlpha;
         public Vector2 P, V;
         public float Psi, W;
         /// <summary>Acceleration of the centre of mass in the body's frame, last step (+x forward, +y left), m/s².</summary>
@@ -109,6 +111,8 @@ public sealed class HeavyTrain
             Load = new float[spec.Axles.Length];
             AxleSpeed = new float[spec.Axles.Length];
             AxleSlide = new float[spec.Axles.Length];
+            AxleFy = new float[spec.Axles.Length];
+            AxleAlpha = new float[spec.Axles.Length];
             SetPayload(payload);
         }
 
@@ -392,6 +396,8 @@ public sealed class HeavyTrain
                     float stopY = Mathf.Abs(vy) * m / h * 0.5f;
                     if (Mathf.Abs(fy) > stopY) fy = -Mathf.Sign(vy) * stopY;
                     b.AxleSpeed[i] = vx;
+                    b.AxleFy[i] = fy;
+                    b.AxleAlpha[i] = alpha;
                     b.AxleSlide[i] = Mathf.Clamp((Mathf.Abs(alpha) - 0.12f) / 0.2f, 0f, 1f) * Mathf.Clamp(Mathf.Abs(vx) / 4f, 0f, 1f);
                     slide = Mathf.Max(slide, b.AxleSlide[i]);
 

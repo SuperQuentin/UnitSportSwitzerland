@@ -253,6 +253,8 @@ public sealed class Truck : Rideable, IEngined
     public override float MaxHealth => 400f;
     /// <summary>Lock to lock through the cab's ratio: ~1800° for a 0.78 rad box, what a truck wheel is set to.</summary>
     public override float WheelLock => 2f * Spec.MaxSteer * HeavyCockpit.SteerRatio;
+    public override Core.WheelFeel Feel => _feel;
+    private Core.WheelFeel _feel;
 
     public override Vector3 FirstPersonEye
     {
@@ -506,6 +508,25 @@ public sealed class Truck : Rideable, IEngined
             var b = Train.Bodies[k];
             WheelSpin[k] += b.V.Dot(b.Forward) / WheelRadius * dt;
         }
+
+        // the wheel's feel: the front (fully steered) axles of the tractor or the bus's first section
+        float fy = 0f, alpha = 0f, peak = 0f;
+        int steered = 0;
+        for (int i = 0; i < b0.Spec.Axles.Length; i++)
+        {
+            if (b0.Spec.Axles[i].Steer < 0.99f) continue;
+            fy += b0.AxleFy[i];
+            alpha += b0.AxleAlpha[i];
+            peak += b0.StaticLoad[i] * Spec.Grip;
+            steered++;
+        }
+        // big tyres on stiff springs pass less of the road than a car's
+        var (road, roadHz) = Core.WheelFeel.RoadFrom(ground.OnFloor ? 0.7f * CarSetups.Roughness(ground.Surface) : 0f, u2);
+        _feel = new Core.WheelFeel(
+            ground.OnFloor && steered > 0 ? Core.WheelFeel.Aligning(fy, alpha / steered, peak, u2) : 0f,
+            road, roadHz,
+            // assisted, but six tonnes on the front axle still scrub when turned on the spot
+            ground.OnFloor ? Core.WheelFeel.WeightFrom(0.45f, u2) : 0f);
 
         // a bus comes up off its knees when it pulls away
         if (Kneeling && motion.Speed > 1.5f) Kneeling = false;

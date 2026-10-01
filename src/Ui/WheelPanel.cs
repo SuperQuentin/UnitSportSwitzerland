@@ -79,6 +79,8 @@ public partial class WheelPanel : VBoxContainer
         AddChild(UiKit.Section("Buttons"));
         foreach (var (label, action) in ButtonTargets) ButtonRow(label, action);
 
+        ForceRows();
+
         var reset = UiKit.Button("Reset to the device's preset");
         reset.Pressed += () =>
         {
@@ -192,6 +194,56 @@ public partial class WheelPanel : VBoxContainer
             info.Text = bound.Count == 0 ? "none" : string.Join(", ", bound.Select(ButtonName)) + (lit ? "  ●" : "");
         });
     }
+
+    /// <summary>Force feedback: on/off, the gains, the device's sense, and a test push each way.</summary>
+    private void ForceRows()
+    {
+        AddChild(UiKit.Section("Force feedback"));
+        var status = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim, wrap: true);
+        AddChild(status);
+        UiKit.ToggleRow(this, "Force feedback", W.ForceFeedback, on => W.ForceFeedback = on);
+        UiKit.SliderRow(this, "Strength", 0, 1, 0.05, W.FfbStrength, v => W.FfbStrength = (float)v, Percent,
+            "Everything at once: lower on a strong direct-drive wheel");
+        UiKit.SliderRow(this, "Aligning torque", 0, 1.5, 0.05, W.FfbAligning, v => W.FfbAligning = (float)v, Percent,
+            "The tyres pulling the wheel straight; light when the fronts slide");
+        UiKit.SliderRow(this, "Road", 0, 1, 0.05, W.FfbRoad, v => W.FfbRoad = (float)v, Percent, "Gravel, grass, bumps");
+        UiKit.SliderRow(this, "Knocks", 0, 1, 0.05, W.FfbKnocks, v => W.FfbKnocks = (float)v, Percent, "Crashes and hard landings");
+        UiKit.SliderRow(this, "Weight", 0, 1, 0.05, W.FfbWeight, v => W.FfbWeight = (float)v, Percent,
+            "Damping, and the steering's weight when parked");
+        UiKit.ToggleRow(this, "Invert force", W.FfbInvert, on => W.FfbInvert = on,
+            "If \"Push right\" turns your wheel left");
+
+        var row = UiKit.HBox();
+        var name = UiKit.Text("Force now");
+        name.CustomMinimumSize = new Vector2(150, 0);
+        row.AddChild(name);
+        var bar = new ProgressBar
+        {
+            MinValue = -1, MaxValue = 1, ShowPercentage = false,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(0, 14),
+            SizeFlagsVertical = SizeFlags.ShrinkCenter,
+        };
+        row.AddChild(bar);
+        var left = UiKit.Button("Push left");
+        left.Pressed += () => SteeringWheel.Test(-0.5f, 0.6f);
+        row.AddChild(left);
+        var right = UiKit.Button("Push right");
+        right.Pressed += () => SteeringWheel.Test(0.5f, 0.6f);
+        row.AddChild(right);
+        AddChild(row);
+
+        _refresh.Add(() =>
+        {
+            status.Text = SteeringWheel.HasForceFeedback ? "Forces on: + pushes right"
+                : !W.ForceFeedback ? "Off"
+                : SteeringWheel.DeviceName == null ? "No wheel in use"
+                : "This wheel has no force feedback SDL can drive";
+            float c = SteeringWheel.LastForces.Constant;
+            bar.Value = float.IsNaN(c) ? 0 : (W.FfbInvert ? -c : c);
+        });
+    }
+
+    private static string Percent(double v) => $"{v * 100:F0} %";
 
     private static string ButtonName(int b)
     {

@@ -159,6 +159,8 @@ public partial class PlayerFeel : Node3D
             }
             Play(SfxSynth.ImpactBank, Mathf.Clamp(lost * 0.12f, 0.25f, 1f), 1f);
             AddTrauma(Mathf.Clamp(lost * 0.12f, 0.15f, 0.8f));
+            // the same knock through a steering wheel's rim (nothing unless one is driving this)
+            SteeringWheel.Knock(Mathf.Clamp(lost / 15f, 0.25f, 1f));
         };
     }
 
@@ -167,6 +169,9 @@ public partial class PlayerFeel : Node3D
         float dt = (float)delta;
         bool viewing = _player.IsViewing;
         _screen.Visible = viewing;
+        // a steering wheel's forces (#68): what this vehicle's steering feels, while it is on screen
+        if (viewing && _player.Vehicle is { WheelLock: > 0f } wheeled)
+            SteeringWheel.Drive(wheeled.Feel, wheeled.WheelLock);
         if (!viewing)
         {
             // someone else's camera is on screen (the fly camera): nothing of this belongs there
@@ -456,6 +461,7 @@ public partial class PlayerFeel : Node3D
     {
         float hard = Mathf.Clamp((fall - 2f) / 9f, 0f, 1f);
         Play(Surfaces.Landing(SurfaceUnderfoot()), 0.25f + 0.75f * hard, 1.15f - 0.35f * hard);
+        SteeringWheel.Knock(hard * 0.7f);
         AddTrauma(hard * 0.65f);
 
         // the FOV dips and springs back: FootPlayer eases its FOV every frame, so a nudge here

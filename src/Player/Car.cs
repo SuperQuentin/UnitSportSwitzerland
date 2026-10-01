@@ -73,6 +73,8 @@ public sealed record CarSpec
     /// over the lock. What the cockpit's wheel turns and what a real steering wheel steers through.
     /// </summary>
     public float SteerRatio => LockTurns * Mathf.Pi / MaxSteer;
+    /// <summary>Assisted steering: light to turn on the spot. Off for the unassisted racks (heavy when parked).</summary>
+    public bool PowerSteering { get; init; } = true;
     /// <summary>Drag area Cd·A, m².</summary>
     public float DragArea { get; init; } = 0.65f;
 
@@ -200,6 +202,8 @@ public sealed class Car : Rideable, IEngined
     public override bool CanHop => false;
     public override float MaxHealth => 160f;
     public override float WheelLock => Spec.LockTurns * Mathf.Tau;
+    public override Core.WheelFeel Feel => _feel;
+    private Core.WheelFeel _feel;
 
     // the driver's own eye, in the visual's frame (faces −Z, so +X is the driver's right): the
     // seat is derived from the body (CarCabin), right-hand drive — these are Japanese-market cars
@@ -410,6 +414,7 @@ public sealed class Car : Rideable, IEngined
         float slideAccum = 0f;
         float h = dt / Substeps;
 
+        float feelFy = 0f, feelAlpha = 0f, feelU = 0f;
         for (int i = 0; i < Substeps; i++)
         {
             float m = s.Mass, a = s.FrontAxle, b = s.RearAxle, L = s.Wheelbase;
@@ -497,6 +502,7 @@ public sealed class Car : Rideable, IEngined
                     * Mathf.Clamp((Mathf.Abs(slipNow) - 0.25f) / 0.2f, 0f, 1f);
             float fyF = -latF * Mathf.Sin(tyreC * Mathf.Atan(TyreB * alphaF));
             float fyR = -latR * Mathf.Sin(tyreC * Mathf.Atan(TyreB * alphaR));
+            (feelFy, feelAlpha, feelU) = (fyF, alphaF, u);
             if (TyreWearOn)
             {
                 // sliding power: side force times how fast the contact patch slides sideways, plus
@@ -562,6 +568,15 @@ public sealed class Car : Rideable, IEngined
         }
 
         TyreSlide = ground.OnFloor ? Mathf.Clamp(slideAccum / Substeps, 0f, 1f) * Mathf.Clamp(Mathf.Abs(u) / 4f, 0f, 1f) : 0f;
+
+        // the wheel's feel: the front axle against what it gives at its peak on tarmac (a car on ice
+        // goes light), the road's roughness, and the weight of an unassisted rack at a standstill
+        float frontPeak = s.Mass * Gravity * s.RearAxle / s.Wheelbase * s.Grip * Tyres.Grip;
+        var (road, roadHz) = Core.WheelFeel.RoadFrom(ground.OnFloor ? CarSetups.Roughness(ground.Surface) * Mathf.Sqrt(Mathf.Max(s.Stiffness, 0.1f)) : 0f, u);
+        _feel = new Core.WheelFeel(
+            ground.OnFloor ? Core.WheelFeel.Aligning(feelFy, feelAlpha, frontPeak, feelU) : 0f,
+            road, roadHz,
+            ground.OnFloor ? Core.WheelFeel.WeightFrom(s.PowerSteering ? 0.25f : 0.8f, u) : 0f);
         WheelSpin += u / WheelRadius * dt;
 
         motion.Speed = Mathf.Sqrt(u * u + w * w);

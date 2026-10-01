@@ -1,0 +1,268 @@
+using Godot;
+using SDL;
+using static SDL.SDL3;
+
+namespace UnitSport.Core;
+
+/// <summary>
+/// Force feedback (issue #68, part 2), through SDL3 haptics on the claimed wheel. Godot only does
+/// joypad rumble, so the forces are SDL effects played on the wheel's own controller:
+///
+/// <list type="bullet">
+/// <item>a <b>constant</b> force, updated every frame: the vehicle's self-aligning torque
+/// (<see cref="WheelFeel.Torque"/>) plus the <b>soft lock</b> past the vehicle's lock;</item>
+/// <item>a <b>sine</b> for the road (<see cref="WheelFeel.Road"/>), and a short one for knocks
+/// (<see cref="Knock"/>: crashes, hard landings);</item>
+/// <item><b>damper</b> and <b>friction</b> conditions, which the wheel runs itself at its own rate:
+/// the weight of the steering at a standstill (<see cref="WheelFeel.Weight"/>).</item>
+/// </list>
+///
+/// <para>
+/// The game drives it from the local player's feel layer once a frame (<see cref="Drive"/>); a feel
+/// older than <see cref="StaleSeconds"/> (a menu, on foot, someone else's camera) leaves only a light
+/// damper. The wheel's own autocentre spring is switched off where it can be, or it would fight the
+/// aligning torque. Signs: + pushes the wheel right; <see cref="WheelSettings.FfbInvert"/> flips the
+/// device's sense if it reads the other way.
+/// </para>
+/// </summary>
+public partial class SteeringWheel
+{
+    /// <summary>A feel this old means nobody is driving with this wheel any more.</summary>
+    public const float StaleSeconds = 0.25f;
+    /// <summary>Past the lock, the soft lock is at full force within this much more rotation, radians (8°).</summary>
+    public const float SoftLockRamp = 0.14f;
+
+    /// <summary>The claimed wheel has force feedback and it is open.</summary>
+    public static bool HasForceFeedback => _instance is { _hapticOpen: true };
+
+    /// <summary>What the force-feedback panel shows: the forces sent last frame, −1..1 / 0..1.</summary>
+    public static (float Constant, float Road, float Damper, float Friction) LastForces =>
+        _instance is { } w ? (w._sentConstant, w._sentRoad, w._sentDamper, w._sentFriction) : default;
+
+    private unsafe SDL_Haptic* _haptic;
+    private bool _hapticSdl, _hapticOpen;
+    private uint _features;
+    private SDL_HapticEffectID _constant = (SDL_HapticEffectID)(-1), _road = (SDL_HapticEffectID)(-1),
+        _knock = (SDL_HapticEffectID)(-1), _damper = (SDL_HapticEffectID)(-1), _friction = (SDL_HapticEffectID)(-1);
+
+    private WheelFeel _feel;
+    private float _lock;
+    private double _feelAge = double.MaxValue;
+    private float _testLevel, _testTimer;
+    private float _sentConstant = float.NaN, _sentRoad = float.NaN, _sentRoadHz, _sentDamper = float.NaN, _sentFriction = float.NaN;
+
+    /// <summary>
+    /// The vehicle being driven with this wheel this frame: what its steering feels and how far its
+    /// wheel turns lock to lock, radians (the soft lock).
+    /// </summary>
+    public static void Drive(in WheelFeel feel, float lockToLock)
+    {
+        if (_instance is not { } w) return;
+        w._feel = feel;
+        w._lock = lockToLock;
+        w._feelAge = 0;
+    }
+
+    /// <summary>A knock through the rim, 0..1: a crash, a kerb, a hard landing.</summary>
+    public static unsafe void Knock(float strength)
+    {
+        if (_instance is not { _hapticOpen: true } w || (int)w._knock < 0 || w._feelAge > StaleSeconds) return;
+        float level = Math.Clamp(strength * Settings.FfbKnocks * Settings.FfbStrength, 0f, 1f);
+        if (level < 0.02f) return;
+        var e = Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, 70, level * (Settings.FfbInvert ? -1f : 1f), 160);
+        e.periodic.fade_length = 120;
+        SDL_UpdateHapticEffect(w._haptic, w._knock, &e);
+        SDL_RunHapticEffect(w._haptic, w._knock, 1);
+    }
+
+    /// <summary>The settings panel's test: push the wheel one way, + right, for a moment.</summary>
+    public static void Test(float level, float seconds)
+    {
+        if (_instance is not { } w) return;
+        (w._testLevel, w._testTimer) = (Math.Clamp(level, -1f, 1f), seconds);
+    }
+
+    /// <summary>
+    /// The soft lock's push, + right: none inside <paramref name="halfLock"/> (radians of wheel either
+    /// side of centre), then back toward centre, full within <see cref="SoftLockRamp"/> more.
+    /// </summary>
+    public static float SoftLock(float angle, float halfLock)
+    {
+        float excess = Mathf.Abs(angle) - halfLock;
+        return excess <= 0f ? 0f : -Mathf.Sign(angle) * Mathf.Clamp(excess / SoftLockRamp, 0f, 1f);
+    }
+
+    /// <summary>
+    /// Where the soft lock starts on the real wheel, radians either side: the vehicle's lock when the
+    /// wheel's range covers it, else nowhere — a stretched range reaches the lock at the wheel's own stop.
+    /// </summary>
+    public static float SoftLockAt(float lockToLock, float range) =>
+        lockToLock > 0f && range > lockToLock + 0.01f ? lockToLock * 0.5f : float.PositiveInfinity;
+
+    /// <summary>The forces for one frame, as the constant level and the three other channels.</summary>
+    public static (float Constant, float Road, float Damper, float Friction) Compose(
+        in WheelFeel feel, float lockToLock, float angle, WheelSettings s)
+    {
+        float range = Mathf.DegToRad(s.RangeDeg);
+        float constant = feel.Torque * s.FfbAligning + SoftLock(angle, SoftLockAt(lockToLock, range));
+        float master = s.FfbStrength;
+        return (Math.Clamp(constant, -1f, 1f) * master,
+            Math.Clamp(feel.Road * s.FfbRoad, 0f, 1f) * master,
+            // a little damping always, so the rim does not oscillate on the aligning torque; more parked
+            Math.Clamp((0.12f + 0.5f * feel.Weight) * s.FfbWeight, 0f, 1f) * master,
+            Math.Clamp(feel.Weight * s.FfbWeight, 0f, 1f) * master);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // per frame
+    // ---------------------------------------------------------------------------------------
+
+    private unsafe void UpdateForces(float dt)
+    {
+        var s = Settings;
+        bool want = s.ForceFeedback && _claimed;
+        if (want && !_hapticOpen && _hapticSdl && !_hapticFailed) OpenHaptic();
+        else if (!want && _hapticOpen) CloseHaptic();
+        if (!_hapticOpen) return;
+
+        _feelAge += dt;
+        float constant, road, damper, friction;
+        float hz = _feel.RoadHz;
+        if (_testTimer > 0f)
+        {
+            _testTimer -= dt;
+            (constant, road, damper, friction) = (_testLevel * s.FfbStrength, 0f, 0f, 0f);
+        }
+        else if (_feelAge <= StaleSeconds && !Assigning)
+            (constant, road, damper, friction) = Compose(_feel, _lock, Angle, s);
+        else
+            (constant, road, damper, friction) = (0f, 0f, 0.1f * s.FfbStrength, 0f);
+        if (s.FfbInvert) constant = -constant;
+
+        if ((int)_constant >= 0 && (MathF.Abs(constant - _sentConstant) > 1f / 512f || float.IsNaN(_sentConstant)))
+        {
+            _sentConstant = constant;
+            var e = new SDL_HapticEffect();
+            e.constant.type = SDL_HapticEffectType.SDL_HAPTIC_CONSTANT;
+            e.constant.direction.type = SDL_HapticDirectionType.SDL_HAPTIC_STEERING_AXIS;
+            e.constant.length = SDL_HAPTIC_INFINITY;
+            e.constant.level = Level(constant);
+            SDL_UpdateHapticEffect(_haptic, _constant, &e);
+        }
+        if ((int)_road >= 0 && (MathF.Abs(road - _sentRoad) > 0.01f || MathF.Abs(hz - _sentRoadHz) > 1f || float.IsNaN(_sentRoad)))
+        {
+            (_sentRoad, _sentRoadHz) = (road, hz);
+            var e = Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, (ushort)Math.Clamp(1000f / Math.Max(hz, 1f), 20f, 500f), road, SDL_HAPTIC_INFINITY);
+            SDL_UpdateHapticEffect(_haptic, _road, &e);
+        }
+        if ((int)_damper >= 0 && (MathF.Abs(damper - _sentDamper) > 0.01f || float.IsNaN(_sentDamper)))
+        {
+            _sentDamper = damper;
+            var e = Condition(SDL_HapticEffectType.SDL_HAPTIC_DAMPER, damper);
+            SDL_UpdateHapticEffect(_haptic, _damper, &e);
+        }
+        if ((int)_friction >= 0 && (MathF.Abs(friction - _sentFriction) > 0.01f || float.IsNaN(_sentFriction)))
+        {
+            _sentFriction = friction;
+            var e = Condition(SDL_HapticEffectType.SDL_HAPTIC_FRICTION, friction);
+            SDL_UpdateHapticEffect(_haptic, _friction, &e);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // the device
+    // ---------------------------------------------------------------------------------------
+
+    private bool _hapticFailed;
+
+    private unsafe void OpenHaptic()
+    {
+        if (_joy == null || !SDL_IsJoystickHaptic(_joy)) { _hapticFailed = true; return; }
+        _haptic = SDL_OpenHapticFromJoystick(_joy);
+        if (_haptic == null)
+        {
+            GD.PushWarning($"[wheel] force feedback: could not open {_name}: {SDL_GetError()}");
+            _hapticFailed = true;
+            return;
+        }
+        _hapticOpen = true;
+        _features = SDL_GetHapticFeatures(_haptic);
+        if ((_features & SDL_HAPTIC_GAIN) != 0) SDL_SetHapticGain(_haptic, 100);
+        // the wheel's own centring spring would fight the aligning torque
+        if ((_features & SDL_HAPTIC_AUTOCENTER) != 0) SDL_SetHapticAutocenter(_haptic, 0);
+
+        _constant = Start(SDL_HAPTIC_CONSTANT, () =>
+        {
+            var e = new SDL_HapticEffect();
+            e.constant.type = SDL_HapticEffectType.SDL_HAPTIC_CONSTANT;
+            e.constant.direction.type = SDL_HapticDirectionType.SDL_HAPTIC_STEERING_AXIS;
+            e.constant.length = SDL_HAPTIC_INFINITY;
+            return e;
+        }, run: true);
+        _road = Start(SDL_HAPTIC_SINE, () => Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, 50, 0f, SDL_HAPTIC_INFINITY), run: true);
+        _knock = Start(SDL_HAPTIC_SINE, () => Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, 70, 0f, 160), run: false);
+        _damper = Start(SDL_HAPTIC_DAMPER, () => Condition(SDL_HapticEffectType.SDL_HAPTIC_DAMPER, 0f), run: true);
+        _friction = Start(SDL_HAPTIC_FRICTION, () => Condition(SDL_HapticEffectType.SDL_HAPTIC_FRICTION, 0f), run: true);
+        _sentConstant = _sentRoad = _sentDamper = _sentFriction = float.NaN;
+        GD.Print($"[wheel] force feedback on {SDL_GetHapticName(_haptic)}: features 0x{_features:x}, "
+            + $"constant {(int)_constant >= 0}, road {(int)_road >= 0}, knock {(int)_knock >= 0}, "
+            + $"damper {(int)_damper >= 0}, friction {(int)_friction >= 0}");
+    }
+
+    /// <summary>Creates (and with <paramref name="run"/>, starts) an effect the device supports; −1 otherwise.</summary>
+    private unsafe SDL_HapticEffectID Start(uint feature, Func<SDL_HapticEffect> make, bool run)
+    {
+        if ((_features & feature) == 0) return (SDL_HapticEffectID)(-1);
+        var e = make();
+        var id = SDL_CreateHapticEffect(_haptic, &e);
+        if ((int)id < 0)
+        {
+            GD.PushWarning($"[wheel] force feedback: effect 0x{feature:x} refused: {SDL_GetError()}");
+            return id;
+        }
+        if (run && !SDL_RunHapticEffect(_haptic, id, SDL_HAPTIC_INFINITY))
+            GD.PushWarning($"[wheel] force feedback: effect 0x{feature:x} would not run: {SDL_GetError()}");
+        return id;
+    }
+
+    private unsafe void CloseHaptic()
+    {
+        if (_haptic != null)
+        {
+            SDL_StopHapticEffects(_haptic);
+            SDL_CloseHaptic(_haptic);
+        }
+        _haptic = null;
+        _hapticOpen = false;
+        _constant = _road = _knock = _damper = _friction = (SDL_HapticEffectID)(-1);
+        _sentConstant = _sentRoad = _sentDamper = _sentFriction = float.NaN;
+    }
+
+    private static short Level(float v) => (short)Math.Clamp(MathF.Round(v * 32767f), -32767f, 32767f);
+
+    private static SDL_HapticEffect Periodic(SDL_HapticEffectType wave, ushort periodMs, float magnitude, uint length)
+    {
+        var e = new SDL_HapticEffect();
+        e.periodic.type = wave;
+        e.periodic.direction.type = SDL_HapticDirectionType.SDL_HAPTIC_STEERING_AXIS;
+        e.periodic.length = length;
+        e.periodic.period = periodMs;
+        e.periodic.magnitude = Level(magnitude);
+        return e;
+    }
+
+    /// <summary>A damper or friction on the steering axis, the same both ways, at <paramref name="strength"/> 0..1.</summary>
+    private static SDL_HapticEffect Condition(SDL_HapticEffectType kind, float strength)
+    {
+        var e = new SDL_HapticEffect();
+        e.condition.type = kind;
+        e.condition.direction.type = SDL_HapticDirectionType.SDL_HAPTIC_STEERING_AXIS;
+        e.condition.length = SDL_HAPTIC_INFINITY;
+        short coeff = Level(Math.Clamp(strength, 0f, 1f));
+        e.condition.right_coeff[0] = coeff;
+        e.condition.left_coeff[0] = coeff;
+        e.condition.right_sat[0] = 0xFFFF;
+        e.condition.left_sat[0] = 0xFFFF;
+        return e;
+    }
+}

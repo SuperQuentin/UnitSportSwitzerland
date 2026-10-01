@@ -221,6 +221,9 @@ public abstract class Rideable
     /// </summary>
     public virtual float WheelLock => 0f;
 
+    /// <summary>What its steering wheel feels after the last step, for force feedback; nothing by default.</summary>
+    public virtual Core.WheelFeel Feel => default;
+
     /// <summary>The mesh as it stands with nobody on it (a bike without its rider).</summary>
     public virtual Node3D BuildParkedVisual(int riderIndex) => BuildVisual(riderIndex);
 

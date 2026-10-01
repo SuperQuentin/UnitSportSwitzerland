@@ -115,9 +115,74 @@ public partial class WheelProbe : Node
         PlayerInput.SetIgnoredJoypads(Array.Empty<int>());
         Expect(before > 0 && PadEvents(PlayerInput.MoveLeft, -1) == before, $"pad bindings restored ({before} before)");
 
+        failures += Forces(Expect);
         failures += SdlLoads() ? 0 : 1;
         GD.Print(failures == 0 ? "[wheel] RESULT: PASS" : $"[wheel] RESULT: FAILED ({failures})");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>Force feedback's numbers: the vehicles' feel and the soft lock. Failures go through <paramref name="expect"/>.</summary>
+    private static int Forces(Action<bool, string> expect)
+    {
+        const float Dt = 1f / 60f;
+        // a car held in a steady right-hand bend; returns its last feel
+        WheelFeel Hold(CarSpec spec, float wheelDeg, float speed, Audio.Surface surface = Audio.Surface.Asphalt, float seconds = 2f)
+        {
+            var car = new Car(spec);
+            var m = new RideMotion { Speed = speed };
+            for (float t = 0; t < seconds; t += Dt)
+            {
+                m.Speed = speed;   // held at speed: the bend, not the drag, is measured
+                car.Step(new RideInput(0.3f, 0f, 0f, false, WheelAngle: Mathf.DegToRad(wheelDeg)), new RideGround(true, 0f, surface), Dt, ref m);
+            }
+            return car.Feel;
+        }
+
+        var profileWas = GameSettings.Current.RideProfile;
+        GameSettings.Current.RideProfile = RideProfile.Sim;
+        foreach (var spec in CarCatalog.All)
+        {
+            var straight = Hold(spec, 0f, 20f);
+            expect(Mathf.Abs(straight.Torque) < 0.02f, $"{spec.Label}: straight ahead the wheel pulls {straight.Torque:F3}");
+            var bend = Hold(spec, 30f, 20f);
+            expect(bend.Torque < -0.05f, $"{spec.Label}: steered right the wheel should pull back left, got {bend.Torque:F3}");
+            var ice = Hold(spec, 30f, 20f, Audio.Surface.Ice);
+            expect(Mathf.Abs(ice.Torque) < Mathf.Abs(bend.Torque), $"{spec.Label}: ice {ice.Torque:F3} should be lighter than tarmac {bend.Torque:F3}");
+        }
+        var ae86 = CarCatalog.All[0];
+        var gravel = Hold(ae86, 0f, 20f, Audio.Surface.Gravel);
+        var tarmac = Hold(ae86, 0f, 20f);
+        expect(gravel.Road > tarmac.Road + 0.1f && tarmac.Road > 0f, $"road: gravel {gravel.Road:F2} against tarmac {tarmac.Road:F2}");
+        var parked86 = Hold(ae86, 0f, 0f, seconds: 0.1f);
+        var parkedFd = Hold(CarCatalog.All[1], 0f, 0f, seconds: 0.1f);
+        expect(parked86.Weight > parkedFd.Weight && parkedFd.Weight > 0f, $"parked: unassisted AE86 {parked86.Weight:F2}, FD3S {parkedFd.Weight:F2}");
+        GD.Print($"[wheel] AE86 at 72 km/h, 30° right: torque {Hold(ae86, 30f, 20f).Torque:F2}; on ice {Hold(ae86, 30f, 20f, Audio.Surface.Ice).Torque:F2}; "
+            + $"road gravel {gravel.Road:F2} / tarmac {tarmac.Road:F2}; parked weight {parked86.Weight:F2}");
+        GameSettings.Current.RideProfile = profileWas;
+
+        // the tyre curve through the trail: past the peak the wheel goes light
+        float Aligned(float alpha) => WheelFeel.Aligning(1000f * Mathf.Sin(1.45f * Mathf.Atan(14f * alpha)), alpha, 1000f, 20f);
+        expect(Aligned(0.1f) > Aligned(0.3f) && Aligned(0.3f) > 0f, $"light past the peak: {Aligned(0.1f):F2} at 0.1 rad, {Aligned(0.3f):F2} at 0.3");
+
+        foreach (var heavy in HeavyCatalog.All)
+        {
+            if (Rideable.Create(heavy.Kind) is not Truck truck) continue;
+            var m = new RideMotion { Speed = 12f };
+            for (float t = 0; t < 2f; t += Dt)
+            {
+                m.Speed = 12f;
+                truck.Step(new RideInput(0.3f, 0f, 0f, false, WheelAngle: Mathf.DegToRad(200f)), new RideGround(true, 0f), Dt, ref m);
+            }
+            expect(truck.Feel.Torque < -0.02f, $"{heavy.Label}: steered right the wheel should pull back left, got {truck.Feel.Torque:F3}");
+        }
+
+        float r900 = Mathf.DegToRad(900f), r1260 = Mathf.DegToRad(1260f), r1080 = Mathf.DegToRad(1080f);
+        expect(float.IsPositiveInfinity(SteeringWheel.SoftLockAt(r1260, r900)), "no soft lock when the range is stretched over the lock");
+        float at = SteeringWheel.SoftLockAt(r900, r1080);
+        expect(Mathf.IsEqualApprox(at, r900 / 2), "soft lock at the vehicle's lock");
+        expect(SteeringWheel.SoftLock(at - 0.01f, at) == 0f && SteeringWheel.SoftLock(at + 0.07f, at) < -0.4f
+            && SteeringWheel.SoftLock(-at - 0.2f, at) == 1f, "soft lock pushes back toward centre");
+        return 0;
     }
 
     private static int PadEvents(string action, int device) =>

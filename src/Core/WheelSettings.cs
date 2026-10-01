@@ -68,12 +68,33 @@ public sealed class WheelSettings
     /// <summary>A button bound to this pulls the handbrake fully, like a handbrake lever.</summary>
     public const string HandbrakeButton = "handbrake";
 
+    // --- force feedback ---
+    /// <summary>Forces through the rim, on a wheel that has them (<c>SteeringWheel.Force.cs</c>).</summary>
+    public bool ForceFeedback { get; set; } = true;
+    /// <summary>Everything at once, 0..1: a strong direct-drive base wants it lower than a gear-driven wheel.</summary>
+    public float FfbStrength { get; set; } = 0.7f;
+    /// <summary>Self-aligning torque and the soft lock past the vehicle's lock, 0..1.5.</summary>
+    public float FfbAligning { get; set; } = 1f;
+    /// <summary>The road's rumble, 0..1.</summary>
+    public float FfbRoad { get; set; } = 0.5f;
+    /// <summary>Crashes and hard landings, 0..1.</summary>
+    public float FfbKnocks { get; set; } = 0.8f;
+    /// <summary>Damping, and the steering's weight when parked, 0..1.</summary>
+    public float FfbWeight { get; set; } = 0.6f;
+    /// <summary>The device pushes the other way for a positive force: flips every force.</summary>
+    public bool FfbInvert { get; set; }
+
     /// <summary>The preset these bindings started from, so a new device of the same kind is not re-preset.</summary>
     public string Preset { get; set; } = "";
 
     public void Clamp()
     {
         RangeDeg = Math.Clamp(RangeDeg, MinRangeDeg, MaxRangeDeg);
+        FfbStrength = Math.Clamp(FfbStrength, 0f, 1f);
+        FfbAligning = Math.Clamp(FfbAligning, 0f, 1.5f);
+        FfbRoad = Math.Clamp(FfbRoad, 0f, 1f);
+        FfbKnocks = Math.Clamp(FfbKnocks, 0f, 1f);
+        FfbWeight = Math.Clamp(FfbWeight, 0f, 1f);
         Device ??= "";
         Preset ??= "";
         Throttle ??= new();
