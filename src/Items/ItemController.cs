@@ -215,7 +215,7 @@ public partial class ItemController : Node
             });
             if (!aiming && def?.Use == ItemUse.Readout) visual.SetPose(ViewPose.Read);   // the GPS is held up to read
             visual.ScreenText = def?.Use == ItemUse.Readout && usable ? GpsScreen(player) : null;
-            visual.Suppressed = _capturing || (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
+            visual.Suppressed = (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
         }
 
         // the viewfinder / binocular overlay appears once the item has been raised
@@ -324,7 +324,10 @@ public partial class ItemController : Node
                 break;
 
             case ItemUse.Photo:
-                if (!_capturing) TakePhoto(player);
+                // the picture is what the viewfinder frames: the camera shoots from the eye only
+                if (_ui.Scope != ItemUse.Photo)
+                    _ui.Toast(InputHints.Format("Hold Aim ({aim_item}) to look through the viewfinder, then {use_item} takes the picture."));
+                else if (!_capturing) TakePhoto(player);
                 break;
 
             case ItemUse.Place:
@@ -448,25 +451,18 @@ public partial class ItemController : Node
     }
 
     /// <summary>
-    /// Saves the frame as it is on screen, minus the inventory UI and the item itself, to
-    /// <c>user://photos/</c>. Waits for <see cref="RenderingServer.FramePostDraw"/>: reading the
-    /// viewport from <c>_Process</c> returns whatever the render thread last left there, which is
-    /// the frame <i>before</i> the UI was hidden (the exporter learned this the hard way).
+    /// Takes the picture the viewfinder frames (<see cref="PhotoCapture"/>: rendered from the eye
+    /// at the focal length, no HUD, no held item), saves the full frame to <c>user://photos/</c>
+    /// and prints the Polaroid. Only called with the camera at the eye (see <see cref="UseSlot"/>).
     /// </summary>
     private async void TakePhoto(FootPlayer player)
     {
         _capturing = true;
-        _ui.Visible = false;
-        if (player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v) v.Suppressed = true;
-
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-
         string path = "";
         string? photo = null;
         try
         {
-            var image = GetViewport().GetTexture().GetImage();
+            var image = await PhotoCapture.Render(this, player.Camera, FovFromFocal(_focalMm));
             DirAccess.MakeDirRecursiveAbsolute("user://photos");
             path = $"user://photos/photo_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
             image.SavePng(path);
@@ -482,7 +478,6 @@ public partial class ItemController : Node
             GD.PushWarning($"[items] photo failed: {e.Message}");
         }
 
-        _ui.Visible = true;
         _capturing = false;
         if (!IsInstanceValid(player)) return;
         // the flash others see (and a light pulse here) — after the capture, not in it
@@ -496,8 +491,8 @@ public partial class ItemController : Node
             _ui.Toast("Photo failed.");
             return;
         }
-        // two frames for the camera hidden during the capture to be drawn again, so the print
-        // knows whether it can come out of it
+        // two frames for a camera lowered right after the shot to be drawn again, so the print
+        // comes out of it
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         if (IsInstanceValid(player)) StartDevelop(player, photo);
@@ -641,7 +636,7 @@ public partial class ItemController : Node
         {
             _ghost = new MeshInstance3D
             {
-                Name = "PhotoGhost", Mesh = PhotoVisuals.Card, TopLevel = true,
+                Name = "PhotoGhost", TopLevel = true,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             };
             AddChild(_ghost);
@@ -654,6 +649,7 @@ public partial class ItemController : Node
                 Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             };
+        _ghost.Mesh = PhotoVisuals.MeshFor(at.Value);   // a poster on a wall, a Polaroid on the ground
         _ghost.GlobalTransform = at.Value;
         _ghost.Visible = true;
     }
