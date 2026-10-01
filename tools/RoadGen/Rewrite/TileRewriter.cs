@@ -453,7 +453,8 @@ public static class TileRewriter
         var height = new float[segment.PointCount];
         for (int i = 0; i < segment.PointCount; i++)
         {
-            plan[i] = new Vec2(id.MinE + segment.Points[i * 3], id.MaxN - segment.Points[i * 3 + 2]);
+            var (e, n) = segment.Lv95(id, i);
+            plan[i] = new Vec2(e, n);
             height[i] = segment.Points[i * 3 + 1];
         }
 
@@ -465,7 +466,7 @@ public static class TileRewriter
         int layer = (segment.Flags & RoadFlags.Bridge) != 0 ? 1
             : (segment.Flags & RoadFlags.Tunnel) != 0 ? -1 : 0;
 
-        net.AddLink(centreline, ProfileFor(segment, dividedScale), layer, source, allowSmoothing: !structure);
+        net.AddLink(centreline, RoadProfiles.For(segment, dividedScale, surfaceDecidesPaving: false), layer, source, allowSmoothing: !structure);
     }
 
     private static RoadSegment ToSegment(List<Vec2> plan, Source source)
@@ -560,29 +561,6 @@ public static class TileRewriter
             valueSum += w * height;
         }
         return weightSum < 1e-12 ? anchors[0].Height : (float)(valueSum / weightSum);
-    }
-
-    private static RoadProfile ProfileFor(RoadSegment segment, double dividedScale)
-    {
-        var profile = segment.Class switch
-        {
-            RoadClass.Motorway => RoadProfile.Motorway,
-            RoadClass.Expressway => RoadProfile.Expressway,
-            RoadClass.Ramp => RoadProfile.Ramp,
-            RoadClass.Major => RoadProfile.Major,
-            RoadClass.Road => RoadProfile.Road,
-            RoadClass.Minor => RoadProfile.Minor,
-            RoadClass.Lane or RoadClass.Link or RoadClass.Square => RoadProfile.Lane,
-            RoadClass.Track => RoadProfile.Track,
-            RoadClass.Path => RoadProfile.Path,
-            RoadClass.Railway => RoadProfile.Railway,
-            _ => RoadProfile.Lane,
-        };
-
-        double width = segment.Width > 0.1 ? segment.Width : profile.Width;
-        if ((segment.Flags & RoadFlags.Divided) != 0) width *= dividedScale;
-
-        return profile with { Width = width };
     }
 
     /// <summary>A shallow copy for the before-measurement, since the pipeline mutates its input.</summary>

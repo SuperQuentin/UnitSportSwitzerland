@@ -158,10 +158,8 @@ public sealed class RoadNetwork
 
             for (int i = 0; i < count; i++)
             {
-                // tile-local is X east, Z south from the NW corner
-                e[i] = tile.Id.MinE + segment.Points[i * 3];
+                (e[i], n[i]) = segment.Lv95(tile.Id, i);
                 y[i] = segment.Points[i * 3 + 1];          // absolute altitude, already draped
-                n[i] = tile.Id.MaxN - segment.Points[i * 3 + 2];
                 if (i > 0)
                 {
                     double dx = e[i] - e[i - 1], dy = n[i] - n[i - 1];
