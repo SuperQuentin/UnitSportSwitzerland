@@ -58,7 +58,7 @@ godot --path . -- --goto Lausanne          # by name
 godot --path . -- --at 2538000,1152000     # or by LV95 easting/northing
 ```
 
-- **WASD + mouse** — fly around. **Space** up, **Shift** down, **Ctrl** boost. Click to take the mouse back after a menu
+- **WASD + mouse** — fly around. **Space** up, **Shift** down, **Q** boost. Click to take the mouse back after a menu
 - **T** — drop onto the ground and walk. **T** again to fly
 - On foot: **Shift** run, **Space** jump, **Ctrl** slide, **Space** against a wall to wall jump
 - **M** — search for a town and teleport there (only places with terrain are listed)
@@ -97,6 +97,21 @@ C:\ProgramData\chocolatey\lib\godot-mono\tools\godot_v4.7.1-stable_mono_win64\go
 
 ---
 
+## What is in the game
+
+Beyond walking and flying, the world has (each system has notes in `docs/notes/<area>/`):
+
+- **Vehicles**: cars (tuning, garages, setups), motorbikes, trucks and buses with trailers, planes
+  and helicopters, bikes and skis; first-person cockpits, passengers, damage and wrecks.
+- **Races** between players and NPCs on roads or air gates, traffic, trains and day/night.
+- **Interiors, loot and items**: enterable buildings with lootable furniture, gun lockers and
+  safes, an inventory, a radio and CDs, a camera that prints photos, flags to plant.
+- **Combat and birds**: aerial combat, hunting and bird strikes.
+- **Occasions**: seasonal events such as Halloween and Christmas.
+- **Synthesised audio**: all sound is generated at startup, no audio files are shipped.
+
+---
+
 ## Replaying a GPX track
 
 Press **G**, then pick one or more `.gpx` files — selecting several starts a **ghost race**
@@ -106,7 +121,7 @@ where they all begin together and you watch the gaps open.
 | ------------------------- | ----------------------------------------------------- |
 | **G**                     | add track(s)                                          |
 | **Space**                 | play / pause                                          |
-| **C**                     | cycle camera: chase → first person → cinematic → free |
+| **C**                     | cycle camera: chase → first person → cinematic → free → Absolute Cinema → Absolute Racing |
 | **F**                     | follow the next runner                                |
 | **H** / *Hide UI* button  | show or hide the interface                            |
 | timeline slider           | scrub anywhere in the race                            |
@@ -323,7 +338,7 @@ godot --path . -- --probe lv95E,lv95N,seconds
 
 ## Where the source data comes from
 
-All of it is swisstopo / federal open data, free to use with attribution.
+All of it is swisstopo / federal open data, free to use with attribution (see [Licenses](#licenses)).
 
 | Dataset                         | Contents                                                                                               | Source                                                      |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
@@ -362,6 +377,7 @@ Two things worth knowing before extending the pipeline:
 # dedicated server
 godot --headless --path . -- --server [--port 7777] [--admin-password <pw>]
                                       [--bind <ip>] [--stream-bandwidth <MB/s>]
+                                      [--generated-world]
 
 # client
 godot --path . -- --connect 127.0.0.1 [--name Syra]
@@ -493,19 +509,48 @@ the first admin gets granted on a fresh server:
 
 ```
 src/
-  Core/      boot, world origin, screenshot + probe helpers
-  Terrain/   chunk streaming, mesh builders, LOD, cover palette
-  Player/    walking controller, spectator camera
-  Net/       ENet setup and player replication
-  Gpx/       GPX parsing, race clock, runners, cameras, HUD
+  Core/        boot, game modes and menu, input, settings, diagnostics, screenshot + probe helpers
+  Terrain/     chunk streaming, mesh builders, LOD, collision, generated terrain
+  Player/      on foot, mounts, flight, spectator camera
+  Vehicles/    machines left in the world, damage, wrecks
+  Avatar/      procedural human, bike and aircraft meshes and rigs
+  Net/         ENet setup, replication, terrain streaming, chat, admin
+  Gpx/         GPX parsing, race clock, runners, cameras, HUD, video export
+  World/       day/night, traffic, trees, races
+  Audio/       synthesised sound
+  Birds/ Combat/ Items/ Loot/ Interiors/ Occasions/   gameplay systems
 tools/
   TerrainFormat/       binary formats shared by preprocessor and game
   TerrainPreprocessor/ the offline pipeline
+  MapSetup/            region setup wizard
+  RoadGen/ BlendCheck/ road generation and terrain blend checks
+  swiss_data.py, swiss_relief.py    data downloader, 500 m relief for generated terrain
   export_buildings.py  FileGDB -> GeoPackage (needs GDAL)
   export_route_keys.py cycle route keys
-shaders/     ps1_terrain, ps1_road, ps1_building, ps1_tree, ps1_water
+  *check.sh            multiplayer feature checks (dedicated server + client)
+shaders/     ps1_* terrain, road, building, tree, water and other shaders
+docs/notes/  one topic per file, indexed by each directory's CLAUDE.md
 terrain_chunks/  generated output: .terr .road .cover .trees .bldg .holes
 ```
 
 `CLAUDE.md` holds the architecture notes and a list of hard-won gotchas — read it before
 changing the formats, the shaders, or anything that has to line up with the terrain grid.
+
+---
+
+## Licenses
+
+- **This project's code and docs** are MIT licensed: see [LICENSE](LICENSE). Third-party software and data
+  keep their own terms, below.
+- **Third-party software** (Godot, .NET, Godot AI addon, Spectre.Console, Microsoft.Data.Sqlite) is MIT
+  licensed. Details and the MIT text are in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md); the
+  addon's own license is [`addons/godot_ai/LICENSE`](addons/godot_ai/LICENSE).
+- **Geodata** is open data and must be credited:
+  - Terrain, roads, rail, land cover, water, trees and buildings: **Source: swisstopo**
+    (swissALTI3D, swissALTIRegio, swissTLM3D, swissBUILDINGS3D).
+  - Building register: **Source: Federal Statistical Office (FSO), GWR**.
+  - Cycle routes: **Source: ASTRA / SwitzerlandMobility**.
+  - Optional French border data: **Source: IGN, BD TOPO®**, under Licence Ouverte 2.0.
+- No image, audio, font or model assets are bundled; everything is generated in code.
+
+See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for terms, links and the committed derived data files.
