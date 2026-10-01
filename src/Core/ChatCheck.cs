@@ -20,6 +20,7 @@ public static class ChatCheck
             Places = (q, n) => new[] { "Sion", "Sierre", "La Chaux-de-Fonds" }
                 .Where(p => p.Contains(q, StringComparison.OrdinalIgnoreCase)).Take(n),
             Occasions = () => ["halloween", "christmas"],
+            Players = () => ["Alice", "Albert", "Bob"],
         };
 
         // commands
@@ -39,7 +40,22 @@ public static class ChatCheck
         // sub-commands and ids
         ExpectTexts(completer, "/occasion s", ["/occasion start", "/occasion stop"], "occasion sub-commands");
         ExpectTexts(completer, "/occasion start h", ["/occasion start halloween"], "occasion ids");
-        Expect(completer.Complete("hello").Count == 0, "plain chat is not completed");
+        Expect(completer.Complete("hello").Count == 0, "plain chat with no name in it is not completed");
+
+        // player names in free text
+        ExpectTexts(completer, "hi bo", ["hi Bob "], "a name in plain chat");
+        ExpectTexts(completer, "hi al", ["hi Albert ", "hi Alice "], "names sharing a start");
+        ExpectTexts(completer, "hi a", [], "one bare letter is not enough");
+        ExpectTexts(completer, "@b", ["@Bob "], "an @mention");
+        Expect(completer.Complete("@").Count == 3, "a bare @ lists everybody");
+        ExpectTexts(completer, "/me waves at al", ["/me waves at Albert ", "/me waves at Alice "], "a name inside /me");
+        ExpectTexts(completer, "hi Bob", [], "a name already whole");
+
+        // command list carries the arguments, usage once a command is typed
+        Expect(completer.Complete("/sp").FirstOrDefault().Detail == "<item> [count]", "command arguments shown");
+        Expect(completer.Usage("/spawn ") == "/spawn <item> [count]", "usage of a typed command");
+        Expect(completer.Usage("/sp") == null, "no usage while the command is still typed");
+        Expect(completer.Usage("/tp x") == null, "no usage for a command hidden offline");
 
         // parsing
         Expect(Parses("energybar", ItemId.EnergyBar, 1), "id name");

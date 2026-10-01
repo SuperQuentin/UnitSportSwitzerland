@@ -8,8 +8,9 @@
 - **Font**: a `SystemFont` (Inter, Segoe UI Variable, Segoe UI, SF Pro, Roboto, Noto Sans, Arial),
   so nothing is shipped and no licence is carried. Bundle a font only with its OFL file and a
   `THIRD_PARTY_LICENSES.md` entry.
-- **Applied to menu roots only** (shell root, loading screen, modals). The HUDs keep the stock look:
-  setting it on the root Window would restyle and resize every one of them.
+- **Applied per root Control, never on the root Window** (shell root, loading screen, modals, the
+  chat panel): on the Window it would restyle and resize every HUD at once. A HUD adopts the look by
+  theming its own root — how, step by step: `style-guide`.
 - **Kit** (`Ui/UiKit`): `MenuButton` (hover/focus slides the label 12 px right and fades in an amber
   bar; the stylebox's left margin is tweened, because a container owns its children's positions),
   `Button(primary)`, `IconButton`, `Card`, `Section` (letter-spaced caps), and the setting rows
