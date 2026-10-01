@@ -9,6 +9,7 @@
   centre, or a taller room from below reaching into it (`Span`). So no plan field, and `Roll`, `Chance`,
   `ChanceFrancs`, `ContentsOf`, `BuildingChance` all take/compute the same room and cannot drift
   (`--lootchancecheck` has room cases).
+- **Bags** (#208): wardrobes and hall/lobby shelves can hold any bag, nightstands and bedroom desks a pouch or a handbag (the items `bags` note).
 - **Kind extras** (`InteriorGenerator.KindExtras`): pieces a building kind adds after a room's own (shop store:
   rack + crate; works store/workshop: rack + crate; farm store/workshop: bale + crate; office in a
   shop/works/civic: a filing shelf; restaurant kitchen: second fridge + shelf). Placed last, so they only use space left.

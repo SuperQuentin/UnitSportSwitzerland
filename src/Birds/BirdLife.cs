@@ -154,8 +154,8 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         for (int i = 0; i < Inventory.Size; i++) hasGun |= inv[i].Id == ItemId.Shotgun;
         if (!hasGun)
         {
-            inv.Add(ItemId.Shotgun, 1);
-            inv.Add(ItemId.Shells, 25);
+            _items.Give(new ItemStack(ItemId.Shotgun, 1));
+            _items.Give(new ItemStack(ItemId.Shells, 25));
         }
     }
 

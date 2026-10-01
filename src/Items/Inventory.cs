@@ -17,8 +17,9 @@ public readonly record struct ItemStack(ItemId Id, int Count, string? Data = nul
 }
 
 /// <summary>
-/// The player's items: a hotbar of <see cref="HotbarSize"/> slots, the first of the array, and a
-/// backpack behind it, plus the <see cref="Cash"/> in their pocket. Pure data — no nodes — so the
+/// The player's items: a hotbar of <see cref="HotbarSize"/> slots, the first of the array, a
+/// pack behind it of <see cref="BasePack"/> slots plus whatever the worn <see cref="Bag"/> adds,
+/// and the <see cref="Cash"/> in their pocket. Pure data — no nodes — so the
 /// UI, the item behaviours and the save file all read one thing, and <see cref="Changed"/> is the
 /// only way anything learns it moved.
 ///
@@ -28,6 +29,13 @@ public readonly record struct ItemStack(ItemId Id, int Count, string? Data = nul
 /// <see cref="QuickMove"/>, <see cref="Collect"/>, <see cref="SwapWithHotbar"/> and
 /// <see cref="Distribute"/> are the whole vocabulary, and the panel is only a way of calling them.
 /// The carried stack is saved with the rest, so quitting mid-move never loses it.
+/// </para>
+///
+/// <para>
+/// <b>Bags.</b> The array always has room for the biggest bag; only the first <see cref="Capacity"/>
+/// slots are in use, and <see cref="BagSlot"/>, after them all, holds the bag worn. Every change of
+/// bag goes through <see cref="ChangeBag"/>: stacks in slots a smaller bag no longer has move into
+/// free ones, and if they cannot all fit the change is refused (<see cref="Refused"/>).
 /// </para>
 ///
 /// <para>
@@ -47,12 +55,19 @@ public readonly record struct ItemStack(ItemId Id, int Count, string? Data = nul
 public sealed class Inventory
 {
     public const int HotbarSize = 6;
-    public const int BackpackSize = 18;
-    public const int Size = HotbarSize + BackpackSize;
+    /// <summary>Pack slots with no bag: three rows of <see cref="PackColumns"/>.</summary>
+    public const int BasePack = 27;
+    /// <summary>Pack slots with the biggest bag on.</summary>
+    public const int MaxPack = 63;
+    public const int PackColumns = 9;
+    /// <summary>Every item slot there can be (hotbar + the biggest pack); the ones in use are <see cref="Capacity"/>.</summary>
+    public const int Size = HotbarSize + MaxPack;
+    /// <summary>The worn bag's slot, after all the item slots.</summary>
+    public const int BagSlot = Size;
 
     private const string File = "user://inventory.json";
 
-    private ItemStack[] _slots = new ItemStack[Size];
+    private ItemStack[] _slots = new ItemStack[Size + 1];
     private int _batch;
     private bool _dirty;
 
@@ -69,6 +84,26 @@ public sealed class Inventory
     public int Cash { get; private set; }
 
     public event Action? Changed;
+
+    /// <summary>A bag change that could not be made, with why (the pack too full to shrink).</summary>
+    public event Action<string>? Refused;
+
+    /// <summary>The bag worn, or empty.</summary>
+    public ItemStack Bag => _slots[BagSlot];
+
+    /// <summary>Pack slots in use: the base pack plus what the bag adds.</summary>
+    public int PackSize => BasePack + BagSlots(Bag);
+
+    /// <summary>Hotbar plus pack: slots 0..Capacity-1 hold items, the rest of the array waits for a bigger bag.</summary>
+    public int Capacity => HotbarSize + PackSize;
+
+    private static int BagSlots(ItemStack bag) =>
+        bag.IsEmpty ? 0 : Math.Min(MaxPack - BasePack, ItemDefs.Get(bag.Id)?.PackSlots ?? 0);
+
+    public static bool IsBag(ItemStack s) => !s.IsEmpty && ItemDefs.Get(s.Id)?.Use == ItemUse.Bag;
+
+    /// <summary>A slot that can hold something now: an item slot within <see cref="Capacity"/>, or the bag slot.</summary>
+    public bool IsOpen(int slot) => slot == BagSlot || (slot >= 0 && slot < Capacity);
 
     /// <summary>Write every change to <c>user://inventory.json</c>. Off for the check's scratch inventories.</summary>
     public bool Persist { get; init; } = true;
@@ -127,7 +162,8 @@ public sealed class Inventory
         }
         if (ItemDefs.Get(id) is not { } def) return count;
 
-        for (int i = 0; i < Size && count > 0; i++)
+        int cap = Capacity;
+        for (int i = 0; i < cap && count > 0; i++)
             if (_slots[i].Id == id && _slots[i].Data == data && _slots[i].Count < def.MaxStack)
             {
                 int take = Math.Min(count, def.MaxStack - _slots[i].Count);
@@ -135,7 +171,7 @@ public sealed class Inventory
                 count -= take;
             }
 
-        for (int i = 0; i < Size && count > 0; i++)
+        for (int i = 0; i < cap && count > 0; i++)
             if (_slots[i].IsEmpty)
             {
                 int take = Math.Min(count, def.MaxStack);
@@ -156,7 +192,7 @@ public sealed class Inventory
         if (id == ItemId.Francs) return int.MaxValue;
         if (ItemDefs.Get(id) is not { } def) return 0;
         int room = 0;
-        for (int i = 0; i < Size; i++)
+        for (int i = 0; i < Capacity; i++)
             if (_slots[i].IsEmpty) room += def.MaxStack;
             else if (_slots[i].Id == id && _slots[i].Data == data) room += Math.Max(0, def.MaxStack - _slots[i].Count);
         return room;
@@ -185,6 +221,8 @@ public sealed class Inventory
     {
         var stack = _slots[slot];
         if (stack.IsEmpty || count <= 0) return ItemStack.Empty;
+        if (slot == BagSlot)
+            return ChangeBag(() => _slots[BagSlot] = ItemStack.Empty) ? stack : ItemStack.Empty;
         int take = Math.Min(count, stack.Count);
         _slots[slot] = Less(stack, take);
         Notify();
@@ -197,7 +235,14 @@ public sealed class Inventory
     /// </summary>
     public void Move(int from, int to)
     {
-        if (from == to) return;
+        if (from == to || !IsOpen(from) || !IsOpen(to)) return;
+        if (from == BagSlot || to == BagSlot)
+        {
+            int other = from == BagSlot ? to : from;
+            if (!_slots[other].IsEmpty && !IsBag(_slots[other])) return;
+            ChangeBag(() => (_slots[from], _slots[to]) = (_slots[to], _slots[from]));
+            return;
+        }
         var a = _slots[from];
         var b = _slots[to];
 
@@ -225,6 +270,12 @@ public sealed class Inventory
     /// </summary>
     public void PrimaryClick(int slot)
     {
+        if (slot == BagSlot)
+        {
+            ClickBag();
+            return;
+        }
+        if (!IsOpen(slot)) return;
         var s = _slots[slot];
         if (Carried.IsEmpty)
         {
@@ -259,6 +310,12 @@ public sealed class Inventory
     /// </summary>
     public void SecondaryClick(int slot)
     {
+        if (slot == BagSlot)
+        {
+            ClickBag();
+            return;
+        }
+        if (!IsOpen(slot)) return;
         var s = _slots[slot];
         if (Carried.IsEmpty)
         {
@@ -287,9 +344,27 @@ public sealed class Inventory
     /// </summary>
     public void QuickMove(int slot)
     {
+        if (!IsOpen(slot)) return;
         var s = _slots[slot];
         if (s.IsEmpty) return;
-        (int from, int to) = IsHotbar(slot) ? (HotbarSize, Size) : (0, HotbarSize);
+        // the worn bag comes off into the first free slot; a bag goes on when none is worn
+        if (slot == BagSlot)
+        {
+            ChangeBag(() =>
+            {
+                _slots[BagSlot] = ItemStack.Empty;
+                int free = Array.FindIndex(_slots, 0, Capacity, x => x.IsEmpty);
+                if (free >= 0) _slots[free] = s;
+                else _slots[BagSlot] = s;   // nowhere to put it: it stays on
+            });
+            return;
+        }
+        if (IsBag(s) && Bag.IsEmpty)
+        {
+            ChangeBag(() => (_slots[BagSlot], _slots[slot]) = (s, ItemStack.Empty));
+            return;
+        }
+        (int from, int to) = IsHotbar(slot) ? (HotbarSize, Capacity) : (0, HotbarSize);
         int left = s.Count, max = MaxStack(s.Id);
 
         for (int i = from; i < to && left > 0; i++)
@@ -320,7 +395,7 @@ public sealed class Inventory
     {
         if (Carried.IsEmpty) return;
         int max = MaxStack(Carried.Id);
-        var order = Enumerable.Range(0, Size)
+        var order = Enumerable.Range(0, Capacity)
             .Where(i => _slots[i].SameKind(Carried) && !_slots[i].IsEmpty)
             .OrderBy(i => _slots[i].Count);
         foreach (int i in order)
@@ -336,7 +411,12 @@ public sealed class Inventory
     /// <summary>A number key over a slot: swaps that slot with hotbar slot <paramref name="hotbar"/>.</summary>
     public void SwapWithHotbar(int slot, int hotbar)
     {
-        if (slot == hotbar || hotbar < 0 || hotbar >= HotbarSize) return;
+        if (slot == hotbar || hotbar < 0 || hotbar >= HotbarSize || !IsOpen(slot)) return;
+        if (slot == BagSlot)
+        {
+            Move(slot, hotbar);
+            return;
+        }
         (_slots[slot], _slots[hotbar]) = (_slots[hotbar], _slots[slot]);
         Notify();
     }
@@ -353,7 +433,7 @@ public sealed class Inventory
         if (Carried.IsEmpty) return;
         var carried = Carried;
         int max = MaxStack(carried.Id);
-        var usable = slots.Where(i => _slots[i].IsEmpty || (_slots[i].SameKind(carried) && _slots[i].Count < max)).ToList();
+        var usable = slots.Where(i => i != BagSlot && IsOpen(i)).Where(i => _slots[i].IsEmpty || (_slots[i].SameKind(carried) && _slots[i].Count < max)).ToList();
         if (usable.Count == 0) return;
 
         int share = oneEach ? 1 : Math.Max(1, Carried.Count / usable.Count);
@@ -378,6 +458,14 @@ public sealed class Inventory
         Notify();
     }
 
+    /// <summary>A stack that has nowhere else to go into the bin, so one click can still get it back.</summary>
+    public void Bin(ItemStack stack)
+    {
+        if (stack.IsEmpty) return;
+        Trashed = stack;
+        Notify();
+    }
+
     /// <summary>A click on the bin with an empty hand: the last thing thrown away comes back.</summary>
     public void Untrash()
     {
@@ -388,21 +476,112 @@ public sealed class Inventory
     }
 
     /// <summary>
-    /// Puts the cursor stack back into the slots: on closing the panel, where Minecraft would throw
-    /// it on the ground. It always fits, having come out of them; if somehow it does not, the rest
-    /// goes to the bin rather than vanishing.
+    /// Puts the cursor stack back into the slots, on closing the panel. It nearly always fits,
+    /// having come out of them; what does not is returned, for the caller to drop on the ground
+    /// (or put in the <see cref="Bin"/> if it cannot).
     /// </summary>
-    public void ReturnCarried()
+    public ItemStack ReturnCarried()
     {
-        if (Carried.IsEmpty) return;
+        if (Carried.IsEmpty) return ItemStack.Empty;
         var c = Carried;
         Carried = ItemStack.Empty;
         using (Batch())
         {
-            int left = Add(c);
-            if (left > 0) Trashed = c with { Count = left };
             _dirty = true;
+            // a bag goes back on when none is worn, rather than into a slot
+            if (IsBag(c) && Bag.IsEmpty) _slots[BagSlot] = c;
+            else if (Add(c) is var left and > 0) return c with { Count = left };
         }
+        return ItemStack.Empty;
+    }
+
+    /// <summary>Takes the cursor stack (or one of it) off the cursor, to drop on the ground.</summary>
+    public ItemStack TakeCarried(bool one)
+    {
+        if (Carried.IsEmpty) return ItemStack.Empty;
+        var taken = one ? Carried with { Count = 1 } : Carried;
+        Carried = Less(Carried, taken.Count);
+        Notify();
+        return taken;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // bags
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A click on the bag slot. Empty hand: take the bag off. A bag on the cursor: put it on,
+    /// swapping with the one worn. Anything else on the cursor: refused, the slot is for bags.
+    /// </summary>
+    private void ClickBag()
+    {
+        var worn = Bag;
+        if (Carried.IsEmpty)
+        {
+            if (worn.IsEmpty) return;
+            ChangeBag(() => { Carried = worn; _slots[BagSlot] = ItemStack.Empty; });
+        }
+        else if (IsBag(Carried))
+        {
+            var carried = Carried;
+            ChangeBag(() => { _slots[BagSlot] = carried; Carried = worn; });
+        }
+        else Refused?.Invoke("Only a bag goes in the bag slot.");
+    }
+
+    /// <summary>
+    /// Makes a change that may swap the bag, then moves stacks out of the slots a smaller pack no
+    /// longer has into free ones. If they cannot all fit, nothing changes and <see cref="Refused"/>
+    /// says so. True when the change was made.
+    /// </summary>
+    public bool ChangeBag(Action change)
+    {
+        var snap = Snapshot();
+        change();
+        if (!Compact())
+        {
+            _slots = snap.Slots;
+            Carried = snap.Carried;
+            Refused?.Invoke("Your pack is too full: make room before taking that bag off.");
+            return false;
+        }
+        Notify();
+        return true;
+    }
+
+    /// <summary>Moves every stack beyond <see cref="Capacity"/> into the slots in use. False if one does not fit.</summary>
+    private bool Compact()
+    {
+        int cap = Capacity;
+        for (int i = cap; i < Size; i++)
+        {
+            var s = _slots[i];
+            if (s.IsEmpty) continue;
+            int left = s.Count, max = MaxStack(s.Id);
+            for (int j = 0; j < cap && left > 0; j++)
+                if (_slots[j].SameKind(s) && _slots[j].Count < max)
+                {
+                    int put = Math.Min(left, max - _slots[j].Count);
+                    _slots[j] = _slots[j] with { Count = _slots[j].Count + put };
+                    left -= put;
+                }
+            for (int j = 0; j < cap && left > 0; j++)
+                if (_slots[j].IsEmpty)
+                {
+                    _slots[j] = s with { Count = left };
+                    left = 0;
+                }
+            if (left > 0) return false;
+            _slots[i] = ItemStack.Empty;
+        }
+        return true;
+    }
+
+    /// <summary>Puts on the bag in <paramref name="slot"/> (Use on a bag): the worn one, if any, takes its place.</summary>
+    public bool WearBag(int slot)
+    {
+        if (!IsOpen(slot) || slot == BagSlot || !IsBag(_slots[slot])) return false;
+        return ChangeBag(() => (_slots[BagSlot], _slots[slot]) = (_slots[slot], _slots[BagSlot]));
     }
 
     /// <summary>Everything the cursor operations touch, for undoing a drag in progress.</summary>
@@ -485,7 +664,7 @@ public sealed class Inventory
     public bool Contains(ItemId id)
     {
         if (Carried.Id == id && !Carried.IsEmpty) return true;
-        for (int i = 0; i < Size; i++)
+        for (int i = 0; i < _slots.Length; i++)
             if (_slots[i].Id == id && !_slots[i].IsEmpty) return true;
         return false;
     }
@@ -544,12 +723,14 @@ public sealed class Inventory
         inv.Cash = Math.Max(0, data.Cash);
         // saved by name, so a renumbered enum cannot turn binoculars into a flag
         foreach (var s in data.Slots)
-            if (s.Slot >= 0 && s.Slot < Size && Parse(s) is { } stack)
+            if (s.Slot >= 0 && s.Slot <= BagSlot && Parse(s) is { } stack)
             {
                 // francs saved in a slot before money had its own counter
                 if (stack.Id == ItemId.Francs) inv.Cash += stack.Count;
                 else inv._slots[s.Slot] = stack;
             }
+        if (!IsBag(inv.Bag)) inv._slots[BagSlot] = ItemStack.Empty;
+        inv.Compact();   // stacks a save left beyond the pack (a changed bag size): moved in where they fit
         inv.Selected = Math.Clamp(data.Selected, 0, HotbarSize - 1);
         if (Enum.TryParse<ItemId>(data.Worn, out var worn)) inv._worn = worn;
         // quit with something on the cursor: back into the slots
@@ -557,7 +738,7 @@ public sealed class Inventory
         {
             inv.Carried = carried;
             inv._batch++;           // no save from inside Load
-            inv.ReturnCarried();
+            inv.Trashed = inv.ReturnCarried();
             inv._batch--;
         }
         return inv;
@@ -606,7 +787,7 @@ public sealed class Inventory
     internal string ToJson()
     {
         var data = new SaveData { Selected = Selected, Cash = Cash, Worn = _worn == ItemId.None ? "" : _worn.ToString() };
-        for (int i = 0; i < Size; i++)
+        for (int i = 0; i < _slots.Length; i++)
             if (!_slots[i].IsEmpty)
                 data.Slots.Add(new SavedSlot { Slot = i, Item = _slots[i].Id.ToString(), Count = _slots[i].Count, Data = _slots[i].Data });
         if (!Carried.IsEmpty)

@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Core;
+using UnitSport.Ui;
 
 namespace UnitSport.Items;
 
@@ -16,13 +17,19 @@ namespace UnitSport.Items;
 /// </para>
 ///
 /// <para>
-/// <b>The panel works like Minecraft's.</b> A stack taken out of a slot rides on the cursor
+/// <b>The panel</b> has the menus' look (<see cref="UiTheme"/>, <c>docs/notes/ui/style-guide.md</c>):
+/// the hotbar, the pack (<see cref="Inventory.PackSize"/> slots, nine to a row, more with a bag on),
+/// the bag slot and the bin, a card describing the item under the pointer, and the money.
+/// It works like Minecraft's: a stack taken out of a slot rides on the cursor
 /// (<see cref="Inventory.Carried"/>) until it is put down: left click picks up / puts down / swaps,
 /// right click takes half or puts down one, shift-click sends a stack across between hotbar and
-/// pack, a double-click gathers every stack of that item onto the cursor, and dragging with a stack
-/// on the cursor spreads it over the slots crossed (evenly with the left button, one each with the
-/// right). A plain press-drag-release from one slot to another is also a drag and drop. A number
-/// key over a slot swaps it with that hotbar slot. On a pad: A, X and Y on the focused slot.
+/// pack (or puts a bag on), a double-click gathers every stack of that item onto the cursor, and
+/// dragging with a stack on the cursor spreads it over the slots crossed (evenly with the left
+/// button, one each with the right). A plain press-drag-release from one slot to another is also a
+/// drag and drop. A number key over a slot swaps it with that hotbar slot. <b>A click outside the
+/// panel drops the cursor stack on the ground</b> (right click: one of it), and so does releasing a
+/// dragged stack there; Q over a slot drops one, Ctrl+Q the stack. On a pad: A, X and Y on the
+/// focused slot, and the card's Drop button.
 /// </para>
 ///
 /// <para>
@@ -41,7 +48,8 @@ namespace UnitSport.Items;
 public partial class InventoryUi : CanvasLayer
 {
     private const int SlotPx = 50;
-    private const int PanelSlotPx = 58;
+    private const int PanelSlotPx = 52;
+    private const int Gap = 6;
     private const int TrashSlot = -2;
     private const double DoubleClickSeconds = 0.35;
 
@@ -64,12 +72,16 @@ public partial class InventoryUi : CanvasLayer
     private Control _crosshair = null!;
     private Label _cashHud = null!;
 
+    // the panel
     private Control _panel = null!;
-    private readonly SlotButton[] _panelSlots = new SlotButton[Inventory.Size];
+    private readonly SlotButton[] _panelSlots = new SlotButton[Inventory.Size + 1];   // the last is the bag slot
     private SlotButton _trash = null!;
-    private Label _infoName = null!, _infoBlurb = null!, _infoValue = null!;
+    private Label _capacity = null!, _packHint = null!, _controlsHint = null!, _dropHint = null!;
+    private Label _bagName = null!, _bagInfo = null!;
+    private TextureRect _infoIcon = null!;
+    private Label _infoName = null!, _infoKind = null!, _infoBlurb = null!, _infoValue = null!;
     private Button _useButton = null!, _handButton = null!, _dropButton = null!, _claimButton = null!;
-    private Label _cashLine = null!, _accountLine = null!, _controlsHint = null!, _hotbarCaption = null!;
+    private Label _cashLine = null!, _accountLine = null!;
     private int _inspect;
     private CarriedView _carried = null!;
     private PanelContainer _tooltip = null!;
@@ -135,6 +147,7 @@ public partial class InventoryUi : CanvasLayer
 
         PlayerInput.DeviceChanged += OnDeviceChanged;
         if (Bank.Instance is { } bank) bank.BalanceChanged += OnBalanceChanged;
+        Inv.Refused += OnRefused;
         Refresh();
     }
 
@@ -142,6 +155,7 @@ public partial class InventoryUi : CanvasLayer
     {
         PlayerInput.DeviceChanged -= OnDeviceChanged;
         if (Bank.Instance is { } bank) bank.BalanceChanged -= OnBalanceChanged;
+        Inv.Refused -= OnRefused;
     }
 
     // ------------------------------------------------------------------------------------
@@ -179,14 +193,14 @@ public partial class InventoryUi : CanvasLayer
 
     private void BuildHud()
     {
-        int width = Inventory.HotbarSize * SlotPx + (Inventory.HotbarSize - 1) * 6;
+        int width = Inventory.HotbarSize * SlotPx + (Inventory.HotbarSize - 1) * Gap;
         _hotbar = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-        _hotbar.AddThemeConstantOverride("separation", 6);
+        _hotbar.AddThemeConstantOverride("separation", Gap);
         _hotbar.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
         _hotbar.OffsetLeft = -width / 2f;
         _hotbar.OffsetRight = width / 2f;
-        _hotbar.OffsetTop = -12 - SlotPx;
-        _hotbar.OffsetBottom = -12;
+        _hotbar.OffsetTop = -14 - SlotPx;
+        _hotbar.OffsetBottom = -14;
         _root.AddChild(_hotbar);
 
         for (int i = 0; i < Inventory.HotbarSize; i++)
@@ -204,47 +218,47 @@ public partial class InventoryUi : CanvasLayer
         }
 
         // cash in the pocket, just right of the hotbar, where the eye already is
-        _cashHud = new Label { MouseFilter = Control.MouseFilterEnum.Ignore, VerticalAlignment = VerticalAlignment.Center };
-        _cashHud.AddThemeFontSizeOverride("font_size", 15);
-        _cashHud.AddThemeColorOverride("font_color", new Color(0.98f, 0.84f, 0.38f));
-        _cashHud.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.9f));
-        _cashHud.AddThemeConstantOverride("outline_size", 5);
+        _cashHud = OverWorld(UiKit.Text("", UiTheme.FontBody, UiTheme.Amber, bold: true));
+        _cashHud.VerticalAlignment = VerticalAlignment.Center;
         _cashHud.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
         _cashHud.OffsetLeft = width / 2f + 14;
         _cashHud.OffsetRight = width / 2f + 220;
-        _cashHud.OffsetTop = -12 - SlotPx;
-        _cashHud.OffsetBottom = -12;
+        _cashHud.OffsetTop = -14 - SlotPx;
+        _cashHud.OffsetBottom = -14;
         _root.AddChild(_cashHud);
 
-        _heldName = CentredLabel(16, -12 - SlotPx - 28);
-        _toast = CentredLabel(15, -12 - SlotPx - 56);
-        _toast.AddThemeColorOverride("font_color", new Color(1f, 0.92f, 0.7f));
+        _heldName = CentredLabel(UiTheme.FontBody + 1, -14 - SlotPx - 28, UiTheme.Text);
+        _toast = CentredLabel(UiTheme.FontBody, -14 - SlotPx - 56, new Color(1f, 0.92f, 0.7f));
 
-        _readoutPanel = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
-        _readoutPanel.AddThemeStyleboxOverride("panel", PanelStyle(0.75f, 8));
+        _readoutPanel = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false, Theme = UiTheme.Get() };
+        _readoutPanel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.78f, 10, 10));
         _readoutPanel.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
-        _readoutPanel.OffsetLeft = 18;
+        _readoutPanel.OffsetLeft = 16;
         _readoutPanel.OffsetTop = -96;
         _readoutPanel.OffsetBottom = -40;
         _readoutPanel.GrowVertical = Control.GrowDirection.Begin;
         _root.AddChild(_readoutPanel);
 
-        _readout = new Label();
-        _readout.AddThemeFontSizeOverride("font_size", 15);
-        _readout.AddThemeColorOverride("font_color", new Color(0.7f, 1f, 0.75f));
+        _readout = UiKit.Text("", UiTheme.FontBody, new Color(0.7f, 1f, 0.75f));
         _readoutPanel.AddChild(_readout);
     }
 
-    private Label CentredLabel(int size, float bottom)
+    /// <summary>Text drawn straight over the world: outline and shadow, no box (the style guide's floating text).</summary>
+    private static Label OverWorld(Label label)
     {
-        var label = new Label
-        {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        };
-        label.AddThemeFontSizeOverride("font_size", size);
-        label.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.9f));
-        label.AddThemeConstantOverride("outline_size", 5);
+        label.AddThemeFontOverride("font", UiTheme.Bold);
+        label.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.55f));
+        label.AddThemeConstantOverride("outline_size", 4);
+        label.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.45f));
+        label.AddThemeConstantOverride("shadow_offset_x", 1);
+        label.AddThemeConstantOverride("shadow_offset_y", 2);
+        label.AddThemeConstantOverride("shadow_outline_size", 6);
+        return label;
+    }
+
+    private Label CentredLabel(int size, float bottom, Color color)
+    {
+        var label = OverWorld(UiKit.Text("", size, color, align: HorizontalAlignment.Center));
         label.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
         label.OffsetLeft = -300;
         label.OffsetRight = 300;
@@ -267,134 +281,162 @@ public partial class InventoryUi : CanvasLayer
         centre.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(centre);
 
-        var panel = new PanelContainer { Visible = false };
-        panel.AddThemeStyleboxOverride("panel", PanelStyle(0.94f, 20));
+        // themed here, on the panel's own root, never on the Window (style guide, step 1)
+        var panel = new PanelContainer { Visible = false, Theme = UiTheme.Get() };
+        panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.88f, 12, 22));
         centre.AddChild(panel);
         _panel = panel;
 
-        var columns = new HBoxContainer();
-        columns.AddThemeConstantOverride("separation", 20);
+        var columns = UiKit.HBox(22);
         panel.AddChild(columns);
 
-        var left = new VBoxContainer();
-        left.AddThemeConstantOverride("separation", 8);
+        // ---- left: hotbar and pack ----
+        var left = UiKit.VBox(8);
         columns.AddChild(left);
 
-        var title = new Label { Text = "Inventory" };
-        title.AddThemeFontSizeOverride("font_size", 22);
-        title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
-        left.AddChild(title);
+        var header = UiKit.HBox(12);
+        header.AddChild(UiKit.Text("Inventory", UiTheme.FontHeading, UiTheme.Text, bold: true));
+        header.AddChild(UiKit.Spacer(expand: true));
+        _capacity = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        _capacity.SizeFlagsVertical = Control.SizeFlags.ShrinkEnd;
+        header.AddChild(_capacity);
+        left.AddChild(header);
 
-        _hotbarCaption = Caption("");
-        left.AddChild(_hotbarCaption);
-        left.AddChild(SlotGrid(0, Inventory.HotbarSize));
-        left.AddChild(Caption("Backpack"));
-        left.AddChild(SlotGrid(Inventory.HotbarSize, Inventory.BackpackSize));
+        left.AddChild(UiKit.Spacer(4));
+        left.AddChild(UiKit.Section("Hotbar"));
+        left.AddChild(SlotGrid(0, Inventory.HotbarSize, Inventory.HotbarSize));
+        left.AddChild(UiKit.Spacer(4));
+        left.AddChild(UiKit.Section("Pack"));
+        left.AddChild(SlotGrid(Inventory.HotbarSize, Inventory.MaxPack, Inventory.PackColumns));
+        _packHint = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextFaint);
+        left.AddChild(_packHint);
 
-        _controlsHint = Caption("");
-        _controlsHint.AutowrapMode = TextServer.AutowrapMode.Off;
+        left.AddChild(UiKit.Spacer(expand: true));
+        _dropHint = UiKit.Text("", UiTheme.FontSmall, UiTheme.Amber);
+        left.AddChild(_dropHint);
+        _controlsHint = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextFaint);
         left.AddChild(_controlsHint);
 
-        var right = new VBoxContainer { CustomMinimumSize = new Vector2(230, 0) };
-        right.AddThemeConstantOverride("separation", 8);
+        // ---- right: bag and bin, the item card, money ----
+        var right = UiKit.VBox(12);
+        right.CustomMinimumSize = new Vector2(268, 0);
         columns.AddChild(right);
 
-        _infoName = new Label();
-        _infoName.AddThemeFontSizeOverride("font_size", 18);
-        right.AddChild(_infoName);
-
-        _infoBlurb = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(230, 0) };
-        _infoBlurb.AddThemeFontSizeOverride("font_size", 13);
-        _infoBlurb.AddThemeColorOverride("font_color", new Color(0.7f, 0.74f, 0.8f));
-        right.AddChild(_infoBlurb);
-
-        _infoValue = new Label();
-        _infoValue.AddThemeFontSizeOverride("font_size", 12);
-        _infoValue.AddThemeColorOverride("font_color", new Color(0.62f, 0.58f, 0.44f));
-        right.AddChild(_infoValue);
-
-        _useButton = new Button { Text = "Use" };
-        _useButton.Pressed += () => _items.UseSlot(null, _inspect);
-        right.AddChild(_useButton);
-
-        _handButton = new Button { Text = "Take in hand" };
-        _handButton.Pressed += TakeInHand;
-        right.AddChild(_handButton);
-
-        // onto the ground in front of you, where anyone can pick it up (#206)
-        _dropButton = new Button { Text = "Drop on the ground" };
-        _dropButton.Pressed += () =>
+        var gear = UiKit.VBox(10);
+        gear.AddChild(UiKit.Section("Bag"));
+        var bagRow = UiKit.HBox(12);
+        var bag = new SlotButton
         {
-            _items.DropSlot(null, _inspect, all: true);
-            Inspect(_inspect);
-        };
-        right.AddChild(_dropButton);
-
-        // the Polaroids: every photo in the pack and every one taken here (PhotoUi)
-        var albumButton = new Button { Text = "Photo album" };
-        albumButton.Pressed += () => _items.PhotoUi.OpenAlbum();
-        right.AddChild(albumButton);
-
-        // the bin: drop a stack on it to throw it away; click it empty-handed to get it back
-        var binRow = new HBoxContainer();
-        binRow.AddThemeConstantOverride("separation", 10);
-        _trash = new SlotButton
-        {
-            Slot = TrashSlot, KeyHint = "", IsTrash = true,
+            Slot = Inventory.BagSlot, KeyHint = "", Placeholder = "BAG",
             CustomMinimumSize = new Vector2(PanelSlotPx, PanelSlotPx),
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        _trash.Pressed += () => ClickTrash();
-        binRow.AddChild(_trash);
-        var binText = Caption("Bin: drop a stack here to throw it away.\nClick it again to take the last one back.");
-        binText.VerticalAlignment = VerticalAlignment.Center;
-        binRow.AddChild(binText);
-        right.AddChild(binRow);
+        bag.Pressed += () => { Inv.PrimaryClick(Inventory.BagSlot); Inspect(Inventory.BagSlot); };
+        bag.FocusEntered += () => Inspect(Inventory.BagSlot);
+        _panelSlots[Inventory.BagSlot] = bag;
+        bagRow.AddChild(bag);
+        var bagText = UiKit.VBox(2);
+        bagText.Alignment = BoxContainer.AlignmentMode.Center;
+        bagText.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _bagName = UiKit.Text("", UiTheme.FontBody, UiTheme.Text, bold: true);
+        _bagInfo = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextDim, wrap: true);
+        bagText.AddChild(_bagName);
+        bagText.AddChild(_bagInfo);
+        bagRow.AddChild(bagText);
 
-        right.AddChild(new HSeparator());
+        // the bin: drop a stack on it to destroy it; click it empty-handed to get it back
+        _trash = new SlotButton
+        {
+            Slot = TrashSlot, KeyHint = "", Placeholder = "BIN", IsTrash = true,
+            CustomMinimumSize = new Vector2(PanelSlotPx, PanelSlotPx),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            TooltipText = "Bin: drop a stack here to destroy it. Click it again to take the last one back.",
+        };
+        _trash.Pressed += ClickTrash;
+        bagRow.AddChild(_trash);
+        gear.AddChild(bagRow);
+        right.AddChild(UiKit.Card(gear, 0.55f, 14));
+
+        // the item under the pointer (or the focused slot)
+        var info = UiKit.VBox(6);
+        var titleRow = UiKit.HBox(12);
+        _infoIcon = new TextureRect
+        {
+            CustomMinimumSize = new Vector2(48, 48),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        titleRow.AddChild(_infoIcon);
+        var names = UiKit.VBox(0);
+        names.Alignment = BoxContainer.AlignmentMode.Center;
+        names.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _infoName = UiKit.Text("", UiTheme.FontBody + 2, UiTheme.Text, bold: true);
+        _infoKind = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextDim);
+        names.AddChild(_infoName);
+        names.AddChild(_infoKind);
+        titleRow.AddChild(names);
+        info.AddChild(titleRow);
+        _infoBlurb = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim, wrap: true);
+        _infoBlurb.CustomMinimumSize = new Vector2(236, 56);
+        info.AddChild(_infoBlurb);
+        _infoValue = UiKit.Text("", UiTheme.FontTiny, new Color(UiTheme.Amber, 0.75f));
+        info.AddChild(_infoValue);
+
+        var actions = UiKit.HBox(6);
+        _useButton = UiKit.Button("Use");
+        _useButton.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _useButton.Pressed += () => { _items.UseSlot(null, _inspect); Inspect(_inspect); };
+        _handButton = UiKit.Button("In hand");
+        _handButton.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _handButton.Pressed += TakeInHand;
+        _dropButton = UiKit.Button("Drop");
+        _dropButton.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _dropButton.Pressed += () => { DropSlot(_inspect, all: true); Inspect(_inspect); };
+        actions.AddChild(_useButton);
+        actions.AddChild(_handButton);
+        actions.AddChild(_dropButton);
+        info.AddChild(actions);
+        right.AddChild(UiKit.Card(info, 0.55f, 14));
 
         // money: what is in your pocket, what is safe, and the button between the two
-        var money = new Label { Text = "Money" };
-        money.AddThemeFontSizeOverride("font_size", 16);
-        money.AddThemeColorOverride("font_color", new Color(0.98f, 0.84f, 0.38f));
-        right.AddChild(money);
-        _cashLine = new Label();
-        _cashLine.AddThemeFontSizeOverride("font_size", 14);
-        right.AddChild(_cashLine);
-        _accountLine = new Label();
-        _accountLine.AddThemeFontSizeOverride("font_size", 14);
-        _accountLine.AddThemeColorOverride("font_color", new Color(0.7f, 0.86f, 0.72f));
-        right.AddChild(_accountLine);
-        _claimButton = new Button();
+        var money = UiKit.VBox(4);
+        money.AddChild(UiKit.Section("Money"));
+        _cashLine = UiKit.Text("", UiTheme.FontBody, UiTheme.Text);
+        _accountLine = UiKit.Text("", UiTheme.FontSmall, UiTheme.Good);
+        money.AddChild(_cashLine);
+        money.AddChild(_accountLine);
+        money.AddChild(UiKit.Spacer(4));
+        _claimButton = UiKit.Button("", primary: true);
         _claimButton.Pressed += () => Bank.Instance?.ClaimAll();
-        right.AddChild(_claimButton);
-        var moneyHint = Caption("Cash you carry is lost if you are knocked out.\nClaimed money is safe in your account.");
-        right.AddChild(moneyHint);
+        money.AddChild(_claimButton);
+        money.AddChild(UiKit.Text("Cash you carry is lost if you are knocked out.", UiTheme.FontTiny, UiTheme.TextFaint, wrap: true));
+        right.AddChild(UiKit.Card(money, 0.55f, 14));
+
+        // the Polaroids: every photo in the pack and every one taken here (PhotoUi)
+        var album = UiKit.Button("Photo album");
+        album.Pressed += () => _items.PhotoUi.OpenAlbum();
+        right.AddChild(album);
     }
 
     private void BuildTooltip()
     {
-        _tooltip = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
-        _tooltip.AddThemeStyleboxOverride("panel", PanelStyle(0.96f, 8));
-        _tooltipText = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(220, 0) };
-        _tooltipText.AddThemeFontSizeOverride("font_size", 13);
+        _tooltip = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false, Theme = UiTheme.Get() };
+        var style = UiTheme.GlassPanel(0.97f, 8, 10);
+        style.ShadowSize = 12;
+        _tooltip.AddThemeStyleboxOverride("panel", style);
+        _tooltipText = UiKit.Text("", UiTheme.FontSmall, UiTheme.Text, wrap: true);
+        _tooltipText.CustomMinimumSize = new Vector2(220, 0);
         _tooltip.AddChild(_tooltipText);
         _root.AddChild(_tooltip);
     }
 
-    private static Label Caption(string text)
+    private GridContainer SlotGrid(int first, int count, int columns)
     {
-        var label = new Label { Text = text };
-        label.AddThemeFontSizeOverride("font_size", 12);
-        label.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
-        return label;
-    }
-
-    private GridContainer SlotGrid(int first, int count)
-    {
-        var grid = new GridContainer { Columns = Inventory.HotbarSize };
-        grid.AddThemeConstantOverride("h_separation", 6);
-        grid.AddThemeConstantOverride("v_separation", 6);
+        var grid = new GridContainer { Columns = columns };
+        grid.AddThemeConstantOverride("h_separation", Gap);
+        grid.AddThemeConstantOverride("v_separation", Gap);
         for (int i = first; i < first + count; i++)
         {
             int slot = i;
@@ -415,18 +457,6 @@ public partial class InventoryUi : CanvasLayer
         return grid;
     }
 
-    private static StyleBoxFlat PanelStyle(float alpha, int margin)
-    {
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.05f, 0.06f, 0.08f, alpha),
-            ContentMarginLeft = margin, ContentMarginRight = margin,
-            ContentMarginTop = margin * 0.8f, ContentMarginBottom = margin * 0.8f,
-        };
-        style.SetCornerRadiusAll(6);
-        return style;
-    }
-
     // ------------------------------------------------------------------------------------
     // state
     // ------------------------------------------------------------------------------------
@@ -437,17 +467,37 @@ public partial class InventoryUi : CanvasLayer
         if (_panel == null) return;
         for (int i = 0; i < Inventory.HotbarSize; i++)
             _hotbarSlots[i].Display(Inv[i], i == Inv.Selected, false);
-        for (int i = 0; i < Inventory.Size; i++)
+        int capacity = Inv.Capacity;
+        // slots shrink a little when a big bag's rows would not fit the screen's height (720p, hiking pack)
+        int rows = 1 + (Inv.PackSize + Inventory.PackColumns - 1) / Inventory.PackColumns;
+        float px = Mathf.Clamp(Mathf.Floor((_root.Size.Y - 330f) / rows) - Gap, 38f, PanelSlotPx);
+        for (int i = 0; i < _panelSlots.Length; i++)
         {
-            _panelSlots[i].Hot = i == _hover;
-            _panelSlots[i].Display(Inv[i], i == Inv.Selected, _paintSlots.Contains(i));
+            var b = _panelSlots[i];
+            if (i < Inventory.Size) b.CustomMinimumSize = new Vector2(px, px);
+            // only the rows the pack has now: a bag adds rows, taking it off removes them
+            b.Visible = Inv.IsOpen(i);
+            b.Hot = i == _hover;
+            b.Display(Inv[i], i == Inv.Selected, _paintSlots.Contains(i));
         }
         _trash.Hot = _hover == TrashSlot;
         _trash.Display(Inv.Trashed, false, false);
+
+        int used = Enumerable.Range(0, capacity).Count(i => !Inv[i].IsEmpty);
+        _capacity.Text = $"{used} / {capacity} slots";
+        _packHint.Text = Inv.PackSize < Inventory.MaxPack
+            ? $"{Inv.PackSize} pack slots. Bags found in houses add more, up to {Inventory.MaxPack}."
+            : $"{Inv.PackSize} pack slots: the biggest bag there is.";
+        var bag = Inv.Bag;
+        var bagDef = bag.IsEmpty ? null : ItemDefs.Get(bag.Id);
+        _bagName.Text = bagDef?.Name ?? "No bag";
+        _bagInfo.Text = bagDef != null ? $"+{bagDef.PackSlots} pack slots" : "Put one here for more room.";
+
         Inspect(_inspect);
         _wheel.QueueRedraw();
         _carried.QueueRedraw();
         RefreshMoney();
+        RefreshDropHint();
 
         // the name of what just came into the hand, briefly
         if (Inv.HeldId != _lastHeld)
@@ -464,9 +514,16 @@ public partial class InventoryUi : CanvasLayer
         bool pending = Bank.Instance?.Pending == true;
         _cashLine.Text = $"Cash on you:  {Chf(Inv.Cash)}";
         _accountLine.Text = $"Account:  {Chf(balance)}";
-        _claimButton.Text = pending ? "Claiming…" : Inv.Cash > 0 ? $"Claim {Chf(Inv.Cash)} to account" : "No cash to claim";
+        _claimButton.Text = pending ? "Claiming…" : Inv.Cash > 0 ? $"Claim {Chf(Inv.Cash)}" : "No cash to claim";
         _claimButton.Disabled = pending || Inv.Cash <= 0 || Bank.Instance == null;
         _cashHud.Text = Inv.Cash > 0 ? $"{Chf(Inv.Cash)}\n{InputHints.Tag(PlayerInput.Inventory)} claim" : "";
+    }
+
+    private void RefreshDropHint()
+    {
+        bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
+        _dropHint.Text = !IsOpen || Inv.Carried.IsEmpty ? ""
+            : pad ? "(B) put it back" : "Click outside the panel to drop it on the ground  ·  right click: drop one";
     }
 
     private static string Chf(long amount) =>
@@ -475,15 +532,12 @@ public partial class InventoryUi : CanvasLayer
     /// <summary>The key reference under the slots, for the device in hand.</summary>
     private void OnDeviceChanged()
     {
-        _hotbarCaption.Text = $"Hotbar — in reach ({InputHints.Label(PlayerInput.NextItem)} / 1–6 to pick)";
         _controlsHint.Text = PlayerInput.LastDevice == InputDevice.Gamepad
-            ? "(A) pick up / put down   (X) take half / put one   (Y) send across\n"
-              + $"(B) put back, then close   {InputHints.Label(PlayerInput.Inventory)} close"
-            : "LMB pick up / put down   RMB take half / put one   Shift+LMB send across\n"
-              + "Drag to move or to spread a stack   Double-click gather   1–6 over a slot: swap into hotbar\n"
-              + $"{InputHints.Label(PlayerInput.Inventory)} / Esc close   {InputHints.Label(PlayerInput.QuickWheel)} (hold) quick wheel";
-        _useButton.Text = PlayerInput.LastDevice == InputDevice.Gamepad ? "Use" : "Use  [MMB]";
+            ? "(A) pick up / put down   (X) take half / put one   (Y) send across   (B) put back, then close"
+            : "LMB pick up / put down   RMB half / one   Shift+LMB send across   Drag to spread   Double-click gather\n"
+              + $"1–6 over a slot: into hotbar   Q drop one, Ctrl+Q stack   MMB use   {InputHints.Label(PlayerInput.Inventory)} / Esc close";
         RefreshMoney();
+        RefreshDropHint();
     }
 
     private void OnBalanceChanged(long deposited)
@@ -492,19 +546,33 @@ public partial class InventoryUi : CanvasLayer
         RefreshMoney();
     }
 
+    private void OnRefused(string why)
+    {
+        Toast(why);
+        Refresh();
+    }
+
     private void Inspect(int slot)
     {
-        if (slot < 0) return;
+        if (slot < 0 || !Inv.IsOpen(slot)) return;
         _inspect = slot;
         var stack = Inv[slot];
         var def = stack.IsEmpty ? null : ItemDefs.Get(stack.Id);
+        _infoIcon.Texture = def == null ? null
+            : stack.Id == ItemId.Photo && PhotoStore.Thumbnail(stack.Data) is { } thumb ? thumb
+            : ItemIcons.Get(stack.Id);
         _infoName.Text = def == null ? "Empty slot" : def.MaxStack > 1 ? $"{def.Name}  ×{stack.Count}" : def.Name;
-        _infoName.AddThemeColorOverride("font_color", def?.Tint.Lightened(0.35f) ?? new Color(0.6f, 0.6f, 0.6f));
+        _infoName.AddThemeColorOverride("font_color", def == null ? UiTheme.TextFaint : UiTheme.Text);
+        _infoKind.Text = slot == Inventory.BagSlot ? "Worn bag"
+            : def != null ? def.Category.ToString() + (slot < Inventory.HotbarSize ? " · hotbar" : " · pack")
+            : slot < Inventory.HotbarSize ? "Hotbar slot" : "Pack slot";
         _infoBlurb.Text = def != null ? InputHints.Format(def.Blurb)
-            : slot < Inventory.HotbarSize ? "Hotbar slot — whatever is here can be in your hand." : "Backpack slot.";
+            : slot == Inventory.BagSlot ? "A bag worn here adds rows to the pack."
+            : slot < Inventory.HotbarSize ? "Whatever is here can be in your hand." : "Room for anything you find.";
         _infoValue.Text = def is { Value: > 0 } ? $"Worth about {def.Value * stack.Count:0.#} CHF" : "";
-        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear or ItemUse.Print);
-        _handButton.Disabled = def == null || slot == Inv.Selected;
+        _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear or ItemUse.Print or ItemUse.Bag);
+        _useButton.Text = def?.Use == ItemUse.Bag ? slot == Inventory.BagSlot ? "Take off" : "Wear" : "Use";
+        _handButton.Disabled = def == null || slot == Inv.Selected || slot == Inventory.BagSlot;
         _dropButton.Disabled = def == null || !ItemsActive;
     }
 
@@ -520,6 +588,22 @@ public partial class InventoryUi : CanvasLayer
     {
         if (!Inv.Carried.IsEmpty) Inv.Trash();
         else Inv.Untrash();
+    }
+
+    /// <summary>A slot's stack (or one of it) onto the ground in front of you.</summary>
+    private void DropSlot(int slot, bool all)
+    {
+        if (!Inv.IsOpen(slot) || Inv[slot].IsEmpty) return;
+        _items.DropSlot(null, slot, all);
+    }
+
+    /// <summary>The cursor stack (or one of it) onto the ground in front of you; back in the pack if it cannot go.</summary>
+    private void DropCarried(bool one)
+    {
+        var stack = Inv.TakeCarried(one);
+        if (stack.IsEmpty) return;
+        if (!_items.DropStack(null, stack) && Inv.Add(stack) is var left and > 0) Inv.Bin(stack with { Count = left });
+        RefreshDropHint();
     }
 
     public void Toast(string text)
@@ -550,8 +634,8 @@ public partial class InventoryUi : CanvasLayer
         _panel.Visible = false;
         _tooltip.Visible = false;
         _hover = -1;
-        // Minecraft throws a stack held on closing to the ground; here it goes back in the pack
-        Inv.ReturnCarried();
+        // a stack held on closing goes back in the pack; what no longer fits goes on the ground
+        if (Inv.ReturnCarried() is { IsEmpty: false } left && !_items.DropStack(null, left)) Inv.Bin(left);
         UiFocus.Set(this, false);
         Core.MouseCapture.Capture();
         Refresh();
@@ -577,13 +661,16 @@ public partial class InventoryUi : CanvasLayer
     // the panel's mouse
     // ------------------------------------------------------------------------------------
 
-    /// <summary>The slot under a point, <see cref="TrashSlot"/> for the bin, or -1.</summary>
+    /// <summary>The slot under a point (the bag slot included), <see cref="TrashSlot"/> for the bin, or -1.</summary>
     private int SlotAt(Vector2 point)
     {
-        for (int i = 0; i < Inventory.Size; i++)
-            if (_panelSlots[i].GetGlobalRect().HasPoint(point)) return i;
+        for (int i = 0; i < _panelSlots.Length; i++)
+            if (_panelSlots[i].Visible && _panelSlots[i].GetGlobalRect().HasPoint(point)) return i;
         return _trash.GetGlobalRect().HasPoint(point) ? TrashSlot : -1;
     }
+
+    /// <summary>Outside the panel altogether: where a click drops the cursor stack on the ground.</summary>
+    private bool OutsidePanel(Vector2 point) => !_panel.GetGlobalRect().HasPoint(point);
 
     /// <summary>Where the carried stack is drawn: at the pointer, or on the focused slot with a pad.</summary>
     public Vector2 CarriedAt =>
@@ -592,6 +679,9 @@ public partial class InventoryUi : CanvasLayer
             : _cursor;
 
     public ItemStack CarriedStack => IsOpen ? Inv.Carried : ItemStack.Empty;
+
+    /// <summary>The cursor is over the world, not the panel: the carried stack is drawn as about to fall.</summary>
+    public bool CarriedOutside => IsOpen && PlayerInput.LastDevice != InputDevice.Gamepad && OutsidePanel(_cursor);
 
     private bool HandlePanelMouse(InputEvent e)
     {
@@ -605,7 +695,8 @@ public partial class InventoryUi : CanvasLayer
                 {
                     _hover = hover;
                     if (hover >= 0) Inspect(hover);
-                    if (_paintButton != MouseButton.None && hover >= 0 && !_paintSlots.Contains(hover)) AddPaint(hover);
+                    if (_paintButton != MouseButton.None && hover >= 0 && hover != Inventory.BagSlot && !_paintSlots.Contains(hover))
+                        AddPaint(hover);
                     Refresh();
                 }
                 _carried.QueueRedraw();
@@ -615,7 +706,13 @@ public partial class InventoryUi : CanvasLayer
             case InputEventMouseButton { Pressed: true } b when b.ButtonIndex is MouseButton.Left or MouseButton.Right or MouseButton.Middle:
             {
                 int slot = SlotAt(b.Position);
-                if (slot == -1) return false;
+                if (slot == -1)
+                {
+                    // outside the panel with a stack on the cursor: it falls to the ground
+                    if (b.ButtonIndex == MouseButton.Middle || Inv.Carried.IsEmpty || !OutsidePanel(b.Position)) return false;
+                    DropCarried(one: b.ButtonIndex == MouseButton.Right);
+                    return true;
+                }
                 if (slot == TrashSlot)
                 {
                     if (b.ButtonIndex == MouseButton.Left) ClickTrash();
@@ -634,12 +731,12 @@ public partial class InventoryUi : CanvasLayer
                 _lastClickTime = now;
 
                 if (left && b.ShiftPressed && Inv.Carried.IsEmpty) Inv.QuickMove(slot);
-                else if (doubleClick && !Inv.Carried.IsEmpty)
+                else if (doubleClick && !Inv.Carried.IsEmpty && slot != Inventory.BagSlot)
                 {
                     EndPaint(commit: false);
                     Inv.Collect();
                 }
-                else if (Inv.Carried.IsEmpty)
+                else if (Inv.Carried.IsEmpty || slot == Inventory.BagSlot)
                 {
                     if (left) Inv.PrimaryClick(slot);
                     else Inv.SecondaryClick(slot);
@@ -674,7 +771,8 @@ public partial class InventoryUi : CanvasLayer
                     _pickedOnPress = -1;
                     if (slot == TrashSlot) Inv.Trash();
                     else if (slot >= 0 && slot != from) Inv.PrimaryClick(slot);   // dropped on another slot
-                    return slot != -1;
+                    else if (slot == -1 && OutsidePanel(b.Position)) DropCarried(one: false);   // dragged off the panel
+                    return true;
                 }
                 return false;
             }
@@ -721,7 +819,9 @@ public partial class InventoryUi : CanvasLayer
         var def = ItemDefs.Get(stack.Id)!;
         string count = def.MaxStack > 1 ? $"  ×{stack.Count}" : "";
         string worth = def.Value > 0 ? $"\n{def.Value * stack.Count:0.#} CHF" : "";
-        string swap = _hover >= Inventory.HotbarSize ? "\n1–6 swap into hotbar · Shift+click to hotbar" : "\nShift+click to backpack";
+        string swap = _hover == Inventory.BagSlot ? "\nClick to take it off · Shift+click into the pack"
+            : def.Use == ItemUse.Bag && Inv.Bag.IsEmpty ? "\nShift+click to wear it"
+            : _hover >= Inventory.HotbarSize ? "\n1–6 swap into hotbar · Shift+click to hotbar" : "\nShift+click to pack";
         _tooltipText.Text = $"{def.Name}{count}\n{InputHints.Format(def.Blurb)}{worth}{swap}";
         _tooltip.ResetSize();
         var size = _tooltip.Size;
@@ -743,7 +843,10 @@ public partial class InventoryUi : CanvasLayer
         {
             if (!e.IsPressed() || e.IsEcho()) return;
             if (e.IsActionPressed("ui_cancel") && !Inv.Carried.IsEmpty)
-                Inv.ReturnCarried();   // B first puts the carried stack back, then closes
+            {
+                // B first puts the carried stack back, then closes
+                if (Inv.ReturnCarried() is { IsEmpty: false } left && !_items.DropStack(null, left)) Inv.Bin(left);
+            }
             else if (e.IsActionPressed(PlayerInput.Inventory) || e.IsActionPressed(PlayerInput.Menu)
                      || e.IsActionPressed("ui_cancel"))
                 Close();
@@ -781,11 +884,14 @@ public partial class InventoryUi : CanvasLayer
         if (IsOpen)
         {
             if (HandlePanelMouse(e)) GetViewport().SetInputAsHandled();
-            // a number key over a slot swaps it with that hotbar slot, as in Minecraft
-            else if (e is InputEventKey { Pressed: true, Echo: false } k && _hover >= 0
-                     && (int)k.PhysicalKeycode - (int)Key.Key1 is var n && n >= 0 && n < Inventory.HotbarSize)
+            else if (e is InputEventKey { Pressed: true, Echo: false } k && _hover >= 0)
             {
-                Inv.SwapWithHotbar(_hover, n);
+                // a number key over a slot swaps it with that hotbar slot, Q drops, as in Minecraft
+                if ((int)k.PhysicalKeycode - (int)Key.Key1 is var n && n >= 0 && n < Inventory.HotbarSize)
+                    Inv.SwapWithHotbar(_hover, n);
+                else if (k.PhysicalKeycode == Key.Q)
+                    DropSlot(_hover, all: k.CtrlPressed);
+                else return;
                 GetViewport().SetInputAsHandled();
             }
             return;
@@ -890,14 +996,16 @@ void fragment() {
 }";
 }
 
-/// <summary>One inventory slot: an icon swatch with a two-letter glyph, a count and a key hint.</summary>
+/// <summary>One inventory slot: the item's icon, a count and a key hint, on a rounded glass tile.</summary>
 public partial class SlotButton : Button
 {
     public int Slot;
     public string KeyHint = "";
+    /// <summary>Faint word drawn in an empty special slot (BAG, BIN).</summary>
+    public string Placeholder = "";
     /// <summary>Under the pointer. Set by the panel, which hit-tests the mouse itself.</summary>
     public bool Hot;
-    /// <summary>The bin, drawn with its own mark when empty.</summary>
+    /// <summary>The bin, drawn in red when it holds something.</summary>
     public bool IsTrash;
     private ItemStack _stack;
     private bool _selected, _picked;
@@ -923,10 +1031,11 @@ public partial class SlotButton : Button
     public override void _Draw()
     {
         var r = new Rect2(Vector2.Zero, Size);
-        SlotDrawing.DrawSlot(this, r, _stack, KeyHint, _selected, _picked, Hot || IsHovered() || HasFocus());
-        if (IsTrash && _stack.IsEmpty)
-            DrawString(ThemeDB.FallbackFont, new Vector2(0, r.Size.Y * 0.62f), "BIN",
-                HorizontalAlignment.Center, r.Size.X, 13, new Color(0.55f, 0.35f, 0.32f));
+        SlotDrawing.DrawSlot(this, r, _stack, KeyHint, _selected, _picked, Hot || IsHovered() || HasFocus(),
+            IsTrash && !_stack.IsEmpty);
+        if (_stack.IsEmpty && Placeholder.Length > 0)
+            DrawString(UiTheme.Bold, new Vector2(0, r.Size.Y * 0.5f + 4), Placeholder,
+                HorizontalAlignment.Center, r.Size.X, UiTheme.FontTiny, UiTheme.TextFaint);
     }
 }
 
@@ -942,21 +1051,41 @@ public partial class CarriedView : Control
     {
         var stack = _ui.CarriedStack;
         if (stack.IsEmpty) return;
-        const float size = 50f;
+        const float size = 52f;
         var at = _ui.CarriedAt - new Vector2(size * 0.5f, size * 0.5f);
         SlotDrawing.DrawSlot(this, new Rect2(at, new Vector2(size, size)), stack, "", false, true, false);
+        // over the world: an arrow down says a click lets it fall
+        if (_ui.CarriedOutside)
+        {
+            var c = new Vector2(at.X + size * 0.5f, at.Y + size + 10);
+            DrawColoredPolygon(new[] { c + new Vector2(-7, 0), c + new Vector2(7, 0), c + new Vector2(0, 8) }, UiTheme.Amber);
+        }
     }
 }
 
 public static class SlotDrawing
 {
-    /// <summary>Shared by the slots and the wheel so an item looks the same everywhere it appears.</summary>
-    public static void DrawSlot(CanvasItem c, Rect2 r, ItemStack stack, string keyHint,
-        bool selected, bool picked, bool hot)
-    {
-        var font = ThemeDB.FallbackFont;
-        c.DrawRect(r, new Color(0.04f, 0.05f, 0.07f, 0.78f));
+    private static StyleBoxFlat? _tile, _tileHot, _tileSelected, _tilePicked, _tileBad;
 
+    private static StyleBoxFlat Tile(Color bg, Color border, int width)
+    {
+        var s = UiTheme.Flat(bg, 8, 0, 0, border, width);
+        return s;
+    }
+
+    /// <summary>Shared by the slots, the wheel and the loot window so an item looks the same everywhere it appears.</summary>
+    public static void DrawSlot(CanvasItem c, Rect2 r, ItemStack stack, string keyHint,
+        bool selected, bool picked, bool hot, bool bad = false)
+    {
+        _tile ??= Tile(new Color(0.10f, 0.115f, 0.14f, 0.72f), new Color(1, 1, 1, 0.07f), 1);
+        _tileHot ??= Tile(new Color(0.14f, 0.16f, 0.19f, 0.82f), new Color(1, 1, 1, 0.35f), 1);
+        _tileSelected ??= Tile(new Color(UiTheme.Amber, 0.10f), UiTheme.Amber, 2);
+        _tilePicked ??= Tile(new Color(UiTheme.Amber, 0.18f), new Color(UiTheme.Amber, 0.7f), 2);
+        _tileBad ??= Tile(new Color(UiTheme.Bad, 0.16f), new Color(UiTheme.Bad, 0.7f), 1);
+        var tile = picked ? _tilePicked : selected ? _tileSelected : bad ? _tileBad : hot ? _tileHot : _tile;
+        c.DrawStyleBox(tile, r);
+
+        var font = UiTheme.Bold;
         if (!stack.IsEmpty && ItemDefs.Get(stack.Id) is { } def)
         {
             var icon = ItemIcons.Get(stack.Id);
@@ -977,32 +1106,19 @@ public static class SlotDrawing
                 var at = (r.GetCenter() - size * 0.5f).Round();
                 c.DrawTextureRect(icon, new Rect2(at, size), false);
             }
-            else
-            {
-                var inner = r.Grow(-r.Size.X * 0.18f);
-                c.DrawRect(inner, def.Tint);
-                c.DrawRect(inner, def.Tint.Lightened(0.4f), false, 1.5f);
-                int glyphSize = (int)(r.Size.Y * 0.30f);
-                c.DrawString(font, new Vector2(inner.Position.X, inner.GetCenter().Y + glyphSize * 0.36f), def.Glyph,
-                    HorizontalAlignment.Center, inner.Size.X, glyphSize, Colors.White);
-            }
             if (def.MaxStack > 1)
             {
-                int countSize = (int)(r.Size.Y * 0.26f);
-                c.DrawString(font, new Vector2(r.Position.X, r.End.Y - 3), stack.Count.ToString(),
-                    HorizontalAlignment.Right, r.Size.X - 4, countSize, new Color(1f, 1f, 0.85f));
+                int countSize = Mathf.Max(UiTheme.FontTiny, (int)(r.Size.Y * 0.24f));
+                var pos = new Vector2(r.Position.X, r.End.Y - 4);
+                c.DrawStringOutline(font, pos, stack.Count.ToString(), HorizontalAlignment.Right, r.Size.X - 5, countSize, 4,
+                    new Color(0, 0, 0, 0.75f));
+                c.DrawString(font, pos, stack.Count.ToString(), HorizontalAlignment.Right, r.Size.X - 5, countSize, UiTheme.Text);
             }
         }
 
         if (keyHint.Length > 0)
-            c.DrawString(font, r.Position + new Vector2(4, 12), keyHint,
-                HorizontalAlignment.Left, -1, 11, new Color(0.65f, 0.68f, 0.72f));
-
-        var border = picked ? new Color(0.3f, 0.85f, 1f)
-            : selected ? new Color(0.98f, 0.72f, 0.10f)
-            : hot ? new Color(0.9f, 0.9f, 0.9f)
-            : new Color(0.25f, 0.28f, 0.33f);
-        c.DrawRect(r.Grow(-1), border, false, selected || picked ? 3f : 1.5f);
+            c.DrawString(font, r.Position + new Vector2(5, 13), keyHint,
+                HorizontalAlignment.Left, -1, UiTheme.FontTiny, selected ? UiTheme.Amber : UiTheme.TextFaint);
     }
 }
 

@@ -471,6 +471,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chat = ChatManager.CreateClient();
         _chat.Teleporter = _teleporter;
         _chat.Inventory = inventory;
+        _chat.GiveOrDrop = items.Give;
         _chat.PlaceSearch = _places;
         AddChild(_chat);
         _chatUi = ChatUi.Create(_chat, new ChatCompleter
@@ -500,6 +501,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         loot.Items = items;
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
+        _radioUi.Give = items.Give;
         AddChild(_radioUi);
         if (Items.CarCdCheck.Create(() => LocalPlayer, () => _players, items.Inventory, networked: false) is { } carCdShots) AddChild(carCdShots);
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)

@@ -139,7 +139,7 @@ public partial class ItemController : Node
     private void OnRadioRefused(string text)
     {
         _ui.Toast(text);
-        if (text.Contains("throw", StringComparison.OrdinalIgnoreCase)) _inventory.Add(ItemId.Radio, 1);
+        if (text.Contains("throw", StringComparison.OrdinalIgnoreCase)) Give(new ItemStack(ItemId.Radio, 1));
     }
 
     private void OnDropRefused(string text, ItemStack back)
@@ -346,6 +346,21 @@ public partial class ItemController : Node
         UseSlot(player, _inventory.Selected);
     }
 
+    /// <summary>
+    /// Puts something new in the inventory (a developed photo, a flag picked up, a spawned item):
+    /// what does not fit is dropped on the ground in front of the player rather than lost. Returns
+    /// how many could go nowhere at all (no player, nowhere to drop).
+    /// </summary>
+    public int Give(ItemStack stack)
+    {
+        int left = _inventory.Add(stack);
+        if (left <= 0) return 0;
+        var rest = stack with { Count = left };
+        if (!DropStack(null, rest)) return left;
+        _ui.Toast($"No room in your pack: {ItemDefs.Get(stack.Id)?.Name ?? "it"} dropped at your feet.");
+        return 0;
+    }
+
     /// <summary>Uses whatever is in <paramref name="slot"/>; the inventory panel calls this for "Use" on any slot.</summary>
     public void UseSlot(FootPlayer? player, int slot)
     {
@@ -439,6 +454,13 @@ public partial class ItemController : Node
 
             case ItemUse.Material:
                 _ui.Toast($"{def.Name}: keep it for trading or building.");
+                break;
+
+            case ItemUse.Bag:
+                // worn: off into the pack; carried: on, swapping with the one worn
+                if (slot == Inventory.BagSlot) _inventory.QuickMove(slot);
+                else if (_inventory.WearBag(slot)) _ui.Toast($"You put on the {def.Name.ToLowerInvariant()}: {_inventory.PackSize} pack slots.");
+                Play(SfxSynth.Tick, 1.1f);
                 break;
 
             case ItemUse.Print:
@@ -754,10 +776,13 @@ public partial class ItemController : Node
         _developing = null;
         _photoUi.EndDevelop();
         if (CurrentPlayer()?.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v) v.HidePrint();
-        if (_inventory.Add(new ItemStack(ItemId.Photo, 1, photo)) > 0)
-            _ui.Toast("Pack full: the photo is only in your album.");
+        if (_inventory.Room(ItemId.Photo, photo) < 1)
+        {
+            if (Give(new ItemStack(ItemId.Photo, 1, photo)) > 0) _ui.Toast("Pack full: the photo is only in your album.");
+        }
         else
         {
+            Give(new ItemStack(ItemId.Photo, 1, photo));
             Play(SfxSynth.Chime, 1.5f);
             _ui.Toast("Photo developed: in your pack.");
         }
@@ -812,7 +837,7 @@ public partial class ItemController : Node
         {
             if (!r.Ok)
             {
-                _inventory.Add(stack with { Count = 1 });   // refused: the print comes back
+                Give(stack with { Count = 1 });   // refused: the print comes back
                 _ui.Toast($"Cannot stick it here: {r.Refused}");
                 return;
             }
@@ -825,11 +850,6 @@ public partial class ItemController : Node
     public void PickUpPhoto(long id)
     {
         if (PlacedObjects.Instance is not { } placed || !placed.All.TryGetValue(id, out var o)) return;
-        if (_inventory.Room(ItemId.Photo, o.Payload) < 1)
-        {
-            _ui.Toast("No room in your pack.");
-            return;
-        }
         placed.RequestRemove(id, r =>
         {
             if (!r.Ok)
@@ -837,8 +857,8 @@ public partial class ItemController : Node
                 _ui.Toast($"Cannot take it: {r.Refused}");
                 return;
             }
-            if (_inventory.Add(new ItemStack(ItemId.Photo, 1, o.Payload)) > 0) _ui.Toast("No room in your pack: the photo is lost.");
-            else _ui.Toast("Photo taken back.");
+            if (_inventory.Room(ItemId.Photo, o.Payload) >= 1) _ui.Toast("Photo taken back.");
+            Give(new ItemStack(ItemId.Photo, 1, o.Payload));
             Play(SfxSynth.Whoosh, 1.6f);
         });
     }
@@ -892,11 +912,6 @@ public partial class ItemController : Node
 
         if (aim.Kind == FlagAimKind.PickUp)
         {
-            if (_inventory.Room(ItemId.SwissFlag) < 1)
-            {
-                _ui.Toast("No room in your pack.");
-                return;
-            }
             await Stroke(player, raise: false, () => placed.RequestRemove(aim.Id, r =>
             {
                 if (!r.Ok)
@@ -904,8 +919,8 @@ public partial class ItemController : Node
                     _ui.Toast($"Cannot pick it up: {r.Refused}");
                     return;
                 }
-                if (_inventory.Add(ItemId.SwissFlag, 1) > 0) _ui.Toast("No room in your pack: the flag is lost.");
-                else _ui.Toast("Flag picked up.");
+                if (_inventory.Room(ItemId.SwissFlag) >= 1) _ui.Toast("Flag picked up.");
+                Give(new ItemStack(ItemId.SwissFlag, 1));
                 Play(SfxSynth.Whoosh, 1.3f);
             }));
             return;
@@ -927,7 +942,7 @@ public partial class ItemController : Node
             {
                 if (!r.Ok)
                 {
-                    _inventory.Add(ItemId.SwissFlag, 1);   // the server said no: the flag comes back
+                    Give(new ItemStack(ItemId.SwissFlag, 1));   // the server said no: the flag comes back
                     _ui.Toast($"Cannot plant it here: {r.Refused}");
                     return;
                 }
