@@ -20,6 +20,7 @@ public partial class AvatarPreview : Node3D
 {
     private double _elapsed;
     private double _seconds = 6;
+    private CarRig? _mirrorRig;
     private string _output = "";
     private float _viewDegrees = 90;
     private int _focus = -1;
@@ -113,6 +114,57 @@ public partial class AvatarPreview : Node3D
             AddChild(hatCam);
             hatCam.LookAt(new Vector3(0, 1.1f, 0), Vector3.Up);
             hatCam.Current = true;
+            return;
+        }
+
+        // "--cockpit [--car N] [--turn deg] [--throttle t] [--outside] [--bare]" (#69): one car with
+        // its driver, seen from the driver's own eye (head hidden, or the whole figure with
+        // --bare), or with --outside from a three-quarter front view through the glass. --turn
+        // turns the steering wheel (+ = anticlockwise, a left turn).
+        if (OS.GetCmdlineUserArgs().Contains("--cockpit"))
+        {
+            var args = OS.GetCmdlineUserArgs();
+            string? After(string flag) => Array.IndexOf(args, flag) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+            float Number(string flag, float fallback) => float.TryParse(After(flag), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : fallback;
+            var cars = Player.CarCatalog.All;
+            var spec = cars[Mathf.Clamp((int)Number("--car", 0), 0, cars.Count - 1)];
+            var rig = CarRig.Create(spec.Body, spec.Wheelbase, spec.Gauges, HumanPalette.ForRider(1));
+            bool outside = args.Contains("--outside");
+            rig.WheelTurn = Mathf.DegToRad(Number("--turn", 0f));
+            rig.SteerAngle = rig.WheelTurn / spec.SteerRatio;
+            rig.Throttle = Number("--throttle", 0.4f);
+            rig.Rpm = Mathf.Lerp(spec.IdleRpm, spec.Redline, rig.Throttle);
+            rig.SpeedKmh = 88f;
+            rig.Gear = 3;
+            rig.Headlights = args.Contains("--lights");
+            rig.View = outside ? CockpitView.Outside : args.Contains("--bare") ? CockpitView.Bare : CockpitView.Body;
+            rig.MirrorsOn = args.Contains("--mirrors");
+            AddChild(rig);
+            _mirrorRig = rig.MirrorsOn ? rig : null;
+            if (rig.MirrorsOn)
+                // something to see behind the car: posts in a row, red on its left, blue on its right
+                for (int i = 0; i < 7; i++)
+                {
+                    var post = new MeshInstance3D
+                    {
+                        Mesh = new BoxMesh { Size = new Vector3(0.6f, 2.2f, 0.6f) },
+                        MaterialOverride = new StandardMaterial3D { AlbedoColor = Color.FromHsv(i / 7f, 0.8f, 0.9f) },
+                        Position = new Vector3((i - 3) * 2.2f, 1.1f, 9f),
+                    };
+                    AddChild(post);
+                }
+            var cam = new Camera3D { Fov = outside ? 34 : 70, Near = 0.05f };
+            AddChild(cam);
+            if (outside)
+            {
+                cam.Position = new Vector3(3.6f, 2.2f, -5.2f);
+                cam.LookAt(new Vector3(0, 0.8f, 0), Vector3.Up);
+            }
+            else
+                cam.Transform = rig.EyeFrame * new Transform3D(new Basis(Vector3.Right, -0.1f), Vector3.Zero);
+            cam.Current = true;
+            GD.Print($"[cockpit] {spec.Label}: eye {rig.EyeFrame.Origin}, wheel {Number("--turn", 0f)}°");
             return;
         }
 
@@ -314,6 +366,12 @@ public partial class AvatarPreview : Node3D
 
         var image = GetViewport().GetTexture().GetImage();
         var error = image.SavePng(_output);
+        // --cockpit --mirrors: what each mirror sees, as its own picture next to the shot
+        foreach (var port in _mirrorRig?.GetChildren().OfType<SubViewport>() ?? Enumerable.Empty<SubViewport>())
+        {
+            var path = _output[..^4] + "_" + port.Name + ".png";
+            GD.Print($"[avatars] wrote {path}: {port.GetTexture().GetImage().SavePng(path)}");
+        }
         GD.Print(error == Error.Ok
             ? $"[avatars] wrote {_output} ({image.GetWidth()}x{image.GetHeight()})"
             : $"[avatars] FAILED to write {_output}: {error}");

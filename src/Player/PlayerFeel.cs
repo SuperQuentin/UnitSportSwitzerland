@@ -761,10 +761,18 @@ public partial class PlayerFeel : Node3D
 
     private void UpdateHud(float dt, RideKind ride, float speed)
     {
-        // mounted only: on foot the pace is the walk, and a number would be clutter
-        _speedLabel.Visible = ride != RideKind.OnFoot;
+        // mounted only: on foot the pace is the walk, and a number would be clutter; in the
+        // cockpit the dashboard shows it, unless the setting wants it here too
+        bool dash = _player.InCockpit && !Core.GameSettings.Current.CockpitHud;
+        string wear = _player.Vehicle is Car worn
+            ? (Core.GameSettings.Current.TyreWear ? $"    tyres F {(1f - worn.TyreWearFront) * 100:0}% R {(1f - worn.TyreWearRear) * 100:0}%" : "")
+              + (Core.GameSettings.Current.BrakeWear ? $"    brakes {worn.BrakeTemp:0}°C{(worn.BrakeFactor < 0.95f ? " FADE" : "")}" : "")
+            : "";
+        // the dashboard has no tyre or brake gauges: those stay on the HUD
+        _speedLabel.Visible = ride != RideKind.OnFoot && (!dash || wear != "");
         if (_speedLabel.Visible)
-            _speedLabel.Text = _player.IsFlying
+            _speedLabel.Text = dash ? wear.Trim()
+                : _player.IsFlying
                 ? $"{speed * 3.6f:0} km/h    {_player.Clearance:0} m"
                 + (ride == RideKind.Plane ? $"    {_player.Flight.Control * 100:0}%" : "")
                 : _player.Vehicle is Truck t
@@ -775,15 +783,13 @@ public partial class PlayerFeel : Node3D
                       + (t.Box.ClutchPedal > 0.5f ? "    CLUTCH" : "")
                       + $"    {t.Train.Mass / 1000f:0.0} t"
                 : _player.Vehicle is Car c
-                    ? $"{speed * 3.6f:0} km/h    {(c.Gear < 0 ? "R" : c.Gear.ToString())}    {c.Rpm:0} rpm"
-                      + (Core.GameSettings.Current.TyreWear ? $"    tyres F {(1f - c.TyreWearFront) * 100:0}% R {(1f - c.TyreWearRear) * 100:0}%" : "")
-                      + (Core.GameSettings.Current.BrakeWear ? $"    brakes {c.BrakeTemp:0}°C{(c.BrakeFactor < 0.95f ? " FADE" : "")}" : "")
+                    ? $"{speed * 3.6f:0} km/h    {(c.Gear < 0 ? "R" : c.Gear.ToString())}    {c.Rpm:0} rpm" + wear
                     : _player.Vehicle is IEngined e
                         ? $"{speed * 3.6f:0} km/h    {e.Gear}    {e.Rpm:0} rpm"
                         : $"{speed * 3.6f:0} km/h";
 
         // the rev counter, amber turning red toward the limit
-        _rpmBar.Visible = _player.Vehicle is IEngined;
+        _rpmBar.Visible = _player.Vehicle is IEngined && !dash;
         if (_player.Vehicle is IEngined rev)
         {
             _rpmBar.Value = rev.Rpm01;

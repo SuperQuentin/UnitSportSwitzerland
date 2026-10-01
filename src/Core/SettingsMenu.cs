@@ -121,6 +121,18 @@ public partial class SettingsMenu : PanelContainer
             v => GameSettings.Current.ScreenShake = (float)v, v => v <= 0 ? "off" : $"{v * 100:F0} %");
         ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on);
 
+        Section(rows, "Cockpit");
+        ToggleRow(rows, "Show your own body (V cycles it too)", s.CockpitBody, on => GameSettings.Current.CockpitBody = on);
+        ToggleRow(rows, "Working mirrors", s.CockpitMirrors, on => GameSettings.Current.CockpitMirrors = on);
+        ToggleRow(rows, "Speed and gear on the HUD too", s.CockpitHud, on => GameSettings.Current.CockpitHud = on);
+        ToggleRow(rows, "Head moves with g-forces", s.CockpitHeadMotion, on => GameSettings.Current.CockpitHeadMotion = on);
+        SliderRow(rows, "Field of view", 50, 100, 1, s.CockpitFov,
+            v => GameSettings.Current.CockpitFov = (float)v, v => $"{v:F0}°");
+        SliderRow(rows, "Seat height", -0.1, 0.1, 0.01, s.SeatHeight,
+            v => GameSettings.Current.SeatHeight = (float)v, v => $"{v * 100:+0;-0;0} cm");
+        SliderRow(rows, "Seat forward", -0.15, 0.15, 0.01, s.SeatForward,
+            v => GameSettings.Current.SeatForward = (float)v, v => $"{v * 100:+0;-0;0} cm");
+
         Section(rows, "Controls");
         SliderRow(rows, "Stick look speed", 0.2, 3, 0.1, s.StickSensitivity,
             v => GameSettings.Current.StickSensitivity = (float)v, v => $"{v:F1}x");

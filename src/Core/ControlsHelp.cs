@@ -38,7 +38,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Slide (while running)", PlayerInput.CrouchSlide),
             new("Interact: get in or out, search, door", PlayerInput.InteractMount),
             new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "Y (nothing near)"),
-            new("First / third person", PlayerInput.CameraToggle),
+            new("First / third person (in a car: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
             new("Base jump: jump again while falling", PlayerInput.Jump),
         }),
         ("Items", new Row[]

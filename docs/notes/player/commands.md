@@ -5,6 +5,9 @@
   non-zero exit if the rider went nowhere or ended under the terrain. Riding is the one part
   that cannot be judged from a screenshot; add `--ridemenu` (with `--shot`) to capture the picker.
 - Trucks and buses: `--truckcheck [trace]` (headless, numbers), `--truckprobe N[,s[,shot]] [--trailer M] [--kmh V] [--minor] [--trace] --at E,N` (a real road), `--heavynet a|b [pw]` (two clients), `--ride truck:N --trailer M [--steer x]`, `--gearbox auto|seq|seqclutch|hsplit|h`; see `trucks-buses`.
+- Cockpit check: `<godot> --headless --path . -- --cockpitcheck` — every car's driver fits their seat
+  (`car-cabin`); `--view body|bare` starts in the cockpit, `--mirrors on|off`, `--vsync on|off`,
+  `--mirrorperf` logs what the mirrors cost (`cockpit`).
 - Spin check: `<godot> --headless --path . -- --spincheck` — every car, Game and Sim, a badly managed
   brake at 200 km/h must spin it and a managed one must not (`locked-rear-spins`).
 - `--drivecheck ... --skill S --aggression A` sets every driver's temperament (default: each its own,
