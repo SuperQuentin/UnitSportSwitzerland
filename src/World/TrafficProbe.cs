@@ -19,6 +19,7 @@ public partial class TrafficProbe : Node
     private bool _placed;
     private int _maxCars, _maxTrains;
     private float _maxSpeed;
+    private int _wrongWay;
 
     public TrafficProbe(Traffic traffic, Camera3D camera, string? shot)
     {
@@ -71,15 +72,18 @@ public partial class TrafficProbe : Node
         _maxCars = Math.Max(_maxCars, _traffic.CarCount);
         _maxTrains = Math.Max(_maxTrains, _traffic.TrainCount);
         _maxSpeed = Math.Max(_maxSpeed, _traffic.AverageCarSpeed);
+        _wrongWay = Math.Max(_wrongWay, _traffic.WrongWayCars);
         if ((int)(_t / 5) != (int)((_t - delta) / 5))
             GD.Print($"[trafficcheck] t={_t:F0}s cars {_traffic.CarCount} (avg {_traffic.AverageCarSpeed * 3.6f:F0} km/h), "
-                + $"trains {_traffic.TrainCount} (avg {_traffic.AverageTrainSpeed * 3.6f:F0} km/h)");
+                + $"trains {_traffic.TrainCount} (avg {_traffic.AverageTrainSpeed * 3.6f:F0} km/h), "
+                + $"one-way edges {_traffic.OneWayEdges}, cars against one-way {_traffic.WrongWayCars}");
 
         if (_t < 40) return;
         if (_shot != null && GetViewport().GetTexture().GetImage().SavePng(_shot) == Error.Ok)
             GD.Print($"[trafficcheck] wrote {_shot}");
-        bool ok = _maxCars > 0 && _maxSpeed > 2f;
-        GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains)"
+        bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0;
+        GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way)"
+                    : _wrongWay > 0 ? $"[trafficcheck] RESULT: FAILED — up to {_wrongWay} cars against a one-way"
                     : "[trafficcheck] RESULT: FAILED — no moving traffic");
         GetTree().Quit(ok ? 0 : 1);
         SetProcess(false);

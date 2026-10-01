@@ -24,6 +24,13 @@ public sealed class LaneEdge
     /// </summary>
     public int OneWay { get; set; }
 
+    /// <summary>
+    /// Metres right of the centreline, in the direction of travel, of the rightmost lane when the
+    /// edge is one-way (<see cref="RoadCrossSection.RightLaneOffset"/>, #117); 0 for a v1/v2 tile's
+    /// narrow carriageway.
+    /// </summary>
+    public float RightLane { get; init; }
+
     public float Length => Cumulative[^1];
 
     /// <summary>Position and unit tangent at arc length <paramref name="s"/> along the drawing order.</summary>
@@ -95,6 +102,8 @@ public sealed class LaneGraph
                     Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags,
                     Width = seg.Width, KeyStart = KeyOf(pts[0]), KeyEnd = KeyOf(pts[^1]),
                     OneWay = seg.Attributes.OneWay,
+                    RightLane = RoadCrossSection.RightLaneOffset(seg.Class, seg.Width,
+                        Math.Max(seg.Attributes.LanesForward, seg.Attributes.LanesBackward)),
                 };
                 g.Edges.Add(edge);
                 g.Link(edge.KeyStart, edge, true);

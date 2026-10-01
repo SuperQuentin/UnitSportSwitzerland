@@ -300,7 +300,8 @@ public partial class Traffic : Node3D
 
     /// <summary>Right-hand traffic: an undivided road is shared, so each car keeps to its half.</summary>
     private static float KeepRight(LaneEdge e) =>
-        (e.Flags & RoadFlags.Divided) != 0 || e.Class == RoadClass.Ramp ? 0f
+        e.OneWay != 0 ? e.RightLane
+        : (e.Flags & RoadFlags.Divided) != 0 || e.Class == RoadClass.Ramp ? 0f
         : e.Width < 4.5f ? 0.3f : e.Width * 0.25f;
 
     private (LaneEdge, bool)? NextRoad((LaneEdge Edge, bool Forward) leg)
@@ -436,6 +437,9 @@ public partial class Traffic : Node3D
     public float AverageCarSpeed => _cars.Count == 0 ? 0f : _cars.Average(c => c.Speed);
     public float AverageTrainSpeed => _trains.Count == 0 ? 0f : _trains.Average(c => c.Speed);
     public int CarCount => _cars.Count;
+    /// <summary>Cars driving an edge against its stored or inferred one-way direction (must stay 0).</summary>
+    public int WrongWayCars => _cars.Count(c => c.Route.Edge.OneWay != 0 && c.Route.Forward != c.Route.Edge.OneWay > 0);
+    public int OneWayEdges => _roads?.Edges.Count(e => e.OneWay != 0) ?? 0;
     public int TrainCount => _trains.Count;
 
     /// <summary>One car, or one train of several units, riding one route.</summary>
