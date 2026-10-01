@@ -113,6 +113,10 @@ public static partial class TerrainMeshBuilder
                 if (wall.Type is LinearPropType.RetainingWallFill or LinearPropType.RetainingWallCut)
                     FreeBehindWall(scratch, wall);
 
+            foreach (var island in roadTile.AreaProps)
+                if (island.Type == AreaPropType.Island && island.Height > 0 && island.Vertices.Length >= 9)
+                    HoldUnderIsland(scratch, island);
+
             var cells = new List<int>(touched.Count);
             var los = new List<float>(touched.Count);
             var his = new List<float>(touched.Count);
@@ -379,6 +383,54 @@ public static partial class TerrainMeshBuilder
     }
 
     private static double Sq(double v) => v * v;
+
+    /// <summary>How far under a raised island's top the ground is held.</summary>
+    private const float IslandClearance = 0.05f;
+
+    /// <summary>
+    /// Holds the ground under a raised roundabout island (#122) below its top, so a mound in the
+    /// terrain does not poke through the island's surface: each cell inside one of its triangles
+    /// may lie no higher than the top there less <see cref="IslandClearance"/>. A road's own cell
+    /// is never touched; the island's kerb and top are <c>IslandBuilder</c>'s mesh and collision.
+    /// </summary>
+    private static void HoldUnderIsland(Scratch s, RoadAreaProp island)
+    {
+        var v = island.Vertices;
+        var ix = island.Indices;
+        double sp = ChunkFormat.SpacingM;
+        int n = s.N;
+        for (int t = 0; t + 2 < ix.Length; t += 3)
+        {
+            int a = ix[t] * 3, b = ix[t + 1] * 3, c = ix[t + 2] * 3;
+            double ax = v[a] / sp, az = v[a + 2] / sp, bx = v[b] / sp, bz = v[b + 2] / sp, cx = v[c] / sp, cz = v[c + 2] / sp;
+            double det = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+            if (Math.Abs(det) < 1e-12) continue;
+            int c0 = Math.Max(0, (int)Math.Ceiling(Math.Min(ax, Math.Min(bx, cx)))), c1 = Math.Min(n - 1, (int)Math.Floor(Math.Max(ax, Math.Max(bx, cx))));
+            int r0 = Math.Max(0, (int)Math.Ceiling(Math.Min(az, Math.Min(bz, cz)))), r1 = Math.Min(n - 1, (int)Math.Floor(Math.Max(az, Math.Max(bz, cz))));
+            for (int r = r0; r <= r1; r++)
+                for (int col = c0; col <= c1; col++)
+                {
+                    double wa = ((bz - cz) * (col - cx) + (cx - bx) * (r - cz)) / det;
+                    double wb = ((cz - az) * (col - cx) + (ax - cx) * (r - cz)) / det;
+                    double wc = 1 - wa - wb;
+                    if (wa < -1e-9 || wb < -1e-9 || wc < -1e-9) continue;
+                    float top = (float)(wa * v[a + 1] + wb * v[b + 1] + wc * v[c + 1]) + island.Height - IslandClearance;
+                    int idx = r * n + col;
+                    if (s.Seen[idx] == 0)
+                    {
+                        s.Seen[idx] = 1;
+                        s.Touched.Add(idx);
+                        s.CoreDist[idx] = float.PositiveInfinity;
+                        s.Lo[idx] = float.NegativeInfinity;
+                        s.Hi[idx] = top;
+                        continue;
+                    }
+                    if (s.CoreDist[idx] < float.PositiveInfinity) continue;
+                    if (top < s.Hi[idx]) s.Hi[idx] = top;
+                    if (s.Lo[idx] > s.Hi[idx]) s.Lo[idx] = s.Hi[idx];
+                }
+        }
+    }
 
     /// <summary>Narrows [xMin, xMax] to where <c>k·x + c</c> lies in [lo, hi]; false if empty.</summary>
     private static bool ClipRange(double k, double c, double lo, double hi, ref double xMin, ref double xMax)

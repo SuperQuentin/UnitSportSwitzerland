@@ -33,6 +33,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `osm-odbl-licence` — OSM is ODbL: attribution in README and Settings > Licenses; tiles built with the overlay are a derived database; release.sh ships no tiles...
 - `road-widths-lanes-oneway` — #117: per-carriageway width (TLM nominal / lanes / OSM), lanes, one-way order (roundabout, partner, OSM ramps, connectivity), priority; motorway median measured (TLM 2.3 m vs OSM 9.9 m) -> carriageways shifted outward; region stats
 - `junction-priority` — #121: main road per junction (importance, owner, width, straightness), Wartelinie teeth, 3.02/3.03 signs (sizes from RoadSigns), centre line through, yield bits for traffic; region stats, checks
+- `roundabouts` — #122: flagged rings fitted to a circle and rebuilt as arcs before the graph, arms moved onto them, grassed raised island (APRP, kerb, collision, blend hold) or flush mini disc; checks
 - `tlm-road-attribute-domains` — swissTLM3D `kreisel`, `verkehrsbedeutung`, `eigentuemer`, `stufe` value domains (SELECT DISTINCT counts) and where each goes in v3
 
 ## Commands
