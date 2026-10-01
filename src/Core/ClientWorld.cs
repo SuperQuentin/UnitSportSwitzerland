@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Net;
 using UnitSport.Player;
 using UnitSport.Gpx;
+using UnitSport.Styles;
 using UnitSport.Terrain;
 
 namespace UnitSport.Core;
@@ -140,6 +141,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             GetTree().Quit(ChatCheck.Run());
             return;
         }
+        if (StyleKit.ReportRequested)
+        {
+            GetTree().Quit(StyleKit.Report());
+            return;
+        }
         if (Occasions.OccasionProbe.Requested)
         {
             GetTree().Quit(Occasions.OccasionProbe.Run());
@@ -174,6 +180,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var origin = hasLocalTerrain
             ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
             : new WorldOrigin(startE, startN);
+        if (SpawnPoint.ParseOrigin() is var (pinE, pinN))
+            origin = new WorldOrigin(pinE, pinN);
 
         _worldOrigin = origin;
         _startOrigin = (origin.E, origin.N);
@@ -189,32 +197,20 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 + "with tools/TerrainPreprocessor, or join a server and it will stream in. "
                 + "See the README.");
 
-        var material = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_terrain.gdshader"),
-        };
-        var roadMaterial = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_road.gdshader"),
-        };
-        var buildingMaterial = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_building.gdshader"),
-        };
-
-        var treeMaterial = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_tree.gdshader"),
-        };
-
-        var waterMaterial = new ShaderMaterial
-        {
-            Shader = GD.Load<Shader>("res://shaders/ps1_water.gdshader"),
-        };
+        GD.Print($"[style] {StyleKit.Style}");
+        var material = StyleKit.Material(MaterialRole.Terrain);
+        var roadMaterial = StyleKit.Material(MaterialRole.Road);
+        var buildingMaterial = StyleKit.Material(MaterialRole.Building);
+        var treeMaterial = StyleKit.Material(MaterialRole.Tree);
+        var waterMaterial = StyleKit.Material(MaterialRole.Water);
+        // far trees as billboards, before the first tile builds them
+        var treeFarMaterial = StyleKit.Material(MaterialRole.TreeFar);
+        StyleKit.TreeFarMaterial = StyleKit.TreeLod ? treeFarMaterial : null;
+        AddChild(new CameraGlobal());
 
         // Fog is a setting now (off by default: the far horizon is the point). Every world
         // material carries the uniforms, so the toggle just re-pushes two floats to each.
-        _worldMaterials = new[] { material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial };
+        _worldMaterials = new[] { material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial, treeFarMaterial };
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
         // a named handler, unsubscribed in _ExitTree: the event is static and outlives this world
         GameSettings.Changed += OnSettingsChanged;
@@ -758,7 +754,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _spectator.SetProcess(false);
             _spectator.SetProcessUnhandledInput(false);
             Input.MouseMode = Input.MouseModeEnum.Visible;
-            AddChild(ShotRunner.ForQueue(_spectator, queue, _worldOrigin));
+            var runner = ShotRunner.ForQueue(_spectator, queue, _worldOrigin);
+            runner.GroundHeight = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
+            AddChild(runner);
         }
     }
 

@@ -621,7 +621,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             // mesh arrays off the main thread; a tall block is a few thousand boxes
             var data = await Task.Run(() => InteriorMeshBuilder.Build(layout));
             if (!IsInsideTree() || _built.ContainsKey(layout.Key)) return;
-            _material ??= new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_interior.gdshader") };
+            _material ??= Styles.StyleKit.Material(Styles.MaterialRole.Interior);
             var node = InteriorNode.Create(layout, data, _material, PlacementFor(layout, Origin));
             AddChild(node);
             _built[layout.Key] = node;

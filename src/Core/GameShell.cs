@@ -80,6 +80,7 @@ public partial class GameShell : Node
             "--name", "--chunks", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail",
             "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--perflog",
+            "--origin", "--style", "--tree-lod", "--tree-near",
             "--menu", "--settings", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
             "--leave-restart", "--autostart", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot",
         };

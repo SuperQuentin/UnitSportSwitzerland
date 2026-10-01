@@ -21,7 +21,7 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
 
     public override void _Ready()
     {
-        _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ps1_snowfall.gdshader") };
+        _material = Styles.StyleKit.Material(Styles.MaterialRole.Precip);
         _material.SetShaderParameter("box", Box);
         FogUniforms.Apply(_material);
         _snow = new MeshInstance3D

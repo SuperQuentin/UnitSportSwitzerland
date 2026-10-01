@@ -1401,8 +1401,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         r.Roads?.Dispose();
         r.Buildings?.Dispose();
         r.Water?.Dispose();
-        r.Trees?.Conifers?.Dispose();
-        r.Trees?.Broadleaves?.Dispose();
+        r.Trees?.Dispose();
     }
 
     private void StartBuild(TileId id, ChunkState state, int stride, bool wantCollision,

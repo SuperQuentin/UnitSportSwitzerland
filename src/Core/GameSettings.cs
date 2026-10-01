@@ -155,6 +155,10 @@ public sealed class GameSettings
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public Audio.EngineVoice EngineVoice { get; set; } = Audio.EngineVoice.Ps1;
 
+    /// <summary>How the world looks (<see cref="Styles.StyleKit"/>). Client-only, never replicated.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Styles.VisualStyle VisualStyle { get; set; } = Styles.VisualStyle.Ps1;
+
     /// <summary>Camera shake strength, 0 (off) .. 1.</summary>
     public float ScreenShake { get; set; } = 1f;
 
@@ -296,7 +300,7 @@ public sealed class GameSettings
 
     /// <summary>
     /// "--rings N", "--horizon km", "--fog on|off", "--detail low|medium|high",
-    /// "--generated on|off" — for
+    /// "--generated on|off", "--style ps1|cartoon|real-|real+" — for
     /// screenshotting one configuration against another without touching the saved file.
     /// </summary>
     private void ApplyCommandLine(string[] args)
@@ -331,6 +335,15 @@ public sealed class GameSettings
                         "ps1" => Audio.EngineVoice.Ps1, "nes" => Audio.EngineVoice.Nes,
                         "sid" => Audio.EngineVoice.Sid, "genesis" => Audio.EngineVoice.Genesis,
                         _ => Audio.EngineVoice.Realistic,
+                    };
+                    break;
+                case "--style":
+                    VisualStyle = v.ToLowerInvariant() switch
+                    {
+                        "cartoon" => Styles.VisualStyle.Cartoon,
+                        "real-" or "realistic-" => Styles.VisualStyle.RealisticLow,
+                        "real+" or "realistic+" => Styles.VisualStyle.RealisticHigh,
+                        _ => Styles.VisualStyle.Ps1,
                     };
                     break;
                 // a fixed time of day, for screenshots: --time 21.5 is half past nine at night
