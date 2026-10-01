@@ -17,3 +17,4 @@
   view-space shader maths, so on foot, the ride chase cam, free fly and the replay cameras all
   get it with no C# per frame.
   Current region: ~40 M trees, of which 0.87 M planted and 1.65 M surveyed.
+  Beyond 220 m each tree is drawn as a ray-traced billboard instead (`styles/tree-lod`).

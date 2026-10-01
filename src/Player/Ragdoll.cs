@@ -133,6 +133,18 @@ public sealed class Ragdoll
                 Stick(block[i], block[k], 1f);
     }
 
+    /// <summary>Into the new frame after an origin shift (#185): every point, and the velocity turned with it.</summary>
+    public void Apply(Core.OriginShift shift)
+    {
+        for (int i = 0; i < _p.Length; i++)
+        {
+            _p[i] = shift.Point(_p[i]);
+            _prev[i] = shift.Point(_prev[i]);
+            _start[i] = shift.Point(_start[i]);
+        }
+        _restAt = shift.Point(_restAt);
+    }
+
     /// <summary>Moves every point by <paramref name="by"/>, velocity kept: a remote copy steered onto the owner's.</summary>
     public void Shift(Vector3 by)
     {

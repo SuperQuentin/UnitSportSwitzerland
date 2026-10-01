@@ -93,6 +93,13 @@ public sealed class Director
 
     private Shot? _forced;
 
+    /// <summary>The origin moved (#185): the plan's places and every shot's own positions follow.</summary>
+    public void Shift(Core.OriginShift shift)
+    {
+        _events = _events.Select(e => e with { Where = shift.Point(e.Where) }).ToList();
+        foreach (var shot in _shots) shot.Shift(shift);
+    }
+
     /// <summary>
     /// Pins the director to one named shot, or clears the pin. Placement (<c>Begin</c>) is still
     /// tested every time the forced shot is (re)started, so it never opens on a bad vantage — a

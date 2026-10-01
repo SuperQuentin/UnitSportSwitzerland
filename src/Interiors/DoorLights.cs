@@ -15,7 +15,7 @@ namespace UnitSport.Interiors;
 /// to the open doors nearest the camera, scaled by how far open each swings and by the night.
 /// </para>
 /// </summary>
-public partial class DoorLights : Node3D
+public partial class DoorLights : Node3D, Core.IOriginContainer
 {
     /// <summary>Doors lit at once; one global uniform each (<c>world_door_light_N</c>).</summary>
     public const int Slots = 4;

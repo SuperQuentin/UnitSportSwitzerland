@@ -84,6 +84,21 @@ public partial class FootPlayer
         TakeDamage((hit - 8f) * 2f);
     }
 
+    /// <summary>
+    /// The origin moved (#185) mid-crash: the ragdoll's points, the crash camera's spots and the
+    /// last seat drawn are world positions kept across frames. (The ragdoll's mesh and the VR eye
+    /// are top-level nodes, which the shifter moves itself.)
+    /// </summary>
+    private void ShiftCrash(OriginShift shift)
+    {
+        _ragdoll?.Apply(shift);
+        _crashAnchor = shift.Point(_crashAnchor);
+        _crashLook = shift.Point(_crashLook);
+        _crashSide = shift.Direction(_crashSide);
+        _crashFrom = shift.Apply(_crashFrom);
+        _seenSeatFrame = shift.Apply(_seenSeatFrame);
+    }
+
     /// <summary>The figure as it sits in the vehicle, world space: the driver's seat in a car, a rider's crouch otherwise.</summary>
     private Vector3[] SeatedJoints() => _visual is CarRig rig
         ? DriverWorldJoints(rig.DriverSeat, GlobalTransform * _visual.Transform * rig.DriverFrame)

@@ -11,7 +11,7 @@ namespace UnitSport.Gpx;
 /// Alignment is by elapsed time, not by wall-clock date: tracks recorded months apart are
 /// still meaningfully compared, which is what "ghost" means here.
 /// </summary>
-public partial class RacePlayback : Node3D
+public partial class RacePlayback : Node3D, Core.IOriginContainer
 {
     private ChunkManager _chunks = null!;
     private WorldOrigin _origin = null!;

@@ -23,7 +23,7 @@ namespace UnitSport.XR;
 /// you look.
 /// </para>
 /// </summary>
-public partial class XrRig : Node3D
+public partial class XrRig : Node3D, Core.IOriginShiftAware
 {
     /// <summary>On foot, the right stick snaps the body round by this much.</summary>
     private const float SnapTurn = Mathf.Pi / 6f;
@@ -69,6 +69,19 @@ public partial class XrRig : Node3D
 
     // skiing
     private Vector3 _prevLeft, _prevRight;
+
+    /// <summary>
+    /// The origin moved (#185): where the rig was and where the hands were are somewhere else in
+    /// world space, or the comfort vignette and the hand velocities read the shift as motion.
+    /// </summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        _lastAnchor = shift.Apply(_lastAnchor);
+        _lastHead = shift.Apply(_lastHead);
+        _prevAnchorPos = shift.Point(_prevAnchorPos);
+        _prevLeft = shift.Point(_prevLeft);
+        _prevRight = shift.Point(_prevRight);
+    }
     private float _pole;
     private float _snowBuzz;
 

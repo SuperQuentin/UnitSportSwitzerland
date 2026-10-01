@@ -17,8 +17,9 @@
   `--survey 10` over Mollendruz, 60 m AGL at 160 km/h: **6 strikes per 10 min**, mostly tits and
   thrushes, one buzzard, one raven. **Aircraft guns hit birds**: tracers are also tested against the
   local bird list (segment vs `HitRadius` sphere); a round from THIS client bags the bird in the
-  journal, so a protected species shot from a plane costs the −250 it costs on foot. Birds are local
-  per client, so strikes are client-authoritative like the guns. Note the plane's wing guns fire
+  journal, so a protected species shot from a plane costs the −250 it costs on foot. Online the birds
+  are the server's (`shared-birds`): the pilot's client still decides a strike and its damage, and
+  a round's hit, but only reports the bird, which the server kills for everyone. Note the plane's wing guns fire
   **parallel** to the nose 1.7 m either side — they do not converge — and birds past
   `DespawnDistance` (240 m) do not exist, so a bird can only be shot inside that. Check:
   `<godot> --path . -- --birdstrikecheck[,out.png] [--at E,N] [--survey <min>]` — sparrow then

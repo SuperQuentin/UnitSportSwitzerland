@@ -323,7 +323,30 @@ public sealed class Truck : Rideable, IEngined
     }
     public override bool ExitLeft => !IsBus;
 
-    public override (Vector3 Centre, Vector3 Size) ParkedBox => Measured((Kind, "s0"), _ => HeavyRig.Create(Spec, 0, 0.5f));
+    public override (Vector3 Centre, Vector3 Size) ParkedBox => Solid(Measured((Kind, "s0"), _ => HeavyRig.Create(Spec, 0, 0.5f)), 0);
+
+    /// <summary>What the body may stand out past its spec width (rubbing strips, wheel nuts), m.</summary>
+    private const float BodyFlare = 0.05f;
+
+    /// <summary>
+    /// No wider than the body: the mirrors are part of the shell's mesh, and measured with them a
+    /// 2.55 m Citaro was a 3.23 m box from the ground to the roof over all of its 12.6 m — 34 cm of
+    /// invisible wall down each side. They are out on their arms at 2.0–2.8 m, over a walker's head.
+    /// </summary>
+    public override Aabb Solid(Aabb measured, int section)
+    {
+        if (section >= OwnSections) return measured;   // a trailer has no mirrors
+        float half = Spec.Sections[section].Width * 0.5f + BodyFlare;
+        float left = Mathf.Max(measured.Position.X, -half), right = Mathf.Min(measured.End.X, half);
+        if (right <= left) return measured;
+        return new Aabb(measured.Position with { X = left }, measured.Size with { X = right - left });
+    }
+
+    private (Vector3 Centre, Vector3 Size) Solid((Vector3 Centre, Vector3 Size) box, int section)
+    {
+        var solid = Solid(new Aabb(box.Centre - box.Size * 0.5f, box.Size), section);
+        return (solid.GetCenter(), solid.Size);
+    }
 
     /// <summary>The rig of section <paramref name="k"/> of this train.</summary>
     public HeavyRig SectionRig(int k) => k < OwnSections
@@ -332,7 +355,7 @@ public sealed class Truck : Rideable, IEngined
 
     /// <summary>The bounds of section <paramref name="k"/>'s rig in its own node space, measured once.</summary>
     public (Vector3 Centre, Vector3 Size) SectionBox(int k) => k < OwnSections
-        ? Measured((Kind, k), _ => HeavyRig.Create(Spec, k, 0.5f))
+        ? Solid(Measured((Kind, k), _ => HeavyRig.Create(Spec, k, 0.5f)), k)
         : Measured(("trailer", TrailerCatalog.Index(TrailerCode), k - OwnSections), _ => HeavyRig.CreateTrailer(Trailer!, k - OwnSections, 1f));
 
     public override Node3D BuildVisual(int riderIndex) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex));

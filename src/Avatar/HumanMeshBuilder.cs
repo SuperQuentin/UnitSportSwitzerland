@@ -45,6 +45,10 @@ public enum ItemArmPose
     Mouth,
     /// <summary>The item hand low and forward: planting something in the ground.</summary>
     Plant,
+    /// <summary>Winding up a throw: the item hand cocked back above the shoulder, the other arm pointing ahead (#206).</summary>
+    ThrowWindup,
+    /// <summary>A throw let go: the item arm whipped through, forward and down, the other arm swung back.</summary>
+    ThrowRelease,
 }
 
 /// <summary>Colours for one figure. Kept separate so riders can be told apart at distance.</summary>
@@ -204,6 +208,14 @@ public static class HumanMeshBuilder
                 item = new(s * 0.05f, rig.Hip.Y - 0.22f, rig.Hip.Z + 0.42f);
                 support = new(-s * 0.05f, rig.Hip.Y + 0.08f, rig.Hip.Z + 0.42f);
                 dir = new Vector3(0f, 1f, 0.12f); break;
+            case ItemArmPose.ThrowWindup:
+                item = new(s * 0.24f, rig.HeadBase.Y + 0.10f, rig.Chest.Z - 0.24f);
+                support = new(-s * 0.10f, rig.Neck.Y - 0.02f, rig.Chest.Z + 0.48f);
+                dir = new Vector3(0f, 0.7f, -0.5f); break;
+            case ItemArmPose.ThrowRelease:
+                item = new(s * 0.02f, rig.Waist.Y + 0.12f, rig.Chest.Z + 0.52f);
+                support = new(-s * 0.26f, rig.Hip.Y + 0.02f, rig.Hip.Z - 0.14f);
+                dir = new Vector3(0f, -0.4f, 1f); break;
             default:   // Hold
                 item = new(s * 0.19f, rig.Waist.Y + 0.05f, rig.Waist.Z + 0.30f);
                 support = Reduce(rig.WristR, rest);
