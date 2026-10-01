@@ -148,6 +148,17 @@ public partial class ServerWorld : Node3D
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here
         Items.ItemEvents.Create(this, server: true);
+
+        // the birds everybody shares (#143): simulated here around every player, sent to those near
+        var birds = new Birds.BirdLife(_chunks, origin, null)
+        {
+            Headless = true,
+            Observers = () => _players!.GetChildren().OfType<Player.FootPlayer>().Where(p => !p.Npc)
+                .Select(p => new Birds.BirdLife.Observer(p.GlobalPosition, p.NetVel, p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
+                    or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit)).ToList(),
+        };
+        AddChild(birds);
+        Birds.BirdNet.Create(this, birds, server: true);
         // stuck Polaroids' images: uploaded by their owner, kept here, served to the others
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);

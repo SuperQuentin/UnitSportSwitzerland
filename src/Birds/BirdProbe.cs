@@ -188,6 +188,69 @@ public partial class BirdProbe : Node
         int penalty = _birds.Journal.Bag(robin, _birds.Month);
         Check(penalty < 0, $"a protected European Robin is penalised: {penalty}");
 
+        // (3b) the bug of #143: a bird on the ground, in plain sight, was "behind a wall" - the
+        // ground it stands on. The old test cast to the body's centre (a few cm above the ground)
+        // and called any hit more than 0.5 m short of it a wall: at a grazing angle the ground
+        // itself is that. Sparrows at 8-30 m all around; every one whose top the eye can see must
+        // fall, and the log says how many the old rule lost.
+        if (terrain)
+        {
+            var sparrow = BirdCatalog.ByName("House Sparrow")!;
+            var rng2 = new Random(11);
+            int visible = 0, hits = 0, oldRule = 0;
+            _birds.PlayerOverride = () => null;
+            var eye2 = standAt + Vector3.Up * 1.6f;
+            var skip = new Godot.Collections.Array<Rid> { player.GetRid() };
+            for (int k = 0; k < 80; k++)
+            {
+                float d = 8f + (float)rng2.NextDouble() * 22f;
+                var dir = new Basis(Vector3.Up, (float)rng2.NextDouble() * Mathf.Tau) * Vector3.Forward;
+                var spot = standAt + dir * d;
+                spot.Y = _birds.Ground(spot);
+                var bird = _birds.Spawn(sparrow, spot, Bird.Mode.Ground);
+                bool seen = space.IntersectRay(PhysicsRayQueryParameters3D.Create(eye2, bird.Centre + Vector3.Up * 0.1f, uint.MaxValue, skip)).Count == 0;
+                var old = space.IntersectRay(PhysicsRayQueryParameters3D.Create(eye2, bird.Centre, uint.MaxValue, skip));
+                bool oldBlocked = old.Count > 0 && eye2.DistanceTo(old["position"].AsVector3()) < (bird.Centre - eye2).Dot((bird.Centre - eye2).Normalized()) - 0.5f;
+                var got = _birds.Shoot(eye2, bird.Centre - eye2, player);
+                if (seen) { visible++; if (got == bird) hits++; if (oldBlocked) oldRule++; }
+                bird.Node.QueueFree();
+                _birds.Remove(bird);
+            }
+            GD.Print($"[birds] sparrows on the ground in sight: {hits}/{visible} hit (the old wall test would have lost {oldRule})");
+            Check(visible >= 10 && hits >= visible * 0.95, "a bird on the ground in plain sight is hit when aimed at");
+
+            // the same for birds perched on a tree top: they sit inside the trunk's collision
+            // cylinder, which the old test took for a wall. Seen = nothing but trunks in the way.
+            var great = BirdCatalog.ByName("Great Tit")!;
+            int pSeen = 0, pHits = 0, pOld = 0;
+            uint noTrunks = uint.MaxValue & ~World.TreeColliders.Layer;
+            for (int k = 0; k < 120 && pSeen < 30; k++)
+            {
+                float d = 10f + (float)rng2.NextDouble() * 25f;
+                var dir = new Basis(Vector3.Up, (float)rng2.NextDouble() * Mathf.Tau) * Vector3.Forward;
+                var spot = standAt + dir * d;
+                var bird = _birds.Spawn(great, spot, Bird.Mode.Perched);
+                var c = bird.Centre;
+                float along = (c - eye2).Length();
+                if (bird.State == Bird.Mode.Perched && along is > 6f and < 45f
+                    && space.IntersectRay(PhysicsRayQueryParameters3D.Create(eye2, c + Vector3.Up * 0.1f, noTrunks, skip)).Count == 0)
+                {
+                    var old = space.IntersectRay(PhysicsRayQueryParameters3D.Create(eye2, c, uint.MaxValue, skip));
+                    bool oldBlocked = old.Count > 0 && eye2.DistanceTo(old["position"].AsVector3()) < along - 0.5f;
+                    var got = _birds.Shoot(eye2, c - eye2, player);
+                    pSeen++;
+                    if (got == bird) pHits++;
+                    if (oldBlocked) pOld++;
+                }
+                bird.Node.QueueFree();
+                _birds.Remove(bird);
+            }
+            GD.Print($"[birds] tits perched on tree tops, no building or ground in the way: {pHits}/{pSeen} hit (the old wall test would have lost {pOld})");
+            // another tree's trunk may still be in the way of a few
+            Check(pSeen == 0 || pHits >= pSeen * 0.85, "a bird perched on a tree is hit when aimed at");
+            _birds.PlayerOverride = () => player;
+        }
+
         // (4) the item path spends a shell
         int Shells() => Enumerable.Range(0, Inventory.Size).Where(i => _items.Inventory[i].Id == ItemId.Shells).Sum(i => _items.Inventory[i].Count);
         int gun = Enumerable.Range(0, Inventory.Size).FirstOrDefault(i => _items.Inventory[i].Id == ItemId.Shotgun, -1);
