@@ -4,6 +4,8 @@
 # Commands
 
 - `--style ps1|cartoon|real-|real+`: the visual style for this run (`GameSettings.VisualStyle`).
+- `--bake-impostors` (windowed): re-pictures the realistic trees' impostors into
+  `assets/realistic/trees` (`assets`).
 - `--style-report`: headless check of the style kit's shader table, RESULT PASS/FAIL, and what
   each style borrows (`style-kit`).
 - `/style [ps1|cartoon|real-|real+]` in the chat: switch live, for the session only;

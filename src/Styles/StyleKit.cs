@@ -509,11 +509,12 @@ public static class StyleKit
             real.SkyHorizonColor = new Color(0.66f, 0.76f, 0.88f).Lerp(sky.Lightened(0.2f), dusk);
             real.GroundHorizonColor = real.SkyHorizonColor;
             real.GroundBottomColor = real.SkyHorizonColor.Darkened(0.4f);
-            real.SkyEnergyMultiplier = Mathf.Lerp(1.0f, 0.25f, night);
+            // the palette's night sky is dark already: scaling it down as well gave a black screen
+            real.SkyEnergyMultiplier = 1f;
             env.FogLightColor = new Color(0.66f, 0.76f, 0.88f).Lerp(sky.Lightened(0.15f), dusk);
             env.AmbientLightSkyContribution = 1f;
-            env.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.35f, night);
-            if (sun != null) sun.LightEnergy = Mathf.Lerp(1.6f, 0.12f, night);
+            env.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.7f, night);
+            if (sun != null) sun.LightEnergy = Mathf.Lerp(1.6f, 0.3f, night);
             return;
         }
         env.BackgroundColor = sky;
@@ -670,9 +671,10 @@ public static class StyleKit
                 LookItem("sun", l => l.Sun);
                 LookItem("finish", l => l.Finish);
                 LookItem("tree-near", l => l.TreeNear);
+                // a model id no style down the chain has is the base's builder: the base's own
                 foreach (var id in ModelCatalog.Ids)
-                    if (ModelCatalog.Resolve(style, id) is not { } model) borrowed.Add($"{id}<-builder");
-                    else if (model.From != style) borrowed.Add($"{id}<-{model.From}");
+                    if (ModelCatalog.Resolve(style, id) is { } model && model.From != style) borrowed.Add($"{id}<-{model.From}");
+                    else if (ModelCatalog.Resolve(style, id) == null && style != Base) borrowed.Add($"{id}<-builder");
                 GD.Print($"[style-report] {style}: {(borrowed.Count == 0 ? "complete" : $"borrows {borrowed.Count}: {string.Join(" ", borrowed)}")}");
             }
         }
