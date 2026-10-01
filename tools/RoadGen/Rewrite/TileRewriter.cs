@@ -228,6 +228,7 @@ public static class TileRewriter
         int blockIndex = 0, guarded = 0;
         var audit = new HeightAuditor();
         var netStats = new NetworkStats();
+        var embankments = new EmbankmentPlanner.Stats();
 
         foreach (var block in blocks)
         {
@@ -268,6 +269,9 @@ public static class TileRewriter
             var output = new Dictionary<TileId, List<RoadSegment>>();
             var caps = new Dictionary<TileId, List<RoadJunction>>();
 
+            // the full-res terrain of the block and its halo: the height audit and the walls (#125)
+            var grids = LoadGrids(chunkDir, context);
+
             if (net.Links.Count > 0)
             {
                 if (options.Measure)
@@ -287,7 +291,7 @@ public static class TileRewriter
                 overlapAfter += result.Report.OverlapArea;
                 carriageway += result.Report.CarriagewayArea;
 
-                var terrain = options.AuditHeights ? LoadGrids(chunkDir, context) : null;
+                var terrain = options.AuditHeights ? grids : null;
 
                 // Final plan of every ribbon, halo included: the halo's divided carriageways are
                 // the partners the block's ones take their direction from.
@@ -358,7 +362,9 @@ public static class TileRewriter
 
                 var flags = RoadTileFlags.Network;
                 if (segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) flags |= RoadTileFlags.Osm;
-                var tile = new RoadTile { Id = id, Segments = segments, Junctions = junctions, Flags = flags };
+                var walls = grids is null ? new List<RoadLinearProp>()
+                    : EmbankmentPlanner.Plan(id, segments, (e, n) => SampleGround(grids, e, n), embankments);
+                var tile = new RoadTile { Id = id, Segments = segments, Junctions = junctions, Flags = flags, LinearProps = walls };
                 var bytes = Encode(tile);
                 Count(netStats, tile, bytes);
 
@@ -378,6 +384,7 @@ public static class TileRewriter
                 log($"  block {blockIndex}/{blocks.Count}  {tilesWritten} tiles, {junctionCount} junctions");
         }
 
+        log(embankments.Format());
         return new Stats(tilesRead, tilesWritten, junctionCount, written, dropped,
             overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, netStats);
     }
@@ -566,6 +573,9 @@ public static class TileRewriter
 
         return reverted;
     }
+
+    private static double SampleGround(Dictionary<TileId, ChunkGrid> grids, double e, double n) =>
+        grids.TryGetValue(TileId.FromLv95(e, n), out var grid) ? grid.SampleHeight(e, n) : double.NaN;
 
     private static Dictionary<TileId, ChunkGrid>? LoadGrids(string chunkDir, IEnumerable<TileId> tiles)
     {
