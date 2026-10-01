@@ -27,7 +27,7 @@
   surface painted (a bridge deck's included: + `BridgeLift` 0.15). Colour sRGB. A polyline's
   dash pattern starts with a dash at its first vertex (the writer phases it by where it starts
   the line, `road-markings`); `dash` 0 = solid. Written by `PaintEmitter` (#116): white lines
-  and `RailGroove` (#124, one line per rail of an embedded piece, colour 0x34322F); #120/#121/#123
+  and `RailGroove` (#124, one line per rail of an embedded piece, colour 0x9A9893); #120/#121/#123
   add types through the same layer.
 - **`PPRP`** point props (#121 yield sign, #122 roundabout sign): `count u32`, `recordSize u16`,
   pad, records of 24 B: `type u8, variant u8, flags u16 (Solid), x, y (foot), z, heading

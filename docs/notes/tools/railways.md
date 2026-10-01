@@ -10,7 +10,7 @@
   cuts every ground-level rail (not bridge, tunnel or funicular) where its centreline runs inside a
   carriageway (class Lane or wider, or Platz; raw untrimmed lines, so junction areas count). That
   piece (+1 m past the centreline's exit) is flagged ATTR `Embedded`: no ballast, no raised rails
-  (`RoadMeshBuilder` skips it), `RailGroove` paint per rail instead (dark 0.16 m line, gauge and
+  (`RoadMeshBuilder` skips it), `RailGroove` paint per rail instead (light steel 0.2 m line, the rail head; dark vanished in the asphalt; gauge and
   track offsets), at road height; the rail blends back to its own height over 8 m. The road's own
   paint is cut out of the track zone (outer rail + 0.5 m; a dashed line resumes on its next dash).
   Collision is unchanged in kind: the embedded rail sits at the road's height, so the road blend
