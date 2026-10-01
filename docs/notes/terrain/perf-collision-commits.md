@@ -53,7 +53,7 @@ TBD before/after table (worst commit ms, frames > 33 ms, commit hitches, builds.
   adding faces to either adds them inside the `SplitByCell(...)` call.
 - grep `CollisionCommitsPerFrame`, `collisionBudget` — gone; the budget is `CommitBudgetMs`.
 - grep `CommitLogged` — its third argument is now a `string kind` ("ground", "tail",
-  "coll-height", "coll-bridge", "coll-bldg"), not `bool interim`; `PerfRecorder.OnCommit` follows.
+  "coll-height", "coll-road", "coll-bldg"), not `bool interim`; `PerfRecorder.OnCommit` follows.
 - #229 deletes `ChunkNode.ClearRoads/ClearCollision` around the old `SetCollision`: on conflict,
   keep this branch's `SetCollisionCell` block and drop both dead methods.
 

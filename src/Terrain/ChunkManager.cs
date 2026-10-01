@@ -194,7 +194,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     /// <summary>
     /// Raised on the main thread for every commit: tile, stride, kind, ms. Kind is "ground" (an
-    /// interim result), "tail", or one collision piece: "coll-height", "coll-bridge", "coll-bldg".
+    /// interim result), "tail", or one collision piece: "coll-height", "coll-road", "coll-bldg".
     /// </summary>
     public event Action<TileId, int, string, double>? CommitLogged;
 
