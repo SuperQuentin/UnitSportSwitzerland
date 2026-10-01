@@ -15,7 +15,7 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `camera-zoom` — Camera focal-length zoom (wheel while aiming), LookScale, viewfinder readout + autofocus hunt, --zoom
 - `cash-account` — Money is a counter, not an item: `Inventory.Cash`, lost when knocked out, claimed to the server-kept account...
 - `radio` — Radio: a thrown RigidBody world item (thrower simulates the fall, server owns what plays), plays in the hand too (stack data + FootPlayer.HeldRadio), RadioSpeaker keyed by CD id (the track-change bug), volume, E to dance; `tools/radiocheck.sh`
-- `polaroid` — Camera prints photos: ItemId.Photo + ItemStack.Data, develop animation, album, sticking, PhotoTransfer image sharing, --photocheck
+- `polaroid` — Camera prints photos: shoots only through the viewfinder, PhotoCapture renders the eye's view (no HUD), ItemId.Photo + ItemStack.Data, develop, album, sticking, wall posters, PhotoTransfer sharing, --photocheck
 - `item-net-events` — ItemEvents.Send (shot, photo flash relayed to others) and PlacedObjects (server-kept, saved flags/photos, kind factories)
 - `flag-plant` — Swiss flag: placement ghost (green/red, pick-up halo), raise-and-stab / pull-up strokes, replicated Plant arms, spawn thud + dirt
 - `smart-binoculars` — Optic item: pick a target item, see the loot chance (%) on buildings in view (LootTables.Chance)
