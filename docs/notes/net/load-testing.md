@@ -9,7 +9,32 @@
   on a 15 GB machine several agents running clients at once get OOM-killed — check `free -g`,
   and a run with a process killed (exit 137) is invalid.
 - `--serverstats`: frame (wall clock) and busy ms p50/p99/max, working set, heap, GC counts and
-  pauses, ENet bytes/packets per second total and per peer, rtt/loss, kernel UDP receive drops.
+  pauses, ENet bytes/packets per second total and per peer, rtt/loss, kernel UDP receive drops
+  (Linux only).
+- **busy is per frame** (#221): a Stopwatch from the first hook of the iteration (`physics_frame`, or
+  the multiplayer poll, which `ServerStats` takes over: `SceneTree.MultiplayerPoll = false`) to the
+  end of `ServerStats._Process` (`ProcessPriority = int.MaxValue`). Godot's `TimeProcess` monitors
+  are the **max over the last second**: one 100 ms frame read as "busy 100 ms" for ~60 frames.
+  Every frame over 50 ms is printed, `[stats] slow frame t=... frame=... busy=... ms, jobs: ...`,
+  with the periodic jobs that ran in it (`ServerStats.Ran(name, Stopwatch.GetTimestamp())` around
+  a job) and whether a GC ran; the summary has `slow_frames_over_50ms` and `job_max_ms <job>`.
+- **`GD.Print` blocks on Windows**: ~6 ms a line, at times 30-120 ms (headless console wrapper,
+  stdout redirected). The per-player status line every 5 s made a 70-460 ms frame every 5 s at 16
+  players; it is now opt-in (`--player-status`). Keep periodic server prints to one line; the
+  `[stats]` line and the summary file are written on a worker.
+- **#221 results, 16 players, 120 s, Windows** (steady state 20-150 s, medians of the 5 s windows):
+
+  | | before | after |
+  |---|---|---|
+  | slow frames (> 50 ms) | 31 (one every 5 s: player status 66-459 ms) | 3-4 |
+  | frame p99 / max | 18.2 / 475 ms | 18.2 / 103 ms |
+  | busy p50 / p99 / max | 1.6 / 3.4 / 460 ms | 1.8 / 3.5 / 43 ms |
+
+  The 5 s `VehicleManager` housekeeping takes ≤ 1.4 ms (no vehicles in a swarm run): left as is.
+  The MCP `game_helper` logger is only attached with the editor debugger (it was never drained
+  otherwise). Soak 4 players × 10 min: working set 309 MB flat from t=120 s to 600 s.
+- Windows (Git Bash): `$!` is the console wrapper's msys pid; `loadtest.sh` reads swarm CPU and
+  memory from the Godot child process through PowerShell, and free memory from `MemFree`.
 - **Results, 32 players (issue #37)**:
 
   | | before | after |

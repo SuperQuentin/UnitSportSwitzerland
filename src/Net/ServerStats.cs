@@ -62,6 +62,8 @@ public partial class ServerStats : Node
     private readonly string[] _jobNames = new string[MaxJobs];
     private readonly double[] _jobMs = new double[MaxJobs];
     private int _jobCount, _slowFrames, _gcSeen;
+    private Task _summaryWrite = Task.CompletedTask;
+    private readonly Dictionary<string, double> _jobMax = [];   // slowest run of each job, for the summary
 
     private static double SecondsArg()
     {
@@ -76,9 +78,12 @@ public partial class ServerStats : Node
     /// </summary>
     public static void Ran(string job, long start)
     {
-        if (_active is not { } s || s._jobCount >= MaxJobs) return;
+        if (_active is not { } s) return;
+        double ms = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        s._jobMax[job] = Math.Max(ms, s._jobMax.GetValueOrDefault(job));
+        if (s._jobCount >= MaxJobs) return;
         s._jobNames[s._jobCount] = job;
-        s._jobMs[s._jobCount++] = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        s._jobMs[s._jobCount++] = ms;
     }
 
     public override void _Ready()
@@ -98,6 +103,7 @@ public partial class ServerStats : Node
     public override void _ExitTree()
     {
         if (_active == this) _active = null;
+        _summaryWrite.Wait(1000);   // a summary cut short by the process exiting would be unreadable
         GetTree().MultiplayerPoll = true;
         GetTree().ProcessFrame -= PollFrame;
         GetTree().PhysicsFrame -= BeginFrame;
@@ -246,7 +252,6 @@ public partial class ServerStats : Node
             ws / 1048576.0, heap / 1048576.0, gc[0], gc[1], gc[2], pauseDelta,
             inBps / 1024, outBps / 1024, peerCount > 0 ? inBps / 1024 / peerCount : 0, peerCount > 0 ? outBps / 1024 / peerCount : 0,
             rttAvg, rttMax, lossAvg, b50, b99, _busyWindowMax, inPps, outPps, dropDelta);
-        GD.Print(_lastLine);
         Array.Clear(_window);
         Array.Clear(_busyWindow);
         _windowMax = 0;
@@ -261,6 +266,8 @@ public partial class ServerStats : Node
     /// </summary>
     private static long UdpDrops()
     {
+        // elsewhere /proc/self/fd does not exist: the throw and catch cost ms every window
+        if (!OperatingSystem.IsLinux()) return -1;
         try
         {
             var inodes = new HashSet<string>();
@@ -309,13 +316,20 @@ public partial class ServerStats : Node
         Line("packets_in_peak_per_s", "{0:F0}", _inPpsPeak);
         Line("udp_rcvbuf_drops", "{0}", _dropsTotal);
         Line("slow_frames_over_50ms", "{0}", _slowFrames);
+        foreach (var (job, ms) in _jobMax) Line("job_max_ms " + job, "{0:F2}", ms);
         sb.AppendLine("last_window             " + _lastLine);
-        try
+        // the line and the file on a worker, one after the other: on Windows a print blocked the
+        // frame for up to 360 ms now and then (stdout), and a slow disk must not stall it either
+        string dir = ProjectSettings.GlobalizePath($"res://test_output/loadtest/{_label}"), text = sb.ToString(), line = _lastLine;
+        _summaryWrite = _summaryWrite.ContinueWith(_ =>
         {
-            string dir = ProjectSettings.GlobalizePath($"res://test_output/loadtest/{_label}");
-            Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "server_summary.txt"), sb.ToString());
-        }
-        catch (Exception e) { GD.PushWarning($"[stats] cannot write summary: {e.Message}"); }
+            GD.Print(line);
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "server_summary.txt"), text);
+            }
+            catch (Exception e) { GD.PushWarning($"[stats] cannot write summary: {e.Message}"); }
+        });
     }
 }

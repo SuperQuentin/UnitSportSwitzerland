@@ -251,6 +251,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
     }
 
     private double _sinceStatus;
+    // one line per player every 5 s: ~6 ms per line on Windows, ~100 ms frames at 16 players (#221)
+    private static readonly bool PlayerStatus = OS.GetCmdlineUserArgs().Contains("--player-status");
 
     public override void _Process(double delta)
     {
@@ -264,7 +266,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
                 return;
             }
         }
-        if (_players == null) return;
+        if (_players == null || !PlayerStatus) return;
         _sinceStatus += delta;
         if (_sinceStatus < 5) return;
         _sinceStatus = 0;
