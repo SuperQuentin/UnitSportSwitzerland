@@ -664,7 +664,7 @@ public partial class ItemController : Node
         {
             var play = RadioPlay.Decode(stack.Data);
             for (int i = 0; i < stack.Count; i++)
-                RadioManager.Instance!.Throw(new RadioState("", 0, origin + Vector3.Up * (0.25f * i), yaw, velocity,
+                RadioManager.Instance!.Throw(new RadioState("", 0, _origin.ToGlobal(origin + Vector3.Up * (0.25f * i)), yaw, velocity,
                     play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
             return;
         }

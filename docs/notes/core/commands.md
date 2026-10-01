@@ -25,8 +25,12 @@
   Windows: `windows-launch-focus`).
   A queued shot's y may be `g1.7` (that high above the ground, once it has streamed in), and each
   shot logs `frame=` ms, averaged over its last second of settling.
-- `--origin E,N` (LV95): pins the world origin, so shots at fixed world coordinates stay put when
-  the manifest's suggested origin moves (offline; a server's origin wins online).
+- `--origin E,N` (LV95): pins the starting world origin, so shots at fixed world coordinates stay put
+  when the manifest's suggested origin moves. The floating origin still moves it as the camera
+  travels (`ShotRunner` maps queued shots from that first frame); add `--originshift 1000000` to
+  keep it still. Online too: every peer has its own origin since #185. On a server it moves the
+  server's own world space (the server never shifts): `--server --origin 3583250,1113250` runs a
+  generated world 1,000 km from the server's origin, the check that nothing on the server depends on it.
 - `--nocapture`: never grab the mouse (`Core/MouseCapture`). Every probe and tool run implies it,
   so a check running in a window leaves the pointer to whoever is using the machine.
 - `--chatcheck`: chat tab completion, `/spawn` parsing and Up/Down history (a real `ChatUi`), headless, RESULT PASS/FAIL (`Core/ChatCheck`).

@@ -383,7 +383,7 @@ public partial class FootPlayer
         if (code == 0) return;
         var pos = ToGlobal(new Vector3(-at.Y, 0f, -at.X));
         if (_sections.Count > 0) pos.Y = _sections[0].GlobalPosition.Y;
-        Vehicles?.Park(new VehicleState(RideKind.Trailer, pos, Rotation.Y + yaw, Vector3.Zero, 400f, false, false, 0f,
+        Vehicles?.Park(new VehicleState(RideKind.Trailer, Origin!.ToGlobal(pos), Rotation.Y + yaw, Vector3.Zero, 400f, false, false, 0f,
             VehicleState.Now, Train: code, Angles: angles));
         TrailerCode = 0;
         RefreshVisual(force: true);
@@ -410,7 +410,7 @@ public partial class FootPlayer
         var ahead = -GlobalTransform.Basis.Z with { Y = 0 };
         var pos = GlobalPosition + ahead.Normalized() * 14f;
         if (Terrain != null && Terrain.TryGetHeight(pos, out float g)) pos.Y = g;
-        Vehicles.Park(new VehicleState(RideKind.Trailer, pos, Rotation.Y, Vector3.Zero, 400f, false, false, 0f,
+        Vehicles.Park(new VehicleState(RideKind.Trailer, Origin!.ToGlobal(pos), Rotation.Y, Vector3.Zero, 400f, false, false, 0f,
             VehicleState.Now, Train: code));
         return true;
     }

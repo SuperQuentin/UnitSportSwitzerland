@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Audio;
+using UnitSport.Core;
 using UnitSport.Avatar;
 using UnitSport.Player;
 using UnitSport.Terrain;
@@ -44,6 +45,15 @@ public partial class VehicleBody : CharacterBody3D
 
     public ChunkManager? Terrain { get; set; }
 
+    /// <summary>This peer's origin, to put the position on the wire.</summary>
+    public WorldOrigin Origin { get; private set; } = null!;
+
+    /// <summary>The position on the wire (#185): published here after each physics step, applied on every other peer.</summary>
+    private Net.NetPlace _place = null!;
+
+    /// <summary>Where it is, origin-free: the last position published (by this peer, if it simulates it).</summary>
+    public GlobalPos Global => _place.Global;
+
     /// <summary>Seconds since this became a wreck, on this peer — for despawning.</summary>
     public double WreckAge { get; private set; }
 
@@ -71,12 +81,13 @@ public partial class VehicleBody : CharacterBody3D
     private GpuParticles3D? _fire, _smoke;
     private readonly List<PhysicsBody3D> _ignoring = new();
 
-    public static VehicleBody Create(VehicleState state, ChunkManager? terrain)
+    public static VehicleBody Create(VehicleState state, ChunkManager? terrain, WorldOrigin origin)
     {
         var v = new VehicleBody
         {
             Name = string.IsNullOrEmpty(state.Name) ? $"veh_local_{Interlocked.Increment(ref _localCounter)}" : state.Name,
             Terrain = terrain,
+            Origin = origin,
             _initial = state,
             Kind = state.Kind,
             // the car with its preset and its garage parts on, the truck with its trailer: they are
@@ -107,7 +118,8 @@ public partial class VehicleBody : CharacterBody3D
         // bottom starts exactly on it — a vehicle parked from where the rider stood — begins a
         // hair inside it and falls straight through the world (measured: a parked bike 125 m
         // under the mountain five seconds later). From just above, it settles onto it.
-        Position = s.Position + Vector3.Up * 0.15f;
+        Position = Origin.ToWorld(s.Position) + Vector3.Up * 0.15f;
+        AddChild(_place = new Net.NetPlace(Origin, s.Position));
         Rotation = new Vector3(0, s.Yaw, 0);
         Velocity = s.Velocity;
 
@@ -134,7 +146,7 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         var replication = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen" })
+        foreach (var prop in Net.NetPlace.Properties.Concat(new[] { ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen" }))
             replication.AddProperty(prop);
         // states that change a few times per life of a vehicle go reliably on change; the motion
         // at 20 Hz while it moves (every frame before, for a bike standing in a field for hours)
@@ -153,7 +165,7 @@ public partial class VehicleBody : CharacterBody3D
         // player claims it. The hand's breadth above is for a body that falls onto the ground.
         if (Net.NetworkManager.DedicatedServer && IsMultiplayerAuthority())
         {
-            Position = s.Position;
+            Position = Origin.ToWorld(s.Position);
             _asleep = true;
             sync.ReplicationInterval = 2f;
         }
@@ -221,7 +233,7 @@ public partial class VehicleBody : CharacterBody3D
     /// Heading from the body's own yaw, which is replicated: the server captures vehicles it
     /// never simulated, so their flight state there is whatever they were parked with.
     /// </remarks>
-    public VehicleState Capture() => new(Kind, GlobalPosition,
+    public VehicleState Capture() => new(Kind, Global,
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning, DoorsOpen, _initial.Setup,
         _initial.Train, _initial.Angles, _initial.Flags, _initial.Load, _initial.Radio, _initial.Cd);
@@ -285,6 +297,7 @@ public partial class VehicleBody : CharacterBody3D
         if (Wrecked) StepWreck(dt, onFloor);
         else if (Ride is Flyer flyer) StepFlyer(dt, onFloor, flyer);
         else StepRolling(dt, onFloor);
+        _place.Publish(GlobalPosition);
 
         // at rest long enough: sleep, and stop asking for collision
         bool still = onFloor && Velocity.LengthSquared() < 0.04f && _flight.Spool < 0.05f;

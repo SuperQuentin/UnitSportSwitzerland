@@ -17,44 +17,31 @@ namespace UnitSport.Net;
 /// </para>
 ///
 /// <para>
-/// The origin is checked, not adopted. Every coordinate in the session is an offset from it,
-/// so if the two sides disagree the players are in different worlds while appearing to be in
-/// one: positions would be wrong by the difference and nothing would look obviously broken.
-/// Refusing loudly is the only safe answer, and in practice both sides derive it from the
-/// same generated manifest so it matches.
+/// The server's origin is neither checked nor adopted (#185): every position on the wire is LV95,
+/// and tiles are named in LV95, so each side keeps its own origin. The manifest's suggested origin
+/// only says where a server's world starts.
 /// </para>
 /// </summary>
 public sealed partial class ClientTerrainSync : Node
 {
     private readonly ChunkStreamer _streamer;
     private readonly ChunkManager _chunks;
-    private readonly WorldOrigin _origin;
 
-    public ClientTerrainSync(ChunkStreamer streamer, ChunkManager chunks, WorldOrigin origin)
+    public ClientTerrainSync(ChunkStreamer streamer, ChunkManager chunks)
     {
         _streamer = streamer;
         _chunks = chunks;
-        _origin = origin;
         Name = "TerrainSync";
     }
 
     /// <summary>Raised with a human-readable status line, for the chat log.</summary>
     public event Action<string>? Status;
 
-    /// <summary>Raised when the two sides disagree about the world origin.</summary>
-    public event Action<string>? OriginMismatch;
-
     /// <summary>Raised once the town index has been cached, so the Tab search can reload.</summary>
     public event Action? PlacesReceived;
 
     /// <summary>The far-horizon file arrived from the server and is in the cache.</summary>
     public event Action? HorizonReceived;
-
-    /// <summary>
-    /// Raised when a client with no terrain adopted the server's origin. The host should
-    /// respawn whatever it had placed, since its world position now means something else.
-    /// </summary>
-    public event Action? Rebased;
 
     /// <summary>True once the server manifest has been merged.</summary>
     public bool Synced { get; private set; }
@@ -109,10 +96,9 @@ public sealed partial class ClientTerrainSync : Node
             return false;
         }
 
-        // The continuation above runs on the thread pool, and what follows moves the origin and
-        // unloads tiles (real ones replacing generated ground): main thread only.
-        int added = await OnMainThread(() => Adopt(manifest)).ConfigureAwait(false);
-        if (added < 0) return false;
+        // The continuation above runs on the thread pool, and what follows unloads tiles (real
+        // ones replacing generated ground): main thread only.
+        int added = await OnMainThread(() => _chunks.MergeAvailableTiles(manifest.Tiles.Select(t => t.Id))).ConfigureAwait(false);
         Synced = true;
 
         // Persist it beside the cache. Without this the cached tiles are unreachable offline:
@@ -127,46 +113,6 @@ public sealed partial class ClientTerrainSync : Node
         GD.Print($"[stream] {line}");
         Status?.Invoke(line);
         return true;
-    }
-
-    /// <summary>
-    /// Checks the server's origin against ours and merges its tile list. Returns how many tiles
-    /// were new, or -1 when the worlds disagree and streaming stays off.
-    /// </summary>
-    private int Adopt(TerrainManifest manifest)
-    {
-        double de = Math.Abs(manifest.SuggestedOriginLv95.E - _origin.E);
-        double dn = Math.Abs(manifest.SuggestedOriginLv95.N - _origin.N);
-
-        // A client with no terrain of its own has no world to contradict, so it adopts the
-        // server's anchor instead of refusing. This is the fresh-clone path: the whole world then
-        // streams in, and refusing here would make a clone with no data unable to play at all.
-        // Generated ground counts as none (AvailableTileCount is real tiles only) — everything
-        // built against the old origin is thrown away before it moves, and the generated fill,
-        // anchored in LV95 rather than to the origin, comes back identical round the server's.
-        bool noWorldOfOurOwn = _chunks.AvailableTileCount == 0;
-        if ((de > 0.5 || dn > 0.5) && noWorldOfOurOwn)
-        {
-            _chunks.ResetAll(() =>
-                _origin.Rebase(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N));
-            de = dn = 0;
-            Rebased?.Invoke();
-        }
-
-        if (de > 0.5 || dn > 0.5)
-        {
-            string message =
-                $"World origin mismatch: server is at LV95 {manifest.SuggestedOriginLv95.E:F0}/"
-                + $"{manifest.SuggestedOriginLv95.N:F0}, this client at {_origin.E:F0}/{_origin.N:F0}. "
-                + "Every position would be offset by the difference, so terrain streaming is off.";
-
-            GD.PushError($"[stream] {message}");
-            Status?.Invoke(message);
-            OriginMismatch?.Invoke(message);
-            return -1;
-        }
-
-        return _chunks.MergeAvailableTiles(manifest.Tiles.Select(t => t.Id));
     }
 
     private static Task<T> OnMainThread<T>(Func<T> work)
@@ -268,11 +214,11 @@ public sealed partial class ClientTerrainSync : Node
 
     /// <summary>
     /// Merges a previously saved server index at boot, so terrain streamed in an earlier
-    /// session is reachable without a server. The origin is checked again: a cached index from
-    /// a different world would silently place the player in the wrong place.
+    /// session is reachable without a server. Its tiles are LV95 like everything else, whatever
+    /// origin that server started from.
     /// </summary>
     /// <returns>How many tiles the cached index added.</returns>
-    public static int MergeCachedIndex(ChunkManager chunks, WorldOrigin origin)
+    public static int MergeCachedIndex(ChunkManager chunks)
     {
         try
         {
@@ -280,13 +226,6 @@ public sealed partial class ClientTerrainSync : Node
             if (!File.Exists(path)) return 0;
 
             var manifest = TerrainManifest.FromJson(File.ReadAllText(path));
-
-            if (Math.Abs(manifest.SuggestedOriginLv95.E - origin.E) > 0.5
-                || Math.Abs(manifest.SuggestedOriginLv95.N - origin.N) > 0.5)
-            {
-                GD.PushWarning("[stream] cached server index is for a different world origin; ignored");
-                return 0;
-            }
 
             int added = chunks.MergeAvailableTiles(manifest.Tiles.Select(t => t.Id));
             if (added > 0)

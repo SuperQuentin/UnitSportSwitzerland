@@ -22,6 +22,9 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
 
     public ChunkManager? Terrain { get; set; }
 
+    /// <summary>This peer's origin: vehicle states carry LV95 (#185), its bodies stand in world space.</summary>
+    public Core.WorldOrigin Origin { get; private set; } = null!;
+
     /// <summary>Where the players are, for despawning what nobody is near.</summary>
     public Func<IEnumerable<Vector3>>? PlayerPositions { get; set; }
 
@@ -54,16 +57,16 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     /// <summary>The manager of this process's world, if there is one.</summary>
     public static VehicleManager? Instance { get; private set; }
 
-    public static VehicleManager Create(Node world, ChunkManager? terrain)
+    public static VehicleManager Create(Node world, ChunkManager? terrain, Core.WorldOrigin origin)
     {
-        var manager = new VehicleManager { Name = NodeName, Terrain = terrain };
+        var manager = new VehicleManager { Name = NodeName, Terrain = terrain, Origin = origin };
         world.AddChild(manager);
         manager._spawner = new MultiplayerSpawner
         {
             Name = "VehicleSpawner",
             SpawnPath = new NodePath("../" + NodeName),
             SpawnFunction = Callable.From((Variant data) =>
-                (Node)VehicleBody.Create(VehicleState.FromDict(data.AsGodotDictionary()), manager.Terrain)),
+                (Node)VehicleBody.Create(VehicleState.FromDict(data.AsGodotDictionary()), manager.Terrain, manager.Origin)),
         };
         world.AddChild(manager._spawner);
         Instance = manager;
@@ -83,7 +86,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         if (!Online)
         {
-            AddChild(VehicleBody.Create(state with { SpawnedAt = VehicleState.Now }, Terrain));
+            AddChild(VehicleBody.Create(state with { SpawnedAt = VehicleState.Now }, Terrain, Origin));
             return;
         }
         RpcId(1, MethodName.RequestPark, state.ToDict());
@@ -99,7 +102,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         state = state with { Owner = 0, Name = name, SpawnedAt = VehicleState.Now };
         if (!Online)
         {
-            AddChild(VehicleBody.Create(state, Terrain));
+            AddChild(VehicleBody.Create(state, Terrain, Origin));
             return name;
         }
         if (!Multiplayer.IsServer() || _spawner == null) return null;

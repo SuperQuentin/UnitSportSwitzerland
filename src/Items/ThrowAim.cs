@@ -17,7 +17,7 @@ namespace UnitSport.Items;
 /// arc, they see the wind-up arm pose (<c>ItemAction</c> 3, then 4 for the release).
 /// </para>
 /// </summary>
-public partial class ThrowAim : Node3D
+public partial class ThrowAim : Node3D, Core.IOriginShiftAware
 {
     public const float MinSpeed = 4.5f, MaxSpeed = 21f;
     /// <summary>Seconds of Use held to reach full strength.</summary>
@@ -69,6 +69,18 @@ public partial class ThrowAim : Node3D
         _sfx = new AudioStreamPlayer { Name = "Sfx", Bus = SfxBus.Name };
         AddChild(_hum);
         AddChild(_sfx);
+    }
+
+    /// <summary>
+    /// The origin moved (#185). The arc is drawn in world space under this node, so it stays at the
+    /// identity (the shift moved it, as a top-level node); what the arc was drawn from moves.
+    /// </summary>
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        Transform = Transform3D.Identity;
+        for (int i = 0; i < _points.Count; i++) _points[i] = shift.Point(_points[i]);
+        if (_hitPoint is { } hit) _hitPoint = shift.Point(hit);
+        if (_hitNormal is { } normal) _hitNormal = shift.Direction(normal);
     }
 
     /// <summary>Where a throw leaves the hand: over the right shoulder, a little ahead.</summary>

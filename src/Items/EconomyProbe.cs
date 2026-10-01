@@ -56,7 +56,7 @@ public partial class EconomyProbe : Node
 
         var vehicles = VehicleManager.Instance!;
         var at = GetViewport().GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
-        var bike = new VehicleState(RideKind.RoadBike, at + new Vector3(3, 0, 0), 0, Vector3.Zero, 100, true, false, 0, 0);
+        var bike = new VehicleState(RideKind.RoadBike, vehicles.Origin.ToGlobal(at + new Vector3(3, 0, 0)), 0, Vector3.Zero, 100, true, false, 0, 0);
 
         int count = Count(vehicles);
         vehicles.Park(bike);

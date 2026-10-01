@@ -13,7 +13,9 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `admin` — Admin: (`Net/PlayerRegistry`): identity is the ENet peer id, which a client cannot forge; the display name is a...
 - `vision-interest` — Vision-based interest: the server decides who sees whom (size at render resolution, sky, line of sight, race); out of view = despawned
 - `perf-visibility-on-change` — Player synchronizers keep `VisibilityUpdateMode.None`: every change to what a peer may see must call `UpdateVisibility` (`RefreshNetVisibility`/`RefreshRelays`) where it happens
-- `remote-interpolation` — Remote players are interpolated (NetPos/NetVel/NetTime at 30 Hz, Hermite, bounded extrapolation, smooth render clock)
+- `remote-interpolation` — Remote players are interpolated (NetGlobal/NetVel/NetTime at 30 Hz, Hermite on GlobalPos, bounded extrapolation, smooth render clock)
+- `positions-on-the-wire` — Positions cross the network as LV95 doubles (GlobalPos), lists as an anchor + offsets, bodies through NetPlace; never a world Vector3 (#185)
+- `protocol-handshake` — Connecting starts with Hello/Welcome (Handshake.Protocol); its RPCs never change; bump the protocol on any wire change
 - `load-testing` — Load testing: --swarm bots, --serverstats, --netsmooth, tools/loadtest.sh; before/after numbers at 32 players and a 30-min soak
 - `lean-dedicated-server` — Dedicated server: proxy players, fps cap, coarse grids, asset prep off the main thread, throttled vehicles
 - `lan-discovery` — mDNS browse for `_unitsport._udp` (avahi on the server); the Multiplayer screen lists LAN servers, legacy unicast queries, `--discovercheck`

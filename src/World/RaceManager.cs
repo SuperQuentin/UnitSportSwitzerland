@@ -27,8 +27,15 @@ namespace UnitSport.World;
 /// crossed the line. The countdown goes out in SECONDS, never a clock time: the machines' clocks
 /// need not agree.
 /// </para>
+///
+/// <para>
+/// <b>Every race has its own frame</b> (#185): the server's players can be anywhere and its own
+/// origin far from all of them, so a race is built and checked in an <see cref="OriginFrame"/>
+/// anchored at its host, and its road and gates go out as float offsets from that anchor. A client
+/// maps them into its own origin, which moves while it races: its courses <c>Follow</c> every shift.
+/// </para>
 /// </summary>
-public partial class RaceManager : Node
+public partial class RaceManager : Node, IOriginShiftAware
 {
     public const string NodeName = "Race";
     public const int MinEntrants = 2, MaxEntrants = 32;
@@ -72,6 +79,8 @@ public partial class RaceManager : Node
         public int NpcSetup;
         public float Metres;
         public Phase Phase;
+        /// <summary>The frame everything below is in: anchored at the host when it was opened.</summary>
+        public OriginFrame Frame = null!;
         public RaceRoute? Route;
         public RaceCourse? Course;
         /// <summary>Ground: the road sent with every setup (kept to set up an NPC that changes simulator).</summary>
@@ -106,6 +115,7 @@ public partial class RaceManager : Node
     private ChatManager? _chat;
     private Node3D? _players;
     private IChunkSource? _source;
+    /// <summary>Client: this peer's origin, which the courses the server sends are mapped into.</summary>
     private WorldOrigin? _origin;
     private double _clock;
     private int _nextId = 1;
@@ -131,12 +141,12 @@ public partial class RaceManager : Node
         return true;
     }
 
-    public static RaceManager CreateServer(ChatManager chat, Node3D players, IChunkSource source, WorldOrigin origin) => new()
+    public static RaceManager CreateServer(ChatManager chat, Node3D players, IChunkSource source) => new()
     {
-        Name = NodeName, _server = true, _chat = chat, _players = players, _source = source, _origin = origin,
+        Name = NodeName, _server = true, _chat = chat, _players = players, _source = source,
     };
 
-    public static RaceManager CreateClient() => new() { Name = NodeName };
+    public static RaceManager CreateClient(WorldOrigin origin) => new() { Name = NodeName, _origin = origin };
 
     /// <summary>Both are entrants of the same race, after its entry closed and before they finish.</summary>
     public bool SameRace(long a, long b) =>
@@ -178,7 +188,7 @@ public partial class RaceManager : Node
     private string Start(long sender, string[] args, long invited)
     {
         if (_raceOf.TryGetValue(sender, out int busy)) return $"You are already in race #{busy} — /race leave first.";
-        if (_players?.GetNodeOrNull<Node3D>(sender.ToString()) is not { } host) return "You have no position yet.";
+        if (_players?.GetNodeOrNull<FootPlayer>(sender.ToString()) is not { } host) return "You have no position yet.";
 
         bool air = args.Length > 0 && args[0].Equals("air", System.StringComparison.OrdinalIgnoreCase);
         var words = new List<string>(air ? args[1..] : args);
@@ -193,7 +203,9 @@ public partial class RaceManager : Node
 
         string rest = string.Join(' ', words);
         bool isNumber = float.TryParse(rest, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float metres);
-        var at = host.GlobalPosition;
+        // the race's own frame, at the host: the server's origin may be anywhere (#185)
+        var frame = OriginFrame.AnchorNear(host.Global);
+        var at = frame.ToWorld(host.Global);
         Vector3 target = default;
         if (air)
         {
@@ -209,14 +221,14 @@ public partial class RaceManager : Node
             {
                 var found = _chat?.Places?.Search(rest, limit: 1);
                 if (found == null || found.Count == 0) return $"No place matching '{rest}'.";
-                target = _origin!.ToWorld(found[0].E, found[0].N, at.Y);
+                target = frame.ToWorld(found[0].E, found[0].N, at.Y);
             }
         }
         else if (rest.Length > 0 && !isNumber) return $"Unknown mount or distance '{rest}'. /race help";
 
         var race = new Race
         {
-            Id = _nextId++, Host = sender, Invited = invited, Air = air, Mount = mount, Phase = Phase.Building, Spot = at,
+            Id = _nextId++, Host = sender, Invited = invited, Air = air, Mount = mount, Phase = Phase.Building, Spot = at, Frame = frame,
             Class = cls?.Id ?? -1, NpcSetup = cls?.Id ?? 0,
             Metres = air ? 0 : isNumber ? Mathf.Clamp(metres, 300f, 8000f) : 2000f,
         };
@@ -224,18 +236,17 @@ public partial class RaceManager : Node
         Enter(race, sender);
 
         var source = _source!;
-        var origin = _origin!;
         int raceId = race.Id;
         _ = System.Threading.Tasks.Task.Run(async () =>
         {
             if (air)
             {
-                var (course, why) = await RaceCourse.BuildAirAsync(source, origin, at, target, (RideKind)(mount == Open ? (int)RideKind.Plane : mount));
+                var (course, why) = await RaceCourse.BuildAirAsync(source, frame, at, target, (RideKind)(mount == Open ? (int)RideKind.Plane : mount));
                 Callable.From(() => Opened(raceId, null, course, why)).CallDeferred();
             }
             else
             {
-                var route = await RaceRoute.BuildAsync(source, origin, at);
+                var route = await RaceRoute.BuildAsync(source, frame, at);
                 Callable.From(() => Opened(raceId, route, null, "")).CallDeferred();
             }
         });
@@ -375,11 +386,11 @@ public partial class RaceManager : Node
             var road = RaceRoute.FromPoints(lane.Centre, lane.Width);
             var all = _players.GetChildren().OfType<FootPlayer>().ToList();
             plan = NpcArrival.Plan(road, lane.Zero, race.Entrants.Count, count, race.Entrants.Count + count,
-                all.Where(p => !p.Npc).Select(p => p.GlobalPosition).ToList(), all.Select(p => p.GlobalPosition).ToList(),
+                all.Where(p => !p.Npc).Select(p => race.Frame.ToWorld(p.Global)).ToList(), all.Select(p => race.Frame.ToWorld(p.Global)).ToList(),
                 race.Id * 7919 + (int)(owner % 100000) * 31 + race.Entrants.Count);
         }
-        var ids = npcs.Spawn(owner, count, (RideKind)mount, host.GlobalPosition, host.Rotation.Y,
-            plan == null ? null : i => (plan[i].At, plan[i].Yaw), race.Class >= 0 ? race.Class : race.NpcSetup);
+        var ids = npcs.Spawn(owner, count, (RideKind)mount, host.Global, host.Rotation.Y,
+            plan == null ? null : i => (race.Frame.ToGlobal(plan[i].At), plan[i].Yaw), race.Class >= 0 ? race.Class : race.NpcSetup);
         if (duel && ids.Count == 1) race.Invited = ids[0];   // before the course is built: Opened reads it
         foreach (long npc in ids)
         {
@@ -392,7 +403,8 @@ public partial class RaceManager : Node
         {
             var e = plan[i];
             race.Arriving.Add(ids[i]);
-            RpcId(owner, MethodName.NpcArrive, race.Id, ids[i], lane.Centre, lane.Width, lane.Zero, (int)e.Style, e.Variant, e.Slot, race.Entrants.Count);
+            RpcId(owner, MethodName.NpcArrive, race.Id, ids[i], race.Frame.E, race.Frame.N, lane.Centre, lane.Width, lane.Zero,
+                (int)e.Style, e.Variant, e.Slot, race.Entrants.Count);
             GD.Print($"[npc] {Who(ids[i])} arrives {e.Style} for slot {e.Slot + 1}");
         }
         if (ids.Count > 0) race.ArriveBy = System.Math.Max(race.ArriveBy, _clock + ArriveWithin);
@@ -510,16 +522,16 @@ public partial class RaceManager : Node
         }
         // "near the race": its entrants still on course, else where it was opened
         var field = race.Entrants.Where(e => e != old && !race.Out.Contains(e) && !race.Finished.ContainsKey(e))
-            .Select(e => _players?.GetNodeOrNull<Node3D>(PlayerReplication.NodeName(e))).OfType<Node3D>()
-            .Select(n => n.GlobalPosition).ToList();
-        if (field.Count == 0) field.Add(race.Spot);
+            .Select(e => _players?.GetNodeOrNull<FootPlayer>(PlayerReplication.NodeName(e))).OfType<FootPlayer>()
+            .Select(n => n.Global).ToList();
+        if (field.Count == 0) field.Add(race.Frame.ToGlobal(race.Spot));
         long best = 0;
         (int, float) bestKey = default;
         foreach (var child in _players?.GetChildren() ?? new Godot.Collections.Array<Node>())
         {
             if (child is not FootPlayer { Npc: false } p || !long.TryParse(p.Name, out long peer) || peer == old) continue;
             bool entrant = race.Entrants.Contains(peer) && !race.Out.Contains(peer);
-            float d = field.Min(f => RaceNpcs.Flat(f, p.GlobalPosition));
+            float d = field.Min(f => RaceNpcs.Flat(f, p.Global));
             if (!entrant && d > RaceNpcs.Zone) continue;
             var key = (entrant ? 0 : 1, d);
             if (best == 0 || key.CompareTo(bestKey) < 0) { best = peer; bestKey = key; }
@@ -550,11 +562,12 @@ public partial class RaceManager : Node
             if (other == race || other.Phase != Phase.Running || other.Course == null) continue;
             if (_clock > other.StartAt + GridClearSeconds) continue;
             int theirs = other.Entrants.Count;
+            var mine = race.Frame.Since(other.Frame);   // each race is in its own frame
             for (int i = 0; i < count; i++)
             {
                 var (a, _) = course.Slot(i, count);
                 for (int j = 0; j < theirs; j++)
-                    if (a.DistanceTo(other.Course.Slot(j, theirs).At) < GridClearance) return other;
+                    if (a.DistanceTo(mine.Point(other.Course.Slot(j, theirs).At)) < GridClearance) return other;
             }
         }
         return null;
@@ -633,7 +646,7 @@ public partial class RaceManager : Node
     {
         var course = race.Course!;
         int slot = race.Entrants.IndexOf(e), count = race.Entrants.Count;
-        RpcId(SimOf(e), MethodName.Setup, race.Id, e, race.Air, race.Centre, race.Width,
+        RpcId(SimOf(e), MethodName.Setup, race.Id, e, race.Air, race.Frame.E, race.Frame.N, race.Centre, race.Width,
             race.Air ? course.Gates : System.Array.Empty<Vector3>(), course.Length, course.GridAltitude, slot, count,
             race.Mount, resume ? race.StartAt - _clock : Countdown, race.Next.GetValueOrDefault(e), resume, race.Class,
             race.Skill.GetValueOrDefault(e, 1f));
@@ -720,10 +733,10 @@ public partial class RaceManager : Node
         int slot = race.Entrants.IndexOf(entrant);
         float startArc = race.Air ? 0f : RaceCourse.StartArc(slot, race.Entrants.Count);
         var at = course.CheckpointAt(index, startArc);
-        if (_players?.GetNodeOrNull<Node3D>(PlayerReplication.NodeName(entrant)) is { } body)
+        if (_players?.GetNodeOrNull<FootPlayer>(PlayerReplication.NodeName(entrant)) is { } body)
         {
             float reach = race.Air ? RaceCourse.GateRadius + 60f : 80f;   // the proxy lags a few frames
-            float off = RaceRoute.Flat(body.GlobalPosition - at).Length();
+            float off = RaceRoute.Flat(race.Frame.ToWorld(body.Global) - at).Length();
             if (off > reach)
             {
                 GD.Print($"[race] #{race.Id} {Who(entrant)} reported checkpoint {index} {off:F0} m from it — ignored");
@@ -921,8 +934,31 @@ public partial class RaceManager : Node
     public void ReportStaged(int raceId, long npc) => RpcId(1, MethodName.NpcStaged, raceId, npc);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void NpcArrive(int raceId, long npc, Vector3[] centre, float[] width, float zero, int style, int variant, int slot, int count) =>
-        _arrivals[npc] = new Arrival(raceId, RaceRoute.FromPoints(centre, width), zero, (ArrivalStyle)style, variant, slot, count);
+    private void NpcArrive(int raceId, long npc, double frameE, double frameN, Vector3[] centre, float[] width, float zero,
+        int style, int variant, int slot, int count) =>
+        _arrivals[npc] = new Arrival(raceId, RaceRoute.FromPoints(Here(frameE, frameN, centre), width, frame: _origin!.Frame),
+            zero, (ArrivalStyle)style, variant, slot, count);
+
+    /// <summary>Points the server sent as offsets from a race's anchor, in this client's world space now (#185).</summary>
+    private Vector3[] Here(double frameE, double frameN, Vector3[] points)
+    {
+        var shift = _origin!.Since(OriginFrame.Anchor(frameE, frameN));
+        return points.Select(shift.Point).ToArray();
+    }
+
+    /// <summary>The origin moved (#185): every course, lane and last position this client races on moves with it.</summary>
+    public void OnOriginShifted(OriginShift shift)
+    {
+        if (_server || _origin == null) return;
+        var now = _origin.Frame;
+        foreach (var r in _npcs.Values.Append(_me))
+        {
+            if (r == null) continue;
+            r.Course.Follow(now);
+            r.Last = shift.Point(r.Last);
+        }
+        foreach (var a in _arrivals.Values) a.Lane.Follow(now);
+    }
 
     /// <summary>The latest race id this client saw opened, challenged or joined (from the chat).</summary>
     public int LastRaceSeen { get; private set; }
@@ -944,13 +980,14 @@ public partial class RaceManager : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Setup(int raceId, long entrant, bool air, Vector3[] centre, float[] width, Vector3[] gates, float length,
-        float gridAltitude, int slot, int count, int mount, double countdown, int next, bool resume, int carClass, float skill)
+    private void Setup(int raceId, long entrant, bool air, double frameE, double frameN, Vector3[] centre, float[] width, Vector3[] gates,
+        float length, float gridAltitude, int slot, int count, int mount, double countdown, int next, bool resume, int carClass, float skill)
     {
         var r = new Runner
         {
             RaceId = raceId, Id = entrant, Slot = slot, Count = count, Mount = mount, GoIn = countdown, Next = next, Class = carClass,
-            Course = RaceCourse.FromWire(air, centre, width, gates, length, gridAltitude),
+            Course = RaceCourse.FromWire(air, Here(frameE, frameN, centre), width, Here(frameE, frameN, gates), length, gridAltitude,
+                _origin!.Frame),
             StartArc = air ? 0f : RaceCourse.StartArc(slot, count),
         };
         // the grid is not lined up in the middle of this client's traffic: the cars around it go (a car

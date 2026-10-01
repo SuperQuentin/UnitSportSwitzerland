@@ -33,6 +33,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private NetworkChunkSource? _chunkSource;
     private CachingChunkSource? _cache;
     private ClientTerrainSync? _terrainSync;
+    private Handshake? _handshake;
     private WorldOrigin? _worldOrigin;
     private ShaderMaterial[] _worldMaterials = Array.Empty<ShaderMaterial>();
     private WorldEnvironment? _worldEnvironment;
@@ -63,8 +64,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>Players on the server, for the pause menu's status line (null offline).</summary>
     public int? Players => _networked && _players != null ? _players.GetChildCount() : null;
-    /// <summary>The origin the world started with: the server's frame, until positions on the wire are global.</summary>
-    private (double E, double N)? _startOrigin;
 
     public override async void _Ready()
     {
@@ -215,12 +214,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             origin = new WorldOrigin(pinE, pinN);
 
         _worldOrigin = origin;
-        _startOrigin = (origin.E, origin.N);
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
 
         // The floating origin (#185): world space follows the camera, so float32 stays precise
-        // however far it goes. Offline only until positions on the wire are origin-independent.
-        AddChild(new OriginShifter(origin, () => GetViewport().GetCamera3D()?.GlobalPosition, () => !_networked));
+        // however far it goes. Online too: positions on the wire are LV95, never world space.
+        AddChild(new OriginShifter(origin, () => GetViewport().GetCamera3D()?.GlobalPosition, () => true));
 
         if (!hasLocalTerrain && generated != null)
             GD.PushWarning(
@@ -285,7 +283,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
         // A fixture course is all there is: nothing cached joins it.
-        if (!fixture) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
+        if (!fixture) ClientTerrainSync.MergeCachedIndex(_chunks);
 
         AddChild(_chunks);
         Audio.Surfaces.Origin = origin;
@@ -304,7 +302,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Vehicles left standing in the world. Same node path as on the server, so parking and
         // claiming work over the network; offline it just holds the nodes.
-        var vehicles = Vehicles.VehicleManager.Create(this, _chunks);
+        var vehicles = Vehicles.VehicleManager.Create(this, _chunks, origin);
         // seats in vehicles other players drive (#158): same path as the server's
         Vehicles.PassengerService.Create(this);
         vehicles.PlayerPositions = () =>
@@ -316,10 +314,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         };
         // Radios thrown into the world and the CD library they play from, same paths as the
         // server's; the clock the CDs run on (offline: this machine's own).
-        var radios = Items.RadioManager.Create(this);
+        var radios = Items.RadioManager.Create(this, origin);
         radios.PlayerPositions = vehicles.PlayerPositions;
         // items dropped and thrown on the ground (#206)
-        Items.DroppedItems.Create(this).PlayerPositions = vehicles.PlayerPositions;
+        Items.DroppedItems.Create(this, origin).PlayerPositions = vehicles.PlayerPositions;
         var chunksForDrops = _chunks;
         Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetHeight(p, out float y) ? y : null;
         // every body that may hold a radio that plays (#168): the remote players and this one
@@ -344,7 +342,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
-        var combat = Combat.CombatManager.Create(this, _chunks, server: false);
+        var combat = Combat.CombatManager.Create(this, _chunks, origin, server: false);
         combat.LocalPlayer = () => _onFoot ? LocalPlayer : null;
 
         // Building interiors: E opens a front door, and you walk through it. Same node path as the
@@ -560,7 +558,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // which decides who gets what; offline this client does both.
         // held-item events (shots, flashes) and placed objects (flags, photos): same node paths
         // as the server's, which relays the first and owns the second; offline this client does both
-        Items.ItemEvents.Create(this, server: false);
+        Items.ItemEvents.Create(this, origin, server: false);
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
@@ -1050,25 +1048,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
     }
 
-    /// <summary>
-    /// Puts the player down again after the world origin moved.
-    ///
-    /// <para>
-    /// Only happens on a client that had no terrain of its own and adopted the server's
-    /// anchor. Its position was an offset from a placeholder origin and now means somewhere
-    /// else entirely, so the spawn is simply re-run against the new one.
-    /// </para>
-    /// </summary>
-    private void RespawnAfterRebase()
-    {
-        if (_chunks == null || _worldOrigin == null || _teleporter == null) return;
-
-        var (spawnE, spawnN) = SpawnPoint.ParseTarget();
-        _teleporter.TeleportTo(spawnE, spawnN, "spawn");
-        Items.PlacedObjects.Instance?.Reposition();
-        _chatUi?.Append("Adopted the server's world; terrain will stream in.", ChatKind.System);
-    }
-
     /// <summary>Switches mode, tearing down whatever the previous one owned.</summary>
     private void EnterMode(GameMode mode)
     {
@@ -1137,10 +1116,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         if (_networked) return;
         if (!Systems.On(Systems.Network)) { Fail("The network is off for this run (--systems)."); return; }
-        // Positions on the wire are still world space (#185, phase 2), so online every peer must be
-        // in the frame the server is in: a game that travelled offline puts its origin back where
-        // it started before anything is sent. The shifter is off from here on.
-        if (_startOrigin is { } start) OriginShifter.Instance?.ShiftTo(start.E, start.N, exact: true);
         _networked = true;
 
         // The chat node (World/Chat, made at boot) is already where the server's RPCs route.
@@ -1148,7 +1123,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Items.EconomyProbe(_chat, _items.Inventory));
 
         // World/Race on both sides; the client side puts this player on the grid and times the run
-        var race = World.RaceManager.CreateClient();
+        var race = World.RaceManager.CreateClient(_worldOrigin!);
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
 
@@ -1173,9 +1148,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         _chat!.Kicked += OnKicked;
 
-        // Merges the server's tile list so tiles this client never shipped with become
-        // streamable, and refuses to stream at all if the two worlds disagree on the origin.
-        _terrainSync = new ClientTerrainSync(_streamer!, _chunks!, _worldOrigin!);
+        // Merges the server's tile list so tiles this client never shipped with become streamable.
+        _terrainSync = new ClientTerrainSync(_streamer!, _chunks!);
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
             Callable.From(() =>
@@ -1183,10 +1157,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _chatUi?.Append(line, ChatKind.System);
                 LoadDetail = line;
             }).CallDeferred();
-
-        // Adopting the server's anchor changes what every world coordinate means, so whatever
-        // was placed against the old one has to be put down again.
-        _terrainSync.Rebased += () => Callable.From(RespawnAfterRebase).CallDeferred();
 
         // The town index arrives after this UI was built, so it has to be told to re-read.
         _terrainSync.PlacesReceived += () =>
@@ -1202,6 +1172,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Callable.From(() => _chunks?.Horizon?.Reload()).CallDeferred();
         AddChild(_terrainSync);
 
+        // the version check comes first: nothing else is sent before the server welcomes us
+        _handshake = Handshake.CreateClient();
+        _handshake.Welcomed += OnWelcomed;
+        _handshake.Refused += reason =>
+        {
+            GD.PushWarning($"[net] {reason}");
+            Multiplayer.MultiplayerPeer?.Close();
+            ReportDisconnect(reason);
+        };
+        AddChild(_handshake);
+
         // before any player arrives: each one's synchronizer asks it whom to send to
         InterestService.CreateClient(this);
         _players = new Node3D { Name = "Players" };
@@ -1212,9 +1193,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 Callable.From(() => EnterFootWhenGrounded(player)).CallDeferred();
         };
         AddChild(_players);
-        AddChild(PlayerReplication.CreateSpawner());
+        AddChild(PlayerReplication.CreateSpawner(_worldOrigin!));
         AddChild(World.RaceNpcs.CreateClient());   // World/Npcs: the path its RPC routes by
-        if (NetSmoothProbe.ParseArgs() is { } smooth) AddChild(new NetSmoothProbe(_players, smooth.Seconds, smooth.Label));
+        if (NetSmoothProbe.ParseArgs() is { } smooth) AddChild(new NetSmoothProbe(_players, smooth.Seconds, smooth.Label, smooth.MinSpeed));
         if (WallOffProbe.ParseArgs() is { } wallOff) AddChild(new WallOffProbe(_players, _chunks!, _worldOrigin!, wallOff));
         var net = new NetworkManager { Name = "Net" };
         AddChild(net);
@@ -1234,6 +1215,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         _connected = true;
         GD.Print($"[world] connected, peer id {Multiplayer.GetUniqueId()}");
+        _handshake?.Begin();
+    }
+
+    /// <summary>The server speaks this client's protocol (<see cref="Handshake"/>): join for real.</summary>
+    private void OnWelcomed()
+    {
+        GD.Print($"[world] the server speaks protocol {Handshake.Protocol}");
 
         // The server assigns the final name — it deduplicates and sanitises — so this is
         // a request, not a claim.

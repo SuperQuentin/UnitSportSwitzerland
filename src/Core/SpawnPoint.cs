@@ -63,8 +63,10 @@ public partial class SpawnPoint : Node
     public static (double E, double N) ParseTarget() => ParseLv95("--at") ?? (DefaultLv95E, DefaultLv95N);
 
     /// <summary>
-    /// Reads an optional "--origin E,N" (LV95 metres) that pins the world origin, so screenshots
-    /// and timings at fixed world coordinates stay put when the manifest's suggested origin moves.
+    /// Reads an optional "--origin E,N" (LV95 metres) that pins the starting world origin, so
+    /// screenshots and timings at fixed world coordinates stay put when the manifest's suggested
+    /// origin moves. The floating origin (#185) still moves it from there; <c>ShotRunner</c> maps
+    /// its coordinates from this first frame.
     /// </summary>
     public static (double E, double N)? ParseOrigin() => ParseLv95("--origin");
 

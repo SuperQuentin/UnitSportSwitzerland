@@ -1,4 +1,6 @@
 using Godot;
+using UnitSport.Core;
+using UnitSport.Player;
 
 namespace UnitSport.Birds;
 
@@ -15,7 +17,8 @@ namespace UnitSport.Birds;
 /// <item>tells every peer near a dead bird (reliable <c>Killed</c>), the shooter included: that is when
 /// the shooter's journal scores it, so the kill goes into the shooter's journal only.</item>
 /// </list>
-/// Offline it does nothing: <see cref="BirdLife.Authority"/> is true there.
+/// Offline it does nothing: <see cref="BirdLife.Authority"/> is true there. Every position it sends
+/// is LV95 (#185): server and clients each have their own origin.
 /// </summary>
 public partial class BirdNet : Node
 {
@@ -60,8 +63,8 @@ public partial class BirdNet : Node
         _tick++;
         foreach (int peer in Multiplayer.GetPeers())
         {
-            if (GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body) continue;
-            foreach (var chunk in Life!.Snapshot(body.GlobalPosition, _tick))
+            if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) continue;
+            foreach (var chunk in Life!.Snapshot(body.Global, _tick))
                 RpcId(peer, MethodName.Snapshot, chunk);
         }
     }
@@ -75,56 +78,60 @@ public partial class BirdNet : Node
     /// <summary>Client: tell the server what this client's gun, rounds or craft did to a bird.</summary>
     public void Report(int kind, int id, Vector3 from, Vector3 dir)
     {
-        if (Online) RpcId(1, MethodName.ReportRpc, kind, id, from, dir);
+        if (!Online || Life == null) return;
+        var at = Life.Origin.ToGlobal(from);
+        RpcId(1, MethodName.ReportRpc, kind, id, at.E, at.N, at.Alt, dir);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReportRpc(int kind, int id, Vector3 from, Vector3 dir)
+    private void ReportRpc(int kind, int id, double e, double n, double alt, Vector3 dir)
     {
         if (!_server || kind is < ReportShot or > ReportFlush) return;
         long sender = Multiplayer.GetRemoteSenderId();
+        var from = new GlobalPos(e, n, alt);
         // a gun that is not where its owner is does not shoot
         float reach = kind == ReportShot ? MaxShotOffset : MaxFarOffset;
-        if (GetNodeOrNull<Node3D>("../Players/" + sender) is not { } body || body.GlobalPosition.DistanceTo(from) > reach)
+        if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is not { } body || !from.IsFinite || body.Global.DistanceTo(from) > reach)
         {
             GD.Print($"[birds] peer {sender}: report {kind} on #{id} refused, not where its player is");
             return;
         }
-        Life!.ServerReport(sender, kind, id, from, dir);
+        Life!.ServerReport(sender, kind, id, Life.Origin.ToWorld(from), dir);
     }
 
     /// <summary>Server: a bird fell. Everyone within earshot hears of it; the shooter is always told.</summary>
     public void BroadcastKill(Bird b, Vector3 dir, long shooter)
     {
         if (!_server || !Online) return;
-        var at = b.Node.GlobalPosition;
+        var at = Life!.Origin.ToGlobal(b.Node.GlobalPosition);
         foreach (int peer in Multiplayer.GetPeers())
-            if (peer == shooter || GetNodeOrNull<Node3D>("../Players/" + peer) is { } body && body.GlobalPosition.DistanceTo(at) < KilledRange)
-                RpcId(peer, MethodName.Killed, b.Id, b.Species.Index, at, dir, shooter);
+            if (peer == shooter || GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body && body.Global.DistanceTo(at) < KilledRange)
+                RpcId(peer, MethodName.Killed, b.Id, b.Species.Index, at.E, at.N, at.Alt, dir, shooter);
     }
 
     /// <summary>Server: a pigeon let go. Everyone near sees it fall; <paramref name="victim"/> (a peer, or 0) is who it lands on.</summary>
     public void BroadcastDropping(Vector3 from, Vector3 vel, long victim)
     {
         if (!_server || !Online) return;
+        var at = Life!.Origin.ToGlobal(from);
         foreach (int peer in Multiplayer.GetPeers())
-            if (peer == victim || GetNodeOrNull<Node3D>("../Players/" + peer) is { } body && body.GlobalPosition.DistanceTo(from) < DroppingRange)
-                RpcId(peer, MethodName.Dropping, from, vel, victim);
+            if (peer == victim || GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body && body.Global.DistanceTo(at) < DroppingRange)
+                RpcId(peer, MethodName.Dropping, at.E, at.N, at.Alt, vel, victim);
     }
 
     private const float DroppingRange = 150f;
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Dropping(Vector3 from, Vector3 vel, long victim)
+    private void Dropping(double e, double n, double alt, Vector3 vel, long victim)
     {
-        if (!_server) Life?.Dropping(from, vel, victim);
+        if (!_server && Life != null) Life.Dropping(Life.Origin.ToWorld(e, n, alt), vel, victim);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Killed(int id, int species, Vector3 at, Vector3 dir, long shooter)
+    private void Killed(int id, int species, double e, double n, double alt, Vector3 dir, long shooter)
     {
         if (_server) return;
         GD.Print($"[birds] killed #{id} ({Species(species)?.Name}) by peer {shooter}");
-        Life?.RemoteKilled(id, species, at, dir, shooter);
+        Life?.RemoteKilled(id, species, Life.Origin.ToWorld(e, n, alt), dir, shooter);
     }
 }

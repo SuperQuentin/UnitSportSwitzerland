@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Audio;
 using UnitSport.Audio.Cd;
 using UnitSport.Avatar;
+using UnitSport.Core;
 using UnitSport.Net;
 
 namespace UnitSport.Items;
@@ -60,16 +61,20 @@ public partial class RadioBody : RigidBody3D
     private const double SettleAfter = 8, RestFor = 1;
 
     private RadioState _initial;
+    private WorldOrigin _origin = null!;
+    /// <summary>The position on the wire (#185): published by whoever throws it, applied everywhere else.</summary>
+    private NetPlace _place = null!;
     private MultiplayerSynchronizer? _sync;
     private double _age, _restTime;
     private RadioSpeaker? _speaker;
 
-    public static RadioBody Create(RadioState state)
+    public static RadioBody Create(RadioState state, WorldOrigin origin)
     {
         var r = new RadioBody
         {
             Name = string.IsNullOrEmpty(state.Name) ? $"radio_local_{Interlocked.Increment(ref _localCounter)}" : state.Name,
             _initial = state,
+            _origin = origin,
             Owner = state.Owner,
             CdId = state.CdId,
             StartedAt = state.StartedAt,
@@ -90,14 +95,15 @@ public partial class RadioBody : RigidBody3D
         AddToGroup(Group);
         CollisionMask |= World.TreeColliders.Layer;
         var s = _initial;
-        Position = s.Position;
+        Position = _origin.ToWorld(s.Position);
+        AddChild(_place = new NetPlace(_origin, s.Position));
         Rotation = new Vector3(0, s.Yaw, 0);
         Mass = 3f;
         AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(BodyW, BodyH, BodyD) } });
 
         // the fall: whoever threw it simulates, the others move the box where they are told
         var fall = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:position", ".:rotation", ".:Settled" }) fall.AddProperty(prop);
+        foreach (var prop in NetPlace.Properties.Append(".:rotation").Append(".:Settled")) fall.AddProperty(prop);
         fall.PropertySetReplicationMode(".:Settled", SceneReplicationConfig.ReplicationMode.OnChange);
         _sync = new MultiplayerSynchronizer
         {
@@ -147,6 +153,7 @@ public partial class RadioBody : RigidBody3D
     {
         if (Settled) return;
         _age += delta;
+        _place.Publish(Position);
         _restTime = LinearVelocity.LengthSquared() < 0.05f * 0.05f ? _restTime + delta : 0;
         if (Sleeping || _restTime > RestFor || _age > SettleAfter || Position.Y < -500)
         {
@@ -168,7 +175,7 @@ public partial class RadioBody : RigidBody3D
     }
 
     /// <summary>The state to respawn it from: where it is now, what it plays.</summary>
-    public RadioState Capture() => new(Name, Owner, Position, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length);
+    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length);
 
     /// <summary>What it plays, as the item carries it when picked up; null when silent or finished.</summary>
     public RadioPlay? NowPlaying => Playing && WantedPosition < Length ? new RadioPlay(CdId, StartedAt, Length) : null;

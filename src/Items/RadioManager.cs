@@ -55,15 +55,18 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
     private readonly HashSet<string> _claimed = new();
     private double _housekeeping;
 
-    public static RadioManager Create(Node world)
+    /// <summary>This peer's origin: radio states carry LV95 (#185), the radios stand in world space.</summary>
+    public Core.WorldOrigin Origin { get; private set; } = null!;
+
+    public static RadioManager Create(Node world, Core.WorldOrigin origin)
     {
-        var manager = new RadioManager { Name = NodeName };
+        var manager = new RadioManager { Name = NodeName, Origin = origin };
         world.AddChild(manager);
         manager._spawner = new MultiplayerSpawner
         {
             Name = "RadioSpawner",
             SpawnPath = new NodePath("../" + NodeName),
-            SpawnFunction = Callable.From((Variant data) => (Node)RadioBody.Create(RadioState.FromDict(data.AsGodotDictionary()))),
+            SpawnFunction = Callable.From((Variant data) => (Node)RadioBody.Create(RadioState.FromDict(data.AsGodotDictionary()), origin)),
         };
         world.AddChild(manager._spawner);
         Instance = manager;
@@ -85,7 +88,7 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
     {
         if (!Online)
         {
-            AddChild(RadioBody.Create(state with { Owner = 0, Name = "" }));
+            AddChild(RadioBody.Create(state with { Owner = 0, Name = "" }, Origin));
             return;
         }
         RpcId(1, MethodName.RequestThrow, state.ToDict());
@@ -176,7 +179,7 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
         long sender = Multiplayer.GetRemoteSenderId();
         var thrown = RadioState.FromDict(data);
         // a full-strength throw (ThrowAim.MaxSpeed) from a sprint, with room to spare
-        if (thrown.Velocity.Length() > 40f || !thrown.Position.IsFinite())
+        if (thrown.Velocity.Length() > 40f || !thrown.Position.IsFinite)
         {
             RpcId(sender, MethodName.ThrowRefused);
             return;

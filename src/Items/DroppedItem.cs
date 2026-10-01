@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Net;
 
 namespace UnitSport.Items;
@@ -13,27 +14,31 @@ public readonly record struct DropState(
     string Name,
     long Owner,
     ItemStack Stack,
-    Vector3 Position,
+    GlobalPos Position,
     Vector3 Rotation,
     Vector3 Velocity,
     Vector3 Spin,
     bool Settled = false,
     int Token = 0)
 {
-    public Godot.Collections.Dictionary ToDict() => new()
+    public Godot.Collections.Dictionary ToDict()
     {
+        var d = new Godot.Collections.Dictionary
+        {
         ["name"] = Name,
         ["owner"] = Owner,
         ["id"] = (int)Stack.Id,
         ["count"] = Stack.Count,
         ["data"] = Stack.Data ?? "",
-        ["pos"] = Position,
         ["rot"] = Rotation,
         ["vel"] = Velocity,
         ["spin"] = Spin,
         ["settled"] = Settled,
         ["token"] = Token,
-    };
+        };
+        Position.Write(d);
+        return d;
+    }
 
     public static DropState FromDict(Godot.Collections.Dictionary d)
     {
@@ -42,7 +47,7 @@ public readonly record struct DropState(
             d["name"].AsString(),
             d["owner"].AsInt64(),
             new ItemStack((ItemId)d["id"].AsInt32(), d["count"].AsInt32(), data.Length == 0 ? null : data),
-            d["pos"].AsVector3(),
+            GlobalPos.Read(d),
             d["rot"].AsVector3(),
             d["vel"].AsVector3(),
             d["spin"].AsVector3(),
@@ -92,16 +97,20 @@ public partial class DroppedItem : RigidBody3D
 
     private const double SettleAfter = 10, RestFor = 0.6;
     private DropState _initial;
+    private WorldOrigin _origin = null!;
+    /// <summary>The position on the wire (#185): published by whoever simulates the fall, applied everywhere else.</summary>
+    private NetPlace _place = null!;
     private MultiplayerSynchronizer? _sync;
     private double _age, _restTime;
     private bool _predicting;
     private ImpactFx? _impact;
     private static int _localCounter;
 
-    public static DroppedItem Create(DropState state, bool proxy = false)
+    public static DroppedItem Create(DropState state, WorldOrigin origin, bool proxy = false)
     {
         var item = new DroppedItem
         {
+            _origin = origin,
             Name = string.IsNullOrEmpty(state.Name) ? $"drop_local_{Interlocked.Increment(ref _localCounter)}" : state.Name,
             _initial = state,
             Owner = state.Owner,
@@ -118,7 +127,8 @@ public partial class DroppedItem : RigidBody3D
         AddToGroup(Group);
         CollisionMask |= World.TreeColliders.Layer;
         var s = _initial;
-        Position = s.Position;
+        Position = _origin.ToWorld(s.Position);
+        AddChild(_place = new NetPlace(_origin, s.Position));
         Rotation = s.Rotation;
 
         // the collider is the drawn item's box (thin cards and bars get a minimum, or they sink)
@@ -141,7 +151,7 @@ public partial class DroppedItem : RigidBody3D
         }
 
         var fall = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:position", ".:rotation", ".:Settled" }) fall.AddProperty(prop);
+        foreach (var prop in NetPlace.Properties.Append(".:rotation").Append(".:Settled")) fall.AddProperty(prop);
         fall.PropertySetReplicationMode(".:Settled", SceneReplicationConfig.ReplicationMode.OnChange);
         _sync = new MultiplayerSynchronizer
         {
@@ -246,10 +256,11 @@ public partial class DroppedItem : RigidBody3D
             if (_age > SettleAfter) StopPredicting();
             return;
         }
+        if (!Proxy) _place.Publish(Position);
         _restTime = LinearVelocity.LengthSquared() < 0.05f * 0.05f && AngularVelocity.LengthSquared() < 0.2f ? _restTime + delta : 0;
         if (Sleeping || _restTime > RestFor || _age > SettleAfter || Position.Y < -5000) Settle();
     }
 
     /// <summary>The state to respawn it from: where it lies now, what it is.</summary>
-    public DropState Capture() => new(Name, Owner, Stack, Position, Rotation, Vector3.Zero, Vector3.Zero, Settled);
+    public DropState Capture() => new(Name, Owner, Stack, _place.Global, Rotation, Vector3.Zero, Vector3.Zero, Settled);
 }
