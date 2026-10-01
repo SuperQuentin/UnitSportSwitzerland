@@ -65,6 +65,15 @@ public sealed partial class ClientTerrainSync : Node
     /// </summary>
     public async Task SyncAsync(CancellationToken ct = default)
     {
+        try { await SyncCore(ct); }
+        finally { Finished = true; }
+    }
+
+    /// <summary>The sync has run to its end, whether it merged anything or not (the loading screen waits on it).</summary>
+    public bool Finished { get; private set; }
+
+    private async Task SyncCore(CancellationToken ct)
+    {
         if (Synced) return;
 
         // The manifest is not tile-scoped, so any TileId will do as the request key.

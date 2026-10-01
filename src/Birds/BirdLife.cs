@@ -85,6 +85,11 @@ public partial class BirdLife : Node3D
 
     public BirdLife() : this(null!, null!, null!) { }
 
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+    }
+
     public override void _Ready()
     {
         Name = "Birds";

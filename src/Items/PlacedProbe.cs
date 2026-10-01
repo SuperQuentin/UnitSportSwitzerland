@@ -14,7 +14,9 @@ namespace UnitSport.Items;
 /// in — fires the shotgun through the real item path and sends a camera flash.</item>
 /// <item>B joins AFTER the flag is planted: it must have A's flag and photo from the join snapshot,
 /// hear A's Shot and PhotoFlash, and be refused removing A's photo (owner-only). It saves a
-/// screenshot to <c>test_output/placedcheck_b.png</c>. A then removes its photo itself.</item>
+/// screenshot to <c>test_output/placedcheck_b.png</c>. A's real Polaroid is also put upright on a
+/// "wall" (through the API): B must draw it poster-sized with the image
+/// (<c>test_output/placedcheck_b_poster.png</c>). A then removes its photos itself.</item>
 /// <item>C runs against the RESTARTED server: A's flag must still be there; C pulls it up (anyone
 /// may), which also cleans up.</item>
 /// </list>
@@ -122,6 +124,12 @@ public partial class PlacedProbe : Node
             placed.RequestRemove(card.Id, r => gone = r);
             Expect(await Until(() => gone != null, 5) && gone!.Value.Ok, "the owner removed its own photo");
         }
+        foreach (var wallPhoto in placed.All.Values.Where(o => o.Payload == shot && PhotoVisuals.IsWall(o.WorldTransform(placed.Origin))).ToList())
+        {
+            PlacedResult? down = null;
+            placed.RequestRemove(wallPhoto.Id, r => down = r);
+            Expect(await Until(() => down != null, 5) && down!.Value.Ok, "the owner took its poster down");
+        }
         if (shot != null && placed.All.Values.FirstOrDefault(o => o.Payload == shot) is { } stuck)
         {
             _items.PickUpPhoto(stuck.Id);
@@ -136,10 +144,13 @@ public partial class PlacedProbe : Node
         int cam = SlotOf(ItemId.Camera);
         if (cam < 0) { Expect(false, "a camera in the scratch pack"); return null; }
         me.LookPitch = 0.05f;
-        await Seconds(0.5);
+        _items.Inventory.Select(cam);
+        _items.ForceAim = true;   // the camera shoots through its viewfinder only
+        await Seconds(1.2);
         string? shot = null;
         _items.Printed += id => shot = id;
         _items.UseSlot(me, cam);
+        _items.ForceAim = false;
         Expect(await Until(() => shot != null && SlotOfPhoto(shot) >= 0, ItemController.DevelopSeconds + 5),
             $"a photo was taken and developed into the pack ({shot})");
         if (shot == null || SlotOfPhoto(shot) < 0) return null;
@@ -153,6 +164,15 @@ public partial class PlacedProbe : Node
         Expect(await Until(() => placed.All.Values.Any(o => o.Kind == PlacedKind.Photo && o.Payload == shot), 5),
             "the Polaroid is stuck on the ground (item path, image uploaded)");
         GD.Print($"[placedcheck A] photo {shot}: {PhotoStore.Bytes(shot)?.Length ?? 0} bytes");
+
+        // the same print upright, as if on a wall, 2 m to the side at eye height: a poster for B
+        var side = me.GlobalTransform.Basis.X with { Y = 0 };
+        var wall = new Transform3D(Basis.Identity, me.GlobalPosition + side.Normalized() * 2f + Vector3.Up * 1.6f);
+        PlacedResult? poster = null;
+        placed.RequestPlace(PlacedKind.Photo, wall, shot, r => poster = r);
+        Expect(await Until(() => poster != null, 5) && poster!.Value.Ok, "the Polaroid also went up on a wall");
+        var card = poster?.Object is { } p ? placed.GetNodeOrNull<MeshInstance3D>($"P{p.Id}/Card") : null;
+        Expect(card?.Mesh == PhotoVisuals.Poster, "drawn as a poster here");
         return shot;
     }
 
@@ -201,7 +221,8 @@ public partial class PlacedProbe : Node
 
         // A's Polaroid: in the snapshot by id only; the image must come from the server, by hash
         var polaroid = placed.All.Values.FirstOrDefault(o => o.Kind == PlacedKind.Photo && o.Owner == "PlacedA"
-                                                             && PhotoStore.IsValidId(o.Payload));
+                                                             && PhotoStore.IsValidId(o.Payload)
+                                                             && !PhotoVisuals.IsWall(o.WorldTransform(placed.Origin)));
         Expect(polaroid != null, "A's Polaroid arrived with the join snapshot");
         if (polaroid != null)
         {
@@ -226,6 +247,33 @@ public partial class PlacedProbe : Node
             me.LookPitch = -1.1f;
             await Seconds(1.0);
             GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "placedcheck_b_photo.png"));
+        }
+
+        // the same print on a wall: drawn here poster-sized, with the image
+        var wall = placed.All.Values.FirstOrDefault(o => o.Kind == PlacedKind.Photo && o.Owner == "PlacedA"
+                                                         && PhotoStore.IsValidId(o.Payload) && PhotoVisuals.IsWall(o.WorldTransform(placed.Origin)));
+        Expect(wall != null, "A's wall Polaroid arrived");
+        if (wall != null)
+        {
+            var poster = placed.GetNodeOrNull<MeshInstance3D>($"P{wall.Id}/Card");
+            var size = poster?.Mesh.GetAabb().Size ?? Vector3.Zero;
+            Expect(poster?.Mesh == PhotoVisuals.Poster && size.X > 0.5f, FormattableString.Invariant($"drawn as a poster ({size.X:F2} x {size.Y:F2} m)"));
+            Expect(await Until(() => poster?.MaterialOverride is StandardMaterial3D sm && sm.AlbedoTexture != null
+                                     && sm.AlbedoTexture != PhotoVisuals.Blank, 10), "the poster shows the image");
+            // 2.5 m in front of it (it faces +Z), level, looking at it
+            var at = wall.WorldTransform(placed.Origin);
+            var face = at.Basis.Z with { Y = 0 };
+            face = face.LengthSquared() > 1e-4f ? face.Normalized() : Vector3.Back;
+            me.GlobalPosition = at.Origin + face * 2.5f + Vector3.Up * 0.3f;
+            me.Velocity = Vector3.Zero;
+            me.RequestReplacement();
+            await Until(() => me.IsOnFloor(), 10);
+            await Seconds(0.5);
+            var to = at.Origin - me.Camera.GlobalPosition;   // look straight at its centre
+            me.LookYaw = Mathf.Atan2(-to.X, -to.Z);
+            me.LookPitch = Mathf.Atan2(to.Y, new Vector2(to.X, to.Z).Length());
+            await Seconds(1.0);
+            GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "placedcheck_b_poster.png"));
         }
         Say("done");
     }

@@ -318,7 +318,7 @@ void ShowPlan(List<Step> steps)
     AnsiConsole.MarkupLine($"[grey]Download at {rate}; processing on {Environment.ProcessorCount} cores"
                            + (stats.TerrainCoreSecPerTile != new Stats().TerrainCoreSecPerTile ? ", rates calibrated by earlier runs" : "") + ".[/]");
     if (!gdal)
-        AnsiConsole.MarkupLine("[yellow]GDAL is not available to Python (python -c \"import osgeo\" fails): buildings and cycle routes are off.[/]");
+        AnsiConsole.MarkupLine("[yellow]GDAL is not available to Python (python -c \"import osgeo\" fails): buildings and cycle routes are off. To install it: docs/notes/tools/gdal-setup.md[/]");
 
     // not enough room is the one failure worth catching before anything starts
     foreach (var group in running.Where(s => s.DiskBytes > 0 && s.DiskPath != null).GroupBy(s => Path.GetPathRoot(Path.GetFullPath(s.DiskPath!))))
@@ -432,9 +432,9 @@ Layers AskLayers(Layers current)
     var choices = new List<(Layers Layer, string Label)>
     {
         (Layers.Roads, $"Roads, rail, rivers, land cover, trees  [grey](swissTLM3D, {Bytes(country.Extras.GetValueOrDefault("swisstlm3d", 4_800_000_000))} once)[/]"),
-        (Layers.Buildings, gdal ? "Buildings  [grey](swissBUILDINGS3D, the sheets you touch; GDAL)[/]" : "Buildings  [red](needs GDAL — unavailable)[/]"),
+        (Layers.Buildings, gdal ? "Buildings  [grey](swissBUILDINGS3D, the sheets you touch; GDAL)[/]" : "Buildings  [red](needs GDAL — unavailable, see docs/notes/tools/gdal-setup.md)[/]"),
         (Layers.Cadastre, "Building use, age and storeys  [grey](GWR register)[/]"),
-        (Layers.Routes, gdal ? "Cycle and MTB route flags  [grey](ASTRA, ~90 MB; GDAL)[/]" : "Cycle routes  [red](needs GDAL — unavailable)[/]"),
+        (Layers.Routes, gdal ? "Cycle and MTB route flags  [grey](ASTRA, ~90 MB; GDAL)[/]" : "Cycle routes  [red](needs GDAL — unavailable, see docs/notes/tools/gdal-setup.md)[/]"),
         (Layers.Places, "Place index for the in-game search  [grey](needs the GWR register)[/]"),
     };
     var prompt = new MultiSelectionPrompt<string>()

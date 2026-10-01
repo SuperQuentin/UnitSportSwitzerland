@@ -2,8 +2,11 @@ using UnitSport.Items;
 
 namespace UnitSport.Core;
 
-/// <summary>One completion: what the hint shows, and the whole input line it would produce.</summary>
-public readonly record struct Suggestion(string Label, string Text);
+/// <summary>
+/// One completion: what the list shows, the whole input line it would produce, and an optional
+/// dim note beside it (a command's arguments).
+/// </summary>
+public readonly record struct Suggestion(string Label, string Text, string Detail = "");
 
 /// <summary>
 /// Tab completion for the chat input: command names, sub-commands, towns, players, items and
@@ -14,6 +17,11 @@ public readonly record struct Suggestion(string Label, string Text);
 /// It offers what the player may actually run: offline only the commands that work without a
 /// server, online the admin ones only to an admin. That is a convenience; the server checks every
 /// command again.
+/// </para>
+///
+/// <para>
+/// Player names complete wherever a word is free text too: in plain chat, after <c>@</c>, and in the
+/// text of <c>/me</c>, <c>/say</c> or a kick reason.
 /// </para>
 /// </summary>
 public sealed class ChatCompleter
@@ -31,32 +39,33 @@ public sealed class ChatCompleter
     /// <summary>Asked for when a player name is about to be completed, so the list is fresh.</summary>
     public Action? PlayersWanted { get; init; }
 
-    /// <summary>Name, whether it needs operator rights online, whether it also works without a server.</summary>
-    private static readonly (string Name, bool Admin, bool Offline)[] Commands =
+    /// <summary>Name, whether it needs operator rights online, whether it also works without a server, its arguments.</summary>
+    private static readonly (string Name, bool Admin, bool Offline, string Args)[] Commands =
     [
-        ("help", false, true),
-        ("who", false, true),
-        ("me", false, true),
-        ("city", false, true),
-        ("occasion", false, true),
-        ("spawn", true, true),
-        ("name", false, false),
-        ("login", false, false),
-        ("stream", false, false),
-        ("race", false, false),
-        ("say", true, false),
-        ("admin", true, false),
-        ("tp", true, false),
-        ("bring", true, false),
-        ("tpall", true, false),
-        ("kick", true, false),
+        ("help", false, true, ""),
+        ("who", false, true, ""),
+        ("me", false, true, "<action>"),
+        ("city", false, true, "<town>"),
+        ("occasion", false, true, "[list | start | stop | auto] [id]"),
+        ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
+        ("spawn", true, true, "<item> [count]"),
+        ("name", false, false, "<name>"),
+        ("login", false, false, "<password>"),
+        ("stream", false, false, ""),
+        ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
+        ("say", true, false, "<message>"),
+        ("admin", true, false, "list | add <player> | remove <player>"),
+        ("tp", true, false, "<player>"),
+        ("bring", true, false, "<player>"),
+        ("tpall", true, false, "<town>"),
+        ("kick", true, false, "<player> [reason]"),
     ];
 
     /// <summary>The commands this player can run right now.</summary>
     public IEnumerable<string> VisibleCommands()
     {
         bool online = Permissions.Online;
-        foreach (var (name, admin, offline) in Commands)
+        foreach (var (name, admin, offline, _) in Commands)
         {
             if (!online && !offline) continue;
             if (online && admin && !Permissions.IsAdmin) continue;
@@ -66,10 +75,22 @@ public sealed class ChatCompleter
         }
     }
 
-    /// <summary>Suggestions for the line as typed so far; empty when it is not a command or nothing fits.</summary>
+    /// <summary>"/spawn &lt;item&gt; [count]" once the line starts with a command this player can run, else null.</summary>
+    public string? Usage(string text)
+    {
+        if (!text.StartsWith('/') || !text.Contains(' ')) return null;
+        string verb = text[1..].Split(' ', 2)[0].ToLowerInvariant();
+        if (!VisibleCommands().Contains(verb)) return null;
+        string args = ArgsOf(verb);
+        return args.Length == 0 ? $"/{verb}" : $"/{verb} {args}";
+    }
+
+    private static string ArgsOf(string verb) => Commands.First(c => c.Name == verb).Args;
+
+    /// <summary>Suggestions for the line as typed so far; empty when nothing fits.</summary>
     public IReadOnlyList<Suggestion> Complete(string text)
     {
-        if (!text.StartsWith('/')) return [];
+        if (!text.StartsWith('/')) return PlayerWord(text);
 
         string body = text[1..];
         bool trailing = body.EndsWith(' ');
@@ -78,7 +99,9 @@ public sealed class ChatCompleter
         if (words.Length == 0 || (words.Length == 1 && !trailing))
         {
             string typed = words.Length == 0 ? "" : words[0];
-            return Match(VisibleCommands(), typed).Select(c => new Suggestion(c, $"/{c} ")).ToList();
+            return Match(VisibleCommands(), typed)
+                .Select(c => new Suggestion($"/{c}", $"/{c} ", ArgsOf(c)))
+                .ToList();
         }
 
         string verb = words[0].ToLowerInvariant();
@@ -107,10 +130,19 @@ public sealed class ChatCompleter
                 options = ItemLookup.Names();
                 break;
 
-            case "tp" or "bring" or "kick":
+            case "tp" or "bring":
                 if (argIndex != 0) return [];
                 options = PlayerNames();
                 break;
+
+            case "kick":
+                // the reason after the name is free text
+                if (argIndex != 0) return PlayerWord(text);
+                options = PlayerNames();
+                break;
+
+            case "me" or "say":
+                return PlayerWord(text);
 
             case "admin":
                 options = argIndex switch
@@ -126,6 +158,16 @@ public sealed class ChatCompleter
                 {
                     0 => ["start", "duel", "join", "leave", "list", "npc", "cancel"],
                     1 when words[1].ToLowerInvariant() == "duel" => PlayerNames(),
+                    _ => [],
+                };
+                break;
+
+            case "time":
+                bool mayTime = !Permissions.Online || Permissions.IsAdmin;
+                options = argIndex switch
+                {
+                    0 => mayTime ? World.TimeCommand.Verbs : ["query"],
+                    1 when mayTime && words[1].ToLowerInvariant() == "set" => World.TimeCommand.Named.Select(n => n.Name),
                     _ => [],
                 };
                 break;
@@ -146,6 +188,33 @@ public sealed class ChatCompleter
 
         string start = text[..(text.Length - current.Length)];
         return Match(options, current).Select(o => new Suggestion(o, start + o)).ToList();
+    }
+
+    /// <summary>
+    /// The last word of free text completed to a player's name: "hi qu" → "hi Quentin ", "@qu" → "@Quentin ".
+    /// A bare word needs two letters, so ordinary chatting does not keep popping names up; after
+    /// <c>@</c> one is enough, and a bare <c>@</c> lists everybody.
+    /// </summary>
+    private IReadOnlyList<Suggestion> PlayerWord(string text)
+    {
+        if (text.Length == 0 || text.EndsWith(' ')) return [];
+
+        int space = text.LastIndexOf(' ');
+        string word = text[(space + 1)..];
+        bool at = word.StartsWith('@');
+        string typed = at ? word[1..] : word;
+        if (!at && typed.Length < 2) return [];
+
+        string head = text[..(space + 1)] + (at ? "@" : "");
+        // a name only completes from its start: "an" must not offer "Joanna" mid-sentence
+        return PlayerNames()
+            .Distinct()
+            .Where(n => n.StartsWith(typed, StringComparison.OrdinalIgnoreCase)
+                        && !n.Equals(typed, StringComparison.Ordinal))
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxSuggestions)
+            .Select(n => new Suggestion(at ? "@" + n : n, head + n + " "))
+            .ToList();
     }
 
     private IEnumerable<string> PlayerNames()

@@ -26,6 +26,8 @@ public partial class Explosion : Node3D
     /// it costs them — the client-authoritative model: each peer hurts only its own player.
     /// </summary>
     public static event Action<Vector3>? Blast;
+    /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
+    internal static void ResetEvents() => Blast = null;
 
     private double _age;
     private OmniLight3D _light = null!;

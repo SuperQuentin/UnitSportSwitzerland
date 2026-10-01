@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Audio.Cd;
 using UnitSport.Net;
+using UnitSport.Player;
 
 namespace UnitSport.Items;
 
@@ -11,6 +12,12 @@ namespace UnitSport.Items;
 /// client asks and the server decides — a throw spawns it for everyone with the thrower as the
 /// authority over its fall, a pick-up removes it for everyone and only one player can win it, and
 /// play/stop set the state the server's synchronizer then carries to all.
+///
+/// <para>
+/// A radio in a player's hand is not a node here: it is <c>FootPlayer.HeldRadio</c>, which the
+/// holder writes and the player's own synchronizer carries. This manager hangs a
+/// <see cref="RadioSpeaker"/> on every player holding a playing radio (<see cref="UpdateHeld"/>).
+/// </para>
 /// </summary>
 public partial class RadioManager : Node3D
 {
@@ -31,8 +38,16 @@ public partial class RadioManager : Node3D
     /// <summary>Where the players are, for despawning what nobody is near.</summary>
     public Func<IEnumerable<Vector3>>? PlayerPositions { get; set; }
 
+    /// <summary>Client: every player body on this machine, local and remote, for held radios.</summary>
+    public Func<IEnumerable<FootPlayer>>? Players { get; set; }
+
+    /// <summary>The node name of the speaker a held radio hangs on its holder.</summary>
+    public const string HeldSpeakerName = "HeldRadio";
+
     /// <summary>Client: the server refused something, with a line for the player.</summary>
     public static event Action<string>? Refused;
+    /// <summary>Drops the subscribers a world left behind when it was freed (<see cref="Core.WorldStatics"/>).</summary>
+    internal static void ResetEvents() => Refused = null;
 
     private MultiplayerSpawner? _spawner;
     private int _counter;
@@ -89,11 +104,14 @@ public partial class RadioManager : Node3D
         RpcId(1, MethodName.RequestPickUp, radio.Name);
     }
 
-    /// <summary>Puts a CD in and starts it, from the beginning, for everyone.</summary>
-    public void Play(RadioBody radio, int cdId)
+    /// <summary>
+    /// Puts a CD in and starts it, from the beginning, for everyone. <paramref name="length"/> is
+    /// only trusted for a personal CD (id &lt; 0), which the server has never seen.
+    /// </summary>
+    public void Play(RadioBody radio, int cdId, float length)
     {
-        if (!Online) { StartOn(radio, cdId); return; }
-        RpcId(1, MethodName.RequestPlay, radio.Name, cdId);
+        if (!Online) { StartOn(radio, cdId, length); return; }
+        RpcId(1, MethodName.RequestPlay, radio.Name, cdId, length);
     }
 
     public void Stop(RadioBody radio)
@@ -122,7 +140,7 @@ public partial class RadioManager : Node3D
         RadioBody? best = null;
         float bestDist = radius;
         foreach (var node in GetChildren())
-            if (node is RadioBody { Playing: true } r && r.Cd is { } cd && r.WantedPosition < cd.Duration)
+            if (node is RadioBody { Playing: true } r && r.Cd != null && r.WantedPosition < r.Length)
             {
                 float d = r.GlobalPosition.DistanceTo(point);
                 if (d < bestDist) { bestDist = d; best = r; }
@@ -132,11 +150,23 @@ public partial class RadioManager : Node3D
 
     // ---- server side ---------------------------------------------------------------------------
 
-    private static void StartOn(RadioBody radio, int cdId)
+    private static void StartOn(RadioBody radio, int cdId, float length)
     {
         radio.CdId = cdId;
         radio.StartedAt = ClockSync.ServerNow;
+        radio.Length = length;
         radio.Playing = true;
+    }
+
+    /// <summary>
+    /// How long a CD lasts, as far as this side can trust it: the library's word for a shared CD,
+    /// the player's (bounded) for a personal one; negative when the CD cannot be played here.
+    /// </summary>
+    private static float TrustedLength(int cdId, float claimed)
+    {
+        if (cdId > 0) return CdLibrary.Instance?.All.GetValueOrDefault(cdId) is { } cd ? cd.Duration : -1f;
+        if (cdId < 0 && float.IsFinite(claimed) && claimed > 0) return Math.Min(claimed, CdBurner.MaxSeconds + 1);
+        return -1f;
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -150,7 +180,14 @@ public partial class RadioManager : Node3D
             RpcId(sender, MethodName.ThrowRefused);
             return;
         }
-        var state = thrown with { Owner = sender, Name = $"radio_{sender}_{++_counter}", Playing = false, Settled = false };
+        // the CD it was playing in the hand carries on, if the server can vouch for it
+        float length = thrown.Playing ? TrustedLength(thrown.CdId, thrown.Length) : -1f;
+        var state = thrown with
+        {
+            Owner = sender, Name = $"radio_{sender}_{++_counter}", Settled = false,
+            Playing = length > 0 && double.IsFinite(thrown.StartedAt) && thrown.StartedAt <= ClockSync.ServerNow + 1,
+            Length = Math.Max(length, 0),
+        };
         _spawner.Spawn(state.ToDict());
     }
 
@@ -170,12 +207,13 @@ public partial class RadioManager : Node3D
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestPlay(string name, int cdId)
+    private void RequestPlay(string name, int cdId, float length)
     {
         if (!Multiplayer.IsServer()) return;
         if (GetNodeOrNull<RadioBody>(name) is not { } radio) return;
-        if (CdLibrary.Instance?.All.ContainsKey(cdId) != true) return;
-        StartOn(radio, cdId);
+        length = TrustedLength(cdId, length);
+        if (length <= 0) return;
+        StartOn(radio, cdId, length);
         GD.Print($"[radio] {name} plays CD {cdId} from {radio.StartedAt:F2}");
     }
 
@@ -227,6 +265,7 @@ public partial class RadioManager : Node3D
     /// </summary>
     public override void _Process(double delta)
     {
+        if (!NetworkManager.DedicatedServer && DisplayServer.GetName() != "headless") UpdateHeld();
         if (Online && !Multiplayer.IsServer()) return;
         _housekeeping += delta;
         if (_housekeeping < 1) return;
@@ -237,10 +276,39 @@ public partial class RadioManager : Node3D
         foreach (var node in GetChildren())
         {
             if (node is not RadioBody r) continue;
-            if (r.Playing && (r.Cd is not { } cd || r.WantedPosition >= cd.Duration)) r.Playing = false;
+            if (r.Playing && r.WantedPosition >= r.Length) r.Playing = false;
             bool near = players.Count == 0 || players.Any(p => p.DistanceTo(r.GlobalPosition) < LonelyDistance);
             r.LonelyFor = near ? 0 : r.LonelyFor + step;
             if (r.LonelyFor > LonelyTime) r.QueueFree();
+        }
+    }
+
+    /// <summary>
+    /// Client: a speaker on every player holding a radio that plays, none on anyone else. The
+    /// holder's own copy too: they hear their radio from their hand like everyone near them.
+    /// </summary>
+    private void UpdateHeld()
+    {
+        if (Players == null) return;
+        foreach (var player in Players())
+        {
+            if (!IsInstanceValid(player)) continue;
+            var speaker = player.GetNodeOrNull<RadioSpeaker>(HeldSpeakerName);
+            var play = player.HeldItemId == (int)ItemId.Radio ? RadioPlay.Decode(player.HeldRadio) : null;
+            if (play is not { } p)
+            {
+                if (speaker != null) speaker.On = false;   // kept, silent: cheaper than a node per switch
+                continue;
+            }
+            if (speaker == null)
+            {
+                speaker = new RadioSpeaker { Name = HeldSpeakerName, Position = new Vector3(0, 1.1f, 0) };
+                player.AddChild(speaker);
+            }
+            speaker.CdId = p.CdId;
+            speaker.StartedAt = p.StartedAt;
+            speaker.Length = p.Length;
+            speaker.On = true;
         }
     }
 }

@@ -10,12 +10,13 @@ Knowledge lives in ~180 micro notes, `docs/notes/<area>/<name>.md`, one topic ea
 directory's `CLAUDE.md` (auto-loaded when you touch files there) is only an **index**: one line per
 note. Read a note only when the task needs it; find one with `grep -ril <word> docs/notes`.
 Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, world, combat, birds, items, loot,
-occasions, core, general. New knowledge goes in a new or existing note plus one index line — never in this file.
+occasions, core, ui, general. New knowledge goes in a new or existing note plus one index line — never in this file.
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
-`worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand).
+`worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
+`linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH).
 
 ## Rules
 
@@ -27,6 +28,8 @@ occasions, core, general. New knowledge goes in a new or existing note plus one 
   3. Branch from up-to-date `main` as `feat/<issue#>-name`, in a **worktree**
      (`../UnitSportSwitzerland-<issue#>`): the main checkout stays on `main`
      (`docs/notes/general/worktrees.md`). Never commit features on `main`; `Closes #N` in the PR.
+     **Push local commits on feature branches whenever possible**, so others can build on them
+     and a local crash loses nothing.
 - **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
   in the main checkout and push. No issue, branch, worktree or PR.
   4. **Test in multiplayer**: dedicated server + client on loopback, check the feature on the

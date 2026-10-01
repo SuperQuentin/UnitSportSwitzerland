@@ -141,6 +141,28 @@ public partial class FootPlayer : CharacterBody3D
     /// </summary>
     [Export] public int HeldItemId { get; set; }
 
+    /// <summary>
+    /// The CD a radio in the hand plays (<c>Items.RadioPlay</c>), empty when silent; written by
+    /// the owner from the stack's data. Replicated so everyone near hears it (#168).
+    /// </summary>
+    [Export] public string HeldRadio { get; set; } = "";
+
+    /// <summary>
+    /// The live station the car or truck this player drives is tuned to (<c>Audio.Live.Stations</c>,
+    /// 0 = off), set by the driver (U / P). Replicated so everyone near hears it, in sync (#179).
+    /// </summary>
+    [Export] public int CarRadio { get; set; }
+
+    /// <summary>The station this body's vehicle plays, 0 when it drives none or the radio is off.</summary>
+    public int PlayingCarRadio => RidingWith == 0 && CarRadio > 0 && HasCarRadio((RideKind)RideKindId) ? CarRadio : 0;
+
+    /// <summary>Cars, trucks and buses have a radio; bikes, mounts, aircraft and trailers do not.</summary>
+    public static bool HasCarRadio(RideKind kind) =>
+        CarCatalog.For(kind) != null || kind != RideKind.Trailer && HeavyCatalog.For(kind) != null;
+
+    /// <summary>Local driver: the radio was retuned, with the station's name, for a line on screen.</summary>
+    public event Action<string>? CarRadioTuned;
+
     // --- pose, replicated (see _Ready) ---
     // Everything a remote copy draws comes from these three, written by the owner every frame.
     // Before them a remote peer rebuilt the pose from the transform stream alone, so it never saw a
@@ -898,6 +920,8 @@ public partial class FootPlayer : CharacterBody3D
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
         replication.AddProperty(".:DanceId");
+        replication.AddProperty(".:HeldRadio");
+        replication.AddProperty(".:CarRadio");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -911,7 +935,7 @@ public partial class FootPlayer : CharacterBody3D
         replication.AddProperty(".:DeckYaw");
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId", ".:HeldRadio", ".:CarRadio" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1771,6 +1795,7 @@ public partial class FootPlayer : CharacterBody3D
             car.Headlights = state.Headlights;
             car.RoofOpen = state.RoofOpen && car.HasSoftTop;
         }
+        CarRadio = state.Radio;
         _placed = true;
     }
 
@@ -1788,7 +1813,8 @@ public partial class FootPlayer : CharacterBody3D
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
             Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId,
             Train: _ride is Truck t ? t.TrailerCode : 0, Angles: _ride is Truck ta ? ta.Angles : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : 0, Load: _ride is Truck tl ? tl.Load : 0.5f);
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Radio: wrecked ? 0 : CarRadio);
     }
 
     /// <summary>
@@ -2089,6 +2115,8 @@ public partial class FootPlayer : CharacterBody3D
         // a truck or bus from the picker comes with the load chosen there
         if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
         RideKindId = (int)kind;
+        // the radio belongs to the vehicle: getting out leaves it tuned in the parked one
+        CarRadio = 0;
         // the parts and the doors belong to one car: changing car (the picker), getting out or a
         // wreck leaves them with that car
         TuningBits = _ride is Car car ? car.Tuning.Pack() : 0;
@@ -2184,6 +2212,15 @@ public partial class FootPlayer : CharacterBody3D
 
         if (_ride is Truck truck && HandleTruckInput(@event, truck))
         {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if ((@event.IsActionPressed(PlayerInput.RadioNext) || @event.IsActionPressed(PlayerInput.RadioPrev)) && !@event.IsEcho()
+            && _ride != null && SeatIndex == 0 && HasCarRadio((RideKind)RideKindId))
+        {
+            CarRadio = Audio.Live.Stations.Step(CarRadio, @event.IsActionPressed(PlayerInput.RadioNext) ? 1 : -1);
+            CarRadioTuned?.Invoke(Audio.Live.Stations.Name(CarRadio));
             GetViewport().SetInputAsHandled();
             return;
         }

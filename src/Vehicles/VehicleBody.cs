@@ -236,7 +236,11 @@ public partial class VehicleBody : CharacterBody3D
         Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
         _initial.Train, _initial.Angles,
         // a bus's doors as they are now, where a truck keeps them
-        Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4) : _initial.Flags, _initial.Load);
+        Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4) : _initial.Flags, _initial.Load,
+        _initial.Radio);
+
+    /// <summary>The live station its radio plays, as the driver left it (spawn data only: nobody tunes a parked car).</summary>
+    public int Radio => _initial.Radio;
 
     /// <summary>A lone trailer standing here, waiting for a truck; null for anything else.</summary>
     public ParkedTrailer? Trailer => Ride as ParkedTrailer;

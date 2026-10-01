@@ -1094,6 +1094,52 @@ public partial class InteriorNode : Node3D
     /// <summary>A barn door's pair as seen from in here (<see cref="DoorLeaf.CreateShutter"/>).</summary>
     public DoorLeaf? Shutter(string door) => _shutters.TryGetValue(door, out var l) ? l : null;
 
+    // ---- gun lockers and safes (#165) ----------------------------------------------------------
+
+    private readonly Dictionary<int, Node3D> _lockDoors = new();
+    private readonly HashSet<int> _lockOpen = new();
+    private const float LockOpenAngle = 1.9f;
+
+    /// <summary>Whether the door of the locked container at this furniture index is shown open.</summary>
+    public bool IsLockOpen(int furniture) => _lockOpen.Contains(furniture);
+
+    /// <summary>Swings a gun locker's or safe's door open (or shut, on a restock); animated or at once.</summary>
+    public void SetLockOpen(int furniture, bool open, bool animate)
+    {
+        if (!_lockDoors.TryGetValue(furniture, out var hinge)) return;
+        if (open) _lockOpen.Add(furniture); else _lockOpen.Remove(furniture);
+        float to = open ? -LockOpenAngle : 0f;
+        if (!animate || !hinge.IsInsideTree()) { hinge.Rotation = new Vector3(0, to, 0); return; }
+        var tween = hinge.CreateTween();
+        tween.TweenProperty(hinge, "rotation:y", to, 0.9).SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+    }
+
+    private static void AddLockDoors(InteriorNode node, Material material)
+    {
+        var l = node.Layout;
+        for (int i = 0; i < l.Furniture.Count; i++)
+        {
+            var f = l.Furniture[i];
+            if (f.Type is not (FurnitureType.GunLocker or FurnitureType.Safe)) continue;
+            var data = InteriorMeshBuilder.LockDoor(f);
+            using var arrays = new Godot.Collections.Array();
+            arrays.Resize((int)Mesh.ArrayType.Max);
+            arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
+            arrays[(int)Mesh.ArrayType.Color] = data.Colors;
+            var mesh = new ArrayMesh();
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            mesh.SurfaceSetMaterial(0, material);
+            // the piece's frame (back to -Z, turned), then its left front edge: the hinge
+            var piece = new Transform3D(new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2), new Vector3(f.X, f.Floor * l.StoreyHeight + f.Lift, f.Z));
+            var mount = new Node3D { Name = $"Lock{i}", Transform = piece * new Transform3D(Basis.Identity, new Vector3(-f.W / 2, 0, f.D / 2)) };
+            var hinge = new Node3D { Name = "Hinge" };
+            hinge.AddChild(new MeshInstance3D { Name = "Door", Mesh = mesh });
+            mount.AddChild(hinge);
+            node.AddChild(mount);
+            node._lockDoors[i] = hinge;
+        }
+    }
+
     public static InteriorNode Create(InteriorLayout layout, InteriorMeshBuilder.MeshData data, Material material, Transform3D placement)
     {
         var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement, Layout = layout };
@@ -1132,6 +1178,7 @@ public partial class InteriorNode : Node3D
             leaf.SetSwing(0);
             (pair ? node._shutters : node._leaves)[e.Door] = leaf;
         }
+        AddLockDoors(node, material);
         return node;
     }
 }
