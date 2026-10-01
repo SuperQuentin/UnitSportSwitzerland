@@ -156,6 +156,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // idempotent: the shell, which owns the window settings, has usually installed it already
         PlayerInput.Install(GetParent());
+        if (Player.WheelProbe.CheckRequested)
+        {
+            GetTree().Quit(Player.WheelProbe.Check());
+            return;
+        }
 
         // a hand-made street to show the door portals: no terrain, no server
         if (Interiors.PortalDemo.ParseArgs() is { Requested: true } portalDemo)
@@ -396,6 +401,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Combat.CombatProbe.ParseArgs().Requested
             || Birds.BirdStrikeProbe.ParseArgs().Requested
             || SyncProbe.Requested() || HitboxProbe.Requested();
+        // --wheelwatch spawns normally, but must not grab the pointer either
+        MouseCapture.Disabled |= Player.WheelProbe.WatchRole != null;
         // a check running in a window must leave the pointer to whoever is using the machine
         MouseCapture.Disabled |= placedByTool;
 
@@ -464,6 +471,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
+        if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
         if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));

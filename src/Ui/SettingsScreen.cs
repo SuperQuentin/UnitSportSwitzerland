@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// Settings, in tabs: Video, Audio, Gameplay, Vehicles, Controls, World, Performance, About. Every
+/// Settings, in tabs: Video, Audio, Gameplay, Vehicles, Controls, Wheel, World, Performance, About. Every
 /// control writes straight into <see cref="GameSettings.Current"/> and commits, so the world
 /// re-applies itself live and the file is saved — there is no Apply button to forget. LB / RB
 /// (or Q / E) change tab. One instance serves the title screen and the in-game pause menu.
@@ -27,8 +27,10 @@ public partial class SettingsScreen : Screen
         var pages = new Control { SizeFlagsVertical = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore };
         body.AddChild(pages);
 
+        var names = new List<string>();
         void Tab(string name, Action<VBoxContainer> fill)
         {
+            names.Add(name);
             var b = new Button { Text = name, ToggleMode = true, ButtonGroup = group, FocusMode = FocusModeEnum.All, CustomMinimumSize = new Vector2(0, 36) };
             var normal = UiTheme.Flat(new Color(0, 0, 0, 0), 6, 14, 6);
             var on = UiTheme.Flat(new Color(UiTheme.Amber, 0.12f), 6, 14, 6);
@@ -126,6 +128,9 @@ public partial class SettingsScreen : Screen
                 InputHints.Format("As bound on your keyboard and pad ({help})"));
         });
 
+        // a steering wheel and its pedals (#68): its own tab, it is a page of bindings
+        Tab("Wheel", rows => rows.AddChild(new WheelPanel { Name = "WheelPanel" }));
+
         Tab("World", rows =>
         {
             rows.AddChild(UiKit.Section("Time and traffic"));
@@ -165,7 +170,17 @@ public partial class SettingsScreen : Screen
         Tab("About", LicenseRows);
         _about = _tabs.Count - 1;
 
-        Show(0);
+        Show(StartTab(names));
+    }
+
+    /// <summary>"--settings wheel" opens on that tab, for screenshotting it.</summary>
+    private static int StartTab(List<string> names)
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int i = Array.IndexOf(args, "--settings");
+        return i >= 0 && i + 1 < args.Length
+            ? Math.Max(0, names.FindIndex(n => n.Equals(args[i + 1], StringComparison.OrdinalIgnoreCase)))
+            : 0;
     }
 
     private int _about;
