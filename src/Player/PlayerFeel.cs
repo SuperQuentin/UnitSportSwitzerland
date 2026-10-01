@@ -767,6 +767,12 @@ public partial class PlayerFeel : Node3D
         string wear = _player.Vehicle is Car worn
             ? (Core.GameSettings.Current.TyreWear ? $"    tyres F {(1f - worn.TyreWearFront) * 100:0}% R {(1f - worn.TyreWearRear) * 100:0}%" : "")
               + (Core.GameSettings.Current.BrakeWear ? $"    brakes {worn.BrakeTemp:0}°C{(worn.BrakeFactor < 0.95f ? " FADE" : "")}" : "")
+            : _player.Vehicle is Truck heavy
+            // a truck's dash has its air gauge and lamps, but no stage number, hold or weight
+            ? (heavy.Box.RetarderLevel > 0 ? $"    {(heavy.Box.RetarderLevel == 1 ? "EXH" : $"RET {heavy.Box.RetarderLevel - 1}")}" : "")
+              + (!heavy.Box.SpringBrakes && heavy.HillHold ? "    HOLD" : "")
+              + (heavy.Box.ClutchPedal > 0.5f ? "    CLUTCH" : "")
+              + $"    {heavy.Train.Mass / 1000f:0.0} t"
             : "";
         // the dashboard has no tyre or brake gauges: those stay on the HUD
         _speedLabel.Visible = ride != RideKind.OnFoot && (!dash || wear != "");

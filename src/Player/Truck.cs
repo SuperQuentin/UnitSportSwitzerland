@@ -226,7 +226,12 @@ public sealed class Truck : Rideable, IEngined
     public float TyreSlide => Train.TyreSlide;
     /// <summary>Accumulated wheel rotation of each section's wheels, rad.</summary>
     public readonly float[] WheelSpin = new float[4];
+    /// <summary>The cab's acceleration in its own frame, last step (+X forward, +Y left), m/s²: the cockpit's head motion.</summary>
     public float AccelX { get; private set; }
+    public float AccelY { get; private set; }
+    /// <summary>The pedals as the driver's feet hold them (after the automatic's reverse swap, without the hill hold), 0..1.</summary>
+    public float ThrottlePedal { get; private set; }
+    public float BrakePedal { get; private set; }
 
     /// <summary>The gear as the dash shows it: N, R, A7 (automatic), 4H (a gate and the splitter), 7.</summary>
     public string GearLabel => Box.Gear == 0 ? "N" : Box.Gear < 0 ? "R" : EffectiveMode switch
@@ -330,7 +335,7 @@ public sealed class Truck : Rideable, IEngined
         ? Measured((Kind, k), _ => HeavyRig.Create(Spec, k, 0.5f))
         : Measured(("trailer", TrailerCatalog.Index(TrailerCode), k - OwnSections), _ => HeavyRig.CreateTrailer(Trailer!, k - OwnSections, 1f));
 
-    public override Node3D BuildVisual(int riderIndex) => HeavyRig.Create(Spec, 0, Load);
+    public override Node3D BuildVisual(int riderIndex) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex));
 
     /// <summary>Parked: every section, posed at the angles it was left at.</summary>
     public override Node3D BuildParkedVisual(int riderIndex)
@@ -388,6 +393,8 @@ public sealed class Truck : Rideable, IEngined
         // hold the truck until the throttle is pressed (with the clutch pedal, that is the driver's job)
         HillHold = mode is HeavyShift.Automatic or HeavyShift.Sequential && Mathf.Abs(u) < 0.3f
             && pedal < 0.02f && brake < 0.05f && ground.OnFloor;
+        ThrottlePedal = pedal;
+        BrakePedal = brake;
         if (HillHold) brake = 0.35f;
         Braking = brake > 0.05f && !HillHold;
 
@@ -429,6 +436,7 @@ public sealed class Truck : Rideable, IEngined
         var b0 = Train.Bodies[0];
         float u2 = b0.V.Dot(b0.Forward), w2 = b0.V.Dot(b0.Left);
         AccelX = b0.Accel.X;
+        AccelY = b0.Accel.Y;
         motion.Speed = Mathf.Sqrt(u2 * u2 + w2 * w2);
         // the direction of travel down to any speed at all: taken as forward below a crawl (the
         // car's rule), a truck starting to roll back down a hill was turned round every frame and
@@ -469,13 +477,16 @@ public sealed class Truck : Rideable, IEngined
     // ---- what others see ------------------------------------------------------------------------
 
     private const int PoseBrake = 1, PoseLights = 2, PoseReverse = 4, PoseKneel = 8, PoseDoorShift = 4, PoseDestShift = 8;
+    /// <summary>The throttle pedal in eighths (#157: the driver's foot others see), above the destination's byte.</summary>
+    private const int PoseThrottleShift = 16, PoseThrottleSteps = 7;
 
-    /// <summary>Front-wheel angle, wheel spin rate, rpm, and in W the lamps, doors, kneel and destination as bits.</summary>
+    /// <summary>Front-wheel angle, wheel spin rate, rpm, and in W the lamps, doors, kneel, destination and throttle as bits.</summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
         new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01, PackFlags());
 
     public int PackFlags() => (Braking ? PoseBrake : 0) | (Headlights ? PoseLights : 0) | (Reversing ? PoseReverse : 0)
-        | (Kneeling ? PoseKneel : 0) | ((DoorsOpen & 15) << PoseDoorShift) | ((Destination & 0xFF) << PoseDestShift);
+        | (Kneeling ? PoseKneel : 0) | ((DoorsOpen & 15) << PoseDoorShift) | ((Destination & 0xFF) << PoseDestShift)
+        | (Mathf.RoundToInt(Mathf.Clamp(ThrottlePedal, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift);
 
     public void UnpackFlags(int flags)
     {
@@ -485,6 +496,8 @@ public sealed class Truck : Rideable, IEngined
         Kneeling = (flags & PoseKneel) != 0;
         DoorsOpen = (byte)((flags >> PoseDoorShift) & 15);
         Destination = (flags >> PoseDestShift) & 0xFF;
+        ThrottlePedal = ((flags >> PoseThrottleShift) & PoseThrottleSteps) / (float)PoseThrottleSteps;
+        BrakePedal = Braking ? 1f : 0f;
     }
 
     private bool _remoteReverse;
@@ -497,7 +510,11 @@ public sealed class Truck : Rideable, IEngined
         SteerAngle = pose.X;
         for (int k = 0; k < WheelSpin.Length; k++) WheelSpin[k] = _remoteSpin;
         _remoteRpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
-        if (visual is HeavyRig rig) Dress(rig, 0, _remoteReverse);
+        if (visual is not HeavyRig rig) return;
+        Dress(rig, 0, _remoteReverse);
+        // the cockpit seen through the glass: the wheel and feet, the dials from the rpm and wheel
+        // speed; the gear display, the air and the lamps that are not replicated stay as they are
+        DressCockpit(rig, Mathf.Abs(pose.Y) * WheelRadius * 3.6f, _remoteRpm);
     }
 
     private float _remoteRpm;
@@ -506,7 +523,24 @@ public sealed class Truck : Rideable, IEngined
 
     public override void Animate(Node3D visual, in RideMotion motion, float dt)
     {
-        if (visual is HeavyRig rig) Dress(rig, 0, Reversing);
+        if (visual is not HeavyRig rig) return;
+        Dress(rig, 0, Reversing);
+        DressCockpit(rig, motion.Speed * Mathf.Cos(motion.Slip) * 3.6f, Rpm);
+        rig.Clutch = Box.ClutchPedal;
+        rig.Gear = GearLabel;
+        rig.Air = Box.AirTank;
+        rig.SpringBrakes = Box.SpringBrakes;
+        rig.Retarder = Box.RetarderLevel;
+    }
+
+    /// <summary>The cockpit's wheel, pedals and dials (#157), on the owner and every copy alike.</summary>
+    private void DressCockpit(HeavyRig rig, float kmh, float rpm)
+    {
+        rig.WheelTurn = SteerAngle * HeavyCockpit.SteerRatio;
+        rig.Throttle = ThrottlePedal;
+        rig.Brake = BrakePedal;
+        rig.SpeedKmh = kmh;
+        rig.Rpm = rpm;
     }
 
     /// <summary>Puts this train's state on the rig of section <paramref name="k"/>.</summary>

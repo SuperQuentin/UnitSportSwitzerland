@@ -20,7 +20,7 @@ public partial class AvatarPreview : Node3D
 {
     private double _elapsed;
     private double _seconds = 6;
-    private CarRig? _mirrorRig;
+    private Node3D? _mirrorRig;
     private string _output = "";
     private float _viewDegrees = 90;
     private int _focus = -1;
@@ -114,6 +114,71 @@ public partial class AvatarPreview : Node3D
             AddChild(hatCam);
             hatCam.LookAt(new Vector3(0, 1.1f, 0), Vector3.Up);
             hatCam.Current = true;
+            return;
+        }
+
+        // "--cockpit --heavy N [--section k] [--turn deg] [--throttle t] [--outside|--side|--saloon] [--bare]
+        // [--mirrors] [--lights] [--front] [--pitch rad]" (#157): a truck or bus (HeavyCatalog index) with its driver,
+        // from the driver's eye, a three-quarter front view, the left side, through the windscreen, or
+        // down a bus's aisle from the back
+        if (OS.GetCmdlineUserArgs().Contains("--cockpit") && OS.GetCmdlineUserArgs().Contains("--heavy"))
+        {
+            var args = OS.GetCmdlineUserArgs();
+            string? After(string flag) => Array.IndexOf(args, flag) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+            float Number(string flag, float fallback) => float.TryParse(After(flag), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : fallback;
+            var spec = Player.HeavyCatalog.All[Mathf.Clamp((int)Number("--heavy", 0), 0, Player.HeavyCatalog.All.Count - 1)];
+            int section = Mathf.Clamp((int)Number("--section", 0), 0, spec.Sections.Length - 1);
+            var rig = HeavyRig.Create(spec, section, 0.5f, section == 0 ? HumanPalette.ForRider(1) : null);
+            var s = spec.Sections[section];
+            float cg = HeavyMesh.Cg(s, 0.5f);
+            rig.WheelTurn = Mathf.DegToRad(Number("--turn", 0f));
+            rig.SteerAngle = rig.WheelTurn / HeavyCockpit.SteerRatio;
+            rig.Throttle = Number("--throttle", 0.4f);
+            rig.Rpm = Mathf.Lerp(spec.IdleRpm, spec.Redline, rig.Throttle);
+            rig.SpeedKmh = 62f;
+            rig.Gear = "A9";
+            rig.Air = 8.4f;
+            rig.Retarder = 2;
+            rig.Headlights = args.Contains("--lights");
+            string view = args.Contains("--outside") ? "outside" : args.Contains("--side") ? "side" : args.Contains("--saloon") ? "saloon"
+                : args.Contains("--front") ? "front" : "eye";
+            rig.View = view != "eye" ? CockpitView.Outside : args.Contains("--bare") ? CockpitView.Bare : CockpitView.Body;
+            rig.MirrorsOn = args.Contains("--mirrors");
+            AddChild(rig);
+            _mirrorRig = rig.MirrorsOn ? rig : null;
+            var cam = new Camera3D { Fov = view == "eye" ? 70 : 40, Near = 0.05f };
+            AddChild(cam);
+            // node space: the front is at −cg, the back at length − cg
+            float front = -cg, back = s.Length - cg;
+            switch (view)
+            {
+                case "outside":
+                    cam.Position = new Vector3(-6f, 3.4f, front - 8f);
+                    cam.LookAt(new Vector3(0, 1.8f, front + 2.5f), Vector3.Up);
+                    break;
+                case "side":
+                    cam.Fov = 55;
+                    cam.Position = new Vector3(-(s.Length * 0.75f + 2f), 2.2f, (front + back) * 0.5f);
+                    cam.LookAt(new Vector3(0, 1.6f, (front + back) * 0.5f), Vector3.Up);
+                    break;
+                case "front":
+                    // up close through the windscreen, as --heavynet's watcher shoots it
+                    var at = rig.EyeFrame.Origin;
+                    cam.Fov = 60;
+                    cam.LookAtFromPosition(at + new Vector3(0.6f, 0.1f, -2.6f), at + new Vector3(0, -0.45f, 0), Vector3.Up);
+                    break;
+                case "saloon":
+                    cam.Fov = 75;
+                    cam.Position = new Vector3(0.2f, s.Height - 0.75f, back - 0.4f);
+                    cam.LookAt(new Vector3(0, 1.2f, front + 1f), Vector3.Up);
+                    break;
+                default:
+                    cam.Transform = rig.EyeFrame * new Transform3D(new Basis(Vector3.Right, Number("--pitch", -0.1f)), Vector3.Zero);
+                    break;
+            }
+            cam.Current = true;
+            GD.Print($"[cockpit] {spec.Label}: eye {rig.EyeFrame.Origin}, {rig.Seats.Length} seats, view {view}");
             return;
         }
 

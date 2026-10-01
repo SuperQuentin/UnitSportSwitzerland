@@ -176,6 +176,16 @@ public partial class HeavyNetProbe : Node
                 return $"{s.Name}@({local.X:F1},{local.Z:F1}) yaw {yaw:F0}°";
             }));
             lines.Add($"player {p.Name}: {p.Ride} trailer {p.TrailerCode} pose ({Mathf.RadToDeg(p.TrainPose.X):F0}°,{Mathf.RadToDeg(p.TrainPose.Y):F0}°) flags {Mathf.RoundToInt(p.Anim.W)} sections [{where}]");
+            // the cockpit (#157): the driver at the wheel, turning it at the replicated steer x the ratio
+            if (p.Visual is Avatar.HeavyRig { Cockpit: not null } cab)
+            {
+                var driver = cab.GetNodeOrNull<Node3D>("Body/Driver");
+                float expected = p.Anim.X * Avatar.HeavyCockpit.SteerRatio;
+                lines.Add($"  cab: wheel {Mathf.RadToDeg(cab.WheelTurn):F0}° (steer x ratio {Mathf.RadToDeg(expected):F0}°, off {Mathf.RadToDeg(Mathf.Abs(cab.WheelTurn - expected)):F1}°)"
+                    + $" thr {cab.Throttle:F2} brake {cab.Brake:F2} driver {(driver?.Visible == true ? "shown" : "MISSING")} head {cab.GetNodeOrNull<Node3D>("Body/DriverHead")?.Visible} view {cab.View}");
+                // (the watcher spawns where a does: its own figure can stand in a's cab at the start)
+                if (Mathf.Abs(cab.WheelTurn) > 1f) Shoot(cab, "remote_cab_wheel");
+            }
             if (Mathf.Abs(p.TrainPose.X) > 0.12f) Shoot(p, "remote_bend");
             if (p.Ride == Articulated && (Mathf.RoundToInt(p.Anim.W) & 0xF0) != 0) Shoot(p, "remote_bus_doors");
         }
@@ -213,7 +223,14 @@ public partial class HeavyNetProbe : Node
         if (_shootAt == null || _eye == null) return;
         if (!IsInstanceValid(_shootAt)) { _shootAt = null; return; }
         var t = _shootAt.GlobalTransform;
-        _eye.LookAtFromPosition(t.Origin + t.Basis.Z * 14f + t.Basis.X * 12f + Vector3.Up * 8f, t.Origin + t.Basis.Z * 6f + Vector3.Up, Vector3.Up);
+        if (_shootAt is Avatar.HeavyRig { Cockpit: not null } cab)
+        {
+            // up close through the windscreen, a little to the driver's side: the hands on the wheel
+            var eye = cab.EyeFrame.Origin;
+            _eye.LookAtFromPosition(t * (eye + new Vector3(0.6f, 0.1f, -2.6f)), t * (eye + new Vector3(0, -0.45f, 0)), Vector3.Up);
+        }
+        else
+            _eye.LookAtFromPosition(t.Origin + t.Basis.Z * 14f + t.Basis.X * 12f + Vector3.Up * 8f, t.Origin + t.Basis.Z * 6f + Vector3.Up, Vector3.Up);
         _eye.Current = true;
         if ((_shootIn -= delta) > 0) return;
         string path = ProjectSettings.GlobalizePath($"res://test_output/heavynet_{_shootName}.png");

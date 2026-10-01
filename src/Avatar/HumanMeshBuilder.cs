@@ -398,7 +398,7 @@ public static class HumanMeshBuilder
         var n = seat.WheelAxis;
         var up = (Vector3.Up - n * n.Dot(Vector3.Up)).Normalized();
         var left = n.Cross(up);
-        var turn = new Basis(n, Mathf.Clamp(wheelAngle, -MaxGripTurn, MaxGripTurn));
+        var turn = new Basis(n, Mathf.Clamp(wheelAngle, -seat.MaxGrip, seat.MaxGrip));
         // side -1 is the figure's right (-X), +1 its left; a little above the horizontal diameter
         Vector3 Grip(float side) => seat.WheelCentre + turn * (left * side * 0.96f + up * 0.28f) * seat.WheelRadius + n * 0.025f;
         var wristL = Grip(-1f);
