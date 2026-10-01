@@ -26,6 +26,79 @@ public static class SfxSynth
 
     private static AudioStreamWav? _hiss, _tyre, _scrape;
     private static SfxBank? _stepsBank, _landingBank, _whooshBank, _tickBank, _impactBank, _chimeBank, _boomBank, _gulpBank, _crunchBank;
+    private static SfxBank? _boneBreakBank, _glassBank;
+
+    /// <summary>
+    /// A bone going (#214): two to four dry cracks a few milliseconds apart, each a bright snap
+    /// with a short ringing knock in it, over the dull thump of the body landing and a gritty
+    /// crunch as the ends grind. The cracks are what sell it; the thump is what says it was a person.
+    /// </summary>
+    public static SfxBank BoneBreakBank => _boneBreakBank ??= SfxBank.Build("bone_break", 6, 0.4f, 214, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.2f;
+        var bright = HighPass(Noise(rng, n), 0.45f * J());
+        var dull = LowPass(Noise(rng, n), 0.05f * J());
+        var grit = BandPass(Noise(rng, n), 0.08f, 0.5f);
+        int cracks = 2 + rng.Next(3);
+        var at = new float[cracks];
+        var knock = new float[cracks];
+        for (int c = 0; c < cracks; c++)
+        {
+            at[c] = c == 0 ? 0f : at[c - 1] + 0.008f + 0.022f * (float)rng.NextDouble();
+            knock[c] = 1700f + 1400f * (float)rng.NextDouble();
+        }
+        float thud = 105f * J();
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate, crack = 0f;
+            for (int c = 0; c < cracks; c++)
+            {
+                float u = t - at[c];
+                if (u < 0) continue;
+                float gain = c == 0 ? 1f : 0.55f + 0.3f * (c % 2);
+                crack += gain * (bright[i] * 1.8f * Mathf.Exp(-u * 380f) + Mathf.Sin(Mathf.Tau * knock[c] * u) * 0.6f * Mathf.Exp(-u * 260f));
+            }
+            float body = Mathf.Sin(Mathf.Tau * thud * t * (1f - t * 0.6f)) * 0.75f * Mathf.Exp(-t * 22f) + dull[i] * 2.5f * Mathf.Exp(-t * 30f);
+            // the grind: noise switched on and off in grains, a little after the snap
+            float grain = Mathf.Sin(t * 900f + 3f * Mathf.Sin(t * 170f)) > 0.2f ? 1f : 0.15f;
+            float crunch = t > 0.02f ? grit[i] * 0.9f * grain * Mathf.Exp(-(t - 0.02f) * 14f) : 0f;
+            s[i] = Mathf.Clamp(crack + body + crunch, -1.2f, 1.2f);
+        }
+        return s;
+    });
+
+    /// <summary>
+    /// A windscreen going (#214): the bang of the hit, a burst of bright noise as it crazes, then a
+    /// shower of little glass pings falling away over most of a second.
+    /// </summary>
+    public static SfxBank GlassBank => _glassBank ??= SfxBank.Build("glass", 4, 1.1f, 215, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.15f;
+        var hiss = HighPass(Noise(rng, n), 0.55f);
+        var bang = LowPass(Noise(rng, n), 0.08f * J());
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            s[i] = bang[i] * 3f * Mathf.Exp(-t * 35f) + hiss[i] * (0.9f * Mathf.Exp(-t * 18f) + 0.12f * Mathf.Exp(-t * 3.5f));
+        }
+        // the tinkle: a hundred-odd short pings, thinning out as the shards land
+        int pings = 90 + rng.Next(40);
+        for (int k = 0; k < pings; k++)
+        {
+            float u = (float)rng.NextDouble();
+            int start = (int)(u * u * 0.9f * Rate);
+            float f = 2800f + 6500f * (float)rng.NextDouble(), amp = 0.25f * (1f - u * 0.7f) * (0.4f + 0.6f * (float)rng.NextDouble());
+            for (int i = start, end = Math.Min(n, start + Rate / 25); i < end; i++)
+            {
+                float t = (float)(i - start) / Rate;
+                s[i] += Mathf.Sin(Mathf.Tau * f * t) * amp * Mathf.Exp(-t * 160f);
+            }
+        }
+        for (int i = 0; i < n; i++) s[i] = Mathf.Clamp(s[i], -1.2f, 1.2f);
+        return s;
+    });
 
     /// <summary>Looping edge hiss for skis: bright, high-passed noise.</summary>
     public static AudioStreamWav Hiss => _hiss ??= Loop(2.0f, 12, (rng, n) =>

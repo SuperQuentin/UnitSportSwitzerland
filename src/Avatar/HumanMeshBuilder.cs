@@ -440,6 +440,46 @@ public static class HumanMeshBuilder
     /// <summary>Camera mounts for <see cref="AppendDriver"/>'s figure at rest, flipped to face -Z like the mesh.</summary>
     public static GaitMounts MountsForDriver(DriverSeat seat) => MountsForRig(DriverRig(seat, 0f, 0f, 0f));
 
+    // ---- joints as plain points, for a ragdoll (#214) ----
+
+    /// <summary>Number of joints in a figure, in <see cref="Joint"/> order.</summary>
+    public const int JointCount = 20;
+
+    /// <summary>The figure's joints, in the order <see cref="DriverJoints"/> and <see cref="BuildJoints"/> use.</summary>
+    public enum Joint
+    {
+        HeadTop, HeadBase, Neck, Chest, Waist, Hip,
+        ShoulderL, ElbowL, WristL, ShoulderR, ElbowR, WristR,
+        HipL, KneeL, AnkleL, ToeL, HipR, KneeR, AnkleR, ToeR,
+    }
+
+    private static Vector3[] JointsOf(Rig r) => new[]
+    {
+        r.HeadTop, r.HeadBase, r.Neck, r.Chest, r.Waist, r.Hip,
+        r.ShoulderL, r.ElbowL, r.WristL, r.ShoulderR, r.ElbowR, r.WristR,
+        r.HipL, r.KneeL, r.AnkleL, r.ToeL, r.HipR, r.KneeR, r.AnkleR, r.ToeR,
+    };
+
+    /// <summary>The seated driver's joints, author space (+Z forward, as the car is built).</summary>
+    public static Vector3[] DriverJoints(DriverSeat seat) => JointsOf(DriverRig(seat, 0f, 0f, 0f));
+
+    /// <summary>A fixed pose's joints, author space (+Z forward, origin at the feet).</summary>
+    public static Vector3[] PoseJoints(HumanPose pose) => JointsOf(RigFor(pose));
+
+    /// <summary>
+    /// A figure drawn from free joint points (a ragdoll): <paramref name="joints"/> in
+    /// <see cref="Joint"/> order, author space. Bone lengths are whatever the points say.
+    /// </summary>
+    public static ArrayMesh BuildJoints(HumanPalette palette, ReadOnlySpan<Vector3> joints, Headwear hat = Headwear.None)
+    {
+        var j = joints;
+        var rig = new Rig(j[0], j[1], j[2], j[3], j[4], j[5], j[6], j[7], j[8], j[9], j[10], j[11],
+            j[12], j[13], j[14], j[15], j[16], j[17], j[18], j[19], TorsoLean: 0f);
+        var scratch = new MeshScratch();
+        AppendRig(scratch, palette, rig, includeLegs: true, helmet: false, hat);
+        return scratch.Build();
+    }
+
     /// <summary>
     /// How far short each limb falls of what it holds, m: the right and left hand of the rim, the
     /// right foot of the throttle and the left of its rest. Zero when it reaches (the two-bone
