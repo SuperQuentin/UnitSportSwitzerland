@@ -289,6 +289,7 @@ public partial class ServerWorld : Node3D
         _interiors?.SendTableTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _chat?.SendWorldTimeTo(id);
     }
 
     private void OnPeerDisconnected(long id)
