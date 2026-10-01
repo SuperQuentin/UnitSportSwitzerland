@@ -5,6 +5,7 @@
 #   GODOT=<exe> tools/pvpcheck.sh        screenshots: test_output/pvp_{a_down,b_down}.png
 set -u
 AT=2583250,1113250
+AT_B=2583256,1113250   # never on top of A: two bodies spawned in one place throw each other kilometres
 PORT=7797
 GODOT=${GODOT:-godot}
 cd "$(dirname "$0")/.."
@@ -15,9 +16,9 @@ run() {   # $1 = on|off
     timeout 300 "$GODOT" --headless --path . -- --server --generated-world --port $PORT $flag > "$OUT/pvp_server_$1.log" 2>&1 & SERVER=$!
     sleep 12
     client() { timeout 220 "$GODOT" --path . -- --connect 127.0.0.1:$PORT --name "Pvp$2" --cache "$OUT/pvp_cache_$2" \
-        --at "$AT" --view first --pvpcheck "$2" --pvpexpect "$1" > "$OUT/pvp_$1_$2.log" 2>&1; }
-    client "$1" A & A=$!
-    client "$1" B
+        --at "$3" --view first --pvpcheck "$2" --pvpexpect "$1" > "$OUT/pvp_$1_$2.log" 2>&1; }
+    client "$1" A "$AT" & A=$!
+    client "$1" B "$AT_B"
     wait $A
     kill $SERVER 2>/dev/null
     grep -h "\[pvp" "$OUT/pvp_$1_A.log" "$OUT/pvp_$1_B.log" "$OUT/pvp_server_$1.log"

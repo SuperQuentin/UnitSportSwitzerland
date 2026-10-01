@@ -78,16 +78,18 @@ public partial class PvpProbe : Node
         if (b == null) { Fail("B's body is not here"); return; }
         await Seconds(1.0);
 
+        // B moved itself 10 m out: wait until its body is there on this machine, not still at the spawn
+        await Near(me, b, 10f);
         await Fire(me, b, ItemId.Rifle, 2, "rifle");
         await Step("B", "vest");
         await Fire(me, b, ItemId.Pistol, 1, "pistol");
         if (!ExpectOn) { Say("finished"); await Step("B", "done"); return; }
 
         await Step("B", "close");
-        await Seconds(1.0);
+        await Near(me, b, 1.5f);
         await Fire(me, b, ItemId.Knife, 1, "knife");
         await Step("B", "far");
-        await Seconds(1.0);
+        await Near(me, b, 10f);
 
         // finish B: rifle rounds until its Down flag arrives here
         for (int i = 0; i < 12 && b.Down == 0; i++)
@@ -103,6 +105,16 @@ public partial class PvpProbe : Node
     }
 
     private int Hits;
+
+    /// <summary>Until B's body, as replicated here, stands about <paramref name="d"/> m away (and a moment more).</summary>
+    private async Task Near(FootPlayer me, FootPlayer b, float d)
+    {
+        bool there = await Until(() => Mathf.Abs(Flat(b.GlobalPosition - me.GlobalPosition) - d) < 0.8f, 20);
+        if (!there) Expect(false, $"B's body {d} m away here ({Flat(b.GlobalPosition - me.GlobalPosition):F1} m)");
+        await Seconds(0.5);
+    }
+
+    private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
     /// <summary>Aims at B's chest, selects the weapon and pulls the trigger <paramref name="shots"/> times through the item path.</summary>
     private async Task Fire(FootPlayer me, FootPlayer b, ItemId weapon, int shots, string? announce)
