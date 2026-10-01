@@ -122,14 +122,15 @@ public partial class WheelProbe : Node
         PlayerInput.SetIgnoredJoypads(Array.Empty<int>());
         Expect(before > 0 && PadEvents(PlayerInput.MoveLeft, -1) == before, $"pad bindings restored ({before} before)");
 
-        failures += Forces(Expect);
+        // a statement, not `failures += Forces(...)`: that read failures before Forces added to it
+        Forces(Expect);
         failures += SdlLoads() ? 0 : 1;
         GD.Print(failures == 0 ? "[wheel] RESULT: PASS" : $"[wheel] RESULT: FAILED ({failures})");
         return failures == 0 ? 0 : 1;
     }
 
     /// <summary>Force feedback's numbers: the vehicles' feel and the soft lock. Failures go through <paramref name="expect"/>.</summary>
-    private static int Forces(Action<bool, string> expect)
+    private static void Forces(Action<bool, string> expect)
     {
         const float Dt = 1f / 60f;
         // a car held in a steady right-hand bend; returns its last feel
@@ -200,9 +201,9 @@ public partial class WheelProbe : Node
         var s = new WheelSettings { RangeDeg = 1080f };
         var into = SteeringWheel.Compose(default, r900, at + 0.1f, 3f, s);
         var back = SteeringWheel.Compose(default, r900, at + 0.1f, -3f, s);
-        expect(into.Constant < back.Constant && into.Damper > 0.6f * s.FfbStrength,
+        var deep = SteeringWheel.Compose(default, r900, at + 0.5f, 0f, s);
+        expect(into.Constant < back.Constant && deep.Constant <= -0.99f && into.Damper > 0.6f,
             $"soft lock damps the rim: {into.Constant:F2} going in, {back.Constant:F2} coming back, damper {into.Damper:F2}");
-        return 0;
     }
 
     private static int PadEvents(string action, int device) =>

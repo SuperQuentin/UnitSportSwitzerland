@@ -133,16 +133,19 @@ public partial class SteeringWheel
         in WheelFeel feel, float lockToLock, float angle, float rate, WheelSettings s)
     {
         float softAt = SoftLockAt(lockToLock, Mathf.DegToRad(s.RangeDeg));
-        float constant = feel.Torque * s.FfbAligning + SoftLock(angle, softAt);
-        if (Mathf.Abs(angle) > softAt) constant -= Math.Clamp(rate * SoftLockDamping, -0.5f, 0.5f);
+        float master = s.FfbStrength;
+        // The soft lock is a wall, so it takes the device's whole force whatever the strength: capped
+        // at 70% it was pushed straight through on the HORI (121° past a 90° lock, force maxed out).
+        float wall = SoftLock(angle, softAt);
+        if (Mathf.Abs(angle) > softAt) wall -= Math.Clamp(rate * SoftLockDamping, -0.5f, 0.5f);
+        float constant = feel.Torque * s.FfbAligning * master + wall;
         // the wheel's damper takes over from 6° short of the lock, fully at it
         float nearLock = Math.Clamp((Mathf.Abs(angle) - (softAt - 0.1f)) / 0.1f, 0f, 1f);
-        float master = s.FfbStrength;
         // a little damping always, so the rim does not oscillate on the aligning torque; more parked
-        float damper = Math.Max(Math.Clamp((0.12f + 0.5f * feel.Weight) * s.FfbWeight, 0f, 1f), SoftLockDamper * nearLock);
-        return (Math.Clamp(constant, -1f, 1f) * master,
+        float damper = Math.Max(Math.Clamp((0.12f + 0.5f * feel.Weight) * s.FfbWeight, 0f, 1f) * master, SoftLockDamper * nearLock);
+        return (Math.Clamp(constant, -1f, 1f),
             Math.Clamp(feel.Road * s.FfbRoad, 0f, 1f) * master,
-            damper * master,
+            damper,
             Math.Clamp(feel.Weight * s.FfbWeight, 0f, 1f) * master);
     }
 
