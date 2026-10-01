@@ -1198,7 +1198,7 @@ public partial class FootPlayer : CharacterBody3D
         var (lower, upper) = ride!.HullBoxes ?? Avatar.MeshBounds.Split(_visual, HullCut);
         _visual.Transform = pose;
         _hullLeans = ride is not (Car or Truck);   // lean-steered: yaw and pitch only (see AlignHull)
-        var parts = new[] { lower, upper };
+        var parts = new[] { ride.Solid(lower, 0), ride.Solid(upper, 0) };
         for (int i = 0; i < 2; i++)
         {
             var box = parts[i];
@@ -1880,9 +1880,7 @@ public partial class FootPlayer : CharacterBody3D
         // beside the door, not the middle: a bus's front door is six metres ahead of it
         var door = vehicle.EntryPoint == Vector3.Zero ? state.Position : ToGlobal(new Vector3(0, 0, vehicle.EntryPoint.Z));
         bool grounded = IsOnFloor();
-        var ahead = -GlobalTransform.Basis.Z with { Y = 0 };
-        ahead = ahead.LengthSquared() > 1e-6f ? ahead.Normalized() : Vector3.Forward;
-        float end = vehicle.ParkedBox.Size.Z * 0.5f + BodyRadius + 0.3f;
+        var frame = GlobalTransform;
         // out of a car through the driver's door: it opens, and shuts behind (unless left open)
         if (vehicle is Car && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
             state = state with { DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor | VehicleState.DriverDoorShuts) };
@@ -1893,20 +1891,32 @@ public partial class FootPlayer : CharacterBody3D
         SeatIndex = 0;
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
-        GlobalPosition = FindExit(door, right, side, ahead, end, grounded);
+        GlobalPosition = FindExit(door, right, side, frame, vehicle, grounded);
     }
 
     /// <summary>
     /// A clear spot beside the vehicle: its right, else its left, else behind or in front of it (a
     /// car in a garage one car wide), else on top. In the air there is nothing to stand on either
-    /// side, so the right side it is.
+    /// side, so the right side it is. <paramref name="at"/> is the door the sides are taken from;
+    /// behind, ahead and on top are the vehicle's own box in <paramref name="frame"/>, its node.
     /// </summary>
-    private Vector3 FindExit(Vector3 at, Vector3 right, float side, Vector3 ahead, float end, bool grounded)
+    private Vector3 FindExit(Vector3 at, Vector3 right, float side, Transform3D frame, Rideable? vehicle, bool grounded)
     {
         if (!grounded) return at + right * side;
         _standProbe ??= new CapsuleShape3D { Radius = BodyRadius - 0.03f, Height = StandHeight };
-        foreach (var raw in new[] { at + right * side, at - right * side, at - ahead * end, at + ahead * end, at + Vector3.Up * 2.8f })
+        var ahead = -frame.Basis.Z with { Y = 0 };
+        ahead = ahead.LengthSquared() > 1e-6f ? ahead.Normalized() : Vector3.Forward;
+        // from the box's middle, not the door: a bus's front door is 5.6 m ahead of its middle, and
+        // "behind the door" was 1.3 m inside the bus (a tractor's, inside its cab)
+        var (centre, size) = vehicle?.ParkedBox ?? (new Vector3(0, 1.35f, 0), new Vector3(2f, 2.7f, 4.8f));
+        var middle = frame * (centre with { Y = 0 });
+        float end = size.Z * 0.5f + BodyRadius + 0.3f;
+        var over = middle + Vector3.Up * (centre.Y + size.Y * 0.5f + 0.1f);
+        foreach (var raw in new[] { at + right * side, at - right * side, middle - ahead * end, middle + ahead * end, over })
         {
+            // the vehicle just left is not in the physics yet (online the server spawns it), so a
+            // spot inside it reads clear: the player was put there, then shoved onto its roof
+            if (raw != over && InsideVehicle(raw, frame, vehicle)) continue;
             // on a slope the ground beside the seat is not at the seat's height: stand on it,
             // or the uphill side reads as blocked and the player is put on the vehicle's roof
             // (indoors the terrain is 3 km overhead: the floor is at the seat's height)
@@ -1923,7 +1933,25 @@ public partial class FootPlayer : CharacterBody3D
             if (GetWorld3D().DirectSpaceState.IntersectShape(query, 1).Count == 0)
                 return candidate + Vector3.Up * 0.1f;
         }
-        return at + Vector3.Up * 3f;
+        return over + Vector3.Up * 0.2f;
+    }
+
+    /// <summary>Whether a player standing at <paramref name="feet"/> would be in one of the vehicle's own boxes.</summary>
+    private bool InsideVehicle(Vector3 feet, Transform3D frame, Rideable? vehicle)
+    {
+        if (vehicle == null) return false;
+        var local = frame.AffineInverse() * feet;
+        bool In(Transform3D pose, Vector3 centre, Vector3 size)
+        {
+            var p = pose.AffineInverse() * local - centre;
+            return Mathf.Abs(p.X) < size.X * 0.5f + BodyRadius && Mathf.Abs(p.Z) < size.Z * 0.5f + BodyRadius
+                && p.Y < size.Y * 0.5f && p.Y + StandHeight > -size.Y * 0.5f;
+        }
+        var (c, s) = vehicle.ParkedBox;
+        if (In(Transform3D.Identity, c, s)) return true;
+        foreach (var (pose, centre, size) in vehicle.ExtraBoxes())
+            if (In(pose, centre, size)) return true;
+        return false;
     }
 
     /// <summary>
