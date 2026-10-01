@@ -1187,10 +1187,14 @@ public static partial class InteriorGenerator
         });
     }
 
+    /// <summary>The pastor rat (#241): robed, mitred, arms spread, by the altar of every church.</summary>
+    private static readonly Piece RatPiece = new(FurnitureType.PastorRat, 0.9f, 0.45f, 1.35f, false);
+
     private static void Pews(InteriorLayout l, int f, RoomPlan r, List<RectPlan> placed, List<RectPlan> blocked)
     {
         TryPlace(l, f, r, new Piece(FurnitureType.Altar, Math.Min(2.0f, r.Width * 0.4f), 0.9f, 1.0f, true),
             placed, blocked, new Random(0));
+        TryPlace(l, f, r, RatPiece, placed, blocked, new Random(1));
         float aisle = 1.4f;
         float pewW = Math.Min(3.5f, (r.Width - aisle) / 2 - 0.5f);
         if (pewW < 1.2f) return;

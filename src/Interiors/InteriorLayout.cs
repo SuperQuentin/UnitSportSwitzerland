@@ -99,7 +99,7 @@ public enum FurnitureType
     Blackboard, Tv, Rug, Workbench, Plant,
     Bell, Lectern, Cross, Dais,
     // stored plans hold these as numbers: new types go on the end
-    GunLocker, Safe,
+    GunLocker, Safe, PastorRat,
     // #213
     WashingMachine, Dryer, BunkBed, WineRack, Barrel, DrumKit, Piano, Keyboard, GuitarStand,
     AcousticFoam, CinemaScreen, Armchair, Bookcase, ToyBox, TellerDesk, VaultSafe, WaterTank,
@@ -153,7 +153,7 @@ public sealed class EntrancePlan
 public sealed class InteriorLayout
 {
     /// <summary>Bumped whenever the generator changes enough that old plans should be regenerated.</summary>
-    public const int CurrentVersion = 8; // 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 9; // 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
