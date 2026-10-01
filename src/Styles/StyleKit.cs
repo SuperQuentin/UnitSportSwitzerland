@@ -76,6 +76,28 @@ public static class StyleKit
         Chosen?.Invoke();
     }
 
+    /// <summary>
+    /// The settings menu's choice: saved with the settings (the menu commits them, and
+    /// <c>GameSettings.Changed</c> restyles the world), and it ends any <c>/style</c> choice.
+    /// </summary>
+    public static void ChooseSetting(VisualStyle style)
+    {
+        _session = null;
+        GameSettings.Current.VisualStyle = style;
+    }
+
+    /// <summary>The styles the settings menu offers: those with a look of their own so far.</summary>
+    public static readonly VisualStyle[] MenuStyles = [VisualStyle.Ps1, VisualStyle.Cartoon];
+
+    /// <summary>"PS1", "Cartoon", "Realistic−", "Realistic+": for menus.</summary>
+    public static string Label(VisualStyle style) => style switch
+    {
+        VisualStyle.Ps1 => "PS1",
+        VisualStyle.Cartoon => "Cartoon",
+        VisualStyle.RealisticLow => "Realistic−",
+        _ => "Realistic+",
+    };
+
     /// <summary>Raised by <see cref="Choose"/>: the client world restyles itself. Main thread.</summary>
     public static event System.Action? Chosen;
 
@@ -118,11 +140,12 @@ public static class StyleKit
             [MaterialRole.Path] = "res://shaders/ps1_path.gdshader",
             [MaterialRole.Precip] = "res://shaders/ps1_snowfall.gdshader",
         },
-        // ps1_road waits for the road network stack's split (#237); interiors and snowfall are
-        // unshaded on purpose: rooms float in the dark under the terrain, out of the sun
+        // interiors and snowfall stay PS1's, unshaded on purpose: rooms float in the dark under
+        // the terrain, out of the sun
         [VisualStyle.Cartoon] = new()
         {
             [MaterialRole.Terrain] = "res://shaders/cartoon_terrain.gdshader",
+            [MaterialRole.Road] = "res://shaders/cartoon_road.gdshader",
             [MaterialRole.Building] = "res://shaders/cartoon_building.gdshader",
             [MaterialRole.Tree] = "res://shaders/cartoon_tree.gdshader",
             [MaterialRole.TreeFar] = "res://shaders/cartoon_treefar.gdshader",

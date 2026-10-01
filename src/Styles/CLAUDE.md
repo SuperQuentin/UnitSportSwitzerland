@@ -9,8 +9,9 @@ touches its topic; search with `grep -ril <word> docs/notes/styles`.
 ## Architecture
 
 - `style-kit` — `VisualStyle` (client-only), `MaterialRole`, `StyleKit.Material(role)`, the fallback chain to PS1, `--style-report`, per-style looks (MeshDetail, finest stride, sun, environment), live `Restyle` + `RebuildVisuals`, `/style`; never load a `ps1_*` shader directly
-- `role-bodies` — shaders/body/ role bodies + thin per-style wrappers, shaders/common/ (world, retro, sightline), the `retro` uniform the kit turns off outside PS1
-- `tree-lod` — 3D trees near, ray-traced billboards far (17 plane tests per pixel), complementary dither crossfade, per-tile range from the AABB incl. height, `world_cam_pos`
+- `role-bodies` — shaders/body/ role bodies + thin per-style wrappers, shaders/common/ (world, retro, sightline, style), the `retro` uniform the kit turns off outside PS1, the STYLE_LIT path
+- `tree-lod` — 3D trees near, ray-traced billboards far (17 plane tests per pixel), complementary dither crossfade, per-tile range from the AABB incl. height, `world_cam_pos`, NearTrees (per-tree culling of heavy trees), Cartoon's traced shapes
+- `cartoon` — Cartoon: lit wrappers, cel light (shadow faded at the terminator against acne, hard shadows), grade, sky/haze/sun, who casts shadows, toon figures, settings entry
 
 ## Commands
 
