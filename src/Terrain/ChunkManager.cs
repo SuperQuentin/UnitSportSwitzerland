@@ -479,13 +479,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public Styles.MeshDetail Detail { get; private set; } = Styles.MeshDetail.Low;
 
     /// <summary>
-    /// Builds every tile's meshes again, in place: ground, roads, buildings, trees and water, for
-    /// a style with another <see cref="Detail"/> (or <c>/style rebuild</c>). The old meshes stay
-    /// drawn until each tile's new ones commit, and its collision is left alone, so the player,
-    /// physics and the network session carry on through it. Builds in flight are cancelled: they
-    /// would commit the old detail. Main thread.
-    /// </summary>
-    /// <summary>
     /// Material of the piers and jetties (#377), a <see cref="Styles.MaterialRole.Prop"/> one; null:
     /// they are not drawn (their collision still is).
     /// </summary>
@@ -510,6 +503,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         if (tiles > 0) GD.Print($"[terrain] {tiles} tiles build their piers");
     }
 
+    /// <summary>
+    /// Builds every tile's meshes again, in place: ground, roads, buildings, trees and water, for
+    /// a style with another <see cref="Detail"/> (or <c>/style rebuild</c>). The old meshes stay
+    /// drawn until each tile's new ones commit, and its collision is left alone, so the player,
+    /// physics and the network session carry on through it. Builds in flight are cancelled: they
+    /// would commit the old detail. Main thread.
+    /// </summary>
     public void RebuildVisuals()
     {
         if (!BuildMeshes) return;
