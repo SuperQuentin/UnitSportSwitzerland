@@ -27,7 +27,7 @@ reason (numbers), the traps and the exact migration steps; read only the ones yo
 | Avatars | `perf-pose-mesh-cache` (rebuild a figure only on a new pose key, in place; no `ArrayMesh` per frame), `perf-shared-materials`, `cockpit-kit` (cabin wheel/dials/lamps/pedals/mirrors through `CockpitKit` + `CockpitSpec`) |
 | Vehicles / world / audio | `perf-surface-grid` (`Surfaces.At(..., caller)`), `perf-traffic-tick` (lazy obstacle sampling, lane neighbours, shared traffic meshes, 600 m car draw), `perf-racenpc-server-physics` (no NPC physics step on the server), `perf-parked-vehicles` (nothing per frame while asleep, reused ray queries), `perf-engine-synth-idle` |
 | Probes / UI | `chat-probe` (two-client probes derive from `ChatProbe`, register in `ClientWorld`'s check tables), `ui-theme-panels` (`UiTheme.Title/Prompt/Flat/Amber`, no hand-built styles) |
-| Tools / formats | `perf-tile-header` (`TileHeader`, byte-identical goldens in `tests/`), `perf-road-segment-helpers` (`RoadSegment.Lv95`, `RoadProfiles.For`), `dead-code-and-shared-helpers`, `mathx` (`MathX.Flat/Damp/WrapAngle`, `Mathf.SmoothStep`) |
+| Tools / formats | `perf-tile-header` (`TileHeader`, byte-identical goldens in `tests/`), `perf-road-segment-helpers` (`RoadSegment.Lv95`, `RoadProfiles.For`), `dead-code-and-shared-helpers`, `mathx` (`MathX.Flat/Damp/WrapAngle`, `Mathf.SmoothStep`), `twoclient-checks` (server + client `tools/*check.sh` through `tools/lib/twoclient.sh`: tree kills, own `user://`) |
 
 ## Rebasing an old branch: the order that conflicts least
 
@@ -36,7 +36,7 @@ reason (numbers), the traps and the exact migration steps; read only the ones yo
 2. Resolve conflicts with the notes above; the usual ones: `ClientWorld.cs` probe dispatch (`chat-probe`),
    `FootPlayer` synchronizers (`perf-visibility-on-change`), `Traffic.cs` (`perf-traffic-tick`),
    `ChunkManager`/`ChunkNode` (`perf-collision-commits`), per-frame code in `PlayerFeel`/`DayNight`/
-   `PlayerInput` (`perf-no-per-frame-allocations`), `tools/*check.sh` (keep the `guard_watch $$` line).
+   `PlayerInput` (`perf-no-per-frame-allocations`), `tools/*check.sh` (source `lib/twoclient.sh`, `twoclient-checks`).
 3. Grep your own new code for the patterns each note lists.
 4. `tools/test.sh quick`, then `tools/test.sh net` if you touched replication.
 

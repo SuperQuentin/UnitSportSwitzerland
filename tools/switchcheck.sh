@@ -5,28 +5,20 @@
 # out; the watcher (windowed: a headless client draws no parked vehicles) must see all of it on the
 # moving car and on the parked one, and saves test_output/switchcheck_watch.png.
 #   tools/switchcheck.sh [E,N]      (default: the spawn; CHUNKS=<dir> for another terrain_chunks)
-. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
-set -u
+. "$(dirname "$0")/lib/twoclient.sh" switch
 AT=${1:-}
 PORT=7796
-GODOT=${GODOT:-godot}   # the Godot executable (a full path on Windows: docs/notes/general/godot-exe.md)
 EXTRA=${EXTRA:-}        # more client args, e.g. EXTRA="--time 13" for a daylight shot
-OUT=test_output
-cd "$(dirname "$0")/.."
-mkdir -p "$OUT"
 ATARG=()
 [ -n "$AT" ] && ATARG=(--at "$AT")
-CHARG=()
-[ -n "${CHUNKS:-}" ] && CHARG=(--chunks "$CHUNKS")
 C1=$(mktemp -d); C2=$(mktemp -d)
-timeout 200 "$GODOT" --headless --path . -- --server --port $PORT --admin-password switchcheck ${CHARG[@]+"${CHARG[@]}"} > $OUT/switchcheck_server.log 2>&1 &
-sleep 6
-timeout 190 "$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT --name Driver --cache "$C1" --switchcheck driver switchcheck ${ATARG[@]+"${ATARG[@]}"} ${CHARG[@]+"${CHARG[@]}"} --traffic 0 $EXTRA > $OUT/switchcheck_driver.log 2>&1 &
+tc_server 200 120 $OUT/switchcheck_server.log --server --port $PORT --admin-password switchcheck "${CH[@]}"
+tc_client 190 $OUT/switchcheck_driver.log --connect 127.0.0.1:$PORT --name Driver --cache "$C1" --switchcheck driver switchcheck "${ATARG[@]}" "${CH[@]}" --traffic 0 $EXTRA &
 sleep 2
-timeout 185 "$GODOT" --path . -- --connect 127.0.0.1:$PORT --name Watcher --cache "$C2" --switchcheck watch $OUT/switchcheck_watch.png ${ATARG[@]+"${ATARG[@]}"} ${CHARG[@]+"${CHARG[@]}"} --traffic 0 $EXTRA > $OUT/switchcheck_watch.log 2>&1
+tc_client 185 $OUT/switchcheck_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --cache "$C2" --switchcheck watch $OUT/switchcheck_watch.png "${ATARG[@]}" "${CH[@]}" --traffic 0 $EXTRA
 code=$?
 sleep 2
 grep -h "\[switchcheck\]" $OUT/switchcheck_driver.log $OUT/switchcheck_watch.log
-kill %1 %2 2>/dev/null
-rm -rf "$C1" "$C2"
+tc_stop
+rm -r "$C1" "$C2"
 exit $code

@@ -4,33 +4,24 @@
 # wrong Simon sequence is refused, A cracks a safe through the dial and the Simon panel, B sees it open
 # with the same contents; A then stands in a house cellar's shelter and music room (src/Loot/BankProbe).
 #   CHUNKS=<terrain_chunks> GODOT=<exe> tools/bankcheck.sh [epoch] [E,N]   (default: a random restock period, Riddes)
-# WARNING: the server writes to the real user://loot and user://bank/accounts.json of this project
-# (a fresh epoch keeps the loot apart; the accounts are BankA/BankB).
-. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
-set -u
+# The server writes user://loot and user://bank/accounts.json (accounts BankA/BankB) in
+# test_output/userdata_bank (lib/twoclient.sh).
+. "$(dirname "$0")/lib/twoclient.sh" bank
 EP=${1:-$((800000 + RANDOM * 8 + RANDOM % 8))}
 AT=${2:-2582700,1113300}
 PORT=7794
-GODOT=${GODOT:-godot}
-CH=()
-[ -n "${CHUNKS:-}" ] && CH=(--chunks "$CHUNKS")
-cd "$(dirname "$0")/.."
-OUT=test_output
-mkdir -p "$OUT"
-timeout 480 "$GODOT" --headless --path . -- --server --port $PORT --lootepoch "$EP" "${CH[@]}" > $OUT/bank_server.log 2>&1 &
-SERVER=$!
-for _ in $(seq 1 120); do /usr/bin/grep -q "server listening" $OUT/bank_server.log 2>/dev/null && break; sleep 1; done
-timeout 400 "$GODOT" --path . -- --connect 127.0.0.1:$PORT --name BankA --cache "$OUT/bank_cache_a" \
-    --at "$AT" --view first --lootepoch "$EP" --bankcheck A "${CH[@]}" > $OUT/bank_a.log 2>&1 &
+tc_server 480 120 $OUT/bank_server.log --server --port $PORT --lootepoch "$EP" "${CH[@]}"
+tc_client 400 $OUT/bank_a.log --windowed --connect 127.0.0.1:$PORT --name BankA --cache "$OUT/bank_cache_a" \
+    --at "$AT" --view first --lootepoch "$EP" --bankcheck A "${CH[@]}" &
 A=$!
 sleep 3
-timeout 400 "$GODOT" --path . -- --connect 127.0.0.1:$PORT --name BankB --cache "$OUT/bank_cache_b" \
-    --at "$AT" --lootepoch "$EP" --bankcheck B "${CH[@]}" > $OUT/bank_b.log 2>&1
+tc_client 400 $OUT/bank_b.log --windowed --connect 127.0.0.1:$PORT --name BankB --cache "$OUT/bank_cache_b" \
+    --at "$AT" --lootepoch "$EP" --bankcheck B "${CH[@]}"
 wait $A
-kill $SERVER 2>/dev/null
-/usr/bin/grep -h "\[bank [AB]\]" $OUT/bank_a.log $OUT/bank_b.log
-/usr/bin/grep -h "\[bank\]\|\[loot\].*\(cracked\|wrong\)" $OUT/bank_server.log
-if [ "$(/usr/bin/grep -h "RESULT: ok" $OUT/bank_a.log $OUT/bank_b.log | wc -l)" -eq 2 ]; then
+tc_stop
+grep -h "\[bank [AB]\]" $OUT/bank_a.log $OUT/bank_b.log
+grep -h "\[bank\]\|\[loot\].*\(cracked\|wrong\)" $OUT/bank_server.log
+if tc_ok 2 $OUT/bank_a.log $OUT/bank_b.log; then
     echo "[bankcheck] RESULT: ok (epoch $EP)"; exit 0
 fi
 echo "[bankcheck] RESULT: FAILED (epoch $EP, see $OUT/bank_*.log)"; exit 1
