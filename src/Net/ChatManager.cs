@@ -62,6 +62,9 @@ public partial class ChatManager : Node
 
     /// <summary>Client-side only: where <c>/spawn</c> puts items, and the towns <c>/city</c> offline looks in.</summary>
     public Items.Inventory? Inventory { get; set; }
+
+    /// <summary>Adds a stack, dropping what does not fit on the ground; returns how many went nowhere. Falls back to a plain add.</summary>
+    public Func<Items.ItemStack, int>? GiveOrDrop { get; set; }
     public PlaceSearchUi? PlaceSearch { get; set; }
 
     /// <summary>
@@ -144,6 +147,12 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(clock, ChatKind.Private);
             return;
         }
+        // the visual style is this screen's alone: never a server's business
+        if (Styles.StyleCommand.Run(text.Trim()) is { } style)
+        {
+            LineReceived?.Invoke(style, ChatKind.Private);
+            return;
+        }
         if (IsLocal)
         {
             text = text.Trim();
@@ -205,9 +214,10 @@ public partial class ChatManager : Node
     {
         if (Inventory is null) return "No inventory to put that in.";
 
-        int left = Inventory.Add(def.Id, count);
+        int room = Math.Min(count, Inventory.Room(def.Id));
+        int left = GiveOrDrop?.Invoke(new Items.ItemStack(def.Id, count)) ?? Inventory.Add(def.Id, count);
         return left == 0
-            ? $"Spawned {count} x {def.Name}."
+            ? room < count ? $"Spawned {count} x {def.Name}; {count - room} dropped at your feet." : $"Spawned {count} x {def.Name}."
             : left == count
                 ? $"No room for {def.Name}."
                 : $"Spawned {count - left} x {def.Name}; {left} did not fit.";
@@ -236,7 +246,7 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help":
-                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /occasion  /time  — Tab completes.", ChatKind.Private);
+                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /occasion  /time  /style  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 
@@ -275,7 +285,7 @@ public partial class ChatManager : Node
                         Show(line, ChatKind.Private);
                 return;
 
-            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick":
+            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
@@ -401,6 +411,9 @@ public partial class ChatManager : Node
     /// <summary>Races (<c>/race</c>), wired by ServerWorld.</summary>
     public World.RaceManager? Race { get; set; }
 
+    /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
+    public BattleRoyale.BrManager? BattleRoyale { get; set; }
+
     /// <summary>For races: the place index (air courses to a town), a player by name, a private line.</summary>
     public PlaceIndex? Places => _places;
     public long PeerByName(string name) => _registry?.FindByName(name)?.PeerId ?? -1;
@@ -474,6 +487,10 @@ public partial class ChatManager : Node
             case "inertia" when parts.Length == 1:
                 ReplyTo(sender, $"Standing passengers: {Vehicles.PassengerService.Inertia.ToString().ToLowerInvariant()} (steady, sway or full).", ChatKind.Private);
                 return;
+            case "br":
+                if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
+                return;
             case "race":
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId && !rest.StartsWith("cancel") && !rest.StartsWith("list")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
@@ -510,6 +527,7 @@ public partial class ChatManager : Node
             case "tpall": CommandTeleportEveryone(sender, rest); return;
             case "kick": CommandKick(sender, parts); return;
             case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;
+            case "pvp": CommandPvp(sender, rest); return;
 
             default:
                 ReplyTo(sender, $"Unknown command '/{verb}'. Try /help.", ChatKind.Error);
@@ -517,9 +535,29 @@ public partial class ChatManager : Node
         }
     }
 
+    /// <summary>/pvp on|off: whether foot weapons hurt players (#178). Bare /pvp says which.</summary>
+    private void CommandPvp(long sender, string rest)
+    {
+        switch (rest.Trim().ToLowerInvariant())
+        {
+            case "":
+                ReplyTo(sender, $"PvP is {(Combat.PvpRules.Enabled ? "on" : "off")}.", ChatKind.Private);
+                return;
+            case "on" or "off":
+                Combat.PvpRules.Enabled = rest.Trim().ToLowerInvariant() == "on";
+                Broadcast(Combat.PvpRules.Enabled
+                    ? "PvP is ON: weapons hurt players."
+                    : "PvP is off: weapons no longer hurt players.", ChatKind.System);
+                return;
+            default:
+                ReplyTo(sender, "Usage: /pvp on|off", ChatKind.Error);
+                return;
+        }
+    }
+
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /occasion  /time", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /br join|leave|status  /occasion  /time", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -673,6 +711,11 @@ public partial class ChatManager : Node
 
     private void CommandCity(long sender, string query)
     {
+        if (BattleRoyale?.Playing(sender) == true)
+        {
+            ReplyTo(sender, "No teleporting out of a Battle Royale. /br leave to give up.", ChatKind.Error);
+            return;
+        }
         if (query.Length == 0)
         {
             ReplyTo(sender, "Usage: /city <town>", ChatKind.Error);

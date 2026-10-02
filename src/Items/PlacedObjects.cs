@@ -410,10 +410,7 @@ public partial class PlacedObjects : Node
                     Rotation = new[] { o.Rotation.X, o.Rotation.Y, o.Rotation.Z, o.Rotation.W }, Payload = o.Payload,
                 }).ToList(),
             };
-            Directory.CreateDirectory(Path.GetDirectoryName(_storePath)!);
-            string tmp = _storePath + ".part";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(store, new JsonSerializerOptions { WriteIndented = true }));
-            File.Move(tmp, _storePath, overwrite: true);
+            Core.JsonStore.Save(_storePath, store, Core.JsonStore.Indented);
         }
         catch (Exception ex) { GD.PushError($"[placed] saving: {ex.Message}"); }
     }

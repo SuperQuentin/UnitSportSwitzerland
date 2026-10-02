@@ -48,17 +48,20 @@ public sealed class ChatCompleter
         ("city", false, true, "<town>"),
         ("occasion", false, true, "[list | start | stop | auto] [id]"),
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
+        ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("spawn", true, true, "<item> [count]"),
         ("name", false, false, "<name>"),
         ("login", false, false, "<password>"),
         ("stream", false, false, ""),
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
+        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | start | cancel | status"),
         ("say", true, false, "<message>"),
         ("admin", true, false, "list | add <player> | remove <player>"),
         ("tp", true, false, "<player>"),
         ("bring", true, false, "<player>"),
         ("tpall", true, false, "<town>"),
         ("kick", true, false, "<player> [reason]"),
+        ("pvp", true, false, "on | off"),
     ];
 
     /// <summary>The commands this player can run right now.</summary>
@@ -153,6 +156,20 @@ public sealed class ChatCompleter
                 };
                 break;
 
+            case "br":
+                bool admin = Permissions.IsAdmin;
+                options = argIndex switch
+                {
+                    0 => admin ? ["join", "leave", "status", "open", "start", "cancel"] : ["join", "leave", "status"],
+                    _ when admin && words[1].ToLowerInvariant() == "open" => ["here", "short", "normal", "long", "5", "6", "7"],
+                    _ => [],
+                };
+                break;
+
+            case "pvp":
+                options = argIndex == 0 ? ["on", "off"] : [];
+                break;
+
             case "race":
                 options = argIndex switch
                 {
@@ -170,6 +187,10 @@ public sealed class ChatCompleter
                     1 when mayTime && words[1].ToLowerInvariant() == "set" => World.TimeCommand.Named.Select(n => n.Name),
                     _ => [],
                 };
+                break;
+
+            case "style":
+                options = argIndex == 0 ? Styles.StyleCommand.Words : [];
                 break;
 
             case "occasion":

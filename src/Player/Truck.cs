@@ -260,6 +260,8 @@ public sealed class Truck : Rideable, IEngined
     public override bool HasEngine => true;
     public override bool CanHop => false;
     public override float MaxHealth => 400f;
+    /// <summary>Lock to lock through the cab's ratio: ~1800° for a 0.78 rad box, what a truck wheel is set to.</summary>
+    public override float WheelLock => 2f * Spec.MaxSteer * HeavyCockpit.SteerRatio;
 
     public override Vector3 FirstPersonEye
     {
@@ -367,7 +369,7 @@ public sealed class Truck : Rideable, IEngined
         ? Solid(Measured((Kind, k), _ => HeavyRig.Create(Spec, k, 0.5f)), k)
         : Measured(("trailer", TrailerCatalog.Index(TrailerCode), k - OwnSections), _ => HeavyRig.CreateTrailer(Trailer!, k - OwnSections, 1f));
 
-    public override Node3D BuildVisual(int riderIndex) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex));
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
 
     /// <summary>Every seat of the truck's own sections (a bus's both halves), the driver's first (#158).</summary>
     public override SeatAnchor[] Seats => Model.Seats;
@@ -462,11 +464,21 @@ public sealed class Truck : Rideable, IEngined
         if (HillHold) brake = 0.35f;
         Braking = brake > 0.05f && !HillHold;
 
-        // a heavy rack: slower to wind on than a car's, and far less lock asked for at speed
-        float rate = Mathf.Abs(input.Steer) < Mathf.Abs(_steer) || input.Steer * _steer < 0 ? 3.2f : 1.9f;
-        _steer = Mathf.MoveToward(_steer, input.Steer, rate * dt);
-        float lockScale = 1f / (1f + Mathf.Max(Mathf.Abs(u), 0f) / 9f);
-        float delta = -_steer * Spec.MaxSteer * lockScale;
+        float delta;
+        if (!float.IsNaN(input.WheelAngle))
+        {
+            // a steering wheel (#68): the box follows the driver's hands through the cab's ratio, to the stop
+            delta = Mathf.Clamp(-input.WheelAngle / HeavyCockpit.SteerRatio, -Spec.MaxSteer, Spec.MaxSteer);
+            _steer = -delta / Spec.MaxSteer;
+        }
+        else
+        {
+            // a heavy rack: slower to wind on than a car's, and far less lock asked for at speed
+            float rate = Mathf.Abs(input.Steer) < Mathf.Abs(_steer) || input.Steer * _steer < 0 ? 3.2f : 1.9f;
+            _steer = Mathf.MoveToward(_steer, input.Steer, rate * dt);
+            float lockScale = 1f / (1f + Mathf.Max(Mathf.Abs(u), 0f) / 9f);
+            delta = -_steer * Spec.MaxSteer * lockScale;
+        }
         SteerAngle = delta;
 
         var (drive, retard) = Box.Step(new DriveDemand(pedal, brake, input.Handbrake, u, ground.Grade, Train.Mass, EngineRunning), dt);

@@ -468,7 +468,8 @@ public partial class PlayerFeel : Node3D
     private void UpdateAir(float dt, bool grounded)
     {
         // on foot only: time spent flying a plane is not a jump
-        if (_player.Ride != RideKind.OnFoot) _airTime = 0;
+        // and neither is being thrown through a windscreen (#214)
+        if (_player.Ride != RideKind.OnFoot || _player.Ragdolled) _airTime = 0;
         else if (!grounded) _airTime += dt;
         else if (!_wasGrounded)
         {
@@ -863,10 +864,10 @@ public partial class PlayerFeel : Node3D
             case RideKind.Wingsuit:
                 urgent = _player.Clearance < 80f;
                 text = $"{jump}  open PARACHUTE" + (urgent ? "  — NOW!" : "")
-                    + $"\n{(pad ? "left stick" : "W / S")} dive · flare     {(pad ? "left stick" : "A / D")} turn";
+                    + $"\n{(pad ? "left stick" : "W / S")} dive · flare     {(pad ? "left stick" : "A / D")} turn · {(pad ? "look" : "mouse")} leans";
                 break;
             case RideKind.Parachute:
-                text = $"{(pad ? "left stick" : "A / D")} steer     {(pad ? "pull back" : "S")} brake — hold it to flare the landing";
+                text = $"{(pad ? "left stick" : "A / D")} steer · {(pad ? "look" : "mouse")} leans     {(pad ? "pull back" : "S")} brake — hold it to flare the landing";
                 break;
             case var _ when _player.Heavy is { } truck && truck.Trailer == null && _player.GroundSpeed < 1.5f
                 && _player.CoupleCandidate(truck) != null:

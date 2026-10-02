@@ -28,7 +28,7 @@ public static class LootTables
         _ => 2f,
     };
 
-    private static readonly Dictionary<ItemId, Tier> Tiers = new()
+    private static readonly Dictionary<ItemId, Tier> Tiers = WithClothes(new()
     {
         [ItemId.Bread] = Tier.Common, [ItemId.CannedFood] = Tier.Common, [ItemId.Apple] = Tier.Common,
         [ItemId.Cheese] = Tier.Uncommon, [ItemId.Chocolate] = Tier.Uncommon, [ItemId.EnergyBar] = Tier.Uncommon,
@@ -46,7 +46,27 @@ public static class LootTables
         [ItemId.SmartBinoculars] = Tier.VeryRare,
         // only in the locked containers (gun lockers, safes): category Gear, so no category pool picks them up
         [ItemId.Shotgun] = Tier.Rare, [ItemId.Shells] = Tier.Common,
-    };
+        // bags (#208): category Gear too, so only the pools that name them (Bags, Purses) give them
+        [ItemId.BeltPouch] = Tier.Common, [ItemId.Handbag] = Tier.Uncommon,
+        [ItemId.Backpack] = Tier.Rare, [ItemId.HikingPack] = Tier.VeryRare,
+    });
+
+    /// <summary>
+    /// Every look in the wardrobe (#251): plain ones common, gothic and kawaii ones uncommon, the
+    /// finishes rare. Category Clothing, which no pool takes by category, so only the pools that
+    /// name them (<see cref="Clothes"/>, <see cref="Specials"/>) give them.
+    /// </summary>
+    private static Dictionary<ItemId, Tier> WithClothes(Dictionary<ItemId, Tier> tiers)
+    {
+        foreach (var g in Avatar.Garments.All)
+            tiers[g.Item] = g.Style switch
+            {
+                Avatar.GarmentStyle.Basic => Tier.Common,
+                Avatar.GarmentStyle.Special => Tier.Rare,
+                _ => Tier.Uncommon,
+            };
+        return tiers;
+    }
 
     // ---- pools ------------------------------------------------------------------------------
 
@@ -73,6 +93,22 @@ public static class LootTables
     private static readonly ItemId[] Guns = { ItemId.Shotgun };
     private static readonly ItemId[] Ammo = { ItemId.Shells };
     private static readonly ItemId[] Pantry = { ItemId.CannedFood, ItemId.WaterBottle, ItemId.MineralWater };
+    /// <summary>Every bag: a wardrobe, a hall's coat hooks, a child's room.</summary>
+    private static readonly ItemId[] Bags = { ItemId.BeltPouch, ItemId.Handbag, ItemId.Backpack, ItemId.HikingPack };
+    /// <summary>What a nightstand or a bedroom desk keeps: the small ones.</summary>
+    private static readonly ItemId[] Purses = { ItemId.BeltPouch, ItemId.Handbag };
+    private static readonly ItemId[] Plastic = { ItemId.Plastic };
+    private static readonly ItemId[] Larder = { ItemId.Cheese, ItemId.Bread, ItemId.Apple };
+    /// <summary>Clothes to wear, plain, gothic and kawaii (#251): what a wardrobe mostly holds.</summary>
+    private static readonly ItemId[] Clothes = Avatar.Garments.All.Where(g => !g.IsSpecial).Select(g => g.Item).ToArray();
+    /// <summary>The rare ones with a finish that moves: rainbow, disco ball, galaxy…</summary>
+    private static readonly ItemId[] Specials = Avatar.Garments.All.Where(g => g.IsSpecial).Select(g => g.Item).ToArray();
+    /// <summary>What comes out of the wash: tees, shorts, socks.</summary>
+    private static readonly ItemId[] Laundry = Avatar.Garments.All
+        .Where(g => !g.IsSpecial && g.Shape is Avatar.GarmentShape.TShirt or Avatar.GarmentShape.Marcel
+            or Avatar.GarmentShape.Shorts or Avatar.GarmentShape.KneeSock or Avatar.GarmentShape.ThighHigh
+            or Avatar.GarmentShape.StripedThighHigh or Avatar.GarmentShape.Polo)
+        .Select(g => g.Item).ToArray();
 
     private readonly record struct Pool(ItemId[] Items, float Weight);
 
@@ -87,8 +123,9 @@ public static class LootTables
         [FurnitureType.Counter] = new(0.40f, 0, 2, new[] { P(Food, 50), P(Water, 35), P(KitchenScrap, 15) }, 0.20f, 1, 5),
         [FurnitureType.Stove] = new(0.40f, 0, 2, new[] { P(Food, 60), P(Water, 20), P(KitchenScrap, 20) }, 0.20f, 1, 5),
         [FurnitureType.Shelf] = new(0.35f, 1, 2, new[] { P(Food, 25), P(Water, 10), P(Scrap, 35), P(Medical, 10), P(Minerals, 15), P(Parts, 5), P(Optics, 1) }, 0.10f, 1, 5),
-        [FurnitureType.Wardrobe] = new(0.45f, 1, 1, new[] { P(Cloth, 60), P(Medical, 20), P(Scrap, 20) }, 0.25f, 5, 40),
-        [FurnitureType.Nightstand] = new(0.45f, 0, 1, new[] { P(Medical, 40), P(Sweets, 30), P(Gadgets, 30) }, 0.40f, 2, 20),
+        // mostly clothes to wear (#251), now and then a rare one with a finish
+        [FurnitureType.Wardrobe] = new(0.40f, 1, 2, new[] { P(Clothes, 70), P(Specials, 1.6f), P(Cloth, 9), P(Medical, 6), P(Scrap, 4), P(Bags, 9) }, 0.25f, 5, 40),
+        [FurnitureType.Nightstand] = new(0.45f, 0, 1, new[] { P(Medical, 38), P(Sweets, 28), P(Gadgets, 28), P(Purses, 6) }, 0.40f, 2, 20),
         [FurnitureType.Desk] = new(0.40f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 30), P(Scrap, 30), P(Optics, 1.5f) }, 0.35f, 5, 50),
         [FurnitureType.Crate] = new(0.20f, 2, 4, new[] { P(Scrap, 45), P(Minerals, 30), P(Tins, 15), P(Parts, 10) }),
         [FurnitureType.Rack] = new(0.20f, 2, 4, new[] { P(Scrap, 45), P(Minerals, 30), P(Tins, 15), P(Parts, 10) }),
@@ -100,6 +137,18 @@ public static class LootTables
         // locked (IsLocked): cracked with the dial first, and stocked whatever the building's budget
         [FurnitureType.GunLocker] = new(0.15f, 1, 2, new[] { P(Guns, 40), P(Ammo, 60) }),
         [FurnitureType.Safe] = new(0.10f, 1, 2, new[] { P(Gadgets, 35), P(Ammo, 20), P(Medical, 15), P(Optics, 8), P(Guns, 6) }, 0.90f, 50, 400),
+        // a bank vault's: mostly money, sometimes a lot (#213); cracked with the dial, then Simon
+        [FurnitureType.VaultSafe] = new(0.05f, 0, 2, new[] { P(Gadgets, 40), P(Optics, 15), P(Guns, 10), P(Ammo, 15), P(Medical, 20) }, 1.0f, 150, 2500),
+        // #213: cellars, music rooms, playrooms
+        [FurnitureType.WashingMachine] = new(0.55f, 0, 1, new[] { P(Laundry, 45), P(Cloth, 35), P(Sweets, 10), P(Gadgets, 10) }, 0.25f, 1, 20),   // forgotten in a pocket
+        [FurnitureType.Dryer] = new(0.55f, 0, 1, new[] { P(Laundry, 60), P(Cloth, 40) }, 0.15f, 1, 10),
+        [FurnitureType.WineRack] = new(0.45f, 1, 1, new[] { P(KitchenScrap, 55), P(Water, 30), P(Food, 15) }),
+        [FurnitureType.Barrel] = new(0.60f, 0, 1, new[] { P(Water, 60), P(Scrap, 40) }),
+        [FurnitureType.WaterTank] = new(0.40f, 1, 2, new[] { P(Water, 100) }),
+        [FurnitureType.ToyBox] = new(0.40f, 1, 2, new[] { P(Sweets, 50), P(Gadgets, 25), P(Plastic, 25) }, 0.30f, 1, 15),   // the piggy bank
+        [FurnitureType.Bookcase] = new(0.50f, 0, 1, new[] { P(Medical, 20), P(Gadgets, 30), P(Optics, 3), P(Cloth, 20) }, 0.30f, 5, 60),   // notes slipped in a book
+        [FurnitureType.Amplifier] = new(0.60f, 0, 1, new[] { P(Gadgets, 50), P(Wire, 50) }),
+        [FurnitureType.Piano] = new(0.70f, 0, 1, new[] { P(Sweets, 50), P(Gadgets, 50) }, 0.25f, 5, 40),
     };
 
     /// <summary>
@@ -117,19 +166,37 @@ public static class LootTables
         [(FurnitureType.Shelf, RoomType.Dining)] = new(0.40f, 1, 2, new[] { P(Food, 35), P(Water, 25), P(Sweets, 20), P(KitchenScrap, 20) }, 0.10f, 1, 5),
         [(FurnitureType.Shelf, RoomType.Office)] = new(0.35f, 1, 2, new[] { P(Gadgets, 45), P(Wire, 20), P(Scrap, 25), P(Optics, 2) }, 0.15f, 5, 25),
         // a hall shelf: shoes and coats, the winter road salt and firewood by the door, a bike part
-        [(FurnitureType.Shelf, RoomType.Hall)] = new(0.50f, 1, 1, new[] { P(Cloth, 25), P(Medical, 15), P(Sweets, 10), P(Minerals, 35), P(Parts, 15) }, 0.20f, 1, 5),
-        [(FurnitureType.Shelf, RoomType.Lobby)] = new(0.50f, 1, 1, new[] { P(Cloth, 25), P(Medical, 15), P(Sweets, 10), P(Minerals, 35), P(Parts, 15) }, 0.20f, 1, 5),
-        [(FurnitureType.Desk, RoomType.Bedroom)] = new(0.45f, 1, 1, new[] { P(Sweets, 40), P(Gadgets, 40), P(Cloth, 20) }, 0.30f, 2, 20),
+        [(FurnitureType.Shelf, RoomType.Hall)] = new(0.50f, 1, 1, new[] { P(Cloth, 22), P(Medical, 14), P(Sweets, 9), P(Minerals, 32), P(Parts, 13), P(Bags, 10) }, 0.20f, 1, 5),
+        [(FurnitureType.Shelf, RoomType.Lobby)] = new(0.50f, 1, 1, new[] { P(Cloth, 22), P(Medical, 14), P(Sweets, 9), P(Minerals, 32), P(Parts, 13), P(Bags, 10) }, 0.20f, 1, 5),
+        [(FurnitureType.Desk, RoomType.Bedroom)] = new(0.45f, 1, 1, new[] { P(Sweets, 36), P(Gadgets, 36), P(Cloth, 18), P(Purses, 10) }, 0.30f, 2, 20),
         [(FurnitureType.Desk, RoomType.Classroom)] = new(0.55f, 0, 1, new[] { P(Sweets, 35), P(Gadgets, 25), P(Scrap, 40) }, 0.10f, 1, 5),
         [(FurnitureType.Crate, RoomType.Storage)] = new(0.25f, 1, 3, new[] { P(Pantry, 35), P(Scrap, 25), P(Minerals, 30), P(Parts, 10) }),
         [(FurnitureType.Crate, RoomType.Barn)] = new(0.30f, 1, 3, new[] { P(BarnStuff, 55), P(Minerals, 30), P(Tins, 15) }),
+        // #213: the shelter's shelf is the two weeks of supplies a household keeps; the cellar's
+        // the overflow; the carnotzet's cheese for the raclette; the laundry's powder and pegs
+        [(FurnitureType.Shelf, RoomType.Shelter)] = new(0.25f, 1, 3, new[] { P(Pantry, 55), P(Medical, 25), P(Fuel, 5), P(Hardware, 10), P(Optics, 1) }),
+        [(FurnitureType.Crate, RoomType.Shelter)] = new(0.20f, 1, 3, new[] { P(Tins, 50), P(Medical, 25), P(Hardware, 25) }),
+        [(FurnitureType.Shelf, RoomType.Cellar)] = new(0.30f, 1, 3, new[] { P(Pantry, 45), P(Scrap, 20), P(Hardware, 10), P(Minerals, 20), P(Parts, 5) }),
+        [(FurnitureType.Crate, RoomType.Cellar)] = new(0.25f, 1, 3, new[] { P(Pantry, 35), P(Scrap, 25), P(Minerals, 30), P(Parts, 10) }),
+        [(FurnitureType.Shelf, RoomType.Carnotzet)] = new(0.35f, 1, 2, new[] { P(Larder, 55), P(Water, 35), P(Fuel, 10) }, 0.10f, 1, 10),
+        [(FurnitureType.Shelf, RoomType.Laundry)] = new(0.40f, 1, 2, new[] { P(Cloth, 45), P(Hardware, 25), P(KitchenScrap, 30) }),
+        [(FurnitureType.Shelf, RoomType.Pantry)] = new(0.35f, 1, 2, new[] { P(Pantry, 50), P(Food, 40), P(Sweets, 10) }),
+        [(FurnitureType.Shelf, RoomType.HomeCinema)] = new(0.40f, 1, 2, new[] { P(Gadgets, 50), P(Sweets, 40), P(Wire, 10) }, 0.10f, 1, 10),
+        [(FurnitureType.Shelf, RoomType.Playroom)] = new(0.40f, 1, 2, new[] { P(Sweets, 45), P(Gadgets, 30), P(Plastic, 25) }),
+        [(FurnitureType.Desk, RoomType.Playroom)] = new(0.50f, 0, 1, new[] { P(Sweets, 60), P(Plastic, 40) }, 0.20f, 1, 10),
+        [(FurnitureType.Desk, RoomType.Study)] = new(0.35f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 20), P(Optics, 3), P(Medical, 10) }, 0.40f, 5, 60),
+        [(FurnitureType.Fridge, RoomType.Pantry)] = new(0.20f, 1, 3, new[] { P(Food, 70), P(Water, 30) }),   // the freezer
+        [(FurnitureType.Crate, RoomType.Vault)] = new(0.30f, 0, 0, Array.Empty<Pool>(), 1.0f, 20, 200),       // coin rolls
         [(FurnitureType.Workbench, RoomType.Garage)] = new(0.15f, 2, 4, new[] { P(Hardware, 40), P(Parts, 25), P(VehicleParts, 15), P(Scrap, 20) }),
     };
 
     public static bool IsLootable(FurnitureType type) => Containers.ContainsKey(type);
 
     /// <summary>Opened with the dial (<see cref="LockPickUi"/>) before anything in it can be searched.</summary>
-    public static bool IsLocked(FurnitureType type) => type is FurnitureType.GunLocker or FurnitureType.Safe;
+    public static bool IsLocked(FurnitureType type) => type is FurnitureType.GunLocker or FurnitureType.Safe or FurnitureType.VaultSafe;
+
+    /// <summary>A bank vault's safe: after the dial, a Simon panel (<see cref="SimonSequence"/>) too.</summary>
+    public static bool NeedsSimon(FurnitureType type) => type == FurnitureType.VaultSafe;
 
     private static Container? ContainerFor(FurnitureType type, RoomType? room) =>
         room is { } r && RoomContainers.TryGetValue((type, r), out var rc) ? rc
@@ -381,7 +448,8 @@ public static class LootTables
     {
         int lootable = layout.Furniture.Count(f => IsLootable(f.Type) && !IsLocked(f.Type));
         if (lootable == 0) return 1f;
-        float budget = (6f + 3f * Math.Max(1, layout.Floors.Count)) * BudgetFactor(layout.Kind);
+        // storeys above ground: a cellar spreads the same household's things over more furniture (#213)
+        float budget = (6f + 3f * Math.Max(1, layout.Floors.Count - layout.Below)) * BudgetFactor(layout.Kind);
         return Math.Min(1f, budget / lootable);
     }
 
@@ -405,7 +473,7 @@ public static class LootTables
     public static int[] Combination(string buildingKey, int furnitureIndex, long epoch, FurnitureType type)
     {
         var rng = new Random(InteriorGenerator.StableHash($"{buildingKey}|{furnitureIndex}|{epoch}|lock"));
-        var combo = new int[type == FurnitureType.Safe ? 4 : 3];
+        var combo = new int[type == FurnitureType.GunLocker ? 3 : 4];
         for (int i = 0; i < combo.Length; i++)
         {
             int v;
@@ -416,7 +484,33 @@ public static class LootTables
         return combo;
     }
 
+    /// <summary>
+    /// The Simon panel's sequence of a vault safe this period (#213): pads 0-3, as long as what is
+    /// inside is worth — 4 presses for an almost empty one, one more per 450 CHF, at most 14. Derived
+    /// like the combination and the contents, so the server checks it without storing anything,
+    /// and a richer safe is a longer memory test.
+    /// </summary>
+    public static int[] SimonSequence(InteriorLayout layout, int furnitureIndex, long epoch)
+    {
+        int length = SimonLength(Value(ContentsOf(layout, furnitureIndex, epoch)));
+        var rng = new Random(InteriorGenerator.StableHash($"{layout.Key}|{furnitureIndex}|{epoch}|simon"));
+        var seq = new int[length];
+        for (int i = 0; i < length; i++) seq[i] = rng.Next(0, 4);
+        return seq;
+    }
+
+    public static int SimonLength(int value) => Math.Clamp(4 + value / 450, 4, 14);
+
+    /// <summary>Rough worth of some stacks in francs: the cash, and 25 a piece for anything else (a shotgun more).</summary>
+    public static int Value(IEnumerable<ItemStack> stacks) => stacks.Sum(s => s.Id switch
+    {
+        ItemId.Francs => s.Count,
+        ItemId.Shotgun or ItemId.SmartBinoculars => 300 * s.Count,
+        _ => 25 * s.Count,
+    });
+
     /// <summary>Distance between two dial numbers, the short way round.</summary>
+
     public static float DialDistance(float a, float b)
     {
         float d = Math.Abs(a - b) % 100f;
@@ -427,6 +521,14 @@ public static class LootTables
 
     public const long RestockSeconds = 24 * 3600;
 
+    /// <summary>
+    /// A Battle Royale match's say over a building (#194): its own epoch for the buildings in the
+    /// match region, null everywhere else. Those buildings restock for every match and roll
+    /// <see cref="MatchLoot"/> instead of their free-roam table. Set on the server and the clients
+    /// by <c>BattleRoyale.BrManager</c>.
+    /// </summary>
+    public static Func<string, long?>? MatchEpoch { get; set; }
+
     /// <summary>Added to every epoch, for testing a restock without waiting a day (<c>--lootepoch +N</c>).</summary>
     public static long EpochOffset { get; set; }
 
@@ -436,6 +538,7 @@ public static class LootTables
     /// </summary>
     public static long Epoch(string buildingKey, long unixSeconds)
     {
+        if (MatchEpoch?.Invoke(buildingKey) is long match) return match;
         long stagger = (uint)InteriorGenerator.StableHash(buildingKey) % RestockSeconds;
         return (unixSeconds + stagger) / RestockSeconds + EpochOffset;
     }
@@ -449,6 +552,8 @@ public static class LootTables
     {
         if (furnitureIndex < 0 || furnitureIndex >= layout.Furniture.Count) return new();
         var f = layout.Furniture[furnitureIndex];
+        if (MatchEpoch?.Invoke(layout.Key) != null)
+            return MatchLoot.Roll(MatchLoot.ForFurniture(f.Type), RngFor(layout.Key, furnitureIndex, epoch));
         return Roll(layout.Kind, f.Type, RngFor(layout.Key, furnitureIndex, epoch), AbundanceFor(layout, f.Type), layout.RoomOf(f)?.Type);
     }
 
@@ -460,6 +565,11 @@ public static class LootTables
         FurnitureType.HayBale => "hay bale",
         FurnitureType.Car => "car",
         FurnitureType.Altar => "offering box",
+        FurnitureType.VaultSafe => "vault safe",
+        FurnitureType.WashingMachine => "washing machine",
+        FurnitureType.WineRack => "wine rack",
+        FurnitureType.WaterTank => "water tank",
+        FurnitureType.ToyBox => "toy box",
         _ => t.ToString().ToLowerInvariant(),
     };
 }

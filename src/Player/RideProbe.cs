@@ -13,7 +13,8 @@ namespace UnitSport.Player;
 /// (<c>--heading</c>: compass bearing to ride along, 0 = north, 90 = east; <c>--brake-at</c>: let
 /// go of the throttle and brake from then on, to stop somewhere, say inside a garage;
 /// <c>--midshot</c>: one more screenshot then, next to out.png as out_mid.png; <c>--setup name</c>: a car
-/// preset, <see cref="CarSetups"/>)
+/// preset, <see cref="CarSetups"/>; <c>--wall D</c>: a solid wall D m ahead, to crash into (#214), with
+/// <c>--crashshots t1,t2,...</c> screenshots that many seconds after the rider is thrown)
 /// </para>
 ///
 /// <para>
@@ -26,7 +27,7 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class RideProbe : Node
 {
-    private readonly ChunkManager _chunks;
+    private readonly ChunkManager? _chunks;   // null on --world flat
     private readonly WorldOrigin _origin;
     private readonly RideKind _kind;
     private readonly double _seconds;
@@ -43,6 +44,11 @@ public partial class RideProbe : Node
     private bool _done;
     private bool _midShot;
     private bool _stopped;
+    // --wall (#214): when the rider went limp, how far the body flew, and the shots still to take
+    private double _thrownAt = -1, _restedAt = -1, _sinceCrashReport;
+    private Vector3 _thrownFrom;
+    private float _thrownFarthest;
+    private readonly System.Collections.Generic.List<float> _crashShots = new();
 
     private static float? Arg(string name)
     {
@@ -55,7 +61,7 @@ public partial class RideProbe : Node
     /// <summary>A motorbike's worst use of its wheelie / stoppie limit; 1 or more would be a flip.</summary>
     private float _worstPitch;
 
-    public RideProbe(ChunkManager chunks, WorldOrigin origin, RideKind kind, double seconds,
+    public RideProbe(ChunkManager? chunks, WorldOrigin origin, RideKind kind, double seconds,
         string? shot = null)
     {
         _chunks = chunks;
@@ -116,7 +122,7 @@ public partial class RideProbe : Node
         {
             var (e, n) = SpawnPoint.ParseTarget();
             var at = _origin.ToWorld(e, n, 0);
-            if (!_chunks.TryGetHeight(at, out float ground)) return;
+            if (!TestWorld.TryGround(_chunks, at, out float ground)) return;
 
             _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
             // --heading is a compass bearing: a node faces −Z (north) and +yaw turns it toward −X
@@ -128,6 +134,7 @@ public partial class RideProbe : Node
                 _player.Rotation = new Vector3(0, -Mathf.DegToRad(bearing), 0);
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, ground + 1.5f, at.Z);
+            if (_chunks == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
             _start = _origin.ToGlobal(_player.GlobalPosition);
             _startAltitude = ground;
             GD.Print($"[ride] spawned at LV95 {e:F0}/{n:F0}, ground {ground:F1} m");
@@ -171,6 +178,7 @@ public partial class RideProbe : Node
             int st = System.Array.IndexOf(a, "--steer");
             float steer = st >= 0 && st + 1 < a.Length && float.TryParse(a[st + 1], System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out float asked) ? asked : 0f;
+            if (_mounted && Arg("--wall") is { } wallAt) SpawnWall(wallAt);
             float brakeAt = Arg("--brake-at") ?? float.MaxValue;
             // (the brake, held at a standstill, would reverse: let go once stopped)
             _player.RideControls = () =>
@@ -200,17 +208,19 @@ public partial class RideProbe : Node
             GD.Print(GetViewport().GetTexture().GetImage().SavePng(path) == Error.Ok ? $"[ride] wrote {path}" : $"[ride] FAILED to write {path}");
         }
 
+        WatchCrash(delta);
+
         _sinceReport += delta;
         if (_sinceReport >= 1.0)
         {
             _sinceReport = 0;
             var p = _player.GlobalPosition;
-            float clearance = _chunks.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
+            float clearance = TestWorld.TryGround(_chunks, p, out float g) ? p.Y - g : float.NaN;
             GD.Print($"[ride] t={_elapsed,5:F1}s  v={_player.RideSpeed,5:F1} m/s "
                 + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
                 + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
-                + (_player.Vehicle is Car car ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {car.Gear}" : "")
-                + (_player.Vehicle is Truck truck ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
+                + (_player.Vehicle is Car car ? $"  on {(_chunks is { } c ? Audio.Surfaces.At(c, p, false) : Audio.Surface.Asphalt)}  gear {car.Gear}" : "")
+                + (_player.Vehicle is Truck truck ? $"  on {(_chunks is { } tc ? Audio.Surfaces.At(tc, p, false) : Audio.Surface.Asphalt)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
                     + $"  joints {string.Join(" ", truck.Articulation.Take(truck.SectionCount - 1).Select(j => $"{Mathf.RadToDeg(j):F0}°"))}" : "")
                 + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : "")
                 + (Inside() is { } inside ? $"  inside {inside.DressedKind()} {inside.Key}" : "")
@@ -222,7 +232,7 @@ public partial class RideProbe : Node
 
         var end = _player.GlobalPosition;
         float travelled = (float)_origin.ToGlobal(end).HorizontalDistanceTo(_start);
-        bool underground = _chunks.TryGetHeight(end, out float endGround) && end.Y < endGround - 1.5f;
+        bool underground = TestWorld.TryGround(_chunks, end, out float endGround) && end.Y < endGround - 1.5f;
         if (Inside() is { } building)
         {
             // driven in through the door's portal: the interior's floor is the ground in there
@@ -236,6 +246,16 @@ public partial class RideProbe : Node
             + $"top {_topSpeed:F1} m/s ({_topSpeed * 3.6f:F1} km/h), "
             + $"climbed {end.Y - _startAltitude:F1} m"
             + (_player.Vehicle is Motorbike ? $", worst pitch {_worstPitch:P0} of the wheelie/stoppie limit" : ""));
+        if (Arg("--wall") != null)
+        {
+            bool thrown = _thrownAt >= 0, rested = _restedAt >= 0;
+            GD.Print(thrown && rested && !underground
+                ? $"[crash] RESULT: thrown at {_thrownAt:F1} s, flew {_thrownFarthest:F1} m, at rest after {_restedAt - _thrownAt:F1} s, {_player.CrashBones} bones"
+                : $"[crash] RESULT: FAILED — thrown {thrown}, came to rest {rested}, underground {underground}");
+            if (_shot != null) GetViewport().GetTexture().GetImage().SavePng(_shot);
+            GetTree().Quit(thrown && rested && !underground ? 0 : 1);
+            return;
+        }
         GD.Print(travelled > 5 && !underground
             ? "[ride] RESULT: rode under its own power and stayed on the surface"
             : underground
@@ -252,6 +272,63 @@ public partial class RideProbe : Node
         }
 
         GetTree().Quit(travelled > 5 && !underground ? 0 : 1);
+    }
+
+    /// <summary>A wall across the road <paramref name="ahead"/> m in front: 30 m wide, 4 m high, on the ground.</summary>
+    private void SpawnWall(float ahead)
+    {
+        var fwd = -_player!.GlobalBasis.Z with { Y = 0 };
+        var at = _player.GlobalPosition + fwd.Normalized() * ahead;
+        _chunks.TryGetHeight(at, out float g);
+        var size = new Vector3(30f, 4f, 1f);
+        var wall = new StaticBody3D { Name = "CrashWall" };
+        wall.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
+        wall.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size } });
+        AddChild(wall);
+        wall.GlobalTransform = new Transform3D(Basis.LookingAt(fwd.Normalized(), Vector3.Up), new Vector3(at.X, g + size.Y * 0.5f - 0.3f, at.Z));
+        var a = OS.GetCmdlineUserArgs();
+        int si = System.Array.IndexOf(a, "--crashshots");
+        if (si >= 0 && si + 1 < a.Length)
+            foreach (var t in a[si + 1].Split(','))
+                if (float.TryParse(t, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) _crashShots.Add(v);
+        GD.Print($"[crash] wall {ahead:F0} m ahead");
+    }
+
+    /// <summary>--wall: the throw, the flight and the rest, printed; the timed shots taken.</summary>
+    private void WatchCrash(double delta)
+    {
+        if (Arg("--wall") == null || _player == null) return;
+        bool limp = _player.Ragdolled;
+        if (limp && _thrownAt < 0)
+        {
+            _thrownAt = _elapsed;
+            _thrownFrom = _player.GlobalPosition;
+            GD.Print($"[crash] thrown at t={_elapsed:F2}s");
+        }
+        if (_thrownAt < 0) return;
+        var p = _player.GlobalPosition;
+        if (limp) _thrownFarthest = Mathf.Max(_thrownFarthest, new Vector2(p.X - _thrownFrom.X, p.Z - _thrownFrom.Z).Length());
+        if (!limp && _restedAt < 0)
+        {
+            _restedAt = _elapsed;
+            GD.Print($"[crash] at rest at t={_elapsed:F2}s, {_player.CrashBones} bones broken, health {_player.Health:F0}"
+                + (XR.XrSession.Active ? $", VR anchor {XR.XrSession.Anchor?.Name}" : ""));
+        }
+        _sinceCrashReport += delta;
+        if (limp && _sinceCrashReport >= 0.2)
+        {
+            _sinceCrashReport = 0;
+            float clearance = _chunks.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
+            GD.Print($"[crash] t={_elapsed - _thrownAt,4:F1}s hips {p.X - _thrownFrom.X,6:F1} {p.Y - _thrownFrom.Y,5:F1} {p.Z - _thrownFrom.Z,6:F1}  clearance {clearance:F2}"
+                + (XR.XrSession.Active ? $"  VR anchor {XR.XrSession.Anchor?.Name} at {XR.XrSession.Anchor?.GlobalPosition.DistanceTo(p):F1} m" : ""));
+        }
+        for (int i = _crashShots.Count - 1; i >= 0; i--)
+        {
+            if (_elapsed - _thrownAt < _crashShots[i] || _shot == null) continue;
+            string path = _shot.Replace(".png", "_crash" + _crashShots[i].ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + ".png");
+            GD.Print(GetViewport().GetTexture().GetImage().SavePng(path) == Error.Ok ? $"[crash] wrote {path}" : $"[crash] FAILED to write {path}");
+            _crashShots.RemoveAt(i);
+        }
     }
 
     /// <summary>The interior the rider is in (walked or driven in through its door), if any.</summary>

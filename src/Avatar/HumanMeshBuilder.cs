@@ -45,6 +45,10 @@ public enum ItemArmPose
     Mouth,
     /// <summary>The item hand low and forward: planting something in the ground.</summary>
     Plant,
+    /// <summary>Winding up a throw: the item hand cocked back above the shoulder, the other arm pointing ahead (#206).</summary>
+    ThrowWindup,
+    /// <summary>A throw let go: the item arm whipped through, forward and down, the other arm swung back.</summary>
+    ThrowRelease,
 }
 
 /// <summary>Colours for one figure. Kept separate so riders can be told apart at distance.</summary>
@@ -61,6 +65,19 @@ public sealed record HumanPalette(
         Shorts: new Color(0.16f, 0.17f, 0.20f),
         Shoes: new Color(0.92f, 0.92f, 0.90f),
         Helmet: new Color(0.93f, 0.90f, 0.86f));
+
+    /// <summary>
+    /// The clothes the figure has on (#251): what is worn replaces the jersey, shorts and shoes it
+    /// would otherwise get; empty for everyone who never put anything on, and for every NPC.
+    /// </summary>
+    public Outfit Outfit { get; init; }
+
+    /// <summary>
+    /// The air streaming past the figure, m/s in its author space (+Z forward): riding forward at
+    /// v is (0, 0, −v), falling is up. Skirts and robes stream with it and flutter
+    /// (<see cref="FigureWind"/> measures it from a node's motion). Zero: they hang still.
+    /// </summary>
+    public Vector3 Wind { get; init; }
 
     /// <summary>A deterministic jersey colour, so each rider in a race is distinguishable.</summary>
     public static HumanPalette ForRider(int index)
@@ -111,7 +128,7 @@ public readonly record struct DanceParams(Audio.Cd.MusicStyle Style, int Move, f
 /// cylinders reading as scaffolding.
 /// </para>
 /// </summary>
-public static class HumanMeshBuilder
+public static partial class HumanMeshBuilder
 {
     /// <summary>Joint positions in metres, origin at the feet, +Z forward, +X right.</summary>
     private readonly record struct Rig(
@@ -157,6 +174,9 @@ public static class HumanMeshBuilder
         ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null)
     {
         var scratch = new MeshScratch();
+        // a skirt with no measured wind still feels the stride's own (#251)
+        if (palette.Wind == Vector3.Zero && speed > 0.05f && Flutters(palette.Outfit))
+            palette = palette with { Wind = new Vector3(0, 0, -speed) };
         AppendRig(scratch, palette, ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), includeLegs: true, helmet, hat);
         return scratch.Build();
     }
@@ -204,6 +224,14 @@ public static class HumanMeshBuilder
                 item = new(s * 0.05f, rig.Hip.Y - 0.22f, rig.Hip.Z + 0.42f);
                 support = new(-s * 0.05f, rig.Hip.Y + 0.08f, rig.Hip.Z + 0.42f);
                 dir = new Vector3(0f, 1f, 0.12f); break;
+            case ItemArmPose.ThrowWindup:
+                item = new(s * 0.24f, rig.HeadBase.Y + 0.10f, rig.Chest.Z - 0.24f);
+                support = new(-s * 0.10f, rig.Neck.Y - 0.02f, rig.Chest.Z + 0.48f);
+                dir = new Vector3(0f, 0.7f, -0.5f); break;
+            case ItemArmPose.ThrowRelease:
+                item = new(s * 0.02f, rig.Waist.Y + 0.12f, rig.Chest.Z + 0.52f);
+                support = new(-s * 0.26f, rig.Hip.Y + 0.02f, rig.Hip.Z - 0.14f);
+                dir = new Vector3(0f, -0.4f, 1f); break;
             default:   // Hold
                 item = new(s * 0.19f, rig.Waist.Y + 0.05f, rig.Waist.Z + 0.30f);
                 support = Reduce(rig.WristR, rest);
@@ -440,6 +468,46 @@ public static class HumanMeshBuilder
     /// <summary>Camera mounts for <see cref="AppendDriver"/>'s figure at rest, flipped to face -Z like the mesh.</summary>
     public static GaitMounts MountsForDriver(DriverSeat seat) => MountsForRig(DriverRig(seat, 0f, 0f, 0f));
 
+    // ---- joints as plain points, for a ragdoll (#214) ----
+
+    /// <summary>Number of joints in a figure, in <see cref="Joint"/> order.</summary>
+    public const int JointCount = 20;
+
+    /// <summary>The figure's joints, in the order <see cref="DriverJoints"/> and <see cref="BuildJoints"/> use.</summary>
+    public enum Joint
+    {
+        HeadTop, HeadBase, Neck, Chest, Waist, Hip,
+        ShoulderL, ElbowL, WristL, ShoulderR, ElbowR, WristR,
+        HipL, KneeL, AnkleL, ToeL, HipR, KneeR, AnkleR, ToeR,
+    }
+
+    private static Vector3[] JointsOf(Rig r) => new[]
+    {
+        r.HeadTop, r.HeadBase, r.Neck, r.Chest, r.Waist, r.Hip,
+        r.ShoulderL, r.ElbowL, r.WristL, r.ShoulderR, r.ElbowR, r.WristR,
+        r.HipL, r.KneeL, r.AnkleL, r.ToeL, r.HipR, r.KneeR, r.AnkleR, r.ToeR,
+    };
+
+    /// <summary>The seated driver's joints, author space (+Z forward, as the car is built).</summary>
+    public static Vector3[] DriverJoints(DriverSeat seat) => JointsOf(DriverRig(seat, 0f, 0f, 0f));
+
+    /// <summary>A fixed pose's joints, author space (+Z forward, origin at the feet).</summary>
+    public static Vector3[] PoseJoints(HumanPose pose) => JointsOf(RigFor(pose));
+
+    /// <summary>
+    /// A figure drawn from free joint points (a ragdoll): <paramref name="joints"/> in
+    /// <see cref="Joint"/> order, author space. Bone lengths are whatever the points say.
+    /// </summary>
+    public static ArrayMesh BuildJoints(HumanPalette palette, ReadOnlySpan<Vector3> joints, Headwear hat = Headwear.None)
+    {
+        var j = joints;
+        var rig = new Rig(j[0], j[1], j[2], j[3], j[4], j[5], j[6], j[7], j[8], j[9], j[10], j[11],
+            j[12], j[13], j[14], j[15], j[16], j[17], j[18], j[19], TorsoLean: 0f);
+        var scratch = new MeshScratch();
+        AppendRig(scratch, palette, rig, includeLegs: true, helmet: false, hat);
+        return scratch.Build();
+    }
+
     /// <summary>
     /// How far short each limb falls of what it holds, m: the right and left hand of the rim, the
     /// right foot of the throttle and the left of its rest. Zero when it reaches (the two-bone
@@ -490,6 +558,12 @@ public static class HumanMeshBuilder
     private static void AppendRig(MeshScratch scratch, HumanPalette palette, Rig rig,
         bool includeLegs, bool helmet, Headwear hat = Headwear.None, bool body = true, bool head = true)
     {
+        // dressed (#251): the clothes replace the jersey, shorts and shoes (HumanMeshBuilder.Clothing.cs)
+        if (!palette.Outfit.IsEmpty)
+        {
+            AppendDressed(scratch, palette, rig, includeLegs, helmet, hat, body, head);
+            return;
+        }
         if (body)
         {
             // torso as a lozenge rather than a cylinder: shoulders wider than waist is most of
@@ -955,6 +1029,16 @@ public static class HumanMeshBuilder
         SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
         Roughness = 1f,
     };
+
+    private static ShaderMaterial? _figureMaterial;
+
+    /// <summary>
+    /// <see cref="Material"/> as a shader that also draws the clothes' finishes (rainbow, disco
+    /// ball, galaxy…, <c>shaders/avatar.gdshader</c>), read from the vertex alpha. One shared
+    /// instance: it has no per-figure parameters.
+    /// </summary>
+    public static ShaderMaterial FigureMaterial() =>
+        _figureMaterial ??= new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/avatar.gdshader") };
 
     // =====================================================================================
     // Dance layer. The spec (conventions, every move's joint formulas, moving variants) is

@@ -28,6 +28,8 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
 {
     /// <summary>The building's kind, so door consumers need not keep the tile.</summary>
     public BuildingKind Kind { get; init; }
+    /// <summary>A bank (<see cref="BuildingFootprint.IsBank"/>): a sign over the door, a teller desk inside.</summary>
+    public bool Bank { get; init; }
 }
 
 /// <summary>
@@ -64,6 +66,15 @@ public sealed record Footprint(
 
 public static class BuildingFootprint
 {
+    /// <summary>
+    /// Whether a building is a bank (#213). The data has no banks, so about one shop or office
+    /// building in five of some size is one, by a stable hash of its key: a pure function of the tile,
+    /// so the server's plan and every client's door sign agree without sending anything.
+    /// </summary>
+    public static bool IsBank(Footprint fp) =>
+        fp.Kind == BuildingKind.Commercial && fp.Width * fp.Depth >= 60f && Math.Min(fp.Width, fp.Depth) >= 6f
+        && (uint)InteriorGenerator.StableHash(fp.Key + "|bank") % 5 == 0;
+
     /// <summary>Same wall/roof split the building renderer uses.</summary>
     private const float RoofNormalY = 0.45f;
 
@@ -138,7 +149,10 @@ public static class BuildingFootprint
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
         var doors = new DoorSpot[tile.Buildings.Count];
         for (int i = 0; i < doors.Length; i++)
-            doors[i] = (Compute(tile, i, roadIndex, grid)?.Door ?? default) with { Kind = tile.Buildings[i].Kind };
+        {
+            var fp = Compute(tile, i, roadIndex, grid);
+            doors[i] = (fp?.Door ?? default) with { Kind = tile.Buildings[i].Kind, Bank = fp != null && IsBank(fp) };
+        }
         return doors;
     }
 

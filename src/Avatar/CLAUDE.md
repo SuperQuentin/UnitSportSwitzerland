@@ -15,6 +15,7 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - (`VehicleDeck`/`DeckBuilder`, a vehicle's walkable deck built with its model: see the player note `walk-aboard`)
 - `heavy-cabin` — Truck cabs and bus driver's place and saloon (#157): hollow cabs with panes, derived seat and flat wheel (hands' reach at `MaxGrip`), air gauge and gear display, binnacle square to the dials, 2+2 bus seats, seat anchors for passengers
 - `item-arm-poses` — Held items pose the arms (ItemArmPose, replicated ItemAction) and the held mesh follows the hand basis
+- `clothing` — Clothes (#251): Garments catalog, WearSlot, Outfit bits (OutfitBits), AppendDressed from the rig, open Skirt primitive, finishes in vertex alpha + FigureMaterial/avatar.gdshader; `--outfitcheck`, `--avatars … --outfits`
 
 ## Gotchas
 

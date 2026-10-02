@@ -208,7 +208,7 @@ public partial class CarRig : Node3D
 
     private void Assemble(CarParts p)
     {
-        var body = HumanMeshBuilder.Material();
+        var body = HumanMeshBuilder.FigureMaterial();   // the driver wears clothes, maybe with a finish (#251)
         var glass = _glass = GlassMaterial();
         _headMaterial = TrafficMeshBuilder.LampMaterial();
         _tailMaterial = TrafficMeshBuilder.LampMaterial();
@@ -337,8 +337,22 @@ public partial class CarRig : Node3D
     /// </summary>
     public Transform3D EyeFrame => _body.Transform * new Transform3D(Basis.Identity, _cabin.Eye + ShellOffset);
 
+    /// <summary>The driver's seat, author space: with <see cref="DriverFrame"/>, where the driver's figure is.</summary>
+    public DriverSeat DriverSeat => _cabin.Seat;
+
+    /// <summary>The driver figure's frame in the rig's own frame, on the pitching body (author +Z still to flip).</summary>
+    public Transform3D DriverFrame => _body.Transform * new Transform3D(Basis.Identity, ShellOffset);
+
     /// <summary>A seat's hip in the rig's own frame, on the pitching body: where someone sitting in it goes.</summary>
     public Transform3D SeatFrame(SeatAnchor seat) => _body.Transform * new Transform3D(Basis.Identity, seat.Hip + ShellOffset);
+
+    /// <summary>
+    /// The steering wheel for VR hands (#243): its node (hub at the origin, turned by
+    /// <see cref="WheelTurn"/> about <c>Axis</c>, which is in the node's parent's frame) and the rim's radius.
+    /// Null on a car built without its cabin.
+    /// </summary>
+    public (Node3D Wheel, Vector3 Axis, float Radius)? SteeringGrip =>
+        _cabin == null ? null : (_wheel, _cabin.ColumnAxis, _cabin.Seat.WheelRadius);
 
     /// <summary>The bit of the door whose middle is nearest a world point, and how far it is.</summary>
     public (byte Bit, float Distance) NearestDoor(Vector3 point)

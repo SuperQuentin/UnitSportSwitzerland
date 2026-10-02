@@ -32,6 +32,13 @@ public partial class ItemController : Node
     private SmartBinocularsHud _smart = null!;
     public SmartBinocularsHud SmartHud => _smart;
     private FlagGhost _flagGhost = null!;
+    private ThrowAim _throw = null!;
+
+    /// <summary>The live controller (the local player's), for the E key's pick-up; null when none.</summary>
+    public static ItemController? Instance { get; private set; }
+
+    /// <summary>The throw in progress, for probes and the prompt bar.</summary>
+    public ThrowAim Throw => _throw;
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
     private bool _forceAim;
@@ -59,8 +66,11 @@ public partial class ItemController : Node
     /// <summary>Vertical FOV in degrees of a 35 mm-equivalent focal length (35 mm is about 38 degrees).</summary>
     public static float FovFromFocal(float mm) => Mathf.RadToDeg(2f * Mathf.Atan(12f / mm));
 
-    /// <summary>Fires the held gun (a shell already taken); set by the bird hunt, <c>Birds.BirdLife</c>.</summary>
-    public Action<FootPlayer>? Fire { get; set; }
+    /// <summary>
+    /// A shotgun shot left the eye along the aim (both given), the shell already spent and the
+    /// blast already sent; set by the bird hunt, <c>Birds.BirdLife</c>.
+    /// </summary>
+    public Action<FootPlayer, Vector3, Vector3>? Fire { get; set; }
 
     /// <summary>Resolved per frame, never captured: the local on-foot player, or null (fly camera, replay).</summary>
     public Func<FootPlayer?>? ActivePlayer { get; set; }
@@ -68,6 +78,9 @@ public partial class ItemController : Node
     public Inventory Inventory => _inventory;
     public InventoryUi Ui => _ui;
     public PhotoUi PhotoUi => _photoUi;
+
+    /// <summary>Holds Use down as if pressed, for the throw's wind-up (<c>--dropcheck</c>).</summary>
+    public bool ForceUse { get; set; }
 
     /// <summary>Holds Aim down as if pressed ("--aim", and the photo probes).</summary>
     public bool ForceAim { get => _forceAim; set => _forceAim = value; }
@@ -99,6 +112,10 @@ public partial class ItemController : Node
         AddChild(_smart);
         _flagGhost = new FlagGhost { Name = "FlagGhost" };
         AddChild(_flagGhost);
+        _throw = new ThrowAim { Name = "ThrowAim" };
+        AddChild(_throw);
+        Instance = this;
+        DroppedItems.Refused += OnDropRefused;
 
         _inventory.Changed += () => _ui.Refresh();
 
@@ -125,10 +142,22 @@ public partial class ItemController : Node
     private void OnRadioRefused(string text)
     {
         _ui.Toast(text);
-        if (text.Contains("throw", StringComparison.OrdinalIgnoreCase)) _inventory.Add(ItemId.Radio, 1);
+        if (text.Contains("throw", StringComparison.OrdinalIgnoreCase)) Give(new ItemStack(ItemId.Radio, 1));
     }
 
-    public override void _ExitTree() => RadioManager.Refused -= OnRadioRefused;
+    private void OnDropRefused(string text, ItemStack back)
+    {
+        _ui.Toast(text);
+        if (!back.IsEmpty) _inventory.Add(back);
+    }
+
+    public override void _ExitTree()
+    {
+        RadioManager.Refused -= OnRadioRefused;
+        DroppedItems.Refused -= OnDropRefused;
+        if (Instance == this) Instance = null;
+        Highlight.Point(null);
+    }
 
     /// <summary>The player if items can be used right now: on foot (not in a passenger seat), on screen, not in a menu.</summary>
     public FootPlayer? UsablePlayer
@@ -157,15 +186,17 @@ public partial class ItemController : Node
         if (player == null)
         {
             ShowGhost(null);
+            Highlight.Point(null);
+            _throw.Step(null, false, false, (float)delta);
             return;
         }
 
         // cash you carry is lost when you go down; what you claimed to the account is not
-        if (player.KnockedOut && !_wasKnockedOut && _inventory.Cash > 0)
+        if (player.KnockedOut && !_wasKnockedOut && _inventory.Cash > 0 && !_inventory.InMatch)
         {
             int lost = _inventory.Cash;
             _inventory.TakeCash(lost);
-            _ui.Toast($"You dropped {lost} CHF you had not claimed.");
+            _ui.Toast($"You dropped {lost} CHF you had not banked.");
         }
         _wasKnockedOut = player.KnockedOut;
 
@@ -198,10 +229,13 @@ public partial class ItemController : Node
         float breathFov = 1f + 0.012f * Mathf.Sin(breath * 1.3f);
         _ui.OpticSway = aiming && def!.Use == ItemUse.Optic
             ? new Vector2(0.0035f * Mathf.Sin(breath * 0.9f + 1f), 0.005f * Mathf.Sin(breath * 1.3f)) : Vector2.Zero;
-        player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f * breathFov, ItemUse.Photo => FovFromFocal(_focalMm), _ => 50f } : null;
+        var weapon = Weapons.Get(_inventory.HeldId);
+        // a scoped gun is held to the eye like the binoculars, and drawn as their overlay
+        bool scoped = aiming && weapon is { AimFov: < 20f };
+        player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f * breathFov, ItemUse.Photo => FovFromFocal(_focalMm), _ => weapon?.AimFov ?? 50f } : null;
         player.ScopeView = aiming;
         player.ItemAction = _planting || _useBusy ? 2 : aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
-        player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => 0.6f } : 1f;
+        player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => scoped ? 0.15f : 0.6f } : 1f;
         // held items stay visible while aiming: they are raised to a pose. Binoculars and the
         // camera hide once at the eye (you look through them: the overlay is the view).
         bool poseSettled = visual?.PoseSettled ?? true;
@@ -219,11 +253,14 @@ public partial class ItemController : Node
             });
             if (!aiming && def?.Use == ItemUse.Readout) visual.SetPose(ViewPose.Read);   // the GPS is held up to read
             visual.ScreenText = _inventory.HeldId == ItemId.Gps && usable ? GpsScreen(player) : null;
-            visual.Suppressed = (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
+            visual.Suppressed = (aiming && (def!.Use is (ItemUse.Optic or ItemUse.Photo) || scoped) && poseSettled);
         }
 
         // the viewfinder / binocular overlay appears once the item has been raised
-        _ui.Scope = aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def.Use : null;
+        _ui.Scope = scoped ? (poseSettled ? ItemUse.Optic : null)
+            : aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def!.Use : null;
+        StepThrow(player, def, usable, aiming, (float)delta);
+
         // the smart binoculars read out the building at hand while held (#165): no aiming
         _smart.Held = usable && _inventory.HeldId == ItemId.SmartBinoculars;
         _smart.Player = UsablePlayer;
@@ -242,6 +279,11 @@ public partial class ItemController : Node
         if (e.IsActionPressed(PlayerInput.UseItem))
         {
             UseHeld(player);
+            GetViewport().SetInputAsHandled();
+        }
+        else if (e.IsActionPressed(PlayerInput.DropItem))
+        {
+            DropHeld(player, all: e is InputEventKey { CtrlPressed: true });
             GetViewport().SetInputAsHandled();
         }
         else if (_aimingPhoto && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
@@ -296,6 +338,12 @@ public partial class ItemController : Node
 
     private void UseHeld(FootPlayer player)
     {
+        // aiming a throw: Use winds it up, letting go throws (StepThrow)
+        if (_throw.Active)
+        {
+            _throw.BeginCharge();
+            return;
+        }
         // an empty hand takes back a photo of yours you are looking at
         if (_inventory.Held.IsEmpty)
         {
@@ -303,6 +351,21 @@ public partial class ItemController : Node
             return;
         }
         UseSlot(player, _inventory.Selected);
+    }
+
+    /// <summary>
+    /// Puts something new in the inventory (a developed photo, a flag picked up, a spawned item):
+    /// what does not fit is dropped on the ground in front of the player rather than lost. Returns
+    /// how many could go nowhere at all (no player, nowhere to drop).
+    /// </summary>
+    public int Give(ItemStack stack)
+    {
+        int left = _inventory.Add(stack);
+        if (left <= 0) return 0;
+        var rest = stack with { Count = left };
+        if (!DropStack(null, rest)) return left;
+        _ui.Toast($"No room in your pack: {ItemDefs.Get(stack.Id)?.Name ?? "it"} dropped at your feet.");
+        return 0;
     }
 
     /// <summary>Uses whatever is in <paramref name="slot"/>; the inventory panel calls this for "Use" on any slot.</summary>
@@ -353,33 +416,87 @@ public partial class ItemController : Node
 
             case ItemUse.Shoot:
             {
-                // the action has to be pumped before the next shell: no firing until it has cycled
+                if (Weapons.Get(stack.Id) is not { } weapon) break;
+                // the action has to cycle before the next round (the shotgun's pump, a rifle's bolt)
                 if (Time.GetTicksMsec() < _nextShotMs) break;
-                int shells = -1;
-                for (int i = 0; i < Inventory.Size && shells < 0; i++)
-                    if (_inventory[i].Id == ItemId.Shells && !_inventory[i].IsEmpty) shells = i;
-                if (shells < 0)
+                int ammo = -1;
+                for (int i = 0; i < Inventory.Size && ammo < 0; i++)
+                    if (_inventory[i].Id == weapon.Ammo && !_inventory[i].IsEmpty) ammo = i;
+                if (ammo < 0)
                 {
                     Play(SfxSynth.Tick, 0.5f);
-                    _ui.Toast("Out of shells.");
+                    _ui.Toast(weapon.Ammo == ItemId.Shells ? "Out of shells." : $"Out of {ItemDefs.Get(weapon.Ammo)?.Name ?? "ammunition"}.");
                     break;
                 }
-                _inventory.TakeOne(shells);
-                _nextShotMs = Time.GetTicksMsec() + (ulong)((HeldItemVisual.PumpDelay + HeldItemVisual.PumpTime + 0.1f) * 1000f);
-                Recoil(player);
-                Fire?.Invoke(player);
+                _inventory.TakeOne(ammo);
+                _nextShotMs = Time.GetTicksMsec() + (ulong)(weapon.Interval * 1000f);
+                Recoil(player, weapon);
+                Shoot(player, weapon);
                 break;
             }
 
-            case ItemUse.Wear:
+            case ItemUse.Melee:
+            {
+                if (Weapons.Get(stack.Id) is not { } blade || Time.GetTicksMsec() < _nextShotMs) break;
+                _nextShotMs = Time.GetTicksMsec() + (ulong)(blade.Interval * 1000f);
+                Kick(player);
+                Play(SfxSynth.WhooshBank.Variants[SfxRng.Next(SfxSynth.WhooshBank.Variants.Length)], 1.3f);
+                var (eye, aim) = AimFrom(player, blade.Range);
+                if (!PlayerHits.Stab(player, eye, aim, blade)) BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, blade.Range);
+                break;
+            }
+
+            case ItemUse.Signal:
+            {
+                // a flare calls a supply drop (#198): only where there is a match to drop into
+                if (BattleRoyale.BrManager.Instance?.CallDrop() != true)
+                {
+                    _ui.Toast("The flare would only call a supply drop in a Battle Royale.");
+                    break;
+                }
+                _inventory.TakeOne(slot);
+                Kick(player);
+                var up = (Vector3.Up * 3f - player.Camera.GlobalTransform.Basis.Z).Normalized();
+                ItemEvents.Instance?.Send(ItemEventKind.Flare, ItemEvents.MuzzleOf(player, up), up);
+                _ui.Toast("Flare up: a supply drop is on its way.");
+                break;
+            }
+
+            case ItemUse.Armor:
                 if (_useBusy) break;
-                var hat = stack.Id;
+                if (player.Armor >= FootPlayer.MaxArmor - 0.01f)
+                {
+                    _ui.Toast("Your vest is already whole.");
+                    break;
+                }
+                StartUse(player, slot, def, ViewPose.Head, 0.4f, 0.5f, 0.3f, () =>
+                {
+                    if (!player.AddArmor(FootPlayer.MaxArmor)) return;
+                    _inventory.TakeOne(slot);
+                    Play(SfxSynth.Tick, 0.8f);
+                    _ui.Toast($"{def.Name} on: {FootPlayer.MaxArmor:F0} armour.");
+                });
+                break;
+
+            case ItemUse.Wear:
+                // worn: off into the pack; carried: on in its body slot, swapping with what was there
+                if (Inventory.IsWearSlot(slot))
+                {
+                    _inventory.QuickMove(slot);
+                    Play(SfxSynth.Tick, 0.9f);
+                    break;
+                }
+                if (_useBusy) break;
+                var worn = stack.Id;
                 StartUse(player, slot, def, ViewPose.Head, 0.3f, 0.2f, 0.3f, () =>
                 {
-                    bool on = _inventory.Worn != hat;
-                    _inventory.SetWorn(on ? hat : ItemId.None);
-                    Play(SfxSynth.Tick, on ? 1.2f : 0.9f);
-                    _ui.Toast(on ? $"You put on the {def.Name.ToLowerInvariant()}." : $"You take off the {def.Name.ToLowerInvariant()}.");
+                    // the stack may have moved during the wind-up: wear it from wherever it is now
+                    int at = _inventory[slot].Id == worn ? slot : -1;
+                    for (int i = 0; at < 0 && i < _inventory.Capacity; i++)
+                        if (_inventory[i].Id == worn) at = i;
+                    if (at < 0 || !_inventory.Wear(at)) return;
+                    Play(SfxSynth.Tick, 1.2f);
+                    _ui.Toast($"You put on the {def.Name.ToLowerInvariant()}.");
                 });
                 break;
 
@@ -391,28 +508,20 @@ public partial class ItemController : Node
                     RadioUi.Instance?.OpenHeld(slot);
                     break;
                 }
-                if (RadioManager.Instance is not { } radios)
-                {
-                    _ui.Toast("Nowhere to throw it.");
-                    break;
-                }
-                // from the eye, along the view: the body, not the chase camera, is the origin in third person
-                var forward = -player.Camera.GlobalTransform.Basis.Z;
-                var origin = player.GlobalPosition + Vector3.Up * 1.5f + forward * 0.6f;
-                float yaw = Mathf.Atan2(-forward.X, -forward.Z);
-                var velocity = forward * 8f + Vector3.Up * 3f + player.Velocity;
-                _inventory.TakeOne(slot);
-                // what it played in the hand, it plays on where it lands
-                var play = RadioPlay.Decode(stack.Data);
-                radios.Throw(new RadioState("", 0, origin, yaw, velocity,
-                    play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
-                Kick(player);
-                Play(SfxSynth.Whoosh, 0.8f);
+                // Aim + Use from the pack panel (no wind-up there): a medium throw
+                ThrowSlot(player, slot, 0.45f);
                 break;
             }
 
             case ItemUse.Material:
                 _ui.Toast($"{def.Name}: keep it for trading or building.");
+                break;
+
+            case ItemUse.Bag:
+                // worn: off into the pack; carried: on, swapping with the one worn
+                if (slot == Inventory.BagSlot) _inventory.QuickMove(slot);
+                else if (_inventory.WearBag(slot)) _ui.Toast($"You put on the {def.Name.ToLowerInvariant()}: {_inventory.PackSize} pack slots.");
+                Play(SfxSynth.Tick, 1.1f);
                 break;
 
             case ItemUse.Print:
@@ -447,16 +556,240 @@ public partial class ItemController : Node
 
     private ulong _nextShotMs;
 
-    /// <summary>A shotgun's kick: the viewmodel jolts, the view punches up a few degrees, the action cycles.</summary>
-    private static void Recoil(FootPlayer player)
+    // ------------------------------------------------------------------------------------
+    // throwing, dropping, picking up (#206)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The throw, every frame: Aim held with a throwable item brings out <see cref="ThrowAim"/>, which
+    /// in turn pushes the shoulder camera, the FOV, the shake and the wind-up arm pose onto the player
+    /// (re-asserted each frame, like everything else here). Also moves the pointing border.
+    /// </summary>
+    private void StepThrow(FootPlayer player, ItemDef? def, bool usable, bool aiming, float dt)
     {
+        bool throwing = usable && !aiming && !UiFocus.TextEntryActive && !_ui.IsOpen && !_useBusy && !_planting
+                        && ItemDefs.Throwable(def) && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+        if (_throw.Step(player, throwing, PlayerInput.Held(PlayerInput.UseItem) || ForceUse, dt))
+            ThrowSlot(player, _inventory.Selected, _throw.ReleasePower);
+
+        player.ThrowAim = _throw.Active ? 1f : 0f;
+        player.CameraShake = _throw.Shake;
+        if (!aiming && _throw.Fov is { } fov) player.FovOverride = fov;
+        if (_throw.Active)
+        {
+            player.LookScale = 0.75f;
+            player.ItemAction = 3;
+        }
+        else if (_throw.SinceRelease < 0.4f) player.ItemAction = 4;
+
+        Highlight.Point(usable && !_throw.Active && !_ui.IsOpen ? Highlight.Find(player) : null);
+    }
+
+    /// <summary>Throws one from <paramref name="slot"/> out of the hand along the view, at <paramref name="power"/> 0..1.</summary>
+    private void ThrowSlot(FootPlayer player, int slot, float power)
+    {
+        if (_inventory[slot].IsEmpty) return;
+        if (!Release(player, slot, 1, ThrowAim.Origin(player), ThrowAim.Launch(player, power), power)) return;
+        Kick(player);
+        player.Punch(Mathf.DegToRad(1.2f + 2.5f * power));
+        var bank = SfxSynth.WhooshBank;
+        Play(bank.Variants[SfxRng.Next(bank.Variants.Length)], Mathf.Lerp(0.75f, 1.35f, power));
+    }
+
+    /// <summary>Drops one of the item in hand at the player's feet (<paramref name="all"/>: the whole stack).</summary>
+    private void DropHeld(FootPlayer player, bool all)
+    {
+        if (_throw.Charging || _useBusy || _planting) return;
+        DropSlot(player, _inventory.Selected, all);
+    }
+
+    /// <summary>Drops from any slot, a little ahead of the player: the hand's Q, and the pack panel's Drop.</summary>
+    public void DropSlot(FootPlayer? player, int slot, bool all)
+    {
+        player ??= UsablePlayer;
+        var stack = _inventory[slot];
+        if (player == null || stack.IsEmpty || !CanRelease(stack)) return;
+        DropStack(player, _inventory.TakeFrom(slot, all ? stack.Count : 1));
+    }
+
+    /// <summary>
+    /// Drops a stack that is in no slot (the cursor's, a print with no room in the pack) a little
+    /// ahead of <paramref name="player"/> (null: the local one), the same toss as Q. Keeps
+    /// <see cref="ItemStack.Data"/>. False when there is nobody or nowhere to put it: the caller
+    /// still holds the stack then.
+    /// </summary>
+    public bool DropStack(FootPlayer? player, ItemStack stack)
+    {
+        player ??= CurrentPlayer();
+        if (player == null || stack.IsEmpty || !CanRelease(stack)) return false;
+        var view = player.Camera.GlobalTransform.Basis;
+        var ahead = new Vector3(-view.Z.X, 0, -view.Z.Z).Normalized();
+        var origin = player.GlobalPosition + Vector3.Up * 1.15f + ahead * 0.45f;
+        var velocity = ahead * 1.8f + Vector3.Up * 1.4f + player.Velocity;
+        Launch(player, stack, origin, velocity, 0.1f);
+        Kick(player);
+        Play(SfxSynth.Whoosh, 1.5f);
+        return true;
+    }
+
+    /// <summary>Whether the world can take <paramref name="stack"/> now (its manager exists); toasts when not.</summary>
+    private bool CanRelease(ItemStack stack)
+    {
+        if (stack.Id == ItemId.Radio ? RadioManager.Instance != null : DroppedItems.Instance != null) return true;
+        _ui.Toast("Nowhere to put it.");
+        return false;
+    }
+
+    /// <summary>Takes <paramref name="count"/> out of <paramref name="slot"/> and launches it (<see cref="Launch"/>). False when there is nowhere to put it.</summary>
+    private bool Release(FootPlayer player, int slot, int count, Vector3 origin, Vector3 velocity, float power)
+    {
+        var stack = _inventory[slot];
+        if (stack.IsEmpty || !CanRelease(stack)) return false;
+        Launch(player, _inventory.TakeFrom(slot, count), origin, velocity, power);
+        return true;
+    }
+
+    /// <summary>
+    /// Puts <paramref name="stack"/> in the world at <paramref name="origin"/>, moving at
+    /// <paramref name="velocity"/>: radios as <see cref="RadioBody"/> (each its own body, playing on
+    /// where it lands), anything else as one <see cref="DroppedItem"/> tumbling end over end.
+    /// <see cref="CanRelease"/> first.
+    /// </summary>
+    private void Launch(FootPlayer player, ItemStack stack, Vector3 origin, Vector3 velocity, float power)
+    {
+        var flat = new Vector3(velocity.X, 0, velocity.Z);
+        var ahead = flat.LengthSquared() > 1e-4f ? flat.Normalized() : -player.GlobalTransform.Basis.Z;
+        float yaw = Mathf.Atan2(-ahead.X, -ahead.Z);
+        if (stack.Id == ItemId.Radio)
+        {
+            var play = RadioPlay.Decode(stack.Data);
+            for (int i = 0; i < stack.Count; i++)
+                RadioManager.Instance!.Throw(new RadioState("", 0, origin + Vector3.Up * (0.25f * i), yaw, velocity,
+                    play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
+            return;
+        }
+        var right = ahead.Cross(Vector3.Up);
+        var spin = right * -(3f + 14f * power)
+                   + new Vector3(SfxRng.NextSingle() - 0.5f, SfxRng.NextSingle() - 0.5f, SfxRng.NextSingle() - 0.5f) * 3f;
+        DroppedItems.Instance!.Drop(stack, origin, velocity, new Vector3(0, yaw, 0), spin);
+    }
+
+    /// <summary>
+    /// E on a dropped item: room checked first, then the server asked (one winner). Here it flies
+    /// into the hand at once; it goes in the pack when the server says so.
+    /// </summary>
+    public void PickUp(DroppedItem item)
+    {
+        if (DroppedItems.Instance is not { } dropped || UsablePlayer is not { } player) return;
+        var stack = item.Stack;
+        if (_inventory.Room(stack.Id, stack.Data) < stack.Count)
+        {
+            _ui.Toast("No room in your pack.");
+            Play(SfxSynth.Tick, 0.5f);
+            return;
+        }
+        if (item.Visual is { } visual)
+        {
+            FlyToHand(player, visual);
+            visual.Visible = false;
+        }
+        Highlight.Point(null);
+        Play(SfxSynth.Tick, 1.9f);
+        dropped.PickUp(item, got =>
+        {
+            int left = _inventory.Add(got);
+            if (left > 0)
+            {
+                // filled up in the meantime: what does not fit falls back down
+                dropped.Drop(got with { Count = left }, player.GlobalPosition + Vector3.Up, Vector3.Up, Vector3.Zero, Vector3.Zero);
+                _ui.Toast("Your pack is full: some of it fell back down.");
+            }
+            else _ui.Toast($"+ {(ItemDefs.Get(got.Id)?.Name ?? "item")}{(got.Count > 1 ? $" ×{got.Count}" : "")}");
+            Play(SfxSynth.Chime, 1.8f);
+            Kick(player);
+        });
+    }
+
+    /// <summary>A copy of the picked-up item sucked into the player's hand, spinning and shrinking.</summary>
+    private void FlyToHand(FootPlayer player, MeshInstance3D visual)
+    {
+        var ghost = new MeshInstance3D
+        {
+            Name = "PickedUp", Mesh = visual.Mesh, MaterialOverride = visual.MaterialOverride, TopLevel = true,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        AddChild(ghost);
+        var start = visual.GlobalTransform;
+        var turn = start.Basis.GetRotationQuaternion();
+        ghost.GlobalTransform = start;
+        var tween = ghost.CreateTween();
+        tween.TweenMethod(Callable.From<float>(t =>
+        {
+            if (!IsInstanceValid(player)) return;
+            var hand = player.GlobalPosition + Vector3.Up * 1.15f;
+            float e = t * t;
+            var at = start.Origin.Lerp(hand, e) + Vector3.Up * (Mathf.Sin(t * Mathf.Pi) * 0.35f);
+            var basis = new Basis(turn) * new Basis(Vector3.Up, t * 5f);
+            ghost.GlobalTransform = new Transform3D(basis.Scaled(Vector3.One * Mathf.Lerp(1f, 0.2f, e)), at);
+        }), 0f, 1f, 0.26f);
+        tween.TweenCallback(Callable.From(ghost.QueueFree));
+    }
+
+    /// <summary>A gun's kick: the viewmodel jolts, the view punches up a few degrees, a shotgun's action cycles.</summary>
+    private static void Recoil(FootPlayer player, WeaponDef weapon)
+    {
+        bool shotgun = weapon.Id == ItemId.Shotgun;
         if (player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v)
         {
             v.Kick = 1f;
-            v.Recoil = 1f;
-            v.Pump();
+            v.Recoil = shotgun || weapon.Id == ItemId.HuntingRifle ? 1f : 0.45f;
+            if (shotgun) v.Pump();
         }
-        player.Punch(Mathf.DegToRad(4.5f));
+        player.Punch(Mathf.DegToRad(weapon.Id switch { ItemId.Shotgun => 4.5f, ItemId.HuntingRifle => 5f, ItemId.Pistol => 2.5f, _ => 1.4f }));
+    }
+
+    /// <summary>
+    /// Where a shot from <paramref name="player"/> starts and goes. It leaves the EYE: in third
+    /// person the camera is ~3 m behind and to the side, so the camera's ray finds what the
+    /// crosshair is on and the barrel aims from the eye at that point.
+    /// </summary>
+    public static (Vector3 Eye, Vector3 Aim) AimFrom(FootPlayer player, float range)
+    {
+        var cam = player.Camera;
+        var eye = player.EyePosition;
+        var look = -cam.GlobalTransform.Basis.Z;
+        var aim = look;
+        if (!player.IsFirstPerson && !player.ScopeView)
+        {
+            var start = cam.GlobalPosition + look * Mathf.Max(0f, (eye - cam.GlobalPosition).Dot(look));
+            var end = start + look * (range + 10f);
+            var ray = player.GetWorld3D().DirectSpaceState.IntersectRay(
+                PhysicsRayQueryParameters3D.Create(start, end, uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() }));
+            var point = ray.Count > 0 ? ray["position"].AsVector3() : end;
+            if (point.DistanceTo(eye) > 1f) aim = (point - eye).Normalized();
+        }
+        return (eye, aim);
+    }
+
+    /// <summary>
+    /// A shot: heard and seen by everyone near (an item event, this player included), traced
+    /// against the other players, and for the shotgun against the birds.
+    /// </summary>
+    private void Shoot(FootPlayer player, WeaponDef weapon)
+    {
+        var (eye, aim) = AimFrom(player, weapon.Range);
+        if (ItemEvents.Instance is { } events)
+            events.Send(ItemEventKind.Shot, ItemEvents.MuzzleOf(player, aim), aim, ((int)weapon.Id).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        else
+        {
+            // a probe world without the event node: a plain sound
+            var (stream, pitch, db) = SfxSynth.Shotgun.Pick(SfxRng);
+            Play(stream, pitch * weapon.Pitch);
+        }
+        PlayerHits.Shoot(player, eye, aim, weapon);
+        // a shot through a supply crate breaks it open (#198)
+        BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, weapon.Range);
+        if (weapon.Id == ItemId.Shotgun) Fire?.Invoke(player, eye, aim);
     }
 
     private static void Kick(FootPlayer player)
@@ -549,10 +882,13 @@ public partial class ItemController : Node
         _developing = null;
         _photoUi.EndDevelop();
         if (CurrentPlayer()?.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v) v.HidePrint();
-        if (_inventory.Add(new ItemStack(ItemId.Photo, 1, photo)) > 0)
-            _ui.Toast("Pack full: the photo is only in your album.");
+        if (_inventory.Room(ItemId.Photo, photo) < 1)
+        {
+            if (Give(new ItemStack(ItemId.Photo, 1, photo)) > 0) _ui.Toast("Pack full: the photo is only in your album.");
+        }
         else
         {
+            Give(new ItemStack(ItemId.Photo, 1, photo));
             Play(SfxSynth.Chime, 1.5f);
             _ui.Toast("Photo developed: in your pack.");
         }
@@ -607,7 +943,7 @@ public partial class ItemController : Node
         {
             if (!r.Ok)
             {
-                _inventory.Add(stack with { Count = 1 });   // refused: the print comes back
+                Give(stack with { Count = 1 });   // refused: the print comes back
                 _ui.Toast($"Cannot stick it here: {r.Refused}");
                 return;
             }
@@ -620,11 +956,6 @@ public partial class ItemController : Node
     public void PickUpPhoto(long id)
     {
         if (PlacedObjects.Instance is not { } placed || !placed.All.TryGetValue(id, out var o)) return;
-        if (_inventory.Room(ItemId.Photo, o.Payload) < 1)
-        {
-            _ui.Toast("No room in your pack.");
-            return;
-        }
         placed.RequestRemove(id, r =>
         {
             if (!r.Ok)
@@ -632,8 +963,8 @@ public partial class ItemController : Node
                 _ui.Toast($"Cannot take it: {r.Refused}");
                 return;
             }
-            if (_inventory.Add(new ItemStack(ItemId.Photo, 1, o.Payload)) > 0) _ui.Toast("No room in your pack: the photo is lost.");
-            else _ui.Toast("Photo taken back.");
+            if (_inventory.Room(ItemId.Photo, o.Payload) >= 1) _ui.Toast("Photo taken back.");
+            Give(new ItemStack(ItemId.Photo, 1, o.Payload));
             Play(SfxSynth.Whoosh, 1.6f);
         });
     }
@@ -687,11 +1018,6 @@ public partial class ItemController : Node
 
         if (aim.Kind == FlagAimKind.PickUp)
         {
-            if (_inventory.Room(ItemId.SwissFlag) < 1)
-            {
-                _ui.Toast("No room in your pack.");
-                return;
-            }
             await Stroke(player, raise: false, () => placed.RequestRemove(aim.Id, r =>
             {
                 if (!r.Ok)
@@ -699,8 +1025,8 @@ public partial class ItemController : Node
                     _ui.Toast($"Cannot pick it up: {r.Refused}");
                     return;
                 }
-                if (_inventory.Add(ItemId.SwissFlag, 1) > 0) _ui.Toast("No room in your pack: the flag is lost.");
-                else _ui.Toast("Flag picked up.");
+                if (_inventory.Room(ItemId.SwissFlag) >= 1) _ui.Toast("Flag picked up.");
+                Give(new ItemStack(ItemId.SwissFlag, 1));
                 Play(SfxSynth.Whoosh, 1.3f);
             }));
             return;
@@ -722,7 +1048,7 @@ public partial class ItemController : Node
             {
                 if (!r.Ok)
                 {
-                    _inventory.Add(ItemId.SwissFlag, 1);   // the server said no: the flag comes back
+                    Give(new ItemStack(ItemId.SwissFlag, 1));   // the server said no: the flag comes back
                     _ui.Toast($"Cannot plant it here: {r.Refused}");
                     return;
                 }

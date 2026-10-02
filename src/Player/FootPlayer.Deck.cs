@@ -77,7 +77,7 @@ public partial class FootPlayer
     private uint _walkMask;
     /// <summary>The section frame this player was last carried from.</summary>
     private Transform3D _carriedFrom;
-    private bool _carried;
+    private bool _deckCarried;
     /// <summary>Just stood up or left the wheel: carried at this velocity until the vehicle's deck is here to stand on.</summary>
     private float _deckWait;
     private Vector3 _deckWaitVelocity;
@@ -209,7 +209,7 @@ public partial class FootPlayer
 
         if (!Aboard || !_decks.TryGetValue(DeckOn, out var mine) || SectionFrame(mine.Host, DeckSection) is not { } section) return;
         var now = section.GlobalTransform.Orthonormalized();
-        if (_carried)
+        if (_deckCarried)
         {
             var delta = now * _carriedFrom.AffineInverse();
             float turn = Mathf.Wrap(YawOf(now) - YawOf(_carriedFrom), -Mathf.Pi, Mathf.Pi);
@@ -220,7 +220,7 @@ public partial class FootPlayer
             Velocity = new Basis(Vector3.Up, turn) * Velocity;
         }
         _carriedFrom = now;
-        _carried = true;
+        _deckCarried = true;
         DeckPos = now.AffineInverse() * GlobalPosition;
         DeckYaw = Mathf.Wrap(Rotation.Y - YawOf(now), -Mathf.Pi, Mathf.Pi);
     }
@@ -348,7 +348,7 @@ public partial class FootPlayer
                 DeckOn = at.Set.Key;
                 DeckSection = at.Deck.Section;
                 _carriedFrom = at.Frame;
-                _carried = true;
+                _deckCarried = true;
             }
             Sway(at.Set, at.Deck, at.Frame, dt);
             return false;
@@ -381,7 +381,7 @@ public partial class FootPlayer
         DeckOn = set.Key;
         DeckSection = section;
         _carriedFrom = frame;
-        _carried = true;
+        _deckCarried = true;
         _deckWait = 0f;
         _standInExit = null;
         _deckFrameValid = false;
@@ -395,7 +395,7 @@ public partial class FootPlayer
     {
         if (keepVelocity && HostNamed(DeckOn) is { } host) Velocity += VelocityOfHost(host);
         DeckOn = "";
-        _carried = false;
+        _deckCarried = false;
         _deckFrameValid = false;
         CollisionMask = _walkMask;
         _capsule.Radius = BodyRadius;

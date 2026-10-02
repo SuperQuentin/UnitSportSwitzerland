@@ -5,6 +5,8 @@ render_mode unshaded, depth_test_disabled, depth_draw_never, cull_disabled, blen
 
 // 0 = no vignette, 1 = only a small window left in the middle
 uniform float strength : hint_range(0.0, 1.0) = 0.0;
+// 0 = clear, 1 = all black: a blink to hide a cut (XrRig.Blink, the crash view #214)
+uniform float blackout : hint_range(0.0, 1.0) = 0.0;
 
 void vertex() {
 	// the quad is 2x2 in its own space: put it over the whole view, nearest the eye
@@ -18,5 +20,5 @@ void fragment() {
 	float inner = mix(1.25, 0.40, strength);
 	float a = smoothstep(inner, inner + 0.35, r);
 	ALBEDO = vec3(0.0);
-	ALPHA = a * clamp(strength * 3.0, 0.0, 1.0);
+	ALPHA = max(a * clamp(strength * 3.0, 0.0, 1.0), blackout);
 }

@@ -109,7 +109,7 @@ public partial class RadioBody : RigidBody3D
 
         // what plays: the server's word, reliably on change, and with the spawn for late joiners
         var play = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:CdId", ".:StartedAt", ".:Playing", ".:Length" })
+        foreach (var prop in new[] { ".:CdId", ".:StartedAt", ".:Playing", ".:Length", ".:Mode" })
         {
             play.AddProperty(prop);
             play.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
@@ -138,6 +138,7 @@ public partial class RadioBody : RigidBody3D
             AddChild(new MeshInstance3D { Name = "Visual", Mesh = Mesh(), MaterialOverride = ItemDefs.Material });
             _speaker = new RadioSpeaker { Name = "Speaker" };
             AddChild(_speaker);
+            AddChild(new ImpactFx { Name = "Impact", Size = BodyW });
         }
     }
 

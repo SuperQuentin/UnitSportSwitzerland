@@ -65,11 +65,49 @@ public partial class InventoryUiProbe : Node
         // 4: shift-click sends a hotbar stack to the pack
         var gps = Inv[2];
         await Click(2, MouseButton.Left, shift: true);
-        Expect(Inv[2].IsEmpty && Enumerable.Range(pack, Inventory.BackpackSize).Any(i => Inv[i] == gps), "shift-click to the pack");
+        Expect(Inv[2].IsEmpty && Enumerable.Range(pack, Inv.PackSize).Any(i => Inv[i] == gps), "shift-click to the pack");
 
         // 5: right click takes half
         await Click(15, MouseButton.Right);
         Expect(!Inv.Carried.IsEmpty, $"right click takes half ({Inv.Carried.Count})");
+        Inv.ReturnCarried();
+
+        // 6: a click outside the panel with a stack on the cursor drops it on the ground (#208, #206)
+        int dropSlot = Enumerable.Range(0, Inv.Capacity).First(i => !Inv[i].IsEmpty && Inv[i].Id != ItemId.Radio);
+        var dropped = Inv[dropSlot];
+        int before = DroppedItems.Instance?.GetChildCount() ?? -1;
+        await Click(dropSlot, MouseButton.Left);
+        var outside = new Vector2(6, 6);
+        Push(new InputEventMouseMotion { Position = outside, GlobalPosition = outside });
+        await Frames(2);
+        Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = outside, GlobalPosition = outside });
+        await Frames(2);
+        Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = outside, GlobalPosition = outside });
+        await Frames(20);
+        int after = DroppedItems.Instance?.GetChildCount() ?? -1;
+        Expect(Inv.Carried.IsEmpty && Inv[dropSlot].IsEmpty && after > before && before >= 0,
+            $"click outside drops {dropped} on the ground (dropped items {before} -> {after})");
+
+        // 7: clothes (#251): carried onto their body slot, shift-clicked on, refused in the wrong one
+        int top = Inventory.SlotOf(Avatar.WearSlot.Top), head = Inventory.SlotOf(Avatar.WearSlot.Head);
+        int free = Enumerable.Range(pack, Inv.PackSize).First(i => Inv[i].IsEmpty);
+        Inv.Put(free, new ItemStack(ItemId.BuckleCorset, 1));
+        int ears = Enumerable.Range(pack, Inv.PackSize).First(i => Inv[i].IsEmpty);
+        Inv.Put(ears, new ItemStack(ItemId.CatEarsBlack, 1));
+        await Click(free, MouseButton.Left);
+        await Click(head, MouseButton.Left);
+        Expect(Inv[head].IsEmpty && Inv.Carried.Id == ItemId.BuckleCorset, "the corset is refused on the head");
+        await Click(top, MouseButton.Left);
+        Expect(Inv[top].Id == ItemId.BuckleCorset && Inv.Carried.IsEmpty, "and put on in the top slot");
+        await Click(ears, MouseButton.Left, shift: true);
+        Expect(Inv[head].Id == ItemId.CatEarsBlack && Inv[ears].IsEmpty, "shift-click puts the cat ears on");
+        await Move(top);
+        await Frames(4);
+        var dir = ProjectSettings.GlobalizePath("res://test_output");
+        System.IO.Directory.CreateDirectory(dir);
+        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "invui_wearing.png"));
+        await Click(top, MouseButton.Left);
+        Expect(Inv.Carried.Id == ItemId.BuckleCorset && Inv[top].IsEmpty, "a click takes the corset off");
         Inv.ReturnCarried();
 
         _items.Ui.Close();

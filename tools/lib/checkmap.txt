@@ -1,0 +1,85 @@
+# Which checks a change calls for, read by tools/test.sh (docs/notes/general/testing.md).
+#   <path prefix>  <tier>  <check>
+# prefix  matched against the changed files (git diff against origin/main, plus uncommitted
+#         and untracked files) or, given, the [area] argument. "@rpc" matches a diff whose lines
+#         add or remove RPC or replication code.
+# tier    quick: one headless Godot, no map, seconds.  net: headless server + client (tier 2).
+#         full: the windowed / two-client / load scripts (tier 3), only under `test.sh full`.
+# check   "--flag [args]" runs `godot --headless --path . -- --flag [args]`; a tools/ path runs
+#         that script; "@netsmoke" is the runner's own headless server + client.
+# Only list a check that ends by itself and prints a RESULT line or exits non-zero on failure.
+# Give each check the lightest world it works on (Core/Systems): `--world flat` (TestWorld, no
+# map), `--systems ui` (only what is named), `--world fixture` / `--chunks fixture:<course>`
+# (tiles built in code). Never the real map in quick/net.
+
+src/Net/                 quick  --interestcheck
+src/Audio/Cd/            quick  --beatcheck
+src/Avatar/              quick  --meshcheck
+src/Avatar/              quick  --outfitcheck
+src/Avatar/              quick  --cockpitcheck
+src/Core/Chat            quick  --chatcheck
+src/World/TimeCommand    quick  --chatcheck
+src/Core/                quick  --origincheck
+src/Terrain/             quick  --origincheck
+src/Items/               quick  --invcheck
+src/Loot/                quick  --lootchancecheck
+src/Occasions/           quick  --occasioncheck
+src/Occasions/           quick  --huntcheck
+src/Player/              quick  --setupcheck
+src/Player/              quick  --tuningcheck
+src/Player/              quick  --cockpitcheck
+src/Player/              quick  --motocheck
+src/Player/              quick  --truckcheck
+src/Player/              quick  --driftcheck
+src/Player/              quick  --spincheck
+src/Vehicles/            quick  --driftcheck
+src/Vehicles/            quick  --truckcheck
+src/Player/              quick  --synccheck --world flat
+src/Player/              quick  --hitboxcheck --world flat
+src/Avatar/              quick  --hitboxcheck --world flat
+src/Player/              quick  --ride bike,20 --world flat
+src/Player/              quick  --ride car,15 --world flat
+src/Vehicles/            quick  --ride car,15 --world flat
+src/Player/              quick  --exitcheck --world fixture
+src/Vehicles/            quick  --exitcheck --world fixture
+src/Core/TestWorld       quick  --hitboxcheck --world flat
+src/Core/Systems         quick  --hitboxcheck --world flat
+src/Ui/                  quick  --leavecheck --world fixture
+src/Ui/                  quick  --menucheck --systems ui
+src/Core/GameShell       quick  --menucheck --systems ui
+src/Core/Systems         quick  --menucheck --systems ui
+src/Core/ClientWorld     quick  --leavecheck --world fixture
+src/BattleRoyale/        quick  --brcheck
+src/Combat/              quick  --brcheck
+
+# tier 1: one headless Godot on a synthetic course (src/Terrain/Fixture), ~2 min
+src/Terrain/Fixture/     quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/AutoPilot     quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/RaceRoute     quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/RaceLine      quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/DriveProbe    quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+
+src/Net/                 net    @netsmoke
+src/Core/ServerWorld     net    @netsmoke
+src/Core/ClientWorld     net    @netsmoke
+@rpc                     net    @netsmoke
+
+src/BattleRoyale/        full   tools/brcheck.sh
+src/Combat/              full   tools/pvpcheck.sh
+src/Items/Weapons        full   tools/pvpcheck.sh
+src/Items/               full   tools/gunshotcheck.sh
+src/Items/               full   tools/placedcheck.sh
+src/Items/               full   tools/plantcheck.sh
+src/Items/               full   tools/useanimcheck.sh
+src/Loot/                full   tools/lootsynccheck.sh
+src/Loot/                full   tools/locksynccheck.sh
+src/World/               full   tools/racecheck.sh
+src/Audio/               full   tools/radiocheck.sh
+src/Player/              full   tools/switchcheck.sh
+src/Vehicles/            full   tools/switchcheck.sh
+src/Player/              full   tools/decknetcheck.sh
+src/Vehicles/            full   tools/decknetcheck.sh
+src/Avatar/              full   tools/decknetcheck.sh
+src/Net/                 full   tools/loadtest.sh 4 testsh 60
+tools/lib/               quick  tools/lib/guard_selftest.sh

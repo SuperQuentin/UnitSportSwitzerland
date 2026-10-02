@@ -5,6 +5,9 @@ using UnitSport.Vehicles;
 
 namespace UnitSport.Player;
 
+/// <summary>What took a player's health: kept with the last attacker for the kill credit.</summary>
+public enum DamageCause { Other, Weapon, Blast, Fall, Crash, Zone }
+
 /// <summary>
 /// First-person on-foot controller tuned for human scale: WASD / left stick, mouse or right
 /// stick look, Shift / L3 to run, Space / A to jump, Ctrl / B to slide, jump against a wall to
@@ -230,6 +233,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var relay = new MultiplayerSynchronizer
         {
             Name = name, RootPath = new NodePath(".."), ReplicationConfig = config, ReplicationInterval = interval,
+            // refreshed when the audience changes (RefreshRelays): Idle ran the filter every frame for every peer
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         relay.SetMultiplayerAuthority(1);
         return relay;
@@ -363,6 +368,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private Avatar.Headwear _poseHat;
 
     /// <summary>
+    /// The clothes on the figure, an <see cref="Avatar.Outfit"/> packed into 60 bits (#251).
+    /// Replicated like <see cref="HeadwearId"/>; set on the owner by <c>Occasions.OccasionHats</c>
+    /// from the inventory's body slots.
+    /// </summary>
+    [Export] public long OutfitBits { get; set; }
+
+    private long _poseOutfit;
+
+    /// <summary>The figure's colours with what it wears: the jersey of whoever owns it, the clothes it has on.</summary>
+    private Avatar.HumanPalette FigurePalette(int rider) => Avatar.HumanPalette.ForRider(rider) with { Outfit = new(OutfitBits) };
+
+    /// <summary>
     /// The figure's right hand in this node's local space, or null when no figure is drawn
     /// (first person on foot, or mounted). Updated whenever the body mesh is posed.
     /// </summary>
@@ -382,6 +399,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// (<c>Items.RadioBody.BeatAt</c>), which is what keeps everyone on the same step.
     /// </summary>
     [Export] public int DanceId { get; set; }
+
+    /// <summary>
+    /// 1 while down (knocked out, or eliminated in a match), else 0. Replicated like
+    /// <see cref="DanceId"/>; written by the owner. Other peers' hit tests skip a downed body
+    /// (<c>Items.PlayerHits</c>).
+    /// </summary>
+    [Export] public int Down { get; set; }
 
     /// <summary>The arm pose currently drawn and its 0..1 blend, eased in and out on every peer.</summary>
     public Avatar.ItemArmPose DrawnArmPose => _itemArmCur;
@@ -408,6 +432,22 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public bool IsFirstPerson => !_thirdPerson;
 
+    /// <summary>
+    /// 0..1: an item held ready to throw wants the close over-the-shoulder camera (set every frame by
+    /// <see cref="Items.ItemController"/>, like <see cref="FovOverride"/>). In first person the view
+    /// is lent to third person for as long as it lasts, pulled out of the head and back.
+    /// </summary>
+    public float ThrowAim { get; set; }
+
+    /// <summary>Camera tremble in radians, set every frame (a fully wound-up throw shakes).</summary>
+    public float CameraShake { get; set; }
+
+    /// <summary>The throw camera's eased weight.</summary>
+    private float _throwBlend;
+
+    /// <summary>Third person lent to a throw from first person: given back when the throw camera has eased out.</summary>
+    private bool _borrowedThird;
+
     /// <summary>In a car's, a truck's or a bus's driver's seat, looking out through the windscreen (not the chase camera, not the garage's orbit).</summary>
     public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null && SeatIndex == 0;
 
@@ -421,6 +461,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private RideKind _visualKind = RideKind.OnFoot;
     private int _visualSetup;
     private long _visualTuning;
+    // the clothes a ride's rider was drawn in (#251): a change redraws the ride
+    private long _visualOutfit;
+    private readonly Avatar.FigureWind _walkWind = new();
     /// <summary>Owner: seconds until every door open while getting in (the driver's, any left open) shuts.</summary>
     private float _shutDriverIn;
     /// <summary>Doors shut by themselves above this speed, m/s (20 km/h).</summary>
@@ -685,6 +728,30 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>Hurt by this much (the feel layer flashes and shakes).</summary>
     public event Action<float>? Hurt;
+
+    /// <summary>
+    /// Health reached zero. The peer is whoever last hurt this player within
+    /// <see cref="CreditSeconds"/> (0 for nobody), the cause is what finished them.
+    /// </summary>
+    public event Action<long, DamageCause>? Died;
+
+    /// <summary>
+    /// Asked when this player goes down: true keeps them down (<see cref="Eliminated"/>) instead
+    /// of the knockout's revive a few seconds later. A Battle Royale match sets it.
+    /// </summary>
+    public static Func<FootPlayer, bool>? StayDown;
+
+    /// <summary>Down for good, until <see cref="Respawn"/>: out of the match.</summary>
+    public bool Eliminated { get; private set; }
+
+    /// <summary>Armour left, 0..<see cref="MaxArmor"/>: it takes half of every weapon hit while it lasts.</summary>
+    public float Armor { get; private set; }
+    public const float MaxArmor = 50f;
+
+    /// <summary>A hit this recent still credits its shooter with the kill, whatever finishes the job.</summary>
+    public const double CreditSeconds = 10;
+    private long _lastAttacker;
+    private double _lastAttackedAt = -99;
     /// <summary>Shaken by something nearby — an explosion — at this strength, 0..1.</summary>
     public event Action<float>? Shaken;
     public event Action<bool>? EngineToggled;
@@ -919,9 +986,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
+        replication.AddProperty(".:OutfitBits");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:HeldRadio");
+        replication.AddProperty(".:Down");
         replication.AddProperty(".:CarRadio");
+        replication.AddProperty(".:CarCd");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -935,7 +1005,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:DeckYaw");
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId", ".:HeldRadio", ".:CarRadio" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:CarRadio", ".:CarCd", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -949,6 +1019,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // 30 Hz is plenty once the receiver interpolates; the frame rate was the old rate,
             // which is 144 packets a second per viewer from a fast machine
             ReplicationInterval = 1f / 30f,
+            // a fixed filter (the server only): Godot evaluates it on join, SetSimulator on handoff
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _sync = sync;
         // the synchronizer's own authority decides who sends; children added after the
@@ -1001,6 +1073,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // for every peer, 30 000 managed calls a second at 32 players
             ReplicationInterval = 3600f,
             DeltaInterval = 3600f,
+            // refreshed per viewer when its set changes (RefreshNetVisibility), not every frame
+            VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
         _vis.SetMultiplayerAuthority(1);
         if (NetProxy && netId != 0)
@@ -1107,7 +1181,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         var kind = (RideKind)RideKindId;
         // a car is redrawn when its preset or garage parts change too (the garage's live preview, a remote tune)
-        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup && TrailerCode == _visualTrailer) return;
+        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup && TrailerCode == _visualTrailer
+            && OutfitBits == _visualOutfit) return;
 
         _visual?.QueueFree();
         _visual = null;
@@ -1116,6 +1191,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _visualKind = kind;
         _visualSetup = CarSetupId;
         _visualTuning = TuningBits;
+        _visualOutfit = OutfitBits;
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
         // the sections behind a truck's cab: their own bodies, whatever else is drawn
         FitSections(kind);
@@ -1127,12 +1203,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             // first person: nothing to draw, except in VR for the monitor's third-person view (#186)
             if (IsMultiplayerAuthority() && !Npc && !_thirdPerson && !XR.XrSession.Active) return;
-            _walkPalette = Avatar.HumanPalette.ForRider(rider);
+            _walkPalette = FigurePalette(rider);
+            _poseOutfit = OutfitBits;
             _walker = new MeshInstance3D
             {
                 Name = "Body",
                 Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f, hat: Hat),
-                MaterialOverride = Avatar.HumanMeshBuilder.Material(),
+                MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial(),
             };
             if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) _walker.Layers = XR.XrSession.SpectatorOnlyLayer;
             _visual = _walker;
@@ -1140,7 +1217,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else
         {
             _walker = null;
-            _visual = (_ride ?? CarSetups.Ride(kind, CarSetupId, TuningBits))?.BuildVisual(rider);
+            _visual = (_ride ?? CarSetups.Ride(kind, CarSetupId, TuningBits))?.BuildVisual(rider, new Avatar.Outfit(OutfitBits));
         }
 
         if (_visual != null)
@@ -1281,8 +1358,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 return;
             }
 
+            // thrown from a crash (#214): limp, and the crash camera on the body
+            if (TickRagdoll(dt))
+            {
+                UpdateCrashCamera(dt);
+                return;
+            }
+
             // published whatever the view: first person draws no body, but everyone else does
             PublishFootPose(dt);
+            StepThrowView(dt);
 
             // Render rate, not physics rate: the look has to answer the mouse the frame it
             // moves, the way rotating the body directly always did.
@@ -1304,16 +1389,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             }
             else
             {
-                if (_walker != null) _walker.Visible = true;
+                // borrowed from first person for a throw: the body only shows once the lens is out of the head
+                if (_walker != null) _walker.Visible = !_borrowedThird || _throwBlend > 0.3f;
                 ApplyFootPose();
                 UpdateThirdPersonCamera(dt);
             }
+            BlendOutCrashCamera(dt);
             return;
         }
 
         // someone in another building (or out while we are in) is not here: hidden, and their
         // last replicated position must not stand in a doorway as an invisible wall
-        bool here = Interiors.InteriorManager.Instance?.SameSpaceAsLocal(GetMultiplayerAuthority()) != false;
+        bool here = !Stowed && Interiors.InteriorManager.Instance?.SameSpaceAsLocal(GetMultiplayerAuthority()) != false;
         if (Visible != here)
         {
             Visible = here;
@@ -1359,8 +1446,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (dt <= 0) return;
         var kind = (RideKind)RideKindId;
+        // thrown from a crash (#214): this peer's own ragdoll, started and stopped by the owner's pose
+        bool limp = TickRagdoll(dt);
         if (kind == RideKind.OnFoot)
         {
+            if (limp) { SetRemoteEngine(null); return; }
             if (Anim.Y != _seenPhase) _stridePhase = _seenPhase = Anim.Y;
             else if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, Anim.X, dt);
             ApplyFootPose();
@@ -1373,7 +1463,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         AlignHull();
         _remoteRide?.AnimateRemote(_visual, Anim, dt);
         AnimateRemoteSections(dt);
-        if (_visual is Avatar.CarRig rig) { rig.DoorsOpen = DoorsOpen; rig.DriverShown = SeatIndex == 0; }
+        if (_visual is Avatar.CarRig rig)
+        {
+            rig.DoorsOpen = DoorsOpen;
+            rig.DriverShown = SeatIndex == 0;
+            // where the driver sits, in case the next update throws them through the windscreen
+            _seenSeat = rig.DriverSeat;
+            _seenSeatFrame = GlobalTransform * _visual.Transform * rig.DriverFrame;
+            _seenSeatAt = Time.GetTicksMsec() / 1000.0;
+        }
         else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
         SetRemoteEngine(_remoteRide as Flyer);
     }
@@ -1420,6 +1518,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The arm pose the held item and <see cref="ItemAction"/> call for, the same on every peer.</summary>
     private Avatar.ItemArmPose TargetArmPose()
     {
+        // a throw (#206): wound up with anything, and the follow-through once it has left the hand
+        if (ItemAction == 3) return Avatar.ItemArmPose.ThrowWindup;
+        if (ItemAction == 4) return Avatar.ItemArmPose.ThrowRelease;
         var def = Items.ItemDefs.Get((Items.ItemId)HeldItemId);
         if (def == null) return Avatar.ItemArmPose.None;
         bool aim = ItemAction == 1, use = ItemAction == 2;
@@ -1448,6 +1549,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _itemArmBlend = target;
             return;
         }
+        // the release whips straight out of the wind-up: no easing out of one into the other
+        if (want == Avatar.ItemArmPose.ThrowRelease && _itemArmCur == Avatar.ItemArmPose.ThrowWindup) _itemArmCur = want;
         if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first
         else if (want != _itemArmCur) _itemArmCur = want;
         _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / 0.18f);
@@ -1534,6 +1637,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_walker == null) return;
         // the two held poses are cached, so a hat put on or taken off (#18) rebuilds them
         if (_poseHat != Hat) { _slidePose = null; _airPose = null; _poseHat = Hat; }
+        // and so do clothes put on or taken off (#251)
+        if (_poseOutfit != OutfitBits)
+        {
+            _slidePose = null; _airPose = null; _poseOutfit = OutfitBits;
+            _walkPalette = _walkPalette with { Outfit = new(OutfitBits) };
+        }
         float dt = (float)GetProcessDeltaTime();
         StepArmPose(dt);
         var dance = StepDance(dt);
@@ -1542,21 +1651,29 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
         if (dance != null && ItemAction == 0) { arm = Avatar.ItemArmPose.None; blend = 0f; }
         bool armed = arm != Avatar.ItemArmPose.None && blend > 0.001f;
+        // a skirt streams in the air the figure moves through (#251): walking, running, falling
+        var palette = _walkPalette;
+        if (Avatar.HumanMeshBuilder.Flutters(palette.Outfit))
+        {
+            palette = palette with { Wind = _walkWind.Update(_walker, dt) };
+            _slidePose = null;
+            _airPose = null;
+        }
         Avatar.HumanMeshBuilder.GaitMounts mounts;
         switch (PoseKind)
         {
             case PoseTucked:
-                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(_walkPalette, Avatar.HumanPose.Tucked, arm, blend, Hat)
-                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked, hat: Hat);
+                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Tucked, arm, blend, Hat)
+                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat);
                 mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend);
                 break;
             case PoseAir:
-                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(_walkPalette, Avatar.HumanPose.Running, arm, blend, Hat)
-                    : _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running, hat: Hat);
+                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat)
+                    : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat);
                 mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend);
                 break;
             default:
-                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend, dance: dance);
+                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend, dance: dance);
                 mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance);
                 break;
         }
@@ -1580,25 +1697,65 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// a camera parented to that turn would swing round every time the player changed direction.
     /// </para>
     /// </summary>
+    private const float ThrowCamHeight = 1.62f, ThrowCamOffset = 0.62f, ThrowCamDistance = 1.7f;
+
+    /// <summary>
+    /// Eases the throw camera toward <see cref="ThrowAim"/>, lending third person to a first-person
+    /// player for as long as it is out (the body has to be built to be seen) and handing it back once
+    /// the lens is home in the head.
+    /// </summary>
+    private void StepThrowView(float dt)
+    {
+        float want = ScopeView ? 0f : Mathf.Clamp(ThrowAim, 0f, 1f);
+        _throwBlend = Mathf.Lerp(_throwBlend, want, 1f - Mathf.Exp(-(want > _throwBlend ? 9f : 7f) * dt));
+        if (want == 0f && _throwBlend < 0.01f) _throwBlend = 0f;
+        if (!_thirdPerson && want > 0f)
+        {
+            _borrowedThird = true;
+            _thirdPerson = true;
+            _pivotY = float.NaN;
+            _armBlend = 1f;
+            RefreshVisual(force: true);
+        }
+        else if (_borrowedThird && want == 0f && _throwBlend == 0f)
+        {
+            _borrowedThird = false;
+            _thirdPerson = false;
+            if (_camera != null) _camera.Transform = new Transform3D(Basis.Identity, new Vector3(0, EyeHeight, 0));
+            RefreshVisual(force: true);
+        }
+    }
+
     private void UpdateThirdPersonCamera(float dt)
     {
         if (_camera == null) return;
 
         // The pivot drops with the slide, and its height is eased so a step, a kerb or the top
         // of a jump does not jerk the whole picture; far off (a teleport), it snaps.
-        float pivotTarget = GlobalPosition.Y + Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend);
+        // A throw pulls the lens in close over the right shoulder (#206); lent from first person,
+        // the arm grows out of the eye instead of shrinking from the chase distance.
+        float tb = _throwBlend;
+        float height = Mathf.Lerp(_borrowedThird ? EyeHeight : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend), ThrowCamHeight, tb);
+        float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
             : Mathf.Lerp(_pivotY, pivotTarget, 1f - Mathf.Exp(-10f * dt));
         var pivot = new Vector3(GlobalPosition.X, _pivotY, GlobalPosition.Z);
 
         var view = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, _pitch + _punch);
+        if (CameraShake > 0f)
+        {
+            // two incommensurate wobbles per axis: a tremble, not a wave
+            float now = (float)Time.GetTicksMsec() / 1000f;
+            view = view * new Basis(Vector3.Right, CameraShake * (Mathf.Sin(now * 61f) + 0.6f * Mathf.Sin(now * 97f)))
+                        * new Basis(Vector3.Up, CameraShake * (Mathf.Sin(now * 53f + 1f) + 0.6f * Mathf.Sin(now * 89f)));
+        }
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
-        float distance = ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f;
+        float distance = Mathf.Lerp(_borrowedThird ? 0f : ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f, ThrowCamDistance, tb);
 
-        var shoulder = pivot + view.X * ShoulderOffset;
+        var shoulder = pivot + view.X * Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset, ThrowCamOffset, tb);
         var wanted = shoulder + view.Z * distance;
 
         // cast from the body's centre, not the shoulder, so a wall at the player's right does not
@@ -1651,6 +1808,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void ToggleView()
     {
+        // mid-throw from first person: the lent view is given back first, then toggled as usual
+        if (_borrowedThird)
+        {
+            _borrowedThird = false;
+            _thirdPerson = false;
+        }
         var settings = Core.GameSettings.Current;
         // VR is first person only (#186): at the wheel, V still shows or hides your own body
         if (XR.XrSession.Active)
@@ -1698,7 +1861,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool SetRide(RideKind kind)
     {
         if (kind == (RideKind)RideKindId) return true;
-        if (!IsOnFloor() || _sliding || Indoors) return false;
+        if (!IsOnFloor() || _sliding || Indoors || Ragdolled) return false;
 
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
         float limit = _ride?.DismountSpeed ?? RunSpeed + 0.5f;
@@ -1725,11 +1888,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public bool TryInteract()
     {
+        // limp after a crash: nothing to do, and no picker either
+        if (Ragdolled) return true;
         // a walkable vehicle's passenger stands up into the aisle; any other gets out
         if (RidingWith != 0) return StandUp() || TryLeaveSeat();
         if (_ride is { IsVehicle: true })
         {
             ExitVehicle();
+            return true;
+        }
+        // a Battle Royale crate at your feet (#194), indoors or out: a death box falls where its owner did
+        if (_ride == null && !_mantling && _deadTimer <= 0 && BattleRoyale.BrCrates.Instance?.TryOpen(this) == true) return true;
+
+        // what the view points at and the border outlines (#206): a dropped item is picked up
+        if (_ride == null && !_mantling && _deadTimer <= 0 && Items.Highlight.Pointed is Items.DroppedItem dropped
+            && IsInstanceValid(dropped) && Items.ItemController.Instance is { } items)
+        {
+            items.PickUp(dropped);
             return true;
         }
         // inside, E is the front door or nothing: no mount picker in a living room
@@ -1752,8 +1927,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // walking about in a vehicle: a seat, or the wheel (#162)
         if (Aboard) return TryDeckSeat();
 
-        // a radio within reach: its panel (play a CD, burn one, pick it up)
-        if (Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach) is { } radio)
+        // a radio within reach, the one pointed at first: its panel (play a CD, burn one, pick it up)
+        if ((Items.Highlight.Pointed as Items.RadioBody ?? Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach)) is { } radio)
         {
             Items.RadioUi.Instance?.Open(radio);
             return true;
@@ -1812,6 +1987,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             car.RoofOpen = state.RoofOpen && car.HasSoftTop;
         }
         CarRadio = state.Radio;
+        CarCd = state.Cd;
         _placed = true;
     }
 
@@ -1830,7 +2006,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId,
             Train: _ride is Truck t ? t.TrailerCode : 0, Angles: _ride is Truck ta ? ta.Angles : default,
             Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
-            Radio: wrecked ? 0 : CarRadio);
+            Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd);
     }
 
     /// <summary>
@@ -1879,6 +2055,23 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return false;
         var (bit, distance) = rig.NearestDoor(GlobalPosition);
         if (bit == 0 || distance > VehicleManager.DoorReach) return false;
+        Vehicles.ToggleDoor(vehicle, bit);
+        return true;
+    }
+
+    /// <summary>How near the middle of a car door a VR hand must be to work it, m (#243).</summary>
+    private const float HandDoorReach = 0.6f;
+
+    /// <summary>
+    /// A VR hand gripping a car door (#243): as <see cref="TryToggleCarDoor()"/>, but the door the
+    /// hand is at, and only when the hand is really there.
+    /// </summary>
+    public bool TryToggleCarDoor(Vector3 hand)
+    {
+        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+            return false;
+        var (bit, distance) = rig.NearestDoor(hand);
+        if (bit == 0 || distance > HandDoorReach) return false;
         Vehicles.ToggleDoor(vehicle, bit);
         return true;
     }
@@ -1944,9 +2137,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (raw != over && InsideVehicle(raw, frame, vehicle)) continue;
             // on a slope the ground beside the seat is not at the seat's height: stand on it,
             // or the uphill side reads as blocked and the player is put on the vehicle's roof
-            // (indoors the terrain is 3 km overhead: the floor is at the seat's height)
+            // (indoors, or in a tunnel, the terrain is overhead: the floor is at the seat's height)
             var candidate = raw;
-            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && Terrain.TryGetHeight(raw, out float g))
+            // in a tunnel, out beside the vehicle only within the bore: past its wall is the hill
+            if (Terrain != null && Terrain.InTunnel(at) && !Terrain.InTunnel(raw)) continue;
+            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && !Terrain.InTunnel(raw) && Terrain.TryGetHeight(raw, out float g))
                 candidate = raw with { Y = Mathf.Max(raw.Y, g) };
             var query = new PhysicsShapeQueryParameters3D
             {
@@ -2006,14 +2201,63 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     // health
     // ------------------------------------------------------------------------------------
 
-    public void TakeDamage(float amount)
+    public void TakeDamage(float amount) => TakeDamage(amount, 0, DamageCause.Other);
+
+    /// <summary>
+    /// Takes <paramref name="amount"/> of health. A weapon hit names its shooter
+    /// (<paramref name="attacker"/>, a peer id) and is half soaked by <see cref="Armor"/> while it lasts.
+    /// </summary>
+    public void TakeDamage(float amount, long attacker, DamageCause cause)
     {
         if (amount <= 0 || _deadTimer > 0) return;
+        if (cause == DamageCause.Weapon && Armor > 0)
+        {
+            float soaked = Mathf.Min(Armor, amount * 0.5f);
+            Armor -= soaked;
+            amount -= soaked;
+        }
+        double now = Time.GetTicksMsec() / 1000.0;
+        if (attacker != 0)
+        {
+            _lastAttacker = attacker;
+            _lastAttackedAt = now;
+        }
         Health = Mathf.Max(0f, Health - amount);
         _sinceHurt = 0;
         Hurt?.Invoke(amount);
         PlayerInput.Rumble(0.6f, Mathf.Clamp(amount / 40f, 0.2f, 1f), 0.25f);
-        if (Health <= 0f) Die();
+        if (Health <= 0f)
+        {
+            long killer = now - _lastAttackedAt <= CreditSeconds ? _lastAttacker : 0;
+            Die();
+            Died?.Invoke(killer, cause);
+        }
+    }
+
+    /// <summary>Puts on a vest: armour back to full. False when it already is.</summary>
+    public bool AddArmor(float amount)
+    {
+        if (amount <= 0 || _deadTimer > 0 || Armor >= MaxArmor - 0.01f) return false;
+        Armor = Mathf.Min(MaxArmor, Armor + amount);
+        return true;
+    }
+
+    /// <summary>
+    /// Back in the game after <see cref="Eliminated"/> (a match ended): full health, no armour, at
+    /// <paramref name="at"/>.
+    /// </summary>
+    public void Respawn(Vector3 at)
+    {
+        Eliminated = false;
+        _deadTimer = 0;
+        _stunTimer = 0;
+        Down = 0;
+        Health = MaxHealth;
+        Armor = 0;
+        _lastAttacker = 0;
+        GlobalPosition = at;
+        Velocity = Vector3.Zero;
+        RequestReplacement();
     }
 
     /// <summary>
@@ -2021,7 +2265,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// occupant, and going to zero wrecks it with them inside; on foot or on equipment it is the
     /// player who is hit.
     /// </summary>
-    public void ShotHit(float damage)
+    public void ShotHit(float damage, long attacker = 0)
     {
         if (_ride is { IsVehicle: true })
         {
@@ -2029,7 +2273,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (VehicleHealth <= 0f) WreckVehicle();
             return;
         }
-        TakeDamage(damage);
+        TakeDamage(damage, attacker, DamageCause.Weapon);
     }
 
     /// <summary>
@@ -2071,6 +2315,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (_ride is { IsVehicle: true }) WreckVehicle();
         else if (_ride != null) ApplyRide(RideKind.OnFoot, Velocity);
+        Down = 1;
+        if (StayDown?.Invoke(this) == true)
+        {
+            // out of the match: never revived by the timer, only by Respawn
+            Eliminated = true;
+            Announced?.Invoke("ELIMINATED", false);
+            _deadTimer = float.PositiveInfinity;
+            _stunTimer = float.PositiveInfinity;
+            return;
+        }
         Announced?.Invoke("KNOCKED OUT", false);
         _deadTimer = 3.5f;
         _stunTimer = 3.5f;
@@ -2078,6 +2332,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void Revive()
     {
+        Down = 0;
+        // knocked out while still tumbling from a crash (#214): up at the safe spot, not lying there
+        if (Ragdolled) { EndRagdoll(); _stunTimer = 0.3f; }
         Health = MaxHealth;
         if (HasSafeHere) GlobalPosition = _lastSafe + Vector3.Up * 0.5f;
         Velocity = Vector3.Zero;
@@ -2098,6 +2355,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _camFwd = shift.Direction(_camFwd);
         Velocity = shift.Direction(Velocity);
         ShiftDeck(shift);
+        ShiftCrash(shift);
     }
 
     private void RememberSafe(Vector3 at)
@@ -2153,7 +2411,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         float damage = 75f * t;
         if (_ejected > 0) damage = Mathf.Min(damage, EjectBlastCap);
-        TakeDamage(damage);
+        TakeDamage(damage, 0, DamageCause.Blast);
         if (_ride == null)
         {
             var away = (GlobalPosition - at) with { Y = 0 };
@@ -2171,12 +2429,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <param name="setup">A car's preset (<see cref="CarSetups"/>), likewise.</param>
     private void ApplyRide(RideKind kind, Vector3 velocity, long tuning = 0, int setup = 0)
     {
+        // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
+        if (kind != RideKind.OnFoot) EndRagdoll();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
         if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
         RideKindId = (int)kind;
         // the radio belongs to the vehicle: getting out leaves it tuned in the parked one
         CarRadio = 0;
+        CarCd = "";
         // the parts and the doors belong to one car: changing car (the picker), getting out or a
         // wreck leaves them with that car
         TuningBits = _ride is Car car ? car.Tuning.Pack() : 0;
@@ -2279,6 +2540,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if ((@event.IsActionPressed(PlayerInput.RadioNext) || @event.IsActionPressed(PlayerInput.RadioPrev)) && !@event.IsEcho()
             && _ride != null && SeatIndex == 0 && HasCarRadio((RideKind)RideKindId))
         {
+            CarCd = "";
             CarRadio = Audio.Live.Stations.Step(CarRadio, @event.IsActionPressed(PlayerInput.RadioNext) ? 1 : -1);
             CarRadioTuned?.Invoke(Audio.Live.Stations.Name(CarRadio));
             GetViewport().SetInputAsHandled();
@@ -2347,6 +2609,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public override void _PhysicsProcess(double delta)
     {
+        // held by the Battle Royale cargo plane (#207): it moves the body, nothing else does
+        if (Carried()) return;
         // drop onto the terrain surface once its height data is available
         if (!_placed && !Indoors)
         {
@@ -2371,6 +2635,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         TickHealth(dt, onFloor);
+
+        // limp after a crash (#214): the body goes where its hips are, so the replicated position follows the ragdoll
+        if (_ragdoll != null)
+        {
+            Velocity = Vector3.Zero;
+            GlobalPosition = _ragdoll.Pelvis;
+            return;
+        }
 
         // PlayerInput returns neutral while a text field has the keyboard, so typing in chat
         // does not walk the player around.
@@ -2732,6 +3004,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void FaceTravel(float dt, Vector3 moveDirection)
     {
+        // winding up a throw: square up to where the view points, whatever the feet do
+        if (_throwBlend > 0.05f)
+        {
+            Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, _viewYaw, 1f - Mathf.Exp(-18f * dt)), 0);
+            return;
+        }
         var flat = new Vector3(Velocity.X, 0, Velocity.Z);
         Vector3 facing;
         if (!_sliding && moveDirection.LengthSquared() > 0.01f) facing = moveDirection;
@@ -2756,7 +3034,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>
     /// Safety net for a player who glitched through the world, on foot, mounted or flying:
     /// <list type="bullet">
-    /// <item>outdoors, more than 2 m under the terrain: straight up onto it;</item>
+    /// <item>outdoors, more than 2 m under the terrain, not inside a tunnel bore and with no floor
+    /// under them (a ramp the road blend cut into the ground): straight up onto it;</item>
     /// <item>outdoors, far below any ground and no height known here (the tile has not streamed, or
     /// there is no data): back to the last safe spot outside, or held here until the ground arrives;</item>
     /// <item>indoors, under the interior's floor: back where they last stood in it.</item>
@@ -2782,7 +3061,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground))
         {
-            if (GlobalPosition.Y >= ground - 2f) return false;
+            if (GlobalPosition.Y >= ground - 2f || Terrain.InTunnel(GlobalPosition)
+                || Terrain.FloorBelow(this, GlobalPosition, GetRid())) return false;
             to = GlobalPosition with { Y = ground + 1f };
         }
         else
@@ -2794,7 +3074,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_sinceSnapWarning > 2)
         {
             _sinceSnapWarning = 0;
-            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}");
+            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}"
+                + (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float gh) ? $" (ground {gh:F1}, in a tunnel: {Terrain.InTunnel(GlobalPosition)}, y {GlobalPosition.Y:F2})" : ""));
         }
         RequestReplacement();
         _flight.Velocity = Vector3.Zero;
@@ -2824,8 +3105,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _jumpHeld = jumpDown;
         bool downHeld = PlayerInput.Held(PlayerInput.CrouchSlide);
 
+        // a wingsuit or canopy also leans toward where the free look points (#207)
+        var stick = PlayerInput.Move;
+        if (flyer.LookBank > 0f && !typing && !onFloor)
+            stick.X = Mathf.Clamp(stick.X - Mathf.Clamp(_lookYaw / 0.8f, -1f, 1f) * flyer.LookBank, -1f, 1f);
+
         var input = new FlightInput(
-            Stick: PlayerInput.Move,
+            Stick: stick,
             Up: Mathf.Max(jumpDown ? 1f : 0f, tr),
             Down: Mathf.Max(downHeld ? 1f : 0f, tl),
             LeverUp: Mathf.Max(PlayerInput.Held(PlayerInput.Sprint) ? 1f : 0f, tr),
@@ -2910,7 +3196,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
         // a wingsuit into the ground is the pilot hitting it, not a machine
-        TakeDamage((speed - 8f) * 3.5f);
+        TakeDamage((speed - 8f) * 3.5f, 0, DamageCause.Crash);
         Impacted?.Invoke(Mathf.Max(speed, 8f));
         Announced?.Invoke(flyer is Wingsuit ? "SPLAT!" : "CRASH!", false);
         PlayerInput.Rumble(1f, 1f, 0.5f);
@@ -2993,8 +3279,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
             Steer: SteerInput(),
             Effort: PlayerInput.Held(PlayerInput.TuckBoost),
-            // Space is a hop on a bike and the handbrake in a car
-            Handbrake: _ride is { CanHop: false } && PlayerInput.Held(PlayerInput.Jump));
+            // Space is a hop on a bike and the handbrake in a car, as is a wheel's lever
+            Handbrake: _ride is { CanHop: false } && (PlayerInput.Held(PlayerInput.Jump) || PlayerInput.WheelHandbrake > 0.5f),
+            WheelAngle: _ride is { WheelLock: > 0f } wheeled ? PlayerInput.WheelAngle(wheeled.WheelLock) : float.NaN);
 
         // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
         if (_ride is Skis && XR.XrSession.Active && RideControls == null)
@@ -3004,6 +3291,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 Throttle = Mathf.Max(input.Throttle, XR.XrSession.SkiPole),
                 Effort = input.Effort || XR.XrSession.SkiTuck,
             };
+        // VR hands on the steering wheel (#243): the wheel's angle, as a real wheel's (#68)
+        if (_ride is { WheelLock: > 0f } && XR.XrSession.Active && RideControls == null && !float.IsNaN(XR.XrSession.WheelAngle))
+            input = input with { WheelAngle = XR.XrSession.WheelAngle };
 
         // nobody at the wheel (the driver jumped out, #158): no pedal, the wheel let go
         if (SeatIndex != 0) input = new RideInput(0f, 0f, 0f, false);
@@ -3050,7 +3340,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
         var surface = (_ride is Motorbike or Truck || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
-            ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
+            ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors, this) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
@@ -3127,6 +3417,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float achieved = new Vector2(real.X, real.Z).Length();
         _shortfall = Mathf.Lerp(_shortfall, Mathf.Max(0f, _motion.Speed - achieved), 1f - Mathf.Exp(-ImpactResponse * dt));
         _realSpeed = _motion.Speed - _shortfall;
+        // The settle after mounting is time, not contact: counted only while touching something,
+        // it swallowed the first second of the first real crash, and nobody was ever thrown (#214).
+        if (_settle > 0f) _settle -= dt;
         if (_realSpeed < _motion.Speed - ImpactTolerance)
         {
             float before = _motion.Speed;
@@ -3135,19 +3428,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             PlayerInput.Rumble(0.4f, Mathf.Clamp((before - _motion.Speed) * 0.6f, 0f, 1f), 0.12f);
             Impacted?.Invoke(before - _motion.Speed);
 
-            // A wall taken at speed throws the rider over the bars; the bike stays where it hit.
-            if (_settle > 0f) _settle -= dt;
-            else if (_ride is { IsVehicle: true } && before - _realSpeed > 9f)
+            // A wall taken at speed throws the rider over the bars, or through the windscreen
+            // (#214, FootPlayer.Crash.cs); the machine stays where it hit. A shortfall that
+            // persists (the smoothed one, so a bump is not a wall) and a big one right now: the
+            // smoothed figure alone, with the decel cap above, only just reached 9 m/s in a
+            // 56 km/h head-on hit, and whether it did came down to frame timing.
+            float stopped = _motion.Speed - achieved;
+            if (_settle <= 0f && _ride is { IsVehicle: true } && _shortfall > 3f && stopped > ThrowSpeed)
             {
-                float hit = before;
-                var fwd = -GlobalTransform.Basis.Z with { Y = 0 };
-                var state = CaptureVehicle(wrecked: false) with { Velocity = Vector3.Zero };
-                Vehicles?.Park(state);
-                Announced?.Invoke("THROWN OFF!", false);
-                ApplyRide(RideKind.OnFoot, fwd.Normalized() * hit * 0.25f + Vector3.Up * 4f);
-                GlobalPosition += Vector3.Up * 1.2f;
-                _stunTimer = 1.2f;
-                TakeDamage((hit - 8f) * 3f);
+                ThrowFromVehicle(before);
                 return;
             }
         }
@@ -3572,7 +3861,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PlayerInput.Rumble(0.2f, Mathf.Clamp((_fallSpeed - 3f) / 7f, 0.15f, 1f), 0.15f);
             if (_fallSpeed > 1.5f) Landed?.Invoke(_fallSpeed);
             // a 6 m drop is free, a 15 m one hurts a lot, a 25 m one is the end
-            if (_fallSpeed > 11f && _ejected <= 0) TakeDamage((_fallSpeed - 11f) * 9f);
+            if (_fallSpeed > 11f && _ejected <= 0) TakeDamage((_fallSpeed - 11f) * 9f, 0, DamageCause.Fall);
             _fallSpeed = 0f;
         }
         _wasOnFloor = onFloor;

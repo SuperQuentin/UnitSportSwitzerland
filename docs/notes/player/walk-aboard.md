@@ -103,10 +103,9 @@
   now parked bus, out, the outside button shuts and opens the door, back in, sit, stand, walk to the
   wheel, drive), both with `--deck-inertia`
   on the server; `--exitcheck [pw]` gets up from every bus's wheel (into the aisle) and from a city
-  bus's at 19 km/h (still aboard as it rolls on). Run them **on generated terrain** (no
-  `terrain_location.json`, the server with `--generated-world`): on the real Martigny data the scripted drive of `--decknet a|b` goes into
-  a house as a jumps out (the bus stops dead, "still rolls" fails) and both clients' spawn can put the
-  bus over b;
+  bus's at 19 km/h (still aboard as it rolls on). All of it in one guarded run: `tools/decknetcheck.sh` (`--world fixture`, headless,
+  ~3 min; tier `full` in `tools/lib/checkmap.txt`), and `--exitcheck --world fixture` (tier `quick`,
+  70 s). On the real Martigny map the scripted drive of `--decknet a|b` goes into a house;
   on the server; `--avatars … --cockpit --heavy N --deck [--door]` draws the deck. Test traps met:
   both clients spawn on one spot (b was inside a's bus and was carried off), a headless client has
   no parked models (the parked vehicle's own node is the frame then).
