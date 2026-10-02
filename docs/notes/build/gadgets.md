@@ -27,8 +27,16 @@
     parachute as on any base jump).
   - Trampoline: walking or landing onto the mat (no key) throws you up at 15.5 m/s (~13 m) and sets
     `FootPlayer.SoftLanding`: the next landing deals no fall damage.
-- **Not yet**: a hanging / climbing pose for others (they see a standing body moving), hay bale burning from a
-  flare, hiding from the minimap (no enemy markers exist yet), pixel icons, Battle Royale prefabs using them (#276).
+- **Poses** (#359): `GadgetTool.Board` sets `FootPlayer.CarriedPose` (1 zipline, 2 ladder) and the ladder hold
+  `ClimbStep` (one per 0.45 m rung); `PublishFootPose` replicates them as `PoseHang` / `PoseClimb` (`Anim.X` =
+  step parity), drawn with `HumanPose.Hanging` / `ClimbLeft` / `ClimbRight`. Reset on `Release` / `Leap`.
+- **Burning** (#359): a flare fired beside a hay hideout (3 m) or at one (≤ 25 m along the aim, 1.5 m off it)
+  calls `GadgetTool.TryBurn` → `PlacedObjects.RequestBurn` → server `ServeBurn` (hay only, shooter within 30 m
+  in LV95, anyone's) → `Burnt` on every peer: `GadgetMeshes.Burn` fire, smoke and light for 8 s, then gone.
+- **Hidden from the radar** (#359): the Battle Royale minimap shows opponents within 80 m as red dots
+  (`BrManager.Nearby`), except a body whose feet are under a camo net (its 3.8 m square, up to 2 m) or in a
+  hay hideout (`Gadgets.Hidden`, worked out by each viewer, nothing sent).
+- **Icons**: pixel grids in `ItemIcons` for all six.
 - **Checks**: `--gadgetcheck --systems ui,physics,build` (offline: the rules, the real place path for trampoline /
   net / hideout, a bounce of 13 m without damage, the zipline's two-Use path refused when too short, a ride
   to the bottom post, a 5 m climb, an 80 m launch into the wingsuit, cleanup; `shots` windowed writes

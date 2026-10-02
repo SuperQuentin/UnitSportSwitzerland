@@ -318,19 +318,82 @@ public partial class Structures : Node
 
     // ---- server ---------------------------------------------------------------------------------
 
-    /// <summary>Server: hands a joining peer every structure and piece.</summary>
+    // ---- interest (#359): a peer has only the structures near it --------------------------------
+
+    /// <summary>A structure this close to a player (horizontally, from its origin) is sent to it; past <see cref="LeaveRange"/> it is taken back.</summary>
+    public const double EnterRange = 1200, LeaveRange = 1500;
+
+    /// <summary>Server: which structures each peer has been sent.</summary>
+    private readonly Dictionary<long, HashSet<long>> _known = new();
+
+    /// <summary>Server: a joining peer starts with nothing, then gets what is near it.</summary>
     public void SendTo(long peer)
     {
         RpcId(peer, MethodName.Clear);
+        _known[peer] = new HashSet<long>();
+        UpdateInterest(peer);
+    }
+
+    /// <summary>Server: one structure, whole, to one peer.</summary>
+    private void SendWhole(long peer, Structure s)
+    {
+        if (!_known.TryGetValue(peer, out var known)) _known[peer] = known = new HashSet<long>();
+        known.Add(s.Id);
+        RpcId(peer, MethodName.AddStructure, s.Id, s.E, s.N, s.Altitude, s.Yaw, s.Owner, s.Match);
+        // undamaged pieces of one owner in one go (a prefab is dozens); the rest one by one
+        foreach (var group in s.Pieces.Values.Where(p => p.Damage == 0).GroupBy(p => p.Owner))
+            RpcId(peer, MethodName.AddPieces, s.Id, group.SelectMany(p => Pack(p.Piece)).ToArray(), group.Key, group.Min(p => p.BuiltAt));
+        foreach (var p in s.Pieces.Values.Where(p => p.Damage != 0))
+            RpcId(peer, MethodName.AddPiece, s.Id, Pack(p.Piece), p.Owner, p.Damage, p.BuiltAt, false);
+    }
+
+    /// <summary>Where a peer's body is, in LV95 (what it published), or null if it has none.</summary>
+    private GlobalPos? BodyOf(long peer) => GetNodeOrNull<Player.FootPlayer>("../Players/" + peer) is { } body ? body.Global : null;
+
+    private static double Distance(Structure s, GlobalPos at)
+    {
+        double de = s.E - at.E, dn = s.N - at.N;
+        return Math.Sqrt(de * de + dn * dn);
+    }
+
+    /// <summary>Server: sends a peer what came into range, takes back what went out of it.</summary>
+    private void UpdateInterest(long peer)
+    {
+        if (BodyOf(peer) is not { } at) return;
+        if (!_known.TryGetValue(peer, out var known)) _known[peer] = known = new HashSet<long>();
         foreach (var s in _structures.Values)
         {
-            RpcId(peer, MethodName.AddStructure, s.Id, s.E, s.N, s.Altitude, s.Yaw, s.Owner, s.Match);
-            // undamaged pieces of one owner in one go (a prefab is dozens); the rest one by one
-            foreach (var group in s.Pieces.Values.Where(p => p.Damage == 0).GroupBy(p => p.Owner))
-                RpcId(peer, MethodName.AddPieces, s.Id, group.SelectMany(p => Pack(p.Piece)).ToArray(), group.Key, group.Min(p => p.BuiltAt));
-            foreach (var p in s.Pieces.Values.Where(p => p.Damage != 0))
-                RpcId(peer, MethodName.AddPiece, s.Id, Pack(p.Piece), p.Owner, p.Damage, p.BuiltAt, false);
+            double d = Distance(s, at);
+            if (!known.Contains(s.Id) && d < EnterRange) SendWhole(peer, s);
+            else if (known.Contains(s.Id) && d > LeaveRange)
+            {
+                known.Remove(s.Id);
+                RpcId(peer, MethodName.RemoveStructure, s.Id);
+            }
         }
+    }
+
+    /// <summary>Server: a new structure goes to the peers near it (the builder among them, being within reach).</summary>
+    private void Introduce(Structure s)
+    {
+        if (!Online) return;
+        foreach (int peer in Multiplayer.GetPeers())
+            if (BodyOf(peer) is { } at && Distance(s, at) < EnterRange) SendWhole(peer, s);
+    }
+
+    /// <summary>Server: a change to one structure, to the peers that have it.</summary>
+    private void ToKnowers(long structure, StringName method, params Variant[] args)
+    {
+        if (!Online) return;
+        foreach (var (peer, known) in _known)
+            if (known.Contains(structure)) RpcId(peer, method, args);
+    }
+
+    /// <summary>Server: a structure is gone: told to those that had it, and forgotten.</summary>
+    private void Gone(long structure)
+    {
+        ToKnowers(structure, MethodName.RemoveStructure, structure);
+        foreach (var known in _known.Values) known.Remove(structure);
     }
 
     /// <summary>
@@ -343,8 +406,7 @@ public partial class Structures : Node
         PutStructure(s);
         double grown = Now - 1000;
         foreach (var piece in pieces) PutPiece(s, new Placed { Piece = piece, Owner = "", BuiltAt = grown }, false);
-        Broadcast(MethodName.AddStructure, s.Id, s.E, s.N, s.Altitude, s.Yaw, s.Owner, s.Match);
-        Broadcast(MethodName.AddPieces, s.Id, s.Pieces.Values.SelectMany(p => Pack(p.Piece)).ToArray(), "", grown);
+        Introduce(s);
         return s;
     }
 
@@ -354,6 +416,11 @@ public partial class Structures : Node
         _sinceSweep += delta;
         if (_sinceSweep < 2) return;
         _sinceSweep = 0;
+        if (Online)
+        {
+            foreach (long peer in _known.Keys.Where(p => !Multiplayer.GetPeers().Contains((int)p)).ToList()) _known.Remove(peer);
+            foreach (int peer in Multiplayer.GetPeers()) UpdateInterest(peer);
+        }
         // a match is over: its structures go with it
         if (MatchRunning?.Invoke() == true) return;
         ClearMatch();
@@ -365,7 +432,7 @@ public partial class Structures : Node
         foreach (var s in _structures.Values.Where(s => s.Match).ToList())
         {
             DropStructure(s.Id);
-            Broadcast(MethodName.RemoveStructure, s.Id);
+            Gone(s.Id);
         }
     }
 
@@ -417,11 +484,11 @@ public partial class Structures : Node
         {
             s = new Structure { Id = _nextId++, E = e, N = n, Altitude = alt, Yaw = yaw, Owner = owner, Match = match };
             PutStructure(s);
-            Broadcast(MethodName.AddStructure, s.Id, s.E, s.N, s.Altitude, s.Yaw, s.Owner, s.Match);
+            Introduce(s);
         }
         var placed = new Placed { Piece = piece!.Value, Owner = owner, BuiltAt = Now };
         PutPiece(s, placed, live: true);
-        Broadcast(MethodName.AddPiece, s.Id, Pack(placed.Piece), placed.Owner, 0f, placed.BuiltAt, true);
+        ToKnowers(s.Id, MethodName.AddPiece, s.Id, Pack(placed.Piece), placed.Owner, 0f, placed.BuiltAt, true);
         if (!s.Match) Save();
         Reply(peer, req, "");
     }
@@ -457,7 +524,7 @@ public partial class Structures : Node
         if (p.Hp(Now) > 0)
         {
             _visuals?.Damaged(s, p);
-            Broadcast(MethodName.SetDamage, s.Id, PackSlot(slot), p.Damage);
+            ToKnowers(s.Id, MethodName.SetDamage, s.Id, PackSlot(slot), p.Damage);
             return;
         }
         Break(s, slot, pickedUp: false);
@@ -487,13 +554,13 @@ public partial class Structures : Node
             if (stacks.Count > 0) Rubble(Centre(s, lost[0]), stacks);
         }
         // a pick-up names the one piece first (no debris for it); the rest fell
-        if (pickedUp) Broadcast(MethodName.RemovePieces, s.Id, PackSlot(slot), false);
+        if (pickedUp) ToKnowers(s.Id, MethodName.RemovePieces, s.Id, PackSlot(slot), false);
         var debris = pickedUp ? gone.Skip(5).ToArray() : gone.ToArray();
-        if (debris.Length > 0) Broadcast(MethodName.RemovePieces, s.Id, debris, true);
+        if (debris.Length > 0) ToKnowers(s.Id, MethodName.RemovePieces, s.Id, debris, true);
         if (s.Pieces.Count == 0)
         {
             DropStructure(s.Id);
-            Broadcast(MethodName.RemoveStructure, s.Id);
+            Gone(s.Id);
         }
         Changed?.Invoke();
         if (!s.Match) Save();
@@ -507,12 +574,6 @@ public partial class Structures : Node
         if (GroundAt?.Invoke(foot) is not { } ground) return true;
         float gap = foot.Y - ground;
         return gap > -BuildGrid.Storey && gap < BuildGrid.StiltMax + 1f;
-    }
-
-    private void Broadcast(StringName method, params Variant[] args)
-    {
-        if (!Online) return;
-        foreach (int peer in Multiplayer.GetPeers()) RpcId(peer, method, args);
     }
 
     private void Reply(long peer, int req, string refused)

@@ -127,6 +127,19 @@ public partial class BuildNetProbe : Node
         Expect(await Until(() => refused != "waiting", 5) && refused?.Contains("not yours") == true, $"taking A's wall refused ({refused})");
         await Seconds(1.0);
         Expect(s.Pieces.TryGetValue(WallA, out var w) && w.Damage == 0, "my hit on A's wall was ignored");
+
+        // interest (#359): 1.6 km away the structure is taken back, nearby again it comes back whole
+        if (Me is { } me)
+        {
+            var home = me.GlobalPosition;
+            me.GlobalPosition = home + new Vector3(1600f, 400f, 0);
+            Expect(await Until(() => !structures.All.ContainsKey(id), 8), "far away, A's structure is taken back here");
+            me.GlobalPosition = home + Vector3.Up * 2f;
+            Expect(await Until(() => structures.All.TryGetValue(id, out var back) && back.Pieces.Count == 4, 8),
+                "back again, it is sent whole");
+            s = structures.All[id];
+            await Until(() => me.IsOnFloor(), 5);
+        }
         Say("seen");
 
         if (!await Heard("A", "broke", 60)) { Fail("A never broke its wall"); return; }

@@ -202,6 +202,15 @@ public static partial class InteriorMeshBuilder
 
     // ---- rooms -------------------------------------------------------------------------------
 
+    /// <summary>
+    /// How far each wall, floor and ceiling piece runs past its neat edge. Pieces that only touch
+    /// (a panel beside a doorway, the lintel over it, two rooms' reveals meeting at the shared wall
+    /// line) leave T-junctions, and those rasterise as hairline cracks onto the dark void the
+    /// interior floats in; the interior's far-from-origin coordinates make it worse. Overlapping by
+    /// a few millimetres closes them; the overlap is coplanar and the same colour, so it is unseen.
+    /// </summary>
+    private const float Seam = 0.006f;
+
     private static void Room(Scratch s, RoomPlan r, float y0, float clear, List<RectPlan> holes, List<RectPlan> ceilingHoles)
     {
         var (floorCol, wallCol, ceilCol) = Palette(r.Type);
@@ -209,12 +218,18 @@ public static partial class InteriorMeshBuilder
         var inner = new RectPlan(r.X0 + t, r.Z0 + t, r.X1 - t, r.Z1 - t);
         float top = y0 + clear;
 
-        foreach (var piece in Subtract(inner, holes))
+        foreach (var cut in Subtract(inner, holes))
+        {
+            var piece = cut.Grow(Seam);
             s.Quad(new(piece.X0, y0, piece.Z0), new(piece.X1, y0, piece.Z0),
                 new(piece.X1, y0, piece.Z1), new(piece.X0, y0, piece.Z1), floorCol);
-        foreach (var piece in Subtract(inner, ceilingHoles))
+        }
+        foreach (var cut in Subtract(inner, ceilingHoles))
+        {
+            var piece = cut.Grow(Seam);
             s.Quad(new(piece.X0, top, piece.Z0), new(piece.X0, top, piece.Z1),
                 new(piece.X1, top, piece.Z1), new(piece.X1, top, piece.Z0), ceilCol);
+        }
 
         for (int side = 0; side < 4; side++)
             Wall(s, r, (Side)side, inner, y0, clear, wallCol);
@@ -243,6 +258,7 @@ public static partial class InteriorMeshBuilder
         void Panel(float u0, float u1, float ya, float yb)
         {
             if (u1 - u0 < 1e-3f || yb - ya < 1e-3f) return;
+            u0 -= Seam; u1 += Seam; ya -= Seam; yb += Seam;
             s.WallQuad(P(u0, ya), P(u1, ya), P(u1, yb), P(u0, yb), col, y0, clear);
         }
 
@@ -257,7 +273,9 @@ public static partial class InteriorMeshBuilder
 
             // reveals: to the shared wall line for a doorway (the neighbour closes the rest),
             // deeper for an exterior opening so it reads as a real wall's thickness
-            float depth = o.Kind is OpeningKind.Door or OpeningKind.Arch ? InteriorGenerator.WallInset : InteriorGenerator.WallInset + 0.22f;
+            // (a doorway's reveal runs a hair past that line, into the neighbour's, so the two meet
+            // without a crack)
+            float depth = o.Kind is OpeningKind.Door or OpeningKind.Arch ? InteriorGenerator.WallInset + Seam : InteriorGenerator.WallInset + 0.22f;
             var reveal = col * 0.9f;
             reveal.A = 1;
             Vector3 R(float u, float y, float d) => OnWall(side, inner, u, y, d);
