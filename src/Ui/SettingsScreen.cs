@@ -66,7 +66,11 @@ public partial class SettingsScreen : Screen
             var styles = Styles.StyleKit.MenuStyles;
             UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
                 Math.Max(0, Array.IndexOf(styles, s.VisualStyle)),
-                i => Styles.StyleKit.ChooseSetting(styles[i]), "Switches live; how the world looks, never what it does");
+                i =>
+                {
+                    Styles.StyleKit.ChooseSetting(styles[i]);
+                    if (Styles.StyleKit.NeedsForwardPlus(styles[i]) && !Styles.StyleKit.OnForwardPlus) AskForwardPlus(this, Shell);
+                }, "Switches live; how the world looks, never what it does");
             UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
             UiKit.ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on, "Off by default: the far horizon is the point");
             UiKit.ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on, "Streaks at the screen edge at speed");
@@ -315,6 +319,22 @@ public partial class SettingsScreen : Screen
             if (XR.XrSession.Relaunch(on, asked: true)) shell.Quit();
             else cancel?.Invoke();
         }, cancel);
+    }
+
+    /// <summary>
+    /// Realistic+ chosen on the Mobile renderer: offers the restart onto Forward+. Declined, it
+    /// draws as Realistic− until the next start, which relaunches (<see cref="Styles.RendererRelaunch"/>).
+    /// </summary>
+    private static void AskForwardPlus(Control host, GameShell shell)
+    {
+        string message = "Realistic+ needs the Forward+ renderer, which the game picks when it starts. "
+            + "Until then it looks like Realistic−.";
+        if (shell.InWorld) message += " You will leave the current world.";
+        Modal.Confirm(host, "Restart for Realistic+?", message, "Restart", () =>
+        {
+            GameSettings.Current.Commit();
+            if (Styles.RendererRelaunch.Relaunch()) shell.Quit();
+        });
     }
 
     internal static string Percent(double v) => v <= 0 ? "off" : $"{v * 100:F0} %";
