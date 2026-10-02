@@ -349,12 +349,17 @@ public enum AreaPropType : byte
     Pavement = 4,     // flush carriageway beside a segment: a turn lane's widening (#123); Height 0
     BikePath = 5,     // a bike path carried through a junction where no road joins (#120); Height = its level
     Grass = 6,        // a grass strip beside such a path (#120)
+    Kerb = 7,         // a sloped kerb strip beside such a path (#120): its vertices carry the slope, Height 0
 }
 
 /// <summary>Area props that are part of a street's side, drawn and solid like a sidewalk slab.</summary>
 public static class StreetAreas
 {
-    public static bool Is(AreaPropType t) => t is AreaPropType.Sidewalk or AreaPropType.BikePath or AreaPropType.Grass;
+    public static bool Is(AreaPropType t) => t is AreaPropType.Sidewalk or AreaPropType.BikePath or AreaPropType.Grass or AreaPropType.Kerb;
+
+    /// <summary>Solid: a raised patch, or a sloped kerb strip (raised by its vertices, Height 0).</summary>
+    public static bool IsSolid(RoadAreaProp a) =>
+        Is(a.Type) && (a.Flags & PropFlags.Solid) != 0 && (a.Height > 0 || a.Type == AreaPropType.Kerb);
 }
 
 /// <summary>A raised surface: a triangulated polygon lifted by <see cref="Height"/> with a kerb face.</summary>

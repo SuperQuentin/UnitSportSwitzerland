@@ -48,7 +48,8 @@
   choice: the UVEK Weisung allows red only with Radstreifen), and that road's Wartelinie and 3.02
   move out behind it. No road joining on the path's side (the straight side of a T): the path
   runs on through the junction (`BridgePath`): each profile band as an APRP `BikePath`/`Grass`/
-  `Sidewalk` strip at its level along the junction's edge curve, 15 cm over the pieces' chamfered
+  `Sidewalk` strip at its level along the junction's edge curve, each sloped kerb as an APRP
+  `Kerb` strip whose vertices carry its slope (Height 0; the blend skips it), 15 cm over the pieces' chamfered
   ends, replacing the sidewalk corner there (centroid test); only when both arms have the same
   profile. Samples thinned to 2 cm on the outer edge (9 per band cost +23 KB/tile).
   3.03 signs that stood on a path move onto the buffer or sidewalk.
@@ -56,8 +57,8 @@
   `RoadSide.OuterDm` (verge + path + buffer + sidewalk: what blend, embankments, cover, corners and
   signs now use instead of `SidewalkDm`). Paint past the carriageway edge lies on the side's
   profile (`RoadPaintGeometry.Offset`).
-- **Cost** (Nyon, 6 tiles, against main on the same raw input): 203.3 → 218.2 KB/tile raw
-  (+7.3 %, APRP +9 KB: paths through junctions), 133.1 → 140.5 deflated; paint 2.6k → 6.4k game triangles/tile; stage 6.1 → 6.3 s.
+- **Cost** (Nyon, 6 tiles, against main on the same raw input): 203.3 → 221.0 KB/tile raw
+  (+8.7 %, APRP +12 KB: paths and their kerbs through junctions), 133.1 → 141.9 deflated; paint 2.6k → 6.4k game triangles/tile; stage 6.1 → 6.3 s.
   Numbers there: 20.8 km candidates, Kernfahrbahn 15.2 km, path sides 20.3 km (layouts 1..5
   3.3/4.2/5.2/2.8/4.8), 306 symbols, 83 red crossings (37 lane, 46 path), 136 paths carried through (101 corners
   replaced), 40 Wartelinien moved.

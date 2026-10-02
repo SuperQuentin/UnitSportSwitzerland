@@ -258,8 +258,8 @@ public static partial class TileRewriter
 
     /// <summary>
     /// A separated path carried on through a junction where no road joins on its side (#120): each
-    /// band of its profile (grass, path, sidewalk; a sloped kerb goes to the band outside it) as a
-    /// solid area prop at its level, between the two arms' ends along the junction's edge curve.
+    /// band of its profile (grass, path, sidewalk) as a solid area prop at its level, each sloped
+    /// kerb as a strip whose vertices carry its slope, between the two arms' ends along the junction's edge curve.
     /// Null when the two arms' profiles differ (their bands would not meet): the sidewalk corner
     /// stays. <paramref name="curve"/> gives the curve at an offset outward from each arm's edge.
     /// </summary>
@@ -275,9 +275,10 @@ public static partial class TileRewriter
         for (int k = 0; k + 1 < pa.Count; k++)
         {
             var surface = pa.Surface[k];
-            if (surface == StreetSurface.Kerb) continue;
-            // a sloped kerb before this band belongs to it
-            int from = k > 0 && pa.Surface[k - 1] == StreetSurface.Kerb ? k - 1 : k;
+            bool kerb = surface == StreetSurface.Kerb;
+            // a vertical kerb has no width: the faces down the bands' open edges are its face
+            if (kerb && pa.D[k + 1] - pa.D[k] < 1e-4f) continue;
+            int from = k;
             var inner = At(pa.D[from], pb.D[from]);
             var outer = At(pa.D[k + 1], pb.D[k + 1]);
             inner.Insert(0, inner[0] + ua * BridgeOverlap);
@@ -287,6 +288,8 @@ public static partial class TileRewriter
             int n = inner.Count;
             var plan = inner.Concat(outer).ToList();
             var vertices = Local(home, plan, height, 0f);
+            if (kerb)   // a sloped kerb strip carries its slope in its vertices: inner edge at its foot, outer at its top
+                for (int i = 0; i < 2 * n; i++) vertices[i * 3 + 1] += i < n ? pa.H[k] : pa.H[k + 1];
             var indices = new List<ushort>();
             for (int i = 0; i + 1 < n; i++)
             {
@@ -296,6 +299,7 @@ public static partial class TileRewriter
             var type = surface switch
             {
                 StreetSurface.Track => AreaPropType.BikePath,
+                StreetSurface.Kerb => AreaPropType.Kerb,
                 StreetSurface.Verge or StreetSurface.Buffer => AreaPropType.Grass,
                 _ => AreaPropType.Sidewalk,
             };
@@ -303,7 +307,7 @@ public static partial class TileRewriter
             ring.AddRange(Enumerable.Reverse(outer));
             result.Add((new RoadAreaProp
             {
-                Type = type, Flags = pa.H[k + 1] > 0 ? PropFlags.Solid : PropFlags.None, Height = pa.H[k + 1],
+                Type = type, Flags = pa.H[k + 1] > 0 ? PropFlags.Solid : PropFlags.None, Height = kerb ? 0f : pa.H[k + 1],
                 Vertices = vertices, Indices = indices.ToArray(),
             }, ring));
         }

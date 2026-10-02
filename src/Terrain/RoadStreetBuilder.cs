@@ -105,7 +105,8 @@ public static class RoadStreetBuilder
             if (!StreetAreas.Is(area.Type) || area.Vertices.Length < 9) continue;
             var up = new Vector3(0, area.Height, 0);
             var down = new Vector3(0, area.Height - Skirt, 0);
-            var surface = area.Type == AreaPropType.BikePath ? PathColor.SrgbToLinear()
+            var surface = area.Type == AreaPropType.Kerb ? kerb
+                : area.Type == AreaPropType.BikePath ? PathColor.SrgbToLinear()
                 : area.Type == AreaPropType.Grass ? GrassColor.SrgbToLinear() : area.Height > 0 ? top : paving;
             for (int k = 0; k + 2 < area.Indices.Length; k += 3)
             {
@@ -178,7 +179,7 @@ public static class RoadStreetBuilder
         // junction corners: the top and its edges, vertical (a corner patch is a few metres across)
         foreach (var area in tile.AreaProps)
         {
-            if (!StreetAreas.Is(area.Type) || (area.Flags & PropFlags.Solid) == 0 || area.Height <= 0) continue;
+            if (!StreetAreas.IsSolid(area)) continue;
             var up = new Vector3(0, area.Height, 0);
             for (int k = 0; k + 2 < area.Indices.Length; k += 3)
             {
