@@ -1,6 +1,8 @@
 ﻿using Godot;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
+using UnitSport.Ui;
+using UnitSport.Core;
 
 namespace UnitSport.Gpx;
 
@@ -222,7 +224,8 @@ public partial class VideoExporter : Node
         _lastHash = 0;
         SetProcess(true);
 
-        var size = GetViewport().GetVisibleRect().Size;
+        // frames are grabbed at the window's real size, not the UI canvas's
+        var size = GetWindow().Size;
         GD.Print($"[export] {_total} frames at {_fps} fps ({_race.Duration / _clockSpeed:F0} s of video, "
                  + $"{_clockSpeed:0.##}x), {size.X:F0}x{size.Y:F0} -> {directory}");
         return true;
@@ -465,7 +468,7 @@ public partial class VideoExporter : Node
     /// Hands one frame to the sink.
     ///
     /// <para>
-    /// Down the pipe there is no PNG compression and no file: a 1152x648 frame is 3 MB of memcpy
+    /// Down the pipe there is no PNG compression and no file: a 1920x1080 frame is 8 MB of memcpy
     /// into a buffered stream, and ffmpeg encodes it on its own core while the game renders the
     /// next one. Compressing each frame to PNG on the main thread, only for ffmpeg to decompress
     /// it again at the end, was the second-largest cost in an export once the terrain waits were
@@ -557,23 +560,15 @@ public partial class VideoExporter : Node
             AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 1, AnchorBottom = 1,
             OffsetLeft = -260, OffsetRight = 260, OffsetTop = -96, OffsetBottom = -20,
         };
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.04f, 0.05f, 0.07f, 0.92f),
-            ContentMarginLeft = 18, ContentMarginRight = 18,
-            ContentMarginTop = 12, ContentMarginBottom = 12,
-        };
-        style.SetCornerRadiusAll(6);
-        panel.AddThemeStyleboxOverride("panel", style);
+        panel.AddThemeStyleboxOverride("panel", UiTheme.Flat(new Color(0.04f, 0.05f, 0.07f, 0.92f), 6, 18, 12));
         _overlay.AddChild(panel);
 
         var rows = new VBoxContainer();
         rows.AddThemeConstantOverride("separation", 6);
         panel.AddChild(rows);
 
-        var title = new Label { Text = "Recording", HorizontalAlignment = HorizontalAlignment.Center };
-        title.AddThemeFontSizeOverride("font_size", 18);
-        title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
+        var title = UiTheme.Title("Recording", 18);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
         rows.AddChild(title);
 
         _bar = new ProgressBar { MinValue = 0, MaxValue = 1, Step = 0.0001, ShowPercentage = false,
@@ -727,7 +722,7 @@ public partial class VideoExporter : Node
         Release();
 
         // "--export" runs unattended, so there is nobody to see the HUD go back to normal
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--export") >= 0) GetTree().Quit(ok ? 0 : 1);
+        if (CmdArgs.Has("--export")) GetTree().Quit(ok ? 0 : 1);
     }
 
     /// <summary>

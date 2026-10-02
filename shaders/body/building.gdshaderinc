@@ -3,6 +3,7 @@
 
 #include "res://shaders/common/world.gdshaderinc"
 #include "res://shaders/common/retro.gdshaderinc"
+#include "res://shaders/common/style.gdshaderinc"
 #include "res://shaders/common/sightline.gdshaderinc"
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/door_light.gdshaderinc"
@@ -71,6 +72,11 @@ uniform vec3 garage_sign : source_color = vec3(0.97, 0.95, 0.88);
 uniform vec3 garage_stripe : source_color = vec3(0.82, 0.24, 0.12);
 
 varying vec3 world_pos;
+
+#ifdef STYLE_REAL
+uniform sampler2D tex_plaster : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_roof : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+#endif
 
 varying vec2 facade;   // x = metres along the facade, y = storey coordinate (<0 = none)
 varying float storey_count; // whole storeys in the wall; grid stops below this
@@ -226,6 +232,17 @@ void fragment() {
     }
 
     vec3 col = COLOR.rgb;
+#ifdef STYLE_REAL
+    // walls: plaster in facade space (metres along, storeys times their height); roofs: tiles
+    // in plan. Windows, signs and paint are drawn over it below.
+    if (n.y > 0.25 || facade.y < 0.0) {
+        col = style_tinted(tex_roof, vec2(pattern_xz(world_pos).x + world_pos.y * 0.7, pattern_xz(world_pos).y) / 2.5, col, 0.25);
+    } else {
+        col = style_tinted(tex_plaster, vec2(facade.x, facade.y * max(wall_frame.z, 2.8)) / 3.0, col, 0.15);
+    }
+#endif
+    // how much of this pixel is glass (windows): glossy in the lit styles
+    float glass = 0.0;
     // a running occasion's snow on the roofs (walls are vertical and stay clear)
     col = occasion_snow(col, n, 1.0);
 
@@ -269,6 +286,7 @@ void fragment() {
                 }
             }
             col = mix(col, win, legible);
+            glass = legible;
             if (lit) glow = win * legible;
         }
     }
@@ -303,9 +321,11 @@ void fragment() {
         col = garage_stripe;
     }
 
+#ifndef STYLE_LIT
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     float light = retro_steps(ndl, light_levels) * 0.5 + 0.5;
     col *= light;
+#endif
 
     // dissolve anything between the camera and its subject, using the same 4x4 Bayer pattern
     // the colour quantiser below uses, so the fade reads as part of the renderer
@@ -314,6 +334,20 @@ void fragment() {
         discard;
     }
 
+#ifdef STYLE_LIT
+    // valley mist of a running occasion; a no-op on an ordinary day
+    col = style_grade(occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX)));
+    ALBEDO = col;
+    NORMAL = style_view_normal(VIEW_MATRIX, n);
+#ifdef STYLE_REAL
+    ROUGHNESS = mix(0.9, 0.08, glass);
+    SPECULAR = mix(0.5, 0.9, glass);
+#else
+    ROUGHNESS = 1.0;
+#endif
+    // a lit window is its own light: at night it shines through the darkness around it
+    EMISSION = col * door_light(world_pos, n) + glow * world_night;
+#else
     col *= world_tint + door_light(world_pos, n);
     // a lit window is its own light: at night it shines through the darkness around it
     col = max(col, glow * world_night);
@@ -323,4 +357,5 @@ void fragment() {
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
     ALBEDO = mix(col, world_sky, fog);
+#endif
 }

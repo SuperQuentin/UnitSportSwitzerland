@@ -41,3 +41,11 @@
 - Not solved here: a teleport across the course is accepted as a finish (every checkpoint on one
   segment), and a pilot's reset-to-line can bring a teleported racer back onto the course.
 - **#85 check** (`--npcwatch prefix[,before,after]`, `World/NpcWatch`, windowed B): chase-films the first NPC and saves the frames around its simulator change, logs `JUMP` where a drawn frame parts from velocity × dt. Found and fixed: silence was judged from the old simulator's last state, so the new one was "silent" a second after the handoff and both NPCs were retired mid-race; now it counts from the handoff too. Seen: the NPC stands still for the ~3 s before the handoff (A silent, by design), goes on at its speed after it, then drops to 0 within ~0.4 s and restarts (a visible stop, not a jump; not fixed). Pass `--title`.
+- **#159**: the owner silent → `StaleSeconds` 1.2 s, reviewed every 0.25 s (was 2.5 / 1 s); a fresh simulator gets
+  `HandoffGrace` 2.5 s more for its first states (judged at 1.2 s, both NPCs were handed to B and retired again
+  within the second). Meanwhile other peers carry the silent NPC on for up to 1.6 s
+  (`RemoteInterpolator.MaxAhead`), easing to half its speed, and the new simulator coasts while the pilot arms
+  (the handbrake of `Hold` stopped it from 72 km/h in 0.4 s). Checked windowed (`--title`, server + 3 swarm
+  bots + A host with 2 NPCs, `kill -9` at GO+12 s, + B `--npcwatch`): handed to B at 98 km/h, drawn steps match
+  v·dt across it, 93 km/h 0.5 s later, no stop in the frames; B made host; swarm 3/3; 0 exceptions. The
+  second NPC was retired later at 902 m from B (out of the zone, by design).

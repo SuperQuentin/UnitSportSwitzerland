@@ -5,26 +5,16 @@
 # print a fingerprint of the audio due at every 5 s mark: they must agree on every common mark.
 #   tools/webradiocheck.sh                 (terrain_chunks/ in this checkout)
 #   CHUNKS=/path/to/terrain_chunks tools/webradiocheck.sh   (a worktree without terrain data)
-. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
-set -u
+. "$(dirname "$0")/lib/twoclient.sh" webradio
 PORT=7798
 PW=webradiopw
-OUT=test_output
-cd "$(dirname "$0")/.."
-mkdir -p "$OUT"
-CHUNKARG=()
-[ -n "${CHUNKS:-}" ] && CHUNKARG=(--chunks "$CHUNKS")
-timeout 330 godot --headless --path . -- --server --port $PORT --admin-password $PW ${CHUNKARG[@]+"${CHUNKARG[@]}"} > $OUT/webradio_server.log 2>&1 &
 # a full-world server blends its horizon for half a minute before it listens: wait for it
-for i in $(seq 1 150); do
-  grep -q "server listening" $OUT/webradio_server.log 2>/dev/null && break
-  sleep 1
-done
+tc_server 330 150 $OUT/webradio_server.log --server --port $PORT --admin-password $PW ${CH[@]+"${CH[@]}"}
 sleep 2
-timeout 230 godot --headless --path . -- --connect 127.0.0.1:$PORT --name Driver --webradiocheck driver --webradiopw $PW --traffic 0 --cache "$PWD/$OUT/webradio_cache_driver" ${CHUNKARG[@]+"${CHUNKARG[@]}"} > $OUT/webradio_driver.log 2>&1 &
+tc_client 230 $OUT/webradio_driver.log --connect 127.0.0.1:$PORT --name Driver --webradiocheck driver --webradiopw $PW --traffic 0 --cache "$PWD/$OUT/webradio_cache_driver" ${CH[@]+"${CH[@]}"} &
 DRIVER=$!
 sleep 2
-timeout 225 godot --path . -- --connect 127.0.0.1:$PORT --name Watcher --webradiocheck watch --traffic 0 --cache "$PWD/$OUT/webradio_cache_watch" ${CHUNKARG[@]+"${CHUNKARG[@]}"} > $OUT/webradio_watch.log 2>&1
+tc_client 225 $OUT/webradio_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --webradiocheck watch --traffic 0 --cache "$PWD/$OUT/webradio_cache_watch" ${CH[@]+"${CH[@]}"}
 code=$?
 wait $DRIVER   # headless runs may exit 139 after their result: read the RESULT line
 grep -q "RESULT: ok" $OUT/webradio_driver.log || code=1
@@ -37,6 +27,6 @@ total=$(echo "$common" | grep -c . )
 same=$(echo "$common" | awk '$2==$3' | grep -c .)
 echo "[webradiocheck] fingerprints: $same of $total common marks identical on both clients"
 [ "$total" -gt 5 ] && [ "$same" -eq "$total" ] || code=1
-kill %1 2>/dev/null
+tc_stop
 echo "[webradiocheck] exit $code"
 exit $code

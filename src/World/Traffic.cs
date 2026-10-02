@@ -75,8 +75,12 @@ public sealed class Route
         }
     }
 
-    /// <summary>The first junction (3+ road ends meeting) within <paramref name="within"/> m ahead on the legs chosen: where, and how far.</summary>
-    public (Vector3 At, float Distance)? NextJunction(LaneGraph g, float within)
+    /// <summary>
+    /// The first junction (3+ road ends meeting) within <paramref name="within"/> m ahead on the legs chosen: where, how
+    /// far, and whether this car gives way there (#159): a road meeting a more important one (a lower
+    /// <see cref="RoadClass"/>). ponytail: class only; stored one-way and yield arms (#117 / #121) when the road overhaul lands.
+    /// </summary>
+    public (Vector3 At, float Distance, bool Yields)? NextJunction(LaneGraph g, float within)
     {
         float d = Legs[Leg].Edge.Length - Arc;
         for (int i = Leg; i < Legs.Count; i++)
@@ -84,7 +88,9 @@ public sealed class Route
             if (i > Leg) d += Legs[i].Edge.Length;
             if (d > within) break;
             var (edge, fwd) = Legs[i];
-            if (g.Degree(fwd ? edge.KeyEnd : edge.KeyStart) >= 3) return (fwd ? edge.Points[^1] : edge.Points[0], d);
+            long key = fwd ? edge.KeyEnd : edge.KeyStart;
+            if (g.Degree(key) >= 3)
+                return (fwd ? edge.Points[^1] : edge.Points[0], d, g.GivesWay(key, edge));
         }
         return null;
     }
@@ -132,6 +138,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// junction for one about to pass it.
     /// </summary>
     public Func<IEnumerable<(Vector3 Pos, Vector3 Vel)>>? Obstacles { get; set; }
+    private readonly List<(Vector3 Pos, Vector3 Vel)> _obstacles = new();
 
     /// <summary>
     /// The traffic of this client, for the race pilots that drive among it (one world per process).
@@ -162,7 +169,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     /// <summary>A traffic car's state in a few words (for crash logs).</summary>
     public string? Describe(ulong body) => _byBody.TryGetValue(body, out var v)
-        ? $"{v.Speed * 3.6f:F0} km/h, {v.Route.Edge.Class} {v.Route.Edge.Width:F1} m, pull {v.Pull:F1}, hold {v.Holding}, yield {v.Yield}, startle {v.Startle > 0f}, alert {v.Alert:F1}, arc {v.Route.Arc:F0}/{v.Route.Edge.Length:F0}, end degree {_roads?.Degree(v.Route.Forward ? v.Route.Edge.KeyEnd : v.Route.Edge.KeyStart)}"
+        ? $"{v.Speed * 3.6f:F0} km/h, {v.Route.Edge.Class} {v.Route.Edge.Width:F1} m, pull {v.Pull:F1}, hold {v.Holding}, yield {v.Yield}, startle {v.Startle > 0f}, alert {v.Alert:F1}, arc {v.Route.Arc:F0}/{v.Route.Edge.Length:F0}, end degree {_roads?.Degree(v.Route.Forward ? v.Route.Edge.KeyEnd : v.Route.Edge.KeyStart)}, age {(Time.GetTicksMsec() - v.Born) / 1000f:F0} s"
         : null;
 
     private LaneGraph? _roads, _rails;
@@ -321,7 +328,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (_trains.Count < wantTrains) SpawnTrain(focus);
         }
 
-        var obstacles = Obstacles?.Invoke().ToList() ?? new List<(Vector3 Pos, Vector3 Vel)>();
+        // one list for the traffic's life, refilled each tick (#221)
+        var obstacles = _obstacles;
+        obstacles.Clear();
+        if (Obstacles?.Invoke() is { } seen) obstacles.AddRange(seen);
         _byX.Clear();
         _byX.AddRange(_cars);
         _byX.Sort(ByX);
@@ -365,9 +375,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     private void SpawnCar(Vector3 focus, float minDist, IEnumerable<(Vector3 Pos, Vector3 Vel)>? obstacles)
     {
         if (_roads!.RandomSpot(_rng, focus, minDist, CarSpawnMax, CarWeight) is not var (edge, arc)) return;
-        // never out of thin air beside a player: a car filled in 5 m in front of a racer is a crash
+        // never out of thin air beside a player: a car filled in 5 m in front of a racer is a crash. 60 m
+        // and the 4 s a fast one covers: at 150 km/h 60 m is 1.4 s, less than a racer needs to see it and stop (#159)
         var (spot, _) = edge.Sample(arc);
-        if (obstacles != null && obstacles.Any(o => new Vector2(o.Pos.X - spot.X, o.Pos.Z - spot.Z).Length() < 60f)) return;
+        if (obstacles != null && obstacles.Any(o => new Vector2(o.Pos.X - spot.X, o.Pos.Z - spot.Z).Length() < 60f + 4f * new Vector2(o.Vel.X, o.Vel.Z).Length())) return;
         bool forward = edge.OneWay switch { 1 => true, -1 => false, _ => _rng.Next(2) == 0 };
         var route = new Route(edge, forward, forward ? arc : edge.Length - arc);
         bool van = _rng.NextDouble() < 0.18;
@@ -449,7 +460,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         float mine = keep + car.Pull;   // this car's centre, right of the centreline
         float wantPull = 0f, makeWay = float.MaxValue;
         bool yield = false, hold = false, blocked = false, stopFor = false;
-        (Vector3 At, float Distance)? junction = null;
+        (Vector3 At, float Distance, bool Yields)? junction = null;
         bool junctionLooked = false;
         // what this driver has noticed: someone in sight (no crest, hillside or building between), and then
         // only after its reaction time. Seen late — little time left — it is startled (see below)
@@ -470,8 +481,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         foreach (var (oPos, oVel) in obstacles)
         {
             var rel = oPos - pos;
-            // a racer 7 s from a junction at 40 m/s is 280 m away
-            if (new Vector2(rel.X, rel.Z).LengthSquared() > 300f * 300f) continue;
+            // a racer 9 s from a junction at 50 m/s is 450 m away
+            if (new Vector2(rel.X, rel.Z).LengthSquared() > 450f * 450f) continue;
             // the road is sampled only for a car with someone that near: the local player alone is
             // an obstacle, and sampling for every car every tick was most of the traffic's cost (#221)
             if (!sampled)
@@ -484,10 +495,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // where it is on this car's road (bends and all): metres ahead (- behind), and right of the centreline
             int best = 0;
             for (int k = 1; k < _roadPos.Length; k++)
-                if (Flat(oPos - _roadPos[k]).LengthSquared() < Flat(oPos - _roadPos[best]).LengthSquared()) best = k;
+                if (MathX.Flat(oPos - _roadPos[k]).LengthSquared() < MathX.Flat(oPos - _roadPos[best]).LengthSquared()) best = k;
             var t = _roadDir[best];
             var side = new Vector3(-t.Z, 0, t.X).Normalized();
-            var r = Flat(oPos - _roadPos[best]);
+            var r = MathX.Flat(oPos - _roadPos[best]);
             float along = 4f * (best - Behind) + r.Dot(t), lat = r.Dot(side);
             float ov = oVel.X * t.X + oVel.Z * t.Z;   // its speed along this car's way
             // on this road (not past either end of what was sampled) and not on a bridge over it
@@ -495,7 +506,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
             // whatever the road says, never drive into a body: anything in front of its own nose, within
             // a car's width of where it actually is (a kinematic box shoves a car it drives into)
-            var nose = Flat(oPos - car.Head);
+            var nose = MathX.Flat(oPos - car.Head);
             float noseAhead = nose.Dot(dir), noseSide = Mathf.Abs(nose.X * -dir.Z + nose.Z * dir.X);
             if (noseAhead > 0f && noseAhead < 6f + Mathf.Max(0f, car.Speed - (oVel.X * dir.X + oVel.Z * dir.Z)) && noseSide < 2.1f && Mathf.Abs(rel.Y) < 3f)
             {
@@ -504,6 +515,19 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                 blocked |= oSpeed < 0.5f;
             }
 
+            // giving way to someone coming along the road this car is about to turn into (#159): beyond the
+            // junction it is "on this road", and the oncoming rule below waited for sight and a reaction time —
+            // a car stood in the junction mouth in front of racers at 120-150 km/h. At the line a driver looks
+            if (onRoad && ov < -2f)
+            {
+                if (!junctionLooked) { junction = car.Route.NextJunction(_roads!, 60f); junctionLooked = true; }
+                if (junction is var (_, jD, jGives) && jGives && jD >= 5f && along > jD + 2f && (along - jD) / -ov < 9f)
+                {
+                    hold = true;
+                    target = Mathf.Min(target, StopWithin(jD - 12f));
+                    continue;
+                }
+            }
             if (onRoad && along > 0.5f && ov < -2f)
             {
                 // coming the other way: they meet in this many seconds
@@ -554,12 +578,17 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // off this road: someone fast about to pass through the junction ahead? wait short of it
             if (oSpeed < 2f) continue;
             if (!junctionLooked) { junction = car.Route.NextJunction(_roads!, 60f); junctionLooked = true; }
-            if (junction is not var (j, dj)) continue;
-            var toJ = Flat(j - oPos);
+            if (junction is not var (j, dj, gives)) continue;
+            var toJ = MathX.Flat(j - oPos);
             float dJ = toJ.Length(), towards = dJ > 0.1f ? (oVel.X * toJ.X + oVel.Z * toJ.Z) / dJ : oSpeed;
-            if (dJ > 15f && (towards < 3f || dJ / towards > 7f)) continue;
+            // giving way (#159): look left and right over what a racer covers while this car pulls out (from the
+            // line to clear the main road: ~3.5 s from standing, and a margin) — 9 s, not 7
+            if (dJ > 15f && (towards < 3f || dJ / towards > (gives ? 9f : 7f))) continue;
             // committed (the nose is in it): clear it rather than stop across the road
-            if (dj < 5f || !Noticed(oPos, towards > 0.5f ? dJ / towards : 99f, brake: true)) continue;
+            if (dj < 5f) continue;
+            // a driver at the line has stopped to look: no reaction time, and a crest or a bend hiding the
+            // racer (the line of sight rule) is no excuse to pull out in front of it
+            if (!gives && !Noticed(oPos, towards > 0.5f ? dJ / towards : 99f, brake: true)) continue;
             hold = true;
             target = Mathf.Min(target, StopWithin(dj - 12f));
         }
@@ -600,12 +629,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         car.Route.Trim(90f);   // the road behind it too: whoever is closing from behind is found on it
         float pull = car.Startle > 0f ? Mathf.Clamp(car.Pull + 0.12f * Mathf.Sin(car.Startle * 14f), 0f, maxPull) : car.Pull;
         car.Place(e => KeepRight(e) + pull);
-        car.Vel = dt > 0f ? Flat(car.Head - before) / dt : Vector3.Zero;
+        car.Vel = dt > 0f ? MathX.Flat(car.Head - before) / dt : Vector3.Zero;
         // where its lane takes it, 0.5 s apart at this speed: a racer reads it to see it coming out of a side road
         for (int k = 0; k < PathSteps; k++) car.Path[k] = car.Route.At(-car.Speed * 0.5f * (k + 1)).Pos;
     }
 
-    private static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
 
     /// <summary>How far a driver notices a car coming, m.</summary>
     private const float SightRange = 250f;
@@ -663,13 +691,15 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         if (remaining > YieldLookAhead) return float.MaxValue;
         var junction = forward ? edge.Points[^1] : edge.Points[0];
 
-        bool conflict = obstacles.Any(o => FlatLength(o.Pos - junction) < 8f);
+        bool conflict = false;
+        foreach (var o in obstacles)
+            if (MathX.FlatLength(o.Pos - junction) < 8f) { conflict = true; break; }
         foreach (var other in _cars)
         {
             if (conflict) break;
             if (other == car || IsWaiting(other, junction)) continue;
             var to = junction - other.Head;
-            float d = FlatLength(to);
+            float d = MathX.FlatLength(to);
             if (d > YieldWatch) continue;
             var (_, dir) = other.Route.At(0);
             bool coming = new Vector2(dir.X, dir.Z).Dot(new Vector2(to.X, to.Z)) > 0;
@@ -687,10 +717,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         var (edge, forward) = v.Route.Legs[v.Route.Leg];
         if ((edge.Yield & (forward ? RoadAttrFlags.YieldAtEnd : RoadAttrFlags.YieldAtStart)) == 0) return false;
         var end = forward ? edge.Points[^1] : edge.Points[0];
-        return FlatLength(end - junction) < 30f;
+        return MathX.FlatLength(end - junction) < 30f;
     }
 
-    private static float FlatLength(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
     /// <summary>Cars stopped or slowing at a side road's Wartelinie for main-road traffic right now.</summary>
     public int GivingWayCars => _cars.Count(c => c.GivingWay);
@@ -849,7 +878,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     {
         for (int i = _cars.Count - 1; i >= 0; i--)
         {
-            if (Flat(_cars[i].Head - at).Length() >= radius) continue;
+            if (MathX.Flat(_cars[i].Head - at).Length() >= radius) continue;
             foreach (var u in _cars[i].Units) _byBody.Remove(u.GetInstanceId());
             _cars[i].Free();
             _cars.RemoveAt(i);
@@ -901,6 +930,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         /// <summary>The driver: reaction time (s), how long it has had someone in view, when it last saw
         /// them, when it looks again, and a fright (s left, and whether it brakes in it).</summary>
         public float Reaction = 0.75f, Alert, SawAgo = 99f, LookIn, Startle;
+        /// <summary>When it was spawned (ms): a car met just after it appeared (#159 logs).</summary>
+        public readonly ulong Born = Time.GetTicksMsec();
         public bool StartleBrake;
 
         /// <summary>A search key for <see cref="Traffic._byX"/>: a vehicle that is only a position east-west.</summary>

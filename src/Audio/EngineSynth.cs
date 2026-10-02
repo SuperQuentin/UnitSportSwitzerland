@@ -128,6 +128,7 @@ public partial class EngineSynth : Node3D
     private AudioStreamPlayer3D? _player3D;
     private AudioStreamGeneratorPlayback? _playback;
     private Vector2[] _push = [];
+    private float _quietFor;
 
     private IChipVoice _voice;
     private EngineVoice _voiceKind;
@@ -210,16 +211,35 @@ public partial class EngineSynth : Node3D
         var want = VoiceOverride ?? GameSettings.Current.EngineVoice;
         if (want != _voiceKind) { _voiceKind = want; _voice = ChipVoices.Create(want, _seed); }
 
+        // A parked engine is silent but would still render and push a buffer every frame (#221).
+        // Stop the player once the fade-out has played through the buffer; start it again when
+        // the level rises: the per-sample ramp still starts from silence, so neither end clicks.
+        bool quiet = _tLevel < 1e-4f && _level < 1e-4f;
+        _quietFor = quiet ? _quietFor + (float)delta : 0f;
+        AudioStreamPlayer3D? p3 = _player3D;
+        bool playing = p3?.Playing ?? _player!.Playing;
+        if (playing && _quietFor > 2f * BufferSeconds)
+        {
+            if (p3 != null) p3.Stop(); else _player!.Stop();
+            return;
+        }
+        if (!playing)
+        {
+            if (quiet) return;
+            if (p3 != null) p3.Play(); else _player!.Play();
+            _playback = (AudioStreamGeneratorPlayback)(p3 != null ? p3.GetStreamPlayback() : _player!.GetStreamPlayback());
+        }
+
         int frames = _playback.GetFramesAvailable();
         if (frames <= 0) return;
-        if (_push.Length != frames) _push = new Vector2[frames];
+        if (_push.Length < frames) _push = new Vector2[frames];
         const float vol = 1f;   // the Sfx bus carries the slider (SfxBus.ApplyVolumes)
         for (int i = 0; i < frames; i++)
         {
             float s = NextSample(vol);
             _push[i] = new Vector2(s, s);
         }
-        _playback.PushBuffer(_push);
+        _playback.PushBuffer(new ReadOnlySpan<Vector2>(_push, 0, frames));
     }
 
     /// <summary>

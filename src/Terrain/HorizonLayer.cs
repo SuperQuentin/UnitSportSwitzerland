@@ -112,26 +112,6 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     /// <summary>Blocks on screen that were meshed from an older lattice.</summary>
     private readonly HashSet<(int E, int N)> _stale = new();
 
-    /// <summary>
-    /// Drops the lattice, every block and the coverage texture — for when the world they were
-    /// built for is being replaced (a rebase: the origin moves under them). <see cref="Reload"/> then reads whatever the source now has.
-    /// </summary>
-    public void Clear()
-    {
-        _epoch++;
-        _loading = false;
-        _reloadQueued = false;
-        _index = null;
-        foreach (var block in _blocks.Values) block?.QueueFree();
-        _blocks.Clear();
-        _building.Clear();
-        _stale.Clear();
-        _coverImage = null;
-        _coverTexture = null;
-        _coverDirty = false;
-        _material?.SetShaderParameter("use_cover", false);
-    }
-
     // ---- coverage: which km tiles have a real mesh on screen ---------------------------
     //
     // One texel per tile over the whole region (Switzerland is ~350 x 220 km, so a few hundred
@@ -287,7 +267,7 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         foreach (var key in drop)
         {
             _stale.Remove(key);
-            _blocks[key]?.QueueFree();
+            Free(_blocks[key]);
             _blocks.Remove(key);
         }
     }
@@ -326,28 +306,35 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     private void Commit((int E, int N) key, TerrainMeshBuilder.MeshData? data)
     {
         // what this replaces, if it is a rebuild from a newer lattice
-        _blocks[key]?.QueueFree();
+        Free(_blocks[key]);
         _blocks[key] = null;
         if (data == null) return;   // nothing built there; keep the key so it is not retried
 
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
-        arrays[(int)Mesh.ArrayType.Color] = data.Colors;
-        arrays[(int)Mesh.ArrayType.Index] = data.Indices;
-
-        var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        mesh.SurfaceSetMaterial(0, _material);
+        var mesh = ChunkNode.ToArrayMesh(data, _material!);
 
         var instance = new MeshInstance3D
         {
             Name = $"Horizon_{key.E}_{key.N}",
             Mesh = mesh,
+            // ground: never a sun-shadow caster (lit styles)
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             // NW corner of the block, like a tile
             Position = _origin!.ToWorld(key.E * ChunkFormat.TileSizeM, (key.N + BlockTiles) * ChunkFormat.TileSizeM, 0),
         };
         AddChild(instance);
         _blocks[key] = instance;
+    }
+
+    /// <summary>
+    /// Frees a block and its mesh now: the mesh's memory is the RenderingServer's, so left to the
+    /// finalizer every rebuilt or dropped block kept its mesh alive (see ChunkNode.ReleaseResources).
+    /// </summary>
+    private static void Free(MeshInstance3D? block)
+    {
+        if (block == null) return;
+        var mesh = block.Mesh;
+        block.Mesh = null;
+        mesh?.Dispose();
+        block.QueueFree();
     }
 }

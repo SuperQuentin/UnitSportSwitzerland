@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Core;
 using UnitSport.Player;
+using UnitSport.Ui;
 
 namespace UnitSport.Vehicles;
 
@@ -25,7 +26,7 @@ public partial class GarageUi : CanvasLayer
     public static Func<Vector3, bool>? GarageNear { get; set; }
 
     /// <summary><c>--tuning</c>: the menu opens anywhere, for testing and screenshots.</summary>
-    public static bool Anywhere { get; } = Array.IndexOf(OS.GetCmdlineUserArgs(), "--tuning") >= 0;
+    public static bool Anywhere { get; } = CmdArgs.Has("--tuning");
 
     /// <summary>Resolved per press, never captured: in multiplayer the player node is respawned.</summary>
     public Func<FootPlayer?>? ActivePlayer { get; set; }
@@ -57,39 +58,19 @@ public partial class GarageUi : CanvasLayer
     {
         Layer = 30;   // under the main menu, over the world
 
-        _prompt = new Label
-        {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            Visible = false,
-        };
-        _prompt.AddThemeFontSizeOverride("font_size", 18);
-        _prompt.AddThemeColorOverride("font_outline_color", Colors.Black);
-        _prompt.AddThemeConstantOverride("outline_size", 6);
-        _prompt.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
-        _prompt.Position = new Vector2(-150, -210);
-        _prompt.Size = new Vector2(300, 30);
+        _prompt = UiTheme.Prompt(-210);
         AddChild(_prompt);
 
         // on the left, so the car stays in view on the right
         _panel = new PanelContainer { Visible = false, Position = new Vector2(24, 24), CustomMinimumSize = new Vector2(500, 0) };
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.05f, 0.06f, 0.08f, 0.9f),
-            ContentMarginLeft = 18, ContentMarginRight = 18, ContentMarginTop = 14, ContentMarginBottom = 14,
-        };
-        style.SetCornerRadiusAll(6);
-        _panel.AddThemeStyleboxOverride("panel", style);
+        _panel.AddThemeStyleboxOverride("panel", UiTheme.Flat(new Color(0.05f, 0.06f, 0.08f, 0.9f), 6, 18, 14));
         AddChild(_panel);
 
         var rows = new VBoxContainer();
         rows.AddThemeConstantOverride("separation", 8);
         _panel.AddChild(rows);
 
-        var title = new Label { Text = "Garage" };
-        title.AddThemeFontSizeOverride("font_size", 22);
-        title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
-        rows.AddChild(title);
+        rows.AddChild(UiTheme.Title("Garage"));
         rows.AddChild(new HSeparator());
 
         var columns = new HBoxContainer();

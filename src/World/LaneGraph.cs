@@ -156,6 +156,15 @@ public sealed class LaneGraph
     public int Degree(long key) => Incident(key).Count();
 
     /// <summary>
+    /// Whether another road meeting at <paramref name="key"/> is more important than <paramref name="edge"/> (a lower
+    /// class): the car on <paramref name="edge"/> gives way. Also across a short connector (<see cref="JoinTrimmedEnds"/>):
+    /// a side road trimmed back from the main road meets only its connectors, of its own class.
+    /// </summary>
+    public bool GivesWay(long key, LaneEdge edge) => Incident(key).Any(o => o.Edge != edge
+        && (o.Edge.Class < edge.Class
+            || (o.Edge.Length < 20f && Incident(o.AtStart ? o.Edge.KeyEnd : o.Edge.KeyStart).Any(f => f.Edge != o.Edge && f.Edge != edge && f.Edge.Class < edge.Class))));
+
+    /// <summary>
     /// Joins road ends that stop short of each other with a straight connector edge: the road
     /// generator trims every road back from its junction polygon, so the roads meeting at a junction
     /// no longer share an endpoint (<see cref="UnitSport.Player.RaceRoute"/> looks 18 m around for the

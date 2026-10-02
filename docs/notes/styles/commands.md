@@ -4,6 +4,10 @@
 # Commands
 
 - `--style ps1|cartoon|real-|real+`: the visual style for this run (`GameSettings.VisualStyle`).
+- `--rendering-method forward_plus` (an engine flag, before `--`): Realistic+'s renderer; `--sdfgi`
+  adds global illumination (`realistic-plus`). `TerrainPreprocessor --photos`: SWISSIMAGE (`swissimage`).
+- `--bake-impostors` (windowed): re-pictures the realistic trees' impostors into
+  `assets/realistic/trees` (`assets`).
 - `--style-report`: headless check of the style kit's shader table, RESULT PASS/FAIL, and what
   each style borrows (`style-kit`).
 - `/style [ps1|cartoon|real-|real+]` in the chat: switch live, for the session only;
@@ -11,11 +15,14 @@
 - `--tree-lod off`: every tree 3D, no billboards; `--tree-near m`: the 3D/billboard handover
   (`tree-lod`).
 - **Style screenshots and timings:** `tools/style-shots.sh <tag> [game flags]` from the checkout
-  under test: one `--shot-queue` launch, seven viewpoints around Riddes (aerial, low, street,
-  house, chase, valley, top-down) at a pinned origin (`--origin`), pictures and log in
+  under test: one `--shot-queue` launch, eight viewpoints around Riddes (aerial, low, street,
+  house, chase, valley, top-down, interior) at a pinned origin (`--origin`), pictures and log in
   `test_output/styles/`, then each shot's frame time and primitives. `VIEWS="top street"` takes
   only those, `SETTLE=s` per shot, `TIME=h`. Compare a branch with `main` by running it from a
-  `main` checkout too (needs `--origin` and `g` heights, so `main` after #212).
+  `main` checkout too (needs `--origin` and `g` heights, so `main` after #212). **house** is a
+  house seen from its street; until #320 it stood inside a building's shell (culled from inside,
+  only that building's doorway showed). **interior** is the same house's ground floor through its
+  front door (`i` height, `main` after #320).
 - **A live change in one launch:** a `--shot-queue` line starting with `/` is typed into the chat
   between two shots (`/style cartoon`, `/style rebuild`, `/time set 19:30`).
 - **On Windows** the script needs zsh and `godot` on the PATH; a bash copy with `${=X}` changed

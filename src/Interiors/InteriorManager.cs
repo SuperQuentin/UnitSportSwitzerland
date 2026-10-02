@@ -192,6 +192,35 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     public IReadOnlyDictionary<string, DoorLink> Links => _links;
     public DoorPortals? Portals => _portals;
 
+    // ---- a camera with no player: the shot queue's "i" heights (#320) ---------------------------
+
+    /// <summary>
+    /// Opens the front door nearest <paramref name="at"/> (asked again while a request is pending
+    /// is harmless), and returns its key; null while no door within <paramref name="reach"/> has
+    /// streamed in. Offline only: online a door is the server's, for a player standing at it.
+    /// </summary>
+    public string? OpenDoorForCamera(Vector3 at, float reach)
+    {
+        if (Online) return null;
+        var door = DoorIndex.NearestEntrance(at, reach)?.Key.ToString();
+        if (door != null && !_doors.ContainsKey(door) && _requestingDoor == null) AskDoor(door, true);
+        return door;
+    }
+
+    /// <summary>A door's link once its interior is built here, else null.</summary>
+    public DoorLink? BuiltLink(string door) =>
+        _links.TryGetValue(door, out var link) && _built.ContainsKey(link.Plan) ? link : null;
+
+    /// <summary>
+    /// The free camera stands in <paramref name="plan"/>'s rooms, or back outside (null): the
+    /// building then stays built and shown, as for a player inside it. Offline, with no player.
+    /// </summary>
+    public void CameraInside(string? plan)
+    {
+        _current = plan != null && _cache.TryGetValue(plan, out var layout) ? layout : null;
+        Maintain();
+    }
+
     /// <summary>Whether a world point is down where the interiors are, not in the world above.</summary>
     public static bool InInteriorSpace(Vector3 at) => at.Y < InteriorBaseY + 1000f;
 
@@ -205,6 +234,14 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (!InInteriorSpace(at)) return at;
         float floor = ground?.Invoke(at) ?? 0f;
         return at with { Y = floor + (at.Y - InteriorBaseY) };
+    }
+
+    /// <summary>The same in LV95 (#185): an interior differs from its building only in altitude.</summary>
+    public static GlobalPos SurfacePoint(GlobalPos at, Func<GlobalPos, float?>? ground = null)
+    {
+        if (!(at.Alt < InteriorBaseY + 1000f)) return at;
+        float floor = ground?.Invoke(at) ?? 0f;
+        return at with { Alt = floor + (at.Alt - InteriorBaseY) };
     }
 
     /// <summary>The built interior whose plan holds a point far underground, if any (none on a dedicated server).</summary>
@@ -640,13 +677,21 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (!_building.Add(layout.Key) || Origin == null) return;
         try
         {
-            // mesh arrays off the main thread; a tall block is a few thousand boxes
-            var data = await Task.Run(() => InteriorMeshBuilder.Build(layout));
+            // mesh arrays and the ArrayMesh off the main thread (RenderingServer calls are queued,
+            // as for terrain tiles); a tall block is a few thousand boxes
+            var material = _material ??= Styles.StyleKit.Material(Styles.MaterialRole.Interior);
+            var (data, mesh) = await Task.Run(() =>
+            {
+                var d = InteriorMeshBuilder.Build(layout);
+                return (d, InteriorNode.BuildMesh(d, material));
+            });
             if (!IsInsideTree() || _built.ContainsKey(layout.Key)) return;
-            _material ??= Styles.StyleKit.Material(Styles.MaterialRole.Interior);
-            var node = InteriorNode.Create(layout, data, _material, PlacementFor(layout, Origin));
+            var node = InteriorNode.Create(layout, data, material, PlacementFor(layout, Origin), mesh);
             AddChild(node);
             _built[layout.Key] = node;
+            // the collision BVH a frame later, so the two costs do not land on one frame (#221)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (IsInstanceValid(node)) node.AddBody(data.Collision);
         }
         finally { _building.Remove(layout.Key); }
         Maintain();
@@ -1175,10 +1220,9 @@ public partial class InteriorNode : Node3D
         }
     }
 
-    public static InteriorNode Create(InteriorLayout layout, InteriorMeshBuilder.MeshData data, Material material, Transform3D placement)
+    /// <summary>The interior's visual mesh; safe on a worker thread, like <c>ChunkNode.ToArrayMesh</c>.</summary>
+    public static ArrayMesh BuildMesh(InteriorMeshBuilder.MeshData data, Material material)
     {
-        var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement, Layout = layout };
-
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
@@ -1186,16 +1230,19 @@ public partial class InteriorNode : Node3D
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         mesh.SurfaceSetMaterial(0, material);
-        node.AddChild(new MeshInstance3D { Name = "Mesh", Mesh = mesh });
+        return mesh;
+    }
 
-        // BackfaceCollision: every wall here is a single face, approached from whichever side the
-        // player is on; one-sided, half of them would be walked straight through
-        var body = new StaticBody3D { Name = "Body" };
-        body.AddChild(new CollisionShape3D
-        {
-            Shape = new ConcavePolygonShape3D { Data = data.Collision, BackfaceCollision = true },
-        });
-        node.AddChild(body);
+    /// <summary>
+    /// Builds the node. Given a prebuilt <paramref name="mesh"/>, the caller adds the collision
+    /// itself (<see cref="AddBody"/>); without one, both are built here.
+    /// </summary>
+    public static InteriorNode Create(InteriorLayout layout, InteriorMeshBuilder.MeshData data, Material material, Transform3D placement,
+        ArrayMesh? mesh = null)
+    {
+        var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement, Layout = layout };
+        node.AddChild(new MeshInstance3D { Name = "Mesh", Mesh = mesh ?? BuildMesh(data, material) });
+        if (mesh == null) node.AddBody(data.Collision);
 
         // the front doors, shut: the way out is to open one, not to walk into the void
         foreach (var e in layout.AllEntrances())
@@ -1215,5 +1262,17 @@ public partial class InteriorNode : Node3D
         }
         AddLockDoors(node, material);
         return node;
+    }
+
+    public void AddBody(Vector3[] collision)
+    {
+        // BackfaceCollision: every wall here is a single face, approached from whichever side the
+        // player is on; one-sided, half of them would be walked straight through
+        var body = new StaticBody3D { Name = "Body" };
+        body.AddChild(new CollisionShape3D
+        {
+            Shape = new ConcavePolygonShape3D { Data = collision, BackfaceCollision = true },
+        });
+        AddChild(body);
     }
 }

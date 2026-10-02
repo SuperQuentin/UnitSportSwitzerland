@@ -71,7 +71,7 @@ public partial class PerfRecorder : Node, IOriginShiftAware
     private readonly List<float> _frameMs = new();
     private readonly List<Hitch> _hitches = new();
     private readonly List<ChunkManager.BuildLog> _buildLogs = new();
-    private readonly List<(TileId Id, int Stride, bool Interim, double Ms)> _slowCommits = new();
+    private readonly List<(TileId Id, int Stride, string Kind, double Ms)> _slowCommits = new();
     private double _cpuSum;
     private long _primSum, _drawSum;
     private int _saturatedFrames;
@@ -101,12 +101,8 @@ public partial class PerfRecorder : Node, IOriginShiftAware
     public override void _Ready()
     {
         EnableRenderTiming(GetViewport());
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--perflog");
-        if (i < 0) return;
-        if (i + 1 < args.Length && double.TryParse(args[i + 1], NumberStyles.Float,
-                CultureInfo.InvariantCulture, out double seconds))
-            _autoStop = seconds;
+        if (!CmdArgs.Has("--perflog")) return;
+        if (CmdArgs.Double("--perflog") is double seconds) _autoStop = seconds;
         Start();
     }
 
@@ -286,14 +282,14 @@ public partial class PerfRecorder : Node, IOriginShiftAware
         if (_autoStop > 0 && _elapsed >= _autoStop) Stop();
     }
 
-    private void OnCommit(TileId id, int stride, bool interim, double ms)
+    private void OnCommit(TileId id, int stride, string kind, double ms)
     {
         _pendingCommits++;
         _pendingCommitMs += ms;
         if (ms > _pendingWorstCommit) { _pendingWorstCommit = ms; _pendingWorstTile = id.ToString(); }
         _commits?.WriteLine(string.Format(CultureInfo.InvariantCulture, "{0:F3},{1},{2},{3},{4},{5:F2}",
-            _elapsed, _frameIndex + 1, id, stride, interim ? "ground" : "tail", ms));
-        if (ms > 8) _slowCommits.Add((id, stride, interim, ms));
+            _elapsed, _frameIndex + 1, id, stride, kind, ms));
+        if (ms > 8) _slowCommits.Add((id, stride, kind, ms));
     }
 
     private void OnBuild(ChunkManager.BuildLog b)
@@ -393,7 +389,7 @@ public partial class PerfRecorder : Node, IOriginShiftAware
         {
             L("{0} commits over 8 ms; slowest:", _slowCommits.Count);
             foreach (var c in _slowCommits.OrderByDescending(c => c.Ms).Take(10))
-                L("  {0} stride {1} {2}: {3:F1} ms", c.Id, c.Stride, c.Interim ? "ground" : "tail", c.Ms);
+                L("  {0} stride {1} {2}: {3:F1} ms", c.Id, c.Stride, c.Kind, c.Ms);
         }
         L("");
 

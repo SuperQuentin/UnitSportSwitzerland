@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Avatar;
 using UnitSport.Vehicles;
 
@@ -24,6 +25,12 @@ public partial class FootPlayer
     [Export] public int SeatIndex { get; set; }
 
     public bool RidingAlong => RidingWith != 0;
+
+    /// <summary>The vehicle this passenger sits in can be walked about in: E stands up into it rather than getting out.</summary>
+    public bool HostWalkable => Host is { } host && VehicleOf(host) is { Walkable: true };
+
+    /// <summary>A bus's doors, one bit each: its own while driving it, from the published pose on a copy (the server's too).</summary>
+    public byte BusDoors => _ride is Truck own ? own.DoorsOpen : Ride == RideKind.OnFoot ? (byte)0 : (byte)((Mathf.RoundToInt(Anim.W) >> 4) & 15);
 
     /// <summary>One's own vehicle with nobody at the wheel: no input, it rolls on under its own physics.</summary>
     public bool RollingDriverless => _ride != null && SeatIndex != 0;
@@ -88,8 +95,9 @@ public partial class FootPlayer
     /// </summary>
     private void UpdateSeated()
     {
-        // a passenger's copy is placed from its host's: after the host has moved this frame, on every peer
-        int priority = RidingWith != 0 ? 10 : 0;
+        // a passenger's copy (and one walking about aboard) is placed from its vehicle's: after the
+        // vehicle has moved this frame, on every peer
+        int priority = RidingWith != 0 || DeckOn != "" || _decks.Count > 0 ? 10 : 0;
         if (ProcessPriority != priority) ProcessPriority = priority;
         var at = WhereSeated();
         if (at is not { } s)
@@ -140,6 +148,27 @@ public partial class FootPlayer
     /// The camera from a seat: from the figure's own eye on the vehicle's body (first person), or
     /// behind the vehicle (third), turned by the free look, which stays where it is put.
     /// </summary>
+    /// <summary>
+    /// What the seat camera's ray ignores: this body, the vehicle and its section bodies. Rebuilt
+    /// only when the vehicle, its train (<see cref="TrainRids"/> is a new array then) or its child
+    /// count changes (#221: a new array and a LINQ scan per frame before).
+    /// </summary>
+    private Godot.Collections.Array<Rid> SeatExclude(FootPlayer who)
+    {
+        var train = who.TrainRids();
+        int children = who.GetChildCount();
+        if (_seatExclude != null && who == _seatWho && ReferenceEquals(train, _seatTrain) && children == _seatChildren) return _seatExclude;
+        _seatExclude = new Godot.Collections.Array<Rid> { GetRid(), who.GetRid() };
+        foreach (var section in who.GetChildren().OfType<CollisionObject3D>()) _seatExclude.Add(section.GetRid());
+        _seatWho = who;
+        _seatTrain = train;
+        _seatChildren = children;
+        return _seatExclude;
+    }
+    private Godot.Collections.Array<Rid>? _seatExclude, _seatTrain;
+    private FootPlayer? _seatWho;
+    private int _seatChildren;
+
     private void UpdateSeatCamera(float dt)
     {
         if (_camera == null || WhereSeated() is not { } s) return;
@@ -149,7 +178,7 @@ public partial class FootPlayer
             var eye = frame * (SeatedFigure.Eye(s.Seat) - s.Seat.Hip);
             var basis = frame.Basis.Orthonormalized() * new Basis(Vector3.Up, _lookYaw) * new Basis(Vector3.Right, _pitch);
             _camera.GlobalTransform = new Transform3D(basis, eye);
-            _camera.Fov = Mathf.Lerp(_camera.Fov, Core.GameSettings.Current.CockpitFov, 1f - Mathf.Exp(-3f * dt));
+            _camera.Fov = Mathf.Lerp(_camera.Fov, Core.GameSettings.Current.CockpitFov, MathX.Damp(3f, dt));
             return;
         }
         // behind and above the vehicle, round it with the look, pulled in short of what is in the way
@@ -157,13 +186,11 @@ public partial class FootPlayer
         var centre = s.Who.GlobalPosition + Vector3.Up * ride.EyeHeight;
         float yaw = s.Who.GlobalRotation.Y + _lookYaw;
         var wanted = centre + new Basis(Vector3.Up, yaw) * new Vector3(0, ride.ChaseHeight, ride.ChaseDistance);
-        var exclude = new Godot.Collections.Array<Rid> { GetRid(), s.Who.GetRid() };
-        foreach (var section in s.Who.GetChildren().OfType<CollisionObject3D>()) exclude.Add(section.GetRid());
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(centre, wanted, CameraMask, exclude));
+        var hit = _camRay.Cast(GetWorld3D().DirectSpaceState, centre, wanted, CameraMask, SeatExclude(s.Who));
         var at = hit.Count > 0 ? centre.Lerp(hit["position"].AsVector3(), 0.85f) : wanted;
         _camera.GlobalTransform = Transform3D.Identity.LookingAt(centre - at, Vector3.Up).Translated(at);
         _camera.RotateObjectLocal(Vector3.Right, _pitch + ride.ChasePitch + 0.1f);
-        _camera.Fov = Mathf.Lerp(_camera.Fov, ride.BaseFov, 1f - Mathf.Exp(-3f * dt));
+        _camera.Fov = Mathf.Lerp(_camera.Fov, ride.BaseFov, MathX.Damp(3f, dt));
     }
 
     /// <summary>E beside someone's vehicle: the nearest one being driven, within reach of its door, or null.</summary>
@@ -174,7 +201,8 @@ public partial class FootPlayer
         foreach (var p in GetTree().GetNodesInGroup(Group).OfType<FootPlayer>())
         {
             if (p == this || p.RidingAlong || p.Ride == RideKind.OnFoot || VehicleOf(p) is not { IsVehicle: true } vehicle) continue;
-            if (vehicle.Seats.Length < 2) continue;
+            // a vehicle you can walk about in is boarded by walking in (#162)
+            if (vehicle.Seats.Length < 2 || vehicle.Walkable) continue;
             // at its door, or right against its side (#261): not anywhere within a few metres of its middle
             var entry = vehicle.EntryPoint;
             float d = entry != Vector3.Zero
@@ -249,6 +277,8 @@ public partial class FootPlayer
     public void BoardAs(int host, int seat)
     {
         if (_sliding) EndSlide();
+        if (Aboard) LeaveDeck(keepVelocity: false);
+        _deckWait = 0f;
         bool boarding = RidingWith == 0;
         RidingWith = host;
         SeatIndex = seat;
@@ -269,6 +299,8 @@ public partial class FootPlayer
     public void TakeVehicle(VehicleState state, int seat)
     {
         float look = _lookYaw;
+        if (Aboard) LeaveDeck(keepVelocity: false);
+        _deckWait = 0f;
         if (_seated != null && IsInstanceValid(_seated)) _seated.QueueFree();
         _seated = null;
         RidingWith = 0;
@@ -324,7 +356,7 @@ public partial class FootPlayer
     public VehicleState? VehicleStateOfCopy()
     {
         if (Ride == RideKind.OnFoot || CarSetups.Ride(Ride, CarSetupId, TuningBits) is not { } vehicle) return null;
-        return new VehicleState(Ride, GlobalPosition, Rotation.Y, WorldVelocity, vehicle.MaxHealth, true, false, 0f, VehicleState.Now,
+        return new VehicleState(Ride, Global, Rotation.Y, WorldVelocity, vehicle.MaxHealth, true, false, 0f, VehicleState.Now,
             Tuning: TuningBits, DoorsOpen: DoorsOpen, Setup: CarSetupId, Train: TrailerCode,
             Angles: new Vector3(TrainPose.X, TrainPose.Y, TrainPose.Z));
     }

@@ -24,6 +24,13 @@ cd "$(dirname "$0")/.."
 . tools/lib/guard.sh
 [ "$TIER" = lock ] && { guard_status; exit 0; }
 
+# Windows: the winget `godot`/`godot_console` links start the GUI build and hang headless runs
+# (docs/notes/general/godot-exe.md), so default to the real console exe when one is installed
+if [ -z "${GODOT:-}" ] && _guard_windows; then
+  for g in "$(cygpath -u "${LOCALAPPDATA:-}" 2>/dev/null)"/Microsoft/WinGet/Packages/GodotEngine.GodotEngine.Mono_*/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe            /c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe; do
+    [ -f "$g" ] && { GODOT=$g; break; }
+  done
+fi
 GODOT=${GODOT:-godot}
 export GODOT
 OUT=test_output/tests
@@ -93,7 +100,7 @@ while read -r prefix tier check; do
       grep -q "^$prefix" <<< "$CHANGED" || continue
     fi
   fi
-  printf '%s\n' "${CHECKS[@]}" | grep -Fqx -- "$tier $check" || CHECKS+=("$tier $check")
+  printf "%s\n" ${CHECKS[@]+"${CHECKS[@]}"} | grep -Fqx -- "$tier $check" || CHECKS+=("$tier $check")
 done < tools/lib/checkmap.txt
 
 # --- tier 0 -----------------------------------------------------------------------------------

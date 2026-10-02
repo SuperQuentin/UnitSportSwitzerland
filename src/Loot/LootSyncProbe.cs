@@ -15,42 +15,24 @@ namespace UnitSport.Loot;
 /// Run the server and both clients with the same <c>--lootepoch N</c> (a restock period no earlier
 /// run touched) and the same <c>--at E,N</c>. Scratch inventories; the server keeps the taken mask.
 /// </summary>
-public partial class LootSyncProbe : Node
+public partial class LootSyncProbe : ChatProbe
 {
-    public static string? Role
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--lootsynccheck");
-            return i >= 0 && i + 1 < args.Length ? args[i + 1].ToUpperInvariant() : null;
-        }
-    }
+    public static string? Role => RoleArg("--lootsynccheck");
 
-    private readonly ItemController _items;
     private readonly WorldOrigin _origin;
-    private readonly List<string> _heard = new();
-    private string _role = "";
-    private int _failures;
 
-    public LootSyncProbe(ItemController items, WorldOrigin origin)
-    {
-        _items = items;
-        _origin = origin;
-    }
+    public LootSyncProbe(ItemController items, WorldOrigin origin) : base(items, "lootsync", "LS", "lootsync_") => _origin = origin;
 
     public LootSyncProbe() : this(null!, null!) { }
 
-    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
-    private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
+    protected override bool EchoSay => false;
 
     public override async void _Ready()
     {
         _role = Role ?? "A";
         string other = _role == "A" ? "B" : "A";
 
-        if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor(), 120)) { Fail("no player on the ground"); return; }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
+        if (!await Joined(120)) return;
         var me = Me!;
         var interiors = InteriorManager.Instance!;
         var loot = LootService.Instance!;
@@ -129,10 +111,10 @@ public partial class LootSyncProbe : Node
         if (_role == "A")
         {
             var first = start[0];
-            int before = Count();
+            int before = PackTotal();
             loot.Take(first.Index);
             Expect(await Until(() => !loot.Waiting && !loot.OpenContents().Any(c => c.Index == first.Index), 5), "A's take was granted");
-            Expect(Count() - before == first.Stack.Count, $"A's pack gained {Count() - before} of {first.Stack.Count}");
+            Expect(PackTotal() - before == first.Stack.Count, $"A's pack gained {PackTotal() - before} of {first.Stack.Count}");
             Say($"took {first.Index}");
             if (!await Heard("B", "done", 60)) { Fail("B never finished"); return; }
 
@@ -156,61 +138,20 @@ public partial class LootSyncProbe : Node
                 "B's open panel lost the stack A took, without B doing anything");
 
             // even with a stale view, the server must not hand the same stack out twice
-            int before = Count();
+            int before = PackTotal();
             var stackA = start.First(c => c.Index == gone).Stack;
             loot.Take(gone);
             await Until(() => !loot.Waiting, 5);
             await Seconds(0.3);
-            Expect(Count() == before && !loot.OpenContents().Any(c => c.Index == gone),
+            Expect(PackTotal() == before && !loot.OpenContents().Any(c => c.Index == gone),
                 $"B taking {stackA.Id} as well is refused, and B's view catches up");
 
             loot.TakeAll();
             await Until(() => !loot.Waiting && !loot.OpenContents().Any(), 10);
             Expect(!loot.OpenContents().Any(), "B took the rest");
-            Say($"done {Count() - before}");
+            Say($"done {PackTotal() - before}");
         }
 
-        GD.Print(_failures == 0 ? $"[lootsync {_role}] RESULT: ok" : $"[lootsync {_role}] RESULT: FAILED ({_failures})");
-        await Seconds(2);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
-    }
-
-    /// <summary>Items in the pack plus cash, as the interior probe counts them.</summary>
-    private int Count()
-    {
-        var inv = _items.Inventory;
-        int n = inv.Cash;
-        for (int i = 0; i < Inventory.Size; i++) if (!inv[i].IsEmpty) n += inv[i].Count;
-        return n;
-    }
-
-    private void Say(string what) => Chat?.Send($"LS {_role} {what}");
-
-    private Task<bool> Heard(string role, string what, double seconds) =>
-        Until(() => _heard.Any(l => l.Contains($"LS {role} {what}")), seconds);
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[lootsync {_role}] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[lootsync {_role}] RESULT: FAILED — {why}");
-        GetTree().Quit(1);
+        await Finish(2);
     }
 }

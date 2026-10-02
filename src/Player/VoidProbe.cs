@@ -19,7 +19,7 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class VoidProbe : Node
 {
-    public static bool Requested() => Array.IndexOf(OS.GetCmdlineUserArgs(), "--voidcheck") >= 0;
+    public static bool Requested() => CmdArgs.Has("--voidcheck");
 
     private const float Deep = 30f;
 

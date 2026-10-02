@@ -3,6 +3,7 @@ using System.Linq;
 using Godot;
 using UnitSport.Audio;
 using UnitSport.Avatar;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -132,7 +133,7 @@ public sealed class Motorbike : Rideable, IEngined
         if (!ground.OnFloor)
         {
             // off a crest: the rear spins free and the air is all that acts
-            Rpm = Mathf.Lerp(Rpm, Mathf.Lerp(s.IdleRpm, s.Redline, input.Throttle), 1f - Mathf.Exp(-6f * dt));
+            Rpm = Mathf.Lerp(Rpm, Mathf.Lerp(s.IdleRpm, s.Redline, input.Throttle), MathX.Damp(6f, dt));
             v -= 0.5f * AirDensity * s.DragArea * v * v / m * dt;
             motion.Speed = Mathf.Max(0f, v);
             AccelX = 0f;
@@ -235,10 +236,8 @@ public sealed class Motorbike : Rideable, IEngined
         int failures = 0;
         var settings = Core.GameSettings.Current;
         var was = settings.RideProfile;
-        var args = OS.GetCmdlineUserArgs();
-        int ai = System.Array.IndexOf(args, "--motocheck");
-        var only = ai >= 0 && ai + 1 < args.Length && !args[ai + 1].StartsWith("--")
-            ? args[ai + 1].Split(',').Select(int.Parse).ToHashSet() : null;
+        var only = CmdArgs.Value("--motocheck", notFlag: true) is { } list
+            ? list.Split(',').Select(int.Parse).ToHashSet() : null;
         foreach (var profile in new[] { Core.RideProfile.Sim, Core.RideProfile.Game })
         {
             settings.RideProfile = profile;

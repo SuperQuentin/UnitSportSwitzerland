@@ -36,10 +36,28 @@ public partial class Cyclist : Node3D
     private BikePalette _bikePalette = BikePalette.Default;
     private MeshInstance3D _rider = null!;
     private readonly FigureWind _wind = new();
+    // the fluttering rider keeps one mesh, rebuilt in place when the wind moves by a cm/s (#221)
+    private ArrayMesh? _riderMesh;
+    private Vector3 _riderWindKey = new(float.NaN, 0, 0);
     private bool Flutters => HumanMeshBuilder.Flutters(_palette.Outfit);
 
     private float _crankAngle;
     private float _cadenceRpm;
+
+    /// <summary>
+    /// Steps of a crank revolution the cranks and legs are drawn at (#221): both depend on the crank
+    /// angle alone, so each step is built once and shared by every rider of the same colours and clothes,
+    /// instead of three new meshes per rider per frame. 128 steps = 2.8°, a foot at most 4 mm off
+    /// the pedal angle it would have been solved for.
+    /// </summary>
+    private const int Steps = 128;
+    // ponytail: one entry set per distinct palette, never evicted; a few hundred tiny meshes per
+    // colour scheme. Evict by palette if riders with unique colours ever come by the thousand.
+    private static readonly Dictionary<(BikePalette, int), ArrayMesh> CrankSteps = new();
+    private static readonly Dictionary<(HumanPalette, int, int, bool), ArrayMesh> LegSteps = new();
+    private int _shownStep = -1;
+    /// <summary>Whether the rider and legs shown were built smooth (<see cref="HumanMeshBuilder.SmoothFigures"/>).</summary>
+    private bool _riderSmooth;
 
     /// <summary>Live cadence. Drives the crank; set it from the router and the legs follow.</summary>
     public float CadenceRpm
@@ -58,7 +76,6 @@ public partial class Cyclist : Node3D
     public void SetCrankAngle(float radians)
     {
         _crankAngle = Mathf.Wrap(radians, 0f, Mathf.Tau);
-        _cranks.Mesh = BikeMeshBuilder.BuildCranks(_bikePalette, _crankAngle);
         UpdateLegs();
     }
 
@@ -108,14 +125,10 @@ public partial class Cyclist : Node3D
             Mesh = HumanMeshBuilder.Build(_palette, HumanPose.Cycling, includeLegs: false, helmet: true),
             MaterialOverride = material,
         };
+        _riderSmooth = HumanMeshBuilder.SmoothFigures;
         AddChild(_rider);
 
-        _cranks = new MeshInstance3D
-        {
-            Name = "Cranks",
-            Mesh = BikeMeshBuilder.BuildCranks(bikePalette),
-            MaterialOverride = material,
-        };
+        _cranks = new MeshInstance3D { Name = "Cranks", MaterialOverride = material };
         AddChild(_cranks);
 
         for (int i = 0; i < 2; i++)
@@ -129,59 +142,86 @@ public partial class Cyclist : Node3D
 
     public override void _Process(double delta)
     {
+        // a restyle to or from a lit style (#311): the rider and legs are built again, parked or not
+        if (HumanMeshBuilder.SmoothFigures != _riderSmooth)
+        {
+            _riderSmooth = HumanMeshBuilder.SmoothFigures;
+            _rider.Mesh = HumanMeshBuilder.Build(_palette, HumanPose.Cycling, includeLegs: false, helmet: true);
+            _shownStep = -1;
+            UpdateLegs();
+        }
         // a skirt streams back in the wind of the ride (#251): measured from the bike's own motion
         if (Flutters)
         {
             var wind = _wind.Update(_rider, (float)delta);
-            _rider.Mesh = HumanMeshBuilder.Build(_palette with { Wind = wind }, HumanPose.Cycling, includeLegs: false, helmet: true);
+            var key = (wind * 100f).Round();
+            if (key != _riderWindKey)
+            {
+                _riderWindKey = key;
+                _rider.Mesh = HumanMeshBuilder.Build(_palette with { Wind = wind }, HumanPose.Cycling,
+                    includeLegs: false, helmet: true, into: _riderMesh ??= new ArrayMesh());
+            }
         }
         if (_cadenceRpm <= 0.01f) return;
 
         _crankAngle = Mathf.Wrap(_crankAngle + (float)(_cadenceRpm / 60.0 * Mathf.Tau * delta), 0f, Mathf.Tau);
-        _cranks.Mesh = BikeMeshBuilder.BuildCranks(_bikePalette, _crankAngle);
         UpdateLegs();
     }
 
     /// <summary>
-    /// Rebuilds both legs for the current crank angle.
-    ///
-    /// <para>
-    /// Only the legs are rebuilt, and only while pedalling — two short tube pairs, which is far
-    /// less work than it sounds and keeps the knee exactly on the circle the pedal describes.
-    /// </para>
+    /// Puts the cranks and both legs at the current crank angle's <see cref="Steps"/> step,
+    /// building that step's meshes the first time any rider of these colours reaches it.
     /// </summary>
     private void UpdateLegs()
     {
+        int step = Mathf.RoundToInt(_crankAngle / Mathf.Tau * Steps) % Steps;
+        if (step == _shownStep || _cranks == null) return;
+        _shownStep = step;
+        float stepAngle = step * Mathf.Tau / Steps;
+        if (!CrankSteps.TryGetValue((_bikePalette, step), out var cranks))
+            CrankSteps[(_bikePalette, step)] = cranks = BikeMeshBuilder.BuildCranks(_bikePalette, stepAngle);
+        _cranks.Mesh = cranks;
         for (int i = 0; i < 2; i++)
         {
-            float angle = _crankAngle + i * Mathf.Pi;
-            float side = i == 0 ? PedalOffset : -PedalOffset;
-
-            var hip = HipCentre + new Vector3(side * 1.28f, 0, 0);
-
-            // Sign matches BikeMeshBuilder.Cranks: a crank at the front travels downward next,
-            // because the bike faces +Z. The leg is solved from wherever the pedal is, so the
-            // two can only disagree if this expression does — hence the duplicated minus.
-            var pedal = BottomBracket + new Vector3(
-                side, -Mathf.Sin(angle) * CrankLength, Mathf.Cos(angle) * CrankLength);
-
-            // the knee leads the hip on a bicycle; +Z is forward in author space
-            var knee = Limb.Solve(hip, pedal, ThighLength, ShinLength, new Vector3(0, 0, 1));
-
-            var scratch = new MeshScratch();
-            if (!_palette.Outfit.IsEmpty)
-            {
-                // dressed (#251): stockings, boots and trousers on the pedalling leg, the foot along the pedal
-                HumanMeshBuilder.AppendLeg(scratch, _palette, hip, knee, pedal + new Vector3(0, 0.03f, -0.03f), pedal + new Vector3(0, 0, 0.09f));
-                _legs[i].Mesh = scratch.Build();
-                continue;
-            }
-            scratch.Tube(hip, knee, 0.088f, 0.062f, _palette.Shorts, 6);
-            scratch.Tube(knee, pedal, 0.062f, 0.042f, _palette.Skin, 6);
-            scratch.Box(pedal, new Vector3(0.058f, 0.045f, 0.115f), _palette.Shoes);
-
-            _legs[i].Mesh = scratch.Build();
+            var key = (_palette, i, step, HumanMeshBuilder.SmoothFigures);
+            if (!LegSteps.TryGetValue(key, out var leg)) LegSteps[key] = leg = BuildLeg(i, stepAngle);
+            _legs[i].Mesh = leg;
         }
+    }
+
+    /// <summary>
+    /// One leg, solved from where its pedal is: the knee stays exactly on the circle the pedal
+    /// describes.
+    /// </summary>
+    private ArrayMesh BuildLeg(int i, float crankAngle)
+    {
+        float angle = crankAngle + i * Mathf.Pi;
+        float side = i == 0 ? PedalOffset : -PedalOffset;
+
+        var hip = HipCentre + new Vector3(side * 1.28f, 0, 0);
+
+        // Sign matches BikeMeshBuilder.Cranks: a crank at the front travels downward next,
+        // because the bike faces +Z. The leg is solved from wherever the pedal is, so the
+        // two can only disagree if this expression does — hence the duplicated minus.
+        var pedal = BottomBracket + new Vector3(
+            side, -Mathf.Sin(angle) * CrankLength, Mathf.Cos(angle) * CrankLength);
+
+        // the knee leads the hip on a bicycle; +Z is forward in author space
+        var knee = Limb.Solve(hip, pedal, ThighLength, ShinLength, new Vector3(0, 0, 1));
+
+        var scratch = new MeshScratch();
+        using var smoothing = scratch.Smoothing(HumanMeshBuilder.SmoothFigures);
+        if (!_palette.Outfit.IsEmpty)
+        {
+            // dressed (#251): stockings, boots and trousers on the pedalling leg, the foot along the pedal
+            HumanMeshBuilder.AppendLeg(scratch, _palette, hip, knee, pedal + new Vector3(0, 0.03f, -0.03f), pedal + new Vector3(0, 0, 0.09f));
+            return scratch.Build();
+        }
+        scratch.Tube(hip, knee, 0.088f, 0.062f, _palette.Shorts, 6);
+        scratch.Tube(knee, pedal, 0.062f, 0.042f, _palette.Skin, 6);
+        scratch.Box(pedal, new Vector3(0.058f, 0.045f, 0.115f), _palette.Shoes);
+
+        return scratch.Build();
     }
 
 }

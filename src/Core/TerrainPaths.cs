@@ -86,26 +86,11 @@ public static class TerrainPaths
     }
 
     /// <summary>Reads an optional "--chunks &lt;dir&gt;" from the command line.</summary>
-    public static string? ParseChunkDirArg()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--chunks")
-                return args[i + 1];
-        return null;
-    }
+    public static string? ParseChunkDirArg() => CmdArgs.Value("--chunks");
 
     /// <summary>
     /// Where streamed terrain is cached. Overridable with <c>--cache &lt;dir&gt;</c> so two
     /// clients on one machine do not share a cache during testing.
     /// </summary>
-    public static string FindCacheDir()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--cache")
-                return args[i + 1];
-
-        return ProjectSettings.GlobalizePath("user://chunk_cache");
-    }
+    public static string FindCacheDir() => CmdArgs.Value("--cache") ?? ProjectSettings.GlobalizePath("user://chunk_cache");
 }

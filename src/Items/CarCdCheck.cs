@@ -58,20 +58,11 @@ public partial class CarCdCheck : Node
     /// <summary>The check for this run, if asked for: <paramref name="networked"/> for driver/watch, not for shots.</summary>
     public static CarCdCheck? Create(Func<FootPlayer?> local, Func<Node?> players, Inventory inventory, bool networked)
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--carcdcheck");
-        if (i < 0) return null;
-        string role = i + 1 < args.Length ? args[i + 1] : "watch";
+        if (!CmdArgs.Has("--carcdcheck")) return null;
+        string role = CmdArgs.Value("--carcdcheck") ?? "watch";
         if (networked == (role == "shots")) return null;
         GD.Print($"[carcdcheck] role {role}");
         return new CarCdCheck(role, local, players, inventory);
-    }
-
-    private static string? Arg(string name)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, name);
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
     }
 
     private FootPlayer? Other()
@@ -134,7 +125,7 @@ public partial class CarCdCheck : Node
         switch (_step)
         {
             case 0 when t > 1:
-                if (Arg("--carcdpw") is { } pw && GetTree().Root.FindChild(ChatManager.NodeName, true, false) is ChatManager chat)
+                if (CmdArgs.Value("--carcdpw") is { } pw && GetTree().Root.FindChild(ChatManager.NodeName, true, false) is ChatManager chat)
                     chat.Send($"/login {pw}");
                 _step++;
                 break;
@@ -286,8 +277,9 @@ public partial class CarCdCheck : Node
                 Shoot("radio_held.png");
                 RadioUi.Instance?.Close();
                 var forward = -me.GlobalTransform.Basis.Z with { Y = 0 };
-                RadioManager.Instance?.Throw(new RadioState("", 0, me.GlobalPosition + Vector3.Up * 1.2f + forward.Normalized() * 1.2f,
-                    me.Rotation.Y, Vector3.Zero));
+                if (RadioManager.Instance is { } radios)
+                    radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(me.GlobalPosition + Vector3.Up * 1.2f + forward.Normalized() * 1.2f),
+                        me.Rotation.Y, Vector3.Zero));
                 _step++;
                 break;
             case 6 when t > 17:
