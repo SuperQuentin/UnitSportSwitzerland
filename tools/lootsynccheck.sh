@@ -11,14 +11,14 @@ EP=${1:-$((700000 + RANDOM * 8 + RANDOM % 8))}
 AT=${2:-2583250,1113250}
 PORT=7792
 # a full-world server blends its horizon for ~30 s before it listens
-tc_server 300 120 $OUT/lootsync_server.log --server --port $PORT --lootepoch "$EP" "${CH[@]}"
+tc_server 300 120 $OUT/lootsync_server.log --server --port $PORT --lootepoch "$EP" ${CH[@]+"${CH[@]}"}
 # windowed clients, as verified; untested headless
 tc_client 240 $OUT/lootsync_a.log --windowed --connect 127.0.0.1:$PORT --name LootA --cache "$OUT/lootsync_cache_a" \
-    --at "$AT" --lootepoch "$EP" --lootsynccheck A "${CH[@]}" &
+    --at "$AT" --lootepoch "$EP" --lootsynccheck A ${CH[@]+"${CH[@]}"} &
 A=$!
 sleep 3
 tc_client 240 $OUT/lootsync_b.log --windowed --connect 127.0.0.1:$PORT --name LootB --cache "$OUT/lootsync_cache_b" \
-    --at "$AT" --lootepoch "$EP" --lootsynccheck B "${CH[@]}"
+    --at "$AT" --lootepoch "$EP" --lootsynccheck B ${CH[@]+"${CH[@]}"}
 wait $A
 tc_stop
 grep -h "\[lootsync" $OUT/lootsync_a.log $OUT/lootsync_b.log

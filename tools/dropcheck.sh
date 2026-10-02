@@ -9,12 +9,12 @@
 . "$(dirname "$0")/lib/twoclient.sh" drop
 PORT=7798
 # a full-world server blends its horizon for half a minute before it listens: wait for it
-tc_server 300 150 $OUT/dropcheck_server.log --server --port $PORT "${CH[@]}"
+tc_server 300 150 $OUT/dropcheck_server.log --server --port $PORT ${CH[@]+"${CH[@]}"}
 sleep 2
-tc_client 200 $OUT/dropcheck_thrower.log --windowed --connect 127.0.0.1:$PORT --name Thrower --dropcheck thrower --traffic 0 --cache "$PWD/$OUT/dropcheck_cache_thrower" "${CH[@]}" &
+tc_client 200 $OUT/dropcheck_thrower.log --windowed --connect 127.0.0.1:$PORT --name Thrower --dropcheck thrower --traffic 0 --cache "$PWD/$OUT/dropcheck_cache_thrower" ${CH[@]+"${CH[@]}"} &
 THROWER=$!
 sleep 2
-tc_client 195 $OUT/dropcheck_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --dropcheck watch --traffic 0 --cache "$PWD/$OUT/dropcheck_cache_watch" "${CH[@]}"
+tc_client 195 $OUT/dropcheck_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --dropcheck watch --traffic 0 --cache "$PWD/$OUT/dropcheck_cache_watch" ${CH[@]+"${CH[@]}"}
 code=$?
 wait $THROWER   # runs may exit 139 after their result: read the RESULT line
 grep -q "RESULT: ok" $OUT/dropcheck_thrower.log || code=1

@@ -8,12 +8,12 @@
 PORT=7814
 PW=crashcheck
 # a full-world server blends its horizon for half a minute before it listens: wait for it
-tc_server 260 150 $OUT/crashnet_server.log --server --port $PORT --admin-password $PW "${CH[@]}"
+tc_server 260 150 $OUT/crashnet_server.log --server --port $PORT --admin-password $PW ${CH[@]+"${CH[@]}"}
 sleep 2
-tc_client 200 $OUT/crashnet_b.log --windowed --connect 127.0.0.1:$PORT --name Watcher --crashnet b --traffic 0 --cache "$PWD/$OUT/crashnet_cache_b" "${CH[@]}" &
+tc_client 200 $OUT/crashnet_b.log --windowed --connect 127.0.0.1:$PORT --name Watcher --crashnet b --traffic 0 --cache "$PWD/$OUT/crashnet_cache_b" ${CH[@]+"${CH[@]}"} &
 WATCHER=$!
 sleep 3
-tc_client 190 $OUT/crashnet_a.log --connect 127.0.0.1:$PORT --name Driver --crashnet a $PW --traffic 0 --cache "$PWD/$OUT/crashnet_cache_a" "${CH[@]}"
+tc_client 190 $OUT/crashnet_a.log --connect 127.0.0.1:$PORT --name Driver --crashnet a $PW --traffic 0 --cache "$PWD/$OUT/crashnet_cache_a" ${CH[@]+"${CH[@]}"}
 wait $WATCHER   # headless runs may exit 139 after their result: read the RESULT lines
 code=0
 grep -q "a RESULT: ok" $OUT/crashnet_a.log || code=1

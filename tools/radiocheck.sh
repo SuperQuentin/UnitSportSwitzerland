@@ -17,12 +17,12 @@ ffmpeg -y -loglevel error -f lavfi -i "sine=f=440:b=4:d=45" -ac 1 -ar 22050 "$FI
 ffmpeg -y -loglevel error -f lavfi -i "sine=f=660:b=4:d=50" -ac 1 -ar 22050 "$FIX2"
 ffmpeg -y -loglevel error -f lavfi -i "sine=f=330:b=4:d=20" -ac 1 -ar 22050 "$MINE"
 # a full-world server blends its horizon for half a minute before it listens: wait for it
-tc_server 330 150 $OUT/radiocheck_server.log --server --port $PORT --cdfixture "$FIX" --cdfixture "$FIX2" "${CH[@]}"
+tc_server 330 150 $OUT/radiocheck_server.log --server --port $PORT --cdfixture "$FIX" --cdfixture "$FIX2" ${CH[@]+"${CH[@]}"}
 sleep 2
-tc_client 230 $OUT/radiocheck_thrower.log --connect 127.0.0.1:$PORT --name Thrower --radiocheck thrower --radiopersonal "$MINE" --traffic 0 --cache "$PWD/$OUT/radiocheck_cache_thrower" "${CH[@]}" &
+tc_client 230 $OUT/radiocheck_thrower.log --connect 127.0.0.1:$PORT --name Thrower --radiocheck thrower --radiopersonal "$MINE" --traffic 0 --cache "$PWD/$OUT/radiocheck_cache_thrower" ${CH[@]+"${CH[@]}"} &
 THROWER=$!
 sleep 2
-tc_client 225 $OUT/radiocheck_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --radiocheck watch --traffic 0 --cache "$PWD/$OUT/radiocheck_cache_watch" "${CH[@]}"
+tc_client 225 $OUT/radiocheck_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --radiocheck watch --traffic 0 --cache "$PWD/$OUT/radiocheck_cache_watch" ${CH[@]+"${CH[@]}"}
 code=$?
 # the thrower finishes its own steps (and deletes its personal fixture CD) a little after
 wait $THROWER   # headless runs may exit 139 after their result: read the RESULT line

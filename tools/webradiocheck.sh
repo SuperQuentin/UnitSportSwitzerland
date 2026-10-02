@@ -9,12 +9,12 @@
 PORT=7798
 PW=webradiopw
 # a full-world server blends its horizon for half a minute before it listens: wait for it
-tc_server 330 150 $OUT/webradio_server.log --server --port $PORT --admin-password $PW "${CH[@]}"
+tc_server 330 150 $OUT/webradio_server.log --server --port $PORT --admin-password $PW ${CH[@]+"${CH[@]}"}
 sleep 2
-tc_client 230 $OUT/webradio_driver.log --connect 127.0.0.1:$PORT --name Driver --webradiocheck driver --webradiopw $PW --traffic 0 --cache "$PWD/$OUT/webradio_cache_driver" "${CH[@]}" &
+tc_client 230 $OUT/webradio_driver.log --connect 127.0.0.1:$PORT --name Driver --webradiocheck driver --webradiopw $PW --traffic 0 --cache "$PWD/$OUT/webradio_cache_driver" ${CH[@]+"${CH[@]}"} &
 DRIVER=$!
 sleep 2
-tc_client 225 $OUT/webradio_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --webradiocheck watch --traffic 0 --cache "$PWD/$OUT/webradio_cache_watch" "${CH[@]}"
+tc_client 225 $OUT/webradio_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --webradiocheck watch --traffic 0 --cache "$PWD/$OUT/webradio_cache_watch" ${CH[@]+"${CH[@]}"}
 code=$?
 wait $DRIVER   # headless runs may exit 139 after their result: read the RESULT line
 grep -q "RESULT: ok" $OUT/webradio_driver.log || code=1

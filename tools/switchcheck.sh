@@ -12,10 +12,10 @@ EXTRA=${EXTRA:-}        # more client args, e.g. EXTRA="--time 13" for a dayligh
 ATARG=()
 [ -n "$AT" ] && ATARG=(--at "$AT")
 C1=$(mktemp -d); C2=$(mktemp -d)
-tc_server 200 120 $OUT/switchcheck_server.log --server --port $PORT --admin-password switchcheck "${CH[@]}"
-tc_client 190 $OUT/switchcheck_driver.log --connect 127.0.0.1:$PORT --name Driver --cache "$C1" --switchcheck driver switchcheck "${ATARG[@]}" "${CH[@]}" --traffic 0 $EXTRA &
+tc_server 200 120 $OUT/switchcheck_server.log --server --port $PORT --admin-password switchcheck ${CH[@]+"${CH[@]}"}
+tc_client 190 $OUT/switchcheck_driver.log --connect 127.0.0.1:$PORT --name Driver --cache "$C1" --switchcheck driver switchcheck ${ATARG[@]+"${ATARG[@]}"} ${CH[@]+"${CH[@]}"} --traffic 0 $EXTRA &
 sleep 2
-tc_client 185 $OUT/switchcheck_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --cache "$C2" --switchcheck watch $OUT/switchcheck_watch.png "${ATARG[@]}" "${CH[@]}" --traffic 0 $EXTRA
+tc_client 185 $OUT/switchcheck_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --cache "$C2" --switchcheck watch $OUT/switchcheck_watch.png ${ATARG[@]+"${ATARG[@]}"} ${CH[@]+"${CH[@]}"} --traffic 0 $EXTRA
 code=$?
 sleep 2
 grep -h "\[switchcheck\]" $OUT/switchcheck_driver.log $OUT/switchcheck_watch.log

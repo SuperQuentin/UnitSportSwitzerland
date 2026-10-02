@@ -5,7 +5,7 @@
 # waits for 4 GB free, cds to the repo root and sets:
 #   OUT     test_output
 #   GODOT   the env value, else the Godot console exe on Windows (docs/notes/general/godot-exe.md), else godot
-#   CH      (--chunks "$CHUNKS") when CHUNKS is set, else empty: pass it as ${CH[@]+"${CH[@]}"}
+#   CH      (--chunks "$CHUNKS") when CHUNKS is set, else empty: pass it as ${CH[@]+"${CH[@]}"} (bash 3.2 + set -u)
 #   APPDATA / XDG_DATA_HOME  a fresh $OUT/userdata_<name>, so user:// (loot, bank, placed, birds...) is
 #           never the real one; USERDATA=<dir> picks another, USERDATA=real keeps the real one
 # Then:
@@ -50,7 +50,7 @@ fi
 _tc_servers=()
 _tc_cleanup() {
   local p
-  for p in "${_tc_servers[@]}"; do _guard_kill_tree "$p"; done
+  for p in ${_tc_servers[@]+"${_tc_servers[@]}"}; do _guard_kill_tree "$p"; done
   [ -n "${GUARD_LOCK_HELD:-}" ] || guard_unlock
 }
 trap _tc_cleanup EXIT

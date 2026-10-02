@@ -10,13 +10,13 @@ EP=${1:-$((800000 + RANDOM * 8 + RANDOM % 8))}
 AT=${2:-2583250,1113250}
 PORT=7793
 # a full-world server blends its horizon for ~30 s before it listens
-tc_server 420 120 $OUT/locksync_server.log --server --port $PORT --lootepoch "$EP" "${CH[@]}"
+tc_server 420 120 $OUT/locksync_server.log --server --port $PORT --lootepoch "$EP" ${CH[@]+"${CH[@]}"}
 tc_client 300 $OUT/locksync_a.log --windowed --connect 127.0.0.1:$PORT --name LockA --cache "$OUT/locksync_cache_a" \
-    --at "$AT" --lootepoch "$EP" --locksynccheck A "${CH[@]}" &
+    --at "$AT" --lootepoch "$EP" --locksynccheck A ${CH[@]+"${CH[@]}"} &
 A=$!
 sleep 3
 tc_client 300 $OUT/locksync_b.log --windowed --connect 127.0.0.1:$PORT --name LockB --cache "$OUT/locksync_cache_b" \
-    --at "$AT" --lootepoch "$EP" --locksynccheck B "${CH[@]}"
+    --at "$AT" --lootepoch "$EP" --locksynccheck B ${CH[@]+"${CH[@]}"}
 wait $A
 tc_stop
 grep -h "\[locksync" $OUT/locksync_a.log $OUT/locksync_b.log

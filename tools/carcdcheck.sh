@@ -15,12 +15,12 @@ FIXB="$PWD/$OUT/carcdB.wav"
 ffmpeg -y -loglevel error -f lavfi -i "sine=f=520:b=4:d=20" -ac 1 -ar 22050 "$FIXA" || { echo "ffmpeg is needed on PATH"; exit 1; }
 ffmpeg -y -loglevel error -f lavfi -i "sine=f=780:b=4:d=50" -ac 1 -ar 22050 "$FIXB"
 # a full-world server blends its horizon for half a minute before it listens: wait for it
-tc_server 700 300 $OUT/carcd_server.log --server --port $PORT --admin-password $PW --cdfixture "$FIXA" --cdfixture "$FIXB" "${CH[@]}"
+tc_server 700 300 $OUT/carcd_server.log --server --port $PORT --admin-password $PW --cdfixture "$FIXA" --cdfixture "$FIXB" ${CH[@]+"${CH[@]}"}
 sleep 2
-tc_client 450 $OUT/carcd_driver.log --connect 127.0.0.1:$PORT --name Driver --carcdcheck driver --carcdpw $PW --traffic 0 --cache "$PWD/$OUT/carcd_cache_driver" "${CH[@]}" &
+tc_client 450 $OUT/carcd_driver.log --connect 127.0.0.1:$PORT --name Driver --carcdcheck driver --carcdpw $PW --traffic 0 --cache "$PWD/$OUT/carcd_cache_driver" ${CH[@]+"${CH[@]}"} &
 DRIVER=$!
 sleep 2
-tc_client 445 $OUT/carcd_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --carcdcheck watch --traffic 0 --cache "$PWD/$OUT/carcd_cache_watch" "${CH[@]}"
+tc_client 445 $OUT/carcd_watch.log --windowed --connect 127.0.0.1:$PORT --name Watcher --carcdcheck watch --traffic 0 --cache "$PWD/$OUT/carcd_cache_watch" ${CH[@]+"${CH[@]}"}
 code=$?
 wait $DRIVER   # headless runs may exit 139 after their result: read the RESULT line
 grep -q "RESULT: ok" $OUT/carcd_driver.log || code=1
