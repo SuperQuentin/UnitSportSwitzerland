@@ -170,4 +170,50 @@ public partial class FootPlayer
         if (WaterField.TryLevelAt(at, out float level)) at.Y = Mathf.Max(at.Y, level - 0.2f);
         GlobalPosition = at;
     }
+
+    /// <summary>
+    /// After the swim's slide (#378), against a vehicle's hull that overhangs the swimmer: a ship's
+    /// topsides flaring out over the water, a boat's bottom dropping on the swell. Under it (facing
+    /// down), it strokes out across the hull toward its nearer side, at least <see cref="OutFromUnder"/>
+    /// m/s: held there, the buoyancy pressed it into the bottom for good. Under a flare, the next
+    /// strokes do not drive in under it (<see cref="ClearOfHull"/>): stroking into the steamer's side,
+    /// the flare slid the swimmer down under the water and held its head there.
+    /// </summary>
+    private void OutFromUnderHull()
+    {
+        _overhang = Vector3.Zero;
+        for (int i = 0; i < GetSlideCollisionCount(); i++)
+        {
+            var hit = GetSlideCollision(i);
+            var n = hit.GetNormal();
+            if (n.Y > -0.15f || hit.GetCollider() is not (VehicleBody or FootPlayer) || hit.GetCollider() is not Node3D hull) continue;
+            var level = n with { Y = 0 };
+            if (n.Y > -0.7f && level.LengthSquared() > 1e-4f)
+            {
+                _overhang = level.Normalized();
+                continue;
+            }
+            var across = hull.GlobalTransform.Basis.X with { Y = 0 };
+            if (across.LengthSquared() < 1e-6f) continue;
+            across = across.Normalized();
+            if ((GlobalPosition - hull.GlobalPosition).Dot(across) < 0f) across = -across;
+            float now = Velocity.Dot(across);
+            if (now < OutFromUnder) Velocity += across * (OutFromUnder - now);
+            _overhang = across;
+            return;
+        }
+    }
+
+    /// <summary>Out from a hull overhanging the swimmer at its last slide (level), zero when none.</summary>
+    private Vector3 _overhang;
+
+    /// <summary>The stroke, less what drives it in under an overhanging hull.</summary>
+    private Vector3 ClearOfHull(Vector3 wish)
+    {
+        if (_overhang == Vector3.Zero) return wish;
+        float into = wish.Dot(_overhang);
+        return into < 0f ? wish - _overhang * into : wish;
+    }
+
+    private const float OutFromUnder = 1.5f;
 }
