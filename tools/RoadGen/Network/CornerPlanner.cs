@@ -52,8 +52,11 @@ public static class CornerPlanner
     private sealed record Chain(List<(Vec2 P, float Y)> Kerb, Vec2 Out, double Width, float Kerb_, Vec2 Inward);
 
     public static List<RoadAreaProp> Plan(TileId id, IReadOnlyList<RoadSegment> segments, IReadOnlyList<RoadJunction> caps,
-        Facades facades, Stats stats)
+        Facades facades, Stats stats, IReadOnlyList<RoadAreaProp>? pavement = null)
     {
+        // a turn lane's widening (#123) is carriageway too: a corner never stands on it (#120:
+        // the sidewalk beside a pocket now carries on, and its corner reached across the lane)
+        _pavement = pavement?.Where(a => a.Type == AreaPropType.Pavement && a.Vertices.Length >= 9).ToList() ?? [];
         var props = new List<RoadAreaProp>();
         var ends = new Dictionary<(long, long), List<End>>();
         for (int s = 0; s < segments.Count; s++)
@@ -150,14 +153,14 @@ public static class CornerPlanner
             var side = right ? seg.Attributes.Right : seg.Attributes.Left;
             var edge = Edge(seg, right);
             if (!cur.AtStart) edge.Reverse();
-            if (side.SidewalkDm > 0)
+            if (side.OuterDm > 0)   // the whole side: a bike path (#120) and its sidewalk
             {
                 if (kerb.Count == 0) kerb.Add(edge[0]);   // else the last piece ended there
                 var dir = edge.Count > 1 ? (edge[1].P - edge[0].P) : Outward(seg, cur.AtStart);
                 dir = dir / Math.Max(dir.Length, 1e-9);
                 // away from the carriageway: left of the outward direction for a left side
                 var across = left ? new Vec2(-dir.Y, dir.X) : new Vec2(dir.Y, -dir.X);
-                double w = side.SidewalkDm / 10.0;
+                double w = side.OuterDm / 10.0;
                 return new Chain(kerb, edge[0].P + across * w, w, side.KerbCm / 100f, dir * -1);
             }
             if (!IsStreet(seg)) return null;
@@ -288,6 +291,30 @@ public static class CornerPlanner
         };
     }
 
+    /// <summary>The tile's turn-lane widenings while a tile is planned (<see cref="Plan"/>).</summary>
+    [ThreadStatic] private static List<RoadAreaProp>? _pavement;
+
+    /// <summary>Whether a plan point (x east, y = -z) lies on one of the tile's turn-lane widenings.</summary>
+    private static bool OnPavement(Vec2 q)
+    {
+        if (_pavement is null || _pavement.Count == 0) return false;
+        double x = q.X, z = -q.Y;
+        foreach (var a in _pavement)
+        {
+            var v = a.Vertices;
+            for (int t = 0; t + 2 < a.Indices.Length; t += 3)
+            {
+                int i0 = a.Indices[t] * 3, i1 = a.Indices[t + 1] * 3, i2 = a.Indices[t + 2] * 3;
+                double d1 = (x - v[i1]) * (v[i0 + 2] - v[i1 + 2]) - (v[i0] - v[i1]) * (z - v[i1 + 2]);
+                double d2 = (x - v[i2]) * (v[i1 + 2] - v[i2 + 2]) - (v[i1] - v[i2]) * (z - v[i2 + 2]);
+                double d3 = (x - v[i0]) * (v[i2 + 2] - v[i0 + 2]) - (v[i2] - v[i0]) * (z - v[i0 + 2]);
+                bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+                if (!(neg && pos)) return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>A wall or a carriageway inside a quad (sampled every 0.5 m), or null.</summary>
     private static string? QuadBlocked(TileId id, List<RoadSegment> segments, List<Vec2> quad, Facades facades)
     {
@@ -300,6 +327,7 @@ public static class CornerPlanner
                 if (facades.Occupied(id.MinE + x, id.MaxN + y)) return "wall";
                 foreach (var s in segments)
                     if (DistanceToLine(s, q) < s.Width * 0.5 - 0.3) return "road";
+                if (OnPavement(q)) return "road";
             }
         return null;
     }
@@ -352,7 +380,49 @@ public static class CornerPlanner
         }
         outer[0] = (a.Out, kerb[0].Y);
         outer[^1] = (b.Out, kerb[^1].Y);
+        Unfold(outer, kerb);
         return outer;
+    }
+
+    /// <summary>
+    /// An outer line offset further than the kerb's radius round a tight corner runs backwards or
+    /// crosses itself, and the band folds over at two heights (#120: a side with a bike path is up
+    /// to 5 m wide). An outer point stepping back against the kerb's direction holds the previous
+    /// one; every remaining loop is cut at its crossing, the points between collapsing onto it at
+    /// their mean height. Their quads become triangles fanning to that point.
+    /// </summary>
+    private static void Unfold(List<(Vec2 P, float Y)> outer, List<(Vec2 P, float Y)> kerb)
+    {
+        for (int k = 1; k + 1 < outer.Count; k++)
+            if ((outer[k].P - outer[k - 1].P).Dot(kerb[k].P - kerb[k - 1].P) <= 0) outer[k] = outer[k - 1];
+        // the last step into B's end may run back too: hold from that end
+        for (int k = outer.Count - 2; k > 0; k--)
+            if ((outer[k + 1].P - outer[k].P).Dot(kerb[k + 1].P - kerb[k].P) <= 0) outer[k] = outer[k + 1];
+        for (int pass = 0; pass < 32; pass++)
+        {
+            bool cut = false;
+            for (int i = 0; i + 2 < outer.Count && !cut; i++)
+                for (int j = outer.Count - 2; j > i + 1 && !cut; j--)
+                {
+                    if (Crossing(outer[i].P, outer[i + 1].P, outer[j].P, outer[j + 1].P) is not { } x) continue;
+                    float y = 0;
+                    for (int k = i + 1; k <= j; k++) y += outer[k].Y;
+                    y /= j - i;
+                    for (int k = i + 1; k <= j; k++) outer[k] = (x, y);
+                    cut = true;
+                }
+            if (!cut) return;
+        }
+    }
+
+    private static Vec2? Crossing(Vec2 a, Vec2 b, Vec2 c, Vec2 d)
+    {
+        var r = b - a;
+        var s = d - c;
+        double den = r.Cross(s);
+        if (Math.Abs(den) < 1e-12) return null;
+        double t = (c - a).Cross(s) / den, u = (c - a).Cross(r) / den;
+        return t > 1e-6 && t < 1 - 1e-6 && u > 1e-6 && u < 1 - 1e-6 ? a + r * t : null;
     }
 
     /// <summary>
@@ -423,6 +493,7 @@ public static class CornerPlanner
                     return Debug != null ? string.Create(CultureInfo.InvariantCulture, $"wall at ({id.MinE + x:F1},{id.MaxN + y:F1}), patch of {plan.Count} points, {area:F0} m2") : "wall";
                 foreach (var s in near)
                     if (DistanceToLine(s, q) < s.Width * 0.5 - 0.3) return "road";
+                if (OnPavement(q)) return "road";
             }
         return null;
     }
@@ -463,8 +534,12 @@ public static class CornerPlanner
         int n = seg.PointCount;
         var result = new List<(Vec2, float)>(n);
         double half = seg.Width * 0.5, sign = right ? 1 : -1;
+        // the kerb runs past a turn lane's widening where the side is shifted out (#120)
+        var side = right ? seg.Attributes.Right : seg.Attributes.Left;
+        var along = side.ShiftStartCm != 0 || side.ShiftEndCm != 0 ? RoadStreetSection.Fractions(seg) : null;
         for (int i = 0; i < n; i++)
         {
+            double off = half + (along is null ? 0 : side.ShiftAt(along[i]));
             int a = i == 0 ? 0 : i - 1, b = i == n - 1 ? n - 1 : i + 1;
             if (i == 0) b = 1; else if (i == n - 1) a = n - 2;
             double fx = seg.Points[b * 3] - seg.Points[a * 3], fz = seg.Points[b * 3 + 2] - seg.Points[a * 3 + 2];
@@ -472,7 +547,7 @@ public static class CornerPlanner
             if (len < 1e-9) { fx = 0; fz = -1; len = 1; }
             fx /= len; fz /= len;
             // right of travel, tile-local (X east, Z south): (-fz, fx)
-            double x = seg.Points[i * 3] + -fz * half * sign, z = seg.Points[i * 3 + 2] + fx * half * sign;
+            double x = seg.Points[i * 3] + -fz * off * sign, z = seg.Points[i * 3 + 2] + fx * off * sign;
             result.Add((new Vec2(x, -z), seg.Points[i * 3 + 1]));
         }
         return result;

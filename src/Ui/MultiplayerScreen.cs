@@ -402,6 +402,12 @@ public partial class ServerRow : HBoxContainer
         _ping.AddThemeColorOverride("font_color", colour);
         string world = r.Status.World == "generated" ? "  ·  generated world" : "";
         string version = r.Status.Version.Length > 0 ? $"  ·  v{r.Status.Version}" : "";
+        // another wire protocol: the server would refuse this client (Net/Handshake)
+        if (r.Status.Wire != Net.Handshake.Protocol)
+        {
+            version += "  ·  other game version";
+            _dot.Texture = UiTheme.Dot(UiTheme.Bad, 10);
+        }
         _detail.Text = $"{_endpoint}  ·  {_note}{version}{world}";
     }
 }

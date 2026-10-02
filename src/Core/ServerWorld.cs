@@ -27,10 +27,12 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
     private BattleRoyale.BrCrates? _brCrates;
+    private Handshake? _handshake;
 
     public override async void _Ready()
     {
@@ -63,6 +65,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         var origin = manifest.Tiles.Count > 0
             ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
             : new WorldOrigin(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+        // "--origin E,N" puts the server's own world space anywhere, to test that nothing depends on
+        // it (#185): what it measures and relays is LV95, whatever its origin
+        if (SpawnPoint.ParseOrigin() is var (pinE, pinN))
+            origin = new WorldOrigin(pinE, pinN);
         _origin = origin;
         GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}"
             + (manifest.Tiles.Count == 0 ? " (generated world)" : ""));
@@ -101,24 +107,24 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // player's synchronizer looks it up in _Ready). Line of sight from the 100 m horizon lattice.
         var horizon = await source.LoadHorizonAsync();
         _interest = InterestService.CreateServer(this, _players,
-            horizon != null ? InterestService.HorizonGround(horizon, origin) : null);
+            horizon != null ? InterestService.HorizonGround(horizon) : null);
 
-        _spawner = PlayerReplication.CreateSpawner();
+        _spawner = PlayerReplication.CreateSpawner(origin);
         AddChild(_spawner);
         // race NPCs: spawned here for everyone, simulated on the client that asked (issue #39)
         AddChild(_npcs = World.RaceNpcs.CreateServer(_spawner, _players));
 
         // vehicles standing in the world; the server spawns and removes them for everyone
-        _vehicles = Vehicles.VehicleManager.Create(this, null);
+        _vehicles = Vehicles.VehicleManager.Create(this, null, origin);
         // who sits in whose vehicle (#158): handed out here
         _passengers = Vehicles.PassengerService.Create(this);
         _passengers.Players = _players;
         _vehicles.PlayerPositions = () => _players!.GetChildren().OfType<Node3D>().Select(p => p.GlobalPosition);
         // radios thrown into the world, and the CDs they play; the clock everyone plays them by
-        _radios = Items.RadioManager.Create(this);
+        _radios = Items.RadioManager.Create(this, origin);
         _radios.PlayerPositions = _vehicles.PlayerPositions;
         // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
-        _dropped = Items.DroppedItems.Create(this);
+        _dropped = Items.DroppedItems.Create(this, origin);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
         Net.ClockSync.Create(this);
@@ -128,7 +134,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(new World.AfricaTwinEgg(_chunks));
 
         // gunfire: clients send their rounds here to be relayed; the server flies none of them
-        Combat.CombatManager.Create(this, null, server: true);
+        Combat.CombatManager.Create(this, null, origin, server: true);
 
         // building interiors: planned here on first entry, stored under user://interiors, and
         // handed to everyone who walks in afterwards
@@ -149,8 +155,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chat = ChatManager.CreateServer(_registry, _players, origin, places);
         AddChild(_chat);
 
+        // nothing goes to a peer before it has said which protocol it speaks (World/Handshake)
+        _handshake = Handshake.CreateServer(_chat);
+        _handshake.Accepted += OnPeerAccepted;
+        AddChild(_handshake);
+
         // car races between players: World/Race, like World/Chat, so the RPCs find it
-        var race = World.RaceManager.CreateServer(_chat, _players, source, origin);
+        var race = World.RaceManager.CreateServer(_chat, _players, source);
         // racers see each other however far apart the field spreads (Net/InterestService)
         // and everyone aboard one vehicle sees everyone else aboard it, wherever it goes
         var passengers = _passengers;
@@ -174,7 +185,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // held-item events (a shot, a flash) are relayed through here; placed objects (planted
         // flags, stuck photos) are owned, checked and saved here
-        Items.ItemEvents.Create(this, server: true);
+        Items.ItemEvents.Create(this, origin, server: true);
 
         // the birds everybody shares (#143): simulated here around every player, sent to those near
         var birds = new Birds.BirdLife(_chunks, origin, null)
@@ -196,6 +207,27 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
         _chat.NameAssigned += bank.SendBalance;
+        // built structures (#274): checked, kept and saved here; match ones cleared after the match
+        if (Systems.On(Systems.Build))
+        {
+            _structures = Build.Structures.Create(this, origin, server: true);
+            _structures.NameOf = _chat.NameOfPeer;
+            _structures.InMatch = br.Playing;
+            _structures.MatchRunning = () => br.State.Running;
+            _structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+            // a match piece that comes down leaves a pile of some of its materials (#276)
+            var crates = _brCrates;
+            _structures.Rubble = (at, stacks) =>
+            {
+                if (crates == null) return;
+                var (e, n) = origin.ToLv95(at);
+                var pile = new BattleRoyale.Crate { Style = BattleRoyale.CrateStyle.Pile, E = e, N = n, Alt = BattleRoyale.BrCrates.Ground, Label = "the rubble" };
+                pile.SetStacks(stacks);
+                crates.Spawn(new[] { pile });
+            };
+            br.Structures = _structures;
+        }
+        br.Placed = _placed;
 
         // a vehicle out of nothing is an admin's, or the one a race put you on (Core/Permissions)
         // (a wreck cannot be driven and burns out: no loophole, and race NPCs' wrecks park through
@@ -247,7 +279,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
             string world = manifest.Tiles.Count > 0 ? "real" : "generated";
             var registry = _registry;
             AddChild(new QueryResponder(queryPort, () => new ServerStatus(
-                name, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients, version, world), QueryResponder.ParseBind()));
+                name, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients, version, world) { Wire = Handshake.Protocol },
+                QueryResponder.ParseBind()));
         }
         _parentPid = HostedServer.ParseParentPid();
     }
@@ -314,13 +347,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _sinceStatus = 0;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         foreach (var child in _players.GetChildren())
-            if (child is Node3D p)
+            if (child is Player.FootPlayer p)
             {
                 // the ground this server holds under them: what any server-side check would use
                 string ground = _chunks != null && _chunks.TryGetHeight(p.GlobalPosition, out float h)
                     ? $"ground {h:F1} m" + (_chunks.IsGenerated(_origin!.TileAt(p.GlobalPosition)) ? " (generated)" : "")
                     : "ground not loaded";
-                GD.Print($"[server] player {p.Name} at {p.GlobalPosition}, {ground}");
+                GD.Print($"[server] player {p.Name} at {p.Global}, {ground}");
             }
         ServerStats.Ran("player status", t0);
     }
@@ -328,6 +361,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private void OnPeerConnected(long id)
     {
         GD.Print($"[server] peer {id} connected");
+        _handshake?.PeerConnected(id);
+    }
+
+    /// <summary>The peer speaks this server's protocol (<see cref="Handshake"/>): its player, and the world's state.</summary>
+    private void OnPeerAccepted(long id)
+    {
+        GD.Print($"[server] peer {id} speaks protocol {Handshake.Protocol}");
         _registry?.Add(id);
 
         var node = _spawner!.Spawn(id);
@@ -337,6 +377,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _structures?.SendTo(id);
         _br?.SendTo(id);
         _brCrates?.SendTo(id);
         _chat?.SendWorldTimeTo(id);
@@ -346,6 +387,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private void OnPeerDisconnected(long id)
     {
         GD.Print($"[server] peer {id} disconnected");
+        _handshake?.PeerLeft(id);
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);

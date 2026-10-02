@@ -260,6 +260,14 @@ public partial class Gathering : Node, Core.IOriginShiftAware
 
     private (ItemId Id, int Count) Yield((Resource Kind, string Spot, CoverClass Cover) t)
     {
+        // in a Battle Royale match (#276) the land gives building material: planks off a tree, more stone
+        if (BattleRoyale.BrManager.Instance?.InMatch == true)
+            switch (t.Kind)
+            {
+                case Resource.TreeWood: return (ItemId.WoodPlanks, 3);
+                case Resource.Deadwood: return (ItemId.WoodPlanks, 1);
+                case Resource.Stone: return (ItemId.Stone, 4);
+            }
         switch (t.Kind)
         {
             case Resource.Water:

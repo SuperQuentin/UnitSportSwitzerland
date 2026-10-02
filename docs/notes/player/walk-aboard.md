@@ -66,6 +66,13 @@
   host's) a round trip later. A walker on it is carried on at its last speed (`_deckWait`) and
   boards its new form, whose velocity starts from the one it publishes (measured after). There is a
   ~0.4 m jump along the aisle at that moment.
+- **Back at the wheel of a parked bus** (#323): the claim takes the parked body out of the physics at
+  once (`VehicleBody.Retire`: no layer, hidden; online the server's despawn can come after the
+  grant), and `EnterVehicle` drops the decks itself (`FreeDeck` zeroes their layer before the
+  `QueueFree`), not in the next `_Process`. In between, a physics step stood the bus just got into
+  on its own parked deck, then on its roof (2.8 m), and it fell. `EnterVehicle` also puts a ground
+  vehicle back where it stood after `ApplyRide`'s lift of a body that grew (0.73 m for a bus).
+  `--exitcheck` takes the wheel again after every bus exit and fails on any lift.
 - **Seats and the wheel** (#158's seats): E aboard takes the seat whose **place to stand** is nearest
   (`AisleSpot`: beside it toward the aisle; the wheel's by the front door), not the nearest hip
   (the driver's seat is up on its platform: a passenger seat beside it came out nearer). A parked

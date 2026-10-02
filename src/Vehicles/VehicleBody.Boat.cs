@@ -21,8 +21,8 @@ public partial class VehicleBody
 
     private void BeginBoat(Boat boat, VehicleState s)
     {
-        // the body arrives a hand's breadth up (see _Ready): the boat starts from there, as it was
-        boat.State = BoatState.At(s.Position + Vector3.Up * 0.15f + boat.Pivot, s.Yaw, s.Velocity);
+        // from where the body was put in this peer's frame (_Ready: the state's GlobalPos, a hand's breadth up)
+        boat.State = BoatState.At(Position + boat.Pivot, s.Yaw, s.Velocity);
         if (s.Angles != default) boat.State.Attitude = Quaternion.FromEuler(s.Angles);
         Tilt = boat.State.Attitude;
         _drawnTilt = Tilt;

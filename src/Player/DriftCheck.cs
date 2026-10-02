@@ -21,7 +21,7 @@ public static class DriftCheck
     private const float Dt = 1f / 60f;
     /// <summary>The drift angle the scripted driver holds: 30°, travelling right of a nose turned left.</summary>
     private const float Target = -0.52f;
-    private static readonly bool Trace = Array.IndexOf(OS.GetCmdlineUserArgs(), "--trace") >= 0;
+    private static readonly bool Trace = CmdArgs.Has("--trace");
 
     public static int Run()
     {

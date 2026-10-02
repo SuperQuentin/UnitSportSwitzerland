@@ -739,33 +739,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
-    /// Throws the whole world away — every tile, every cached asset and blend, the horizon — for
-    /// a rebase, which changes what every world coordinate means. <paramref name="moveOrigin"/>
-    /// runs once nothing placed against the old origin is left; the rings then rebuild everything
-    /// round the new one. Main thread only.
-    /// </summary>
-    public void ResetAll(Action? moveOrigin = null)
-    {
-        foreach (var id in _chunks.Keys.ToList()) UnloadTile(id);
-        _desired.Clear();
-        _wanted = [];
-        _ordered = [];
-        _desiredKey = "";
-        _orderedView = null;
-        _worldVersion++;
-        _sinceEval = double.MaxValue;
-        _invalidate?.Invoke(null);
-        _fallback?.ClearBlends();
-        Horizon?.Clear();
-        moveOrigin?.Invoke();
-        // the coverage texture is placed in world space: after the move, not before
-        FitHorizonCoverage();
-        Horizon?.Reload();
-        GD.Print("[terrain] world reset");
-        TerrainReplaced?.Invoke(null);
-    }
-
-    /// <summary>
     /// Sizes the horizon's coverage texture to every tile that can be drawn: the real set and the
     /// generated fill's domain.
     /// </summary>
@@ -791,6 +764,59 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         if (minE > maxE) return;
         Horizon.EnsureCoverage(minE, maxE, minN, maxN);
     }
+
+    // ---- debug menu (#339) -------------------------------------------------------------
+
+    /// <summary>The tile layers the debug menu hid on every tile; none in play.</summary>
+    public TileLayers HiddenLayers { get; private set; }
+
+    private bool _hideReal, _hideGenerated;
+
+    /// <summary>
+    /// Hides tile layers, and whole tiles by where their data comes from, on every loaded tile and
+    /// every tile built later. The horizon and the near trees are the caller's: they are nodes of
+    /// their own. Main thread.
+    /// </summary>
+    public void SetDebugHidden(TileLayers layers, bool real, bool generated)
+    {
+        HiddenLayers = layers;
+        _hideReal = real;
+        _hideGenerated = generated;
+        foreach (var (id, state) in _chunks)
+            if (state.Node != null) ApplyDebugHidden(id, state.Node);
+    }
+
+    private void ApplyDebugHidden(TileId id, ChunkNode node)
+    {
+        node.HideLayers(HiddenLayers);
+        node.Visible = !(IsGenerated(id) ? _hideGenerated : _hideReal);
+    }
+
+    /// <summary>
+    /// Stops the rings following the anchors: what is loaded stays loaded, at the stride it has,
+    /// so the camera can leave and look at it from outside. Builds already queued still commit.
+    /// </summary>
+    public bool FreezeRings
+    {
+        get => _freezeRings;
+        set
+        {
+            _freezeRings = value;
+            _sinceEval = double.MaxValue;
+        }
+    }
+
+    private bool _freezeRings;
+
+    /// <summary>Every loaded tile and the stride its ground is drawn at (-1: not built yet), for the debug overlay.</summary>
+    public void ListTiles(List<(TileId Id, int Stride)> into)
+    {
+        into.Clear();
+        foreach (var (id, state) in _chunks) into.Add((id, state.ActiveStride));
+    }
+
+    /// <summary>The stride a loaded tile's ground is drawn at; -1 when it is not loaded or not built yet.</summary>
+    public int StrideAt(TileId id) => _chunks.TryGetValue(id, out var state) ? state.ActiveStride : -1;
 
     /// <summary>Real or generated: whether the rings may ask for a tile.</summary>
     private bool IsAvailable(TileId id) => _available.Contains(id) || _fallback?.Covers(id) == true;
@@ -1129,7 +1155,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         // idle and capped the whole loader at MaxConcurrentBuilds per interval — 24 tiles a
         // second however fast the disk actually is.
         _sinceEval += delta;
-        if (_sinceEval >= EvalInterval || committed > 0)
+        if (!_freezeRings && (_sinceEval >= EvalInterval || committed > 0))
         {
             _sinceEval = 0;
             EvaluateRings();
@@ -1407,6 +1433,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 Name = $"Chunk_{id}",
                 Position = _origin!.ToWorld(id.MinE, id.MaxN, 0),
             };
+            ApplyDebugHidden(id, state.Node);
             AddChild(state.Node);
         }
         return state.Node;
@@ -1426,7 +1453,28 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private KeyValuePair<TileId, Want>[] _wanted = [];
     private KeyValuePair<TileId, Want>[] _ordered = [];
     private double[] _orderKeys = [];
-    private string _desiredKey = "";
+    /// <summary>
+    /// What the desired set was computed from: each anchor's tile and whether it wants collision,
+    /// the LOD policy, the world version and <see cref="BuildMeshes"/>. Compared field by field at
+    /// 10 Hz, with nothing allocated (it was a string built every evaluation, #221).
+    /// </summary>
+    private readonly List<(TileId Tile, bool Collision)> _desiredKey = new(), _keyNow = new();
+    private (LodPolicy? Lod, long Version, bool Meshes) _desiredKeyRest;
+
+    private bool RingKeyChanged()
+    {
+        _keyNow.Clear();
+        foreach (var anchor in _anchors)
+            _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor)));
+        (LodPolicy? Lod, long Version, bool Meshes) rest = (Lod, _worldVersion, BuildMeshes);
+        if (rest == _desiredKeyRest   // the policy by reference: a new one is a new key
+            && System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_keyNow).SequenceEqual(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_desiredKey)))
+            return false;
+        _desiredKeyRest = rest;
+        _desiredKey.Clear();
+        _desiredKey.AddRange(_keyNow);
+        return true;
+    }
     private ViewCone? _orderedView;
 
     /// <summary>
@@ -1459,16 +1507,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     private void EvaluateRings()
     {
-        var keyBuilder = new System.Text.StringBuilder();
-        foreach (var anchor in _anchors)
-            keyBuilder.Append(_origin!.TileAt(anchor.GlobalPosition)).Append(_collisionAnchors.Contains(anchor) ? 'p' : 'c').Append(';');
-        keyBuilder.Append('|').Append(Lod.GetHashCode())
-            .Append('|').Append(_worldVersion).Append('|').Append(BuildMeshes);
-        string key = keyBuilder.ToString();
-
-        if (key != _desiredKey)
+        if (RingKeyChanged())
         {
-            _desiredKey = key;
             _orderedView = null;
             RecomputeDesired();
         }

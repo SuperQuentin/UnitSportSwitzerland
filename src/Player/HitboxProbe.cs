@@ -29,7 +29,7 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class HitboxProbe : Node3D
 {
-    public static bool Requested() => Array.IndexOf(OS.GetCmdlineUserArgs(), "--hitboxcheck") >= 0;
+    public static bool Requested() => CmdArgs.Has("--hitboxcheck");
 
     private readonly ChunkManager? _chunks;   // null on --world flat: no buildings to test
     private readonly WorldOrigin _origin;

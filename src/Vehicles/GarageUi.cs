@@ -26,7 +26,7 @@ public partial class GarageUi : CanvasLayer
     public static Func<Vector3, bool>? GarageNear { get; set; }
 
     /// <summary><c>--tuning</c>: the menu opens anywhere, for testing and screenshots.</summary>
-    public static bool Anywhere { get; } = Array.IndexOf(OS.GetCmdlineUserArgs(), "--tuning") >= 0;
+    public static bool Anywhere { get; } = CmdArgs.Has("--tuning");
 
     /// <summary>Resolved per press, never captured: in multiplayer the player node is respawned.</summary>
     public Func<FootPlayer?>? ActivePlayer { get; set; }

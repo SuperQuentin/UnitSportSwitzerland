@@ -23,6 +23,12 @@ src/Core/                quick  --origincheck
 src/Terrain/             quick  --origincheck
 src/Items/               quick  --invcheck
 src/Crafting/            quick  --invcheck
+src/Build/               quick  --buildcheck --systems ui,physics,build
+src/Build/               net    tools/buildnetcheck.sh
+src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
+src/Build/Gadget         net    tools/gadgetnetcheck.sh
+src/BattleRoyale/BrPrefab quick  --prefabcheck --systems ui,physics,build
+src/BattleRoyale/BrStruct quick  --prefabcheck --systems ui,physics,build
 src/Loot/                quick  --lootchancecheck
 src/Occasions/           quick  --occasioncheck
 src/Occasions/           quick  --huntcheck
@@ -50,6 +56,9 @@ src/Ui/                  quick  --menucheck --systems ui
 src/Core/GameShell       quick  --menucheck --systems ui
 src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
+src/Core/Debug           quick  --debugcheck --systems ui
+src/Styles/StyleKit      quick  --debugcheck --systems ui
+src/Terrain/ChunkNode    quick  --debugcheck --systems ui
 src/BattleRoyale/        quick  --brcheck
 src/Combat/              quick  --brcheck
 
@@ -88,6 +97,7 @@ src/Avatar/BoatMesh      quick  --boatcheck jetski --chunks fixture:lake
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
+src/Core/Debug           net    tools/debugcheck.sh
 @rpc                     net    @netsmoke
 src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh

@@ -76,6 +76,17 @@ public partial class ItemController : Node
     public Func<FootPlayer?>? ActivePlayer { get; set; }
 
     public Inventory Inventory => _inventory;
+
+    /// <summary>A short line over the hotbar.</summary>
+    public void Toast(string text) => _ui.Toast(text);
+
+    /// <summary>The hammer's ghost and builder (#274).</summary>
+    public Build.BuildTool BuildTool => _build;
+    private Build.BuildTool _build = null!;
+
+    /// <summary>Gadgets in hand and in use: the zipline, ladder, trampoline, launch pad (#275).</summary>
+    public Build.GadgetTool GadgetTool => _gadgets;
+    private Build.GadgetTool _gadgets = null!;
     public InventoryUi Ui => _ui;
 
     /// <summary>Every item, for the offline player or an admin (#262).</summary>
@@ -123,6 +134,10 @@ public partial class ItemController : Node
         AddChild(_flagGhost);
         _throw = new ThrowAim { Name = "ThrowAim" };
         AddChild(_throw);
+        _build = new Build.BuildTool(this) { Name = "BuildTool" };
+        AddChild(_build);
+        _gadgets = new Build.GadgetTool(this) { Name = "GadgetTool" };
+        AddChild(_gadgets);
         Instance = this;
         DroppedItems.Refused += OnDropRefused;
 
@@ -195,6 +210,8 @@ public partial class ItemController : Node
         if (player == null)
         {
             ShowGhost(null);
+            _build.Step(null, false, false);
+            _gadgets.Step(null, ItemId.None, false);
             Highlight.Point(null);
             Vehicles.VehicleReach.Point(null);
             _throw.Step(null, false, false, (float)delta);
@@ -257,6 +274,10 @@ public partial class ItemController : Node
                         && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
         ShowGhost(sticking ? StickTarget(player).At : null);
         _flagGhost.Step(player, usable && !_planting && _inventory.HeldId == ItemId.SwissFlag);
+        _build.Step(player, usable && !UiFocus.TextEntryActive && _inventory.HeldId == ItemId.Hammer,
+            PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+        _gadgets.Step(usable && !UiFocus.TextEntryActive ? player : null, _inventory.HeldId, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+        _gadgets.Tick(usable ? player : null);
         if (visual != null)
         {
             visual.SetPose(_raiseFlag ? ViewPose.Raise : !aiming ? ViewPose.Rest : def!.Use switch
@@ -297,6 +318,27 @@ public partial class ItemController : Node
         else if (e.IsActionPressed(PlayerInput.DropItem))
         {
             DropHeld(player, all: e is InputEventKey { CtrlPressed: true });
+            GetViewport().SetInputAsHandled();
+        }
+        else if (e.IsActionPressed(PlayerInput.InteractMount) && _gadgets.TryInteract(player))
+        {
+            // E by a zipline's top post, a ladder's foot, on a launch pad: ride it (#275)
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_inventory.HeldId == ItemId.Hammer && e.IsActionPressed(PlayerInput.RideMenu))
+        {
+            // the hammer in hand: R turns the piece, Aim + R changes its material (the travel picker waits)
+            if (PlayerInput.Held(PlayerInput.AimItem)) _build.CycleMaterial();
+            else _build.Turn();
+            Click();
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_inventory.HeldId == ItemId.Hammer && PlayerInput.Held(PlayerInput.AimItem)
+                 && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
+        {
+            // Aim + wheel: the next piece instead of the next hotbar slot
+            _build.CyclePiece(e.IsActionPressed(PlayerInput.NextItem) ? 1 : -1);
+            Click();
             GetViewport().SetInputAsHandled();
         }
         else if (_aimingPhoto && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
@@ -432,6 +474,14 @@ public partial class ItemController : Node
                 PlaceOrPickUpFlag(player, slot);
                 break;
 
+            case ItemUse.Build:
+                _build.Use(player, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+                break;
+
+            case ItemUse.Gadget:
+                _gadgets.Use(player, slot, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+                break;
+
             case ItemUse.Optic:
                 _ui.Toast(InputHints.Format("Hold Aim ({aim_item}) to look through them."));
                 break;
@@ -467,7 +517,9 @@ public partial class ItemController : Node
                 Kick(player);
                 Play(SfxSynth.WhooshBank.Variants[SfxRng.Next(SfxSynth.WhooshBank.Variants.Length)], 1.3f);
                 var (eye, aim) = AimFrom(player, blade.Range);
-                if (!PlayerHits.Stab(player, eye, aim, blade)) BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, blade.Range);
+                if (!PlayerHits.Stab(player, eye, aim, blade)
+                    && BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, blade.Range) != true)
+                    Build.BuildTool.TryHit(player, eye, aim, blade);
                 break;
             }
 
@@ -692,7 +744,7 @@ public partial class ItemController : Node
         {
             var play = RadioPlay.Decode(stack.Data);
             for (int i = 0; i < stack.Count; i++)
-                RadioManager.Instance!.Throw(new RadioState("", 0, origin + Vector3.Up * (0.25f * i), yaw, velocity,
+                RadioManager.Instance!.Throw(new RadioState("", 0, _origin.ToGlobal(origin + Vector3.Up * (0.25f * i)), yaw, velocity,
                     play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
             return;
         }
@@ -820,6 +872,9 @@ public partial class ItemController : Node
         player.Punch(Mathf.DegToRad(weapon.Id switch { ItemId.Shotgun => 4.5f, ItemId.HuntingRifle => 5f, ItemId.Pistol => 2.5f, _ => 1.4f }));
     }
 
+    /// <summary>The crosshair's and the photo's view rays: one query, reused (#221).</summary>
+    private static readonly Core.RayQuery AimRay = new();
+
     /// <summary>
     /// Where a shot from <paramref name="player"/> starts and goes. It leaves the EYE: in third
     /// person the camera is ~3 m behind and to the side, so the camera's ray finds what the
@@ -835,8 +890,7 @@ public partial class ItemController : Node
         {
             var start = cam.GlobalPosition + look * Mathf.Max(0f, (eye - cam.GlobalPosition).Dot(look));
             var end = start + look * (range + 10f);
-            var ray = player.GetWorld3D().DirectSpaceState.IntersectRay(
-                PhysicsRayQueryParameters3D.Create(start, end, uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() }));
+            var ray = AimRay.Cast(player.GetWorld3D().DirectSpaceState, start, end, uint.MaxValue, player.SelfExclude);
             var point = ray.Count > 0 ? ray["position"].AsVector3() : end;
             if (point.DistanceTo(eye) > 1f) aim = (point - eye).Normalized();
         }
@@ -859,6 +913,8 @@ public partial class ItemController : Node
             Play(stream, pitch * weapon.Pitch);
         }
         PlayerHits.Shoot(player, eye, aim, weapon);
+        // a shot that meets a built piece first chips it (#274)
+        Build.BuildTool.TryHit(player, eye, aim, weapon);
         // a shot through a supply crate breaks it open (#198)
         BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, weapon.Range);
         if (weapon.Id == ItemId.Shotgun) Fire?.Invoke(player, eye, aim);
@@ -974,9 +1030,7 @@ public partial class ItemController : Node
         var from = camera.GlobalPosition;
         var forward = -camera.GlobalTransform.Basis.Z;
         float reach = PlaceReach + from.DistanceTo(player.GlobalPosition + Vector3.Up * 1.6f);
-        var query = PhysicsRayQueryParameters3D.Create(from, from + forward * reach,
-            uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() });
-        var hit = player.GetWorld3D().DirectSpaceState.IntersectRay(query);
+        var hit = AimRay.Cast(player.GetWorld3D().DirectSpaceState, from, from + forward * reach, uint.MaxValue, player.SelfExclude);
         if (hit.Count == 0) return (null, null, "Nothing in reach to stick it on.");
         if (PlacedObjects.IdOf(hit["collider"].AsGodotObject() as Node) is long id
             && PlacedObjects.Instance?.All.TryGetValue(id, out var o) == true && o.Kind == PlacedKind.Photo)

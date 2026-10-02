@@ -13,6 +13,18 @@ public enum PlacedKind
     Flag = 1,
     /// <summary>A photo stuck on something. Payload: the photo's id/hash. Only its owner removes it.</summary>
     Photo = 2,
+
+    // 3 and 4 are the campfire and the field workbench (#272)
+
+    // gadgets (#275, Build.Gadgets): only their owner removes them
+    /// <summary>The low end of a zipline. Payload: the high end, "E;N;altitude" (invariant).</summary>
+    Zipline = 5,
+    /// <summary>A rope ladder hanging from its top. Payload: its length in metres (invariant).</summary>
+    RopeLadder = 6,
+    Trampoline = 7,
+    LaunchPad = 8,
+    CamoNet = 9,
+    HayHideout = 10,
 }
 
 /// <summary>
@@ -65,6 +77,9 @@ public partial class PlacedObjects : Node
 
     public static PlacedObjects? Instance { get; private set; }
 
+    /// <summary>The owner of what a Battle Royale match sets out (#276): nobody can take it, it is never saved, it goes with the match.</summary>
+    public const string MatchOwner = "(match)";
+
     /// <summary>Kinds anyone may remove; every other kind only its owner. Must agree on the server.</summary>
     public static readonly HashSet<PlacedKind> RemovableByAnyone = new() { PlacedKind.Flag };
 
@@ -72,6 +87,12 @@ public partial class PlacedObjects : Node
     {
         [PlacedKind.Flag] = _ => FlagVisual(),
         [PlacedKind.Photo] = PhotoVisuals.Placed,
+        [PlacedKind.Zipline] = Build.GadgetMeshes.Visual,
+        [PlacedKind.RopeLadder] = Build.GadgetMeshes.Visual,
+        [PlacedKind.Trampoline] = Build.GadgetMeshes.Visual,
+        [PlacedKind.LaunchPad] = Build.GadgetMeshes.Visual,
+        [PlacedKind.CamoNet] = Build.GadgetMeshes.Visual,
+        [PlacedKind.HayHideout] = Build.GadgetMeshes.Visual,
     };
 
     /// <summary>
@@ -163,14 +184,6 @@ public partial class PlacedObjects : Node
         int req = Track(done);
         if (Online) RpcId(1, MethodName.AskRemove, req, id);
         else ServeRemove(1, req, id);
-    }
-
-    /// <summary>After an origin rebase: puts every visual back where its LV95 position now is.</summary>
-    public void Reposition()
-    {
-        foreach (var (id, node) in _visuals)
-            if (_objects.TryGetValue(id, out var o) && IsInstanceValid(node))
-                node.Transform = o.WorldTransform(_origin);
     }
 
     private int Track(Action<PlacedResult>? done)
@@ -302,7 +315,8 @@ public partial class PlacedObjects : Node
             : !double.IsFinite(e) || !double.IsFinite(n) || !double.IsFinite(alt) || !rot.IsFinite() ? "Bad position."
             : !InReach(peer, e, n, alt) ? "Too far away."
             : _objects.Values.Count(o => o.Owner == owner) >= MaxPerOwner ? $"You already placed {MaxPerOwner} things."
-            : null;
+            // a kind's own rules (a zipline's length and slope): Build.Gadgets
+            : Build.Gadgets.Check(new PlacedObject(0, (PlacedKind)kind, owner, e, n, alt, rot, payload), _origin);
         if (refused != null)
         {
             Reply(peer, req, 0, refused);
@@ -317,6 +331,30 @@ public partial class PlacedObjects : Node
             foreach (int p in Multiplayer.GetPeers())
                 RpcId(p, MethodName.Add, o.Id, (int)o.Kind, o.Owner, o.E, o.N, o.Altitude, o.Rotation, o.Payload);
         Reply(peer, req, o.Id, "");
+    }
+
+    /// <summary>Server: sets something down on its own authority (a match's gadgets): no checks, told to everyone.</summary>
+    public PlacedObject ServerPlace(PlacedKind kind, Transform3D at, string payload, string owner)
+    {
+        var (e, n) = _origin.ToLv95(at.Origin);
+        var o = Put(new PlacedObject(_nextId++, kind, owner, e, n, at.Origin.Y, at.Basis.Orthonormalized().GetRotationQuaternion(), payload));
+        if (owner != MatchOwner) Save();
+        if (Online)
+            foreach (int p in Multiplayer.GetPeers())
+                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, o.Owner, o.E, o.N, o.Altitude, o.Rotation, o.Payload);
+        return o;
+    }
+
+    /// <summary>Server: takes away everything one owner set down (the match's gadgets when it is over).</summary>
+    public void ClearOwner(string owner)
+    {
+        foreach (var o in _objects.Values.Where(o => o.Owner == owner).ToList())
+        {
+            Drop(o.Id);
+            if (Online)
+                foreach (int p in Multiplayer.GetPeers())
+                    RpcId(p, MethodName.Remove, o.Id);
+        }
     }
 
     private void ServeRemove(long peer, int req, long id)
@@ -351,8 +389,9 @@ public partial class PlacedObjects : Node
     private bool InReach(long peer, double e, double n, double alt)
     {
         if (!Online) return true;
-        if (GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body) return false;
-        return body.GlobalPosition.DistanceTo(_origin.ToWorld(e, n, alt)) <= Reach;
+        if (GetNodeOrNull<Player.FootPlayer>("../Players/" + peer) is not { } body) return false;
+        // in LV95, from what the player published: the server's origin may be far away (#185)
+        return body.Global.DistanceTo(new GlobalPos(e, n, alt)) <= Reach;
     }
 
     // ---- persistence ----------------------------------------------------------------------------
@@ -404,7 +443,7 @@ public partial class PlacedObjects : Node
             var store = new Store
             {
                 Next = _nextId,
-                Objects = _objects.Values.OrderBy(o => o.Id).Select(o => new Entry
+                Objects = _objects.Values.Where(o => o.Owner != MatchOwner).OrderBy(o => o.Id).Select(o => new Entry
                 {
                     Id = o.Id, Kind = o.Kind.ToString(), Owner = o.Owner, E = o.E, N = o.N, Altitude = o.Altitude,
                     Rotation = new[] { o.Rotation.X, o.Rotation.Y, o.Rotation.Z, o.Rotation.W }, Payload = o.Payload,

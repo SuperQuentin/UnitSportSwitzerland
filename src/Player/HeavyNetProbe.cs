@@ -22,22 +22,9 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class HeavyNetProbe : Node
 {
-    public static string? ParseArgs()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, "--heavynet");
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-    }
+    public static string? ParseArgs() => CmdArgs.Value("--heavynet");
 
-    private static string? Password
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = System.Array.IndexOf(args, "--heavynet");
-            return i >= 0 && i + 2 < args.Length && !args[i + 2].StartsWith("--") ? args[i + 2] : null;
-        }
-    }
+    private static string? Password => CmdArgs.Value("--heavynet", 2, notFlag: true);
 
     private readonly string _role;
     private readonly System.Func<FootPlayer?> _local;

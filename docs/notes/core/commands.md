@@ -24,9 +24,25 @@
   more than one picture is needed: every launch steals focus on macOS (`macos-launch-steals-focus`;
   Windows: `windows-launch-focus`).
   A queued shot's y may be `g1.7` (that high above the ground, once it has streamed in), and each
-  shot logs `frame=` ms, averaged over its last second of settling.
-- `--origin E,N` (LV95): pins the world origin, so shots at fixed world coordinates stay put when
-  the manifest's suggested origin moves (offline; a server's origin wins online).
+  shot logs `frame=` ms, averaged over its last second of settling. Or `i1.6`, inside a house
+  (#320, offline): x, z stand in front of a front door (within 30 m, outside: a point inside a
+  building never finds its own door); that door opens, and once its interior is built the camera
+  goes as far behind the doorway as the point stands in front of it, 1.6 m above the sill, turned
+  as asked, carried into the rooms (`InteriorManager.OpenDoorForCamera`/`CameraInside`). Stand
+  2-3 m from a house looking at it to look into its ground floor. The door is left open, so
+  queue it last; it fails after 40 s without a door or an interior.
+  A line `shift dE,dN` moves the floating origin by that many metres (LV95 E, N) with the camera
+  still, then logs the CPU and GPU time of the 120 frames after it against the 30 before (#185):
+  what a shift costs the renderer. Time it with no shot right after it (saving a PNG stalls the
+  GPU); picture it in a second run, with settles of 0 for the very next frames.
+- `--origin E,N` (LV95): pins the starting world origin, so shots at fixed world coordinates stay put
+  when the manifest's suggested origin moves. The floating origin still moves it as the camera
+  travels (`ShotRunner` maps queued shots from that first frame); add `--originshift 1000000` to
+  keep it still. Online too: every peer has its own origin since #185. On a server it moves the
+  server's own world space (the server never shifts): `--server --origin 3583250,1113250` runs a
+  generated world 1,000 km from the server's origin, the check that nothing on the server depends on it.
+- `--debugcheck`: the debug menu driven through input (`debug-menu`), headless with `--systems ui`, RESULT ok/FAILED; online through `tools/debugcheck.sh`.
+- `--debugview a,b,...`: debug menu tools on from boot (`debug-menu`): `open`, `tiles`, `labels`, `origin`, `freeze`, `no<layer>`, `wireframe` / `clay` / `colours` / `overdraw`.
 - `--nocapture`: never grab the mouse (`Core/MouseCapture`). Every probe and tool run implies it,
   so a check running in a window leaves the pointer to whoever is using the machine.
 - `--chatcheck`: chat tab completion, `/spawn` parsing and Up/Down history (a real `ChatUi`), headless, RESULT PASS/FAIL (`Core/ChatCheck`).

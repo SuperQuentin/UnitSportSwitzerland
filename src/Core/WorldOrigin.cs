@@ -23,6 +23,18 @@ public sealed class OriginFrame
         Epoch = epoch;
     }
 
+    /// <summary>
+    /// A frame that is no peer's origin: the anchor a list of points travels with on the network
+    /// (a race road, a bird snapshot), each point a float offset from it, or the frame a server
+    /// works one race in. The receiver maps the points with <see cref="WorldOrigin.Since"/>.
+    /// Put near the points, so the floats stay small.
+    /// </summary>
+    public static OriginFrame Anchor(double e, double n) => new(e, n, -1);
+
+    /// <summary>An anchor on the whole kilometre nearest <paramref name="p"/>.</summary>
+    public static OriginFrame AnchorNear(GlobalPos p) =>
+        Anchor(System.Math.Round(p.E / 1000) * 1000, System.Math.Round(p.N / 1000) * 1000);
+
     public Vector3 ToWorld(double lv95E, double lv95N, double altitude) =>
         new((float)(lv95E - E), (float)altitude, (float)-(lv95N - N));
 
@@ -39,8 +51,14 @@ public sealed class OriginFrame
     }
 
     /// <summary>What turns a position in <paramref name="earlier"/>'s world space into this one's.</summary>
-    public OriginShift Since(OriginFrame earlier) =>
-        new(new Transform3D(Basis.Identity, new Vector3((float)(earlier.E - E), 0, (float)-(earlier.N - N))));
+    public OriginShift Since(OriginFrame earlier) => SinceAnchor(earlier.E, earlier.N);
+
+    /// <summary>
+    /// The same from an anchor given as LV95 (<see cref="Anchor"/> without the object): what turns a
+    /// position relative to it into this frame. Nothing allocated, for code that runs every tick.
+    /// </summary>
+    public OriginShift SinceAnchor(double e, double n) =>
+        new(new Transform3D(Basis.Identity, new Vector3((float)(e - E), 0, (float)-(n - N))));
 }
 
 /// <summary>
@@ -87,25 +105,6 @@ public sealed class WorldOrigin
     public static WorldOrigin SwissDefault() => new(2660000, 1190000);
 
     /// <summary>
-    /// Moves the anchor without moving anything placed against it.
-    ///
-    /// <para>
-    /// Only legal while nothing has been placed in the world, which in practice means "a
-    /// client with no local terrain has just been told where the server's world is". Every
-    /// existing world-space coordinate is an offset from the old anchor, so rebasing with
-    /// chunks or players already positioned would silently teleport all of them; the caller
-    /// is responsible for having nothing to invalidate. A live move is <see cref="OriginShifter"/>'s.
-    /// </para>
-    /// </summary>
-    public void Rebase(double e, double n)
-    {
-        if (Math.Abs(E - e) < 0.5 && Math.Abs(N - n) < 0.5) return;
-
-        GD.Print($"[world] origin rebased from LV95 {E:F0}/{N:F0} to {e:F0}/{n:F0}");
-        _frame = new OriginFrame(e, n, _frame.Epoch + 1);
-    }
-
-    /// <summary>
     /// <see cref="OriginShifter"/>'s first step: the new frame, and how world space moved. The
     /// caller then moves every node and calls <see cref="RaiseShifted"/>.
     /// </summary>
@@ -120,6 +119,9 @@ public sealed class WorldOrigin
 
     /// <summary>What turns a position in <paramref name="earlier"/>'s world space into the current one's.</summary>
     public OriginShift Since(OriginFrame earlier) => _frame.Since(earlier);
+
+    /// <summary>What turns a position relative to an LV95 anchor into the current world space (<see cref="OriginFrame.SinceAnchor"/>).</summary>
+    public OriginShift SinceAnchor(double e, double n) => _frame.SinceAnchor(e, n);
 
     public Vector3 ToWorld(double lv95E, double lv95N, double altitude) => _frame.ToWorld(lv95E, lv95N, altitude);
 

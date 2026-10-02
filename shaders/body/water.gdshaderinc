@@ -1,5 +1,8 @@
 // Water body, shared by every style's water wrapper (ps1_water, cartoon_water, real_water). Each
-// wrapper is shader_type, render_mode, its defines, then this include.
+// wrapper is shader_type, render_mode (with depth_draw_always: the surface is drawn in the
+// transparent pass, unsorted within a tile and sorted only roughly between tiles, so without its
+// own depth a farther tile or crest painted over a nearer one in polygons), its defines, then
+// this include.
 //
 // Every style moves the surface with the same physical waves (#299, common/waves, in vertex()):
 // what is drawn is what a hull rides on. The fine ripples (water_detail) only shade.
@@ -30,7 +33,10 @@ uniform float wave_speed = 0.35;
 uniform sampler2D water_depth_texture : hint_depth_texture, filter_nearest;
 #ifndef STYLE_LIT
 // semitransparency: alpha at the waterline and through `fade_depth` metres of water and more
-uniform float shore_alpha = 0.32;
+uniform float shore_alpha = 0.45;
+// the shallows' own tint, so a sandy shelf reads as water, not as wet ground
+uniform vec3 shallows_color : source_color = vec3(0.20, 0.58, 0.64);
+uniform vec3 shore_line_color : source_color = vec3(0.78, 0.88, 0.88);
 uniform float deep_alpha = 0.92;
 uniform float fade_depth = 6.0;
 uniform float below_alpha = 0.8;
@@ -49,7 +55,7 @@ uniform float foam_shore_m = 0.035;
 #ifdef STYLE_REAL
 uniform sampler2D water_screen_texture : hint_screen_texture, filter_linear_mipmap;
 // what a metre of water takes out of red, green and blue: clear at the shore, blue-green deep
-uniform vec3 absorption = vec3(0.42, 0.11, 0.075);
+uniform vec3 absorption = vec3(0.45, 0.16, 0.12);
 // the colour the water scatters back (lit by the sun and the sky)
 uniform vec3 scatter_color : source_color = vec3(0.015, 0.075, 0.085);
 uniform float refraction = 0.035;
@@ -106,42 +112,38 @@ float wd_noise(vec2 p, float cells) {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-// Value noise and its gradient over q = R p, R a rotation-and-scale (r.x, r.y; -r.y, r.x) of
-// |r| = 13..25, drifting along q.x by `drift` q-units a second. Not wrapped to a period on purpose:
-// a lattice wrapped every 9.6 km of q repeats every 9.6 km / |r| (384 m at 25) of ground, which
-// from above a lake is a regular grid. The cost: the fine ripples jump once when the offline
-// floating origin shifts (every few km) and when the wave clock wraps (every 20 min); they only
-// shade. `cells` is per 9.6 km of q. x: 0..1; yz: the gradient per metre of p.
-vec3 wd_layer(vec2 p, vec2 r, float cells, float drift) {
-    vec2 q = vec2(r.x * p.x + r.y * p.y, -r.y * p.x + r.x * p.y);
-    q.x += water_time * drift;
-    float s = cells / 9600.0;
-    vec2 g = q * s;
-    vec2 i = floor(g);
-    vec2 f = g - i;
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    vec2 du = 6.0 * f * (1.0 - f);
-    float a = wd_hash(i);
-    float b = wd_hash(i + vec2(1.0, 0.0));
-    float c = wd_hash(i + vec2(0.0, 1.0));
-    float d = wd_hash(i + vec2(1.0, 1.0));
-    float k = a - b - c + d;
-    float v = a + (b - a) * u.x + (c - a) * u.y + k * u.x * u.y;
-    vec2 dq = du * vec2(b - a + k * u.y, c - a + k * u.x) * s;
-    return vec3(v, r.x * dq.x - r.y * dq.y, r.y * dq.x + r.x * dq.y);
+// One ripple train, `n` whole cycles over 9.6 km and `m` over the 1200 s wave clock (no jump at
+// an origin shift or at the clock's wrap), its phase shifted by `warp`; value and gradient per
+// metre (the warp's own slope left out: it is slow).
+vec3 wd_train(vec2 p, vec2 n, float m, float warp) {
+    vec2 k = n * (6.2831853 / 9600.0);
+    float th = dot(k, p) - m * (6.2831853 / 1200.0) * water_time + warp;
+    return vec3(sin(th), cos(th) * k);
 }
 
-// The fine ripples every style shades with (#299): three layers of drifting value noise, 2.6, 1.6
-// and 4.5 m cells, each turned to its own angle (67, 62 and 74 degrees) and drifting its own way
-// at 0.3-0.6 m/s. Noise, not sine trains: any two crossing trains make a lattice, and the old
-// shimmer (sin x + sin z, quantised into four bands) drew exactly that, a regular grid of
-// identical ellipses on calm water. x: about -1..1; yz: its gradient per metre.
+// The fine ripples every style shades with (#299): six trains of 1.35-3.4 m spread round the
+// compass at unrelated lengths, their phases warped by five slower trains (6-57 m) and their
+// strengths swayed by two of them, so no two line up into a lattice and no patch repeats. Pure sines: the
+// noise lattices tried before showed their cells (value noise as creases; a hashed gradient
+// noise as hairline breaks along its cell edges on this GPU), and two crossing trains alone (the
+// old sin x + sin z shimmer in four bands) drew a regular grid of ellipses on calm water.
+// x: about -1..1; yz: its gradient per metre.
 vec3 water_detail(vec2 p) {
-    vec3 a = wd_layer(p, vec2(5.0, 12.0), 284.0, 8.0);
-    vec3 b = wd_layer(p, vec2(-8.0, 15.0), 353.0, 8.0);
-    vec3 c = wd_layer(p, vec2(7.0, -24.0), 85.0, 8.0);
-    vec3 sum = a * 0.5 + b * 0.3 + c * 0.45;
-    return vec3((sum.x - 0.625) * 2.6, sum.yz * 2.6);
+    float s1 = sin(dot(vec2(196.0, 128.0) * (6.2831853 / 9600.0), p) - 234.0 * (6.2831853 / 1200.0) * water_time);
+    float s2 = sin(dot(vec2(-79.0, 149.0) * (6.2831853 / 9600.0), p) - 199.0 * (6.2831853 / 1200.0) * water_time + 1.3);
+    // and three of 6-14 m, which scramble the phases within a few ripples: without them the two
+    // strongest trains still beat into rows of blobs
+    float s3 = sin(dot(vec2(232.0, 1006.0) * (6.2831853 / 9600.0), p) - 246.0 * (6.2831853 / 1200.0) * water_time + 0.4);
+    float s4 = sin(dot(vec2(654.0, -251.0) * (6.2831853 / 9600.0), p) - 203.0 * (6.2831853 / 1200.0) * water_time + 2.2);
+    float s5 = sin(dot(vec2(-1390.0, 739.0) * (6.2831853 / 9600.0), p) - 304.0 * (6.2831853 / 1200.0) * water_time + 4.0);
+    float warp = s1 * 1.7 + s2 * 1.3 + s3 * 2.1 + s4 * 1.8 + s5 * 1.4;
+    vec3 sum = wd_train(p, vec2(2762.0, 587.0), 813.0, warp) * (0.55 + 0.25 * s2)
+        + wd_train(p, vec2(1724.0, 3110.0), 913.0, 0.7 - warp + s3 * 2.0) * (0.45 + 0.25 * s1)
+        + wd_train(p, vec2(-1106.0, 4436.0), 1035.0, 2.9 + warp * 0.6 - s4 * 1.5) * (0.4 - 0.2 * s2 * s5)
+        + wd_train(p, vec2(-4736.0, 3076.0), 1150.0, 4.4 - warp * 0.8) * (0.3 - 0.15 * s1)
+        + wd_train(p, vec2(-6800.0, -2079.0), 1290.0, 1.1 + warp * 1.2) * 0.2
+        + wd_train(p, vec2(-1816.0, -3564.0), 968.0, 5.3 + warp * 0.4) * (0.35 + 0.2 * s1 * s2);
+    return sum * 0.55;
 }
 
 // The total wave amplitude of the sea state here (the pushed amplitudes times the wave scale).
@@ -178,7 +180,7 @@ void fragment() {
     // the shimmer: the fine ripples near, broad painted patches further out (fine ripples would
     // alias into noise there), drifting
     float far = smoothstep(40.0, 320.0, dist);
-    float patches = (wd_layer(ground, vec2(24.0, 7.0), 17.0, 6.0).x - 0.5) * 2.4;
+    float patches = (wd_noise(ground + vec2(water_time * 0.3, water_time * -0.2), 410.0) - 0.5) * 2.4;
     float w = mix(det.x, patches, far);
     // the physical waves take the bands over as the sea gets up: crests light, troughs dark, a
     // slope facing the sun lighter; the fine ripples stay on them as a quarter of the shading
@@ -190,6 +192,12 @@ void fragment() {
     float band = floor((clamp(w, -1.0, 1.0) * 0.5 + 0.5) * 4.0) / 4.0;
 
     vec3 col = mix(deep_color, shallow_color, band);
+    // the shallows: a lighter blue-green, the bands still on it, so a shelf reads as water
+    col = mix(col, shallows_color * (0.8 + 0.35 * band), (1.0 - smoothstep(0.3, 3.0, depth)) * 0.85);
+    // and a broken pale line where the water meets the dry land
+    float edge = (1.0 - smoothstep(0.03, 0.09, depth)) * step(0.35, wd_noise(ground, 2400.0));
+    col = mix(col, shore_line_color, edge);
+    ALPHA = max(ALPHA, edge * 0.85);
     // from below: a bright skin, the waves' slopes in its bands
     col = FRONT_FACING ? col : underside_color * (0.5 + 0.7 * band);
 
@@ -297,7 +305,9 @@ void fragment() {
     }
     if (FRONT_FACING) {
         EMISSION = seen * trans * (1.0 - fresnel) + reflected * fresnel;
-        ALBEDO = occasion_mist(scatter_color * (1.0 - trans.g), mist_at, dist);
+        // a thin broken wet line where the water meets the dry land
+        float edge = (1.0 - smoothstep(0.02, 0.06, depth)) * step(0.4, wd_noise(ground, 2400.0));
+        ALBEDO = occasion_mist(mix(scatter_color * (1.0 - trans.g), vec3(0.75, 0.8, 0.8), edge * 0.6), mist_at, dist);
         ROUGHNESS = 0.02 + 0.1 * (1.0 - near);
         SPECULAR = specular;
     } else {

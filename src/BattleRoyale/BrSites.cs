@@ -240,7 +240,7 @@ public static class BrSites
     }
 
     /// <summary>A building's centre (LV95) and the radius of its plan, from its triangles.</summary>
-    private static (double E, double N, float Radius) Footprint(TileId id, Building b)
+    internal static (double E, double N, float Radius) Footprint(TileId id, Building b)
     {
         float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
         var tri = b.Triangles;
