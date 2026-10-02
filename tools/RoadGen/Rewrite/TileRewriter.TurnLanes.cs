@@ -1031,10 +1031,13 @@ public static partial class TileRewriter
             });
             stats.StopBars++;
             double second = storage >= 20 + ArrowLength ? 20 : 13;
-            foreach (double tip in (ReadOnlySpan<double>)[5 + ArrowLength, second + ArrowLength])
+            // the first arrow always: where a short storage behind a skewed line has no room for it 5 m
+            // back, it moves up to 1 m from the line; the second only where the storage holds it
+            double first = Math.Clamp(storage + 1 - setback, 1 + ArrowLength, 5 + ArrowLength);
+            foreach (double tip in (ReadOnlySpan<double>)[first, second + ArrowLength])
             {
                 double back = tip + setback;
-                if (back > storage + 1) continue;
+                if (tip > first && back > storage + 1) continue;
                 var (x, y, z, sx, sz) = At(back);
                 double fx = sz, fz = -sx;
                 paint.Add(Arrow(x + sx * pocket.Mid, y, z + sz * pocket.Mid, fx, fz, PaintArrow.Right));
