@@ -58,7 +58,9 @@
   for a displacement hull, `WindArea`. The hull's pose is `BoatState.Attitude` about
   `Boat.Pivot`; a deck (`Rideable.Decks`, `DeckBuilder`) built in the visual's frame is carried by
   the posed visual, so its sections pitch and roll with the hull (the deck system reads the visual's
-  transform every frame, `walk-aboard`). Cost: one `WaterField.TryLevelAt` per column per substep.
+  transform every frame: `SectionFrame` is the posed `_visual`, `walk-aboard`). Trap for #303: a headless
+  peer has no visual for a parked boat, so its deck frame there is the level body; give it an empty
+  posed frame as `VehicleBody` does for a parked bus. Cost: one `WaterField.TryLevelAt` per column per substep.
 - **Measured** (`--boatcheck`, calm unless said): jetski draft 0.23 m, on the plane in 1.4 s, top
   82 km/h (spec 81), bow up 7° over the hump, running trim 2-3°, circle 59 m at 64 km/h banked 11°;
   speedboat draft 0.28 m, plane 3.2 s, top 70.5 km/h (38 kn), hump 6.6°, trim 3°, circle 55 m at
