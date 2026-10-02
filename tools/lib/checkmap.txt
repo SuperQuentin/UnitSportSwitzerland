@@ -24,6 +24,9 @@ src/Terrain/             quick  --origincheck
 src/Items/               quick  --invcheck
 src/Crafting/            quick  --invcheck
 src/Loot/                quick  --lootchancecheck
+src/Loot/                quick  --shopcheck
+src/Interiors/           quick  --shopcheck
+src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
 src/Occasions/           quick  --huntcheck
 src/Player/              quick  --setupcheck
@@ -69,6 +72,10 @@ src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh
 src/Items/DroppedItem    net    tools/bonkcheck.sh
 src/Player/FootPlayer.B  net    tools/bonkcheck.sh
+src/Loot/Shop            net    tools/shopcheck.sh
+src/Items/Bank           net    tools/shopcheck.sh
+src/Interiors/BankSigns  net    tools/shopcheck.sh
+src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 
 src/BattleRoyale/        full   tools/brcheck.sh
 src/Combat/              full   tools/pvpcheck.sh

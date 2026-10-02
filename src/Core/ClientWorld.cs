@@ -564,7 +564,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested
-            || Items.BonkCheck.Requested
+            || Items.BonkCheck.Requested || Loot.ShopProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
@@ -582,6 +582,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
+        if (Loot.ShopProbe.Role != null) AddChild(new Loot.ShopProbe(items, origin));
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));

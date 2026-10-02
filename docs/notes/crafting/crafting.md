@@ -15,7 +15,7 @@
   slots excluded), from the end of the pack first so the hotbar keeps what is in reach.
 - **Local only**, like the inventory: nothing is sent to the server.
 - **Never crafted** (`Recipes.NeverCrafted`): guns, ammunition (shells included), vest, flare gun,
-  camera, hiking pack, money, photos, seasonal treats and hats; clothes and cosmetics by category
+  camera, hiking pack, money, photos, seasonal treats and hats, the Swiss army knife and the PAUSA snacks (#273); clothes and cosmetics by category
   (checked in `--invcheck`). They are found, or bought in shops (#273).
 - **Salvage** (workbench) takes one part apart; it always gives back less CHF value than the part
   (`--invcheck` compares `ItemDef.Value`s).
