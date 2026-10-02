@@ -70,6 +70,8 @@ public partial class PlayerInput : Node
     // --- trucks and buses (#70) ---
     /// <summary>Couple or uncouple a trailer (<see cref="Player.Truck.Couple"/>).</summary>
     public const string Couple = "couple";
+    /// <summary>A steamer's whistle (#303), held: it blows as long as it is held. H, like coupling a truck.</summary>
+    public const string Horn = "horn";
     /// <summary>A passenger moves into the free driver's seat (#158).</summary>
     public const string TakeWheel = "take_wheel";
     /// <summary>A bus kneels (lowers its door side) or rises.</summary>
@@ -408,6 +410,8 @@ public partial class PlayerInput : Node
         // which only mean tuck and slide elsewhere), the clutch takes C / B, and the H-pattern's
         // gates the number keys, which only pick hotbar slots on foot.
         Bind(Couple, Keys(Key.H), Button(JoyButton.DpadLeft));
+        // a steamer has nothing to couple: its whistle takes the same key
+        Bind(Horn, Keys(Key.H), Button(JoyButton.DpadLeft));
         // a passenger never does tricks: the trick keys are free in a seat
         Bind(TakeWheel, Keys(Key.F), Button(JoyButton.RightShoulder));
         Bind(Kneel, Keys(Key.K));

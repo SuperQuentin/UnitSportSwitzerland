@@ -103,6 +103,14 @@ public partial class ControlsHelp : CanvasLayer
             new("Bus: kneel", PlayerInput.Kneel),
             new("Bus: destination display", PlayerInput.Destination),
         }),
+        ("Paddle steamer", new Row[]
+        {
+            new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "Left stick up / down"),
+            new("Wheel (the rudder needs way on)", Keys: "{move_left} / {move_right}", Pad: "Left stick"),
+            new("Whistle (hold)", PlayerInput.Horn),
+            new("Gangways, stopped", PlayerInput.CarDoor),
+            new("Walk aboard by a gangway; E at the wheel in the wheelhouse drives, E at a seat sits", PlayerInput.InteractMount),
+        }),
         ("Flying", new Row[]
         {
             new("Pitch and roll", Keys: Wasd, Pad: "Left stick"),

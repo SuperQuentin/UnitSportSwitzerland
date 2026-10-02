@@ -127,6 +127,11 @@ public sealed class GameSettings
     public bool TyreWear { get; set; }
     /// <summary>Cars' brakes heat up and fade, and their pads wear (off by default).</summary>
     public bool BrakeWear { get; set; }
+    /// <summary>
+    /// E beside a parked ship (the steamer, #303) puts you on its deck by the nearest gangway instead
+    /// of at its wheel (off by default: it is taken like a bus).
+    /// </summary>
+    public bool BoardShipsOnDeck { get; set; }
     /// <summary>How trucks and buses are shifted (#70): automatic, sequential, with the clutch, H-pattern.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public Player.HeavyShift HeavyGearbox { get; set; } = Player.HeavyShift.Automatic;
@@ -380,6 +385,7 @@ public sealed class GameSettings
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
                 case "--tyrewear": TyreWear = v is "on" or "1" or "true"; break;
                 case "--brakewear": BrakeWear = v is "on" or "1" or "true"; break;
+                case "--boardondeck": BoardShipsOnDeck = v is "on" or "1" or "true"; break;
                 case "--gearbox":
                     HeavyGearbox = v.ToLowerInvariant() switch
                     {

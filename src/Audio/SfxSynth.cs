@@ -666,4 +666,51 @@ public static class SfxSynth
         }
         return s;
     });
+
+    // ---- the paddle steamer (#303) -----------------------------------------------------------
+
+    private static AudioStreamWav? _paddles, _whistle;
+
+    /// <summary>
+    /// The paddle wheels' churn, looping: a low rumble of thrown water with a float slapping into it
+    /// eight times a second (two seconds, sixteen slaps, so the loop's seam keeps time). The player
+    /// sets the pitch from the shaft's speed: 12 floats at 46 rpm slap ~9 times a second.
+    /// </summary>
+    public static AudioStreamWav Paddles => _paddles ??= Loop(2.0f, 303, (rng, n) =>
+    {
+        var rumble = BandPass(Noise(rng, n), 0.006f, 0.05f);
+        var slap = BandPass(Noise(rng, n), 0.04f, 0.3f);
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float beat = (t * 8f) % 1f;
+            float hit = Mathf.Exp(-beat * 22f) * Mathf.Min(1f, beat * 400f);
+            float wash = 0.55f + 0.45f * Mathf.Exp(-beat * 5f);
+            s[i] = rumble[i] * 3.2f * wash + slap[i] * 2.6f * hit;
+        }
+        return s;
+    });
+
+    /// <summary>
+    /// A steamer's whistle, looping while it blows: a deep chime of three pipes (a minor chord, every
+    /// tone a whole number of Hz in the one-second loop so the seam is in phase), reedy with harmonics,
+    /// over the breathy rush of the steam.
+    /// </summary>
+    public static AudioStreamWav Whistle => _whistle ??= Loop(1.0f, 304, (rng, n) =>
+    {
+        var steam = BandPass(Noise(rng, n), 0.05f, 0.35f);
+        var s = new float[n];
+        float[] pipes = { 196f, 233f, 294f };
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float tone = 0f;
+            foreach (float hz in pipes)
+                for (int k = 1; k <= 4; k++) tone += Mathf.Sin(Mathf.Tau * hz * k * t) / (k * k);
+            float wobble = 1f + 0.04f * Mathf.Sin(Mathf.Tau * 5f * t);
+            s[i] = tone * 0.4f * wobble + steam[i] * 1.4f;
+        }
+        return s;
+    });
 }

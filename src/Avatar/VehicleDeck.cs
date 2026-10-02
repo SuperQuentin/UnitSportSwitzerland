@@ -30,6 +30,39 @@ public sealed record VehicleDeck(int Section, DeckBox[] Boxes, Aabb Aboard, Vect
 {
     /// <summary>The buttons anyone presses to open or shut a door, inside and out.</summary>
     public DeckButton[] Buttons { get; init; } = System.Array.Empty<DeckButton>();
+
+    /// <summary>
+    /// The floor plan aboard, node frame (x, z), a polygon round its edge; null: the whole
+    /// <see cref="Aboard"/> box. A ship's hull tapers to its stem (#303): out past the rail at the
+    /// bow, inside the box but over the water, is not aboard.
+    /// </summary>
+    public Vector2[]? Plan { get; init; }
+
+    /// <summary>
+    /// Standing at <paramref name="local"/> (node frame) is being aboard: inside the box grown by
+    /// <paramref name="grow"/>, and within <paramref name="grow"/> of the plan when there is one.
+    /// </summary>
+    public bool Contains(Vector3 local, float grow)
+    {
+        if (!Aboard.Grow(grow).HasPoint(local)) return false;
+        if (Plan is not { Length: >= 3 } plan) return true;
+        var p = new Vector2(local.X, local.Z);
+        bool inside = false;
+        float near = float.MaxValue;
+        for (int i = 0, j = plan.Length - 1; i < plan.Length; j = i++)
+        {
+            var a = plan[i];
+            var b = plan[j];
+            if ((a.Y > p.Y) != (b.Y > p.Y) && p.X < (b.X - a.X) * (p.Y - a.Y) / (b.Y - a.Y) + a.X) inside = !inside;
+            if (grow > 0f)
+            {
+                var ab = b - a;
+                float t = ab.LengthSquared() > 1e-8f ? Mathf.Clamp((p - a).Dot(ab) / ab.LengthSquared(), 0f, 1f) : 0f;
+                near = Mathf.Min(near, (a + ab * t).DistanceSquaredTo(p));
+            }
+        }
+        return inside || near <= grow * grow;
+    }
 }
 
 /// <summary>
@@ -95,6 +128,30 @@ public sealed class DeckBuilder
         _boxes.Add(new DeckBox(Node(centre), new Vector3(width, thick, length), basis.Orthonormalized(), part, door));
     }
 
+    /// <summary>
+    /// A wall (or a rail) <paramref name="thick"/> thick from plan point (<paramref name="x0"/>, station
+    /// <paramref name="at0"/>) to (<paramref name="x1"/>, <paramref name="at1"/>), authored x: along a
+    /// hull that tapers, where <see cref="Along"/> only runs straight down the section.
+    /// </summary>
+    public void Wall(float x0, float at0, float x1, float at1, float y0, float y1, float thick, DeckPart part = DeckPart.Solid, int door = -1)
+    {
+        var a = new Vector3(x0, 0, _cg - at0);
+        var b = new Vector3(x1, 0, _cg - at1);
+        var run = b - a;
+        float length = run.Length();
+        if (length < 0.01f || y1 - y0 < 0.005f) return;
+        // authored: the box's z along the run; node space turns the run as it turns points
+        var centre = ((a + b) * 0.5f) with { Y = (y0 + y1) * 0.5f };
+        var along = Node(run / length);
+        var basis = new Basis(Vector3.Up.Cross(along).Normalized(), Vector3.Up, along);
+        _boxes.Add(new DeckBox(Node(centre), new Vector3(thick, y1 - y0, length), basis.Orthonormalized(), part, door));
+    }
+
+    private readonly List<Vector2> _plan = new();
+
+    /// <summary>The floor plan aboard (<see cref="VehicleDeck.Plan"/>): the next corner round its edge, authored x and station.</summary>
+    public void PlanAt(float x, float at) => _plan.Add(new Vector2(-x, -(_cg - at)));
+
     /// <summary>A door's button at an authored point, facing authored <paramref name="normal"/>.</summary>
     public void Button(int door, Vector3 at, Vector3 normal) => _buttons.Add(new DeckButton(door, Node(at), Node(normal)));
 
@@ -107,6 +164,10 @@ public sealed class DeckBuilder
         var a = aboardAuthored;
         var min = new Vector3(-a.End.X, a.Position.Y, -a.End.Z);
         var aboard = new Aabb(min, a.Size);
-        return new VehicleDeck(section, _boxes.ToArray(), aboard, _holds.ToArray()) { Buttons = _buttons.ToArray() };
+        return new VehicleDeck(section, _boxes.ToArray(), aboard, _holds.ToArray())
+        {
+            Buttons = _buttons.ToArray(),
+            Plan = _plan.Count >= 3 ? _plan.ToArray() : null,
+        };
     }
 }
