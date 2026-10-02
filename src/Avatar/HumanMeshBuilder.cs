@@ -482,6 +482,23 @@ public static partial class HumanMeshBuilder
         float wheelAngle, float throttle, float brake, bool body = true, bool head = true, Headwear hat = Headwear.None) =>
         AppendRig(scratch, palette, DriverRig(seat, wheelAngle, throttle, brake), includeLegs: true, helmet: false, hat, body, head);
 
+    /// <summary>
+    /// A seated driver's body (no head) for a wheel angle, throttle and brake quantised to what can
+    /// be seen (0.03 rad, eighths), from <paramref name="cache"/> or built once into it (#221): a car
+    /// or a truck keeps one cache, so a wheel that comes back to straight does not rebuild the figure.
+    /// </summary>
+    public static ArrayMesh DriverBody(Dictionary<(int Turn, int Throttle, int Brake), ArrayMesh> cache,
+        (int Turn, int Throttle, int Brake) pose, HumanPalette palette, DriverSeat seat)
+    {
+        if (cache.TryGetValue(pose, out var mesh)) return mesh;
+        // ponytail: a full cache is emptied, not evicted by age; a hard drive of a full lock-to-lock
+        // wheel crosses ~500 keys, and an LRU is not worth it for a figure this cheap to rebuild
+        if (cache.Count >= 256) cache.Clear();
+        var s = new MeshScratch();
+        AppendDriver(s, palette, seat, pose.Turn * 0.03f, pose.Throttle / 8f, pose.Brake / 8f, head: false);
+        return cache[pose] = s.Build();
+    }
+
     /// <summary>Camera mounts for <see cref="AppendDriver"/>'s figure at rest, flipped to face -Z like the mesh.</summary>
     public static GaitMounts MountsForDriver(DriverSeat seat) => MountsForRig(DriverRig(seat, 0f, 0f, 0f));
 
