@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Audio.Cd;
 using UnitSport.Net;
 using UnitSport.Player;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -45,14 +46,12 @@ public partial class BonkCheck : Node
     }
 
     /// <summary>"--bonkcheck" on the command line: the client must use a scratch inventory.</summary>
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--bonkcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--bonkcheck");
 
     public static BonkCheck? Create(Func<FootPlayer?> local, Func<Node?> players, Inventory inventory)
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--bonkcheck");
-        if (i < 0) return null;
-        bool thrower = i + 1 < args.Length && args[i + 1] == "thrower";
+        if (!CmdArgs.Has("--bonkcheck")) return null;
+        bool thrower = CmdArgs.Value("--bonkcheck") == "thrower";
         GD.Print($"[bonkcheck] role {(thrower ? "thrower" : "victim")}");
         return new BonkCheck(thrower, local, players, inventory);
     }

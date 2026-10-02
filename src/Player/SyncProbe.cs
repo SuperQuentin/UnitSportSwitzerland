@@ -30,7 +30,7 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class SyncProbe : Node
 {
-    public static bool Requested() => Array.IndexOf(OS.GetCmdlineUserArgs(), "--synccheck") >= 0;
+    public static bool Requested() => CmdArgs.Has("--synccheck");
 
     /// <summary>A network's update rate: time, not frames, or a 30 fps machine tests 10 Hz.</summary>
     private const double UpdateInterval = 0.05;

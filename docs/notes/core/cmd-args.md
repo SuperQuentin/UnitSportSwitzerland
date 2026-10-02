@@ -19,10 +19,11 @@
 
 ## Why
 
-#221 cluster #3: 173 `GetCmdlineUserArgs()` calls in 90 files, each its own `IndexOf`, bounds check and
+#221 cluster #3: 198 `GetCmdlineUserArgs()` calls in 110 files, each its own `IndexOf`, bounds check and
 TryParse (some culture-dependent `int.TryParse`), and local helpers (`DriveProbe.ArgAfter`, `ArrivalProbe.Arg`,
 `TruckProbe.Arg`, `StyleKit.ArgValue`, `GarageProbe.Arg`, `RideProbe.Arg`, `AvatarPreview.After` ×3,
-`GameShell.Has`). Each call also allocated a new array from the engine. Net −360 lines in `src/`; no behaviour change.
+`GameShell.Has`, `Swarm.Arg`, `CarCdCheck.Arg`, `RadioSyncCheck.Arg`, `OriginShifter.ParseMetres`). Each call also
+allocated a new array from the engine. Net −413 lines in `src/`; no behaviour change.
 
 ## Same logic, preserved
 
@@ -30,8 +31,9 @@ TryParse (some culture-dependent `int.TryParse`), and local helpers (`DriveProbe
 - `Value` returns `--flags` as values unless `notFlag`: callers that checked `!StartsWith("--")` pass `notFlag: true`.
 - Left on `CmdArgs.All` on purpose, because a reader would change them:
   - loops where the **last** occurrence wins or every one counts (`WorldLaunch --connect/--gpx`, `DriveProbe.ParseArgs`,
-    `OccasionManager --occasion`, `CdLibrary --cdfixture`, `HostedServer --parent-pid` and `InteriorProbe --doorkind`,
-    which skip unparsable values), `RideProbe --ride`;
+    `OccasionManager --occasion`, `CdLibrary --cdfixture`; `HostedServer --parent-pid`, `InteriorProbe --doorkind`,
+    `QueryResponder --query-port/--query-bind` and `SpawnPoint` LV95 pairs, which skip unparsable values),
+    `RideProbe --ride`, `NetSmoothProbe` (its own comma fields);
   - `double.TryParse(..., out x)` on a present but unreadable value leaves **0**, not the default (`Main` turntable
     `--view/--crank/--stride`, `--discovercheck`); `CmdArgs.Double(...) ?? default` would differ;
   - `CombatProbe`: `IndexOf(..., "paraglider") > 0` (not first);
@@ -48,12 +50,9 @@ TryParse (some culture-dependent `int.TryParse`), and local helpers (`DriveProbe
   - `... && float.TryParse(args[i + 1], Float, Invariant, out v) ? v : d` → `CmdArgs.Float("--x") ?? d`;
   - the `foreach (var a in ...) if (a.StartsWith("--xcheck")) Split(',')` block → `CmdArgs.FlagWithShot("--xcheck")`.
   - Check the exceptions above before converting a loop or an `out`-parse.
-- Files of open PRs left untouched (#269, #281, #308, #313, #314); migrate them after they merge:
-  `BattleRoyale/BrManager.Client`, `BrProbe`, `Birds/BirdLife`, `BirdNetProbe`, `Core/ClientWorld`, `GameSettings`,
-  `OriginCheck`, `OriginShifter` (`ParseMetres`), `ServerWorld`, `SpawnPoint`, `Systems`, `Gpx/VideoExporter`,
-  `Interiors/PortalDemo`, `Items/BonkCheck`, `CarCdCheck`, `EconomyProbe`, `InteractCheck`, `ItemController`,
-  `Net/NetSmoothProbe`, `QueryResponder`, `Swarm`, `Player/RadioSyncCheck`, `SyncProbe`, `Ui/SettingsScreen`,
-  `World/NpcArrival`, `RaceManager`, `RaceNpc`.
+- Files of open PRs (#281, #319, #324, #327, #328, #329) left untouched; migrate them after they merge:
+  `BattleRoyale/BrManager.Client`, `Birds/BirdLife`, `Core/ClientWorld`, `Core/ServerWorld`, `Core/Systems`,
+  `Items/ItemController`, `World/RaceManager`.
 - Merge conflicts: a `using UnitSport.Core;` line was added after the other usings of each migrated file; keep both sides'.
 
 ## How to check

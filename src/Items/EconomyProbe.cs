@@ -21,15 +21,7 @@ namespace UnitSport.Items;
 /// </summary>
 public partial class EconomyProbe : ChatProbe
 {
-    public static string? Password
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--econcheck");
-            return i >= 0 ? (i + 1 < args.Length ? args[i + 1] : "") : null;
-        }
-    }
+    public static string? Password => CmdArgs.Has("--econcheck") ? CmdArgs.Value("--econcheck") ?? "" : null;
 
     private readonly ChatManager _chat;
     private readonly Inventory _inventory;
