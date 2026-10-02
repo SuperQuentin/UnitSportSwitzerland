@@ -39,6 +39,9 @@ src/Build/Gadget         net    tools/gadgetnetcheck.sh
 src/BattleRoyale/BrPrefab quick  --prefabcheck --systems ui,physics,build
 src/BattleRoyale/BrStruct quick  --prefabcheck --systems ui,physics,build
 src/Loot/                quick  --lootchancecheck
+src/Loot/                quick  --shopcheck
+src/Interiors/           quick  --shopcheck
+src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
 src/Occasions/           quick  --huntcheck
 src/Player/              quick  --setupcheck
@@ -119,6 +122,10 @@ src/World/Wa             net    tools/watercheck.sh
 src/World/SeaState       net    tools/watercheck.sh
 src/Net/ChatManager      net    tools/watercheck.sh
 src/Terrain/Water        net    tools/watercheck.sh
+src/Loot/Shop            net    tools/shopcheck.sh
+src/Items/Bank           net    tools/shopcheck.sh
+src/Interiors/BankSigns  net    tools/shopcheck.sh
+src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
 src/Player/SwimNet       net    tools/swimnetcheck.sh
 src/Avatar/HumanMeshBuilder.Sw net tools/swimnetcheck.sh

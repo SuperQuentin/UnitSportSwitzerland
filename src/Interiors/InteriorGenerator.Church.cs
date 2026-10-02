@@ -38,7 +38,7 @@ public static partial class InteriorGenerator
         {
             var fp = BuildingFootprint.Compute(tile, index, roads, grid);
             if (fp == null) return null;
-            layout = Generate(fp, tile.Buildings[index]);
+            layout = Generate(fp, tile.Buildings[index], Loot.ShopTables.IsRural(tile.Buildings.Count));
         }
         layout.Group = GroupPrint(tile, index);
         return layout;
