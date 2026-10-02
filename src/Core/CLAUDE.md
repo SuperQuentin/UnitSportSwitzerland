@@ -8,7 +8,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 ## Architecture
 
 - `modes` — Modes: (`GameMode`, `Core/WorldLaunch`): Explore / GpxReplay / Multiplayer, picked on the title screen or by --connect/--gpx; Esc = pause menu
-- `steering-wheel` — Steering wheel: (`Core/SteeringWheel`, #68): SDL3 wheel and pedals, 1:1 direct steering, Godot's copy of the device ignored, presets + Settings → Wheel tab
+- `steering-wheel` — Steering wheel: (`Core/SteeringWheel`, #68): SDL3 wheel and pedals, 1:1 direct steering, force feedback (aligning, soft lock, road, engine, knocks), Godot's copy of the device ignored, presets + Settings → Wheel tab
 - `input` — Input: (`Core/PlayerInput`): every gameplay control is a named `InputMap` action registered in code at boot...
 - `settings` — Settings: (`Core/GameSettings`, `Ui/SettingsScreen` tabs, `user://settings.json`): render distance in tile rings (6..40,...
 - `performance-overlay` — Performance overlay: (`Core/PerfOverlay`, F3 cycles Off / FPS / Detailed, saved as `GameSettings.PerfOverlay`, also...
@@ -20,11 +20,13 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `chat-probe` — MP probes derive from `Core/ChatProbe`; quick self-checks go in `ClientWorld.QuickChecks`, camera-placing tools in the `tools` table (`placedByTool` derived), never a hand-kept list
 - `is-online` — "online?" is `NetLink.Online(this)`; never copy the `not OfflineMultiplayerPeer && Connected` check again
 - `floating-origin` — Floating origin (#185): world space follows the camera, online too (each peer its own origin, LV95 on the wire); keep `GlobalPos` or handle `IOriginShiftAware`; containers; `Follow` for shared point lists; Jolt kinematic teleport; `--origincheck`, `--originstress`
-- `json-store` — Persist JSON only via `JsonStore.Save` (atomic, `user://` ok, static options); never `FileAccess` Write / `File.WriteAllText`; how Bank/Inventory/LootService/InteriorManager/GameSettings migrate
+- `json-store` — Persist JSON only via `JsonStore.Save` (atomic, `user://` ok, static options); never `FileAccess` Write / `File.WriteAllText`; InteriorManager still to migrate
+- `perf-saves-background` — Gameplay saves (plant, deposit, loot, claim) via `JsonStore.SaveAsync` (one ordered background writer, `SaveQueue`, flushed on quit); never `JsonStore.Save` in an RPC handler
+- `mathx` — `MathX.Flat/FlatLength/FlatDistance/Damp/WrapAngle` and `Mathf.SmoothStep`, never a private copy; only where floats stay identical (`-dt / tau` is not `Damp`); tier-0 tested (#221)
 
 ## Commands
 
-- `commands` — Commands: --at, --chatcheck, --fakewheel, --origincheck, --originshift, --originstress, --goto, --licenses, --menu, --nohud, --origin, --path, --probe, --settings wheel, --shot, --shot-queue (g heights, frame=), --title, --wheelcheck, --wheelwatch
+- `commands` — Commands: --at, --chatcheck, --fakewheel, --ffbcheck, --ffblog, --origincheck, --originshift, --originstress, --goto, --licenses, --menu, --nohud, --origin, --path, --probe, --settings wheel, --shot, --shot-queue (g heights, frame=), --title, --wheelcheck, --wheellock, --wheelwatch
 
 ## Gotchas
 

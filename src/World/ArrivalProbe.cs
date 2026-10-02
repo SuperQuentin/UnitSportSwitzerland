@@ -222,7 +222,7 @@ public partial class ArrivalProbe : Node
         var (s, _) = NpcArrival.Frame(_lane!, car, -1);
         var t = NpcArrival.TangentAt(_lane!, s);
         var want = car + t.Cross(Vector3.Up) * 13f - t * 6f + Vector3.Up * 9f;
-        _cam.GlobalPosition = _placed ? _cam.GlobalPosition.Lerp(want, 1f - Mathf.Exp(-2f * dt)) : want;
+        _cam.GlobalPosition = _placed ? _cam.GlobalPosition.Lerp(want, MathX.Damp(2f, dt)) : want;
         _placed = true;
         if (_chunks.TryGetHeight(_cam.GlobalPosition, out float g) && _cam.GlobalPosition.Y < g + 2f)
             _cam.GlobalPosition = _cam.GlobalPosition with { Y = g + 2f };

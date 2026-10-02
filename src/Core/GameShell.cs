@@ -82,7 +82,7 @@ public partial class GameShell : Node
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
             "--menu", "--settings", "--licenses", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
-            "--leave-restart", "--autostart", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot",
+            "--leave-restart", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -120,6 +120,12 @@ public partial class GameShell : Node
         // relaunch carries --vr, and a run with --vr never relaunches)
         if (!Direct && !vr && GameSettings.Current.VrMode && !Has("--vr") && !Has("--xrsim")
             && DisplayServer.GetName() != "headless" && XR.XrSession.Relaunch(true))
+        {
+            Quit();
+            return;
+        }
+        // a saved Realistic+ wants Forward+, which Godot only picks at startup (once, likewise)
+        if (!Direct && !vr && Styles.RendererRelaunch.Wanted && Styles.RendererRelaunch.Relaunch())
         {
             Quit();
             return;

@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Terrain;
+using UnitSport.Core;
 
 namespace UnitSport.Gpx;
 
@@ -188,7 +189,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
             {
                 // trail behind and above, easing so the view does not snap on corners
                 var desired = target - heading * 7.5f + Vector3.Up * 3.0f;
-                GlobalPosition = GlobalPosition.Lerp(desired, 1f - Mathf.Exp(-6f * dt));
+                GlobalPosition = GlobalPosition.Lerp(desired, MathX.Damp(6f, dt));
                 Aim(target + Vector3.Up * 1.2f);
                 break;
             }
@@ -354,7 +355,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
 
         float target = blocked ? CutRadius : 0f;
         _cut = dt > 0
-            ? Mathf.Lerp(_cut, target, 1f - Mathf.Exp(-CutRamp * dt))
+            ? Mathf.Lerp(_cut, target, MathX.Damp(CutRamp, dt))
             : target;
 
         // settle to exactly zero, so the shaders take their disabled branch rather than

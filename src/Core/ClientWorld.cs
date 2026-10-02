@@ -39,6 +39,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private WorldEnvironment? _worldEnvironment;
     private World.DayNight? _dayNight;
     private DirectionalLight3D? _sun;
+    private ShaderMaterial? _treeMaterial;
+    private NearTrees? _nearTrees;
+    private PhotoLayer? _photos;
 
     /// <summary>The session this world is built for: the title screen's choice, or the command line's.</summary>
     public WorldLaunch Launch { get; init; } = WorldLaunch.FromArgs();
@@ -104,7 +107,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => StyleKit.ReportRequested, StyleKit.Report),
         (() => BattleRoyale.BrCheck.Requested, BattleRoyale.BrCheck.Run),
         (() => Occasions.OccasionProbe.Requested, Occasions.OccasionProbe.Run),
-        (() => Player.WheelProbe.CheckRequested, Player.WheelProbe.Check),
+        (() => Player.WheelProbe.CheckRequested, () => Player.WheelProbe.Check(GetParent())),
         // the network rules' own self-checks: vision interest and remote interpolation
         (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
         // the CD beat analyser's self-test: synthetic clicks at known tempos
@@ -125,8 +128,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
             OriginCheck.Run(this);
             return;
         }
+        if (ImpostorBake.Requested)
+        {
+            AddChild(new ImpostorBake());
+            return;
+        }
         // idempotent: the shell, which owns the window settings, has usually installed it already
         PlayerInput.Install(GetParent());
+        if (Player.WheelProbe.ForceCheckRequested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Player.WheelProbe { Name = "WheelProbe" });
+            return;
+        }
 
         // a hand-made street to show the door portals: no terrain, no server
         if (Interiors.PortalDemo.ParseArgs() is { Requested: true } portalDemo)
@@ -189,7 +203,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var material = StyleKit.Material(MaterialRole.Terrain);
         var roadMaterial = StyleKit.Material(MaterialRole.Road);
         var buildingMaterial = StyleKit.Material(MaterialRole.Building);
-        var treeMaterial = StyleKit.Material(MaterialRole.Tree);
+        var treeMaterial = _treeMaterial = StyleKit.Material(MaterialRole.Tree);
         var waterMaterial = StyleKit.Material(MaterialRole.Water);
         // far trees as billboards, before the first tile builds them
         var treeFarMaterial = StyleKit.Material(MaterialRole.TreeFar);
@@ -243,6 +257,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!fixture) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
 
         AddChild(_chunks);
+        ApplyNearTrees();
+        ApplyPhotos();
         Audio.Surfaces.Origin = origin;
         var chunksForAudio = _chunks;
         if (Systems.On(Systems.Audio))
@@ -531,6 +547,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.HeavyNetProbe.ParseArgs() is { } heavyRole) AddChild(new Player.HeavyNetProbe(heavyRole, () => LocalPlayer));
         if (Player.CrashNetProbe.ParseArgs() is { } crashRole) AddChild(new Player.CrashNetProbe(crashRole, () => LocalPlayer));
         if (Player.PassengerProbe.ParseArgs() is { } passengerRole) AddChild(new Player.PassengerProbe(passengerRole, () => LocalPlayer));
+        if (Player.DeckProbe.ParseArgs() is { } deckRole) AddChild(new Player.DeckProbe(deckRole, () => LocalPlayer));
         if (Player.ExitProbe.Requested) AddChild(new Player.ExitProbe(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
@@ -871,6 +888,54 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _dayNight?.SetEnvironment(environment);
         }
         ApplySun();
+        ApplyNearTrees();
+        ApplyPhotos();
+    }
+
+    /// <summary>
+    /// The SWISSIMAGE drape (<see cref="PhotoLayer"/>) while the style has one: on the tiles'
+    /// terrain material, from the local terrain folder's photos.
+    /// </summary>
+    private void ApplyPhotos()
+    {
+        bool want = StyleKit.HasPhotos && _chunks != null && _worldOrigin != null && _worldMaterials.Length > 0;
+        if (want == (_photos != null)) return;
+        _photos?.QueueFree();
+        _photos = null;
+        if (!want) return;
+        _photos = new PhotoLayer(_chunks!, _worldOrigin!, _worldMaterials[0], TerrainPaths.FindChunkDir());
+        AddChild(_photos);
+    }
+
+    /// <summary>
+    /// The 3D trees near the camera, culled per tree, while the style's trees are too heavy to
+    /// leave per tile (<see cref="MeshDetail.High"/>). The tiles hand their trees over as they
+    /// rebuild at the new detail (<see cref="ChunkManager.RebuildVisuals"/>).
+    /// </summary>
+    private void ApplyNearTrees()
+    {
+        // every restyle: each style has its own trees and range
+        _nearTrees?.QueueFree();
+        _nearTrees = null;
+        if (StyleKit.Detail != MeshDetail.High || !StyleKit.TreeLod || _chunks == null || _treeMaterial == null) return;
+        var (cone, crown) = ChunkNode.HighDetailTrees(_treeMaterial);
+        _nearTrees = new NearTrees(CatalogueTree(ModelCatalog.TreeConifer) ?? cone,
+            CatalogueTree(ModelCatalog.TreeBroadleaf) ?? crown, StyleKit.TreeReach);
+        // under the terrain, an origin container: the floating origin moves it with the tiles
+        _chunks!.AddChild(_nearTrees);
+    }
+
+    /// <summary>
+    /// The applied style's model for a tree (<see cref="ModelCatalog"/>), with its bark and leaf
+    /// materials; null where the style has none and the builders' trees serve.
+    /// </summary>
+    private static Mesh? CatalogueTree(string id)
+    {
+        if (ModelCatalog.Mesh(id) is not { } model) return null;
+        var mesh = (ArrayMesh)model.Duplicate();
+        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            mesh.SurfaceSetMaterial(s, StyleKit.TreeSurface(id, ImpostorBake.IsLeaves(mesh, s)));
+        return mesh;
     }
 
     /// <summary>The style's sun, or none: made here, pointed by <see cref="World.DayNight"/>.</summary>
@@ -903,6 +968,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         GameSettings.Changed -= OnSettingsChanged;
         StyleCommand.RebuildRequested -= OnRebuildRequested;
         StyleKit.Chosen -= OnStyleChosen;
+        NearTrees.Forget();
         Vehicles.VehicleManager.Refused -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         if (_networked)
@@ -1226,9 +1292,26 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         else if (viewer is { } p && IsInstanceValid(p))
         {
+            // a bus door's button in reach, inside or out (#162)
+            if (p.Vehicle == null && p.ButtonInReach() is { } button)
+                yield return (PlayerInput.InteractMount, button.Open ? "Shut the door" : "Open the door");
             if (p.RidingAlong && p.StereoOwner != null) yield return (PlayerInput.RadioPanel, "Radio");
-            if (p.Vehicle is { IsVehicle: true } vehicle)
+            // walking about in a vehicle, or sat in one somebody else hosts (#158, #162)
+            if (p.Aboard)
             {
+                if (p.DeckHint is { } deckHint) yield return (PlayerInput.InteractMount, deckHint);
+                yield return (PlayerInput.CameraToggle, "Camera");
+                yield return (PlayerInput.Inventory, "Inventory");
+            }
+            else if (p.Host is { } carrier)
+            {
+                yield return (PlayerInput.InteractMount, p.HostWalkable ? "Stand up" : "Get out");
+                if (carrier.SeatIndex != 0) yield return (PlayerInput.TakeWheel, "Take the wheel");
+                yield return (PlayerInput.CameraToggle, "Camera");
+            }
+            else if (p.Vehicle is { IsVehicle: true } vehicle)
+            {
+                if (p.SeatIndex > 0) yield return (PlayerInput.TakeWheel, "Take the wheel");
                 // the engine and "get out" are on the vehicle readout in the same corner
                 yield return (PlayerInput.CameraToggle, "Camera");
                 if (p.StereoOwner != null) yield return (PlayerInput.RadioPanel, "Radio");

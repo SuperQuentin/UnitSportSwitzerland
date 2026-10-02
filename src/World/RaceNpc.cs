@@ -62,6 +62,9 @@ public partial class RaceNpc : Node, IOriginShiftAware
     {
         _me = GetParent<FootPlayer>();
         _me.RideControls = Hold;
+        // a dedicated server's copy is a data proxy: never its authority (SetSimulator gives it to
+        // clients only, and returns early on a proxy), so its physics step only ever returned (#221)
+        if (Net.NetworkManager.DedicatedServer) SetPhysicsProcess(false);
         _race = _me.GetParent()?.GetParent()?.GetNodeOrNull<RaceManager>(RaceManager.NodeName);
         if (_race == null) return;
         _race.NpcSetup += OnSetup;

@@ -318,7 +318,7 @@ public partial class DriveProbe : Node
             {
                 var m = en.Player.Motion;
                 GD.Print($"[drive]   t={_t,5:F1} {en.Label,-12} s={en.Arc,6:F0} v={m.Speed * 3.6f,4:F0}/{en.Pilot!.Profile[en.Pilot.D.Near] * 3.6f,4:F0} "
-                    + $"slip={Mathf.RadToDeg(Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi)),4:F0} off={_route.Off(en.Player.GlobalPosition),4:F1} "
+                    + $"slip={Mathf.RadToDeg(MathX.WrapAngle(m.Slip)),4:F0} off={_route.Off(en.Player.GlobalPosition),4:F1} "
                     + $"R={1f / Mathf.Max(Mathf.Abs(_route.Line.Curvature[en.Pilot.D.Near]), 1e-4f),5:F0} drift={en.Pilot.D.Drifting}"
                     + $" in={en.Player.LastRideInput.Throttle:F2}/{en.Player.LastRideInput.Brake:F2}/{en.Player.LastRideInput.Steer:F2}{(en.Player.LastRideInput.Handbrake ? " HB" : "")} lat={en.Pilot.D.Lateral:F2} cap={(en.Pilot.D.Cap < 1e9f ? en.Pilot.D.Cap * 3.6f : 0f):F0} draft={en.Player.Draft:F2}"
                     + (en.Player.GetSlideCollisionCount() > 0 && Enumerable.Range(0, en.Player.GetSlideCollisionCount())
@@ -399,7 +399,7 @@ public partial class DriveProbe : Node
         else if (!d.Drifting)
         {
             var want = car + new Basis(Vector3.Up, p.Motion.Yaw + p.Motion.Slip) * new Vector3(-4f, 5f, 11f);
-            _cine.GlobalPosition = _cinePlaced ? _cine.GlobalPosition.Lerp(want, 1f - Mathf.Exp(-3f * dt)) : want;
+            _cine.GlobalPosition = _cinePlaced ? _cine.GlobalPosition.Lerp(want, MathX.Damp(3f, dt)) : want;
         }
         _cinePlaced = true;
         var cp = _cine.GlobalPosition;
@@ -410,7 +410,7 @@ public partial class DriveProbe : Node
         _chunks.SetSightlineCut(_cine.GlobalPosition, car, 3f);
         _cine.Current = true;
 
-        float slip = Mathf.Abs(Mathf.Wrap(p.Motion.Slip, -Mathf.Pi, Mathf.Pi));
+        float slip = Mathf.Abs(MathX.WrapAngle(p.Motion.Slip));
         if (_shotPrefix != null && d.Drifting && d.Planned && _shots < 4 && slip > 0.45f && d.DriftTime > 0.3f && !_shotThisDrift)
         {
             _shotThisDrift = true;

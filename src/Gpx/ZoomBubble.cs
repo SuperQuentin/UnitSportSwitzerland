@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Terrain;
+using UnitSport.Core;
 
 namespace UnitSport.Gpx;
 
@@ -215,7 +216,7 @@ public partial class ZoomBubble : CanvasLayer, Core.IOriginShiftAware
 
         _camPos = !_camPlaced || dt <= 0
             ? want
-            : _camPos.Lerp(want, 1f - Mathf.Exp(-5f * dt));
+            : _camPos.Lerp(want, MathX.Damp(5f, dt));
         _camPlaced = true;
 
         var target = head + Vector3.Down * 0.7f;
@@ -277,7 +278,7 @@ public partial class ZoomBubble : CanvasLayer, Core.IOriginShiftAware
         }
         else
         {
-            _center = _center.Lerp(center, 1f - Mathf.Exp(-8f * dt));
+            _center = _center.Lerp(center, MathX.Damp(8f, dt));
         }
         _tip = tip;
     }

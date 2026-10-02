@@ -539,6 +539,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public StaticBody3D? BuildingBodyAt(TileId id) =>
         _chunks.TryGetValue(id, out var state) ? state.Node?.BuildingBody : null;
 
+    /// <summary>A loaded tile's ground mesh, for per-tile shader parameters (<see cref="PhotoLayer"/>).</summary>
+    public MeshInstance3D? GroundAt(TileId id) =>
+        _chunks.TryGetValue(id, out var state) ? state.Node?.Ground : null;
+
     /// <summary>
     /// The buildings with players inside, for the facade shader's occupancy cues (more lit
     /// windows, figures behind the glass). Each box is (world x, world z, half width along the

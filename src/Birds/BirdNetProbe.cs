@@ -24,42 +24,26 @@ namespace UnitSport.Birds;
 /// Windowed, each role saves zoomed pictures of those moments to <c>test_output/birdnet_&lt;role&gt;_*.png</c>.
 /// Roles talk through chat lines. Scratch inventory; the journal is the machine's real <c>user://birds.json</c>.
 /// </summary>
-public partial class BirdNetProbe : Node
+public partial class BirdNetProbe : ChatProbe
 {
-    public static string? Role
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--birdnetcheck");
-            return i >= 0 && i + 1 < args.Length ? args[i + 1].ToUpperInvariant() : null;
-        }
-    }
+    public static string? Role => RoleArg("--birdnetcheck");
 
-    private readonly ItemController _items;
-    private readonly List<string> _heard = new();
-    private string _role = "";
-    private int _failures;
-
-    public BirdNetProbe(ItemController items) => _items = items;
+    public BirdNetProbe(ItemController items) : base(items, "birdnet", "PN") { }
     public BirdNetProbe() : this(null!) { }
 
-    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
-    private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
+    /// <summary>A failure here counts and carries on (the RESULT line comes at the end), it does not quit.</summary>
+    protected override void Fail(string why) => Expect(false, why);
     private BirdLife? Life => BirdLife.Instance;
 
     public override async void _Ready()
     {
         _role = Role ?? "A";
         ProcessPriority = 1000;
-        if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor() && Life != null && Life.Net != null, 150))
+        if (!await Joined(150, () => Life != null && Life.Net != null))
         {
-            Fail("no player on the ground");
-            GD.Print($"[birdnet {_role}] RESULT: FAILED ({_failures})");
-            GetTree().Quit(1);
+            await Finish(0);
             return;
         }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
         var life = Life!;
         Expect(!life.Authority, "this client is not the authority on the birds");
         Expect(Enumerable.Range(0, BirdCatalog.All.Length).All(i => BirdCatalog.All[i].Index == i), "species index = catalogue position (the wire name)");
@@ -70,9 +54,7 @@ public partial class BirdNetProbe : Node
         if (Town) { if (_role == "A") await TownA(Me!, life); else await TownB(Me!, life); }
         else if (_role == "A") await RunA(Me!, life); else await RunB(Me!, life);
 
-        GD.Print(_failures == 0 ? $"[birdnet {_role}] RESULT: ok" : $"[birdnet {_role}] RESULT: FAILED ({_failures})");
-        await Seconds(1.0);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(1.0);
     }
 
     private int _firstId;
@@ -132,10 +114,10 @@ public partial class BirdNetProbe : Node
             if (sight.Count > 0) { GD.Print($"[birdnet A] #{target.Id} not in sight from {stand:F0} m, next"); continue; }
             await Aim(me, target.Centre);
             GD.Print($"[birdnet A] aimed: {-me.Camera.GlobalTransform.Basis.Z.Dot((target.Centre - me.EyePosition).Normalized()):F4}");
-            int shells = Shells();
+            int shells = CountOf(ItemId.Shells);
             GD.Print($"[birdnet A] shooting #{target.Id} {target.Species.Name} at {target.Node.GlobalPosition.DistanceTo(me.GlobalPosition):F1} m");
             _items.UseSlot(me, gun);
-            Expect(Shells() == shells - 1, "the item path spent a shell");
+            Expect(CountOf(ItemId.Shells) == shells - 1, "the item path spent a shell");
             if (await Until(() => life.Journal.Score != before, 4)) killed = target;
             await Seconds(1.0);
         }
@@ -332,7 +314,7 @@ public partial class BirdNetProbe : Node
         _lens = null;
         RenderingServer.FramePreDraw -= fov;
         if (eye != null && IsInstanceValid(me)) me.Camera.Transform = home;
-        GD.Print($"[birdnet {_role}] picture {name}");
+        GD.Print($"{Log} picture {name}");
     }
 
     private static bool Blocked(FootPlayer me, Vector3 from, Vector3 to)
@@ -483,41 +465,5 @@ public partial class BirdNetProbe : Node
             if (down) await Snap(me, "town_landed", calm);
         }
         Say("landed");
-    }
-
-    private int Shells() => Enumerable.Range(0, Inventory.Size).Where(i => _items.Inventory[i].Id == ItemId.Shells).Sum(i => _items.Inventory[i].Count);
-
-    private void Say(string what)
-    {
-        GD.Print($"[birdnet {_role}] say {what}");
-        Chat?.Send($"PN {_role} {what}");
-    }
-
-    private Task<bool> Heard(string role, string what, double seconds) =>
-        Until(() => _heard.Any(l => l.Contains($"PN {role} {what}")), seconds);
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[birdnet {_role}] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[birdnet {_role}] FAIL {why}");
-        _failures++;
     }
 }

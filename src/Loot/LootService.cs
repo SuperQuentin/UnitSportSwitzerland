@@ -789,10 +789,7 @@ public partial class LootService : Node
     {
         try
         {
-            Directory.CreateDirectory(_storeDir);
-            string path = PathFor(k), tmp = path + ".part";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(t));
-            File.Move(tmp, path, overwrite: true);
+            Core.JsonStore.SaveAsync(PathFor(k), t, onError: e => GD.PushError($"[loot] saving: {e.Message}"));
         }
         catch (Exception e) { GD.PushError($"[loot] saving: {e.Message}"); }
     }
