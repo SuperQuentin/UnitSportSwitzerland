@@ -4,8 +4,9 @@
 # Floating origin
 
 Status: **phases 1-3 done** (offline floating origin, #215; positions on the wire and the server
-in LV95, in one PR). **Phase 4 is waiting on the Realistic styles** (#212): only the `--origin` pin
-question could be settled now (see Phase 4). The working rules are in
+in LV95, #269). **Phase 4 is unblocked**: Realistic− and Realistic+ are merged (#250, #255). Their
+world-space UVs already go through `pattern_xz()`, and the SWISSIMAGE drape is per tile; what is
+left is measuring SDFGI and reflection probes across a shift (see Phase 4). The working rules are in
 `docs/notes/core/floating-origin.md` and `docs/notes/net/positions-on-the-wire.md`. Issue: #185.
 
 ## Why
@@ -233,11 +234,15 @@ A transient use (computed and used in the same frame) needs no change.
 - Done when: two players 1,000+ km apart (the generated fill covers any LV95 coordinate) each see
   correct terrain and their neighbours, and the server log has no precision-related warnings.
 
-**Phase 4: visual styles.** Waiting on the Realistic styles.
+**Phase 4: visual styles.** Unblocked (Realistic− #250, Realistic+ #255 merged), not started.
 - Check the new styles against shifts: SDFGI cascades and reflection probes in Realistic+ (a shift
   may force them to relight; measure it), decals, texture UVs taken from world space (use
   `world_origin_offset`).
 - This phase depends on `docs/plans/visual-styles.md`. Whichever lands second adapts to the other.
+- Already fine: the Cartoon and Realistic role bodies read world-space UVs through `pattern_xz()`,
+  and `Terrain/PhotoLayer` gives each tile its photo by an instance uniform, not by world XZ.
+- Left: Realistic+ with `--sdfgi` and its reflection probes across a shift (relight cost, visible
+  pop), and any decals.
 - Settled: `--origin E,N` (#212's pin for screenshot runs) pins the **starting** origin and the
   shifter runs from there; `ShotRunner` maps queued shots from that first frame, and
   `--originshift 1000000` keeps the origin still when a run needs it.
