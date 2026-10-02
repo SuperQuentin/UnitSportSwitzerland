@@ -100,16 +100,44 @@
   lane: the cars' white line 4 m behind, a 0.30 m yellow line in front, a symbol in it, the
   pocket's arrows behind it; the through lane keeps its line. Where it has one: a 0.30 m yellow
   **advanced bike stop line** 3.0 m ahead across the bike lane. A **bike signal** (group with a
-  3 s lead green, #349) on approaches with a separated path, or a kerbside painted lane beside a
-  right pocket (layout (a) only: the bike lane stays right of the pocket); its head is a half-size
-  three-lens head (100 mm lenses, `Shape.Bike`) on the main pole, lower edge 1.05 m, below the
-  priority sign. Geneva centre: 12 left-turn bike lanes (3 boxes, 9 advanced lines), 90
-  approaches with a bike signal. Screenshots from above and from the driver's seat at LV95
-  2499901,1118599. Not done: layout (b) (the painted lane between the right pocket and the through
-  lane); traffic's lane shift ignores the bike lane (#353 moves through cars 3 m, now 4.5 m).
+  3 s lead green, #349) on approaches with a separated path (read from the street's built end
+  piece: the line's own sides do not know a street's paths), or a painted lane kerbside of a
+  right pocket (layout (a)); its head is a half-size three-lens head (100 mm lenses,
+  `Shape.Bike`) on the main pole, lower edge 1.05 m, below the priority sign. Screenshots from
+  above and from the driver's seat at LV95 2499901,1118599.
+- **Right pocket beside a painted bike lane** (#351). `ApproachLayout` is the one place the lanes'
+  offsets are worked out (`Lane` per lane, `open` along the taper); paint, stop lines, poles and
+  crossings read it, #353's lane topology is meant to (tier 0 `ApproachLayoutTests`). Same width
+  (3 m pocket + the lane), two orders: **(a)** kerbside, the pocket between the through lane and
+  the bike lane (bike signal); **(b)** the bike lane between the through lane and the pocket
+  (Velostreifen zwischen den Fahrstreifen): yellow lines both sides, solid along the storage,
+  1 m / 1 m dashes over the taper where cars cross it, a symbol, the stop line across it; #120's
+  lane paint skips the pocket's reach. Each approach picks by `Fnv` of its TLM uuid:part and end
+  (`ApproachKey`): stable. A path keeps (a). **(a) needs a protected phase**: the plan is built,
+  and where the approach's bike group is not green for >= `MinGreen` with its right-turn group red
+  (`SignalPlan.ThroughWithRightHeld`; the 3 s lead alone does not count, a right turn without a
+  group of its own never), (b) is forced (`Forced`) and the plan rebuilt; the pockets' lane paint
+  waits for it (`EmitRightLanes`). Fixed on the way: (a)'s lane line, stop bar and arrows stood a
+  bike lane too far out; a street that got paths has no painted lane, so a pocket there no longer
+  widens for one (read from the painted lines).
+- **Crossings at a widened arm** (#351, `SquareCrossing`): at traffic lights, where the road a
+  #120 crossing crosses is widened by its pockets (or the crossing comes from a widened arm), it
+  runs square across that road, edge to widened edge, between its stop line and the junction
+  (behind an advanced bike line), its ends joined straight (an end inside the widened span moves
+  out along its own lane or path); a layout (b) lane crosses from its own place. Was: the narrow
+  mouth's curve from a shifted end, skewed over the stop line (LV95 2499132,1116455, rule-only
+  copy). Sides now move out only for their own street's widenings, up to 10 m (was any strip of
+  the tile, up to 6 m: a left + right pocket reached the next arm's corner and pushed that arm's
+  sidewalk 6 m out onto it).
+- **Bike numbers** (`test351` copies): Geneva centre 286 junctions, 13 left-turn bike lanes (3
+  boxes, 10 advanced lines), 217 approaches with a bike signal, 97 right pockets; beside a painted
+  lane (a) 2, (b) by hash 0, (b) forced 1. Rule-only copy: 163 junctions, (a) 1, (b) 1, forced 1.
+  Martigny-Riddes: no signalised junction, all 0. Rebuild byte-identical. Screenshots from above:
+  (a) LV95 2500713,1115381, (b) 2500569,1117717, the crossing before and after.
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` and restrictions not read yet (#347 has them); thin median (optional); crossings of divided roads
-  (several nodes); 3-lane roads; a #120 red bike crossing drawn for the narrow mouth runs skewed
-  across a widened arm's stop line (2499132,1116455; #351 reworks bikes at signals); bike heads
-  (#351); traffic obeying them (#353); 300 mm overhead heads (#354); rejected poles are dropped,
+  (several nodes); 3-lane roads; at a compact junction a left + right pocket's mouth reaches into
+  the next arm's sidewalk corner (it stands on the widening, over part of the crossing:
+  2499132,1116455); traffic obeying them (#353), and its lane shift ignores the bike lanes (#353
+  moves through cars 3 m, now 4.5 m); 300 mm overhead heads (#354); rejected poles are dropped,
   not moved along the kerb.

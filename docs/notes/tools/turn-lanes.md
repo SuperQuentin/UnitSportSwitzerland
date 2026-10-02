@@ -55,7 +55,7 @@
   notched dart head; left: the shaft jogs left near its end into an open corner head at 45 deg,
   within 0.55 m of the lane's middle. Two attempts from memory were wrong (the old Swiss
   branch arrow, then a guessed jog). The stop bar is a `StopLine` polyline.
-- **Beside a painted bike lane** (#120): along the solid centre line a car must pass a cyclist
+- **Beside a painted bike lane** (#120; as painted, #351: a street that got paths has none): along the solid centre line a car must pass a cyclist
   without crossing it, so every car lane beside the bike lane is 3.0 m (ZH Standards
   Veloverkehr): the pocket is the approach lane widened to 3.0 m (`_pocket`), the through lane
   3.0 m, the bike lane outside. The extra comes on over a 1:6 lead-in (at least 6 m) before the
