@@ -45,7 +45,8 @@ the steamer AI (#379) reads.
   `IChunkSource.LoadLandingsAsync`: `LocalChunkSource` reads the file, the decorators forward it,
   `NetworkChunkSource` reads the shipped one else the server's cached copy, `FixtureChunkSource`
   plans its course's stops and jetties (`FixtureCourse.Stops`/`Jetties`).
-- **Streaming**: `AssetKind.Landings = 12` (an older server answers "missing"); `ClientTerrainSync`
+- **Streaming**: `AssetKind.Landings = 12` (an older server answers "missing"); the server serves the
+  landings it uses (`ChunkStreamer.LandingsOverride`: its file, a fixture's plan, `--landings`); `ClientTerrainSync`
   fetches it after the place index; when it differs from the client's own, `Landings.Use` and
   `ChunkManager.RebuildPiers` (the tiles holding a pier, old or new, build roads and collision again).
 - **Building** (`Terrain/PierMeshBuilder`, in the tile worker): each ribbon is built by the one tile its
@@ -84,6 +85,8 @@ the steamer AI (#379) reads.
 - `tools/test.sh unit` (`LandingTests`: the head at the plank's height, the neck to the quay and its
   ramps, a Steg's ramp, moving out for water, too shallow, no shore, a jetty, the numbers against
   `SteamerLines`, the file round trip and one tile per ribbon, the fixture lake's landing).
+- Streaming checked by hand: a server on `fixture:lake`, a client on the flat fixture: `[stream] landings
+  received: 1 landings, 1 jetties`, `[terrain] 1 tiles build their piers`, `--leavecheck` ok.
 - `--steamercheck pier --chunks fixture:lake` (quick, ~1 min): the fixture's landing (a stop on the
   shelf, a 130 m neck), the steamer at its berth, the plank's foot against the deck (−0.017 m), the
   walk along the neck, over the plank onto the main deck and back, a speedboat alongside the fixture's
