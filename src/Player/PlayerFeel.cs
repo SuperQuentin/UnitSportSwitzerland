@@ -953,6 +953,10 @@ public partial class PlayerFeel : Node3D
 
         switch (ride)
         {
+            case RideKind.OnFoot when _player.IsSwimming:
+                // the first moments in the water (#301): how to go down and up
+                if (_player.SwimTime < 5f) text = InputHints.Format("{crouch_slide}  dive     {jump}  up · climb out");
+                break;
             case RideKind.OnFoot:
                 // mirrors FootPlayer's deploy test: falling, and more than 12 m of air below
                 if (!_player.IsOnFloor() && _player.Velocity.Y < -3f && _player.Terrain != null
