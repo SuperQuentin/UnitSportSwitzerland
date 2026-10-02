@@ -456,6 +456,18 @@ public sealed class LaneGraph
         }
     }
 
+    /// <summary>Everything that may be driven into a junction (for <c>--trafficcheck --feed</c>, #353).</summary>
+    public IEnumerable<(LaneEdge Edge, bool Forward)> Entering(long key)
+    {
+        foreach (var (edge, atStart) in Incident(key))
+        {
+            bool forward = !atStart;   // arriving at its end means driving in drawing order
+            if (edge.OneWay == 1 && !forward) continue;
+            if (edge.OneWay == -1 && forward) continue;
+            yield return (edge, forward);
+        }
+    }
+
     /// <summary>
     /// swissTLM3D draws a divided road as two centrelines and records nothing about which way
     /// each carries traffic. Switzerland drives on the right, so each carriageway runs with the

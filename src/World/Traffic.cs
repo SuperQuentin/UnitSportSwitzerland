@@ -410,13 +410,56 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         var (spot, _) = edge.Sample(arc);
         if (obstacles != null && obstacles.Any(o => new Vector2(o.Pos.X - spot.X, o.Pos.Z - spot.Z).Length() < 60f + 4f * new Vector2(o.Vel.X, o.Vel.Z).Length())) return;
         bool forward = edge.OneWay switch { 1 => true, -1 => false, _ => _rng.Next(2) == 0 };
-        var route = new Route(edge, forward, forward ? arc : edge.Length - arc);
+        AddCar(new Route(edge, forward, forward ? arc : edge.Length - arc));
+    }
+
+    private void AddCar(Route route)
+    {
         bool van = _rng.NextDouble() < 0.18;
         var (body, lamps) = TrafficMeshBuilder.Car(TrafficMeshBuilder.Paints[_rng.Next(TrafficMeshBuilder.Paints.Length)], van);
-        var v = new Vehicle(route, CruiseSpeed(edge.Class) * 0.8f, new[] { 0f },
+        var v = new Vehicle(route, CruiseSpeed(route.Edge.Class) * 0.8f, new[] { 0f },
             new[] { Unit(body, lamps, CarDrawn) }) { Reaction = 0.5f + 0.5f * (float)_rng.NextDouble() };
         AddVehicle(v);
         _cars.Add(v);
+    }
+
+    /// <summary>
+    /// <c>--trafficcheck --feed</c> (#353, the queue capture only): one more car on the road into
+    /// <paramref name="approach"/>, <paramref name="from"/> to <paramref name="to"/> m before its
+    /// line (back over the junctions upstream where its edge is shorter), its route already through
+    /// the approach; none while there are as many cars as the settings ask, or a car within 10 m of the spot.
+    /// </summary>
+    public bool SpawnInto(LaneApproach approach, float from, float to)
+    {
+        if (_roads is null || _cars.Count >= GameSettings.Current.TrafficCars) return false;
+        foreach (var e in _roads.Edges)
+        {
+            bool atEnd = e.ApproachAtEnd?.Approach == approach;
+            if (!atEnd && e.ApproachAtStart?.Approach != approach) continue;
+            float before = from + (float)_rng.NextDouble() * (to - from);
+            // the legs back from the approach's edge, in the order they are driven; the line is
+            // `behind` m from the start of the first
+            var legs = new List<(LaneEdge Edge, bool Forward)> { (e, atEnd) };
+            float behind = e.Length - (atEnd ? e.ApproachAtEnd : e.ApproachAtStart)!.Value.StopBack;
+            while (behind < before && legs.Count < 8)
+            {
+                var (first, forward) = legs[0];
+                var options = _roads.Entering(forward ? first.KeyStart : first.KeyEnd).Where(o => o.Edge != first).ToList();
+                if (options.Count == 0) break;
+                var pick = options[_rng.Next(options.Count)];
+                legs.Insert(0, pick);
+                behind += pick.Edge.Length;
+            }
+            if (behind < from) return false;
+            var route = new Route(legs[0].Edge, legs[0].Forward, Mathf.Max(0f, behind - before));
+            for (int i = 1; i < legs.Count; i++) route.Legs.Add(legs[i]);
+            var (spot, _) = route.At(0f);
+            foreach (var c in _cars)
+                if (new Vector2(c.Head.X - spot.X, c.Head.Z - spot.Z).LengthSquared() < 100f) return false;
+            AddCar(route);
+            return true;
+        }
+        return false;
     }
 
     /// <summary>Braking a traffic driver plans with, m/s²: the speed from which it stops within <paramref name="gap"/> m.</summary>
@@ -506,7 +549,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             return car.Alert >= car.Reaction;
         }
         target = Mathf.Min(target, GiveWay(car, obstacles));
-        target = Mathf.Min(target, Approach(car));   // its lane, and the traffic lights (#353)
+        // its lane, and the traffic lights (#353)
+        float lights = Approach(car);
+        target = Mathf.Min(target, lights);
 
         bool sampled = false;
         foreach (var (oPos, oVel) in obstacles)
@@ -643,11 +688,15 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         }
         if (racerRight) wantPull = Mathf.Min(wantPull, car.Pull);
         car.Speed = Mathf.MoveToward(car.Speed, target, accel * dt);
-        // waiting for a race is not stuck: a car dropped after 20 s of it vanished in front of the racers
-        car.Stuck = car.Speed < 0.3f && !stopFor && !hold ? car.Stuck + dt : 0f;
+        // waiting for a race is not stuck: a car dropped after 20 s of it vanished in front of the racers.
+        // Nor is waiting at a red (#353): a car 20 s at one vanished from the line (a red always ends;
+        // a wait on green for room or a gap still counts, the way out of a gridlock). A car held by the
+        // lights (a red, a wait at the line) in a queue does not turn round either
+        bool atLights = lights < float.MaxValue;
+        car.Stuck = car.Speed < 0.3f && !stopFor && !hold && !car.AtRed ? car.Stuck + dt : 0f;
         car.Holding = hold;
         car.Yield = yield;
-        car.Stale = blocked && car.Speed < 0.3f ? car.Stale + dt : 0f;
+        car.Stale = blocked && car.Speed < 0.3f && !atLights ? car.Stale + dt : 0f;
         if (car.Stale > 5f && twoWay)
         {
             car.Stale = 0f;
@@ -931,7 +980,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     }
 
     /// <summary>The group for a turn on an approach: its pocket's arrow, else the main head that carries it.</summary>
-    private static int GroupFor(SignalSite site, int arm, SignalMoves turn)
+    public static int GroupFor(SignalSite site, int arm, SignalMoves turn)
     {
         int any = -1;
         for (int g = 0; g < site.Plan.Groups.Count; g++)
@@ -987,6 +1036,23 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                 && other.Speed > 1f && !other.AtRed)
                 return true;
         return false;
+    }
+
+    /// <summary>
+    /// For <c>--trafficcheck</c>'s capture (#353): the cars on an approach that read group
+    /// <paramref name="group"/> there, from 2 m past its line to <paramref name="within"/> m before
+    /// it: standing (under 0.5 m/s), and all of them.
+    /// </summary>
+    public (int Standing, int All) Queue(LaneApproach approach, int group, float within)
+    {
+        int standing = 0, all = 0;
+        foreach (var c in _cars)
+            if (c.Approach == approach && c.Group == group && c.ToLine > -2f && c.ToLine < within)
+            {
+                all++;
+                if (c.Speed < 0.5f) standing++;
+            }
+        return (standing, all);
     }
 
     /// <summary>Cars waiting at a red light now (#353).</summary>

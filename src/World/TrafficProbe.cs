@@ -10,7 +10,9 @@ namespace UnitSport.World;
 /// the nearest motorway (else the busiest road), lets the traffic run for 40 s, prints cars,
 /// trains and speeds every 5 s, and fails if nothing ever moved. With <c>--at</c> the camera stays over that point and the
 /// traffic lives around it (<c>--dense</c>: more of it near there); at the end it prints, per approach (#353), what the lights and
-/// lanes did, and fails on a red run. <c>--seconds N</c> runs longer.
+/// lanes did, and fails on a red run. <c>--seconds N</c> runs longer. Windowed with a picture and
+/// <c>--at</c>, it also captures a queue at a red and the same lane moving off on green
+/// (<see cref="Capture"/>); <c>--feed</c> spawns cars into the junction's approaches so one forms.
 /// With <c>--crossing</c> (#124) it watches the rail at <c>--at</c> instead (a level crossing):
 /// spawns a train there and fails unless its units roll over it with their wheels on the road
 /// surface (the groove paint), within 5 cm.
@@ -29,7 +31,8 @@ public partial class TrafficProbe : Node
     private int _givingWay;
     /// <summary>Most cars waiting at a red light at once, and signalised approaches seen (#353).</summary>
     private int _atRed, _signalApproaches;
-    private readonly bool _crossing = CmdArgs.Has("--crossing"), _stay = CmdArgs.Has("--at"), _dense = CmdArgs.Has("--at") && CmdArgs.Has("--dense");
+    private readonly bool _crossing = CmdArgs.Has("--crossing"), _stay = CmdArgs.Has("--at"), _dense = CmdArgs.Has("--at") && CmdArgs.Has("--dense"),
+        _feed = CmdArgs.Has("--at") && CmdArgs.Has("--feed");
     /// <summary>How long the traffic runs (40 s; <c>--seconds N</c> for more cars through the junctions, #353).</summary>
     private readonly double _seconds = CmdArgs.Double("--seconds") ?? 40;
     private Vector3 _at;
@@ -51,6 +54,9 @@ public partial class TrafficProbe : Node
         _traffic = traffic;
         _camera = camera;
         _shot = shot;
+        // --feed (#353, the queue capture): as many cars as --traffic asks, past the settings' cap
+        // of 150 (this run only, never saved)
+        if (_feed) GameSettings.Current.TrafficCars = Math.Max(GameSettings.Current.TrafficCars, CmdArgs.Int("--traffic") ?? 300);
     }
 
     public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--trafficcheck");
@@ -68,6 +74,7 @@ public partial class TrafficProbe : Node
             var spot = new Vector3(at.X, ground.Y, at.Z);
             var eye = spot + new Vector3(0f, 45f, 15f);
             _camera.GlobalTransform = new Transform3D(Player.Flyer.Orient(spot - eye, Vector3.Up, Vector3.Forward), eye);
+            _spot = spot;
             _placed = true;
         }
         if (!_placed && _traffic.Roads is { } roads)
@@ -97,9 +104,12 @@ public partial class TrafficProbe : Node
                 GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_car.png"));
         }
 
+        if (_stay && _shot != null && _placed && _t > CaptureFrom) Capture();
         if (_t >= TickFrom && _t - delta < TickFrom) _traffic.ResetTickCost();
         // --dense: more of the traffic where the junction under test is (#353)
         if (_dense && (int)(_t * 4) != (int)((_t - delta) * 4)) _traffic.SpawnNear(_camera.GlobalPosition, NearSpawn);
+        // --feed: a car into one of the junction's signalised approaches every 0.4 s, so queues form at its reds
+        if (_feed && _placed && (int)(_t * 2.5) != (int)((_t - delta) * 2.5)) Feed();
         _maxCars = Math.Max(_maxCars, _traffic.CarCount);
         _maxTrains = Math.Max(_maxTrains, _traffic.TrainCount);
         _maxSpeed = Math.Max(_maxSpeed, _traffic.AverageCarSpeed);
@@ -116,6 +126,9 @@ public partial class TrafficProbe : Node
         if (_t < _seconds) return;
         if (_shot != null && GetViewport().GetTexture().GetImage().SavePng(_shot) == Error.Ok)
             GD.Print($"[trafficcheck] wrote {_shot}");
+        if (_stay && _shot != null && _captured < CaptureAt.Length)
+            GD.Print($"[trafficcheck] capture: {(_capture is null ? "no queue of " + CaptureQueue + " at a red near --at" : $"{_captured} of {CaptureAt.Length} shots")} before the end, run longer (--seconds)");
+        if (_feed) GD.Print($"[trafficcheck] fed {_fedCars} cars into {_fed.Count} approaches near --at");
         var (mean, p50, p99, ticks, cars) = _traffic.TickCost();
         GD.Print($"[trafficcheck] tick cost from {TickFrom:F0} s (perf-traffic-tick): mean {mean:F0} us, p50 {p50:F0} us, p99 {p99:F0} us over {ticks} ticks, {cars:F0} cars on average");
         Approaches();
@@ -209,6 +222,111 @@ public partial class TrafficProbe : Node
     }
 
     private bool _shotTaken;
+
+    // ---- the capture (#353): a queue at a red, then the same lane moving off on green ----
+    /// <summary>Server-clock seconds from the green the shots are taken at: one at the end of the red, then three as it moves off.</summary>
+    private static readonly double[] CaptureAt = [-2.5, 2.0, 4.0, 6.0];
+    /// <summary>Standing cars wanted in the queue, and how far back from the line they count, m.</summary>
+    private const int CaptureQueue = 3;
+    private const float CaptureReach = 60f;
+    /// <summary>Approaches whose line is this close to <c>--at</c>, m.</summary>
+    private const float CaptureNear = 120f;
+    /// <summary>Not before the traffic has had time to queue.</summary>
+    private const double CaptureFrom = 15;
+    private Vector3 _spot;
+    private LaneApproach? _capture;
+    private int _captureGroup = -1, _captured, _crossedBefore;
+    private double _greenAt;
+
+    /// <summary>
+    /// Windowed <c>--trafficcheck,&lt;png&gt; --at E,N</c> (#353): waits for a signalised approach
+    /// within <see cref="CaptureNear"/> m of the point with a car group (its main head or a
+    /// pocket's arrow) that is red with at least <see cref="CaptureQueue"/> cars standing in it
+    /// (<see cref="Traffic.Queue"/>, the most of any) and turns green in 3-6 s
+    /// (<c>SignalPlan.State</c> on <c>ClockSync.ServerNow</c>, as the cars read it), frames that
+    /// approach from above and saves <c>&lt;png&gt;_1_red.png</c> 2.5 s before the green (still red, before the red and yellow), then
+    /// <c>_2_green2s</c>, <c>_3_green4s</c>, <c>_4_green6s</c>, each with the lane's state in the log.
+    /// </summary>
+    private void Capture()
+    {
+        if (_captured >= CaptureAt.Length || _traffic.Roads is not { } roads) return;
+        double now = Net.ClockSync.ServerNow;
+        if (_capture is null)
+        {
+            int best = CaptureQueue - 1;
+            foreach (var a in roads.Approaches)
+            {
+                if (a.Site is not { } site || new Vector2(a.Stop.X - _spot.X, a.Stop.Z - _spot.Z).Length() > CaptureNear) continue;
+                // each car group of the arm (the main head, a pocket's arrow): the lane its cars read
+                for (int g = 0; g < site.Plan.Groups.Count; g++)
+                {
+                    var group = site.Plan.Groups[g];
+                    if (group.Arm != a.Arm || group.Kind is not (SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow)) continue;
+                    if (site.Plan.State(g, now) != SignalAspect.Red || UntilGreen(site.Plan, g, now) is not { } until || until is < 3.0 or > 6.0) continue;
+                    int queued = _traffic.Queue(a, g, CaptureReach).Standing;
+                    if (queued <= best) continue;
+                    best = queued;
+                    _capture = a;
+                    _captureGroup = g;
+                    _greenAt = now + until;
+                }
+            }
+            if (_capture is null) return;
+            // straight down over the queue (it stands back from the line along the arm), the arm
+            // across the picture: no building hides the lane
+            var spot = _capture.Stop + _capture.Out * 22f;
+            var eye = spot + Vector3.Up * 50f;
+            _camera.GlobalTransform = new Transform3D(Player.Flyer.Orient(Vector3.Down, new Vector3(-_capture.Out.Z, 0f, _capture.Out.X), Vector3.Forward), eye);
+            _crossedBefore = _capture.GreenCrossings + _capture.AmberClears;
+            GD.Print($"[trafficcheck] capture: approach {Where(_capture.Stop)}, group {_captureGroup}, {best} cars standing, green in {_greenAt - now:F1} s");
+        }
+        if (now < _greenAt + CaptureAt[_captured]) return;
+        string[] names = ["red", "green2s", "green4s", "green6s"];
+        string file = _shot!.Replace(".png", $"_{_captured + 1}_{names[_captured]}.png");
+        var (standing, all) = _traffic.Queue(_capture, _captureGroup, CaptureReach);
+        var aspect = _capture.Site!.Plan.State(_captureGroup, now);
+        bool saved = GetViewport().GetTexture().GetImage().SavePng(file) == Error.Ok;
+        GD.Print($"[trafficcheck] capture {(saved ? "wrote" : "could not write")} {file}: {aspect} at {now - _greenAt:+0.0;-0.0} s from green, "
+            + $"{standing} of {all} cars within {CaptureReach:F0} m standing, {_capture.GreenCrossings + _capture.AmberClears - _crossedBefore} crossed the line since");
+        _captured++;
+    }
+
+    private LaneGraph? _fedGraph;
+    private List<LaneApproach> _fed = new();
+    private int _fedCars, _feedTurn;
+
+    /// <summary>
+    /// <c>--feed</c> (#353, for the capture, not the game's traffic): one more car on the road into
+    /// one of the signalised approaches within 60 m of <c>--at</c>, in turn, 40-250 m before its
+    /// line and routed through it (<see cref="Traffic.SpawnInto"/>).
+    /// </summary>
+    private void Feed()
+    {
+        if (_traffic.Roads is not { } roads) return;
+        if (roads != _fedGraph)
+        {
+            _fedGraph = roads;
+            _fed = roads.Approaches.Where(a => a.Site is not null && new Vector2(a.Stop.X - _spot.X, a.Stop.Z - _spot.Z).Length() < 60f).ToList();
+            GD.Print($"[trafficcheck] feeding {_fed.Count} signalised approaches near --at");
+        }
+        if (_fed.Count > 0 && _traffic.SpawnInto(_fed[_feedTurn++ % _fed.Count], 40f, 250f)) _fedCars++;
+    }
+
+    /// <summary>Seconds from <paramref name="now"/> until the group shows green, if it does within a few changes.</summary>
+    private static double? UntilGreen(SignalPlan plan, int group, double now)
+    {
+        double t = now;
+        for (int i = 0; i < 6; i++)
+        {
+            if (plan.State(group, t) == SignalAspect.Green) return t - now;
+            double step = plan.UntilChange(group, t);
+            if (double.IsInfinity(step)) return null;
+            t += step + 1e-3;
+        }
+        return null;
+    }
+
+    private string Where(Vector3 p) => Origin is { } o && o.ToLv95(p) is var (e, n) ? $"LV95 {e:F0},{n:F0}" : $"{p}";
 
     /// <summary>The traffic tick is timed from here on (#353): the cars have spawned.</summary>
     private const double TickFrom = 10;
