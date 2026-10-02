@@ -68,6 +68,15 @@ src/Terrain/Fixture/     quick  --watercheck --chunks fixture:lake
 src/Terrain/ChunkManager quick  --watercheck --chunks fixture:lake
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
+# swimming (#301): walk in, swim, waves, dive, climb out, wade out, drown, a sunk car's driver, high dives, a wingsuit
+src/Player/FootPlayer.Sw quick  --swimcheck --chunks fixture:lake
+src/Player/FootPlayer.Wa quick  --swimcheck --chunks fixture:lake
+src/Player/FootPlayer.cs quick  --swimcheck --chunks fixture:lake
+src/Player/SwimCheck     quick  --swimcheck --chunks fixture:lake
+src/Player/AirReserve    quick  --swimcheck --chunks fixture:lake
+src/Player/PlayerFeel    quick  --swimcheck --chunks fixture:lake
+src/Avatar/HumanMeshBuilder.Sw quick --swimcheck --chunks fixture:lake
+src/World/Wa             quick  --swimcheck --chunks fixture:lake
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
@@ -81,6 +90,9 @@ src/World/Wa             net    tools/watercheck.sh
 src/World/SeaState       net    tools/watercheck.sh
 src/Net/ChatManager      net    tools/watercheck.sh
 src/Terrain/Water        net    tools/watercheck.sh
+src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
+src/Player/SwimNet       net    tools/swimnetcheck.sh
+src/Avatar/HumanMeshBuilder.Sw net tools/swimnetcheck.sh
 
 src/BattleRoyale/        full   tools/brcheck.sh
 src/Combat/              full   tools/pvpcheck.sh
