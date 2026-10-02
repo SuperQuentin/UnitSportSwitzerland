@@ -240,7 +240,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
         // A fixture course is all there is: nothing cached joins it.
-        if (!fixture) ClientTerrainSync.MergeCachedIndex(_chunks);
+        if (!fixture) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
 
         AddChild(_chunks);
         Audio.Surfaces.Origin = origin;

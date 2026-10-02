@@ -204,11 +204,14 @@ public sealed partial class ClientTerrainSync : Node
 
     /// <summary>
     /// Merges a previously saved server index at boot, so terrain streamed in an earlier
-    /// session is reachable without a server. Its tiles are LV95 like everything else, whatever
-    /// origin that server started from.
+    /// session is reachable without a server. Only an index from this world: its suggested
+    /// origin must be this copy's starting one. That is no longer about precision (positions on
+    /// the wire are LV95, #185) but about identity: an index from another server lists real tiles
+    /// this one may not have, and merged they replace the generated ground with tiles that never
+    /// arrive (a stale loopback index left the spawn with no ground at all).
     /// </summary>
     /// <returns>How many tiles the cached index added.</returns>
-    public static int MergeCachedIndex(ChunkManager chunks)
+    public static int MergeCachedIndex(ChunkManager chunks, WorldOrigin origin)
     {
         try
         {
@@ -216,6 +219,13 @@ public sealed partial class ClientTerrainSync : Node
             if (!File.Exists(path)) return 0;
 
             var manifest = TerrainManifest.FromJson(File.ReadAllText(path));
+
+            if (Math.Abs(manifest.SuggestedOriginLv95.E - origin.E) > 0.5
+                || Math.Abs(manifest.SuggestedOriginLv95.N - origin.N) > 0.5)
+            {
+                GD.PushWarning("[stream] cached server index is from another world (another origin); ignored");
+                return 0;
+            }
 
             int added = chunks.MergeAvailableTiles(manifest.Tiles.Select(t => t.Id));
             if (added > 0)

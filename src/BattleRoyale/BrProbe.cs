@@ -50,7 +50,7 @@ public partial class BrProbe : Node
         { Fail("no player on the ground"); return; }
         Chat!.LineReceived += (line, _) => _heard.Add(line);
         await Seconds(2.0);
-        var start = Me!.GlobalPosition;
+        var start = Me!.Global;   // LV95: the match's flight moves the origin (#185)
         if (_role == "A") await RunA(); else await RunB();
         if (_failures == 0) await Released(start);
         GD.Print(_failures == 0 ? $"[br {_role}] RESULT: ok" : $"[br {_role}] RESULT: FAILED ({_failures})");
@@ -104,7 +104,8 @@ public partial class BrProbe : Node
         Snap("a_drop");
 
         // wait for B next to us, then stab it until it goes down
-        Say(Fmt($"posA {me.GlobalPosition.X:F2} {me.GlobalPosition.Y:F2} {me.GlobalPosition.Z:F2}"));
+        // LV95: B's world space is not this one (every peer has its own origin, #185)
+        Say(Fmt($"posA {me.Global.E:F2} {me.Global.N:F2} {me.Global.Alt:F2}"));
         if (!await Until(() => Said("B", "near"), 90)) { Expect(false, "B came near"); return; }
         await Seconds(1.5);
         var b = GetParent().GetNodeOrNull<FootPlayer>("Players/" + PeerOf("B"));
@@ -148,8 +149,8 @@ public partial class BrProbe : Node
         // next to A
         if (!await Until(() => _heard.Any(l => l.Contains("BR A posA")), 160)) { Expect(false, "A reported"); return; }
         var p = _heard.Last(l => l.Contains("BR A posA")).Split("posA ")[1].Split(' ');
-        var a = new Vector3(Float(p[0]), Float(p[1]), Float(p[2]));
-        var (e, n) = Br.Origin!.ToLv95(a);
+        double e = double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture);
+        double n = double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture);
         Br.Teleport(e, n + 1.3, "next to A");
         await Seconds(3.0);
         me.LookYaw = Mathf.Pi;
@@ -267,7 +268,7 @@ public partial class BrProbe : Node
     }
 
     /// <summary>After the results: back where the player stood, with its own pack.</summary>
-    private async Task Released(Vector3 start)
+    private async Task Released(GlobalPos start)
     {
         if (!await Until(() => !Br!.InMatch, 40)) { Expect(false, "released after the results"); return; }
         Expect(!_items.Inventory.InMatch && _items.Inventory.Contains(ItemId.Binoculars) && !_items.Inventory.Contains(ItemId.Knife),
@@ -278,7 +279,7 @@ public partial class BrProbe : Node
         await Seconds(5.0);
         var me = Me!;
         Expect(!me.Eliminated && !me.KnockedOut, "standing again");
-        float d = new Vector2(me.GlobalPosition.X - start.X, me.GlobalPosition.Z - start.Z).Length();
+        float d = (float)me.Global.HorizontalDistanceTo(start);
         Expect(d < 30f, $"back where it started ({d:F0} m away)");
     }
 
