@@ -22,6 +22,8 @@
 list that had to match 24 hand-written `if` blocks (one forgotten term = a spawn drop fighting the
 probe for the camera height).
 
+Second PR: `BankProbe`, `BrProbe`, `PvpProbe`, `BirdNetProbe` −296 / +70 lines, same log lines.
+
 ## Same logic, preserved
 
 - Log lines, chat prefixes, PNG names and RESULT lines are byte-identical: the `tools/*check.sh`
@@ -44,8 +46,11 @@ probe for the camera height).
   chain: add one `ToolRun` to `tools` instead, in the same place in the order.
 - A probe of your own with `private async Task<bool> Until(` + `_heard` + `Chat?.Send($"XX {_role} ...")`:
   derive from `ChatProbe` and delete those members (grep `private async Task<bool> Until(` in `src/`).
-  Still to migrate on main: `Loot/BankProbe` (#213, merged after this PR was cut; verify with `tools/bankcheck.sh`).
-  Also on main with their own copy: `BattleRoyale/BrProbe`, `Items/PvpProbe` (merged after this PR was cut).
+  `BankProbe`, `BrProbe`, `PvpProbe` and `BirdNetProbe` were migrated in a second #221 PR; none is left on main.
+- A probe that follows its own body rather than the camera (`BrProbe`: spectating) overrides `Me`; one whose
+  failures count and carry on instead of quitting (`BirdNetProbe`) overrides `Fail` with `Expect(false, why)`;
+  one whose `Fail` must also count (so a later `_failures == 0` check sees it, `BrProbe`) overrides `Fail` with
+  `_failures++; base.Fail(why);`.
 - The scratch-inventory OR list and the `if (XProbe.Role != null) AddChild(new XProbe(items))` lines
   further down are unchanged: keep adding there (#169 does).
 
