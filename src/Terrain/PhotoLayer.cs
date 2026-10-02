@@ -38,6 +38,10 @@ public partial class PhotoLayer : Node
     private readonly Stack<int> _free = new();
     private readonly Dictionary<TileId, bool> _hasPhoto = new();
     private readonly ConcurrentQueue<(TileId Id, Image? Image)> _ready = new();
+    private readonly List<TileId> _gone = new();
+
+    // polled twice a second: a string would convert to a new StringName each call (#221)
+    private static readonly StringName PhotoSlot = "photo_slot";
     private double _sincePoll = double.MaxValue;
 
     public PhotoLayer(ChunkManager chunks, WorldOrigin origin, ShaderMaterial terrain, string dir)
@@ -64,7 +68,7 @@ public partial class PhotoLayer : Node
     {
         _terrain.SetShaderParameter("use_photos", false);
         foreach (var (id, _) in _shown)
-            if (_chunks.GroundAt(id) is { } ground) ground.SetInstanceShaderParameter("photo_slot", -1);
+            if (_chunks.GroundAt(id) is { } ground) ground.SetInstanceShaderParameter(PhotoSlot, -1);
     }
 
     public override void _Process(double delta)
@@ -84,10 +88,12 @@ public partial class PhotoLayer : Node
 
         var centre = _origin.TileAt(cam.GlobalPosition);
         // gone out of range: free the slot
-        foreach (var id in new List<TileId>(_shown.Keys))
+        _gone.Clear();
+        foreach (var (id, _) in _shown)
+            if (LodPolicy.Distance(id, centre) > Radius) _gone.Add(id);
+        foreach (var id in _gone)
         {
-            if (LodPolicy.Distance(id, centre) <= Radius) continue;
-            if (_chunks.GroundAt(id) is { } ground) ground.SetInstanceShaderParameter("photo_slot", -1);
+            if (_chunks.GroundAt(id) is { } ground) ground.SetInstanceShaderParameter(PhotoSlot, -1);
             _free.Push(_shown[id].Slot);
             _shown.Remove(id);
         }
@@ -100,7 +106,7 @@ public partial class PhotoLayer : Node
                     // a tile rebuilt or reloaded has a new ground node: tell it its slot again
                     if (_chunks.GroundAt(id) is { } ground && ground.GetInstanceId() != shown.Ground)
                     {
-                        ground.SetInstanceShaderParameter("photo_slot", shown.Slot);
+                        ground.SetInstanceShaderParameter(PhotoSlot, shown.Slot);
                         _shown[id] = (shown.Slot, ground.GetInstanceId());
                     }
                     continue;
