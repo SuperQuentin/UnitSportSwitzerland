@@ -28,6 +28,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `passengers` — Passengers (#158): seats from the models, `PassengerService` hands them out, riders moved and drawn from the host's copy, driverless vehicles when the driver jumps out, take the wheel (F / RB), hand-over between players, `--passengernet a|b|c`
 - `walk-aboard` — Walking about in a moving vehicle (#162): `VehicleDeck` from the model (ramps, flush door steps), decks as collision carried with the drawn vehicle, velocity measured from motion, hulls ignore their guests, steady/sway/full inertia (`--deck-inertia`, `/inertia`), seats by where you stand, `--decknet a|b|solo`
 - `trucks-buses` — Trucks and buses (#70): `HeavyCatalog` RideKind 96..119, trailers by code, a planar multi-body train (pins, per-axle tyres), sections as their own bodies, clutch/converter driveline in five shift modes, retarder, air, rollover, coupling, bus doors/kneel/destination, `--truckcheck`, `--truckprobe`, `--heavynet`
+- `vehicles-sink` — Cars, motorbikes and trucks over their wading depth float, sink and are wrecked, the driver out on foot (#299); no blast under water; legacy 0.12 m lakes still drivable
 
 ## Commands
 

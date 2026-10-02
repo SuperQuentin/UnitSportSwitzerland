@@ -76,7 +76,8 @@ void fragment() {
 
     vec3 col = mix(deep_color, shallow_color, band);
 #ifndef STYLE_LIT
-    col = FRONT_FACING ? col : mix(col, underside_color, 0.65);
+    // from below: a bright skin, the waves' slopes in its bands
+    col = FRONT_FACING ? col : underside_color * (0.5 + 0.7 * band);
 #endif
 
     // sparse glints on the wave crests — kept small and infrequent, otherwise they read

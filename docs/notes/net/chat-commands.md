@@ -9,7 +9,7 @@
   **/** opens it pre-filled, Up/Down walk the history like a shell (the line being typed comes back past the newest; caught on the LineEdit's own GuiInput, which otherwise keeps the arrows), Esc closes.
   **Offline the chat still runs:** `ClientWorld` builds `World/Chat` and `ChatUi` at boot, and
   with no server connection (`ChatManager.IsLocal`) commands run on this machine with operator
-  rights — `/help /who /me /city /spawn /occasion /time`; server-only ones (`/race /tp /kick`…) say
+  rights — `/help /who /me /city /spawn /occasion /time /seastate /water`; server-only ones (`/race /tp /kick`…) say
   they need a multiplayer game. **Tab** completes (`Core/ChatCompleter`, pure text in/out): command
   names, sub-commands, towns (`PlaceSearchUi.Search`), players (asked from the server with
   `RequestPlayerNames`, throttled to 1/s; `NamesReceived` refreshes the list), occasion ids, items,
@@ -34,3 +34,7 @@
   **`/time`** (Minecraft style; `world/day-night`): the query is answered client-side from the
   clock on screen, set/add/speed go to the server, admin only, and change it for everyone.
 - **Look** (`Core/ChatUi`): floating lines sit exactly where the same lines sit in the open panel's scrollback (`AlignFeed`: inside the panel margin, just above the input; same font size and line gap in both lists, a short scrollback bottom-aligned), so opening the chat only adds the glass behind them. The open panel is see-through (`GlassPanel(0.55)`). `--chatopen [s]` opens the input after s seconds, for screenshots.
+- **`/seastate [0..1|calm|chop|storm|gamey]`** (#299, `world/water-field`): anyone asks, an admin sets it for
+  everyone (sent on join and on change); offline anyone. **`/water [E N]`**: the water at an LV95 point (or
+  where you are) as this side computes it, to the 0.1 mm; the server's answer and a client's own compare
+  directly (`tools/watercheck.sh`).
