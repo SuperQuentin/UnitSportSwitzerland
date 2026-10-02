@@ -283,9 +283,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var chunksForAudio = _chunks;
         if (Systems.On(Systems.Audio))
         {
-            AddChild(new Audio.ReverbZones(() => GetViewport().GetCamera3D(), () => LocalPlayer?.Indoors == true, chunksForAudio)
+            // the listener is the local body's head, not the camera (#375)
+            AddChild(new Audio.Ears(() => LocalPlayer));
+            AddChild(new Audio.ReverbZones(EarNode, () => LocalPlayer?.Indoors == true, chunksForAudio)
                 { Name = "ReverbZones" });
-            _ambience = new Audio.Ambience(chunksForAudio, () => GetViewport().GetCamera3D())
+            _ambience = new Audio.Ambience(chunksForAudio, EarNode)
                 { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
             AddChild(_ambience);
         }
@@ -331,7 +333,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             var webRadio = Audio.Live.WebRadio.Create(this);
             webRadio.Players = radios.Players;
-            webRadio.Listener = () => GetViewport().GetCamera3D()?.GlobalPosition ?? LocalPlayer?.GlobalPosition;
+            webRadio.Listener = () => Audio.Ears.Of(this) ?? LocalPlayer?.GlobalPosition;
             if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: false) is { } webRadioOffline) AddChild(webRadioOffline);
         }
         // the Africa Twin at Riddes: placed here offline, by the server online
@@ -374,7 +376,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
             // …the creatures in the air around the camera, and their sounds
             AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
-            AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
+            AddChild(new Occasions.OccasionAmbience(_chunks, origin, EarNode));
             // …and snow falling round the camera, except indoors
             AddChild(new Occasions.OccasionPrecip());
         }
@@ -977,6 +979,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// leave per tile (<see cref="MeshDetail.High"/>). The tiles hand their trees over as they
     /// rebuild at the new detail (<see cref="ChunkManager.RebuildVisuals"/>).
     /// </summary>
+    /// <summary>What the audio systems listen from: the body's ears (#375), else the camera.</summary>
+    private Node3D? EarNode() => Audio.Ears.Ready ? Audio.Ears.Instance : GetViewport().GetCamera3D();
+
     private void ApplyNearTrees()
     {
         // every restyle: each style has its own trees and range

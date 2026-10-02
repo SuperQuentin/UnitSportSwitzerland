@@ -97,7 +97,7 @@ public partial class PlayerFeel : Node3D
         AddChild(_engine);
         for (int i = 0; i < _voices.Length; i++)
         {
-            _voices[i] = new AudioStreamPlayer { Name = $"Voice{i}", Bus = SfxBus.Name };
+            _voices[i] = new AudioStreamPlayer { Name = $"Voice{i}", Bus = SfxBus.Player };
             AddChild(_voices[i]);
         }
 
@@ -330,7 +330,8 @@ public partial class PlayerFeel : Node3D
             {
                 _stepAccum -= 1f;
                 float run = Mathf.Clamp(speed / _player.RunSpeed, 0f, 1f);
-                Play(Surfaces.Steps(SurfaceUnderfoot()), 0.22f + 0.45f * run,
+                // under the world, never on top of it: a step is there, not a drum (#375)
+                Play(Surfaces.Steps(SurfaceUnderfoot()), 0.14f + 0.3f * run,
                     0.9f + (float)_rng.NextDouble() * 0.2f);
             }
         }
@@ -421,7 +422,7 @@ public partial class PlayerFeel : Node3D
 
     private AudioStreamPlayer Loop(AudioStream stream)
     {
-        var p = new AudioStreamPlayer { Stream = stream, VolumeDb = -80f, Autoplay = true, Bus = SfxBus.Name };
+        var p = new AudioStreamPlayer { Stream = stream, VolumeDb = -80f, Autoplay = true, Bus = SfxBus.Player };
         AddChild(p);
         return p;
     }
@@ -480,7 +481,7 @@ public partial class PlayerFeel : Node3D
     private void OnLanded(float fall)
     {
         float hard = Mathf.Clamp((fall - 2f) / 9f, 0f, 1f);
-        Play(Surfaces.Landing(SurfaceUnderfoot()), 0.25f + 0.75f * hard, 1.15f - 0.35f * hard);
+        Play(Surfaces.Landing(SurfaceUnderfoot()), 0.2f + 0.6f * hard, 1.15f - 0.35f * hard);
         SteeringWheel.Knock(hard * 0.7f);
         AddTrauma(hard * 0.65f);
 

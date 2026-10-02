@@ -22,6 +22,22 @@ public static class Soundcheck
             for (int i = 0; i < bank.Variants.Length; i++)
                 bad += Save(System.IO.Path.Combine(outDir, $"{bank.Name}_{i}.wav"), Decode(bank.Variants[i]));
 
+        // the footsteps and landings of every surface (#375): heel, ball of the foot, weight
+        foreach (Surface surf in Enum.GetValues<Surface>())
+        {
+            var step = Surfaces.Steps(surf);
+            for (int i = 0; i < 3; i++)
+                bad += Save(System.IO.Path.Combine(outDir, $"step_{surf.ToString().ToLowerInvariant()}_{i}.wav"), Decode(step.Variants[i]));
+            bad += Save(System.IO.Path.Combine(outDir, $"land_{surf.ToString().ToLowerInvariant()}_0.wav"), Decode(Surfaces.Landing(surf).Variants[0]));
+        }
+        // the air bed (#375), left channel then right
+        foreach (var (name, wav) in new[] { ("wind", AirBed.Wind), ("leaves", AirBed.Leaves) })
+        {
+            var (l, r) = DecodeStereo(wav);
+            bad += Save(System.IO.Path.Combine(outDir, $"air_{name}_l.wav"), l);
+            bad += Save(System.IO.Path.Combine(outDir, $"air_{name}_r.wav"), r);
+        }
+
         // the occasions' sounds (#18): owl, howl, wind, toll, jingles
         foreach (var (name, samples) in Occasions.OccasionSounds.All())
             bad += Save(System.IO.Path.Combine(outDir, $"occasion_{name}.wav"), samples);
@@ -60,6 +76,19 @@ public static class Soundcheck
         var s = new float[d.Length / 2];
         for (int i = 0; i < s.Length; i++) s[i] = (short)(d[i * 2] | (d[i * 2 + 1] << 8)) / 32767f;
         return s;
+    }
+
+    private static (float[] L, float[] R) DecodeStereo(AudioStreamWav w)
+    {
+        var d = w.Data;
+        int n = d.Length / 4;
+        float[] l = new float[n], r = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            l[i] = (short)(d[i * 4] | (d[i * 4 + 1] << 8)) / 32767f;
+            r[i] = (short)(d[i * 4 + 2] | (d[i * 4 + 3] << 8)) / 32767f;
+        }
+        return (l, r);
     }
 
     private static int Save(string path, float[] s)

@@ -8,6 +8,8 @@ touches its topic; search with `grep -ril <word> docs/notes/audio`.
 ## Architecture
 
 - `audio` — Audio: (`src/Audio/`, all synthesised, no audio files; every player routes to the `Sfx` bus that `SfxBus.Ensure()`...
+- `ears` — The listener is `Audio/Ears` at the body's head (`FootPlayer.EarFrame`), never the camera (#375); ask `Ears.Of/FrameOf` for the ear; `Ears.Cabin`/`Shut` for a closed vehicle
+- `mixing` — Bus tree (Master limiter; Sfx world + cabin filter; Player own body; Music), level targets, reverb values per space, footstep structure, sources (#375)
 - `cd-beat` — CDs (`Audio/Cd/`): burnt on the server from a YouTube link (yt-dlp + ffmpeg, worker thread), C# beat/style analyser, `--beatcheck`, streamed as `AssetKind.Cd`; personal CDs (negative ids, burnt on the client, `user://cds/personal`)
 - `hearing` — Music bus + Settings slider (#261), `Hearing`: speakers muffled behind walls (ray), heard across interiors through linked doorways by the leaf's swing, or through the walls
 - `web-radio` — Car radio (`Audio/Live/`, #179): 14 live stations, U / P, `FootPlayer.CarRadio` + `VehicleState.Radio` (a CD instead: `CarCd`, #211), the server taps each stream with ffmpeg and relays µ-law on the shared clock so every client plays the same sample; `tools/webradiocheck.sh`
