@@ -959,10 +959,15 @@ public partial class SteamerRig : Node3D
         _whistle = new AudioStreamPlayer3D
         {
             Name = "Whistle", Stream = Audio.SfxSynth.Whistle, Position = BoatMeshBuilder.Flip(SteamerMeshBuilder.WhistleAt),
-            UnitSize = 60f, MaxDistance = 4000f, VolumeDb = 2f, Bus = Audio.SfxBus.Name,
+            UnitSize = 60f, MaxDistance = 4000f, VolumeDb = WhistleDb, Bus = Audio.SfxBus.Name,
         };
         AddChild(_whistle);
     }
+
+    private const float WhistleDb = 2f;
+    private bool _blowing;
+    private float _blowFor = 10f;
+    private Vector2 _shownWhistle;
 
     private float _shownChurn = -1f, _shownChurn2 = -1f, _shownWake = -1f, _shownBow = -1f, _shownSmoke = -1f, _soundLevel = -1f, _soundPitch = -1f;
 
@@ -1006,7 +1011,7 @@ public partial class SteamerRig : Node3D
 
         if (_paddles != null)
         {
-            float level = Mathf.Round(work * 20f) / 20f, pitch = Mathf.Round((0.35f + 0.85f * work) * 20f) / 20f;
+            float level = Mathf.Round(work * 20f) / 20f, pitch = Mathf.Round(Audio.SfxSynth.PaddlePitch(work) * 40f) / 40f;
             if (level != _soundLevel)
             {
                 _soundLevel = level;
@@ -1016,9 +1021,24 @@ public partial class SteamerRig : Node3D
             }
             if (pitch != _soundPitch) { _soundPitch = pitch; _paddles.PitchScale = pitch; }
         }
-        if (_whistle != null && whistle != _whistle.Playing)
+        if (_whistle != null)
         {
-            if (whistle) _whistle.Play(); else _whistle.Stop();
+            // blown up to its note and let die away, never started or cut dead (#380)
+            if (whistle != _blowing) { _blowing = whistle; _blowFor = 0f; }
+            else _blowFor += dt;
+            var (gain, wpitch) = Audio.SfxSynth.WhistleShape(whistle ? _blowFor : -1f, whistle ? 0f : _blowFor);
+            if (gain > 0.001f)
+            {
+                if (!_whistle.Playing) _whistle.Play();
+                if (gain != _shownWhistle.X) _whistle.VolumeDb = WhistleDb + Mathf.LinearToDb(gain);
+                if (wpitch != _shownWhistle.Y) _whistle.PitchScale = wpitch;
+                _shownWhistle = new Vector2(gain, wpitch);
+            }
+            else if (_whistle.Playing)
+            {
+                _whistle.Stop();
+                _shownWhistle = Vector2.Zero;
+            }
         }
     }
 

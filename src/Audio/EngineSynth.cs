@@ -10,6 +10,12 @@ public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Tur
 public sealed record EngineProfile
 {
     public bool Turbine { get; init; }
+    /// <summary>
+    /// A steam engine (#380): each "firing" is a puff of exhaust steam up the funnel, and nothing
+    /// burns or breathes in between. <see cref="MaxRpm"/> then counts beats (four a turn for two
+    /// double-acting cylinders), so the beat is rpm / 60 Hz.
+    /// </summary>
+    public bool Steam { get; init; }
     public int Cylinders { get; init; } = 4;
     public float IdleRpm { get; init; } = 800f;
     public float MaxRpm { get; init; } = 2700f;
@@ -270,11 +276,12 @@ public partial class EngineSynth : Node3D
         var f = new EngineFrame
         {
             Rpm01 = _rpm, Throttle = _throttle, Load = _load,
-            Level = _level * volume, Turbine = Profile.Turbine,
+            Level = _level * volume, Turbine = Profile.Turbine, Steam = Profile.Steam,
         };
         if (f.Level < 1e-4f && _tLevel < 1e-4f) return 0f;   // silent: skip the model
 
         if (Profile.Turbine) Turbine(ref f);
+        else if (Profile.Steam) SteamBeat(ref f);
         else Piston(ref f, prevThrottle);
 
         // DC blocker: pulse trains are one-sided and would otherwise sit off centre
@@ -368,6 +375,56 @@ public partial class EngineSynth : Node3D
         float drive = 1.4f + 2.2f * _load;
         f.Core = Mathf.Tanh((x * 0.9f + exhaustNoise * 1.3f + intake) * drive) * 0.62f * prop + crackle * 0.35f;
         if (p.PropBlades > 0) f.Core = Mathf.Tanh(f.Core * 0.75f + propVoice) * 0.85f;
+    }
+
+    /// <summary>
+    /// A steam engine's exhaust (#380): a chuff a beat, a burst of hiss with a sharp onset that dies
+    /// away before the next, coloured by the funnel (the pipe comb), over the faint leak of the
+    /// glands. Measured before (the piston model): at full ahead the beat was a 2 dB dip in a steady
+    /// roar of intake noise, a petrol engine idling at 3 Hz. The chip voices get the funnel's note as
+    /// their tone (the beat itself, 0.3-3 Hz, is below anything an oscillator can play).
+    /// </summary>
+    private void SteamBeat(ref EngineFrame f)
+    {
+        var p = Profile;
+        float rpm = Mathf.Lerp(p.IdleRpm, p.MaxRpm, _rpm);
+        float beatHz = rpm / 60f * p.Cylinders / 2f;
+        float funnel = 343f / (2f * p.PipeM);
+        f.ToneHz = funnel * 2f;
+        f.SubHz = funnel;
+
+        _phase += 1f / (_period * Dsp.Rate / beatHz);
+        if (_phase >= 1f)
+        {
+            _phase -= 1f;
+            _cyl = (_cyl + 1) % _cylGain.Length;
+            // a double-acting cylinder's two ends do not quite match: alternate beats differ
+            _period = 1f + WhiteNoise() * 0.02f;
+            _cylAmp = _cylGain[_cyl] * (_cyl % 2 == 0 ? 1f : 0.82f) * (1f + WhiteNoise() * 0.08f);
+            f.PulseStart = 1f;
+        }
+        // seconds since the beat: a 6 ms onset, then a decay short enough to leave a gap before the next
+        float since = _phase / beatHz;
+        float tau = Mathf.Clamp(0.32f / beatHz, 0.035f, 0.15f);
+        _pulseEnv = Mathf.Min(1f, since / 0.006f) * Mathf.Exp(-since / tau);
+        f.Pulse = _pulseEnv;
+        float puff = _pulseEnv * _cylAmp;
+
+        // the steam's hiss, 250 Hz - 4 kHz, brighter the harder it works
+        float n = WhiteNoise();
+        _intakeLp += Dsp.Coef(2500f + 1500f * _load) * (n - _intakeLp);
+        _intakeHp += Dsp.Coef(250f) * (_intakeLp - _intakeHp);
+        float hiss = _intakeLp - _intakeHp;
+        // the funnel's whoomp: the puff's low part ringing in the stack
+        _bodyLp += Dsp.Coef(300f) * (n - _bodyLp);
+        float echo = _comb[_combPos];
+        float x = _bodyLp * puff * 3f + echo * 0.6f;
+        _comb[_combPos] = x;
+        _combPos = (_combPos + 1) % _comb.Length;
+        float leak = hiss * 0.05f;
+        f.Noise = 0.85f;
+
+        f.Core = Mathf.Tanh((hiss * puff * (1.4f + 0.8f * _load) + x * 0.8f + leak) * 1.6f) * 0.7f;
     }
 
     private void Turbine(ref EngineFrame f)

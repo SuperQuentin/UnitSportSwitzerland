@@ -8,7 +8,9 @@ public static class Soundcheck
     public static int Run(string outDir)
     {
         System.IO.Directory.CreateDirectory(outDir);
-        int bad = 0;
+        int bad = Water(outDir);
+        // --water-sounds: only those (#380), for listening to the water by its numbers
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--water-sounds") >= 0) return bad > 0 ? 1 : 0;
 
         var banks = new[]
         {
@@ -52,6 +54,76 @@ public static class Soundcheck
                 synth.Free();
             }
         return bad > 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// The water's sounds as they are played (#301, #303, #380): every variant of the swim, wade and
+    /// hull banks; the steamer's paddles at the pitch the rig gives them at quarter, half and full
+    /// shaft; its whistle; its engine through each voice from STOP up to full ahead and back to
+    /// slow, at the level <c>PlayerFeel</c> gives it.
+    /// </summary>
+    private static int Water(string outDir)
+    {
+        int bad = 0;
+        string Path(string name) => System.IO.Path.Combine(outDir, $"water_{name}.wav");
+        foreach (var bank in new[] { SfxSynth.SplashBank, SfxSynth.StrokeBank, SfxSynth.GaspBank, SfxSynth.WadeBank, SfxSynth.HullSlapBank })
+            for (int i = 0; i < bank.Variants.Length; i++)
+                bad += Save(Path($"{bank.Name}_{i}"), Decode(bank.Variants[i]));
+        var paddles = Decode(SfxSynth.Paddles);
+        foreach (float shaft in new[] { 0.25f, 0.5f, 1f })
+            bad += Save(Path($"paddles_{Mathf.RoundToInt(shaft * 100)}"), Repitch(paddles, SfxSynth.PaddlePitch(shaft), 4f));
+        bad += Save(Path("whistle"), Blast(Decode(SfxSynth.Whistle), 2f, 3f));
+        foreach (EngineVoice voice in Enum.GetValues<EngineVoice>())
+        {
+            var synth = new EngineSynth(Player.Steamer.SteamEngine, spatial: false, seed: 3) { VoiceOverride = voice };
+            var all = new List<float>();
+            const float chunkS = 0.05f;
+            var buf = new float[(int)(chunkS * Dsp.Rate)];
+            for (float t = 0; t < 26f - 1e-4f; t += chunkS)
+            {
+                // the shaft as the telegraph spools it (0.08/s): stop, up to full ahead, held, eased to slow
+                float shaft = t < 1f ? 0f : t < 13.5f ? (t - 1f) * 0.08f : t < 19f ? 1f : Mathf.Max(0.25f, 1f - (t - 19f) * 0.08f);
+                synth.Render(buf, shaft, shaft > 0.02f ? 1f : 0f, shaft, shaft > 0.02f ? 0.18f + 0.25f * shaft : 0f);
+                all.AddRange(buf);
+            }
+            bad += Save(Path($"steam_engine_{voice.ToString().ToLowerInvariant()}"), all.ToArray());
+            synth.Free();
+        }
+        return bad;
+    }
+
+    /// <summary>
+    /// A blast of the whistle as the rig plays it: the valve open <paramref name="held"/> seconds,
+    /// with <see cref="SfxSynth.WhistleShape"/>'s rise and dying fall (gain and pitch per 1/60 s frame).
+    /// </summary>
+    private static float[] Blast(float[] loop, float held, float seconds)
+    {
+        var s = new float[(int)(seconds * Dsp.Rate)];
+        double at = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            float t = (float)i / Dsp.Rate, frame = Mathf.Floor(t * 60f) / 60f;
+            var (gain, pitch) = SfxSynth.WhistleShape(frame < held ? frame : -1f, frame < held ? 0f : frame - held);
+            at = (at + pitch) % loop.Length;
+            int a = (int)at;
+            float f = (float)(at - a);
+            s[i] = (loop[a] * (1f - f) + loop[(a + 1) % loop.Length] * f) * gain;
+        }
+        return s;
+    }
+
+    /// <summary>A loop played at <paramref name="pitch"/> for <paramref name="seconds"/> (linear interpolation, as a player resamples).</summary>
+    private static float[] Repitch(float[] loop, float pitch, float seconds)
+    {
+        var s = new float[(int)(seconds * Dsp.Rate)];
+        for (int i = 0; i < s.Length; i++)
+        {
+            double at = i * (double)pitch % loop.Length;
+            int a = (int)at;
+            float f = (float)(at - a);
+            s[i] = loop[a] * (1f - f) + loop[(a + 1) % loop.Length] * f;
+        }
+        return s;
     }
 
     private static float[] Decode(AudioStreamWav w)

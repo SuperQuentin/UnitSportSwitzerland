@@ -39,6 +39,13 @@ public struct EngineFrame
     public float Level;
     /// <summary>True for a turboshaft (helicopter), false for a piston.</summary>
     public bool Turbine;
+    /// <summary>
+    /// True for a steam engine (#380): no note of its own, only puffs. A synthesiser voice plays its
+    /// tone (the funnel's) and noise, and gates the lot by <see cref="Pulse"/>.
+    /// </summary>
+    public bool Steam;
+    /// <summary>A synthesiser voice's output gate: 1, or a steam engine's puff (see <see cref="Steam"/>).</summary>
+    public readonly float SteamGate => Steam ? 0.08f + 0.92f * Pulse : 1f;
 }
 
 /// <summary>

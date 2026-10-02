@@ -134,7 +134,7 @@ public sealed class Nes2A03Voice : IChipVoice
         float y = x - _hp;
         _lp += _lpA * (y - _lp);
 
-        float o = _lp * Math.Clamp(f.Level, 0f, 1f);
+        float o = _lp * Math.Clamp(f.Level, 0f, 1f) * f.SteamGate;
         return float.IsFinite(o) ? Math.Clamp(o, -1f, 1f) : 0f;
     }
 }
