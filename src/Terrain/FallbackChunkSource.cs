@@ -196,9 +196,16 @@ public sealed class FallbackChunkSource : IChunkSource
         return await Task.Run<byte[]?>(() => World.BuildCover(id, blend), ct).ConfigureAwait(false);
     }
 
-    /// <summary>Generated tiles have no water layer yet: their lakes are cover, the legacy way.</summary>
-    public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default) =>
-        Covers(id) ? Task.FromResult<WaterTile?>(null) : _inner.LoadWaterAsync(id, ct);
+    /// <summary>
+    /// A generated tile's still water (#298): its lakes' and rivers' levels where its cover says
+    /// Water; the beds are in its height grid. Same blend as the cover, which it reads.
+    /// </summary>
+    public async Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default)
+    {
+        if (!Covers(id)) return await _inner.LoadWaterAsync(id, ct).ConfigureAwait(false);
+        var blend = await BlendFor(id, full: false, ct).ConfigureAwait(false);
+        return await Task.Run(() => World.BuildWater(id, blend), ct).ConfigureAwait(false);
+    }
 
     public async Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default)
     {
@@ -378,6 +385,15 @@ public sealed class FallbackChunkSource : IChunkSource
                 if (real.TryGet(id, out var s)) tiles[id] = s;
         for (int t = 0; t < ids.Count; t++) tiles[ids[t]] = samples[t];
 
+        // the still water at the samples (#298): the real file's, and the generated lakes'
+        var water = new Dictionary<TileId, ushort[]>();
+        if (real != null)
+            foreach (var (id, levels) in real.Water) water[id] = levels;
+        var genWater = new ushort[]?[ids.Count];
+        Parallel.For(0, ids.Count, new ParallelOptions { CancellationToken = ct }, t => genWater[t] = ProceduralWorld.HorizonWater(ids[t]));
+        for (int t = 0; t < ids.Count; t++)
+            if (genWater[t] is { } levels) water[ids[t]] = levels;
+
         Log?.Invoke($"[fallback] horizon: {real?.Count ?? 0} real + {ids.Count} generated tiles "
             + $"({blended} blended, {ids.Count - computed} from cache) in {clock.ElapsedMilliseconds} ms");
         if (computed > 0)
@@ -387,7 +403,7 @@ public sealed class FallbackChunkSource : IChunkSource
                 if (blendKeys[t] != 0) current.Add(((ids[t], blendKeys[t]), samples[t]));
             SaveHorizonCache(current);
         }
-        return new HorizonIndex(tiles);
+        return new HorizonIndex(tiles, water);
     }
 
     // ---- the generated horizon on disk -----------------------------------------------------
