@@ -13,3 +13,4 @@ touches its topic; search with `grep -ril <word> docs/notes/vehicles`.
 - passengers (#158): `PassengerService` (World/Passengers) seats players in vehicles others drive and moves a vehicle between hosts; see the player note `passengers`
 - trucks and buses park as whole trains (trailer, angles, bus flags in `VehicleState`), a lone trailer is `RideKind.Trailer` (`ParkedTrailer`): see the player note `trucks-buses`
 - `admin-only-spawning` — Only an admin conjures vehicles online: the server counts claims and refuses other parks unless `MayPark`...
+- `perf-parked-vehicles` — Nothing per frame for a parked vehicle: dressed once at rest, cached sections, one reused ground ray query (#221)
