@@ -39,6 +39,14 @@ public interface IChunkSource
     /// <summary>Ground-cover raster for a tile; null when unclassified.</summary>
     Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default);
 
+    /// <summary>
+    /// The tile's still water (#299): level per 2 m sample, NaN where dry, optional fetch. Null when
+    /// the source has no water layer for it; the runtime then derives the legacy layer from the
+    /// cover raster (<see cref="WaterLayer.FromCover"/>). The preprocessor's water file (#298)
+    /// answers here; decorators forward it.
+    /// </summary>
+    Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default) => Task.FromResult<WaterTile?>(null);
+
     /// <summary>Tree instances for a tile; null when the tile has none.</summary>
     Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default);
 

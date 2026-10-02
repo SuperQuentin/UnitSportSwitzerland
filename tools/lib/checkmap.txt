@@ -69,6 +69,14 @@ src/Player/RaceRoute     quick  --drivecheck --chunks fixture:hairpin --traffic 
 src/Player/RaceLine      quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
 src/Player/DriveProbe    quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
 src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+# the water (#299): layer, waves, /seastate, a car wading and sinking, on the lake course
+src/World/Wa             quick  --watercheck --chunks fixture:lake
+src/World/SeaState       quick  --watercheck --chunks fixture:lake
+src/Terrain/Water        quick  --watercheck --chunks fixture:lake
+src/Terrain/Fixture/     quick  --watercheck --chunks fixture:lake
+src/Terrain/ChunkManager quick  --watercheck --chunks fixture:lake
+src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
+src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
@@ -79,6 +87,10 @@ src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh
 src/Items/DroppedItem    net    tools/bonkcheck.sh
 src/Player/FootPlayer.B  net    tools/bonkcheck.sh
+src/World/Wa             net    tools/watercheck.sh
+src/World/SeaState       net    tools/watercheck.sh
+src/Net/ChatManager      net    tools/watercheck.sh
+src/Terrain/Water        net    tools/watercheck.sh
 
 src/BattleRoyale/        full   tools/brcheck.sh
 src/Combat/              full   tools/pvpcheck.sh
@@ -98,3 +110,6 @@ src/Vehicles/            full   tools/decknetcheck.sh
 src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
 tools/lib/               quick  tools/lib/guard_selftest.sh
+src/World/Wa             full   tools/waterparity.sh
+shaders/common/waves     full   tools/waterparity.sh
+shaders/body/water       full   tools/waterparity.sh

@@ -12,7 +12,8 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `road-embankments-walls` — Road embankments (#125): level cross-section, 2:3 fill / 1:1 cut clamp in RoadBlend, retaining walls planned in RoadGen (LPRP), 40 cm crown with a cover over the heightfield step, cost
 - `road-railings` — Road railings (#126): guardrails on fill-wall crowns, above drops and as back-to-back median beams; fences; RailingBuilder mesh and collision strip, racing-line obstacle
 - `surface-patterns` — Surface patterns: `CoverPalette` writes a `SurfacePattern` code into vertex-colour alpha in quarter steps (0 none,...
-- `water` — Water: built at runtime from the Water cover class, not a separate file — swissALTI3D already models lakes/rivers as...
+- `water` — Water: its own mesh on the tile's still water layer (2 m near, 4 m far, wave scale in UV.x, no collision); legacy tiles from the cover; PS1 translucent, wave-displaced (#299)
+- `water-level-layer` — In-memory still water per tile (#299): `WaterTile` (501² levels, NaN dry, optional fetch) from `IChunkSource.LoadWaterAsync`, `WaterLayer` (+ wave scale), legacy from cover, `ChunkManager.TryGetWaterLevel`; the shape #298 fills
 - `windows` — Windows: `BuildingMeshBuilder` bakes facade UVs (metres along the wall, storey index) from the *triangle* normal;... fake rooms behind the glass, occupancy cues
 - `building-types` — Building types: `BuildingTypes` groups a tile's solids (a church's nave + bell tower) at runtime; one church interior, every...
 - `building-triangles` — read building triangles with `b.Tri(t)`; wall/roof split is `BuildingTriangles.RoofNormalY`, never a local copy

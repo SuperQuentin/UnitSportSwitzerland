@@ -304,13 +304,13 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         var tile = _origin.TileAt(feet);
         EnsureLoaded(tile);
 
-        // water: a mapped lake or river in reach, at about the height of the feet (not under a bridge)
+        // water: a lake or river in reach (World/WaterField), its surface about the height of the
+        // feet (not under a bridge, not over the head)
         foreach (float d in new[] { 0.6f, 1.4f, 2.2f })
         {
             var at = feet + fwd * d;
-            if (_chunks.TryGetCover(at, out var c) && c == CoverClass.Water
-                && _chunks.TryGetHeight(at, out float h) && feet.Y - h < 2.5f && h - feet.Y < 1f)
-                return (Resource.Water, "water", c);
+            if (World.WaterField.TryLevelAt(at, out float h) && feet.Y - h < 2.5f && h - feet.Y < 1f)
+                return (Resource.Water, "water", CoverClass.Water);
         }
         if (NearStream(tile, feet, ahead)) return (Resource.Water, "water", CoverClass.Water);
 
