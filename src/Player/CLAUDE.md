@@ -34,6 +34,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 
 ## Gotchas
 
+- `perf-pose-mesh-cache` (avatar) — `ApplyFootPose` rebuilds the figure only on a new `FootPoseKey`, in place, remotes throttled by `HoldRemoteFigure`; a new input to the figure goes in the key (#221)
 - `launch-clutch-bites-near-launch` — An automated clutch must bite near the launch speed, not from idle: biting at 600 rpm a diesel never got up to pull
 
 - `player-scale-set-speed-size` — Player scale is set by speed, not by size: A 1.8 m capsule moving at 6-14 m/s reads as a giant next to 10 m...
