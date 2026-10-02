@@ -6,6 +6,7 @@
 #   CHUNKS=<terrain_chunks> GODOT=<exe> tools/bankcheck.sh [epoch] [E,N]   (default: a random restock period, Riddes)
 # WARNING: the server writes to the real user://loot and user://bank/accounts.json of this project
 # (a fresh epoch keeps the loot apart; the accounts are BankA/BankB).
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 EP=${1:-$((800000 + RANDOM * 8 + RANDOM % 8))}
 AT=${2:-2582700,1113300}

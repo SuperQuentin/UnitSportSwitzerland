@@ -261,12 +261,131 @@ public static class InventoryCheck
             Expect(inv.TakeCarried(true) == new ItemStack(bar, 1) && inv.Carried.Count == 4, "drop one off the cursor");
         });
 
+        // ---- clothes (#251) ----
+        int top = Inventory.SlotOf(Avatar.WearSlot.Top), bottom = Inventory.SlotOf(Avatar.WearSlot.Bottom);
+        int headSlot = Inventory.SlotOf(Avatar.WearSlot.Head);
+
+        Case("clothes go on in their own slot, and swap", inv =>
+        {
+            inv.Put(0, new(ItemId.WhiteTee, 1));
+            inv.Put(1, new(ItemId.BandTee, 1));
+            Expect(inv.Wear(0) && inv[top].Id == ItemId.WhiteTee && inv[0].IsEmpty, "Use puts the tee on");
+            Expect(inv.Wear(1) && inv[top].Id == ItemId.BandTee && inv[1].Id == ItemId.WhiteTee, "another tee swaps with it");
+            Expect(inv.Outfit[Avatar.WearSlot.Top]?.Item == ItemId.BandTee, "the outfit shows the band tee");
+            inv.Put(2, new(bar, 3));
+            Expect(!inv.Wear(2), "a snack is not worn");
+        });
+
+        Case("a body slot takes only its own", inv =>
+        {
+            string? refused = null;
+            inv.Refused += why => refused = why;
+            inv.Put(0, new(ItemId.Jeans, 1));
+            inv.PrimaryClick(0);
+            inv.PrimaryClick(top);
+            Expect(inv[top].IsEmpty && inv.Carried.Id == ItemId.Jeans && refused != null, "jeans refused on the top slot");
+            inv.PrimaryClick(bottom);
+            Expect(inv[bottom].Id == ItemId.Jeans && inv.Carried.IsEmpty, "and put on in the bottom one");
+            inv.Put(1, new(ItemId.Cheese, 1));
+            inv.Move(1, bottom);
+            Expect(inv[bottom].Id == ItemId.Jeans && inv[1].Id == ItemId.Cheese, "a drag of cheese onto the jeans does nothing");
+            inv.PrimaryClick(bottom);
+            Expect(inv.Carried.Id == ItemId.Jeans && inv[bottom].IsEmpty, "a click takes them off");
+        });
+
+        Case("a dress takes the bottom slot", inv =>
+        {
+            string? refused = null;
+            inv.Refused += why => refused = why;
+            inv.Put(bottom, new(ItemId.TartanSkirt, 1));
+            inv.Put(0, new(ItemId.LolitaDress, 1));
+            Expect(inv.Wear(0) && inv[top].Id == ItemId.LolitaDress && inv[bottom].IsEmpty
+                   && Total(inv, ItemId.TartanSkirt) == 1, "the skirt goes back in the pack");
+            int skirt = Enumerable.Range(0, inv.Capacity).First(i => inv[i].Id == ItemId.TartanSkirt);
+            Expect(!inv.Wear(skirt) && refused != null && inv[bottom].IsEmpty, "and cannot go on over the dress");
+        });
+
+        Case("shift-click wears and takes off; worn clothes are saved", inv =>
+        {
+            inv.Put(Inventory.HotbarSize, new(ItemId.CatEarsPink, 1));
+            inv.QuickMove(Inventory.HotbarSize);
+            Expect(inv[headSlot].Id == ItemId.CatEarsPink && inv.Worn == ItemId.CatEarsPink, "on the head");
+            inv.Put(Inventory.HotbarSize, new(ItemId.BeeStockings, 1));
+            inv.QuickMove(Inventory.HotbarSize);
+            var back = Inventory.FromJson(inv.ToJson(), persist: false);
+            Expect(back != null && back.Outfit == inv.Outfit && back.WornIn(Avatar.WearSlot.Legs).Id == ItemId.BeeStockings, "round trip");
+            inv.QuickMove(headSlot);
+            Expect(inv[headSlot].IsEmpty && Total(inv, ItemId.CatEarsPink) == 1, "shift-click takes the ears off into the pack");
+        });
+
+        Case("a hat worn before body slots moves onto the head", _ =>
+        {
+            var old = Inventory.FromJson("{\"Worn\":\"WitchHat\",\"Selected\":0,\"Cash\":0,\"Slots\":[{\"Slot\":4,\"Item\":\"WitchHat\",\"Count\":1}]}",
+                persist: false);
+            Expect(old != null && old.Worn == ItemId.WitchHat && old[4].IsEmpty, "out of the pack onto the head");
+            var misplaced = Inventory.FromJson($"{{\"Selected\":0,\"Cash\":0,\"Slots\":[{{\"Slot\":{top},\"Item\":\"Jeans\",\"Count\":1}}]}}",
+                persist: false);
+            Expect(misplaced != null && misplaced[top].IsEmpty && Total(misplaced, ItemId.Jeans) == 1, "jeans saved in the top slot go back in the pack");
+        });
+
+        // ---- crafting (#271): the rules that need real item data (values, categories, stacks) ----
+        Case("recipes: real items, nothing shop-only or worn made, salvage worth less than the part", _ =>
+        {
+            foreach (var r in Crafting.Recipes.All)
+            {
+                foreach (var o in Crafting.Recipes.Outputs(r))
+                {
+                    var def = ItemDefs.Get(o.Id);
+                    Expect(def != null && def.Category != ItemCategory.Clothing && def.Category != ItemCategory.Cosmetic,
+                        $"{r.Key}: makes {o.Id}, a real, non-clothing item");
+                }
+                Expect(r.In.All(i => ItemDefs.Get(i.Id) != null), $"{r.Key}: every ingredient exists");
+                if (!r.Salvage) continue;
+                float part = ItemDefs.Get(r.In[0].Id)!.Value;
+                float back = Crafting.Recipes.Outputs(r).Sum(o => o.Count * ItemDefs.Get(o.Id)!.Value);
+                Expect(back < part, $"{r.Key}: gives back {back:0.#} CHF of a {part:0.#} CHF part");
+            }
+        });
+
+        Case("crafting on a real inventory takes from the pack end, never a photo", inv =>
+        {
+            inv.Put(0, new(ItemId.Cloth, 3));
+            inv.Put(Inventory.HotbarSize + 4, new(ItemId.Cloth, 4));
+            inv.Put(1, new(ItemId.Photo, 1, "abc"));
+            Expect(inv.CountPlain(ItemId.Cloth) == 7 && inv.CountPlain(ItemId.Photo) == 0, "counts plain stacks only");
+            var store = new ScratchStore(inv);
+            var bandage = Crafting.Recipes.All.First(r => r.Out == ItemId.Bandage);
+            int made = Crafting.Recipes.Craft(store, bandage, 2, Crafting.Station.Hands);
+            Expect(made == 2 && inv.CountPlain(ItemId.Bandage) == 4, $"two batches, four bandages ({made}, {inv.CountPlain(ItemId.Bandage)})");
+            Expect(inv[0].Count == 3 && inv[Inventory.HotbarSize + 4].IsEmpty, "the pack's cloth went first, the hotbar's stayed");
+            Expect(inv[1].Id == ItemId.Photo, "the photo is untouched");
+        });
+
+        Case("crafting into a full pack drops the rest, loses nothing", inv =>
+        {
+            for (int i = 0; i < inv.Capacity; i++) inv.Put(i, new(ItemId.Binoculars, 1));
+            inv.Put(3, new(ItemId.Tyre, 2));   // one stays: the slot never frees up
+            var store = new ScratchStore(inv);
+            var strip = Crafting.Recipes.All.First(r => r.Salvage && r.In[0].Id == ItemId.Tyre);
+            Crafting.Recipes.Craft(store, strip, 1, Crafting.Station.Workbench);
+            Expect(store.Dropped == 3 && inv.CountPlain(ItemId.Tyre) == 1, $"3 rubber kept or dropped ({inv.CountPlain(ItemId.Rubber)} + {store.Dropped})");
+        });
+
         GD.Print(_failures == 0 ? "[invcheck] RESULT: ok": $"[invcheck] RESULT: FAILED ({_failures})");
         return _failures == 0 ? 0 : 1;
     }
 
     private static int Total(Inventory inv, ItemId id) =>
         Enumerable.Range(0, Inventory.Size).Where(i => inv[i].Id == id).Sum(i => inv[i].Count) + (inv.Carried.Id == id ? inv.Carried.Count : 0);
+
+    /// <summary><see cref="Crafting.InventoryStore"/> without an <see cref="ItemController"/>: what does not fit is counted as dropped.</summary>
+    private sealed class ScratchStore(Inventory inv) : Crafting.IItemStore
+    {
+        public int Dropped;
+        public int Count(ItemId id) => inv.CountPlain(id);
+        public void Take(ItemId id, int count) => inv.TakePlain(id, count);
+        public void Give(ItemId id, int count) => Dropped += inv.Add(id, count);
+    }
 
     private static void Case(string name, Action<Inventory> body)
     {

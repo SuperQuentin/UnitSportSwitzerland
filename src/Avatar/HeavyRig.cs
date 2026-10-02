@@ -92,6 +92,7 @@ public partial class HeavyRig : Node3D
     private HumanPalette? _driverPalette;
     private MeshInstance3D? _driverBody, _driverHead;
     private (int Turn, int Throttle, int Brake) _driverPose = (int.MinValue, 0, 0);
+    private readonly Dictionary<(int Turn, int Throttle, int Brake), ArrayMesh> _driverPoses = new();
     private float _rpmShown, _speedShown, _airShown = HeavyDriveline.AirMax;
     private string _gearShown = "";
     private CabMirrors? _mirrors;
@@ -112,7 +113,7 @@ public partial class HeavyRig : Node3D
     private static HeavyRig Assemble(HeavyParts p, HumanPalette? driver)
     {
         var rig = new HeavyRig { Name = "Heavy", _driverPalette = driver, Seats = p.Seats };
-        var body = HumanMeshBuilder.Material();
+        var body = HumanMeshBuilder.FigureMaterial();   // the driver wears clothes, maybe with a finish (#251)
         var glass = rig._glass = CarRig.GlassMaterial();
         rig._head = TrafficMeshBuilder.LampMaterial();
         rig._tail = TrafficMeshBuilder.LampMaterial();
@@ -290,9 +291,7 @@ public partial class HeavyRig : Node3D
         var pose = (Mathf.RoundToInt(WheelTurn / 0.03f), Mathf.RoundToInt(Throttle * 8f), Mathf.RoundToInt(Brake * 8f));
         if (pose == _driverPose) return;
         _driverPose = pose;
-        var s = new MeshScratch();
-        HumanMeshBuilder.AppendDriver(s, palette, c.Seat, WheelTurn, Throttle, Brake, head: false);
-        _driverBody.Mesh = s.Build();
+        _driverBody.Mesh = HumanMeshBuilder.DriverBody(_driverPoses, pose, palette, c.Seat);
     }
 
     public override void _Process(double delta)

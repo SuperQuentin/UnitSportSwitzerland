@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Player;
 
 namespace UnitSport.Items;
@@ -15,14 +16,11 @@ namespace UnitSport.Items;
 /// takes it back with an empty hand; puts one on a wall in front through the API: a poster
 /// (<c>photocheck_poster.png</c>). Scratch inventory; the offline placed list ends as it began.
 /// </summary>
-public partial class PhotoProbe : Node
+public partial class PhotoProbe : ChatProbe
 {
     public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--photocheck") >= 0;
 
-    private readonly ItemController _items;
-    private int _failures;
-
-    public PhotoProbe(ItemController items) => _items = items;
+    public PhotoProbe(ItemController items) : base(items, "photocheck", shots: "photocheck_") { }
     public PhotoProbe() : this(null!) { }
 
     private Inventory Inv => _items.Inventory;
@@ -33,8 +31,7 @@ public partial class PhotoProbe : Node
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         if (_items.UsablePlayer is not { } me)
         {
-            GD.Print("[photocheck] RESULT: FAILED — no player on foot");
-            GetTree().Quit(1);
+            Fail("no player on foot");
             return;
         }
         await Seconds(1.5);
@@ -56,7 +53,7 @@ public partial class PhotoProbe : Node
         Expect(await Until(() => _items.Developing != null, 3), "the first print is developing");
         string first = _items.Developing ?? "";
         await Seconds(1.6);
-        Shot("photocheck_develop_3d.png");
+        Shot("develop_3d");
         Expect(await Until(() => Photos().Contains(first), ItemController.DevelopSeconds + 2), "it became a Photo item");
 
         // 2: at the eye: the camera is hidden, the card rises at the bottom of the screen
@@ -67,7 +64,7 @@ public partial class PhotoProbe : Node
         Expect(await Until(() => _items.Developing != null, 3), "the second print is developing");
         string second = _items.Developing ?? "";
         await Seconds(1.4);
-        Shot("photocheck_develop_ui.png");
+        Shot("develop_ui");
         _items.ForceAim = false;
         Expect(await Until(() => Photos().Contains(second), ItemController.DevelopSeconds + 2), "it became a Photo item too");
         Expect(first != second, "two different prints");
@@ -86,7 +83,7 @@ public partial class PhotoProbe : Node
         _items.PhotoUi.OpenAlbum();
         await Seconds(0.6);
         Expect(_items.PhotoUi.AlbumIds().Take(2).ToHashSet().SetEquals(new[] { first, second }), "the album lists both, pack first");
-        Shot("photocheck_album.png");
+        Shot("album");
         _items.PhotoUi.CloseAlbum();
         _items.Ui.Close();
         await Seconds(0.3);
@@ -97,7 +94,7 @@ public partial class PhotoProbe : Node
         _items.UseSlot(me, Inv.Selected);   // Use without Aim: look at it
         await Seconds(0.8);
         Expect(_items.PhotoUi.Viewing == first, "Use shows the print");
-        Shot("photocheck_inspect.png");
+        Shot("inspect");
         var esc = new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true };
         Input.ParseInputEvent(esc);
         await Seconds(0.3);
@@ -110,7 +107,7 @@ public partial class PhotoProbe : Node
         _items.ForceAim = true;
         await Seconds(0.8);
         Expect(GetParent().FindChild("PhotoGhost", true, false) is MeshInstance3D { Visible: true }, "the ghost shows where it goes");
-        Shot("photocheck_ghost.png");
+        Shot("ghost");
         _items.UseSlot(me, Inv.Selected);
         _items.ForceAim = false;
         Expect(await Until(() => placed.All.Values.Any(o => !before.Contains(o.Id) && o.Kind == PlacedKind.Photo && o.Payload == first), 3),
@@ -120,7 +117,7 @@ public partial class PhotoProbe : Node
         await Seconds(0.8);
         me.LookPitch = -0.6f;
         await Seconds(0.5);
-        Shot("photocheck_stuck.png");
+        Shot("stuck");
         var card = stuck != null ? placed.GetNodeOrNull<MeshInstance3D>($"P{stuck.Id}/Card") : null;
         Expect(card?.MaterialOverride is StandardMaterial3D sm && sm.AlbedoTexture == PhotoStore.Texture(first),
             "the stuck card shows the print");
@@ -149,47 +146,23 @@ public partial class PhotoProbe : Node
             Expect(mesh?.Mesh == PhotoVisuals.Poster && size.X > 0.5f && Mathf.Abs(size.Y / size.X - PhotoStore.CardSize.Y / PhotoStore.CardSize.X) < 0.01f,
                 FormattableString.Invariant($"drawn as a poster, card aspect ({size.X:F2} x {size.Y:F2} m)"));
             Expect(mesh?.MaterialOverride is StandardMaterial3D pm && pm.AlbedoTexture == PhotoStore.Texture(second), "the poster shows the print");
-            Shot("photocheck_poster.png");
+            Shot("poster");
             PlacedResult? gone = null;
             placed.RequestRemove(onWall.Id, r => gone = r);
             Expect(await Until(() => gone != null, 3) && gone!.Value.Ok, "the poster came down");
         }
 
-        GD.Print(_failures == 0 ? "[photocheck] RESULT: ok" : $"[photocheck] RESULT: FAILED ({_failures})");
-        await Seconds(0.5);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(0.5);
     }
 
     private List<string> Photos() =>
         Enumerable.Range(0, Inventory.Size).Where(i => Inv[i].Id == ItemId.Photo && Inv[i].Data != null)
             .Select(i => Inv[i].Data!).ToList();
 
-    private int SlotOf(ItemId id) => Enumerable.Range(0, Inventory.Size).First(i => Inv[i].Id == id);
-
-    private void Shot(string name)
+    protected override string Shot(string name)
     {
-        var dir = ProjectSettings.GlobalizePath("res://test_output");
-        System.IO.Directory.CreateDirectory(dir);
-        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, name));
-        GD.Print($"[photocheck] screenshot test_output/{name}");
-    }
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[photocheck] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
+        string path = base.Shot(name);
+        GD.Print($"{Log} screenshot test_output/photocheck_{name}.png");
+        return path;
     }
 }

@@ -68,101 +68,68 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// <summary>The origin the world started with: the server's frame, until positions on the wire are global.</summary>
     private (double E, double N)? _startOrigin;
 
+    private static bool Has(string flag) => Array.IndexOf(OS.GetCmdlineUserArgs(), flag) >= 0;
+
+    /// <summary>The value after <c>--soundcheck</c> (its output directory), or null.</summary>
+    private static string? SoundcheckDir
+    {
+        get
+        {
+            var args = OS.GetCmdlineUserArgs();
+            int i = Array.IndexOf(args, "--soundcheck");
+            return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        }
+    }
+
+    private static int Verdict(string tag, bool ok)
+    {
+        GD.Print(ok ? $"[{tag}] RESULT: ok" : $"[{tag}] RESULT: FAILED");
+        return ok ? 0 : 1;
+    }
+
+    /// <summary>Self-checks that build no world: the first one requested runs, and the game quits with its exit code.</summary>
+    private (Func<bool> Requested, Func<int> Run)[] QuickChecks => new (Func<bool>, Func<int>)[]
+    {
+        (() => SoundcheckDir != null, () => Audio.Soundcheck.Run(SoundcheckDir!)),
+        (() => Has("--driftcheck"), Player.DriftCheck.Run),
+        (() => Has("--tuningcheck"), Player.GarageProbe.Check),
+        (() => Has("--meshcheck"), Avatar.MeshScratch.Check),
+        (() => Has("--outfitcheck"), Avatar.OutfitCheck.Run),
+        (() => Has("--cockpitcheck"), Player.CockpitCheck.Run),
+        (() => Has("--spincheck"), Player.DriftCheck.Spin),
+        (() => Has("--setupcheck"), Player.CarSetups.Check),
+        (() => Has("--motocheck"), Player.Motorbike.Check),
+        (() => Has("--truckcheck"), Player.HeavyCheck.Run),
+        (() => Items.IconSheet.Requested, Items.IconSheet.Run),
+        (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
+        (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
+        (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
+        (() => StyleKit.ReportRequested, StyleKit.Report),
+        (() => BattleRoyale.BrCheck.Requested, BattleRoyale.BrCheck.Run),
+        (() => Occasions.OccasionProbe.Requested, Occasions.OccasionProbe.Run),
+        (() => Player.WheelProbe.CheckRequested, Player.WheelProbe.Check),
+        // the network rules' own self-checks: vision interest and remote interpolation
+        (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
+        // the CD beat analyser's self-test: synthetic clicks at known tempos
+        (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck())),
+    };
+
     public override async void _Ready()
     {
         Audio.SfxBus.Ensure();
-        {
-            var scArgs = OS.GetCmdlineUserArgs();
-            int sc = Array.IndexOf(scArgs, "--soundcheck");
-            if (sc >= 0 && sc + 1 < scArgs.Length)
+        foreach (var (requested, run) in QuickChecks)
+            if (requested())
             {
-                int code = Audio.Soundcheck.Run(scArgs[sc + 1]);
-                GetTree().Quit(code);
+                GetTree().Quit(run());
                 return;
             }
-            if (Array.IndexOf(scArgs, "--driftcheck") >= 0)
-            {
-                GetTree().Quit(Player.DriftCheck.Run());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--tuningcheck") >= 0)
-            {
-                GetTree().Quit(Player.GarageProbe.Check());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--meshcheck") >= 0)
-            {
-                GetTree().Quit(Avatar.MeshScratch.Check());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--cockpitcheck") >= 0)
-            {
-                GetTree().Quit(Player.CockpitCheck.Run());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--spincheck") >= 0)
-            {
-                GetTree().Quit(Player.DriftCheck.Spin());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--setupcheck") >= 0)
-            {
-                GetTree().Quit(Player.CarSetups.Check());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--motocheck") >= 0)
-            {
-                GetTree().Quit(Player.Motorbike.Check());
-                return;
-            }
-            if (Array.IndexOf(scArgs, "--truckcheck") >= 0)
-            {
-                GetTree().Quit(Player.HeavyCheck.Run());
-                return;
-            }
-        }
-        if (Items.IconSheet.Requested)
-        {
-            GetTree().Quit(Items.IconSheet.Run());
-            return;
-        }
-        if (Loot.LootChanceCheck.Requested)
-        {
-            GetTree().Quit(Loot.LootChanceCheck.Run());
-            return;
-        }
-        if (Items.InventoryCheck.Requested)
-        {
-            GetTree().Quit(Items.InventoryCheck.Run());
-            return;
-        }
         if (OriginCheck.Requested)
         {
             OriginCheck.Run(this);
             return;
         }
-        if (ChatCheck.Requested)
-        {
-            GetTree().Quit(ChatCheck.Run(this));
-            return;
-        }
-        if (StyleKit.ReportRequested)
-        {
-            GetTree().Quit(StyleKit.Report());
-            return;
-        }
-        if (Occasions.OccasionProbe.Requested)
-        {
-            GetTree().Quit(Occasions.OccasionProbe.Run());
-            return;
-        }
         // idempotent: the shell, which owns the window settings, has usually installed it already
         PlayerInput.Install(GetParent());
-        if (Player.WheelProbe.CheckRequested)
-        {
-            GetTree().Quit(Player.WheelProbe.Check());
-            return;
-        }
 
         // a hand-made street to show the door portals: no terrain, no server
         if (Interiors.PortalDemo.ParseArgs() is { Requested: true } portalDemo)
@@ -172,7 +139,18 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
-        var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
+        // a test course built in code instead of the map: --chunks fixture:<course>, --world fixture,
+        // or --systems without terrain (Terrain/Fixture, docs/notes/general/testing.md)
+        IChunkSource source;
+        bool fixture = Systems.FixtureCourse != null;
+        if (fixture)
+        {
+            var (fE, fN) = SpawnPoint.ParseTarget();
+            source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN)
+                ?? throw new ArgumentException($"no fixture course '{Systems.FixtureCourse}' (known: {string.Join(", ", Terrain.Fixture.FixtureCourse.Names)})");
+            GD.Print($"[world] fixture course {Systems.FixtureCourse}");
+        }
+        else source = new LocalChunkSource(TerrainPaths.FindChunkDir());
         var manifest = await source.LoadManifestAsync();
         if (!IsInsideTree()) return;   // left during the load
         Report(LoadStage.BuildingWorld, 0.06f);
@@ -186,7 +164,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // goes on the spawn point, so the ground is not tens of kilometres out in float precision.
         bool hasLocalTerrain = manifest.Tiles.Count > 0;
         var (startE, startN) = SpawnPoint.ParseTarget();
-        var generated = new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+        // the generator derives its rivers on a worker as soon as it exists: not made when it is off
+        var generated = Systems.On(Systems.Generated) && !fixture
+            ? new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N) : null;
         var origin = hasLocalTerrain
             ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
             : new WorldOrigin(startE, startN);
@@ -201,7 +181,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // however far it goes. Offline only until positions on the wire are origin-independent.
         AddChild(new OriginShifter(origin, () => GetViewport().GetCamera3D()?.GlobalPosition, () => !_networked));
 
-        if (!hasLocalTerrain)
+        if (!hasLocalTerrain && generated != null)
             GD.PushWarning(
                 "[world] no terrain data found, showing generated terrain. Generate the real one "
                 + "with tools/TerrainPreprocessor, or join a server and it will stream in. "
@@ -235,27 +215,27 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _streamer = ChunkStreamer.CreateClient();
         AddChild(_streamer);
 
-        var streamedSource = new NetworkChunkSource(
+        // (not under a fixture course: the cache would fill its gaps, and its horizon, with real data)
+        IChunkSource streamedSource = fixture ? source : _chunkSource = new NetworkChunkSource(
             source, TerrainPaths.FindChunkDir(), _streamer, TerrainPaths.FindCacheDir());
-        _chunkSource = streamedSource;
 
         // The generated fill answers for the tiles no real data exists for, above the network
         // source so a client never asks a server for one, and under the cache so a generated tile
         // is not generated twice. Built even when switched off, so the setting can turn it on.
-        var fallback = new FallbackChunkSource(streamedSource, generated, startE, startN,
+        var fallback = generated == null ? null : new FallbackChunkSource(streamedSource, generated, startE, startN,
             GameSettings.Current.GeneratedFill) { Log = s => GD.Print(s), HorizonCacheDir = TerrainPaths.FindCacheDir() };
 
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
-        _cache = new CachingChunkSource(fallback);
+        _cache = new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
         // the blend reads real neighbours through the cache, sharing what the loader decodes
-        fallback.Neighbours = _cache;
+        if (fallback != null) fallback.Neighbours = _cache;
 
         _chunks = new ChunkManager { Name = "Terrain" };
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
-        _chunks.UseFallback(fallback, _cache.Invalidate);
+        if (fallback != null) _chunks.UseFallback(fallback, _cache.Invalidate);
         // the towns occasion props go in: places.json's, plus the generated villages that stand
         // on generated ground (re-read whenever real tiles replace some, below)
         var fillChunks = _chunks;
@@ -263,17 +243,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Anything streamed in an earlier session is on disk but absent from the local
         // manifest, so without this it would be unreachable until a server was joined again.
-        ClientTerrainSync.MergeCachedIndex(_chunks, origin);
+        // A fixture course is all there is: nothing cached joins it.
+        if (!fixture) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
 
         AddChild(_chunks);
         ApplyNearTrees();
         Audio.Surfaces.Origin = origin;
         var chunksForAudio = _chunks;
-        AddChild(new Audio.ReverbZones(() => GetViewport().GetCamera3D(), () => LocalPlayer?.Indoors == true, chunksForAudio)
-            { Name = "ReverbZones" });
-        _ambience = new Audio.Ambience(chunksForAudio, () => GetViewport().GetCamera3D())
-            { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
-        AddChild(_ambience);
+        if (Systems.On(Systems.Audio))
+        {
+            AddChild(new Audio.ReverbZones(() => GetViewport().GetCamera3D(), () => LocalPlayer?.Indoors == true, chunksForAudio)
+                { Name = "ReverbZones" });
+            _ambience = new Audio.Ambience(chunksForAudio, () => GetViewport().GetCamera3D())
+                { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
+            AddChild(_ambience);
+        }
         await Breathe();
         if (!IsInsideTree()) return;
         Report(LoadStage.BuildingWorld, 0.10f);
@@ -298,6 +282,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.DroppedItems.Create(this).PlayerPositions = vehicles.PlayerPositions;
         var chunksForDrops = _chunks;
         Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetHeight(p, out float y) ? y : null;
+        Audio.Hearing.Ground = Items.DroppedItems.GroundHeight;
         // every body that may hold a radio that plays (#168): the remote players and this one
         radios.Players = () =>
         {
@@ -308,10 +293,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Audio.Cd.CdLibrary.Create(this, server: false);
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
-        var webRadio = Audio.Live.WebRadio.Create(this);
-        webRadio.Players = radios.Players;
-        webRadio.Listener = () => GetViewport().GetCamera3D()?.GlobalPosition ?? LocalPlayer?.GlobalPosition;
-        if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: false) is { } webRadioOffline) AddChild(webRadioOffline);
+        if (Systems.On(Systems.Audio))
+        {
+            var webRadio = Audio.Live.WebRadio.Create(this);
+            webRadio.Players = radios.Players;
+            webRadio.Listener = () => GetViewport().GetCamera3D()?.GlobalPosition ?? LocalPlayer?.GlobalPosition;
+            if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: false) is { } webRadioOffline) AddChild(webRadioOffline);
+        }
         // the Africa Twin at Riddes: placed here offline, by the server online
         AddChild(new World.AfricaTwinEgg(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
@@ -322,19 +310,22 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Building interiors: E opens a front door, and you walk through it. Same node path as the
         // server's, which plans and stores them; offline this client does both.
-        var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
-        interiors.LocalPlayer = () => _onFoot ? LocalPlayer : null;
-        var chunksForDoors = _chunks;
-        interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
-        interiors.OccupancySink = chunksForDoors.SetOccupancy;
-        interiors.OpenDoorsSink = chunksForDoors.SetOpenDoors;
-        interiors.OutsideShownChanged += shown =>
+        if (Systems.On(Systems.Interiors))
         {
-            // indoors with the doors shut, the whole outside world is overhead and out of sight:
-            // stop drawing it. An open door shows it again, through the doorway.
-            if (_chunks != null) _chunks.Visible = shown;
-            vehicles.Visible = shown;
-        };
+            var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
+            interiors.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+            var chunksForDoors = _chunks;
+            interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
+            interiors.OccupancySink = chunksForDoors.SetOccupancy;
+            interiors.OpenDoorsSink = chunksForDoors.SetOpenDoors;
+            interiors.OutsideShownChanged += shown =>
+            {
+                // indoors with the doors shut, the whole outside world is overhead and out of sight:
+                // stop drawing it. An open door shows it again, through the doorway.
+                if (_chunks != null) _chunks.Visible = shown;
+                vehicles.Visible = shown;
+            };
+        }
 
         var environment = StyleKit.NewEnvironment();
         _worldEnvironment = new WorldEnvironment { Environment = environment };
@@ -342,38 +333,50 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
         // word online. Before the clock, which reads its sun and sky from it.
-        Occasions.OccasionManager.Create(this);
-        // their props, dressed onto each tile as its buildings load
-        AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
-        // a sign over every bank door (#213)
-        AddChild(new Interiors.BankSigns(_chunks));
-        // …the creatures in the air around the camera, and their sounds
-        AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
-        AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
-        // …and snow falling round the camera, except indoors
-        AddChild(new Occasions.OccasionPrecip());
-
-        // the clock: sun, light colour, sky and night for every shader and the environment
-        var chunksForSky = _chunks;
-        _dayNight = new World.DayNight(environment)
+        if (Systems.On(Systems.Occasions))
         {
-            GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
-        };
-        AddChild(_dayNight);
+            Occasions.OccasionManager.Create(this);
+            // their props, dressed onto each tile as its buildings load
+            AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
+            // …the creatures in the air around the camera, and their sounds
+            AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
+            AddChild(new Occasions.OccasionAmbience(_chunks, origin, () => GetViewport().GetCamera3D()));
+            // …and snow falling round the camera, except indoors
+            AddChild(new Occasions.OccasionPrecip());
+        }
+        // a sign over every bank door (#213)
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
+
+        // the clock: sun, light colour, sky and night for every shader and the environment.
+        // Off (--systems without sky): no clock, the style's fixed sun and the background colour.
+        var chunksForSky = _chunks;
+        if (Systems.On(Systems.Sky))
+        {
+            _dayNight = new World.DayNight(environment)
+            {
+                GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
+            };
+            AddChild(_dayNight);
+        }
         ApplySun();
 
         // cars on the roads and trains on the railway, around wherever the view is
-        _traffic = new World.Traffic(_chunks, origin)
+        if (!Systems.On(Systems.Trains)) GameSettings.Current.Trains = false;   // this run only: not committed
+        if (Systems.On(Systems.Traffic) || Systems.On(Systems.Trains))
         {
-            Focus = () => GetViewport().GetCamera3D()?.GlobalPosition,
-            // every player it can meet — the local one, remote racers, race NPCs — with how each moves:
-            // the traffic makes way for a race going through it (#85)
-            Obstacles = () => GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
-                .Select(p => (p.GlobalPosition, p.WorldVelocity)),
-        };
-        AddChild(_traffic);
-        if (World.NpcWatch.FromArgs() is { } npcWatch) AddChild(npcWatch);
-        if (World.TrafficProbe.ParseArgs() is { Requested: true } tcheck)
+            if (!Systems.On(Systems.Traffic)) GameSettings.Current.TrafficCars = 0;
+            _traffic = new World.Traffic(_chunks, origin)
+            {
+                Focus = () => GetViewport().GetCamera3D()?.GlobalPosition,
+                // every player it can meet — the local one, remote racers, race NPCs — with how each moves:
+                // the traffic makes way for a race going through it (#85)
+                Obstacles = () => GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
+                    .Select(p => (p.GlobalPosition, p.WorldVelocity)),
+            };
+            AddChild(_traffic);
+        }
+        if (Systems.On(Systems.Npcs) && World.NpcWatch.FromArgs() is { } npcWatch) AddChild(npcWatch);
+        if (_traffic != null && World.TrafficProbe.ParseArgs() is { Requested: true } tcheck)
         {
             var tcam = new Camera3D { Name = "TrafficCam", Far = GameSettings.Current.CameraFar };
             AddChild(tcam);
@@ -385,25 +388,108 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 { Origin = origin });
         }
 
-        // Start somewhere with something to look at, not at the world origin — after a
+        var chunks = _chunks;
+        var cache = _cache;
+        // The verification tools that start in place of a spawn, in the order they are tried: one list
+        // says both whether one runs (placedByTool) and how it starts (at the end of _Ready).
+        ToolRun[] tools =
+        {
+            new(() => World.TrafficProbe.ParseArgs().Requested, ToolAnchor.Own, null),   // started above, with its own camera
+            // pure analysis: it loads the tiles it needs itself, so it neither waits for streaming
+            // nor cares where the spectator is
+            new(() => Gpx.Cinema.CinemaProbe.ParseArgs() != null, ToolAnchor.Own, _ => new Gpx.Cinema.CinemaProbe(
+                Gpx.Cinema.CinemaProbe.ParseArgs()!, origin, streamedSource, manifest.Tiles.Select(t => t.Id).ToHashSet())),
+            new(() => Vehicles.VehicleProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Vehicles.VehicleProbe(chunks, origin, Vehicles.VehicleProbe.ParseArgs().Shot)),
+            new(() => Loot.GatherProbe.ParseArgs().Requested, ToolAnchor.Dropped,
+                k => new Loot.GatherProbe(chunks, origin, k.Gathering, k.Items, Loot.GatherProbe.ParseArgs().Shot)),
+            new(() => Birds.BirdProbe.ParseArgs().Requested, ToolAnchor.Dropped,
+                k => new Birds.BirdProbe(chunks, origin, k.Birds, k.Items, Birds.BirdProbe.ParseArgs().Shot)),
+            // tables only: no terrain wanted, and quitting mid-stream races the tile workers
+            new(() => Loot.LootProbe.ParseArgs() != null, ToolAnchor.Dropped, _ => new Loot.LootProbe(cache, chunks, Loot.LootProbe.ParseArgs()!.Value)),
+            new(() => Interiors.InteriorProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Interiors.InteriorProbe(chunks, origin, cache, Interiors.InteriorProbe.ParseArgs().Shot)),
+            new(() => Interiors.DoorWatchProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Interiors.DoorWatchProbe(chunks, origin, Interiors.DoorWatchProbe.ParseArgs().Shot)),
+            new(() => Birds.BirdStrikeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                k => new Birds.BirdStrikeProbe(chunks, origin, k.Birds, Birds.BirdStrikeProbe.ParseArgs().Shot)),
+            new(() => Combat.CombatProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Combat.CombatProbe(chunks, origin, Combat.CombatProbe.ParseArgs().Shot)),
+            new(() => FlightCheckProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
+            {
+                var f = FlightCheckProbe.ParseArgs()!.Value;
+                return new FlightCheckProbe(chunks, origin, f.Kind, f.Shot);
+            }),
+            new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
+            new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
+            new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
+            new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(chunks, origin)),
+            new(() => RoadPerfProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var roadPerf = RoadPerfProbe.ParseArgs()!.Value;
+                return new RoadPerfProbe(roadPerf.Dir, roadPerf.Label);
+            }),
+            new(RoadStandProbe.Requested, ToolAnchor.AtTarget, _ => new RoadStandProbe(chunks, origin)),
+            new(() => DriveProbe.ParseArgs().Requested, ToolAnchor.AtTarget, _ =>
+            {
+                var d = DriveProbe.ParseArgs();
+                return new DriveProbe(chunks, origin, d.Shot, d.Car, d.Seconds);
+            }),
+            new(() => World.ArrivalProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new World.ArrivalProbe(chunks, origin, World.ArrivalProbe.ParseArgs().Prefix)),
+            new(() => World.TreeCheck.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new World.TreeCheck(chunks, origin, World.TreeCheck.ParseArgs().Shot)),
+            new(() => TruckProbe.Requested, ToolAnchor.AtTarget, _ => new TruckProbe(chunks, origin)),
+            // the anchor on the spawn, so the tile under the rider arrives with collision: without
+            // it the probe drops through an empty world and measures gravity
+            new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
+            {
+                var r = RideProbe.ParseArgs()!.Value;
+                return new RideProbe(chunks, origin, r.Kind, r.Seconds, r.Shot);
+            }),
+            new(() => TunnelProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var probe = TunnelProbe.ParseArgs()!;
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                double e = double.Parse(probe[0], inv), n = double.Parse(probe[1], inv);
+                // park the anchor on the portal so its chunk streams in with collision
+                _spectator!.Position = origin.ToWorld(e, n, 1200);
+                return new TunnelProbe(chunks, origin, e, n, double.Parse(probe[2], inv));
+            }),
+            new(() => FlightProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var fly = FlightProbe.ParseArgs()!;
+                FreeSpectator();
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                return new FlightProbe(_spectator!, chunks,
+                    new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
+                    float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv));
+            }),
+            new(() => ShotRunner.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var shot = ShotRunner.ParseArgs()!;
+                FreeSpectator();
+                // InvariantCulture: this project is developed on a fr-CH machine where the
+                // default decimal separator would reject "1500.5"
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                return new ShotRunner(_spectator!,
+                    new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
+                    float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]) { Origin = _worldOrigin };
+            }),
+            new(() => ShotRunner.ParseQueueArg() != null, ToolAnchor.Own, _ =>
+            {
+                FreeSpectator();
+                var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
+                runner.GroundHeight = at => chunks.TryGetHeight(at, out float h) ? h : null;
+                runner.RunCommand = line => _chat?.Send(line);
+                return runner;
+            }),
+        };
+        // Start somewhere with something to look at, not at the world origin: after a
         // large import that is usually empty space. "--at E,N" overrides it (LV95 metres).
         // --shot and --probe place the camera themselves, and a spawn drop would fight
         // them for the height.
-        bool placedByTool = ShotRunner.ParseArgs() != null || ShotRunner.ParseQueueArg() != null
-            || TunnelProbe.ParseArgs() != null
-            || FlightProbe.ParseArgs() != null
-            || RideProbe.ParseArgs() != null || TruckProbe.Requested || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
-            || Gpx.Cinema.CinemaProbe.ParseArgs() != null
-            || RoadStandProbe.Requested() || MantleProbe.Requested() || VoidProbe.Requested()
-            || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
-            || Interiors.InteriorProbe.ParseArgs().Requested || Interiors.DoorWatchProbe.ParseArgs().Requested
-            || Loot.LootProbe.ParseArgs() != null
-            || Loot.GatherProbe.ParseArgs().Requested
-            || Birds.BirdProbe.ParseArgs().Requested
-            || World.TrafficProbe.ParseArgs().Requested
-            || Combat.CombatProbe.ParseArgs().Requested
-            || Birds.BirdStrikeProbe.ParseArgs().Requested
-            || SyncProbe.Requested() || HitboxProbe.Requested();
+        bool placedByTool = tools.Any(t => t.Requested());
         // --wheelwatch spawns normally, but must not grab the pointer either
         MouseCapture.Disabled |= Player.WheelProbe.WatchRole != null;
         // a check running in a window must leave the pointer to whoever is using the machine
@@ -458,9 +544,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
+            || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested
+            || Items.BonkCheck.Requested
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
+        if (Items.PvpProbe.Role != null) Items.PvpProbe.Stock(inventory);
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
         Items.Bank.Create(this, inventory);
@@ -481,6 +570,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
+        if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
+        if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
             && Items.DropCheck.Requested && Items.DropCheck.Create(() => LocalPlayer, () => _players, items) is { } soloDrop)
             AddChild(soloDrop);
@@ -504,6 +595,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             PlayersWanted = _chat.RequestPlayerNames,
         });
         AddChild(_chatUi);
+        // the item catalogue types its commands into the chat, so the server checks them (#262)
+        items.RunCommand = _chat.Send;
+        _chat.CatalogueRequested += () => items.Catalogue.Open();
 
         // bottom right: the controls that apply here (F1, every control, is the shell's)
         var prompts = PromptBar.Create();
@@ -519,25 +613,32 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
 
-        var loot = Loot.LootService.Create(this);
-        loot.Items = items;
+        if (Systems.On(Systems.Loot)) Loot.LootService.Create(this).Items = items;
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
         _radioUi.Give = items.Give;
         AddChild(_radioUi);
         if (Items.CarCdCheck.Create(() => LocalPlayer, () => _players, items.Inventory, networked: false) is { } carCdShots) AddChild(carCdShots);
+        if (Items.InteractCheck.Create(() => LocalPlayer, items.Inventory) is { } interactCheck) AddChild(interactCheck);
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
-        var gathering = new Loot.Gathering(_chunks, origin, items);
-        AddChild(gathering);
+        // (null only with loot or birds off, when no probe that needs them runs)
+        Loot.Gathering gathering = null!;
+        if (Systems.On(Systems.Loot)) AddChild(gathering = new Loot.Gathering(_chunks, origin, items));
         // birds around the player, from the real land cover; the shotgun hunts them (J: journal)
-        var birds = new Birds.BirdLife(_chunks, origin, items);
-        AddChild(birds);
-        // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
-        Birds.BirdNet.Create(this, birds, server: false);
+        Birds.BirdLife birds = null!;
+        if (Systems.On(Systems.Birds))
+        {
+            AddChild(birds = new Birds.BirdLife(_chunks, origin, items));
+            // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
+            Birds.BirdNet.Create(this, birds, server: false);
+        }
 
         // occasions: the treat / gift hunt (taken with the gather hold) and the seasonal hat
-        AddChild(new Occasions.OccasionHunt());
-        AddChild(new Occasions.OccasionHats(() => LocalPlayer, items.Inventory));
+        if (Systems.On(Systems.Occasions))
+        {
+            AddChild(new Occasions.OccasionHunt());
+            AddChild(new Occasions.OccasionHats(() => LocalPlayer, items.Inventory));
+        }
 
         // solid trunks around whatever asks for collision
         var trees = new World.TreeColliders(_chunks, origin);
@@ -551,7 +652,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             Audio.Surfaces.Forget();
             _ambience?.ForgetTiles();
-            gathering.Forget();
+            gathering?.Forget();
             _traffic?.Forget();
             trees.Forget();
             Occasions.OccasionTowns.Reload();
@@ -589,211 +690,36 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // camera back for itself.
         StartLaunch(placedByTool);
 
-        // Pure analysis: it loads the tiles it needs itself, so it neither waits for streaming
-        // nor cares where the spectator is.
-        if (Gpx.Cinema.CinemaProbe.ParseArgs() is { } cinemaTrack)
+        var kit = new ToolKit(items, gathering, birds);
+        foreach (var tool in tools)
         {
-            AddChild(new Gpx.Cinema.CinemaProbe(cinemaTrack, origin, streamedSource,
-                manifest.Tiles.Select(t => t.Id).ToHashSet()));
+            if (tool.Start == null || !tool.Requested()) continue;
+            if (tool.Anchor == ToolAnchor.AtTarget)
+            {
+                var (e, n) = SpawnPoint.ParseTarget();
+                _spectator.Position = origin.ToWorld(e, n, 1200);
+            }
+            else if (tool.Anchor == ToolAnchor.Dropped) _chunks.RemoveAnchor(_spectator);
+            AddChild(tool.Start(kit));
             return;
         }
+    }
 
-        if (Vehicles.VehicleProbe.ParseArgs() is { Requested: true } vcheck)
-        {
-            var (vE, vN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(vE, vN, 1200);
-            AddChild(new Vehicles.VehicleProbe(_chunks, origin, vcheck.Shot));
-            return;
-        }
+    /// <summary>Where a verification tool wants the streaming anchor: on the <c>--at</c> spot, gone, or left to the tool.</summary>
+    private enum ToolAnchor { AtTarget, Dropped, Own }
 
-        if (Loot.GatherProbe.ParseArgs() is { Requested: true } gcheck)
-        {
-            _chunks.RemoveAnchor(_spectator);
-            AddChild(new Loot.GatherProbe(_chunks, origin, gathering, items, gcheck.Shot));
-            return;
-        }
+    /// <summary>A verification tool: whether the command line asks for it, and how it starts (null: started elsewhere).</summary>
+    private readonly record struct ToolRun(Func<bool> Requested, ToolAnchor Anchor, Func<ToolKit, Node>? Start);
 
-        if (Birds.BirdProbe.ParseArgs() is { Requested: true } bcheck)
-        {
-            _chunks.RemoveAnchor(_spectator);
-            AddChild(new Birds.BirdProbe(_chunks, origin, birds, items, bcheck.Shot));
-            return;
-        }
+    /// <summary>What some tools need that only exists once the items are built.</summary>
+    private readonly record struct ToolKit(Items.ItemController Items, Loot.Gathering Gathering, Birds.BirdLife Birds);
 
-        if (Loot.LootProbe.ParseArgs() is { } lootEpochs)
-        {
-            // tables only: no terrain wanted, and quitting mid-stream races the tile workers
-            _chunks.RemoveAnchor(_spectator);
-            AddChild(new Loot.LootProbe(_cache, _chunks, lootEpochs));
-            return;
-        }
-
-        if (Interiors.InteriorProbe.ParseArgs() is { Requested: true } icheck)
-        {
-            var (iE, iN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(iE, iN, 1200);
-            AddChild(new Interiors.InteriorProbe(_chunks, origin, _cache, icheck.Shot));
-            return;
-        }
-
-        if (Interiors.DoorWatchProbe.ParseArgs() is { Requested: true } watch)
-        {
-            var (wE, wN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(wE, wN, 1200);
-            AddChild(new Interiors.DoorWatchProbe(_chunks, origin, watch.Shot));
-            return;
-        }
-
-        if (Birds.BirdStrikeProbe.ParseArgs() is { Requested: true } scheck)
-        {
-            var (sE, sN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(sE, sN, 1200);
-            AddChild(new Birds.BirdStrikeProbe(_chunks, origin, birds, scheck.Shot));
-            return;
-        }
-
-        if (Combat.CombatProbe.ParseArgs() is { Requested: true } ccheck)
-        {
-            var (cE, cN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(cE, cN, 1200);
-            AddChild(new Combat.CombatProbe(_chunks, origin, ccheck.Shot));
-            return;
-        }
-
-        if (FlightCheckProbe.ParseArgs() is { } flycheck)
-        {
-            var (fE, fN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(fE, fN, 1200);
-            AddChild(new FlightCheckProbe(_chunks, origin, flycheck.Kind, flycheck.Shot));
-            return;
-        }
-
-        if (HitboxProbe.Requested())
-        {
-            AddChild(new HitboxProbe(_chunks, origin));
-            return;
-        }
-
-        if (SyncProbe.Requested())
-        {
-            var (sE, sN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(sE, sN, 1200);
-            AddChild(new SyncProbe(_chunks, origin));
-            return;
-        }
-
-        if (MantleProbe.Requested())
-        {
-            var (mE, mN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(mE, mN, 1200);
-            AddChild(new MantleProbe(_chunks, origin));
-            return;
-        }
-
-        if (VoidProbe.Requested())
-        {
-            var (vE, vN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(vE, vN, 1200);
-            AddChild(new VoidProbe(_chunks, origin));
-            return;
-        }
-
-        if (RoadStandProbe.Requested())
-        {
-            var (checkE, checkN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(checkE, checkN, 1200);
-            AddChild(new RoadStandProbe(_chunks, origin));
-            return;
-        }
-
-        if (DriveProbe.ParseArgs() is { Requested: true } drive)
-        {
-            var (driveE, driveN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(driveE, driveN, 1200);
-            AddChild(new DriveProbe(_chunks, origin, drive.Shot, drive.Car, drive.Seconds));
-            return;
-        }
-
-        if (World.ArrivalProbe.ParseArgs() is { Requested: true } arrival)
-        {
-            var (arrE, arrN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(arrE, arrN, 1200);
-            AddChild(new World.ArrivalProbe(_chunks, origin, arrival.Prefix));
-            return;
-        }
-
-        if (World.TreeCheck.ParseArgs() is { Requested: true } treeCheck)
-        {
-            var (treeE, treeN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(treeE, treeN, 1200);
-            AddChild(new World.TreeCheck(_chunks, origin, treeCheck.Shot));
-            return;
-        }
-
-        if (TruckProbe.Requested)
-        {
-            var (truckE, truckN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(truckE, truckN, 1200);
-            AddChild(new TruckProbe(_chunks, origin));
-            return;
-        }
-
-        if (RideProbe.ParseArgs() is { } ride)
-        {
-            // park the streaming anchor on the spawn so the tile under the rider arrives with
-            // collision — without it the probe drops through an empty world and measures gravity
-            var (rideE, rideN) = SpawnPoint.ParseTarget();
-            _spectator.Position = origin.ToWorld(rideE, rideN, 1200);
-            AddChild(new RideProbe(_chunks, origin, ride.Kind, ride.Seconds, ride.Shot));
-            return;
-        }
-
-        if (TunnelProbe.ParseArgs() is { } probe)
-        {
-            var inv0 = System.Globalization.CultureInfo.InvariantCulture;
-            // park the anchor on the portal so its chunk streams in with collision
-            _spectator.Position = origin.ToWorld(
-                double.Parse(probe[0], inv0), double.Parse(probe[1], inv0), 1200);
-            AddChild(new TunnelProbe(_chunks, origin,
-                double.Parse(probe[0], inv0), double.Parse(probe[1], inv0),
-                double.Parse(probe[2], inv0)));
-            return;
-        }
-
-        if (FlightProbe.ParseArgs() is { } fly)
-        {
-            _spectator.SetProcess(false);
-            _spectator.SetProcessUnhandledInput(false);
-            Input.MouseMode = Input.MouseModeEnum.Visible;
-            var inv = System.Globalization.CultureInfo.InvariantCulture;
-            AddChild(new FlightProbe(_spectator, _chunks,
-                new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
-                float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv)));
-            return;
-        }
-
-        if (ShotRunner.ParseArgs() is { } shot)
-        {
-            _spectator.SetProcess(false);
-            _spectator.SetProcessUnhandledInput(false);
-            Input.MouseMode = Input.MouseModeEnum.Visible;
-            // InvariantCulture: this project is developed on a fr-CH machine where the
-            // default decimal separator would reject "1500.5"
-            var inv = System.Globalization.CultureInfo.InvariantCulture;
-            AddChild(new ShotRunner(_spectator,
-                new Vector3(float.Parse(shot[0], inv), float.Parse(shot[1], inv), float.Parse(shot[2], inv)),
-                float.Parse(shot[3], inv), float.Parse(shot[4], inv), double.Parse(shot[5], inv), shot[6]) { Origin = _worldOrigin });
-        }
-        else if (ShotRunner.ParseQueueArg() is { } queue)
-        {
-            _spectator.SetProcess(false);
-            _spectator.SetProcessUnhandledInput(false);
-            Input.MouseMode = Input.MouseModeEnum.Visible;
-            var runner = ShotRunner.ForQueue(_spectator, queue, _worldOrigin);
-            runner.GroundHeight = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
-            runner.RunCommand = line => _chat?.Send(line);
-            AddChild(runner);
-        }
+    /// <summary>A tool that drives the spectator camera itself: no fly controls, the pointer free.</summary>
+    private void FreeSpectator()
+    {
+        _spectator!.SetProcess(false);
+        _spectator.SetProcessUnhandledInput(false);
+        Input.MouseMode = Input.MouseModeEnum.Visible;
     }
 
     /// <summary>
@@ -1097,6 +1023,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private void StartNetworking(string host)
     {
         if (_networked) return;
+        if (!Systems.On(Systems.Network)) { Fail("The network is off for this run (--systems)."); return; }
         // Positions on the wire are still world space (#185, phase 2), so online every peer must be
         // in the frame the server is in: a game that travelled offline puts its origin back where
         // it started before anything is sent. The shifter is off from here on.
@@ -1111,10 +1038,25 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var race = World.RaceManager.CreateClient();
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
+
+        // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
+        var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
+        br.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+        br.Inventory = () => _items?.Inventory;
+        br.Teleport = (e, n, label) => _teleporter?.TeleportTo(e, n, label) == true;
+        br.AddAnchor = node => _chunks?.AddAnchor(node);
+        br.RemoveAnchor = node => _chunks?.RemoveAnchor(node);
+        br.Source = () => _chunks?.Source;
+        // the match's crates (#194): drawn on this client's own ground
+        var crates = BattleRoyale.BrCrates.Create(this, _worldOrigin!, server: false);
+        crates.GroundAt = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
+        br.Places = () => (IEnumerable<Terrain.Format.Place>?)_places?.All ?? Array.Empty<Terrain.Format.Place>();
+        AddChild(br);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
         if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
         if (_items != null && Items.CarCdCheck.Create(() => LocalPlayer, () => _players, _items.Inventory, networked: true) is { } carCdCheck) AddChild(carCdCheck);
         if (Items.DropCheck.Create(() => LocalPlayer, () => _players, _items) is { } dropCheck) AddChild(dropCheck);
+        if (_items != null && Items.BonkCheck.Create(() => LocalPlayer, () => _players, _items.Inventory) is { } bonkCheck) AddChild(bonkCheck);
         if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: true) is { } webRadioCheck) AddChild(webRadioCheck);
 
         _chat!.Kicked += OnKicked;
@@ -1257,6 +1199,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // while the search box has focus, keys belong to it
         if (@event.IsActionPressed(PlayerInput.Teleport))
         {
+            // in a Battle Royale match M is the match map, and there is no teleporting anyway
+            if (BattleRoyale.BrManager.Instance?.ToggleMap() == true) return;
             _places?.Toggle();
             return;
         }
@@ -1340,14 +1284,23 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else if (Items.Highlight.Pointed is Items.DroppedItem pointed)
                 yield return (PlayerInput.InteractMount, $"Pick up {pointed.Label}");
+            else if (Items.Highlight.Pointed is Items.RadioBody)
+            {
+                yield return (PlayerInput.UseItem, "Take the radio");
+                yield return (PlayerInput.InteractMount, "Radio");
+            }
             else if (!p.Indoors)
             {
-                if (Items.Highlight.Pointed is Items.RadioBody || Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
+                if (Vehicles.VehicleReach.Current == null && Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
                     yield return (PlayerInput.InteractMount, "Radio");
-                else if (Items.RadioManager.Instance?.NearestPlaying(p.GlobalPosition, Items.RadioManager.DanceRadius) != null)
+                else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p.GlobalPosition) == null
+                    && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
-                if (Vehicles.VehicleManager.Instance?.Nearest(p.GlobalPosition, FootPlayer.EnterReach) is { } parked)
-                    yield return (PlayerInput.InteractMount, $"Get in the {parked.Ride.Label.ToLowerInvariant()}");
+                if (Vehicles.VehicleReach.Current is { } at)
+                {
+                    yield return (PlayerInput.InteractMount, at.Action);
+                    if (at is { HasDoor: true, DoorOpen: true }) yield return (PlayerInput.CarDoor, "Close the door");
+                }
                 yield return (PlayerInput.RideMenu, "Travel");
                 yield return (PlayerInput.Inventory, "Inventory");
                 yield return (PlayerInput.Teleport, "Map");

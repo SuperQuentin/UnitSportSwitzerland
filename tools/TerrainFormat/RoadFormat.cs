@@ -107,6 +107,9 @@ public sealed class RoadSegment
     public RoadAttributes Attributes { get; init; }
 
     public int PointCount => Points.Length / 3;
+
+    /// <summary>Point <paramref name="i"/> in LV95 (E, N); <paramref name="tile"/> is the tile this segment was read from.</summary>
+    public (double E, double N) Lv95(TileId tile, int i) => (tile.MinE + Points[i * 3], tile.MaxN - Points[i * 3 + 2]);
 }
 
 /// <summary>v3 attribute flags: the second flags word <see cref="RoadFlags"/> had no room for.</summary>
@@ -124,6 +127,7 @@ public enum RoadAttrFlags : ushort
     OwnerCanton = 1 << 7,  // TLM eigentuemer = Kanton
     OnStreet = 1 << 8,     // railway: TLM auf_strasse, the track runs in a street (#124)
     Embedded = 1 << 9,     // railway piece inside a carriageway: no ballast, no raised rails, RailGroove paint (#124)
+    PavedBed = 1 << 10,    // tram track in a town, outside any carriageway: a paved bed, no ballast, flush rails as RailGroove paint (#119)
 }
 
 /// <summary>Bike provision on one side of a carriageway (#120).</summary>

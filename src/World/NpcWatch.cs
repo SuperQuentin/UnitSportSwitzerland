@@ -23,6 +23,7 @@ public partial class NpcWatch : Node
     private Vector3 _last, _heading = Vector3.Forward;
     private double _moving = -1, _sinceShot;
     private int _frame, _sim, _jumps;
+    private readonly bool _headless = DisplayServer.GetName() == "headless";
 
     private NpcWatch(string prefix, double before, double after)
     {
@@ -80,7 +81,9 @@ public partial class NpcWatch : Node
         // a step more than 0.3 m and half again off what its velocity says
         bool jump = _moving >= 0 && Mathf.Abs(step - expect) > 0.3f + 0.5f * expect;
         if (jump) _jumps++;
-        if (Capturing || jump)
+        // and every 0.25 s besides: the speed it is drawn at in the seconds before a handoff (a standstill shows)
+        bool tick = _moving >= 0 && (int)(_moving * 4) != (int)((_moving - delta) * 4);
+        if (Capturing || jump || tick)
             GD.Print($"[npcwatch] t={_moving:F2} step {step:F2} m, v*dt {expect:F2} m, {vel.Length() * 3.6f:F0} km/h, sim {_sim}{(jump ? " JUMP" : "")}");
         _last = p;
         var flat = new Vector3(vel.X, 0, vel.Z);
@@ -101,7 +104,8 @@ public partial class NpcWatch : Node
         var at = _cam.GlobalPosition.DistanceTo(eye) > 30f ? eye : _cam.GlobalPosition.Lerp(eye, 1f - Mathf.Exp(-6f * (float)delta));
         _cam.GlobalTransform = new Transform3D(Flyer.Orient(_npc.GlobalPosition + Vector3.Up - at, Vector3.Up, Vector3.Forward), at);
         _cam.MakeCurrent();
-        if (_sinceHandoff >= _after || (_sinceShot += delta) < 0.1) return;
+        // headless: no picture, the log lines (speed per drawn frame around the handoff) still come
+        if (_headless || _sinceHandoff >= _after || (_sinceShot += delta) < 0.1) return;
         _sinceShot = 0;
         var image = GetViewport().GetTexture().GetImage();
         image.Resize(640, 640 * image.GetHeight() / Mathf.Max(image.GetWidth(), 1));

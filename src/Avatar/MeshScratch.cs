@@ -84,6 +84,56 @@ public sealed class MeshScratch
     public void Tube(Vector3 a, Vector3 b, float radius, Color colour, int sides = 6) =>
         Tube(a, b, radius, radius, colour, sides);
 
+    /// <summary>
+    /// A tapered tube with no ends, each side wound both ways so it is seen from inside as well as
+    /// out: a skirt, a flared sleeve (#251). Faces whose middle points within
+    /// <paramref name="gapAngle"/> radians of <paramref name="gap"/> are left out, which makes a
+    /// slit. Not closed, so like <see cref="Pane"/> it has no volume for <c>--meshcheck</c>.
+    /// <paramref name="ripple"/> (a fraction of the hem radius) waves the hem in and out and up and
+    /// down round its edge, at <paramref name="phase"/>: a skirt fluttering in the wind.
+    /// </summary>
+    public void Skirt(Vector3 a, Vector3 b, float radiusA, float radiusB, Color colour, int sides = 10,
+        Vector3 gap = default, float gapAngle = 0f, float ripple = 0f, float phase = 0f)
+    {
+        var axis = b - a;
+        float length = axis.Length();
+        if (length < 1e-5f || sides < 3) return;
+        axis /= length;
+
+        // the same frame as Tube, so a skirt's facets line up with the body's
+        var reference = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.95f ? Vector3.Right : Vector3.Up;
+        var u = axis.Cross(reference).Normalized();
+        var v = axis.Cross(u);
+        var slit = gap - axis * gap.Dot(axis);
+        bool open = gapAngle > 0f && slit.LengthSquared() > 1e-8f;
+        if (open) slit = slit.Normalized();
+
+        int start = _vertices.Count;
+        var linear = colour.SrgbToLinear();
+        for (int i = 0; i < sides; i++)
+        {
+            float angle = Mathf.Tau * i / sides;
+            var offset = u * Mathf.Cos(angle) + v * Mathf.Sin(angle);
+            Add(a + offset * radiusA, linear);
+            // two waves of different speed round the hem, so it never pulses as one
+            float wave = Mathf.Sin(phase + i * 2.4f) * 0.7f + Mathf.Sin(phase * 1.7f + i * 1.1f) * 0.3f;
+            float lift = Mathf.Cos(phase * 1.3f + i * 1.9f);
+            Add(b + offset * radiusB * (1f + ripple * wave) + axis * (radiusB * ripple * 0.6f * lift), linear);
+        }
+        for (int i = 0; i < sides; i++)
+        {
+            if (open)
+            {
+                float mid = Mathf.Tau * (i + 0.5f) / sides;
+                if ((u * Mathf.Cos(mid) + v * Mathf.Sin(mid)).AngleTo(slit) < gapAngle) continue;
+            }
+            int p = start + i * 2;
+            int q = start + ((i + 1) % sides) * 2;
+            Quad(p, p + 1, q + 1, q);   // outside
+            Quad(p, q, q + 1, p + 1);   // inside
+        }
+    }
+
     /// <summary>An axis-aligned box, optionally rotated about its own centre.</summary>
     public void Box(Vector3 centre, Vector3 size, Color colour, Basis? orientation = null)
     {
@@ -206,6 +256,29 @@ public sealed class MeshScratch
         return mesh;
     }
 
+    /// <summary>
+    /// Empties the scratch for the next figure: a figure redrawn every frame reuses one scratch
+    /// (and its lists' capacity) instead of a new one per frame (#221).
+    /// </summary>
+    public void Clear()
+    {
+        _vertices.Clear(); _colors.Clear(); _indices.Clear();
+        _glassVertices.Clear(); _glassColors.Clear(); _glassIndices.Clear();
+    }
+
+    /// <summary>
+    /// As <see cref="Build()"/>, into <paramref name="mesh"/>, whose surfaces are replaced: an
+    /// animated figure keeps one <see cref="ArrayMesh"/> (one RID) for its whole life rather than
+    /// a new one per frame left to the finalizer (#221).
+    /// </summary>
+    public ArrayMesh BuildInto(ArrayMesh mesh)
+    {
+        mesh.ClearSurfaces();
+        AddSurface(mesh, _vertices, _colors, _indices, Vector3.Zero, "body");
+        AddSurface(mesh, _glassVertices, _glassColors, _glassIndices, Vector3.Zero, GlassSurface);
+        return mesh;
+    }
+
     private static void AddSurface(ArrayMesh mesh, List<Vector3> vertices, List<Color> colors, List<int> indices,
         Vector3 pivot, string name)
     {
@@ -217,7 +290,7 @@ public sealed class MeshScratch
             facing[i] = new Vector3(-v.X, v.Y, -v.Z);
         }
 
-        var arrays = new Godot.Collections.Array();
+        using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = facing;
         arrays[(int)Mesh.ArrayType.Color] = colors.ToArray();

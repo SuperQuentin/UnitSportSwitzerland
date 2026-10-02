@@ -18,9 +18,6 @@ public static class ChunkFormat
     /// </summary>
     public const ushort Version = 2;
 
-    /// <summary>Payload is deflate-compressed (reserved for the CDN era, unused for now).</summary>
-    public const ushort FlagDeflate = 1;
-
     /// <summary>
     /// Vertices per tile edge; corner-aligned, so spacing = 1000 / (GridSize - 1) = 1 m.
     ///

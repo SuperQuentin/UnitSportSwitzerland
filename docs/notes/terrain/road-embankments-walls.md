@@ -67,5 +67,9 @@
   thin walls: the body rests 0.25-0.6 m over the floor under it after a 0.8-1.3 m drop, on ground
   that rises right in front of the face (also visible as lattice triangles over the face). The
   same tile's `--roadcheck` fails on a Path/Natural sample 0.1 m under its ribbon, also on both.
+- **#119**: tunnel approach ramps (within 60 m of a tunnel end) get a wall wherever the ground 3 m
+  past the edge is > 1.2 m off the road (the terrain holds the trench, so the slope rule never
+  fired), 1.5 m thick; no wall's solid or face stands on another line or a street's sidewalk.
+  Blend changes for sidewalks, caps and bores: `sidewalks-tunnels-runtime`.
 - **Not done**: steeper cut in rock cover, walls instead of slopes that would bury a building,
   slopes and walls from a road in the neighbouring tile (the blend sees one tile's segments, as before).

@@ -35,11 +35,13 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
         AddChild(_snow);
     }
 
+    private static readonly StringName Density = "density";
+
     public override void _Process(double delta)
     {
         float snowfall = OccasionManager.Instance?.Atmosphere?.Atmosphere.Snowfall ?? 0f;
         _snow.Visible = snowfall > 0f;
-        if (_snow.Visible) _material.SetShaderParameter("density", snowfall);
+        if (_snow.Visible) _material.SetShaderParameter(Density, snowfall);
     }
 
     /// <summary>Every flake a quad whose corners carry its home, its corner and its hash; placed by the shader.</summary>

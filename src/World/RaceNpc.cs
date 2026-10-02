@@ -45,6 +45,8 @@ public partial class RaceNpc : Node
     /// <summary>This peer simulates it (it can start or stop doing so at any time, #50).</summary>
     private bool _active;
 
+    private static RideInput Coast() => new(0f, 0f, 0f, false);
+
     private static RideInput Hold() => new(0f, 0f, 0f, false, Handbrake: true);
 
     public override void _Ready()
@@ -76,7 +78,13 @@ public partial class RaceNpc : Node
             if (_active) { _active = false; _route = null; _pilot = null; _arrival = null; }
             return;
         }
-        if (!_active) { _active = true; _me.RideControls = Hold; }
+        if (!_active)
+        {
+            _active = true;
+            // a handoff takes over a car that is rolling: coast until the pilot is armed. The handbrake
+            // of Hold stopped it from 72 km/h in 0.4 s (#159)
+            _me.RideControls = _me.RideSpeed > 3f ? Coast : Hold;
+        }
         // on its mount, and back on it after being thrown off (the mount waits for the ground)
         if (_me.Ride != Kind && _me.IsOnFloor()) _me.SetRide(Kind);
         if (Setup != 0 && _me.Vehicle is Car && _me.CarSetupId != Setup && _pilot == null && _me.SetCarSetup(Setup))
@@ -245,9 +253,16 @@ public partial class RaceNpcs : Node
     private const double MinHold = 5.0;
 
     /// <summary>No state from the simulator for this long: it is gone (ENet takes 5-30 s to notice a crash).</summary>
-    public const double StaleSeconds = 2.5;
+    public const double StaleSeconds = 1.2;
 
-    private const double ReviewPeriod = 1.0;
+    /// <summary>
+    /// A new simulator's first states take longer than a running one's next: taking the car over and
+    /// re-arming the pilot on a busy client. Judged at <see cref="StaleSeconds"/> from the handoff, both
+    /// NPCs were handed to B and retired again within the second (#159 loopback, B at 300 m).
+    /// </summary>
+    private const double HandoffGrace = 2.5;
+
+    private const double ReviewPeriod = 0.25;
 
     private MultiplayerSpawner? _spawner;
     private Node3D? _players;
@@ -327,7 +342,7 @@ public partial class RaceNpcs : Node
             // silent counts from the handoff too: the new simulator's first state takes a moment, and
             // judged by the old one's last state, a car just handed over was "silent" again a second
             // later and retired (seen in the #85 loopback check: both NPCs gone mid-race)
-            if (simNode == null || Now - System.Math.Max(npc.LastNetState, _live[id].Since) > StaleSeconds)
+            if (simNode == null || Now - System.Math.Max(npc.LastNetState, _live[id].Since + HandoffGrace) > StaleSeconds)
             {
                 HandOff(id, sim, simNode == null ? "its simulator left" : "its simulator stopped sending");
                 continue;
@@ -353,6 +368,8 @@ public partial class RaceNpcs : Node
         npc.SetSimulator((int)to);
         _live[id].Since = Now;
         npc.RefreshNetVisibility(to);   // it must exist there: an NPC always does on its simulator
+        // and the old simulator keeps it only if it sees it (visibility is refreshed on change only)
+        if (_players!.GetNodeOrNull(from.ToString()) != null) npc.RefreshNetVisibility(from);
         Rpc(MethodName.Migrate, id, (int)to);
         npc.RefreshRelays();   // the relays skip the simulator: now another peer
         Race?.ResumeNpc(id);
@@ -379,10 +396,6 @@ public partial class RaceNpcs : Node
         }
         return best;
     }
-
-    /// <summary>Server: whether <paramref name="peer"/>'s player may take on an NPC at <paramref name="at"/> (the host role uses the same zone).</summary>
-    public bool InZone(long peer, Vector3 at) =>
-        _players?.GetNodeOrNull<FootPlayer>(peer.ToString()) is { } p && Flat(p.GlobalPosition, at) <= Zone;
 
     public static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
 

@@ -61,8 +61,7 @@ public partial class ClockSync : Node
         _synced = false;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     public override void _Process(double delta)
     {
