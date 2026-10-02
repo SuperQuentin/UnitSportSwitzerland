@@ -29,9 +29,6 @@ public static class WaterField
     private static float _seaState;
     private static readonly float[] Amp = new float[WaveSpectrum.Count];
 
-    /// <summary>Sea state names for <c>/seastate</c> and <c>--sea-state</c>.</summary>
-    public const float Calm = 0f, Chop = 0.35f, Storm = 0.7f, Gamey = 1f;
-
     /// <summary>Fired on the main thread when <see cref="SeaState"/> changes.</summary>
     public static event Action<float>? SeaStateChanged;
 
