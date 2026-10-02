@@ -28,6 +28,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `cachingchunksource` — `CachingChunkSource`: decorates the source chain with a byte-budgeted LRU of decoded tiles, so ground that is left...
 - `road-markings` (tools note) — v3 road paint: `RoadPaintBuilder` draws the `.road` PANT layer as a second road surface (style 6, depth bias, dither fade)
 - `data-location` — Data location: `--chunks` > `UNITSPORT_CHUNKS` > `terrain_location.json` (MapSetup's drive picker) > `terrain_chunks/`; game and server alike
+- `perf-collision-commits` — Collision is queued and committed one 4x4 cell piece a frame, nearest a body first; a new collision layer must go through that queue
 
 ## Commands
 

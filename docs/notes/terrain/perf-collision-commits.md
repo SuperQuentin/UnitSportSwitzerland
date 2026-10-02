@@ -24,9 +24,16 @@
 
 ## Why
 
-PR #TBD (#221). Before, a tile's collision landed in one main-thread frame: a 1001²
+#221 (feat/221-terrain-collision). Before, a tile's collision landed in one main-thread frame: a 1001²
 `HeightMapShape3D` (~80 ms), the buildings' BVH (up to 80 ms) and the bridges together.
-TBD before/after table (worst commit ms, frames > 33 ms, commit hitches, builds.csv complete ms).
+Measured with `--ride` + `--perflog` in Riddes, Medium, back to back against main:
+
+| | before | after |
+|---|---|---|
+| worst single commit | 110-118 ms | 15 ms (`coll-bldg` 14.5, `coll-height` <= 7.9) |
+| frames > 33 ms, foot 90 s (3 runs) / car 60 s | 23-24 / 23 | 4-6 / 7 |
+| commit hitches in events.log | 13-17 | 0-1 |
+| builds.csv ground / complete p50, p95 | 17 / 24, 116 / 117 ms | the same |
 
 ## Same logic, preserved
 
