@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Styles;
 
@@ -17,7 +18,7 @@ namespace UnitSport.Styles;
 /// </summary>
 public partial class ImpostorBake : Node
 {
-    public static bool Requested => System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--bake-impostors") >= 0;
+    public static bool Requested => CmdArgs.Has("--bake-impostors");
 
     private const string Dir = "res://assets/realistic/trees/";
 

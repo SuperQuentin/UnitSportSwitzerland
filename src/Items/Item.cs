@@ -129,6 +129,18 @@ public static class ItemDefs
         Bag(ItemId.Backpack, "Backpack", "#2a5a8a", "BK", 27, 70),
         Bag(ItemId.HikingPack, "Hiking backpack", "#c8602a", "HK", 36, 150),
 
+        // building (#274): pieces cost materials straight from the pack
+        new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + wheel picks the piece, R turns it, {aim_item} + R the material. {aim_item} + {use_item} takes your own piece back.",
+            ItemUse.Build, 1, new Color(0.45f, 0.30f, 0.18f), "HM", 0, ItemCategory.Gear, 12f),
+
+        // gadgets (#275): set down with Use, taken back with Aim + Use
+        Gadget(ItemId.Zipline, "Zipline", "{use_item} at the top sets its start, {use_item} again at the bottom (downhill, 8 to 150 m) strings the cable. {interact_mount} at the top post rides it; {jump} lets go.", "#8a8e94", "ZL", 30),
+        Gadget(ItemId.RopeLadder, "Rope ladder", "{use_item} on the top of a wall or a ledge hangs it down, up to 8 m. {interact_mount} at its foot climbs it: forward up, back down, {jump} lets go.", "#c8b078", "LD", 15),
+        Gadget(ItemId.Trampoline, "Tyre trampoline", "{use_item} sets it on the ground. Land on it, or walk onto it: about 12 m up.", "#26282c", "TR", 70),
+        Gadget(ItemId.LaunchPad, "Launch pad", "{use_item} sets it on the ground. {interact_mount} on it fires you about 80 m up, into a wingsuit glide.", "#2a7a8a", "LP", 90),
+        Gadget(ItemId.CamoNet, "Camo net", "{use_item} spreads it on four poles: under it you are hard to spot from above and afar.", "#4a5a30", "CN", 12),
+        Gadget(ItemId.HayHideout, "Hay bale hideout", "{use_item} sets it down: a hollow bale to crouch in, with a slit to look out of.", "#d8c060", "HY", 14),
+
         // fire and placeables (#272): cooked at a fire, worth more than what went in
         Eat(ItemId.Fondue, "Fondue", 3, "#f0c850", "FO", 90, ItemCategory.Food, 30),
         Eat(ItemId.HotChocolate, "Hot chocolate", 5, "#7a4628", "HC", 30, ItemCategory.Water, 8),
@@ -140,6 +152,9 @@ public static class ItemDefs
         new(ItemId.FieldWorkbench, "Field workbench", "{use_item} sets it up where you look: a workbench to craft at, anywhere. {use_item} on it with an empty hand packs it up again.",
             ItemUse.Place, 1, new Color(0.62f, 0.44f, 0.24f), "WB", 0, ItemCategory.Gear, 15f),
     };
+
+    private static ItemDef Gadget(ItemId id, string name, string blurb, string tint, string glyph, float value) =>
+        new(id, name, blurb + " {aim_item} + {use_item} on your own takes it back.", ItemUse.Gadget, 1, new Color(tint), glyph, 0, ItemCategory.Gear, value);
 
     private static ItemDef Bag(ItemId id, string name, string tint, string glyph, int slots, float value) =>
         new(id, name, $"Wear it in the bag slot for {slots} more pack slots. {{use_item}} or a click on the bag slot puts it on.",
@@ -367,6 +382,12 @@ public static class ItemDefs
                 // the real hat, the one a figure wears
                 HumanMeshBuilder.AppendHat(s, UnitSport.Occasions.OccasionHats.ForItem(id), new Vector3(0, -0.02f, 0), Vector3.Up * 0.2f);
                 break;
+            case ItemId.Hammer:
+                s.Box(new Vector3(0, 0.0f, 0.0f), new Vector3(0.03f, 0.03f, 0.30f), new Color(0.55f, 0.36f, 0.20f));    // handle
+                s.Box(new Vector3(0, 0.0f, 0.16f), new Vector3(0.11f, 0.035f, 0.04f), new Color(0.40f, 0.42f, 0.45f));  // head
+                s.Box(new Vector3(-0.07f, 0.0f, 0.16f), new Vector3(0.04f, 0.025f, 0.03f), new Color(0.40f, 0.42f, 0.45f)); // claw
+                break;
+
             case ItemId.Torch:
             {
                 // upright like the GPS: a stick, a wrap of cloth soaked in pitch, a flame on top

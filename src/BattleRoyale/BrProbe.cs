@@ -320,7 +320,7 @@ public partial class BrProbe : ChatProbe
     }
 
     /// <summary>"--brsites": the outdoor sites (#198) are checked too (a real-terrain run: tools/brcheck.sh with SITES=1).</summary>
-    private static bool Sites => Array.IndexOf(OS.GetCmdlineUserArgs(), "--brsites") >= 0;
+    private static bool Sites => CmdArgs.Has("--brsites");
 
     /// <summary>A: the sites exist; crack a bunker; shoot a supply crate open and loot the pile; fire a flare.</summary>
     private async Task TrySites(FootPlayer me)

@@ -9,7 +9,7 @@ namespace UnitSport.Core;
 /// </summary>
 public static class MouseCapture
 {
-    public static bool Disabled { get; set; } = Array.IndexOf(OS.GetCmdlineUserArgs(), "--nocapture") >= 0;
+    public static bool Disabled { get; set; } = CmdArgs.Has("--nocapture");
 
     public static void Capture()
     {

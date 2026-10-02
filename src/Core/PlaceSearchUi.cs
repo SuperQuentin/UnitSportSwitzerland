@@ -85,14 +85,7 @@ public partial class PlaceSearchUi : CanvasLayer
     }
 
     /// <summary>Reads an optional "--goto &lt;town&gt;" from the command line.</summary>
-    public static string? ParseGotoArg()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--goto")
-                return args[i + 1];
-        return null;
-    }
+    public static string? ParseGotoArg() => CmdArgs.Value("--goto");
 
     /// <summary>Places matching a query, best first: the same ranking the search panel uses.</summary>
     public List<Place> Search(string query, int limit = 12) => _index.Search(query, limit);

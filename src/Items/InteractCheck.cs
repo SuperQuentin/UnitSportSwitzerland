@@ -40,7 +40,7 @@ public partial class InteractCheck : Node
     }
 
     /// <summary>Asked for on the command line: the world then gives it a scratch inventory (the real one is shared by every worktree).</summary>
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--interactcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--interactcheck");
 
     public static InteractCheck? Create(Func<FootPlayer?> local, Inventory inventory) =>
         Requested ? new InteractCheck(local, inventory) : null;

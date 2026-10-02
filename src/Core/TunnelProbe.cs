@@ -38,17 +38,7 @@ public partial class TunnelProbe : Node3D
 
     public override void _ExitTree() => _chunks.RemoveAnchor(this);
 
-    public static string[]? ParseArgs()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--probe")
-            {
-                var parts = args[i + 1].Split(',');
-                return parts.Length == 3 ? parts : null;
-            }
-        return null;
-    }
+    public static string[]? ParseArgs() => CmdArgs.Value("--probe")?.Split(',') is { Length: 3 } parts ? parts : null;
 
     public override void _PhysicsProcess(double delta)
     {

@@ -341,7 +341,7 @@ public partial class BirdNetProbe : ChatProbe
     }
 
     /// <summary><c>--birdtown</c>: the town part of #143 instead of the hunt (tools/birdnetcheck.sh with TOWN=1).</summary>
-    private static bool Town => Array.IndexOf(OS.GetCmdlineUserArgs(), "--birdtown") >= 0;
+    private static bool Town => CmdArgs.Has("--birdtown");
 
     private float Above(BirdLife life, Bird b) => b.Node.GlobalPosition.Y - life.Ground(b.Node.GlobalPosition);
 

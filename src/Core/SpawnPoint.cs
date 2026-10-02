@@ -72,7 +72,7 @@ public partial class SpawnPoint : Node
 
     private static (double E, double N)? ParseLv95(string flag)
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         for (int i = 0; i < args.Length - 1; i++)
             if (args[i] == flag)

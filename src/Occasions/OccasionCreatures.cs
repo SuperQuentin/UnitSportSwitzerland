@@ -39,7 +39,7 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
     private readonly Dictionary<CritterKind, double[]> _born = new();
     private ShaderMaterial _material = null!;
     private double _t;
-    private static readonly bool LogFlocks = OS.GetCmdlineUserArgs().Contains("--decorlog");
+    private static readonly bool LogFlocks = CmdArgs.Has("--decorlog");
     private double _logIn;
     private Vector3 _crowCentre;
 

@@ -305,7 +305,8 @@ public partial class FootPlayer
 
     private void FreeDeck(DeckSet set)
     {
-        foreach (var (_, body, _) in set.Sections) if (IsInstanceValid(body)) body.QueueFree();
+        // out of the physics now: freed at the end of the frame, a step could still stand on it
+        foreach (var (_, body, _) in set.Sections) if (IsInstanceValid(body)) { body.CollisionLayer = 0; body.QueueFree(); }
         foreach (var other in set.Excepted) if (IsInstanceValid(other)) RemoveCollisionExceptionWith(other);
     }
 

@@ -120,6 +120,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         if (!Online)
         {
             var state = vehicle.Capture();
+            vehicle.Retire();
             vehicle.QueueFree();
             granted(state);
             return;
@@ -256,7 +257,10 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         var claim = _pendingClaim;
         _pendingClaim = null;
-        claim?.Invoke(VehicleState.FromDict(data));
+        var state = VehicleState.FromDict(data);
+        // the server's despawn of it may come after this: out of the way of its new driver until then
+        if (claim != null) GetNodeOrNull<VehicleBody>(state.Name)?.Retire();
+        claim?.Invoke(state);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

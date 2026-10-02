@@ -22,7 +22,9 @@ and the SWISSIMAGE drape (`swissimage`); it borrows every shader and model from 
 - **Effects** (`NewEnvironment`, `EffectsOn`): SSAO (radius 1.5, intensity 1.6), SSR, volumetric
   fog at density 0.0004 over 200 m (0.0015 / 300 m turned the aerials milky and haloed the sun),
   on top of Realistic−'s ACES, haze and glow. SDFGI only with `--sdfgi`: ~15-20 ms on the M1 Pro,
-  to be measured on a gaming laptop before it goes into the preset. The sun is Cartoon's,
+  to be measured on a gaming laptop before it goes into the preset. A floating-origin shift
+  re-voxelises every cascade in one frame (25-37 ms of GPU instead of 8-12 on an RTX 4070), with
+  no visible pop (`core/floating-origin`). The sun is Cartoon's,
   4 cascades to 400 m.
 - **Greyed out in the settings** (`StyleKit.InDevelopment`) while it is unfinished: on some machines
   it renders nothing. `--style real+` still picks it; a saved `RealisticHigh` still loads.

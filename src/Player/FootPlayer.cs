@@ -184,7 +184,45 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// attitude, the landing squash and a stunned figure lying flat — all of it, whatever computed
     /// it, in one value the remote copy applies as-is rather than re-deriving.
     /// </summary>
-    [Export] public Transform3D BodyPose { get; set; } = Transform3D.Identity;
+    /// Replicated as <see cref="NetPose"/>.
+    public Transform3D BodyPose { get; set; } = Transform3D.Identity;
+
+    /// <summary>
+    /// <see cref="BodyPose"/> and <see cref="TrainPose"/> on the wire (#221): the rotation as a
+    /// quaternion, the offset, the landing squash, then the train's three joint angles only while a
+    /// train has any. 40 bytes off a train against 72 for a Transform3D and a Vector4, in every
+    /// state packet to every viewer.
+    /// </summary>
+    [Export]
+    public float[] NetPose
+    {
+        get
+        {
+            bool train = TrainPose != Vector4.Zero;
+            var w = train ? _poseTrain : _poseBody;
+            var b = BodyPose.Basis;
+            // the only scale a pose has is the landing squash, (1 + s/2, 1 - s, 1 + s/2) after the rotation
+            var q = b.GetRotationQuaternion();
+            var o = BodyPose.Origin;
+            w[0] = q.X; w[1] = q.Y; w[2] = q.Z; w[3] = q.W;
+            w[4] = o.X; w[5] = o.Y; w[6] = o.Z;
+            float squash = 1f - b.Y.Length();
+            w[7] = Mathf.Abs(squash) < 1e-5f ? 0f : squash;   // a ride's rounding is no squash
+            if (train) { w[8] = TrainPose.X; w[9] = TrainPose.Y; w[10] = TrainPose.Z; }
+            return w;
+        }
+        set
+        {
+            if (value == null || value.Length < PoseFloats) return;   // a malformed packet changes nothing
+            float s = value[7];
+            var rot = new Basis(new Quaternion(value[0], value[1], value[2], value[3]).Normalized());
+            BodyPose = new Transform3D(s == 0f ? rot : rot * Basis.FromScale(new Vector3(1f + s * 0.5f, 1f - s, 1f + s * 0.5f)),
+                new Vector3(value[4], value[5], value[6]));
+            TrainPose = value.Length >= PoseFloats + 3 ? new Vector4(value[8], value[9], value[10], 0f) : Vector4.Zero;
+        }
+    }
+    private const int PoseFloats = 8;
+    private readonly float[] _poseBody = new float[PoseFloats], _poseTrain = new float[PoseFloats + 3];
 
     /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/> or <see cref="PoseTucked"/>.</summary>
     [Export] public int PoseKind { get; set; }
@@ -258,6 +296,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var relay = new MultiplayerSynchronizer
         {
             Name = name, RootPath = new NodePath(".."), ReplicationConfig = config, ReplicationInterval = interval,
+            // the on-change properties (ride, seat, clothes, items) checked at 10 Hz, not every
+            // frame for every relay: a change reaches viewers at most 0.1 s later (#221)
+            DeltaInterval = 0.1f,
             // refreshed when the audience changes (RefreshRelays): Idle ran the filter every frame for every peer
             VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };
@@ -504,7 +545,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public float? ShowroomYaw { get; set; }
 
     /// <summary>The replicated pose properties, in one place for the synchronizer and <c>--synccheck</c>.</summary>
-    public static readonly string[] PoseProperties = { ".:BodyPose", ".:PoseKind", ".:Anim", ".:TrainPose" };
+    public static readonly string[] PoseProperties = { ".:NetPose", ".:PoseKind", ".:Anim" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -2076,6 +2117,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // a Battle Royale crate at your feet (#194), indoors or out: a death box falls where its owner did
         if (_ride == null && !_mantling && _deadTimer <= 0 && BattleRoyale.BrCrates.Instance?.TryOpen(this) == true) return true;
+        // a zipline's top post, a ladder's foot, a launch pad (#275)
+        if (_ride == null && !_mantling && _deadTimer <= 0 && !Indoors && Items.ItemController.Instance?.GadgetTool.TryInteract(this) == true) return true;
 
         // what the view points at and the border outlines (#206): a dropped item is picked up
         if (_ride == null && !_mantling && _deadTimer <= 0 && Items.Highlight.Pointed is Items.DroppedItem dropped
@@ -2169,12 +2212,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void EnterVehicle(VehicleState state)
     {
         if (_sliding) EndSlide();
-        GlobalPosition = Origin!.ToWorld(state.Position);
+        // off the bus's deck and out of every deck now, not in the next _Process: a physics step in
+        // between stood the bus just got into on its own parked deck, 0.7 m up, then on its roof (#323)
+        if (Aboard) LeaveDeck(keepVelocity: false);
+        ClearDecks();
+        var at = Origin!.ToWorld(state.Position);
+        GlobalPosition = at;
         Rotation = new Vector3(0, state.Yaw, 0);
         // the same car: its preset, its garage parts and whatever doors were left open come with it; the
         // driver's door opens to let them in, and once seated every door shuts (and stays shut:
         // nobody drives with a door open, see TryToggleCarDoor)
         ApplyRide(state.Kind, state.Velocity, state.Tuning, state.Setup);
+        // where it stood, on its wheels: ApplyRide lifts a body that grew (a walker's 0.32 m to a
+        // bus's 1.05), and the bus got into stood 0.73 m up for a frame, then dropped (#323). A craft
+        // keeps the lift, it is what keeps one on a slope from reading its first step as a crash.
+        if (_ride is not Flyer) GlobalPosition = at;
         if (HeavyCatalog.For(state.Kind) != null && state.CreateRide() is Truck train)
         {
             // the truck as it was left: its trailer, its angles, its doors and display, its load
@@ -4046,8 +4098,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PlayerInput.Rumble(0.2f, Mathf.Clamp((_fallSpeed - 3f) / 7f, 0.15f, 1f), 0.15f);
             if (_fallSpeed > 1.5f) Landed?.Invoke(_fallSpeed);
             // a 6 m drop is free, a 15 m one hurts a lot, a 25 m one is the end
-            if (_fallSpeed > 11f && _ejected <= 0) TakeDamage((_fallSpeed - 11f) * 9f, 0, DamageCause.Fall);
+            if (_fallSpeed > 11f && _ejected <= 0 && !SoftLanding) TakeDamage((_fallSpeed - 11f) * 9f, 0, DamageCause.Fall);
             _fallSpeed = 0f;
+            SoftLanding = false;
         }
         _wasOnFloor = onFloor;
 

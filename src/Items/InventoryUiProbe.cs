@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -11,7 +12,7 @@ namespace UnitSport.Items;
 /// </summary>
 public partial class InventoryUiProbe : Node
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--invuicheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--invuicheck");
 
     private readonly ItemController _items;
     private int _failures;

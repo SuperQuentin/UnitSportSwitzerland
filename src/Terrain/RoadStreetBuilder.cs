@@ -4,23 +4,25 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Terrain;
 
 /// <summary>
-/// Sidewalks (#119): the v3 <see cref="RoadSide.SidewalkDm"/>/<see cref="RoadSide.KerbCm"/> the
-/// network stage (<c>StreetPlanner</c>) wrote, drawn beside the carriageway and given collision.
-/// A kerbed side is a slab: its inner edge on the ribbon's edge (offset exactly as
-/// <c>RoadMeshBuilder.AppendSegment</c> offsets it, per-vertex bisector), its top the kerb height
-/// above the road, a kerb face down to the road, and a skirt on the outer edge reaching under the
-/// ground the road blend leaves there. A side with no kerb (a square, a 3 m lane) is flush paving
-/// at road height. Ends where the sidewalk stops get an end face; where the next piece carries it
-/// on, nothing.
+/// Sidewalks (#119) and separated bike paths (#120): what the v3 <see cref="RoadSide"/> of a
+/// segment holds beside its carriageway, as the network stage (<c>StreetPlanner</c>) wrote it,
+/// drawn and given collision. A side is laid out by <see cref="RoadStreetSection"/>, shared with
+/// the network stage: a profile of (distance from the ribbon's edge, height above the road)
+/// points, its pieces coloured as kerb face, sidewalk, flush paving, grass or path. Its inner
+/// edge is the ribbon's edge (offset exactly as <c>RoadMeshBuilder.AppendSegment</c> offsets it,
+/// per-vertex bisector), its outer edge gets a skirt reaching under the ground the road blend
+/// leaves there. Ends where the side stops get an end face; where the next piece carries it on,
+/// nothing.
 ///
 /// <para>
-/// Collision is the top and the kerb, in the two-sided bridge-deck body, with the kerb
-/// <b>chamfered</b> (<see cref="Chamfer"/> out for the kerb's height up) and so are the open
-/// ends: a foot capsule of 0.32 m meets a vertical 12 cm step at 51°, at the edge of its 52°
+/// Collision is the profile's tops and kerbs, in the two-sided bridge-deck body, with every
+/// vertical kerb <b>chamfered</b> 45° (<see cref="RoadStreetSection.Chamfered"/>) and so are the
+/// open ends: a foot capsule of 0.32 m meets a vertical 12 cm step at 51°, at the edge of its 52°
 /// <c>FloorMaxAngle</c>, and would stop dead at some kerbs; a 45° chamfer it walks up. Cars
-/// (0.85 m) meet even a vertical one at 31°. Flush paving needs none: the heightfield under it is
-/// the road's. The ground under a slab is the road blend's (raised to the kerb a lattice cell in
-/// from the kerb line, <c>ComputeRoadBlend</c>), so walking off the outer edge carries on level.
+/// (0.85 m) meet even a vertical one at 31°. The sloped kerbs beside a bike path are their own
+/// ramp. Flush paving needs none: the heightfield under it is the road's. The ground under a
+/// slab is the road blend's (raised to the side's outer height a lattice cell in from its edge,
+/// <c>ComputeRoadBlend</c>), so walking off the outer edge carries on level.
 /// </para>
 /// </summary>
 public static class RoadStreetBuilder
@@ -28,6 +30,8 @@ public static class RoadStreetBuilder
     private static readonly Color SidewalkColor = new Color(0.47f, 0.47f, 0.46f);   // asphalt, a shade lighter than the road
     private static readonly Color KerbColor = new Color(0.70f, 0.69f, 0.66f);       // granite kerbstones
     private static readonly Color PavingColor = new Color(0.56f, 0.53f, 0.48f);     // flush paving
+    private static readonly Color PathColor = new Color(0.40f, 0.40f, 0.41f);       // bike path: asphalt, a shade darker than the sidewalk
+    private static readonly Color GrassColor = new Color(0.33f, 0.42f, 0.22f);      // verge and buffer strips
 
     /// <summary>The skirt runs this far below the top: the visual ground sits 0.35 m under the road.</summary>
     private const float Skirt = 0.6f;
@@ -37,12 +41,34 @@ public static class RoadStreetBuilder
 
     public static bool HasSidewalk(RoadSegment s) =>
         s.PointCount >= 2 && RoadEmbankment.IsAtGrade(s)
-        && (s.Attributes.Left.SidewalkDm > 0 || s.Attributes.Right.SidewalkDm > 0);
+        && (s.Attributes.Left.OuterDm > 0 || s.Attributes.Right.OuterDm > 0);
 
-    /// <summary>One side of one segment: inner (ribbon edge) and outer plan points, road height, kerb, open ends.</summary>
-    private readonly record struct Side(Vector3[] Inner, Vector3[] Outer, Vector3[] Forward, float Kerb, bool OpenStart, bool OpenEnd);
+    /// <summary>
+    /// One side of one segment: the ribbon's edge points, the unit vector out across the side at
+    /// each, the forward direction, the profile, and whether each end is open.
+    /// </summary>
+    private readonly record struct Side(Vector3[] Edge, Vector3[] Across, Vector3[] Forward,
+        RoadStreetSection.Profile Profile, bool OpenStart, bool OpenEnd)
+    {
+        /// <summary>The profile point <paramref name="k"/> of <paramref name="p"/> at vertex <paramref name="i"/>.</summary>
+        public Vector3 At(RoadStreetSection.Profile p, int i, int k) => Edge[i] + Across[i] * p.D[k] + new Vector3(0, p.H[k], 0);
 
-    /// <summary>Appends every sidewalk of the tile to a road mesh under construction.</summary>
+        /// <summary>The same point on the road surface (height 0 above the road).</summary>
+        public Vector3 Base(RoadStreetSection.Profile p, int i, int k) => Edge[i] + Across[i] * p.D[k];
+
+        public bool Raised => Profile.H.Any(h => h > 0);
+    }
+
+    private static Color ColorOf(StreetSurface s) => s switch
+    {
+        StreetSurface.Kerb => KerbColor,
+        StreetSurface.Paving => PavingColor,
+        StreetSurface.Track => PathColor,
+        StreetSurface.Verge or StreetSurface.Buffer => GrassColor,
+        _ => SidewalkColor,
+    };
+
+    /// <summary>Appends every sidewalk and bike path of the tile to a road mesh under construction.</summary>
     public static void Append(RoadTile tile, List<Vector3> vertices, List<Color> colors, List<Vector2> uvs,
         List<Vector2> uv2s, List<int> indices)
     {
@@ -51,32 +77,37 @@ public static class RoadStreetBuilder
         var paving = PavingColor.SrgbToLinear();
         foreach (var side in Sides(tile))
         {
-            var (inner, outer) = (side.Inner, side.Outer);
-            int n = inner.Length;
-            var up = new Vector3(0, side.Kerb, 0);
-            var down = new Vector3(0, side.Kerb - Skirt, 0);
-            var surface = side.Kerb > 0 ? top : paving;
-            for (int i = 0; i < n - 1; i++)
+            var p = side.Profile;
+            int n = side.Edge.Length, last = p.Count - 1;
+            var drop = new Vector3(0, -Skirt, 0);
+            for (int k = 0; k < last; k++)
             {
-                Quad(vertices, colors, uvs, uv2s, indices, surface, inner[i] + up, inner[i + 1] + up, outer[i + 1] + up, outer[i] + up);
-                if (side.Kerb > 0)
-                    Quad(vertices, colors, uvs, uv2s, indices, kerb, inner[i], inner[i + 1], inner[i + 1] + up, inner[i] + up);
-                Quad(vertices, colors, uvs, uv2s, indices, kerb, outer[i] + up, outer[i + 1] + up, outer[i + 1] + down, outer[i] + down);
+                var color = ColorOf(p.Surface[k]).SrgbToLinear();
+                for (int i = 0; i < n - 1; i++)
+                    Quad(vertices, colors, uvs, uv2s, indices, color, side.At(p, i, k), side.At(p, i + 1, k), side.At(p, i + 1, k + 1), side.At(p, i, k + 1));
             }
-            if (side.Kerb <= 0) continue;
-            if (side.OpenStart)
-                Quad(vertices, colors, uvs, uv2s, indices, kerb, inner[0], inner[0] + up, outer[0] + up, outer[0]);
-            if (side.OpenEnd)
-                Quad(vertices, colors, uvs, uv2s, indices, kerb, inner[n - 1], inner[n - 1] + up, outer[n - 1] + up, outer[n - 1]);
+            for (int i = 0; i < n - 1; i++)
+                Quad(vertices, colors, uvs, uv2s, indices, kerb, side.At(p, i, last), side.At(p, i + 1, last), side.At(p, i + 1, last) + drop, side.At(p, i, last) + drop);
+            if (!side.Raised) continue;
+            foreach (var (open, i) in (ReadOnlySpan<(bool, int)>)[(side.OpenStart, 0), (side.OpenEnd, n - 1)])
+            {
+                if (!open) continue;
+                for (int k = 0; k < last; k++)
+                    if (p.D[k + 1] - p.D[k] > 1e-4f)
+                        Quad(vertices, colors, uvs, uv2s, indices, kerb, side.Base(p, i, k), side.At(p, i, k), side.At(p, i, k + 1), side.Base(p, i, k + 1));
+            }
         }
 
-        // junction corners (APRP): the top, and a face down every open edge (kerb or outer, the same skirt)
+        // junction corners (APRP), and a path's bands carried through a junction (#120): the top,
+        // and a face down every open edge (kerb or outer, the same skirt)
         foreach (var area in tile.AreaProps)
         {
-            if (area.Type != AreaPropType.Sidewalk || area.Vertices.Length < 9) continue;
+            if (!StreetAreas.Is(area.Type) || area.Vertices.Length < 9) continue;
             var up = new Vector3(0, area.Height, 0);
             var down = new Vector3(0, area.Height - Skirt, 0);
-            var surface = area.Height > 0 ? top : paving;
+            var surface = area.Type == AreaPropType.Kerb ? kerb
+                : area.Type == AreaPropType.BikePath ? PathColor.SrgbToLinear()
+                : area.Type == AreaPropType.Grass ? GrassColor.SrgbToLinear() : area.Height > 0 ? top : paving;
             for (int k = 0; k + 2 < area.Indices.Length; k += 3)
             {
                 int i0 = vertices.Count;
@@ -110,47 +141,45 @@ public static class RoadStreetBuilder
     }
 
     /// <summary>
-    /// Collision triangles for every kerbed sidewalk: the top, and the chamfered kerb and open
-    /// ends from the road up to it. Goes into the bridge-deck body, which is two-sided.
+    /// Collision triangles for every raised side: its chamfered profile, and the open ends from
+    /// the road up to it, pulled in like the kerb. Goes into the bridge-deck body, which is two-sided.
     /// </summary>
     public static Vector3[] BuildCollisionFaces(RoadTile tile)
     {
         var faces = new List<Vector3>();
         foreach (var side in Sides(tile))
         {
-            if (side.Kerb <= 0) continue;
-            var (inner, outer, fwd) = (side.Inner, side.Outer, side.Forward);
-            int n = inner.Length;
-            var up = new Vector3(0, side.Kerb, 0);
-            // the top's inner edge, Chamfer in from the kerb line; its ends Chamfer in where open
-            var innerTop = new Vector3[n];
-            var outerTop = new Vector3[n];
+            if (!side.Raised) continue;
+            var p = RoadStreetSection.Chamfered(side.Profile);
+            int n = side.Edge.Length, count = p.Count;
+            var top = new Vector3[n, count];
             for (int i = 0; i < n; i++)
-            {
-                var across = outer[i] - inner[i];
-                float width = across.Length();
-                innerTop[i] = inner[i] + across / Math.Max(width, 1e-4f) * Math.Min(Chamfer, width * 0.5f) + up;
-                outerTop[i] = outer[i] + up;
-            }
+                for (int k = 0; k < count; k++)
+                    top[i, k] = side.At(p, i, k);
             float length = 0;
-            for (int i = 1; i < n; i++) length += inner[i].DistanceTo(inner[i - 1]);
+            for (int i = 1; i < n; i++) length += side.Edge[i].DistanceTo(side.Edge[i - 1]);
             float pull = Math.Min(Chamfer, length * 0.25f);
-            if (side.OpenStart) { innerTop[0] += fwd[0] * pull; outerTop[0] += fwd[0] * pull; }
-            if (side.OpenEnd) { innerTop[n - 1] -= fwd[n - 1] * pull; outerTop[n - 1] -= fwd[n - 1] * pull; }
-
-            for (int i = 0; i < n - 1; i++)
+            for (int k = 0; k < count; k++)
             {
-                Tri(faces, innerTop[i], innerTop[i + 1], outerTop[i + 1], outerTop[i]);
-                Tri(faces, inner[i], inner[i + 1], innerTop[i + 1], innerTop[i]);
+                if (p.H[k] <= 0) continue;
+                if (side.OpenStart) top[0, k] += side.Forward[0] * pull;
+                if (side.OpenEnd) top[n - 1, k] -= side.Forward[n - 1] * pull;
             }
-            if (side.OpenStart) Tri(faces, inner[0], outer[0], outerTop[0], innerTop[0]);
-            if (side.OpenEnd) Tri(faces, inner[n - 1], outer[n - 1], outerTop[n - 1], innerTop[n - 1]);
+
+            for (int k = 0; k + 1 < count; k++)
+            {
+                for (int i = 0; i < n - 1; i++)
+                    Tri(faces, top[i, k], top[i + 1, k], top[i + 1, k + 1], top[i, k + 1]);
+                if (p.D[k + 1] - p.D[k] < 1e-4f) continue;
+                if (side.OpenStart) Tri(faces, side.Base(p, 0, k), side.Base(p, 0, k + 1), top[0, k + 1], top[0, k]);
+                if (side.OpenEnd) Tri(faces, side.Base(p, n - 1, k), side.Base(p, n - 1, k + 1), top[n - 1, k + 1], top[n - 1, k]);
+            }
         }
 
         // junction corners: the top and its edges, vertical (a corner patch is a few metres across)
         foreach (var area in tile.AreaProps)
         {
-            if (area.Type != AreaPropType.Sidewalk || (area.Flags & PropFlags.Solid) == 0 || area.Height <= 0) continue;
+            if (!StreetAreas.IsSolid(area)) continue;
             var up = new Vector3(0, area.Height, 0);
             for (int k = 0; k + 2 < area.Indices.Length; k += 3)
             {
@@ -164,7 +193,7 @@ public static class RoadStreetBuilder
         return faces.ToArray();
     }
 
-    /// <summary>Every sidewalk side of the tile, with whether each end is open (no sidewalk carries on there).</summary>
+    /// <summary>Every side of the tile with something beside its carriageway, with whether each end is open (nothing carries on there).</summary>
     private static IEnumerable<Side> Sides(RoadTile tile)
     {
         // endpoint -> (segment, at its start) for the continuation test
@@ -188,8 +217,8 @@ public static class RoadStreetBuilder
             foreach (bool right in new[] { false, true })
             {
                 var mine = right ? seg.Attributes.Right : seg.Attributes.Left;
-                if (mine.SidewalkDm == 0) continue;
-                yield return Build(seg, right, mine,
+                if (RoadStreetSection.For(mine) is not { } profile) continue;
+                yield return Build(seg, right, profile,
                     !Continues(tile, ends, s, atStart: true, right), !Continues(tile, ends, s, atStart: false, right));
             }
         }
@@ -208,19 +237,22 @@ public static class RoadStreetBuilder
             // end to start runs the same way: same side; end to end or start to start: the other side
             bool sameWay = atStart != otherAtStart;
             var theirs = sameWay == right ? o.Right : o.Left;
-            if (theirs.SidewalkDm > 0) return true;
+            if (theirs.OuterDm > 0) return true;
         }
         return false;
     }
 
-    private static Side Build(RoadSegment seg, bool right, RoadSide side, bool openStart, bool openEnd)
+    private static Side Build(RoadSegment seg, bool right, RoadStreetSection.Profile profile, bool openStart, bool openEnd)
     {
         int n = seg.PointCount;
         var pts = new Vector3[n];
         for (int i = 0; i < n; i++) pts[i] = new Vector3(seg.Points[i * 3], seg.Points[i * 3 + 1], seg.Points[i * 3 + 2]);
-        float half = seg.Width * 0.5f, width = side.SidewalkDm / 10f, sign = right ? 1f : -1f;
+        float half = seg.Width * 0.5f, width = profile.Width, sign = right ? 1f : -1f;
+        var side = right ? seg.Attributes.Right : seg.Attributes.Left;
+        var along = RoadStreetSection.Fractions(seg);   // a turn lane's widening pushes the side out (#120)
         var inner = new Vector3[n];
         var outer = new Vector3[n];
+        var across = new Vector3[n];
         var forward = new Vector3[n];
         for (int i = 0; i < n; i++)
         {
@@ -229,14 +261,15 @@ public static class RoadStreetBuilder
             f.Y = 0;
             if (f.LengthSquared() < 1e-8f) f = Vector3.Forward;
             f = f.Normalized();
-            var across = new Vector3(-f.Z, 0, f.X) * sign;
-            inner[i] = pts[i] + across * half;
-            outer[i] = pts[i] + across * (half + width);
+            across[i] = new Vector3(-f.Z, 0, f.X) * sign;
+            float start = half + side.ShiftAt(along[i]);
+            inner[i] = pts[i] + across[i] * start;
+            outer[i] = pts[i] + across[i] * (start + width);
             forward[i] = f;
         }
         var keep = Simplify(inner, outer);
-        return new Side(keep.Select(k => inner[k]).ToArray(), keep.Select(k => outer[k]).ToArray(),
-            keep.Select(k => forward[k]).ToArray(), side.KerbCm / 100f, openStart, openEnd);
+        return new Side(keep.Select(k => inner[k]).ToArray(), keep.Select(k => across[k]).ToArray(),
+            keep.Select(k => forward[k]).ToArray(), profile, openStart, openEnd);
     }
 
     /// <summary>A slab vertex may be dropped if both edges and the height stay this close to the chord.</summary>
@@ -248,7 +281,8 @@ public static class RoadStreetBuilder
     /// triangles and made its kerb collision 24 times the bridges'. Greedy: a run is extended while
     /// every vertex it skips lies within <see cref="PlanTolerance"/> of both edge chords and
     /// <see cref="HeightTolerance"/> of the height chord. The kerb stays on the ribbon's edge to
-    /// within the tolerance.
+    /// within the tolerance, and every line between the two edges (a band of the profile) too: it
+    /// is their blend.
     /// </summary>
     private static List<int> Simplify(Vector3[] inner, Vector3[] outer)
     {

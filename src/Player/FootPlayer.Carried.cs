@@ -13,6 +13,15 @@ public partial class FootPlayer
     /// <summary>Where the carrier holds the body this frame (position, heading, velocity), or null once it lets go.</summary>
     public Func<(Vector3 At, float Yaw, Vector3 Velocity)?>? Carrier { get; set; }
 
+    /// <summary>
+    /// The body stays on show while carried: hanging from a zipline or on a ladder (#275), where the
+    /// player's own camera still looks at it. The cargo plane leaves it false (inside the fuselage).
+    /// </summary>
+    public bool ShowWhileCarried { get; set; }
+
+    /// <summary>The next landing does not hurt, however far the fall: thrown up by a trampoline (#275).</summary>
+    public bool SoftLanding { get; set; }
+
     private bool _carried;
 
     /// <summary>
@@ -34,7 +43,7 @@ public partial class FootPlayer
             if (Indoors) Interiors.InteriorManager.Instance?.Leave(this);
             if (_ride is { IsVehicle: true }) ExitVehicle();
             _carried = true;
-            Visible = false;   // inside the fuselage: nothing to see, and the camera is the plane's
+            Visible = ShowWhileCarried;   // inside the fuselage: nothing to see, and the camera is the plane's
         }
         _body.Disabled = true;
         _placed = true;
@@ -52,12 +61,30 @@ public partial class FootPlayer
     }
 
     /// <summary>
+    /// Let go on foot at <paramref name="at"/> with <paramref name="velocity"/> (the end of a zipline, the
+    /// top of a ladder, a jump off either): no ride change, and the fall counts from here.
+    /// </summary>
+    public void Release(Vector3 at, Vector3 velocity)
+    {
+        Carrier = null;
+        ShowWhileCarried = false;
+        if (_carried) Uncarry();
+        GlobalPosition = at;
+        Velocity = Vector3.Zero;
+        MoveAndSlide();
+        _fallSpeed = 0f;
+        _placed = true;
+        Velocity = velocity;
+    }
+
+    /// <summary>
     /// Out of the carrier: at <paramref name="at"/> with <paramref name="velocity"/>, in a <paramref name="ride"/>
     /// (the wingsuit; its Jump opens the parachute as on any base jump).
     /// </summary>
     public void Leap(Vector3 at, Vector3 velocity, RideKind ride)
     {
         Carrier = null;
+        ShowWhileCarried = false;
         if (_carried) Uncarry();
         GlobalPosition = at;
         // no physics ran while carried, so the body still believes it stands where it boarded:

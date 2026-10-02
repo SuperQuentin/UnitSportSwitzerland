@@ -1034,6 +1034,27 @@ public static class ItemIcons
             "..kkk...........",
         };
 
+        // building (#274): a claw hammer, steel head top right, wooden handle down to the left
+        d[ItemId.Hammer] = new[]
+        {
+            "................",
+            "................",
+            "..........kkk...",
+            ".........kwagk..",
+            "........kwaaggk.",
+            ".......kkkagGGk.",
+            "......kNnkkGGk..",
+            ".....kNnk..kk...",
+            "....kNnk........",
+            "...kNnk.........",
+            "..kNnk..........",
+            ".kNnk...........",
+            ".knk............",
+            "..k.............",
+            "................",
+            "................",
+        };
+
         d[ItemId.Ammo9mm] = new[]
         {
             "................",
