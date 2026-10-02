@@ -2285,8 +2285,6 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             vehicles.ToggleDoor(aim.Vehicle, aim.Door);
             return true;
         }
-        // a ship, with the setting on (#303): onto its deck by the nearest gangway, not at its wheel
-        if (Core.GameSettings.Current.BoardShipsOnDeck && TryBoardOnDeck(aim.Vehicle)) return true;
         vehicles.Claim(aim.Vehicle, EnterVehicle);
         return true;
     }

@@ -22,7 +22,8 @@ namespace UnitSport.Player;
 /// standing there in the swell (carried by the tilting deck, the stumble feels the heel), down the
 /// stairs, along the side deck into the saloon, the gangway's gate opened by its button and out on
 /// the plank, forward to the bow (38 m from the middle: the deck is still built), over the rail into
-/// the water swimming, back up the gangway's ladder, and into a saloon seat and up again.</item>
+/// the water swimming, back up the boarding ladder on the hull (#384), and into a saloon seat and up
+/// again; then E from a quay alongside both ways of "Get in buses and ships from outside" (#384).</item>
 /// </list>
 /// <c>pier</c> (#377): the fixture's landing, the steamer at its berth, a walk from the pier over the
 /// gangway onto the deck and back, a speedboat's driver stepping out onto a jetty (<see cref="Piers"/>);
@@ -704,12 +705,21 @@ public partial class SteamerCheck : Node
         bool swimming = await Until(() => me.IsSwimming, 8);
         me.WalkControls = () => (Vector3.Zero, false);
         Expect(swimming && !me.Aboard, $"over the rail: in the water, swimming (#301), not carried ({WhereText(me)})");
-        // back up the gangway's ladder
-        if (Deck(me, SteamerMeshBuilder.DeckHalf(SteamerMeshBuilder.Z(44.2f)) + 1.8f, d, 44.2f) is { } foot) me.StartSwimmingAtSurface(foot);
+        // back up the boarding ladder on the hull (#384), forward climbing it as a rope ladder
+        float lx = SteamerMeshBuilder.LadderX, la = SteamerMeshBuilder.LadderAt;
+        if (Deck(me, lx + 1.2f, d, la) is { } foot) me.StartSwimmingAtSurface(foot);
         await Wait(0.5);
-        Expect(me.IsSwimming && me.TryInteract(), "E swimming beside the gangway");
-        bool aboard = await Until(() => me.Aboard && !me.IsSwimming, 6);
-        Expect(aboard && Mathf.Abs(Where(me).Y - d) < 0.3f, $"climbs its ladder onto the deck ({WhereText(me)})");
+        Expect(me.IsSwimming && me.TryInteract() && me.OnShipLadder, $"E swimming by the ladder gets onto it ({WhereText(me)})");
+        me.ForceLadderClimb = 1f;
+        await Wait(0.9);
+        await Shot("ladder_climb", () => OnShip(me, lx + 7f, SteamerMeshBuilder.DeckY + 0.6f, la + 6f, lx, SteamerMeshBuilder.DeckY - 0.6f, la));
+        float midway = Where(me).Y;
+        bool aboard = await Until(() => me.Aboard && !me.IsSwimming && !me.OnShipLadder, 8);
+        me.ForceLadderClimb = null;
+        await Wait(0.5);
+        Log(F($"on the ladder: {midway:F2} m over the keel after 0.9 s of climbing, a pose {me.PoseKind} on the way"));
+        Expect(aboard && Mathf.Abs(Where(me).Y - d) < 0.3f, $"climbs the ladder over the rail onto the deck ({WhereText(me)})");
+        await Shot("ladder", () => OnShip(me, lx + 9f, SteamerMeshBuilder.DeckY + 1.2f, la + 7f, lx, SteamerMeshBuilder.DeckY - 0.4f, la));
     }
 
     private async Task Seat(FootPlayer me)
@@ -728,51 +738,64 @@ public partial class SteamerCheck : Node
     }
 
     /// <summary>
-    /// E from a quay beside the parked steamer, both ways of the setting "Board ships on deck": off (the
-    /// default) it takes the wheel, as a bus; on, it puts the player on deck by the gangway.
+    /// E from a quay beside the parked steamer, both ways of "Get in buses and ships from outside"
+    /// (#384): on (the default) it takes the wheel, as a bus; off it does nothing, and the player walks
+    /// aboard by the gangway (its button opens it) instead.
     /// </summary>
     private async Task Boarding(FootPlayer me)
     {
         await SeaState("calm", 0f);
         await Wait(3);
         var settings = GameSettings.Current;
-        bool was = settings.BoardShipsOnDeck;
+        bool was = settings.BoardWalkableFromOutside;
         float d = SteamerMeshBuilder.DeckY, top = d - SteamerMeshBuilder.PlankDrop;
-        float inner = SteamerMeshBuilder.PlankEdge + 0.5f, outer = inner + 7f;
-        var size = new Vector3(outer - inner, 8f, 8.4f);
+        float inner = SteamerMeshBuilder.PlankEdge + SteamerMeshBuilder.PlankOut, outer = inner + 7f;
+        var size = new Vector3(outer - inner, 8f, 14f);
         var quay = new StaticBody3D { Name = "TestQuay" };
         quay.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
         quay.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size }, MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.55f, 0.52f) } });
         GetTree().CurrentScene.AddChild(quay);
-        // on the quay at the port gangway, the ship as it lies now
-        async Task<bool> OnQuay()
+        // on the quay at the port gangway (or along it, out of the buttons' reach), the ship as it lies now
+        async Task<bool> OnQuay(float at, float x)
         {
             if (Frame(me) is not { } f) return false;
             var t = f.GlobalTransform;
             quay.GlobalTransform = new Transform3D(new Basis(Vector3.Up, t.Basis.GetEuler().Y),
                 t * BoatMeshBuilder.Flip(new Vector3((inner + outer) * 0.5f, top - size.Y * 0.5f, SteamerMeshBuilder.Z(44.2f))));
-            me.GlobalPosition = t * BoatMeshBuilder.Flip(new Vector3(SteamerMeshBuilder.PlankEdge + 1.6f, top + 0.05f, SteamerMeshBuilder.Z(44.2f)));
+            me.GlobalPosition = t * BoatMeshBuilder.Flip(new Vector3(x, top + 0.05f, SteamerMeshBuilder.Z(at)));
             me.Velocity = Vector3.Zero;
             await Wait(1.5);
             return !me.Aboard && me.Ride == RideKind.OnFoot;
         }
 
-        settings.BoardShipsOnDeck = false;
-        Expect(await OnQuay(), $"on a quay beside the port gangway ({WhereText(me)})");
+        settings.BoardWalkableFromOutside = true;
+        Expect(await OnQuay(44.2f, inner + 0.3f), $"on a quay beside the port gangway ({WhereText(me)})");
+        Log($"  E would: {VehicleReach.Find(me)?.Action ?? "nothing"} ({(Parked() is { } pk ? pk.Name : "no parked steamer")}, enterable {(Parked() is { } pp && VehicleManager.Instance!.Enterable(pp))})");
         Expect(me.TryInteract() && await Until(() => me.Ride == RideKind.Steamer && me.SeatIndex == 0, 5),
-            "\"Board ships on deck\" off (the default): E from the quay takes the wheel, as a bus");
+            "\"Get in buses and ships from outside\" on (the default): E from the quay takes the wheel, as a bus");
         me.ExitVehicle();
         await Until(() => me.Aboard, 8);
 
-        settings.BoardShipsOnDeck = true;
-        Expect(await OnQuay(), $"back on the quay ({WhereText(me)})");
-        bool aboard = me.TryInteract() && await Until(() => me.Ride == RideKind.OnFoot && me.Aboard, 6);
+        settings.BoardWalkableFromOutside = false;
+        Expect(await OnQuay(49f, inner + 0.3f), $"back on the quay, along the ship ({WhereText(me)})");
+        me.TryInteract();
+        await Wait(2);
+        Expect(me.Ride == RideKind.OnFoot && !me.Aboard, $"off: E from the quay does nothing to the ship ({me.Ride}, {WhereText(me)})");
+        // so walk aboard: the gangway's button opens it, over the plank onto the deck
+        var parked = Parked();
+        Expect(await Walk(me, new[] { (inner + 0.45f, 43.1f) }, top), $"to the gangway's outside button ({WhereText(me)})");
+        await Wait(0.5);
+        if (me.ButtonInReach() == null && parked?.Visual is { } pv)
+            foreach (var b in parked.Ride.Decks[0].Buttons)
+                Log(F($"  button {b.Door} at {b.At} normal {b.Normal}, chest {pv.GlobalTransform.AffineInverse() * (me.GlobalPosition + Vector3.Up * 1.1f)} (node)"));
+        // shut, as someone aboard may have left it: its button outside, reached from the quay, opens it
+        if ((parked?.BusDoors & 1) == 1) parked!.ToggleDoor(1);
+        await Wait(0.5);
+        Expect(me.ButtonInReach() is { Door: 0 } && me.TryInteract() && await Until(() => (parked?.BusDoors & 1) == 1, 3), $"its button, reached from the quay, opens the gangway (gates {parked?.BusDoors})");
+        Expect(await Walk(me, new[] { (inner + 0.4f, 44.2f), (3.4f, 44.2f), (2.4f, 44.2f) }, d), $"over the plank ({WhereText(me)})");
         await Wait(1);
-        var w = Where(me);
-        Expect(aboard && Mathf.Abs(w.Y - d) < 0.25f && w.At > SteamerMeshBuilder.GangFrom - 0.5f && w.At < SteamerMeshBuilder.GangTo + 0.5f,
-            F($"\"Board ships on deck\" on: E from the quay puts the player on deck at the gangway ({WhereText(me)})"));
-        await Shot("board_on_deck", () => OnShip(me, 2.4f, d + 1.7f, 38.8f, 3.9f, d + 0.9f, 44.4f));
-        settings.BoardShipsOnDeck = was;
+        Expect(me.Aboard && Mathf.Abs(Where(me).Y - d) < 0.25f, $"off: walked aboard by the gangway instead ({WhereText(me)})");
+        settings.BoardWalkableFromOutside = was;
         quay.QueueFree();
     }
 

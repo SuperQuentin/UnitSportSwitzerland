@@ -47,6 +47,12 @@ public static class SteamerMeshBuilder
     public const float PlankOut = 1.3f, PlankDrop = 0.3f;
     /// <summary>Where the plank starts: the floor slab's edge amidships (4.3 + 0.05 m), flush with it.</summary>
     public const float PlankEdge = 4.35f;
+    /// <summary>
+    /// The boarding ladders (#384): a rope ladder down each side of the hull just aft of the gangway,
+    /// from the rail into the water, to climb aboard from it. Station, foot over the keel, out from the centreline.
+    /// </summary>
+    public const float LadderAt = 46.0f, LadderFoot = SteamerLines.Draught - 0.75f;
+    public static float LadderX => HalfAt(LadderAt) + 0.07f;
     /// <summary>The stairs: from the main deck here up to the upper deck's aft edge, either side.</summary>
     public const float StairFoot = 68.5f, StairX = 2.9f, StairWidth = 1.1f;
     /// <summary>The wheels' middle, as a station, and the paddle boxes either side of it.</summary>
@@ -784,6 +790,19 @@ public static class SteamerMeshBuilder
     /// <summary>The windlass and bitts on the open bow, the flagstaffs, the lifebuoys on the rails.</summary>
     private static void Fittings(MeshScratch m, DeckBuilder dk)
     {
+        // the boarding ladders (#384): rope sides hooked over the rail, a teak rung every 30 cm
+        var rope = new Color(0.78f, 0.7f, 0.52f);
+        foreach (float side in new[] { 1f, -1f })
+        {
+            float x = side * LadderX, z = Z(LadderAt);
+            foreach (float e in new[] { -0.26f, 0.26f })
+            {
+                m.Tube(new Vector3(x, LadderFoot, z + e), new Vector3(x, DeckY + RailHeight, z + e), 0.025f, rope, 5);
+                m.Tube(new Vector3(x, DeckY + RailHeight, z + e), new Vector3(x - side * 0.18f, DeckY + RailHeight, z + e), 0.025f, rope, 5);
+            }
+            for (float y = LadderFoot + 0.15f; y < DeckY + RailHeight - 0.1f; y += 0.3f)
+                m.Box(new Vector3(x + side * 0.02f, y, z), new Vector3(0.06f, 0.04f, 0.56f), Teak);
+        }
         var windlass = new Vector3(0, DeckY + 0.4f, Z(4.5f));
         m.Box(windlass, new Vector3(1.2f, 0.8f, 0.7f), Dark);
         m.Tube(windlass + new Vector3(-0.8f, 0.1f, 0), windlass + new Vector3(0.8f, 0.1f, 0), 0.22f, Brass, 8);

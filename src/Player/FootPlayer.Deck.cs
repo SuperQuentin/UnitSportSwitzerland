@@ -612,13 +612,21 @@ public partial class FootPlayer
                 if (SectionFrame(host, deck.Section) is not { } frame) continue;
                 foreach (var button in deck.Buttons)
                 {
-                    float d = (frame.GlobalTransform * button.At).DistanceTo(chest);
+                    var at = frame.GlobalTransform * button.At;
+                    float d = at.DistanceTo(chest);
+                    // a ship's gangway buttons outside are pressed from the pier its plank reaches
+                    // (1.3 m off the hull, #383): reached from that far, a bell-pull rather than a bus's push
+                    if (ride is Steamer && (frame.GlobalTransform.Basis * button.Normal).Dot(chest - at) > 0f)
+                        d -= ShipButtonReach - PassengerService.ButtonReach;
                     if (d < bestDist) { bestDist = d; best = (host, button.Door, (doors >> button.Door & 1) != 0); }
                 }
             }
         }
         return best;
     }
+
+    /// <summary>How far a ship's gangway button outside is reached from, m (a pier's face is 1.3 m off the hull).</summary>
+    private const float ShipButtonReach = 1.9f;
 
     /// <summary>E or G at a door's button: the door opens or shuts, whoever presses it. True when there was one.</summary>
     private bool TryDoorButton()
