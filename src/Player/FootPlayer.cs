@@ -2210,12 +2210,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void EnterVehicle(VehicleState state)
     {
         if (_sliding) EndSlide();
-        GlobalPosition = Origin!.ToWorld(state.Position);
+        // off the bus's deck and out of every deck now, not in the next _Process: a physics step in
+        // between stood the bus just got into on its own parked deck, 0.7 m up, then on its roof (#323)
+        if (Aboard) LeaveDeck(keepVelocity: false);
+        ClearDecks();
+        var at = Origin!.ToWorld(state.Position);
+        GlobalPosition = at;
         Rotation = new Vector3(0, state.Yaw, 0);
         // the same car: its preset, its garage parts and whatever doors were left open come with it; the
         // driver's door opens to let them in, and once seated every door shuts (and stays shut:
         // nobody drives with a door open, see TryToggleCarDoor)
         ApplyRide(state.Kind, state.Velocity, state.Tuning, state.Setup);
+        // where it stood, on its wheels: ApplyRide lifts a body that grew (a walker's 0.32 m to a
+        // bus's 1.05), and the bus got into stood 0.73 m up for a frame, then dropped (#323). A craft
+        // keeps the lift, it is what keeps one on a slope from reading its first step as a crash.
+        if (_ride is not Flyer) GlobalPosition = at;
         if (HeavyCatalog.For(state.Kind) != null && state.CreateRide() is Truck train)
         {
             // the truck as it was left: its trailer, its angles, its doors and display, its load
