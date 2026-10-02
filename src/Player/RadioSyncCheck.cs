@@ -105,8 +105,9 @@ public partial class RadioSyncCheck : Node
             case 0 when t > 3:
                 var forward = -me.GlobalTransform.Basis.Z with { Y = 0 };
                 forward = forward.LengthSquared() > 1e-6f ? forward.Normalized() : Vector3.Forward;
-                RadioManager.Instance?.Throw(new RadioState("", 0,
-                    me.GlobalPosition + Vector3.Up * 1.5f + forward * 0.6f, me.Rotation.Y, forward * 4f + Vector3.Up * 2f));
+                if (RadioManager.Instance is { } radios)
+                    radios.Throw(new RadioState("", 0,
+                        radios.Origin.ToGlobal(me.GlobalPosition + Vector3.Up * 1.5f + forward * 0.6f), me.Rotation.Y, forward * 4f + Vector3.Up * 2f));
                 GD.Print("[radiocheck] thrower: thrown");
                 _step++;
                 break;

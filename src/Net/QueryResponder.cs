@@ -11,6 +11,9 @@ namespace UnitSport.Net;
 public sealed record ServerStatus(string Name, int Port, int Players, int Max, string Version, string World)
 {
     public int Proto { get; init; } = ServerQuery.Proto;
+
+    /// <summary>The game's wire protocol (<see cref="Handshake.Protocol"/>); 0 from a server older than the check.</summary>
+    public int Wire { get; init; }
 }
 
 /// <summary>
