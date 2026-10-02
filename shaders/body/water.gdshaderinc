@@ -72,7 +72,7 @@ void vertex() {
     // meshed 2 m and 4 m apart share their edge vertices, and must move them alike (UV.y, the
     // spacing, would crack the seam)
     vec3 rest = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    float spacing = max(2.0, distance(rest, CAMERA_POSITION_WORLD) * 0.004);
+    float spacing = max(2.0, distance(rest, CAMERA_POSITION_WORLD) * 0.008);
     vec3 n;
     vec3 d = water_wave_displace(pattern_xz(rest), UV.x, spacing, n);
     wave_normal = n;
@@ -156,6 +156,9 @@ void fragment() {
     vec2 ground = pattern_xz(world_pos);
     float dist = length(VERTEX);
     vec3 det = water_detail(ground);
+    // far off, the waves' normal is interpolated over a few pixels' worth of triangles: shading by
+    // it draws the mesh's own grid over a whole lake (seen from above Nyon), so it eases to up
+    vec3 wave_n = normalize(mix(wave_normal, vec3(0.0, 1.0, 0.0), smoothstep(400.0, 1500.0, dist)));
     // the water between this surface and what is behind it, along the view
     float scene_depth = texture(water_depth_texture, SCREEN_UV).r;
     vec4 behind = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_depth, 1.0);
@@ -182,7 +185,7 @@ void fragment() {
     float amp = wave_height_here();
     float wave_amount = clamp(amp * 1.6, 0.0, 0.8);
     vec3 sun = normalize(world_sun_dir);
-    float swell = wave_lift / max(amp, 0.05) * 1.1 + (dot(wave_normal, sun) - sun.y) * 6.0;
+    float swell = wave_lift / max(amp, 0.05) * 1.1 + (dot(wave_n, sun) - sun.y) * 6.0;
     w = mix(w, swell + w * 0.25, wave_amount);
     float band = floor((clamp(w, -1.0, 1.0) * 0.5 + 0.5) * 4.0) / 4.0;
 
@@ -196,7 +199,7 @@ void fragment() {
     vec2 cell = floor(mat2(vec2(0.83, 0.56), vec2(-0.56, 0.83)) * ground * 2.3);
     float sparkle = step(0.8, wd_hash(cell + floor(water_time * 3.0) * 7.31))
         * step(0.45, wd_noise(ground, 600.0));
-    col = mix(col, glint_color, crest * sparkle * 0.55);
+    col = mix(col, glint_color, crest * sparkle * 0.55 * (1.0 - smoothstep(120.0, 400.0, dist)));
 
     col *= world_tint;
     // valley mist of a running occasion; a no-op on an ordinary day
@@ -215,7 +218,7 @@ void fragment() {
 #else
     float ripple = 0.25;
 #endif
-    vec3 n_world = normalize(wave_normal - vec3(det.y, 0.0, det.z) * ripple * near * (0.45 + 0.8 * sea));
+    vec3 n_world = normalize(wave_n - vec3(det.y, 0.0, det.z) * ripple * near * (0.45 + 0.8 * sea));
     // from below, the surface faces down
     vec3 n_face = FRONT_FACING ? n_world : -n_world;
     NORMAL = style_view_normal(VIEW_MATRIX, n_face);
