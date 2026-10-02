@@ -21,6 +21,7 @@ client() { tc_client 240 "$OUT/placed_$1.log" --windowed --connect 127.0.0.1:$PO
     --photo-dir "$PHOTOS/placed_photos_$1" --at "$AT" --placedcheck "$1" "${@:2}"; }
 
 server 1
+: > "$OUT/placed_A.log"   # emptied first: the wait below must not read the last run's log
 client A & A=$!
 for _ in $(seq 1 180); do grep -q "A\] say planted" "$OUT/placed_A.log" 2>/dev/null && break; sleep 1; done
 client B --view first   # first person: the Polaroid on the ground fills the screenshot
