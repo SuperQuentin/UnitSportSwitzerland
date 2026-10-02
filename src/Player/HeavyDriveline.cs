@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -382,7 +383,7 @@ public sealed class HeavyDriveline
 
     private void AutoSelect(in DriveDemand d, float throttle, float speed, float dt)
     {
-        _gaining = Mathf.Lerp(_gaining, (Mathf.Abs(speed) - _lastSpeed) / Mathf.Max(dt, 1e-3f), 1f - Mathf.Exp(-3f * dt));
+        _gaining = Mathf.Lerp(_gaining, (Mathf.Abs(speed) - _lastSpeed) / Mathf.Max(dt, 1e-3f), MathX.Damp(3f, dt));
         _lastSpeed = Mathf.Abs(speed);
         if (_shift > 0f) return;
         int top = _s.Gears.Length;

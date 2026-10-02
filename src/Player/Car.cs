@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Audio;
 using UnitSport.Avatar;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -382,7 +383,7 @@ public sealed class Car : Rideable, IEngined
         BrakePedal = brake;
         HandbrakeOn = input.Handbrake;
 
-        float slipNow = Mathf.Wrap(motion.Slip, -Mathf.Pi, Mathf.Pi);
+        float slipNow = MathX.WrapAngle(motion.Slip);
         float delta;
         if (!float.IsNaN(input.WheelAngle))
         {

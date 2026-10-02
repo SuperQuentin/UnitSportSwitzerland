@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Gpx.Cinema;
 
@@ -67,7 +68,7 @@ public sealed class StabilisedHead : Shot
 
         if (!_primed) { _aim = want; _primed = true; }
         // critically damped: fast enough to follow a corner, slow enough to eat the bob
-        else _aim = _aim.Lerp(want, 1f - Mathf.Exp(-ctx.Follow(3.2f) * ctx.Dt));
+        else _aim = _aim.Lerp(want, MathX.Damp(ctx.Follow(3.2f), ctx.Dt));
 
         ctx.Place(eye, _aim, 74f);
     }
@@ -160,7 +161,7 @@ public sealed class Handheld : Shot
             + Vector3.Up * 1.5f;
 
         if (!_primed) { _pos = want; _primed = true; }
-        else _pos = _pos.Lerp(want, 1f - Mathf.Exp(-ctx.Follow(4.5f) * ctx.Dt));
+        else _pos = _pos.Lerp(want, MathX.Damp(ctx.Follow(4.5f), ctx.Dt));
 
         // breathing plus a slow wander; amplitude grows with pace, as an operator's would
         float shake = 0.02f + ctx.Speed * 0.006f;
@@ -254,7 +255,7 @@ public sealed class DroneReveal : Shot
     public override void Step(ShotContext ctx)
     {
         _t = Mathf.Min(1f, _t + ctx.Dt / 9f);
-        float e = _t * _t * (3f - 2f * _t);            // smoothstep, so it eases out of the climb
+        float e = Mathf.SmoothStep(0f, 1f, _t);        // so it eases out of the climb
 
         var pos = ctx.Subject
             - ctx.Heading * Mathf.Lerp(7f, 70f, e)
@@ -402,7 +403,7 @@ public sealed class ChaseShot : Shot
     {
         var want = ctx.Subject - ctx.Heading * 7.5f + Vector3.Up * 3f;
         if (!_primed) { _pos = want; _primed = true; }
-        else _pos = _pos.Lerp(want, 1f - Mathf.Exp(-ctx.Follow(6f) * ctx.Dt));
+        else _pos = _pos.Lerp(want, MathX.Damp(ctx.Follow(6f), ctx.Dt));
 
         ctx.Place(ctx.Lift(_pos, 1.5f), ctx.Chest + Vector3.Up * 0.3f, 68f);
     }
