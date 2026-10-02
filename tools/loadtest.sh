@@ -6,6 +6,7 @@
 #   tools/loadtest.sh <players> [label] [seconds]     (label: p<players>, seconds: 90)
 # Env: GODOT (default godot), CHUNKS (terrain_chunks dir, default the project's), PORT (7797),
 #      SEED (1), AT (observer E,N, default Col du Mollendruz).
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 PLAYERS=${1:?usage: tools/loadtest.sh <players> [label] [seconds]}
 LABEL=${2:-p$PLAYERS}

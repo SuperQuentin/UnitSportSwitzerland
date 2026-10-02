@@ -99,19 +99,4 @@ public sealed class Selection
         double ce = _tiles.Average(t => (double)t.E), cn = _tiles.Average(t => (double)t.N);
         return _tiles.MinBy(t => (t.E - ce) * (t.E - ce) + (t.N - cn) * (t.N - cn));
     }
-
-    /// <summary>"E-N" per line, the format swiss_data.py, TerrainPreprocessor and this tool read.</summary>
-    public void WriteTilesFile(string path) =>
-        File.WriteAllLines(path, _tiles.OrderBy(t => t.E).ThenBy(t => t.N).Select(t => $"{t.E}-{t.N}"));
-
-    public static IEnumerable<TileId> ReadTilesFile(string path)
-    {
-        foreach (var raw in File.ReadLines(path))
-        {
-            var line = raw.Split('#')[0].Trim();
-            if (line.Length == 0) continue;
-            var parts = line.Split('-', '_', ',');
-            yield return new TileId(int.Parse(parts[0]), int.Parse(parts[1]));
-        }
-    }
 }

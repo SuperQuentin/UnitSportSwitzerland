@@ -17,7 +17,7 @@
   record's tail), pad u16, then per segment, in drawing direction:
   `flags u16` (`RoadAttrFlags`: Urban, Roundabout, Osm, Tram, YieldAtStart, YieldAtEnd,
   OwnerFederal, OwnerCanton, OnStreet = TLM `auf_strasse` rail, Embedded = rail piece inside a
-  carriageway, #124 `railways`), `oneWay i8` (+1 with drawing, -1 against, 0 both/unknown),
+  carriageway, #124 `railways`, PavedBed = tram track laid in town paving, #119), `oneWay i8` (+1 with drawing, -1 against, 0 both/unknown),
   `layer i8` (TLM `stufe`, else bridge +1 / tunnel -1), `lanesFwd u8`, `lanesBwd u8` (per
   direction; a one-way segment has all its lanes in its travel direction; 0 = none/unknown),
   `priority u8` (high nibble `verkehrsbedeutung` rank 0..3, OSM highway where TLM has none; low
@@ -60,7 +60,10 @@
   wall with it on its right); `flags` Solid; `variant` 0 generated, 1 a surveyed TLM wall stands
   there (frees the ground, not drawn). A railing on a wall (#126) goes on the face line at the top.
   Region: 2,933 walls, +1.5 KB/tile raw (+2.9 %).
-- **`APRP`** area props (#122 island, splitter island; #119 junction-corner sidewalk):
+- **Sidewalks (#119, `urban-streets`)**: ATTR `Urban`, per side `sidewalkDm` and `kerbCm` (12, 0 =
+  flush) are written by `StreetPlanner`; a segment is split wherever a side's sidewalk changes.
+- **`APRP`** area props (#122 island, splitter island; #119 junction-corner sidewalk, written by
+  `CornerPlanner`: height = kerb, Solid when kerbed):
   `count u32`, per prop `type u8, variant u8, flags u16, height f32 (raise above the vertices,
   e.g. 0.12 kerb), vertexCount u16, indexCount u16`, xyz vertices, u16 indices.
 - **Varying along a link** (a sidewalk width per sample, OSM lanes changing mid-line): the

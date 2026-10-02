@@ -3,6 +3,7 @@
 # shotgun aimed and fires (screenshots of its own view), client B stands nearby and screenshots A's body:
 #   test_output/gunshot_{a_aimed,a_kick,a_pump,b_kick,b_pump,b_after}.png
 #   GODOT=<exe> tools/gunshotcheck.sh [--gunside]   (side: B looks along A's shoulder line; files gunshot_s_*.png)
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 AT=2583250,1113250
 PORT=7795

@@ -8,13 +8,22 @@
 # (touched every GUARD_BEAT s by a helper that dies with the owner) is older than GUARD_STALE s,
 # or when it has been held longer than the owner's max_hold_s + 120 s.
 #   guard_run <timeout_s> <log> cmd... run cmd with its output in log; kill its process tree,
-#                                      and only that, if it overruns. Returns cmd's exit code, 124 on timeout.
+#                                      and only that, if it overruns (124) or if free RAM falls under
+#                                      GUARD_MIN_FREE_MB (137). Otherwise returns cmd's exit code.
+#   guard_watch <pid> [min_free_mb]    background RAM watchdog for a process you started yourself
+#                                      (not through guard_run): kills that PID's tree, and only it,
+#                                      when free RAM falls under the floor. Prints the watchdog's PID.
+# RAM watchdog: free RAM is read every GUARD_MEM_EVERY (2) s from /proc/meminfo (Git Bash maps it
+# to Windows' free physical memory, ~30 ms); under GUARD_MIN_FREE_MB (1500) the run is killed
+# before Windows or WSL run out of memory and take everything else down with them.
 # Works in Git Bash on Windows and on Linux. Never kills by name: only the PIDs it started.
 
 GUARD_LOCK_DIR=${GUARD_LOCK_DIR:-${TMPDIR:-${TEMP:-/tmp}}/unitsport-heavy.lock}
 GUARD_POLL=${GUARD_POLL:-10}
 GUARD_BEAT=${GUARD_BEAT:-10}
 GUARD_STALE=${GUARD_STALE:-45}
+GUARD_MIN_FREE_MB=${GUARD_MIN_FREE_MB:-1500}
+GUARD_MEM_EVERY=${GUARD_MEM_EVERY:-2}
 _guard_have_lock=0
 _guard_beat_pid=
 
@@ -22,12 +31,13 @@ _guard_windows() { [ -n "${WINDIR:-}" ] || [ -n "${windir:-}" ]; }
 
 # free RAM in whole MB
 guard_free_mb() {
-  if _guard_windows; then
+  # Git Bash and Linux both have /proc/meminfo (Git Bash: MemFree = Windows' free physical memory)
+  if [ -r /proc/meminfo ]; then
+    awk '/^MemAvailable:/ { a = $2 } /^MemFree:/ { f = $2 } END { print int((a ? a : f) / 1024) }' /proc/meminfo
+  else
     local kb
     kb=$(powershell -NoProfile -c "(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory" | tr -dc '0-9')
     echo $(( kb / 1024 ))
-  else
-    awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo
   fi
 }
 
@@ -124,20 +134,33 @@ guard_unlock() {
   _guard_have_lock=0
 }
 
+# a PID and all its descendants as Git Bash / Linux sees them (ps -ef pid/ppid), the PID first
+_guard_tree() {
+  ps -ef 2>/dev/null | awk -v root="$1" 'NR > 1 { kids[$3] = kids[$3] " " $2 }
+    END { q = root; while (q != "") { n = split(q, a, " "); q = ""; for (i = 1; i <= n; i++) { print a[i]; q = q kids[a[i]] } } }'
+}
+
 # kill one PID we started, with everything it started
 _guard_kill_tree() {
-  local pid=$1
-  if _guard_windows && [ -r "/proc/$pid/winpid" ]; then
-    taskkill //F //T //PID "$(cat "/proc/$pid/winpid")" > /dev/null 2>&1
+  local pid=$1 p
+  if _guard_windows; then
+    # taskkill /T follows Windows parentage only: a process Git Bash forked is not the Windows child
+    # of its bash, so walk the Git Bash tree too; /T then takes each one's native children (the
+    # real Godot under its _console.exe wrapper)
+    for p in $(_guard_tree "$pid"); do
+      [ -r "/proc/$p/winpid" ] && taskkill //F //T //PID "$(cat "/proc/$p/winpid")" > /dev/null 2>&1
+      kill -KILL "$p" 2>/dev/null
+    done
   else
     kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
     sleep 2
     kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null
+    for p in $(_guard_tree "$pid"); do kill -KILL "$p" 2>/dev/null; done
   fi
 }
 
 guard_run() {
-  local timeout_s=$1 log=$2 pid elapsed=0
+  local timeout_s=$1 log=$2 pid elapsed=0 free
   shift 2
   mkdir -p "$(dirname "$log")"
   # its own process group on Linux, so the timeout can take its children down with it
@@ -154,7 +177,32 @@ guard_run() {
       wait "$pid" 2>/dev/null
       return 124
     fi
+    if [ $(( elapsed % GUARD_MEM_EVERY )) -eq 0 ]; then
+      free=$(guard_free_mb)
+      if [ "$free" -lt "$GUARD_MIN_FREE_MB" ]; then
+        echo "[guard] only ${free} MB free (floor ${GUARD_MIN_FREE_MB} MB): killing PID $pid and its children" | tee -a "$log" >&2
+        _guard_kill_tree "$pid"
+        wait "$pid" 2>/dev/null
+        return 137
+      fi
+    fi
     sleep 1; elapsed=$(( elapsed + 1 ))
   done
   wait "$pid"
+}
+
+guard_watch() {
+  local target=$1 floor=${2:-$GUARD_MIN_FREE_MB}
+  (
+    while kill -0 "$target" 2>/dev/null; do
+      free=$(guard_free_mb)
+      if [ "$free" -lt "$floor" ]; then
+        echo "[guard] only ${free} MB free (floor ${floor} MB): killing PID $target and its children" >&2
+        _guard_kill_tree "$target"
+        exit 0
+      fi
+      sleep "$GUARD_MEM_EVERY"
+    done
+  ) &
+  echo $!
 }

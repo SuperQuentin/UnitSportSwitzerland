@@ -142,10 +142,6 @@ public sealed class Alignment
         return result;
     }
 
-    /// <summary>Convenience: just the positions.</summary>
-    public List<Vec2> SamplePoints(double maxDeviation = 0.05, double minStep = 0.5, double maxStep = 25.0)
-        => Sample(maxDeviation, minStep, maxStep).Select(x => x.Position).ToList();
-
     /// <summary>
     /// Largest curvature step between consecutive pieces. Zero means the whole alignment is
     /// G2 — the number the smoothing is judged by.

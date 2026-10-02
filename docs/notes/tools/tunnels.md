@@ -15,3 +15,8 @@
   wing walls floated. Both the bore height and the headwall are **clamped to the cover that actually exists**
   (`MinCover` / `TerrainAbove`): `Unterfuehrung` under a rail embankment may have only 3 m
   over it, and a fixed-height bore would stand above the track it passes under.
+- **Superseded by #119** (`sidewalks-tunnels-runtime`): the carve is a punch at real mouths only
+  (no more carving wherever the ground falls inside the bore's span, which opened whole city
+  tunnels as trenches), the bore runs 1 m past the end, no cut walls line the hole, the height comes
+  from `RoadTunnels.ClearHeight` (not the raw cover), the ground over a bore is kept above its crown,
+  and bores have floor and wall collision.
