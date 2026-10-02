@@ -1235,10 +1235,5 @@ public static partial class InteriorGenerator
     private static float Fit(float v, float lo, float hi) => lo > hi ? (lo + hi) / 2 : Math.Clamp(v, lo, hi);
 
     /// <summary>FNV-1a: string.GetHashCode is randomised per process, and this seed must not be.</summary>
-    public static int StableHash(string s)
-    {
-        uint h = 2166136261;
-        foreach (char c in s) { h ^= c; h *= 16777619; }
-        return (int)h;
-    }
+    public static int StableHash(string s) => Core.Fnv.Hash(s);
 }

@@ -89,7 +89,7 @@ public static class Recipes
 
     /// <summary>
     /// Never made, only found or bought (#270): guns and ammunition, the camera, the biggest bag,
-    /// the seasonal treats and hats, the flare gun. Clothes are excluded by category in the game check.
+    /// the seasonal treats and hats, the flare gun, the shops' own items (#273). Clothes are excluded by category in the game check.
     /// </summary>
     public static readonly HashSet<ItemId> NeverCrafted = new()
     {
@@ -99,6 +99,8 @@ public static class Recipes
         ItemId.Candy, ItemId.Pumpkin, ItemId.CaramelApple, ItemId.Biberli, ItemId.Mandarin,
         ItemId.Grittibaenz, ItemId.Gluehwein,
         ItemId.WitchHat, ItemId.PumpkinHead, ItemId.SantaHat, ItemId.ReindeerAntlers,
+        // sold only (#273): the Swiss army knife, and what only a PAUSA machine holds
+        ItemId.SwissArmyKnife, ItemId.IceTea, ItemId.Crisps, ItemId.GummyBears, ItemId.IsotonicDrink,
     };
 
     /// <summary>Everything a recipe gives, the main output first.</summary>

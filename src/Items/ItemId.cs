@@ -109,6 +109,15 @@ public enum ItemId
     KneeSocks = 137, RainbowStockings = 138,
     PlatformBoots = 139, CombatBoots = 140, PinkSneakers = 141, WhiteSneakers = 142, MaryJanes = 143, DiscoPlatforms = 144,
     LaceArmWarmers = 145, FingerlessGloves = 146, PawGloves = 147, StripedArmWarmers = 148, NeonGloves = 149,
+
+    // ---- shops and PAUSA vending machines (#273, docs/notes/loot/shops.md): never crafted ----
+    /// <summary>Only from a PAUSA vending machine, like the three after it.</summary>
+    IceTea = 160,
+    Crisps = 161,
+    GummyBears = 162,
+    IsotonicDrink = 163,
+    /// <summary>Sold at hardware, sport and gun shops; carried, a tree gives one more log (<c>Loot.Gathering</c>).</summary>
+    SwissArmyKnife = 164,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
