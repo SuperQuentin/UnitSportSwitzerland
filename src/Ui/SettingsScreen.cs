@@ -83,6 +83,8 @@ public partial class SettingsScreen : Screen
                 v => GameSettings.Current.SfxVolume = (float)v, Percent);
             UiKit.SliderRow(rows, "Ambience", 0, 1, 0.05, s.AmbienceVolume,
                 v => GameSettings.Current.AmbienceVolume = (float)v, Percent);
+            UiKit.SliderRow(rows, "Music", 0, 1, 0.05, s.MusicVolume,
+                v => GameSettings.Current.MusicVolume = (float)v, Percent);
             UiKit.OptionRow(rows, "Engine voice", new[] { "Realistic", "PS1 SPU", "NES 2A03", "C64 SID", "Genesis FM" }, (int)s.EngineVoice,
                 i => GameSettings.Current.EngineVoice = (UnitSport.Audio.EngineVoice)i, "Which sound chip the engines are rendered as");
         });

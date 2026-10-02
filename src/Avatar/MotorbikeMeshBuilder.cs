@@ -517,10 +517,10 @@ public partial class Motorcyclist : Node3D
     private Node3D _steer = null!, _frontSpin = null!, _rearSpin = null!;
     private Vector3 _steerAxis;
 
-    public static Motorcyclist Create(MotoLook look, int riderIndex, bool rider = true)
+    public static Motorcyclist Create(MotoLook look, int riderIndex, bool rider = true, Outfit outfit = default)
     {
         var node = new Motorcyclist { Name = "Motorbike", _look = look };
-        node.Assemble(rider ? HumanPalette.ForRider(riderIndex) : null);
+        node.Assemble(rider ? HumanPalette.ForRider(riderIndex) with { Outfit = outfit } : null);
         return node;
     }
 
@@ -529,9 +529,18 @@ public partial class Motorcyclist : Node3D
 
     private void Assemble(HumanPalette? rider)
     {
-        var material = HumanMeshBuilder.Material();
         var k = _look;
-        AddChild(new MeshInstance3D { Name = "Body", Mesh = MotorbikeMeshBuilder.BuildBody(k, rider), MaterialOverride = material });
+        // a dressed rider (#251) is a mesh of their own, in the figure shader, rebuilt while a skirt
+        // blows; the plain one stays baked into the bike's single body mesh
+        bool dressed = rider is { Outfit.IsEmpty: false };
+        Material material = dressed ? HumanMeshBuilder.FigureMaterial() : HumanMeshBuilder.Material();
+        AddChild(new MeshInstance3D { Name = "Body", Mesh = MotorbikeMeshBuilder.BuildBody(k, dressed ? null : rider), MaterialOverride = material });
+        if (dressed)
+        {
+            _rider = rider;
+            _riderMesh = new MeshInstance3D { Name = "Rider", Mesh = BuildRider(rider!), MaterialOverride = material };
+            AddChild(_riderMesh);
+        }
 
         _steerAxis = Flip(k.SteerAxis).Normalized();
         _steer = new Node3D { Name = "Front", Position = Flip(k.TopClamp) };
@@ -545,9 +554,23 @@ public partial class Motorcyclist : Node3D
         AddChild(_rearSpin);
     }
 
+    private HumanPalette? _rider;
+    private MeshInstance3D? _riderMesh;
+    private readonly FigureWind _wind = new();
+
+    private ArrayMesh BuildRider(HumanPalette rider)
+    {
+        var s = new MeshScratch();
+        HumanMeshBuilder.AppendRider(s, rider, _look.Seat, _look.Grip, _look.Peg);
+        return s.Build();
+    }
+
     public override void _Process(double delta)
     {
         if (_steer == null) return;
+        // the ride's wind in a skirt: measured from the bike's own motion, so remote copies blow too
+        if (_rider is { } r && _riderMesh != null && HumanMeshBuilder.Flutters(r.Outfit))
+            _riderMesh.Mesh = BuildRider(r with { Wind = _wind.Update(_riderMesh, (float)delta) });
         _steer.Basis = new Basis(_steerAxis, SteerAngle);
         // top edge toward −Z (forward), as CarRig
         _frontSpin.Rotation = new Vector3(-WheelSpin * _look.RearRadius / _look.FrontRadius, 0, 0);

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Self-test of tools/lib/guard.sh's lock (no Godot, ~1 min): a lock whose owner died, whose heartbeat
+# Self-test of tools/lib/guard.sh's lock and RAM watchdog (no Godot, ~1 min): a lock whose owner died, whose heartbeat
 # stopped, or which is held past its max is taken over at once; a live lock is waited for.
 # Usage: bash tools/lib/guard_selftest.sh   -> prints RESULT: ok / RESULT: FAILED
 cd "$(dirname "$0")/../.." || exit 1
@@ -29,6 +29,22 @@ kill $over 2>/dev/null; wait $over 2>/dev/null
 t=$(took)
 check "live lock waited for (${t}s)" '[ "$t" -ge 4 ] && [ "$t" -le 12 ]'
 wait $live 2>/dev/null
+
+# 5. RAM watchdog: with the floor above the machine's free RAM, guard_run kills the run (and its
+#    child) within a few seconds and returns 137; guard_watch does the same for a PID it watches
+log=${TMPDIR:-${TEMP:-/tmp}}/unitsport-guard-selftest.$$.log
+t0=$SECONDS
+GUARD_MIN_FREE_MB=999999999 guard_run 60 "$log" bash -c 'sleep 50 & wait' 2>/dev/null; rc=$?
+check "guard_run killed at the RAM floor (rc $rc, $(( SECONDS - t0 ))s)" '[ "$rc" = 137 ] && [ $(( SECONDS - t0 )) -le 6 ]'
+check "guard_run logged why" 'grep -q "floor" "$log"'
+check "its child died with it" '! ps -ef | grep -q "[s]leep 50"'
+bash -c 'sleep 50' & victim=$!
+t0=$SECONDS
+w=$(guard_watch "$victim" 999999999 2>/dev/null)
+wait "$victim" 2>/dev/null
+check "guard_watch killed its PID at the floor ($(( SECONDS - t0 ))s)" '[ $(( SECONDS - t0 )) -le 6 ]'
+kill "$w" 2>/dev/null; rm -f "$log"
+check "free RAM is read ($(guard_free_mb) MB)" '[ "$(guard_free_mb)" -gt 0 ]'
 
 _guard_drop_lock
 [ "$fails" -eq 0 ] && echo "RESULT: ok" || echo "RESULT: FAILED ($fails)"

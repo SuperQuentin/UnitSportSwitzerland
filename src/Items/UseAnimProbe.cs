@@ -8,31 +8,16 @@ namespace UnitSport.Items;
 /// <summary>
 /// <c>--useanim A|B</c> with <c>--connect</c> (driven by <c>tools/useanimcheck.sh</c>): the use animations over loopback.
 /// A (first person) hurts itself, drinks, eats, looks at the GPS, holds and puts on a hat, screenshotting its own view
-/// mid-animation; B stands nearby and must see A's replicated <c>ItemAction</c> turn into the Mouth arm pose for both the
-/// drink and the hat, then A's worn hat, and screenshots A in third person. Uses a scratch inventory.
+/// mid-animation, then dresses (#251); B stands nearby and must see A's replicated <c>ItemAction</c> turn into the Mouth
+/// arm pose for both the drink and the hat, then A's worn hat and outfit, and screenshots A in third person. Uses a
+/// scratch inventory.
 /// </summary>
-public partial class UseAnimProbe : Node
+public partial class UseAnimProbe : ChatProbe
 {
-    public static string? Role
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--useanim");
-            return i >= 0 && i + 1 < args.Length ? args[i + 1].ToUpperInvariant() : null;
-        }
-    }
+    public static string? Role => RoleArg("--useanim");
 
-    private readonly ItemController _items;
-    private readonly List<string> _heard = new();
-    private string _role = "";
-    private int _failures;
-
-    public UseAnimProbe(ItemController items) => _items = items;
+    public UseAnimProbe(ItemController items) : base(items, "useanim", "UA", "useanim_") { }
     public UseAnimProbe() : this(null!) { }
-
-    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
-    private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
 
     private FootPlayer? Other() =>
         Find(GetTree().Root);
@@ -54,13 +39,10 @@ public partial class UseAnimProbe : Node
     public override async void _Ready()
     {
         _role = Role ?? "A";
-        if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor(), 150)) { Fail("no player on the ground"); return; }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
+        if (!await Joined(150)) return;
         await Seconds(2.0);
         if (_role == "A") await RunA(Me!); else await RunB(Me!);
-        GD.Print(_failures == 0 ? $"[useanim {_role}] RESULT: ok" : $"[useanim {_role}] RESULT: FAILED ({_failures})");
-        await Seconds(1.0);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(1.0);
     }
 
     private async Task RunA(FootPlayer me)
@@ -127,9 +109,37 @@ public partial class UseAnimProbe : Node
         await Burst("hat_up_1p", 6, 0.12);
         await Seconds(1.0);
         Expect(inv.Worn == ItemId.WitchHat, "the hat is worn");
+
+        // clothes (#251): one put on with Use (the head-height animation), the rest straight into their slots
+        for (int i = 0; i < Outfit.Length; i++) inv.Put(Inventory.HotbarSize + i, new ItemStack(Outfit[i], 1));
+        inv.Move(Inventory.HotbarSize, 3);
+        inv.Select(3);
+        await Seconds(0.8);
+        _items.UseSlot(me, 3);
+        await Seconds(1.2);
+        Expect(inv.WornIn(Avatar.WearSlot.Face).Id == Outfit[0], "Use put the mask on");
+        for (int i = 1; i < Outfit.Length; i++) inv.Wear(Inventory.HotbarSize + i);
+        Expect(inv.Outfit.Bits == Dressed.Bits, "every piece is in its body slot");
+        Expect(await Until(() => me.OutfitBits == Dressed.Bits, 5), "the outfit is published on A's player");
+        Say("dressed");
+        // dressed on a bike too: B must see the cyclist in the same clothes
+        await Heard("B", "seen", 60);
+        bool mounted = me.SetRide(RideKind.RoadBike);
+        if (!mounted) { me.DebugLaunch(me.GlobalPosition, Vector3.Zero); mounted = me.SetRide(RideKind.RoadBike); }
+        Expect(mounted, "A mounts a road bike");
+        Say("riding");
         Say("done");
         await Heard("B", "done", 30);
     }
+
+    /// <summary>What A puts on, and so what B must see: a mask, a corset, tartan, stockings, boots, lace and a disco finish.</summary>
+    private static readonly ItemId[] Outfit =
+    {
+        ItemId.MaskUwu, ItemId.BuckleCorset, ItemId.TartanSkirt, ItemId.BeeStockings, ItemId.PlatformBoots,
+        ItemId.LaceArmWarmers, ItemId.DiscoShades,
+    };
+
+    private static readonly Avatar.Outfit Dressed = Avatar.Outfit.Of(Outfit);
 
     private async Task RunB(FootPlayer me)
     {
@@ -148,48 +158,24 @@ public partial class UseAnimProbe : Node
         Expect(await Until(() => a.HeadwearId == (int)Avatar.Headwear.WitchHat, 60), "A's hat arrived as Headwear.WitchHat");
         await Seconds(0.5);
         Shot("hat_on_3p_remote");
+        // the clothes (#251): one replicated long, drawn here from it
+        Expect(await Until(() => a.OutfitBits == Dressed.Bits, 60), "A's outfit arrived as OutfitBits");
+        await Seconds(0.8);
+        Shot("outfit_3p_remote");
+        Say("seen");
+        // A gets on a bike (#251): the remote cyclist wears the outfit, drawn in the figure shader
+        Expect(await Until(() => a.RideKindId == (int)RideKind.RoadBike
+            && a.FindChild("Rider", true, false) is MeshInstance3D { MaterialOverride: ShaderMaterial }, 60),
+            "A's cyclist is drawn dressed");
+        await Seconds(0.8);
+        Shot("outfit_bike_3p_remote");
         Say("done");
     }
 
-    private void Shot(string name)
+    protected override string Shot(string name)
     {
-        var dir = ProjectSettings.GlobalizePath("res://test_output");
-        System.IO.Directory.CreateDirectory(dir);
-        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, $"useanim_{name}.png"));
-        GD.Print($"[useanim {_role}] screenshot {name}");
-    }
-
-    private void Say(string what)
-    {
-        GD.Print($"[useanim {_role}] say {what}");
-        Chat?.Send($"UA {_role} {what}");
-    }
-
-    private Task<bool> Heard(string role, string what, double seconds) =>
-        Until(() => _heard.Any(l => l.Contains($"UA {role} {what}")), seconds);
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[useanim {_role}] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[useanim {_role}] RESULT: FAILED — {why}");
-        GetTree().Quit(1);
+        string path = base.Shot(name);
+        GD.Print($"{Log} screenshot {name}");
+        return path;
     }
 }

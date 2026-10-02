@@ -21,7 +21,8 @@
 - **A live change in one launch:** a `--shot-queue` line starting with `/` is typed into the chat
   between two shots (`/style cartoon`, `/style rebuild`, `/time set 19:30`).
 - **On Windows** the script needs zsh and `godot` on the PATH; a bash copy with `${=X}` changed
-  to `$X` and `godot` to the exe path (`docs/notes/general/godot-exe.md`) runs the same, with
+  to `$X` and `godot` to the exe path (`docs/notes/general/godot-exe.md`) runs the same (never with
+  `--always-on-top` there: `core/windows-launch-focus`), with
   `--chunks <dir>` when the worktree has no terrain. Vsync caps the frame times at 16.7 ms there:
   compare primitives, or turn vsync off for timings.
 - **Pixel check of a shader refactor:** diff the branch's pictures against `main`'s, and two

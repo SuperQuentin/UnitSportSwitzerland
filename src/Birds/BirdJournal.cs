@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Godot;
 using UnitSport.Core;
+using UnitSport.Ui;
 
 namespace UnitSport.Birds;
 
@@ -61,9 +62,7 @@ public partial class BirdJournal : CanvasLayer
         rows.AddThemeConstantOverride("separation", 6);
         _panel.AddChild(rows);
 
-        var title = new Label { Text = "Field journal — birds of Switzerland" };
-        title.AddThemeFontSizeOverride("font_size", 22);
-        title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
+        var title = UiTheme.Title("Field journal — birds of Switzerland");
         rows.AddChild(title);
 
         _summary = new Label();

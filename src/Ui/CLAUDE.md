@@ -12,6 +12,7 @@ touches its topic; search with `grep -ril <word> docs/notes/ui`.
 - `screens` — Title -> Loading -> InWorld -> Leave: `GameShell` page stack, pause menu, command-line runs skip the title (`UseTitle` whitelist), --menucheck
 - `theme` — `UiTheme` (code-built Theme, glass panels, amber, SystemFont), `UiKit` rows/buttons with the hover slide, `Modal`, `Icons` drawn at startup
 - `style-guide` — How any HUD/panel adopts the menu look: theme the root Control, glass panel sizes, text colours/sizes, selection rows, outlined floating text, PR checklist (example: `Core/ChatUi`)
+- `ui-theme-panels` — HUD panels via `UiTheme.Flat`/`GlassPanel`, titles `UiTheme.Title`, "press E" lines `UiTheme.Prompt`, amber `UiTheme.Amber`: no hand-built `StyleBoxFlat`, no amber literal
 - `loading` — Loading screen: real stages from `ClientWorld.Stage`, `ChunkManager.ProgressNear`, joke lines, Cancel; failure goes back with the reason
 - `travel-menu` — R travel menu (tabs, card grid, pre-rendered thumbnails cached in user://thumbs, live stage: doors open + lamps on while pointed) and the F1 controls screen, both sized to the window (#210)
 
