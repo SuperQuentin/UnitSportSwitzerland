@@ -24,6 +24,13 @@ cd "$(dirname "$0")/.."
 . tools/lib/guard.sh
 [ "$TIER" = lock ] && { guard_status; exit 0; }
 
+# Windows: the winget `godot`/`godot_console` links start the GUI build and hang headless runs
+# (docs/notes/general/godot-exe.md), so default to the real console exe when one is installed
+if [ -z "${GODOT:-}" ] && _guard_windows; then
+  for g in "$(cygpath -u "${LOCALAPPDATA:-}" 2>/dev/null)"/Microsoft/WinGet/Packages/GodotEngine.GodotEngine.Mono_*/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe            /c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe; do
+    [ -f "$g" ] && { GODOT=$g; break; }
+  done
+fi
 GODOT=${GODOT:-godot}
 export GODOT
 OUT=test_output/tests
@@ -147,7 +154,7 @@ if [ ${#CHECKS[@]} -gt 0 ]; then
           guard_wait_ram "${TEST_RAM_GB:-3}" || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
         else
           # tier 2/3: one at a time on the machine, and only with room to spare
-          [ $locked = 1 ] || { guard_lock && locked=1; } || { record "$check" FAIL 0 "(lock)"; continue; }
+          [ $locked = 1 ] || { guard_lock && locked=1 && export GUARD_LOCK_HELD=1; } || { record "$check" FAIL 0 "(lock)"; continue; }
           guard_wait_ram "${TEST_HEAVY_RAM_GB:-6}" || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
         fi
         t0=$SECONDS

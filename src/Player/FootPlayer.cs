@@ -414,9 +414,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private float _itemArmBlend;
     private bool _itemArmInit;
 
-    /// <summary>The dance's 0..1 ease, and the radio it follows (kept through the ease-out).</summary>
+    /// <summary>The dance's 0..1 ease, and the music it follows (kept through the ease-out).</summary>
     private float _danceWeight;
-    private Items.RadioBody? _danceRadio;
+    private Items.RadioManager.Music? _danceMusic;
+    /// <summary>How many are dancing to the same music, counted twice a second (#261).</summary>
+    private int _danceCrowd;
+    private double _danceCrowdAt;
 
     /// <summary>An item asking for a narrower view (binoculars, a camera's viewfinder); null for the normal FOV.</summary>
     public float? FovOverride { get; set; }
@@ -989,6 +992,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:OutfitBits");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:HeldRadio");
+        replication.AddProperty(".:BackItemId");
         replication.AddProperty(".:Down");
         replication.AddProperty(".:CarRadio");
         replication.AddProperty(".:CarCd");
@@ -1005,7 +1009,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:DeckYaw");
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:CarRadio", ".:CarCd", ".:Down" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1427,6 +1431,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else if (DeckOn != "" && PlaceOnDeck((float)delta)) { }
         else if (_interp.HasData)
         {
+            // a race NPC whose simulator went silent rolls on, easing off, until the server hands it over: the
+            // server waits RaceNpcs.StaleSeconds (1.2 s) and reviews every 0.25 s, so 1.6 s covers it with the
+            // new simulator's first states on the way (#159: it stood still ~3 s before). Carried straight on,
+            // the new simulator takes it over where it is drawn, a metre or two off the line in a bend
+            _interp.MaxAhead = Npc ? 1.6f : Net.RemoteInterpolator.MaxExtrapolation;
             var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
             Position = p;
             Rotation = new Vector3(0, yaw, 0);
@@ -1594,7 +1603,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private bool DanceAllowed() =>
         Ride == RideKind.OnFoot && !KnockedOut && !_sliding && !Indoors
-        && Items.RadioManager.Instance?.NearestPlaying(GlobalPosition, Items.RadioManager.DanceRadius * 1.15f) != null;
+        && Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius * 1.15f) != null;
 
     /// <summary>
     /// The beat-driven pose for this frame, or null. Everything comes off the replicated
@@ -1604,31 +1613,85 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private Avatar.DanceParams? StepDance(float dt)
     {
-        Items.RadioBody? radio = null;
+        Items.RadioManager.Music? music = null;
         bool want = DanceId != 0 && Ride == RideKind.OnFoot && !KnockedOut && !_sliding;
         if (want)
         {
             // a remote copy tolerates a wider ring: its position lags the owner's a little
-            radio = Items.RadioManager.Instance?.NearestPlaying(GlobalPosition, Items.RadioManager.DanceRadius * 1.3f);
-            want = radio != null;
+            music = Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius * 1.3f);
+            want = music != null;
         }
         _danceWeight = Mathf.MoveToward(_danceWeight, want ? 1f : 0f, dt * 4f);
-        if (radio != null) _danceRadio = radio;
-        if (_danceWeight <= 0.001f || _danceRadio == null || !IsInstanceValid(_danceRadio) || !_danceRadio.IsInsideTree()
-            || !_danceRadio.BeatAt(Net.ClockSync.ServerNow, out float phase, out int beat, out int bar, out var style))
+        if (music != null) _danceMusic = music;
+        if (_danceWeight <= 0.001f || _danceMusic is not { } m || !IsInstanceValid(m.Source) || !m.Source.IsInsideTree()
+            || !m.BeatAt(Net.ClockSync.ServerNow, out float phase, out int beat, out int bar, out var style))
         {
-            _danceRadio = null;
+            _danceMusic = null;
             _danceWeight = 0f;
             return null;
         }
-        // The move changes every couple of bars, the same one on every peer: a hash of the bar
-        // slot and the style, so a figure that joins mid-song lands on the move the others are on.
+
+        double now = Time.GetTicksMsec() / 1000.0;
+        if (now - _danceCrowdAt > 0.5)
+        {
+            _danceCrowdAt = now;
+            _danceCrowd = DancersAround(m.Source.GlobalPosition);
+        }
+        // The move changes every couple of bars. Each dancer has its own pick (a hash of the bar
+        // slot, the style and who it is), so a crowd is not a drill team; but with two or more
+        // dancing to the same music, one slot in three is a crowd move everyone hits together —
+        // the same hash with no "who" in it, so every peer lands on it on the same bar (#261).
         int slot = Mathf.FloorToInt(bar / (float)Avatar.HumanMeshBuilder.BarsPerMove);
-        uint h = (uint)slot * 2654435761u ^ (uint)style * 40503u;
-        h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
-        int move = (int)(h % (uint)Avatar.HumanMeshBuilder.MoveCount(style));
+        int move = DanceMoveFor(slot, style), prev = DanceMoveFor(slot - 1, style);
+        if (DanceMoveOverride >= 0) move = prev = DanceMoveOverride;
         float barPhase = (beat - bar * 4 + phase) / 4f;
-        return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight);
+        // beats into this slot: the first one flows out of the last move instead of cutting to the next
+        float into = (bar - slot * Avatar.HumanMeshBuilder.BarsPerMove) * 4 + (beat - bar * 4) + phase;
+        return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev, Mathf.Clamp(into / 0.9f, 0f, 1f));
+    }
+
+    /// <summary>A move forced on every dancer on this machine (a probe's screenshot), -1 for none.</summary>
+    internal static int DanceMoveOverride = -1;
+
+    /// <summary>This dancer's move for a bar slot: its own, or the crowd's when the slot is a crowd one.</summary>
+    private int DanceMoveFor(int slot, Audio.Cd.MusicStyle style)
+    {
+        uint shared = DanceHash((uint)slot * 2654435761u ^ (uint)style * 40503u);
+        if (_danceCrowd >= 2 && shared % 3u == 1u)
+            return (shared >> 8) % 2u == 0u ? Avatar.HumanMeshBuilder.GroupJump : Avatar.HumanMeshBuilder.GroupPogo;
+        uint own = DanceHash(shared ^ DanceSeed());
+        return (int)(own % (uint)Avatar.HumanMeshBuilder.MoveCount(style));
+    }
+
+    private static uint DanceHash(uint h)
+    {
+        h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
+        return h;
+    }
+
+    /// <summary>A number of this player's own, the same on every peer (FNV-1a of the node name; string.GetHashCode differs per process).</summary>
+    private uint DanceSeed()
+    {
+        if (_danceSeed == 0)
+        {
+            uint h = 2166136261u;
+            foreach (char c in Name.ToString()) { h ^= c; h *= 16777619u; }
+            _danceSeed = h | 1u;
+        }
+        return _danceSeed;
+    }
+
+    private uint _danceSeed;
+
+    /// <summary>Players (this one included) dancing within earshot of the music at <paramref name="at"/>.</summary>
+    private int DancersAround(Vector3 at)
+    {
+        int n = 0;
+        float r = Items.RadioManager.DanceRadius * 1.3f;
+        foreach (var node in GetTree().GetNodesInGroup(Group))
+            if (node is FootPlayer p && p.DanceId != 0 && p.Ride == RideKind.OnFoot && p.GlobalPosition.DistanceTo(at) < r)
+                n++;
+        return n;
     }
 
     /// <summary>Draws the on-foot figure from the published pose — the same code for the owner and every remote copy.</summary>
@@ -1651,6 +1714,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
         if (dance != null && ItemAction == 0) { arm = Avatar.ItemArmPose.None; blend = 0f; }
         bool armed = arm != Avatar.ItemArmPose.None && blend > 0.001f;
+        if (!armed) { arm = Avatar.ItemArmPose.None; blend = 0f; }   // what the builder does with them anyway
+        // Rebuilt only when what it shows changes (#221): a figure standing still is built once, and
+        // a remote one far away or out of view at most 15 times a second. The speed is keyed to the
+        // centimetre per second, so a standing figure's float noise does not rebuild it.
         // a skirt streams in the air the figure moves through (#251): walking, running, falling
         var palette = _walkPalette;
         if (Avatar.HumanMeshBuilder.Flutters(palette.Outfit))
@@ -1659,24 +1726,35 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _slidePose = null;
             _airPose = null;
         }
-        Avatar.HumanMeshBuilder.GaitMounts mounts;
-        switch (PoseKind)
+        _poseWait += dt;
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette);
+        // the hand is placed from fresh mounts every time the pose changes, even while a throttled
+        // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
+        if (key != _mountsKey)
         {
-            case PoseTucked:
-                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Tucked, arm, blend, Hat)
-                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat);
-                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend);
-                break;
-            case PoseAir:
-                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat)
-                    : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat);
-                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend);
-                break;
-            default:
-                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend, dance: dance);
-                mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance);
-                break;
+            _mountsKey = key;
+            _poseMounts = PoseKind switch
+            {
+                PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
+                PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
+                _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance),
+            };
         }
+        if (key != _poseKey && !HoldRemoteFigure())
+        {
+            _poseKey = key;
+            _poseWait = 0f;
+            _walker.Mesh = PoseKind switch
+            {
+                PoseTucked => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Tucked, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
+                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat),
+                PoseAir => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
+                    : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
+                _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
+                    dance: dance, into: _poseMesh ??= new ArrayMesh()),
+            };
+        }
+        var mounts = _poseMounts;
         _walker.Transform = BodyPose;
         if (_jolt > 0.01f)
         {
@@ -1685,7 +1763,41 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             var hip = new Vector3(0, 0.95f, 0);
             _walker.Transform = BodyPose * new Transform3D(Basis.Identity, hip) * t * new Transform3D(Basis.Identity, -hip);
         }
+        // hit by a thrown thing (#261): rocked away from the blow, then a wobble home
+        _walker.Transform *= FlinchPose(dt);
         PlaceHand(mounts);
+        PlaceBack(mounts);
+    }
+
+    /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
+    private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
+        Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette);
+
+    private FootPoseKey _poseKey, _mountsKey;
+    private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;
+    /// <summary>The animated figure's one mesh, rebuilt in place (the cached held poses aside).</summary>
+    private ArrayMesh? _poseMesh;
+    private float _poseWait;
+
+    /// <summary>
+    /// Whether a remote figure keeps last frame's mesh: beyond 40 m or outside the camera's view
+    /// cone it is rebuilt at 15 Hz, not every frame. Not frozen: mirrors, portals and photos see
+    /// what the main camera does not. The cone holds the whole screen and the figure's size, so a
+    /// figure at the edge of the picture still counts as in view.
+    /// </summary>
+    private bool HoldRemoteFigure()
+    {
+        if (IsMultiplayerAuthority() || _poseWait >= 1f / 15f || XR.XrSession.Active) return false;
+        var cam = GetViewport().GetCamera3D();
+        if (cam == null || _walker == null) return false;
+        var to = _walker.GlobalPosition + new Vector3(0, 0.9f, 0) - cam.GlobalPosition;
+        float d = to.Length();
+        if (d > 40f) return true;
+        if (d < 2f) return false;
+        var size = GetViewport().GetVisibleRect().Size;
+        float aspect = Mathf.Max(size.X / Mathf.Max(size.Y, 1f), size.Y / Mathf.Max(size.X, 1f));
+        float halfDiagonal = Mathf.Atan(Mathf.Tan(Mathf.DegToRad(cam.Fov) * 0.5f) * Mathf.Sqrt(1f + aspect * aspect));
+        return (-cam.GlobalBasis.Z).AngleTo(to) > halfDiagonal + Mathf.Asin(1.2f / d);
     }
 
     /// <summary>
@@ -1912,11 +2024,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // but a car parked in the garage is got into like anywhere else
         if (Indoors)
         {
-            if (_ride == null && !_mantling && _deadTimer <= 0 && Vehicles?.Nearest(GlobalPosition, EnterReach) is { } parked)
-            {
-                Vehicles.Claim(parked, EnterVehicle);
-                return true;
-            }
+            if (_ride == null && !_mantling && _deadTimer <= 0 && TryVehicleAt()) return true;
             var interiors = Interiors.InteriorManager.Instance;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             return interiors?.TryDoor(this) ?? true;
@@ -1927,32 +2035,68 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // walking about in a vehicle: a seat, or the wheel (#162)
         if (Aboard) return TryDeckSeat();
 
-        // a radio within reach, the one pointed at first: its panel (play a CD, burn one, pick it up)
-        if ((Items.Highlight.Pointed as Items.RadioBody ?? Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach)) is { } radio)
+        // the radio pointed at: its panel (play a CD, burn one, pick it up)
+        if (Items.Highlight.Pointed is Items.RadioBody pointed && IsInstanceValid(pointed))
         {
-            Items.RadioUi.Instance?.Open(radio);
+            Items.RadioUi.Instance?.Open(pointed);
             return true;
         }
 
-        var vehicle = Vehicles?.Nearest(GlobalPosition, EnterReach);
-        // someone else's vehicle, being driven: a seat in it (#158), when it is nearer than a parked one
-        if (OnlineSeats && DrivenVehicleInReach(EnterReach) is { } driven
-            && (vehicle == null || driven.GlobalPosition.DistanceTo(GlobalPosition) < vehicle.GlobalPosition.DistanceTo(GlobalPosition)))
+        // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"
+        if (TryVehicleAt()) return true;
+
+        // someone else's vehicle, being driven: a seat in it (#158), standing at it
+        if (OnlineSeats && DrivenVehicleInReach(EnterReach) is { } driven)
         {
             PassengerService.Instance!.AskSeat(driven);
             return true;
         }
-        if (vehicle == null)
+        // a radio at your feet you were not looking at
+        if (Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach) is { } radio)
         {
-            // music in earshot: E starts or stops the dance
-            if (Items.RadioManager.Instance?.NearestPlaying(GlobalPosition, Items.RadioManager.DanceRadius) != null)
-            {
-                DanceId = DanceId == 0 ? 1 : 0;
-                return true;
-            }
-            return IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true;
+            Items.RadioUi.Instance?.Open(radio);
+            return true;
         }
-        Vehicles!.Claim(vehicle, EnterVehicle);
+        // a building's door in reach beats the dance: music next door must not lock you out
+        if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
+        // music heard here: E starts the dance; stopping works for as long as it lasts
+        if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius, heard: DanceId == 0) != null)
+        {
+            DanceId = DanceId == 0 ? 1 : 0;
+            return true;
+        }
+        if (DanceId != 0) { DanceId = 0; return true; }
+        return false;
+    }
+
+    /// <summary>
+    /// E at a parked vehicle (#261): at a shut car door it opens that door; at an open one it gets
+    /// in; at a machine without doors it gets on. False when there is none in reach.
+    /// </summary>
+    private bool TryVehicleAt()
+    {
+        if (Vehicles is not { } vehicles) return false;
+        if (vehicles.Claiming) return true;   // already asked: wait for the answer
+        if ((VehicleReach.Current ?? VehicleReach.Find(this)) is not { } aim || !IsInstanceValid(aim.Vehicle) || !vehicles.Enterable(aim.Vehicle))
+            return false;
+        if (aim.HasDoor && !aim.DoorOpen)
+        {
+            vehicles.ToggleDoor(aim.Vehicle, aim.Door);
+            return true;
+        }
+        vehicles.Claim(aim.Vehicle, EnterVehicle);
+        return true;
+    }
+
+    /// <summary>
+    /// For the probes: E at a car, and E again when that only opened its door (#261), so "get in"
+    /// stays one call. The second only follows an own car's door, which opens at once.
+    /// </summary>
+    public bool TryGetIn()
+    {
+        if (!TryInteract()) return false;
+        if (_ride == null && Vehicles is { Claiming: false } && VehicleReach.Find(this) is { HasDoor: true, DoorOpen: true })
+            TryInteract();
         return true;
     }
 
@@ -2051,11 +2195,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // G works a bus door's button as E does (#162)
         if (TryDoorButton()) return true;
-        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+        // the door you are at or looking at (#261), open or shut
+        if (_ride != null || Vehicles is not { } vehicles || (VehicleReach.Current ?? VehicleReach.Find(this)) is not { HasDoor: true } aim)
             return false;
-        var (bit, distance) = rig.NearestDoor(GlobalPosition);
-        if (bit == 0 || distance > VehicleManager.DoorReach) return false;
-        Vehicles.ToggleDoor(vehicle, bit);
+        vehicles.ToggleDoor(aim.Vehicle, aim.Door);
         return true;
     }
 

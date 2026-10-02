@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Core;
+using UnitSport.Ui;
 
 namespace UnitSport.Items;
 
@@ -165,13 +166,7 @@ public partial class PhotoUi : CanvasLayer
         _album = centre;
 
         var panel = new PanelContainer();
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.08f, 0.07f, 0.06f, 0.97f),
-            ContentMarginLeft = 20, ContentMarginRight = 20, ContentMarginTop = 16, ContentMarginBottom = 16,
-        };
-        style.SetCornerRadiusAll(6);
-        panel.AddThemeStyleboxOverride("panel", style);
+        panel.AddThemeStyleboxOverride("panel", UiTheme.Flat(new Color(0.08f, 0.07f, 0.06f, 0.97f), 6, 20, 16));
         centre.AddChild(panel);
 
         var col = new VBoxContainer();
@@ -179,9 +174,8 @@ public partial class PhotoUi : CanvasLayer
         panel.AddChild(col);
 
         var head = new HBoxContainer();
-        var title = new Label { Text = "Album", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        title.AddThemeFontSizeOverride("font_size", 22);
-        title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
+        var title = UiTheme.Title("Album");
+        title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         head.AddChild(title);
         _albumCount = new Label { VerticalAlignment = VerticalAlignment.Center };
         _albumCount.AddThemeFontSizeOverride("font_size", 13);

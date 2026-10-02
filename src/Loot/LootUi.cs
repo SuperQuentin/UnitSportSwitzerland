@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Core;
 using UnitSport.Items;
+using UnitSport.Ui;
 
 namespace UnitSport.Loot;
 
@@ -31,13 +32,9 @@ public partial class LootUi : CanvasLayer
         // same layer as the inventory panel, so both read as one kind of screen
         Layer = 12;
         _panel = new PanelContainer { Visible = false };
-        _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color(0.06f, 0.07f, 0.09f, 0.92f),
-            BorderColor = new Color(0.35f, 0.38f, 0.42f),
-            BorderWidthLeft = 2, BorderWidthRight = 2, BorderWidthTop = 2, BorderWidthBottom = 2,
-            ContentMarginLeft = 14, ContentMarginRight = 14, ContentMarginTop = 10, ContentMarginBottom = 12,
-        });
+        var style = UiTheme.Flat(new Color(0.06f, 0.07f, 0.09f, 0.92f), 0, 14, 10, new Color(0.35f, 0.38f, 0.42f), 2);
+        style.ContentMarginBottom = 12;
+        _panel.AddThemeStyleboxOverride("panel", style);
         _panel.SetAnchorsPreset(Control.LayoutPreset.Center);
         _panel.OffsetLeft = -200;
         _panel.OffsetRight = 200;

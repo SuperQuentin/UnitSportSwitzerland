@@ -54,14 +54,18 @@ public partial class VehicleBody : CharacterBody3D
 
     public long Owner { get; private set; }
 
-    /// <summary>What is drawn, the frame of its first section (a parked train's others are its children named <c>Section{k}</c>).</summary>
-    public Node3D? Visual => _visual;
-
     /// <summary>A parked bus's doors, one bit each (#162: open, they can be walked through; anyone works them by their buttons).</summary>
     public byte BusDoors => Ride is Truck { IsBus: true } ? DoorsOpen : (byte)0;
 
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
+
+    /// <summary>
+    /// The drawn machine, for outlining it (#261), and the frame of its first section (a parked
+    /// train's others are its children named <c>Section{k}</c>). Null on a headless peer, but for a
+    /// parked truck or bus: an empty frame there, posed on the ground as the model would be (#162).
+    /// </summary>
+    public Node3D? Visual => _visual;
 
     private VehicleState _initial;
     private RideMotion _motion;

@@ -77,6 +77,13 @@ public partial class ItemController : Node
 
     public Inventory Inventory => _inventory;
     public InventoryUi Ui => _ui;
+
+    /// <summary>Every item, for the offline player or an admin (#262).</summary>
+    public CatalogueUi Catalogue => _catalogue;
+    private CatalogueUi _catalogue = null!;
+
+    /// <summary>Sends a chat command (<c>ChatManager.Send</c>): how the catalogue asks for items.</summary>
+    public Action<string>? RunCommand { get; set; }
     public PhotoUi PhotoUi => _photoUi;
 
     /// <summary>Holds Use down as if pressed, for the throw's wind-up (<c>--dropcheck</c>).</summary>
@@ -108,6 +115,8 @@ public partial class ItemController : Node
         AddChild(_ui);
         _photoUi = new PhotoUi(this) { Name = "PhotoUi" };
         AddChild(_photoUi);
+        _catalogue = new CatalogueUi(this) { Name = "CatalogueUi" };
+        AddChild(_catalogue);
         _smart = new SmartBinocularsHud();
         AddChild(_smart);
         _flagGhost = new FlagGhost { Name = "FlagGhost" };
@@ -187,6 +196,7 @@ public partial class ItemController : Node
         {
             ShowGhost(null);
             Highlight.Point(null);
+            Vehicles.VehicleReach.Point(null);
             _throw.Step(null, false, false, (float)delta);
             return;
         }
@@ -201,8 +211,11 @@ public partial class ItemController : Node
         _wasKnockedOut = player.KnockedOut;
 
         player.HeldItemId = (int)_inventory.HeldId;
-        // a radio plays in the hand too: everyone near hears what the stack's data says (#168)
-        player.HeldRadio = _inventory.HeldId == ItemId.Radio ? _inventory.Held.Data ?? "" : "";
+        // a radio plays in the hand too, and on the back once put away: everyone near hears what
+        // the stack's data says (#168, #261); one not in the hand is drawn on the back
+        int radio = _inventory.RadioSlot();
+        player.HeldRadio = radio >= 0 ? _inventory[radio].Data ?? "" : "";
+        player.BackItemId = radio >= 0 && _inventory.HeldId != ItemId.Radio ? (int)ItemId.Radio : 0;
         var visual = player.GetNodeOrNull<HeldItemVisual>("HeldItem");
         if (visual != null) visual.HeldData = _inventory.Held.Data;
 
@@ -342,6 +355,18 @@ public partial class ItemController : Node
         if (_throw.Active)
         {
             _throw.BeginCharge();
+            return;
+        }
+        // a click on the radio you point at takes it in the hand (#261); on anything else lying
+        // there, with nothing in the hand, picks it up (a held tool still does its own thing)
+        if (Highlight.Pointed is RadioBody radio && IsInstanceValid(radio))
+        {
+            TakeRadio(player, radio);
+            return;
+        }
+        if (_inventory.Held.IsEmpty && Highlight.Pointed is DroppedItem dropped && IsInstanceValid(dropped))
+        {
+            PickUp(dropped);
             return;
         }
         // an empty hand takes back a photo of yours you are looking at
@@ -583,6 +608,9 @@ public partial class ItemController : Node
         else if (_throw.SinceRelease < 0.4f) player.ItemAction = 4;
 
         Highlight.Point(usable && !_throw.Active && !_ui.IsOpen ? Highlight.Find(player) : null);
+        // a world item pointed at comes first; else the car door (or machine) the player is at (#261)
+        Vehicles.VehicleReach.Point(usable && !_throw.Active && !_ui.IsOpen && Highlight.Pointed == null
+            ? Vehicles.VehicleReach.Find(player) : null);
     }
 
     /// <summary>Throws one from <paramref name="slot"/> out of the hand along the view, at <paramref name="power"/> 0..1.</summary>
@@ -710,6 +738,50 @@ public partial class ItemController : Node
         });
     }
 
+    /// <summary>
+    /// Takes a radio lying in the world straight into the hand (#261): it flies there at once,
+    /// keeps playing what it played (the stack carries the CD, its start and its mode), and is
+    /// selected, the item that was in the hand going to the pack if the hotbar is full.
+    /// </summary>
+    public void TakeRadio(FootPlayer player, RadioBody radio)
+    {
+        if (RadioManager.Instance is not { } manager) return;
+        string? playing = radio.NowPlaying is { } p ? (p with { Mode = RadioQueue.Clamp(radio.Mode) }).Encode() : null;
+        if (_inventory.Room(ItemId.Radio, playing) < 1)
+        {
+            _ui.Toast("No room in your pack.");
+            Play(SfxSynth.Tick, 0.5f);
+            return;
+        }
+        if (radio.GetNodeOrNull<MeshInstance3D>("Visual") is { } visual)
+        {
+            FlyToHand(player, visual);
+            visual.Visible = false;
+        }
+        Highlight.Point(null);
+        Play(SfxSynth.Tick, 1.9f);
+        manager.PickUp(radio, () =>
+        {
+            Give(new ItemStack(ItemId.Radio, 1, playing));
+            InHand(ItemId.Radio, playing);
+            Play(SfxSynth.Chime, 1.8f);
+            Kick(player);
+        });
+    }
+
+    /// <summary>Selects the slot holding <paramref name="id"/> with <paramref name="data"/>: the hotbar's, else swapped in from the pack.</summary>
+    private void InHand(ItemId id, string? data)
+    {
+        for (int i = 0; i < _inventory.Capacity; i++)
+        {
+            var s = _inventory[i];
+            if (s.IsEmpty || s.Id != id || s.Data != data) continue;
+            if (Inventory.IsHotbar(i)) _inventory.Select(i);
+            else _inventory.SwapWithHotbar(i, _inventory.Selected);
+            return;
+        }
+    }
+
     /// <summary>A copy of the picked-up item sucked into the player's hand, spinning and shrinking.</summary>
     private void FlyToHand(FootPlayer player, MeshInstance3D visual)
     {
@@ -730,7 +802,7 @@ public partial class ItemController : Node
             float e = t * t;
             var at = start.Origin.Lerp(hand, e) + Vector3.Up * (Mathf.Sin(t * Mathf.Pi) * 0.35f);
             var basis = new Basis(turn) * new Basis(Vector3.Up, t * 5f);
-            ghost.GlobalTransform = new Transform3D(basis.Scaled(Vector3.One * Mathf.Lerp(1f, 0.2f, e)), at);
+            ghost.GlobalTransform = new Transform3D(basis.Scaled(start.Basis.Scale * Mathf.Lerp(1f, 0.2f, e)), at);
         }), 0f, 1f, 0.26f);
         tween.TweenCallback(Callable.From(ghost.QueueFree));
     }

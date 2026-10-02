@@ -27,6 +27,9 @@ public sealed class RemoteInterpolator
     /// <summary>Longest a body is carried on its last velocity when states stop arriving.</summary>
     public const float MaxExtrapolation = 0.25f;
 
+    /// <summary>This body's own limit (<see cref="MaxExtrapolation"/> unless set): a race NPC's is longer (#159).</summary>
+    public float MaxAhead = MaxExtrapolation;
+
     /// <summary>A jump beyond this is a teleport: snap, do not ease.</summary>
     public const float TeleportMetres = 25f;
 
@@ -164,7 +167,10 @@ public sealed class RemoteInterpolator
         ref var newest = ref _buf[_head];
         if (t >= newest.T)
         {
-            float ahead = (float)Math.Min(t - newest.T, MaxExtrapolation);
+            float ahead = (float)Math.Min(t - newest.T, MaxAhead);
+            // a long carry (a race NPC waiting for its handoff) eases off like a lift, to half its speed by the
+            // end of it, instead of rolling on flat out and then stopping dead (#159)
+            if (MaxAhead > MaxExtrapolation) ahead -= ahead * ahead / (4f * MaxAhead);
             return (newest.P + newest.V * ahead, newest.Yaw);
         }
         // walk back to the pair straddling t

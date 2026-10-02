@@ -81,6 +81,7 @@ public partial class InventoryUi : CanvasLayer
     private Label _capacity = null!, _packHint = null!, _controlsHint = null!, _dropHint = null!;
     private Label _bagName = null!, _bagInfo = null!;
     private TextureRect _infoIcon = null!;
+    private ScrollContainer _infoBlurbScroll = null!;
     private Label _infoName = null!, _infoKind = null!, _infoBlurb = null!, _infoValue = null!;
     private Button _useButton = null!, _handButton = null!, _dropButton = null!;
     private Label _cashLine = null!, _accountLine = null!;
@@ -289,7 +290,7 @@ public partial class InventoryUi : CanvasLayer
         centre.AddChild(panel);
         _panel = panel;
 
-        var columns = UiKit.HBox(22);
+        var columns = UiKit.HBox(18);
         panel.AddChild(columns);
 
         // ---- left: hotbar and pack ----
@@ -403,8 +404,15 @@ public partial class InventoryUi : CanvasLayer
         titleRow.AddChild(names);
         info.AddChild(titleRow);
         _infoBlurb = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim, wrap: true);
-        _infoBlurb.CustomMinimumSize = new Vector2(236, 56);
-        info.AddChild(_infoBlurb);
+        _infoBlurb.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        // fixed height: a long blurb scrolls instead of growing the card and shifting the panel
+        _infoBlurbScroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(236, 72),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        _infoBlurbScroll.AddChild(_infoBlurb);
+        info.AddChild(_infoBlurbScroll);
         _infoValue = UiKit.Text("", UiTheme.FontTiny, new Color(UiTheme.Amber, 0.75f));
         info.AddChild(_infoValue);
 
@@ -441,7 +449,17 @@ public partial class InventoryUi : CanvasLayer
         var album = UiKit.Button("Photo album");
         album.Pressed += () => _items.PhotoUi.OpenAlbum();
         right.AddChild(album);
+
+        // every item, offline or as an admin (#262); shown or hidden on each Open
+        _catalogueButton = UiKit.Button("Item catalogue");
+        _catalogueButton.Pressed += () => _items.Catalogue.Open();
+        right.AddChild(_catalogueButton);
+
+        // ---- third column: crafting (#271, InventoryUi.Crafting) ----
+        BuildCrafting(columns);
     }
+
+    private Button _catalogueButton = null!;
 
     private void BuildTooltip()
     {
@@ -521,6 +539,7 @@ public partial class InventoryUi : CanvasLayer
         _carried.QueueRedraw();
         RefreshMoney();
         RefreshDropHint();
+        if (IsOpen) RefreshCrafting();
 
         // the name of what just came into the hand, briefly
         if (Inv.HeldId != _lastHeld)
@@ -593,6 +612,7 @@ public partial class InventoryUi : CanvasLayer
             : slot == Inventory.BagSlot ? "A bag worn here adds rows to the pack."
             : worn ? $"Nothing on your {part}. Clothes found in wardrobes go here, and everyone sees them."
             : slot < Inventory.HotbarSize ? "Whatever is here can be in your hand." : "Room for anything you find.";
+        _infoBlurbScroll.ScrollVertical = 0;
         _infoValue.Text = def is { Value: > 0 } ? $"Worth about {def.Value * stack.Count:0.#} CHF" : "";
         _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear or ItemUse.Print or ItemUse.Bag);
         _useButton.Text = def?.Use is ItemUse.Bag or ItemUse.Wear
@@ -646,6 +666,7 @@ public partial class InventoryUi : CanvasLayer
         CloseWheel(false);
         EndPaint(commit: false);
         _panel.Visible = true;
+        _catalogueButton.Visible = CatalogueUi.Allowed;
         OnDeviceChanged();
         Refresh();
         Input.MouseMode = Input.MouseModeEnum.Visible;
@@ -657,6 +678,7 @@ public partial class InventoryUi : CanvasLayer
     {
         if (!IsOpen) return;
         EndPaint(commit: true);
+        StopMaking();
         _panel.Visible = false;
         _tooltip.Visible = false;
         _hover = -1;
@@ -960,6 +982,7 @@ public partial class InventoryUi : CanvasLayer
             CloseWheel(false);
         }
 
+        ProcessCrafting(dt);
         _hotbar.Visible = ItemsActive && !IsOpen && Scope == null;
         _cashHud.Visible = _hotbar.Visible;
         _readoutPanel.Visible = Readout != null && !IsOpen;
@@ -1034,6 +1057,8 @@ public partial class SlotButton : Button
     public bool Hot;
     /// <summary>The bin, drawn in red when it holds something.</summary>
     public bool IsTrash;
+    /// <summary>Draw the stack's count. Off in the catalogue, where a tile is a kind of item, not a stack.</summary>
+    public bool ShowCount = true;
     private ItemStack _stack;
     private bool _selected, _picked;
 
@@ -1059,7 +1084,7 @@ public partial class SlotButton : Button
     {
         var r = new Rect2(Vector2.Zero, Size);
         SlotDrawing.DrawSlot(this, r, _stack, KeyHint, _selected, _picked, Hot || IsHovered() || HasFocus(),
-            IsTrash && !_stack.IsEmpty);
+            IsTrash && !_stack.IsEmpty, ShowCount);
         if (_stack.IsEmpty && Placeholder.Length > 0)
             DrawString(UiTheme.Bold, new Vector2(0, r.Size.Y * 0.5f + 4), Placeholder,
                 HorizontalAlignment.Center, r.Size.X, UiTheme.FontTiny, UiTheme.TextFaint);
@@ -1102,7 +1127,7 @@ public static class SlotDrawing
 
     /// <summary>Shared by the slots, the wheel and the loot window so an item looks the same everywhere it appears.</summary>
     public static void DrawSlot(CanvasItem c, Rect2 r, ItemStack stack, string keyHint,
-        bool selected, bool picked, bool hot, bool bad = false)
+        bool selected, bool picked, bool hot, bool bad = false, bool count = true)
     {
         _tile ??= Tile(new Color(0.10f, 0.115f, 0.14f, 0.72f), new Color(1, 1, 1, 0.07f), 1);
         _tileHot ??= Tile(new Color(0.14f, 0.16f, 0.19f, 0.82f), new Color(1, 1, 1, 0.35f), 1);
@@ -1133,7 +1158,7 @@ public static class SlotDrawing
                 var at = (r.GetCenter() - size * 0.5f).Round();
                 c.DrawTextureRect(icon, new Rect2(at, size), false);
             }
-            if (def.MaxStack > 1)
+            if (count && def.MaxStack > 1)
             {
                 int countSize = Mathf.Max(UiTheme.FontTiny, (int)(r.Size.Y * 0.24f));
                 var pos = new Vector2(r.Position.X, r.End.Y - 4);

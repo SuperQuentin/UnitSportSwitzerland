@@ -153,6 +153,14 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(style, ChatKind.Private);
             return;
         }
+        // the catalogue is a panel on this screen; what it gives still goes through /spawn
+        if (text.Trim().ToLowerInvariant() is "/catalogue" or "/catalog" or "/items")
+        {
+            if (!CanUseCatalogue) LineReceived?.Invoke("The item catalogue is for admins on a server.", ChatKind.Error);
+            else if (CatalogueRequested is null) LineReceived?.Invoke("No catalogue here.", ChatKind.Error);
+            else CatalogueRequested();
+            return;
+        }
         if (IsLocal)
         {
             text = text.Trim();
@@ -209,6 +217,41 @@ public partial class ChatManager : Node
         LineReceived?.Invoke(Give(def, count), ChatKind.Admin);
     }
 
+    /// <summary>Client: <c>/catalogue</c> was typed by someone allowed it; the item catalogue opens.</summary>
+    public event Action? CatalogueRequested;
+
+    /// <summary>Client: the catalogue is offered alone, or to an admin. The server re-checks every <c>/spawn</c> it sends.</summary>
+    public bool CanUseCatalogue => IsLocal || Permissions.IsAdmin;
+
+    /// <summary>Client: an admin emptied this inventory (<c>/clear</c>).</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ClearInventory(string by) => LineReceived?.Invoke(Clear(by.Length == 0 ? null : by), ChatKind.Admin);
+
+    /// <summary>Client: an admin put cash in this pocket, or took it (<c>/money</c>).</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void GrantCash(int amount) =>
+        LineReceived?.Invoke(Cash(Math.Clamp(amount, -MaxCashGrant, MaxCashGrant)), ChatKind.Admin);
+
+    /// <summary>Most one <c>/money</c> moves, either way.</summary>
+    public const int MaxCashGrant = 1_000_000;
+
+    private string Clear(string? by)
+    {
+        if (Inventory is null) return "No inventory to clear.";
+        Inventory.Clear();
+        return by is null ? "Inventory cleared." : $"{by} cleared your inventory.";
+    }
+
+    private string Cash(int amount)
+    {
+        if (Inventory is null) return "No pocket to put that in.";
+        if (amount >= 0) Inventory.Add(Items.ItemId.Francs, amount);
+        else Inventory.TakeCash(Math.Min(-amount, Inventory.Cash));
+        return $"{(amount >= 0 ? "+" : "-")}{Math.Abs(amount)} CHF cash, {Inventory.Cash} CHF in your pocket.";
+    }
+
     /// <summary>Puts items in the inventory and says what happened.</summary>
     private string Give(Items.ItemDef def, int count)
     {
@@ -246,7 +289,8 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help":
-                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /occasion  /time  /style  — Tab completes.", ChatKind.Private);
+                Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /catalogue  /clear  /money <amount>  "
+                    + "/bank [set|add|take <amount>]  /occasion  /time  /style  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 
@@ -276,6 +320,26 @@ public partial class ChatManager : Node
 
             case "time":
                 Show(LocalTime(parts[1..], out bool failed), failed ? ChatKind.Error : ChatKind.Admin);
+                return;
+
+            case "give":
+                Show("Offline you are the only player: /spawn <item> [count], or /catalogue.", ChatKind.Error);
+                return;
+
+            case "clear":
+                Show(Clear(null), ChatKind.Admin);
+                return;
+
+            case "money":
+                if (parts.Length == 2 && AdminArgs.TryAmount(parts[1], out long cash))
+                    Show(Cash((int)Math.Clamp(cash, -MaxCashGrant, MaxCashGrant)), ChatKind.Admin);
+                else Show("Usage: /money <amount>  (negative takes)", ChatKind.Error);
+                return;
+
+            case "bank":
+                if (Items.Bank.Instance is not { } bank) Show("No bank here.", ChatKind.Error);
+                else if (!AdminArgs.TryBank(parts[1..], out _, out long? set, out long add, out string usage)) Show(usage, ChatKind.Error);
+                else Show($"Account: {bank.AdminAdjust(null, set, add)} CHF", ChatKind.Admin);
                 return;
 
             case "occasion" or "occasions":
@@ -487,6 +551,8 @@ public partial class ChatManager : Node
             case "inertia" when parts.Length == 1:
                 ReplyTo(sender, $"Standing passengers: {Vehicles.PassengerService.Inertia.ToString().ToLowerInvariant()} (steady, sway or full).", ChatKind.Private);
                 return;
+            // your own inventory is yours to empty; someone else's is an admin's (checked inside)
+            case "clear": CommandClear(sender, rest); return;
             case "br":
                 if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
@@ -528,6 +594,9 @@ public partial class ChatManager : Node
             case "kick": CommandKick(sender, parts); return;
             case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;
             case "pvp": CommandPvp(sender, rest); return;
+            case "give": CommandGive(sender, parts); return;
+            case "money": CommandMoney(sender, parts); return;
+            case "bank": CommandBank(sender, parts); return;
 
             default:
                 ReplyTo(sender, $"Unknown command '/{verb}'. Try /help.", ChatKind.Error);
@@ -557,7 +626,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /br join|leave|status  /occasion  /time", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /br join|leave|status  /occasion  /time  /clear", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -566,7 +635,9 @@ public partial class ChatManager : Node
             ReplyTo(sender,
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
                 + "/kick <player> [reason]  /admin list|add <name>|remove <name>  "
-                + "/occasion start|stop <id>|auto  /spawn <item> [count]  "
+                + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  "
+                + "/give <player> <item> [count]  /clear [player]  /money <amount> [player]  "
+                + "/bank <player> [set|add|take <amount>]  "
                 + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  — Tab completes",
                 ChatKind.Private);
     }
@@ -940,6 +1011,128 @@ public partial class ChatManager : Node
 
         RpcId(sender, MethodName.GrantItem, (int)def.Id, count);
         GD.Print($"[admin] {NameOf(sender)} spawned {count} x {def.Name}");
+    }
+
+    /// <summary>A player named in an admin command; "me" is the sender. Says why when there is none.</summary>
+    private PlayerInfo? Target(long sender, string name)
+    {
+        if (name.Equals("me", StringComparison.OrdinalIgnoreCase) && sender != ConsolePeerId
+            && _registry?.Find(sender) is { } self) return self;
+        if (_registry?.FindByName(name) is { } found) return found;
+        ReplyTo(sender, $"No player matching '{name}'.", ChatKind.Error);
+        return null;
+    }
+
+    /// <summary><c>/give &lt;player&gt; &lt;item&gt; [count]</c>: <c>/spawn</c> into someone else's inventory.</summary>
+    private void CommandGive(long sender, string[] parts)
+    {
+        if (parts.Length < 3)
+        {
+            ReplyTo(sender, "Usage: /give <player> <item> [count]", ChatKind.Error);
+            return;
+        }
+        if (Target(sender, parts[1]) is not { } target) return;
+        if (!Items.ItemLookup.TryParse(string.Join(' ', parts[2..]), out var def, out int count, out string error))
+        {
+            ReplyTo(sender, error, ChatKind.Error);
+            return;
+        }
+
+        RpcId(target.PeerId, MethodName.GrantItem, (int)def.Id, count);
+        if (target.PeerId != sender)
+        {
+            ReplyTo(target.PeerId, $"{NameOf(sender)} gave you {count} x {def.Name}.", ChatKind.Admin);
+            ReplyTo(sender, $"Gave {target.Name} {count} x {def.Name}.", ChatKind.Admin);
+        }
+        GD.Print($"[admin] {NameOf(sender)} gave {target.Name} {count} x {def.Name}");
+    }
+
+    /// <summary><c>/clear [player]</c>: empties an inventory, cash aside. Anyone may clear their own.</summary>
+    private void CommandClear(long sender, string name)
+    {
+        long peer = sender;
+        if (name.Length > 0 && !name.Equals("me", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsAdmin(sender))
+            {
+                ReplyTo(sender, "Clearing someone else's inventory is an admin command.", ChatKind.Error);
+                return;
+            }
+            if (Target(sender, name) is not { } target) return;
+            peer = target.PeerId;
+        }
+        else if (sender == ConsolePeerId)
+        {
+            ReplyTo(sender, "Usage: /clear <player>", ChatKind.Error);
+            return;
+        }
+
+        RpcId(peer, MethodName.ClearInventory, peer == sender ? "" : NameOf(sender));
+        if (peer != sender) ReplyTo(sender, $"Cleared {NameOf(peer)}'s inventory.", ChatKind.Admin);
+        GD.Print($"[admin] {NameOf(sender)} cleared {NameOf(peer)}'s inventory");
+    }
+
+    /// <summary><c>/money &lt;amount&gt; [player]</c>: cash into a pocket, or out of it when negative.</summary>
+    private void CommandMoney(long sender, string[] parts)
+    {
+        if (parts.Length is < 2 or > 3 || !AdminArgs.TryAmount(parts[1], out long amount) || amount == 0)
+        {
+            ReplyTo(sender, "Usage: /money <amount> [player]  (negative takes, 2k = 2000)", ChatKind.Error);
+            return;
+        }
+        if (parts.Length == 2 && sender == ConsolePeerId)
+        {
+            ReplyTo(sender, "Usage: /money <amount> <player>", ChatKind.Error);
+            return;
+        }
+        long peer = sender;
+        if (parts.Length == 3)
+        {
+            if (Target(sender, parts[2]) is not { } target) return;
+            peer = target.PeerId;
+        }
+
+        int cash = (int)Math.Clamp(amount, -MaxCashGrant, MaxCashGrant);
+        RpcId(peer, MethodName.GrantCash, cash);
+        if (peer != sender) ReplyTo(sender, $"{(cash > 0 ? "Gave" : "Took")} {NameOf(peer)} {Math.Abs(cash)} CHF cash.", ChatKind.Admin);
+        GD.Print($"[admin] {NameOf(sender)} moved {cash} CHF cash to {NameOf(peer)}");
+    }
+
+    /// <summary>
+    /// <c>/bank [player] [set|add|take &lt;amount&gt;]</c>: reads or edits a server-kept account. The
+    /// player need not be online: accounts are keyed by name.
+    /// </summary>
+    private void CommandBank(long sender, string[] parts)
+    {
+        if (Items.Bank.Instance is not { } bank)
+        {
+            ReplyTo(sender, "This server has no bank.", ChatKind.Error);
+            return;
+        }
+        if (!AdminArgs.TryBank(parts[1..], out string? who, out long? set, out long add, out string usage))
+        {
+            ReplyTo(sender, usage, ChatKind.Error);
+            return;
+        }
+        if (who is null && sender == ConsolePeerId)
+        {
+            ReplyTo(sender, "Usage: /bank <player> [set|add|take <amount>]", ChatKind.Error);
+            return;
+        }
+
+        // an online player by prefix, else the name as written: the account of someone not here
+        var online = who is null ? _registry?.Find(sender)
+            : who.Equals("me", StringComparison.OrdinalIgnoreCase) ? _registry?.Find(sender) : _registry?.FindByName(who);
+        string account = online?.Name ?? PlayerRegistry.Sanitize(who ?? "");
+        if (account.Length == 0)
+        {
+            ReplyTo(sender, usage, ChatKind.Error);
+            return;
+        }
+
+        long balance = bank.AdminAdjust(account, set, add);
+        if (online != null) bank.SendBalance(online.PeerId);
+        ReplyTo(sender, $"{account}'s account: {balance} CHF{(online == null ? " (not online)" : "")}", ChatKind.Admin);
     }
 
     private void CommandKick(long sender, string[] parts)
