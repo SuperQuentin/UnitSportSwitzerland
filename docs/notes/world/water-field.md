@@ -46,12 +46,21 @@
     `StyleKit.Configure`: Godot's SSR does not reach transparent materials); Snell's window from below.
   - Underwater (`WaterSurface.Look`): PS1 dark teal, 22 m; Cartoon bright turquoise, 20 m;
     Realistic blue-green, 14 m (metres for 63 % of the view).
-- **No lattice, at any distance**: the fine ripples (`water_detail`, shading only) are three layers
-  of value noise on rotated domains drifting their own ways, not wrapped to a period. Any two
-  crossing sine trains form a lattice (the old `sin x + sin z` shimmer in four bands drew a grid of
-  identical ellipses), and a noise lattice wrapped every 9.6 km of a domain rotated by |r| repeats
-  every 9.6 km / |r| (384 m at 25): a grid over the whole Petit Lac. The price: the ripples jump
-  once at an offline origin shift and at the wave clock's 20-minute wrap.
+- **No lattice, at any distance**: the fine ripples (`water_detail`, shading only) are six sine
+  trains of 1.35-3.4 m spread round the compass, their phases scrambled by five slower trains
+  (6-57 m), all whole cycles over 9.6 km and 20 min (origin- and clock-safe). Tried and dropped:
+  the old `sin x + sin z` shimmer in four bands (a grid of identical ellipses on calm water); three
+  noise-warped trains (the two strongest still beat into rows); value noise on rotated domains
+  (wrapped, it repeated every 9.6 km / |r|, 384 m: a grid over the whole Petit Lac; unwrapped, its
+  cells showed as creases); hashed gradient noise (hairline breaks along its cell edges on the
+  RTX 4070, Mobile and Forward+). Far off the waves' normal eases to up (400-1500 m): interpolated
+  over sub-pixel triangles it drew the mesh grid over the lake.
+- **The water writes depth** (`depth_draw_always` on every wrapper): it is drawn in the transparent
+  pass, unsorted within a tile, so without it a farther tile or crest painted over a nearer one in
+  polygons. The lit wrappers also skip received shadows (`shadows_disabled`).
+- **Shallows read as water**: PS1 tints them blue-green over the bed (alpha 0.45 at the waterline
+  to 0.92 at 6 m) and draws a broken pale shoreline in the last 3-9 cm; Realistic a wet line;
+  Cartoon its foam line. PS1 underwater is a lighter teal (22 m).
 - **No wave shorter than four 2 m mesh squares** (8.2 m): 4.3 m waves aliased on the mesh into a
   false lattice. The body fades the short waves with distance (`spacing` = max(2, 0.004 x
   distance)), never by the mesh's own spacing, so tiles meshed 2 m and 4 m apart move their shared
