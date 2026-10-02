@@ -20,7 +20,7 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `item-net-events` — ItemEvents.Send (shot, photo flash relayed to others) and PlacedObjects (server-kept, saved flags/photos, kind factories)
 - `flag-plant` — Swiss flag: placement ghost (green/red, pick-up halo), raise-and-stab / pull-up strokes, replicated Plant arms, spawn thud + dirt
 - `bags` — Bag slot adds pack rows (pouch/handbag/backpack/hiking +9..+36), one array with a moving Capacity, ChangeBag compacts or refuses, found in wardrobes/halls/nightstands (#208)
-- `throw-drop` — Drop (Q / Ctrl+Q / pack panel), pointing outline (inverted hull overlay), E pick-up, grenade-style charged throw (arc, ring, shoulder cam, wind-up arm pose), local proxy + remote prediction, CCD + under-terrain rescue, ImpactFx; `tools/dropcheck.sh` (#206)
+- `throw-drop` — Drop (Q / Ctrl+Q / pack panel), pointing outline (inverted hull overlay), E pick-up, grenade-style charged throw (arc, ring, shoulder cam, wind-up arm pose), local proxy + remote prediction, CCD + under-terrain rescue, ImpactFx, Minecraft-style floating/spinning look at rest (DropFloat); `tools/dropcheck.sh` (#206)
 - `smart-binoculars` — Held at a building's door (or inside): reads out its loot table (LootTables.BuildingTable); no aim, no zoom (#165)
 
 ## Commands

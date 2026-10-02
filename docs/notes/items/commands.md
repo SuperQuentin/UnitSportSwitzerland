@@ -15,7 +15,7 @@
 - `tools/dropcheck.sh` (`CHUNKS=<terrain_chunks dir>` from a worktree): server + windowed `--dropcheck thrower`
   (drops, full wind-up throw, stack drop; `test_output/dropcheck_aim.png`) + windowed `--dropcheck watch`
   (wind-up pose, items settled, points at and picks up the bars; `test_output/dropcheck_point.png`); see `throw-drop`.
-  Offline: `<godot> --path . -- --ride foot,60 --dropcheck solo` (outline + pick-up, `test_output/dropcheck_solo.png`).
+  Offline: `<godot> --path . -- --ride foot,60 --brake-at 0 --dropcheck solo` (floating pose, outline + pick-up, `test_output/dropcheck_solo.png`).
 - `tools/carcdcheck.sh` (`CHUNKS=` likewise, port 7811): car stereo CDs, `--carcdcheck driver` (headless) /
   `watch` (windowed); `<godot> --path . -- --carcdcheck shots` offline screenshots of the radio panel; see `radio`.
 - `GODOT=<exe> tools/gunshotcheck.sh [--gunside]`: server + A (shouldered shotgun, fires, rate limit) + B (screenshots A's body, counts Shot events); pictures `test_output/gunshot_*.png` (see `shotgun-feel`).
