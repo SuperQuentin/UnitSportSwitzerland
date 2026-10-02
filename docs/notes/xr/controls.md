@@ -31,6 +31,8 @@
     (`FootPlayer.TryToggleCarDoor(hand)`) or 0.7 m of a building doorway, between sill and lintel
     (`InteriorManager.TryDoorByHand`), toggles it through the usual server-checked paths. A toggle,
     not a hand-driven swing: door state is binary on the network.
+- **Pigeon (#217).** As a pigeon the triggers stay shoulders (right = drop), A flaps, B dives, the eye is
+  the bird's (level), snap turn works perched or walking (`player/pigeon`).
 - **Flight gap.** In `FootPlayer`, flight reads `Input.GetJoyAxis(0, Trigger*)` directly, and
   parsed events do not set that. In an aircraft, climb and descend come from A and B
   (Jump / Crouch) only.

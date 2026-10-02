@@ -347,11 +347,14 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     {
         var stick = _right.GetVector2("primary");
 
-        // snap turn, on foot only: in a vehicle the head is the free look
+        // snap turn, on foot only: in a vehicle the head is the free look; a pigeon (#217) snaps
+        // while perched or walking (PigeonSnap says no in the air)
         bool onFoot = player != null && player.Ride == RideKind.OnFoot && player.RidingWith == 0;
-        if (onFoot && Mathf.Abs(stick.X) > 0.7f && _snapArmed && !_ui.Pointing)
+        if ((onFoot || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && !_ui.Pointing)
         {
-            player!.LookYaw -= Mathf.Sign(stick.X) * SnapTurn;
+            float turn = -Mathf.Sign(stick.X) * SnapTurn;
+            if (onFoot) player!.LookYaw += turn;
+            else player!.PigeonSnap(turn);
             _snapArmed = false;
         }
         else if (Mathf.Abs(stick.X) < 0.35f) _snapArmed = true;
@@ -442,8 +445,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
             // a teleport or a respawn is not motion
             if (speed < 200f)
             {
-                // sitting in a cockpit gives the eye a frame that moves with it: half as much
-                float frame = player != null && player.Ride != RideKind.OnFoot && player.IsFirstPerson ? 0.5f : 1f;
+                // sitting in a cockpit gives the eye a frame that moves with it: half as much (a pigeon has none)
+                float frame = player != null && player.Ride is not (RideKind.OnFoot or RideKind.Pigeon) && player.IsFirstPerson ? 0.5f : 1f;
                 target = (Mathf.Clamp((speed - 1.5f) / 14f, 0f, 0.55f) + Mathf.Clamp((turn - 0.4f) / 2.5f, 0f, 0.45f)) * frame;
             }
         }

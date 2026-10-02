@@ -71,7 +71,8 @@ internal sealed class XrPad
         // --- triggers and grips ---
         float lt = _left.GetFloat("trigger"), rt = uiActive ? 0f : _right.GetFloat("trigger");
         float lg = LeftGripBusy ? 0f : _left.GetFloat("grip"), rg = RightGripBusy ? 0f : _right.GetFloat("grip");
-        if (onFoot)
+        // the pigeon (#217) drops on the right trigger, like using an item on foot; it flaps on A
+        if (onFoot || player?.Ride == RideKind.Pigeon)
         {
             Axis(JoyAxis.TriggerLeft, 0f);
             Axis(JoyAxis.TriggerRight, 0f);

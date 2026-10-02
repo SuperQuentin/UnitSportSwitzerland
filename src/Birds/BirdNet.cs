@@ -109,22 +109,67 @@ public partial class BirdNet : Node
                 RpcId(peer, MethodName.Killed, b.Id, b.Species.Index, at.E, at.N, at.Alt, dir, shooter);
     }
 
-    /// <summary>Server: a pigeon let go. Everyone near sees it fall; <paramref name="victim"/> (a peer, or 0) is who it lands on.</summary>
-    public void BroadcastDropping(Vector3 from, Vector3 vel, long victim)
+    /// <summary>
+    /// Server: a pigeon let go. Everyone near sees it fall; <paramref name="victim"/> (a peer, or 0) is who
+    /// it lands on; <paramref name="by"/> is the player pigeon that dropped it (#217), told too, 0 for a bird.
+    /// </summary>
+    public void BroadcastDropping(Vector3 from, Vector3 vel, long victim, long by = 0)
     {
         if (!_server || !Online) return;
         var at = Life!.Origin.ToGlobal(from);
+        string name = by == 0 ? "" : GetNodeOrNull<ChatManager>("../" + ChatManager.NodeName)?.NameOfPeer(by) ?? "";
         foreach (int peer in Multiplayer.GetPeers())
-            if (peer == victim || GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body && body.Global.DistanceTo(at) < DroppingRange)
-                RpcId(peer, MethodName.Dropping, at.E, at.N, at.Alt, vel, victim);
+            if (peer == victim || peer == by || GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body && body.Global.DistanceTo(at) < DroppingRange)
+                RpcId(peer, MethodName.Dropping, at.E, at.N, at.Alt, vel, victim, by, name);
     }
 
     private const float DroppingRange = 150f;
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Dropping(double e, double n, double alt, Vector3 vel, long victim)
+    private void Dropping(double e, double n, double alt, Vector3 vel, long victim, long by, string byName)
     {
-        if (!_server && Life != null) Life.Dropping(Life.Origin.ToWorld(e, n, alt), vel, victim);
+        if (!_server && Life != null) Life.Dropping(Life.Origin.ToWorld(e, n, alt), vel, victim, by, byName);
+    }
+
+    /// <summary>Client: the local player, a pigeon, lets go (#217). The server checks it and picks the victim.</summary>
+    public void SendDrop(Vector3 from, Vector3 vel)
+    {
+        if (!Online || Life == null) return;
+        var at = Life.Origin.ToGlobal(from);
+        RpcId(1, MethodName.DropRpc, at.E, at.N, at.Alt, vel);
+    }
+
+    /// <summary>A player pigeon's droppings: at most one per <see cref="DropInterval"/>, from where its body is.</summary>
+    public const double DropInterval = 0.4;
+    private readonly Dictionary<long, double> _lastDrop = new();
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void DropRpc(double e, double n, double alt, Vector3 vel)
+    {
+        if (!_server) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        var from = new GlobalPos(e, n, alt);
+        double now = Time.GetTicksMsec() / 1000.0;
+        if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is not { } body || body.RideKindId != (int)RideKind.Pigeon
+            || !from.IsFinite || body.Global.DistanceTo(from) > 4f || !vel.IsFinite() || vel.Length() > 60f
+            || _lastDrop.TryGetValue(sender, out double last) && now - last < DropInterval) return;
+        _lastDrop[sender] = now;
+        var at = Life!.Origin.ToWorld(from);
+        BroadcastDropping(at, vel, Victim(at, sender), sender);
+    }
+
+    /// <summary>Who a dropping from <paramref name="at"/> lands on: a person on foot nearly straight below, else nobody.</summary>
+    private long Victim(Vector3 at, long dropper)
+    {
+        long victim = 0;
+        float best = 1.3f;
+        foreach (var s in PlayerSnapshot.Of(GetTree()))
+        {
+            if (s.Ride != RideKind.OnFoot || FootPlayer.NetId(s.Player.Name) is not long peer || peer == dropper || peer <= 0) continue;
+            float d = new Vector2(at.X - s.Pos.X, at.Z - s.Pos.Z).Length(), above = at.Y - s.Pos.Y;
+            if (d < best && above is > 1.7f and < 60f) { best = d; victim = peer; }
+        }
+        return victim;
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
