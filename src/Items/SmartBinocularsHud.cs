@@ -13,6 +13,8 @@ namespace UnitSport.Items;
 /// locked ones, and every item it can give with the chance that at least one container holds it
 /// when restocked (<see cref="LootTables.BuildingTable"/>), best first. Only odds, never what a
 /// container really holds or what was taken. Client-only, a child of <see cref="ItemController"/>.
+/// At a shop's door (#273) they read its catalogue instead: the shop's type, every line with its
+/// price here and the chance it is in stock when restocked (<see cref="ShopTables.Chance"/>).
 ///
 /// <para>
 /// The odds need the building's plan (<see cref="InteriorManager.GetOrCreate"/>, generated on a
@@ -103,9 +105,26 @@ public partial class SmartBinocularsHud : CanvasLayer
         if (layout == null) return;
         double now = Time.GetTicksMsec() / 1000.0;
         if (!_tables.TryGetValue(key, out var t) || now - t.At > TableSeconds)
-            _tables[key] = t = (now, LootTables.BuildingTable(layout));
+            _tables[key] = t = (now, layout.Shop != ShopType.None ? ShopTable(layout) : LootTables.BuildingTable(layout));
         _table = t.Rows;
     }
+
+    /// <summary>A shop's catalogue as odds of finding each line in stock, best first; prices go in <see cref="_prices"/>.</summary>
+    private List<(ItemId, double)> ShopTable(InteriorLayout layout)
+    {
+        bool season = ShopService.Instance?.HuntingSeason() ?? true;
+        double markup = ShopTables.Markup(layout.Key);
+        var rows = new List<(ItemId, double)>();
+        foreach (var line in ShopTables.Catalogue(layout.Shop))
+        {
+            _prices[(layout.Key, line.Id)] = ShopTables.Price(ShopService.ValueOf(line.Id), markup);
+            rows.Add((line.Id, ShopTables.Chance(layout.Shop, line.Id, season)));
+        }
+        rows.Sort((a, b) => b.Item2.CompareTo(a.Item2));
+        return rows;
+    }
+
+    private readonly Dictionary<(string, ItemId), int> _prices = new();
 
     private async void Load(InteriorManager manager, string key)
     {
@@ -114,7 +133,7 @@ public partial class SmartBinocularsHud : CanvasLayer
         catch (Exception e) { GD.PushWarning($"[smartbin] plan for {key}: {e.Message}"); }
         if (!IsInsideTree()) return;
         _inflight.Remove(key);
-        if (_layouts.Count > 200) { _layouts.Clear(); _tables.Clear(); }   // bound the memory; the manager keeps its own cache
+        if (_layouts.Count > 200) { _layouts.Clear(); _tables.Clear(); _prices.Clear(); }   // bound the memory; the manager keeps its own cache
         _layouts[key] = layout;
     }
 
@@ -163,7 +182,8 @@ public partial class SmartBinocularsHud : CanvasLayer
             v.DrawString(font, panel.Position + new Vector2(10, 44), "Stand at a building's door", HorizontalAlignment.Left, 260, 15, Colors.White);
             return;
         }
-        v.DrawString(font, panel.Position + new Vector2(10, 40), KindName(_kind), HorizontalAlignment.Left, 260, 17, Colors.White);
+        if (!(ready && _layout!.Shop != ShopType.None))
+            v.DrawString(font, panel.Position + new Vector2(10, 40), KindName(_kind), HorizontalAlignment.Left, 260, 17, Colors.White);
         if (!ready)
         {
             bool failed = _layouts.TryGetValue(BuildingKey, out var l) && l == null;
@@ -171,12 +191,24 @@ public partial class SmartBinocularsHud : CanvasLayer
             return;
         }
 
-        int containers = _layout!.Furniture.Count(f => LootTables.IsLootable(f.Type));
-        int locked = _layout.Furniture.Count(f => LootTables.IsLocked(f.Type));
-        string sub = $"{containers} containers" + (locked > 0 ? $", {locked} locked" : "");
-        v.DrawString(font, panel.Position + new Vector2(10, 60), sub, HorizontalAlignment.Left, 260, 13,
-            locked > 0 ? new Color(0.98f, 0.78f, 0.35f) : new Color(0.75f, 0.85f, 0.9f));
-        v.DrawString(font, panel.Position + new Vector2(10, 78), "chance to find, any container", HorizontalAlignment.Left, 260, 11, new Color(0.55f, 0.7f, 0.75f));
+        var shop = _layout!.Shop;
+        int machines = _layout.Furniture.Count(f => f.Type == FurnitureType.VendingMachine);
+        if (shop != ShopType.None)
+        {
+            v.DrawString(font, panel.Position + new Vector2(10, 40), $"{ShopTables.Name(shop)} shop", HorizontalAlignment.Left, 260, 17, new Color(0.98f, 0.78f, 0.35f));
+            v.DrawString(font, panel.Position + new Vector2(10, 60), $"{_table!.Count} lines" + (machines > 0 ? ", a PAUSA machine" : ""),
+                HorizontalAlignment.Left, 260, 13, new Color(0.75f, 0.85f, 0.9f));
+            v.DrawString(font, panel.Position + new Vector2(10, 78), "price here, chance in stock", HorizontalAlignment.Left, 260, 11, new Color(0.55f, 0.7f, 0.75f));
+        }
+        else
+        {
+            int containers = _layout.Furniture.Count(f => LootTables.IsLootable(f.Type));
+            int locked = _layout.Furniture.Count(f => LootTables.IsLocked(f.Type));
+            string sub = $"{containers} containers" + (locked > 0 ? $", {locked} locked" : "") + (machines > 0 ? ", a PAUSA machine" : "");
+            v.DrawString(font, panel.Position + new Vector2(10, 60), sub, HorizontalAlignment.Left, 260, 13,
+                locked > 0 ? new Color(0.98f, 0.78f, 0.35f) : new Color(0.75f, 0.85f, 0.9f));
+            v.DrawString(font, panel.Position + new Vector2(10, 78), "chance to find, any container", HorizontalAlignment.Left, 260, 11, new Color(0.55f, 0.7f, 0.75f));
+        }
 
         if (_table!.Count == 0)
             v.DrawString(font, panel.Position + new Vector2(10, 104), "nothing to find here", HorizontalAlignment.Left, 260, 14, new Color(0.8f, 0.6f, 0.6f));
@@ -185,7 +217,11 @@ public partial class SmartBinocularsHud : CanvasLayer
             var (item, p) = _table[i];
             float y = panel.Position.Y + 88 + i * 22;
             DrawIcon(v, item, new Vector2(panel.Position.X + 10, y), 18);
-            v.DrawString(font, new Vector2(panel.Position.X + 34, y + 15), ItemDefs.Get(item)?.Name ?? item.ToString(), HorizontalAlignment.Left, 150, 13, Colors.White);
+            int price = 0;
+            bool priced = shop != ShopType.None && _prices.TryGetValue((_layout.Key, item), out price);
+            v.DrawString(font, new Vector2(panel.Position.X + 34, y + 15), ItemDefs.Get(item)?.Name ?? item.ToString(), HorizontalAlignment.Left, priced ? 110 : 150, 13, Colors.White);
+            if (priced)
+                v.DrawString(font, new Vector2(panel.Position.X + 144, y + 15), $"{price}.-", HorizontalAlignment.Right, 40, 12, new Color(0.98f, 0.78f, 0.35f));
             // a bar for the chance, and the number
             var bar = new Rect2(panel.Position.X + 186, y + 5, 50, 9);
             v.DrawRect(bar, new Color(1, 1, 1, 0.08f));

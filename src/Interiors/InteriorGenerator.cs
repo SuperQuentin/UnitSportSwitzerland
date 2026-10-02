@@ -31,7 +31,8 @@ public static partial class InteriorGenerator
     private const float Landing = 1.0f;
     private const int MaxFloors = 30;
 
-    public static InteriorLayout Generate(Footprint fp, Building b)
+    /// <param name="rural">The building's tile is countryside (<c>Loot.ShopTables.IsRural</c>): only there is a gun shop.</param>
+    public static InteriorLayout Generate(Footprint fp, Building b, bool rural = false)
     {
         var rng = new Random(StableHash(fp.Key.ToString()));
         var (h, n) = Storeys(b);
@@ -63,6 +64,7 @@ public static partial class InteriorGenerator
 
         bool bank = BuildingFootprint.IsBank(fp);
         if (bank) layout.Type = BuildingType.Bank;
+        layout.Shop = BuildingFootprint.ShopOf(fp, rural);
 
         bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
             or BuildingKind.Garage
@@ -668,8 +670,27 @@ public static partial class InteriorGenerator
     private sealed record Piece(FurnitureType Type, float W, float D, float H, bool Wall);
 
     /// <summary>A room's pieces: what any room of its type has, then what its building kind adds (<see cref="KindExtras"/>).</summary>
-    private static IEnumerable<Piece> Pieces(RoomType t, RoomPlan r, Random rng, BuildingKind kind) =>
-        BasePieces(t, r, rng).Concat(KindExtras(t, kind));
+    private static IEnumerable<Piece> Pieces(RoomType t, RoomPlan r, Random rng, BuildingKind kind, bool vending = false) =>
+        BasePieces(t, r, rng).Concat(KindExtras(t, kind)).Concat(vending && VendingRoom(t, kind) ? new[] { VendingPiece } : Array.Empty<Piece>());
+
+    private static readonly Piece VendingPiece = new(FurnitureType.VendingMachine, 0.9f, 0.8f, 1.85f, true);
+
+    /// <summary>
+    /// How many buildings of a kind have a PAUSA vending machine (#273): a school's or a hospital's
+    /// hall about one in three, an office block's lobby one in five, a works' floor one in seven.
+    /// </summary>
+    private static double VendingChance(BuildingKind kind) => kind switch
+    {
+        BuildingKind.Civic => 0.35,
+        BuildingKind.Commercial => 0.20,
+        BuildingKind.Industrial => 0.15,
+        _ => 0,
+    };
+
+    /// <summary>Where it stands: the ground floor's lobby or hall, a works' hall or store.</summary>
+    private static bool VendingRoom(RoomType t, BuildingKind kind) => kind == BuildingKind.Industrial
+        ? t is RoomType.Workshop or RoomType.Storage
+        : t is RoomType.Lobby or RoomType.Hall;
 
     /// <summary>
     /// Stock that depends on what the building is for: a shop's back room is racks of goods, a
@@ -907,6 +928,8 @@ public static partial class InteriorGenerator
 
     private static void Furnish(InteriorLayout l, Random rng)
     {
+        // a vending machine is the building's own dice roll, so it moves nothing else in the plan
+        bool vending = !l.IsBank && Core.Fnv.Unit(l.Key + "|vending") < VendingChance(l.Kind);
         var rooms = new List<(int Floor, RoomPlan Room, List<RectPlan> Placed, List<RectPlan> Blocked)>();
         for (int f = 0; f < l.Floors.Count; f++)
         {
@@ -940,11 +963,13 @@ public static partial class InteriorGenerator
                 if (r.Type == RoomType.Classroom) Desks(l, f, r, placed, blocked);
                 if (r.Type == RoomType.Vault) { Vault(l, f, r, placed, blocked, rng); continue; }
 
-                foreach (var p in Pieces(r.Type, r, rng, l.Kind))
+                foreach (var p in Pieces(r.Type, r, rng, l.Kind, vending && f == l.Below))
                     TryPlace(l, f, r, p, placed, blocked, rng);
+                if (vending && l.Furniture.Count > 0 && l.Furniture[^1].Type == FurnitureType.VendingMachine) vending = false;
             }
         }
         if (l.IsBank) Counter(l, rooms, rng);
+        if (l.Shop != Loot.ShopType.None) ShopCounter(l, rooms, rng);
         Secure(l, rooms);
     }
 
@@ -966,6 +991,25 @@ public static partial class InteriorGenerator
                 TryPlace(l, c.Floor, c.Room, new Piece(FurnitureType.TellerDesk, width, 0.7f, 1.15f, false), c.Placed, c.Blocked, rng);
                 if (l.Furniture.Count > before) return;
             }
+    }
+
+    /// <summary>
+    /// A shop must have its counter (#273), or its door sign promises nothing: when no shop room
+    /// placed one (a garage has none of its own), a shorter one, then any ground-floor room.
+    /// </summary>
+    private static void ShopCounter(InteriorLayout l, List<(int Floor, RoomPlan Room, List<RectPlan> Placed, List<RectPlan> Blocked)> rooms, Random rng)
+    {
+        if (l.Furniture.Any(f => f.Type == FurnitureType.ShopCounter && f.Floor == l.Below)) return;
+        var ground = rooms.Where(x => x.Floor == l.Below)
+            .OrderByDescending(x => x.Room.Type is RoomType.Shop or RoomType.Garage).ThenByDescending(x => x.Room.Area).ToList();
+        foreach (float width in new[] { 2.0f, 1.5f, 1.1f })
+            foreach (var c in ground)
+                foreach (bool wall in new[] { true, false })
+                {
+                    int before = l.Furniture.Count;
+                    TryPlace(l, c.Floor, c.Room, new Piece(FurnitureType.ShopCounter, width, 0.6f, 1.0f, wall), c.Placed, c.Blocked, rng);
+                    if (l.Furniture.Count > before) return;
+                }
     }
 
     private static readonly Piece VaultSafePiece = new(FurnitureType.VaultSafe, 0.9f, 0.75f, 1.7f, true);

@@ -265,7 +265,8 @@ public partial class Gathering : Node, Core.IOriginShiftAware
             case Resource.Water:
                 return (ItemId.WaterBottle, 1);
             case Resource.TreeWood:
-                return (ItemId.Firewood, _rng.Next(2, 5));
+                // a Swiss army knife in the pack (#273): its saw gets one more log out of every tree
+                return (ItemId.Firewood, _rng.Next(2, 5) + (_items.Inventory.Contains(ItemId.SwissArmyKnife) ? 1 : 0));
             case Resource.Deadwood:
                 return (ItemId.Firewood, _rng.Next(1, 3));
             case Resource.Pumpkin:

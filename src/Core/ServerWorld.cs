@@ -137,6 +137,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // loot in those interiors: the server rolls it and remembers what was taken
         Loot.LootService.Create(this);
+        // shops and vending machines (#273): the server keeps what was sold and charges the card
+        Loot.ShopService.Create(this);
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);

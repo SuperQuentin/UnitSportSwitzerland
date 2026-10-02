@@ -33,13 +33,13 @@ public static class ItemDefs
     private static ItemDef[] Authored() => new[]
     {
         new(ItemId.Binoculars, "Binoculars", "Hold {aim_item} to look through them. 8x.",
-            ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN"),
+            ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN", 0, ItemCategory.Gear, 60f),
         new(ItemId.SmartBinoculars, "Smart binoculars", "Hold them at a building's door, or inside: they read out what its containers can hold and the chance of finding each item.",
             ItemUse.Readout, 1, new Color(0.20f, 0.42f, 0.50f), "SB", 0, ItemCategory.Gear, 250f),
         new(ItemId.Camera, "Camera", "A Polaroid. Hold {aim_item} to frame, {use_item} to take a photo: it prints, develops, and goes in your pack.",
-            ItemUse.Photo, 1, new Color(0.18f, 0.18f, 0.20f), "CM"),
+            ItemUse.Photo, 1, new Color(0.18f, 0.18f, 0.20f), "CM", 0, ItemCategory.Gear, 160f),
         new(ItemId.Gps, "GPS", "Shows your LV95 coordinates, altitude and heading while held.",
-            ItemUse.Readout, 1, new Color(0.95f, 0.78f, 0.12f), "GP"),
+            ItemUse.Readout, 1, new Color(0.95f, 0.78f, 0.12f), "GP", 0, ItemCategory.Gear, 120f),
         new(ItemId.SwissFlag, "Swiss flag", "{use_item} plants it where you look; {use_item} on a planted flag picks it back up.",
             ItemUse.Place, 5, new Color(0.85f, 0.08f, 0.10f), "FL"),
         new(ItemId.EnergyBar, "Energy bar", "{use_item} to eat. Restores 35 health.",
@@ -128,6 +128,14 @@ public static class ItemDefs
         Bag(ItemId.Handbag, "Handbag", "#8a2a3a", "HB", 18, 40),
         Bag(ItemId.Backpack, "Backpack", "#2a5a8a", "BK", 27, 70),
         Bag(ItemId.HikingPack, "Hiking backpack", "#c8602a", "HK", 36, 150),
+
+        // shops (#273): only a PAUSA vending machine holds these four; the knife is sold in shops
+        Eat(ItemId.IceTea, "Ice tea", 6, "#d89a3a", "IT", 12, ItemCategory.Water, 3),
+        Eat(ItemId.Crisps, "Crisps", 10, "#f2c23a", "CR", 10, ItemCategory.Food, 3),
+        Eat(ItemId.GummyBears, "Gummy bears", 10, "#e8483a", "GB", 8, ItemCategory.Food, 2),
+        Eat(ItemId.IsotonicDrink, "Isotonic drink", 6, "#3ab0e8", "ID", 20, ItemCategory.Water, 4),
+        new(ItemId.SwissArmyKnife, "Swiss army knife", "A tool, not a weapon: kept anywhere in your pack, every tree you chop gives one more log.",
+            ItemUse.Material, 1, new Color(0.80f, 0.10f, 0.12f), "SK", 0, ItemCategory.Gear, 45f),
     };
 
     private static ItemDef Bag(ItemId id, string name, string tint, string glyph, int slots, float value) =>

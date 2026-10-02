@@ -115,7 +115,7 @@ public partial class LootService : Node
 
     /// <summary>The lootable piece of furniture the player is facing, if any, as an index into the layout.</summary>
     public static int NearestContainer(FootPlayer p, InteriorLayout layout, InteriorNode node) =>
-        NearestOf(p, layout, node, LootTables.IsLootable);
+        NearestOf(p, layout, node, t => LootTables.IsLootable(t) && !(t == FurnitureType.ShopCounter && layout.Shop != ShopType.None));
 
     /// <summary>The bank's teller desk the player is facing, if any (#213).</summary>
     public static int NearestCounter(FootPlayer p, InteriorLayout layout, InteriorNode node) =>
@@ -163,10 +163,11 @@ public partial class LootService : Node
     /// <summary>The prompt line for the furniture the player faces, or null.</summary>
     public string? PromptFor(FootPlayer p)
     {
-        if (_ui?.IsOpen == true || _simonUi?.IsOpen == true || _counterUi?.IsOpen == true) return null;
+        if (_ui?.IsOpen == true || _simonUi?.IsOpen == true || _counterUi?.IsOpen == true || ShopService.Instance?.IsOpen == true) return null;
         if (InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return null;
         string key = InputHints.Tag(PlayerInput.InteractMount);
         if (NearestCounter(p, layout, node) >= 0) return $"{key} Bank counter: deposit or withdraw";
+        if (ShopService.Instance?.PromptFor(p) is { } shop) return shop;
         int i = NearestContainer(p, layout, node);
         if (i < 0) return null;
         if (_lockUi?.IsOpen == true) return null;
@@ -184,12 +185,15 @@ public partial class LootService : Node
         if (_ui?.IsOpen == true) { Close(); return true; }
         if (_lockUi?.IsOpen == true || _simonUi?.IsOpen == true) { StopPicking(); return true; }
         if (_counterUi?.IsOpen == true) { _counterUi.Close(); return true; }
+        if (ShopService.Instance is { IsOpen: true } open) { open.Close(); return true; }
         if (InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return false;
         if (NearestCounter(p, layout, node) is var counter and >= 0)
         {
             _counterUi?.Open(p, node, layout.Furniture[counter]);
             return true;
         }
+        // a shop's counter or a PAUSA machine (#273): the shop's panel, not a search
+        if (ShopService.Instance?.TryOpen(p) == true) return true;
         int i = NearestContainer(p, layout, node);
         if (i < 0) return false;
         if (LootTables.IsLocked(layout.Furniture[i].Type) && !IsUnlocked(layout.Key, i))

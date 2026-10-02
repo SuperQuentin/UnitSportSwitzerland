@@ -1192,6 +1192,97 @@ public static class ItemIcons
             "...kk......kk...",
         };
 
+        // ---- shops and PAUSA machines (#273) ----
+        d[ItemId.IceTea] = new[]
+        {
+            "......kkkk......",
+            "......krrk......",
+            "......kRRk......",
+            ".....kkkkkk.....",
+            "....koooooOk....",
+            "....kooooOOk....",
+            "....kyyyyyYk....",
+            "....kylyyyYk....",
+            "....kyyeyyYk....",
+            "....kyyyyyYk....",
+            "....kooooOOk....",
+            "....koooOOOk....",
+            "....kOOOOOOk....",
+            ".....kkkkkk.....",
+        };
+
+        d[ItemId.IsotonicDrink] = new[]
+        {
+            "......kkkk......",
+            "......kwwk......",
+            "......kaak......",
+            ".....kkkkkk.....",
+            "....kCcccbBk....",
+            "....kccccbBk....",
+            "....kwwwwwwk....",
+            "....kwwyywwk....",
+            "....kwyywwwk....",
+            "....kwwwwwwk....",
+            "....kccccbBk....",
+            "....kcccbbBk....",
+            "....kBBBBBBk....",
+            ".....kkkkkk.....",
+        };
+
+        d[ItemId.Crisps] = new[]
+        {
+            "...kkkkkkkkkk...",
+            "...kGaGaGaGak...",
+            "..kyyyyyyyyyyk..",
+            "..kyllyyyyyyYk..",
+            "..krrrrrrrrrRk..",
+            "..kyyyTTTTyyYk..",
+            "..kyyTtttTyyYk..",
+            "..kyyyTTTTyyYk..",
+            "..krrrrrrrrrRk..",
+            "..kyyyyyyyyyYk..",
+            "..kYYYYYYYYYYk..",
+            "...kGaGaGaGak...",
+            "...kkkkkkkkkk...",
+        };
+
+        d[ItemId.GummyBears] = new[]
+        {
+            "....kk....kk....",
+            "...krrk..krrk...",
+            "...krrkkkkrrk...",
+            "....krrrrrrk....",
+            "...krwrrrrwrk...",
+            "...krrrrrrrrk...",
+            "....krrrrrrk....",
+            "..kkkrrrrrrkkk..",
+            ".krrkrrqrrrkrrk.",
+            ".kRRkrrrrrrkRRk.",
+            "..kkkrrrrrrkkk..",
+            "....krrrrrrk....",
+            "...krrrkkrrrk...",
+            "...kRRk..kRRk...",
+            "....kk....kk....",
+        };
+
+        // the red handle with the white cross, the big blade out
+        d[ItemId.SwissArmyKnife] = new[]
+        {
+            "................",
+            "..........kk....",
+            ".........kwak...",
+            "........kwak....",
+            ".......kwak.....",
+            "......kaGk......",
+            "..kkkkkkkkkkk...",
+            ".krrrrrrrrrrRk..",
+            ".krrrrwrrrrrRk..",
+            ".krrrwwwrrrrRk..",
+            ".krrrrwrrrrrRk..",
+            ".kRRRRRRRRRRRk..",
+            "..kkkkkkkkkkk...",
+        };
+
         return d;
     }
 }

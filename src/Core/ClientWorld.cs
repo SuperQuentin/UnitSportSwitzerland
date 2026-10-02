@@ -102,6 +102,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--truckcheck"), Player.HeavyCheck.Run),
         (() => Items.IconSheet.Requested, Items.IconSheet.Run),
         (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
+        (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -632,6 +633,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
 
         if (Systems.On(Systems.Loot)) Loot.LootService.Create(this).Items = items;
+        // shops and PAUSA vending machines (#273): same node path as the server's, which keeps the sold counts
+        if (Systems.On(Systems.Loot)) Loot.ShopService.Create(this).Items = items;
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
         _radioUi.Give = items.Give;
