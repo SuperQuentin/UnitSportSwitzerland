@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -277,7 +278,7 @@ public sealed class HeavyTrain
     {
         for (int k = 1; k < Bodies.Count && k - 1 < gamma.Length; k++)
         {
-            gamma[k - 1] = Mathf.Wrap(Bodies[k].Psi - Bodies[k - 1].Psi, -Mathf.Pi, Mathf.Pi);
+            gamma[k - 1] = MathX.WrapAngle(Bodies[k].Psi - Bodies[k - 1].Psi);
             gammaRate[k - 1] = Bodies[k].W - Bodies[k - 1].W;
         }
     }
@@ -429,7 +430,7 @@ public sealed class HeavyTrain
         for (int k = 1; k < n; k++)
         {
             float damp = Bodies[k].Spec.JointDamping;
-            float gamma = Mathf.Wrap(Bodies[k].Psi - Bodies[k - 1].Psi, -Mathf.Pi, Mathf.Pi);
+            float gamma = MathX.WrapAngle(Bodies[k].Psi - Bodies[k - 1].Psi);
             float rate = Bodies[k].W - Bodies[k - 1].W;
             if (c.FoldDamping > 0f && gamma * rate > 0f && Mathf.Abs(gamma) > 0.12f)
                 damp += c.FoldDamping * Mathf.Clamp((u0f - 4f) / 6f, 0f, 1f);
@@ -531,7 +532,7 @@ public sealed class HeavyTrain
                 p.W -= Cross(rp, lambda) * ip;
 
                 // the stop: the trailer's front corner against the cab, the dolly against the frame
-                float gamma = Mathf.Wrap(c.Psi - p.Psi, -Mathf.Pi, Mathf.Pi);
+                float gamma = MathX.WrapAngle(c.Psi - p.Psi);
                 float max = c.Spec.MaxArticulation;
                 if (Mathf.Abs(gamma) > max - 0.02f)
                 {

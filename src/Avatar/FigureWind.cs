@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Avatar;
 
@@ -37,7 +38,7 @@ public sealed class FigureWind
         var local = node.GlobalBasis.Orthonormalized().Inverse() * velocity;
         // node space faces −Z; author space faces +Z (the half turn MeshScratch.Build makes)
         var air = -new Vector3(-local.X, local.Y, -local.Z);
-        Wind = Wind.Lerp(air, 1f - Mathf.Exp(-5f * dt));
+        Wind = Wind.Lerp(air, MathX.Damp(5f, dt));
         return Wind;
     }
 }

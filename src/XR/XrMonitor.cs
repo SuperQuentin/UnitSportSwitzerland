@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Player;
+using UnitSport.Core;
 
 namespace UnitSport.XR;
 
@@ -211,7 +212,7 @@ public partial class XrMonitor : CanvasLayer
             _chase = wanted;
             _chaseSet = true;
         }
-        else _chase = _chase.Lerp(wanted, 1f - Mathf.Exp(-5f * dt));
+        else _chase = _chase.Lerp(wanted, MathX.Damp(5f, dt));
 
         var look = head + Vector3.Down * 0.25f;
         if (_chase.DistanceSquaredTo(look) > 0.01f)

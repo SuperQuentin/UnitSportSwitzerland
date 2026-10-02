@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Avatar;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -158,7 +159,7 @@ public abstract class Flyer : Rideable
     }
 
     protected static float Approach(float value, float target, float rate, float dt) =>
-        value + (target - value) * (1f - Mathf.Exp(-rate * dt));
+        value + (target - value) * MathX.Damp(rate, dt);
 }
 
 // ============================================================================================
@@ -337,7 +338,7 @@ public class Canopy : Flyer
         m.Yaw -= turn * TurnRate * dt;
         heading = Heading(m.Yaw);
         var target = heading * airspeed + Vector3.Down * sink;
-        m.Velocity = m.Velocity.Lerp(target, 1f - Mathf.Exp(-1.6f * dt));
+        m.Velocity = m.Velocity.Lerp(target, MathX.Damp(1.6f, dt));
 
         // the pilot swings out under the wing in a turn
         m.Bank = Approach(m.Bank, turn * 0.45f, 2.5f, dt);
@@ -417,7 +418,7 @@ public sealed class Helicopter : Flyer
 
         // the nose swings round to where the camera looks, at a helicopter's pace
         if (!parked)
-            m.Yaw += Mathf.Clamp(Mathf.Wrap(input.ViewYaw - m.Yaw, -Mathf.Pi, Mathf.Pi), -YawRate * dt, YawRate * dt);
+            m.Yaw += Mathf.Clamp(MathX.WrapAngle(input.ViewYaw - m.Yaw), -YawRate * dt, YawRate * dt);
 
         var fwd = Heading(m.Yaw);
         var right = fwd.Cross(Vector3.Up);
