@@ -66,6 +66,7 @@ public partial class GadgetNetProbe : Node
         await Seconds(1.0);
 
         var low = me.GlobalPosition;
+        var lowGlobal = placed.Origin.ToGlobal(low);
         var high = low + new Vector3(-30f, 8f, 0);
         var (e, n) = placed.Origin.ToLv95(high);
         long zip = await Place(placed, PlacedKind.Zipline, new Transform3D(Basis.Identity, low), Gadgets.ZipPayload(e, n, high.Y));
@@ -86,7 +87,8 @@ public partial class GadgetNetProbe : Node
         Expect(_items.GadgetTool.Riding, "on the zipline");
         Say($"riding {Multiplayer.GetUniqueId()}");
         await Until(() => !_items.GadgetTool.Riding, 15);
-        Expect(new Vector2(me.GlobalPosition.X - low.X, me.GlobalPosition.Z - low.Z).Length() < 4f, "rode to the bottom");
+        // in LV95: under --originstress the world has shifted since `low` was computed (#185)
+        Expect(me.Global.HorizontalDistanceTo(lowGlobal) < 4, $"rode to the bottom ({me.Global.HorizontalDistanceTo(lowGlobal):F1} m from it)");
         await Seconds(1.5);
         Say("down");
         await Heard("B", "watched", 30);

@@ -25,8 +25,9 @@ public partial class Handshake : Node
     /// 1: everything before the check. 2: positions in LV95, not world space (#185).
     /// 3: one packed NetPose array replaces the replicated BodyPose and TrainPose (#221).
     /// 4: built structures, World/Structures (#274).
+    /// 5: gadgets as placed kinds 5-10, with a zipline/ladder payload (#275).
     /// </summary>
-    public const int Protocol = 4;
+    public const int Protocol = 5;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
