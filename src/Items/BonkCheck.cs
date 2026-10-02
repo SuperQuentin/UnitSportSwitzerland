@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Audio.Cd;
 using UnitSport.Net;
 using UnitSport.Player;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -45,14 +46,12 @@ public partial class BonkCheck : Node
     }
 
     /// <summary>"--bonkcheck" on the command line: the client must use a scratch inventory.</summary>
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--bonkcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--bonkcheck");
 
     public static BonkCheck? Create(Func<FootPlayer?> local, Func<Node?> players, Inventory inventory)
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--bonkcheck");
-        if (i < 0) return null;
-        bool thrower = i + 1 < args.Length && args[i + 1] == "thrower";
+        if (!CmdArgs.Has("--bonkcheck")) return null;
+        bool thrower = CmdArgs.Value("--bonkcheck") == "thrower";
         GD.Print($"[bonkcheck] role {(thrower ? "thrower" : "victim")}");
         return new BonkCheck(thrower, local, players, inventory);
     }
@@ -120,7 +119,7 @@ public partial class BonkCheck : Node
                 var from = me.GlobalPosition + Vector3.Up * 1.4f + (chest - me.GlobalPosition with { Y = chest.Y }).Normalized() * 0.5f;
                 var velocity = (chest - from).Normalized() * 14f + Vector3.Up * 1.2f;
                 if (_step == 2) DroppedItems.Instance?.Drop(new ItemStack(ItemId.Stone, 1), from, velocity, Vector3.Zero, Vector3.Right * 8f);
-                else RadioManager.Instance?.Throw(new RadioState("", 0, from, 0, velocity));
+                else if (RadioManager.Instance is { } radios) radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(from), 0, velocity));
                 GD.Print($"[bonkcheck] thrower: threw a {(_step == 2 ? "stone" : "radio")} from {me.GlobalPosition.DistanceTo(other.GlobalPosition):F1} m");
                 Next();
                 break;

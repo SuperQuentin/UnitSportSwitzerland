@@ -101,9 +101,12 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
     private readonly List<(Vector3 Pos, Vector3 Vel)> _targets = new();
     private static readonly StringName DroneGroup = TargetDrone.Group;
 
-    public static CombatManager Create(Node world, ChunkManager? terrain, bool server)
+    /// <summary>This peer's origin: rounds go to the server and back in LV95 (#185).</summary>
+    private Core.WorldOrigin _origin = null!;
+
+    public static CombatManager Create(Node world, ChunkManager? terrain, Core.WorldOrigin origin, bool server)
     {
-        var c = new CombatManager { Name = NodeName, Terrain = terrain, _server = server };
+        var c = new CombatManager { Name = NodeName, Terrain = terrain, _origin = origin, _server = server };
         world.AddChild(c);
         Instance = c;
         return c;
@@ -256,7 +259,11 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
     /// shooter (Net/InterestService), not to the whole map — someone 60 km away has no tracer to
     /// draw and no bullet that can reach them.
     /// </summary>
-    private void SendShot(Vector3 muzzle, Vector3 vel) => RpcId(1, MethodName.Shot, muzzle, vel);
+    private void SendShot(Vector3 muzzle, Vector3 vel)
+    {
+        var at = _origin.ToGlobal(muzzle);
+        RpcId(1, MethodName.Shot, at.E, at.N, at.Alt, vel);
+    }
 
     /// <summary>
     /// What the crosshair is on: the first thing along the camera's line of sight — terrain or a
@@ -288,19 +295,21 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
-    private void Shot(Vector3 origin, Vector3 velocity)
+    private void Shot(double e, double n, double alt, Vector3 velocity)
     {
         if (!_server) return;
         long shooter = Multiplayer.GetRemoteSenderId();
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
+        // relayed as it came, LV95: the server's own origin has nothing to do with it
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != shooter && interest?.ServerSees(peer, shooter) != false)
-                RpcId(peer, MethodName.ShotFrom, shooter, origin, velocity);
+                RpcId(peer, MethodName.ShotFrom, shooter, e, n, alt, velocity);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
-    private void ShotFrom(long shooter, Vector3 origin, Vector3 velocity) => Spawn(origin, velocity, shooter);
+    private void ShotFrom(long shooter, double e, double n, double alt, Vector3 velocity) =>
+        Spawn(_origin.ToWorld(e, n, alt), velocity, shooter);
 
     private void Spawn(Vector3 origin, Vector3 velocity, long shooter)
     {

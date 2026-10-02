@@ -302,16 +302,6 @@ public sealed class FallbackChunkSource : IChunkSource
         await source.LoadCoarseChunkAsync(k).ConfigureAwait(false)
         ?? await source.LoadChunkAsync(k).ConfigureAwait(false);
 
-    /// <summary>Forgets every blend, for a world being thrown away (a rebase).</summary>
-    public void ClearBlends()
-    {
-        lock (_blendGate)
-        {
-            _blends.Clear();
-            _blendOrder.Clear();
-        }
-    }
-
     // ---- the horizon ---------------------------------------------------------------------------
 
     /// <summary>

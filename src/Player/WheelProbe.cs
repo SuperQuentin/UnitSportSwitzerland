@@ -22,24 +22,16 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class WheelProbe : Node
 {
-    public static bool CheckRequested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--wheelcheck") >= 0;
+    public static bool CheckRequested => CmdArgs.Has("--wheelcheck");
 
     /// <summary>
     /// <c>--ffbcheck</c>, in a window with a real wheel and hands off it: pushes it right, then left,
     /// at 30% for half a second each, and reads back which way it turned — whether this device needs
     /// <see cref="WheelSettings.FfbInvert"/>. RESULT line.
     /// </summary>
-    public static bool ForceCheckRequested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--ffbcheck") >= 0;
+    public static bool ForceCheckRequested => CmdArgs.Has("--ffbcheck");
 
-    public static string? WatchRole
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--wheelwatch");
-            return i < 0 ? null : i + 1 < args.Length && !args[i + 1].StartsWith("--") ? args[i + 1] : "A";
-        }
-    }
+    public static string? WatchRole => CmdArgs.Has("--wheelwatch") ? CmdArgs.Value("--wheelwatch", notFlag: true) ?? "A" : null;
 
     // ---------------------------------------------------------------------------------------
     // --wheelcheck

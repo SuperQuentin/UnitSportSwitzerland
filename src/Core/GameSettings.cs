@@ -265,7 +265,7 @@ public sealed class GameSettings
         }
 
         loaded.Clamp();
-        loaded.ApplyCommandLine(OS.GetCmdlineUserArgs());
+        loaded.ApplyCommandLine(CmdArgs.All);
         Current = loaded;
         GD.Print($"[settings] rings={loaded.RenderDistanceRings} horizon={loaded.HorizonKm}km "
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "

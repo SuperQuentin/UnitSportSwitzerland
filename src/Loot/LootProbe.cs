@@ -31,13 +31,7 @@ public partial class LootProbe : Node
         _epochs = epochs;
     }
 
-    public static int? ParseArgs()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--lootstats");
-        if (i < 0) return null;
-        return i + 1 < args.Length && int.TryParse(args[i + 1], out int n) ? n : 20;
-    }
+    public static int? ParseArgs() => CmdArgs.Has("--lootstats") ? CmdArgs.Int("--lootstats") ?? 20 : null;
 
     private sealed class Tally
     {

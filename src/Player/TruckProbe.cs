@@ -29,7 +29,7 @@ public partial class TruckProbe : Node
     private bool _requested, _mounted, _done;
     private FootPlayer? _player;
     private double _t, _sinceReport, _sinceShot, _sinceTrace;
-    private readonly bool _trace = OS.GetCmdlineUserArgs().Contains("--trace");
+    private readonly bool _trace = CmdArgs.Has("--trace");
     private int _shotCount, _near;
     private float _worstOff, _worstJoint, _travelled, _top, _offTime;
     private readonly List<float> _worstSection = new();
@@ -39,24 +39,17 @@ public partial class TruckProbe : Node
     {
         _chunks = chunks;
         _origin = origin;
-        var parts = (Arg("--truckprobe") ?? "0").Split(',');
+        var parts = (CmdArgs.Value("--truckprobe") ?? "0").Split(',');
         _index = int.TryParse(parts[0], out int n) ? n : 0;
         _seconds = parts.Length > 1 && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double s) ? s : 60;
         _shots = parts.Length > 2 ? parts[2] : null;
-        _kmh = float.TryParse(Arg("--kmh"), NumberStyles.Float, CultureInfo.InvariantCulture, out float k) ? k : 45f;
-        _load = float.TryParse(Arg("--load"), NumberStyles.Float, CultureInfo.InvariantCulture, out float l) ? l : 1f;
-        _trailer = int.TryParse(Arg("--trailer"), out int t) ? t : -1;
-        if (!OS.GetCmdlineUserArgs().Contains("--profile")) GameSettings.Current.RideProfile = RideProfile.Sim;
+        _kmh = CmdArgs.Float("--kmh") ?? 45f;
+        _load = CmdArgs.Float("--load") ?? 1f;
+        _trailer = CmdArgs.Int("--trailer") ?? -1;
+        if (!CmdArgs.Has("--profile")) GameSettings.Current.RideProfile = RideProfile.Sim;
     }
 
-    public static bool Requested => Arg("--truckprobe") != null || OS.GetCmdlineUserArgs().Contains("--truckprobe");
-
-    private static string? Arg(string flag)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, flag);
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-    }
+    public static bool Requested => CmdArgs.Has("--truckprobe");
 
     public override void _PhysicsProcess(double delta)
     {
@@ -74,7 +67,7 @@ public partial class TruckProbe : Node
             _ = System.Threading.Tasks.Task.Run(async () =>
             {
                 var route = await RaceRoute.BuildAsync(source, _origin, at, default,
-                    OS.GetCmdlineUserArgs().Contains("--minor") ? Terrain.Format.RoadClass.Minor : Terrain.Format.RoadClass.Road);
+                    CmdArgs.Has("--minor") ? Terrain.Format.RoadClass.Minor : Terrain.Format.RoadClass.Road);
                 Callable.From(() =>
                 {
                     if (route == null) { GD.Print("[truckprobe] no road near the spawn"); Finish(1); return; }

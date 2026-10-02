@@ -14,22 +14,15 @@ namespace UnitSport.Player;
 ///
 /// Fails when the player ends up on the vehicle, off the ground, or inside its box, or when a
 /// truck's parked box is wider than its body (it used to be as wide as its mirrors). A bus's
-/// driver (#162) gets up into its aisle instead: there it fails unless on the floor, under the roof.
+/// driver (#162) gets up into its aisle instead: there it fails unless on the floor, under the roof,
+/// then takes the wheel again and fails if the bus is lifted off the ground doing it (#323).
 /// Read the <c>[exitcheck]</c> lines.
 /// </summary>
 public partial class ExitProbe : Node, Core.IOriginShiftAware
 {
-    public static bool Requested => System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--exitcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--exitcheck");
 
-    private static string? Password
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = System.Array.IndexOf(args, "--exitcheck");
-            return i >= 0 && i + 1 < args.Length && !args[i + 1].StartsWith("--") ? args[i + 1] : null;
-        }
-    }
+    private static string? Password => CmdArgs.Value("--exitcheck", notFlag: true);
 
     private readonly System.Func<FootPlayer?> _local;
     private int _failed;
@@ -199,6 +192,7 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
         }
         if (ok) Log($"ok   {name}: {what}");
         else Fail(name, (onTop ? "ON TOP: " : ride.Walkable ? "NOT IN THE AISLE: " : over ? "INSIDE: " : agl >= 0.8f ? "OFF THE GROUND: " : "") + what);
+        if (ok && ride.Walkable && me.DeckOn != "" && await BackIn(me, name)) parked = null;   // driven again: it is the player's now
         Clean(walls, parked);
         await Wait(0.3);
     }
@@ -286,6 +280,35 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
         string what = $"got up at {speed * 3.6f:F0} km/h, the bus rolled at up to {worst * 3.6f:F0} km/h";
         if (lost == null) Log($"ok   {name}: {what}, aboard the whole way");
         else Fail(name, $"{what}; LOST {lost}");
+    }
+
+    /// <summary>
+    /// Back at the wheel from the aisle (#323): the bus must stay on the ground, not be taken up and
+    /// dropped. Every physics frame for two seconds, the driven body's height over the ground; then
+    /// on foot again where it stands (the bus gone with it). False when it never took the wheel.
+    /// </summary>
+    private async Task<bool> BackIn(FootPlayer me, string name)
+    {
+        float aisle = me.GlobalPosition.Y - Ground(me, me.GlobalPosition);
+        if (!me.TryGetIn()) { Fail(name, "back in: E at the wheel did nothing"); return false; }
+        for (int i = 0; i < 300 && me.Ride == RideKind.OnFoot; i++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        if (me.Ride == RideKind.OnFoot) { Fail(name, "back in: never took the wheel"); return false; }
+        float start = me.GlobalPosition.Y - Ground(me, me.GlobalPosition), high = float.MinValue;
+        int at = 0;
+        for (int frame = 0; frame < 120; frame++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            float agl = me.GlobalPosition.Y - Ground(me, me.GlobalPosition);
+            if (agl > high) { high = agl; at = frame; }
+        }
+        float settled = me.GlobalPosition.Y - Ground(me, me.GlobalPosition);
+        string what = $"back in: {start:F2} m over the ground at once, {high:F2} m at frame {at}, {settled:F2} m settled (aisle {aisle:F2} m)";
+        if (Mathf.Max(high, start) - settled > 0.25f) Fail(name, $"DROPPED {what}");
+        else Log($"ok   {name}: {what}");
+        // on foot where it stands; the next case conjures its own vehicle 30 m on
+        me.Velocity = Vector3.Zero;
+        for (int i = 0; i < 30 && !me.SetRide(RideKind.OnFoot); i++) await Wait(0.1);
+        return true;
     }
 
     private void Fail(string name, string why)

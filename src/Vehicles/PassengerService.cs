@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Player;
+using UnitSport.Core;
 
 namespace UnitSport.Vehicles;
 
@@ -65,9 +66,7 @@ public partial class PassengerService : Node
         var service = new PassengerService { Name = NodeName };
         world.AddChild(service);
         Instance = service;
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--deck-inertia");
-        if (i >= 0 && i + 1 < args.Length && TryParseInertia(args[i + 1], out var mode)) Inertia = mode;
+        if (CmdArgs.Value("--deck-inertia") is { } inertia && TryParseInertia(inertia, out var mode)) Inertia = mode;
         return service;
     }
 

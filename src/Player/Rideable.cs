@@ -87,7 +87,7 @@ public readonly record struct RideGround(bool OnFloor, float Grade, Audio.Surfac
     /// and going the same way at 10 m/s or more — falling off linearly with the gap. Positions and
     /// velocities are what every peer has (a remote's replicated <c>WorldVelocity</c>).
     /// </summary>
-    public static float DraftBehind(Vector3 me, Vector3 travel, IEnumerable<(Vector3 At, Vector3 Velocity)> others)
+    public static float DraftBehind(Vector3 me, Vector3 travel, List<(Vector3 At, Vector3 Velocity)> others)
     {
         float best = 0f;
         float cone = Mathf.Cos(DraftCone);
