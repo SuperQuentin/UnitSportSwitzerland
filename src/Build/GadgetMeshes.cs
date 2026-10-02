@@ -39,6 +39,42 @@ public static class GadgetMeshes
         return body;
     }
 
+    /// <summary>A hay hideout going up in flames (#359): fire, smoke and a flickering light, gone after 8 s.</summary>
+    public static void Burn(Node parent, Transform3D at)
+    {
+        var root = new Node3D { Name = "HayFire", TopLevel = true };
+        parent.AddChild(root);
+        root.GlobalTransform = at;
+        var flame = new CpuParticles3D
+        {
+            Amount = 60, Lifetime = 1.1f, Direction = Vector3.Up, Spread = 25f, InitialVelocityMin = 1.5f, InitialVelocityMax = 3.5f,
+            Gravity = new Vector3(0, 1.5f, 0), EmissionShape = CpuParticles3D.EmissionShapeEnum.Box, EmissionBoxExtents = new Vector3(1.1f, 0.6f, 1.1f),
+            Position = Vector3.Up * 0.8f, ScaleAmountMin = 0.6f, ScaleAmountMax = 1.2f,
+            Mesh = new BoxMesh { Size = Vector3.One * 0.25f, Material = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = new Color(1f, 0.55f, 0.12f),
+            } },
+        };
+        var smoke = new CpuParticles3D
+        {
+            Amount = 30, Lifetime = 4f, Direction = Vector3.Up, Spread = 15f, InitialVelocityMin = 1f, InitialVelocityMax = 2f,
+            Gravity = new Vector3(0.4f, 1f, 0), Position = Vector3.Up * 1.8f, ScaleAmountMin = 1.5f, ScaleAmountMax = 3f,
+            Mesh = new BoxMesh { Size = Vector3.One * 0.5f, Material = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.25f, 0.24f, 0.22f, 0.6f), Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            } },
+        };
+        var light = new OmniLight3D { LightColor = new Color(1f, 0.6f, 0.25f), LightEnergy = 3f, OmniRange = 9f, Position = Vector3.Up * 1.2f };
+        root.AddChild(flame);
+        root.AddChild(smoke);
+        root.AddChild(light);
+        // the bale itself, blackening, for as long as it burns
+        root.AddChild(new MeshInstance3D { Mesh = Mesh(PlacedKind.HayHideout), MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.1f, 0.08f) } });
+        var tree = parent.GetTree();
+        tree.CreateTimer(5.0).Timeout += () => { if (GodotObject.IsInstanceValid(flame)) flame.Emitting = false; };
+        tree.CreateTimer(8.0).Timeout += () => { if (GodotObject.IsInstanceValid(root)) root.QueueFree(); };
+    }
+
     /// <summary>The mesh of a placed gadget: a zipline is drawn per object (its cable runs to the other post).</summary>
     public static ArrayMesh MeshFor(PlacedObject o)
     {

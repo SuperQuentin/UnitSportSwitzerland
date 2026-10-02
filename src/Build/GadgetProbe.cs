@@ -89,6 +89,16 @@ public partial class GadgetProbe : Node
                 $"{kind} set down, the item spent");
         }
 
+        // under the net and in the bale: hidden from the radar (#359); then a flare burns the bale
+        var net = placed.All.Values.First(o => !before.Contains(o.Id) && o.Kind == PlacedKind.CamoNet).WorldTransform(origin).Origin;
+        var hay = placed.All.Values.First(o => !before.Contains(o.Id) && o.Kind == PlacedKind.HayHideout);
+        var hayAt = hay.WorldTransform(origin).Origin;
+        Expect(Gadgets.Hidden(net + Vector3.Up * 0.1f) && Gadgets.Hidden(hayAt + Vector3.Up * 0.1f)
+            && !Gadgets.Hidden(net + new Vector3(4f, 0.1f, 0)), "hidden under the net and in the bale, not beside them");
+        Expect(GadgetTool.TryBurn(me, hayAt + new Vector3(0, 1.6f, 12f), Vector3.Forward), "a flare aimed at the bale sets it alight");
+        Expect(await Until(() => !placed.All.ContainsKey(hay.Id), 3), "the hay hideout burnt down");
+        if (Shots) { me.LookYaw = Mathf.Pi; await Seconds(1.0); Shot("hay_fire"); }
+
         // walk onto the trampoline: up it goes
         var tramp = placed.All.Values.First(o => !before.Contains(o.Id) && o.Kind == PlacedKind.Trampoline).WorldTransform(origin).Origin;
         int bounces = tool.Bounces;

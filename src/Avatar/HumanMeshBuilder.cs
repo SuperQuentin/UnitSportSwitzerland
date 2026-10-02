@@ -24,6 +24,11 @@ public enum HumanPose
 
     /// <summary>Seated in a harness under a canopy: thighs forward, hands up on the brake lines.</summary>
     Hanging,
+    /// <summary>On a ladder, facing it (+Z): left hand and left knee up, the right ones low (#359).</summary>
+    ClimbLeft,
+
+    /// <summary>The other half of a climbing step: right hand and knee up.</summary>
+    ClimbRight,
 }
 
 /// <summary>
@@ -1061,6 +1066,11 @@ public static partial class HumanMeshBuilder
             AnkleR: new(0.100f, 0.500f, 0.520f), ToeR: new(0.100f, 0.470f, 0.660f),
             TorsoLean: 0f),
 
+        // a ladder rung each 0.45 m: one hand up at the next rung, the other at chest height, the
+        // knee on the same side raised to the next foothold (#359); bone lengths as the standing rig's
+        HumanPose.ClimbLeft => Climb(1f),
+        HumanPose.ClimbRight => Climb(-1f),
+
         _ => new Rig(
             HeadTop: new(0, 1.780f, 0), HeadBase: new(0, 1.590f, 0),
             Neck: new(0, 1.525f, 0), Chest: new(0, 1.345f, 0),
@@ -1075,6 +1085,33 @@ public static partial class HumanMeshBuilder
             AnkleR: new(0.098f, 0.085f, 0), ToeR: new(0.098f, 0.040f, 0.145f),
             TorsoLean: 0f),
     };
+
+    /// <summary>A climbing step: <paramref name="side"/> 1 = the left hand and knee up, −1 = the right ones.</summary>
+    private static Rig Climb(float side)
+    {
+        // up = the side whose hand reaches for the next rung; x of a joint on the left is negative
+        Vector3 Up(float x, float y, float z, bool left) => new(left ? -x : x, y, z);
+        bool l = side > 0;
+        return new Rig(
+            HeadTop: new(0, 1.775f, 0.060f), HeadBase: new(0, 1.585f, 0.045f),
+            Neck: new(0, 1.520f, 0.035f), Chest: new(0, 1.340f, 0.030f),
+            Waist: new(0, 1.090f, 0.010f), Hip: new(0, 0.965f, 0),
+            ShoulderL: new(-0.180f, 1.445f, 0.030f), ShoulderR: new(0.180f, 1.445f, 0.030f),
+            // the reaching arm: elbow out and up, the hand on the rung above the head
+            ElbowL: l ? new(-0.200f, 1.700f, 0.150f) : new(-0.240f, 1.250f, 0.180f),
+            WristL: l ? new(-0.190f, 1.930f, 0.290f) : new(-0.200f, 1.420f, 0.330f),
+            ElbowR: !l ? new(0.200f, 1.700f, 0.150f) : new(0.240f, 1.250f, 0.180f),
+            WristR: !l ? new(0.190f, 1.930f, 0.290f) : new(0.200f, 1.420f, 0.330f),
+            HipL: new(-0.090f, 0.935f, 0), HipR: new(0.090f, 0.935f, 0),
+            // the raised leg on the next foothold, the other straight on the rung below
+            KneeL: l ? Up(0.100f, 0.740f, 0.380f, true) : Up(0.095f, 0.500f, 0.060f, true),
+            AnkleL: l ? Up(0.100f, 0.340f, 0.300f, true) : Up(0.098f, 0.090f, 0.100f, true),
+            ToeL: l ? Up(0.100f, 0.320f, 0.450f, true) : Up(0.098f, 0.050f, 0.250f, true),
+            KneeR: !l ? Up(0.100f, 0.740f, 0.380f, false) : Up(0.095f, 0.500f, 0.060f, false),
+            AnkleR: !l ? Up(0.100f, 0.340f, 0.300f, false) : Up(0.098f, 0.090f, 0.100f, false),
+            ToeR: !l ? Up(0.100f, 0.320f, 0.450f, false) : Up(0.098f, 0.050f, 0.250f, false),
+            TorsoLean: 0f);
+    }
 
     /// <summary>
     /// Vertex-coloured, backface-culled, no specular. Matches how the rest of the world is shaded:
