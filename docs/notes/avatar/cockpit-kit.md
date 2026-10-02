@@ -36,8 +36,7 @@ different constants. After: −180 / +56 lines in the two builders, the kit ~150
   move your changed constant into that vehicle's `Kit` (or a new `CockpitSpec` field if it was not a
   number before). A new dial: `panel.DialFace(...)` + `panel.Needle(...)`.
 - `Dial`/`RedBand`/`Tick`/... not found in `CarMeshBuilder` or `HeavyCabin`: use `CockpitKit.X`.
-- `CarRig` and `HeavyRig` (the rigs that animate these parts) were not touched. #169 (walk-in bus)
-  changes `HeavyRig`, not the cabins.
+- `CarRig` and `HeavyRig` (the rigs that animate these parts) were not touched.
 
 ## How to check
 
