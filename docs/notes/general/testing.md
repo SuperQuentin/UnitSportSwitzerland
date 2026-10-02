@@ -14,7 +14,7 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   The check must end by itself (quit with an exit code) and print `[name] RESULT: ok` or
   `[name] RESULT: FAILED ...` (the runner fails on `FAIL` in the last `RESULT` line). Tier
   `quick` = one headless Godot, no map; `net` = needs a server; `full` = windowed / two clients / load.
-- **Heavy runs only through `tools/lib/guard.sh`**: run a check with
+- **Heavy runs only through `tools/lib/guard.sh`**: (a script the runner calls sees `GUARD_LOCK_HELD=1`: it must not take the lock again) run a check with
   `tools/test.sh quick|net|full [area]`. A new multi-process script sources `guard.sh` and runs each
   process through `guard_run <timeout_s> <log> cmd...`, after `guard_lock` + `guard_wait_ram <GB>`
   for a server or several clients, and `guard_unlock` in its `EXIT` trap. No bare

@@ -148,7 +148,7 @@ if [ ${#CHECKS[@]} -gt 0 ]; then
           guard_wait_ram "${TEST_RAM_GB:-3}" || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
         else
           # tier 2/3: one at a time on the machine, and only with room to spare
-          [ $locked = 1 ] || { guard_lock && locked=1; } || { record "$check" FAIL 0 "(lock)"; continue; }
+          [ $locked = 1 ] || { guard_lock && locked=1 && export GUARD_LOCK_HELD=1; } || { record "$check" FAIL 0 "(lock)"; continue; }
           guard_wait_ram "${TEST_HEAVY_RAM_GB:-6}" || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
         fi
         t0=$SECONDS

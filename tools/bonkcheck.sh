@@ -12,9 +12,10 @@ OUT=test_output
 cd "$(dirname "$0")/.."
 mkdir -p "$OUT"
 SERVER=
-cleanup() { [ -n "$SERVER" ] && _guard_kill_tree "$SERVER"; guard_unlock; }
+cleanup() { [ -n "$SERVER" ] && _guard_kill_tree "$SERVER"; [ -n "${GUARD_LOCK_HELD:-}" ] || guard_unlock; }
 trap cleanup EXIT
-guard_lock 1800 900 || exit 1
+# under tools/test.sh the runner already holds the lock (GUARD_LOCK_HELD): taking it again would wait forever
+[ -n "${GUARD_LOCK_HELD:-}" ] || guard_lock 1800 900 || exit 1
 guard_wait_ram 4 600 || exit 1
 
 "$GODOT" --headless --path . -- --server --port $PORT --generated-world > $OUT/bonkcheck_server.log 2>&1 < /dev/null &

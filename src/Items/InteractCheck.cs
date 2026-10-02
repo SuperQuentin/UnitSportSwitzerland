@@ -192,15 +192,46 @@ public partial class InteractCheck : Node
                 Next();
                 break;
             case 15 when InStep > 1:
-                if (playing != null)
-                    Check(_inventory.HeldId == ItemId.Radio && RadioPlay.Decode(_inventory.Held.Data) is { CdId: var c } && c == cd,
-                        "in the hand, with its CD still playing");
+                if (playing == null || _car == null) { Finish(_failed ? string.Join("; ", _notes) : "all steps (no music)"); return; }
+                Check(_inventory.HeldId == ItemId.Radio && RadioPlay.Decode(_inventory.Held.Data) is { CdId: var c } && c == cd,
+                    "in the hand, with its CD still playing");
+                // hearing (#261): a radio behind the car is heard through it; walk round and it is clear
+                var side = (me.GlobalPosition - _car.GlobalPosition) with { Y = 0 };
+                side = side.LengthSquared() > 0.01f ? side.Normalized() : Vector3.Right;
+                float half = _car.Ride.ParkedBox.Size.X * 0.5f;
+                _farSide = _car.GlobalPosition - side * (half + 0.45f) + Vector3.Up * 0.25f;
+                RadioManager.Instance?.Throw(new RadioState("", 0, _farSide, 0, Vector3.Zero, cd, ClockSync.ServerNow - 1, true, false, length));
+                me.GlobalPosition = _car.GlobalPosition + side * (half + 2.5f) + Vector3.Up * 0.3f;
+                me.Velocity = Vector3.Zero;
+                Next();
+                break;
+            case 16 when InStep > 0.5:
+                Look(me, _farSide);
+                me.LookPitch = Mathf.Min(me.LookPitch, -0.05f);
+                Next();
+                break;
+            case 17 when InStep > 1.5:
+                var hidden = RadioManager.Instance?.Nearest(_farSide, 1.5f);
+                Check(hidden?.Speaker is { HeardThrough: "wall" }, $"a radio behind the car is heard through it ({hidden?.Speaker?.HeardThrough ?? "no speaker"})");
+                Shoot("interact_hearing.png");
+                me.GlobalPosition = _farSide + ((_farSide - _car.GlobalPosition) with { Y = 0 }).Normalized() * 2.5f + Vector3.Up * 0.3f;
+                me.Velocity = Vector3.Zero;
+                Next();
+                break;
+            case 18 when InStep > 0.5:
+                Look(me, _farSide);
+                Next();
+                break;
+            case 19 when InStep > 1.5:
+                var clear = RadioManager.Instance?.Nearest(_farSide, 1.5f);
+                Check(clear?.Speaker is { HeardThrough: "open" }, $"walked round, it is heard in the open ({clear?.Speaker?.HeardThrough ?? "no speaker"})");
                 Finish(_failed ? string.Join("; ", _notes) : "all steps");
                 break;
         }
     }
 
     private bool _shotTaken;
+    private Vector3 _farSide;
 
     /// <summary>A shot when the dance's beat phase is near <paramref name="phase"/> (the top of a jump).</summary>
     private void ShootAtBeat(string file, float phase)
