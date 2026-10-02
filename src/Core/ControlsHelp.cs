@@ -77,7 +77,8 @@ public partial class ControlsHelp : CanvasLayer
         }),
         ("Passengers (online)", new Row[]
         {
-            new("Get into a seat of a vehicle someone drives / get out", PlayerInput.InteractMount),
+            new("Get into a seat of a car someone drives / get out", PlayerInput.InteractMount),
+            new("In a bus: walk in by a door, E at a seat sits, E again stands up, E at the wheel drives", PlayerInput.InteractMount),
             new("Take the wheel, when nobody holds it", PlayerInput.TakeWheel),
             new("Look round from your seat / chase view", PlayerInput.CameraToggle),
         }),

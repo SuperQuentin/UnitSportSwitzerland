@@ -12,6 +12,7 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `judge-model-proportions-long-lens` — Judge model proportions with a long lens: The avatar preview's focus camera sits 9 m back at 13° FOV,...
 
 - `car-cabin` — Car cabin (#69): hollow body, glass as panes in a second surface, dash/dials/wheel/pedals/mirrors, the driver's seat derived from the body and the figure posed from it; `--cockpitcheck`
+- (`VehicleDeck`/`DeckBuilder`, a vehicle's walkable deck built with its model: see the player note `walk-aboard`)
 - `heavy-cabin` — Truck cabs and bus driver's place and saloon (#157): hollow cabs with panes, derived seat and flat wheel (hands' reach at `MaxGrip`), air gauge and gear display, binnacle square to the dials, 2+2 bus seats, seat anchors for passengers
 - `cockpit-kit` — Wheel, column, dials, needles, lamps, pedals and mirrors of cars and heavies come from `CockpitKit` + a per-vehicle `CockpitSpec`; never copy them into a cabin; no static field built from another partial's statics (#221)
 - `item-arm-poses` — Held items pose the arms (ItemArmPose, replicated ItemAction) and the held mesh follows the hand basis
