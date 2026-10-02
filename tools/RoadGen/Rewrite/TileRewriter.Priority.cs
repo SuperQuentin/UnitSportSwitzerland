@@ -27,6 +27,9 @@ public static partial class TileRewriter
         public readonly Dictionary<int, List<(TileId Tile, int Index)>> SignsOf = new();
 
         public RoadAttrFlags FlagsOf(int linkId) => Yield.GetValueOrDefault(linkId);
+
+        /// <summary>Junction nodes whose traffic lights come from OSM (#347), not the inference rule (#348).</summary>
+        public readonly HashSet<int> SignalsFromData = new();
     }
 
     /// <summary>Dash and gap of a guide line (Führungslinie, SSV 6.16) through a junction.</summary>
@@ -50,21 +53,6 @@ public static partial class TileRewriter
         static bool Ok(RoadLink l) => l.Tag is Source s && s.Segment.Class is not (RoadClass.Railway
             or RoadClass.Motorway or RoadClass.Expressway or RoadClass.Ramp) && (s.Segment.Flags & RoadFlags.Divided) == 0;
         return Ok(a) && Ok(b);
-    }
-
-    private static PriorityResult PlanPriority(RoadGenResult result)
-    {
-        var r = new PriorityResult();
-        foreach (var junction in result.Junctions)
-        {
-            var plan = PriorityPlanner.Decide(junction, result.Network, InfoOf);
-            r.Plans.Add((junction, plan));
-            foreach (var arm in plan.Arms)
-                if (arm.Role == PriorityPlanner.Role.Yield && arm.Approach)
-                    r.Yield[arm.LinkId] = r.FlagsOf(arm.LinkId)
-                        | (arm.End == LinkEnd.Start ? RoadAttrFlags.YieldAtStart : RoadAttrFlags.YieldAtEnd);
-        }
-        return r;
     }
 
     private static void EmitPriority(PriorityResult priority, RoadGenResult result, HashSet<TileId> block,
