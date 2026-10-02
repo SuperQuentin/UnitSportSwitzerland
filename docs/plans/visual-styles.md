@@ -3,10 +3,9 @@
 
 # Visual styles: PS1, Cartoon, Realistic− and Realistic+
 
-Status: **phase 1 in progress** (issue #212: part 1 merged in #224, part 2 next; the issue's
-"Status and how to resume" section has the current steps). Phase 0 is done (issue #181): the
-prototype's results, at the end of this file, decided to build the framework and to do Cartoon
-first.
+Status: **phases 0–4 done** (prototype #181, framework #212, Cartoon #238, Realistic− #250,
+Realistic+ #255); each phase below lists what it left out. What's left, phase 5 (the default
+style) and the open questions are tracked in **#312**.
 
 ## Goal
 
@@ -320,8 +319,8 @@ before and after, pixel for pixel, at the shot-queue viewpoints. Includes the mu
 **Status (#238):** built. Lit wrappers over every role body but interior and snowfall (unshaded on
 purpose), the cel light, grade, gradient sky and aerial haze, a 4-cascade sun with the ground out
 of the shadow pass, High-detail trees through `NearTrees` with traced billboards, toon figures,
-and the settings entry. Not yet: a smoother procedural avatar (the plan's last step), High
-detail in the building builders (roof overhangs), and the default-style decision.
+and the settings entry. Smooth procedural figures since #311 (`MeshScratch.Smooth`). Not yet:
+High detail in the building builders (roof overhangs), and the default-style decision.
 Details: `docs/notes/styles/cartoon.md`.
 
 BotW-like cel shaders for every role (the prototype's five plus interiors, props, paths,

@@ -64,13 +64,19 @@ public partial class SettingsScreen : Screen
                 (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
             ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
             var styles = Styles.StyleKit.MenuStyles;
-            UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
+            var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
                 Math.Max(0, Array.IndexOf(styles, s.VisualStyle)),
                 i =>
                 {
                     Styles.StyleKit.ChooseSetting(styles[i]);
                     if (Styles.StyleKit.NeedsForwardPlus(styles[i]) && !Styles.StyleKit.OnForwardPlus) AskForwardPlus(this, Shell);
                 }, "Switches live; how the world looks, never what it does");
+            for (int i = 0; i < styles.Length; i++)
+                if (Styles.StyleKit.InDevelopment(styles[i]))
+                {
+                    styleOption.SetItemText(i, $"{Styles.StyleKit.Label(styles[i])} (in development)");
+                    styleOption.SetItemDisabled(i, true);
+                }
             UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
             UiKit.ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on, "Off by default: the far horizon is the point");
             UiKit.ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on, "Streaks at the screen edge at speed");
@@ -349,19 +355,27 @@ public partial class SettingsScreen : Screen
     }
 
     /// <summary>
-    /// 3D render scales offered as the resolution they produce. The low end is the PS1 look
-    /// pushed further; 75% is the tuned default; above 100% supersamples.
+    /// 3D render scales, offered as the resolution they produce in the window as it is when the
+    /// screen opens (<see cref="DisplaySettings.EffectiveScale"/>): 100% is native, or 1152x648 in
+    /// PS1; above 100% supersamples.
     /// </summary>
     private static readonly float[] RenderScales = { 0.25f, 0.35f, 0.5f, 0.625f, 0.75f, 0.875f, 1f, 1.25f, 1.5f, 2f };
 
-    private static void ScaleRow(Container into, string name, float current, Action<float> set)
+    private void ScaleRow(Container into, string name, float current, Action<float> set)
     {
         var scales = RenderScales.ToList();
         int index = scales.FindIndex(v => Math.Abs(v - current) < 0.001f);
         if (index < 0) { scales.Add(current); scales.Sort(); index = scales.IndexOf(current); }
+        var window = GetTree().Root.Size;
         var labels = scales.Select(v =>
-            $"{Math.Round(GameSettings.BaseWidth * v)} x {Math.Round(GameSettings.BaseHeight * v)}  ({v * 100:F0} %)").ToArray();
-        UiKit.OptionRow(into, name, labels, index, i => set(scales[i]), "The PS1 look gets chunkier below 75 %");
+        {
+            float e = DisplaySettings.EffectiveScale(v, window);
+            return $"{Math.Round(window.X * e)} x {Math.Round(window.Y * e)}  ({v * 100:F0} %)";
+        }).ToArray();
+        string hint = Styles.StyleKit.Style == Styles.VisualStyle.Ps1
+            ? "PS1 keeps its low resolution on any screen; lower is chunkier"
+            : "100 % is the window's own resolution; lower is chunkier and faster";
+        UiKit.OptionRow(into, name, labels, index, i => set(scales[i]), hint);
     }
 
     /// <summary>Common window sizes that fit on the screen the window is on.</summary>
