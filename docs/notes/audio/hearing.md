@@ -27,3 +27,7 @@
     `Hearing.Ground`), -15 dB, 420 Hz ("walls").
   - eased over 0.15 s, the cutoff in log space. `RadioSpeaker.HeardThrough` exposes the path,
     `Hearing.Blocked` the share of rays.
+- **Trap: set a speaker's `Position` before `AddChild`.** `Hearing.Attach` takes the offset in the
+  speaker's `_Ready`; a position set after it is lost and the sound comes from the parent's origin.
+  The church radio played from the middle of the nave that way (#375, `ChurchRadios.SpeakerAt`,
+  checked by `--churchstagecheck`).

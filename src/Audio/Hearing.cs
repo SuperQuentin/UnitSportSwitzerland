@@ -59,6 +59,9 @@ public sealed class Hearing
     /// </summary>
     public string Path { get; private set; } = "open";
 
+    /// <summary>Where the source sits on its parent, taken at <see cref="Attach"/>. For the probes.</summary>
+    public Vector3 Offset => _offset;
+
     /// <summary>The share of the occlusion rays blocked at the last poll, 0..1. For the probes.</summary>
     public float Blocked => _blocked;
 

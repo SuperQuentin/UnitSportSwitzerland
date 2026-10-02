@@ -74,6 +74,9 @@ public partial class RadioSpeaker : AudioStreamPlayer3D
     /// <summary>The share of the occlusion rays blocked, 0..1. For the probes.</summary>
     public float HeardBlocked => _hearing.Blocked;
 
+    /// <summary>Where the sound comes from on the parent (its offset at _Ready). For the probes.</summary>
+    public Vector3 SourceOffset => _hearing.Offset;
+
     public override void _Ready()
     {
         SfxBus.Ensure();
