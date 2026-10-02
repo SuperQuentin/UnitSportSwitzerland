@@ -25,7 +25,8 @@
   (`IntroEndOf`, else `IntroEnd` 2.0 s; `HitTime` falls back to every 0.4 s). The rat snaps to a pose per hit; every
   player in the church (`InteriorManager.Current`, not in VR) whose client sees the play start
   inside the intro gets a temporary `Camera3D` that cuts per hit, `UiFocus` held, `RadioUi`
-  closed; own camera back on the trumpet. Joining later skips it.
+  closed. The shots aim at the posed head; the last is wide and low and holds `HopTime` 0.4 s past the
+  trumpet, so the rat's jump off the crouch (feet and tail too) is on it; then the own camera is back. Joining later skips it.
 - **Dance**: the rat swings a beat each way (body roll/yaw, head against it, arms pumping, a full
   turn every 8th bar); people stand on the trumpet and dance one of five variants by hash, with
   hashed amplitude and phase; every 4th bar they all copy the rat.

@@ -36,6 +36,9 @@ public partial class ChurchStage : Node3D
     /// <summary>Hits before the trumpet, one pose (and one camera cut) each.</summary>
     public const int IntroHits = 5;
 
+    /// <summary>The rat's jump off the crouch on the trumpet, s: the intro's last shot stays on it.</summary>
+    public const float HopTime = 0.4f;
+
     private string _plan = "";
     private InteriorNode _interior = null!;
     private Figure[] _figures = Array.Empty<Figure>();
@@ -245,7 +248,7 @@ public partial class ChurchStage : Node3D
         float spin = ((bar % 8) + 8) % 8 == 7 ? Mathf.Tau * Smooth(b / 4f - bar) : 0f;
         var pose = new RatPose(0.22f * s, 0.08f * pulse, 0f, -0.25f * s, 0.25f * pulse, -0.35f * s,
             -(0.3f + 0.9f * Mathf.Max(0f, s)), 0.3f + 0.9f * Mathf.Max(0f, -s));
-        float hop = 0.05f * Mathf.Abs(s) + (since < 0.35f ? 0.3f * Mathf.Sin(Mathf.Pi * since / 0.35f) : 0f);
+        float hop = 0.05f * Mathf.Abs(s) + (since < HopTime ? 0.35f * Mathf.Sin(Mathf.Pi * since / HopTime) : 0f);
         ApplyRat(f, pose, hop, spin, sway: 0.05f * s, tail: 0.7f * Mathf.Sin(Mathf.Tau * b));
     }
 
@@ -255,7 +258,10 @@ public partial class ChurchStage : Node3D
         Set(f, RatParts.Head, Rot(p.HeadPitch, p.HeadYaw, p.HeadRoll));
         Set(f, RatParts.ArmL, Rot(0, 0, p.ArmL));
         Set(f, RatParts.ArmR, Rot(0, 0, p.ArmR));
-        Set(f, RatParts.Tail, Rot(0, tail, 0));
+        // the beat's little bounce keeps the feet down; the jump on the trumpet takes them along
+        var off = new Vector3(0, Mathf.Max(0f, hop - 0.05f), 0);
+        Set(f, RatParts.Tail, Rot(0, tail, 0), off);
+        Set(f, RatParts.Feet, Basis.Identity, off);
     }
 
     /// <summary>

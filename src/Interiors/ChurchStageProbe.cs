@@ -141,9 +141,20 @@ public partial class ChurchStageProbe : Node3D
                     Check(UiFocus.TextEntryActive || _t < 0.05, "the controls wait during the intro");
                     return;
                 }
-                if (t < end + 0.6) return;
+                if (t < end + ChurchStage.HopTime)
+                {
+                    // the jump on the trumpet, still on the intro's last shot
+                    if (cam == _own) { Check(false, "the last shot holds through the jump"); Next(); return; }
+                    if (Windowed && _shotHit < ChurchStage.IntroHits && t > end + ChurchStage.HopTime * 0.45)
+                    {
+                        _shotHit = ChurchStage.IntroHits;
+                        Shot("_jump");
+                    }
+                    return;
+                }
+                if (t < end + ChurchStage.HopTime + 0.3) return;
                 Check(_cuts.Count >= ChurchStage.IntroHits, $"the camera cut on every hit ({_cuts.Count} angles)");
-                Check(cam == _own, "the player's own camera is back on the trumpet");
+                Check(cam == _own, "the player's own camera is back after the jump");
                 Check(!UiFocus.TextEntryActive, "the controls are back");
                 Next();
                 break;

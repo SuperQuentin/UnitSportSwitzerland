@@ -38,7 +38,8 @@ public partial class ChurchStage
     private void StepIntro(float t, bool intro, CdInfo cd)
     {
         if (_introCam == null) return;
-        if (!intro || !IsInstanceValid(_ownCam)) { StopIntro(); return; }
+        // the last shot holds through the jump on the trumpet, then the player has their camera back
+        if (!intro && t >= IntroEndOf(cd) + HopTime || !IsInstanceValid(_ownCam)) { StopIntro(); return; }
         int k = Math.Max(0, HitAt(cd, t));
         var rat = _figures[_rat];
         float headY = rat.Parts[RatParts.Head].Pivot.Y + 0.14f;
@@ -54,7 +55,8 @@ public partial class ChurchStage
             // three-quarters from the front, on the side away from the altar: clear of the radio stand too
             3 => (new Vector3(0.9f * side, headY * 0.75f, 1.6f), headNow - new Vector3(0, 0.25f, 0), 50f),
             // low and close, looking up at the crouch about to spring: the whole rat, mitre to feet
-            _ => (new Vector3(0.15f * side, 0.25f, 1.5f), headNow - new Vector3(0, 0.35f, 0), 62f),
+            // the crouch, then the jump: wide and low, the camera still so the jump reads, room above the mitre
+            _ => (new Vector3(0.25f * side, 0.35f, 2.8f), new Vector3(0, headY * 0.75f, 0), 60f),
         };
         var frame = rat.Frame;
         var at = frame * eye;
