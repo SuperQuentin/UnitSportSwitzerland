@@ -90,7 +90,13 @@ public readonly record struct Outfit(long Bits)
 
     public static readonly Outfit Empty = new(0);
 
-    public bool IsEmpty => Bits == 0;
+    /// <summary>The medic armband (#218, <see cref="Player.FootPlayer.Medic"/>): above the ten slots, not a garment.</summary>
+    public const long MedicBit = 1L << 60;
+
+    /// <summary>No clothes on (the medic armband is not one: <see cref="Medic"/>).</summary>
+    public bool IsEmpty => (Bits & ~MedicBit) == 0;
+
+    public bool Medic => (Bits & MedicBit) != 0;
 
     public int CodeIn(WearSlot slot) => slot == WearSlot.None ? 0 : (int)((Bits >> (Width * ((int)slot - 1))) & Mask);
 

@@ -34,6 +34,13 @@ public partial class PauseScreen : Screen
         _resume = Entry(column, "Resume", () => Shell.Back());
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         Entry(column, "Controls", () => Shell.ShowControls());
+        // the medic armband (#218): online, outside a Battle Royale match
+        if (Shell.World is { } world && Net.NetLink.Online(world) && BattleRoyale.BrManager.Instance?.InMatch != true
+            && LocalPlayer(world) is { } me && world.GetNodeOrNull<Net.ChatManager>(Net.ChatManager.NodeName) is { } chat)
+        {
+            _me = me;
+            _medic = Entry(column, Combat.Medic.MenuText(me), () => chat.Send(me.Medic ? "/medic off" : "/medic on"));
+        }
         column.AddChild(UiKit.Spacer(8));
         Entry(column, "Leave to main menu", () =>
         {
@@ -48,6 +55,26 @@ public partial class PauseScreen : Screen
         foot.SetAnchorsPreset(LayoutPreset.BottomLeft);
         foot.OffsetLeft = 72; foot.OffsetTop = -50; foot.OffsetBottom = -26;
         AddChild(foot);
+    }
+
+    private Player.FootPlayer? _me;
+    private Button? _medic;
+    private double _medicTick;
+
+    private static Player.FootPlayer? LocalPlayer(Node world)
+    {
+        foreach (var n in world.GetTree().GetNodesInGroup(Player.FootPlayer.Group))
+            if (n is Player.FootPlayer p && !p.Npc && p.IsMultiplayerAuthority()) return p;
+        return null;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_medic == null || _me == null || !IsInstanceValid(_me) || (_medicTick -= delta) > 0) return;
+        _medicTick = 0.25;   // the timer shows seconds: no string built every frame
+        string text = Combat.Medic.MenuText(_me);
+        if (_medic.Text != text) _medic.Text = text;
+        _medic.Disabled = !_me.Medic && (Combat.Medic.CooldownEnds > Combat.Medic.Now || Combat.Medic.PendingEnds > Combat.Medic.Now);
     }
 
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)

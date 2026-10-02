@@ -431,6 +431,15 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
         ? fp == LocalPlayer?.Invoke()
         : fp.GetMultiplayerAuthority() == shooter;
 
+    /// <summary>The body that fired <paramref name="shooter"/>'s rounds, as this peer has it.</summary>
+    private FootPlayer? ShooterBody(long shooter)
+    {
+        if (shooter == LocalId) return LocalPlayer?.Invoke();
+        foreach (var s in PlayerSnapshot.Of(GetTree()))
+            if (s.Player.GetMultiplayerAuthority() == shooter) return s.Player;
+        return null;
+    }
+
     /// <summary>Damage only what this peer has authority over; the shooter's own peer shows the hit marker.</summary>
     private void Hit(GodotObject? collider, long shooter)
     {
@@ -439,6 +448,8 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
         switch (collider)
         {
             case FootPlayer fp:
+                // the medic armband (#218): the victim's machine applies the hit, so it asks here
+                if (!Medic.Hurts(ShooterBody(shooter), fp)) { target = false; break; }
                 if (fp.IsMultiplayerAuthority()) fp.ShotHit(Damage);
                 break;
             case VehicleBody vb when !vb.Wrecked:

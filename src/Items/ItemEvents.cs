@@ -155,7 +155,7 @@ public partial class ItemEvents : Node
     /// <summary>
     /// Server: a player says it hit another. Passed on to the victim alone when PvP is on, the
     /// weapon exists and could do that much, the shooter stands by its body and the victim is
-    /// within the weapon's reach of it, where the shot says.
+    /// within the weapon's reach of it, where the shot says, and neither wears the medic armband.
     /// </summary>
     private void RelayHit(long sender, Core.GlobalPos position, Vector3 direction, string extra)
     {
@@ -171,6 +171,14 @@ public partial class ItemEvents : Node
         if (!(shooter.Global.DistanceTo(victim.Global) <= weapon.Range + Slack)) return;
         if (!(victim.Global.DistanceTo(position) <= Slack)) return;
         if (!Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
+        // the medic armband (#218): an attack all the same (the cooldown restarts), but nobody is hurt
+        Combat.Medic.Attacked(sender, shooter);
+        if (!Combat.Medic.Hurts(shooter, victim))
+        {
+            GD.Print(FormattableString.Invariant($"[medic] dropped a hit from peer {sender} on peer {hit.Victim} (shooter medic {shooter.Medic}, victim medic {victim.Medic})"));
+            return;
+        }
+        Combat.Medic.Ledger.Hurt(hit.Victim, Combat.Medic.Now);
         GD.Print(FormattableString.Invariant($"[pvp] peer {sender} hit peer {hit.Victim} for {hit.Damage:F1} ({hit.Weapon})"));
         RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position.E, position.N, position.Alt, direction, extra);
         Combat.PvpRules.RaiseHit(sender, hit.Victim, hit.Damage);

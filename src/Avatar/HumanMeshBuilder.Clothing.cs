@@ -52,6 +52,26 @@ public static partial class HumanMeshBuilder
     private static bool IsSkirt(Garment? g) => g?.Shape is GarmentShape.HighLowSkirt or GarmentShape.SlitMaxi
         or GarmentShape.RuffleMini or GarmentShape.PleatedSkirt or GarmentShape.LongPleated;
 
+    private static readonly Color ArmbandWhite = new("f4f4f0"), ArmbandRed = new("d01020");
+
+    /// <summary>
+    /// The medic armband (#218): a white band round the left upper arm, proud of any sleeve, with a
+    /// red cross on its outer side. Part of the figure mesh, so it follows every pose for free.
+    /// </summary>
+    private static void AppendArmband(MeshScratch s, Rig r)
+    {
+        var a = r.ShoulderL.Lerp(r.ElbowL, 0.26f);
+        var b = r.ShoulderL.Lerp(r.ElbowL, 0.52f);
+        s.Tube(a, b, 0.084f, 0.08f, ArmbandWhite, 8);
+        var up = (a - b).Normalized();
+        var side = r.ShoulderL - r.ShoulderR;
+        side = (side - up * side.Dot(up)).Normalized();
+        var frame = new Basis(up.Cross(side), up, side);
+        var c = (a + b) * 0.5f + side * 0.086f;
+        s.Box(c, new Vector3(0.06f, 0.018f, 0.01f), ArmbandRed, frame);
+        s.Box(c, new Vector3(0.018f, 0.06f, 0.01f), ArmbandRed, frame);
+    }
+
     private static bool IsTrousers(Garment? g) => g?.Shape is GarmentShape.Pants or GarmentShape.Cargo;
 
     /// <summary><see cref="AppendRig"/> for a figure with something on.</summary>

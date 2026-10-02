@@ -86,14 +86,19 @@ public partial class ChatManager : Node
 
     /// <summary>Builds the server half, which owns the registry and answers commands.</summary>
     public static ChatManager CreateServer(
-        PlayerRegistry registry, Node3D players, WorldOrigin origin, PlaceIndex? places) => new()
+        PlayerRegistry registry, Node3D players, WorldOrigin origin, PlaceIndex? places)
     {
-        Name = NodeName,
-        _registry = registry,
-        _players = players,
-        _origin = origin,
-        _places = places,
-    };
+        // the medic armband's cooldown is kept by name (#218), so a rejoin does not reset it
+        Combat.Medic.IdentityOf = peer => registry.Find(peer)?.Name;
+        return new()
+        {
+            Name = NodeName,
+            _registry = registry,
+            _players = players,
+            _origin = origin,
+            _places = places,
+        };
+    }
 
     /// <summary>Builds the client half, which submits text and displays replies.</summary>
     public static ChatManager CreateClient() => new() { Name = NodeName };
@@ -349,7 +354,7 @@ public partial class ChatManager : Node
                         Show(line, ChatKind.Private);
                 return;
 
-            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br":
+            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br" or "medic":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
@@ -594,6 +599,7 @@ public partial class ChatManager : Node
             case "kick": CommandKick(sender, parts); return;
             case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;
             case "pvp": CommandPvp(sender, rest); return;
+            case "medic": if (RequiresAvatar(sender, verb)) CommandMedic(sender, rest); return;
             case "give": CommandGive(sender, parts); return;
             case "money": CommandMoney(sender, parts); return;
             case "bank": CommandBank(sender, parts); return;
@@ -624,9 +630,27 @@ public partial class ChatManager : Node
         }
     }
 
+    /// <summary>/medic on|off: the medic armband (#218, <see cref="Combat.Medic"/>). Bare /medic says whether it is on.</summary>
+    private void CommandMedic(long sender, string rest)
+    {
+        if (_players.GetNodeOrNull<Player.FootPlayer>(sender.ToString()) is not { } body) return;
+        switch (rest.Trim().ToLowerInvariant())
+        {
+            case "":
+                ReplyTo(sender, body.Medic ? "You wear the medic armband." : "You do not wear the medic armband: /medic on", ChatKind.Private);
+                return;
+            case "on" or "off":
+                Combat.Medic.Request(sender, body, rest.Trim().ToLowerInvariant() == "on", line => ReplyTo(sender, line, ChatKind.Private));
+                return;
+            default:
+                ReplyTo(sender, "Usage: /medic on|off", ChatKind.Error);
+                return;
+        }
+    }
+
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /br join|leave|status  /occasion  /time  /clear", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /br join|leave|status  /medic on|off  /occasion  /time  /clear", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);

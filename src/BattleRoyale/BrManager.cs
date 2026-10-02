@@ -58,6 +58,8 @@ public partial class BrManager : Node
         // the living may loot, the winner during the results too
         if (crates != null) crates.MayLoot = peer => m._state.Running && m._state.Find(peer) is { Alive: true };
         Combat.PvpRules.HitRelayed += m.OnHit;
+        // no medic armband in a match (#218): refused while it runs, taken off at GO, given back after
+        Combat.Medic.InMatch = peer => m._state.Running && m._state.Find(peer) != null;
         return m;
     }
 
@@ -268,6 +270,7 @@ public partial class BrManager : Node
         _state.Started = flight.ClosesAt;
         _pushedOut = false;
         Combat.PvpRules.Override = Allowed;
+        if (_players != null) Combat.Medic.Suspend(_state.Entrants.Select(e => e.Peer), _players);
         SetMatchLoot(_state);
         SpawnLoot(_state.Area, _state.Seed);
         var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace);
@@ -516,6 +519,7 @@ public partial class BrManager : Node
     {
         var was = _state;
         Combat.PvpRules.Override = null;
+        if (_players != null) Combat.Medic.Restore(_players);
         ClearLoot();
         _state = new BrState();
         foreach (var e in was.Entrants)

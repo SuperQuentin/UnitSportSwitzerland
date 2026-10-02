@@ -67,6 +67,7 @@ public sealed class ChatCompleter
         ("tpall", true, false, "<town>"),
         ("kick", true, false, "<player> [reason]"),
         ("pvp", true, false, "on | off"),
+        ("medic", false, false, "on | off"),
     ];
 
     /// <summary>The commands this player can run right now.</summary>

@@ -614,6 +614,7 @@ public static partial class HumanMeshBuilder
     {
         // the figure only: a vehicle drawn into the same scratch keeps its own look
         using var smoothing = scratch.Smoothing(SmoothFigures);
+        if (body && palette.Outfit.Medic) AppendArmband(scratch, rig);
         // dressed (#251): the clothes replace the jersey, shorts and shoes (HumanMeshBuilder.Clothing.cs)
         if (!palette.Outfit.IsEmpty)
         {

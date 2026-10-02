@@ -52,7 +52,8 @@ public partial class OccasionHats : Node
         if (_inventory.Worn == ItemId.None && OccasionManager.Instance?.Top(OccasionFacets.Hats) is { } top)
             hat = top.Content.Hat;
         if (p.HeadwearId != (int)hat) p.HeadwearId = (int)hat;
-        long outfit = _inventory.Outfit.Bits;
+        // the medic armband (#218) is the server's to set, not the inventory's
+        long outfit = _inventory.Outfit.Bits | (p.OutfitBits & Avatar.Outfit.MedicBit);
         if (p.OutfitBits != outfit) p.OutfitBits = outfit;
     }
 }

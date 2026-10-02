@@ -106,8 +106,10 @@ public static class PlayerHits
     private static List<FootPlayer> Targets(FootPlayer shooter)
     {
         var list = new List<FootPlayer>();
+        // a medic (#218) shoots only the world, and nobody hits one: no Hit, no hit marker (the server drops them too)
+        if (shooter.Medic) return list;
         foreach (var n in shooter.GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (n is FootPlayer p && p != shooter && !p.Npc && p.Down == 0 && PeerOf(p) > 0 && p.IsInsideTree())
+            if (n is FootPlayer p && p != shooter && !p.Npc && p.Down == 0 && !p.Medic && PeerOf(p) > 0 && p.IsInsideTree())
                 list.Add(p);
         return list;
     }
