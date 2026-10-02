@@ -54,6 +54,15 @@
   posed `Visual` (the trap from #302) and is `Posed` from its first `DrawBoat`; its gangways are its
   `DoorsOpen` (as a bus's). One placed by the dedicated server never moves (asleep): it sends its
   height over the still water (`Heave`) so clients draw it riding their own waves, level.
+- **Parked, it collides as its hull is drawn** (#378): `Steamer.BuildParkedHull`, one convex shape
+  from the drawn sections (`SteamerMeshBuilder.HullSection`, shared with the mesh: the waterline's beam,
+  the topsides flaring to the deck's edge, the fine bow, the counter) from `HullLift` (1.2 m, under
+  the 1.64 m waterline) up, then straight to the upper deck; posed with the drawn frame on every peer
+  (`boats`, "Its collision is where it is drawn"). The box it was (`ParkedBox`, still used for exits
+  and reach) was the hull's width its whole length: 0.4 m of invisible wall off the side at the
+  foredeck, 3 m off the stem. Convex, the flare is a straight line where it is drawn curving out:
+  up to ~10 cm outside it. The paddle boxes are not in it (a swimmer passes under them; a parked
+  ship alongside a quay is not held off it by them).
 - **At Nyon** (`World/SteamerBerth.cs`, on client offline and server): the CGN landing at 46.382049 N,
   6.243945 E; when its tile loads, `FindBerth` is tried every 2 s for 30 s (the water layers arrive after
   the tile: at once it found nothing on 30 m deep tiles) for the nearest spot (rings every 4 m to 400 m)
@@ -74,6 +83,6 @@
   gamey swell at full ahead, both peers agree where B stands to 3 cm; B over the rail, A sees it
   swimming; `SHOTS=1 STYLE=ps1` A windowed: `remote_passenger.png`).
 - **Not done**: a berth alongside the pier itself (the bathymetry there is too shallow; piers are a follow-up); a server-placed parked steamer only heaves on
-  clients (no pitch/roll until a client claims it); the parked collision box is the hull only, level;
+  clients (no pitch/roll until a client claims it); the parked collision is the hull only (no paddle boxes);
   no hands drawn on the wheel in first person; the telegraph handle on a remote copy follows the
   shaft, not the order; the sounds were not listened to.
