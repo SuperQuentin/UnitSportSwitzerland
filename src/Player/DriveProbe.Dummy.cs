@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -23,6 +24,8 @@ public partial class DriveProbe
         public readonly Dictionary<Entry, (float Ratio, float Speed, float Cap, int Rule)> Worst = new();
         /// <summary>Most the racer was off its racing line within 10 m of it, and its gap to it then (m, centre to centre across).</summary>
         public readonly Dictionary<Entry, (float Off, float Gap)> OffLine = new();
+        /// <summary>Racers a speed cap held (cap under its speed + 2 m/s) within 80 m short of it.</summary>
+        public readonly HashSet<Entry> Braked = new();
     }
 
     private readonly List<Dummy> _dummies = ParseDummies();
@@ -70,6 +73,7 @@ public partial class DriveProbe
                 if (gap > 80f || gap < -5f) continue;
                 float v = en.Player.Motion.Speed, want = p.Profile[p.D.Near];
                 float ratio = v / Mathf.Max(want, 1f);
+                if (p.D.Cap < v + 2f) d.Braked.Add(en);
                 if (!d.Worst.TryGetValue(en, out var w) || ratio < w.Ratio)
                     d.Worst[en] = (ratio, v, p.D.Cap, p.CapRule);
                 if (Mathf.Abs(gap) < 10f)
@@ -88,17 +92,32 @@ public partial class DriveProbe
     private IEnumerable<AutoPilot.Other> DummyRivals() =>
         _dummies.Where(d => d.Rival && d.Pos != Vector3.Zero).Select(d => new AutoPilot.Other(d.Pos, d.Vel, false));
 
-    private void PrintDummies()
+    /// <summary>
+    /// Prints the DUMMY lines; false when a racer braked for a car that left it room (on the far side of a lane,
+    /// |lat| ≥ 1.5 m) or moved further off its line beside one than a car's width beside it needs (+0.3 m), or did
+    /// not brake for one standing in its line.
+    /// </summary>
+    private bool PrintDummies()
     {
         GD.Print($"[drive] traffic: largest speed across a car's own heading {World.Traffic.MaxSideSlip:F2} m/s");
+        bool ok = true;
         int k = 0;
         foreach (var d in _dummies)
         {
             k++;
+            bool roomy = Mathf.Abs(d.Lat) >= 1.5f;
+            float need = Mathf.Max(0f, (d.Rival ? 2.0f : 2.4f) - Mathf.Abs(d.Lat)) + 0.3f;
             foreach (var (en, w) in d.Worst)
+            {
+                var o = d.OffLine.GetValueOrDefault(en);
+                bool capped = d.Braked.Contains(en);
+                bool good = roomy ? !capped && o.Off <= need : capped;
+                ok &= good;
                 GD.Print($"[drive] DUMMY {k} ({(d.Rival ? "rival" : "traffic")}, lat {d.Lat:F1}, {d.Speed * 3.6f:F0} km/h) {en.Label}: "
                     + $"lowest {w.Speed * 3.6f:F0} km/h = {w.Ratio * 100f:F0}% of the profile, cap {(w.Cap < 1e9f ? w.Cap * 3.6f : 0f):F0} (rule {w.Rule}), "
-                    + $"off its line up to {d.OffLine.GetValueOrDefault(en).Off:F2} m beside it (gap {d.OffLine.GetValueOrDefault(en).Gap:F1} m)");
+                    + $"off its line up to {o.Off:F2} m beside it (gap {o.Gap:F1} m){(good ? "" : roomy ? " — BRAKED OR SWERVED WITH ROOM" : " — DID NOT BRAKE")}");
+            }
         }
+        return ok;
     }
 }

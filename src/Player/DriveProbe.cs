@@ -502,11 +502,11 @@ public partial class DriveProbe : Node
             return l.Count == 0 ? "n/a" : $"{l.Average():F1}%";
         }
         float best = _entries.Max(e => e.Pilot?.Skill ?? 0f);
-        PrintDummies();
+        bool dummiesOk = PrintDummies();
         GD.Print($"[drive] PACE ace (skill {best:F2}) {Index(_entries.Where(e => (e.Pilot?.Skill ?? 0f) >= best))}, others {Index(_entries.Where(e => (e.Pilot?.Skill ?? 0f) < best))}");
         bool anyFinish = _entries.Any(e => e.FinishTime >= 0);
         bool driftOk = _entries.All(e => e.Spec == null || e.Grip) || _entries.Any(e => e.Pilot?.Drifts > 0);
-        bool ok = anyFinish && driftOk;
+        bool ok = anyFinish && driftOk && dummiesOk;
         GD.Print(ok ? "[drive] RESULT: raced to the finish, drifting where it fit" : "[drive] RESULT: FAILED");
         if (_shotPrefix != null && GetViewport().GetTexture().GetImage().SavePng($"{_shotPrefix}_end.png") == Error.Ok)
             GD.Print($"[drive] wrote {_shotPrefix}_end.png");

@@ -610,11 +610,14 @@ public sealed class AutoPilot
             bool diveHere = !straight && k != 0f && Aggression > 0.3f && ahead < 15f && inside;
             // no racer-vs-racer pass above 90 km/h (#159): one at ~120 km/h on a fast descent ended in the trees.
             // Behind the car ahead at its pace, the pass waits for a straight where it is slower
-            bool tooFast = !q.Civil && v > 25f;
+            bool tooFast;
             // and a traffic car is passed from a speed this car could still drop back behind it from: a pass
             // started at 105 km/h on one doing 25 had to be given up for a car coming the other way 25 m short
             // of it, and nothing was left but to hit it at 80 (#159). Not yet: close up, then pull out
-            if (q.Civil && !D.Passing && v > follow + 3f) tooFast = true;
+            // — when the pass means crossing over (more than 1.5 m): getting by a car with room beside it is only the
+            // smallest move off the line, made at speed (#297: racers braked behind traffic in the other lane)
+            float move = Mathf.Min(fitsL ? Mathf.Abs(l - myLat) : 99f, fitsR ? Mathf.Abs(r - myLat) : 99f);
+            tooFast = move > 1.5f && (q.Civil ? !D.Passing && v > follow + 3f : v > 25f);
             if ((((straight && (fitsL || fitsR)) || diveHere) || easyL || easyR) && !tooFast)
             {
                 float side = diveHere ? (k > 0f ? l : r)
@@ -779,7 +782,8 @@ public sealed class AutoPilot
         var query = new PhysicsShapeQueryParameters3D { Shape = _probe, CollisionMask = 1, Exclude = _ignore };
         var line = Route.Line;
         float v = Player.Motion.Speed;
-        float reach = Mathf.Clamp(25f + v + v * v / (2f * EasyBrake), 25f, 200f);
+        // (up to 400 m: at 200 a car standing in the lane was sensed too late to stop from 220 km/h, #297)
+        float reach = Mathf.Clamp(25f + v + v * v / (2f * EasyBrake), 25f, 400f);
         _sensedNow.Clear();
         for (float d = 4f; d <= reach; d += 5f)
         {

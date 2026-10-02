@@ -108,6 +108,15 @@ public sealed class RaceRoute
         OriginFrame? frame = null)
     {
         var r = new RaceRoute { Class = cls, Frame = frame };
+        // a point repeated where two edges meet (a tile seam): the pilot finds its place by the next point being
+        // nearer, never true for a twin, so its progress stuck there and it steered back at the point behind —
+        // full lock at 150 km/h on a straight fixture course, off the road at each 1 km seam (#297)
+        if (Enumerable.Range(1, Math.Max(centre.Count - 1, 0)).Any(i => centre[i].DistanceSquaredTo(centre[i - 1]) < 0.01f))
+        {
+            var keep = Enumerable.Range(0, centre.Count).Where(i => i == 0 || centre[i].DistanceSquaredTo(centre[i - 1]) >= 0.01f).ToList();
+            centre = keep.Select(i => centre[i]).ToList();
+            width = keep.Select(i => width[i]).ToList();
+        }
         float s = 0;
         for (int i = 0; i < centre.Count; i++)
         {
