@@ -19,6 +19,13 @@ public partial class FootPlayer
     /// </summary>
     public bool ShowWhileCarried { get; set; }
 
+    /// <summary>
+    /// How the body is held, for the pose everyone sees (#359): 0 as the carrier leaves it, 1 hanging
+    /// from a cable, 2 climbing. <see cref="ClimbStep"/> counts rungs, its parity picks the hand.
+    /// </summary>
+    public int CarriedPose { get; set; }
+    public int ClimbStep { get; set; }
+
     /// <summary>The next landing does not hurt, however far the fall: thrown up by a trampoline (#275).</summary>
     public bool SoftLanding { get; set; }
 
@@ -68,6 +75,7 @@ public partial class FootPlayer
     {
         Carrier = null;
         ShowWhileCarried = false;
+        CarriedPose = 0;
         if (_carried) Uncarry();
         GlobalPosition = at;
         Velocity = Vector3.Zero;
@@ -85,6 +93,7 @@ public partial class FootPlayer
     {
         Carrier = null;
         ShowWhileCarried = false;
+        CarriedPose = 0;
         if (_carried) Uncarry();
         GlobalPosition = at;
         // no physics ran while carried, so the body still believes it stands where it boarded:

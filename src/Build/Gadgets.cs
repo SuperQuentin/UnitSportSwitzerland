@@ -65,6 +65,24 @@ public static class Gadgets
             : null;
     }
 
+    /// <summary>
+    /// A body's feet at <paramref name="feet"/> (world, this peer's frame) are hidden (#359): under a camo
+    /// net (its 3.8 m square, below the net) or inside a hay hideout. Worked out by each viewer from the
+    /// positions it already has: nothing is sent.
+    /// </summary>
+    public static bool Hidden(Vector3 feet)
+    {
+        if (PlacedObjects.Instance is not { } placed) return false;
+        foreach (var o in placed.All.Values)
+        {
+            if (o.Kind is not (PlacedKind.CamoNet or PlacedKind.HayHideout)) continue;
+            var local = o.WorldTransform(placed.Origin).AffineInverse() * feet;
+            float half = o.Kind == PlacedKind.CamoNet ? 1.9f : 1.0f, top = o.Kind == PlacedKind.CamoNet ? 2.0f : 1.5f;
+            if (Mathf.Abs(local.X) <= half && Mathf.Abs(local.Z) <= half && local.Y > -0.5f && local.Y < top) return true;
+        }
+        return false;
+    }
+
     /// <summary>The server's check of a gadget's payload (other kinds: null, nothing to add).</summary>
     public static string? Check(PlacedObject o, WorldOrigin origin)
     {

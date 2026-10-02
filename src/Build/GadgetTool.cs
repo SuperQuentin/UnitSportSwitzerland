@@ -197,6 +197,28 @@ public partial class GadgetTool : Node
         });
     }
 
+    /// <summary>
+    /// A flare just fired (#359): a hay hideout it was fired from, beside or at (within 25 m along the
+    /// aim, 1.5 m of the bale) catches fire. The server checks the distance and burns it for everyone.
+    /// </summary>
+    public static bool TryBurn(FootPlayer player, Vector3 eye, Vector3 aim)
+    {
+        if (PlacedObjects.Instance is not { } placed) return false;
+        aim = aim.Normalized();
+        foreach (var o in placed.All.Values)
+        {
+            if (o.Kind != PlacedKind.HayHideout) continue;
+            var centre = o.WorldTransform(placed.Origin).Origin + Vector3.Up * 0.75f;
+            bool beside = centre.DistanceTo(player.GlobalPosition + Vector3.Up * 0.75f) < 3f;
+            float t = (centre - eye).Dot(aim);
+            bool atIt = t > 0 && t < 25f && (eye + aim * t).DistanceTo(centre) < 1.5f;
+            if (!beside && !atIt) continue;
+            placed.RequestBurn(o.Id);
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>The nearest placed gadget of a kind within <paramref name="within"/> metres of a point.</summary>
     private static PlacedObject? Nearest(Vector3 at, float within, Func<PlacedKind, bool> kind)
     {
@@ -285,6 +307,7 @@ public partial class GadgetTool : Node
             _height = Mathf.Clamp(p.GlobalPosition.Y - (top.Y - len), 0, len - 0.5f);
         }
         p.ShowWhileCarried = true;
+        p.CarriedPose = mode switch { Mode.Zip => 1, Mode.Ladder => 2, _ => 0 };
         p.Carrier = () => Hold(p);
     }
 
@@ -325,6 +348,7 @@ public partial class GadgetTool : Node
                 _height += input * ClimbSpeed * dt;
                 var bottom = frame.Origin - Vector3.Up * len;
                 var at = bottom + Vector3.Up * Mathf.Max(_height, 0) + facing * 0.45f;
+                p.ClimbStep = Mathf.FloorToInt(Mathf.Max(_height, 0) / 0.45f);   // a hand over hand each rung
                 if (jump) { Off(p, at + facing * 0.3f, facing * 3f + Vector3.Up * 2f); return null; }
                 if (_height >= len - 0.2f && input > 0) { Off(p, frame.Origin - facing * 0.8f + Vector3.Up * 0.1f, Vector3.Zero); return null; }
                 if (_height <= 0 && input < 0) { Off(p, at, Vector3.Zero); return null; }

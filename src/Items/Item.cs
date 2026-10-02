@@ -130,7 +130,7 @@ public static class ItemDefs
         Bag(ItemId.HikingPack, "Hiking backpack", "#c8602a", "HK", 36, 150),
 
         // building (#274): pieces cost materials straight from the pack
-        new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + wheel picks the piece, R turns it, {aim_item} + R the material. {aim_item} + {use_item} takes your own piece back.",
+        new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + {next_item} picks the piece, {build_turn} turns it, {aim_item} + {build_turn} the material. {aim_item} + {use_item} takes your own piece back.",
             ItemUse.Build, 1, new Color(0.45f, 0.30f, 0.18f), "HM", 0, ItemCategory.Gear, 12f),
 
         // gadgets (#275): set down with Use, taken back with Aim + Use

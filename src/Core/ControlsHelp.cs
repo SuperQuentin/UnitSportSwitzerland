@@ -55,6 +55,14 @@ public partial class ControlsHelp : CanvasLayer
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
         }),
+        ("Building (hammer in hand)", new Row[]
+        {
+            new("Build the piece shown", PlayerInput.UseItem),
+            new("Take back your own piece", Keys: "{aim_item} + {use_item}", Pad: "LB + RB"),
+            new("Next piece", Keys: "{aim_item} + {next_item}", Pad: "LB + D-pad →"),
+            new("Turn the piece", PlayerInput.BuildTurn),
+            new("Change the material", Keys: "{aim_item} + {build_turn}", Pad: "LB + D-pad ↑"),
+        }),
         ("Riding and driving", new Row[]
         {
             new("Throttle / pedal", PlayerInput.Throttle),
