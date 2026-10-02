@@ -176,6 +176,51 @@ public class TerrainFormatTests
     }
 
     [Fact]
+    public void Water_round_trips_through_deflate()
+    {
+        var layer = WaterLayer.Dry(Id);
+        var rng = new Random(298);
+        for (int i = 0; i < layer.Levels.Length; i += 41)
+        {
+            layer.Levels[i] = (ushort)rng.Next(1, 65536);
+            layer.Fetch[i] = (byte)rng.Next(1, 256);
+        }
+        using var ms = new MemoryStream();
+        WaterFormat.Encode(layer, ms);
+        ms.Position = 0;
+        var back = WaterFormat.Decode(ms); // deflate reads ahead, so no exact-consumption check
+        Assert.Equal(Id, back.Id);
+        Assert.Equal(layer.Levels, back.Levels);
+        Assert.Equal(layer.Fetch, back.Fetch);
+        Assert.Equal("water_2579_1109.water", WaterFormat.FileName(Id));
+        Assert.Throws<ArgumentException>(() => new WaterLayer(Id, new ushort[10], new byte[10]));
+    }
+
+    [Fact]
+    public void Water_level_samples_only_the_wet_corners()
+    {
+        var layer = WaterLayer.Dry(Id);
+        int s = WaterLayer.Size;
+        ushort q = ChunkFormat.Quantize(372.14);
+        // one wet vertex at (10, 20): its cell's other corners are dry
+        layer.Levels[20 * s + 10] = q;
+        double e = Id.MinE + 10, n = Id.MaxN - 20;
+        Assert.True(layer.TrySampleLevel(e + 0.5, n - 0.5, out double level));
+        Assert.Equal(ChunkFormat.Dequantize(q), level, 6);
+        Assert.True(layer.IsWet(10, 20));
+        Assert.False(layer.IsWet(11, 20));
+        Assert.Equal(1, layer.WetCount);
+        Assert.False(layer.TrySampleLevel(e + 5.5, n - 5.5, out _));
+
+        // a falling river: the level interpolates between wet corners
+        layer.Levels[20 * s + 11] = ChunkFormat.Quantize(371.14);
+        Assert.True(layer.TrySampleLevel(e + 0.5, n, out level));
+        Assert.Equal((ChunkFormat.Dequantize(q) + ChunkFormat.Dequantize(layer.Levels[20 * s + 11])) / 2, level, 6);
+        Assert.Equal(255, WaterFormat.QuantizeFetch(1e6));
+        Assert.Equal(1, WaterFormat.QuantizeFetch(0));
+    }
+
+    [Fact]
     public void Cover_classification_maps_the_tlm_names()
     {
         Assert.Equal(CoverClass.Forest, CoverFormat.Parse("Wald"));

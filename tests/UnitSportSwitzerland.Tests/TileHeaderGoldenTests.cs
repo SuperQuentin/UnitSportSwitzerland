@@ -85,4 +85,27 @@ public class TileHeaderGoldenTests
         inflate.ReadExactly(back);
         Assert.Equal(cells, back);
     }
+
+    /// <summary>
+    /// The .water layer (#298): deflate like .cover, so the header is pinned byte for byte and the
+    /// payload must inflate back to the u16 levels (little-endian) then the fetch bytes.
+    /// </summary>
+    [Fact]
+    public void Water_header_bytes_unchanged_and_payload_inflates_back()
+    {
+        var layer = WaterLayer.Dry(Id);
+        for (int i = 0; i < layer.Levels.Length; i += 13) { layer.Levels[i] = (ushort)(i * 7 + 1); layer.Fetch[i] = (byte)(i % 251 + 1); }
+        using var ms = new MemoryStream();
+        WaterFormat.Encode(layer, ms);
+        var bytes = ms.ToArray();
+        Assert.Equal("5553574C01000100130A000055040000E9030000", Convert.ToHexString(bytes, 0, WaterFormat.HeaderSize));
+
+        using var inflate = new DeflateStream(new MemoryStream(bytes, WaterFormat.HeaderSize,
+            bytes.Length - WaterFormat.HeaderSize), CompressionMode.Decompress);
+        var back = new byte[layer.Levels.Length * 3];
+        inflate.ReadExactly(back);
+        for (int i = 0; i < layer.Levels.Length; i++)
+            Assert.Equal(layer.Levels[i], (ushort)(back[2 * i] | back[2 * i + 1] << 8));
+        Assert.Equal(layer.Fetch, back.AsSpan(layer.Levels.Length * 2).ToArray());
+    }
 }
