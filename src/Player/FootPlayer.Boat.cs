@@ -47,6 +47,8 @@ public partial class FootPlayer
     /// <summary>One physics step at the helm. See the class summary.</summary>
     private void BoatPhysics(float dt, Boat boat)
     {
+        // a walkable one (the steamer, #303): people walking aboard or up its gangways are not in its hull's way
+        if (boat.Walkable) IgnoreGuests();
         var stick = PlayerInput.Move;
         var input = RideControls?.Invoke() ?? new RideInput(
             Throttle: Mathf.Max(PlayerInput.Strength(PlayerInput.Throttle), Mathf.Max(0f, -stick.Y)),
@@ -56,7 +58,8 @@ public partial class FootPlayer
         // nobody at the helm (the driver jumped out, #158), or the engine off: it drifts
         if (SeatIndex != 0 || !EngineOn) input = new RideInput(0f, 0f, SeatIndex != 0 ? 0f : input.Steer, false);
         LastRideInput = input;
-        var controls = new BoatControls(input.Throttle, input.Brake, input.Steer);
+        // the steamer (#303): the telegraph rings the orders down, the engine takes its time
+        var controls = boat is Steamer steamer ? SteamerHelm(steamer, input, dt) : new BoatControls(input.Throttle, input.Brake, input.Steer);
         boat.Controls = controls;
 
         // the model starts from where the body is (a teleport, the floating origin, the solver's push)

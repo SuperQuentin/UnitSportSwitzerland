@@ -75,13 +75,19 @@ public partial class VehicleBody
         if (IsMultiplayerAuthority())
         {
             boat.Pose(_visual, Rotation.Y, boat.State.Attitude);
+            // the frame its deck is walked in stands where the model is now (#303): from the first pose
+            Posed = true;
             if (_visual is BoatRig own) own.Water(speed, boat.State.Wet, 0f, boat.State.Airborne <= 0.1f);
+            else if (_visual is SteamerRig ownSteamer)
+                ownSteamer.Animate(boat.State.Shaft, speed, boat.State.Airborne <= 0.1f && boat.State.Wet > 0.05f, false, 0f, DoorsOpen, dt);
             return;
         }
         _drawnTilt = _drawnTilt.Slerp(Tilt.Normalized(), 1f - Mathf.Exp(-10f * dt));
         boat.Pose(_visual, Rotation.Y, _drawnTilt);
         float y = boat.RemoteY(GlobalPosition, Rotation.Y, Heave);
         _visual.Position += Vector3.Up * (y - GlobalPosition.Y);
+        Posed = true;
         if (_visual is BoatRig rig) rig.Water(speed, 1f, 0f, Heave < Boat.NoHeave * 0.5f);
+        else if (_visual is SteamerRig steamer) steamer.Animate(0f, speed, Heave < Boat.NoHeave * 0.5f, false, 0f, DoorsOpen, dt);
     }
 }

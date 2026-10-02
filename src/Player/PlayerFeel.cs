@@ -351,7 +351,10 @@ public partial class PlayerFeel : Node3D
             }
             _carEngine.Set(engine.Rpm01, engine.Throttle, Mathf.Clamp(engine.Throttle * 0.8f + 0.2f * engine.Rpm01, 0f, 1f),
                 // half what it was: at 0.75 a car at redline drowned every other sound in the game
-                _player.EngineOn ? 0.15f + 0.22f * engine.Rpm01 : 0f);
+                !_player.EngineOn ? 0f
+                // a steam engine at STOP is silent (#303)
+                : engine is Steamer ? (engine.Rpm01 > 0.02f ? 0.18f + 0.25f * engine.Rpm01 : 0f)
+                : 0.15f + 0.22f * engine.Rpm01);
         }
         else _carEngine?.Set(0, 0, 0, 0);
 
@@ -878,6 +881,16 @@ public partial class PlayerFeel : Node3D
                 sb.Append($"{speed * 3.6f:0} km/h    ");
                 if (c.Gear < 0) sb.Append('R'); else sb.Append(c.Gear);
                 sb.Append($"    {c.Rpm:0} rpm").Append(wear);
+            }
+            else if (_player.Vehicle is Steamer steamer)
+            {
+                // the bridge: the log in knots, the telegraph's order, the shaft
+                var s = steamer.State;
+                sb.Append($"{speed / 0.5144f:0.0} kn  {speed * 3.6f:0} km/h    ").Append(Telegraph.Name(steamer.Order));
+                sb.Append($"    {steamer.Rpm:0} rpm");
+                if (s.Shaft < -0.01f) sb.Append(" ASTERN");
+                if (s.Grounded) sb.Append("    AGROUND");
+                if (steamer.DoorsOpen != 0) sb.Append("    GANGWAY OPEN");
             }
             else if (_player.Vehicle is Boat boat)
             {
