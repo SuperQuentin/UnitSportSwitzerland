@@ -107,6 +107,13 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   --cockpitcheck --tuningcheck --occasioncheck --huntcheck --origincheck --synccheck --leavecheck`,
   and with world flags `--hitboxcheck --synccheck --ride` (flat), `--menucheck` (`--systems ui`),
   `--leavecheck` and `--drivecheck` (fixture).
+- Traffic lights (#353): `net tools/signalnetcheck.sh` for `src/World/SignalNetProbe`,
+  `src/Terrain/SignalLamps`, `src/Net/ClockSync` and `tools/TerrainFormat/SignalPlan`. A headless
+  server (`--world fixture`) and two clients (`--systems network`) log every group's aspect
+  (`SignalPlan.State` on `ClockSync.ServerNow`) every 0.5 s of server time; the script compares
+  them per instant and measures each client's clock error through the machine's wall clock
+  (fails over 0.1 s). No map: a crossroads plan built in code; `CHUNKS=<dir> JUNCTION=E,N` reads
+  the real record nearest E,N instead (tier 3). ~45 s.
 
 ## Resource guard: `tools/lib/guard.sh`
 

@@ -65,7 +65,30 @@
     centre (`LaneCentre`), like the lanes; a car's `Lane` counts from its usual line
     (`KeepRight`), 0.8 m right of that centre where a bike lane narrows the lane.
   Screenshots from above (windowed `--trafficcheck,<png>`): cars queued at the red of the
-  Geneva junction and in the through lane past the pocket. Not done: a capture of a queue moving
-  off on green; two clients comparing group states (traffic is local, the lamps' `State` is
-  the shared part, #350).
+  Geneva junction and in the through lane past the pocket.
+- **Queue capture** (windowed `--trafficcheck,<png> --at E,N`, from 15 s): it picks the car
+  group (main head or pocket arrow) of a signalised approach within 120 m whose light is red,
+  turns green in 3-6 s (`SignalPlan.State` on `ClockSync.ServerNow`, as the cars read it) and has
+  the most cars standing (at least 3), looks straight down on that arm (50 m up, 22 m back from
+  the line) and saves `<png>_1_red` 2.5 s before the green, then `_2_green2s`, `_3_green4s`,
+  `_4_green6s`, logging per shot the aspect, cars standing and crossings since. **`--feed`**
+  (capture only, not the game's traffic): the car cap is `--traffic` past the settings' 150 for
+  that run, and every 0.4 s a car is spawned 40-250 m before the line of one of the signalised
+  approaches within 60 m, in turn, routed through it (`Traffic.SpawnInto`, back over the junctions
+  upstream; `LaneGraph.Entering`). Without it, queues of 3 rarely form within 150 s (15-25 cars at
+  red over 603 approaches). Run (`test_output/353/`, Geneva copy, `--traffic 300 --dense --feed
+  --seconds 60`): at 2499901,1118599 a queue of 3 at the line, then the lead van over it at +2 s
+  and the lane moving; also at 2499641,1118692.
+- **Waiting at a red is not being stuck** (found by the capture): a car standing 20 s at a red was
+  culled as stuck (it vanished from the line, 9 in a fed 60 s run); `Stuck` no longer counts while
+  `AtRed`, and a car held by the lights does not turn round behind a standing queue (`Stale`).
+  A wait on green (for room, for a gap) still counts: the way out of a gridlock.
+- **Two clients, same lights** (`tools/signalnetcheck.sh`, tier 2): traffic is local, the shared
+  part is the plan and the server clock (the lamps' `State`, #350). `--signalnetcheck [E,N]`
+  (`World/SignalNetProbe`) on the server and two clients logs every group's aspect each 0.5 s of
+  `ClockSync.ServerNow`, the wall clock beside it; the script compares per instant and measures
+  each client's clock error. Flat fixture, a crossroads plan built in code (`tools/test.sh net`,
+  31 s): 40 instants over 5 aspect changes, all identical on the three peers, skew 1.1 ms.
+  `CHUNKS=<Geneva copy> JUNCTION=2499901,1118599` (the real record, 16 groups): 40 instants over
+  4 changes, identical, skew 3.1 ms.
 - Around a race the cars behave like drivers who see it coming: `traffic-and-races`.
