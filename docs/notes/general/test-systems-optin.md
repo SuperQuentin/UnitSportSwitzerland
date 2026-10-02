@@ -28,11 +28,18 @@
 
 ## Why
 
-Measured in #238 (Windows, Godot 4.7.1, headless, no real terrain), peak working set:
+Measured in #260 (Windows, Godot 4.7.1 headless, no real terrain; before = no flags, the
+generated world with every system), peak working set:
 
-| Check | Before (generated world, all systems) | After |
+| Check | Before | After |
 |---|---|---|
-| see `testing` note, "Measured" | | |
+| `--synccheck --world flat` | 64.5 s, 2 318 MB | 55.5 s, 210 MB |
+| `--ride bike,20 --world flat` | 31.3 s, 1 306 MB | 23.4 s, 210 MB |
+| `--menucheck --systems ui` | 13.3 s, 887 MB | 11.9 s, 430 MB |
+| `--leavecheck --world fixture` | 25.9 s, 1 333 MB | 22.6 s, 537 MB |
+| `--drivecheck --chunks fixture:hairpin --traffic 0` | 70.7 s, 2 225 MB | 93.8 s, 693 MB |
+
+Full table in `testing`. Parallel agents running 2 GB checks ran the machine out of RAM.
 
 ## Same logic, preserved
 
