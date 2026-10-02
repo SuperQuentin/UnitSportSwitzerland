@@ -704,6 +704,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var debug = new DebugMenu(_chunks, origin, () => _nearTrees, Toast);
         AddChild(debug);
         _chat.DebugRequested += debug.Open;
+        if (DebugMenuCheck.Requested) AddChild(new DebugMenuCheck(items, debug, _chunks));
 
         // G opens a GPX track for playback; the session owns its own camera and HUD
         _gpx = GpxSession.Create(_chunks, origin, _spectator);

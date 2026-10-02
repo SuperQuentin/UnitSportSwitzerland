@@ -39,3 +39,7 @@
   `freeze`, `no<layer>` (`noground`, `noroads`, `nobuildings`, `notrees`, `nowater`, `nohorizon`,
   `noreal`, `nogenerated`, `nofill`), and one view: `wireframe`, `clay`, `colours`, `overdraw`.
   Example: `--origin 2583250,1113250 --shot-queue q.txt --debugview open,tiles,labels,origin`.
+- **Checks**: `--debugcheck --systems ui` (quick, `Core/DebugMenuCheck`): F9, mouse clicks pushed into
+  the viewport, Space, Esc (not the pause menu), `/debug`, clay through a `/style` restyle and back.
+  `tools/debugcheck.sh` (net): a server with `--admin-password`; refused, `/login`, offered,
+  `/admin remove`, every tool off. The view picker is set through `ItemSelected`, not its popup.

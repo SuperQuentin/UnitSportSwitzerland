@@ -61,7 +61,7 @@ void fragment() {
 
     private static Shader? _clay, _colours;
 
-    private static Shader Clay => _clay ??= new Shader
+    internal static Shader Clay => _clay ??= new Shader
     {
         Code = "shader_type spatial;\n#define BASE vec3(0.42, 0.41, 0.39)\n" + Body,
     };
