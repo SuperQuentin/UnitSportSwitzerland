@@ -9,6 +9,8 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 
 - `data-pipeline` — Data pipeline: swissALTI3D XYZ zips (`ressources/data/swiss_chunks/`, LV95/EPSG:2056, 0.5 m grid, 1 km tiles) →...
 - `shared-format-code` — Shared format code: `tools/TerrainFormat` classlib (TileId, ChunkFormat, ChunkGrid, ChunkCodec, TerrainManifest) —...
+- `perf-tile-header` — tile file headers only via `TileHeader.Write/Read` and `ChunkCodec.ReadHeader`; goldens keep the bytes identical
+- `perf-road-segment-helpers` — road points to LV95 via `RoadSegment.Lv95(id, i)`; RoadGen profiles via `RoadProfiles.For` (importer and rewriter differ on purpose)
 - `roads-rail` — Roads/rail: swissTLM3D GeoPackage (`ressources/data/tlm3d/*.gpkg`, SQLite + R-tree, read directly from C# — no GDAL)...
 - `aerial-ropeways` — Aerial ropeways: `tlm_oev_uebrige_bahn` -> `RoadClass.Cableway/Chairlift/SkiLift/RopeTow`, carried in the `.road`...
 - `watercourses` — Watercourses: `tlm_gewaesser_fliessgewaesser` -> `Watercourse`/`DryChannel`/`Bisse`, draped like roads (their Z sits...
@@ -35,6 +37,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `junction-priority` — #121: main road per junction (importance, owner, width, straightness), Wartelinie teeth, 3.02/3.03 signs (sizes from RoadSigns), centre line through, yield bits for traffic; region stats, checks
 - `roundabouts` — #122: flagged rings fitted to a circle and rebuilt as arcs before the graph, arms moved onto them, grassed raised island (APRP, kerb, collision, blend hold) or flush mini disc; checks
 - `turn-lanes` — #123: left-turn pockets on main-road approaches as a flush APRP Pavement strip (taper + storage) plus an exit taper with a hatched median past the junction, edge line cut, divider, arrows; blend holds the strip as road; rejects and checks
+- `urban-streets` — #119 build side: UrbanField (walls, local + city scale), RoadHeights (rural +8 cm, town ground − kerb), StreetPlanner sidewalks (facade rays, medians, splits), CornerPlanner, ramp shoulders, TownPaving/TunnelRoof cover, tram PavedBed, cost, --street-svg
 - `tlm-road-attribute-domains` — swissTLM3D `kreisel`, `verkehrsbedeutung`, `eigentuemer`, `stufe` value domains (SELECT DISTINCT counts) and where each goes in v3
 
 ## Commands

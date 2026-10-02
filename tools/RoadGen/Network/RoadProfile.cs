@@ -1,6 +1,7 @@
 namespace UnitSport.Tools.RoadGen.Network;
 
 using UnitSport.Tools.RoadGen.Geometry;
+using UnitSport.Terrain.Format;
 
 public enum LineStyle { None, Solid, Dashed }
 
@@ -104,4 +105,47 @@ public sealed record RoadProfile(
 
     public static readonly RoadProfile Railway = new(
         "railway", 4.5, 300, 90, 1, MarkingPlan.None, 10);
+}
+
+/// <summary>The profile of a swissTLM3D road segment read back from a <c>.road</c> tile (#221: one copy for the importer and the rewriter).</summary>
+public static class RoadProfiles
+{
+    public static RoadProfile ForClass(RoadClass c) => c switch
+    {
+        RoadClass.Motorway => RoadProfile.Motorway,
+        RoadClass.Expressway => RoadProfile.Expressway,
+        RoadClass.Ramp => RoadProfile.Ramp,
+        RoadClass.Major => RoadProfile.Major,
+        RoadClass.Road => RoadProfile.Road,
+        RoadClass.Minor => RoadProfile.Minor,
+        RoadClass.Lane or RoadClass.Link or RoadClass.Square => RoadProfile.Lane,
+        RoadClass.Track => RoadProfile.Track,
+        RoadClass.Path => RoadProfile.Path,
+        RoadClass.Railway => RoadProfile.Railway,
+        _ => RoadProfile.Lane,
+    };
+
+    /// <summary>
+    /// The class profile with the surveyed width where TLM gives one, times
+    /// <paramref name="dividedScale"/> on a direction-separated carriageway. With
+    /// <paramref name="surfaceDecidesPaving"/> (the importer) an unpaved surface also clears Paved
+    /// and the markings regardless of width; without it (the rewriter, as it always did) Paved and
+    /// Markings stay the class's. Open question for the RoadGen owner whether the rewriter should
+    /// follow the surface too: docs/notes/tools/perf-road-segment-helpers.md.
+    /// </summary>
+    public static RoadProfile For(RoadSegment segment, double dividedScale, bool surfaceDecidesPaving = true)
+    {
+        var baseProfile = ForClass(segment.Class);
+        double width = segment.Width > 0.1 ? segment.Width : baseProfile.Width;
+        if ((segment.Flags & RoadFlags.Divided) != 0) width *= dividedScale;
+        if (!surfaceDecidesPaving) return baseProfile with { Width = width };
+
+        bool paved = segment.Surface == RoadSurface.Paved;
+        return baseProfile with
+        {
+            Width = width,
+            Paved = paved,
+            Markings = paved ? baseProfile.Markings : MarkingPlan.None,
+        };
+    }
 }

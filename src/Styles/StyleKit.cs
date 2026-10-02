@@ -44,6 +44,11 @@ public enum MaterialRole
     Path,
     /// <summary>Falling snow.</summary>
     Precip,
+    /// <summary>
+    /// Dressed figures, with their clothes' finishes (<c>Avatar/HumanMeshBuilder.FigureMaterial</c>);
+    /// shaded like <see cref="StyleKit.Figure"/>'s plain ones.
+    /// </summary>
+    Figure,
 }
 
 /// <summary>
@@ -146,6 +151,7 @@ public static class StyleKit
             [MaterialRole.Interior] = "res://shaders/ps1_interior.gdshader",
             [MaterialRole.Path] = "res://shaders/ps1_path.gdshader",
             [MaterialRole.Precip] = "res://shaders/ps1_snowfall.gdshader",
+            [MaterialRole.Figure] = "res://shaders/avatar.gdshader",
         },
         // interiors and snowfall stay PS1's, unshaded on purpose: rooms float in the dark under
         // the terrain, out of the sun
@@ -159,6 +165,7 @@ public static class StyleKit
             [MaterialRole.Water] = "res://shaders/cartoon_water.gdshader",
             [MaterialRole.Prop] = "res://shaders/cartoon_prop.gdshader",
             [MaterialRole.Path] = "res://shaders/cartoon_path.gdshader",
+            [MaterialRole.Figure] = "res://shaders/cartoon_avatar.gdshader",
         },
         // prop and path borrow Cartoon's lit ones; interiors and snowfall stay PS1's
         [VisualStyle.RealisticLow] = new()
@@ -169,6 +176,7 @@ public static class StyleKit
             [MaterialRole.Tree] = "res://shaders/real_tree.gdshader",
             [MaterialRole.TreeFar] = "res://shaders/real_treefar.gdshader",
             [MaterialRole.Water] = "res://shaders/real_water.gdshader",
+            [MaterialRole.Figure] = "res://shaders/real_avatar.gdshader",
         },
         [VisualStyle.RealisticHigh] = new(),
     };
@@ -507,13 +515,15 @@ public static class StyleKit
     }
 
     /// <summary>
-    /// Every frame, from <c>World/DayNight</c>: the environment's colours and the sun (null when
-    /// the style has none) for the hour. <paramref name="shade"/> is the direction the shaders
-    /// light from (the sun, or the moon at night), <paramref name="tint"/> and
-    /// <paramref name="sky"/> the palette's light and sky colours as seen (sRGB).
+    /// Every frame, from <c>World/DayNight</c>: the sun (null when the style has none) for the
+    /// hour, and the environment's colours when <paramref name="paletteMoved"/> (the palette,
+    /// night or <see cref="Dusk"/> changed, or the environment is new: #221 writes nothing
+    /// unchanged). <paramref name="shade"/> is the direction the shaders light from (the sun, or
+    /// the moon at night), <paramref name="tint"/> and <paramref name="sky"/> the palette's light
+    /// and sky colours as seen (sRGB).
     /// </summary>
     public static void DriveEnvironment(Godot.Environment env, DirectionalLight3D? sun, Vector3 shade,
-        Color tint, Color sky, float night, float sunElevationDeg)
+        Color tint, Color sky, float night, float sunElevationDeg, bool paletteMoved)
     {
         if (sun != null)
         {
@@ -521,12 +531,14 @@ public static class StyleKit
             var down = -shade.Normalized();
             sun.Basis = Basis.LookingAt(down, Mathf.Abs(down.Y) > 0.999f ? Vector3.Forward : Vector3.Up);
             sun.LightColor = tint;
-            sun.LightEnergy = Mathf.Lerp(1.0f, 0.3f, night);
+            // Realistic's sun is the scene's main light, the sky only fills
+            sun.LightEnergy = Mathf.Lerp(StyleFinish == Finish.Realistic ? 1.6f : 1.0f, 0.3f, night);
         }
+        if (!paletteMoved) return;
         if (StyleFinish == Finish.Cartoon && env.Sky?.SkyMaterial is ProceduralSkyMaterial gradient)
         {
             // a clear day sky, sliding into the palette's own at dusk and night
-            float dusk = Mathf.Clamp(1f - (sunElevationDeg - 2f) / 18f, 0f, 1f);
+            float dusk = Dusk(sunElevationDeg);
             gradient.SkyTopColor = new Color(0.24f, 0.47f, 0.85f).Lerp(sky.Darkened(0.2f), dusk);
             gradient.SkyHorizonColor = new Color(0.72f, 0.84f, 0.95f).Lerp(sky.Lightened(0.2f), dusk);
             gradient.GroundHorizonColor = gradient.SkyHorizonColor;
@@ -541,7 +553,7 @@ public static class StyleKit
         if (StyleFinish == Finish.Realistic && env.Sky?.SkyMaterial is ProceduralSkyMaterial real)
         {
             // a clear sky by day, the palette's own at dusk and night; it lights the scene
-            float dusk = Mathf.Clamp(1f - (sunElevationDeg - 2f) / 18f, 0f, 1f);
+            float dusk = Dusk(sunElevationDeg);
             real.SkyTopColor = new Color(0.20f, 0.38f, 0.70f).Lerp(sky.Darkened(0.2f), dusk);
             real.SkyHorizonColor = new Color(0.66f, 0.76f, 0.88f).Lerp(sky.Lightened(0.2f), dusk);
             real.GroundHorizonColor = real.SkyHorizonColor;
@@ -551,7 +563,6 @@ public static class StyleKit
             env.FogLightColor = new Color(0.66f, 0.76f, 0.88f).Lerp(sky.Lightened(0.15f), dusk);
             env.AmbientLightSkyContribution = 1f;
             env.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.7f, night);
-            if (sun != null) sun.LightEnergy = Mathf.Lerp(1.6f, 0.3f, night);
             return;
         }
         env.BackgroundColor = sky;
@@ -559,6 +570,12 @@ public static class StyleKit
         env.AmbientLightColor = sky.Lerp(new Color(tint.R, tint.G, tint.B), 0.5f);
         env.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.55f, night);
     }
+
+    /// <summary>
+    /// How far a style's own clear day sky has slid into the palette's: 0 with the sun above 20°,
+    /// 1 below 2°. Flat most of the day, so <c>DayNight</c> keys its environment writes on it.
+    /// </summary>
+    public static float Dusk(float sunElevationDeg) => Mathf.Clamp(1f - (sunElevationDeg - 2f) / 18f, 0f, 1f);
 
     /// <summary>
     /// The applied style's sun, or null when it has none (PS1: the shaders light themselves from

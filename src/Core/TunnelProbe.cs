@@ -88,7 +88,11 @@ public partial class TunnelProbe : Node3D
 
                 if (carved)
                 {
-                    if (hit.Count == 0) carvedOpen++; else carvedBlocked++;
+                    // open: the ray passes the terrain surface, to nothing or to the tunnel's own
+                    // floor below (#119: a bore has floor collision now)
+                    bool through = hit.Count == 0
+                        || (hit["collider"].AsGodotObject() as Node)?.Name == "RoadBody";
+                    if (through) carvedOpen++; else carvedBlocked++;
                 }
                 else
                 {

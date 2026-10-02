@@ -202,6 +202,15 @@ public sealed class Truck : Rideable, IEngined
     public bool Headlights { get; set; }
     /// <summary>Passenger doors open, one bit per door (<see cref="HeavyLook.Doors"/>).</summary>
     public byte DoorsOpen { get; set; }
+    private bool _pulledAway;
+
+    /// <summary>A door's button pressed (#162): that door opens or shuts; a stopped city bus kneels while any is open.</summary>
+    public void ToggleDoor(int door)
+    {
+        if (door < 0 || door >= DoorCount) return;
+        DoorsOpen ^= (byte)(1 << door);
+        if (Spec.Class != HeavyClass.Coach && !_pulledAway) Kneeling = DoorsOpen != 0;
+    }
     public int DoorCount => Spec.Look.Doors.Length;
     /// <summary>Lowered on the door side for boarding (buses).</summary>
     public bool Kneeling { get; set; }
@@ -360,20 +369,34 @@ public sealed class Truck : Rideable, IEngined
         ? Solid(Measured((Kind, k), _ => HeavyRig.Create(Spec, k, 0.5f)), k)
         : Measured(("trailer", TrailerCatalog.Index(TrailerCode), k - OwnSections), _ => HeavyRig.CreateTrailer(Trailer!, k - OwnSections, 1f));
 
-    public override Node3D BuildVisual(int riderIndex) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex));
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
 
     /// <summary>Every seat of the truck's own sections (a bus's both halves), the driver's first (#158).</summary>
-    public override SeatAnchor[] Seats => SeatsOf(Kind, () =>
+    public override SeatAnchor[] Seats => Model.Seats;
+
+    /// <summary>The bus's saloon, each half of it, for walking about in (#162); none on a truck.</summary>
+    public override VehicleDeck[] Decks => Model.Decks;
+
+    private static readonly Dictionary<RideKind, (SeatAnchor[] Seats, VehicleDeck[] Decks)> _models = new();
+
+    /// <summary>The seats and decks of this kind's sections, read once from a throwaway build of each.</summary>
+    private (SeatAnchor[] Seats, VehicleDeck[] Decks) Model
     {
-        var seats = new List<SeatAnchor>();
-        for (int k = 0; k < Spec.Sections.Length; k++)
+        get
         {
-            var rig = HeavyRig.Create(Spec, k, 0.5f);
-            seats.AddRange(rig.Seats);
-            rig.Free();
+            if (_models.TryGetValue(Kind, out var known)) return known;
+            var seats = new List<SeatAnchor>();
+            var decks = new List<VehicleDeck>();
+            for (int k = 0; k < Spec.Sections.Length; k++)
+            {
+                var rig = HeavyRig.Create(Spec, k, 0.5f);
+                seats.AddRange(rig.Seats);
+                if (rig.Deck != null) decks.Add(rig.Deck);
+                rig.Free();
+            }
+            return _models[Kind] = (seats.ToArray(), decks.ToArray());
         }
-        return seats.ToArray();
-    });
+    }
 
     public override bool Driverless => true;
 
@@ -507,9 +530,11 @@ public sealed class Truck : Rideable, IEngined
             WheelSpin[k] += b.V.Dot(b.Forward) / WheelRadius * dt;
         }
 
-        // a bus comes up off its knees when it pulls away
-        if (Kneeling && motion.Speed > 1.5f) Kneeling = false;
-        if (DoorsOpen != 0 && motion.Speed > 1.5f) DoorsOpen = 0;
+        // a bus shuts its doors and comes up off its knees as it pulls away; a door opened after
+        // that (a passenger's button, #162) stays open, at their own risk
+        bool moving = motion.Speed > 1.5f;
+        if (moving && !_pulledAway) { DoorsOpen = 0; Kneeling = false; }
+        _pulledAway = moving;
     }
 
     /// <summary>

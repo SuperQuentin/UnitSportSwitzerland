@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Godot;
@@ -9,12 +10,20 @@ namespace UnitSport.Net;
 /// <c>godot --headless --path . -- --server --serverstats[,label] [--seconds S]</c>: every 5 s prints
 /// frame time (p50/p99/max), players, tiles, memory, GC and ENet traffic (total and per peer), and
 /// rewrites <c>test_output/loadtest/&lt;label&gt;/server_summary.txt</c>, so a killed server still
-/// leaves one. With <c>--seconds S</c> the server quits after S seconds. Load-test tooling: see
+/// leaves one. With <c>--seconds S</c> the server quits after S seconds, or once every player has
+/// left. Load-test tooling: see
 /// <c>tools/loadtest.sh</c> and <see cref="Swarm"/>.
 ///
 /// <para>
 /// Frame times go into fixed histograms rather than lists: the probe must not allocate in the
 /// process whose GC it is measuring.
+/// </para>
+/// <para>
+/// busy is measured per frame: from the first thing a main-loop iteration does (the
+/// <c>physics_frame</c> signal, or the multiplayer poll, which this node takes over so it can stamp
+/// the time before it) to the end of this node's <c>_Process</c>, which runs last. Godot's
+/// <c>TimeProcess</c> monitors are a per-second maximum and cannot be used for this. Every frame over
+/// <see cref="SlowMs"/> is printed with the periodic jobs that ran in it (<see cref="Ran"/>).
 /// </para>
 /// </summary>
 public partial class ServerStats : Node
@@ -22,6 +31,10 @@ public partial class ServerStats : Node
     private const double Window = 5;
     private const double BucketMs = 0.05;
     private const int Buckets = 20000;   // 0..1000 ms; anything longer lands in the last one
+    private const double SlowMs = 50;
+    private const int MaxJobs = 8;
+
+    private static ServerStats? _active;
 
     private static readonly string[] Args = OS.GetCmdlineUserArgs();
     public static bool Requested => Args.Any(a => a.StartsWith("--serverstats"));
@@ -31,7 +44,7 @@ public partial class ServerStats : Node
     private double _quitAfter = SecondsArg();
 
     // frame: wall time between frames (headless idles ~6.9 ms per frame, so this bottoms out
-    // there); busy: the work in the frame, process plus physics, which is what load moves first
+    // there); busy: the work in the frame (poll, physics, process), what load moves first
     private readonly int[] _window = new int[Buckets], _all = new int[Buckets];
     private readonly int[] _busyWindow = new int[Buckets], _busyAll = new int[Buckets];
     private double _windowMax, _allMax, _busyWindowMax, _busyAllMax;
@@ -46,6 +59,12 @@ public partial class ServerStats : Node
     private double _inPpsPeak;
     private long _lastDrops = -1, _dropsTotal;
     private string _lastLine = "";
+    private long _frameStart;   // Stopwatch timestamp of this frame's first hook, 0 before it
+    private readonly string[] _jobNames = new string[MaxJobs];
+    private readonly double[] _jobMs = new double[MaxJobs];
+    private int _jobCount, _slowFrames, _gcSeen;
+    private Task _summaryWrite = Task.CompletedTask;
+    private readonly Dictionary<string, double> _jobMax = [];   // slowest run of each job, for the summary
 
     private static double SecondsArg()
     {
@@ -54,16 +73,67 @@ public partial class ServerStats : Node
             && double.TryParse(Args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out double s) ? s : 0;
     }
 
+    /// <summary>
+    /// A periodic main-thread job ran from <paramref name="start"/> (<see cref="Stopwatch.GetTimestamp"/>)
+    /// until now: named in the slow-frame line if this frame turns out slow. No-op without --serverstats.
+    /// </summary>
+    public static void Ran(string job, long start)
+    {
+        if (_active is not { } s) return;
+        double ms = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        s._jobMax[job] = Math.Max(ms, s._jobMax.GetValueOrDefault(job));
+        if (s._jobCount >= MaxJobs) return;
+        s._jobNames[s._jobCount] = job;
+        s._jobMs[s._jobCount++] = ms;
+    }
+
     public override void _Ready()
     {
+        _active = this;
+        ProcessPriority = int.MaxValue;   // last in the process pass: the end of the busy part of a frame
+        var tree = GetTree();
+        tree.PhysicsFrame += BeginFrame;
+        // the poll (ENet receive, replication, every incoming RPC) runs before any signal of a frame
+        // with no physics step: poll here instead, right where the tree would have, after the stamp
+        tree.MultiplayerPoll = false;
+        tree.ProcessFrame += PollFrame;
         _lastPauseMs = GC.GetTotalPauseDuration().TotalMilliseconds;
         for (int g = 0; g < 3; g++) _lastGc[g] = GC.CollectionCount(g);
     }
 
+    public override void _ExitTree()
+    {
+        if (_active == this) _active = null;
+        _summaryWrite.Wait(1000);   // a summary cut short by the process exiting would be unreadable
+        GetTree().MultiplayerPoll = true;
+        GetTree().ProcessFrame -= PollFrame;
+        GetTree().PhysicsFrame -= BeginFrame;
+    }
+
+    private void BeginFrame()
+    {
+        if (_frameStart == 0) _frameStart = Stopwatch.GetTimestamp();
+    }
+
+    private void PollFrame()
+    {
+        BeginFrame();
+        GetTree().GetMultiplayer().Poll();
+    }
+
     public override void _Process(double delta)
     {
+        if (_sinceWindow >= Window)
+        {
+            long t0 = Stopwatch.GetTimestamp();
+            Report(_sinceWindow);
+            _sinceWindow = 0;
+            Ran("stats report", t0);
+        }
+
         // wall clock, not delta: the engine smooths a long frame's delta over the next ones, so
-        // a 3 s stall shows up as a run of ~140 ms deltas
+        // a 3 s stall shows up as a run of ~140 ms deltas. Taken after the report, so a slow
+        // report lands in its own frame.
         ulong now = Time.GetTicksUsec();
         double ms = _lastTicks == 0 ? delta * 1000 : (now - _lastTicks) / 1000.0;
         _lastTicks = now;
@@ -72,23 +142,38 @@ public partial class ServerStats : Node
         _all[b]++;
         _windowMax = Math.Max(_windowMax, ms);
         _allMax = Math.Max(_allMax, ms);
-        // the previous frame's timings: the monitors are filled in at the end of a frame
-        double busy = (Performance.GetMonitor(Performance.Monitor.TimeProcess)
-            + Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess)) * 1000;
+        _elapsed += ms / 1000;
+        _sinceWindow += ms / 1000;
+
+        double busy = _frameStart == 0 ? 0 : Stopwatch.GetElapsedTime(_frameStart).TotalMilliseconds;
+        _frameStart = 0;
+        int gcNow = GC.CollectionCount(0) + GC.CollectionCount(1) + GC.CollectionCount(2);
+        if (ms > SlowMs || busy > SlowMs) SlowFrame(ms, busy, gcNow != _gcSeen);
+        _gcSeen = gcNow;
+        _jobCount = 0;
         int bb = Math.Min(Buckets - 1, (int)(busy / BucketMs));
         _busyWindow[bb]++;
         _busyAll[bb]++;
         _busyWindowMax = Math.Max(_busyWindowMax, busy);
         _busyAllMax = Math.Max(_busyAllMax, busy);
-        _elapsed += ms / 1000;
-        _sinceWindow += ms / 1000;
-        if (_sinceWindow >= Window) { Report(_sinceWindow); _sinceWindow = 0; }
         if (_quitAfter > 0 && _elapsed >= _quitAfter)
         {
             _quitAfter = 0;
-            GD.Print("[stats] --seconds reached, quitting");
+            GD.Print("[stats] run over (--seconds, or everyone left), quitting");
             GetTree().Quit();
         }
+    }
+
+    private void SlowFrame(double ms, double busy, bool gc)
+    {
+        _slowFrames++;
+        var sb = new StringBuilder();
+        sb.Append(CultureInfo.InvariantCulture, $"[stats] slow frame t={_elapsed:F3}s frame={ms:F1} busy={busy:F1} ms, jobs:");
+        if (_jobCount == 0 && !gc) sb.Append(" none");
+        if (gc) sb.Append(" (a GC ran)");
+        for (int i = 0; i < _jobCount; i++)
+            sb.Append(CultureInfo.InvariantCulture, $" {_jobNames[i]} {_jobMs[i]:F2}");
+        GD.Print(sb.ToString());
     }
 
     private static (double P50, double P99, int N) Pct(int[] h)
@@ -113,6 +198,9 @@ public partial class ServerStats : Node
         var world = GetParent();
         int players = world.GetNodeOrNull("Players")?.GetChildCount() ?? 0;
         _peakPlayers = Math.Max(_peakPlayers, players);
+        // --seconds is an upper bound: the run is over once everyone who came has left. A slow
+        // start (it varies by seconds) must not end the server under clients still running.
+        if (_quitAfter > 0 && _peakPlayers > 0 && players == 0) _quitAfter = _elapsed;
         var chunks = world.GetNodeOrNull<ChunkManager>("Terrain");
         long ws = System.Environment.WorkingSet;
         _peakWs = Math.Max(_peakWs, ws);
@@ -168,7 +256,6 @@ public partial class ServerStats : Node
             ws / 1048576.0, heap / 1048576.0, gc[0], gc[1], gc[2], pauseDelta,
             inBps / 1024, outBps / 1024, peerCount > 0 ? inBps / 1024 / peerCount : 0, peerCount > 0 ? outBps / 1024 / peerCount : 0,
             rttAvg, rttMax, lossAvg, b50, b99, _busyWindowMax, inPps, outPps, dropDelta);
-        GD.Print(_lastLine);
         Array.Clear(_window);
         Array.Clear(_busyWindow);
         _windowMax = 0;
@@ -183,6 +270,8 @@ public partial class ServerStats : Node
     /// </summary>
     private static long UdpDrops()
     {
+        // elsewhere /proc/self/fd does not exist: the throw and catch cost ms every window
+        if (!OperatingSystem.IsLinux()) return -1;
         try
         {
             var inodes = new HashSet<string>();
@@ -230,13 +319,21 @@ public partial class ServerStats : Node
         Line("net_out_peak_kbs", "{0:F1}", _outPeak / 1024);
         Line("packets_in_peak_per_s", "{0:F0}", _inPpsPeak);
         Line("udp_rcvbuf_drops", "{0}", _dropsTotal);
+        Line("slow_frames_over_50ms", "{0}", _slowFrames);
+        foreach (var (job, ms) in _jobMax) Line("job_max_ms " + job, "{0:F2}", ms);
         sb.AppendLine("last_window             " + _lastLine);
-        try
+        // the line and the file on a worker, one after the other: on Windows a print blocked the
+        // frame for up to 360 ms now and then (stdout), and a slow disk must not stall it either
+        string dir = ProjectSettings.GlobalizePath($"res://test_output/loadtest/{_label}"), text = sb.ToString(), line = _lastLine;
+        _summaryWrite = _summaryWrite.ContinueWith(_ =>
         {
-            string dir = ProjectSettings.GlobalizePath($"res://test_output/loadtest/{_label}");
-            Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "server_summary.txt"), sb.ToString());
-        }
-        catch (Exception e) { GD.PushWarning($"[stats] cannot write summary: {e.Message}"); }
+            GD.Print(line);
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "server_summary.txt"), text);
+            }
+            catch (Exception e) { GD.PushWarning($"[stats] cannot write summary: {e.Message}"); }
+        });
     }
 }

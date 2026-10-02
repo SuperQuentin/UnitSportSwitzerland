@@ -66,6 +66,7 @@ public partial class DayNight : Node
     {
         _environment = environment;
         _indoor = environment?.Duplicate() as Godot.Environment;
+        _applied = null;   // a new environment is written at once, not at the palette's next change
     }
 
     /// <summary>
@@ -158,22 +159,26 @@ public partial class DayNight : Node
         if (occasion is { Owner: var owner }) (tint, sky) = owner.Grade(SunElevationDeg, tint, sky);
         Night = Mathf.SmoothStep(4f, -7f, SunElevationDeg);
 
-        RenderingServer.GlobalShaderParameterSet("world_sun_dir", shade.Normalized());
+        RenderingServer.GlobalShaderParameterSet(GSunDir, shade.Normalized());
         // The palette is authored as colours you would see; the shaders multiply LINEAR
         // values, so it is converted like the sky. Unconverted, night's 0.13 displayed as
         // 0.40 — a dull dusk, with every wall still pale.
         var tintLinear = tint.SrgbToLinear();
-        RenderingServer.GlobalShaderParameterSet("world_tint", new Vector3(tintLinear.R, tintLinear.G, tintLinear.B));
+        RenderingServer.GlobalShaderParameterSet(GTint, new Vector3(tintLinear.R, tintLinear.G, tintLinear.B));
         var skyLinear = sky.SrgbToLinear();
-        RenderingServer.GlobalShaderParameterSet("world_sky", new Vector3(skyLinear.R, skyLinear.G, skyLinear.B));
-        RenderingServer.GlobalShaderParameterSet("world_night", Night);
+        RenderingServer.GlobalShaderParameterSet(GSky, new Vector3(skyLinear.R, skyLinear.G, skyLinear.B));
+        RenderingServer.GlobalShaderParameterSet(GNight, Night);
         ApplyOccasionGlobals(atmo, tintLinear, delta);
 
-
-        // the visual style's sky, ambient, haze and sun
+        // the visual style's sky, ambient and haze follow the palette, which is flat through most
+        // of the day and night: only write them when it moved (#221). Whatever swaps an environment
+        // in must reset _applied, or the new one waits for a change. The sun moves every frame.
+        var applied = (sky, tint, Night, Styles.StyleKit.Dusk(SunElevationDeg));
+        bool moved = applied != _applied;
+        _applied = applied;
         if (_environment != null)
-            Styles.StyleKit.DriveEnvironment(_environment, Sun, shade, tint, sky, Night, SunElevationDeg);
-        if (_indoor != null)
+            Styles.StyleKit.DriveEnvironment(_environment, Sun, shade, tint, sky, Night, SunElevationDeg, moved);
+        if (moved && _indoor != null)
         {
             _indoor.BackgroundColor = sky;
             _indoor.AmbientLightSource = Godot.Environment.AmbientSource.Color;
@@ -181,6 +186,12 @@ public partial class DayNight : Node
             _indoor.AmbientLightEnergy = 1.0f;
         }
     }
+
+    // set every frame: a string would convert to a new StringName each call (#221)
+    private static readonly StringName GLights = "world_lights", GMistColor = "world_mist_color",
+        GMistDensity = "world_mist_density", GMistTop = "world_mist_top", GNight = "world_night", GSky = "world_sky",
+        GSnow = "world_snow", GSunDir = "world_sun_dir", GTint = "world_tint";
+    private (Color, Color, float, float)? _applied;
 
     // ---- occasion globals (shaders/world_occasion.gdshaderinc) ------------------------------------
 
@@ -194,23 +205,23 @@ public partial class DayNight : Node
     /// </summary>
     private void ApplyOccasionGlobals(Occasions.OccasionAtmosphere? atmo, Color tintLinear, float delta)
     {
-        RenderingServer.GlobalShaderParameterSet("world_snow", atmo?.Snow ?? 0f);
-        RenderingServer.GlobalShaderParameterSet("world_lights", atmo?.Lights ?? 0f);
+        RenderingServer.GlobalShaderParameterSet(GSnow, atmo?.Snow ?? 0f);
+        RenderingServer.GlobalShaderParameterSet(GLights, atmo?.Lights ?? 0f);
 
         float density = atmo == null ? 0f : Mathf.Lerp(atmo.MistDay, atmo.MistNight, Night);
         if (density > 0f && TrackMistTop(atmo!.MistHeight, delta))
         {
             // the mist is lit like everything else, so it darkens with the evening
             var mist = atmo.MistColor.SrgbToLinear();
-            RenderingServer.GlobalShaderParameterSet("world_mist_color",
+            RenderingServer.GlobalShaderParameterSet(GMistColor,
                 new Vector3(mist.R * tintLinear.R, mist.G * tintLinear.G, mist.B * tintLinear.B));
-            RenderingServer.GlobalShaderParameterSet("world_mist_top", _mistTop);
+            RenderingServer.GlobalShaderParameterSet(GMistTop, _mistTop);
         }
         else
         {
             density = 0f;
         }
-        RenderingServer.GlobalShaderParameterSet("world_mist_density", density);
+        RenderingServer.GlobalShaderParameterSet(GMistDensity, density);
     }
 
     /// <summary>
@@ -248,17 +259,7 @@ public partial class DayNight : Node
     /// </summary>
     private static (Color Tint, Color Sky) Palette(float elevation)
     {
-        (float El, Color Tint, Color Sky)[] keys =
-        {
-            (-90f, new Color(0.30f, 0.33f, 0.50f), new Color(0.03f, 0.04f, 0.09f)),
-            (-10f, new Color(0.30f, 0.33f, 0.50f), new Color(0.03f, 0.04f, 0.09f)),
-            (-4f,  new Color(0.52f, 0.48f, 0.66f), new Color(0.22f, 0.20f, 0.35f)),   // blue hour
-            (0f,   new Color(0.78f, 0.50f, 0.42f), new Color(0.88f, 0.52f, 0.40f)),   // sunset
-            (6f,   new Color(1.00f, 0.78f, 0.58f), new Color(0.92f, 0.72f, 0.58f)),   // golden hour
-            (18f,  new Color(1.00f, 0.96f, 0.90f), new Color(0.76f, 0.80f, 0.86f)),
-            (35f,  new Color(1.00f, 1.00f, 1.00f), new Color(0.72f, 0.78f, 0.86f)),   // the old fixed look
-            (90f,  new Color(1.00f, 1.00f, 1.00f), new Color(0.72f, 0.78f, 0.86f)),
-        };
+        var keys = PaletteKeys;
         for (int i = 1; i < keys.Length; i++)
         {
             if (elevation > keys[i].El) continue;
@@ -269,4 +270,16 @@ public partial class DayNight : Node
         }
         return (keys[^1].Tint, keys[^1].Sky);
     }
+
+    private static readonly (float El, Color Tint, Color Sky)[] PaletteKeys =
+        {
+            (-90f, new Color(0.30f, 0.33f, 0.50f), new Color(0.03f, 0.04f, 0.09f)),
+            (-10f, new Color(0.30f, 0.33f, 0.50f), new Color(0.03f, 0.04f, 0.09f)),
+            (-4f,  new Color(0.52f, 0.48f, 0.66f), new Color(0.22f, 0.20f, 0.35f)),   // blue hour
+            (0f,   new Color(0.78f, 0.50f, 0.42f), new Color(0.88f, 0.52f, 0.40f)),   // sunset
+            (6f,   new Color(1.00f, 0.78f, 0.58f), new Color(0.92f, 0.72f, 0.58f)),   // golden hour
+            (18f,  new Color(1.00f, 0.96f, 0.90f), new Color(0.76f, 0.80f, 0.86f)),
+            (35f,  new Color(1.00f, 1.00f, 1.00f), new Color(0.72f, 0.78f, 0.86f)),   // the old fixed look
+            (90f,  new Color(1.00f, 1.00f, 1.00f), new Color(0.72f, 0.78f, 0.86f)),
+        };
 }

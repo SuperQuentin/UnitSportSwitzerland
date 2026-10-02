@@ -35,23 +35,7 @@ public partial class Main : Node
 	{
 		SetWindowTitle(GetWindow());
 
-		// the network rules' own self-checks: vision interest and remote interpolation
-		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--interestcheck") >= 0)
-		{
-			bool ok = UnitSport.Net.Interest.SelfCheck() & UnitSport.Net.RemoteInterpolator.SelfCheck();
-			GD.Print(ok ? "[interestcheck] RESULT: ok" : "[interestcheck] RESULT: FAILED");
-			GetTree().Quit(ok ? 0 : 1);
-			return;
-		}
-
-		// the CD beat analyser's self-test: synthetic clicks at known tempos
-		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--beatcheck") >= 0)
-		{
-			bool ok = UnitSport.Audio.Cd.BeatAnalyzer.SelfCheck();
-			GD.Print(ok ? "[beatcheck] RESULT: ok" : "[beatcheck] RESULT: FAILED");
-			GetTree().Quit(ok ? 0 : 1);
-			return;
-		}
+		// the quick self-checks (--interestcheck, --beatcheck…) run in ClientWorld.QuickChecks
 
 		// LAN discovery probe: browse mDNS for dedicated servers, list them, quit (docs/notes/net/lan-discovery.md)
 		int dc = Array.IndexOf(OS.GetCmdlineUserArgs(), "--discovercheck");
@@ -129,6 +113,15 @@ public partial class Main : Node
 		if (UnitSport.Net.Swarm.ParseArgs() is { } swarm)
 		{
 			AddChild(swarm);
+			return;
+		}
+
+		// a test that names its systems (#221, Core/Systems): physics off is a stub, the space never steps;
+		// --world flat is the flat TestWorld, no map at all
+		if (!Systems.On(Systems.Physics)) PhysicsServer3D.SetActive(false);
+		if (Systems.World == Systems.WorldKind.Flat)
+		{
+			AddChild(new TestWorld { Name = "World" });
 			return;
 		}
 

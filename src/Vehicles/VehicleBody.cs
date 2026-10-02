@@ -41,6 +41,8 @@ public partial class VehicleBody : CharacterBody3D
     [Export] public float Spool { get; set; }
     /// <summary>A car's open doors, one bit each (<see cref="CarRig.DoorLeft"/>..): left open for show, or by whoever just got out.</summary>
     [Export] public byte DoorsOpen { get; set; }
+    /// <summary>A truck's joints as its authority rolls it on (#162), for the copies: its trailer swings where it does.</summary>
+    [Export] public Vector3 TrainAngles { get; set; }
 
     public ChunkManager? Terrain { get; set; }
 
@@ -52,8 +54,18 @@ public partial class VehicleBody : CharacterBody3D
 
     public long Owner { get; private set; }
 
+    /// <summary>A parked bus's doors, one bit each (#162: open, they can be walked through; anyone works them by their buttons).</summary>
+    public byte BusDoors => Ride is Truck { IsBus: true } ? DoorsOpen : (byte)0;
+
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
+
+    /// <summary>
+    /// The drawn machine, for outlining it (#261), and the frame of its first section (a parked
+    /// train's others are its children named <c>Section{k}</c>). Null on a headless peer, but for a
+    /// parked truck or bus: an empty frame there, posed on the ground as the model would be (#162).
+    /// </summary>
+    public Node3D? Visual => _visual;
 
     private VehicleState _initial;
     private RideMotion _motion;
@@ -83,7 +95,8 @@ public partial class VehicleBody : CharacterBody3D
             // part of it
             Ride = state.CreateRide() ?? new Bicycle(),
             Wrecked = state.Wrecked,
-            DoorsOpen = (byte)(state.DoorsOpen & 15),
+            // a car's doors, or a bus's (kept in its flags while it is driven)
+            DoorsOpen = (byte)((state.CreateRide() is Truck { IsBus: true } ? state.Flags >> 4 : state.DoorsOpen) & 15),
             Health = state.Health,
             EngineOn = state.EngineOn,
             Owner = state.Owner,
@@ -134,7 +147,7 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         var replication = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen" })
+        foreach (var prop in new[] { ".:position", ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen", ".:TrainAngles" })
             replication.AddProperty(prop);
         // states that change a few times per life of a vehicle go reliably on change; the motion
         // at 20 Hz while it moves (every frame before, for a bike standing in a field for hours)
@@ -171,6 +184,17 @@ public partial class VehicleBody : CharacterBody3D
                 _engineSound = new EngineSynth(profile, spatial: true, seed: (int)Math.Max(1, Owner));
                 AddChild(_engineSound);
             }
+        }
+        else if (Ride is Truck or ParkedTrailer)
+        {
+            // Headless (the server, a check) nothing is drawn, but the frame the model would stand in
+            // still matters: a parked bus's decks are walked in it, and its guests found by it
+            // (#162). Its box rests on whatever it touches, a metre off the road at a door on a
+            // crest; the frame is posed on the ground axle by axle, as the model is.
+            _visual = new Node3D { Name = "Visual" };
+            int sections = Ride is Truck train ? train.Train.Count : ((ParkedTrailer)Ride).Bodies.Count;
+            for (int k = 1; k < sections; k++) _visual.AddChild(new Node3D { Name = $"Section{k}" });
+            AddChild(_visual);
         }
 
         _wasWrecked = Wrecked;
@@ -223,8 +247,12 @@ public partial class VehicleBody : CharacterBody3D
     /// </remarks>
     public VehicleState Capture() => new(Kind, GlobalPosition,
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
-        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning, DoorsOpen, _initial.Setup,
-        _initial.Train, _initial.Angles, _initial.Flags, _initial.Load, _initial.Radio, _initial.Cd);
+        _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning,
+        Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
+        _initial.Train, _initial.Angles,
+        // a bus's doors as they are now, where a truck keeps them
+        Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4) : _initial.Flags, _initial.Load,
+        _initial.Radio, _initial.Cd);
 
     /// <summary>The live station its radio plays, as the driver left it (spawn data only: nobody tunes a parked car).</summary>
     public int Radio => _initial.Radio;
@@ -241,13 +269,17 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>Opens or shuts one door. The authority's call: others ask <see cref="VehicleManager.ToggleDoor"/>.</summary>
     public void ToggleDoor(byte bit)
     {
-        if (Wrecked || Ride is not Car) return;
+        if (Wrecked || Ride is not (Car or Truck { IsBus: true })) return;
         DoorsOpen ^= (byte)(bit & 15);
         _shutDriverIn = 0f;   // a door someone chose to leave open stays open
     }
 
+    private readonly HashSet<FootPlayer> _guests = new();
+
     public override void _PhysicsProcess(double delta)
     {
+        // a parked bus: people walking in it or up to its doors do not shove it (#162)
+        if (Ride.Walkable) FootPlayer.WatchGuests(this, Ride, _guests, new PhysicsBody3D[] { this }, k => k == 0 ? Visual ?? this : Visual?.GetNodeOrNull<Node3D>($"Section{k}"));
         float dt = (float)delta;
         _life += dt;
         if (_life > SettleTime && _ignoring.Count > 0)
@@ -273,7 +305,8 @@ public partial class VehicleBody : CharacterBody3D
         if (!inside && Terrain != null && !Terrain.HasCollisionAt(GlobalPosition)) return;
 
         // the player's safety net, for vehicles: never under the terrain surface
-        if (!inside && Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f)
+        if (!inside && Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f
+            && !Terrain.InTunnel(GlobalPosition) && !Terrain.FloorBelow(this, GlobalPosition, GetRid()))
         {
             GlobalPosition = GlobalPosition with { Y = ground + 0.2f };
             Velocity = Velocity with { Y = 0f };
@@ -283,6 +316,7 @@ public partial class VehicleBody : CharacterBody3D
         bool onFloor = IsOnFloor();
         if (Wrecked) StepWreck(dt, onFloor);
         else if (Ride is Flyer flyer) StepFlyer(dt, onFloor, flyer);
+        else if (Ride.Driverless) StepDriverless(dt, onFloor);
         else StepRolling(dt, onFloor);
 
         // at rest long enough: sleep, and stop asking for collision
@@ -372,6 +406,44 @@ public partial class VehicleBody : CharacterBody3D
         if (_visual != null) flyer.Pose(_visual, _flight.Yaw, _flight);
     }
 
+    /// <summary>
+    /// A car, a truck or a bus nobody drives, rolling on (#162): its own physics with no input, as
+    /// it does with passengers aboard and nobody at the wheel (#158): no pedal, the wheel let go,
+    /// the engine dragging, a truck's automatic holding it once it stops. It used to slide straight
+    /// on, losing 3 m/s every second, whatever the road did. At rest it sleeps as before.
+    /// </summary>
+    private void StepDriverless(float dt, bool onFloor)
+    {
+        var normal = onFloor ? GetFloorNormal() : Vector3.Up;
+        var heading = -GlobalTransform.Basis.Z with { Y = 0 };
+        heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
+        // the slope along the way it points, as the ride feels it when driven
+        float grade = onFloor ? -(heading.X * normal.X + heading.Z * normal.Z) / Mathf.Max(normal.Y, 0.15f) : 0f;
+        bool inside = Interiors.InteriorManager.InInteriorSpace(GlobalPosition);
+        var surface = Terrain != null ? Audio.Surfaces.At(Terrain, GlobalPosition, inside) : Audio.Surface.Asphalt;
+        if (Ride is Truck truck)
+        {
+            // nobody's foot on anything: the engine only drags. Idling in drive, a bus's converter
+            // would creep on for ever, with nobody aboard to stop it
+            truck.EngineRunning = false;
+            truck.Box.ClutchHeld = false;
+        }
+        _motion.Yaw = Rotation.Y;
+        Ride.Step(new RideInput(0f, 0f, 0f, false), new RideGround(onFloor, grade, surface), dt, ref _motion);
+        Rotation = new Vector3(0, _motion.Yaw, 0);
+        heading = -GlobalTransform.Basis.Z with { Y = 0 };
+        heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
+        var v = heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed;
+        v.Y = onFloor ? Mathf.Min(Velocity.Y, 0f) : Velocity.Y - Rideable.Gravity * dt;
+        Velocity = v;
+        MoveAndSlide();
+        // what it hit takes the speed it could not keep (a wall, a tree, another vehicle)
+        var real = GetRealVelocity();
+        float achieved = new Vector2(real.X, real.Z).Length();
+        if (achieved < _motion.Speed - 1f) _motion.Speed = Mathf.Max(achieved, _motion.Speed - 25f * dt);
+        if (Ride is Truck rolled) TrainAngles = rolled.Angles;
+    }
+
     /// <summary>A riderless bike: it rolls on, slows, and falls over.</summary>
     private void StepRolling(float dt, bool onFloor)
     {
@@ -397,6 +469,12 @@ public partial class VehicleBody : CharacterBody3D
 
         if (_visual == null) return;
         if (_visual is CarRig doors) doors.DoorsOpen = DoorsOpen;
+        else if (_visual is HeavyRig bus && Ride is Truck { IsBus: true })
+        {
+            // the bus's leaves swing on its rig, an articulated one's on both halves
+            bus.DoorsOpen = DoorsOpen;
+            foreach (var half in bus.GetChildren().OfType<HeavyRig>()) half.DoorsOpen = DoorsOpen;
+        }
 
         if (!IsMultiplayerAuthority() && Ride is Flyer remoteFlyer)
             remoteFlyer.Pose(_visual, Rotation.Y, new FlightMotion { Attitude = new Basis(Tilt) });
@@ -425,13 +503,20 @@ public partial class VehicleBody : CharacterBody3D
             rig.Headlights = _initial.Headlights && !Wrecked;
             rig.RoofOpen = _initial.RoofOpen;
         }
+        // a copy's trailer swings where its authority's does
+        if (!IsMultiplayerAuthority() && Ride is Truck swung && TrainAngles != default) swung.SetAngles(TrainAngles);
         StandOnGround(dt);
-        if (_visual is HeavyRig heavy && Ride is Truck truck)
+        // standing still, a parked truck's rigs were dressed with the same values every frame, the
+        // sections found by name each time (#221): once at rest is enough, again if it moves or burns
+        bool restDressed = _dressedAtRest == Wrecked && Velocity == Vector3.Zero;
+        if (_visual is HeavyRig heavy && Ride is Truck truck && !restDressed)
         {
             // parked as the driver left it: lamps, doors, the display; every section's wheels roll
             truck.UnpackFlags(_initial.Flags);
             _heavySpin += Velocity.Length() / truck.WheelRadius * dt;
-            foreach (var section in heavy.FindChildren("Section*", "", false, false).OfType<HeavyRig>().Prepend(heavy))
+            _dressedAtRest = Velocity == Vector3.Zero ? Wrecked : null;
+            _heavySections ??= heavy.FindChildren("Section*", "", false, false).OfType<HeavyRig>().Prepend(heavy).ToArray();
+            foreach (var section in _heavySections)
             {
                 truck.Dress(section, 0, false);
                 section.BrakeLights = false;
@@ -453,7 +538,21 @@ public partial class VehicleBody : CharacterBody3D
     }
 
     private float _standIn;
+
+    /// <summary>
+    /// Its frame (<see cref="Visual"/> and its sections) stands on the ground: false until the
+    /// first pose after it appears, while the frame is still the body's own, wherever its box came
+    /// to rest. A deck is not walked in before (#162): one built in the unposed frame and moved onto
+    /// the ground a frame later swept the driver who had just got up onto its roof.
+    /// </summary>
+    public bool Posed { get; private set; }
     private bool _stoodAsleep;
+    /// <summary>Wrecked or not when the parked rigs were last dressed standing still; null while it moves.</summary>
+    private bool? _dressedAtRest;
+    private HeavyRig[]? _heavySections;
+    /// <summary>The drawn sections by index (0 the visual itself), found by name once.</summary>
+    private Node3D?[]? _standSections;
+    private PhysicsRayQueryParameters3D? _groundQuery;
 
     /// <summary>
     /// A truck, a bus or a trailer stands on the ground as it did when driven: every section pitched
@@ -470,12 +569,17 @@ public partial class VehicleBody : CharacterBody3D
         if (bodies == null || local == null || _visual == null || Wrecked) return;
         bool rolling = Velocity.LengthSquared() > 0.01f;
         if (!rolling && (_standIn -= dt) > 0f) return;
-        _standIn = 0.25f;
+        // at rest and stood: the ground under it is looked at again every 2 s, not 4 times a second
+        // (a parked truck cast its rays for ever, #221); often enough for a road that streams in late
+        _standIn = _stoodAsleep ? 2f : 0.25f;
 
         var poses = HeavyGround.Stand(GlobalTransform, bodies, local, Ground);
+        if (_standSections?.Length != poses.Length)
+            _standSections = Enumerable.Range(0, poses.Length).Select(k => k == 0 ? _visual : _visual.GetNodeOrNull<Node3D>($"Section{k}")).ToArray();
         _visual.GlobalTransform = poses[0];
         for (int k = 1; k < poses.Length; k++)
-            if (_visual.GetNodeOrNull<Node3D>($"Section{k}") is { } rig) rig.GlobalTransform = poses[k];
+            if (_standSections[k] is { } rig) rig.GlobalTransform = poses[k];
+        Posed = true;
 
         // the boxes, at rest only (and once more when it settles): sections from their own pose
         bool settled = _asleep || !IsMultiplayerAuthority();
@@ -500,9 +604,27 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>The ground's height under a point: whatever is solid there (a road, a deck) but this vehicle, else the terrain.</summary>
     private float Ground(Vector3 p)
     {
-        var query = PhysicsRayQueryParameters3D.Create(p + Vector3.Up * 3f, p + Vector3.Down * 6f,
-            CollisionMask & ~World.TreeColliders.Layer, new Godot.Collections.Array<Rid> { GetRid() });
+        // one query for all its rays (a new one and a new exclude array per ray before, #221)
+        var query = _groundQuery ??= new PhysicsRayQueryParameters3D { Exclude = new Godot.Collections.Array<Rid> { GetRid() } };
+        query.From = p + Vector3.Up * 3f;
+        query.To = p + Vector3.Down * 6f;
+        query.CollisionMask = CollisionMask & ~World.TreeColliders.Layer;
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        // not a player: one standing in a parked bus by its front axle (up from the wheel, #162) was
+        // read as the road, and the bus stood on their head, two metres up. Rare: a query of its own.
+        if (hit.Count > 0 && hit["collider"].AsGodotObject() is FootPlayer)
+        {
+            // (Exclude hands out a copy: added to in place, it would change nothing)
+            var exclude = new Godot.Collections.Array<Rid> { GetRid() };
+            var past = new PhysicsRayQueryParameters3D { From = query.From, To = query.To, CollisionMask = query.CollisionMask };
+            for (int tries = 0; tries < 4 && hit.Count > 0 && hit["collider"].AsGodotObject() is FootPlayer; tries++)
+            {
+                exclude.Add(hit["rid"].AsRid());
+                past.Exclude = exclude;
+                hit = GetWorld3D().DirectSpaceState.IntersectRay(past);
+            }
+            if (hit.Count > 0 && hit["collider"].AsGodotObject() is FootPlayer) hit.Clear();
+        }
         if (hit.Count > 0) return hit["position"].AsVector3().Y;
         return Terrain != null && Terrain.TryGetHeight(p, out float g) ? g : p.Y;
     }

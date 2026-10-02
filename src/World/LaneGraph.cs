@@ -121,8 +121,7 @@ public sealed class LaneGraph
                 long keyStart = 0, keyEnd = 0;
                 for (int i = 0; i < pts.Length; i++)
                 {
-                    double e = tile.Id.MinE + seg.Points[i * 3];
-                    double n = tile.Id.MaxN - seg.Points[i * 3 + 2];
+                    var (e, n) = seg.Lv95(tile.Id, i);
                     pts[i] = origin.ToWorld(e, n, seg.Points[i * 3 + 1] - sink);
                     if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
                     if (i == 0) keyStart = Key(e, n);
@@ -155,6 +154,15 @@ public sealed class LaneGraph
 
     /// <summary>How many edge ends meet at a point: 2 is a road carrying on (a tile seam, a split line), 3 or more a junction.</summary>
     public int Degree(long key) => Incident(key).Count();
+
+    /// <summary>
+    /// Whether another road meeting at <paramref name="key"/> is more important than <paramref name="edge"/> (a lower
+    /// class): the car on <paramref name="edge"/> gives way. Also across a short connector (<see cref="JoinTrimmedEnds"/>):
+    /// a side road trimmed back from the main road meets only its connectors, of its own class.
+    /// </summary>
+    public bool GivesWay(long key, LaneEdge edge) => Incident(key).Any(o => o.Edge != edge
+        && (o.Edge.Class < edge.Class
+            || (o.Edge.Length < 20f && Incident(o.AtStart ? o.Edge.KeyEnd : o.Edge.KeyStart).Any(f => f.Edge != o.Edge && f.Edge != edge && f.Edge.Class < edge.Class))));
 
     /// <summary>
     /// Joins road ends that stop short of each other with a straight connector edge: the road

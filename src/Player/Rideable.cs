@@ -197,7 +197,7 @@ public abstract class Rideable
     public virtual float DismountSpeed => 2.5f;
 
     /// <summary>The mesh, parented under the player body. Built facing +Z, origin on the ground.</summary>
-    public abstract Node3D BuildVisual(int riderIndex);
+    public abstract Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default);
 
     // ---- vehicles vs equipment ------------------------------------------------------------
     /// <summary>
@@ -266,6 +266,14 @@ public abstract class Rideable
     /// truck). A motorbike does not: its pillion gets off with the rider.
     /// </summary>
     public virtual bool Driverless => false;
+
+    /// <summary>
+    /// The decks a player can walk about on, one per section that has one (#162): a bus's saloon.
+    /// Empty: not walkable. Read from the drawn model, once per kind.
+    /// </summary>
+    public virtual Avatar.VehicleDeck[] Decks => System.Array.Empty<Avatar.VehicleDeck>();
+
+    public bool Walkable => Decks.Length > 0;
 
     /// <summary>Seat <paramref name="i"/>'s hip in this ride's node frame, the train straight: for picking the nearest seat.</summary>
     public virtual Vector3 SeatPosition(int i) => Seats[i].Hip;

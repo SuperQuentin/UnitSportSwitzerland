@@ -23,8 +23,10 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `void-rescue` — Falling through the world (under terrain, into unstreamed void, under an interior floor) puts you back on the ground; safe spot per space; `--voidcheck`
 - `crash-ragdoll` — Crash ragdoll (#214): through the windscreen as verlet joints, crash camera, bone-break and glass sounds, `PoseRagdoll` replication, `--wall`, `tools/crashnetcheck.sh`
 - `player-overlap` — Two players set down on one spot ease apart (collision exception + 1.5 m/s nudge) instead of the solver throwing one kilometres (#203)
+- `perf-visibility-on-change` (net) — `FootPlayer`'s `Sync`/`RelayNear`/`RelayFar`/`Vis` keep `VisibilityUpdateMode.None`; any new visibility input must call `RefreshNetVisibility`/`RefreshRelays` on change
 
 - `passengers` — Passengers (#158): seats from the models, `PassengerService` hands them out, riders moved and drawn from the host's copy, driverless vehicles when the driver jumps out, take the wheel (F / RB), hand-over between players, `--passengernet a|b|c`
+- `walk-aboard` — Walking about in a moving vehicle (#162): `VehicleDeck` from the model (ramps, flush door steps), decks as collision carried with the drawn vehicle, velocity measured from motion, hulls ignore their guests, steady/sway/full inertia (`--deck-inertia`, `/inertia`), seats by where you stand, `--decknet a|b|solo`
 - `trucks-buses` — Trucks and buses (#70): `HeavyCatalog` RideKind 96..119, trailers by code, a planar multi-body train (pins, per-axle tyres), sections as their own bodies, clutch/converter driveline in five shift modes, retarder, air, rollover, coupling, bus doors/kneel/destination, `--truckcheck`, `--truckprobe`, `--heavynet`
 
 ## Commands
@@ -33,6 +35,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 
 ## Gotchas
 
+- `perf-pose-mesh-cache` (avatar) — `ApplyFootPose` rebuilds the figure only on a new `FootPoseKey`, in place, remotes throttled by `HoldRemoteFigure`; a new input to the figure goes in the key (#221)
 - `launch-clutch-bites-near-launch` — An automated clutch must bite near the launch speed, not from idle: biting at 600 rpm a diesel never got up to pull
 
 - `player-scale-set-speed-size` — Player scale is set by speed, not by size: A 1.8 m capsule moving at 6-14 m/s reads as a giant next to 10 m...
@@ -56,3 +59,4 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `animatable-body-is-static-body` — `AnimatableBody3D` is a `StaticBody3D`: filtering physics hits by `is StaticBody3D` also drops the traffic
 - `tyre-wear-brake-wear-fade` — Tyre wear, brake wear and fade: (Settings -> Feel, off by default; `--tyrewear on`, `--brakewear on`; #20). Tyres...
 - `car-soft-top-popups` — Car soft top and pop-up headlights: (`Car.Headlights`/`RoofOpen`, `CarRig`; #48). L lights (pop-ups rise), O roof on...
+- `perf-no-per-frame-allocations` (general) — `PlayerFeel` HUD labels go through reused `StringBuilder`s + `SetText` (assign only on change); per-frame `InputHints` calls are memoised, `Tag()` concatenates
