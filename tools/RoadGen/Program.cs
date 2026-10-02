@@ -143,7 +143,7 @@ else if (args.Contains("--rewrite"))
             (double.Parse(en[0], CultureInfo.InvariantCulture), double.Parse(en[1], CultureInfo.InvariantCulture));
     }
 
-    var ids = ArgValue("--tiles-file") is { } file ? ReadTilesFile(file)
+    var ids = ArgValue("--tiles-file") is { } file ? TileId.ReadList(file)
         : ArgValue("--tiles") is { } spec ? ParseTiles(spec) : DiscoverTiles(chunks, RawRoads.DirFor(temp));
     if (ids.Count == 0)
     {
@@ -293,19 +293,6 @@ static List<TileId> DiscoverTiles(params string[] dirs)
                 ids.Add((e, n));
         }
     return ids.Select(t => new TileId(t.Item1, t.Item2)).ToList();
-}
-
-static List<TileId> ReadTilesFile(string path)
-{
-    var ids = new List<TileId>();
-    foreach (var raw in File.ReadLines(path))
-    {
-        var line = raw.Split('#')[0].Trim();
-        if (line.Length == 0) continue;
-        var parts = line.Split('-', '_', ',');
-        ids.Add(new TileId(int.Parse(parts[0]), int.Parse(parts[1])));
-    }
-    return ids;
 }
 
 // "2583,1113" for one tile, "2578-2588,1108-1118" for a block, ";" to join several

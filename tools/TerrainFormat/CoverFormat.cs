@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.IO.Compression;
 
 namespace UnitSport.Terrain.Format;
@@ -222,14 +221,8 @@ public static class CoverFormat
         if (cells.Length != Size * Size)
             throw new ArgumentException($"Expected {Size}^2 cover cells, got {cells.Length}");
 
-        Span<byte> header = stackalloc byte[HeaderSize];
-        BinaryPrimitives.WriteUInt32LittleEndian(header[0..], Magic);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[4..], Version);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[6..], 1); // flags: deflate
-        BinaryPrimitives.WriteInt32LittleEndian(header[8..], id.E);
-        BinaryPrimitives.WriteInt32LittleEndian(header[12..], id.N);
-        BinaryPrimitives.WriteInt32LittleEndian(header[16..], Size);
-        output.Write(header);
+        // flags 1 = deflate; the count word holds the cell side, not a record count
+        new TileHeader(Magic, Version, 1, id, Size).Write(output);
 
         using var deflate = new DeflateStream(output, CompressionLevel.Optimal, leaveOpen: true);
         deflate.Write(cells);
@@ -237,16 +230,9 @@ public static class CoverFormat
 
     public static byte[] Decode(Stream input)
     {
-        Span<byte> header = stackalloc byte[HeaderSize];
-        input.ReadExactly(header);
-
-        uint magic = BinaryPrimitives.ReadUInt32LittleEndian(header[0..]);
-        if (magic != Magic)
-            throw new InvalidDataException($"Bad cover magic 0x{magic:X8}");
-        ushort version = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
-        if (version != Version)
-            throw new InvalidDataException($"Unsupported cover version {version}");
-        int size = BinaryPrimitives.ReadInt32LittleEndian(header[16..]);
+        var header = TileHeader.Read(input, Magic, "cover");
+        header.CheckVersion(Version, "cover");
+        int size = (int)header.Count;
         if (size != Size)
             throw new InvalidDataException($"Unsupported cover size {size}");
 

@@ -17,7 +17,8 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
-`testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard).
+`testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
+`dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it).
 
 ## Rules
 
