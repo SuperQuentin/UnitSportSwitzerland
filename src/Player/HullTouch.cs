@@ -83,18 +83,21 @@ public static class HullTouch
     }
 
     /// <summary>
-    /// Puts <paramref name="me"/> in the water <paramref name="off"/> m off the boat's starboard side as
-    /// drawn (at <paramref name="along"/> m from its middle, + ahead), then strokes into the side for
+    /// Puts <paramref name="me"/> in the water <paramref name="off"/> m off the boat's side as drawn (the
+    /// side it is on) (at <paramref name="along"/> m from its middle, + ahead), then strokes into the side for
     /// <paramref name="seconds"/>, measuring. <paramref name="place"/> false: from where the swimmer is.
     /// </summary>
     public static async Task<Result> Swim(Node host, FootPlayer me, VehicleBody boat, double seconds, float off = 1.2f, float along = 0f, bool place = true)
     {
         if (place && Hull(boat, out var hullShape, out _, out var at))
         {
+            // on the side the swimmer is on: online its copy elsewhere slides there from where it was,
+            // and through the boat it shoved the boat aside
             var side = (at.Basis.X with { Y = 0 }).Normalized();
+            if ((me.GlobalPosition - at.Origin).Dot(side) < 0f) side = -side;
             var ahead = (-at.Basis.Z with { Y = 0 }).Normalized();
             me.StartSwimmingAtSurface(at.Origin + side * (Bounds(hullShape).End.X + off) + ahead * along);
-            await host.ToSignal(host.GetTree().CreateTimer(0.3), SceneTreeTimer.SignalName.Timeout);
+            await host.ToSignal(host.GetTree().CreateTimer(1.0), SceneTreeTimer.SignalName.Timeout);
         }
         int frames = 0, contacts = 0, levelN = 0;
         float worstPose = 0f, tilt = 0f, worstOff = 0f, levelSum = 0f, deepest = 0f, under = 0f, underMax = 0f;
