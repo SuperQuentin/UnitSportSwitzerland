@@ -461,7 +461,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
-            || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null
+            || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
@@ -533,6 +533,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _radioUi.Give = items.Give;
         AddChild(_radioUi);
         if (Items.CarCdCheck.Create(() => LocalPlayer, () => _players, items.Inventory, networked: false) is { } carCdShots) AddChild(carCdShots);
+        if (Items.InteractCheck.Create(() => LocalPlayer, items.Inventory) is { } interactCheck) AddChild(interactCheck);
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         var gathering = new Loot.Gathering(_chunks, origin, items);
         AddChild(gathering);

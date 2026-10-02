@@ -71,7 +71,7 @@ Crowd moves (#261), outside the tables: `Move = HumanMeshBuilder.GroupPogo` (100
   slot mixes the channels of the move before into the new one (`Mix(DanceCh)`), no cut.
 - **Groove** (every table move, not the jumps): the knees give 1.8 cm on each beat, the head nods
   0.045 rad into it, the shoulders bounce 1 cm a beat-fraction later, the hips sway 1.2 cm over two beats.
-- **Pogo**: one jump per beat, off at b = 0.16, down at 0.94, 19 cm up (ankles raised with the hip,
+- **Pogo**: one jump per beat, off at b = 0.16, down at 0.94, 22 cm up (ankles raised with the hip,
   so the feet really leave the ground), a soft knee give on landing, one fist punched up every
   other beat. **JumpTogether**: beats 1-3 bounce deeper (3.5, 6, 8.5 cm) with the arms swinging back,
   beat 4 crouches 13 cm and jumps 34 cm with both arms thrown up, landing on the next bar's one.

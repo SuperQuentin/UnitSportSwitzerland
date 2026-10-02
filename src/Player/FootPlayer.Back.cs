@@ -51,7 +51,7 @@ public partial class FootPlayer
         var z = -back;
         var x = up.Cross(z).Normalized();
         var basis = new Basis(x, z.Cross(x), z) * new Basis(Vector3.Right, -0.12f);
-        var at = m.Chest + back * 0.2f + up * 0.02f;
+        var at = m.Chest + back * 0.18f - up * 0.07f;
         var frame = new Transform3D(basis.Scaled(Vector3.One * 0.85f), at);
 
         // it dances on the back too, a little less than on the ground

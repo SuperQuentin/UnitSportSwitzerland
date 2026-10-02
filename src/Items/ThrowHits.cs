@@ -74,7 +74,8 @@ public static class ThrowHits
         {
             if (node is not FootPlayer p || p.Npc || !p.IsInsideTree()) continue;
             if (p.IsMultiplayerAuthority()) { thrower = p; continue; }   // never the thrower: it leaves their hand
-            if (p.Down != 0 || FootPlayer.NetId(p.Name) is not long peer || peer <= 0) continue;
+            // on foot only: someone in a car is behind its glass and steel
+            if (p.Down != 0 || p.Ride != RideKind.OnFoot || p.RidingAlong || FootPlayer.NetId(p.Name) is not long peer || peer <= 0) continue;
             if (Through(from, dir, p.GlobalPosition, out float t) && t < bestT) { bestT = t; best = p; }
         }
         if (best == null || thrower == null) return false;

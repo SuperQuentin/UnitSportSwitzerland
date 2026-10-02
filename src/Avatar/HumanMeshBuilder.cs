@@ -1543,7 +1543,7 @@ public static class HumanMeshBuilder
     {
         float air = Air(t.B, 0.16f, 0.94f);
         float give = Give(t.B, 0.03f, 0.09f);
-        float h = 0.19f * air;
+        float h = 0.22f * air;
         ch.Py = h - 0.085f * give;
         ch.Theta = 0.05f + 0.10f * give;
         ch.ThN = 0.20f * give - 0.10f * air;

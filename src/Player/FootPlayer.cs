@@ -1605,11 +1605,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // the same hash with no "who" in it, so every peer lands on it on the same bar (#261).
         int slot = Mathf.FloorToInt(bar / (float)Avatar.HumanMeshBuilder.BarsPerMove);
         int move = DanceMoveFor(slot, style), prev = DanceMoveFor(slot - 1, style);
+        if (DanceMoveOverride >= 0) move = prev = DanceMoveOverride;
         float barPhase = (beat - bar * 4 + phase) / 4f;
         // beats into this slot: the first one flows out of the last move instead of cutting to the next
         float into = (bar - slot * Avatar.HumanMeshBuilder.BarsPerMove) * 4 + (beat - bar * 4) + phase;
         return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev, Mathf.Clamp(into / 0.9f, 0f, 1f));
     }
+
+    /// <summary>A move forced on every dancer on this machine (a probe's screenshot), -1 for none.</summary>
+    internal static int DanceMoveOverride = -1;
 
     /// <summary>This dancer's move for a bar slot: its own, or the crowd's when the slot is a crowd one.</summary>
     private int DanceMoveFor(int slot, Audio.Cd.MusicStyle style)

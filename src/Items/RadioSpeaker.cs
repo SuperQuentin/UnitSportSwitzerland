@@ -63,8 +63,8 @@ public partial class RadioSpeaker : AudioStreamPlayer3D
         }
     }
 
-    /// <summary>Keeps the slider's value (Settings saves it with everything else).</summary>
-    public static void SaveVolume() => Core.GameSettings.Current.Save();
+    /// <summary>Keeps the slider's value, and nothing else of this run's settings.</summary>
+    public static void SaveVolume() => Core.GameSettings.SaveOnly(nameof(Core.GameSettings.MusicVolume), UserVolume);
 
     private readonly Hearing _hearing = new(8000f);
 
@@ -85,7 +85,8 @@ public partial class RadioSpeaker : AudioStreamPlayer3D
 
     public override void _Process(double delta)
     {
-        _hearing.Step(this, (float)delta);
+        // where it is heard from and how muffled: only worth the rays while it has something to play
+        if (On && CdId != 0) _hearing.Step(this, (float)delta);
         VolumeDb = BaseDb + _hearing.Db;
         _sinceSeek += delta;
         double want = WantedPosition;
