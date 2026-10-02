@@ -184,6 +184,11 @@ public sealed class NetworkChunkSource : IChunkSource
         }, ct).ConfigureAwait(false);
     }
 
+    /// <summary>The shipped landings first, else the server's, pulled into the cache during sync (#377).</summary>
+    public async Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) =>
+        await _local.LoadLandingsAsync(ct).ConfigureAwait(false)
+        ?? await LocalChunkSource.ReadLandingsAsync(_cacheDirectory, ct).ConfigureAwait(false);
+
     // ---- cache and fetch ------------------------------------------------------------------
 
     /// <summary>

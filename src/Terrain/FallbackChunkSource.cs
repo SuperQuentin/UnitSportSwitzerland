@@ -324,6 +324,9 @@ public sealed class FallbackChunkSource : IChunkSource
     /// exactly zero — so this reads no real tile. Without a real index there is no blend out
     /// here, which only shows past the rings: a tile drawn by the loader discards the horizon.
     /// </summary>
+    /// <summary>The real region's landings: the generated lakes have none.</summary>
+    public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
+
     public async Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
     {
         var real = await _inner.LoadHorizonAsync(ct).ConfigureAwait(false);

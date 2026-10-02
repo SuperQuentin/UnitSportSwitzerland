@@ -1566,6 +1566,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
         else if (_visual is Avatar.BoatRig boatRig) boatRig.DriverShown = SeatIndex == 0;
+        else if (_visual is Avatar.SteamerRig steamerRig) steamerRig.DriverShown = SeatIndex == 0;
         SetRemoteEngine(_remoteRide);
     }
 
@@ -1584,7 +1585,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 _remoteEngine = new Audio.EngineSynth(boat.Sound, spatial: true, seed: GetMultiplayerAuthority()) { Name = "RemoteEngine" };
                 AddChild(_remoteEngine);
             }
-            _remoteEngine.Set(Anim.X, Anim.Y, Anim.Y, 0.15f + 0.25f * Anim.X);
+            // the steamer's shaft is signed, and a stopped steam engine is silent (#303)
+            if (boat is Steamer) _remoteEngine.Set(Mathf.Abs(Anim.X), Mathf.Abs(Anim.X), Anim.Y, Mathf.Abs(Anim.X) > 0.02f ? 0.25f + 0.3f * Mathf.Abs(Anim.X) : 0f);
+            else _remoteEngine.Set(Anim.X, Anim.Y, Anim.Y, 0.15f + 0.25f * Anim.X);
             return;
         }
         var craft = ride as Flyer;
@@ -2239,6 +2242,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return true;
         }
 
+        // swimming beside a steamer's gangway: up its ladder onto the deck (#303)
+        if (TryClimbAboard()) return true;
+
         // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"
         if (TryVehicleAt()) return true;
 
@@ -2281,6 +2287,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             vehicles.ToggleDoor(aim.Vehicle, aim.Door);
             return true;
         }
+        // a ship, with the setting on (#303): onto its deck by the nearest gangway, not at its wheel
+        if (Core.GameSettings.Current.BoardShipsOnDeck && TryBoardOnDeck(aim.Vehicle)) return true;
         vehicles.Claim(aim.Vehicle, EnterVehicle);
         return true;
     }
@@ -2331,6 +2339,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _flight.Control = state.Throttle;
         // a boat as it floated: its attitude (#302)
         if (_ride is Boat boarded && state.Angles != default) boarded.State.Attitude = Quaternion.FromEuler(state.Angles);
+        // the steamer's gangways as they were left (#303)
+        if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
         EngineOn = true;
         VehicleHealth = state.Health;
         if (_ride is Car car)
@@ -2356,7 +2366,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
-            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId,
+            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : _ride is Steamer gangways ? gangways.DoorsOpen : DoorsOpen, Setup: CarSetupId,
             Train: _ride is Truck t ? t.TrailerCode : 0,
             // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler() : default,
@@ -2464,8 +2474,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
         if (aisle is { } spot) StandIn(spot, state.Velocity, (door, right, side, frame, vehicle));
         else GlobalPosition = FindExit(door, right, side, frame, vehicle, grounded);
-        // over the side of a boat: into the water beside it, swimming (#302, #301)
-        if (vehicle is Boat && aisle == null) IntoWater(GlobalPosition, state.Velocity with { Y = 0 } * 0.5f);
+        // over the side of a boat: onto a pier or jetty alongside (#377), else into the water beside
+        // it, swimming (#302, #301)
+        if (vehicle is Boat && aisle == null && !StepOntoPier(door, right, side))
+            IntoWater(GlobalPosition, state.Velocity with { Y = 0 } * 0.5f);
     }
 
     /// <summary>
@@ -2789,6 +2801,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
         if (kind != RideKind.OnFoot) EndRagdoll();
+        // and the decks walked about on go at once, not at the next frame (#303): a steamer taken
+        // from its own deck had its hull inside that deck's boxes for a physics step and was shot
+        // into the sky by the solver
+        if (kind != RideKind.OnFoot) LeaveDecksNow();
         LeaveWater();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
@@ -2846,7 +2862,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // settle before anything it touches counts as a crash (_settle). Without both, the
             // solver's shove out of the hillside read as a 20 m/s impact and wrecked a plane
             // the instant it was mounted.
-            if (radius > _capsule.Radius + 0.05f) GlobalPosition += Vector3.Up * (radius - _capsule.Radius);
+            // (not a boat: its body's origin is its keel, afloat; a steamer taken from its deck rose 2.8 m and fell back in, #303)
+            if (radius > _capsule.Radius + 0.05f && _ride is not Boat) GlobalPosition += Vector3.Up * (radius - _capsule.Radius);
             _capsule.Radius = radius;
             SetBodyHeight(_ride?.BodyHeight ?? StandHeight);
         }
@@ -2896,6 +2913,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         if (_ride is Truck truck && HandleTruckInput(@event, truck))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_ride is Steamer steamer && HandleSteamerInput(@event, steamer))
         {
             GetViewport().SetInputAsHandled();
             return;

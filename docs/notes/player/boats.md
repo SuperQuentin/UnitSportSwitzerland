@@ -57,15 +57,12 @@
   loopback (`tools/boatnetcheck.sh`, gamey): the copy's pitch against B's surface slope correlates
   0.98 / 0.90 / 0.99 (idle / running / parked) where A's own boat does 1.00 / 0.93 / 0.99 on A's;
   keel depth under the surface 0.276 m on B, 0.277 m on A.
-- **For the steamer (#303)**: everything is a `BoatSpec`: columns (`PlaningHull(…, HullShape)` or
-  any list: a 70 m hull is more columns, e.g. 14 × 4), mass, inertia (or the box default), centre
-  of mass, drive (`BoatDrive`; paddles are a new value: thrust at two side points), `LiftShare` 0
-  for a displacement hull, `WindArea`. The hull's pose is `BoatState.Attitude` about
-  `Boat.Pivot`; a deck (`Rideable.Decks`, `DeckBuilder`) built in the visual's frame is carried by
-  the posed visual, so its sections pitch and roll with the hull (the deck system reads the visual's
-  transform every frame: `SectionFrame` is the posed `_visual`, `walk-aboard`). Trap for #303: a headless
-  peer has no visual for a parked boat, so its deck frame there is the level body; give it an empty
-  posed frame as `VehicleBody` does for a parked bus. Cost: one `WaterField.TryLevelAt` per column per substep.
+- **The steamer (#303)** is built on this model: `BoatDrive.Paddle` (two wheels on one shaft that
+  reverses through stop at the engine's pace), `LinearDrag` per kg (a 500 t hull at the small boats'
+  0.05 could not make 3 m/s), `RudderAt` (a rudder away from the thrust), see `steamer`. A boat's body
+  is not lifted when its capsule grows (`ApplyRide`: a steamer taken from its deck rose 2.8 m and fell
+  back in), and a shove faster than the model is never adopted as its velocity (only ever slower).
+  Cost: one `WaterField.TryLevelAt` per column per substep (the steamer: 56 columns).
 - **Measured** (`--boatcheck`, calm unless said): jetski draft 0.23 m, on the plane in 1.4 s, top
   82 km/h (spec 81), bow up 7° over the hump, running trim 2-3°, circle 59 m at 64 km/h banked 11°;
   speedboat draft 0.28 m, plane 3.2 s, top 70.5 km/h (38 kn), hump 6.6°, trim 3°, circle 55 m at
@@ -78,7 +75,9 @@
   `--boatcheck jetski|speedboat[,shots] --chunks fixture:lake` (quick; `shots` windowed: pictures
   in `test_output/boats/`); `tools/boatnetcheck.sh` (net; `SHOTS=1`: B's view in
   `test_output/boatnet_B_*.png`).
-- **Not done**: boats parked at real harbours (Nyon); a hull's collision box does not pitch (the
+- **At a jetty** (#377, `world/landings`): harbour jetties are solid decks; getting out beside one steps
+  onto it instead of into the water (`FootPlayer.Pier.cs`, `--steamercheck pier|nyon`).
+- **Not done**: boats placed at the real harbours (the jetties are there, nothing parks at them); a hull's collision box does not pitch (the
   hull boxes do, a parked boat's box stays level); wake foam lies where it was dropped, not on the
   moving waves; no water hiss/slap sound; boats in races have no water courses (the mount words
   `jetski`/`boat` parse); the jetski's rider is the motorbike rider (helmet).

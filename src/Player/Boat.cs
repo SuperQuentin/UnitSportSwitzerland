@@ -13,7 +13,7 @@ namespace UnitSport.Player;
 /// unused. Not a Flyer: it has seats, a hull that collides as drawn, and it is left in the world
 /// floating. Driven by <c>FootPlayer.BoatPhysics</c>, left by <c>VehicleBody.StepBoat</c>.
 /// </summary>
-public sealed class Boat : Rideable, IEngined
+public class Boat : Rideable, IEngined
 {
     public BoatSpec Spec { get; }
     private readonly RideKind _kind;
@@ -25,7 +25,8 @@ public sealed class Boat : Rideable, IEngined
     }
 
     /// <summary>A fresh boat of this kind, or null when the kind is not a boat.</summary>
-    public static Boat? For(RideKind kind) => BoatCatalog.For((int)kind) is { } spec ? new Boat(kind, spec) : null;
+    public static Boat? For(RideKind kind) => kind == RideKind.Steamer ? new Steamer()
+        : BoatCatalog.For((int)kind) is { } spec ? new Boat(kind, spec) : null;
 
     public static bool IsBoat(RideKind kind) => BoatCatalog.For((int)kind) != null;
 
@@ -43,7 +44,7 @@ public sealed class Boat : Rideable, IEngined
     public float Heave = NoHeave;
     public const float NoHeave = 99f;
 
-    private bool Jet => Spec.Drive == BoatDrive.Jet;
+    protected bool Jet => Spec.Drive == BoatDrive.Jet;
 
     public override RideKind Kind => _kind;
     public override string Label => Spec.Name;
@@ -98,7 +99,7 @@ public sealed class Boat : Rideable, IEngined
     public float Throttle => Mathf.Max(Controls.Throttle, Controls.Reverse);
 
     /// <summary>A PWC's 1.6 L triple on its short wet exhaust; a runabout's big V8 burbling through the water.</summary>
-    public EngineProfile Sound => _sound ??= Jet
+    public virtual EngineProfile Sound => _sound ??= Jet
         ? EngineProfile.Inline4Na with { Cylinders = 3, IdleRpm = Spec.IdleRpm, MaxRpm = Spec.MaxRpm, PipeM = 0.55f, Unevenness = 0.6f }
         : EngineProfile.For(EngineLayout.V8, Spec.IdleRpm, Spec.MaxRpm) with { PipeM = 1.7f, Unevenness = 2.4f };
     private EngineProfile? _sound;

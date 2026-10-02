@@ -26,6 +26,13 @@ public static class Lake
     public const double ShelfM = 150, DropM = 50, ShelfDepth = 2.5, DeepDepth = 25;
     public const double RiverHalfWidth = 8, RiverDepth = 2, RiverFall = 0.0067;
 
+    /// <summary>The fixture's boat landing (#377): a stop on the shelf, its pier planned out to the steamer's water.</summary>
+    public const string LandingName = "Fixture (lac)";
+    public const double LandingX = ShoreX + 110, LandingY = 260;
+
+    /// <summary>A harbour jetty (#377) straight out from the beach, for parking boats.</summary>
+    public const double JettyY = -60, JettyLength = 40;
+
     /// <summary>The lake's fetch for the waves: a big lake (a 2 km crossing and more in the long axis).</summary>
     public const double LakeFetch = 3000;
 
@@ -42,6 +49,10 @@ public static class Lake
             Extent = (-1000, -1100, 2700, 1100),
         };
         // the slipway: 300 m down to the waterline, then 40 m on into the shelf (a boat ramp)
+        // a boat landing out on the shelf (#377): its pier is planned from the stop, out to water
+        // that floats the steamer; and a jetty off the beach for the boats
+        c.Stops.Add((LandingName, LandingX, LandingY));
+        c.Jetties.Add(new() { (ShoreX - 8, JettyY, Level + 0.4), (ShoreX + JettyLength, JettyY, Level + 0.4) });
         var slip = new List<(double X, double Y, double Z)>();
         for (double x = -300; x <= ShoreX + 40; x += 2) slip.Add((x, SlipwayY, Ground(x, SlipwayY)));
         return c.Road(RoadClass.Road, slip);

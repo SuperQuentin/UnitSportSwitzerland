@@ -71,7 +71,7 @@ public partial class VehicleBody : CharacterBody3D
     public long Owner { get; private set; }
 
     /// <summary>A parked bus's doors, one bit each (#162: open, they can be walked through; anyone works them by their buttons).</summary>
-    public byte BusDoors => Ride is Truck { IsBus: true } ? DoorsOpen : (byte)0;
+    public byte BusDoors => Ride is Truck { IsBus: true } or Steamer ? DoorsOpen : (byte)0;
 
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
@@ -188,6 +188,9 @@ public partial class VehicleBody : CharacterBody3D
             Position = Origin.ToWorld(s.Position);
             _asleep = true;
             sync.ReplicationInterval = 2f;
+            // a boat it placed (the steamer at its pier, #303): its height over the still water, so
+            // every peer draws it riding its own copy of the waves (the server never simulates it)
+            if (Ride is Boat && World.WaterField.TryGetStill(Position, out float still, out _)) Heave = Position.Y - still;
         }
 
         if (!Headless)
@@ -204,14 +207,15 @@ public partial class VehicleBody : CharacterBody3D
                 AddChild(_engineSound);
             }
         }
-        else if (Ride is Truck or ParkedTrailer)
+        else if (Ride is Truck or ParkedTrailer or Boat { Walkable: true })
         {
             // Headless (the server, a check) nothing is drawn, but the frame the model would stand in
             // still matters: a parked bus's decks are walked in it, and its guests found by it
             // (#162). Its box rests on whatever it touches, a metre off the road at a door on a
             // crest; the frame is posed on the ground axle by axle, as the model is.
             _visual = new Node3D { Name = "Visual" };
-            int sections = Ride is Truck train ? train.Train.Count : ((ParkedTrailer)Ride).Bodies.Count;
+            // (a walkable boat, #303: one section, posed by DrawBoat as its model is)
+            int sections = Ride is Truck train ? train.Train.Count : Ride is ParkedTrailer lone ? lone.Bodies.Count : 1;
             for (int k = 1; k < sections; k++) _visual.AddChild(new Node3D { Name = $"Section{k}" });
             AddChild(_visual);
         }
@@ -303,7 +307,7 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>Opens or shuts one door. The authority's call: others ask <see cref="VehicleManager.ToggleDoor"/>.</summary>
     public void ToggleDoor(byte bit)
     {
-        if (Wrecked || Ride is not (Car or Truck { IsBus: true })) return;
+        if (Wrecked || Ride is not (Car or Truck { IsBus: true } or Steamer)) return;
         DoorsOpen ^= (byte)(bit & 15);
         _shutDriverIn = 0f;   // a door someone chose to leave open stays open
     }
@@ -571,7 +575,7 @@ public partial class VehicleBody : CharacterBody3D
         }
         if (_engineSound != null && Ride is IEngined)
             // ticking over while it rolls; a car at rest is asleep and silent
-            _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep ? 0.1f : 0f);
+            _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep && Ride is not Steamer ? 0.1f : 0f);
         else if (_engineSound != null)
         {
             _engineSound.Set(spool, spool, 0.5f, spool * 0.7f);

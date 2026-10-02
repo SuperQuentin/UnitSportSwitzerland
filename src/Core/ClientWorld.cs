@@ -219,6 +219,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var buildingMaterial = StyleKit.Material(MaterialRole.Building);
         var treeMaterial = _treeMaterial = StyleKit.Material(MaterialRole.Tree);
         var waterMaterial = StyleKit.Material(MaterialRole.Water);
+        // piers and jetties (#377): vertex-coloured props, never lit up at night
+        var pierMaterial = StyleKit.Material(MaterialRole.Prop);
+        pierMaterial.SetShaderParameter("flicker", 0f);
         // far trees as billboards, before the first tile builds them
         var treeFarMaterial = StyleKit.Material(MaterialRole.TreeFar);
         StyleKit.TreeFarMaterial = StyleKit.TreeLod ? treeFarMaterial : null;
@@ -226,7 +229,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Fog is a setting now (off by default: the far horizon is the point). Every world
         // material carries the uniforms, so the toggle just re-pushes two floats to each.
-        _worldMaterials = new[] { material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial, treeFarMaterial };
+        _worldMaterials = new[] { material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial, treeFarMaterial, pierMaterial };
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
         // a named handler, unsubscribed in _ExitTree: the event is static and outlives this world
         GameSettings.Changed += OnSettingsChanged;
@@ -259,6 +262,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
+        _chunks.PierMaterial = pierMaterial;
+        // the landings and jetties (#377) before the first tile builds: their piers ride in its build
+        World.Landings.Use(await World.Landings.LoadAsync(_cache));
         if (fallback != null) _chunks.UseFallback(fallback, _cache.Invalidate);
         // the towns occasion props go in: places.json's, plus the generated villages that stand
         // on generated ground (re-read whenever real tiles replace some, below)
@@ -338,6 +344,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // the Africa Twin at Riddes: placed here offline, by the server online
         AddChild(new World.AfricaTwinEgg(_chunks));
+        // the paddle steamer at the Nyon landing (#303): likewise
+        AddChild(new World.SteamerBerth(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
@@ -591,6 +599,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.RadioPanelProbe.Requested) AddChild(new Items.RadioPanelProbe(() => LocalPlayer));
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
+        if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
         if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
@@ -600,7 +609,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
@@ -639,6 +648,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
+        if (Player.SteamerNetProbe.Role != null) AddChild(new Player.SteamerNetProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
             && Items.DropCheck.Requested && Items.DropCheck.Create(() => LocalPlayer, () => _players, items) is { } soloDrop)
             AddChild(soloDrop);
@@ -1173,6 +1183,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _places?.ReloadIndex();
                 _ambience?.ReloadPlaces();
                 Occasions.OccasionTowns.Reload();
+            }).CallDeferred();
+
+        // The landings (#377): the server's, and the tiles holding a pier build it again
+        _terrainSync.LandingsReceived += index =>
+            Callable.From(() =>
+            {
+                var before = World.Landings.Current;
+                if (before.ToJson() == index.ToJson()) return;   // the same as this client's own
+                World.Landings.Use(index);
+                static bool Holds(Terrain.Format.LandingIndex l, Terrain.Format.TileId id) => l.RibbonsOf(id).Any() || l.BollardsOf(id).Any();
+                _chunks?.RebuildPiers(id => Holds(before, id) || Holds(index, id));
             }).CallDeferred();
 
         // Same for the horizon: a client that shipped without one gets it during sync.

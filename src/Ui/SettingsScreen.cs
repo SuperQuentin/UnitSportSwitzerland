@@ -118,6 +118,8 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "Brake wear and fade (cars)", s.BrakeWear, on => GameSettings.Current.BrakeWear = on);
             UiKit.OptionRow(rows, "Truck gearbox", new[] { "Automatic", "Sequential", "Sequential + clutch", "H-pattern + splitter", "H-pattern (auto splitter)" },
                 (int)s.HeavyGearbox, i => GameSettings.Current.HeavyGearbox = (Player.HeavyShift)i);
+            UiKit.ToggleRow(rows, "Board ships on deck", s.BoardShipsOnDeck, on => GameSettings.Current.BoardShipsOnDeck = on,
+                "E beside the paddle steamer puts you on its deck by a gangway, not at its wheel");
             rows.AddChild(UiKit.Spacer(6));
             rows.AddChild(UiKit.Section("Cockpit"));
             UiKit.ToggleRow(rows, "Show your own body", s.CockpitBody, on => GameSettings.Current.CockpitBody = on, "V cycles it too");

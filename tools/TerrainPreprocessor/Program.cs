@@ -28,6 +28,11 @@ bool coarseOnly = false, horizonOnly = false, photosOnly = false;
 // cover pass; --bathy points at the swissBATHY3D zips (without it every bed is synthetic)
 bool waterOnly = false;
 string? bathyDir = null;
+// boat landings and harbour jetties (#377): standalone with --landings, and after every water pass
+// run with --tlm (the piers stand on the beds and the still water)
+bool landingsOnly = false;
+// --landings-file: write landings.json elsewhere (reading a live region without touching it)
+string? landingsFile = null;
 var pngCrops = new List<(double E, double N, int Size)>();
 bool force = false, fresh = false;
 string? franceBox = null;
@@ -61,6 +66,8 @@ for (int i = 0; i < args.Length; i++)
         case "--coarse": coarseOnly = true; break;
         case "--horizon": horizonOnly = true; break;
         case "--water": waterOnly = true; break;
+        case "--landings": landingsOnly = true; break;
+        case "--landings-file": landingsFile = args[++i]; break;
         case "--bathy": bathyDir = args[++i]; break;
         case "--png-crop":
         {
@@ -139,7 +146,19 @@ if (waterOnly)
         Console.Error.WriteLine("--water requires --out <chunk dir>");
         return 2;
     }
-    return WaterStage.Run(outDir, WaterOptions());
+    int wrc = WaterStage.Run(outDir, WaterOptions());
+    return wrc != 0 || tlmGpkg == null ? wrc : LandingStage.Run(outDir, tlmGpkg);
+}
+
+// ---- landings: piers and jetties from swissTLM3D over the built beds and water -------------
+if (landingsOnly)
+{
+    if (outDir == null || tlmGpkg == null)
+    {
+        Console.Error.WriteLine("--landings requires --out <chunk dir> and --tlm <swisstlm3d .gpkg>");
+        return 2;
+    }
+    return LandingStage.Run(outDir, tlmGpkg, landingsFile);
 }
 
 WaterStage.Options WaterOptions() => new() { Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops };
@@ -423,6 +442,10 @@ int RunFeatures(TerrainManifest existing)
     }
     // the cover says where the water is, so the beds follow every cover pass (whole region: the
     // water bodies and their depths are region-wide)
-    if (doCover) return WaterStage.Run(outDir!, WaterOptions());
+    if (doCover)
+    {
+        int wrc = WaterStage.Run(outDir!, WaterOptions());
+        return wrc != 0 ? wrc : LandingStage.Run(outDir!, tlmGpkg!);
+    }
     return 0;
 }
