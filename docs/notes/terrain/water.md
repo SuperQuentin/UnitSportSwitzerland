@@ -10,6 +10,10 @@
   surface always did — swissALTI3D models lakes and rivers as flat surfaces at water level, so the
   terrain height at a water cell *is* the water level (+0.12 m lift), and rivers keep their
   downstream gradient for free. 0.12 m deep: no waves, cars drive on it.
+- **Tiles built since #298**: the preprocessor's `--water` pass puts the **bed** in the heights and
+  the level in a `.water` file (`tools/bathymetry`), which the sources hand over as the layer; the
+  generated world gives its lakes and rivers a bed and a layer too. Never take the terrain height at
+  a water cell as the surface: read `ChunkManager.TryGetWaterLevel` / `WaterField`.
 - **Mapped watercourses** (`.road` lines) are still ribboned on their draped heights, no waves; a
   line mostly inside the layer's water is skipped (the layer draws that river).
 - **Shading**: `shaders/body/water.gdshaderinc` (+ `ps1_water.gdshader`): displaced in `vertex()` by

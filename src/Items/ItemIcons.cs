@@ -1034,6 +1034,27 @@ public static class ItemIcons
             "..kkk...........",
         };
 
+        // building (#274): a claw hammer, steel head top right, wooden handle down to the left
+        d[ItemId.Hammer] = new[]
+        {
+            "................",
+            "................",
+            "..........kkk...",
+            ".........kwagk..",
+            "........kwaaggk.",
+            ".......kkkagGGk.",
+            "......kNnkkGGk..",
+            ".....kNnk..kk...",
+            "....kNnk........",
+            "...kNnk.........",
+            "..kNnk..........",
+            ".kNnk...........",
+            ".knk............",
+            "..k.............",
+            "................",
+            "................",
+        };
+
         d[ItemId.Ammo9mm] = new[]
         {
             "................",
@@ -1190,6 +1211,196 @@ public static class ItemIcons
             "..kOkkkkkkkkOk..",
             "..kkOOOOOOOOkk..",
             "...kk......kk...",
+        };
+
+        // ---- fire and placeables (#272) ----
+        d[ItemId.Fondue] = new[]
+        {
+            "..........k.....",
+            "..........gk....",
+            ".........kgk....",
+            "........kgk.....",
+            ".kkkkkkkgkkkkk..",
+            "kllllyyygyyyyyk.",
+            "kryyyyyyyyyyYrk.",
+            ".krrrrrrrrrrRk..",
+            ".krwrrrwrrrrRk..",
+            ".krrrrrrrrrrRk..",
+            "..krrrwrrrwRk...",
+            "...kRRRRRRRk....",
+            "....kkkkkkk.....",
+        };
+
+        d[ItemId.HotChocolate] = new[]
+        {
+            "...a...a........",
+            "....a...a.......",
+            "...a...a........",
+            ".kkkkkkkkk......",
+            ".kNnnnnnNkkk....",
+            ".kwwwwwwwk..k...",
+            ".kwwrrwwwk..k...",
+            ".kwwrrwwwk..k...",
+            ".kwwwwwwak.k....",
+            ".kwwwwwwakk.....",
+            "..kaaaaak.......",
+            "...kkkkk........",
+        };
+
+        d[ItemId.ToastedBread] = new[]
+        {
+            "...kkkkkkkkk....",
+            "..kNNNNNNNNNk...",
+            ".kNnttttttttNk..",
+            ".kNtnttttnttNk..",
+            ".kNttttnttttNk..",
+            "..kNtnttttnNk...",
+            "..kNttttnttNk...",
+            "..kNttntttnNk...",
+            "..kNtttttttNk...",
+            "..kNNNNNNNNNk...",
+            "...kkkkkkkkk....",
+        };
+
+        d[ItemId.Campfire] = new[]
+        {
+            ".......o........",
+            "......oyo.......",
+            ".....oyly.o.....",
+            "....ooyllyoo....",
+            "....oyllllyo....",
+            ".....oyllyo.....",
+            "...kNnNkkNnNk...",
+            "..knNnNnnNnNnk..",
+            ".kgakNnNNnNkagk.",
+            "kgaGkkkkkkkkGagk",
+            ".kGgkgaGgakgGk..",
+            "..kkk.kkk.kkk...",
+        };
+
+        d[ItemId.Torch] = new[]
+        {
+            "..........o.....",
+            ".........oyo....",
+            "........oylyo...",
+            "........oyly....",
+            ".........oo.....",
+            "........kNNk....",
+            ".......kNNk.....",
+            "......knnk......",
+            ".....knnk.......",
+            "....knnk........",
+            "...knnk.........",
+            "..knnk..........",
+            "..kkk...........",
+        };
+
+        d[ItemId.FieldWorkbench] = new[]
+        {
+            "..........kkk...",
+            "..........kgk...",
+            ".kkkkkkkkkkgkkk.",
+            ".kttttttttttttk.",
+            ".kNnnnnnnnnnnNk.",
+            ".kkkkkkkkkkkkkk.",
+            "..knk......knk..",
+            "..knk......knk..",
+            "..knkkkkkkkknk..",
+            "..knNNNNNNNNnk..",
+            "..knkkkkkkkknk..",
+            "..knk......knk..",
+            "..kkk......kkk..",
+        };
+
+        // ---- shops and PAUSA machines (#273) ----
+        d[ItemId.IceTea] = new[]
+        {
+            "......kkkk......",
+            "......krrk......",
+            "......kRRk......",
+            ".....kkkkkk.....",
+            "....koooooOk....",
+            "....kooooOOk....",
+            "....kyyyyyYk....",
+            "....kylyyyYk....",
+            "....kyyeyyYk....",
+            "....kyyyyyYk....",
+            "....kooooOOk....",
+            "....koooOOOk....",
+            "....kOOOOOOk....",
+            ".....kkkkkk.....",
+        };
+
+        d[ItemId.IsotonicDrink] = new[]
+        {
+            "......kkkk......",
+            "......kwwk......",
+            "......kaak......",
+            ".....kkkkkk.....",
+            "....kCcccbBk....",
+            "....kccccbBk....",
+            "....kwwwwwwk....",
+            "....kwwyywwk....",
+            "....kwyywwwk....",
+            "....kwwwwwwk....",
+            "....kccccbBk....",
+            "....kcccbbBk....",
+            "....kBBBBBBk....",
+            ".....kkkkkk.....",
+        };
+
+        d[ItemId.Crisps] = new[]
+        {
+            "...kkkkkkkkkk...",
+            "...kGaGaGaGak...",
+            "..kyyyyyyyyyyk..",
+            "..kyllyyyyyyYk..",
+            "..krrrrrrrrrRk..",
+            "..kyyyTTTTyyYk..",
+            "..kyyTtttTyyYk..",
+            "..kyyyTTTTyyYk..",
+            "..krrrrrrrrrRk..",
+            "..kyyyyyyyyyYk..",
+            "..kYYYYYYYYYYk..",
+            "...kGaGaGaGak...",
+            "...kkkkkkkkkk...",
+        };
+
+        d[ItemId.GummyBears] = new[]
+        {
+            "....kk....kk....",
+            "...krrk..krrk...",
+            "...krrkkkkrrk...",
+            "....krrrrrrk....",
+            "...krwrrrrwrk...",
+            "...krrrrrrrrk...",
+            "....krrrrrrk....",
+            "..kkkrrrrrrkkk..",
+            ".krrkrrqrrrkrrk.",
+            ".kRRkrrrrrrkRRk.",
+            "..kkkrrrrrrkkk..",
+            "....krrrrrrk....",
+            "...krrrkkrrrk...",
+            "...kRRk..kRRk...",
+            "....kk....kk....",
+        };
+
+        // the red handle with the white cross, the big blade out
+        d[ItemId.SwissArmyKnife] = new[]
+        {
+            "................",
+            "..........kk....",
+            ".........kwak...",
+            "........kwak....",
+            ".......kwak.....",
+            "......kaGk......",
+            "..kkkkkkkkkkk...",
+            ".krrrrrrrrrrRk..",
+            ".krrrrwrrrrrRk..",
+            ".krrrwwwrrrrRk..",
+            ".krrrrwrrrrrRk..",
+            ".kRRRRRRRRRRRk..",
+            "..kkkkkkkkkkk...",
         };
 
         return d;

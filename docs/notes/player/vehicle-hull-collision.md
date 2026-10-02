@@ -31,4 +31,11 @@
   was put inside the bus and shoved onto its roof. `--exitcheck [pw]` (offline, or a loopback client
   with `--admin-password`) gets out of a car and every truck and bus in the open and between two walls;
   `--exitcheck watch` on a second client checks the boxes it gives the other player's vehicles.
+- **The hull goes on foot even when nothing is drawn**: `RefreshVisual` returns early for a
+  first-person walker (no body to draw), and `FitHull(null)` sat after that return, so the vehicle's
+  hull boxes stayed on the walking player: a bus's 2.65 x 3 x 12.6 m box around them, which lifted
+  them onto the roof as the parked bus's deck appeared, and sank or shoved truck and car exits.
+  `FitHull(null)` now runs before the return and takes the boxes out of the body at once
+  (`RemoveChild`), not at the end of the frame. A space query with the capsule alone saw nothing;
+  `MoveAndSlide` moves every shape of the body.
 - GPX `<us:yaw>` is in radians (east = −sin, north = cos), useful when post-processing recordings.

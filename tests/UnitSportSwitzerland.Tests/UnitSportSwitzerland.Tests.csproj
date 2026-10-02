@@ -29,14 +29,23 @@
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Loot\ShopTables.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Loot\ShopLedger.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SaveQueue.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\MathX.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the water pass's exact distance transform (#298); the rest of the preprocessor is not linked -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\DistanceTransform.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\WaveSpectrum.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\SeaStateCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\WaterLayer.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\BoatModel.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\BoatCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirReserve.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Build\BuildGrid.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\BattleRoyale\BrPrefabs.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

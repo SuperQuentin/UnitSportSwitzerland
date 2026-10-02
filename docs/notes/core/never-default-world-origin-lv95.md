@@ -2,13 +2,8 @@
 
 - **Never default the world origin to LV95 0/0.** Switzerland is 2.6 million metres from
   there, so float precision collapses the moment real data arrives. With no manifest the origin
-  is the spawn point, and a client whose only world is generated then *adopts* the server's
-  origin via `Rebase` rather than refusing the mismatch — refusing is right when two populated
-  worlds disagree, wrong when you have no real world at all. `AvailableTileCount` counts real
-  tiles only, which is what makes that test right. The rebase runs inside
-  `ChunkManager.ResetAll(moveOrigin)`, after every tile, cached asset and the horizon built
-  against the old origin are gone; the generated fill is anchored in LV95, so it comes back
-  identical. Rebasing changes what every world coordinate means, so
-  `ClientWorld.RespawnAfterRebase` puts the player down again.
-  Since #185 the origin also moves while the game runs, offline (`floating-origin`); the rebase
-  above is the online case, where every peer must share the server's frame.
+  is the spawn point (`ClientWorld`), the server's is the default spawn (`ServerWorld`), and with no
+  terrain at all `WorldOrigin.SwissDefault()` is the centre of Switzerland.
+- Since #185 the starting origin only says where world space begins: the floating origin moves it
+  with the camera (`floating-origin`), and a client joining a server keeps its own, since positions
+  on the wire are LV95. There is no rebase or world reset on connect any more.

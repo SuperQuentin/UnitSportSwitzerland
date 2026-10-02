@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -10,7 +11,7 @@ namespace UnitSport.Items;
 /// </summary>
 public static class InventoryCheck
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--invcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--invcheck");
 
     private static int _failures;
 
@@ -369,6 +370,31 @@ public static class InventoryCheck
             var strip = Crafting.Recipes.All.First(r => r.Salvage && r.In[0].Id == ItemId.Tyre);
             Crafting.Recipes.Craft(store, strip, 1, Crafting.Station.Workbench);
             Expect(store.Dropped == 3 && inv.CountPlain(ItemId.Tyre) == 1, $"3 rubber kept or dropped ({inv.CountPlain(ItemId.Rubber)} + {store.Dropped})");
+        });
+
+        // ---- fire and placeables (#272) ----
+        Case("cooking: real food, worth more than what went in; the fondue heals 90", _ =>
+        {
+            foreach (var r in Crafting.Recipes.All.Where(r => r.Station == Crafting.Station.Fire))
+            {
+                var def = ItemDefs.Get(r.Out)!;
+                float cost = r.In.Sum(i => i.Count * ItemDefs.Get(i.Id)!.Value);
+                Expect(def.Use == ItemUse.Consume && def.Heal > 0, $"{r.Key}: something to eat or drink");
+                Expect(def.Value >= cost, $"{r.Key}: worth {def.Value:0.#} CHF, its ingredients {cost:0.#}");
+            }
+            Expect(ItemDefs.Get(ItemId.Fondue)?.Heal == 90f, "the fondue heals 90");
+        });
+
+        Case("placeables: the campfire and the field workbench are placed, the torch is held", _ =>
+        {
+            foreach (var id in new[] { ItemId.SwissFlag, ItemId.Campfire, ItemId.FieldWorkbench })
+                Expect(ItemDefs.Get(id)?.Use == ItemUse.Place && Placeables.ForItem(id) is { } p && Placeables.ForKind(p.Kind) == p,
+                    $"{id}: Use places a {Placeables.ForItem(id)?.Kind}");
+            Expect(Placeables.Refund(PlacedKind.Campfire) == ItemId.None && Placeables.Refund(PlacedKind.FieldWorkbench) == ItemId.FieldWorkbench,
+                "a fire is spent, a bench comes back");
+            Expect(ItemDefs.Get(ItemId.Torch)?.Use == ItemUse.Readout, "the torch is held, Use does nothing");
+            Expect(ItemIcons.IsAuthored(ItemId.Fondue) && ItemIcons.IsAuthored(ItemId.Torch) && ItemIcons.IsAuthored(ItemId.FieldWorkbench),
+                "the new items have drawn icons");
         });
 
         GD.Print(_failures == 0 ? "[invcheck] RESULT: ok": $"[invcheck] RESULT: FAILED ({_failures})");

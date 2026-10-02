@@ -33,6 +33,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private NetworkChunkSource? _chunkSource;
     private CachingChunkSource? _cache;
     private ClientTerrainSync? _terrainSync;
+    private Handshake? _handshake;
     private WorldOrigin? _worldOrigin;
     private ShaderMaterial[] _worldMaterials = Array.Empty<ShaderMaterial>();
     private WorldEnvironment? _worldEnvironment;
@@ -66,8 +67,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>Players on the server, for the pause menu's status line (null offline).</summary>
     public int? Players => _networked && _players != null ? _players.GetChildCount() : null;
-    /// <summary>The origin the world started with: the server's frame, until positions on the wire are global.</summary>
-    private (double E, double N)? _startOrigin;
 
     private static bool Has(string flag) => Array.IndexOf(OS.GetCmdlineUserArgs(), flag) >= 0;
 
@@ -103,6 +102,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--truckcheck"), Player.HeavyCheck.Run),
         (() => Items.IconSheet.Requested, Items.IconSheet.Run),
         (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
+        (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -192,12 +192,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             origin = new WorldOrigin(pinE, pinN);
 
         _worldOrigin = origin;
-        _startOrigin = (origin.E, origin.N);
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
 
         // The floating origin (#185): world space follows the camera, so float32 stays precise
-        // however far it goes. Offline only until positions on the wire are origin-independent.
-        AddChild(new OriginShifter(origin, () => GetViewport().GetCamera3D()?.GlobalPosition, () => !_networked));
+        // however far it goes. Online too: positions on the wire are LV95, never world space.
+        AddChild(new OriginShifter(origin, () => GetViewport().GetCamera3D()?.GlobalPosition, () => true));
 
         if (!hasLocalTerrain && generated != null)
             GD.PushWarning(
@@ -289,7 +288,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Vehicles left standing in the world. Same node path as on the server, so parking and
         // claiming work over the network; offline it just holds the nodes.
-        var vehicles = Vehicles.VehicleManager.Create(this, _chunks);
+        var vehicles = Vehicles.VehicleManager.Create(this, _chunks, origin);
         // seats in vehicles other players drive (#158): same path as the server's
         Vehicles.PassengerService.Create(this);
         vehicles.PlayerPositions = () =>
@@ -301,10 +300,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         };
         // Radios thrown into the world and the CD library they play from, same paths as the
         // server's; the clock the CDs run on (offline: this machine's own).
-        var radios = Items.RadioManager.Create(this);
+        var radios = Items.RadioManager.Create(this, origin);
         radios.PlayerPositions = vehicles.PlayerPositions;
         // items dropped and thrown on the ground (#206)
-        Items.DroppedItems.Create(this).PlayerPositions = vehicles.PlayerPositions;
+        Items.DroppedItems.Create(this, origin).PlayerPositions = vehicles.PlayerPositions;
         var chunksForDrops = _chunks;
         // on the water where there is some (#299): nothing is dropped onto a lake bed
         Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetSurface(p, out float y) ? y : null;
@@ -333,7 +332,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
-        var combat = Combat.CombatManager.Create(this, _chunks, server: false);
+        var combat = Combat.CombatManager.Create(this, _chunks, origin, server: false);
         combat.LocalPlayer = () => _onFoot ? LocalPlayer : null;
 
         // Building interiors: E opens a front door, and you walk through it. Same node path as the
@@ -490,6 +489,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _spectator!.Position = origin.ToWorld(e, n, 1200);
                 return new TunnelProbe(chunks, origin, e, n, double.Parse(probe[2], inv));
             }),
+            new(() => Terrain.WaterProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var w = Terrain.WaterProbe.ParseArgs()!;
+                // the anchor on the point, so its tile streams in with collision
+                _spectator!.Position = origin.ToWorld(w[0], w[1], 1200);
+                return new Terrain.WaterProbe(chunks, origin, w[0], w[1], w[2], w.Length > 3 ? w[3] : 0);
+            }),
             new(() => FlightProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var fly = FlightProbe.ParseArgs()!;
@@ -584,11 +590,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested
-            || Items.BonkCheck.Requested || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
+        if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
         if (Items.PvpProbe.Role != null) Items.PvpProbe.Stock(inventory);
+        if (Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null) Build.BuildProbe.Stock(inventory);
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
         Items.Bank.Create(this, inventory);
@@ -602,6 +610,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
+        if (Loot.ShopProbe.Role != null) AddChild(new Loot.ShopProbe(items, origin));
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
@@ -610,7 +619,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
         if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
+        if (Build.BuildProbe.Requested) AddChild(new Build.BuildProbe(items));
+        if (Build.BuildNetProbe.Role != null) AddChild(new Build.BuildNetProbe(items));
+        if (Build.GadgetProbe.Requested) { Build.GadgetProbe.Stock(items.Inventory); AddChild(new Build.GadgetProbe(items)); }
+        if (Build.GadgetNetProbe.Role != null) AddChild(new Build.GadgetNetProbe(items));
+        if (BattleRoyale.PrefabProbe.Requested) AddChild(new BattleRoyale.PrefabProbe());
         if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
+        if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
+        if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
@@ -649,12 +665,20 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // which decides who gets what; offline this client does both.
         // held-item events (shots, flashes) and placed objects (flags, photos): same node paths
         // as the server's, which relays the first and owns the second; offline this client does both
-        Items.ItemEvents.Create(this, server: false);
+        Items.ItemEvents.Create(this, origin, server: false);
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
+        // built structures (#274): the server owns them, offline this client does
+        if (Systems.On(Systems.Build))
+        {
+            var structures = Build.Structures.Create(this, origin, server: false, networked: Launch.Networked);
+            structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+        }
 
         if (Systems.On(Systems.Loot)) Loot.LootService.Create(this).Items = items;
+        // shops and PAUSA vending machines (#273): same node path as the server's, which keeps the sold counts
+        if (Systems.On(Systems.Loot)) Loot.ShopService.Create(this).Items = items;
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
         _radioUi.Give = items.Give;
@@ -713,6 +737,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             () => (_gpx?.Active == true ? "replay" : _onFoot ? "foot" : "fly") + (_networked ? "+net" : ""));
         AddChild(recorder);
         AddChild(new PerfOverlay(_chunks, _cache, recorder));
+
+        // F9 or /debug: overlays, terrain layers and view modes, alone or as an admin (#339)
+        var debug = new DebugMenu(_chunks, origin, () => _nearTrees, Toast);
+        AddChild(debug);
+        _chat.DebugRequested += debug.Open;
+        if (DebugMenuCheck.Requested) AddChild(new DebugMenuCheck(items, debug, _chunks));
 
         // G opens a GPX track for playback; the session owns its own camera and HUD
         _gpx = GpxSession.Create(_chunks, origin, _spectator);
@@ -952,6 +982,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             CatalogueTree(ModelCatalog.TreeBroadleaf) ?? crown, StyleKit.TreeReach);
         // under the terrain, an origin container: the floating origin moves it with the tiles
         _chunks!.AddChild(_nearTrees);
+        // the debug menu may have hidden the trees before this style made its own
+        _nearTrees.Visible = (_chunks.HiddenLayers & TileLayers.Trees) == 0;
     }
 
     /// <summary>
@@ -1008,25 +1040,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Multiplayer.ConnectionFailed -= OnConnectionFailed;
             Multiplayer.ServerDisconnected -= OnServerDisconnected;
         }
-    }
-
-    /// <summary>
-    /// Puts the player down again after the world origin moved.
-    ///
-    /// <para>
-    /// Only happens on a client that had no terrain of its own and adopted the server's
-    /// anchor. Its position was an offset from a placeholder origin and now means somewhere
-    /// else entirely, so the spawn is simply re-run against the new one.
-    /// </para>
-    /// </summary>
-    private void RespawnAfterRebase()
-    {
-        if (_chunks == null || _worldOrigin == null || _teleporter == null) return;
-
-        var (spawnE, spawnN) = SpawnPoint.ParseTarget();
-        _teleporter.TeleportTo(spawnE, spawnN, "spawn");
-        Items.PlacedObjects.Instance?.Reposition();
-        _chatUi?.Append("Adopted the server's world; terrain will stream in.", ChatKind.System);
     }
 
     /// <summary>Switches mode, tearing down whatever the previous one owned.</summary>
@@ -1097,10 +1110,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         if (_networked) return;
         if (!Systems.On(Systems.Network)) { Fail("The network is off for this run (--systems)."); return; }
-        // Positions on the wire are still world space (#185, phase 2), so online every peer must be
-        // in the frame the server is in: a game that travelled offline puts its origin back where
-        // it started before anything is sent. The shifter is off from here on.
-        if (_startOrigin is { } start) OriginShifter.Instance?.ShiftTo(start.E, start.N, exact: true);
         _networked = true;
 
         // The chat node (World/Chat, made at boot) is already where the server's RPCs route.
@@ -1108,7 +1117,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Items.EconomyProbe(_chat, _items.Inventory));
 
         // World/Race on both sides; the client side puts this player on the grid and times the run
-        var race = World.RaceManager.CreateClient();
+        var race = World.RaceManager.CreateClient(_worldOrigin!);
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
 
@@ -1134,9 +1143,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         _chat!.Kicked += OnKicked;
 
-        // Merges the server's tile list so tiles this client never shipped with become
-        // streamable, and refuses to stream at all if the two worlds disagree on the origin.
-        _terrainSync = new ClientTerrainSync(_streamer!, _chunks!, _worldOrigin!);
+        // Merges the server's tile list so tiles this client never shipped with become streamable.
+        _terrainSync = new ClientTerrainSync(_streamer!, _chunks!);
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
             Callable.From(() =>
@@ -1144,10 +1152,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _chatUi?.Append(line, ChatKind.System);
                 LoadDetail = line;
             }).CallDeferred();
-
-        // Adopting the server's anchor changes what every world coordinate means, so whatever
-        // was placed against the old one has to be put down again.
-        _terrainSync.Rebased += () => Callable.From(RespawnAfterRebase).CallDeferred();
 
         // The town index arrives after this UI was built, so it has to be told to re-read.
         _terrainSync.PlacesReceived += () =>
@@ -1163,6 +1167,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Callable.From(() => _chunks?.Horizon?.Reload()).CallDeferred();
         AddChild(_terrainSync);
 
+        // the version check comes first: nothing else is sent before the server welcomes us
+        _handshake = Handshake.CreateClient();
+        _handshake.Welcomed += OnWelcomed;
+        _handshake.Refused += reason =>
+        {
+            GD.PushWarning($"[net] {reason}");
+            Multiplayer.MultiplayerPeer?.Close();
+            ReportDisconnect(reason);
+        };
+        AddChild(_handshake);
+
         // before any player arrives: each one's synchronizer asks it whom to send to
         InterestService.CreateClient(this);
         _players = new Node3D { Name = "Players" };
@@ -1173,9 +1188,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 Callable.From(() => EnterFootWhenGrounded(player)).CallDeferred();
         };
         AddChild(_players);
-        AddChild(PlayerReplication.CreateSpawner());
+        AddChild(PlayerReplication.CreateSpawner(_worldOrigin!));
         AddChild(World.RaceNpcs.CreateClient());   // World/Npcs: the path its RPC routes by
-        if (NetSmoothProbe.ParseArgs() is { } smooth) AddChild(new NetSmoothProbe(_players, smooth.Seconds, smooth.Label));
+        if (NetSmoothProbe.ParseArgs() is { } smooth) AddChild(new NetSmoothProbe(_players, smooth.Seconds, smooth.Label, smooth.MinSpeed));
         if (WallOffProbe.ParseArgs() is { } wallOff) AddChild(new WallOffProbe(_players, _chunks!, _worldOrigin!, wallOff));
         var net = new NetworkManager { Name = "Net" };
         AddChild(net);
@@ -1195,6 +1210,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         _connected = true;
         GD.Print($"[world] connected, peer id {Multiplayer.GetUniqueId()}");
+        _handshake?.Begin();
+    }
+
+    /// <summary>The server speaks this client's protocol (<see cref="Handshake"/>): join for real.</summary>
+    private void OnWelcomed()
+    {
+        GD.Print($"[world] the server speaks protocol {Handshake.Protocol}");
 
         // The server assigns the final name — it deduplicates and sanitises — so this is
         // a request, not a claim.

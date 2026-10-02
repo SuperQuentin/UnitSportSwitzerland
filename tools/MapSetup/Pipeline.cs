@@ -374,6 +374,8 @@ public static partial class Planner
                     if (tlmGpkgFuture() is not { } tlm) { r.Fail("no swissTLM3D GeoPackage in " + p.TlmDir); return false; }
                     args.AddRange(["--tlm", tlm, "--cover"]);
                     if (File.Exists(p.RouteKeys)) args.AddRange(["--route-keys", p.RouteKeys]);
+                    // the cover pass ends with the lake and river beds (#298): surveyed where the zips are
+                    if (Directory.Exists(p.BathyDir)) args.AddRange(["--bathy", p.BathyDir]);
                 }
                 if (wantBuildings)
                 {

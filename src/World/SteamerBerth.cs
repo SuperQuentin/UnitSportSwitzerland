@@ -79,7 +79,7 @@ public partial class SteamerBerth : Node
                 return;
             }
             if (vehicles.GetNodeOrNull(BerthName) is { } old) old.Free();
-            Place(vehicles, berth.Keel, berth.Yaw, BerthName);
+            Place(vehicles, origin, berth.Keel, berth.Yaw, BerthName);
             var (e, n) = origin.ToLv95(berth.Keel);
             GD.Print($"[steamer] lies at the Nyon landing: LV95 {e:F0}/{n:F0}, {berth.FromLanding:F0} m from it, {berth.Depth:F1} m of water");
         }
@@ -89,11 +89,12 @@ public partial class SteamerBerth : Node
         }
     }
 
-    /// <summary>Puts a steamer, nobody aboard, its keel at <paramref name="keel"/> heading <paramref name="yaw"/>.</summary>
-    public static string? Place(VehicleManager vehicles, Vector3 keel, float yaw, string name)
+    /// <summary>Puts a steamer, nobody aboard, its keel at <paramref name="keel"/> (world, this peer's frame) heading <paramref name="yaw"/>.</summary>
+    public static string? Place(VehicleManager vehicles, WorldOrigin origin, Vector3 keel, float yaw, string name)
     {
         var ride = Rideable.Create(RideKind.Steamer)!;
-        var state = new VehicleState(RideKind.Steamer, keel, yaw, Vector3.Zero, ride.MaxHealth,
+        // on the wire as LV95 (NetPlace): every peer puts it in its own frame
+        var state = new VehicleState(RideKind.Steamer, origin.ToGlobal(keel), yaw, Vector3.Zero, ride.MaxHealth,
             EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
         return vehicles.Place(state, name);
     }

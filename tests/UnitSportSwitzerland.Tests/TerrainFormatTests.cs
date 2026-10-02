@@ -176,6 +176,51 @@ public class TerrainFormatTests
     }
 
     [Fact]
+    public void Water_round_trips_through_deflate()
+    {
+        var layer = WaterGrid.Dry(Id);
+        var rng = new Random(298);
+        for (int i = 0; i < layer.Levels.Length; i += 41)
+        {
+            layer.Levels[i] = (ushort)rng.Next(1, 65536);
+            layer.Fetch[i] = (byte)rng.Next(1, 256);
+        }
+        using var ms = new MemoryStream();
+        WaterFormat.Encode(layer, ms);
+        ms.Position = 0;
+        var back = WaterFormat.Decode(ms); // deflate reads ahead, so no exact-consumption check
+        Assert.Equal(Id, back.Id);
+        Assert.Equal(layer.Levels, back.Levels);
+        Assert.Equal(layer.Fetch, back.Fetch);
+        Assert.Equal("water_2579_1109.water", WaterFormat.FileName(Id));
+        Assert.Throws<ArgumentException>(() => new WaterGrid(Id, new ushort[10], new byte[10]));
+    }
+
+    [Fact]
+    public void Water_level_samples_only_the_wet_corners()
+    {
+        var layer = WaterGrid.Dry(Id);
+        int s = WaterGrid.Size;
+        ushort q = ChunkFormat.Quantize(372.14);
+        // one wet vertex at (10, 20): its cell's other corners are dry
+        layer.Levels[20 * s + 10] = q;
+        double e = Id.MinE + 10, n = Id.MaxN - 20;
+        Assert.True(layer.TrySampleLevel(e + 0.5, n - 0.5, out double level));
+        Assert.Equal(ChunkFormat.Dequantize(q), level, 6);
+        Assert.True(layer.IsWet(10, 20));
+        Assert.False(layer.IsWet(11, 20));
+        Assert.Equal(1, layer.WetCount);
+        Assert.False(layer.TrySampleLevel(e + 5.5, n - 5.5, out _));
+
+        // a falling river: the level interpolates between wet corners
+        layer.Levels[20 * s + 11] = ChunkFormat.Quantize(371.14);
+        Assert.True(layer.TrySampleLevel(e + 0.5, n, out level));
+        Assert.Equal((ChunkFormat.Dequantize(q) + ChunkFormat.Dequantize(layer.Levels[20 * s + 11])) / 2, level, 6);
+        Assert.Equal(255, WaterFormat.QuantizeFetch(1e6));
+        Assert.Equal(1, WaterFormat.QuantizeFetch(0));
+    }
+
+    [Fact]
     public void Cover_classification_maps_the_tlm_names()
     {
         Assert.Equal(CoverClass.Forest, CoverFormat.Parse("Wald"));
@@ -250,6 +295,37 @@ public class TerrainFormatTests
         // the lattice is a decimation of the grid: the SE corner sample is the SE corner vertex
         int last = HorizonFormat.SamplesPerSide - 1;
         Assert.Equal(grid.HeightMetersAt(ChunkFormat.GridSize - 1, ChunkFormat.GridSize - 1), back.HeightMetersAt(Id, last, last));
+        Assert.Empty(back.Water);
+    }
+
+    [Fact]
+    public void Horizon_carries_the_water_level_and_draws_the_higher_of_bed_and_water()
+    {
+        var bed = new ushort[HorizonFormat.SamplesPerTile];
+        Array.Fill(bed, ChunkFormat.Quantize(330));
+        bed[0] = ChunkFormat.Quantize(400);   // a bank above the lake's level
+        var water = WaterGrid.Dry(Id);
+        Array.Fill(water.Levels, ChunkFormat.Quantize(372.14));
+        var levels = HorizonFormat.ExtractWater(water)!;
+        Assert.Null(HorizonFormat.ExtractWater(WaterGrid.Dry(Id)));
+
+        using var ms = new MemoryStream();
+        HorizonFormat.Encode(new Dictionary<TileId, ushort[]> { [Id] = bed }, ms, new Dictionary<TileId, ushort[]> { [Id] = levels });
+        Assert.Equal(HorizonFormat.Version, BitConverter.ToUInt16(ms.ToArray(), 4));
+        ms.Position = 0;
+        var back = HorizonFormat.Decode(ms);
+        Assert.Equal(ms.Length, ms.Position);
+        Assert.True(back.TryGet(Id, out var heights));
+        Assert.Equal(bed, heights);   // the heights stay the bed: the generated fill blends on them
+        Assert.Equal(ChunkFormat.Dequantize(levels[1]), back.SurfaceMetersAt(Id, 1, 0));
+        Assert.Equal(400, back.SurfaceMetersAt(Id, 0, 0), 0);
+        HorizonIndex.Surface(bed[1], levels, 1, out bool wet);
+        Assert.True(wet);
+
+        // no water: still written as version 1, which an older build reads
+        using var dry = new MemoryStream();
+        HorizonFormat.Encode(new Dictionary<TileId, ushort[]> { [Id] = bed }, dry, new Dictionary<TileId, ushort[]>());
+        Assert.Equal(1, BitConverter.ToUInt16(dry.ToArray(), 4));
     }
 
     [Fact]

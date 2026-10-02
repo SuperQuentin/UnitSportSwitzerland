@@ -134,7 +134,8 @@ public static partial class TerrainMeshBuilder
                 if (cap.Layer == 0) UnderSurface(scratch, cap.Vertices, cap.Indices, core: true);
             // sidewalk corners (#119): the ground under a patch is its base, so it never pokes through
             foreach (var area in roadTile.AreaProps)
-                if (area.Type == AreaPropType.Sidewalk)
+                // and a path's bands through a junction (#120); a kerb strip's vertices are its top, its neighbours hold the ground
+                if (StreetAreas.Is(area.Type) && area.Type != AreaPropType.Kerb)
                     UnderSurface(scratch, area.Vertices, area.Indices, core: false);
 
             foreach (var wall in roadTile.LinearProps)
@@ -253,8 +254,9 @@ public static partial class TerrainMeshBuilder
             // round the line's ends only the carriageway is level: a sidewalk stops at the end of
             // its piece, and past it may lie a corner patch (or nothing) at another height
             _endEdge = Math.Max(Math.Max(seg.Width, a.WidthCm / 100.0) * 0.5, ChunkFormat.SpacingM);
-            _raiseLeft = a.Left.SidewalkDm > 0 ? a.Left.KerbCm / 100.0 : 0;
-            _raiseRight = a.Right.SidewalkDm > 0 ? a.Right.KerbCm / 100.0 : 0;
+            // the side's outer height (#119 sidewalk top; #120 the sidewalk behind a bike path)
+            _raiseLeft = RoadStreetSection.For(a.Left)?.OuterHeight ?? 0;
+            _raiseRight = RoadStreetSection.For(a.Right)?.OuterHeight ?? 0;
         }
 
         private double X(int i) => _p[i * 3] / ChunkFormat.SpacingM;

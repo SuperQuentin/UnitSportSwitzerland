@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -9,7 +10,7 @@ namespace UnitSport.Items;
 /// </summary>
 public static class IconSheet
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--iconsheet") >= 0;
+    public static bool Requested => CmdArgs.Has("--iconsheet");
 
     public static int Run()
     {

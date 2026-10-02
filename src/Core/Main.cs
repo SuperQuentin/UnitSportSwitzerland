@@ -14,10 +14,9 @@ public partial class Main : Node
 	/// </summary>
 	private static void SetWindowTitle(Window window)
 	{
-		var args = OS.GetCmdlineUserArgs();
-		int t = System.Array.IndexOf(args, "--title");
+		var args = CmdArgs.All;
 		string what;
-		if (t >= 0 && t + 1 < args.Length) what = args[t + 1];
+		if (CmdArgs.Value("--title") is { } title) what = title;
 		else
 		{
 			var shown = new System.Collections.Generic.List<string>();
@@ -38,10 +37,10 @@ public partial class Main : Node
 		// the quick self-checks (--interestcheck, --beatcheck…) run in ClientWorld.QuickChecks
 
 		// LAN discovery probe: browse mDNS for dedicated servers, list them, quit (docs/notes/net/lan-discovery.md)
-		int dc = Array.IndexOf(OS.GetCmdlineUserArgs(), "--discovercheck");
+		int dc = Array.IndexOf(CmdArgs.All, "--discovercheck");
 		if (dc >= 0)
 		{
-			var a = OS.GetCmdlineUserArgs();
+			var a = CmdArgs.All;
 			double wait = 8;
 			if (dc + 1 < a.Length) double.TryParse(a[dc + 1], System.Globalization.NumberStyles.Float,
 				System.Globalization.CultureInfo.InvariantCulture, out wait);
@@ -75,7 +74,7 @@ public partial class Main : Node
 			// the figures are built and shaded for the visual style: the saved one, or --style
 			GameSettings.Load();
 			float view = 90;
-			var a = OS.GetCmdlineUserArgs();
+			var a = CmdArgs.All;
 			int vi = Array.IndexOf(a, "--view");
 			if (vi >= 0 && vi + 1 < a.Length) float.TryParse(a[vi + 1],
 				System.Globalization.NumberStyles.Float,
@@ -128,7 +127,7 @@ public partial class Main : Node
 		}
 
 		bool isServer = OS.HasFeature("dedicated_server")
-			|| OS.GetCmdlineUserArgs().Contains("--server");
+			|| CmdArgs.Has("--server");
 
 		if (isServer)
 		{
@@ -140,7 +139,7 @@ public partial class Main : Node
 		// picked, the world beside it at /root/Main/World. A run that names a session or a tool on
 		// its command line skips the title and builds the world straight away (GameShell.UseTitle).
 		GameSettings.Load();
-		if (GameShell.UseTitle(OS.GetCmdlineUserArgs()))
+		if (GameShell.UseTitle(CmdArgs.All))
 		{
 			AddChild(new GameShell { Name = "Shell" });
 			return;

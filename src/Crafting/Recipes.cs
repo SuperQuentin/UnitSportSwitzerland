@@ -10,8 +10,10 @@ public enum Station
 {
     /// <summary>Anywhere, from the inventory panel.</summary>
     Hands = 1,
-    /// <summary>Beside a workbench (workshops, garages, works).</summary>
+    /// <summary>Beside a workbench (workshops, garages, works) or a placed field workbench.</summary>
     Workbench = 2,
+    /// <summary>Beside a fire: a burning campfire, or a kitchen stove indoors (#272).</summary>
+    Fire = 4,
 }
 
 public readonly record struct Ingredient(ItemId Id, int Count);
@@ -50,6 +52,9 @@ public static class Recipes
     private static Recipe Bench(ItemId output, int count, float seconds, params Ingredient[] input) =>
         new(output, count, Station.Workbench, input, seconds);
 
+    private static Recipe Cook(ItemId output, float seconds, params Ingredient[] input) =>
+        new(output, 1, Station.Fire, input, seconds);
+
     /// <summary>The part taken apart is the first ingredient; the outputs are the rest.</summary>
     private static Recipe Strip(ItemId part, params Ingredient[] yields) =>
         new(yields[0].Id, yields[0].Count, Station.Workbench, new[] { I(part) }, 3f, Salvage: true)
@@ -66,6 +71,8 @@ public static class Recipes
         Hands(ItemId.Rope, 1, I(ItemId.Cloth, 3)),
         Hands(ItemId.DuctTape, 1, I(ItemId.Cloth), I(ItemId.Plastic, 2)),
         Hands(ItemId.SandBag, 1, I(ItemId.Cloth), I(ItemId.Stone, 3)),
+        Hands(ItemId.Campfire, 1, I(ItemId.Firewood, 5), I(ItemId.Stone, 4)),
+        Hands(ItemId.Torch, 1, I(ItemId.Firewood), I(ItemId.Cloth), I(ItemId.Coal)),
 
         // ---- at a workbench ----
         Bench(ItemId.WoodPlanks, 1, 2f, I(ItemId.Firewood, 3)),
@@ -78,6 +85,24 @@ public static class Recipes
         Bench(ItemId.BeltPouch, 1, 3f, I(ItemId.Cloth, 3), I(ItemId.Rope)),
         Bench(ItemId.Handbag, 1, 3f, I(ItemId.Cloth, 5), I(ItemId.Rope), I(ItemId.Screws, 2)),
         Bench(ItemId.Backpack, 1, 4f, I(ItemId.Cloth, 8), I(ItemId.Rope, 2), I(ItemId.DuctTape)),
+        Bench(ItemId.Hammer, 1, 3f, I(ItemId.ScrapMetal, 2), I(ItemId.WoodPlanks)),
+
+        // gadgets (#275): getting up high, and hiding
+        Bench(ItemId.Zipline, 1, 4f, I(ItemId.Rope, 3), I(ItemId.ScrapMetal, 2)),
+        Bench(ItemId.RopeLadder, 1, 3f, I(ItemId.Rope, 2), I(ItemId.WoodPlanks, 2)),
+        Bench(ItemId.Trampoline, 1, 5f, I(ItemId.Tyre, 3), I(ItemId.Rubber, 2), I(ItemId.WoodPlanks, 4)),
+        Bench(ItemId.LaunchPad, 1, 6f, I(ItemId.CarBattery), I(ItemId.Electronics, 2), I(ItemId.ScrapMetal, 4), I(ItemId.Cloth)),
+        Bench(ItemId.CamoNet, 1, 3f, I(ItemId.Cloth, 4), I(ItemId.Rope, 2)),
+        Bench(ItemId.HayHideout, 1, 3f, I(ItemId.Firewood, 6), I(ItemId.Rope, 2), I(ItemId.Cloth, 2)),
+
+        Bench(ItemId.FieldWorkbench, 1, 6f, I(ItemId.WoodPlanks, 6), I(ItemId.Screws, 10), I(ItemId.ScrapMetal, 2)),
+
+        // ---- at a fire: a campfire or a stove (#272) ----
+        Cook(ItemId.Fondue, 8f, I(ItemId.Cheese, 2), I(ItemId.Bread), I(ItemId.MineralWater)),
+        Cook(ItemId.HotChocolate, 4f, I(ItemId.Chocolate), I(ItemId.MineralWater)),
+        Cook(ItemId.ToastedBread, 3f, I(ItemId.Bread)),
+        Cook(ItemId.CaramelApple, 4f, I(ItemId.Apple), I(ItemId.Candy, 2)),
+        Cook(ItemId.MineralWater, 5f, I(ItemId.WaterBottle)),   // boiled
 
         // ---- salvage: parts back into materials (always worth less than the part) ----
         Strip(ItemId.Tyre, I(ItemId.Rubber, 3)),
@@ -89,16 +114,18 @@ public static class Recipes
 
     /// <summary>
     /// Never made, only found or bought (#270): guns and ammunition, the camera, the biggest bag,
-    /// the seasonal treats and hats, the flare gun. Clothes are excluded by category in the game check.
+    /// the seasonal treats (but the caramel apple, cooked at a fire) and hats, the flare gun, the shops' own items (#273). Clothes are excluded by category in the game check.
     /// </summary>
     public static readonly HashSet<ItemId> NeverCrafted = new()
     {
         ItemId.Shotgun, ItemId.Shells, ItemId.Pistol, ItemId.Rifle, ItemId.HuntingRifle, ItemId.Knife,
         ItemId.Ammo9mm, ItemId.Ammo75, ItemId.ArmorVest, ItemId.FlareGun,
         ItemId.Camera, ItemId.HikingPack, ItemId.Francs, ItemId.Photo,
-        ItemId.Candy, ItemId.Pumpkin, ItemId.CaramelApple, ItemId.Biberli, ItemId.Mandarin,
+        ItemId.Candy, ItemId.Pumpkin, ItemId.Biberli, ItemId.Mandarin,
         ItemId.Grittibaenz, ItemId.Gluehwein,
         ItemId.WitchHat, ItemId.PumpkinHead, ItemId.SantaHat, ItemId.ReindeerAntlers,
+        // sold only (#273): the Swiss army knife, and what only a PAUSA machine holds
+        ItemId.SwissArmyKnife, ItemId.IceTea, ItemId.Crisps, ItemId.GummyBears, ItemId.IsotonicDrink,
     };
 
     /// <summary>Everything a recipe gives, the main output first.</summary>

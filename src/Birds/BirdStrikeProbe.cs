@@ -43,13 +43,7 @@ public partial class BirdStrikeProbe : Node
     private readonly float _survey = SurveyMinutes();
     private double _hold;
 
-    private static float SurveyMinutes()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, "--survey");
-        return i >= 0 && i + 1 < args.Length && float.TryParse(args[i + 1],
-            System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float m) ? m : 0f;
-    }
+    private static float SurveyMinutes() => CmdArgs.Float("--survey") ?? 0f;
 
     public BirdStrikeProbe(ChunkManager chunks, WorldOrigin origin, BirdLife birds, string? shot)
     {
@@ -59,16 +53,7 @@ public partial class BirdStrikeProbe : Node
         _shot = shot;
     }
 
-    public static (bool Requested, string? Shot) ParseArgs()
-    {
-        foreach (var a in OS.GetCmdlineUserArgs())
-            if (a.StartsWith("--birdstrikecheck"))
-            {
-                var parts = a.Split(',');
-                return (true, parts.Length > 1 ? parts[1] : null);
-            }
-        return (false, null);
-    }
+    public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--birdstrikecheck");
 
     public override void _PhysicsProcess(double delta)
     {

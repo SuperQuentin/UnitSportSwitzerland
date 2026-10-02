@@ -239,7 +239,7 @@ public static class Surfaces
 
     private static int _epoch;
     private static ChunkManager? _watched;
-    private static readonly bool CheckIndex = OS.GetCmdlineUserArgs().Contains("--surfacecheck");
+    private static readonly bool CheckIndex = CmdArgs.Has("--surfacecheck");
 
     /// <summary>A road tile goes when its terrain tile unloads: they used to pile up for the whole session (#221).</summary>
     private static void Watch(ChunkManager chunks)

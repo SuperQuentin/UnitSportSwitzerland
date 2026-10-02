@@ -11,7 +11,7 @@ namespace UnitSport.Core;
 /// </summary>
 public static class ChatCheck
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--chatcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--chatcheck");
 
     private static int _failures;
 
@@ -100,6 +100,7 @@ public static class ChatCheck
 
         // the admin item and money commands (#262)
         ExpectTexts(completer, "/cat", ["/catalogue "], "catalogue command offline");
+        ExpectTexts(completer, "/deb", ["/debug "], "debug menu command offline (#339)");
         ExpectTexts(completer, "/giv", [], "/give needs a server");
         ExpectTexts(completer, "/bank s", ["/bank set"], "bank verbs");
         Offline(host);
@@ -174,6 +175,8 @@ public static class ChatCheck
         chat.LineReceived += (line, _) => last = line;
         int opened = 0;
         chat.CatalogueRequested += () => opened++;
+        int debugOpened = 0;
+        chat.DebugRequested += () => debugOpened++;
 
         chat.Send("/spawn bread 3");
         Expect(inv.Contains(ItemId.Bread), $"/spawn puts it in the pack: {last}");
@@ -192,6 +195,8 @@ public static class ChatCheck
         chat.Send("/catalogue");
         chat.Send("/ITEMS");
         Expect(opened == 2, $"/catalogue and /items open the panel offline ({opened})");
+        chat.Send("/debug");
+        Expect(debugOpened == 1, $"/debug opens the debug menu offline ({debugOpened}): {last}");
 
         chat.QueueFree();
     }

@@ -33,13 +33,13 @@ public static class ItemDefs
     private static ItemDef[] Authored() => new[]
     {
         new(ItemId.Binoculars, "Binoculars", "Hold {aim_item} to look through them. 8x.",
-            ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN"),
+            ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN", 0, ItemCategory.Gear, 60f),
         new(ItemId.SmartBinoculars, "Smart binoculars", "Hold them at a building's door, or inside: they read out what its containers can hold and the chance of finding each item.",
             ItemUse.Readout, 1, new Color(0.20f, 0.42f, 0.50f), "SB", 0, ItemCategory.Gear, 250f),
         new(ItemId.Camera, "Camera", "A Polaroid. Hold {aim_item} to frame, {use_item} to take a photo: it prints, develops, and goes in your pack.",
-            ItemUse.Photo, 1, new Color(0.18f, 0.18f, 0.20f), "CM"),
+            ItemUse.Photo, 1, new Color(0.18f, 0.18f, 0.20f), "CM", 0, ItemCategory.Gear, 160f),
         new(ItemId.Gps, "GPS", "Shows your LV95 coordinates, altitude and heading while held.",
-            ItemUse.Readout, 1, new Color(0.95f, 0.78f, 0.12f), "GP"),
+            ItemUse.Readout, 1, new Color(0.95f, 0.78f, 0.12f), "GP", 0, ItemCategory.Gear, 120f),
         new(ItemId.SwissFlag, "Swiss flag", "{use_item} plants it where you look; {use_item} on a planted flag picks it back up.",
             ItemUse.Place, 5, new Color(0.85f, 0.08f, 0.10f), "FL"),
         new(ItemId.EnergyBar, "Energy bar", "{use_item} to eat. Restores 35 health.",
@@ -90,7 +90,7 @@ public static class ItemDefs
         // occasions (#18): treats found in loot and the hunt while one runs, and the hats
         Eat(ItemId.Candy, "Candy", 20, "#e8702a", "SW", 5, ItemCategory.Food, 1),
         Eat(ItemId.Pumpkin, "Pumpkin", 5, "#e07818", "PU", 20, ItemCategory.Food, 3),
-        Eat(ItemId.CaramelApple, "Caramel apple", 5, "#b8581e", "CP", 15, ItemCategory.Food, 2),
+        Eat(ItemId.CaramelApple, "Caramel apple", 5, "#b8581e", "CP", 15, ItemCategory.Food, 4),
         Eat(ItemId.Biberli, "Biberli", 10, "#8a5a2a", "BI", 15, ItemCategory.Food, 2),
         Eat(ItemId.Mandarin, "Mandarin", 10, "#f08a18", "MA", 8, ItemCategory.Food, 1),
         Eat(ItemId.Grittibaenz, "Grittibänz", 5, "#d8a060", "GZ", 25, ItemCategory.Food, 4),
@@ -128,7 +128,41 @@ public static class ItemDefs
         Bag(ItemId.Handbag, "Handbag", "#8a2a3a", "HB", 18, 40),
         Bag(ItemId.Backpack, "Backpack", "#2a5a8a", "BK", 27, 70),
         Bag(ItemId.HikingPack, "Hiking backpack", "#c8602a", "HK", 36, 150),
+
+        // building (#274): pieces cost materials straight from the pack
+        new(ItemId.Hammer, "Hammer", "{use_item} builds the piece shown where you look, from wood, stone, metal or sandbags in your pack. {aim_item} + wheel picks the piece, R turns it, {aim_item} + R the material. {aim_item} + {use_item} takes your own piece back.",
+            ItemUse.Build, 1, new Color(0.45f, 0.30f, 0.18f), "HM", 0, ItemCategory.Gear, 12f),
+
+        // gadgets (#275): set down with Use, taken back with Aim + Use
+        Gadget(ItemId.Zipline, "Zipline", "{use_item} at the top sets its start, {use_item} again at the bottom (downhill, 8 to 150 m) strings the cable. {interact_mount} at the top post rides it; {jump} lets go.", "#8a8e94", "ZL", 30),
+        Gadget(ItemId.RopeLadder, "Rope ladder", "{use_item} on the top of a wall or a ledge hangs it down, up to 8 m. {interact_mount} at its foot climbs it: forward up, back down, {jump} lets go.", "#c8b078", "LD", 15),
+        Gadget(ItemId.Trampoline, "Tyre trampoline", "{use_item} sets it on the ground. Land on it, or walk onto it: about 12 m up.", "#26282c", "TR", 70),
+        Gadget(ItemId.LaunchPad, "Launch pad", "{use_item} sets it on the ground. {interact_mount} on it fires you about 80 m up, into a wingsuit glide.", "#2a7a8a", "LP", 90),
+        Gadget(ItemId.CamoNet, "Camo net", "{use_item} spreads it on four poles: under it you are hard to spot from above and afar.", "#4a5a30", "CN", 12),
+        Gadget(ItemId.HayHideout, "Hay bale hideout", "{use_item} sets it down: a hollow bale to crouch in, with a slit to look out of.", "#d8c060", "HY", 14),
+
+        // fire and placeables (#272): cooked at a fire, worth more than what went in
+        Eat(ItemId.Fondue, "Fondue", 3, "#f0c850", "FO", 90, ItemCategory.Food, 30),
+        Eat(ItemId.HotChocolate, "Hot chocolate", 5, "#7a4628", "HC", 30, ItemCategory.Water, 8),
+        Eat(ItemId.ToastedBread, "Toasted bread", 5, "#a8642a", "TB", 30, ItemCategory.Food, 4),
+        new(ItemId.Campfire, "Campfire", "{use_item} lays it where you look and lights it: it burns 20 minutes, a fire to cook at. Out, anyone may clear the ashes; yours, {use_item} with an empty hand puts it out.",
+            ItemUse.Place, 3, new Color(0.85f, 0.42f, 0.12f), "CF", 0, ItemCategory.Gear, 7f),
+        new(ItemId.Torch, "Torch", "A light in your hand: it burns while you hold it, and everyone sees it.",
+            ItemUse.Readout, 5, new Color(0.95f, 0.55f, 0.15f), "TO", 0, ItemCategory.Gear, 6f),
+        new(ItemId.FieldWorkbench, "Field workbench", "{use_item} sets it up where you look: a workbench to craft at, anywhere. {use_item} on it with an empty hand packs it up again.",
+            ItemUse.Place, 1, new Color(0.62f, 0.44f, 0.24f), "WB", 0, ItemCategory.Gear, 15f),
+
+        // shops (#273): only a PAUSA vending machine holds these four; the knife is sold in shops
+        Eat(ItemId.IceTea, "Ice tea", 6, "#d89a3a", "IT", 12, ItemCategory.Water, 3),
+        Eat(ItemId.Crisps, "Crisps", 10, "#f2c23a", "CR", 10, ItemCategory.Food, 3),
+        Eat(ItemId.GummyBears, "Gummy bears", 10, "#e8483a", "GB", 8, ItemCategory.Food, 2),
+        Eat(ItemId.IsotonicDrink, "Isotonic drink", 6, "#3ab0e8", "ID", 20, ItemCategory.Water, 4),
+        new(ItemId.SwissArmyKnife, "Swiss army knife", "A tool, not a weapon: kept anywhere in your pack, every tree you chop gives one more log.",
+            ItemUse.Material, 1, new Color(0.80f, 0.10f, 0.12f), "SK", 0, ItemCategory.Gear, 45f),
     };
+
+    private static ItemDef Gadget(ItemId id, string name, string blurb, string tint, string glyph, float value) =>
+        new(id, name, blurb + " {aim_item} + {use_item} on your own takes it back.", ItemUse.Gadget, 1, new Color(tint), glyph, 0, ItemCategory.Gear, value);
 
     private static ItemDef Bag(ItemId id, string name, string tint, string glyph, int slots, float value) =>
         new(id, name, $"Wear it in the bag slot for {slots} more pack slots. {{use_item}} or a click on the bag slot puts it on.",
@@ -356,6 +390,21 @@ public static class ItemDefs
                 // the real hat, the one a figure wears
                 HumanMeshBuilder.AppendHat(s, UnitSport.Occasions.OccasionHats.ForItem(id), new Vector3(0, -0.02f, 0), Vector3.Up * 0.2f);
                 break;
+            case ItemId.Hammer:
+                s.Box(new Vector3(0, 0.0f, 0.0f), new Vector3(0.03f, 0.03f, 0.30f), new Color(0.55f, 0.36f, 0.20f));    // handle
+                s.Box(new Vector3(0, 0.0f, 0.16f), new Vector3(0.11f, 0.035f, 0.04f), new Color(0.40f, 0.42f, 0.45f));  // head
+                s.Box(new Vector3(-0.07f, 0.0f, 0.16f), new Vector3(0.04f, 0.025f, 0.03f), new Color(0.40f, 0.42f, 0.45f)); // claw
+                break;
+
+            case ItemId.Torch:
+            {
+                // upright like the GPS: a stick, a wrap of cloth soaked in pitch, a flame on top
+                s.Tube(new Vector3(0, -0.12f, 0), new Vector3(0, 0.30f, 0), 0.016f, 0.022f, new Color(0.45f, 0.29f, 0.15f), 6);
+                s.Tube(new Vector3(0, 0.22f, 0), new Vector3(0, 0.33f, 0), 0.034f, new Color(0.30f, 0.22f, 0.16f), 8);
+                s.Box(new Vector3(0, 0.38f, 0), new Vector3(0.06f, 0.09f, 0.06f), new Color(1f, 0.55f, 0.12f));
+                s.Box(new Vector3(0, 0.43f, 0), new Vector3(0.035f, 0.07f, 0.035f), new Color(1f, 0.88f, 0.35f));
+                break;
+            }
             case ItemId.Radio:
                 // the grip is the handle: the box hangs from the hand at its real 0.46 m
                 AppendRadio(s, new Vector3(0, -0.16f, 0));

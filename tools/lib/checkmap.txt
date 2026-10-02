@@ -21,9 +21,27 @@ src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
 src/Core/                quick  --origincheck
 src/Terrain/             quick  --origincheck
+# #298: a generated lake (Haut-Lac, inside the fill round the default spawn) has its bed 10 m+ under
+# the level the runtime reads, and collision is the bed
+src/Terrain/ProceduralWorld quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
+src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
+tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck
 src/Crafting/            quick  --invcheck
+src/Crafting/            quick  --campfirecheck --systems ui,physics
+src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
+src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
+src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Build/               quick  --buildcheck --systems ui,physics,build
+src/Build/               net    tools/buildnetcheck.sh
+src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
+src/Build/Gadget         net    tools/gadgetnetcheck.sh
+src/BattleRoyale/BrPrefab quick  --prefabcheck --systems ui,physics,build
+src/BattleRoyale/BrStruct quick  --prefabcheck --systems ui,physics,build
 src/Loot/                quick  --lootchancecheck
+src/Loot/                quick  --shopcheck
+src/Interiors/           quick  --shopcheck
+src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
 src/Occasions/           quick  --huntcheck
 src/Player/              quick  --setupcheck
@@ -50,6 +68,9 @@ src/Ui/                  quick  --menucheck --systems ui
 src/Core/GameShell       quick  --menucheck --systems ui
 src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
+src/Core/Debug           quick  --debugcheck --systems ui
+src/Styles/StyleKit      quick  --debugcheck --systems ui
+src/Terrain/ChunkNode    quick  --debugcheck --systems ui
 src/BattleRoyale/        quick  --brcheck
 src/Combat/              quick  --brcheck
 
@@ -88,15 +109,23 @@ src/Avatar/BoatMesh      quick  --boatcheck jetski --chunks fixture:lake
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
+src/Core/Debug           net    tools/debugcheck.sh
 @rpc                     net    @netsmoke
 src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh
 src/Items/DroppedItem    net    tools/bonkcheck.sh
 src/Player/FootPlayer.B  net    tools/bonkcheck.sh
+src/Crafting/            net    tools/campfirecheck.sh
+src/Items/PlacedObjects  net    tools/campfirecheck.sh
+src/Items/HeldItemVisual net    tools/campfirecheck.sh
 src/World/Wa             net    tools/watercheck.sh
 src/World/SeaState       net    tools/watercheck.sh
 src/Net/ChatManager      net    tools/watercheck.sh
 src/Terrain/Water        net    tools/watercheck.sh
+src/Loot/Shop            net    tools/shopcheck.sh
+src/Items/Bank           net    tools/shopcheck.sh
+src/Interiors/BankSigns  net    tools/shopcheck.sh
+src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
 src/Player/SwimNet       net    tools/swimnetcheck.sh
 src/Avatar/HumanMeshBuilder.Sw net tools/swimnetcheck.sh

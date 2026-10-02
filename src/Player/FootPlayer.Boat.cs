@@ -152,7 +152,8 @@ public partial class FootPlayer
         Vehicles?.Park(state);
         var right = GlobalTransform.Basis.X with { Y = 0 };
         right = right.LengthSquared() > 1e-6f ? right.Normalized() : Vector3.Right;
-        var at = state.Position + right * (boat.ParkedBox.Size.X * 0.5f + BodyRadius + 0.6f);
+        // (the state's position is a GlobalPos on the wire: the body, still where the boat is, is this frame's)
+        var at = GlobalPosition + right * (boat.ParkedBox.Size.X * 0.5f + BodyRadius + 0.6f);
         ApplyRide(RideKind.OnFoot, Vector3.Zero);
         IntoWater(at, state.Velocity with { Y = 0 } * 0.4f);
         _stunTimer = 1f;

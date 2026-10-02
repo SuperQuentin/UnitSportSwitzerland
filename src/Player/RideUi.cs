@@ -602,11 +602,9 @@ public partial class RideUi : CanvasLayer
     /// <summary>"--ridemenu &lt;tab&gt; &lt;card&gt;" (0-based): opens on that tab with that card pointed at, for screenshots.</summary>
     private void ApplyShotArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int at = Array.IndexOf(args, "--ridemenu");
-        if (at < 0 || at + 1 >= args.Length || !int.TryParse(args[at + 1], out int tab)) return;
+        if (CmdArgs.Int("--ridemenu") is not int tab) return;
         SelectTab(tab);
-        if (at + 2 < args.Length && int.TryParse(args[at + 2], out int card) && card < _tabs[_tab].Cards.Count)
+        if (CmdArgs.Int("--ridemenu", 2) is int card && card < _tabs[_tab].Cards.Count)
             Point(_tabs[_tab].Cards[card]);
     }
 

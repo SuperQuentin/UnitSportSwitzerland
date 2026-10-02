@@ -84,9 +84,12 @@ public partial class ItemEvents : Node
     private bool _server;
     private readonly Random _rng = new();
 
-    public static ItemEvents Create(Node world, bool server)
+    /// <summary>This peer's origin: events go to the server and back in LV95 (#185).</summary>
+    private Core.WorldOrigin _origin = null!;
+
+    public static ItemEvents Create(Node world, Core.WorldOrigin origin, bool server)
     {
-        var e = new ItemEvents { Name = NodeName, _server = server };
+        var e = new ItemEvents { Name = NodeName, _origin = origin, _server = server };
         world.AddChild(e);
         if (!server) Instance = e;
         return e;
@@ -109,7 +112,9 @@ public partial class ItemEvents : Node
         if (extra.Length > MaxExtra) extra = extra[..MaxExtra];
         long me = Online ? Multiplayer.GetUniqueId() : 1;
         Run(new ItemEvent(me, kind, position, direction, extra, Local: true));
-        if (Online) RpcId(1, MethodName.Relay, (int)kind, position, direction, extra);
+        if (!Online) return;
+        var at = _origin.ToGlobal(position);
+        RpcId(1, MethodName.Relay, (int)kind, at.E, at.N, at.Alt, direction, extra);
     }
 
     /// <summary>Where a held item's business end is: the hand plus <paramref name="reach"/> along the aim, else in front of the camera.</summary>
@@ -122,28 +127,29 @@ public partial class ItemEvents : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Relay(int kind, Vector3 position, Vector3 direction, string extra)
+    private void Relay(int kind, double e, double n, double alt, Vector3 direction, string extra)
     {
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
         if (extra.Length > MaxExtra) return;
+        var at = new Core.GlobalPos(e, n, alt);
         if (kind == (int)ItemEventKind.Hit)
         {
-            RelayHit(sender, position, direction, extra);
+            RelayHit(sender, at, direction, extra);
             return;
         }
         if (kind == (int)ItemEventKind.Bonk)
         {
-            RelayBonk(sender, position, direction, extra);
+            RelayBonk(sender, at, direction, extra);
             return;
         }
         // a sound somewhere the sender is not is not an item it is holding
-        if (GetNodeOrNull<Node3D>("../Players/" + sender) is { } body && body.GlobalPosition.DistanceTo(position) > MaxOffset)
+        if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && !(body.Global.DistanceTo(at) <= MaxOffset))
             return;
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != sender && interest?.ServerSees(peer, sender) != false)
-                RpcId(peer, MethodName.Deliver, sender, kind, position, direction, extra);
+                RpcId(peer, MethodName.Deliver, sender, kind, e, n, alt, direction, extra);
     }
 
     /// <summary>
@@ -151,7 +157,7 @@ public partial class ItemEvents : Node
     /// weapon exists and could do that much, the shooter stands by its body and the victim is
     /// within the weapon's reach of it, where the shot says.
     /// </summary>
-    private void RelayHit(long sender, Vector3 position, Vector3 direction, string extra)
+    private void RelayHit(long sender, Core.GlobalPos position, Vector3 direction, string extra)
     {
         if (PlayerHits.Hit.Parse(extra) is not { } hit || hit.Victim == sender) return;
         if (!Combat.PvpRules.Allows(sender, hit.Victim)) return;
@@ -159,13 +165,14 @@ public partial class ItemEvents : Node
         var shooter = GetNodeOrNull<FootPlayer>("../Players/" + sender);
         var victim = GetNodeOrNull<FootPlayer>("../Players/" + hit.Victim);
         if (shooter == null || victim == null || victim.Down != 0 || shooter.Down != 0) return;
-        // the bodies are where their owners last said: allow for a quarter second of running at both ends
+        // the bodies are where their owners last said (in LV95, #185): allow for a quarter second of
+        // running at both ends
         const float Slack = 8f;
-        if (shooter.GlobalPosition.DistanceTo(victim.GlobalPosition) > weapon.Range + Slack) return;
-        if (victim.GlobalPosition.DistanceTo(position) > Slack) return;
+        if (!(shooter.Global.DistanceTo(victim.Global) <= weapon.Range + Slack)) return;
+        if (!(victim.Global.DistanceTo(position) <= Slack)) return;
         if (!Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
         GD.Print(FormattableString.Invariant($"[pvp] peer {sender} hit peer {hit.Victim} for {hit.Damage:F1} ({hit.Weapon})"));
-        RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position, direction, extra);
+        RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position.E, position.N, position.Alt, direction, extra);
         Combat.PvpRules.RaiseHit(sender, hit.Victim, hit.Damage);
     }
 
@@ -175,7 +182,7 @@ public partial class ItemEvents : Node
     /// the hit says, the thrower within a long throw of it, no more damage than a throw can do.
     /// Not a weapon and never lethal, so it is not a PvP matter.
     /// </summary>
-    private void RelayBonk(long sender, Vector3 position, Vector3 direction, string extra)
+    private void RelayBonk(long sender, Core.GlobalPos position, Vector3 direction, string extra)
     {
         if (ThrowHits.Bonk.Parse(extra) is not { } bonk || bonk.Victim == sender || bonk.Damage > ThrowHits.MaxDamage + 0.5f) return;
         if (!direction.IsFinite() || direction.Length() > 45f) return;
@@ -183,17 +190,19 @@ public partial class ItemEvents : Node
         var victim = GetNodeOrNull<FootPlayer>("../Players/" + bonk.Victim);
         if (thrower == null || victim == null || victim.Down != 0) return;
         const float Slack = 8f;
-        if (victim.GlobalPosition.DistanceTo(position) > Slack || thrower.GlobalPosition.DistanceTo(position) > 60f) return;
+        // in LV95, from what the players published (#185)
+        if (!(victim.Global.DistanceTo(position) <= Slack) || !(thrower.Global.DistanceTo(position) <= 60f)) return;
         GD.Print(FormattableString.Invariant($"[bonk] peer {sender} hit peer {bonk.Victim} with {bonk.Item} for {bonk.Damage:F1}"));
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != sender && (peer == bonk.Victim || interest?.ServerSees(peer, sender) != false || interest?.ServerSees(peer, bonk.Victim) != false))
-                RpcId(peer, MethodName.Deliver, sender, (int)ItemEventKind.Bonk, position, direction, extra);
+                RpcId(peer, MethodName.Deliver, sender, (int)ItemEventKind.Bonk, position.E, position.N, position.Alt, direction, extra);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Deliver(long sender, int kind, Vector3 position, Vector3 direction, string extra)
+    private void Deliver(long sender, int kind, double e, double n, double alt, Vector3 direction, string extra)
     {
+        var position = _origin.ToWorld(e, n, alt);
         // on the owner's body as this peer shows it, when it is here
         if (kind is not ((int)ItemEventKind.Hit or (int)ItemEventKind.Bonk) && GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && direction.LengthSquared() > 1e-6f)
             position = MuzzleOf(body, direction.Normalized(), kind == (int)ItemEventKind.Shot ? 0.55f : 0.1f);

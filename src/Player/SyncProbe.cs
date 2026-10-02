@@ -30,7 +30,7 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class SyncProbe : Node
 {
-    public static bool Requested() => Array.IndexOf(OS.GetCmdlineUserArgs(), "--synccheck") >= 0;
+    public static bool Requested() => CmdArgs.Has("--synccheck");
 
     /// <summary>A network's update rate: time, not frames, or a 30 fps machine tests 10 Hz.</summary>
     private const double UpdateInterval = 0.05;
@@ -104,7 +104,7 @@ public partial class SyncProbe : Node
         _owner.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
         if (_chunks == null) _owner.DebugLaunch(_owner.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
 
-        _mirror = new FootPlayer { Name = "Mirror", ProcessPriority = 2 };
+        _mirror = new FootPlayer { Name = "Mirror", ProcessPriority = 2, Origin = _origin };
         _mirror.SetMultiplayerAuthority(2);   // not us: it takes the remote path, as another peer's copy would
         AddChild(_mirror);
         GD.Print($"[synccheck] owner at LV95 {e:F0}/{n:F0}, ground {g:F1} m; mirror is authority {_mirror.GetMultiplayerAuthority()}");
@@ -193,11 +193,17 @@ public partial class SyncProbe : Node
     private void Replicate()
     {
         var sync = _owner!.GetNode<MultiplayerSynchronizer>("Sync");
+        var shown = _origin.ToGlobal(_owner.Position + MirrorOffset);
         foreach (var path in sync.ReplicationConfig.GetProperties())
         {
             var prop = path.GetConcatenatedSubNames();
-            var value = _owner.Get(prop);
-            if (prop == "NetPos") value = _owner.Position + MirrorOffset;
+            var value = prop switch
+            {
+                "NetE" => shown.E,
+                "NetN" => shown.N,
+                "NetAlt" => shown.Alt,
+                _ => _owner.Get(prop),
+            };
             _mirror!.Set(prop, value);
         }
     }

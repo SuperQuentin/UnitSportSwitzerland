@@ -126,6 +126,9 @@ public static class Highlight
     /// <summary>The world item the local player points at (a <see cref="DroppedItem"/> or a <see cref="RadioBody"/>), refreshed every frame by <see cref="ItemController"/>.</summary>
     public static Node3D? Pointed { get; private set; }
 
+    /// <summary>The view's ray, every frame: one query, reused (#221).</summary>
+    private static readonly Core.RayQuery Ray = new();
+
     /// <summary>
     /// What the view points at within reach of the body: a ray along the view first (it may hit the
     /// item's collider), else the item closest to the view's centre inside a narrow cone, else one
@@ -140,9 +143,7 @@ public static class Highlight
         float reach = DroppedItems.Reach;
 
         float ray = reach + from.DistanceTo(chest) + 0.5f;
-        var query = PhysicsRayQueryParameters3D.Create(from, from + forward * ray, uint.MaxValue,
-            new Godot.Collections.Array<Rid> { player.GetRid() });
-        var hit = player.GetWorld3D().DirectSpaceState.IntersectRay(query);
+        var hit = Ray.Cast(player.GetWorld3D().DirectSpaceState, from, from + forward * ray, uint.MaxValue, player.SelfExclude);
         if (hit.Count > 0 && Candidate(hit["collider"].AsGodotObject() as Node) is { } struck
             && struck.GlobalPosition.DistanceTo(chest) < reach + 0.4f)
             return struck;

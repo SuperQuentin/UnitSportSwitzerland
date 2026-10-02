@@ -124,6 +124,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Chat / command", Keys: "Enter or /", Pad: "—"),
             new("This screen", PlayerInput.Help),
             new("Performance overlay / log", Keys: "F3 / F4", Pad: "—"),
+            new("Debug menu (offline or admin)", PlayerInput.DebugMenu),
         }),
     };
 
@@ -171,7 +172,7 @@ public partial class ControlsHelp : CanvasLayer
         GetViewport().SizeChanged += Rebuild;
         Rebuild();
         // "--controls" opens it from boot, for screenshotting it
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--controls") >= 0) Callable.From(Open).CallDeferred();
+        if (CmdArgs.Has("--controls")) Callable.From(Open).CallDeferred();
     }
 
     public override void _ExitTree()

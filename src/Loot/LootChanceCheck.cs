@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Interiors;
 using UnitSport.Items;
 using UnitSport.Terrain.Format;
+using UnitSport.Core;
 
 namespace UnitSport.Loot;
 
@@ -13,7 +14,7 @@ namespace UnitSport.Loot;
 /// </summary>
 public static class LootChanceCheck
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--lootchancecheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--lootchancecheck");
 
     private const int Samples = 200_000;
     private const double Tolerance = 0.02;
