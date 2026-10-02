@@ -6,7 +6,7 @@ using UnitSport.Vehicles;
 namespace UnitSport.Player;
 
 /// <summary>What took a player's health: kept with the last attacker for the kill credit.</summary>
-public enum DamageCause { Other, Weapon, Blast, Fall, Crash, Zone }
+public enum DamageCause { Other, Weapon, Blast, Fall, Crash, Zone, Drown }
 
 /// <summary>
 /// First-person on-foot controller tuned for human scale: WASD / left stick, mouse or right
@@ -1590,6 +1590,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void PublishFootPose(float dt)
     {
+        if (_swimming) { PublishSwimPose(dt); return; }
         // The owner decides when the dance is over: out of earshot, or doing anything else.
         // Remotes only ease out on what they receive.
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
@@ -1722,6 +1723,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _slidePose = null; _airPose = null; _poseOutfit = OutfitBits;
             _walkPalette = _walkPalette with { Outfit = new(OutfitBits) };
         }
+        if (PoseKind == PoseSwim) { ApplySwimFigure(); return; }
         float dt = (float)GetProcessDeltaTime();
         StepArmPose(dt);
         var dance = StepDance(dt);
@@ -2552,7 +2554,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Health = Mathf.Min(MaxHealth, Health + 12f * dt);
 
         _safeTimer += dt;
-        if (_safeTimer > 2 && _ride == null && onFloor && Health > 30f && _stunTimer <= 0
+        if (_safeTimer > 2 && _ride == null && onFloor && !_swimming && Health > 30f && _stunTimer <= 0
             && Velocity.LengthSquared() < 40f)
         {
             _safeTimer = 0;
@@ -2603,6 +2605,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
         if (kind != RideKind.OnFoot) EndRagdoll();
+        LeaveWater();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
         if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
@@ -2833,6 +2836,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             StepMantle(dt);
             return;
         }
+
+        // in the water (#301, FootPlayer.Swim.cs)
+        if (SwimPhysics(dt, onFloor)) return;
 
         if (Npc)
         {
@@ -3272,6 +3278,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void FlyPhysics(float dt, bool onFloor, Flyer flyer)
     {
+        if (FlyerIntoWater(flyer)) return;
         bool typing = UiFocus.TextEntryActive;
         float tr = typing ? 0f : Mathf.Max(0f, Input.GetJoyAxis(0, JoyAxis.TriggerRight));
         float tl = typing ? 0f : Mathf.Max(0f, Input.GetJoyAxis(0, JoyAxis.TriggerLeft));

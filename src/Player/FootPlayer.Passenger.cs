@@ -327,6 +327,8 @@ public partial class FootPlayer
         bool hard = velocity.Length() > 5f;
         StepOut(hard ? velocity * 0.25f + Vector3.Up * 6f : velocity);
         if (hard) _stunTimer = 1.2f;
+        // out of a car that sank (#299): up to the surface, swimming (#301)
+        SurfaceIfInWater();
     }
 
     /// <summary>

@@ -184,6 +184,9 @@ public partial class FootPlayer
             _ragdoll.Shift(off.LengthSquared() > 64f ? off : off * (1f - Mathf.Exp(-2f * dt)));
         }
 
+        // into deep water: it stops tumbling and floats (#301)
+        if (IsMultiplayerAuthority() && RagdollIntoWater()) return false;
+
         var pelvis = _ragdoll.Pelvis;
         var points = _ragdoll.Points;
         Span<Vector3> local = stackalloc Vector3[HumanMeshBuilder.JointCount];

@@ -571,6 +571,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.ExitProbe.Requested) AddChild(new Player.ExitProbe(() => LocalPlayer));
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
+        if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
@@ -579,7 +580,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested
-            || Items.BonkCheck.Requested
+            || Items.BonkCheck.Requested || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
@@ -606,6 +607,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
         if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
         if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
+        if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
             && Items.DropCheck.Requested && Items.DropCheck.Create(() => LocalPlayer, () => _players, items) is { } soloDrop)
             AddChild(soloDrop);

@@ -168,13 +168,13 @@ public partial class ItemController : Node
         Highlight.Point(null);
     }
 
-    /// <summary>The player if items can be used right now: on foot (not in a passenger seat), on screen, not in a menu.</summary>
+    /// <summary>The player if items can be used right now: on foot (not in a passenger seat, not swimming), on screen, not in a menu.</summary>
     public FootPlayer? UsablePlayer
     {
         get
         {
             var p = CurrentPlayer();
-            return p is { IsViewing: true, RidingAlong: false } && p.Ride == RideKind.OnFoot ? p : null;
+            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 

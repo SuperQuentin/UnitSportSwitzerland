@@ -319,7 +319,7 @@ void fragment() {{
         float dt = (float)delta;
 
         var id = (ItemId)_player.HeldItemId;
-        bool onFoot = _player.Ride == RideKind.OnFoot && !_player.RidingAlong;
+        bool onFoot = _player.Ride == RideKind.OnFoot && !_player.RidingAlong && !_player.IsSwimming;   // holstered swimming (#301)
         if (id != _shown || HeldData != _shownData)
         {
             if (id != _shown)
