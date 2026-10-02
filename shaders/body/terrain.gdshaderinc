@@ -3,6 +3,7 @@
 
 #include "res://shaders/common/world.gdshaderinc"
 #include "res://shaders/common/retro.gdshaderinc"
+#include "res://shaders/common/style.gdshaderinc"
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
@@ -31,10 +32,38 @@ uniform vec2 cover_origin = vec2(0.0);   // world XZ of the texture's NW corner
 uniform vec2 cover_extent = vec2(1.0);   // world metres the texture spans
 
 
+#ifdef STYLE_REAL
+// CC0 ground sets (assets/realistic/textures, Styles/StyleKit), picked by land cover
+uniform sampler2D tex_grass : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_forest : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_gravel : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_rock : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_snow : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D nrm_grass : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D nrm_forest : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D nrm_gravel : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float tex_scale = 4.0;          // metres per repeat, near
+uniform float tex_color_weight = 0.35;  // how much of the texture's own colour shows
+// SWISSIMAGE (Terrain/PhotoLayer): one layer per tile near the camera, the tile's own layer in
+// photo_slot (-1: none). Blended in with distance and with height over the ground, so walkers
+// see the cover textures and pilots the real patchwork of fields.
+uniform bool use_photos = false;
+uniform sampler2DArray photos : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
+instance uniform int photo_slot = -1;
+uniform float photo_near = 120.0;
+uniform float photo_far = 700.0;
+uniform float photo_max = 0.9;
+varying vec2 tile_uv;
+#endif
+
 varying vec3 world_pos;
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#ifdef STYLE_REAL
+    // a tile's mesh runs from its NW corner, x east and z south, 1000 m each: the photo's frame
+    tile_uv = clamp(VERTEX.xz / 1000.0, vec2(0.0), vec2(1.0));
+#endif
     POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
 }
 
@@ -93,8 +122,77 @@ void fragment() {
 
     // steep faces read as bare rock whatever the mapped cover says
     float rockiness = smoothstep(0.62, 0.38, n.y);
+#ifdef STYLE_REAL
+    {
+        // the cover family from the baked colour (CoverPalette): grey = rock, scree and paved;
+        // dark green = forest floor; very bright = snow; anything else = grass. Farmland and
+        // vineyards are only faintly green (0.02-0.04), so grey starts below that.
+        vec3 srgb = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
+        float green = srgb.g - max(srgb.r, srgb.b);
+        float luma = dot(srgb, vec3(0.333));
+        float w_snow = smoothstep(0.72, 0.80, luma);
+        float w_grey = (1.0 - smoothstep(-0.01, 0.015, green)) * (1.0 - w_snow);
+        float w_forest = smoothstep(0.08, 0.12, green) * (1.0 - smoothstep(0.26, 0.32, luma));
+        float w_grass = max(0.0, 1.0 - w_grey - w_forest - w_snow);
+        vec2 ground = pattern_xz(world_pos);
+        vec2 uv = ground / tex_scale;
+        // a second, coarser scale breaks the tiling as the ground recedes
+        float near = 1.0 - smoothstep(60.0, 900.0, length(VERTEX));
+        vec2 uv_far = ground / (tex_scale * 7.3);
+        vec3 grass = mix(style_tinted(tex_grass, uv_far, col, tex_color_weight),
+                         style_tinted(tex_grass, uv, col, tex_color_weight), near);
+        vec3 forest = style_tinted(tex_forest, uv, col, tex_color_weight * 0.5);
+        vec3 grey = style_tinted(tex_gravel, uv, col, 0.1) * 0.85;
+        vec3 snow = style_tinted(tex_snow, uv, col, 0.6);
+        col = grass * w_grass + forest * w_forest + grey * w_grey + snow * w_snow;
+        // up close, the ground's relief from its normal maps
+        if (near > 0.0) {
+            vec3 nn = style_ground_normal(n, nrm_grass, uv, 0.6) * w_grass
+                    + style_ground_normal(n, nrm_forest, uv, 0.6) * w_forest
+                    + style_ground_normal(n, nrm_gravel, uv, 0.6) * (w_grey + w_snow);
+            n = normalize(mix(n, nn, near * (1.0 - rockiness)));
+        }
+        // cliffs: rock, triplanar so it does not smear down the face
+        if (rockiness > 0.01) {
+            vec3 bw = pow(abs(n), vec3(4.0));
+            bw /= bw.x + bw.y + bw.z;
+            float rs = tex_scale * 2.0;
+            vec3 rock = texture(tex_rock, vec2(ground.y, world_pos.y) / rs).rgb * bw.x
+                      + texture(tex_rock, ground / rs).rgb * bw.y
+                      + texture(tex_rock, vec2(ground.x, world_pos.y) / rs).rgb * bw.z;
+            col = mix(col, rock * 0.9, rockiness);
+        }
+        if (use_photos && photo_slot >= 0) {
+            // the photo carries its own sun and shade: kept out of cliffs, where the rock is
+            // better, and lit on top like any albedo
+            float over = CAMERA_POSITION_WORLD.y - world_pos.y;
+            float t = max(smoothstep(photo_near, photo_far, length(VERTEX)), smoothstep(40.0, 250.0, over));
+            vec3 photo = texture(photos, vec3(tile_uv, float(photo_slot))).rgb * 1.1;
+            col = mix(col, photo, t * photo_max * (1.0 - rockiness * 0.7));
+        }
+    }
+#else
     col = mix(col, vec3(0.30, 0.28, 0.26), rockiness * 0.75);
+#endif
 
+#ifdef STYLE_LIT
+    // valley mist of a running occasion; a no-op on an ordinary day
+    col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
+    col = style_grade(col);
+#ifdef STYLE_CARTOON
+    // big painted patches of lighter and darker ground
+    vec2 paint_xz = pattern_xz(world_pos);
+    col *= mix(0.9, 1.1, style_paint_noise(paint_xz / 38.0) * 0.6 + style_paint_noise(paint_xz / 9.0) * 0.4);
+#endif
+    ALBEDO = col;
+    NORMAL = style_view_normal(VIEW_MATRIX, n);
+#ifdef STYLE_REAL
+    ROUGHNESS = 0.92;
+#else
+    ROUGHNESS = 1.0;
+#endif
+    EMISSION = col * door_light(world_pos, n);
+#else
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     // cliffs get a harder light ramp so faceting reads as rock rather than soft ground
     float levels = mix(light_levels, 3.0, rockiness);
@@ -108,4 +206,5 @@ void fragment() {
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
     ALBEDO = mix(col, world_sky, fog);
+#endif
 }

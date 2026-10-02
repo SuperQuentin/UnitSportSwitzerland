@@ -10,6 +10,9 @@ namespace UnitSport.Terrain;
 public partial class ChunkNode : Node3D
 {
     private MeshInstance3D? _meshInstance;
+
+    /// <summary>The tile's ground mesh, once built.</summary>
+    public MeshInstance3D? Ground => _meshInstance;
     private MeshInstance3D? _roadInstance;
     private StaticBody3D? _body;
 
@@ -113,7 +116,9 @@ public partial class ChunkNode : Node3D
     {
         if (_meshInstance == null)
         {
-            _meshInstance = new MeshInstance3D();
+            // the ground, its roads and its water never cast sun shadows (lit styles): millions
+            // of triangles under the cascades, for shade the cel light already gives the slopes
+            _meshInstance = new MeshInstance3D { CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
             AddChild(_meshInstance);
         }
         Swap(_meshInstance, mesh);
@@ -123,7 +128,7 @@ public partial class ChunkNode : Node3D
     {
         if (_roadInstance == null)
         {
-            _roadInstance = new MeshInstance3D { Name = "Roads" };
+            _roadInstance = new MeshInstance3D { Name = "Roads", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
             AddChild(_roadInstance);
         }
         Swap(_roadInstance, mesh);
@@ -306,8 +311,13 @@ public partial class ChunkNode : Node3D
     /// The MultiMeshes of a tile, built on the worker; null where a tile has none. The far pair
     /// holds the same trees as billboards, when the style has them (<see cref="Styles.StyleKit.TreeLod"/>).
     /// </summary>
+    /// <para>
+    /// With <see cref="Styles.MeshDetail.High"/> trees and billboards, a tile builds no 3D trees:
+    /// <see cref="Near"/> hands its instances to <see cref="NearTrees"/>, which draws the ones in
+    /// range from every tile, so the heavier trees cost only what is near the camera.
+    /// </para>
     public sealed record TreeMeshes(MultiMesh? Conifers, MultiMesh? Broadleaves,
-        MultiMesh? ConifersFar = null, MultiMesh? BroadleavesFar = null)
+        MultiMesh? ConifersFar = null, MultiMesh? BroadleavesFar = null, TreeBuffers? Near = null)
     {
         /// <summary>Frees a build that is thrown away before it reached a tile.</summary>
         public void Dispose()
@@ -324,26 +334,34 @@ public partial class ChunkNode : Node3D
     /// computed: assigning a buffer makes the RenderingServer walk every instance for an AABB,
     /// 16 ms for a 60k-tree tile on the main thread, unless a custom one is already set.
     /// </summary>
-    /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    /// <param name="detail">The visual style's mesh detail: PS1's 20-triangle trees, or Cartoon's
+    /// tiered conifers and puffy broadleaves (<see cref="HighDetailTrees"/>).</param>
     public static TreeMeshes BuildTreeMeshes(TreeBuffers trees, Material material, Aabb bounds,
         Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
-        var conifers = Make(trees.Conifers, trees.ConiferCount, UnitMesh(material, 0), bounds);
-        var broadleaves = Make(trees.Broadleaves, trees.BroadleafCount, UnitMesh(material, 1), bounds);
-        if (Styles.StyleKit.TreeFarMaterial is not { } far)
-            return new TreeMeshes(conifers, broadleaves);
-        // the same instances again as billboards: the shaders crossfade the two per tree
-        return new TreeMeshes(conifers, broadleaves,
-            Make(trees.Conifers, trees.ConiferCount, UnitMesh(far, 2), bounds),
-            Make(trees.Broadleaves, trees.BroadleafCount, UnitMesh(far, 3), bounds));
+        var far = Styles.StyleKit.TreeFarMaterial;
+        MultiMesh? conifersFar = null, broadleavesFar = null;
+        if (far != null)
+        {
+            // the same instances again as billboards: the shaders crossfade the two per tree
+            conifersFar = Make(trees.Conifers, trees.ConiferCount, UnitMesh(far, 2), bounds);
+            broadleavesFar = Make(trees.Broadleaves, trees.BroadleafCount, UnitMesh(far, 3), bounds);
+        }
+        bool high = detail == Styles.MeshDetail.High;
+        if (high && far != null)
+            return new TreeMeshes(null, null, conifersFar, broadleavesFar, Near: trees);
+        return new TreeMeshes(Make(trees.Conifers, trees.ConiferCount, UnitMesh(material, high ? 4 : 0), bounds),
+            Make(trees.Broadleaves, trees.BroadleafCount, UnitMesh(material, high ? 5 : 1), bounds),
+            conifersFar, broadleavesFar);
     }
 
     private static readonly Dictionary<(Material, int), ArrayMesh> UnitMeshes = new();
 
     /// <summary>
     /// The unit tree meshes, shared by every tile: 0 cone, 1 crown, 2/3 conifer/broadleaf
-    /// billboard. They used to be built per tile build and never freed (a MultiMesh does not own
-    /// its mesh), four RenderingServer meshes leaked with every tree tile.
+    /// billboard, 4/5 <see cref="Styles.MeshDetail.High"/>'s tiered cone and puffy crown. They used
+    /// to be built per tile build and never freed (a MultiMesh does not own its mesh), four
+    /// RenderingServer meshes leaked with every tree tile.
     /// </summary>
     private static ArrayMesh UnitMesh(Material material, int kind)
     {
@@ -354,6 +372,8 @@ public partial class ChunkNode : Node3D
                 {
                     0 => ConeMesh(material),
                     1 => CrownMesh(material),
+                    4 => TieredConeMesh(material),
+                    5 => PuffCrownMesh(material),
                     _ => BillboardMesh(material, kind - 2),
                 };
             return mesh;
@@ -381,6 +401,12 @@ public partial class ChunkNode : Node3D
         Fill(ref _broadleafInstance, "Broadleaves", trees.Broadleaves);
         Fill(ref _coniferFarInstance, "TreesFar", trees.ConifersFar);
         Fill(ref _broadleafFarInstance, "BroadleavesFar", trees.BroadleavesFar);
+        // a ray-traced billboard is traced from the rendering camera, and a shadow pass would
+        // trace it from the light: far trees cast no shadow (they are past the shadow range anyway)
+        foreach (var farNode in new[] { _coniferFarInstance, _broadleafFarInstance })
+            if (farNode != null) farNode.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        if (trees.Near != null) NearTrees.Register(this, trees.Near);
+        else NearTrees.Unregister(this);
         // a tile too far for any of its trees to be 3D skips the 3D MultiMeshes outright: the
         // shader collapses each far tree, but the GPU would still run every vertex
         bool billboards = trees.ConifersFar != null || trees.BroadleavesFar != null;
@@ -495,6 +521,105 @@ public partial class ChunkNode : Node3D
     }
 
     /// <summary>
+    /// Cartoon's trees (<see cref="Styles.MeshDetail.High"/>), unit height, origin at the base,
+    /// with smooth normals for the cel light. The far billboards trace the same shapes
+    /// (<c>shaders/body/tree.gdshaderinc</c>, <c>hit_tier</c> and <c>hit_puff</c>): change both together.
+    /// </summary>
+    public static (ArrayMesh Conifer, ArrayMesh Broadleaf) HighDetailTrees(Material material) =>
+        (UnitMesh(material, 4), UnitMesh(material, 5));
+
+    /// <summary>Conifer: three stacked 7-sided tiers on a trunk. 54 triangles.</summary>
+    private static ArrayMesh TieredConeMesh(Material material)
+    {
+        var v = new List<Vector3>();
+        var n = new List<Vector3>();
+        Trunk(v, n, 0.06f, 0.3f);
+        (float Base, float Top, float R)[] tiers = { (0.22f, 0.62f, 1.0f), (0.45f, 0.82f, 0.75f), (0.66f, 1.0f, 0.5f) };
+        const int sides = 7;
+        foreach (var (b, t, r) in tiers)
+        {
+            float slope = r / (t - b);
+            Vector3 Side(float a) => new Vector3(Mathf.Cos(a), slope, Mathf.Sin(a)).Normalized();
+            for (int i = 0; i < sides; i++)
+            {
+                float a0 = Mathf.Tau * i / sides, a1 = Mathf.Tau * (i + 1) / sides, am = (a0 + a1) * 0.5f;
+                var p0 = new Vector3(Mathf.Cos(a0) * r, b, Mathf.Sin(a0) * r);
+                var p1 = new Vector3(Mathf.Cos(a1) * r, b, Mathf.Sin(a1) * r);
+                v.Add(new Vector3(0, t, 0)); n.Add(Side(am));
+                v.Add(p0); n.Add(Side(a0));
+                v.Add(p1); n.Add(Side(a1));
+                // the underside: a shallow dent up into the tier
+                v.Add(p1); n.Add(Vector3.Down);
+                v.Add(p0); n.Add(Vector3.Down);
+                v.Add(new Vector3(0, b + 0.04f, 0)); n.Add(Vector3.Down);
+            }
+        }
+        return BuildMesh(v, material, n);
+    }
+
+    /// <summary>Broadleaf: three overlapping ellipsoid puffs on a trunk. 120 triangles.</summary>
+    private static ArrayMesh PuffCrownMesh(Material material)
+    {
+        var v = new List<Vector3>();
+        var n = new List<Vector3>();
+        Trunk(v, n, 0.07f, 0.5f);
+        Puff(v, n, new Vector3(0f, 0.70f, 0f), new Vector3(0.72f, 0.28f, 0.72f));
+        Puff(v, n, new Vector3(0.34f, 0.56f, 0.18f), new Vector3(0.52f, 0.22f, 0.52f));
+        Puff(v, n, new Vector3(-0.30f, 0.58f, -0.22f), new Vector3(0.55f, 0.23f, 0.55f));
+        return BuildMesh(v, material, n);
+    }
+
+    /// <summary>A 6-sided trunk prism, corners at radius <paramref name="r"/>, from 0 to <paramref name="top"/>.</summary>
+    private static void Trunk(List<Vector3> v, List<Vector3> n, float r, float top)
+    {
+        const int sides = 6;
+        for (int i = 0; i < sides; i++)
+        {
+            float a0 = Mathf.Tau * i / sides, a1 = Mathf.Tau * (i + 1) / sides;
+            var d0 = new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0));
+            var d1 = new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1));
+            Vector3 b0 = d0 * r, b1 = d1 * r, t0 = b0 + Vector3.Up * top, t1 = b1 + Vector3.Up * top;
+            v.Add(b0); n.Add(d0); v.Add(t1); n.Add(d1); v.Add(b1); n.Add(d1);
+            v.Add(b0); n.Add(d0); v.Add(t0); n.Add(d0); v.Add(t1); n.Add(d1);
+        }
+    }
+
+    /// <summary>A low-poly ellipsoid, 6 around and 4 down, with smooth normals.</summary>
+    private static void Puff(List<Vector3> v, List<Vector3> n, Vector3 c, Vector3 r)
+    {
+        const int seg = 6, rings = 4;
+        static Vector3 P(int i, int j)
+        {
+            float th = Mathf.Pi * j / rings, ph = Mathf.Tau * i / seg;
+            return new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th), Mathf.Sin(th) * Mathf.Sin(ph));
+        }
+        void Add(Vector3 unit)
+        {
+            v.Add(c + unit * r);
+            n.Add(new Vector3(unit.X / r.X, unit.Y / r.Y, unit.Z / r.Z).Normalized());
+        }
+        for (int j = 0; j < rings; j++)
+            for (int i = 0; i < seg; i++)
+            {
+                Vector3 a = P(i, j), b = P(i + 1, j), cc = P(i, j + 1), d = P(i + 1, j + 1);
+                if (j > 0) { Add(a); Add(b); Add(cc); }
+                if (j < rings - 1) { Add(b); Add(d); Add(cc); }
+            }
+    }
+
+    private static ArrayMesh BuildMesh(List<Vector3> verts, Material material, List<Vector3> normals)
+    {
+        using var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = verts.ToArray();
+        arrays[(int)Mesh.ArrayType.Normal] = normals.ToArray();
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        mesh.SurfaceSetMaterial(0, material);
+        return mesh;
+    }
+
+    /// <summary>
     /// A unit quad for the billboard trees: UV = (across, up), UV2.x = kind (0 conifer, 1
     /// broadleaf). The shader rebuilds the positions around each instance, facing the camera.
     /// </summary>
@@ -538,7 +663,7 @@ public partial class ChunkNode : Node3D
     {
         if (_waterInstance == null)
         {
-            _waterInstance = new MeshInstance3D { Name = "Water" };
+            _waterInstance = new MeshInstance3D { Name = "Water", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
             AddChild(_waterInstance);
         }
         Swap(_waterInstance, mesh);
@@ -551,6 +676,7 @@ public partial class ChunkNode : Node3D
     /// </summary>
     public void ReleaseResources()
     {
+        NearTrees.Unregister(this);
         foreach (var instance in new[] { _meshInstance, _roadInstance, _buildingInstance, _waterInstance })
         {
             var mesh = instance?.Mesh;

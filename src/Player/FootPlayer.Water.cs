@@ -59,7 +59,7 @@ public partial class FootPlayer
             // afloat, low in the water, riding the waves
             float draft = _ride.BodyHeight * 0.55f;
             float rise = (level - draft - GlobalPosition.Y) * 2.5f + WaterField.Velocity(GlobalPosition.X, GlobalPosition.Z, WaterField.Now).Y;
-            v.Y = Mathf.Lerp(v.Y, rise, 1f - Mathf.Exp(-5f * dt));
+            v.Y = Mathf.Lerp(v.Y, rise, MathX.Damp(5f, dt));
         }
         else v.Y = Mathf.MoveToward(v.Y, -SinkSpeed, 3f * dt);
         Velocity = v;

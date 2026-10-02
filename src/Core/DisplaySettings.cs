@@ -15,18 +15,44 @@ public partial class DisplaySettings : Node
     public override void _Ready()
     {
         ProcessMode = ProcessModeEnum.Always;
-        Apply();
+        // before the first Apply: it sizes the window, and the PS1 scale depends on that size
+        GetWindow().SizeChanged += ApplyScale;
+        Styles.StyleKit.ChoiceChanged += ApplyScale;
         GameSettings.Changed += Apply;
+        Apply();
     }
 
-    public override void _ExitTree() => GameSettings.Changed -= Apply;
+    public override void _ExitTree()
+    {
+        GameSettings.Changed -= Apply;
+        Styles.StyleKit.ChoiceChanged -= ApplyScale;
+        GetWindow().SizeChanged -= ApplyScale;
+    }
+
+    /// <summary>
+    /// The viewport's <c>Scaling3DScale</c> for a <see cref="GameSettings.RenderScale"/> in a
+    /// window of <paramref name="window"/> pixels. Of the window's pixels (100% = native), except
+    /// in PS1, whose look is its low resolution: there it is of the UI canvas, 1152x648 widened or
+    /// heightened to the window's aspect (stretch aspect "expand"), so PS1 at 75% is 864x486 on
+    /// any screen, as it was before the 3D followed the window (#306).
+    /// </summary>
+    public static float EffectiveScale(float scale, Vector2I window)
+    {
+        if (Styles.StyleKit.Style != Styles.VisualStyle.Ps1 || window.X <= 0 || window.Y <= 0) return scale;
+        float canvasToWindow = Math.Min(window.X / (float)GameSettings.BaseWidth, window.Y / (float)GameSettings.BaseHeight);
+        return scale / canvasToWindow;
+    }
+
+    private void ApplyScale() =>
+        // In VR the window is the monitor view: its render scale still applies
+        GetViewport().Scaling3DScale = EffectiveScale(GameSettings.Current.RenderScale, GetWindow().Size);
 
     private void Apply()
     {
         var s = GameSettings.Current;
-        // In VR the window is the monitor view: its render scale still applies, but the headset
-        // paces the frames, and a desktop vsync on top would hold it to the monitor's rate.
-        GetViewport().Scaling3DScale = s.RenderScale;
+        ApplyScale();
+        // In VR the headset paces the frames, and a desktop vsync on top would hold it to the
+        // monitor's rate.
         if (!XR.XrSession.Active)
             DisplayServer.WindowSetVsyncMode(s.VSync
                 ? DisplayServer.VSyncMode.Enabled

@@ -16,7 +16,7 @@ namespace UnitSport.Net;
 /// </summary>
 public static class Interest
 {
-    /// <summary>The internal render width (the game renders at 1152x648 whatever the window).</summary>
+    /// <summary>A reference render width (the 1152-wide UI canvas), fixed so relevance never depends on a viewer's screen.</summary>
     public const float RenderWidth = 1152f;
 
     /// <summary>Below this many pixels across, a target is noise, not a person.</summary>

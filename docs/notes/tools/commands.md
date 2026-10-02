@@ -41,3 +41,5 @@
   (`tiles.txt`: one `E-N` per line). Skips the road stage. It rewrites the tile's `.trees` too;
   the tree road mask comes from the raw roads in `<chunks>_temp/roads_raw/` plus the final
   `.road` tile (`trees-masked-off-road-corridors`), so the scatter is the same as the full build's.
+- `--photos` (with `--out`, optional `--tiles-file`, `--io-jobs`, `--force`): SWISSIMAGE aerial photo per tile
+  for Realistic+, from swisstopo's WMS (`docs/notes/styles/swissimage.md`).
