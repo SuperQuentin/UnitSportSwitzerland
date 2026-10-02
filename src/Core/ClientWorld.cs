@@ -486,6 +486,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _spectator!.Position = origin.ToWorld(e, n, 1200);
                 return new TunnelProbe(chunks, origin, e, n, double.Parse(probe[2], inv));
             }),
+            new(() => Terrain.WaterProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var w = Terrain.WaterProbe.ParseArgs()!;
+                // the anchor on the point, so its tile streams in with collision
+                _spectator!.Position = origin.ToWorld(w[0], w[1], 1200);
+                return new Terrain.WaterProbe(chunks, origin, w[0], w[1], w[2], w.Length > 3 ? w[3] : 0);
+            }),
             new(() => FlightProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var fly = FlightProbe.ParseArgs()!;
@@ -579,8 +586,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
+        if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
         if (Items.PvpProbe.Role != null) Items.PvpProbe.Stock(inventory);
@@ -612,6 +620,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Build.GadgetNetProbe.Role != null) AddChild(new Build.GadgetNetProbe(items));
         if (BattleRoyale.PrefabProbe.Requested) AddChild(new BattleRoyale.PrefabProbe());
         if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
+        if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
+        if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")

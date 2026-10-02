@@ -21,8 +21,17 @@ src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
 src/Core/                quick  --origincheck
 src/Terrain/             quick  --origincheck
+# #298: a generated lake (Haut-Lac, inside the fill round the default spawn) has its bed 10 m+ under
+# the level the runtime reads, and collision is the bed
+src/Terrain/ProceduralWorld quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
+src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
+tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck
 src/Crafting/            quick  --invcheck
+src/Crafting/            quick  --campfirecheck --systems ui,physics
+src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
+src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
+src/Items/Placeables     quick  --campfirecheck --systems ui,physics
 src/Build/               quick  --buildcheck --systems ui,physics,build
 src/Build/               net    tools/buildnetcheck.sh
 src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
@@ -103,6 +112,9 @@ src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh
 src/Items/DroppedItem    net    tools/bonkcheck.sh
 src/Player/FootPlayer.B  net    tools/bonkcheck.sh
+src/Crafting/            net    tools/campfirecheck.sh
+src/Items/PlacedObjects  net    tools/campfirecheck.sh
+src/Items/HeldItemVisual net    tools/campfirecheck.sh
 src/World/Wa             net    tools/watercheck.sh
 src/World/SeaState       net    tools/watercheck.sh
 src/Net/ChatManager      net    tools/watercheck.sh

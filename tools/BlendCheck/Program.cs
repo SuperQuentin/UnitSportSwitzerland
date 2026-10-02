@@ -499,6 +499,58 @@ Check("real tiles lost with the fill off", await cache.LoadChunkAsync(real.First
 foreach (var l in logs) WriteLine($"  log: {l}");
 WriteLine($"  {sample.Count} tiles cold through the source, blend loads included: {coldMs:F0} ms");
 
+// ---- water (#298): generated lakes and rivers have a bed below a still level -------------------
+WriteLine("water:");
+{
+    // Léman's middle, then north across its shore; the Rhône round the anchor
+    var lakeTiles = Enumerable.Range(0, 16).Select(i => new TileId(2530, 1140 + i)).ToList();
+    var riverTiles = Enumerable.Range(-3, 7).SelectMany(de => Enumerable.Range(-2, 5).Select(dn => new TileId(c0.E + de, c0.N + dn))).ToList();
+    long above = 0, notFlush = 0, edgeBad = 0, wetSamples = 0;
+    double lakeMax = 0, riverMax = 0;
+    int shoreSamples = 0;
+    var tiles = new Dictionary<TileId, WaterTile?>();
+    foreach (var t in lakeTiles.Concat(riverTiles).Distinct())
+    {
+        var w = world.BuildWater(t);
+        tiles[t] = w;
+        if (w == null) continue;
+        var g = world.BuildGrid(t, 1);
+        int n = WaterTile.Size;
+        for (int r = 0; r < n; r++)
+            for (int c = 0; c < n; c++)
+            {
+                float l = w.Level[r * n + c];
+                if (float.IsNaN(l)) continue;
+                wetSamples++;
+                double depth = l - g.HeightMetersAt(c * WaterTile.Stride, r * WaterTile.Stride);
+                if (depth < -ChunkFormat.HeightScale && above++ < 5)
+                    WriteLine($"    above: {t} ({c},{r}) level {l:F2} ground {g.HeightMetersAt(c * WaterTile.Stride, r * WaterTile.Stride):F2}");
+                if (lakeTiles.Contains(t)) lakeMax = Math.Max(lakeMax, depth); else riverMax = Math.Max(riverMax, depth);
+                // next to a dry sample the bed meets the bank: a lake's shelf there is a metre or so
+                // (the cover's 10 m fields put the water's edge up to ~15 m into the shelf)
+                bool shore = (c > 0 && float.IsNaN(w.Level[r * n + c - 1])) || (c < n - 1 && float.IsNaN(w.Level[r * n + c + 1]))
+                    || (r > 0 && float.IsNaN(w.Level[(r - 1) * n + c])) || (r < n - 1 && float.IsNaN(w.Level[(r + 1) * n + c]));
+                if (shore && lakeTiles.Contains(t)) { shoreSamples++; if (depth > 1.5) notFlush++; }
+            }
+    }
+    foreach (var (t, w) in tiles)
+    {
+        if (w == null || !tiles.TryGetValue(new TileId(t.E + 1, t.N), out var east) || east == null) continue;
+        int n = WaterTile.Size;
+        for (int r = 0; r < n; r++)
+        {
+            float a = w.Level[r * n + n - 1], b = east.Level[r * n];
+            if (float.IsNaN(a) != float.IsNaN(b) || (!float.IsNaN(a) && a != b)) edgeBad++;
+        }
+    }
+    WriteLine($"  {wetSamples} wet samples; deepest lake bed {lakeMax:F1} m, river {riverMax:F1} m; {shoreSamples} lake shore samples");
+    Check("wet samples whose bed is above the still level", above);
+    Check("lake shore samples more than 1.5 m deep (the bed must meet the bank)", notFlush);
+    Check("water level samples differing across a tile edge", edgeBad);
+    Check("a generated lake with no depth (Léman's middle under 20 m)", lakeMax < 20 ? 1 : 0);
+    Check("a generated river deeper than a channel gets (6 m)", riverMax > WaterBed.ChannelDepth(1e9) + 0.5 ? 1 : 0);
+}
+
 static string Ms(IEnumerable<double> v)
 {
     var a = v.OrderBy(x => x).ToArray();

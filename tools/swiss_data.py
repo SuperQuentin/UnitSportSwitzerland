@@ -15,6 +15,7 @@ Usage:
     python tools/swiss_data.py swissalti3d --bbox 2579000 1109000 2586000 1115000
     python tools/swiss_data.py swisstlm3d
     python tools/swiss_data.py swissbuildings3d --bbox 2579000 1109000 2586000 1115000
+    python tools/swiss_data.py swissbathy3d --bbox 2494000 1127000 2512000 1147000   # lake beds (#298)
     python tools/swiss_data.py gwr --canton vs
     python tools/swiss_data.py veloland
     python tools/swiss_data.py osm          # OpenStreetMap extract (ODbL), newest dated Geofabrik file
@@ -674,6 +675,19 @@ def resolve_swissbuildings3d(args):
                 yield asset["href"], key, sha256_of_asset(asset)
 
 
+def resolve_swissbathy3d(args):
+    """swissBATHY3D lake-bed surveys (#298): one STAC item per lake (23 lakes, e.g.
+    swissbathy3d_lacleman), each a zip of 1 km ESRI ASCII grids; the whole lake comes in one
+    file (Leman 409 MB), so a bbox picks lakes, not tiles. The ASCII grid, not the XYZ: the
+    preprocessor's BathySource reads it, and it is the smaller of the two."""
+    bbox = bbox_lv95_to_wgs84(*args.bbox) if args.bbox else None
+    pattern = re.compile(r"\.esriasciigrid\.zip$")
+    for feature in stac_items("ch.swisstopo.swissbathy3d", bbox):
+        for key, asset in feature.get("assets", {}).items():
+            if pattern.search(key):
+                yield asset["href"], key, sha256_of_asset(asset)
+
+
 def resolve_gwr(args):
     url = f"https://public.madd.bfs.admin.ch/{args.canton}.zip"
     yield url, f"gwr_{args.canton}.zip", None
@@ -730,6 +744,12 @@ DATASETS = {
         "resolve": resolve_swissbuildings3d,
         "help": "swissBUILDINGS3D 3.0 LoD2 solids (STAC, bbox-tiled or --nationwide)",
         "needs_bbox": True,
+    },
+    "swissbathy3d": {
+        "subdir": "bathy3d",
+        "resolve": resolve_swissbathy3d,
+        "help": "swissBATHY3D lake beds, whole lakes touching the bbox (STAC; for TerrainPreprocessor --bathy)",
+        "needs_bbox": False,
     },
     "gwr": {
         "subdir": "gwr",

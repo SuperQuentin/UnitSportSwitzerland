@@ -114,7 +114,19 @@ public enum ItemId
     /// <summary>Held, it builds structure pieces from the pack's materials (<see cref="ItemUse.Build"/>).</summary>
     Hammer = 150,
 
-    // 151-179 are taken by the campfire / cooking (#272) and the shops / vending machines (#273)
+    // ---- fire and placeables (#272, docs/notes/crafting/campfire.md) ----
+    /// <summary>Cooked at a fire (#272).</summary>
+    Fondue = 151,
+    HotChocolate = 152,
+    ToastedBread = 153,
+    /// <summary>Placed: a fire that burns 20 minutes, a cooking station (<c>PlacedKind.Campfire</c>).</summary>
+    Campfire = 154,
+    /// <summary>Held: a light in the hand, seen by everyone (it follows the replicated held item).</summary>
+    Torch = 155,
+    /// <summary>Placed: a workbench station anywhere (<c>PlacedKind.FieldWorkbench</c>).</summary>
+    FieldWorkbench = 156,
+
+    // 160-179 are taken by the shops / vending machines (#273)
 
     // ---- gadgets (#275, docs/notes/build/gadgets.md): placed, to get up high or to hide ----
     Zipline = 180, RopeLadder = 181, Trampoline = 182, LaunchPad = 183, CamoNet = 184, HayHideout = 185,

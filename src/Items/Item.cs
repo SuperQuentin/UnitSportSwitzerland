@@ -90,7 +90,7 @@ public static class ItemDefs
         // occasions (#18): treats found in loot and the hunt while one runs, and the hats
         Eat(ItemId.Candy, "Candy", 20, "#e8702a", "SW", 5, ItemCategory.Food, 1),
         Eat(ItemId.Pumpkin, "Pumpkin", 5, "#e07818", "PU", 20, ItemCategory.Food, 3),
-        Eat(ItemId.CaramelApple, "Caramel apple", 5, "#b8581e", "CP", 15, ItemCategory.Food, 2),
+        Eat(ItemId.CaramelApple, "Caramel apple", 5, "#b8581e", "CP", 15, ItemCategory.Food, 4),
         Eat(ItemId.Biberli, "Biberli", 10, "#8a5a2a", "BI", 15, ItemCategory.Food, 2),
         Eat(ItemId.Mandarin, "Mandarin", 10, "#f08a18", "MA", 8, ItemCategory.Food, 1),
         Eat(ItemId.Grittibaenz, "Grittibänz", 5, "#d8a060", "GZ", 25, ItemCategory.Food, 4),
@@ -140,6 +140,17 @@ public static class ItemDefs
         Gadget(ItemId.LaunchPad, "Launch pad", "{use_item} sets it on the ground. {interact_mount} on it fires you about 80 m up, into a wingsuit glide.", "#2a7a8a", "LP", 90),
         Gadget(ItemId.CamoNet, "Camo net", "{use_item} spreads it on four poles: under it you are hard to spot from above and afar.", "#4a5a30", "CN", 12),
         Gadget(ItemId.HayHideout, "Hay bale hideout", "{use_item} sets it down: a hollow bale to crouch in, with a slit to look out of.", "#d8c060", "HY", 14),
+
+        // fire and placeables (#272): cooked at a fire, worth more than what went in
+        Eat(ItemId.Fondue, "Fondue", 3, "#f0c850", "FO", 90, ItemCategory.Food, 30),
+        Eat(ItemId.HotChocolate, "Hot chocolate", 5, "#7a4628", "HC", 30, ItemCategory.Water, 8),
+        Eat(ItemId.ToastedBread, "Toasted bread", 5, "#a8642a", "TB", 30, ItemCategory.Food, 4),
+        new(ItemId.Campfire, "Campfire", "{use_item} lays it where you look and lights it: it burns 20 minutes, a fire to cook at. Out, anyone may clear the ashes; yours, {use_item} with an empty hand puts it out.",
+            ItemUse.Place, 3, new Color(0.85f, 0.42f, 0.12f), "CF", 0, ItemCategory.Gear, 7f),
+        new(ItemId.Torch, "Torch", "A light in your hand: it burns while you hold it, and everyone sees it.",
+            ItemUse.Readout, 5, new Color(0.95f, 0.55f, 0.15f), "TO", 0, ItemCategory.Gear, 6f),
+        new(ItemId.FieldWorkbench, "Field workbench", "{use_item} sets it up where you look: a workbench to craft at, anywhere. {use_item} on it with an empty hand packs it up again.",
+            ItemUse.Place, 1, new Color(0.62f, 0.44f, 0.24f), "WB", 0, ItemCategory.Gear, 15f),
     };
 
     private static ItemDef Gadget(ItemId id, string name, string blurb, string tint, string glyph, float value) =>
@@ -376,6 +387,16 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0.0f, 0.16f), new Vector3(0.11f, 0.035f, 0.04f), new Color(0.40f, 0.42f, 0.45f));  // head
                 s.Box(new Vector3(-0.07f, 0.0f, 0.16f), new Vector3(0.04f, 0.025f, 0.03f), new Color(0.40f, 0.42f, 0.45f)); // claw
                 break;
+
+            case ItemId.Torch:
+            {
+                // upright like the GPS: a stick, a wrap of cloth soaked in pitch, a flame on top
+                s.Tube(new Vector3(0, -0.12f, 0), new Vector3(0, 0.30f, 0), 0.016f, 0.022f, new Color(0.45f, 0.29f, 0.15f), 6);
+                s.Tube(new Vector3(0, 0.22f, 0), new Vector3(0, 0.33f, 0), 0.034f, new Color(0.30f, 0.22f, 0.16f), 8);
+                s.Box(new Vector3(0, 0.38f, 0), new Vector3(0.06f, 0.09f, 0.06f), new Color(1f, 0.55f, 0.12f));
+                s.Box(new Vector3(0, 0.43f, 0), new Vector3(0.035f, 0.07f, 0.035f), new Color(1f, 0.88f, 0.35f));
+                break;
+            }
             case ItemId.Radio:
                 // the grip is the handle: the box hangs from the hand at its real 0.46 m
                 AppendRadio(s, new Vector3(0, -0.16f, 0));
