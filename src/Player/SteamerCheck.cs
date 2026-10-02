@@ -204,6 +204,7 @@ public partial class SteamerCheck : Node
         await Bow(me);
         await Overboard(me);
         await Seat(me);
+        await Boarding(me);
         Finish(null);
     }
 
@@ -484,6 +485,55 @@ public partial class SteamerCheck : Node
             Log(F($"  standing up: ride {me.Ride}, at {me.GlobalPosition}, parked {Parked()?.GlobalPosition}, posed {Parked()?.Posed}, {WhereText(me)}, {me.WalkState}"));
         }
         Expect(up && me.Ride == RideKind.OnFoot && me.Aboard, $"E stands up into the saloon ({WhereText(me)})");
+    }
+
+    /// <summary>
+    /// E from a quay beside the parked steamer, both ways of the setting "Board ships on deck": off (the
+    /// default) it takes the wheel, as a bus; on, it puts the player on deck by the gangway.
+    /// </summary>
+    private async Task Boarding(FootPlayer me)
+    {
+        await SeaState("calm", 0f);
+        await Wait(3);
+        var settings = GameSettings.Current;
+        bool was = settings.BoardShipsOnDeck;
+        float d = SteamerMeshBuilder.DeckY, top = d - SteamerMeshBuilder.PlankDrop;
+        float inner = SteamerMeshBuilder.PlankEdge + 0.5f, outer = inner + 7f;
+        var size = new Vector3(outer - inner, 8f, 8.4f);
+        var quay = new StaticBody3D { Name = "TestQuay" };
+        quay.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
+        quay.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size }, MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.55f, 0.52f) } });
+        GetTree().CurrentScene.AddChild(quay);
+        // on the quay at the port gangway, the ship as it lies now
+        async Task<bool> OnQuay()
+        {
+            if (Frame(me) is not { } f) return false;
+            var t = f.GlobalTransform;
+            quay.GlobalTransform = new Transform3D(new Basis(Vector3.Up, t.Basis.GetEuler().Y),
+                t * BoatMeshBuilder.Flip(new Vector3((inner + outer) * 0.5f, top - size.Y * 0.5f, SteamerMeshBuilder.Z(44.2f))));
+            me.GlobalPosition = t * BoatMeshBuilder.Flip(new Vector3(SteamerMeshBuilder.PlankEdge + 1.6f, top + 0.05f, SteamerMeshBuilder.Z(44.2f)));
+            me.Velocity = Vector3.Zero;
+            await Wait(1.5);
+            return !me.Aboard && me.Ride == RideKind.OnFoot;
+        }
+
+        settings.BoardShipsOnDeck = false;
+        Expect(await OnQuay(), $"on a quay beside the port gangway ({WhereText(me)})");
+        Expect(me.TryInteract() && await Until(() => me.Ride == RideKind.Steamer && me.SeatIndex == 0, 5),
+            "\"Board ships on deck\" off (the default): E from the quay takes the wheel, as a bus");
+        me.ExitVehicle();
+        await Until(() => me.Aboard, 8);
+
+        settings.BoardShipsOnDeck = true;
+        Expect(await OnQuay(), $"back on the quay ({WhereText(me)})");
+        bool aboard = me.TryInteract() && await Until(() => me.Ride == RideKind.OnFoot && me.Aboard, 6);
+        await Wait(1);
+        var w = Where(me);
+        Expect(aboard && Mathf.Abs(w.Y - d) < 0.25f && w.At > SteamerMeshBuilder.GangFrom - 0.5f && w.At < SteamerMeshBuilder.GangTo + 0.5f,
+            F($"\"Board ships on deck\" on: E from the quay puts the player on deck at the gangway ({WhereText(me)})"));
+        await Shot("board_on_deck", () => OnShip(me, 2.4f, d + 1.7f, 38.8f, 3.9f, d + 0.9f, 44.4f));
+        settings.BoardShipsOnDeck = was;
+        quay.QueueFree();
     }
 
     // ---- pictures ---------------------------------------------------------------------------------

@@ -64,9 +64,35 @@ public partial class FootPlayer
     private bool TryClimbAboard()
     {
         if (!IsSwimming || _ride != null || RidingWith != 0) return false;
+        if (NearestGangway(ClimbReach, null) is not { } at) return false;
+        LeaveWater();
+        StandIn(at.Spot, at.Velocity);
+        GD.Print($"[steamer] {Name} climbs aboard by the gangway");
+        return true;
+    }
+
+    /// <summary>
+    /// E beside a parked steamer with "Board ships on deck" on (<see cref="Core.GameSettings.BoardShipsOnDeck"/>):
+    /// onto its deck inside the nearest gangway, aboard as soon as its deck is here. False when it is no ship.
+    /// </summary>
+    private bool TryBoardOnDeck(VehicleBody vehicle)
+    {
+        if (_ride != null || RidingWith != 0 || NearestGangway(float.MaxValue, vehicle) is not { } at) return false;
+        StandIn(at.Spot, at.Velocity);
+        GD.Print($"[steamer] {Name} boards on deck by the gangway");
+        return true;
+    }
+
+    /// <summary>
+    /// The gangway of a walkable ship nearest this player (horizontally, measured to a point 0.6 m out
+    /// from its opening) within <paramref name="reach"/>: the spot on deck just inside it and the
+    /// ship's velocity. Only <paramref name="only"/> when given, else every ship near.
+    /// </summary>
+    private (Vector3 Spot, Vector3 Velocity)? NearestGangway(float reach, Node3D? only)
+    {
         Node3D? best = null;
         Vector3 spot = default, velocity = default;
-        float bestDist = ClimbReach;
+        float bestDist = reach;
         void Consider(Node3D host, Rideable? ride, Vector3 hostVelocity)
         {
             if (ride is not Steamer || SectionFrame(host, 0) is not { } frame) return;
@@ -85,16 +111,16 @@ public partial class FootPlayer
                 velocity = hostVelocity;
             }
         }
-        foreach (var p in GetTree().GetNodesInGroup(Group))
-            if (p is FootPlayer other && other != this) Consider(other, RideOfHost(other), other.WorldVelocity with { Y = 0 });
-        if (VehicleManager.Instance is { } vehicles)
-            foreach (var node in vehicles.GetChildren())
-                if (node is VehicleBody v) Consider(v, RideOfHost(v), v.Velocity with { Y = 0 });
-        if (best == null) return false;
-        LeaveWater();
-        StandIn(spot, velocity);
-        GD.Print($"[steamer] {Name} climbs aboard by the gangway");
-        return true;
+        if (only is VehicleBody one) Consider(one, RideOfHost(one), one.Velocity with { Y = 0 });
+        else
+        {
+            foreach (var p in GetTree().GetNodesInGroup(Group))
+                if (p is FootPlayer other && other != this) Consider(other, RideOfHost(other), other.WorldVelocity with { Y = 0 });
+            if (VehicleManager.Instance is { } vehicles)
+                foreach (var node in vehicles.GetChildren())
+                    if (node is VehicleBody v) Consider(v, RideOfHost(v), v.Velocity with { Y = 0 });
+        }
+        return best == null ? null : (spot, velocity);
     }
 
     /// <summary>How near a gangway's foot a swimmer must be to climb its ladder, m.</summary>

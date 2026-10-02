@@ -45,7 +45,9 @@
   then the upper deck. The floor plan (`VehicleDeck.Plan`) is the hull's edge plus the planks.
 - **Boarding**: walk over a gangway's plank from a quay at its foot; or swimming beside a gangway, E
   climbs its ladder onto the deck (`TryClimbAboard`, whether the gate is open or not). E from outside a
-  parked one still takes the wheel (as a bus). E aboard at the wheel drives; at a seat sits
+  parked one takes the wheel (as a bus) by default; with the setting **Board ships on deck** (Settings ->
+  Vehicles, `GameSettings.BoardShipsOnDeck`, off by default, `--boardondeck on`) it puts you on deck
+  inside the nearest gangway instead (`TryBoardOnDeck`; both ways covered by `--steamercheck`). E aboard at the wheel drives; at a seat sits
   (a parked one is taken driverless from that seat; E stands up). Over the rail: off the floor plan,
   you fall into the lake and swim (#301); the ship goes on.
 - **Parked** (`VehicleBody`): floats and drifts on the model like any boat; headless it gets an empty
