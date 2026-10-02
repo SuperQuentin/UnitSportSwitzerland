@@ -289,7 +289,7 @@ public partial class Ambience : Node, IOriginShiftAware
             _birdSet = Enumerable.Range(0, AmbienceDsp.SpeciesCount).OrderBy(_ => r.Next()).Take(2 + r.Next(2)).ToArray();
         }
 
-        if (_chunks.TryGetHeight(pos, out float h)) { _ground = h; _altitude = h; }
+        if (_chunks.TryGetSurface(pos, out float h)) { _ground = h; _altitude = h; }
         else { _ground = pos.Y - 1.5f; _altitude = pos.Y; }
 
         int known = 0, pasture = 0, wooded = 0;

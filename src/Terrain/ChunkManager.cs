@@ -739,33 +739,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
-    /// Throws the whole world away — every tile, every cached asset and blend, the horizon — for
-    /// a rebase, which changes what every world coordinate means. <paramref name="moveOrigin"/>
-    /// runs once nothing placed against the old origin is left; the rings then rebuild everything
-    /// round the new one. Main thread only.
-    /// </summary>
-    public void ResetAll(Action? moveOrigin = null)
-    {
-        foreach (var id in _chunks.Keys.ToList()) UnloadTile(id);
-        _desired.Clear();
-        _wanted = [];
-        _ordered = [];
-        _desiredKey = "";
-        _orderedView = null;
-        _worldVersion++;
-        _sinceEval = double.MaxValue;
-        _invalidate?.Invoke(null);
-        _fallback?.ClearBlends();
-        Horizon?.Clear();
-        moveOrigin?.Invoke();
-        // the coverage texture is placed in world space: after the move, not before
-        FitHorizonCoverage();
-        Horizon?.Reload();
-        GD.Print("[terrain] world reset");
-        TerrainReplaced?.Invoke(null);
-    }
-
-    /// <summary>
     /// Sizes the horizon's coverage texture to every tile that can be drawn: the real set and the
     /// generated fill's domain.
     /// </summary>
@@ -1017,6 +990,18 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             && water.TrySample(e - id.MinE, id.MaxN - n, out stillLevel, out waveScale);
     }
 
+    /// <summary>
+    /// Where something put down here rests (#299): the ground, or the still water surface where
+    /// there is water over it. <see cref="TryGetHeight"/> is the terrain, which under a lake is now
+    /// its bed: spawns, respawns, drops, birds and the void rescue want this one.
+    /// </summary>
+    public bool TryGetSurface(Vector3 worldPos, out float height)
+    {
+        if (!TryGetHeight(worldPos, out height)) return false;
+        if (TryGetWaterLevel(worldPos, out float still) && still > height) height = still;
+        return true;
+    }
+
     public bool TryGetHeight(Vector3 worldPos, out float height)
     {
         height = 0f;
@@ -1255,11 +1240,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         dist = Math.Min(dist, LodPolicy.Distance(result.Id, _origin!.TileAt(anchor.GlobalPosition)));
                     node.SetTreeDensity(Lod.TreeDensity(dist));
                 }
-                if (result.Water != null)
-                    EnsureNode(result.Id, state).SetWater(result.Water);
                 state.HasBuildings = true;
                 state.PendingBuildings = false;
             }
+            // near tiles' water comes with their buildings, far tiles' (flat, #299) on its own
+            if (result.Water != null)
+                EnsureNode(result.Id, state).SetWater(result.Water);
             state.ActiveStride = result.Stride;
             // a single commit past a frame is worth knowing about: it is what a hitch IS
             double took = clock.Elapsed.TotalMilliseconds - t0;
@@ -1413,7 +1399,28 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private KeyValuePair<TileId, Want>[] _wanted = [];
     private KeyValuePair<TileId, Want>[] _ordered = [];
     private double[] _orderKeys = [];
-    private string _desiredKey = "";
+    /// <summary>
+    /// What the desired set was computed from: each anchor's tile and whether it wants collision,
+    /// the LOD policy, the world version and <see cref="BuildMeshes"/>. Compared field by field at
+    /// 10 Hz, with nothing allocated (it was a string built every evaluation, #221).
+    /// </summary>
+    private readonly List<(TileId Tile, bool Collision)> _desiredKey = new(), _keyNow = new();
+    private (LodPolicy? Lod, long Version, bool Meshes) _desiredKeyRest;
+
+    private bool RingKeyChanged()
+    {
+        _keyNow.Clear();
+        foreach (var anchor in _anchors)
+            _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor)));
+        (LodPolicy? Lod, long Version, bool Meshes) rest = (Lod, _worldVersion, BuildMeshes);
+        if (rest == _desiredKeyRest   // the policy by reference: a new one is a new key
+            && System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_keyNow).SequenceEqual(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_desiredKey)))
+            return false;
+        _desiredKeyRest = rest;
+        _desiredKey.Clear();
+        _desiredKey.AddRange(_keyNow);
+        return true;
+    }
     private ViewCone? _orderedView;
 
     /// <summary>
@@ -1446,16 +1453,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     private void EvaluateRings()
     {
-        var keyBuilder = new System.Text.StringBuilder();
-        foreach (var anchor in _anchors)
-            keyBuilder.Append(_origin!.TileAt(anchor.GlobalPosition)).Append(_collisionAnchors.Contains(anchor) ? 'p' : 'c').Append(';');
-        keyBuilder.Append('|').Append(Lod.GetHashCode())
-            .Append('|').Append(_worldVersion).Append('|').Append(BuildMeshes);
-        string key = keyBuilder.ToString();
-
-        if (key != _desiredKey)
+        if (RingKeyChanged())
         {
-            _desiredKey = key;
             _orderedView = null;
             RecomputeDesired();
         }
@@ -1848,6 +1847,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         ct.ThrowIfCancellationRequested();
                         water = ChunkNode.ToArrayMesh(waterData, waterMaterial);
                     }
+                    Lap(StWater, stageMs, clock);
+                }
+                else if (buildMesh && waterMaterial != null && waterLayer is { Legacy: false }
+                    && WaterMeshBuilder.Build(waterLayer, null, stride, detail) is { } farWater)
+                {
+                    // a far tile with a source water layer (#298's lakes over their beds): a flat
+                    // surface at the still level as coarse as its ground, or the lake is a pit
+                    ct.ThrowIfCancellationRequested();
+                    water = ChunkNode.ToArrayMesh(farWater, waterMaterial);
                     Lap(StWater, stageMs, clock);
                 }
 

@@ -30,23 +30,73 @@
   storm 0.7, gamey 1 (`SeaStateCommand`). Later the wind (#304) sets it.
 - **Amplitude per point = the sea state's amplitudes x the layer's wave scale** (fetch x depth):
   rivers and ponds stay flat, beaches calm down, legacy tiles (0.12 m deep) get no waves at all.
-- A style wrapper gets the waves by including `shaders/body/water.gdshaderinc`: its `vertex()` does
-  the displacement (UV.x of the water mesh = wave scale) and fills the varyings `wave_normal` and
-  `wave_lift`. The PS1-only parts (alpha, depth fade, underside) are under `#ifndef STYLE_LIT`.
-  **Cartoon (#248) and Realistic (#254, #264) must add**: use `wave_normal` for `NORMAL` instead of
-  their fake ripple normal, their own transparency/refraction (they render opaque today), and their
-  underside (`FRONT_FACING` false) look.
+- **Every style draws the same surface** (`shaders/body/water.gdshaderinc`, wrapped by
+  `ps1_water`, `cartoon_water`, `real_water`): one `vertex()` displaces by the physical waves
+  (UV.x = wave scale) and fills `wave_normal`, `wave_lift`, `wave_scale`. The fragment shades:
+  - PS1: four dithered bands, the fine ripples near and broad patches far, the swell taking the
+    bands over as the sea gets up; alpha by the **vertical** water depth (0.32 at the waterline,
+    0.92 from 6 m: the bed shows through the shallows); a bright banded underside.
+  - Cartoon: cel-lit (`style.gdshaderinc` `light()`) flat bands by depth (0.9 / 3 / 9 m), a lighter
+    ripple tone up close, a broken white foam line in the last 3-5 cm of depth and flecks on crests
+    taller than 0.8 of the local amplitude; alpha 0.35 to 0.97 over 4 m.
+  - Realistic: Fresnel (Schlick, F0 0.02), the sky and sun from Godot's PBR (`ROUGHNESS` 0.02),
+    refraction of the screen behind with per-channel absorption along the path through water
+    (clear at the shore, blue-green deep) as `EMISSION`, scatter as `ALBEDO`, detail ripples on the
+    normal; Realistic+ on Forward+ adds its own screen-space reflections (`ssr_steps` 24, set by
+    `StyleKit.Configure`: Godot's SSR does not reach transparent materials); Snell's window from below.
+  - Underwater (`WaterSurface.Look`): PS1 dark teal, 22 m; Cartoon bright turquoise, 20 m;
+    Realistic blue-green, 14 m (metres for 63 % of the view).
+- **No lattice, at any distance**: the fine ripples (`water_detail`, shading only) are six sine
+  trains of 1.35-3.4 m spread round the compass, their phases scrambled by five slower trains
+  (6-57 m), all whole cycles over 9.6 km and 20 min (origin- and clock-safe). Tried and dropped:
+  the old `sin x + sin z` shimmer in four bands (a grid of identical ellipses on calm water); three
+  noise-warped trains (the two strongest still beat into rows); value noise on rotated domains
+  (wrapped, it repeated every 9.6 km / |r|, 384 m: a grid over the whole Petit Lac; unwrapped, its
+  cells showed as creases); hashed gradient noise (hairline breaks along its cell edges on the
+  RTX 4070, Mobile and Forward+). Far off the waves' normal eases to up (400-1500 m): interpolated
+  over sub-pixel triangles it drew the mesh grid over the lake.
+- **The water writes depth** (`depth_draw_always` on every wrapper): it is drawn in the transparent
+  pass, unsorted within a tile, so without it a farther tile or crest painted over a nearer one in
+  polygons. The lit wrappers also skip received shadows (`shadows_disabled`).
+- **Shallows read as water**: PS1 tints them blue-green over the bed (alpha 0.45 at the waterline
+  to 0.92 at 6 m) and draws a broken pale shoreline in the last 3-9 cm; Realistic a wet line;
+  Cartoon its foam line. PS1 underwater is a lighter teal (22 m).
+- **No wave shorter than four 2 m mesh squares** (8.2 m): 4.3 m waves aliased on the mesh into a
+  false lattice. The body fades the short waves with distance (`spacing` = max(2, 0.004 x
+  distance)), never by the mesh's own spacing, so tiles meshed 2 m and 4 m apart move their shared
+  edge vertices alike.
 
 ## Why
 
 - One deterministic function on the server clock: every peer and the GPU get the same surface,
   nothing but one float (the sea state) crosses the wire. What you see is what a hull rides on.
-- Gerstner, six waves (64, 41, 23, 13, 7.4, 4.3 m): sharp crests, flat troughs, an exact normal and
-  particle velocity. Gamey: ~1.2 m summed amplitude (a 1.5-2 m swell crest to trough); calm: 3 cm.
-  `Chop` 1.2 keeps sum(k A Q) ~0.33 at gamey, far from loops (1).
+- Gerstner, six waves (64, 41, 27, 17.5, 11.3, 8.2 m): sharp crests, flat troughs, an exact normal
+  and particle velocity. Gamey: ~1.25 m summed amplitude (a 1.5-2 m swell crest to trough); calm:
+  3 cm. `Chop` 1.2 keeps sum(k A Q) ~0.31 at gamey, far from loops (1).
 - The parity of the bed under a server's coarse grid and a client's full grid: the wave scale's
   depth is read on the 10 m lattice both hold (`WaterLayer.BedAt`), or the two peers' waves differed
   on the shelf.
+
+## Placement over water (`ChunkManager.TryGetSurface`)
+
+- `TryGetHeight` is the terrain, which under a lake with a bed (#298) is the bed. Things put down
+  use `TryGetSurface` (the ground, or the still level where it is higher): `SpawnPoint`, the
+  placement pass in `FootPlayer`, entering foot mode, the void rescue (and `RememberSafe` never
+  records a spot under water, so a rescue never lands on a bed), dropped items and `Hearing`, BR
+  crates, GPX runners, `BirdLife.Ground` (and no ground bird lands under water), `TargetDrone`,
+  occasion decor and creatures, the ambience's ground. Left on the terrain on purpose: getting out
+  of a vehicle (shallow water only: cars cannot be in deep water), parking and wrecks (a sunk wreck
+  rests on the bed), the vehicle safety nets, clearances for audio/feel, traffic and NPC arrivals
+  (roads), the crash ragdoll (physics). `SetRide` refuses a car, motorbike or truck more than
+  0.45 m under water (boats are #302).
+
+## Far water
+
+- Tiles past the fine rings drop their water layer, and a lake with a bed would be a pit from afar.
+  A tile with a **source** layer (fixture, #298's `.water`) gets a flat surface at the still level
+  on every rebuild, as coarse as its ground (`WaterMeshBuilder`, terrain stride >= 10, wave scale 0).
+  Legacy tiles need none (their terrain is the surface). **The horizon is #298's**: `horizon.bin`
+  is built by the preprocessor from tile heights, so it must take max(bed, still level) there.
 
 ## Same logic, preserved
 

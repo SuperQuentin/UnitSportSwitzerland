@@ -29,8 +29,8 @@ more than 30 m from the sender's body.
 ## Placed objects — `src/Items/PlacedObjects.cs`, `World/Placed`
 
 Server-owned list of `PlacedObject(long Id, PlacedKind Kind, string Owner, double E, double N,
-double Altitude, Quaternion Rotation, string Payload)` — LV95 + altitude, so it survives a rebase or
-another server origin; `o.WorldTransform(placed.Origin)` converts.
+double Altitude, Quaternion Rotation, string Payload)` — LV95 + altitude, so it means the same place
+to every peer, whatever their origin (#185); `o.WorldTransform(placed.Origin)` converts.
 
 - Place: `PlacedObjects.Instance.RequestPlace(PlacedKind kind, Transform3D worldAt, string payload, Action<PlacedResult>? done)`.
 - Remove: `RequestRemove(long id, Action<PlacedResult>? done)`.
@@ -41,7 +41,7 @@ another server origin; `o.WorldTransform(placed.Origin)` converts.
   the kind is in `PlacedObjects.RemovableByAnyone` (default: `Flag`; `Photo` is owner-only).
   Owner = the chat display name (`NameOfPeer`), "local" offline — a renamed player loses its objects.
 - Clients: `Add`/`Remove` broadcasts, `Snapshot` on join (replaces everything shown). `All`,
-  `Added`, `Removed` to read/observe. After a rebase `ClientWorld` calls `Reposition()`.
+  `Added`, `Removed` to read/observe.
 - Visuals: `PlacedObjects.RegisterFactory(PlacedKind, Func<PlacedObject, Node3D>)` (replaces and
   redraws). The node is positioned for you, named `P<id>`, in group `placed_object`, tagged with meta
   `placed_id`; `PlacedObjects.IdOf(node)` walks up from any collider. Built-ins: `FlagVisual()`

@@ -40,7 +40,7 @@ public partial class WaterParity : Node
             vec2 p = base + float(i) * step;
             float s = 0.25 + 0.25 * float(i % 4);
             vec3 n;
-            vec3 d = water_wave_displace(p, s, n);
+            vec3 d = water_wave_displace(p, s, 2.0, n);
             // one value per row, in red and green: the alpha of the target is not ours to use
             float v = row == 0 ? d.y : row == 1 ? d.x : row == 2 ? d.z : n.y;
             COLOR = vec4(pack(v), 0.0, 1.0);

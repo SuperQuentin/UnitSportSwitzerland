@@ -16,7 +16,20 @@ public partial class WaterSurface : Node
     /// <summary>The muffled master bus's cut-off, Hz.</summary>
     private const float MuffledHz = 650f;
 
-    private static readonly StringName SurfaceY = "surface_y", Retro = "retro";
+    private static readonly StringName SurfaceY = "surface_y", Retro = "retro", Colour = "water_color", Visibility = "visibility";
+
+    /// <summary>The underwater look per style: the water's colour and the metres that take 63 % of the view.</summary>
+    private static (Color Colour, float Visibility) Look(Styles.VisualStyle style) => style switch
+    {
+        // PS1: the bed and what swims show at 8-15 m, then the fog closes
+        Styles.VisualStyle.Ps1 => (new Color(0.14f, 0.32f, 0.36f), 22f),
+        // Cartoon: bright, clear turquoise, as its shallows
+        Styles.VisualStyle.Cartoon => (new Color(0.14f, 0.46f, 0.52f), 20f),
+        // Realistic: a dark blue-green, as its absorption
+        _ => (new Color(0.05f, 0.24f, 0.27f), 14f),
+    };
+
+    private Styles.VisualStyle? _styled;
 
     private MeshInstance3D? _fog;
     private ShaderMaterial? _fogMaterial;
@@ -79,11 +92,20 @@ public partial class WaterSurface : Node
         if (under)
         {
             _fogMaterial!.SetShaderParameter(SurfaceY, level);
+            // the style's look, again only when the style changed
+            var style = Styles.StyleKit.Applied;
+            if (_styled != style)
+            {
+                _styled = style;
+                var (colour, visibility) = Look(style);
+                _fogMaterial.SetShaderParameter(Retro, style == Styles.VisualStyle.Ps1);
+                _fogMaterial.SetShaderParameter(Colour, colour);
+                _fogMaterial.SetShaderParameter(Visibility, visibility);
+            }
         }
         if (under == _under) return;
         _under = under;
         _fog!.Visible = under;
-        if (under) _fogMaterial!.SetShaderParameter(Retro, Styles.StyleKit.Applied == Styles.VisualStyle.Ps1);
         if (_lowPassIndex >= 0 && _lowPassIndex < AudioServer.GetBusEffectCount(0)
             && AudioServer.GetBusEffect(0, _lowPassIndex) == _lowPass)
             AudioServer.SetBusEffectEnabled(0, _lowPassIndex, under);

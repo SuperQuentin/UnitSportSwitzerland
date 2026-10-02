@@ -11,7 +11,7 @@ namespace UnitSport.Core;
 /// </summary>
 public static class ChatCheck
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--chatcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--chatcheck");
 
     private static int _failures;
 

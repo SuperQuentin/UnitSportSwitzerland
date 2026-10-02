@@ -38,7 +38,7 @@ public partial class DriveProbe : Node
     private readonly string? _shotPrefix;
     private readonly int[] _cars;
     private readonly double _seconds;
-    private static readonly bool Trace = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trace") >= 0;
+    private static readonly bool Trace = CmdArgs.Has("--trace");
 
     private bool _done, _routeRequested, _started;
     private double _t, _wait, _countdown = 2.5;
@@ -55,8 +55,8 @@ public partial class DriveProbe : Node
     private int _shots;
     private bool _shotThisDrift;
 
-    private readonly string? _record = ArgAfter("--record");
-    private readonly int? _mount = int.TryParse(ArgAfter("--mount"), out int k) ? k : null;
+    private readonly string? _record = CmdArgs.Value("--record");
+    private readonly int? _mount = CmdArgs.Int("--mount");
 
     /// <summary>One car in the race: its driver and what is measured of it.</summary>
     private sealed class Entry
@@ -97,16 +97,16 @@ public partial class DriveProbe : Node
         if (Core.OriginShifter.Instance is { } shifter) shifter.ThresholdM = double.MaxValue;
         _shotPrefix = shotPrefix;
         _seconds = seconds;
-        var list = ArgAfter("--cars");
+        var list = CmdArgs.Value("--cars");
         _cars = list != null
             ? list.Split(',').Select(x => int.TryParse(x, out int i) ? i : 0).ToArray()
             : new[] { car };
-        _finish = float.TryParse(ArgAfter("--finish"), NumberStyles.Float, CultureInfo.InvariantCulture, out float f) ? f : 2000f;
+        _finish = CmdArgs.Float("--finish") ?? 2000f;
     }
 
     public static (bool Requested, string? Shot, int Car, double Seconds) ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         bool requested = false;
         string? shot = null;
         int car = 0;
@@ -126,13 +126,6 @@ public partial class DriveProbe : Node
         return (requested, shot, car, seconds);
     }
 
-    private static string? ArgAfter(string flag)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, flag);
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-    }
-
     public override void _PhysicsProcess(double delta)
     {
         if (_done) return;
@@ -148,13 +141,13 @@ public partial class DriveProbe : Node
             var at = _origin.ToWorld(e, n, 0);
             var source = _chunks.Source!;
             // --to E,N: the race runs from the spawn toward that point and finishes level with it
-            Vector3? to = ArgAfter("--to")?.Split(',') is [var te, var tn]
+            Vector3? to = CmdArgs.Value("--to")?.Split(',') is [var te, var tn]
                 && double.TryParse(te, NumberStyles.Float, CultureInfo.InvariantCulture, out double toE)
                 && double.TryParse(tn, NumberStyles.Float, CultureInfo.InvariantCulture, out double toN) ? _origin.ToWorld(toE, toN, 0) : null;
             _ = System.Threading.Tasks.Task.Run(async () =>
             {
                 var route = await RaceRoute.BuildAsync(source, _origin, at, toward: to);
-                if (route != null && ArgAfter("--verge") != "0") route.Line = await RaceLine.Widen(route, source, _origin);
+                if (route != null && CmdArgs.Value("--verge") != "0") route.Line = await RaceLine.Widen(route, source, _origin);
                 Callable.From(() =>
                 {
                     if (route == null) { GD.Print("[drive] no road near the spawn"); Finish(1); return; }
@@ -189,11 +182,11 @@ public partial class DriveProbe : Node
         if (_entries.Count == 0)
         {
             if (!_chunks.TryGetHeight(line.Points[0], out _)) return;
-            int count = _mount != null ? (int.TryParse(ArgAfter("--riders"), out int riders) ? riders : 1) : _cars.Length;
+            int count = _mount != null ? (CmdArgs.Int("--riders") ?? 1) : _cars.Length;
             for (int k = 0; k < count; k++)
             {
                 var spec = _mount == null ? CarCatalog.All[Mathf.Clamp(_cars[k], 0, CarCatalog.All.Count - 1)] : null;
-                if (spec != null && ArgAfter("--setups")?.Split(',') is { } setups
+                if (spec != null && CmdArgs.Value("--setups")?.Split(',') is { } setups
                     && CarSetups.Parse(setups[Mathf.Min(k, setups.Length - 1)]) is { Id: > 0 } preset)
                     spec = preset.Apply(spec);
                 var kind = spec?.Kind ?? (RideKind)_mount!.Value;
@@ -261,8 +254,8 @@ public partial class DriveProbe : Node
                 // set them all)
                 var rng = new System.Random(1000 + _entries.IndexOf(en));
                 float drawn = AutoPilot.GridSkills(_entries.Count, new System.Random(77))[_entries.IndexOf(en)];
-                float skill = float.TryParse(ArgAfter("--skill"), NumberStyles.Float, CultureInfo.InvariantCulture, out float sk) ? sk : drawn;
-                float aggr = float.TryParse(ArgAfter("--aggression"), NumberStyles.Float, CultureInfo.InvariantCulture, out float ag) ? ag : 0.3f * (float)rng.NextDouble();
+                float skill = CmdArgs.Float("--skill") ?? drawn;
+                float aggr = CmdArgs.Float("--aggression") ?? 0.3f * (float)rng.NextDouble();
                 en.Pilot.Temperament(skill, aggr, 1000 + _entries.IndexOf(en));
                 en.Pilot.Go = false;
                 en.Player.RideControls = () => entry.Pilot!.Drive((float)GetPhysicsProcessDeltaTime(), _started && !entry.Out, Others(entry));

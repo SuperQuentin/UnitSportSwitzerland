@@ -41,6 +41,9 @@ public sealed class WaterLayer
     /// <summary>Wave scale per sample, 0..255 for 0..1; 0 where dry.</summary>
     public byte[] Scale { get; }
 
+    /// <summary>Derived from the cover raster (a tile with no source layer): its surface is the terrain + 0.12 m.</summary>
+    public bool Legacy { get; init; }
+
     /// <summary>How many samples have water.</summary>
     public int WetSamples { get; }
 
@@ -127,7 +130,8 @@ public sealed class WaterLayer
                 }
                 level[r * Size + c] = (float)grid.HeightMetersAt(fc, fr) + LegacyLift;
             }
-        return level == null ? null : Create(new WaterTile { Level = level }, grid);
+        return level == null ? null : Create(new WaterTile { Level = level }, grid) is { } layer
+            ? new WaterLayer(layer.Level, layer.Scale) { Legacy = true } : null;
     }
 
     /// <summary>

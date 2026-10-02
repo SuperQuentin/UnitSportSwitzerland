@@ -70,7 +70,7 @@ public partial class ShotgunProbe : ChatProbe
         var parts = _heard.First(l => l.Contains("PG A posA")).Split("posA ")[1].Split(' ');
         var a = new Vector3(Float(parts[0]), Float(parts[1]), Float(parts[2]));
         // in front of A and to its right (+X when A faces north), looking back at it
-        bool side = Array.IndexOf(OS.GetCmdlineUserArgs(), "--gunside") >= 0;   // "--gunside": A's right, looking along its shoulder line
+        bool side = CmdArgs.Has("--gunside");   // "--gunside": A's right, looking along its shoulder line
         _items.Inventory.Select(0);   // B keeps its hands empty: nothing in the way of the picture
         me.GlobalPosition = a + (side ? new Vector3(1.9f, 1.0f, -0.35f) : new Vector3(2.3f, 1.0f, -2.6f));
         me.Velocity = Vector3.Zero;

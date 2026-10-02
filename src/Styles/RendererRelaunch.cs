@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Styles;
 
@@ -16,7 +17,7 @@ public static class RendererRelaunch
     public const string Flag = "--forward-plus-relaunch";
 
     /// <summary>Whether this run is itself a relaunch (and so must not relaunch).</summary>
-    public static bool IsRelaunch => System.Array.IndexOf(OS.GetCmdlineUserArgs(), Flag) >= 0;
+    public static bool IsRelaunch => CmdArgs.Has(Flag);
 
     /// <summary>Whether a saved style wants Forward+ and this run is not on it.</summary>
     public static bool Wanted =>
@@ -30,7 +31,7 @@ public static class RendererRelaunch
         // run from the editor binary (`godot --path .`): it has to be told the project again
         if (OS.HasFeature("editor")) args.AddRange(new[] { "--path", ProjectSettings.GlobalizePath("res://") });
         args.Add("--");
-        args.AddRange(OS.GetCmdlineUserArgs().Where(a => a != Flag));
+        args.AddRange(CmdArgs.All.Where(a => a != Flag));
         args.Add(Flag);
         int pid = OS.CreateProcess(OS.GetExecutablePath(), args.ToArray());
         GD.Print($"[style] relaunching on Forward+ for {StyleKit.Style}: pid {pid}");

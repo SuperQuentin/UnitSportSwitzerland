@@ -25,7 +25,7 @@ public partial class TrafficProbe : Node
     private int _wrongWay;
     /// <summary>Most cars giving way at a side road's Wartelinie at once (#121); reported, not judged.</summary>
     private int _givingWay;
-    private readonly bool _crossing = OS.GetCmdlineUserArgs().Contains("--crossing");
+    private readonly bool _crossing = CmdArgs.Has("--crossing");
     private Vector3 _at;
     private bool _spawned;
     private int _over;
@@ -47,16 +47,7 @@ public partial class TrafficProbe : Node
         _shot = shot;
     }
 
-    public static (bool Requested, string? Shot) ParseArgs()
-    {
-        foreach (var a in OS.GetCmdlineUserArgs())
-            if (a.StartsWith("--trafficcheck"))
-            {
-                var p = a.Split(',');
-                return (true, p.Length > 1 ? p[1] : null);
-            }
-        return (false, null);
-    }
+    public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--trafficcheck");
 
     public override void _Process(double delta)
     {
