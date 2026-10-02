@@ -211,7 +211,7 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         _wasWrecked = Wrecked;
-        if (Wrecked)
+        if (Wrecked && !Drowned)
         {
             Char();
             // A fresh wreck (a crash just now) goes up where every peer can see it. One spawned
@@ -490,7 +490,12 @@ public partial class VehicleBody : CharacterBody3D
     {
         float dt = (float)delta;
 
-        if (Wrecked && !_wasWrecked) { _wasWrecked = true; Char(); Detonate(); }
+        if (Wrecked && !_wasWrecked)
+        {
+            _wasWrecked = true;
+            // sunk (#299): a wreck on the bed, neither burnt nor blown up under water
+            if (!Drowned) { Char(); Detonate(); }
+        }
         if (Wrecked) WreckAge += delta;
 
         if (_shutDriverIn > 0f && (_shutDriverIn -= dt) <= 0f) DoorsOpen &= unchecked((byte)~CarRig.DriverDoor);
@@ -649,6 +654,9 @@ public partial class VehicleBody : CharacterBody3D
         // a little of the momentum survives the blast
         Velocity = Velocity * 0.4f + Vector3.Up * 4f;
     }
+
+    /// <summary>Under water (#299): every peer asks its own <see cref="World.WaterField"/>, which they share.</summary>
+    private bool Drowned => World.WaterField.IsUnderwater(GlobalPosition + Vector3.Up * 0.5f);
 
     private void Detonate()
     {

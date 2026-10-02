@@ -44,6 +44,9 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
      authority, animation, damage). The PR says what was and was not verified. Network model:
      `src/Net/CLAUDE.md`.
 - Check and probe output goes in `test_output/` (gitignored), never the repo root.
+- **In conversation, issues and PRs are always links**, e.g.
+  [#346](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/346), never a bare `#346`
+  (on GitHub itself, in issue/PR/commit text, `#N` already links).
 
 ## Commands
 

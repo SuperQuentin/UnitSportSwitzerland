@@ -181,7 +181,7 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
         {
             if (town is not { } tw) { multi.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(Vector3.Zero), eye)); continue; }
             var centre = _origin.ToWorld(tw.E, tw.N, 0);
-            if (_chunks.TryGetHeight(centre, out float g)) centre.Y = g;
+            if (_chunks.TryGetSurface(centre, out float g)) centre.Y = g;
             float r = 8f + H(i, 1) * 20f, speed = (0.7f + H(i, 2) * 0.9f) * (H(i, 3) < 0.5f ? 1 : -1);
             float a = (float)_t * speed + H(i, 4) * Mathf.Tau;
             float h = 16f + H(i, 5) * 22f + Mathf.Sin((float)_t * 1.7f + i) * 2.5f;
@@ -202,7 +202,7 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
         var target = eye + new Vector3(Mathf.Sin((float)_t * 0.02f) * 70f, 0, Mathf.Cos((float)_t * 0.017f) * 70f);
         _crowCentre = _crowPlaced ? _crowCentre.Lerp(target, MathX.Damp(0.05f, dt)) : target;
         _crowPlaced = true;
-        float ground = _chunks.TryGetHeight(_crowCentre, out float g) ? g : eye.Y - 60f;
+        float ground = _chunks.TryGetSurface(_crowCentre, out float g) ? g : eye.Y - 60f;
         for (int i = 0; i < multi.InstanceCount; i++)
         {
             float r = 18f + H(i, 11) * 30f, speed = 0.18f + H(i, 12) * 0.12f;

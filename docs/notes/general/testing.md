@@ -59,7 +59,8 @@ fixture courses for driving, switchable systems, migrating a probe) are in `test
 - `--world fixture` = every system but the map and the generated fill, on `--chunks fixture:<course>`
   (`flat` by default). Courses (`Terrain/Fixture/FixtureCourse`): `flat`, `straight` (3 km),
   `hairpin` (6 legs, 15 m hairpins, 7 % down), `narrow` (4 m, a trunk every 5 m on both edges),
-  `junction` (9 m road, a T and a crossroads), `verge` (two bends, 6 m of grass, then trees). A
+  `junction` (9 m road, a T and a crossroads), `verge` (two bends, 6 m of grass, then trees), `lake`
+  (#299: beach, shelf, drop-off, a river, a slipway; `--watercheck`). A
   course starts at the spawn (`--at`), so `--drivecheck` runs on it unchanged.
 - Absent flags: today's boot, for players and every old command line.
 
