@@ -175,8 +175,9 @@ public partial class FootPlayer
     /// After the swim's slide (#378), against a vehicle's hull that overhangs the swimmer: a ship's
     /// topsides flaring out over the water, a boat's bottom dropping on the swell. Under it (facing
     /// down), it strokes out across the hull toward its nearer side, at least <see cref="OutFromUnder"/>
-    /// m/s: held there, the buoyancy pressed it into the bottom for good. Under a flare, the next
-    /// strokes do not drive in under it (<see cref="ClearOfHull"/>): stroking into the steamer's side,
+    /// m/s: held there, the buoyancy pressed it into the bottom for good. Under a flare, it moves off
+    /// at <see cref="OffFlare"/> m/s and the next strokes do not drive in under it
+    /// (<see cref="ClearOfHull"/>): stroking into the steamer's side, or lifted into it by a crest,
     /// the flare slid the swimmer down under the water and held its head there.
     /// </summary>
     private void OutFromUnderHull()
@@ -190,7 +191,10 @@ public partial class FootPlayer
             var level = n with { Y = 0 };
             if (n.Y > -0.7f && level.LengthSquared() > 1e-4f)
             {
+                // and off it: rising into it on a crest, it slid the swimmer down under it
                 _overhang = level.Normalized();
+                float off = Velocity.Dot(_overhang);
+                if (off < OffFlare) Velocity += _overhang * (OffFlare - off);
                 continue;
             }
             var across = hull.GlobalTransform.Basis.X with { Y = 0 };
@@ -215,5 +219,5 @@ public partial class FootPlayer
         return into < 0f ? wish - _overhang * into : wish;
     }
 
-    private const float OutFromUnder = 1.5f;
+    private const float OutFromUnder = 1.5f, OffFlare = 0.6f;
 }
