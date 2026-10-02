@@ -184,7 +184,45 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// attitude, the landing squash and a stunned figure lying flat — all of it, whatever computed
     /// it, in one value the remote copy applies as-is rather than re-deriving.
     /// </summary>
-    [Export] public Transform3D BodyPose { get; set; } = Transform3D.Identity;
+    /// Replicated as <see cref="NetPose"/>.
+    public Transform3D BodyPose { get; set; } = Transform3D.Identity;
+
+    /// <summary>
+    /// <see cref="BodyPose"/> and <see cref="TrainPose"/> on the wire (#221): the rotation as a
+    /// quaternion, the offset, the landing squash, then the train's three joint angles only while a
+    /// train has any. 40 bytes off a train against 72 for a Transform3D and a Vector4, in every
+    /// state packet to every viewer.
+    /// </summary>
+    [Export]
+    public float[] NetPose
+    {
+        get
+        {
+            bool train = TrainPose != Vector4.Zero;
+            var w = train ? _poseTrain : _poseBody;
+            var b = BodyPose.Basis;
+            // the only scale a pose has is the landing squash, (1 + s/2, 1 - s, 1 + s/2) after the rotation
+            var q = b.GetRotationQuaternion();
+            var o = BodyPose.Origin;
+            w[0] = q.X; w[1] = q.Y; w[2] = q.Z; w[3] = q.W;
+            w[4] = o.X; w[5] = o.Y; w[6] = o.Z;
+            float squash = 1f - b.Y.Length();
+            w[7] = Mathf.Abs(squash) < 1e-5f ? 0f : squash;   // a ride's rounding is no squash
+            if (train) { w[8] = TrainPose.X; w[9] = TrainPose.Y; w[10] = TrainPose.Z; }
+            return w;
+        }
+        set
+        {
+            if (value == null || value.Length < PoseFloats) return;   // a malformed packet changes nothing
+            float s = value[7];
+            var rot = new Basis(new Quaternion(value[0], value[1], value[2], value[3]).Normalized());
+            BodyPose = new Transform3D(s == 0f ? rot : rot * Basis.FromScale(new Vector3(1f + s * 0.5f, 1f - s, 1f + s * 0.5f)),
+                new Vector3(value[4], value[5], value[6]));
+            TrainPose = value.Length >= PoseFloats + 3 ? new Vector4(value[8], value[9], value[10], 0f) : Vector4.Zero;
+        }
+    }
+    private const int PoseFloats = 8;
+    private readonly float[] _poseBody = new float[PoseFloats], _poseTrain = new float[PoseFloats + 3];
 
     /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/> or <see cref="PoseTucked"/>.</summary>
     [Export] public int PoseKind { get; set; }
@@ -507,7 +545,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public float? ShowroomYaw { get; set; }
 
     /// <summary>The replicated pose properties, in one place for the synchronizer and <c>--synccheck</c>.</summary>
-    public static readonly string[] PoseProperties = { ".:BodyPose", ".:PoseKind", ".:Anim", ".:TrainPose" };
+    public static readonly string[] PoseProperties = { ".:NetPose", ".:PoseKind", ".:Anim" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
