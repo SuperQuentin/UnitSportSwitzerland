@@ -9,7 +9,7 @@
 
 ## Why
 #221 investigation 3/3, cluster #13: the 4-line unpack was copied 6 times and the constant 3 times.
-Pure consolidation; `Tri` returns a value tuple (no allocation), same floats, same order.
+Pure consolidation; `Tri` returns a value tuple (no allocation), same floats, same order. PR #268.
 
 ## Same logic, preserved
 - Corner order A, B, C = floats 0-2, 3-5, 6-8: normals from `(B - A).Cross(C - A)` keep their sign

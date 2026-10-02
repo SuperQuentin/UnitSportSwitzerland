@@ -9,7 +9,7 @@
 
 ## Why
 #221 investigation 3/3, cluster #16: the same 12-line loop lived in `LanDiscovery`, `ServerQuery` and
-`QueryResponder`. Pure consolidation (no runtime cost change; one closure per loop, not per packet). PR: see #221.
+`QueryResponder`. Pure consolidation (no runtime cost change; one closure per loop, not per packet). PR #268.
 
 ## Same logic, preserved
 - Stops on cancellation or `ObjectDisposedException` (socket closed by `Stop`/`Dispose`).

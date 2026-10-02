@@ -7,7 +7,7 @@
 - Do not copy `SyncHorizonAsync`/`SyncPlacesAsync` bodies again.
 
 ## Why
-#221 investigation 3/3, cluster #15: the two methods were the same 30 lines. Pure consolidation, no runtime change.
+#221 investigation 3/3, cluster #15: the two methods were the same 30 lines. Pure consolidation, no runtime change. PR #268.
 
 ## Same logic, preserved
 - The file lands in `TerrainPaths.FindCacheDir()` under its format's `FileName` BEFORE `onDone` runs,
