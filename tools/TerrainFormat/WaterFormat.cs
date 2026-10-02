@@ -107,6 +107,26 @@ public sealed class WaterGrid
 
     public double LevelMetersAt(int col, int row) => ChunkFormat.Dequantize(Levels[row * Size + col]);
 
+    /// <summary>
+    /// The runtime's view (#299's <see cref="WaterTile"/>): every second vertex, the level in metres
+    /// (NaN dry) and the fetch in metres, which this layer knows for the whole water body.
+    /// </summary>
+    public WaterTile ToTile()
+    {
+        int n = WaterTile.Size;
+        var level = new float[n * n];
+        var fetch = new float[n * n];
+        for (int r = 0; r < n; r++)
+            for (int c = 0; c < n; c++)
+            {
+                int src = r * WaterTile.Stride * Size + c * WaterTile.Stride, dst = r * n + c;
+                ushort q = Levels[src];
+                level[dst] = q == 0 ? float.NaN : (float)ChunkFormat.Dequantize(q);
+                fetch[dst] = (float)(Fetch[src] * WaterFormat.FetchUnitM);
+            }
+        return new WaterTile { Level = level, FetchM = fetch };
+    }
+
     public int WetCount
     {
         get

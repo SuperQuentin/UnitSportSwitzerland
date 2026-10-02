@@ -109,6 +109,9 @@ public sealed partial class ClientTerrainSync : Node
             return false;
         }
 
+        int dropped = DropChangedTiles(manifest);
+        if (dropped > 0) GD.Print($"[stream] {dropped} cached tiles changed on the server; they stream again");
+
         // The continuation above runs on the thread pool, and what follows moves the origin and
         // unloads tiles (real ones replacing generated ground): main thread only.
         int added = await OnMainThread(() => Adopt(manifest)).ConfigureAwait(false);
@@ -241,6 +244,42 @@ public sealed partial class ClientTerrainSync : Node
 
     /// <summary>Filename of the cached copy of the server's index.</summary>
     public const string CachedIndexFile = "server-manifest.json";
+
+    /// <summary>
+    /// The cache is keyed by file name only, so a tile the server rebuilt would be served from the
+    /// old copy for ever. The last server index is still on disk: a tile whose height range
+    /// changed since (#298 dug the lake beds, which lowered every lake tile's minimum) loses its
+    /// cached height files and water layer, so it streams again. Returns how many tiles changed.
+    /// </summary>
+    private static int DropChangedTiles(TerrainManifest fresh)
+    {
+        try
+        {
+            string dir = Core.TerrainPaths.FindCacheDir();
+            string path = Path.Combine(dir, CachedIndexFile);
+            if (!File.Exists(path)) return 0;
+            var before = new Dictionary<TileId, ManifestTile>();
+            foreach (var t in TerrainManifest.FromJson(File.ReadAllText(path)).Tiles) before[t.Id] = t;
+
+            int changed = 0;
+            foreach (var t in fresh.Tiles)
+            {
+                if (!before.TryGetValue(t.Id, out var old) || (old.Min == t.Min && old.Max == t.Max)) continue;
+                changed++;
+                foreach (string name in new[] { ChunkFormat.ChunkFileName(t.Id), ChunkFormat.CoarseFileName(t.Id), WaterFormat.FileName(t.Id) })
+                {
+                    string file = Path.Combine(dir, name);
+                    if (File.Exists(file)) File.Delete(file);
+                }
+            }
+            return changed;
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[stream] could not compare the cached server index: {e.Message}");
+            return 0;
+        }
+    }
 
     private void SaveCachedIndex(byte[] json)
     {

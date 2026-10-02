@@ -43,7 +43,7 @@ public sealed class CachingChunkSource : IChunkSource
 
     public double HitRate => Hits + Misses == 0 ? 0 : (double)Hits / (Hits + Misses);
 
-    private enum AssetSlot { Chunk, Coarse, Roads, Holes, Buildings, Cover, Trees }
+    private enum AssetSlot { Chunk, Coarse, Roads, Holes, Buildings, Cover, Trees, Water }
 
     private sealed class Entry
     {
@@ -80,8 +80,9 @@ public sealed class CachingChunkSource : IChunkSource
     public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default) =>
         GetAsync(AssetSlot.Cover, id, () => _inner.LoadCoverAsync(id, ct), c => c.LongLength + 32);
 
-    /// <summary>Not cached yet: only the fixture courses answer it (#299); #298's file may want a slot.</summary>
-    public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default) => _inner.LoadWaterAsync(id, ct);
+    public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default) =>
+        GetAsync(AssetSlot.Water, id, () => _inner.LoadWaterAsync(id, ct),
+            w => 64 + w.Level.LongLength * 4 + (w.FetchM?.LongLength ?? 0) * 4);
 
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default) =>
         GetAsync(AssetSlot.Trees, id, () => _inner.LoadTreesAsync(id, ct),
