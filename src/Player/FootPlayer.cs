@@ -3688,7 +3688,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // smoothed figure alone, with the decel cap above, only just reached 9 m/s in a
             // 56 km/h head-on hit, and whether it did came down to frame timing.
             float stopped = _motion.Speed - achieved;
-            if (_settle <= 0f && _ride is { IsVehicle: true } && _shortfall > 3f && stopped > ThrowSpeed)
+            if (_settle <= 0f && _ride is { IsVehicle: true } && _shortfall > 3f && stopped > ThrowSpeed && HitHeadOn(ThrowSpeed))
             {
                 ThrowFromVehicle(before);
                 return;

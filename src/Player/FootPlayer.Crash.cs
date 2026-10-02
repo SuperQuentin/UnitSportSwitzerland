@@ -56,6 +56,31 @@ public partial class FootPlayer
     /// The owner's vehicle stopped dead (<see cref="RidePhysics"/>): the machine stays where it
     /// hit, the rider goes on. A car throws its driver through the windscreen.
     /// </summary>
+    /// <summary>
+    /// Whether something this vehicle touches stopped it from the front or behind, closing at more than
+    /// <paramref name="closing"/> m/s along the contact: a wall, a tree, a car met nose first. A car rubbing
+    /// alongside (the contact across the heading, or both going the same way) is not a crash: racers side
+    /// by side at 96 km/h were thrown through the windscreen by a shove that took the real speed off for a
+    /// frame (#286).
+    /// </summary>
+    private bool HitHeadOn(float closing)
+    {
+        var fwd = -GlobalTransform.Basis.Z with { Y = 0 };
+        if (fwd.LengthSquared() < 1e-4f) return true;
+        fwd = fwd.Normalized();
+        var mine = fwd * _motion.Speed;
+        for (int i = 0; i < GetSlideCollisionCount(); i++)
+        {
+            var c = GetSlideCollision(i);
+            var n = c.GetNormal() with { Y = 0 };
+            if (n.LengthSquared() < 0.09f) continue;   // the ground
+            n = n.Normalized();
+            if (Mathf.Abs(n.Dot(fwd)) < 0.5f) continue;   // alongside: a side contact
+            if ((mine - (c.GetColliderVelocity() with { Y = 0 })).Dot(-n) > closing) return true;
+        }
+        return false;
+    }
+
     private void ThrowFromVehicle(float hit)
     {
         var fwd = (-GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
