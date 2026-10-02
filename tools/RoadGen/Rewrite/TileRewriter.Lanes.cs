@@ -10,39 +10,14 @@ using UnitSport.Tools.RoadGen.Network;
 /// <summary>
 /// Lane records (#353, <see cref="RoadApproach"/>, section <c>LANE</c>): for every approach with a
 /// left-turn pocket (#123, with or without lights), a right-turn pocket (#348) or traffic lights,
-/// the lanes as built: where each lies at the stop line, where it opens and reaches full width
-/// (from the widenings' actual taper and storage), which movements its arrows show, where its
+/// the lanes as built: where each lies at the stop line (<see cref="ApproachLayout"/>, the one place
+/// lanes are laid side by side, #351), where it opens and reaches full width (from the widenings'
+/// actual taper and storage), which movements its arrows show, where its
 /// traffic stops (a bike box), and the turns an OSM restriction forbids (#347). Traffic
 /// (<c>LaneGraph</c>, <c>Traffic</c>) drives them. Rules: docs/notes/tools/turn-lanes.md.
 /// </summary>
 public static partial class TileRewriter
 {
-    /// <summary>What one approach got from the turn-lane stage: its widenings as built.</summary>
-    private sealed class ApproachPockets(TileId home)
-    {
-        public readonly TileId Home = home;
-        /// <summary>The left pocket's approach widening (#123), null none; its storage, merged with the exit before (#325).</summary>
-        public Widening? Left;
-        public double Storage;
-        public bool Merged;
-        /// <summary>The through lane's arrow also turns right (no right pocket beside it).</summary>
-        public bool ThroughRight;
-        public bool Signal;
-        /// <summary>The right-turn pocket's widening (#348), null none; without a left pocket, whether the own lane also turns left.</summary>
-        public Widening? Right;
-        public bool OwnLeft;
-
-        public void PlacedLeft(Widening way, double storage, bool merged, bool throughRight, bool signal)
-        {
-            Left = way; Storage = storage; Merged = merged; ThroughRight = throughRight; Signal = signal;
-        }
-
-        public void PlacedRight(Widening way, bool ownLeft)
-        {
-            Right = way; OwnLeft = ownLeft; Signal = true;
-        }
-    }
-
     public sealed class LaneStats
     {
         public int Signalised, PocketsWithoutLights, CarLanes, BikeLanes, Banned, BannedLeft, BannedThrough, BannedRight;
@@ -141,12 +116,12 @@ public static partial class TileRewriter
     /// approach has.
     /// </summary>
     private static RoadApproach SignalApproach(Junction j, int arm, RoadNetwork net, short signal, byte planArm, float[] stop,
-        SignalPlan plan, ApproachPockets? built, Restrictions? restrictions, LaneStats stats)
+        SignalPlan plan, ArmLanes? built, Restrictions? restrictions, LaneStats stats)
     {
         var banned = restrictions?.Banned(j, arm, net, stats) ?? SignalMoves.None;
         float centre;
         List<ApproachLane> lanes;
-        if (built is not null)
+        if (built is { Approach: not null })
             (centre, lanes) = PocketLanes(built, MouthSkew(j, j.Arms[arm]) + SignalStopSetback + SignalStopLine * 0.5);
         else
         {
@@ -169,14 +144,14 @@ public static partial class TileRewriter
     /// The lane records of #123 pockets at junctions without lights: their point is the middle of
     /// the approach lanes at the pocket's stop bar, in the junction's home tile.
     /// </summary>
-    private static void EmitPocketApproaches(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), ApproachPockets> pockets,
+    private static void EmitPocketApproaches(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), ArmLanes> pockets,
         Dictionary<TileId, List<RoadApproach>> approaches, Restrictions? restrictions, LaneStats stats)
     {
         var net = result.Network;
         foreach (var (junction, _) in priority.Plans)
             for (int i = 0; i < junction.Arms.Count; i++)
             {
-                if (!pockets.TryGetValue((junction.NodeId, i), out var built) || built.Signal || built.Left is not { } way) continue;
+                if (!pockets.TryGetValue((junction.NodeId, i), out var built) || built.Signal || built.LeftWay is not { } way) continue;
                 var (centre, lanes) = PocketLanes(built, PocketBarMiddle);
                 double across = way.Half + way.FullWidth;   // the approach lanes, centre line to the widened edge
                 var at = way.At(built.Home, PocketBarMiddle, across * 0.5);
@@ -201,66 +176,72 @@ public static partial class TileRewriter
     }
 
     /// <summary>
-    /// An approach's lanes from its widenings as built, left to right, with the original lane's
-    /// centre they are measured from. <paramref name="stop"/>: the stop line's (or bar's) distance
-    /// from the mouth; the widenings measure from the mouth.
+    /// An approach's lanes, left to right, with the original lane's centre they are measured from:
+    /// where each lies at the stop line is <see cref="ApproachLayout"/>'s (#351: the left-turn bike
+    /// lane, layouts (a) and (b) of a right pocket beside a painted bike lane), how long each is and
+    /// where it moves out are the widenings' as built. <paramref name="stop"/>: the stop line's (or
+    /// bar's) distance from the mouth; the widenings measure from the mouth.
     /// </summary>
-    private static (float Centre, List<ApproachLane> Lanes) PocketLanes(ApproachPockets p, double stop)
+    private static (float Centre, List<ApproachLane> Lanes) PocketLanes(ArmLanes p, double stop)
     {
+        var layout = p.Approach!;
         var lanes = new List<ApproachLane>();
         float D(double fromMouth) => (float)Math.Max(0, fromMouth - stop);
-        if (p.Left is { } lw)
+        double centre = (layout.Half - layout.Bike) * 0.5;   // the original lane: between the centre line and a bike lane
+        float O(ApproachLayout.Lane lane) => (float)(lane.Mid - centre);
+
+        // where the lanes right of a left pocket move out over its widening: the taper and the
+        // lead-in before it, or held out all along a strip merged with the exit before (#325);
+        // and where those a right pocket's opening moves (the layout's lane differs closed and open)
+        (float Full, float From)? leftMove = null, rightMove = null;
+        if (p.LeftWay is { } lw)
         {
-            double centre = lw.Car * 0.5;
             // the pocket appears beside the through lane where the hatch closes (#123), or opens out
             // of the lane-wide hatch over the entry diagonal (#325)
             double full = p.Storage, opens = p.Merged ? p.Storage + TurnEntry : p.Storage;
             bool box = p.Signal && lw.HasLeftBikeLane && lw.BikeBox;
-            lanes.Add(new ApproachLane((float)(lw.PocketWidth * 0.5 - centre), D(full), D(opens), SignalMoves.Left, ApproachLaneKind.Car,
+            lanes.Add(new ApproachLane(O(layout.LeftPocketLane!.Value), D(full), D(opens), SignalMoves.Left, ApproachLaneKind.Car,
                 box ? (float)BikeBoxDepth : 0f));
-            if (lw.HasLeftBikeLane)   // the left-turn bike lane (#351): stops at the box's front line, or the advanced line
-                lanes.Add(new ApproachLane((float)(lw.PocketWidth + lw.BikeLeft * 0.5 - centre), D(full), D(opens), SignalMoves.Left,
-                    ApproachLaneKind.Bike, box ? 0f : -(float)AdvancedBikeLine));
-            // the through lane moves out over the taper (and the lead-in before it); a merged strip holds it out all along
-            double throughFull = p.Merged ? lw.Length : p.Storage, throughFrom = p.Merged ? lw.Length : lw.Length + lw.Lead;
-            double through = lw.PocketWidth + lw.BikeLeft;   // its left edge
-            lanes.Add(new ApproachLane((float)(through + TurnLane * 0.5 - centre), D(throughFull), D(throughFrom),
-                SignalMoves.Through | (p.ThroughRight ? SignalMoves.Right : 0), ApproachLaneKind.Car));
-            RightLanes(p, lanes, centre, through + TurnLane, lw.KerbBike, D(throughFull), D(throughFrom), D);
-            return ((float)centre, lanes);
+            if (layout.LeftBikeLane is { } leftBike)   // the left-turn bike lane (#351): stops at the box's front line, or the advanced line
+                lanes.Add(new ApproachLane(O(leftBike), D(full), D(opens), SignalMoves.Left, ApproachLaneKind.Bike,
+                    box ? 0f : -(float)AdvancedBikeLine));
+            leftMove = p.Merged ? (D(lw.Length), D(lw.Length)) : (D(p.Storage), D(lw.Length + lw.Lead));
         }
-        // a right pocket alone: the approach's own lane carries straight on (and left)
-        var rw = p.Right!;
-        double own = rw.Car * 0.5;
-        lanes.Add(new ApproachLane(0f, D(rw.Length), D(rw.Length), SignalMoves.Through | (p.OwnLeft ? SignalMoves.Left : 0), ApproachLaneKind.Car));
-        RightLanes(p, lanes, own, rw.Car, rw.KerbBike, D(rw.Length), D(rw.Length), D);
-        return ((float)own, lanes);
-    }
-
-    /// <summary>
-    /// The lanes right of the through (or own) lane: the right-turn pocket (#348) and the painted
-    /// bike lane on that side (#120). The one place that knows how they are laid out: #351's layout
-    /// (a), the bike lane outside the pocket (it moves out past every widening, `ShiftOffPavement`),
-    /// along the kerb from the through lane's taper. A layout with the bike lane between the pocket
-    /// and the through lane changes this.
-    /// </summary>
-    /// <param name="throughEdge">The through (or own) lane's right edge from the centre line, at the stop line.</param>
-    /// <param name="bike">The painted bike lane's width on that side, 0 none.</param>
-    private static void RightLanes(ApproachPockets p, List<ApproachLane> lanes, double centre, double throughEdge, double bike,
-        float throughFull, float throughFrom, Func<double, float> d)
-    {
-        if (p.Right is not { } rw)
+        var rw = p.RightWay?.Way;
+        if (rw is not null) rightMove = (D(rw.Length - rw.Taper), D(rw.Length));
+        (float Full, float From) Moves(bool withRight)
         {
-            if (bike > 0)
-                lanes.Add(new ApproachLane((float)(throughEdge + bike * 0.5 - centre), throughFull, throughFrom,
-                    SignalMoves.Through | SignalMoves.Right, ApproachLaneKind.Bike));
-            return;
+            // fully moved where the last move ends, starting where the first starts
+            if (withRight && rightMove is { } r)
+                return leftMove is { } l ? (Math.Min(l.Full, r.Full), Math.Max(l.From, r.From)) : r;
+            // a lane no widening moves (the own lane beside a right pocket alone): there all along it
+            return leftMove ?? (rightMove is { } still ? (still.From, still.From) : (0f, 0f));
         }
-        double inner = rw.Half + rw.Base;   // the pocket's left edge: the carriageway's, or the left pocket's widening's
-        float full = d(rw.Length - rw.Taper), from = d(rw.Length);
-        lanes.Add(new ApproachLane((float)(inner + TurnLane * 0.5 - centre), full, from, SignalMoves.Right, ApproachLaneKind.Car));
-        if (bike > 0)
-            lanes.Add(new ApproachLane((float)(inner + TurnLane + bike * 0.5 - centre), full, Math.Max(from, throughFrom),
-                SignalMoves.Through | SignalMoves.Right, ApproachLaneKind.Bike));
+        static bool Opens(ApproachLayout.Lane closed, ApproachLayout.Lane open) => Math.Abs(open.Mid - closed.Mid) > 1e-3;
+
+        // the through lane: beside a left pocket it goes straight (and right without a right pocket);
+        // the own lane of a right pocket alone also turns left where the approach has a left turn
+        var through = layout.Through();
+        var (throughFull, throughFrom) = Moves(Opens(layout.Through(0), through));
+        var throughMoves = p.LeftWay is not null
+            ? SignalMoves.Through | (p.ThroughRight ? SignalMoves.Right : 0)
+            : SignalMoves.Through | (p.RightWay is { LeftTurn: true } ? SignalMoves.Left : 0);
+        lanes.Add(new ApproachLane(O(through), throughFull, throughFrom, throughMoves, ApproachLaneKind.Car));
+
+        // right of it, as the layout orders them: (a) the right pocket, then the painted bike lane
+        // kerbside of it; (b) the bike lane, then the pocket; without a right pocket the bike lane
+        void Bike()
+        {
+            if (layout.BikeLane() is not { } bike) return;
+            var (full, from) = Moves(Opens(layout.BikeLane(0)!.Value, bike));
+            // (b) lies between the through lane and the right-turning cars: it goes straight on
+            var moves = layout.BikeBetween ? SignalMoves.Through : SignalMoves.Through | SignalMoves.Right;
+            lanes.Add(new ApproachLane(O(bike), full, from, moves, ApproachLaneKind.Bike));
+        }
+        if (layout.BikeBetween) Bike();
+        if (layout.RightPocket() is { } pocket && rightMove is { } opening)
+            lanes.Add(new ApproachLane(O(pocket), opening.Full, opening.From, SignalMoves.Right, ApproachLaneKind.Car));
+        if (!layout.BikeBetween) Bike();
+        return ((float)centre, lanes);
     }
 }

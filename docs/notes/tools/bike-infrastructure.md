@@ -52,17 +52,22 @@
   `Kerb` strip whose vertices carry its slope (Height 0; the blend skips it), 15 cm over the pieces' chamfered
   ends, replacing the sidewalk corner there (centroid test); only when both arms have the same
   profile. Samples thinned to 2 cm on the outer edge (9 per band cost +23 KB/tile).
-  3.03 signs that stood on a path move onto the buffer or sidewalk.
+  3.03 signs that stood on a path move onto the buffer or sidewalk. At traffic lights, across a
+  road widened by its pockets, the crossing runs square across the widened mouth, in front of the
+  stop line (#351, `traffic-signals`).
 - **Turn lanes** (#123 pockets widen the approach on its right, through traffic moves into the
   widening): a side standing on a widening (`AreaPropType.Pavement`) moves out by it instead of
   being dropped (#123 dropped sidewalks there; 39 path pieces in Nyon). `ShiftOffPavement` probes
-  the widening every 0.5 m out from the ribbon edge, cuts the piece where it stops being a straight
+  its own street's widenings (#351: not another arm's, `stripOwners`; up to 10 m out, the end
+  stations 5 cm inside) every 0.5 m out from the ribbon edge, cuts the piece where it stops being a straight
   ramp (3 cm), and stores a linear shift per side (`RoadSide.ShiftStartCm/EndCm`, record 32 B).
   The game (slabs, kerb collision, corner kerbs, blend reach, paint heights) adds the shift; a
   painted bike lane moves out too: lanes are painted per final piece (`PaintEmitter.BikeLanes`),
-  offset along a steady shift, as their own geometry along a taper (no symbol there).
+  offset along a steady shift, as their own geometry along a taper (no symbol there); beside a
+  layout (b) right pocket (#351) the pocket paints it instead (`skipLeft/skipRight`).
   A pocket beside a bike lane is widened so its lanes are full width along the solid centre
-  line, with a 1:6 lead-in before it (`turn-lanes`).
+  line, with a 1:6 lead-in before it (`turn-lanes`); a street that got paths has no painted lane
+  and gets no such widening (#351: the pocket reads the painted lines, not the line's own sides).
 - **Format**: `RoadSide.BufferDm` (was a pad byte, older readers skip it), `BikeKind.TrackMid`,
   `RoadSide.OuterDm` (verge + path + buffer + sidewalk: what blend, embankments, cover, corners and
   signs now use instead of `SidewalkDm`). Paint past the carriageway edge lies on the side's

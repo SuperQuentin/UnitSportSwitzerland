@@ -55,7 +55,7 @@
   notched dart head; left: the shaft jogs left near its end into an open corner head at 45 deg,
   within 0.55 m of the lane's middle. Two attempts from memory were wrong (the old Swiss
   branch arrow, then a guessed jog). The stop bar is a `StopLine` polyline.
-- **Beside a painted bike lane** (#120): along the solid centre line a car must pass a cyclist
+- **Beside a painted bike lane** (#120; as painted, #351: a street that got paths has none): along the solid centre line a car must pass a cyclist
   without crossing it, so every car lane beside the bike lane is 3.0 m (ZH Standards
   Veloverkehr): the pocket is the approach lane widened to 3.0 m (`_pocket`), the through lane
   3.0 m, the bike lane outside. The extra comes on over a 1:6 lead-in (at least 6 m) before the
@@ -68,20 +68,24 @@
   blend (`HoldUnderPavement`, sharing `Rasterise` with `HoldUnderIsland`) holds its cells at the
   strip's height as road core, so the heightfield collision carries it like a ribbon.
 - **Lane records** (#353, `TileRewriter.Lanes`, `LANE` in `road-format-v3`): `EmitTurnLanes`
-  returns each approach's built widenings (`ApproachPockets`); every pocket approach (with or
-  without lights) and every signalised one gets a `RoadApproach`, lanes from the widenings' actual
-  sizes: the pocket (offset of its centre from the original lane, full from the storage, appearing
-  there, or over the 15 m entry of a merged strip), the left-turn bike lane (#351), the through
-  lane (moving out from the taper's start plus the lead-in), then `RightLanes`: the right pocket
-  and the kerbside painted bike lane (#351 layout (a): outside the pocket). **`RightLanes` is the
-  one place to change for layout (b)** (bike lane between the pocket and the through lane).
+  returns each arm's `ArmLanes`: its `ApproachLayout` (#351, the one place lanes are laid side by
+  side) and its widenings as built. Every pocket approach (with or without lights) and every
+  signalised one gets a `RoadApproach` (`PocketLanes`): each lane's offset at the line is the
+  layout's (its centre from the original lane's), its lengths the widenings' actual sizes: the
+  pocket (full from the storage, appearing there, or over the 15 m entry of a merged strip), the
+  left-turn bike lane, the through lane (moving out from the taper's start plus the lead-in; 4.5 m
+  from the pocket beside a left-turn bike lane), then the right pocket and the painted bike lane
+  in the layout's order: (a) pocket then kerbside bike lane, (b) bike lane (straight on only) then
+  pocket. A lane the right pocket's opening moves (the layout's lane closed vs open) moves over
+  its taper too. Signalised records are written after the plan, which may force (b).
   Moves from the arrows painted; turns banned by OSM restrictions (#347 `osm_nodes.tsv`, from-line
   of the arm, to-line among the junction's arms, via within 30 m: `no_*` bans that turn, `only_*`
-  the others). Geneva: 815 records (732 at lights, 83 pockets without), car lanes 999, bike 171;
+  the others). Geneva: 824 records (732 at lights, 92 pockets without), car lanes 1,024, bike 23
+  (#351: a street that got paths has no painted lane, so far fewer kerbside bike lanes than #353's 171);
   banned turns on 142 approaches (left 112, through 4, right 50) from 154 of 216 restrictions at a
   recorded approach (62 to-lines not an arm: junctions of several nodes; 15 name another turn than
   the arms make); **10 left pockets were built where OSM forbids the left turn** (planning ignores
-  restrictions). Valais copy (Martigny-Riddes): 10 records, all without lights. `--signal-check`
+  restrictions). Valais copy (Martigny-Riddes): 13 records, all without lights. `--signal-check`
   checks them (exit 2 on a bad one) and lists those near `--at` (`--list`: every pocket approach).
 - **Not done**: right-turn lanes without lights,
   pockets across a tile seam, OSM `turn:lanes` (read, not used: #348). Roads with 3 lanes (8 m, lane lines at ±1.33 m,

@@ -516,22 +516,42 @@ public static partial class TileRewriter
                 }
 
                 EmitPriority(priority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
-                var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs, netStats.TurnLanes);
-                EmitSignals(priority, result, pockets, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals,
+                var bikeBetween = new List<(RoadSegment Segment, bool Right, (double From, double To) Along)>();
+                var stripOwners = new Dictionary<RoadAreaProp, RoadSegment>(ReferenceEqualityComparer.Instance);
+                var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs,
+                    bikeBetween, stripOwners, netStats.TurnLanes);
+                // the bike side of a link's end piece (#351): its separated path, else its painted lane
+                RoadSide BikeSideAt(int linkId, LinkEnd end, bool right)
+                {
+                    if (!segmentOf.TryGetValue(linkId, out var so)) return default;
+                    var (whole, _, painted) = so;
+                    var ends = streetPieces.TryGetValue(whole, out var cut) && cut.Count > 0 ? cut : [whole];
+                    var piece = end == LinkEnd.Start ? ends[0] : ends[^1];
+                    var side = right ? piece.Attributes.Right : piece.Attributes.Left;
+                    if (side.HasTrack) return side;
+                    var lane = right ? painted.Attributes.Right : painted.Attributes.Left;
+                    return lane.HasLane ? lane : default;
+                }
+                // the plans settle layout (a) or (b) of each right pocket beside a bike lane (#351) before
+                // the pockets' paint and the lane records (#353) read it
+                EmitSignals(priority, result, pockets, BikeSideAt, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals,
                     approachRecords, restrictions, netStats.Lanes);
+                EmitRightLanes(pockets, paint, bikeBetween, netStats.TurnLanes);
                 EmitPocketApproaches(priority, result, pockets, approachRecords, restrictions, netStats.Lanes);
 
                 // now the streets are cut into their sidewalk pieces (#119); a side that would stand on
-                // a turn lane's widening (#123) moves out past it (#120)
+                // a turn lane's widening (#123) moves out past it (#120): its own street's widenings
+                // only (#351: at a signalised junction an arm's widening reaches the next arm's corner)
                 var finalPieces = new Dictionary<RoadSegment, List<RoadSegment>>(ReferenceEqualityComparer.Instance);
+                var stripsOf = stripOwners.GroupBy(kv => kv.Value, ReferenceEqualityComparer.Instance)
+                    .ToDictionary(g => (RoadSegment)g.Key!, g => g.Select(kv => kv.Key).ToList(), ReferenceEqualityComparer.Instance);
                 foreach (var (tileId, list) in output)
                 {
-                    var strips = islands.TryGetValue(tileId, out var props)
-                        ? props.Where(a => a.Type == AreaPropType.Pavement).ToList() : [];
                     for (int i = list.Count - 1; i >= 0; i--)
                         if (streetPieces.TryGetValue(list[i], out var pieces))
                         {
-                            var final = strips.Count == 0 ? pieces : pieces.SelectMany(x => ShiftOffPavement(x, strips, netStats.Bikes)).ToList();
+                            var strips = stripsOf.TryGetValue(list[i], out var own) ? own : null;
+                            var final = strips is null ? pieces : pieces.SelectMany(x => ShiftOffPavement(x, strips, netStats.Bikes)).ToList();
                             finalPieces[list[i]] = final;
                             list.RemoveAt(i);
                             list.InsertRange(i, final);
@@ -542,16 +562,21 @@ public static partial class TileRewriter
                 foreach (var (segment, tileId, station, start, end) in lanePaint)
                 {
                     var pieces = finalPieces.TryGetValue(segment, out var cut) ? cut : [segment];
+                    // layout (b) of a right-turn pocket (#351): along its reach the pocket painted the bike lane
+                    var between = bikeBetween.Where(b => ReferenceEquals(b.Segment, segment)).ToList();
                     double s = station;
                     for (int i = 0; i < pieces.Count; i++)
                     {
-                        PaintEmitter.BikeLanes(pieces[i], s, Get(paint, tileId), i == 0 && start, i == pieces.Count - 1 && end);
-                        s += RoadPaintGeometry.Length(pieces[i].Points);
+                        double length = RoadPaintGeometry.Length(pieces[i].Points), mid = s - station + length * 0.5;
+                        bool Inside(bool right) => between.Any(b => b.Right == right && mid > b.Along.From && mid < b.Along.To);
+                        PaintEmitter.BikeLanes(pieces[i], s, Get(paint, tileId), i == 0 && start, i == pieces.Count - 1 && end,
+                            skipLeft: Inside(false), skipRight: Inside(true));
+                        s += length;
                     }
                 }
                 foreach (var (segment, tileId, start, end) in trackPaint)
                     EmitTrackPaint(finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment], start, end, Get(paint, tileId));
-                EmitBikeCrossings(priority, result, segmentOf, finalPieces, block, wanted, paint, signs, bikeBridges, netStats.Bikes);
+                EmitBikeCrossings(priority, result, segmentOf, finalPieces, pockets, block, wanted, paint, signs, bikeBridges, netStats.Bikes);
             }
 
             foreach (var id in block)
@@ -649,7 +674,7 @@ public static partial class TileRewriter
     /// <summary>Stations along a piece where a turn lane's widening is measured, metres.</summary>
     private const double WideningStep = 0.5;
     /// <summary>A widening is looked for this far out from the ribbon's edge, in steps of <see cref="WideningProbe"/>.</summary>
-    private const double WideningReach = 6.0, WideningProbe = 0.05;
+    private const double WideningReach = 10.0, WideningProbe = 0.05;
     /// <summary>
     /// The shift may leave the measured widening by this much between two of its breakpoints: more
     /// than a probe step, so the probe's own 5 cm jitter cuts no piece.
@@ -696,6 +721,9 @@ public static partial class TileRewriter
             for (int k = 0; k < st.Count; k++)
             {
                 var (_, x, z, nx, nz) = st[k];
+                // the end stations a hair inside: a strip that ends there would be missed by rounding
+                double inward = k == 0 ? WideningProbe : k == st.Count - 1 ? -WideningProbe : 0;
+                x += nz * inward; z -= nx * inward;   // forward is (nz, -nx)
                 double covered = 0;
                 for (double d = WideningProbe; d <= WideningReach; d += WideningProbe)
                 {

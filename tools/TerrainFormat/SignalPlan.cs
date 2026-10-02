@@ -121,6 +121,38 @@ public sealed class SignalPlan
         return Cycle - c + list[0].To;
     }
 
+    /// <summary>
+    /// Whether an approach's bike group (else its through group) is green for at least
+    /// <see cref="MinGreen"/> while its right-turn group is red (or red and yellow): a phase that
+    /// keeps right-turning cars off a kerbside bike lane (#351). The bike group's lead green
+    /// (<see cref="BikeLead"/>) alone is not one; a right turn with no group of its own never is.
+    /// </summary>
+    public bool ThroughWithRightHeld(int arm)
+    {
+        int bike = -1, through = -1, right = -1;
+        for (int g = 0; g < Groups.Count; g++)
+        {
+            var group = Groups[g];
+            if (group.Arm != arm) continue;
+            if (group.Kind == SignalGroupKind.Bike) bike = g;
+            else if (group.Kind == SignalGroupKind.RightArrow) right = g;
+            else if (group.Kind == SignalGroupKind.Car && (group.Moves & SignalMoves.Through) != 0) through = g;
+            else if (group.Kind == SignalGroupKind.Car && group.Moves == SignalMoves.Right) right = g;
+        }
+        int go = bike >= 0 ? bike : through;
+        if (go < 0) return true;
+        if (right < 0) return false;   // the right turn shares the through lane's green
+        double held = 0;
+        foreach (var a in Groups[go].Intervals)
+        {
+            if (a.Aspect != SignalAspect.Green) continue;
+            foreach (var b in Groups[right].Intervals)
+                if (b.Aspect is SignalAspect.Red or SignalAspect.RedAmber)
+                    held += Math.Max(0, Math.Min(a.To, b.To) - Math.Max(a.From, b.From));
+        }
+        return held >= MinGreen - 1e-3;
+    }
+
     // ---- movements and conflicts -------------------------------------------------------------
 
     public readonly record struct Movement(int From, int To, SignalMoves Turn, int Group);

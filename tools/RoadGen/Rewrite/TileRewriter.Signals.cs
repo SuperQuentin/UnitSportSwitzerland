@@ -184,7 +184,8 @@ public static partial class TileRewriter
         return r;
     }
 
-    private static void EmitSignals(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), ApproachPockets> pockets,
+    private static void EmitSignals(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), ArmLanes> pockets,
+        Func<int, LinkEnd, bool, RoadSide> bikeSideAt,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, Footprints buildings,
         Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs, SignalStats stats,
@@ -200,6 +201,7 @@ public static partial class TileRewriter
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
 
             var arms = new List<SignalArm>();
+            var kerbside = new List<(int Index, ApproachLayout Lanes)>();   // layout (a) bike lanes (#351)
             var stops = new List<float>();
             var wantPoles = new List<PoleWish>();
             var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
@@ -213,22 +215,24 @@ public static partial class TileRewriter
                 bool inside = Internal(link, junction.NodeId, signalNodes);
                 bool approach = plan.Arms[i].Approach && !inside, leaves = PriorityPlanner.Leaves(info, plan.Arms[i].End);
                 if (inside) stats.InternalArms++;
-                var built = pockets.GetValueOrDefault((junction.NodeId, i));
-                bool pocket = built?.Left is not null, rightPocket = built?.Right is not null;
+                var layout = pockets.GetValueOrDefault((junction.NodeId, i))?.Approach;
+                bool pocket = layout is { LeftPocket: > 0 }, rightPocket = layout is { Right: true };
                 var u = Vec2.FromHeading(arm.OutwardHeading);
                 var right = u.Perp;   // the approaching driver's right (they drive along -u)
                 var mid = (arm.Left + arm.Right) * 0.5;
                 double half = arm.HalfWidth;
                 // the approach lanes: from the centre (a one-way road: its left edge) to the right
-                // edge, and on over the through lane a pocket moved out
-                double from = info.Attributes.OneWay != 0 ? -half : 0, to = half + (pocket ? TurnLane : 0) + (rightPocket ? TurnLane : 0);
+                // edge, widened by its pockets (#351: the lanes' offsets come from their layout)
+                double from = info.Attributes.OneWay != 0 ? -half : 0, to = layout is null ? half : half + layout.Edge() - layout.Half;
                 var bar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + SignalStopLine * 0.5);
                 if (approach && !pocket && block.Contains(source.Tile))
                 {
+                    // across the approach's own lane: a right pocket and the bike lane beside it have their own
+                    double through = layout is null ? half : half + layout.Through().To - layout.Half;
                     Get(paint, source.Tile).Add(new RoadPaint
                     {
                         Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = SignalStopLine,
-                        Vertices = Local(source.Tile, [bar + right * (from + 0.1), bar + right * (half - 0.1)], source.SampleHeight, 0f),
+                        Vertices = Local(source.Tile, [bar + right * (from + 0.1), bar + right * (through - 0.1)], source.SampleHeight, 0f),
                     });
                     stats.StopLines++;
                 }
@@ -254,9 +258,14 @@ public static partial class TileRewriter
                     rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, -right, half, u, right,
                     leftSide.OuterDm > 0 ? leftSide.KerbCm / 100f : 0f, secondFlags, -1));
-                // a bike head (#351) beside a separated path, or a kerbside bike lane a right pocket's cars cross
-                bool bikeSignal = approach && (rightSide.HasTrack || (rightPocket && rightSide.HasLane));
+                // a bike head (#351) beside a separated path, or a kerbside bike lane a right pocket's cars
+                // cross (layout (a)); a bike lane between the pocket and the through lane (b) goes with the
+                // cars. The path or lane as built at the arm's end (the line's own sides do not know a
+                // street's paths, #120)
+                bool path = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight).HasTrack;
+                bool bikeSignal = approach && (path || layout is { KerbsideBike: true });
                 if (bikeSignal) stats.BikeSignals++;
+                if (approach && !path && layout is { KerbsideBike: true }) kerbside.Add((arms.Count, layout));
                 arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, pocket, rightPocket, Pedestrians: true,
                     BikeSignal: bikeSignal, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
                     Rank: (byte)Math.Clamp(PriorityPlanner.Rank(info) / 4, 1, 255)));
@@ -270,6 +279,22 @@ public static partial class TileRewriter
             bool amber = PedestrianAmber(cantons?.CodeAt(junction.Centre.X, junction.Centre.Y));
             uint seed = (uint)(long)Math.Round(junction.Centre.X) * 73856093u ^ (uint)(long)Math.Round(junction.Centre.Y) * 19349663u;
             var signalPlan = SignalPlan.Build(arms, seed, amber);
+            // layout (a) only where the plan gives the kerbside bike lane a phase with the right arrow
+            // red; else the weave must come before the line: layout (b), and the plan again (#351)
+            for (bool forced = true; forced;)
+            {
+                forced = false;
+                foreach (var (index, lanes) in kerbside)
+                {
+                    if (lanes.BikeBetween || signalPlan.ThroughWithRightHeld(index)) continue;
+                    lanes.BikeBetween = lanes.Forced = true;
+                    arms[index] = arms[index] with { BikeSignal = false };
+                    stats.BikeSignals--;
+                    signalPlan = SignalPlan.Build(arms, seed, amber);
+                    forced = true;
+                    break;
+                }
+            }
             if (signalPlan.Validate() is { Count: > 0 } errors)
             {
                 stats.Invalid++;
