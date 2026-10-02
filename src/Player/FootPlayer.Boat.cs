@@ -147,20 +147,19 @@ public partial class FootPlayer
         var right = GlobalTransform.Basis.X with { Y = 0 };
         right = right.LengthSquared() > 1e-6f ? right.Normalized() : Vector3.Right;
         var at = state.Position + right * (boat.ParkedBox.Size.X * 0.5f + BodyRadius + 0.6f);
-        ApplyRide(RideKind.OnFoot, state.Velocity with { Y = 0 } * 0.4f + Vector3.Up * 2f);
-        IntoWater(at);
+        ApplyRide(RideKind.OnFoot, Vector3.Zero);
+        IntoWater(at, state.Velocity with { Y = 0 } * 0.4f);
         _stunTimer = 1f;
         GD.Print($"[boat] {Name} thrown off the {boat.Label} (landing {boat.State.LastLanding:F1} m/s, capsized {boat.State.Capsized:F1} s)");
     }
 
     /// <summary>
-    /// Puts a player who left a boat in the water at <paramref name="at"/>: at the surface, on foot
-    /// (#299's behaviour: they sink to the bed and walk out).
-    /// TODO(#301): start swimming here instead (FootPlayer.IsSwimming / the swim entry point), once
-    /// feat/301-swimming is on main.
+    /// Puts a player who left a boat in the water at <paramref name="at"/>: swimming at the surface
+    /// (#301) with what is left of the boat's way; on foot there where the water has no layer.
     /// </summary>
-    private void IntoWater(Vector3 at)
+    private void IntoWater(Vector3 at, Vector3 velocity)
     {
+        if (StartSwimmingAtSurface(at)) { Velocity = velocity; return; }
         if (WaterField.TryLevelAt(at, out float level)) at.Y = Mathf.Max(at.Y, level - 0.2f);
         GlobalPosition = at;
     }

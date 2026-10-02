@@ -15,10 +15,16 @@ public static class BoatMeshBuilder
     // ---- the jetski: a sit-down three-seater -----------------------------------------------
 
     /// <summary>The rider's seat surface, right grip and right foot (author space): the driver's straddle.</summary>
-    private static readonly Vector3 JetSeat = new(0, 0.97f, -0.32f);
-    private static readonly Vector3 JetGrip = new(-0.33f, 1.14f, 0.36f);
-    private static readonly Vector3 JetPeg = new(-0.3f, 0.66f, 0.02f);
+    private static readonly Vector3 JetSeat = new(0, 0.97f, -0.3f);
+    private static readonly Vector3 JetGrip = new(-0.36f, 1.12f, 0.34f);
+    private static readonly Vector3 JetPeg = new(-0.4f, 0.57f, -0.02f);
+    /// <summary>The saddle runs from here forward to the hood, author z.</summary>
+    private const float JetSeatAft = -1.25f, JetSeatFront = 0.1f;
 
+    /// <summary>
+    /// A sit-down PWC: a low vee hull to the footwells, a long raised saddle, and a big rounded hood
+    /// over the engine running down to the bow, with the bars on its crown.
+    /// </summary>
     public static ArrayMesh JetskiHull(BoatSpec s, Color paint)
     {
         var m = new MeshScratch();
@@ -26,29 +32,42 @@ public static class BoatMeshBuilder
         var bottom = new Color(0.22f, 0.23f, 0.26f);
         var black = new Color(0.1f, 0.1f, 0.11f);
         Hull(m, s, bottom, paint, white, white, cockpit: null);
+        float deck = s.Shape.Sheer(s.Depth, 0.35f);
 
-        // the footwells either side of the seat: dark mats on the deck
-        float deck = s.Shape.Sheer(s.Depth, 0.4f);
-        m.Box(new Vector3(0.38f, deck - 0.1f, -0.35f), new Vector3(0.2f, 0.22f, 1.2f), black);
-        m.Box(new Vector3(-0.38f, deck - 0.1f, -0.35f), new Vector3(0.2f, 0.22f, 1.2f), black);
-        // the saddle: long enough for three, stepped up a little for the ones behind
-        m.Box(new Vector3(0, JetSeat.Y - 0.08f, -0.55f), new Vector3(0.42f, 0.18f, 1.2f), black);
-        m.Box(new Vector3(0, JetSeat.Y - 0.12f, -0.55f), new Vector3(0.46f, 0.06f, 1.24f), paint);
-        // the hood over the engine and the console with its little screen
-        m.Box(new Vector3(0, deck + 0.12f, 0.6f), new Vector3(0.78f, 0.24f, 0.7f), white, new Basis(Vector3.Right, -0.18f));
-        m.Box(new Vector3(0, deck + 0.24f, 0.36f), new Vector3(0.5f, 0.2f, 0.26f), paint, new Basis(Vector3.Right, -0.5f));
-        m.Box(new Vector3(0, deck + 0.38f, 0.42f), new Vector3(0.36f, 0.14f, 0.03f), black, new Basis(Vector3.Right, -0.6f));
-        // the handlebar on its pole
-        m.Tube(new Vector3(0, deck + 0.18f, 0.3f), new Vector3(0, JetGrip.Y - 0.02f, JetGrip.Z - 0.02f), 0.035f, black);
-        m.Tube(new Vector3(JetGrip.X, JetGrip.Y, JetGrip.Z), new Vector3(-JetGrip.X, JetGrip.Y, JetGrip.Z), 0.022f, black);
-        m.Tube(new Vector3(JetGrip.X - 0.02f, JetGrip.Y, JetGrip.Z), new Vector3(JetGrip.X - 0.13f, JetGrip.Y, JetGrip.Z), 0.032f, bottom);
-        m.Tube(new Vector3(-JetGrip.X + 0.02f, JetGrip.Y, JetGrip.Z), new Vector3(-JetGrip.X + 0.13f, JetGrip.Y, JetGrip.Z), 0.032f, bottom);
-        // the jet's nozzle under the transom, and the boarding step
+        // the footwell mats, either side of the saddle
+        foreach (float x in new[] { 0.42f, -0.42f })
+            m.Box(new Vector3(x, deck + 0.04f, -0.55f), new Vector3(0.22f, 0.02f, 1.3f), black);
+        // the saddle on its plinth
+        float seatLen = JetSeatFront - JetSeatAft;
+        m.Box(new Vector3(0, (deck + JetSeat.Y - 0.12f) * 0.5f + 0.02f, (JetSeatAft + JetSeatFront) * 0.5f),
+            new Vector3(0.5f, JetSeat.Y - 0.12f - deck, seatLen), paint);
+        m.Box(new Vector3(0, JetSeat.Y - 0.07f, (JetSeatAft + JetSeatFront) * 0.5f - 0.02f), new Vector3(0.44f, 0.14f, seatLen - 0.06f), black);
+
+        // the hood: a loft from the saddle's front down to the bow
+        float bow = s.Length - s.Shape.SternZ;
+        var stations = new (float Z, float Half, float Top)[]
+        {
+            (JetSeatFront - 0.05f, 0.4f, 1.0f), (0.55f, 0.44f, 0.98f), (1.05f, 0.38f, 0.88f), (1.5f, 0.24f, 0.78f), (bow - 0.08f, 0.06f, 0.7f),
+        };
+        var hood = new List<Vector3[]>();
+        foreach (var (z, half, top) in stations)
+            hood.Add(new[]
+            {
+                new Vector3(half, deck - 0.02f, z), new Vector3(half, top - 0.13f, z), new Vector3(half * 0.6f, top, z),
+                new Vector3(-half * 0.6f, top, z), new Vector3(-half, top - 0.13f, z), new Vector3(-half, deck - 0.02f, z),
+            });
+        m.Loft(hood, new[] { paint, white, white, white, paint, paint }, white);
+        // the console's screen and the bars on their post
+        m.Box(new Vector3(0, 1.02f, 0.22f), new Vector3(0.3f, 0.12f, 0.04f), black, new Basis(Vector3.Right, -0.7f));
+        m.Tube(new Vector3(0, 0.98f, JetGrip.Z + 0.05f), new Vector3(0, JetGrip.Y, JetGrip.Z), 0.04f, black);
+        m.Tube(JetGrip, JetGrip with { X = -JetGrip.X }, 0.022f, black);
+        m.Tube(JetGrip with { X = JetGrip.X + 0.02f }, JetGrip with { X = JetGrip.X - 0.1f }, 0.033f, bottom);
+        m.Tube(JetGrip with { X = -JetGrip.X - 0.02f }, JetGrip with { X = -JetGrip.X + 0.1f }, 0.033f, bottom);
+        // the jet's nozzle under the transom, the boarding step on the swim platform
         float transom = -s.Shape.SternZ;
         m.Tube(new Vector3(0, s.ThrustAt.Y, transom + 0.15f), new Vector3(0, s.ThrustAt.Y, transom - 0.12f), 0.1f, 0.075f, black, 8);
-        m.Box(new Vector3(0, 0.36f, transom - 0.08f), new Vector3(0.5f, 0.05f, 0.18f), black);
-        // a stripe along each side
-        Stripe(m, s, 0.55f, paint.Darkened(0.35f));
+        m.Box(new Vector3(0, deck - 0.12f, transom - 0.08f), new Vector3(0.5f, 0.05f, 0.18f), black);
+        Stripe(m, s, 0.6f, paint.Darkened(0.35f));
         return m.Build();
     }
 
@@ -64,17 +83,17 @@ public static class BoatMeshBuilder
     public static SeatAnchor[] JetskiSeats() => new[]
     {
         new SeatAnchor(0, Flip(JetSeat), 0f, 0f) { Pose = SeatPose.Straddle, Grip = Flip(JetGrip), Peg = Flip(JetPeg) },
-        new SeatAnchor(0, Flip(JetSeat + new Vector3(0, 0.03f, -0.36f)), 0f, 0f)
+        new SeatAnchor(0, Flip(JetSeat + new Vector3(0, 0.01f, -0.4f)), 0f, 0f)
         {
             Pose = SeatPose.Straddle,
-            Grip = Flip(JetSeat + new Vector3(-0.16f, 0.27f, -0.16f)),
-            Peg = Flip(JetPeg + new Vector3(0, 0.02f, -0.36f)),
+            Grip = Flip(JetSeat + new Vector3(-0.16f, 0.25f, -0.2f)),
+            Peg = Flip(JetPeg + new Vector3(0, 0f, -0.42f)),
         },
-        new SeatAnchor(0, Flip(JetSeat + new Vector3(0, 0.05f, -0.7f)), 0f, 0f)
+        new SeatAnchor(0, Flip(JetSeat + new Vector3(0, 0.02f, -0.8f)), 0f, 0f)
         {
             Pose = SeatPose.Straddle,
-            Grip = Flip(JetSeat + new Vector3(-0.16f, 0.29f, -0.5f)),
-            Peg = Flip(JetPeg + new Vector3(0, 0.03f, -0.72f)),
+            Grip = Flip(JetSeat + new Vector3(-0.16f, 0.26f, -0.6f)),
+            Peg = Flip(JetPeg + new Vector3(0, 0f, -0.82f)),
         },
     };
 
@@ -83,7 +102,7 @@ public static class BoatMeshBuilder
     /// <summary>The cockpit: from this far along the hull to that, its floor this high over the keel.</summary>
     private const float CockpitFrom = 0.22f, CockpitTo = 0.6f, CockpitFloor = 0.42f;
     /// <summary>The seats' hips (author space): the driver's on the right, a passenger beside, a bench of three aft.</summary>
-    private static readonly Vector3 HelmHip = new(-0.46f, 0.66f, 0.15f);
+    private static readonly Vector3 HelmHip = new(-0.46f, 0.72f, 0.15f);
     private const float SeatRecline = 0.22f;
     private static readonly Color Mahogany = new(0.6f, 0.27f, 0.13f);
     private static readonly Color Teak = new(0.78f, 0.6f, 0.4f);
@@ -321,7 +340,7 @@ public partial class BoatRig : Node3D
         var hull = new MeshInstance3D
         {
             Name = "Hull",
-            Mesh = jet ? BoatMeshBuilder.JetskiHull(spec, Color.FromHsv(hue, 0.75f, 0.85f))
+            Mesh = jet ? BoatMeshBuilder.JetskiHull(spec, Color.FromHsv(hue, 0.6f, 0.8f))
                 : BoatMeshBuilder.RunaboutHull(spec, Color.FromHsv(hue, 0.6f, 0.7f)),
         };
         rig.AddChild(hull);
@@ -349,14 +368,15 @@ public partial class BoatRig : Node3D
     {
         float transom = _spec.Shape.SternZ;   // node space: +Z is aft
         // the wake: foam left on the water behind the transom, spreading and fading
-        _wake = Emitter("Wake", 120, 3.5f, 0.55f, new ParticleProcessMaterial
+        _wake = Emitter("Wake", 320, 4f, 0.8f, flat: true, new ParticleProcessMaterial
         {
             EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Box,
-            EmissionBoxExtents = new Vector3(_spec.Beam * 0.35f, 0.02f, 0.2f),
+            EmissionBoxExtents = new Vector3(_spec.Beam * 0.3f, 0.02f, 0.3f),
+            // thrown aft and out to both sides: the wake's vee
             Direction = new Vector3(0, 0, 1),
-            Spread = 35f,
-            InitialVelocityMin = 0.3f,
-            InitialVelocityMax = 1.2f,
+            Spread = 25f,
+            InitialVelocityMin = 0.8f,
+            InitialVelocityMax = 2.2f,
             Gravity = Vector3.Zero,
             DampingMin = 0.5f,
             DampingMax = 1f,
@@ -364,11 +384,11 @@ public partial class BoatRig : Node3D
             ScaleMax = 1.6f,
             ScaleCurve = Grow(),
             Color = Foam,
-            ColorRamp = Fade(0.85f),
+            ColorRamp = Fade(0.7f),
         });
-        _wake.Position = new Vector3(0, 0.08f, transom + 0.2f);
+        _wake.Position = _wakeAnchor = new Vector3(0, 0.08f, transom + 0.2f);
         // spray off the chines when it planes or slams: thrown out and up both sides
-        _spray = Emitter("Spray", 90, 0.7f, 0.14f, _sprayMat = new ParticleProcessMaterial
+        _spray = Emitter("Spray", 120, 0.7f, 0.09f, flat: false, _sprayMat = new ParticleProcessMaterial
         {
             EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Box,
             EmissionBoxExtents = new Vector3(_spec.Beam * 0.5f, 0.05f, _spec.Length * 0.12f),
@@ -382,11 +402,11 @@ public partial class BoatRig : Node3D
             Color = Foam,
             ColorRamp = Fade(0.9f),
         });
-        _spray.Position = new Vector3(0, 0.15f, -_spec.Length * 0.12f);
+        _spray.Position = _sprayAnchor = new Vector3(0, 0.15f, -_spec.Length * 0.12f);
         if (jet)
         {
             // the jet's rooster tail out of the nozzle
-            _jet = Emitter("Jet", 80, 0.9f, 0.16f, new ParticleProcessMaterial
+            _jet = Emitter("Jet", 100, 0.9f, 0.11f, flat: false, new ParticleProcessMaterial
             {
                 Direction = new Vector3(0, 0.45f, 1f),
                 Spread = 8f,
@@ -402,7 +422,8 @@ public partial class BoatRig : Node3D
         }
     }
 
-    private GpuParticles3D Emitter(string name, int amount, float life, float size, ParticleProcessMaterial mat)
+    /// <summary>An emitter of white specks (<paramref name="flat"/>: foam patches lying on the water instead of facing the camera).</summary>
+    private GpuParticles3D Emitter(string name, int amount, float life, float size, bool flat, ParticleProcessMaterial mat)
     {
         var p = new GpuParticles3D
         {
@@ -414,10 +435,12 @@ public partial class BoatRig : Node3D
             DrawPass1 = new QuadMesh
             {
                 Size = new Vector2(size, size),
+                Orientation = flat ? PlaneMesh.OrientationEnum.Y : PlaneMesh.OrientationEnum.Z,
                 Material = new StandardMaterial3D
                 {
                     ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                    BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
+                    BillboardMode = flat ? BaseMaterial3D.BillboardModeEnum.Disabled : BaseMaterial3D.BillboardModeEnum.Particles,
+                    CullMode = BaseMaterial3D.CullModeEnum.Disabled,
                     VertexColorUseAsAlbedo = true,
                     Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 },
@@ -460,7 +483,19 @@ public partial class BoatRig : Node3D
         float jet = afloat ? Mathf.Clamp(thrust01, 0f, 1f) * Mathf.Clamp(speed / 6f, 0.3f, 1f) : 0f;
         Set(_wake, wake, ref _shownWake);
         Set(_spray, spray, ref _shownSpray);
+        // foam lies on the water, not on the keel under it: the emitters ride the surface
+        if (wake > 0f) OnSurface(_wake, _wakeAnchor);
+        if (spray > 0f) OnSurface(_spray, _sprayAnchor);
         if (_jet != null) Set(_jet, jet, ref _shownJet);
+    }
+
+    private Vector3 _wakeAnchor, _sprayAnchor;
+
+    /// <summary>Puts an emitter at its anchor on the hull (rig space), lifted or lowered to the surface there.</summary>
+    private void OnSurface(GpuParticles3D p, Vector3 anchor)
+    {
+        var at = GlobalTransform * anchor;
+        if (World.WaterField.TryLevelAt(at, out float level)) p.GlobalPosition = at with { Y = level + 0.03f };
     }
 
     private static void Set(GpuParticles3D p, float amount, ref float shown)

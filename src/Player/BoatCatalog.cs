@@ -11,7 +11,7 @@ public static class BoatCatalog
 {
     public const int First = 121;
 
-    private static readonly HullShape JetskiLines = new(SternZ: 1.55f, Deadrise: 0.18f, BowRise: 0.28f, SheerRise: 0.1f, Stations: 5, Across: 3);
+    private static readonly HullShape JetskiLines = new(SternZ: 1.55f, Deadrise: 0.18f, BowRise: 0.28f, SheerRise: 0.15f, Stations: 5, Across: 3);
     private static readonly HullShape RunaboutLines = new(SternZ: 2.95f, Deadrise: 0.28f, BowRise: 0.45f, SheerRise: 0.15f, Stations: 7, Across: 3);
 
     /// <summary>
@@ -23,11 +23,11 @@ public static class BoatCatalog
     public static readonly BoatSpec Jetski = new()
     {
         Name = "Jetski",
-        Length = 3.45f, Beam = 1.22f, Depth = 0.78f,
+        Length = 3.45f, Beam = 1.22f, Depth = 0.55f,   // to the footwells: the saddle and hood stand on that
         Mass = 480f,                 // 350 dry + fuel + one rider
         CentreHeight = 0.45f,
         Shape = JetskiLines,
-        Columns = BoatSpec.PlaningHull(3.45f, 1.22f, 0.78f, JetskiLines),
+        Columns = BoatSpec.PlaningHull(3.45f, 1.22f, 0.55f, JetskiLines),
         Drive = BoatDrive.Jet,
         PowerKw = 125f, Efficiency = 0.5f, StaticThrust = 3600f, ReverseShare = 0.3f,
         ThrustAt = new Vector3(0, 0.12f, 1.5f),

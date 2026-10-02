@@ -180,7 +180,7 @@ public partial class BoatCheck : Node
         Expect(draft > 0.1f && draft < 0.5f, $"floats at its draft ({draft:F2} m)");
         Expect(Mathf.Abs(Deg(s.Pitch)) < 4f && Mathf.Abs(Deg(s.Roll)) < 2f, "floats level in a calm");
         Expect(s.Velocity.Length() < 0.2f, "lies still in a calm");
-        await Shot("parked_calm", () => Look(me, side: 1f, back: 0.6f, up: 0.35f, distance: 2.6f));
+        await Shot("idle_calm", () => Look(me, side: 1f, back: 0.6f, up: 0.3f, distance: 1.7f));
     }
 
     private async Task Plane(FootPlayer me, Boat boat)
@@ -200,8 +200,8 @@ public partial class BoatCheck : Node
         for (int i = 0; i < 40; i++)
         {
             await Wait(1);
-            if (_shots && i == 18 && !shotWake) { shotWake = true; await Shot("speed_wake", () => Look(me, side: -0.6f, back: 1.6f, up: 0.7f, distance: 3.2f)); }
-            if (_shots && i == 22 && !shotSide) { shotSide = true; await Shot("planing", () => Look(me, side: 1f, back: 0.05f, up: 0.12f, distance: 2.4f)); }
+            if (_shots && i == 18 && !shotWake) { shotWake = true; await Shot("speed_wake", () => Look(me, side: -0.6f, back: 1.6f, up: 0.55f, distance: 2.4f)); }
+            if (_shots && i == 22 && !shotSide) { shotSide = true; await Shot("planing", () => Look(me, side: 1f, back: 0.05f, up: 0.1f, distance: 1.7f)); }
             if (_shots && i == 26) await Shot("hud", null);
         }
         _each = null;
@@ -280,7 +280,7 @@ public partial class BoatCheck : Node
             if (_shots && !pitchShot && Mathf.Abs(Deg(me.BoatMotion.Pitch)) > 4f)
             {
                 pitchShot = true;
-                await Shot("pitching_swell", () => Look(me, side: 1f, back: 0.1f, up: 0.15f, distance: 2.6f));
+                await Shot("pitching_swell", () => Look(me, side: 1f, back: 0.1f, up: 0.12f, distance: 1.9f));
             }
         }
         me.RideControls = Helm(me, 1f, hold: East);
@@ -290,7 +290,7 @@ public partial class BoatCheck : Node
             if (_shots && !airShot && me.BoatMotion.Airborne > 0.12f)
             {
                 airShot = true;
-                await Shot("airborne", () => Look(me, side: 1f, back: 0.2f, up: 0.1f, distance: 2.2f));
+                await Shot("airborne", () => Look(me, side: 1f, back: 0.2f, up: 0.08f, distance: 1.8f));
             }
         }
         _each = null;
@@ -301,11 +301,12 @@ public partial class BoatCheck : Node
         if (thrown)
         {
             // a jetski's rider in the water: the machine floats on, riderless; back on it to go on
-            Expect(me.Ride == RideKind.OnFoot, "thrown off: in the water on foot (swimming is #301)");
+            Expect(me.Ride == RideKind.OnFoot && me.IsSwimming, "thrown off: swimming (#301)");
             await Wait(2);
             if (Nearest(me) is { } loose && IsInstanceValid(loose))
             {
-                me.GlobalPosition = loose.GlobalPosition + Vector3.Right * 1.2f;
+                me.StartSwimmingAtSurface(loose.GlobalPosition + loose.GlobalTransform.Basis.X * (loose.Ride.ParkedBox.Size.X * 0.5f + 0.5f));
+                await Wait(0.3);
                 Expect(me.TryGetIn() && await Until(() => me.Ride == _kind, 5), "climbs back aboard from the water");
             }
             else Expect(false, "the riderless jetski floats on");
@@ -356,13 +357,17 @@ public partial class BoatCheck : Node
         Expect(hi - lo > 0.25f, "the parked boat rides the swell");
         Expect(drift > 0.05f, "and drifts");
         Expect(off < 0.6f, "floating at the surface, neither sunk nor flying");
-        await Shot("parked_gamey", () => Look(parked, side: 1f, back: 0.4f, up: 0.3f, distance: 2.6f));
+        await Shot("parked_gamey", () => Look(parked, side: 1f, back: 0.4f, up: 0.25f, distance: 1.8f));
 
         await SeaState("calm", 0f);
         Expect(await Until(() => !IsInstanceValid(parked) || parked.Asleep, 40), "calm again, it sleeps");
         if (!IsInstanceValid(parked)) return;
-        me.GlobalPosition = parked.GlobalPosition + parked.GlobalTransform.Basis.X * (boat.ParkedBox.Size.X * 0.5f + 0.6f) + Vector3.Up * 0.3f;
-        Expect(me.TryGetIn() && await Until(() => me.Ride == _kind, 5), "claimed back from the water like any vehicle");
+        await Wait(2);
+        await Shot("parked_calm", () => Look(parked, side: 1f, back: -0.5f, up: 0.25f, distance: 1.7f));
+        // swimming up to it (#301), E climbs aboard
+        Expect(me.StartSwimmingAtSurface(parked.GlobalPosition + parked.GlobalTransform.Basis.X * (boat.ParkedBox.Size.X * 0.5f + 0.5f)), "swims beside it");
+        await Wait(0.5);
+        Expect(me.IsSwimming && me.TryGetIn() && await Until(() => me.Ride == _kind, 5), "boards it from the water, claimed like any vehicle");
     }
 
     // ---- pictures -----------------------------------------------------------------------------
