@@ -39,7 +39,7 @@ in 32 files; no behaviour change.
   `BattleRoyale/BrManager.Client` (damping); `Birds/BirdLife`, `BattleRoyale/BrCrates`, `Items/PvpProbe`
   (private `Flat`); `Player/RaceLine`, `Player/RaceRoute` (public `Flat`, used by `AutoPilot`, `NpcArrival`…),
   `World/RaceNpc.Flat(a, b)` (= `FlatDistance`); `AutoPilot.Wrap`, `NpcArrival.Wrap` (= `WrapAngle`).
-  Open PRs at the time: #169, #248, #254, #264, #269, #281.
+  Open PRs at the time: #248, #254, #264, #269, #281 (and `FootPlayer*`/`HeavyRig` were reserved for them).
 
 ## How to check
 
