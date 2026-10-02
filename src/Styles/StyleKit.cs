@@ -95,6 +95,10 @@ public static class StyleKit
     public static readonly VisualStyle[] MenuStyles =
         [VisualStyle.Ps1, VisualStyle.Cartoon, VisualStyle.RealisticLow, VisualStyle.RealisticHigh];
 
+    /// <summary>Styles the settings menu lists greyed out: still in development (Realistic+ can render nothing).
+    /// <c>--style</c> still picks them.</summary>
+    public static bool InDevelopment(VisualStyle style) => style == VisualStyle.RealisticHigh;
+
     /// <summary>Whether a style needs the Forward+ renderer, which Godot only picks at startup.</summary>
     public static bool NeedsForwardPlus(VisualStyle style) => Pick(style, l => l.Effects).Value;
 
