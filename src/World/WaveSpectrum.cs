@@ -54,18 +54,21 @@ public static class WaveSpectrum
     }
 
     /// <summary>
-    /// The waves, longest first. Wavelengths 64, 41, 23, 13, 7.4 and 4.3 m, spread over ±70° round
-    /// the prevailing direction. Gamey (1): about 1.2 m of summed amplitude, a 1.5-2 m swell crest to
-    /// trough on a big lake; calm (0): a few centimetres of ripple, nothing long.
+    /// The waves, longest first. Wavelengths 64, 41, 27, 17.5, 11.3 and 8.2 m, spread over ±70°
+    /// round the prevailing direction. Gamey (1): about 1.25 m of summed amplitude, a 1.5-2 m swell
+    /// crest to trough on a big lake; calm (0): a few centimetres, nothing long. The shortest is
+    /// four of the near mesh's 2 m squares long: a wave drawn with fewer vertices aliases into a
+    /// false lattice over a whole lake (seen on the Petit Lac with 4.3 m waves); shorter ripples
+    /// are the shaders' shading only.
     /// Cycles: omega = sqrt(g k), rounded to whole cycles per <see cref="LoopS"/>.
     /// </summary>
     public static readonly Wave[] Waves = Build(
         (64.0, 20.0, 0.00f, 0.50f, 2.0f, 0.3f),
         (41.0, -15.0, 0.00f, 0.32f, 1.8f, 2.1f),
-        (23.0, 45.0, 0.005f, 0.18f, 1.4f, 4.4f),
-        (13.0, -40.0, 0.010f, 0.10f, 1.0f, 1.7f),
-        (7.4, 70.0, 0.012f, 0.05f, 0.7f, 5.6f),
-        (4.3, -65.0, 0.010f, 0.025f, 0.5f, 3.1f));
+        (27.0, 45.0, 0.004f, 0.20f, 1.4f, 4.4f),
+        (17.5, -40.0, 0.008f, 0.12f, 1.0f, 1.7f),
+        (11.3, 70.0, 0.010f, 0.07f, 0.7f, 5.6f),
+        (8.2, -65.0, 0.012f, 0.04f, 0.5f, 3.1f));
 
     private static Wave[] Build(params (double Length, double Deg, float Calm, float Gamey, float Growth, float Phase)[] specs)
     {

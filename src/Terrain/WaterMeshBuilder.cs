@@ -23,7 +23,8 @@ namespace UnitSport.Terrain;
 /// </summary>
 public static class WaterMeshBuilder
 {
-    /// <param name="Uvs">x: the wave scale (0..1) the shader multiplies the waves by; 0 on channels.</param>
+    /// <param name="Uvs">x: the wave scale (0..1) the shader multiplies the waves by, 0 on channels;
+    /// y: the vertex spacing in metres (for reference; the shader fades the short waves by distance).</param>
     public sealed record MeshData(Vector3[] Vertices, Vector2[] Uvs, int[] Indices);
 
     /// <summary>
@@ -38,13 +39,17 @@ public static class WaterMeshBuilder
     /// the layer's samples (so a vertex and <see cref="ChunkManager.TryGetWaterLevel"/> agree
     /// exactly) at the still level, with the wave scale in UV.x for the shader's displacement.
     /// LOD: every 2 m sample where the terrain is drawn at stride 1 or 2 (the rings round the
-    /// camera, where the waves are looked at), every second one (4 m) further out.
+    /// camera, where the waves are looked at), every second one (4 m) further out, and on the far
+    /// tiles (terrain stride 10 and more, the coarse rings) a flat surface as coarse as the ground,
+    /// no waves (wave scale 0): the source layer's lakes would otherwise be pits from afar.
     /// </summary>
     /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
     public static MeshData? Build(WaterLayer? layer, RoadTile? roads, int terrainStride,
         Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
-        int step = terrainStride <= 2 ? 1 : 2;
+        bool far = terrainStride >= ChunkFormat.CoarseStride;
+        int step = terrainStride <= 2 ? 1 : far ? Math.Max(1, terrainStride / WaterLayer.Stride) : 2;
+        if ((WaterLayer.Size - 1) % step != 0) step = 2;
         const int m = WaterLayer.Size;
         const float quad = WaterLayer.Stride;
 
@@ -64,7 +69,7 @@ public static class WaterMeshBuilder
                 if (lookup[key] >= 0) return lookup[key];
                 lookup[key] = vertices.Count;
                 vertices.Add(new Vector3(c * quad, layer.LevelAt(c, r), r * quad));
-                uvs.Add(new Vector2(layer.ScaleAt(c, r), 0f));
+                uvs.Add(new Vector2(far ? 0f : layer.ScaleAt(c, r), step * quad));
                 return lookup[key];
             }
 

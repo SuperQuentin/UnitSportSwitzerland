@@ -82,6 +82,13 @@ public class WaterTests
     }
 
     [Fact]
+    public void Every_wave_is_four_near_mesh_squares_long_or_more()
+    {
+        // shorter ones alias on the 2 m water mesh into a lattice over a whole lake (#299, Petit Lac)
+        foreach (var w in WaveSpectrum.Waves) Assert.True(w.LengthM >= 4 * WaterLayer.Stride, $"{w.LengthM:F1} m");
+    }
+
+    [Fact]
     public void Height_inverts_the_horizontal_motion()
     {
         var amp = Amp(1f);

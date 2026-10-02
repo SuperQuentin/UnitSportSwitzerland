@@ -194,7 +194,7 @@ public partial class OccasionDecor : Node
             World = _origin,
             Doors = tile.Doors,
             Roads = tile.Roads,
-            HeightAtWorld = p => _chunks.TryGetHeight(p, out float h) ? h : null,
+            HeightAtWorld = p => _chunks.TryGetSurface(p, out float h) ? h : null,
             CoverAtWorld = p => _chunks.TryGetCover(p, out var c) ? c : null,
             Towns = OccasionTowns.Near(id.MinE + 500, id.MaxN - 500, 3000).ToList(),
         };

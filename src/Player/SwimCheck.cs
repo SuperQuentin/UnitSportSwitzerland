@@ -264,9 +264,7 @@ public partial class SwimCheck : Node
         _me.LookPitch = -0.8f;
         Press(PlayerInput.MoveForward, true);
         float y0 = _me.GlobalPosition.Y;
-        await Wait(1.6);
-        if (ShotsMode) await Shot("swim_under_third", null, null, settle: 0);
-        await Wait(ShotsMode ? 0.2 : 0.4);
+        await Wait(2);
         float down = y0 - _me.GlobalPosition.Y;
         Expect(down > 1.2f, $"looking down, the stroke goes down ({down:F2} m in 2 s)");
         Expect(_me.HeadUnderwater, "head under");
@@ -274,8 +272,15 @@ public partial class SwimCheck : Node
         Press(PlayerInput.MoveForward, false);
         _me.LookPitch = -0.2f;
         _me.WalkControls = () => (_wish, _run);
-        // and crouch the rest of the way
+        // and crouch the rest of the way, stroking east (seen from the side for the picture)
         Press(PlayerInput.CrouchSlide, true);
+        if (ShotsMode)
+        {
+            _wish = East;
+            await Wait(0.9);
+            await Shot("swim_under_third", yaw: YawOf(East) + 1.45f, pitch: 0.05f, settle: 0.25);
+            _wish = Vector3.Zero;
+        }
         bool reached = await Until(() => _me.IsOnFloor() || _me.GlobalPosition.Y - bed < 0.15f, 12);
         Expect(reached, $"crouch dives to the bed ({_me.GlobalPosition.Y - bed:F2} m above it)");
         float air = _me.Air;
@@ -284,7 +289,7 @@ public partial class SwimCheck : Node
         if (ShotsMode)
         {
             _me.DebugThirdPerson(false);
-            _me.LookPitch = -0.55f;
+            _me.LookPitch = -1.1f;
             await Wait(0.6);
             await Shot("swim_under_bed_first", null, null);
             _me.DebugThirdPerson(true);
