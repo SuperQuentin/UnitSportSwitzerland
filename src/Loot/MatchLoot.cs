@@ -50,8 +50,10 @@ public static class MatchLoot
                 for (int i = rng.Next(1, 3); i > 0; i--)
                     if (rng.NextDouble() < 0.2) Weapon(found, rng, rng.NextDouble() < 0.7 ? ItemId.Pistol : ItemId.Shotgun);
                     else Supply(found, rng, Pick(Supplies, rng));
+                Materials(found, rng, metal: false);
                 break;
             case MatchTable.Military:
+                Materials(found, rng, metal: true);
                 Weapon(found, rng, rng.NextDouble() < 0.6 ? ItemId.Rifle : rng.NextDouble() < 0.6 ? ItemId.Shotgun : ItemId.HuntingRifle);
                 Supply(found, rng, ItemId.Ammo75);
                 if (rng.NextDouble() < 0.5) Supply(found, rng, ItemId.ArmorVest);
@@ -122,6 +124,24 @@ public static class MatchLoot
     {
         found[gun] = 1;
         if (Items.Weapons.Get(gun) is { Melee: false } w) Supply(found, rng, w.Ammo);
+    }
+
+    /// <summary>
+    /// Building material for the hammer (#276): a supply crate holds planks most of the time, sometimes
+    /// stone; an army crate metal or sandbags.
+    /// </summary>
+    private static void Materials(Dictionary<ItemId, int> found, Random rng, bool metal)
+    {
+        void Add(ItemId id, int n) => found[id] = found.GetValueOrDefault(id) + n;
+        if (metal)
+        {
+            if (rng.NextDouble() < 0.6) { Add(ItemId.ScrapMetal, rng.Next(8, 13)); Add(ItemId.Screws, rng.Next(4, 7)); }
+            else Add(ItemId.SandBag, rng.Next(6, 10));
+            return;
+        }
+        double r = rng.NextDouble();
+        if (r < 0.6) Add(ItemId.WoodPlanks, rng.Next(10, 21));
+        else if (r < 0.8) Add(ItemId.Stone, rng.Next(12, 25));
     }
 
     private static void Supply(Dictionary<ItemId, int> found, Random rng, ItemId id)

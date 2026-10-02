@@ -161,6 +161,14 @@ public partial class ChatManager : Node
             else CatalogueRequested();
             return;
         }
+        // the debug menu draws on this screen only; a server never hears of it (#339)
+        if (text.Trim().ToLowerInvariant() == "/debug")
+        {
+            if (!DebugMenu.Allowed) LineReceived?.Invoke("The debug menu is for admins on a server.", ChatKind.Error);
+            else if (DebugRequested is null) LineReceived?.Invoke("No debug menu here.", ChatKind.Error);
+            else DebugRequested();
+            return;
+        }
         if (IsLocal)
         {
             text = text.Trim();
@@ -219,6 +227,9 @@ public partial class ChatManager : Node
 
     /// <summary>Client: <c>/catalogue</c> was typed by someone allowed it; the item catalogue opens.</summary>
     public event Action? CatalogueRequested;
+
+    /// <summary>Client: <c>/debug</c> was typed by someone allowed it (alone, or an admin); the debug menu opens.</summary>
+    public event Action? DebugRequested;
 
     /// <summary>Client: the catalogue is offered alone, or to an admin. The server re-checks every <c>/spawn</c> it sends.</summary>
     public bool CanUseCatalogue => IsLocal || Permissions.IsAdmin;
@@ -290,7 +301,7 @@ public partial class ChatManager : Node
         {
             case "help":
                 Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /catalogue  /clear  /money <amount>  "
-                    + "/bank [set|add|take <amount>]  /occasion  /time  /seastate  /style  — Tab completes.", ChatKind.Private);
+                    + "/bank [set|add|take <amount>]  /occasion  /time  /seastate  /style  /debug  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 
@@ -656,7 +667,7 @@ public partial class ChatManager : Node
             ReplyTo(sender,
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
                 + "/kick <player> [reason]  /admin list|add <name>|remove <name>  "
-                + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  "
+                + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  /debug  "
                 + "/give <player> <item> [count]  /clear [player]  /money <amount> [player]  "
                 + "/bank <player> [set|add|take <amount>]  "
                 + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /seastate <0..1|calm|chop|storm|gamey>  — Tab completes",

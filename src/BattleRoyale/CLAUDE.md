@@ -12,3 +12,4 @@ its topic; search with `grep -ril <word> docs/notes/br`. Weapons and PvP: `docs/
 - `plane` — BrFlight (seeded line, doors, altitude from the lattice, test pace ×2), BrPlane + CargoPlaneMeshBuilder, Board/Carrier/Stowed, E jumps into the wingsuit, push-out, plane camera, map line, no ground check
 - `polish` — BrSounds stings + heartbeat + whoosh, airdrop beacon and landing thud, BrPrefs (user://br/settings.json, buttons on the full map), --br auto-join, squads groundwork (TeamSize, AssignTeams, SideOf/Hostile/TeamsAlive, team win, mates on maps)
 - `commands` — /br verbs, --brcheck, tools/brcheck.sh
+- `structures` — BrPrefabs (pure, unit-tested: tower, ski jump, avalanche barrier, checkpoint, scout fort, scaffolding, footbridge), BrStructures placement rules, SpawnPrefab + match-owned gadgets, rubble piles, match materials (crates, gathering), --prefabcheck

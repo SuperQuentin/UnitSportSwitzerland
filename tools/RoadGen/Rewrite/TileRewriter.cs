@@ -87,6 +87,7 @@ public static partial class TileRewriter
         public readonly PaintEmitter.Tally Paint = new();
         public readonly RailRoadOverlap.Tally Rail = new();
         public readonly PriorityPlanner.Stats Priority = new();
+        public readonly BikePlanner.Stats Bikes = new();
 
         private string FormatParts(int tiles) => "    parts     " + string.Join(", ", Parts.Select(kv =>
             string.Create(CultureInfo.InvariantCulture,
@@ -104,7 +105,7 @@ public static partial class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format();
+                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Bikes.Format();
         }
     }
 
@@ -301,6 +302,7 @@ public static partial class TileRewriter
             var facades = new Facades(chunkDir);   // building walls, for the streets
             var field = new UrbanField(facades);
             RoadHeights.Apply(lines, field, heightStats, count: true);
+            BikePlanner.PlanLines(lines, field, netStats.Bikes);   // bike lanes (#120), before the junctions read the lines
             // roundabout rings rebuilt as arcs before anything is built from them (#122)
             var islands = new Dictionary<TileId, List<RoadAreaProp>>();
             foreach (var ring in RoundaboutShaper.Shape(lines, netStats.Roundabouts))
@@ -318,6 +320,7 @@ public static partial class TileRewriter
             var caps = new Dictionary<TileId, List<RoadJunction>>();
             var paint = new Dictionary<TileId, List<RoadPaint>>();
             var signs = new Dictionary<TileId, List<RoadPointProp>>();
+            var bikeBridges = new Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>>();   // paths through junctions (#120)
 
             // the full-res terrain of the block and its halo: the height audit and the walls (#125)
             var grids = LoadGrids(chunkDir, context);
@@ -340,6 +343,9 @@ public static partial class TileRewriter
                     JoinNearEnds: MayJoinNearEnd));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
                 var priority = PlanPriority(result);
+                var bikeLayouts = BikePlanner.StrokeLayouts(result.Network, BikeStrokeKey);   // one path layout per street (#120)
+                var trackPaint = new List<(RoadSegment Segment, TileId Tile, bool Start, bool End)>();
+                var lanePaint = new List<(RoadSegment Segment, TileId Tile, double Station, bool Start, bool End)>();
 
                 overlapAfter += result.Report.OverlapArea;
                 foreach (var (pair, area) in result.Report.TopOverlapPairs ?? [])
@@ -457,16 +463,29 @@ public static partial class TileRewriter
                     // rules) but written whole until the turn lanes (#123) have read it; then it is cut
                     // where its cross-section changes. Paint is laid on the whole line, so dashes run on
                     // across the cuts.
-                    var street = streets.Plan(segment, source.Tile, k, out bool urban);
+                    // separated bike paths (#120): a street that wants one, in its street's layout
+                    bool wantsPath = source.Line.BikeWanted || attributes.Left.HasTrack || attributes.Right.HasTrack;
+                    var street = streets.Plan(segment, source.Tile, k, out bool urban, out bool track,
+                        new StreetPlanner.BikeRequest(wantsPath ? bikeLayouts.GetValueOrDefault(linkId) : 0, netStats.Bikes));
                     if (mouths.Count > 0) street = street.Select(piece => RampShoulders(piece, source.Tile, mouths)).ToList();
                     list.Add(segment);
                     if (street.Count != 1 || !ReferenceEquals(street[0], segment)) streetPieces[segment] = street;
                     written += street.Count;
 
-                    var paintOn = urban && !attributes.Has(RoadAttrFlags.Urban)
-                        ? ToSegment(plan, source, attributes with { Flags = attributes.Flags | RoadAttrFlags.Urban }) : segment;
-                    segmentOf[linkId] = (segment, source.Tile, paintOn);
-                    PaintEmitter.Emit(paintOn, source.Key is { } at ? at.FromM + source.AlongOf(plan[0]) : 0, painted);
+                    var link = result.Network.Links[linkId];
+                    bool startsAtJunction = EndsAtJunction(result.Network, link.StartNode), endsAtJunction = EndsAtJunction(result.Network, link.EndNode);
+                    var paintAttributes = attributes;
+                    if (urban) paintAttributes = paintAttributes with { Flags = paintAttributes.Flags | RoadAttrFlags.Urban };
+                    if (track)   // a street that got its paths has no painted lanes
+                        paintAttributes = paintAttributes with { Left = NoLane(paintAttributes.Left), Right = NoLane(paintAttributes.Right) };
+                    var paintOn = paintAttributes == attributes ? segment : ToSegment(plan, source, paintAttributes);
+                    segmentOf[linkId] = (segment, source.Tile, paintOn);   // turn lanes find the lines on paintOn (#325)
+                    double station = source.Key is { } at ? at.FromM + source.AlongOf(plan[0]) : 0;
+                    PaintEmitter.Emit(paintOn, station, painted, startsAtJunction, endsAtJunction, bikeLanes: false);
+                    if (paintAttributes.Left.HasLane || paintAttributes.Right.HasLane)   // on the final pieces (#120)
+                        lanePaint.Add((segment, source.Tile, station, startsAtJunction, endsAtJunction));
+                    if (track || attributes.Left.HasTrack || attributes.Right.HasTrack)
+                        trackPaint.Add((segment, source.Tile, startsAtJunction, endsAtJunction));
                 }
 
                 foreach (var junction in result.Junctions)
@@ -485,8 +504,9 @@ public static partial class TileRewriter
                 EmitPriority(priority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
                 EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs, netStats.TurnLanes);
 
-                // now the streets are cut into their sidewalk pieces (#119); a side whose sidewalk
-                // would stand on a turn lane's widening (#123) has none there
+                // now the streets are cut into their sidewalk pieces (#119); a side that would stand on
+                // a turn lane's widening (#123) moves out past it (#120)
+                var finalPieces = new Dictionary<RoadSegment, List<RoadSegment>>(ReferenceEqualityComparer.Instance);
                 foreach (var (tileId, list) in output)
                 {
                     var strips = islands.TryGetValue(tileId, out var props)
@@ -494,10 +514,27 @@ public static partial class TileRewriter
                     for (int i = list.Count - 1; i >= 0; i--)
                         if (streetPieces.TryGetValue(list[i], out var pieces))
                         {
+                            var final = strips.Count == 0 ? pieces : pieces.SelectMany(x => ShiftOffPavement(x, strips, netStats.Bikes)).ToList();
+                            finalPieces[list[i]] = final;
                             list.RemoveAt(i);
-                            list.InsertRange(i, strips.Count == 0 ? pieces : pieces.Select(x => OffPavement(x, strips)));
+                            list.InsertRange(i, final);
                         }
                 }
+
+                // the paths' paint on their final pieces, and the crossings at the junctions (#120)
+                foreach (var (segment, tileId, station, start, end) in lanePaint)
+                {
+                    var pieces = finalPieces.TryGetValue(segment, out var cut) ? cut : [segment];
+                    double s = station;
+                    for (int i = 0; i < pieces.Count; i++)
+                    {
+                        PaintEmitter.BikeLanes(pieces[i], s, Get(paint, tileId), i == 0 && start, i == pieces.Count - 1 && end);
+                        s += RoadPaintGeometry.Length(pieces[i].Points);
+                    }
+                }
+                foreach (var (segment, tileId, start, end) in trackPaint)
+                    EmitTrackPaint(finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment], start, end, Get(paint, tileId));
+                EmitBikeCrossings(priority, result, segmentOf, finalPieces, block, wanted, paint, signs, bikeBridges, netStats.Bikes);
             }
 
             foreach (var id in block)
@@ -510,9 +547,12 @@ public static partial class TileRewriter
                 // cableways and watercourses go back exactly as they came in
                 if (passthrough.TryGetValue(id, out var kept)) segments.AddRange(kept);
 
-                var flags = RoadTileFlags.Network;
+                var flags = RoadTileFlags.Network | RoadTileFlags.Bikes;
                 if (segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) flags |= RoadTileFlags.Osm;
                 streetStats.Tiles++;
+                var pointProps = signs.TryGetValue(id, out var sp) ? sp : new List<RoadPointProp>();
+                var bridges = bikeBridges.TryGetValue(id, out var br) ? br : [];
+                MoveSignsOffPaths(segments, pointProps, netStats.Bikes);   // #120
                 var walls = new List<RoadLinearProp>();
                 if (grids is not null)
                 {
@@ -526,8 +566,9 @@ public static partial class TileRewriter
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
                     AreaProps = [.. islands.TryGetValue(id, out var isl) ? isl : [],
-                        .. CornerPlanner.Plan(id, segments, junctions, facades, cornerStats)],   // sidewalk corners (#119)
-                    PointProps = signs.TryGetValue(id, out var sp) ? sp : new List<RoadPointProp>(),
+                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl), bridges, netStats.Bikes),   // sidewalk corners (#119)
+                        .. bridges.Select(x => x.Band)],
+                    PointProps = pointProps,
                 };
                 rails.ClearTrackZones(tile.Paint, id);
                 var bytes = Encode(tile);
@@ -586,42 +627,118 @@ public static partial class TileRewriter
         return (tile, null);
     }
 
-    /// <summary>The piece with no sidewalk on a side whose sidewalk band crosses one of <paramref name="strips"/>.</summary>
-    private static RoadSegment OffPavement(RoadSegment seg, List<RoadAreaProp> strips)
+    /// <summary>Stations along a piece where a turn lane's widening is measured, metres.</summary>
+    private const double WideningStep = 0.5;
+    /// <summary>A widening is looked for this far out from the ribbon's edge, in steps of <see cref="WideningProbe"/>.</summary>
+    private const double WideningReach = 6.0, WideningProbe = 0.05;
+    /// <summary>
+    /// The shift may leave the measured widening by this much between two of its breakpoints: more
+    /// than a probe step, so the probe's own 5 cm jitter cuts no piece.
+    /// </summary>
+    private const double WideningTolerance = 0.08;
+
+    /// <summary>
+    /// A street piece beside a turn lane's widening (#123's flush <see cref="AreaPropType.Pavement"/>
+    /// strips): each side that would stand on it moves out by the widening, its kerb on the strip's
+    /// outer edge, instead of being dropped (#120: a bike path, its grass and the sidewalk carry on
+    /// round the pocket; #123 used to drop the sidewalk there). The widening is measured every
+    /// <see cref="WideningStep"/> out from the ribbon's edge, the piece is cut where it bends (taper
+    /// start and end, within <see cref="WideningTolerance"/>), and each part's side carries a linear
+    /// shift (<see cref="RoadSide.ShiftStartCm"/>, <see cref="RoadSide.ShiftEndCm"/>).
+    /// </summary>
+    private static List<RoadSegment> ShiftOffPavement(RoadSegment seg, List<RoadAreaProp> strips, BikePlanner.Stats bikes)
     {
         var a = seg.Attributes;
-        if (a.Left.SidewalkDm == 0 && a.Right.SidewalkDm == 0) return seg;
-        bool Crosses(bool right)
+        static bool Moves(RoadSide s) => s.OuterDm > 0 || s.HasLane;
+        if ((!Moves(a.Left) && !Moves(a.Right)) || seg.PointCount < 2) return [seg];
+        var p = seg.Points;
+        var st = new List<(double S, double X, double Z, double Nx, double Nz)>();
+        double travelled = 0, next = 0, lastNx = 0, lastNz = 0;
+        for (int i = 0; i + 1 < seg.PointCount; i++)
         {
-            var side = right ? a.Right : a.Left;
-            if (side.SidewalkDm == 0) return false;
-            double off = seg.Width * 0.5 + side.SidewalkDm / 20.0, sign = right ? 1 : -1;
-            var p = seg.Points;
-            for (int i = 0; i + 1 < seg.PointCount; i++)
-            {
-                double fx = p[i * 3 + 3] - p[i * 3], fz = p[i * 3 + 5] - p[i * 3 + 2], l = Math.Sqrt(fx * fx + fz * fz);
-                if (l < 1e-6) continue;
-                for (double t = 0; t <= l; t += 1.0)
-                {
-                    // right of travel, tile-local: (-fz, fx)
-                    double x = p[i * 3] + fx * t / l - fz / l * off * sign, z = p[i * 3 + 2] + fz * t / l + fx / l * off * sign;
-                    if (strips.Any(strip => InsideArea(strip, x, z))) return true;
-                }
-            }
-            return false;
+            double ax = p[i * 3], az = p[i * 3 + 2], dx = p[i * 3 + 3] - ax, dz = p[i * 3 + 5] - az, l = Math.Sqrt(dx * dx + dz * dz);
+            if (l < 1e-6) continue;
+            double fx = dx / l, fz = dz / l;
+            // right of travel, tile-local (x east, z south): (-fz, fx)
+            for (; next <= travelled + l + 1e-9; next += WideningStep)
+                st.Add((next, ax + fx * (next - travelled), az + fz * (next - travelled), -fz, fx));
+            travelled += l;
+            (lastNx, lastNz) = (-fz, fx);
         }
-        bool left = Crosses(false), right = Crosses(true);
-        if (!left && !right) return seg;
-        return new RoadSegment
+        if (st.Count == 0) return [seg];
+        if (travelled - st[^1].S > 0.05) st.Add((travelled, p[^3], p[^1], lastNx, lastNz));
+
+        double half = seg.Width * 0.5;
+        double[] Widening(bool right)
         {
-            Class = seg.Class, Surface = seg.Surface, Flags = seg.Flags, Width = seg.Width, Points = seg.Points,
-            Attributes = a with
+            var w = new double[st.Count];
+            if (!Moves(right ? a.Right : a.Left)) return w;
+            double sign = right ? 1 : -1;
+            for (int k = 0; k < st.Count; k++)
             {
-                Left = left ? a.Left with { SidewalkDm = 0, KerbCm = 0 } : a.Left,
-                Right = right ? a.Right with { SidewalkDm = 0, KerbCm = 0 } : a.Right,
-            },
-        };
+                var (_, x, z, nx, nz) = st[k];
+                double covered = 0;
+                for (double d = WideningProbe; d <= WideningReach; d += WideningProbe)
+                {
+                    double px = x + nx * sign * (half + d), pz = z + nz * sign * (half + d);
+                    if (!strips.Any(strip => InsideArea(strip, px, pz))) break;
+                    covered = d;
+                }
+                // half a probe past the last point found on the strip: its edge lies between
+                w[k] = covered > 0 ? covered + WideningProbe * 0.5 : 0;
+            }
+            return w;
+        }
+        var left = Widening(false);
+        var right = Widening(true);
+        if (left.All(w => w == 0) && right.All(w => w == 0)) return [seg];
+        if ((left.Any(w => w > 0) && a.Left.HasTrack) || (right.Any(w => w > 0) && a.Right.HasTrack)) bikes.PathsShiftedOffTurnLanes++;
+
+        // breakpoints: where either side's widening stops being a straight ramp
+        var keep = new SortedSet<int> { 0, st.Count - 1 };
+        void Breaks(double[] w, int i0, int i1)
+        {
+            int worst = -1;
+            double far = WideningTolerance;
+            for (int k = i0 + 1; k < i1; k++)
+            {
+                double t = (st[k].S - st[i0].S) / Math.Max(st[i1].S - st[i0].S, 1e-9);
+                double d = Math.Abs(w[k] - (w[i0] + (w[i1] - w[i0]) * t));
+                if (d > far) { far = d; worst = k; }
+            }
+            if (worst < 0) return;
+            keep.Add(worst);
+            Breaks(w, i0, worst);
+            Breaks(w, worst, i1);
+        }
+        Breaks(left, 0, st.Count - 1);
+        Breaks(right, 0, st.Count - 1);
+
+        static ushort Cm(double m) => (ushort)Math.Clamp(Math.Ceiling(m * 100 - 1e-6), 0, ushort.MaxValue);
+        RoadSide Shift(RoadSide s, double[] w, int i0, int i1) =>
+            !Moves(s) ? s : s with { ShiftStartCm = Cm(w[i0]), ShiftEndCm = Cm(w[i1]) };
+        var cuts = keep.ToList();
+        var pieces = new List<RoadSegment>(cuts.Count - 1);
+        for (int c = 0; c + 1 < cuts.Count; c++)
+        {
+            int i0 = cuts[c], i1 = cuts[c + 1];
+            var points = StreetPlanner.Slice(seg, c == 0 ? 0 : st[i0].S, c + 2 == cuts.Count ? double.PositiveInfinity : st[i1].S);
+            if (points.Length < 6) continue;
+            // the yield bits belong to the segment's ends (#121)
+            var flags = a.Flags;
+            if (c > 0) flags &= ~RoadAttrFlags.YieldAtStart;
+            if (c + 2 < cuts.Count) flags &= ~RoadAttrFlags.YieldAtEnd;
+            pieces.Add(new RoadSegment
+            {
+                Class = seg.Class, Surface = seg.Surface, Flags = seg.Flags, Width = seg.Width, Points = points,
+                Attributes = a with { Flags = flags, Left = Shift(a.Left, left, i0, i1), Right = Shift(a.Right, right, i0, i1) },
+            });
+        }
+        return pieces.Count > 0 ? pieces : [seg];
     }
+
+    /// <summary>A side without its painted bike lane.</summary>
+    private static RoadSide NoLane(RoadSide s) => s.Bike == BikeKind.Lane ? s with { Bike = BikeKind.None, BikeDm = 0 } : s;
 
     private static bool InsideArea(RoadAreaProp prop, double x, double z)
     {
@@ -788,7 +905,13 @@ public static partial class TileRewriter
             if (a.Has(RoadAttrFlags.Urban)) { st.Urban++; st.UrbanKm += km; }
             if (a.Has(RoadAttrFlags.Osm)) { st.Osm++; st.OsmKm += km; }
             if (a.Has(RoadAttrFlags.Roundabout)) st.Roundabout++;
+            foreach (var side in (ReadOnlySpan<RoadSide>)[a.Left, a.Right])
+            {
+                if (side.HasLane) { st.Bikes.LaneSideKm += km; if (a.Has(RoadAttrFlags.Urban)) st.Bikes.UrbanLaneSideKm += km; }
+                st.Bikes.TrackSideKm[LayoutOf(side)] += side.HasTrack ? km : 0;
+            }
         }
+        st.Bikes.Symbols += tile.Paint.Count(p => p.Type == PaintType.BikeSymbol);
     }
 
     /// <summary>

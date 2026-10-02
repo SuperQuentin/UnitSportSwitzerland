@@ -76,6 +76,17 @@ public partial class ItemController : Node
     public Func<FootPlayer?>? ActivePlayer { get; set; }
 
     public Inventory Inventory => _inventory;
+
+    /// <summary>A short line over the hotbar.</summary>
+    public void Toast(string text) => _ui.Toast(text);
+
+    /// <summary>The hammer's ghost and builder (#274).</summary>
+    public Build.BuildTool BuildTool => _build;
+    private Build.BuildTool _build = null!;
+
+    /// <summary>Gadgets in hand and in use: the zipline, ladder, trampoline, launch pad (#275).</summary>
+    public Build.GadgetTool GadgetTool => _gadgets;
+    private Build.GadgetTool _gadgets = null!;
     public InventoryUi Ui => _ui;
 
     /// <summary>Every item, for the offline player or an admin (#262).</summary>
@@ -123,6 +134,10 @@ public partial class ItemController : Node
         AddChild(_flagGhost);
         _throw = new ThrowAim { Name = "ThrowAim" };
         AddChild(_throw);
+        _build = new Build.BuildTool(this) { Name = "BuildTool" };
+        AddChild(_build);
+        _gadgets = new Build.GadgetTool(this) { Name = "GadgetTool" };
+        AddChild(_gadgets);
         Instance = this;
         DroppedItems.Refused += OnDropRefused;
 
@@ -195,6 +210,8 @@ public partial class ItemController : Node
         if (player == null)
         {
             ShowGhost(null);
+            _build.Step(null, false, false);
+            _gadgets.Step(null, ItemId.None, false);
             Highlight.Point(null);
             Vehicles.VehicleReach.Point(null);
             _throw.Step(null, false, false, (float)delta);
@@ -257,6 +274,10 @@ public partial class ItemController : Node
                         && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
         ShowGhost(sticking ? StickTarget(player).At : null);
         _flagGhost.Step(player, usable && !_planting && _inventory.HeldId == ItemId.SwissFlag);
+        _build.Step(player, usable && !UiFocus.TextEntryActive && _inventory.HeldId == ItemId.Hammer,
+            PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+        _gadgets.Step(usable && !UiFocus.TextEntryActive ? player : null, _inventory.HeldId, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+        _gadgets.Tick(usable ? player : null);
         if (visual != null)
         {
             visual.SetPose(_raiseFlag ? ViewPose.Raise : !aiming ? ViewPose.Rest : def!.Use switch
@@ -297,6 +318,27 @@ public partial class ItemController : Node
         else if (e.IsActionPressed(PlayerInput.DropItem))
         {
             DropHeld(player, all: e is InputEventKey { CtrlPressed: true });
+            GetViewport().SetInputAsHandled();
+        }
+        else if (e.IsActionPressed(PlayerInput.InteractMount) && _gadgets.TryInteract(player))
+        {
+            // E by a zipline's top post, a ladder's foot, on a launch pad: ride it (#275)
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_inventory.HeldId == ItemId.Hammer && e.IsActionPressed(PlayerInput.RideMenu))
+        {
+            // the hammer in hand: R turns the piece, Aim + R changes its material (the travel picker waits)
+            if (PlayerInput.Held(PlayerInput.AimItem)) _build.CycleMaterial();
+            else _build.Turn();
+            Click();
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_inventory.HeldId == ItemId.Hammer && PlayerInput.Held(PlayerInput.AimItem)
+                 && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
+        {
+            // Aim + wheel: the next piece instead of the next hotbar slot
+            _build.CyclePiece(e.IsActionPressed(PlayerInput.NextItem) ? 1 : -1);
+            Click();
             GetViewport().SetInputAsHandled();
         }
         else if (_aimingPhoto && (e.IsActionPressed(PlayerInput.NextItem) || e.IsActionPressed(PlayerInput.PrevItem)))
@@ -432,6 +474,14 @@ public partial class ItemController : Node
                 PlaceOrPickUpFlag(player, slot);
                 break;
 
+            case ItemUse.Build:
+                _build.Use(player, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+                break;
+
+            case ItemUse.Gadget:
+                _gadgets.Use(player, slot, PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+                break;
+
             case ItemUse.Optic:
                 _ui.Toast(InputHints.Format("Hold Aim ({aim_item}) to look through them."));
                 break;
@@ -467,7 +517,9 @@ public partial class ItemController : Node
                 Kick(player);
                 Play(SfxSynth.WhooshBank.Variants[SfxRng.Next(SfxSynth.WhooshBank.Variants.Length)], 1.3f);
                 var (eye, aim) = AimFrom(player, blade.Range);
-                if (!PlayerHits.Stab(player, eye, aim, blade)) BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, blade.Range);
+                if (!PlayerHits.Stab(player, eye, aim, blade)
+                    && BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, blade.Range) != true)
+                    Build.BuildTool.TryHit(player, eye, aim, blade);
                 break;
             }
 
@@ -861,6 +913,8 @@ public partial class ItemController : Node
             Play(stream, pitch * weapon.Pitch);
         }
         PlayerHits.Shoot(player, eye, aim, weapon);
+        // a shot that meets a built piece first chips it (#274)
+        Build.BuildTool.TryHit(player, eye, aim, weapon);
         // a shot through a supply crate breaks it open (#198)
         BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, weapon.Range);
         if (weapon.Id == ItemId.Shotgun) Fire?.Invoke(player, eye, aim);
