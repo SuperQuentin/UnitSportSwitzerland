@@ -78,6 +78,7 @@ public static class Recipes
         Bench(ItemId.BeltPouch, 1, 3f, I(ItemId.Cloth, 3), I(ItemId.Rope)),
         Bench(ItemId.Handbag, 1, 3f, I(ItemId.Cloth, 5), I(ItemId.Rope), I(ItemId.Screws, 2)),
         Bench(ItemId.Backpack, 1, 4f, I(ItemId.Cloth, 8), I(ItemId.Rope, 2), I(ItemId.DuctTape)),
+        Bench(ItemId.Hammer, 1, 3f, I(ItemId.ScrapMetal, 2), I(ItemId.WoodPlanks)),
 
         // ---- salvage: parts back into materials (always worth less than the part) ----
         Strip(ItemId.Tyre, I(ItemId.Rubber, 3)),

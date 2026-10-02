@@ -109,6 +109,10 @@ public enum ItemId
     KneeSocks = 137, RainbowStockings = 138,
     PlatformBoots = 139, CombatBoots = 140, PinkSneakers = 141, WhiteSneakers = 142, MaryJanes = 143, DiscoPlatforms = 144,
     LaceArmWarmers = 145, FingerlessGloves = 146, PawGloves = 147, StripedArmWarmers = 148, NeonGloves = 149,
+
+    // ---- building (#274, docs/notes/build/building.md) ----
+    /// <summary>Held, it builds structure pieces from the pack's materials (<see cref="ItemUse.Build"/>).</summary>
+    Hammer = 150,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -145,4 +149,6 @@ public enum ItemUse
     Signal,
     /// <summary>Worn in the bag slot, it adds <see cref="ItemDef.PackSlots"/> to the pack (<see cref="Inventory.Bag"/>).</summary>
     Bag,
+    /// <summary>Use builds the piece the ghost shows; Aim + Use takes your own piece back (<c>Build.BuildTool</c>).</summary>
+    Build,
 }
