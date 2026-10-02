@@ -264,7 +264,9 @@ public partial class SwimCheck : Node
         _me.LookPitch = -0.8f;
         Press(PlayerInput.MoveForward, true);
         float y0 = _me.GlobalPosition.Y;
-        await Wait(2);
+        await Wait(1.6);
+        if (ShotsMode) await Shot("swim_under_third", null, null, settle: 0);
+        await Wait(ShotsMode ? 0.2 : 0.4);
         float down = y0 - _me.GlobalPosition.Y;
         Expect(down > 1.2f, $"looking down, the stroke goes down ({down:F2} m in 2 s)");
         Expect(_me.HeadUnderwater, "head under");
@@ -272,7 +274,6 @@ public partial class SwimCheck : Node
         Press(PlayerInput.MoveForward, false);
         _me.LookPitch = -0.2f;
         _me.WalkControls = () => (_wish, _run);
-        if (ShotsMode) await Shot("swim_under_third", yaw: YawOf(East) + 1.4f, pitch: -0.1f);
         // and crouch the rest of the way
         Press(PlayerInput.CrouchSlide, true);
         bool reached = await Until(() => _me.IsOnFloor() || _me.GlobalPosition.Y - bed < 0.15f, 12);
@@ -412,6 +413,18 @@ public partial class SwimCheck : Node
     private async Task HighDives()
     {
         Log("-- high dives");
+        if (ShotsMode)
+        {
+            // a jump off a 6 m board, for the splash
+            await StandAt(0, 0);
+            _me.GlobalPosition = At(Lake.ShoreX + 400, -60, Level + 6f);
+            _me.Velocity = Vector3.Zero;
+            _me.LookYaw = YawOf(East) + 1.0f;
+            _me.LookPitch = -0.75f;
+            await Until(() => _me.IsSwimming, 4);
+            await Wait(0.15);
+            await Shot("swim_splash", null, null, settle: 0);
+        }
         // 30 m into 25 m of water: free
         await StandAt(0, 0);
         float health = _me.Health;
@@ -424,7 +437,6 @@ public partial class SwimCheck : Node
             await Wait(0.02);
         }
         Expect(inWater, "a 30 m drop into the lake: swimming");
-        if (ShotsMode) { await Wait(0.12); await Shot("swim_splash", yaw: YawOf(East) + 1.0f, pitch: -0.35f); }
         await Wait(3);
         Expect(_me.Health >= health - 0.5f, $"into deep water: no fall damage (health {health:F0} -> {_me.Health:F0})");
 
@@ -464,11 +476,11 @@ public partial class SwimCheck : Node
 
     // ---- screenshots ----------------------------------------------------------------------
 
-    private async Task Shot(string name, float? yaw, float? pitch)
+    private async Task Shot(string name, float? yaw, float? pitch, double settle = 0.35)
     {
         if (yaw is { } y) _me.LookYaw = y;
         if (pitch is { } p) _me.LookPitch = p;
-        await Wait(0.35);
+        if (settle > 0) await Wait(settle);
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         var dir = ProjectSettings.GlobalizePath("res://test_output/swim");
         System.IO.Directory.CreateDirectory(dir);
