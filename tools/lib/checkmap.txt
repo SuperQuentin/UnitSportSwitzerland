@@ -8,6 +8,9 @@
 # check   "--flag [args]" runs `godot --headless --path . -- --flag [args]`; a tools/ path runs
 #         that script; "@netsmoke" is the runner's own headless server + client.
 # Only list a check that ends by itself and prints a RESULT line or exits non-zero on failure.
+# Give each check the lightest world it works on (Core/Systems): `--world flat` (TestWorld, no
+# map), `--systems ui` (only what is named), `--world fixture` / `--chunks fixture:<course>`
+# (tiles built in code). Never the real map in quick/net.
 
 src/Net/                 quick  --interestcheck
 src/Audio/Cd/            quick  --beatcheck
@@ -31,10 +34,29 @@ src/Player/              quick  --driftcheck
 src/Player/              quick  --spincheck
 src/Vehicles/            quick  --driftcheck
 src/Vehicles/            quick  --truckcheck
-src/Player/              quick  --synccheck
-src/Ui/                  quick  --leavecheck
+src/Player/              quick  --synccheck --world flat
+src/Player/              quick  --hitboxcheck --world flat
+src/Avatar/              quick  --hitboxcheck --world flat
+src/Player/              quick  --ride bike,20 --world flat
+src/Player/              quick  --ride car,15 --world flat
+src/Vehicles/            quick  --ride car,15 --world flat
+src/Core/TestWorld       quick  --hitboxcheck --world flat
+src/Core/Systems         quick  --hitboxcheck --world flat
+src/Ui/                  quick  --leavecheck --world fixture
+src/Ui/                  quick  --menucheck --systems ui
+src/Core/GameShell       quick  --menucheck --systems ui
+src/Core/Systems         quick  --menucheck --systems ui
+src/Core/ClientWorld     quick  --leavecheck --world fixture
 src/BattleRoyale/        quick  --brcheck
 src/Combat/              quick  --brcheck
+
+# tier 1: one headless Godot on a synthetic course (src/Terrain/Fixture), ~2 min
+src/Terrain/Fixture/     quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/AutoPilot     quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/RaceRoute     quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/RaceLine      quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/DriveProbe    quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
