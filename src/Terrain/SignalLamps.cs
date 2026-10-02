@@ -22,7 +22,7 @@ public partial class SignalLamps : Node3D
     private const double BlinkHalf = 0.5;
 
     private static Material? _material;
-    private static readonly Mesh?[] Meshes = new Mesh?[4];
+    private static readonly Mesh?[] Meshes = new Mesh?[SignalBuilder.ShapeCount];
 
     /// <summary>Lenses must stay lit (unshaded) and show their colour whatever the light.</summary>
     private static Material Material() => _material ??= new StandardMaterial3D
@@ -39,7 +39,7 @@ public partial class SignalLamps : Node3D
     /// <summary>Per junction, its lenses (start, count) in <see cref="_lenses"/>, sorted by junction.</summary>
     private (int Start, int Count)[] _byJunction = [];
     private double[] _next = [];
-    private readonly MultiMesh?[] _multi = new MultiMesh?[4];
+    private readonly MultiMesh?[] _multi = new MultiMesh?[SignalBuilder.ShapeCount];
 
     /// <summary>The time source: the server's clock; a probe may pin it.</summary>
     public static Func<double> Clock { get; set; } = () => Net.ClockSync.ServerNow;
@@ -56,9 +56,9 @@ public partial class SignalLamps : Node3D
         _plans = lamps.Plans.ToArray();
         _lenses = lamps.Lenses.OrderBy(l => l.Junction).ToArray();
         _slot = new int[_lenses.Length];
-        var counts = new int[4];
+        var counts = new int[SignalBuilder.ShapeCount];
         for (int i = 0; i < _lenses.Length; i++) _slot[i] = counts[(int)_lenses[i].Shape]++;
-        for (int s = 0; s < 4; s++)
+        for (int s = 0; s < SignalBuilder.ShapeCount; s++)
         {
             if (counts[s] == 0) continue;
             var multi = new MultiMesh
@@ -135,6 +135,7 @@ public partial class SignalLamps : Node3D
             SignalBuilder.Shape.Square => [new(-r, -r), new(r, -r), new(r, r), new(-r, r)],
             SignalBuilder.Shape.LeftArrow => Arrow(r, -1),
             SignalBuilder.Shape.RightArrow => Arrow(r, 1),
+            SignalBuilder.Shape.Bike => Circle(r * 0.5f, 8),   // a 100 mm bike lens (#351)
             _ => Circle(r, 10),
         };
         var vertices = new Vector3[outline.Length];

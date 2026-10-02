@@ -75,7 +75,7 @@ public static partial class TileRewriter
         public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, RightPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
         /// <summary>Where OSM decides, what the inference rule would have said: both, rule only, OSM only (#348 tuning).</summary>
         public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
-        public int Poles, PolesRejected, SignsOnPoles;
+        public int Poles, PolesRejected, SignsOnPoles, BikeSignals;
         public readonly List<string> InvalidExamples = new();
         public readonly SortedDictionary<int, int> Cycles = new();
 
@@ -87,7 +87,7 @@ public static partial class TileRewriter
             sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
             sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}").AppendLine();
             sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes").AppendLine();
-            sb.Append(c, $"      poles (#350) {Poles:N0}, rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}").AppendLine();
+            sb.Append(c, $"      poles (#350) {Poles:N0}, rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}, approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
             foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
             return sb.ToString();
         }
@@ -244,8 +244,11 @@ public static partial class TileRewriter
                     rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, -right, half, u, right,
                     leftSide.OuterDm > 0 ? leftSide.KerbCm / 100f : 0f, secondFlags, -1));
+                // a bike head (#351) beside a separated path, or a kerbside bike lane a right pocket's cars cross
+                bool bikeSignal = approach && (rightSide.HasTrack || (rightPocket && rightSide.HasLane));
+                if (bikeSignal) stats.BikeSignals++;
                 arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, pocket, rightPocket, Pedestrians: true,
-                    BikeSignal: false, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
+                    BikeSignal: bikeSignal, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
                     Rank: (byte)Math.Clamp(PriorityPlanner.Rank(info) / 4, 1, 255)));
                 stats.Arms++;
                 if (approach) stats.Approaches++;

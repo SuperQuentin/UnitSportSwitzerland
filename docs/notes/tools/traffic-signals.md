@@ -92,6 +92,21 @@
   comparison per junction per frame, no allocation. Tier 0 `SignalBuilderTests` (layout,
   facings, the second pole's missing right arrow, 2-lens Geneva heads, flashers). Screenshots:
   driver's view by day and night at LV95 2499901,1118599.
+- **Bikes at signals** (#351). A signalised left pocket (not a merged strip) carries a 1.50 m
+  left-turn bike lane between it and the through lane (`LeftBikeLane`: the widening grows by it,
+  the hatch opens to the through lane's edge, yellow dashes both sides from where the pocket opens,
+  a bike symbol). Where the street the left turn goes into has no bike lane or path on its
+  departing side: a **bike box** (SSV 6.26; 4.0 m, ASTRA 2021) in front of the pocket and the bike
+  lane: the cars' white line 4 m behind, a 0.30 m yellow line in front, a symbol in it, the
+  pocket's arrows behind it; the through lane keeps its line. Where it has one: a 0.30 m yellow
+  **advanced bike stop line** 3.0 m ahead across the bike lane. A **bike signal** (group with a
+  3 s lead green, #349) on approaches with a separated path, or a kerbside painted lane beside a
+  right pocket (layout (a) only: the bike lane stays right of the pocket); its head is a half-size
+  three-lens head (100 mm lenses, `Shape.Bike`) on the main pole, lower edge 1.05 m, below the
+  priority sign. Geneva centre: 12 left-turn bike lanes (3 boxes, 9 advanced lines), 90
+  approaches with a bike signal. Screenshots from above and from the driver's seat at LV95
+  2499901,1118599. Not done: layout (b) (the painted lane between the right pocket and the through
+  lane); traffic's lane shift ignores the bike lane (#353 moves through cars 3 m, now 4.5 m).
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` and restrictions not read yet (#347 has them); thin median (optional); crossings of divided roads
   (several nodes); 3-lane roads; a #120 red bike crossing drawn for the narrow mouth runs skewed

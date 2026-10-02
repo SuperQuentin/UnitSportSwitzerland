@@ -25,12 +25,13 @@ public static partial class TileRewriter
     public sealed class TurnLaneStats
     {
         public int AtSignals, RightPockets, RightRejected;
+        public int LeftBikeLanes, BikeBoxes, AdvancedBikeLines;
         public int Candidates, Placed, Merged, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars, SignsMoved, BesideBike, LeadIns;
         /// <summary>Pockets placed per storage length, metres.</summary>
         public readonly SortedDictionary<double, int> Storage = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes, {SignsMoved:N0} signs moved off the widening, {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120); " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes, {SignsMoved:N0} signs moved off the widening, {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}\n");
 
         public void Reject(string why)
@@ -47,6 +48,19 @@ public static partial class TileRewriter
     }
 
     private const double TurnLane = 3.0, TurnSolid = 10, TurnClear = 5;
+
+    /// <summary>
+    /// At traffic lights (#351) a left-turn bike lane runs between the left pocket and the through
+    /// lane (1.50 m in town, SSV 6.09; #120's Radstreifen width), opening with the pocket. Where the
+    /// street it turns into has no bike lane or path, a bike box (Aufstellbereich, SSV 6.26) of
+    /// <see cref="BikeBoxDepth"/> lies in front of the pocket and the bike lane, behind a yellow
+    /// line; where it has one, a yellow advanced stop line <see cref="AdvancedBikeLine"/> ahead of
+    /// the cars' (ASTRA Handbuch Veloverkehr in Kreuzungen 2021: box 4.0 m, advanced line 3.0 m).
+    /// </summary>
+    private const double LeftBikeLane = 1.5, BikeBoxDepth = 4.0, AdvancedBikeLine = 3.0;
+
+    /// <summary>A bike stop line, yellow (SSV Art. 75 al. 6-7; Kanton Bern: 0.30 m).</summary>
+    private const float BikeStopLine = 0.3f;
 
     /// <summary>
     /// Pocket sizes tried longest first, (taper, storage) in metres: the first that fits is built.
@@ -127,7 +141,7 @@ public static partial class TileRewriter
                 // the approaching driver's way, and whether a car road leaves to their left / right
                 var d = Vec2.FromHeading(junction.Arms[i].OutwardHeading) * -1;
                 bool left = false, right = false;
-                int exit = -1;
+                int exit = -1, leftArm = -1;
                 double straightest = 0.87;
                 for (int k = 0; k < junction.Arms.Count && k < plan.Arms.Count; k++)
                 {
@@ -140,7 +154,14 @@ public static partial class TileRewriter
                     if (signal && ahead > straightest) { straightest = ahead; exit = k; continue; }
                     if (ahead > 0.87) continue;   // carries on nearly straight
                     if (signal && !PriorityPlanner.Leaves(info, plan.Arms[k].End)) continue;   // a one-way road in
-                    if (d.X * v.Y - d.Y * v.X > 0) left = true; else right = true;
+                    if (d.X * v.Y - d.Y * v.X > 0) { left = true; leftArm = k; } else right = true;
+                }
+                // a bike box where the street the left turn goes into has no bike lane or path (#351)
+                bool box = false;
+                if (signal && leftArm >= 0 && segmentOf.TryGetValue(plan.Arms[leftArm].LinkId, out var into))
+                {
+                    var leaving = plan.Arms[leftArm].End == LinkEnd.Start ? into.Segment.Attributes.Right : into.Segment.Attributes.Left;
+                    box = !leaving.HasLane && !leaving.HasTrack;
                 }
                 RightPlan? rightPlan = null;
                 if (signal && right && segmentOf.TryGetValue(arm.LinkId, out var rightSeg))
@@ -159,7 +180,7 @@ public static partial class TileRewriter
                 // a slot holds one approach and one exit; a second would be another arm on the same segment
                 if (approach.Approach is not null || departure.Exit is not null) { stats.NoSegment++; continue; }
                 var pocket = new PocketPlan(home, approach, inAtEnd, departure, outAtEnd, right)
-                    { Node = junction.NodeId, Arm = i, Signal = signal, Skew = signal ? MouthSkew(junction, junction.Arms[i]) : 0 };
+                    { Node = junction.NodeId, Arm = i, Signal = signal, Skew = signal ? MouthSkew(junction, junction.Arms[i]) : 0, BikeBox = box };
                 if (rightPlan is not null) rightPlan.Left = pocket;
                 approach.Approach = departure.Exit = pocket;
                 pockets.Add(pocket);
@@ -220,6 +241,7 @@ public static partial class TileRewriter
                 // with a right-turn pocket beside it, the through lane goes straight only
                 bool rightTurn = pocket.RightTurn && !hasRight;
                 approach.StopShift = pocket.Skew;
+                approach.BikeBox = pocket.BikeBox;
                 if (inSlot.Merged) approach.Through(Get(paint, inSlot.Tile), inSlot.Storage, rightTurn, stats, pocket.Signal);
                 else approach.Pocket(Get(paint, inSlot.Tile), rightTurn, stats, pocket.Signal);
             }
@@ -281,6 +303,8 @@ public static partial class TileRewriter
         public bool Signal { get; init; }
         /// <summary>How much further back the stop line stands for a skewed mouth (#348).</summary>
         public double Skew { get; init; }
+        /// <summary>A bike box in front of the pocket and its bike lane, else an advanced bike stop line (#351).</summary>
+        public bool BikeBox { get; init; }
     }
 
     /// <summary>
@@ -311,9 +335,9 @@ public static partial class TileRewriter
             Merged = false;
             int self = tileSegments.IndexOf(Segment);
             Widening Way(PocketPlan p, bool exit, double length, double taper, double clear = TurnClear, double[]? stations = null,
-                bool lead = true) =>
+                bool lead = true, double bikeLeft = 0) =>
                 new(Segment, Painted, Tile, self, junctionAtEnd: exit ? p.OutAtEnd : p.InAtEnd,
-                    side: (exit ? p.OutAtEnd : p.InAtEnd) == exit ? -1 : 1, length, taper, clear, stations, exit, lead);
+                    side: (exit ? p.OutAtEnd : p.InAtEnd) == exit ? -1 : 1, length, taper, clear, stations, exit, lead, bikeLeft: bikeLeft);
 
             if (e is not null)
             {
@@ -346,7 +370,8 @@ public static partial class TileRewriter
                             if (storage + TurnEntry + TurnMinHatch > total) { why = "short"; continue; }
                             way = Way(a, exit: false, total, 0, clear: 0, stations: [storage, storage + TurnEntry], lead: false);
                         }
-                        else way = Way(a, exit: false, taper + storage, taper, clear: e is null ? TurnClear : TurnExit + TurnRejoin, lead: lead);
+                        else way = Way(a, exit: false, taper + storage, taper, clear: e is null ? TurnClear : TurnExit + TurnRejoin, lead: lead,
+                            bikeLeft: a.Signal ? LeftBikeLane : 0);
                         why = way.Check(lines, grids, buildings);
                         if (why is not null) { if (merge) break; continue; }   // a merged strip is the same for every storage
                         ApproachWay = way;
@@ -444,8 +469,16 @@ public static partial class TileRewriter
         /// <summary>At traffic lights, the stop line's extra setback for a skewed mouth (#348).</summary>
         public double StopShift { get; set; }
 
-        /// <summary>Its width along the storage: the through lane, and the bike lane's extra (#120).</summary>
-        public double FullWidth => TurnLane + _extra;
+        /// <summary>The left-turn bike lane between the pocket and the through lane (#351), 0 none; and whether a bike box lies in front.</summary>
+        private readonly double _bikeLeft;
+        public bool BikeBox { get; set; }
+        public bool HasLeftBikeLane => _bikeLeft > 0;
+
+        /// <summary>What the widening adds at full width: the through lane, and on an approach the left-turn bike lane (#351).</summary>
+        private double Lane => TurnLane + _bikeLeft;
+
+        /// <summary>Its width along the storage: the through lane, the bike lanes' extras (#120, #351).</summary>
+        public double FullWidth => Lane + _extra;
 
         /// <summary>Leaves the strip's outer edge line to whatever runs outside it up to <paramref name="dist"/> from the mouth.</summary>
         public void EdgeFrom(double dist)
@@ -466,8 +499,10 @@ public static partial class TileRewriter
 
         /// <param name="painted">The segment the road's lines were laid on (the one they name), <paramref name="seg"/> or an Urban-flagged copy of it.</param>
         public Widening(RoadSegment seg, RoadSegment painted, TileId tile, int self, bool junctionAtEnd, int side, double length, double taper,
-            double clear = TurnClear, double[]? stations = null, bool exit = false, bool leadIn = true, double baseOffset = 0)
+            double clear = TurnClear, double[]? stations = null, bool exit = false, bool leadIn = true, double baseOffset = 0,
+            double bikeLeft = 0)
         {
+            _bikeLeft = exit ? 0 : bikeLeft;
             _seg = seg; _painted = painted; _tile = tile; _self = self; _atEnd = junctionAtEnd; _side = side;
             _length = length; _taper = taper; _clear = clear; _half = seg.Width * 0.5; _exit = exit; _base = baseOffset;
             var widened = side > 0 ? seg.Attributes.Right : seg.Attributes.Left;
@@ -501,11 +536,11 @@ public static partial class TileRewriter
         /// </summary>
         private double Widen(double dist)
         {
-            if (_taper <= 0) return TurnLane + _extra;
+            if (_taper <= 0) return Lane + _extra;
             double main = Math.Clamp((_length - dist) / _taper, 0, 1);
-            if (_lead <= 0 || (_exit && _bike <= 0)) return (TurnLane + _extra) * main;
+            if (_lead <= 0 || (_exit && _bike <= 0)) return (Lane + _extra) * main;
             double lead = _extra * Math.Clamp((Reach - dist) / _lead, 0, 1);
-            if (!_exit) return TurnLane * main + lead;
+            if (!_exit) return Lane * main + lead;
             if (dist > _length) return lead;
             // the hatch closes from the pocket's width to nothing; the through lane and the bike lane keep their widths
             return Math.Max(0, _pocket * (1 - dist / _length) + TurnLane - _car);
@@ -679,7 +714,7 @@ public static partial class TileRewriter
         {
             double storage = _length - _taper;
             SolidCentre(paint);
-            Hatch(paint, stats, storage, _length, d => _pocket * Math.Clamp((_length - d) / _taper, 0, 1));
+            Hatch(paint, stats, storage, _length, d => (_pocket + _bikeLeft) * Math.Clamp((_length - d) / _taper, 0, 1));
             Lanes(paint, storage, storage, rightTurn, stats, signal);
         }
 
@@ -705,18 +740,55 @@ public static partial class TileRewriter
             // at traffic lights the stop line stands back from the mouth (#348): the lanes end there
             float width = signal ? SignalStopLine : StopBar;
             double setback = signal ? SignalStopSetback + StopShift : 0.1;
-            double offset = _side * _pocket;
-            paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, offset, TurnSolid + setback - 0.1, dashedTo));
-            paint.Add(Line(PaintType.WhiteSolid, 0, 0, offset, signal ? setback : 0, TurnSolid + setback - 0.1));
+            double through = _pocket + _bikeLeft;   // the through lane's left edge
+            bool box = _bikeLeft > 0 && BikeBox;
+            // the pocket's arrows and its stop line stand behind a bike box (#351)
+            double pocketBack = setback + (box ? BikeBoxDepth : 0);
+            if (_bikeLeft > 0)
+            {
+                // the left-turn bike lane (#351): yellow dashes both sides, from where the pocket opens
+                // to the line it stops at, and its symbol where riders come in
+                foreach (double o in (ReadOnlySpan<double>)[_pocket, through])
+                    paint.Add(RoadPaint.AlongSegment(_seg, PaintType.YellowDashed, PaintEmitter.Yellow, BikePlanner.LineWidth,
+                        BikePlanner.Dash, BikePlanner.Gap, _side * o, Math.Min(AlongOf(pocketBack), AlongOf(dashedTo)),
+                        Math.Max(AlongOf(pocketBack), AlongOf(dashedTo))));
+                BikeSymbol(paint, _pocket + _bikeLeft * 0.5, dashedTo - 2);
+                stats.LeftBikeLanes++;
+            }
+            else
+            {
+                double offset = _side * _pocket;
+                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, offset, TurnSolid + setback - 0.1, dashedTo));
+                paint.Add(Line(PaintType.WhiteSolid, 0, 0, offset, signal ? setback : 0, TurnSolid + setback - 0.1));
+            }
 
             // across the pocket, just short of the mouth; at traffic lights across the through lane
             // too, as wide as SSV 6.10 asks
-            double bar = width * 0.5 + setback;
-            paint.Add(new RoadPaint
+            void Bar(double dist, double from, double to, float w, uint rgba) => paint.Add(new RoadPaint
             {
-                Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = width,
-                Vertices = [.. Point(bar, 0.1), .. Point(bar, (signal ? _pocket + TurnLane : _pocket) - 0.1)],
+                Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = rgba, Width = w,
+                Vertices = [.. Point(dist + w * 0.5, from), .. Point(dist + w * 0.5, to)],
             });
+            if (box)
+            {
+                // the box: the cars' line behind it across the pocket and the bike lane, the yellow one
+                // in front, a bike symbol in it; the through lane's line where it was
+                Bar(pocketBack, 0.1, through - 0.1, width, PaintEmitter.White);
+                Bar(setback, through + 0.1, through + TurnLane - 0.1, width, PaintEmitter.White);
+                Bar(setback, 0.1, through - 0.1, BikeStopLine, PaintEmitter.Yellow);
+                BikeSymbol(paint, through * 0.5, setback + BikeBoxDepth * 0.5 + BikePlanner.SymbolSize * 0.5);
+                stats.BikeBoxes++;
+            }
+            else
+            {
+                Bar(setback, 0.1, (signal ? through + TurnLane : _pocket) - 0.1, width, PaintEmitter.White);
+                if (_bikeLeft > 0)
+                {
+                    // an advanced bike stop line across the bike lane, 3 m ahead of the cars'
+                    Bar(Math.Max(0.2, setback - AdvancedBikeLine), _pocket + 0.05, through - 0.05, BikeStopLine, PaintEmitter.Yellow);
+                    stats.AdvancedBikeLines++;
+                }
+            }
             stats.StopBars++;
 
             // two per lane in the storage length, tips 5 m from the stop bar and 15 m apart (Bern
@@ -729,11 +801,22 @@ public static partial class TileRewriter
                 var (x, y, z, sx, sz) = At(back);
                 // the through lane lies on the driver's right (sx, sz): their forward is that turned a quarter left
                 double fx = sz, fz = -sx;
-                paint.Add(Arrow(x + sx * _pocket * 0.5, y, z + sz * _pocket * 0.5, fx, fz, PaintArrow.Left));
-                paint.Add(Arrow(x + sx * (_pocket + TurnLane * 0.5), y, z + sz * (_pocket + TurnLane * 0.5), fx, fz,
+                var (px, py, pz, _, _) = At(tip + pocketBack - 0.1);
+                paint.Add(Arrow(px + sx * _pocket * 0.5, py, pz + sz * _pocket * 0.5, fx, fz, PaintArrow.Left));
+                paint.Add(Arrow(x + sx * (through + TurnLane * 0.5), y, z + sz * (through + TurnLane * 0.5), fx, fz,
                     rightTurn ? PaintArrow.Straight | PaintArrow.Right : PaintArrow.Straight));
                 stats.Arrows += 2;
             }
+        }
+
+        /// <summary>A yellow bike symbol (#120's glyph) at <paramref name="offset"/> from the centre, its front <paramref name="dist"/> from the mouth, facing the approach's traffic.</summary>
+        private void BikeSymbol(List<RoadPaint> paint, double offset, double dist)
+        {
+            float size = BikePlanner.SymbolSize;
+            double a = AlongOf(dist), b = AlongOf(dist - size);
+            // the approach drives toward the mouth: with the drawing when the junction is at the end
+            paint.Add(RoadPaint.AlongSegment(_seg, PaintType.BikeSymbol, PaintEmitter.Yellow, size, 0, 0, _side * offset,
+                Math.Min(a, b), Math.Max(a, b), _atEnd ? (byte)0 : RoadPaintGeometry.BikeReversed));
         }
 
         /// <summary>

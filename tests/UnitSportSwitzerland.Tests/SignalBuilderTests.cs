@@ -12,9 +12,9 @@ public class SignalBuilderTests
 {
     private static readonly double[] Headings = [Math.PI / 2, 0, -Math.PI / 2, Math.PI];
 
-    private static SignalBuilder.Lamps Lamps(bool left, bool right, bool pedAmber, SignalPoleFlags flags)
+    private static SignalBuilder.Lamps Lamps(bool left, bool right, bool pedAmber, SignalPoleFlags flags, bool bike = false)
     {
-        var arms = Enumerable.Range(0, 4).Select(i => new SignalArm(Headings[i], true, true, left, right, Pedestrians: true)).ToList();
+        var arms = Enumerable.Range(0, 4).Select(i => new SignalArm(Headings[i], true, true, left, right, Pedestrians: true, BikeSignal: bike)).ToList();
         var plan = SignalPlan.Build(arms, pedestrianAmber: pedAmber);
         var tile = new RoadTile
         {
@@ -66,5 +66,19 @@ public class SignalBuilderTests
         Assert.Equal(2, Count(lamps, SignalBuilder.Shape.Square));
         Assert.Contains(lamps.Lenses, l => l.Role == SignalBuilder.Role.Flash);
         Assert.DoesNotContain(lamps.Lenses, l => l.Shape == SignalBuilder.Shape.Square && l.Role == SignalBuilder.Role.Amber);
+    }
+
+    [Fact]
+    public void BikeHead_LowOnTheMainPole_NotOnTheSecond()
+    {
+        var main = Lamps(left: true, right: true, pedAmber: true, SignalPoleFlags.Main | SignalPoleFlags.Pedestrian, bike: true);
+        var bikeLenses = main.Lenses.Where(l => l.Shape == SignalBuilder.Shape.Bike).ToList();
+        Assert.Equal(3, bikeLenses.Count);
+        Assert.All(bikeLenses, l => Assert.Equal(SignalGroupKind.Bike, main.Plans[0].Groups[l.Group].Kind));
+        // below every car lens
+        float carLow = main.Lenses.Where(l => l.Shape is SignalBuilder.Shape.Circle or SignalBuilder.Shape.LeftArrow).Min(l => l.Transform.Origin.Y);
+        Assert.True(bikeLenses.Max(l => l.Transform.Origin.Y) < carLow);
+        var second = Lamps(left: true, right: true, pedAmber: true, SignalPoleFlags.Second, bike: true);
+        Assert.DoesNotContain(second.Lenses, l => l.Shape == SignalBuilder.Shape.Bike);
     }
 }
