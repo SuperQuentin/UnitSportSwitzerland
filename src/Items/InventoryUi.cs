@@ -441,7 +441,14 @@ public partial class InventoryUi : CanvasLayer
         var album = UiKit.Button("Photo album");
         album.Pressed += () => _items.PhotoUi.OpenAlbum();
         right.AddChild(album);
+
+        // every item, offline or as an admin (#262); shown or hidden on each Open
+        _catalogueButton = UiKit.Button("Item catalogue");
+        _catalogueButton.Pressed += () => _items.Catalogue.Open();
+        right.AddChild(_catalogueButton);
     }
+
+    private Button _catalogueButton = null!;
 
     private void BuildTooltip()
     {
@@ -646,6 +653,7 @@ public partial class InventoryUi : CanvasLayer
         CloseWheel(false);
         EndPaint(commit: false);
         _panel.Visible = true;
+        _catalogueButton.Visible = CatalogueUi.Allowed;
         OnDeviceChanged();
         Refresh();
         Input.MouseMode = Input.MouseModeEnum.Visible;
@@ -1034,6 +1042,8 @@ public partial class SlotButton : Button
     public bool Hot;
     /// <summary>The bin, drawn in red when it holds something.</summary>
     public bool IsTrash;
+    /// <summary>Draw the stack's count. Off in the catalogue, where a tile is a kind of item, not a stack.</summary>
+    public bool ShowCount = true;
     private ItemStack _stack;
     private bool _selected, _picked;
 
@@ -1059,7 +1069,7 @@ public partial class SlotButton : Button
     {
         var r = new Rect2(Vector2.Zero, Size);
         SlotDrawing.DrawSlot(this, r, _stack, KeyHint, _selected, _picked, Hot || IsHovered() || HasFocus(),
-            IsTrash && !_stack.IsEmpty);
+            IsTrash && !_stack.IsEmpty, ShowCount);
         if (_stack.IsEmpty && Placeholder.Length > 0)
             DrawString(UiTheme.Bold, new Vector2(0, r.Size.Y * 0.5f + 4), Placeholder,
                 HorizontalAlignment.Center, r.Size.X, UiTheme.FontTiny, UiTheme.TextFaint);
@@ -1102,7 +1112,7 @@ public static class SlotDrawing
 
     /// <summary>Shared by the slots, the wheel and the loot window so an item looks the same everywhere it appears.</summary>
     public static void DrawSlot(CanvasItem c, Rect2 r, ItemStack stack, string keyHint,
-        bool selected, bool picked, bool hot, bool bad = false)
+        bool selected, bool picked, bool hot, bool bad = false, bool count = true)
     {
         _tile ??= Tile(new Color(0.10f, 0.115f, 0.14f, 0.72f), new Color(1, 1, 1, 0.07f), 1);
         _tileHot ??= Tile(new Color(0.14f, 0.16f, 0.19f, 0.82f), new Color(1, 1, 1, 0.35f), 1);
@@ -1133,7 +1143,7 @@ public static class SlotDrawing
                 var at = (r.GetCenter() - size * 0.5f).Round();
                 c.DrawTextureRect(icon, new Rect2(at, size), false);
             }
-            if (def.MaxStack > 1)
+            if (count && def.MaxStack > 1)
             {
                 int countSize = Mathf.Max(UiTheme.FontTiny, (int)(r.Size.Y * 0.24f));
                 var pos = new Vector2(r.Position.X, r.End.Y - 4);

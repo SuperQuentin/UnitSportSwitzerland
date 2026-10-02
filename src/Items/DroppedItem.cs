@@ -97,6 +97,13 @@ public partial class DroppedItem : RigidBody3D
     private bool _predicting;
     private ImpactFx? _impact;
     private static int _localCounter;
+    /// <summary>The drawn mesh's box and the collider's size, for the floating pose.</summary>
+    private Aabb _box;
+    private Vector3 _size;
+    private float _floatScale = 1f, _floatPhase;
+
+    /// <summary>At rest and drawn floating (<see cref="DropFloat"/>).</summary>
+    internal bool Floating { get; private set; }
 
     public static DroppedItem Create(DropState state, bool proxy = false)
     {
@@ -202,7 +209,43 @@ public partial class DroppedItem : RigidBody3D
             AddChild(Visual);
             _impact = new ImpactFx { Name = "Impact", Size = Mathf.Max(size.X, Mathf.Max(size.Y, size.Z)) };
             AddChild(_impact);
+            _box = mesh.GetAabb();
+            _size = size;
+            _floatScale = DropFloat.ScaleFor(_box.Size);
+            _floatPhase = (Name.ToString().GetHashCode() & 0xffff) / 65536f * Mathf.Tau;
+            DropFloat.Add(this);
         }
+    }
+
+    public override void _ExitTree()
+    {
+        if (Visual != null) DropFloat.Remove(this);
+    }
+
+    /// <summary>
+    /// Draws the item hovering upright over where it lies, blown up to a readable size, turned
+    /// <paramref name="time"/> into its spin and bob. The first call also limits its draw distance.
+    /// </summary>
+    internal void PoseFloat(float time)
+    {
+        if (Visual == null) return;
+        if (!Floating)
+        {
+            Floating = true;
+            Visual.VisibilityRangeEnd = DropFloat.DrawRange;
+        }
+        var b = GlobalBasis.Orthonormalized();
+        // the resting collider's centre and its height above the ground, both in world axes
+        var rest = b * _box.GetCenter();
+        var half = _size * 0.5f;
+        float restHalfY = Mathf.Abs(b.X.Y) * half.X + Mathf.Abs(b.Y.Y) * half.Y + Mathf.Abs(b.Z.Y) * half.Z;
+        float s = _floatScale;
+        float bob = (1f + Mathf.Sin(time * DropFloat.BobSpeed + _floatPhase)) * 0.5f * DropFloat.BobHeight;
+        var center = new Vector3(rest.X, rest.Y - restHalfY + DropFloat.Hover + bob + _box.Size.Y * s * 0.5f, rest.Z);
+        var spin = new Basis(Vector3.Up, time * DropFloat.SpinSpeed + _floatPhase).Scaled(Vector3.One * s);
+        // from world axes back into the body's: it lies however it landed
+        var inv = b.Inverse();
+        Visual.Transform = new Transform3D(inv * spin, inv * (center - spin * _box.GetCenter()));
     }
 
     /// <summary>
