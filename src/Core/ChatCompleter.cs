@@ -202,7 +202,7 @@ public sealed class ChatCompleter
                 };
                 break;
 
-            case "pvp":
+            case "pvp" or "medic":
                 options = argIndex == 0 ? ["on", "off"] : [];
                 break;
 
