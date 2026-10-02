@@ -71,8 +71,22 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 
 - Sourced by the runner, usable by any script: `guard_wait_ram <GB>`, `guard_lock`/`guard_unlock`,
   `guard_run <timeout_s> <log> cmd...`. Windows (Git Bash) and Linux.
-- Free RAM: `Win32_OperatingSystem.FreePhysicalMemory` on Windows, `MemAvailable` on Linux.
-  Light Godot runs wait for `TEST_RAM_GB` (3), tiers 2/3 for `TEST_HEAVY_RAM_GB` (6).
+- Free RAM: `/proc/meminfo` (`MemAvailable` on Linux; in Git Bash `MemFree` is Windows' free
+  physical memory, read in ~30 ms), PowerShell only as a fallback. Light Godot runs wait for
+  `TEST_RAM_GB` (3), tiers 2/3 for `TEST_HEAVY_RAM_GB` (6).
+- **RAM watchdog, so a run can never take Windows or WSL down.** Waiting for RAM before a run is not
+  enough: a run can grow during execution (WSL died several times that way). `guard_run` reads free
+  RAM every `GUARD_MEM_EVERY` (2) s while its command runs. When free RAM falls under
+  `GUARD_MIN_FREE_MB` (1500), it kills that command's process tree, and only it, and returns 137.
+  For a process started some other way, `w=$(guard_watch <pid> [floor_mb])` watches it in the
+  background; stop the watchdog with `kill $w`. **Every Godot, server, client, bot or preprocessor run
+  goes through `guard_run` or under `guard_watch`.** Exit 137 means "rerun later with more free RAM",
+  never "raise the floor".
+- Process trees on Windows: `taskkill /T` follows Windows parentage only, and a process that Git
+  Bash forked is not the Windows child of its bash. So the kill walks the Git Bash tree (`ps -ef`
+  pid/ppid) and runs `taskkill /T` on each process, which also takes the real Godot under its
+  `_console.exe` wrapper. The old version left a script's `sleep`, or a Godot started inside a
+  script, running after a timeout.
 - Machine-wide lock for tiers 2/3: a `mkdir` lock dir, `$TEMP/unitsport-heavy.lock` (`GUARD_LOCK_DIR`),
   with the owner's PID, `info` (start time, `max_hold`, what runs) and a `beat` file. Two `test.sh net`
   started together ran one after the other (46 s each, 104 s in all). The lock is per OS user temp

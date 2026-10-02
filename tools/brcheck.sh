@@ -5,6 +5,7 @@
 #   GODOT=<exe> tools/brcheck.sh   [CHUNKS=<terrain_chunks dir> from a worktree, for --brcheck's real regions]
 #   screenshots: test_output/br_{a,b}_{dropped,results}.png, br_b_outside.png
 set -u
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 AT=2583250,1113250
 AT_B=2583256,1113250   # never on top of A: two bodies spawned in one place throw each other kilometres
 PORT=${PORT:-7799}

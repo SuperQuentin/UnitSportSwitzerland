@@ -127,8 +127,8 @@ public partial class BrProbe : Node
 
     private async Task RunB()
     {
-        // with two in, the lobby turns into the countdown at once
-        if (!await Until(() => Br!.State.Phase is BrPhase.Lobby or BrPhase.Countdown, 90)) { Fail("no lobby"); return; }
+        // with two in, the lobby turns into the countdown at once; --br may even have got B in before this ran
+        if (!await Until(() => Br!.State.Phase is BrPhase.Lobby or BrPhase.Countdown || Br.MyEntry != null, 90)) { Fail("no lobby"); return; }
         // B runs with "--br" (#231): it joins by itself
         Expect(BrManager.AutoJoin && await Until(() => Br!.MyEntry != null, 30), "--br joined the lobby by itself");
         if (!await Dropped()) return;

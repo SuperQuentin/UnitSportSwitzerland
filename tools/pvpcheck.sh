@@ -4,6 +4,7 @@
 # finishes B, who must name A as its killer while A sees B's body down. Without it: nothing may hurt B.
 #   GODOT=<exe> tools/pvpcheck.sh        screenshots: test_output/pvp_{a_down,b_down}.png
 set -u
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 AT=2583250,1113250
 AT_B=2583256,1113250   # never on top of A: two bodies spawned in one place throw each other kilometres
 PORT=7797
