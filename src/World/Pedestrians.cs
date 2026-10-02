@@ -115,7 +115,7 @@ public partial class Pedestrians : Node
         Forget();
         foreach (var (peer, v) in _viewers)
         {
-            var data = Snapshot(v);
+            var data = Pack(v);
             if (peer == 0) ApplySnapshot(data);
             else RpcId(peer, MethodName.Snapshot, data);
         }
@@ -252,7 +252,7 @@ public partial class Pedestrians : Node
     private readonly List<(Ped P, float D)> _send = new();
 
     /// <summary>What one viewer gets: the nearest in view (drawn, up to the cap), and every one near enough to bump.</summary>
-    private byte[] Snapshot(in View v)
+    private byte[] Pack(in View v)
     {
         _send.Clear();
         foreach (var p in _peds)
