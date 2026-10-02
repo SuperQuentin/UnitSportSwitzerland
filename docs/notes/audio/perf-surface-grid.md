@@ -15,7 +15,7 @@ Every driven motorbike, car or truck (and NPC car with a preset) calls `At` ever
 Above ~2 m/s the 0.5 m cache missed every tick, and the one shared cache was overwritten by the next
 caller, so each miss scanned every point of the tile. `--surfacecheck` on 5 Mollendruz tiles (600-1642
 pieces): a full scan cost 12-175 µs per lookup, a cell lookup 0.3-6 µs (×30-75), with 0 differences in
-17,380 lookups. That is per driven vehicle per tick at speed (PR PRNUM).
+17,380 lookups. That is per driven vehicle per tick at speed (PR #258).
 
 ## Same logic, preserved
 - The answer is the same as the old full scan, ties included. A piece is listed in every cell its

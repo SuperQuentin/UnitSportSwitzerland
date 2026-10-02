@@ -15,7 +15,7 @@
 ## Why
 A parked truck or bus used to run, every frame and for ever: `FindChildren` + LINQ + `Dress`,
 plus 4 ground rays a second, each with new query objects. This is a static argument (work skipped,
-allocations removed), with no scene of many parked heavies measured (PR PRNUM). `--heavynet a|b` on
+allocations removed), with no scene of many parked heavies measured (PR #258). `--heavynet a|b` on
 loopback: the watcher sees the same parked train (trailer, truck, boxes) before and after.
 
 ## Same logic, preserved
