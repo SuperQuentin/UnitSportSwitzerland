@@ -136,6 +136,10 @@ public partial class Droppings : Node3D
         Fade(blob, OnPlayerLife);
     }
 
+    /// <summary>A white mark on someone's head that stays (a pedestrian's record says it was hit, #217).</summary>
+    public static MeshInstance3D Stain() =>
+        new() { Name = "Stain", Mesh = Blob, MaterialOverride = White, Position = new Vector3(0.05f, 1.66f, 0.02f) };
+
     /// <summary>Shrinks to nothing over the last five seconds, then goes.</summary>
     private void Fade(Node3D node, float life)
     {

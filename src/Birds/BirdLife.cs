@@ -747,10 +747,13 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         if (_droppings == null) return;
         long me = Multiplayer.GetUniqueId();
         bool mine = victim != 0 && victim == me;
+        // a negative victim is a pedestrian (#217): it lands on the figure if this client draws it
         Node3D? target = victim == 0 ? null
+            : victim < 0 ? World.Pedestrians.Instance?.Drawn3D((int)-victim)
             : mine ? Player
             : GetNodeOrNull<Node3D>("../Players/" + victim);
-        if (victim != 0 && !mine) { DropsOnOthers++; LastVictim = victim; }
+        if (victim > 0 && !mine) { DropsOnOthers++; LastVictim = victim; }
+        if (victim < 0) { DropsOnPedestrians++; LastPedestrian = (int)-victim; }
         if (by != 0 && by == me && victim != 0) _items.Ui.Toast($"Got one! ({++PigeonHits})");
         GD.Print($"[birds] dropping from {from.X:F0},{from.Y:F0},{from.Z:F0}{(victim != 0 ? $" on peer {victim}{(mine ? " (me)" : "")}" : "")}{(by != 0 ? $" by peer {by}" : "")}");
         _droppings.Drop(from, vel, target, mine ? () => Splattered(Player, byName) : null);
@@ -758,6 +761,10 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
 
     /// <summary>Who, as a pigeon, last dropped on this player; empty for a bird (probes read it).</summary>
     public string LastDropper { get; private set; } = "";
+
+    /// <summary>Droppings this client saw fall on a pedestrian, and on which last (probes, #217).</summary>
+    public int DropsOnPedestrians { get; private set; }
+    public int LastPedestrian { get; private set; }
 
     /// <summary>Hits this client scored as a pigeon (#217); a toast counts them.</summary>
     public int PigeonHits { get; private set; }

@@ -155,7 +155,15 @@ public partial class BirdNet : Node
             || _lastDrop.TryGetValue(sender, out double last) && now - last < DropInterval) return;
         _lastDrop[sender] = now;
         var at = Life!.Origin.ToWorld(from);
-        BroadcastDropping(at, vel, Victim(at, sender), sender);
+        long victim = Victim(at, sender);
+        // no player under it: a pedestrian, seen or not, whose record keeps the mark (#217); sent as −id
+        if (victim == 0 && GetNodeOrNull<World.Pedestrians>("../" + World.Pedestrians.NodeName) is { } peds
+            && peds.Under(at, 1.3f) is int ped and > 0 && peds.Soil(ped))
+        {
+            victim = -ped;
+            GD.Print($"[birds] peer {sender} dropped on pedestrian #{ped}");
+        }
+        BroadcastDropping(at, vel, victim, sender);
     }
 
     /// <summary>Who a dropping from <paramref name="at"/> lands on: a person on foot nearly straight below, else nobody.</summary>

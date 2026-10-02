@@ -359,6 +359,21 @@ public partial class Pedestrians : Node
             yield return (p.Id, p.Root.GlobalPosition, p.Mesh is { Visible: true }, p.Body != null, p.Flags);
     }
 
+    /// <summary>The drawn puppet of pedestrian <paramref name="id"/>, or null when this client does not draw it.</summary>
+    public Node3D? Drawn3D(int id) => _puppets.TryGetValue(id, out var p) && p.Mesh is { Visible: true } ? p.Root : null;
+
+    /// <summary>Server: the pedestrian nearly straight under <paramref name="at"/> (within <paramref name="reach"/> flat, 1.7–60 m below), 0 for none.</summary>
+    public int Under(Vector3 at, float reach)
+    {
+        int best = 0;
+        foreach (var p in _peds)
+        {
+            float d = Flat(p.Pos - at), above = at.Y - p.Pos.Y;
+            if (d < reach && above is > 1.7f and < 60f) { reach = d; best = p.Id; }
+        }
+        return best;
+    }
+
     private Camera3D? Camera() => GetViewport().GetCamera3D();
     private FootPlayer? LocalPlayer() => Camera()?.GetParent() as FootPlayer
         ?? GetNodeOrNull<FootPlayer>("../Players/" + Multiplayer.GetUniqueId());
@@ -429,6 +444,8 @@ public partial class Pedestrians : Node
             p.Root.AddChild(p.Mesh);
         }
         if (p.Mesh != null) p.Mesh.Visible = visible;
+        // a dropping's mark stays as long as the record (part 3 of #217): drawn with the figure
+        if ((p.Flags & FlagDirty) != 0 && p.Mesh != null && p.Mesh.GetChildCount() == 0) p.Mesh.AddChild(Birds.Droppings.Stain());
         if (p.Body == null)
         {
             p.Body = new AnimatableBody3D { CollisionLayer = TreeColliders.Layer, CollisionMask = 0, SyncToPhysics = false };

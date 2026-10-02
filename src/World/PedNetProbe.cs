@@ -134,6 +134,45 @@ public partial class PedNetProbe : ChatProbe
         Expect(nearest > 0.35f, $"and did not pass through it (closest {nearest:F2} m)");
         Say($"knocked {t.Id}");
         await Heard("B", "seenknocked", 20);
+        await Droppings(me, peds);
+    }
+
+    private bool Stained(Pedestrians peds, int id) => peds.Drawn3D(id)?.FindChild("Stain", true, false) != null;
+
+    /// <summary>Part 3 of #217: A, a pigeon, drops on a drawn pedestrian; the mark stays in its record.</summary>
+    private async Task Droppings(FootPlayer me, Pedestrians peds)
+    {
+        if (Birds.BirdLife.Instance is not { } life) { Fail("no birds"); return; }
+        await Until(() => me.SetRide(RideKind.Pigeon), 20);
+        Expect(me.Ride == RideKind.Pigeon, "A is a pigeon");
+        int id = 0;
+        await Until(() =>
+        {
+            foreach (var s in peds.Seen())
+                if (s.Visible && (s.Flags & (Pedestrians.FlagKnocked | Pedestrians.FlagDirty)) == 0 && (s.Pos - me.GlobalPosition).Length() < 80f) { id = s.Id; return true; }
+            return false;
+        }, 30);
+        Expect(id != 0, "a pedestrian in view to drop on");
+        if (id == 0) return;
+        for (int i = 0; i < 40 && peds.Drawn3D(id) is { } fig; i++)
+        {
+            me.DebugLaunch(fig.GlobalPosition + Vector3.Up * 6f, Vector3.Zero);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        }
+        int before = life.DropsOnPedestrians;
+        Input.ActionPress(PlayerInput.Fire);
+        await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        Input.ActionRelease(PlayerInput.Fire);
+        Expect(await Until(() => life.DropsOnPedestrians > before && life.LastPedestrian == id, 10), $"the dropping fell on pedestrian #{id} ({life.LastPedestrian})");
+        Expect(await Until(() => Stained(peds, id), 5), $"#{id} carries the mark");
+        Say($"dirty {id}");
+        await Heard("B", "seendirty", 20);
+        // look away until it is no longer drawn, and back: still marked (the record keeps it)
+        me.LookYaw += Mathf.Pi;
+        await Seconds(5);
+        me.LookYaw -= Mathf.Pi;
+        Expect(await Until(() => Stained(peds, id), 8), $"turned away and back: #{id} still marked");
     }
 
     private async Task RunB(FootPlayer me, Pedestrians peds)
@@ -156,5 +195,13 @@ public partial class PedNetProbe : ChatProbe
         Expect(await Until(() => peds.Seen().Any(s => s.Id == id && (s.Flags & Pedestrians.FlagKnocked) != 0), 6) || !peds.Seen().Any(s => s.Id == id),
             $"B sees #{id} knocked over (or it is out of B's range)");
         Say("seenknocked");
+
+        if (!await Heard("A", "dirty", 120)) { Fail("A never dropped on a pedestrian"); return; }
+        line = _heard.Last(l => l.Contains("PD A dirty"));
+        id = int.Parse(line[(line.IndexOf("dirty ") + 6)..].Trim());
+        bool here = peds.Seen().Any(s => s.Id == id);
+        Expect(await Until(() => peds.Seen().Any(s => s.Id == id && (s.Flags & Pedestrians.FlagDirty) != 0), 6) || !here,
+            $"B sees #{id} dirty too{(here ? "" : " (not in B's range)")}");
+        Say("seendirty");
     }
 }
