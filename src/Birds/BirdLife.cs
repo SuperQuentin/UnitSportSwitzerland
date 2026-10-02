@@ -738,17 +738,60 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     /// <summary>Per second, per pigeon: anywhere, and straight above someone.</summary>
     public const float DropRate = 1f / 150f, DropAboveRate = 0.25f;
 
-    /// <summary>Client: a dropping falls from <paramref name="from"/>; <paramref name="victim"/> (a peer id, 0 for none) is who it lands on.</summary>
-    public void Dropping(Vector3 from, Vector3 vel, long victim)
+    /// <summary>
+    /// Client: a dropping falls from <paramref name="from"/>; <paramref name="victim"/> (a peer id, 0 for
+    /// none) is who it lands on; <paramref name="by"/> is the player pigeon that let go (#217), 0 for a bird.
+    /// </summary>
+    public void Dropping(Vector3 from, Vector3 vel, long victim, long by = 0, string byName = "")
     {
         if (_droppings == null) return;
-        bool mine = victim != 0 && victim == Multiplayer.GetUniqueId();
+        long me = Multiplayer.GetUniqueId();
+        bool mine = victim != 0 && victim == me;
         Node3D? target = victim == 0 ? null
             : mine ? Player
             : GetNodeOrNull<Node3D>("../Players/" + victim);
         if (victim != 0 && !mine) { DropsOnOthers++; LastVictim = victim; }
-        GD.Print($"[birds] dropping from {from.X:F0},{from.Y:F0},{from.Z:F0}{(victim != 0 ? $" on peer {victim}{(mine ? " (me)" : "")}" : "")}");
-        _droppings.Drop(from, vel, target, mine ? () => Splattered(Player) : null);
+        if (by != 0 && by == me && victim != 0) _items.Ui.Toast($"Got one! ({++PigeonHits})");
+        GD.Print($"[birds] dropping from {from.X:F0},{from.Y:F0},{from.Z:F0}{(victim != 0 ? $" on peer {victim}{(mine ? " (me)" : "")}" : "")}{(by != 0 ? $" by peer {by}" : "")}");
+        _droppings.Drop(from, vel, target, mine ? () => Splattered(Player, byName) : null);
+    }
+
+    /// <summary>Who, as a pigeon, last dropped on this player; empty for a bird (probes read it).</summary>
+    public string LastDropper { get; private set; } = "";
+
+    /// <summary>Hits this client scored as a pigeon (#217); a toast counts them.</summary>
+    public int PigeonHits { get; private set; }
+
+    /// <summary>
+    /// The playing pigeon lets go (#217): online the server checks it and picks who is under it
+    /// (<see cref="BirdNet.SendDrop"/>); offline it simply falls.
+    /// </summary>
+    public void PlayerDrop(Vector3 from, Vector3 vel)
+    {
+        if (Net is { Online: true } net) net.SendDrop(from, vel);
+        else Dropping(from, vel, 0);
+    }
+
+    /// <summary>The nearest roof or ledge perch within <paramref name="radius"/> (#217: the playing pigeon lands there).</summary>
+    public Perch? NearestPerch(Vector3 p, float radius)
+    {
+        EnsureTown(_origin.TileAt(p));
+        if (TownAt(p) is not { } town) return null;
+        var (cx, cz) = TownPerches.CellOf(p, TownPerches.Cell);
+        Perch? best = null;
+        float bestD = radius;
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = -1; dz <= 1; dz++)
+            {
+                if (!town.Cells.TryGetValue((cx + dx, cz + dz), out var cell)) continue;
+                foreach (var perch in cell)
+                {
+                    if (perch.Kind == PerchKind.Street) continue;
+                    float d = perch.At.DistanceTo(p);
+                    if (d < bestD) { bestD = d; best = perch; }
+                }
+            }
+        return best;
     }
 
     /// <summary>Droppings this client saw fall on another player, and on whom last (probes read them).</summary>
@@ -758,12 +801,13 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     /// <summary>Counts the droppings that landed on this player (probes read it).</summary>
     public int Splats { get; private set; }
 
-    private void Splattered(FootPlayer? me)
+    private void Splattered(FootPlayer? me, string byName = "")
     {
         Splats++;
+        LastDropper = byName;
         me?.Punch(0.05f);
         _droppings?.OnScreen();
-        _items.Ui.Toast("A pigeon got you!");
+        _items.Ui.Toast(byName.Length > 0 ? $"{byName}, as a pigeon, got you!" : "A pigeon got you!");
     }
 
     // ------------------------------------------------------------------------------------

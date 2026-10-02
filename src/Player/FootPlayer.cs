@@ -3373,6 +3373,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         Clearance = Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground)
             ? GlobalPosition.Y - ground : 999f;
 
+        if (flyer is Pigeon) PigeonStep(input, dt);
         var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance), dt, ref _flight);
         Rotation = new Vector3(0, _flight.Yaw, 0);
 
@@ -3460,6 +3461,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void UpdateFlightCamera(float dt, Flyer flyer)
     {
         if (_camera == null) return;
+        if (flyer is Pigeon pigeon && PigeonEye(dt, pigeon)) return;
 
         Vector3 fwd;
         if (flyer.LookSteers)
