@@ -149,4 +149,7 @@ public partial class Main : Node
 		shell.Attach(world);
 		AddChild(world);
 	}
+
+	// after every child's _ExitTree (Godot exits children first): saves still queued reach the disk
+	public override void _ExitTree() => SaveQueue.Flush();
 }

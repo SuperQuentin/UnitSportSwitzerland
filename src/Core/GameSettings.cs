@@ -277,8 +277,7 @@ public sealed class GameSettings
     {
         try
         {
-            using var file = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
-            file.StoreString(JsonSerializer.Serialize(this, JsonOptions));
+            JsonStore.Save(File, this, JsonOptions);
         }
         catch (Exception e)
         {
@@ -311,8 +310,7 @@ public sealed class GameSettings
             foreach (var existing in root.Select(kv => kv.Key).Where(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase)).ToList())
                 root.Remove(existing);
             root[name] = value;
-            using var file = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
-            file.StoreString(root.ToJsonString(JsonOptions));
+            JsonStore.Save(File, root, JsonOptions);
         }
         catch (Exception e)
         {

@@ -1031,12 +1031,20 @@ public sealed class Inventory
     private void Save()
     {
         if (!Persist || _lent != null) return;
-        using var f = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
-        f?.StoreString(ToJson());
+        try { Core.JsonStore.Save(File, ToData(), SaveJson); }
+        catch (Exception e) { GD.PushWarning($"[inventory] could not write {File}: {e.Message}"); }
     }
 
+    private static readonly JsonSerializerOptions SaveJson = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
     /// <summary>The save format: stacks by item name, their data only when there is some.</summary>
-    internal string ToJson()
+    internal string ToJson() => JsonSerializer.Serialize(ToData(), SaveJson);
+
+    private SaveData ToData()
     {
         var data = new SaveData { Selected = Selected, Cash = Cash };
         for (int i = 0; i < _slots.Length; i++)
@@ -1045,10 +1053,6 @@ public sealed class Inventory
         if (!Carried.IsEmpty)
             data.Carried = new SavedSlot { Slot = -1, Item = Carried.Id.ToString(), Count = Carried.Count, Data = Carried.Data };
 
-        return JsonSerializer.Serialize(data, new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-        });
+        return data;
     }
 }
