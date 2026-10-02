@@ -256,6 +256,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 SuggestedOriginLv95 = new Lv95Point { E = origin.E, N = origin.N },
             }.ToJson());
+        // the landings this server uses (#377), whatever its chunk directory holds
+        if (World.Landings.Current is { } landings && (landings.Landings.Count > 0 || landings.Jetties.Count > 0))
+            _streamer.LandingsOverride = System.Text.Encoding.UTF8.GetBytes(landings.ToJson());
         if (ParseStreamBandwidth() is { } megabytesPerSecond)
         {
             _streamer.BytesPerSecondPerPeer = (int)(megabytesPerSecond * 1024 * 1024);

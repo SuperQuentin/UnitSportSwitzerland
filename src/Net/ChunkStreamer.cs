@@ -80,6 +80,13 @@ public partial class ChunkStreamer : Node
     public byte[]? ManifestOverride { get; set; }
 
     /// <summary>
+    /// Served in place of <c>landings.json</c> (#377): the landings this server uses (its chunk
+    /// source's, a fixture course's planned ones, or <c>--landings</c>), so a client builds the piers
+    /// the server's steamer lies at. Null: the file in the chunk directory, if any.
+    /// </summary>
+    public byte[]? LandingsOverride { get; set; }
+
+    /// <summary>
     /// Server: where burnt CDs live (<c>Audio/Cd</c>). <see cref="AssetKind.Cd"/> requests are
     /// served from here instead of the chunk directory; null means no CDs can be served.
     /// </summary>
@@ -244,7 +251,7 @@ public partial class ChunkStreamer : Node
         // prepares it; the RPCs go out from _Process, because an RPC sent off the main thread
         // never arrives (see the net notes).
         queue.Preparing++;
-        var manifestOverride = ManifestOverride;   // read on the main thread
+        var manifestOverride = assetKind == AssetKind.Landings ? LandingsOverride : ManifestOverride;   // read on the main thread
         System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(Prepare(peer, requestId, assetKind, path, manifestOverride)));
     }
 
@@ -257,7 +264,7 @@ public partial class ChunkStreamer : Node
         try
         {
             byte[] payload;
-            if (kind == AssetKind.Manifest && manifestOverride is { } manifest)
+            if (kind is AssetKind.Manifest or AssetKind.Landings && manifestOverride is { } manifest)
                 payload = manifest;
             else if (!System.IO.File.Exists(path))
                 return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
