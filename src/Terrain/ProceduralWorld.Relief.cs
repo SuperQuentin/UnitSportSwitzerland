@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain;
 
@@ -38,6 +39,8 @@ public sealed partial class ProceduralWorld
         /// <summary>The lake a node lies in, or -1.</summary>
         public readonly int[] LakeOf;
         public readonly List<float> LakeLevels = new();
+        /// <summary>Per lake: its area in m² (its nodes, shore included) and the deepest its bed gets (#298, <see cref="WaterBed.MaxDepthForArea"/>).</summary>
+        public readonly List<double> LakeAreaM2 = new(), LakeMaxDepth = new();
         /// <summary>The node each node drains into, or -1 at an outlet on the edge.</summary>
         public readonly int[] Receiver;
         /// <summary>How many nodes drain through each node, itself included.</summary>
@@ -61,6 +64,10 @@ public sealed partial class ProceduralWorld
             Rough = BuildRough();
             Peak = BuildPeak(3);
             LakeOf = FindLakes();
+            for (int l = 0; l < LakeLevels.Count; l++) LakeAreaM2.Add(0);
+            foreach (int l in LakeOf)
+                if (l >= 0) LakeAreaM2[l] += spacing * spacing;
+            foreach (double a in LakeAreaM2) LakeMaxDepth.Add(WaterBed.MaxDepthForArea(a));
             (Receiver, Area) = Drain();
         }
 
@@ -114,7 +121,10 @@ public sealed partial class ProceduralWorld
         /// How much of the neighbourhood is lake, bilinear between nodes (1 inside, 0 away from
         /// any), and the level of the lake it belongs to.
         /// </summary>
-        public double LakeWeight(double e, double n, out double level)
+        public double LakeWeight(double e, double n, out double level) => LakeWeight(e, n, out level, out _);
+
+        /// <summary><see cref="LakeWeight(double, double, out double)"/>, and which lake (-1: none).</summary>
+        public double LakeWeight(double e, double n, out double level, out int lakeId)
         {
             double fx = (e - MinE) / Spacing, fy = (MaxN - n) / Spacing;
             int c = (int)Math.Floor(fx), r = (int)Math.Floor(fy);
@@ -133,6 +143,7 @@ public sealed partial class ProceduralWorld
                     lake = Math.Min(lake, l);
                 }
             if (lake != int.MaxValue) level = LakeLevels[lake];
+            lakeId = lake == int.MaxValue ? -1 : lake;
             return w;
         }
 

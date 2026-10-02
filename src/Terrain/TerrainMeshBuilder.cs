@@ -188,9 +188,12 @@ public static partial class TerrainMeshBuilder
                 var id = new TileId(blockE + tc, blockN + HorizonBlockTiles - 1 - tr);
                 if (!horizon.TryGet(id, out var samples)) continue;
 
-                float alt = (float)ChunkFormat.Dequantize(samples[ir * HorizonFormat.SamplesPerSide + ic]);
+                // a lake's bed is in the heights since #298: draw its water over it, water-coloured
+                horizon.TryGetWater(id, out var levels);
+                int si = ir * HorizonFormat.SamplesPerSide + ic;
+                float alt = (float)ChunkFormat.Dequantize(HorizonIndex.Surface(samples[si], levels, si, out bool wet));
                 vertices[r * m + c] = new Vector3(c * quad, alt, r * quad);
-                colors[r * m + c] = CoverPalette.ColorFor(CoverClass.Open, alt,
+                colors[r * m + c] = CoverPalette.ColorFor(wet ? CoverClass.Water : CoverClass.Open, alt,
                     CoverPalette.Hash(blockE * 100 + c, blockN * 100 + r)).SrgbToLinear();
                 present[r * m + c] = true;
                 any++;

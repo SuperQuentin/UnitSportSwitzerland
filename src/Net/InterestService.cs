@@ -284,8 +284,9 @@ public partial class InterestService : Node
         int last = HorizonFormat.SamplesPerSide - 1;
         int c0 = Math.Clamp((int)fc, 0, last - 1), r0 = Math.Clamp((int)fr, 0, last - 1);
         double tx = Math.Clamp(fc - c0, 0, 1), ty = Math.Clamp(fr - r0, 0, 1);
-        double h00 = index.HeightMetersAt(id, c0, r0), h10 = index.HeightMetersAt(id, c0 + 1, r0);
-        double h01 = index.HeightMetersAt(id, c0, r0 + 1), h11 = index.HeightMetersAt(id, c0 + 1, r0 + 1);
+        // the surface, not the ground: over a lake that is its water (#298), not its bed
+        double h00 = index.SurfaceMetersAt(id, c0, r0), h10 = index.SurfaceMetersAt(id, c0 + 1, r0);
+        double h01 = index.SurfaceMetersAt(id, c0, r0 + 1), h11 = index.SurfaceMetersAt(id, c0 + 1, r0 + 1);
         return (float)((h00 * (1 - tx) + h10 * tx) * (1 - ty) + (h01 * (1 - tx) + h11 * tx) * ty);
     };
 }
