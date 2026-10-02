@@ -358,10 +358,11 @@ public partial class FootPlayer
         _airTime = 0f;
         bool under = HeadUnderwater && SwimDepth > SwimFloat + 0.3f;
         // under water and going nowhere (rising on its own): hands sculling, upright
-        bool stroking = _swimIntent.Length() > 0.3f || _swimMove > 0.35f;
+        // (from the stroke asked for, not the motion: a swell carries a floating body about)
+        bool stroking = _swimIntent.Length() > 0.3f;
         var style = KnockedOut ? SwimStyle.Tread
             : under && stroking ? SwimStyle.Under
-            : _swimMove > 0.35f ? SwimStyle.Crawl
+            : new Vector2(_swimIntent.X, _swimIntent.Z).Length() > 0.35f ? SwimStyle.Crawl
             : SwimStyle.Tread;
         float before = _swimPhase;
         if (!KnockedOut) _swimPhase = HumanMeshBuilder.AdvanceSwim(_swimPhase, style, _swimMove, dt);
