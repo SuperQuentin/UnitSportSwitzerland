@@ -1017,6 +1017,18 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             && water.TrySample(e - id.MinE, id.MaxN - n, out stillLevel, out waveScale);
     }
 
+    /// <summary>
+    /// Where something put down here rests (#299): the ground, or the still water surface where
+    /// there is water over it. <see cref="TryGetHeight"/> is the terrain, which under a lake is now
+    /// its bed: spawns, respawns, drops, birds and the void rescue want this one.
+    /// </summary>
+    public bool TryGetSurface(Vector3 worldPos, out float height)
+    {
+        if (!TryGetHeight(worldPos, out height)) return false;
+        if (TryGetWaterLevel(worldPos, out float still) && still > height) height = still;
+        return true;
+    }
+
     public bool TryGetHeight(Vector3 worldPos, out float height)
     {
         height = 0f;
@@ -1255,11 +1267,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         dist = Math.Min(dist, LodPolicy.Distance(result.Id, _origin!.TileAt(anchor.GlobalPosition)));
                     node.SetTreeDensity(Lod.TreeDensity(dist));
                 }
-                if (result.Water != null)
-                    EnsureNode(result.Id, state).SetWater(result.Water);
                 state.HasBuildings = true;
                 state.PendingBuildings = false;
             }
+            // near tiles' water comes with their buildings, far tiles' (flat, #299) on its own
+            if (result.Water != null)
+                EnsureNode(result.Id, state).SetWater(result.Water);
             state.ActiveStride = result.Stride;
             // a single commit past a frame is worth knowing about: it is what a hitch IS
             double took = clock.Elapsed.TotalMilliseconds - t0;
@@ -1848,6 +1861,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         ct.ThrowIfCancellationRequested();
                         water = ChunkNode.ToArrayMesh(waterData, waterMaterial);
                     }
+                    Lap(StWater, stageMs, clock);
+                }
+                else if (buildMesh && waterMaterial != null && waterLayer is { Legacy: false }
+                    && WaterMeshBuilder.Build(waterLayer, null, stride, detail) is { } farWater)
+                {
+                    // a far tile with a source water layer (#298's lakes over their beds): a flat
+                    // surface at the still level as coarse as its ground, or the lake is a pit
+                    ct.ThrowIfCancellationRequested();
+                    water = ChunkNode.ToArrayMesh(farWater, waterMaterial);
                     Lap(StWater, stageMs, clock);
                 }
 

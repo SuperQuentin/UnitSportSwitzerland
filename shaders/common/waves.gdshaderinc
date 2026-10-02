@@ -7,6 +7,10 @@
 // `p` is pattern XZ (world_origin.gdshaderinc's pattern_xz): every wave vector is a whole number
 // of cycles over its 9.6 km period, so the floating origin moving does not move the waves.
 // `scale` (0..1) is the water layer's share of the sea state there (fetch x depth), from the mesh.
+// `spacing` is the vertex spacing to draw for, metres: a wave shorter than three of them is faded
+// out (it would alias into a false lattice), a wave four or more long is drawn whole. At 2 m every
+// wave is drawn exactly as the physics has it (the shortest is 8.2 m); the water body passes a
+// spacing growing with distance, so far water drops its shortest waves.
 #ifndef COMMON_WAVES
 #define COMMON_WAVES
 global uniform vec4 water_wave_0;
@@ -21,11 +25,13 @@ global uniform vec4 water_amp_b;
 global uniform float water_time;
 
 // One wave: adds its displacement to d and its derivatives to the two tangents' offsets.
-void water_wave_term(vec4 w, float a, float chop, vec2 p, inout vec3 d, inout vec3 tx, inout vec3 tz) {
+void water_wave_term(vec4 w, float a, float chop, vec2 p, float spacing, inout vec3 d, inout vec3 tx, inout vec3 tz) {
     if (a == 0.0) {
         return;
     }
-    vec2 dir = w.xy / length(w.xy);
+    float k = length(w.xy);
+    a *= clamp(6.2831853 / (k * spacing) - 3.0, 0.0, 1.0);
+    vec2 dir = w.xy / k;
     float theta = dot(w.xy, p) - w.z * water_time + w.w;
     float s = sin(theta);
     float c = cos(theta);
@@ -37,18 +43,18 @@ void water_wave_term(vec4 w, float a, float chop, vec2 p, inout vec3 d, inout ve
 
 // The displacement of the surface point at rest at pattern XZ p (x, z horizontal, y up from the
 // still level), and the displaced surface's unit normal.
-vec3 water_wave_displace(vec2 p, float scale, out vec3 normal) {
+vec3 water_wave_displace(vec2 p, float scale, float spacing, out vec3 normal) {
     vec3 d = vec3(0.0);
     vec3 tx = vec3(0.0);
     vec3 tz = vec3(0.0);
     if (scale > 0.0) {
         float chop = water_amp_b.z;
-        water_wave_term(water_wave_0, water_amp_a.x * scale, chop, p, d, tx, tz);
-        water_wave_term(water_wave_1, water_amp_a.y * scale, chop, p, d, tx, tz);
-        water_wave_term(water_wave_2, water_amp_a.z * scale, chop, p, d, tx, tz);
-        water_wave_term(water_wave_3, water_amp_a.w * scale, chop, p, d, tx, tz);
-        water_wave_term(water_wave_4, water_amp_b.x * scale, chop, p, d, tx, tz);
-        water_wave_term(water_wave_5, water_amp_b.y * scale, chop, p, d, tx, tz);
+        water_wave_term(water_wave_0, water_amp_a.x * scale, chop, p, spacing, d, tx, tz);
+        water_wave_term(water_wave_1, water_amp_a.y * scale, chop, p, spacing, d, tx, tz);
+        water_wave_term(water_wave_2, water_amp_a.z * scale, chop, p, spacing, d, tx, tz);
+        water_wave_term(water_wave_3, water_amp_a.w * scale, chop, p, spacing, d, tx, tz);
+        water_wave_term(water_wave_4, water_amp_b.x * scale, chop, p, spacing, d, tx, tz);
+        water_wave_term(water_wave_5, water_amp_b.y * scale, chop, p, spacing, d, tx, tz);
     }
     // the tangents d/dx0 = (1, 0, 0) + tx and d/dz0 = (0, 0, 1) + tz; normal = Tz x Tx
     normal = normalize(cross(vec3(0.0, 0.0, 1.0) + tz, vec3(1.0, 0.0, 0.0) + tx));

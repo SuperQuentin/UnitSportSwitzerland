@@ -323,6 +323,10 @@ public static class StyleKit
             case MaterialRole.TreeFar:
                 m.SetShaderParameter("tree_near", TreeNear);
                 break;
+            // the water's own screen-space reflections (#299): where the style has Forward+'s effects
+            case MaterialRole.Water when HasUniform(shader, "ssr_steps"):
+                m.SetShaderParameter("ssr_steps", Pick(style, l => l.Effects).Value && OnForwardPlus ? 24 : 0);
+                break;
         }
         // the realistic shaders' textures, wherever they are drawn (Realistic+ borrows them)
         if (from == VisualStyle.RealisticLow)
