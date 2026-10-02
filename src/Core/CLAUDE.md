@@ -8,7 +8,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 ## Architecture
 
 - `modes` — Modes: (`GameMode`, `Core/WorldLaunch`): Explore / GpxReplay / Multiplayer, picked on the title screen or by --connect/--gpx; Esc = pause menu
-- `steering-wheel` — Steering wheel: (`Core/SteeringWheel`, #68): SDL3 wheel and pedals, 1:1 direct steering, Godot's copy of the device ignored, presets + Settings → Wheel tab
+- `steering-wheel` — Steering wheel: (`Core/SteeringWheel`, #68): SDL3 wheel and pedals, 1:1 direct steering, force feedback (aligning, soft lock, road, engine, knocks), Godot's copy of the device ignored, presets + Settings → Wheel tab
 - `input` — Input: (`Core/PlayerInput`): every gameplay control is a named `InputMap` action registered in code at boot...
 - `settings` — Settings: (`Core/GameSettings`, `Ui/SettingsScreen` tabs, `user://settings.json`): render distance in tile rings (6..40,...
 - `performance-overlay` — Performance overlay: (`Core/PerfOverlay`, F3 cycles Off / FPS / Detailed, saved as `GameSettings.PerfOverlay`, also...
@@ -24,7 +24,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 ## Commands
 
-- `commands` — Commands: --at, --chatcheck, --fakewheel, --origincheck, --originshift, --originstress, --goto, --licenses, --menu, --nohud, --origin, --path, --probe, --settings wheel, --shot, --shot-queue (g heights, frame=), --title, --wheelcheck, --wheelwatch
+- `commands` — Commands: --at, --chatcheck, --fakewheel, --ffbcheck, --ffblog, --origincheck, --originshift, --originstress, --goto, --licenses, --menu, --nohud, --origin, --path, --probe, --settings wheel, --shot, --shot-queue (g heights, frame=), --title, --wheelcheck, --wheellock, --wheelwatch
 
 ## Gotchas
 
