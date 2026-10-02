@@ -295,6 +295,37 @@ public class TerrainFormatTests
         // the lattice is a decimation of the grid: the SE corner sample is the SE corner vertex
         int last = HorizonFormat.SamplesPerSide - 1;
         Assert.Equal(grid.HeightMetersAt(ChunkFormat.GridSize - 1, ChunkFormat.GridSize - 1), back.HeightMetersAt(Id, last, last));
+        Assert.Empty(back.Water);
+    }
+
+    [Fact]
+    public void Horizon_carries_the_water_level_and_draws_the_higher_of_bed_and_water()
+    {
+        var bed = new ushort[HorizonFormat.SamplesPerTile];
+        Array.Fill(bed, ChunkFormat.Quantize(330));
+        bed[0] = ChunkFormat.Quantize(400);   // a bank above the lake's level
+        var water = WaterGrid.Dry(Id);
+        Array.Fill(water.Levels, ChunkFormat.Quantize(372.14));
+        var levels = HorizonFormat.ExtractWater(water)!;
+        Assert.Null(HorizonFormat.ExtractWater(WaterGrid.Dry(Id)));
+
+        using var ms = new MemoryStream();
+        HorizonFormat.Encode(new Dictionary<TileId, ushort[]> { [Id] = bed }, ms, new Dictionary<TileId, ushort[]> { [Id] = levels });
+        Assert.Equal(HorizonFormat.Version, BitConverter.ToUInt16(ms.ToArray(), 4));
+        ms.Position = 0;
+        var back = HorizonFormat.Decode(ms);
+        Assert.Equal(ms.Length, ms.Position);
+        Assert.True(back.TryGet(Id, out var heights));
+        Assert.Equal(bed, heights);   // the heights stay the bed: the generated fill blends on them
+        Assert.Equal(ChunkFormat.Dequantize(levels[1]), back.SurfaceMetersAt(Id, 1, 0));
+        Assert.Equal(400, back.SurfaceMetersAt(Id, 0, 0), 0);
+        HorizonIndex.Surface(bed[1], levels, 1, out bool wet);
+        Assert.True(wet);
+
+        // no water: still written as version 1, which an older build reads
+        using var dry = new MemoryStream();
+        HorizonFormat.Encode(new Dictionary<TileId, ushort[]> { [Id] = bed }, dry, new Dictionary<TileId, ushort[]>());
+        Assert.Equal(1, BitConverter.ToUInt16(dry.ToArray(), 4));
     }
 
     [Fact]

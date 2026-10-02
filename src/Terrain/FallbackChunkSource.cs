@@ -385,6 +385,15 @@ public sealed class FallbackChunkSource : IChunkSource
                 if (real.TryGet(id, out var s)) tiles[id] = s;
         for (int t = 0; t < ids.Count; t++) tiles[ids[t]] = samples[t];
 
+        // the still water at the samples (#298): the real file's, and the generated lakes'
+        var water = new Dictionary<TileId, ushort[]>();
+        if (real != null)
+            foreach (var (id, levels) in real.Water) water[id] = levels;
+        var genWater = new ushort[]?[ids.Count];
+        Parallel.For(0, ids.Count, new ParallelOptions { CancellationToken = ct }, t => genWater[t] = ProceduralWorld.HorizonWater(ids[t]));
+        for (int t = 0; t < ids.Count; t++)
+            if (genWater[t] is { } levels) water[ids[t]] = levels;
+
         Log?.Invoke($"[fallback] horizon: {real?.Count ?? 0} real + {ids.Count} generated tiles "
             + $"({blended} blended, {ids.Count - computed} from cache) in {clock.ElapsedMilliseconds} ms");
         if (computed > 0)
@@ -394,7 +403,7 @@ public sealed class FallbackChunkSource : IChunkSource
                 if (blendKeys[t] != 0) current.Add(((ids[t], blendKeys[t]), samples[t]));
             SaveHorizonCache(current);
         }
-        return new HorizonIndex(tiles);
+        return new HorizonIndex(tiles, water);
     }
 
     // ---- the generated horizon on disk -----------------------------------------------------

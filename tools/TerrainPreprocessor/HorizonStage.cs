@@ -21,6 +21,7 @@ public static class HorizonStage
 
         var clock = Stopwatch.StartNew();
         var tiles = new System.Collections.Concurrent.ConcurrentDictionary<TileId, ushort[]>();
+        var water = new System.Collections.Concurrent.ConcurrentDictionary<TileId, ushort[]>();
         long readBytes = 0;
         int fromCoarse = 0;
 
@@ -44,11 +45,20 @@ public static class HorizonStage
                         throw new InvalidDataException($"{grid.Id}: horizon sample differs at ({c},{r})");
 
             tiles[grid.Id] = samples;
+
+            // the still water at the same samples (#298): the ground under a lake is its bed
+            string waterPath = Path.Combine(outDir, WaterFormat.FileName(grid.Id));
+            if (File.Exists(waterPath))
+            {
+                WaterGrid wg;
+                using (var fs = File.OpenRead(waterPath)) wg = WaterFormat.Decode(fs);
+                if (HorizonFormat.ExtractWater(wg) is { } levels) water[grid.Id] = levels;
+            }
         });
 
         string outPath = Path.Combine(outDir, HorizonFormat.FileName);
         using (var fs = File.Create(outPath))
-            HorizonFormat.Encode(tiles, fs);
+            HorizonFormat.Encode(tiles, fs, water);
 
         // and that what landed on disk is what we checked
         HorizonIndex reread;
@@ -58,11 +68,14 @@ public static class HorizonStage
         foreach (var (id, samples) in tiles)
             if (!reread.TryGet(id, out var back) || !back.AsSpan().SequenceEqual(samples))
                 throw new InvalidDataException($"{id}: horizon tile did not round-trip");
+        foreach (var (id, levels) in water)
+            if (!reread.TryGetWater(id, out var back) || !back.AsSpan().SequenceEqual(levels))
+                throw new InvalidDataException($"{id}: horizon water did not round-trip");
 
         long wrote = new FileInfo(outPath).Length;
         Console.WriteLine($"Horizon pass: {tiles.Count} tiles ({fromCoarse} from .terrc) in "
             + $"{clock.Elapsed.TotalSeconds:F1}s, read {readBytes / 1048576.0:F1} MB -> "
-            + $"wrote {wrote / 1024.0:F0} KB ({HorizonFormat.SpacingM} m lattice)");
+            + $"wrote {wrote / 1024.0:F0} KB ({HorizonFormat.SpacingM} m lattice, {water.Count} tiles with water)");
         return 0;
     }
 }

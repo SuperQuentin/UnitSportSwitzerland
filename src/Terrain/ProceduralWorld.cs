@@ -221,16 +221,44 @@ public sealed partial class ProceduralWorld
         };
 
         // lakes: a ragged shore, but no lake where the heightmap has none
-        double lake = relief.LakeWeight(e, n, out double level, out int lakeId);
+        double lake = LakeField(e, n, out double level, out int lakeId);
         if (lake > 0)
         {
-            lake = Math.Clamp(lake + 0.6 * lake * (1 - lake) * Noise.Fbm(x / 400, y / 400, 3, 41), 0, 1);
             c.Lake = lake;
             c.Level = level;
             c.MaxDepth = relief.LakeMaxDepth[lakeId];
             c.Fetch = Math.Sqrt(relief.LakeAreaM2[lakeId]);
         }
         return c;
+    }
+
+    /// <summary>How far into a lake a point is, 0..1 (water above 0.5): the relief's lake weight with a ragged shore.</summary>
+    private static double LakeField(double e, double n, out double level, out int lakeId)
+    {
+        double lake = Relief.Instance.LakeWeight(e, n, out level, out lakeId);
+        if (lake <= 0) return 0;
+        double x = e - NoiseE, y = n - NoiseN;
+        return Math.Clamp(lake + 0.6 * lake * (1 - lake) * Noise.Fbm(x / 400, y / 400, 3, 41), 0, 1);
+    }
+
+    /// <summary>
+    /// A tile's still water at its 11x11 horizon samples (#298): the lake level where a sample is in
+    /// a lake, 0 elsewhere; null when none is. The horizon heights are the beds, so it draws the
+    /// higher of the two. Lakes only (a river is narrower than the 100 m lattice), and from the lake
+    /// field alone, a few microseconds a tile, so the generated horizon cache does not need it.
+    /// </summary>
+    public static ushort[]? HorizonWater(TileId id)
+    {
+        const int side = HorizonFormat.SamplesPerSide;
+        ushort[]? levels = null;
+        for (int r = 0; r < side; r++)
+            for (int c = 0; c < side; c++)
+            {
+                double e = id.MinE + c * HorizonFormat.SpacingM, n = id.MaxN - r * HorizonFormat.SpacingM;
+                if (LakeField(e, n, out double level, out _) < 0.5) continue;
+                (levels ??= new ushort[HorizonFormat.SamplesPerTile])[r * side + c] = ChunkFormat.Quantize(level);
+            }
+        return levels;
     }
 
     /// <summary>
