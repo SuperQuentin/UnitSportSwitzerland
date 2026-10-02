@@ -107,6 +107,9 @@ public sealed class RoadSegment
     public RoadAttributes Attributes { get; init; }
 
     public int PointCount => Points.Length / 3;
+
+    /// <summary>Point <paramref name="i"/> in LV95 (E, N); <paramref name="tile"/> is the tile this segment was read from.</summary>
+    public (double E, double N) Lv95(TileId tile, int i) => (tile.MinE + Points[i * 3], tile.MaxN - Points[i * 3 + 2]);
 }
 
 /// <summary>v3 attribute flags: the second flags word <see cref="RoadFlags"/> had no room for.</summary>
