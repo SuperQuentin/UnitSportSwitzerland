@@ -456,7 +456,7 @@ public static class StyleKit
     public static bool EffectsOn => Pick(Applied, l => l.Effects).Value && OnForwardPlus;
 
     /// <summary>"--sdfgi": global illumination in Realistic+, off until measured on a gaming laptop.</summary>
-    private static readonly bool Sdfgi = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--sdfgi") >= 0;
+    private static readonly bool Sdfgi = CmdArgs.Has("--sdfgi");
 
     private static Finish StyleFinish => Pick(Applied, l => l.Finish).Value;
 
@@ -647,7 +647,7 @@ public static class StyleKit
     // inside it the 3D tree, crossfaded per tree with a dither.
 
     /// <summary>Whether far trees are billboards. "--tree-lod off" keeps every tree 3D, as before.</summary>
-    public static bool TreeLod { get; } = ArgValue("--tree-lod") is not ("off" or "0" or "false");
+    public static bool TreeLod { get; } = CmdArgs.Value("--tree-lod") is not ("off" or "0" or "false");
 
     /// <summary>
     /// Where the 3D trees hand over to billboards in the applied style, in metres (PS1 and Cartoon
@@ -655,9 +655,7 @@ public static class StyleKit
     /// </summary>
     public static float TreeNear => TreeNearArg ?? Pick(Applied, l => l.TreeNear).Value;
 
-    private static readonly float? TreeNearArg =
-        float.TryParse(ArgValue("--tree-near"), System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out float m) ? m : null;
+    private static readonly float? TreeNearArg = CmdArgs.Float("--tree-near");
 
     /// <summary>
     /// Visibility range for a whole tile's 3D tree MultiMesh, whose trees lie in
@@ -681,7 +679,7 @@ public static class StyleKit
 
     // --- --style-report ------------------------------------------------------------------------
 
-    public static bool ReportRequested => System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--style-report") >= 0;
+    public static bool ReportRequested => CmdArgs.Has("--style-report");
 
     /// <summary>
     /// <c>--style-report</c>: every role each style borrows, and from which style. Fails if the
@@ -748,12 +746,5 @@ public static class StyleKit
         }
         GD.Print($"RESULT {(failures == 0 ? "PASS" : $"FAIL ({failures})")}");
         return failures == 0 ? 0 : 1;
-    }
-
-    private static string? ArgValue(string flag)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, flag);
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
     }
 }

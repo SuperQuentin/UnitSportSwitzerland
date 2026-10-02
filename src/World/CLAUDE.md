@@ -17,4 +17,5 @@ touches its topic; search with `grep -ril <word> docs/notes/world`.
 - `africa-twin-egg` — A random Africa Twin in a parking bay at Riddes (#55): `TileEntered`, server-placed, server authority at rest, `--eggcheck`
 - `perf-traffic-tick` — Traffic per tick: road sampled only near an obstacle, gap check on the X-sorted `_byX` window, cars drawn to 600 m, shared cached meshes (#221)
 - `perf-racenpc-server-physics` — `RaceNpc` has no physics step on the dedicated server (a data proxy, never the simulator) (#221)
+- `perf-race-tick` — `RaceManager.ServerTick` per frame: no LINQ/`GetNodeOrNull`; node lookups on the 1 s review pass (#221)
 - `perf-player-snapshot` (player) — `Traffic` obstacles come from the tick's `PlayerSnapshot` into reused lists, never a group scan + `ToList` per tick (#221)

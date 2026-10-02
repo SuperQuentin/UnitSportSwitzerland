@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Net;
 
@@ -127,8 +128,8 @@ public partial class QueryResponder : Node
     /// <summary>"--query-port N" (default: game port + 1), or null for "--no-query".</summary>
     public static int? ParsePort(int gamePort)
     {
-        var args = OS.GetCmdlineUserArgs();
-        if (Array.IndexOf(args, "--no-query") >= 0) return null;
+        var args = CmdArgs.All;
+        if (CmdArgs.Has("--no-query")) return null;
         for (int i = 0; i < args.Length - 1; i++)
             if (args[i] == "--query-port" && int.TryParse(args[i + 1], out int p)) return p;
         return gamePort + 1;
@@ -137,7 +138,7 @@ public partial class QueryResponder : Node
     /// <summary>"--query-bind &lt;ip&gt;": answer status queries on that address only (127.0.0.1 hides the server from the LAN).</summary>
     public static IPAddress? ParseBind()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         for (int i = 0; i < args.Length - 1; i++)
             if (args[i] == "--query-bind" && IPAddress.TryParse(args[i + 1], out var ip)) return ip;
         return null;
@@ -146,9 +147,7 @@ public partial class QueryResponder : Node
     /// <summary>"--server-name &lt;name&gt;", else the machine's name.</summary>
     public static string ParseServerName()
     {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--server-name") return args[i + 1];
+        if (CmdArgs.Value("--server-name") is { } name) return name;
         string host = System.Environment.MachineName;
         return host.Length > 0 ? $"{host}" : "UnitSport server";
     }

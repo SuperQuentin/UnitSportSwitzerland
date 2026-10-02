@@ -50,13 +50,6 @@ public partial class RideProbe : Node
     private float _thrownFarthest;
     private readonly System.Collections.Generic.List<float> _crashShots = new();
 
-    private static float? Arg(string name)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, name);
-        return i >= 0 && i + 1 < args.Length && float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : null;
-    }
     private readonly System.Collections.Generic.List<float> _reached = new();
     /// <summary>A motorbike's worst use of its wheelie / stoppie limit; 1 or more would be a flip.</summary>
     private float _worstPitch;
@@ -72,14 +65,14 @@ public partial class RideProbe : Node
 
         // The probe checks the physics against real-world numbers (180 W -> 32.7 km/h flat), so
         // it rides the Sim profile unless told otherwise with --profile game. Not saved.
-        if (!OS.GetCmdlineUserArgs().Contains("--profile"))
+        if (!CmdArgs.Has("--profile"))
             Core.GameSettings.Current.RideProfile = Core.RideProfile.Sim;
     }
 
     /// <summary>Returns the requested vehicle and duration, or null when --ride was not given.</summary>
     public static (RideKind Kind, double Seconds, string? Shot)? ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         for (int i = 0; i < args.Length - 1; i++)
         {
             if (args[i] != "--ride") continue;
@@ -127,10 +120,7 @@ public partial class RideProbe : Node
             _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
             // --heading is a compass bearing: a node faces −Z (north) and +yaw turns it toward −X
             // (west). Set before the node enters the tree, whose _Ready takes its view from it.
-            var args = OS.GetCmdlineUserArgs();
-            int hi = System.Array.IndexOf(args, "--heading");
-            if (hi >= 0 && hi + 1 < args.Length && float.TryParse(args[hi + 1], System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out float bearing))
+            if (CmdArgs.Float("--heading") is float bearing)
                 _player.Rotation = new Vector3(0, -Mathf.DegToRad(bearing), 0);
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, ground + 1.5f, at.Z);
@@ -146,7 +136,7 @@ public partial class RideProbe : Node
             // "--ride foot": run straight ahead (and stand still from --brake-at on)
             if (!_player.IsOnFloor()) return;
             _mounted = true;
-            float stopAt = Arg("--brake-at") ?? float.MaxValue;
+            float stopAt = CmdArgs.Float("--brake-at") ?? float.MaxValue;
             var ahead = -_player.GlobalBasis.Z with { Y = 0 };
             _player.WalkControls = () => (_elapsed < stopAt ? ahead.Normalized() : Vector3.Zero, true);
             GD.Print("[ride] on foot");
@@ -162,24 +152,19 @@ public partial class RideProbe : Node
                 ? $"[ride] mounted {_kind}"
                 : $"[ride] MOUNT REFUSED for {_kind}");
             if (!_mounted) { _done = true; GetTree().Quit(1); }
-            int si = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--setup");
-            if (_mounted && si >= 0 && si + 1 < OS.GetCmdlineUserArgs().Length)
+            if (_mounted && CmdArgs.Value("--setup") is { } setupWord)
             {
-                var setup = CarSetups.Parse(OS.GetCmdlineUserArgs()[si + 1]);
+                var setup = CarSetups.Parse(setupWord);
                 GD.Print(setup != null && _player.SetCarSetup(setup.Id) ? $"[ride] preset {setup.Name}" : "[ride] PRESET REFUSED");
             }
 
-            var a = OS.GetCmdlineUserArgs();
-            int ti = System.Array.IndexOf(a, "--trailer");
-            if (_mounted && ti >= 0 && ti + 1 < a.Length && int.TryParse(a[ti + 1], out int trailer))
+            if (_mounted && CmdArgs.Int("--trailer") is int trailer)
                 GD.Print(_player.SpawnTrailer(trailer, 1f) ? $"[ride] coupled {TrailerCatalog.All[trailer].Label}" : "[ride] TRAILER REFUSED");
             // full throttle, straight ahead — the probe measures the model, not the steering —
             // unless --steer asks for a turn (−1 left .. 1 right)
-            int st = System.Array.IndexOf(a, "--steer");
-            float steer = st >= 0 && st + 1 < a.Length && float.TryParse(a[st + 1], System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out float asked) ? asked : 0f;
-            if (_mounted && Arg("--wall") is { } wallAt) SpawnWall(wallAt);
-            float brakeAt = Arg("--brake-at") ?? float.MaxValue;
+            float steer = CmdArgs.Float("--steer") ?? 0f;
+            if (_mounted && CmdArgs.Float("--wall") is { } wallAt) SpawnWall(wallAt);
+            float brakeAt = CmdArgs.Float("--brake-at") ?? float.MaxValue;
             // (the brake, held at a standstill, would reverse: let go once stopped)
             _player.RideControls = () =>
             {
@@ -201,7 +186,7 @@ public partial class RideProbe : Node
         if (_player.Vehicle is Motorbike moto)
             _worstPitch = Mathf.Max(_worstPitch, Mathf.Abs(moto.PitchUse));
 
-        if (_shot != null && Arg("--midshot") is { } mid && _elapsed >= mid && !_midShot)
+        if (_shot != null && CmdArgs.Float("--midshot") is { } mid && _elapsed >= mid && !_midShot)
         {
             _midShot = true;
             string path = _shot.Replace(".png", "_mid.png");
@@ -246,7 +231,7 @@ public partial class RideProbe : Node
             + $"top {_topSpeed:F1} m/s ({_topSpeed * 3.6f:F1} km/h), "
             + $"climbed {end.Y - _startAltitude:F1} m"
             + (_player.Vehicle is Motorbike ? $", worst pitch {_worstPitch:P0} of the wheelie/stoppie limit" : ""));
-        if (Arg("--wall") != null)
+        if (CmdArgs.Float("--wall") != null)
         {
             bool thrown = _thrownAt >= 0, rested = _restedAt >= 0;
             GD.Print(thrown && rested && !underground
@@ -286,10 +271,8 @@ public partial class RideProbe : Node
         wall.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size } });
         AddChild(wall);
         wall.GlobalTransform = new Transform3D(Basis.LookingAt(fwd.Normalized(), Vector3.Up), new Vector3(at.X, g + size.Y * 0.5f - 0.3f, at.Z));
-        var a = OS.GetCmdlineUserArgs();
-        int si = System.Array.IndexOf(a, "--crashshots");
-        if (si >= 0 && si + 1 < a.Length)
-            foreach (var t in a[si + 1].Split(','))
+        if (CmdArgs.Value("--crashshots") is { } shots)
+            foreach (var t in shots.Split(','))
                 if (float.TryParse(t, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) _crashShots.Add(v);
         GD.Print($"[crash] wall {ahead:F0} m ahead");
     }
@@ -297,7 +280,7 @@ public partial class RideProbe : Node
     /// <summary>--wall: the throw, the flight and the rest, printed; the timed shots taken.</summary>
     private void WatchCrash(double delta)
     {
-        if (Arg("--wall") == null || _player == null) return;
+        if (CmdArgs.Float("--wall") == null || _player == null) return;
         bool limp = _player.Ragdolled;
         if (limp && _thrownAt < 0)
         {

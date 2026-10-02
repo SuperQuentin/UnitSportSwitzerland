@@ -430,7 +430,7 @@ public partial class RaceNpcs : Node
     }
 
     // ---- --npccheck (loopback test, on a client that does not own the NPCs): are they solid here? ----
-    private readonly bool _check = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--npccheck") >= 0;
+    private readonly bool _check = CmdArgs.Has("--npccheck");
     private double _sinceCheck;
 
     public override void _PhysicsProcess(double delta)

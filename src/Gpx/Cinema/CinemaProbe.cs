@@ -36,13 +36,7 @@ public partial class CinemaProbe : Node
         Name = "CinemaProbe";
     }
 
-    public static string? ParseArgs()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--cinema") return args[i + 1];
-        return null;
-    }
+    public static string? ParseArgs() => CmdArgs.Value("--cinema");
 
     public override void _Process(double delta)
     {

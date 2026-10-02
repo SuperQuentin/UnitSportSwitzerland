@@ -106,11 +106,8 @@ public partial class ChatUi : CanvasLayer
 
         Append("Press Enter to chat, / for commands.", ChatKind.System);
         // "--chatopen [seconds]" opens the input after that long, for screenshotting it against the floating lines
-        var args = OS.GetCmdlineUserArgs();
-        int at = Array.IndexOf(args, "--chatopen");
-        if (at >= 0)
-            GetTree().CreateTimer(at + 1 < args.Length && double.TryParse(args[at + 1], System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out double wait) ? wait : 4).Timeout += () => OpenInput();
+        if (CmdArgs.Has("--chatopen"))
+            GetTree().CreateTimer(CmdArgs.Double("--chatopen") ?? 4).Timeout += () => OpenInput();
     }
 
     /// <summary>

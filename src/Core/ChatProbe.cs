@@ -33,12 +33,7 @@ public abstract partial class ChatProbe : Node
     }
 
     /// <summary>The upper-cased word after <paramref name="flag"/>, or null when the flag is absent.</summary>
-    public static string? RoleArg(string flag)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, flag);
-        return i >= 0 && i + 1 < args.Length ? args[i + 1].ToUpperInvariant() : null;
-    }
+    public static string? RoleArg(string flag) => CmdArgs.Value(flag)?.ToUpperInvariant();
 
     protected string Log => _role.Length > 0 ? $"[{_tag} {_role}]" : $"[{_tag}]";
     /// <summary>Echo each <see cref="Say"/> to the log (some scripts wait for the echo).</summary>

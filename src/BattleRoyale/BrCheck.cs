@@ -20,7 +20,7 @@ namespace UnitSport.BattleRoyale;
 /// </summary>
 public static class BrCheck
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--brcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--brcheck");
 
     private static int _failures;
 

@@ -82,7 +82,7 @@ public partial class BirdJournal : CanvasLayer
         hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
         rows.AddChild(hint);
 
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--journal") >= 0)
+        if (CmdArgs.Has("--journal"))
             GetTree().CreateTimer(1.5).Timeout += Open;
     }
 

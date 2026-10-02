@@ -62,7 +62,7 @@ public partial class SteeringWheel
     private float _testLevel, _testTimer;
     private bool _softLogged;
     /// <summary><c>--ffblog</c>: a line every 2 s of what the wheel is being given.</summary>
-    private static readonly bool TraceForces = Array.IndexOf(OS.GetCmdlineUserArgs(), "--ffblog") >= 0;
+    private static readonly bool TraceForces = CmdArgs.Has("--ffblog");
     private float _traceIn;
     private float _softDeepest, _softHardest;
     private float _lastAngle, _rate;
@@ -88,13 +88,7 @@ public partial class SteeringWheel
     /// </summary>
     public static readonly float? LockOverride = ParseLockOverride();
 
-    private static float? ParseLockOverride()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--wheellock");
-        return i >= 0 && i + 1 < args.Length && float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out float deg) ? Mathf.DegToRad(deg) : null;
-    }
+    private static float? ParseLockOverride() => CmdArgs.Float("--wheellock") is float deg ? Mathf.DegToRad(deg) : null;
 
     /// <summary>A knock through the rim, 0..1: a crash, a kerb, a hard landing.</summary>
     public static unsafe void Knock(float strength)
