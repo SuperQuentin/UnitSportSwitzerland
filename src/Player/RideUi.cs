@@ -191,6 +191,10 @@ public partial class RideUi : CanvasLayer
         AddTab(bar, pages, "Trucks and buses", HeavyCatalog.All.Select(h => NewCard(h.Kind, h.Label,
             h.Blurb + (h.Look.Operator.Length > 0 ? $" ({h.Look.Operator} colours)" : ""), true,
             $"{h.Kind}|{h}", () => HeavyRig.Create(h, 0, 0.5f))).ToList());
+        // the boats (#302): picked on the water (or by it: it starts afloat at the surface)
+        AddTab(bar, pages, "Boats", BoatCatalog.All.Select((b, i) => NewCard((RideKind)(BoatCatalog.First + i), b.Name,
+            Rideable.Create((RideKind)(BoatCatalog.First + i))!.Blurb, true,
+            $"{BoatCatalog.First + i}|{b.Name}", () => Rideable.Create((RideKind)(BoatCatalog.First + i))?.BuildParkedVisual(0))).ToList());
         // trailers are not mounts: each card couples one behind the truck being driven, or leaves it
         // in the world ahead to back onto (RideKind.Trailer + its index, decoded in Choose)
         AddTab(bar, pages, "Trailers", TrailerCatalog.All.Select((t, i) => NewCard((RideKind)(TrailerRow + i), t.Label,

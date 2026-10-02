@@ -22,7 +22,10 @@ public enum RideKind
     /// says which). Nobody rides it; a truck backs under it and couples.
     /// </summary>
     Trailer = 120,
-    // The next other mount is 121.
+    // 121.. are boats (#302): BoatCatalog.All[kind - BoatCatalog.First], append-only; the steamer (#303) is 123.
+    Jetski = 121,
+    Speedboat = 122,
+    // The next other mount is 123.
 }
 
 /// <summary>
@@ -441,6 +444,7 @@ public abstract class Rideable
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),
+        _ when Boat.For(kind) is { } boat => boat,
         _ => null,
     };
 }

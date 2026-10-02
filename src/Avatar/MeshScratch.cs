@@ -310,6 +310,61 @@ public sealed class MeshScratch
     }
 
     /// <summary>
+    /// A closed solid through <paramref name="sections"/>: rings of the same number of points, in
+    /// order along the solid (a hull's stations, transom to stem), joined face to face, the first
+    /// and last rings capped. <paramref name="edgeColours"/>[i] colours the band between ring points
+    /// i and i + 1 (a hull's bottom, topsides and deck); the caps take <paramref name="capColour"/>.
+    /// The rings may wind either way: the result is turned to face out by its own signed volume
+    /// (#302: boat hulls; <c>--meshcheck</c> checks it).
+    /// </summary>
+    public void Loft(IReadOnlyList<Vector3[]> sections, IReadOnlyList<Color> edgeColours, Color capColour)
+    {
+        if (sections.Count < 2) return;
+        int m = sections[0].Length;
+        if (m < 3 || edgeColours.Count < m) return;
+        int first = _indices.Count;
+        for (int k = 0; k + 1 < sections.Count; k++)
+        {
+            var a = sections[k];
+            var b = sections[k + 1];
+            for (int i = 0; i < m; i++)
+            {
+                int j = (i + 1) % m;
+                var linear = edgeColours[i].SrgbToLinear();
+                int s = _vertices.Count;
+                Add(a[i], linear); Add(a[j], linear); Add(b[j], linear); Add(b[i], linear);
+                Quad(s, s + 1, s + 2, s + 3);
+            }
+        }
+        var cap = capColour.SrgbToLinear();
+        void Cap(Vector3[] ring, bool end)
+        {
+            var centre = Vector3.Zero;
+            foreach (var p in ring) centre += p;
+            centre /= ring.Length;
+            for (int i = 0; i < m; i++)
+            {
+                int j = (i + 1) % m;
+                int s = _vertices.Count;
+                Add(centre, cap);
+                // the sides run a_i -> a_j, so the start cap runs a_j -> a_i (and the end the other way)
+                if (end) { Add(ring[i], cap); Add(ring[j], cap); }
+                else { Add(ring[j], cap); Add(ring[i], cap); }
+                _indices.Add(s); _indices.Add(s + 1); _indices.Add(s + 2);
+            }
+        }
+        Cap(sections[0], end: false);
+        Cap(sections[^1], end: true);
+        // clockwise from outside is a negative signed volume: flip the lot if it came out positive
+        float volume = 0f;
+        for (int i = first; i < _indices.Count; i += 3)
+            volume += _vertices[_indices[i]].Dot(_vertices[_indices[i + 1]].Cross(_vertices[_indices[i + 2]]));
+        if (volume > 0f)
+            for (int i = first; i < _indices.Count; i += 3)
+                (_indices[i + 1], _indices[i + 2]) = (_indices[i + 2], _indices[i + 1]);
+    }
+
+    /// <summary>
     /// A flat convex polygon, <paramref name="corners"/> in order round its edge, seen from both
     /// sides: a window. It goes in the mesh's second surface (<see cref="GlassSurface"/>), for a
     /// translucent material. One sheet rather than a thin box, because behind glass you can see
@@ -473,6 +528,12 @@ public sealed class MeshScratch
             ("smooth tube", true, m => m.Tube(at, at + Vector3.Back, 0.2f, 0.1f, Colors.White), smoothTaper, 1e-4f),
             ("rounded box", true, m => m.RoundedBox(at, size, Colors.White, new Basis(Vector3.Up, 0.6f)),
                 box * superellipsoid, box * 0.1f),
+            // a 0.4 x 0.6 square prism 0.8 long, its rings wound the "wrong" way: Loft turns it out (#302)
+            ("loft", false, m => m.Loft(new[]
+                {
+                    new[] { at, at + new Vector3(0, 0.6f, 0), at + new Vector3(0.4f, 0.6f, 0), at + new Vector3(0.4f, 0, 0) },
+                    new[] { at + new Vector3(0, 0, 0.8f), at + new Vector3(0, 0.6f, 0.8f), at + new Vector3(0.4f, 0.6f, 0.8f), at + new Vector3(0.4f, 0, 0.8f) },
+                }, new[] { Colors.White, Colors.White, Colors.White, Colors.White }, Colors.White), box, 1e-4f),
         };
         int failed = 0;
         foreach (var (name, smooth, draw, volume, tolerance) in cases)

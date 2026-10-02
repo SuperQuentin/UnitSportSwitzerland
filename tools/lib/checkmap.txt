@@ -98,6 +98,13 @@ src/Player/AirReserve    quick  --swimcheck --chunks fixture:lake
 src/Player/PlayerFeel    quick  --swimcheck --chunks fixture:lake
 src/Avatar/HumanMeshBuilder.Sw quick --swimcheck --chunks fixture:lake
 src/World/Wa             quick  --swimcheck --chunks fixture:lake
+# boats (#302): float, plane, top speed, turn, beach, gamey, parked drift and sleep, boarding from the water
+src/Player/Boat          quick  --boatcheck jetski --chunks fixture:lake
+src/Player/Boat          quick  --boatcheck speedboat --chunks fixture:lake
+src/Player/FootPlayer.Bo quick  --boatcheck jetski --chunks fixture:lake
+src/Player/FootPlayer.Bo quick  --boatcheck speedboat --chunks fixture:lake
+src/Vehicles/VehicleBody quick  --boatcheck speedboat --chunks fixture:lake
+src/Avatar/BoatMesh      quick  --boatcheck jetski --chunks fixture:lake
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
@@ -122,6 +129,9 @@ src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
 src/Player/SwimNet       net    tools/swimnetcheck.sh
 src/Avatar/HumanMeshBuilder.Sw net tools/swimnetcheck.sh
+src/Player/Boat          net    tools/boatnetcheck.sh
+src/Player/FootPlayer.Bo net    tools/boatnetcheck.sh
+src/Vehicles/VehicleBody net    tools/boatnetcheck.sh
 
 src/BattleRoyale/        full   tools/brcheck.sh
 src/Combat/              full   tools/pvpcheck.sh
