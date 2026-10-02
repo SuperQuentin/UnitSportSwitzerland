@@ -13,7 +13,8 @@ reason (numbers), the traps and the exact migration steps; read only the ones yo
   checks use fixture courses (`--chunks fixture:<course>`), never a required real map. → `test-systems-optin`
 - **Nothing allocated per frame** (LINQ, `new` collections, string building, `"literal"` → `StringName`,
   new ray queries, shader params / label text written without a change). → `perf-no-per-frame-allocations`
-- **Saves**: every persisted JSON file through `JsonStore.Save` (atomic). → `json-store`
+- **Saves**: every persisted JSON file through `JsonStore.Save` (atomic); saves a player triggers while
+  playing through `JsonStore.SaveAsync` (background writer, flushed on quit). → `json-store`, `perf-saves-background`
 - **Visibility**: player synchronizers update visibility on change only; any change to what a peer may see
   calls `UpdateVisibility`. → `perf-visibility-on-change`
 

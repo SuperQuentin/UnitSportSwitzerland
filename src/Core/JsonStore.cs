@@ -17,21 +17,16 @@ public static class JsonStore
 
     /// <summary>Serializes <paramref name="value"/> (UTF-8, no BOM) to <paramref name="path"/>, an OS path or
     /// a <c>user://</c> one, creating its folder. <paramref name="options"/> null = compact, default naming.</summary>
-    public static void Save<T>(string path, T value, JsonSerializerOptions? options = null)
-    {
-        path = ProjectSettings.GlobalizePath(path);
-        string? dir = Path.GetDirectoryName(path);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-        // unique, so two saves of the same file at once (a worker thread and the main one) cannot collide
-        string tmp = $"{path}.{Guid.NewGuid():N}.part";
-        try
-        {
-            File.WriteAllText(tmp, JsonSerializer.Serialize(value, options));
-            File.Move(tmp, path, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(tmp)) File.Delete(tmp);
-        }
-    }
+    public static void Save<T>(string path, T value, JsonSerializerOptions? options = null) =>
+        SaveQueue.WriteAtomic(ProjectSettings.GlobalizePath(path), JsonSerializer.Serialize(value, options));
+
+    /// <summary>
+    /// Like <see cref="Save"/>, but only the serializing happens now (the snapshot: later changes to
+    /// <paramref name="value"/> are not in it); the file is written by <see cref="SaveQueue"/>'s
+    /// background writer, in order, last save per file wins, flushed on quit. For saves made while
+    /// playing (a plant, a claim, a deposit). Serializing errors throw here; write errors go to
+    /// <paramref name="onError"/>, on the writer thread.
+    /// </summary>
+    public static void SaveAsync<T>(string path, T value, JsonSerializerOptions? options = null, Action<Exception>? onError = null) =>
+        SaveQueue.Enqueue(ProjectSettings.GlobalizePath(path), JsonSerializer.Serialize(value, options), onError);
 }
