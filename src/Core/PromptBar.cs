@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Ui;
 
 namespace UnitSport.Core;
 
@@ -85,15 +86,8 @@ public partial class PromptBar : CanvasLayer
 
         // the key as a small keycap, so it reads as a key and not as part of the sentence
         var cap = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.08f, 0.09f, 0.11f, 0.82f),
-            BorderColor = new Color(0.98f, 0.72f, 0.10f, dim ? 0.45f : 0.9f),
-            ContentMarginLeft = 6, ContentMarginRight = 6, ContentMarginTop = 1, ContentMarginBottom = 1,
-        };
-        style.SetBorderWidthAll(1);
-        style.SetCornerRadiusAll(4);
-        cap.AddThemeStyleboxOverride("panel", style);
+        cap.AddThemeStyleboxOverride("panel", UiTheme.Flat(new Color(0.08f, 0.09f, 0.11f, 0.82f), 4, 6, 1,
+            new Color(UiTheme.Amber, dim ? 0.45f : 0.9f), 1));
         cap.AddChild(Outlined(InputHints.Label(action), dim ? 12 : 14, new Color(1f, 0.86f, 0.45f)));
         row.AddChild(cap);
         return row;

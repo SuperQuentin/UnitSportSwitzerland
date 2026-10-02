@@ -11,5 +11,5 @@ gets a collision exception and this body is moved 1.5 m/s away from it (coincide
 opposite directions by name); once the shapes no longer intersect the exception is removed and
 they are solid again. Walking into someone never starts it, only being set down on top of them.
 
-Check: dedicated server + two clients with the same `--at`; the server's `[server] player ... at`
+Check: dedicated server (`--player-status`) + two clients with the same `--at`; the server's `[server] player ... at`
 lines end ~0.65-1.35 m apart and stay there, clients log `[spawn] ... easing apart`.

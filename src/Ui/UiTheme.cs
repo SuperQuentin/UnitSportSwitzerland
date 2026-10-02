@@ -77,6 +77,36 @@ public static class UiTheme
         return s;
     }
 
+    /// <summary>A panel's title: amber, <paramref name="fontSize"/> px (0: the inherited size).</summary>
+    public static Label Title(string text, int fontSize = FontHeading)
+    {
+        var l = new Label { Text = text };
+        if (fontSize > 0) l.AddThemeFontSizeOverride("font_size", fontSize);
+        l.AddThemeColorOverride("font_color", Amber);
+        return l;
+    }
+
+    /// <summary>
+    /// The floating "press E to …" line of a HUD: 18 px, black outline, centred <paramref name="aboveBottom"/>
+    /// px from the bottom of the screen (negative), hidden until set.
+    /// </summary>
+    public static Label Prompt(float aboveBottom)
+    {
+        var l = new Label
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Visible = false,
+        };
+        l.AddThemeFontSizeOverride("font_size", 18);
+        l.AddThemeColorOverride("font_outline_color", Colors.Black);
+        l.AddThemeConstantOverride("outline_size", 6);
+        l.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
+        l.Position = new Vector2(-150, aboveBottom);
+        l.Size = new Vector2(300, 30);
+        return l;
+    }
+
     public static Theme Get()
     {
         if (_theme != null) return _theme;

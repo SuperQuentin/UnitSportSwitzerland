@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Ui;
 
 namespace UnitSport.Gpx;
 
@@ -119,8 +120,7 @@ public partial class PlaybackHud : CanvasLayer
         var top = new HBoxContainer();
         rows.AddChild(top);
 
-        _title = new Label { Text = "no track" };
-        _title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
+        _title = UiTheme.Title("no track", 0);
         top.AddChild(_title);
 
         top.AddChild(new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
@@ -286,13 +286,8 @@ public partial class PlaybackHud : CanvasLayer
         finishRows.AddThemeConstantOverride("separation", 8);
         _finishPanel.AddChild(finishRows);
 
-        _finishLabel = new Label
-        {
-            Text = "Finished",
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
-        _finishLabel.AddThemeFontSizeOverride("font_size", 20);
-        _finishLabel.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
+        _finishLabel = UiTheme.Title("Finished", 20);
+        _finishLabel.HorizontalAlignment = HorizontalAlignment.Center;
         finishRows.AddChild(_finishLabel);
 
         var finishButtons = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
@@ -329,17 +324,7 @@ public partial class PlaybackHud : CanvasLayer
         _toggleButton.Modulate = new Color(1, 1, 1, visible ? 0.75f : 0.35f);
     }
 
-    private static StyleBoxFlat Panel()
-    {
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.06f, 0.07f, 0.09f, 0.82f),
-            ContentMarginLeft = 12, ContentMarginRight = 12,
-            ContentMarginTop = 8, ContentMarginBottom = 8,
-        };
-        style.SetCornerRadiusAll(4);
-        return style;
-    }
+    private static StyleBoxFlat Panel() => UiTheme.Flat(new Color(0.06f, 0.07f, 0.09f, 0.82f), 4, 12, 8);
 
     private static Button Button(string text, Action pressed)
     {
@@ -465,9 +450,7 @@ public partial class PlaybackHud : CanvasLayer
             return;
         }
 
-        var header = new Label { Text = $"Race — {_race.Runners.Count} runner(s)" };
-        header.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
-        _board.AddChild(header);
+        _board.AddChild(UiTheme.Title($"Race — {_race.Runners.Count} runner(s)", 0));
 
         var ordered = _race.Standings.ToList();
         double leadDistance = ordered[0].Distance;
