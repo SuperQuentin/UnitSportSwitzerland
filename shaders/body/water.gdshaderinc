@@ -89,10 +89,11 @@ void fragment() {
     col = mix(col, glint_color, crest * sparkle * 0.55);
 
 #ifdef STYLE_LIT
-    // the two wave trains' slopes as a normal, so the sun catches the ripples
+    // the two wave trains' slopes as a normal, so the sun catches the ripples, on top of the
+    // physical waves' own normal (#299; straight up on still water, as before)
     float dx = cos(ground.x * 0.35 + t) * 0.35 * 0.5;
     float dz = -sin(ground.y * 0.27 - t * 0.8) * 0.27 * 0.5;
-    vec3 ripple = normalize(vec3(-dx * 0.6, 1.0, -dz * 0.6));
+    vec3 ripple = normalize(wave_normal + vec3(-dx * 0.6, 0.0, -dz * 0.6));
     NORMAL = style_view_normal(VIEW_MATRIX, ripple);
 #ifdef STYLE_REAL
     // dark and glossy: the sky's reflection and the sun's glint do the rest
