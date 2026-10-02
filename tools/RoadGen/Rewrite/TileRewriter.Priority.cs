@@ -52,21 +52,6 @@ public static partial class TileRewriter
         return Ok(a) && Ok(b);
     }
 
-    private static PriorityResult PlanPriority(RoadGenResult result)
-    {
-        var r = new PriorityResult();
-        foreach (var junction in result.Junctions)
-        {
-            var plan = PriorityPlanner.Decide(junction, result.Network, InfoOf);
-            r.Plans.Add((junction, plan));
-            foreach (var arm in plan.Arms)
-                if (arm.Role == PriorityPlanner.Role.Yield && arm.Approach)
-                    r.Yield[arm.LinkId] = r.FlagsOf(arm.LinkId)
-                        | (arm.End == LinkEnd.Start ? RoadAttrFlags.YieldAtStart : RoadAttrFlags.YieldAtEnd);
-        }
-        return r;
-    }
-
     private static void EmitPriority(PriorityResult priority, RoadGenResult result, HashSet<TileId> block,
         HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
         Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadPointProp>> props,

@@ -29,7 +29,8 @@ public static class PriorityPlanner
     /// <summary>What the planner needs to know about a link; null for links that are not roads (rails).</summary>
     public readonly record struct LinkInfo(RoadClass Class, RoadSurface Surface, RoadFlags Flags, RoadAttributes Attributes, float Width);
 
-    public enum Kind : byte { NotRoad, HighSpeed, Minor, RightBeforeLeft, Unresolved, Main, Roundabout }
+    /// <summary><see cref="Signal"/>: traffic lights (#348); the main road and the yielding arms are still chosen, for the signs that rule when the lights are off.</summary>
+    public enum Kind : byte { NotRoad, HighSpeed, Minor, RightBeforeLeft, Unresolved, Main, Roundabout, Signal }
 
     public enum Role : byte { None, Main, Yield }
 
@@ -103,7 +104,48 @@ public static class PriorityPlanner
         return al.PointAt(0).DistanceTo(mouth) <= al.PointAt(al.Length).DistanceTo(mouth) ? LinkEnd.Start : LinkEnd.End;
     }
 
-    public static Plan Decide(Junction j, RoadNetwork net, Func<RoadLink, LinkInfo?> infoOf)
+    /// <summary>
+    /// UrbanField density from which a crossing of two main roads gets traffic lights when no
+    /// data says where they are (#348): a dense core, stricter than a town's 0.4 (tuned on Sion
+    /// and Geneva, docs/notes/tools/traffic-signals.md).
+    /// </summary>
+    public const double SignalDensity = 0.6;
+
+    /// <summary>
+    /// Whether a junction gets traffic lights by inference (#348): at least four car arms, at
+    /// grade, paved, no roundabout or motorway class, and two roads crossing that are both
+    /// priority roads (each a pair of about opposite arms that may carry 3.03), in a dense core.
+    /// </summary>
+    public static bool InferSignal(Junction j, RoadNetwork net, Func<RoadLink, LinkInfo?> infoOf, double density)
+    {
+        if (density < SignalDensity) return false;
+        var car = new List<(JunctionArm Arm, LinkInfo Info)>();
+        foreach (var arm in j.Arms)
+        {
+            if (infoOf(net.Links[arm.LinkId]) is not { } info || !IsCarRoad(info.Class) || (info.Flags & RoadFlags.Stairs) != 0) continue;
+            if (info.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Ramp || info.Attributes.Has(RoadAttrFlags.Roundabout)
+                || info.Surface != RoadSurface.Paved || (info.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) return false;
+            car.Add((arm, info));
+        }
+        if (car.Count < 4) return false;
+        int roads = 0;
+        var used = new bool[car.Count];
+        for (int a = 0; a < car.Count; a++)
+        {
+            if (used[a] || !IsPriorityRoad(car[a].Info)) continue;
+            for (int b = a + 1; b < car.Count; b++)
+            {
+                if (used[b] || !IsPriorityRoad(car[b].Info)) continue;
+                if (-Math.Cos(car[a].Arm.OutwardHeading - car[b].Arm.OutwardHeading) < Math.Cos(40 * Math.PI / 180)) continue;
+                used[a] = used[b] = true;
+                roads++;
+                break;
+            }
+        }
+        return roads >= 2;
+    }
+
+    public static Plan Decide(Junction j, RoadNetwork net, Func<RoadLink, LinkInfo?> infoOf, bool signal = false)
     {
         var plan = new Plan();
         int n = j.Arms.Count;
@@ -158,10 +200,11 @@ public static class PriorityPlanner
             int lower = best.Item1;
             bool strict = car.All(i => i == bestA || i == bestB || Rank(infos[i]!.Value) < lower);
             bool priority = IsPriorityRoad(infos[bestA]!.Value) && IsPriorityRoad(infos[bestB]!.Value);
-            if (!priority) { plan.Kind = Kind.RightBeforeLeft; Finish(); return plan; }
-            if (!strict) { plan.Kind = Kind.Unresolved; Finish(); return plan; }
+            // with lights the best pair is the main road for the signs even on equal ranks (#348)
+            if (!signal && !priority) { plan.Kind = Kind.RightBeforeLeft; Finish(); return plan; }
+            if (!signal && !strict) { plan.Kind = Kind.Unresolved; Finish(); return plan; }
 
-            plan.Kind = Kind.Main;
+            plan.Kind = signal ? Kind.Signal : Kind.Main;
             foreach (int i in car) roles[i] = i == bestA || i == bestB ? Role.Main : Role.Yield;
         }
         Finish();
@@ -189,7 +232,8 @@ public static class PriorityPlanner
             var centre = j.Centre + u * baseAt;
             double h = arm.HalfWidth;
 
-            if (info.Surface == RoadSurface.Paved)   // SSV Art. 75 al. 4: not on roads without a hard surface
+            // SSV Art. 75 al. 4: not on roads without a hard surface; a signalised arm has a stop line instead (#348)
+            if (info.Surface == RoadSurface.Paved && plan.Kind != Kind.Signal)
             {
                 bool all = info.Attributes.OneWay != 0;   // a one-way approach: every lane approaches
                 double from = all ? -h + TeethMargin : TeethMargin, to = h - TeethMargin;
@@ -210,7 +254,7 @@ public static class PriorityPlanner
 
         // 3.03 on the main road: inside localities just before the junction, outside just after
         // (SSV Art. 37 al. 2); left out where only 3 m lanes join ("kann weggelassen werden")
-        if (plan.Kind == Kind.Main && !smallSideRoadsOnly)
+        if (plan.Kind is Kind.Main or Kind.Signal && !smallSideRoadsOnly)
         {
             foreach (int i in main)
             {
@@ -235,7 +279,8 @@ public static class PriorityPlanner
         return plan;
     }
 
-    private static bool Leaves(LinkInfo info, LinkEnd end) =>
+    /// <summary>Whether traffic may leave the junction along an arm (not a one-way road in).</summary>
+    public static bool Leaves(LinkInfo info, LinkEnd end) =>
         end == LinkEnd.Start ? info.Attributes.OneWay >= 0 : info.Attributes.OneWay <= 0;
 
     /// <summary>The whole teeth that fit between two points, centred: the row as stored starts on a tooth.</summary>
@@ -523,7 +568,7 @@ public static class PriorityPlanner
             string Pct(int v) => all == 0 ? "-" : (100.0 * v / all).ToString("F1", c) + "%";
             var sb = new System.Text.StringBuilder();
             sb.Append(c, $"    junctions (#121) {all:N0}: main road {Kinds[(int)Kind.Main]:N0} ({Pct(Kinds[(int)Kind.Main])}), ");
-            sb.Append(c, $"with a yielding road {MainWithSideRoad:N0}, roundabout {Kinds[(int)Kind.Roundabout]:N0}, right-before-left {Kinds[(int)Kind.RightBeforeLeft]:N0}, ");
+            sb.Append(c, $"with a yielding road {MainWithSideRoad:N0}, traffic lights {Kinds[(int)Kind.Signal]:N0}, roundabout {Kinds[(int)Kind.Roundabout]:N0}, right-before-left {Kinds[(int)Kind.RightBeforeLeft]:N0}, ");
             sb.Append(c, $"equal ranks {Kinds[(int)Kind.Unresolved]:N0}, motorway/ramp {Kinds[(int)Kind.HighSpeed]:N0}, ");
             sb.Append(c, $"one car road {Kinds[(int)Kind.Minor]:N0}, no road {Kinds[(int)Kind.NotRoad]:N0}\n");
             sb.Append(c, $"      yielding arms {YieldingArms:N0} (+{YieldNoApproach:N0} one-way away), Wartelinien {TeethRows:N0} ({Teeth:N0} teeth), unpaved no teeth {NoTeethUnpaved:N0}, main centre lines {CentreLines:N0} and {Guides:N0} edge guide lines, near ends joined {NearEndsJoined:N0}\n");
