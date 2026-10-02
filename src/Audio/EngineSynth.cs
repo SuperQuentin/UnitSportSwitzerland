@@ -198,7 +198,8 @@ public partial class EngineSynth : Node3D
         }
         else
         {
-            _player = new AudioStreamPlayer { Stream = gen, Bus = SfxBus.Name };
+            // non-positional is always the local body's own machine: the Player bus, inside the cabin glass
+            _player = new AudioStreamPlayer { Stream = gen, Bus = SfxBus.Player };
             AddChild(_player);
             _player.Play();
             _playback = (AudioStreamGeneratorPlayback)_player.GetStreamPlayback();
@@ -402,13 +403,24 @@ public partial class EngineSynth : Node3D
 }
 
 /// <summary>
-/// The "Sfx" audio bus every game sound is routed through, with a reverb on it whose settings
-/// <see cref="ReverbZones"/> eases toward the surroundings. Created in code at boot so the
-/// project needs no bus layout resource.
+/// The mix (#375), created in code at boot so the project needs no bus layout resource:
+/// <code>
+/// Master  [hard limiter, -1 dB ceiling]
+///  |- Sfx     the world: other bodies, vehicles, ambience, impacts   [cabin low-pass, reverb]
+///  |- Player  this body: own steps, landings, own engine and foley  [reverb, drier]
+///  '- Music   radios, car stereos, live stations                     [reverb, drier]
+/// </code>
+/// <see cref="ReverbZones"/> eases the three reverbs toward the room the ears are in;
+/// <see cref="Ears.Shut"/> closes the cabin filter over the world when sitting in a car, so the
+/// street goes dull behind the glass while one's own engine and stereo stay clear. The Player
+/// bus is the Sfx slider too.
 /// </summary>
 public static class SfxBus
 {
     public const string Name = "Sfx";
+
+    /// <summary>The local body's own sounds (#375): never behind the cabin glass, less room on them.</summary>
+    public const string Player = "Player";
 
     /// <summary>
     /// The music bus (#261): radios, car stereos, live stations. Its own slider in Settings, and its
@@ -423,6 +435,12 @@ public static class SfxBus
     /// <summary>The music bus's reverb, or null before <see cref="Ensure"/>.</summary>
     public static AudioEffectReverb? MusicReverb { get; private set; }
 
+    /// <summary>The player bus's reverb, or null before <see cref="Ensure"/>.</summary>
+    public static AudioEffectReverb? PlayerReverb { get; private set; }
+
+    /// <summary>The world bus's cabin low-pass (20 kHz open), or null before <see cref="Ensure"/>.</summary>
+    public static AudioEffectLowPassFilter? Cabin { get; private set; }
+
     /// <summary>
     /// A volume slider position as decibels. Hearing is logarithmic: a LINEAR 5 % is only -26 dB,
     /// which still fills a room — that is why "even at 5 % it is too loud". Square law (40·log10)
@@ -434,64 +452,88 @@ public static class SfxBus
     public static float SliderGain(float v) => v * v;
 
     /// <summary>
-    /// The one place volume is applied: Master for everything, Sfx for the effects and ambience
-    /// routed through it. Per-sound code no longer multiplies by the settings, so nothing can
-    /// escape the slider or be scaled twice.
+    /// The one place volume is applied: Master for everything, Sfx (and Player) for the effects and
+    /// ambience routed through them. Per-sound code no longer multiplies by the settings, so
+    /// nothing can escape the slider or be scaled twice.
     /// </summary>
     public static void ApplyVolumes()
     {
         var s = Core.GameSettings.Current;
         AudioServer.SetBusVolumeDb(0, SliderDb(s.MasterVolume));
         AudioServer.SetBusMute(0, s.MasterVolume <= 0.001f);
-        int idx = AudioServer.GetBusIndex(Name);
-        if (idx >= 0)
+        foreach (var (bus, v) in new[] { (Name, s.SfxVolume), (Player, s.SfxVolume), (Music, s.MusicVolume) })
         {
-            AudioServer.SetBusVolumeDb(idx, SliderDb(s.SfxVolume));
-            AudioServer.SetBusMute(idx, s.SfxVolume <= 0.001f);
-        }
-        int music = AudioServer.GetBusIndex(Music);
-        if (music >= 0)
-        {
-            AudioServer.SetBusVolumeDb(music, SliderDb(s.MusicVolume));
-            AudioServer.SetBusMute(music, s.MusicVolume <= 0.001f);
+            int idx = AudioServer.GetBusIndex(bus);
+            if (idx < 0) continue;
+            AudioServer.SetBusVolumeDb(idx, SliderDb(v) + (bus == Name ? _cabinDb : 0f));
+            AudioServer.SetBusMute(idx, v <= 0.001f);
         }
     }
 
     private static bool _subscribed;
+    private static float _cabinHz = 20000f, _cabinDb;
 
-    /// <summary>Creates the bus once (idempotent). Call before creating any player.</summary>
+    /// <summary>Creates the buses once (idempotent). Call before creating any player.</summary>
     public static void Ensure()
     {
-        int idx = AudioServer.GetBusIndex(Name);
-        if (idx < 0)
-        {
-            AudioServer.AddBus();
-            idx = AudioServer.BusCount - 1;
-            AudioServer.SetBusName(idx, Name);
-            AudioServer.SetBusSend(idx, "Master");
-            AudioServer.AddBusEffect(idx, new AudioEffectReverb
-            {
-                RoomSize = 0.3f, Damping = 0.5f, Wet = 0f, Dry = 1f, Spread = 1f, Hipass = 0.1f,
-            });
-        }
-        for (int e = 0; e < AudioServer.GetBusEffectCount(idx); e++)
-            if (AudioServer.GetBusEffect(idx, e) is AudioEffectReverb r) Reverb = r;
+        // the master only catches peaks: a stack of engines, a boom and a radio must not clip
+        if (Find<AudioEffectHardLimiter>(0) == null)
+            AudioServer.AddBusEffect(0, new AudioEffectHardLimiter { CeilingDb = -1f, PreGainDb = 0f, Release = 0.1f });
 
-        int music = AudioServer.GetBusIndex(Music);
-        if (music < 0)
-        {
-            AudioServer.AddBus();
-            music = AudioServer.BusCount - 1;
-            AudioServer.SetBusName(music, Music);
-            AudioServer.SetBusSend(music, "Master");
-            AudioServer.AddBusEffect(music, new AudioEffectReverb
-            {
-                RoomSize = 0.3f, Damping = 0.5f, Wet = 0f, Dry = 1f, Spread = 1f, Hipass = 0.15f,
-            });
-        }
-        for (int e = 0; e < AudioServer.GetBusEffectCount(music); e++)
-            if (AudioServer.GetBusEffect(music, e) is AudioEffectReverb r) MusicReverb = r;
+        int sfx = Bus(Name);
+        if (Find<AudioEffectLowPassFilter>(sfx) == null)
+            AudioServer.AddBusEffect(sfx, new AudioEffectLowPassFilter { CutoffHz = 20000f, Resonance = 0.5f }, 0);
+        Cabin = Find<AudioEffectLowPassFilter>(sfx);
+        Reverb = Find<AudioEffectReverb>(sfx) ?? AddReverb(sfx, 0.1f);
+        PlayerReverb = Find<AudioEffectReverb>(Bus(Player)) ?? AddReverb(Bus(Player), 0.12f);
+        MusicReverb = Find<AudioEffectReverb>(Bus(Music)) ?? AddReverb(Bus(Music), 0.15f);
+        // the filter costs nothing while it is off
+        AudioServer.SetBusEffectEnabled(sfx, 0, _cabinHz < 19000f);
         ApplyVolumes();
         if (!_subscribed) { _subscribed = true; Core.GameSettings.Changed += ApplyVolumes; }
+    }
+
+    /// <summary>
+    /// How far shut in a cabin the ears are (0 open .. 1 closed car): the world loses its highs and
+    /// ~8 dB, the Player and Music buses do not. Cheap to call every frame: it writes only on change.
+    /// </summary>
+    public static void SetCabin(float shut)
+    {
+        if (Cabin == null) return;
+        // log-space sweep from open air to the ~1.4 kHz of a closed car
+        float hz = shut <= 0.001f ? 20000f : Mathf.Exp(Mathf.Lerp(Mathf.Log(20000f), Mathf.Log(1400f), shut));
+        float db = -8f * shut;
+        if (Mathf.Abs(hz - _cabinHz) < 20f && Mathf.Abs(db - _cabinDb) < 0.05f) return;
+        _cabinHz = hz; _cabinDb = db;
+        Cabin.CutoffHz = hz;
+        int sfx = AudioServer.GetBusIndex(Name);
+        if (sfx < 0) return;
+        AudioServer.SetBusEffectEnabled(sfx, 0, hz < 19000f);
+        AudioServer.SetBusVolumeDb(sfx, SliderDb(Core.GameSettings.Current.SfxVolume) + db);
+    }
+
+    private static int Bus(string name)
+    {
+        int idx = AudioServer.GetBusIndex(name);
+        if (idx >= 0) return idx;
+        AudioServer.AddBus();
+        idx = AudioServer.BusCount - 1;
+        AudioServer.SetBusName(idx, name);
+        AudioServer.SetBusSend(idx, "Master");
+        return idx;
+    }
+
+    private static AudioEffectReverb AddReverb(int bus, float hipass)
+    {
+        var r = new AudioEffectReverb { RoomSize = 0.2f, Damping = 0.7f, Wet = 0f, Dry = 1f, Spread = 1f, Hipass = hipass };
+        AudioServer.AddBusEffect(bus, r);
+        return r;
+    }
+
+    private static T? Find<T>(int bus) where T : AudioEffect
+    {
+        for (int e = 0; e < AudioServer.GetBusEffectCount(bus); e++)
+            if (AudioServer.GetBusEffect(bus, e) is T t) return t;
+        return null;
     }
 }

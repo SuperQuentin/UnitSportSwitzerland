@@ -1230,6 +1230,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         if (!IsMultiplayerAuthority())
             GD.Print($"[net] player {Name} came into view at {GlobalPosition.Round()} ({Global})");
+        // someone else walking past is heard, from their feet (#375)
+        if (!IsMultiplayerAuthority() && DisplayServer.GetName() != "headless") AddChild(new Audio.BodySteps(this));
 
         RefreshVisual();
 

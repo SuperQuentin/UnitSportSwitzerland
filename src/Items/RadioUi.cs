@@ -360,6 +360,29 @@ public partial class RadioUi : CanvasLayer
         Rebuild();
         UpdateNow();
         FocusCurrent();
+        _mouseMoved = false;
+    }
+
+    /// <summary>
+    /// Whether the mouse moved since the panel opened. Until it does, a left click is the Use key
+    /// again and closes the panel: the cursor comes back in the middle of the screen, right on the
+    /// first CD of the list, and that click used to pick it (the chess type beat, #375).
+    /// </summary>
+    private bool _mouseMoved;
+
+    public override void _Input(InputEvent e)
+    {
+        if (!IsOpen) return;
+        if (e is InputEventMouseMotion motion)
+        {
+            if (motion.Relative.LengthSquared() > 4f) _mouseMoved = true;
+            return;
+        }
+        if (!_mouseMoved && _target == Target.Held && e is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true })
+        {
+            Close();
+            GetViewport().SetInputAsHandled();
+        }
     }
 
     public void Close()
@@ -423,6 +446,7 @@ public partial class RadioUi : CanvasLayer
 
     private void PlayCd(int id)
     {
+        GD.Print($"[radio] the {_target.ToString().ToLowerInvariant()} radio's panel plays CD {id}");
         if (Refuse() || CdLibrary.Instance?.Find(id) is not { } cd) return;
         var mode = Now().Mode;
         switch (_target)

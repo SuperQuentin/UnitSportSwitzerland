@@ -44,3 +44,5 @@
 - **Check:** `--churchstagecheck[,shot.png]` (`ChurchStageProbe`): a hand-made church, the beat
   burnt, played, five cuts, own camera back, everyone up and varied, disco on; stopped: parts,
   lights, shader and camera back in one frame; windowed, `_rest` vs `_stopped` pixel diff.
+- The speaker is made by `ChurchRadios.SpeakerAt(node, spot)`, its spot set before `AddChild`
+  (`docs/notes/audio/hearing.md`): it used to sound from the middle of the church (#375).
