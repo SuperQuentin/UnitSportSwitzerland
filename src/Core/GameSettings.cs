@@ -89,11 +89,10 @@ public sealed class GameSettings
     public double CommitBudgetMs { get; set; } = 4;
 
     /// <summary>
-    /// Viewport 3D scale, the biggest single fidelity/performance knob. The game lays out at a
-    /// fixed <see cref="BaseWidth"/>x<see cref="BaseHeight"/> (<c>stretch/mode = "viewport"</c>)
-    /// and the 3D is drawn at this fraction of it, so this IS the 3D render resolution; above 1
-    /// it supersamples. The UI is untouched, which is why resolution is not changed through the
-    /// root's content scale size: that would resize every HUD element with it.
+    /// Viewport 3D scale, the biggest single fidelity/performance knob: the 3D is drawn at this
+    /// fraction of the window's real pixels (<c>stretch/mode = "canvas_items"</c>), so 1 is native
+    /// and above 1 supersamples. The UI lays out at a fixed <see cref="BaseWidth"/>x<see cref="BaseHeight"/>
+    /// content scale and is untouched by it.
     /// </summary>
     public float RenderScale { get; set; } = 0.75f;
     public const int BaseWidth = 1152, BaseHeight = 648;

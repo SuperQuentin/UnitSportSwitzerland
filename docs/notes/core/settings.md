@@ -10,10 +10,10 @@
   vertices and a stride-1 one a million, so a count was sized for the wrong one), VSync, window
   mode (windowed / borderless / exclusive fullscreen; **F11 / Alt+Enter** toggle it from anywhere, in
   `Core/DisplaySettings._Input` so chat does not open on Alt+Enter, back to the last fullscreen kind) and window size, and **3D resolution** — a
-  dropdown of `Scaling3DScale` presets 25–200% shown as the pixels they produce (864x486 = the 75%
-  default). Resolution is deliberately NOT `Root.ContentScaleSize`: in `viewport` stretch mode the UI
-  lays out in that same viewport, so changing it would shrink the HUD at 1080p and balloon it at
-  360p. Window mode/size are only re-applied when those two settings change, or every unrelated
+  dropdown of `Scaling3DScale` presets 25–200% **of the window's real pixels** (100% = native,
+  `canvas_items` stretch since #306), labelled with the pixels they give in the window as it is
+  when the screen opens. Resolution is deliberately NOT `Root.ContentScaleSize`: the UI lays out
+  in that 1152x648 canvas, so changing it would shrink or balloon the HUD. Window mode/size are only re-applied when those two settings change, or every unrelated
   setting would snap a hand-resized window back. `DisplaySettings` belongs to the shell, so all of it
   holds on the title screen too.
 - **Tabs**: Video (window, size, 3D resolution, VSync, fog, speed lines), Audio (volumes, engine
