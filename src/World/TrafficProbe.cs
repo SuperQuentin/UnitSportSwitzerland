@@ -25,6 +25,8 @@ public partial class TrafficProbe : Node
     private int _wrongWay;
     /// <summary>Most cars giving way at a side road's Wartelinie at once (#121); reported, not judged.</summary>
     private int _givingWay;
+    /// <summary>Most cars waiting at a red light at once, and signalised approaches seen (#353).</summary>
+    private int _atRed, _signalApproaches;
     private readonly bool _crossing = CmdArgs.Has("--crossing");
     private Vector3 _at;
     private bool _spawned;
@@ -85,17 +87,22 @@ public partial class TrafficProbe : Node
         _maxSpeed = Math.Max(_maxSpeed, _traffic.AverageCarSpeed);
         _wrongWay = Math.Max(_wrongWay, _traffic.WrongWayCars);
         _givingWay = Math.Max(_givingWay, _traffic.GivingWayCars);
+        _atRed = Math.Max(_atRed, _traffic.AtRedCars);
+        _signalApproaches = Math.Max(_signalApproaches, _traffic.SignalApproaches);
         if ((int)(_t / 5) != (int)((_t - delta) / 5))
             GD.Print($"[trafficcheck] t={_t:F0}s cars {_traffic.CarCount} (avg {_traffic.AverageCarSpeed * 3.6f:F0} km/h), "
                 + $"trains {_traffic.TrainCount} (avg {_traffic.AverageTrainSpeed * 3.6f:F0} km/h), "
-                + $"one-way edges {_traffic.OneWayEdges}, cars against one-way {_traffic.WrongWayCars}, giving way {_traffic.GivingWayCars}");
+                + $"one-way edges {_traffic.OneWayEdges}, cars against one-way {_traffic.WrongWayCars}, giving way {_traffic.GivingWayCars}, "
+                + $"signalised approaches {_traffic.SignalApproaches}, at red {_traffic.AtRedCars}, stops at red {_traffic.RedStops}, lines crossed {_traffic.LinesCrossed}, red runs {_traffic.RedRuns}");
 
         if (_t < 40) return;
         if (_shot != null && GetViewport().GetTexture().GetImage().SavePng(_shot) == Error.Ok)
             GD.Print($"[trafficcheck] wrote {_shot}");
-        bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0;
-        GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way, up to {_givingWay} giving way)"
+        bool ok = _maxCars > 0 && _maxSpeed > 2f && _wrongWay == 0 && _traffic.RedRuns == 0;
+        GD.Print(ok ? $"[trafficcheck] RESULT: ok (peak {_maxCars} cars, {_maxTrains} trains, none against a one-way, up to {_givingWay} giving way, "
+                        + $"{_signalApproaches} signalised approaches, up to {_atRed} at red, {_traffic.RedStops} stops at red, {_traffic.LinesCrossed} stop lines crossed on green, no red run)"
                     : _wrongWay > 0 ? $"[trafficcheck] RESULT: FAILED — up to {_wrongWay} cars against a one-way"
+                    : _traffic.RedRuns > 0 ? $"[trafficcheck] RESULT: FAILED — {_traffic.RedRuns} cars crossed a stop line on red"
                     : "[trafficcheck] RESULT: FAILED — no moving traffic");
         GetTree().Quit(ok ? 0 : 1);
         SetProcess(false);
