@@ -99,7 +99,7 @@ if (photosOnly)
         return 2;
     }
     var manifestPath = Path.Combine(outDir, "manifest.json");
-    var region = tilesFile != null ? ReadTilesFile(tilesFile)
+    var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
         : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
         : new HashSet<TileId>();
     return await PhotoStage.Run(outDir, region, ioJobs, force);
