@@ -50,13 +50,18 @@ public partial class Pedestrians : Node
 
     public Pedestrians() : this(null!, null) { }
 
+    private bool _stub;
+
+    /// <summary>A swarm bot's (src/Net/Swarm): takes the snapshots, draws nothing, keeps nothing.</summary>
+    public static Pedestrians Stub() => new() { Name = NodeName, _stub = true };
+
     public bool Online => NetLink.Online(this);
     /// <summary>Keeps the records: the server, or a client playing offline.</summary>
     public bool Authority => _server || !Online;
 
     public override void _Ready()
     {
-        if (!_server) Instance = this;
+        if (!_server && !_stub) Instance = this;
     }
 
     public override void _ExitTree()
@@ -93,6 +98,7 @@ public partial class Pedestrians : Node
 
     public override void _Process(double delta)
     {
+        if (_stub) return;
         _clock += delta;
         if (!_server && Online) ClientProcess((float)delta);
         if (!Authority) { MovePuppets((float)delta); return; }
@@ -290,7 +296,7 @@ public partial class Pedestrians : Node
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
     private void Snapshot(byte[] data)
     {
-        if (!_server) ApplySnapshot(data);
+        if (!_server && !_stub) ApplySnapshot(data);
     }
 
     /// <summary>Client: the camera's yaw and turn rate, 4 times a second, for the server's view cone.</summary>
