@@ -356,7 +356,7 @@ public partial class FootPlayer
     public VehicleState? VehicleStateOfCopy()
     {
         if (Ride == RideKind.OnFoot || CarSetups.Ride(Ride, CarSetupId, TuningBits) is not { } vehicle) return null;
-        return new VehicleState(Ride, GlobalPosition, Rotation.Y, WorldVelocity, vehicle.MaxHealth, true, false, 0f, VehicleState.Now,
+        return new VehicleState(Ride, Global, Rotation.Y, WorldVelocity, vehicle.MaxHealth, true, false, 0f, VehicleState.Now,
             Tuning: TuningBits, DoorsOpen: DoorsOpen, Setup: CarSetupId, Train: TrailerCode,
             Angles: new Vector3(TrainPose.X, TrainPose.Y, TrainPose.Z));
     }

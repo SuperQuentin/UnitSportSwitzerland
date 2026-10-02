@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Player;
 
 namespace UnitSport.World;
@@ -267,6 +268,13 @@ public sealed class NpcArrival
         _lastYaw = me.Motion.Yaw;
         // a flick on the way in, 15-20 m short of the slot
         _flickAt = style == ArrivalStyle.Behind && variant == 1 ? _slotS - 17f : float.NaN;
+    }
+
+    /// <summary>The origin moved (#185): the lane follows it, and so does the spot checked clear for a turn.</summary>
+    public void OnOriginShifted(OriginShift shift, OriginFrame now)
+    {
+        Road.Follow(now);
+        _spotCentre = shift.Point(_spotCentre);
     }
 
     /// <summary>The grid is known: this slot, GO in <paramref name="countdown"/> s.</summary>

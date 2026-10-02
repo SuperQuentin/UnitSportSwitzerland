@@ -134,7 +134,8 @@ public partial class BirdNetProbe : ChatProbe
         // a shot into the air: everything resting within 150 m takes off, for B too. The first shot
         // flushed everything around: B waits for newly spawned birds to settle near A first.
         await Seconds(1.0);
-        Say(string.Create(CultureInfo.InvariantCulture, $"at {me.GlobalPosition.X:F0} {me.GlobalPosition.Z:F0}"));
+        // LV95: B's world space is not this one (every peer has its own origin, #185)
+        Say(string.Create(CultureInfo.InvariantCulture, $"at {me.Global.E:F0} {me.Global.N:F0}"));
         if (!await Heard("B", "flushready", 70)) { Fail("B not ready for the flush"); return; }
         me.LookPitch = 1.2f;
         await Seconds(0.3);
@@ -219,9 +220,13 @@ public partial class BirdNetProbe : ChatProbe
         // flush: resting birds near A (new ones, the first shot flushed the rest), then A's air shot
         Expect(await Heard("A", "at", 30), "A says where it stands");
         var at = (_heard.LastOrDefault(l => l.Contains("PN A at")) ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var shooter = at.Length >= 2 ? new Vector3(float.Parse(at[^2], CultureInfo.InvariantCulture), 0, float.Parse(at[^1], CultureInfo.InvariantCulture)) : me.GlobalPosition;
+        var shooter = at.Length >= 2
+            ? new Core.GlobalPos(double.Parse(at[^2], CultureInfo.InvariantCulture), double.Parse(at[^1], CultureInfo.InvariantCulture), 0)
+            : me.Global;
+        // in this client's world space now, whatever it was when A said it
+        Vector3 Shooter() => life.Origin.ToWorld(shooter);
         HashSet<int> Resting() => life.Birds.Where(b => b.State is Bird.Mode.Ground or Bird.Mode.Perched or Bird.Mode.Swimming
-            && new Vector2(b.Node.GlobalPosition.X - shooter.X, b.Node.GlobalPosition.Z - shooter.Z).Length() < 130f).Select(b => b.Id).ToHashSet();
+            && new Vector2(b.Node.GlobalPosition.X - Shooter().X, b.Node.GlobalPosition.Z - Shooter().Z).Length() < 130f).Select(b => b.Id).ToHashSet();
         await Until(() => Resting().Count >= 2, 50);
         var resting = Resting();
         GD.Print($"[birdnet B] {resting.Count} resting birds within 130 m of A before the flush");

@@ -40,6 +40,21 @@ public sealed class RaceCourse
     /// <summary>Air only: the height the grid is held at until GO.</summary>
     public readonly float GridAltitude;
 
+    /// <summary>The frame the gates are in (#185); the route keeps its own. Null: taken to be the first one <see cref="Follow"/> is given.</summary>
+    private OriginFrame? _frame;
+
+    /// <summary>Moves the course into <paramref name="now"/> (the origin moved, #185); a no-op once it is there.</summary>
+    public void Follow(OriginFrame now)
+    {
+        Route?.Follow(now);
+        if (_frame is { } was && !(was.E == now.E && was.N == now.N))
+        {
+            var shift = now.Since(was);
+            for (int i = 0; i < Gates.Length; i++) Gates[i] = shift.Point(Gates[i]);
+        }
+        _frame = now;
+    }
+
     private RaceCourse(bool air, RaceRoute? route, Vector3[] gates, float length, float gridAltitude)
     {
         Air = air;
@@ -51,16 +66,17 @@ public sealed class RaceCourse
 
     public static RaceCourse Ground(RaceRoute route, float length) => new(false, route, System.Array.Empty<Vector3>(), length, 0f);
 
-    public static RaceCourse Airborne(Vector3[] gates, float gridAltitude)
+    public static RaceCourse Airborne(Vector3[] gates, float gridAltitude, OriginFrame? frame = null)
     {
         float length = 0;
         for (int i = 1; i < gates.Length; i++) length += gates[i].DistanceTo(gates[i - 1]);
-        return new(true, null, gates, length, gridAltitude);
+        return new(true, null, gates, length, gridAltitude) { _frame = frame };
     }
 
-    /// <summary>The course a server sent (<c>Setup</c>): the same arrays either way.</summary>
-    public static RaceCourse FromWire(bool air, Vector3[] centre, float[] width, Vector3[] gates, float length, float gridAltitude) =>
-        air ? Airborne(gates, gridAltitude) : Ground(RaceRoute.FromPoints(centre, width), length);
+    /// <summary>The course a server sent (<c>Setup</c>), in the frame its points are in: the same arrays either way.</summary>
+    public static RaceCourse FromWire(bool air, Vector3[] centre, float[] width, Vector3[] gates, float length, float gridAltitude,
+        OriginFrame frame) =>
+        air ? Airborne(gates, gridAltitude, frame) : Ground(RaceRoute.FromPoints(centre, width, frame: frame), length);
 
     /// <summary>Checkpoints before the finish. Air: every gate but the last, which is the finish.</summary>
     public int Checkpoints => Air ? Gates.Length - 1 : Mathf.FloorToInt(Length / CheckpointEvery);
@@ -151,8 +167,9 @@ public sealed class RaceCourse
     /// terrain rises out of gliding reach.
     /// </para>
     /// </summary>
+    /// <param name="origin">The frame <paramref name="from"/> and <paramref name="to"/> are in, and the course will be.</param>
     public static async Task<(RaceCourse? Course, string Why)> BuildAirAsync(
-        IChunkSource source, WorldOrigin origin, Vector3 from, Vector3 to, RideKind kind)
+        IChunkSource source, OriginFrame origin, Vector3 from, Vector3 to, RideKind kind)
     {
         var dir = RaceRoute.Flat(to - from);
         float distance = Mathf.Min(dir.Length(), MaxAirDistance);
@@ -205,6 +222,6 @@ public sealed class RaceCourse
         }
         if (gates.Count < 2)
             return (null, glider ? "the terrain rises out of gliding reach that way — race downhill" : "that course is too short");
-        return (Airborne(gates.ToArray(), glider ? grid0 : gates[0].Y), "");
+        return (Airborne(gates.ToArray(), glider ? grid0 : gates[0].Y, origin), "");
     }
 }

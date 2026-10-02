@@ -50,9 +50,10 @@ public sealed class Crate
 /// roads, military crates, airdrops. The server owns the list and what is in each crate, and hands
 /// every stack out once to a living entrant standing at it; the crates last as long as the match.
 /// Clients draw them (snapped to their own terrain) and open them in the loot panel
-/// (<c>Loot.LootService.OpenCrate</c>). Docs: <c>docs/notes/br/loot.md</c>.
+/// (<c>Loot.LootService.OpenCrate</c>). Docs: <c>docs/notes/br/loot.md</c>. A container for the
+/// floating origin (#185): it stays at the identity and the shift moves its crates.
 /// </summary>
-public partial class BrCrates : Node3D
+public partial class BrCrates : Node3D, IOriginContainer
 {
     public const string NodeName = "BrCrates";
     /// <summary>"No altitude: on the ground there".</summary>
