@@ -30,6 +30,7 @@ public partial class Ears : Node3D, Core.IOriginShiftAware
     private readonly Func<FootPlayer?> _body;
     private AudioListener3D _listener = null!;
     private Basis _basis = Basis.Identity;
+    private Quaternion _rotation = Quaternion.Identity;
     private bool _placed;
 
     /// <summary>The ear point this frame (the camera's when there is no listener yet).</summary>
@@ -85,7 +86,11 @@ public partial class Ears : Node3D, Core.IOriginShiftAware
         else return;
 
         // ease the facing; a first frame or a teleport of the head takes it as it is
-        _basis = _placed ? _basis.Slerp(frame.Basis.Orthonormalized(), 1f - Mathf.Exp(-dt / TurnSeconds)) : frame.Basis.Orthonormalized();
+        // through normalised quaternions: a camera basis carries a hair of scale, and Basis.Slerp
+        // throws on anything not exactly a rotation
+        var want = frame.Basis.Orthonormalized().GetRotationQuaternion().Normalized();
+        _rotation = _placed ? _rotation.Slerp(want, 1f - Mathf.Exp(-dt / TurnSeconds)).Normalized() : want;
+        _basis = new Basis(_rotation);
         _placed = true;
         Frame = new Transform3D(_basis, frame.Origin);
         GlobalTransform = Frame;

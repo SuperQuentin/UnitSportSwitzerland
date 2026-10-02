@@ -12,7 +12,7 @@
     passenger): played from the dash (ears + (0, -0.3, -0.75)), clear, panning 0.35.
   - "own": a radio on the local body (held, on the back): where it hangs, clear, panning 0.45.
   - same space: 5 rays at 5 Hz, ears -> the source and 4 points 0.4 m around it; the share blocked
-    scales the loss (one pillar 1-2 rays, a wall all 5). Hits within 0.35 m of the target (its table,
+    scales the loss (one pillar 1-2 rays, a wall all 5); the path is named "wall"/"room" from 2 rays on. Hits within 0.35 m of the target (its table,
     the ground under it) or 0.3 m of the ears, players, and the source's own collider do not count.
     Outdoors fully blocked = -10 dB / 700 Hz ("wall"); both inside one interior = at most -4 dB /
     2.4 kHz ("room": the room's reflections fill in; this is what made a church radio muffled

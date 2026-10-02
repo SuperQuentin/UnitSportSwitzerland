@@ -71,6 +71,9 @@ public partial class RadioSpeaker : AudioStreamPlayer3D
     /// <summary>The path the sound takes to this machine's ear: "open", "wall", "door", "walls". For the probes.</summary>
     public string HeardThrough => _hearing.Path;
 
+    /// <summary>The share of the occlusion rays blocked, 0..1. For the probes.</summary>
+    public float HeardBlocked => _hearing.Blocked;
+
     public override void _Ready()
     {
         SfxBus.Ensure();

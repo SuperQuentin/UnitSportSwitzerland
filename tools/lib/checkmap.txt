@@ -14,6 +14,8 @@
 
 src/Net/                 quick  --interestcheck
 src/Audio/Cd/            quick  --beatcheck
+src/Audio/               quick  --earscheck --world fixture --view third
+src/Player/FootPlayer.Ears quick --earscheck --world fixture --view third
 src/Avatar/              quick  --meshcheck
 src/Avatar/              quick  --outfitcheck
 src/Avatar/              quick  --cockpitcheck

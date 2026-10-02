@@ -116,7 +116,8 @@ public sealed class Hearing
                     }
                     // inside one building the room fills in behind a pillar: never more than a dulling
                     bool room = srcIn && earIn;
-                    Path = _blocked > 0.01f ? room ? "room" : "wall" : "open";
+                    // one ray of five clipping a corner is a dulling, not a wall
+                    Path = _blocked >= 0.4f ? room ? "room" : "wall" : "open";
                     _wantDb = (room ? RoomDb : WallDb) * _blocked;
                     _wantCut = LogLerp(_clearCutoff, room ? RoomCutoff : WallCutoff, _blocked);
                 }
@@ -173,8 +174,8 @@ public sealed class Hearing
     private static readonly Godot.Collections.Array<Rid> OccluderExclude = new();
 
     /// <summary>
-    /// The share (0..1) of five rays, from the ears to the source and to four points 0.4 m around
-    /// it, that something solid stops: one slim pillar blocks one or two, a wall all five. A hit
+    /// The share (0..1) of five rays, from the ears to the source and to points 0.4-0.8 m around
+    /// it (four around it and one over the top), that something solid stops: one slim pillar blocks one or two, a wall all five. A hit
     /// near the source (the table a radio stands on, the car its stereo is in) or near the ears
     /// does not count, nor does a body or the source's own collider.
     /// </summary>
@@ -195,7 +196,8 @@ public sealed class Hearing
                 1 => source + side * 0.4f,
                 2 => source - side * 0.4f,
                 3 => source + up * 0.4f,
-                _ => source - up * 0.4f,
+                // over the top rather than under: under is the ground the source stands on
+                _ => source + up * 0.8f,
             };
             if (Stopped(space, source3D, listener, target)) blocked++;
         }

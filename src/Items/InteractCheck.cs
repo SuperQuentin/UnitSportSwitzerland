@@ -216,7 +216,7 @@ public partial class InteractCheck : Node
                 break;
             case 17 when InStep > 1.5:
                 var hidden = RadioManager.Instance?.Nearest(_farSide, 1.5f);
-                Check(hidden?.Speaker is { HeardThrough: "wall" }, $"a radio behind the car is heard through it ({hidden?.Speaker?.HeardThrough ?? "no speaker"})");
+                Check(hidden?.Speaker is { HeardThrough: "wall" }, $"a radio behind the car is heard through it ({hidden?.Speaker?.HeardThrough ?? "no speaker"}, {hidden?.Speaker?.HeardBlocked:0.0} blocked)");
                 Shoot("interact_hearing.png");
                 me.GlobalPosition = _farSide + ((_farSide - _car.GlobalPosition) with { Y = 0 }).Normalized() * 2.5f + Vector3.Up * 0.3f;
                 me.Velocity = Vector3.Zero;
@@ -228,7 +228,7 @@ public partial class InteractCheck : Node
                 break;
             case 19 when InStep > 1.5:
                 var clear = RadioManager.Instance?.Nearest(_farSide, 1.5f);
-                Check(clear?.Speaker is { HeardThrough: "open" }, $"walked round, it is heard in the open ({clear?.Speaker?.HeardThrough ?? "no speaker"})");
+                Check(clear?.Speaker is { HeardThrough: "open" }, $"walked round, it is heard in the open ({clear?.Speaker?.HeardThrough ?? "no speaker"}, {clear?.Speaker?.HeardBlocked:0.0} blocked)");
                 Finish(_failed ? string.Join("; ", _notes) : "all steps");
                 break;
         }

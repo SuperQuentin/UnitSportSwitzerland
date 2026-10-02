@@ -39,6 +39,8 @@ public partial class FootPlayer
         get
         {
             var owner = RidingWith != 0 ? Host : (Ride != RideKind.OnFoot ? this : null);
+            // a soft top down is the open air (known for one's own car; a host's copy has no ride object)
+            if (owner?.Vehicle is Car { RoofOpen: true }) return null;
             return owner != null && IsInstanceValid(owner) && ClosedCabin((RideKind)owner.RideKindId) ? owner : null;
         }
     }
