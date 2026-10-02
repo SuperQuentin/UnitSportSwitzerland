@@ -268,6 +268,7 @@ public class WaterTests
         }
         finally { CultureInfo.CurrentCulture = saved; }
     }
+}
 
 public class SeaStateArgsTests
 {
