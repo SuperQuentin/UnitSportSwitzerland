@@ -355,9 +355,9 @@ public partial class SettingsScreen : Screen
     }
 
     /// <summary>
-    /// 3D render scales of the window's real pixels, offered as the resolution they produce in the
-    /// window as it is when the screen opens. 100% is native; the low end is the PS1 look pushed
-    /// further; above 100% supersamples.
+    /// 3D render scales, offered as the resolution they produce in the window as it is when the
+    /// screen opens (<see cref="DisplaySettings.EffectiveScale"/>): 100% is native, or 1152x648 in
+    /// PS1; above 100% supersamples.
     /// </summary>
     private static readonly float[] RenderScales = { 0.25f, 0.35f, 0.5f, 0.625f, 0.75f, 0.875f, 1f, 1.25f, 1.5f, 2f };
 
@@ -368,8 +368,14 @@ public partial class SettingsScreen : Screen
         if (index < 0) { scales.Add(current); scales.Sort(); index = scales.IndexOf(current); }
         var window = GetTree().Root.Size;
         var labels = scales.Select(v =>
-            $"{Math.Round(window.X * v)} x {Math.Round(window.Y * v)}  ({v * 100:F0} %)").ToArray();
-        UiKit.OptionRow(into, name, labels, index, i => set(scales[i]), "100 % is the window's own resolution; lower is chunkier and faster");
+        {
+            float e = DisplaySettings.EffectiveScale(v, window);
+            return $"{Math.Round(window.X * e)} x {Math.Round(window.Y * e)}  ({v * 100:F0} %)";
+        }).ToArray();
+        string hint = Styles.StyleKit.Style == Styles.VisualStyle.Ps1
+            ? "PS1 keeps its low resolution on any screen; lower is chunkier"
+            : "100 % is the window's own resolution; lower is chunkier and faster";
+        UiKit.OptionRow(into, name, labels, index, i => set(scales[i]), hint);
     }
 
     /// <summary>Common window sizes that fit on the screen the window is on.</summary>

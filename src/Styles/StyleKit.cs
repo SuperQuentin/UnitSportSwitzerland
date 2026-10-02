@@ -79,6 +79,7 @@ public static class StyleKit
     {
         _session = style;
         Chosen?.Invoke();
+        ChoiceChanged?.Invoke();
     }
 
     /// <summary>
@@ -116,6 +117,12 @@ public static class StyleKit
 
     /// <summary>Raised by <see cref="Choose"/>: the client world restyles itself. Main thread.</summary>
     public static event System.Action? Chosen;
+
+    /// <summary>
+    /// Raised by <see cref="Choose"/> for what is not the world (the render scale, which is style
+    /// dependent): a listener on <see cref="Chosen"/> would make <see cref="HasWorld"/> true.
+    /// </summary>
+    public static event System.Action? ChoiceChanged;
 
     /// <summary>Whether a client world is listening for <see cref="Chosen"/>.</summary>
     public static bool HasWorld => Chosen != null;

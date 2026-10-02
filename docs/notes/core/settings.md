@@ -10,9 +10,13 @@
   vertices and a stride-1 one a million, so a count was sized for the wrong one), VSync, window
   mode (windowed / borderless / exclusive fullscreen; **F11 / Alt+Enter** toggle it from anywhere, in
   `Core/DisplaySettings._Input` so chat does not open on Alt+Enter, back to the last fullscreen kind) and window size, and **3D resolution** — a
-  dropdown of `Scaling3DScale` presets 25–200% **of the window's real pixels** (100% = native,
-  `canvas_items` stretch since #306), labelled with the pixels they give in the window as it is
-  when the screen opens. Resolution is deliberately NOT `Root.ContentScaleSize`: the UI lays out
+  dropdown of render scales 25–200% **of the window's real pixels** (100% = native,
+  `canvas_items` stretch since #306), **except in PS1**, where it is of the 1152x648 UI canvas so the
+  PS1 look stays as low-res on a 1440p monitor as on a laptop (75% = 864x486 at 16:9).
+  `DisplaySettings.EffectiveScale` turns the setting into `Scaling3DScale`, re-applied on a settings
+  change, a window resize and `/style` (`StyleKit.ChoiceChanged`: not `Chosen`, whose listeners
+  mean "a world exists"). The labels are the pixels they give in the window as it is when the
+  screen opens. Resolution is deliberately NOT `Root.ContentScaleSize`: the UI lays out
   in that 1152x648 canvas, so changing it would shrink or balloon the HUD. Window mode/size are only re-applied when those two settings change, or every unrelated
   setting would snap a hand-resized window back. `DisplaySettings` belongs to the shell, so all of it
   holds on the title screen too.
