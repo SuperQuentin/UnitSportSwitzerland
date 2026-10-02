@@ -255,6 +255,13 @@ public partial class RaceNpcs : Node
     /// <summary>No state from the simulator for this long: it is gone (ENet takes 5-30 s to notice a crash).</summary>
     public const double StaleSeconds = 1.2;
 
+    /// <summary>
+    /// A new simulator's first states take longer than a running one's next: taking the car over and
+    /// re-arming the pilot on a busy client. Judged at <see cref="StaleSeconds"/> from the handoff, both
+    /// NPCs were handed to B and retired again within the second (#159 loopback, B at 300 m).
+    /// </summary>
+    private const double HandoffGrace = 2.5;
+
     private const double ReviewPeriod = 0.25;
 
     private MultiplayerSpawner? _spawner;
@@ -335,7 +342,7 @@ public partial class RaceNpcs : Node
             // silent counts from the handoff too: the new simulator's first state takes a moment, and
             // judged by the old one's last state, a car just handed over was "silent" again a second
             // later and retired (seen in the #85 loopback check: both NPCs gone mid-race)
-            if (simNode == null || Now - System.Math.Max(npc.LastNetState, _live[id].Since) > StaleSeconds)
+            if (simNode == null || Now - System.Math.Max(npc.LastNetState, _live[id].Since + HandoffGrace) > StaleSeconds)
             {
                 HandOff(id, sim, simNode == null ? "its simulator left" : "its simulator stopped sending");
                 continue;
