@@ -284,10 +284,12 @@ public partial class BoatCheck : Node
             }
         }
         me.RideControls = Helm(me, 1f, hold: East);
-        for (int i = 0; i < 50 && !thrown; i++)
+        double until = Time.GetTicksMsec() / 1000.0 + 20.0;
+        while (!thrown && Time.GetTicksMsec() / 1000.0 < until)
         {
-            await Wait(0.4);
-            if (_shots && !airShot && me.BoatMotion.Airborne > 0.12f)
+            // watched every physics frame: a jump off a crest lasts a few tenths of a second
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            if (_shots && !airShot && me.Vehicle is Boat && me.BoatMotion.Airborne > 0.06f)
             {
                 airShot = true;
                 await Shot("airborne", () => Look(me, side: 1f, back: 0.2f, up: 0.08f, distance: 1.8f));
