@@ -120,14 +120,20 @@ public static class PriorityPlanner
     {
         if (density < SignalDensity) return false;
         var car = new List<(JunctionArm Arm, LinkInfo Info)>();
+        int ins = 0, outs = 0;
         foreach (var arm in j.Arms)
         {
             if (infoOf(net.Links[arm.LinkId]) is not { } info || !IsCarRoad(info.Class) || (info.Flags & RoadFlags.Stairs) != 0) continue;
             if (info.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Ramp || info.Attributes.Has(RoadAttrFlags.Roundabout)
                 || info.Surface != RoadSurface.Paved || (info.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) return false;
             car.Add((arm, info));
+            var end = EndAt(net, j, arm);
+            if (end == LinkEnd.End ? info.Attributes.OneWay >= 0 : info.Attributes.OneWay <= 0) ins++;
+            if (Leaves(info, end)) outs++;
         }
-        if (car.Count < 4) return false;
+        // four car arms, and traffic through them (not every arm a one-way road in, as where the
+        // carriageways of a divided road are cut into several nodes)
+        if (car.Count < 4 || ins < 2 || outs < 2) return false;
         int roads = 0;
         var used = new bool[car.Count];
         for (int a = 0; a < car.Count; a++)
@@ -542,6 +548,27 @@ public static class PriorityPlanner
             (V(20, -80), V(20, -2), Info(RoadClass.Minor)));
         Check(near.NearEndsJoined == 1 && nearPlans.Any(p => p.Kind == Kind.Main && p.Teeth.Count == 1),
             "a side road ending inside the main road's half width is joined and yields");
+
+        // traffic lights (#348): two 6 m roads crossing in a dense core, not in a town of 0.5, not two 4 m roads
+        var (cross, _) = Run((V(-80, 0), V(0, 0), Info(RoadClass.Road)), (V(0, 0), V(80, 0), Info(RoadClass.Road)),
+            (V(0, -80), V(0, 0), Info(RoadClass.Road)), (V(0, 0), V(0, 80), Info(RoadClass.Road)));
+        Check(cross.Junctions.Count == 1 && InferSignal(cross.Junctions[0], cross.Network, l => l.Tag as LinkInfo?, 0.7)
+            && !InferSignal(cross.Junctions[0], cross.Network, l => l.Tag as LinkInfo?, 0.5),
+            "crossroads of two 6 m roads: lights in a dense core only");
+        if (cross.Junctions.Count == 1)
+        {
+            var lit = Decide(cross.Junctions[0], cross.Network, l => l.Tag as LinkInfo?, signal: true);
+            Check(lit.Kind == Kind.Signal && lit.Teeth.Count == 0 && lit.Signs.Any(s => s.Type == PointPropType.YieldSign),
+                "signalised crossroads: no Wartelinie, the fallback signs kept");
+        }
+        var (minorCross, _) = Run((V(-80, 0), V(0, 0), Info(RoadClass.Minor)), (V(0, 0), V(80, 0), Info(RoadClass.Minor)),
+            (V(0, -80), V(0, 0), Info(RoadClass.Minor)), (V(0, 0), V(0, 80), Info(RoadClass.Minor)));
+        Check(minorCross.Junctions.Count == 1 && !InferSignal(minorCross.Junctions[0], minorCross.Network, l => l.Tag as LinkInfo?, 0.9),
+            "crossroads of two 4 m roads: no lights");
+        var (tee, _) = Run((V(-80, 0), V(0, 0), Info(RoadClass.Road)), (V(0, 0), V(80, 0), Info(RoadClass.Road)),
+            (V(0, -80), V(0, 0), Info(RoadClass.Road)));
+        Check(tee.Junctions.Count == 1 && !InferSignal(tee.Junctions[0], tee.Network, l => l.Tag as LinkInfo?, 0.9),
+            "a T of two 6 m roads keeps its yield treatment");
 
         log(ok ? "priority check passed" : "priority check FAILED");
         return ok;

@@ -22,15 +22,33 @@ public static partial class TileRewriter
     /// <summary>The stop line at traffic lights: 0.50 m (SSV 6.10; Kanton Bern Handbuch Markierung).</summary>
     private const float SignalStopLine = 0.5f;
 
+    /// <summary>
+    /// The stop line at traffic lights lies this far back from the junction's mouth: behind a red
+    /// bike crossing there (#120, about 2 m) with a metre to spare. #292 moves it back behind a
+    /// pedestrian crossing.
+    /// </summary>
+    private const double SignalStopSetback = 3.0;
+
+    /// <summary>
+    /// How much further out than its middle a skewed mouth reaches along the arm: a stop line
+    /// square to the road stands that much further back, so none of it lies in the junction (#348).
+    /// </summary>
+    private static double MouthSkew(Junction j, JunctionArm arm)
+    {
+        var u = Vec2.FromHeading(arm.OutwardHeading);
+        double mid = ((arm.Left + arm.Right) * 0.5 - j.Centre).Dot(u);
+        return Math.Max(0, Math.Max((arm.Left - j.Centre).Dot(u), (arm.Right - j.Centre).Dot(u)) - mid);
+    }
+
     public sealed class SignalStats
     {
-        public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
-        public readonly SortedDictionary<float, int> Cycles = new();
+        public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, RightPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
+        public readonly SortedDictionary<int, int> Cycles = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    traffic lights (#348): {Junctions:N0} junctions ({Inferred:N0} inferred, {FromData:N0} from data), {Arms:N0} arms, {Approaches:N0} approaches, " +
-            $"{LeftPockets:N0} with a left-turn pocket, {StopLines:N0} stop lines without one, {Groups:N0} signal groups, " +
-            $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}, invalid plans {Invalid:N0}\n");
+            $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, " +
+            $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}\n");
     }
 
     private static PriorityResult PlanPriority(RoadGenResult result, Func<Junction, bool> signal, SignalStats stats)
@@ -49,9 +67,9 @@ public static partial class TileRewriter
         return r;
     }
 
-    private static void EmitSignals(PriorityResult priority, RoadGenResult result, HashSet<(int Node, int Arm)> pockets,
+    private static void EmitSignals(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), (bool Left, bool Right)> pockets,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
-        Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, SignalStats stats)
+        Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, SignalStats stats)
     {
         var net = result.Network;
         foreach (var (junction, plan) in priority.Plans)
@@ -62,21 +80,23 @@ public static partial class TileRewriter
 
             var arms = new List<SignalArm>();
             var stops = new List<float>();
+            // 50 km/h inside a locality: the yellow lasts 3 s (#349)
+            bool urban = field.Density(junction.Centre.X, junction.Centre.Y) >= UrbanField.UrbanAt;
             for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
             {
                 var link = net.Links[plan.Arms[i].LinkId];
                 if (link.Tag is not Source source || InfoOf(link) is not { } info || !PriorityPlanner.IsCarRoad(info.Class)) continue;
                 var arm = junction.Arms[i];
                 bool approach = plan.Arms[i].Approach, leaves = PriorityPlanner.Leaves(info, plan.Arms[i].End);
-                bool pocket = pockets.Contains((junction.NodeId, i));
+                var (pocket, rightPocket) = pockets.GetValueOrDefault((junction.NodeId, i));
                 var u = Vec2.FromHeading(arm.OutwardHeading);
                 var right = u.Perp;   // the approaching driver's right (they drive along -u)
                 var mid = (arm.Left + arm.Right) * 0.5;
                 double half = arm.HalfWidth;
                 // the approach lanes: from the centre (a one-way road: its left edge) to the right
                 // edge, and on over the through lane a pocket moved out
-                double from = info.Attributes.OneWay != 0 ? -half : 0, to = half + (pocket ? TurnLane : 0);
-                var bar = mid + u * (SignalStopLine * 0.5 + 0.1);
+                double from = info.Attributes.OneWay != 0 ? -half : 0, to = half + (pocket ? TurnLane : 0) + (rightPocket ? TurnLane : 0);
+                var bar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + SignalStopLine * 0.5);
                 if (approach && !pocket && block.Contains(source.Tile))
                 {
                     Get(paint, source.Tile).Add(new RoadPaint
@@ -89,13 +109,13 @@ public static partial class TileRewriter
                 var stop = bar + right * ((from + to) * 0.5);
                 if (approach) stops.AddRange(Local(home, [stop], source.SampleHeight, 0f));
                 else stops.AddRange([float.NaN, float.NaN, float.NaN]);
-                bool urban = info.Attributes.Has(RoadAttrFlags.Urban);
-                arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, pocket, RightPocket: false, Pedestrians: true,
-                    BikeSignal: false, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(2 * half + (pocket ? TurnLane : 0)),
+                arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, pocket, rightPocket, Pedestrians: true,
+                    BikeSignal: false, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
                     Rank: (byte)Math.Clamp(PriorityPlanner.Rank(info) / 4, 1, 255)));
                 stats.Arms++;
                 if (approach) stats.Approaches++;
                 if (pocket) stats.LeftPockets++;
+                if (rightPocket) stats.RightPockets++;
             }
             if (arms.Count(a => a.In) < 2) continue;
 
@@ -111,7 +131,8 @@ public static partial class TileRewriter
             stats.Inferred++;
             stats.Groups += signalPlan.Groups.Count;
             if (!amber) stats.TwoLensPedestrian++;
-            stats.Cycles[signalPlan.Cycle] = stats.Cycles.GetValueOrDefault(signalPlan.Cycle) + 1;
+            int cycle = (int)MathF.Round(signalPlan.Cycle);
+            stats.Cycles[cycle] = stats.Cycles.GetValueOrDefault(cycle) + 1;
         }
     }
 
