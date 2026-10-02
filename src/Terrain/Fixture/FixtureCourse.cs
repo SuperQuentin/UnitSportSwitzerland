@@ -40,6 +40,12 @@ public sealed class FixtureCourse
     /// <summary>Ground cover per point; null: open grass everywhere.</summary>
     public Func<double, double, CoverClass>? Cover { get; init; }
 
+    /// <summary>Boat stops (#377): a name and where it lies, metres from the start; the source plans their piers.</summary>
+    public List<(string Name, double X, double Y)> Stops { get; } = new();
+
+    /// <summary>Harbour jetties (#377): a centreline, metres from the start, with the deck's height.</summary>
+    public List<List<(double X, double Y, double Z)>> Jetties { get; } = new();
+
     /// <summary>The box the course needs whatever its roads, metres from the start; null: the roads' box.</summary>
     public (double MinX, double MinY, double MaxX, double MaxY)? Extent { get; init; }
 

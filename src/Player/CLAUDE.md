@@ -33,6 +33,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `vehicles-sink` — Cars, motorbikes and trucks over their wading depth float, sink and are wrecked, the driver out swimming (#299); no blast under water; legacy 0.12 m lakes still drivable
 - `swimming` — Swimming, diving, the air reserve (#301): `FootPlayer.Swim.cs` on `WaterField`, riding the waves, look-steered under water, mantle out, water landings by drag, drowning via `Health`, air bar, `PoseSwim` replicated, items holstered, `StartSwimming` for boats, `--swimcheck`, `tools/swimnetcheck.sh`
 - `boats` — Boats (#302): `BoatModel` hull columns on `WaterField` (buoyancy, slam, hump and plane, jet/rudder, beaching), `Boat` rideable (RideKind 121 jetski, 122 speedboat), `FootPlayer.Boat.cs`, `VehicleBody.Boat.cs` (float, drift, sleep), remote copies on their own waves (`Heave`), thrown riders swim, steamer (#303) hooks, `--boatcheck`, `tools/boatnetcheck.sh`
+- `landings` (world) — The steamer lies alongside Nyon's pier (#377), its gangway open onto the head; getting out of a boat beside a jetty steps onto it (`FootPlayer.Pier.cs`)
 - `steamer` — The CGN paddle steamer (#303): RideKind 123, `BoatDrive.Paddle` (one shaft reversing through stop), telegraph/whistle/gangways, `SteamerMeshBuilder` decks (saloon, upper deck, stairs, plank), climbing aboard from the water, the Nyon berth (deep water only), `--steamercheck`, `tools/steamernetcheck.sh`
 
 ## Commands

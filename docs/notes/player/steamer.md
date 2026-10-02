@@ -54,16 +54,18 @@
   posed `Visual` (the trap from #302) and is `Posed` from its first `DrawBoat`; its gangways are its
   `DoorsOpen` (as a bus's). One placed by the dedicated server never moves (asleep): it sends its
   height over the still water (`Heave`) so clients draw it riding their own waves, level.
-- **At Nyon** (`World/SteamerBerth.cs`, on client offline and server): the CGN landing at 46.382049 N,
-  6.243945 E; when its tile loads, `FindBerth` is tried every 2 s for 30 s (the water layers arrive after
-  the tile: at once it found nothing on 30 m deep tiles) for the nearest spot (rings every 4 m to 400 m)
-  where the whole hull, every 5 m along and ±4.5 m across, has 0.6 m under its keel and 1.2 m of water
-  stands 8 m either side (checked only at its ends, it lay against the quay with its collision box on
-  the bank, 2 m out of the water), lying along the isobath; it places `veh_steamer_nyon` there. On the
-  lake-bed tiles (#298) it lies 184 m south-west of the landing along the quay (LV95 2507989/1137291,
-  3.3 m of water, the bathymetry by the pier is shallower than its draught) and floats at 1.66 m.
-  Check: `--steamercheck nyon[,shots] --chunks <real tiles> --at 2507900,1137600` (tier 3, not in the
-  map: needs the real tiles). Piers as structures, the timetable and docking assist are follow-ups.
+- **At Nyon** (`World/SteamerBerth.cs`, on client offline and server): alongside the Nyon pier (#377,
+  `world/landings`): at the berth of the landing "Nyon (lac)" in `landings.json` (LV95
+  2508106.5/1137439.5, heading 46°, across the TLM Steg, 3.5 m of water), its keel 1.64 m under the
+  still level, **its port gangway open** onto the pier's head, whose deck is the plank's foot (1.08 m
+  over the water). Placed when the berth's tile loads and its water is there (tried every 2 s for 30 s).
+  Without landings (a region built before #377) it falls back to the old search from the landing at
+  46.382049 N, 6.243945 E (`FindBerth`: rings every 4 m to 400 m for a spot where the whole hull has
+  0.6 m under its keel and 1.2 m of water 8 m either side, along the isobath; it lay 184 m south-west
+  along the quay). Check: `--steamercheck nyon[,shots] --chunks <real tiles> --at 2507900,1137600`
+  (tier 3, not in the map: needs the real tiles): the berth, the plank flush with the deck, a walk from
+  the Steg down its ramp, over the plank onto the deck and back. The timetable and docking assist are
+  follow-ups (#379).
 - **Network**: the owner sends `Anim = (shaft (signed), thrust share, Heave, wet + 2 airborne +
   4 whistling + 8 gangways)` (`Steamer.WritePose`/`DoorsOf`); `BusDoors` reads the gangways on a copy.
   Walkers aboard are the bus's mechanism (`walk-aboard`).
@@ -73,7 +75,7 @@
   B walks aboard A's steamer from a quay it builds, up the stairs, rides the upper deck through a
   gamey swell at full ahead, both peers agree where B stands to 3 cm; B over the rail, A sees it
   swimming; `SHOTS=1 STYLE=ps1` A windowed: `remote_passenger.png`).
-- **Not done**: a berth alongside the pier itself (the bathymetry there is too shallow; piers are a follow-up); a server-placed parked steamer only heaves on
+- **Not done**: mooring lines (parked, it floats free and drifts in a swell); a server-placed parked steamer only heaves on
   clients (no pitch/roll until a client claims it); the parked collision box is the hull only, level;
   no hands drawn on the wheel in first person; the telegraph handle on a remote copy follows the
   shaft, not the order; the sounds were not listened to.

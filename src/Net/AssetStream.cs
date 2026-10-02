@@ -66,6 +66,12 @@ public enum AssetKind
     /// format. Only tiles with water have one; an older server answers "missing".
     /// </summary>
     Water = 11,
+
+    /// <summary>
+    /// landings.json, the region's boat landings and harbour jetties (#377). Not tile-scoped, like
+    /// <see cref="Places"/>: fetched once during sync; an older server answers "missing".
+    /// </summary>
+    Landings = 12,
 }
 
 /// <summary>
@@ -113,6 +119,7 @@ public static class AssetStream
         AssetKind.Holes => HoleFormat.FileName(id),
         AssetKind.Cd => $"{id.E}.ogg",
         AssetKind.Water => WaterFormat.FileName(id),
+        AssetKind.Landings => LandingIndex.FileName,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

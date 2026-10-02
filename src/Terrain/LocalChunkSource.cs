@@ -133,6 +133,24 @@ public sealed class LocalChunkSource : IChunkSource
         }, ct);
     }
 
+    public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => ReadLandingsAsync(_dir, ct);
+
+    /// <summary><c>landings.json</c> in a directory, or null; a file that does not parse is logged and skipped.</summary>
+    public static Task<LandingIndex?> ReadLandingsAsync(string dir, CancellationToken ct = default)
+    {
+        return Task.Run(() =>
+        {
+            string path = Path.Combine(dir, LandingIndex.FileName);
+            if (!File.Exists(path)) return (LandingIndex?)null;
+            try { return LandingIndex.FromJson(File.ReadAllText(path)); }
+            catch (Exception e)
+            {
+                Godot.GD.PushWarning($"[landings] {path} does not parse: {e.Message}");
+                return null;
+            }
+        }, ct);
+    }
+
     public Task<RoadTile?> LoadRoadsAsync(TileId id, CancellationToken ct = default)
     {
         return Task.Run(() =>
