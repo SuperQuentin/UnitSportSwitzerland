@@ -410,7 +410,7 @@ public partial class PlacedObjects : Node
                     Rotation = new[] { o.Rotation.X, o.Rotation.Y, o.Rotation.Z, o.Rotation.W }, Payload = o.Payload,
                 }).ToList(),
             };
-            Core.JsonStore.Save(_storePath, store, Core.JsonStore.Indented);
+            Core.JsonStore.SaveAsync(_storePath, store, Core.JsonStore.Indented, e => GD.PushError($"[placed] saving: {e.Message}"));
         }
         catch (Exception ex) { GD.PushError($"[placed] saving: {ex.Message}"); }
     }

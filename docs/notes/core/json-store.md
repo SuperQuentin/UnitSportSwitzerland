@@ -34,20 +34,17 @@ target, so the file is always the old or the new version. No perf numbers: this 
 
 After rebasing onto main, grep:
 `rg -n "ModeFlags.Write|WriteAllText\(|\.part\"|new JsonSerializerOptions" src --glob "*.cs"`.
-Every hit that writes a persisted JSON file becomes one `JsonStore.Save` call. Already done on main:
+Every hit that writes a persisted JSON file becomes one `JsonStore.Save` (or `SaveAsync`) call. Already done on main:
 `PlacedObjects`, `BirdJournal`, `ServerBook`, `PlayerRegistry`, `OccasionConfig`, `OccasionHunt`,
 `PhotoStore`, `CdLibrary`.
 
-Left on purpose because open PRs were editing them during #228. The author of the named PR migrates
-the file after rebasing (no conflict expected: main did not touch these lines):
+Also done (#221 round 2): `Bank`, `Inventory`, `LootService`, `GameSettings` (`Save` and `SaveOnly`),
+`CdBurner` (CD info). Left: `src/Interiors/InteriorManager.cs` layout cache (`path + ".part"` +
+`File.WriteAllTextAsync` + `File.Move`; already atomic, in open PR #269): make `InteriorLayout.Json`
+`internal`, then `JsonStore.Save(path, layout, InteriorLayout.Json);`.
 
-| File (PR) | Today | Replace with |
-|---|---|---|
-| `src/Items/Bank.cs` `SaveAccounts` (#219) | `DirAccess.MakeDirRecursiveAbsolute(...)` + `FileAccess.Open(file, Write)` + `StoreString(Serialize(_accounts, new JsonSerializerOptions { WriteIndented = true }))` | `JsonStore.Save(file, _accounts, JsonStore.Indented);` in a `try/catch` with `GD.PushWarning("[bank] could not write ...")`; drop the `MakeDir` |
-| `src/Items/Inventory.cs` `Save`/`ToJson` (#225, #222, #188, #180) | `FileAccess.Open(File, Write)` + `f?.StoreString(ToJson())`; `ToJson` builds new options | Move the options (`WriteIndented = true`, `WhenWritingNull`) to a `private static readonly JsonSerializerOptions SaveJson`; build the `SaveData` in a helper; `JsonStore.Save(File, data, SaveJson)` in a `try/catch`. Keep `ToJson()` (same helper + `SaveJson`) if anything else calls it |
-| `src/Loot/LootService.cs` `Save` (#219, #201, #197) | `CreateDirectory` + `path + ".part"` + `WriteAllText(Serialize(t))` + `File.Move` | `JsonStore.Save(PathFor(k), t);` (compact; keep the `catch`) |
-| `src/Interiors/InteriorManager.cs` layout cache (#219, #197) | `path + ".part"`, `await File.WriteAllTextAsync(tmp, layout.ToJson())`, `File.Move` | Make `InteriorLayout.Json` `internal`, then `JsonStore.Save(path, layout, InteriorLayout.Json);` (a small sync write; already atomic, so low priority) |
-| `src/Core/GameSettings.cs` `Save` (#148) | `FileAccess.Open(File, Write)` + `StoreString(Serialize(this, JsonOptions))` | `JsonStore.Save(File, this, JsonOptions);` (keep the `try/catch`) |
+Saves made while playing (a plant, a claim, a deposit) use `JsonStore.SaveAsync`: same file, same
+bytes, written by the background writer (`perf-saves-background`).
 
 A branch that adds a new save: use `JsonStore.Save` from the start.
 
