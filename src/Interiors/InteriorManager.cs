@@ -1241,8 +1241,11 @@ public partial class InteriorNode : Node3D
         ArrayMesh? mesh = null)
     {
         var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement, Layout = layout };
-        node.AddChild(new MeshInstance3D { Name = "Mesh", Mesh = mesh ?? BuildMesh(data, material) });
+        var room = new MeshInstance3D { Name = "Mesh", Mesh = mesh ?? BuildMesh(data, material) };
+        node.AddChild(room);
         if (mesh == null) node.AddBody(data.Collision);
+        // a church's rat and congregation, which dance to the chess type beat (#370)
+        if (data.Figures is { Length: > 0 } figures) node.AddChild(ChurchStage.Create(node, figures, material, room));
 
         // the front doors, shut: the way out is to open one, not to walk into the void
         foreach (var e in layout.AllEntrances())

@@ -1768,8 +1768,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private int DanceMoveFor(int slot, Audio.Cd.MusicStyle style)
     {
         uint shared = DanceHash((uint)slot * 2654435761u ^ (uint)style * 40503u);
+        // to the chess type beat the crowd's move is the rat's swing, the first of its moves (#370)
         if (_danceCrowd >= 2 && shared % 3u == 1u)
-            return (shared >> 8) % 2u == 0u ? Avatar.HumanMeshBuilder.GroupJump : Avatar.HumanMeshBuilder.GroupPogo;
+            return style == Audio.Cd.MusicStyle.RatDance ? 0
+                : (shared >> 8) % 2u == 0u ? Avatar.HumanMeshBuilder.GroupJump : Avatar.HumanMeshBuilder.GroupPogo;
         uint own = DanceHash(shared ^ DanceSeed());
         return (int)(own % (uint)Avatar.HumanMeshBuilder.MoveCount(style));
     }
