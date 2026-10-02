@@ -36,6 +36,21 @@ public partial class CdLibrary : Node
     public static string PersonalDirectory => Path.Combine(Directory, "personal");
 
     private const string IndexFile = "library.json";
+
+    /// <summary>The chess type beat, shipped with the game (#370): the church radio's CD and the rat dance.</summary>
+    public const string RatBeatRes = "res://assets/audio/chess_type_beat.ogg";
+
+    /// <summary><see cref="CdInfo.Source"/> of the CD burnt from <see cref="RatBeatRes"/>.</summary>
+    public const string RatBeatSource = "bundled:chess_type_beat";
+
+    /// <summary>
+    /// The shared CD of the chess type beat, or -1 while it is not burnt (or not yet listed here).
+    /// Every peer knows it from the library, so the dance needs nothing replicated.
+    /// </summary>
+    public int RatBeatId { get; private set; } = -1;
+
+    /// <summary>Whether this CD is the chess type beat.</summary>
+    public static bool IsRatBeat(int cdId) => cdId >= 0 && Instance is { } lib && lib.RatBeatId == cdId;
     private const double BurnCooldown = 60;
 
     public static CdLibrary? Instance { get; private set; }
@@ -93,6 +108,7 @@ public partial class CdLibrary : Node
         Load();
         if (!_server) LoadPersonal();
         if (_server) Multiplayer.PeerConnected += SendAll;
+        EnsureRatBeat();
         BurnFixture();
     }
 
@@ -144,6 +160,7 @@ public partial class CdLibrary : Node
     {
         var info = CdInfo.FromDict(cd);
         _all[info.Id] = info;
+        Note(info);
         Changed?.Invoke();
     }
 
@@ -151,10 +168,12 @@ public partial class CdLibrary : Node
     private void Library(Godot.Collections.Array cds)
     {
         _all.Clear();
+        RatBeatId = -1;
         foreach (var v in cds)
         {
             var info = CdInfo.FromDict(v.AsGodotDictionary());
             _all[info.Id] = info;
+            Note(info);
         }
         GD.Print($"[cd] library from the server: {_all.Count} CD(s)");
         Changed?.Invoke();
@@ -211,10 +230,15 @@ public partial class CdLibrary : Node
         var progress = new Progress<string>(text => _status.Enqueue((peer, text)));
         GD.Print($"[cd] burning {(personal ? "personal " : "")}CD {id} for peer {peer}: {(localFile ? Path.GetFileName(url) : url)}");
         // The tools run for a while; RPCs must go out from _Process, so the results are queued.
+        string? source = localFile && url == _ratBeatFile ? RatBeatSource : null;
         Task.Run(async () =>
         {
             CdInfo? cd = null;
-            try { cd = await burner.BurnAsync(id, url, progress, CancellationToken.None); }
+            try
+            {
+                cd = await burner.BurnAsync(id, url, progress, CancellationToken.None);
+                if (cd != null && source != null) cd = cd with { Source = source };
+            }
             catch (Exception e) { _status.Enqueue((peer, $"Burn failed: {e.Message}")); }
             _done.Enqueue((peer, cd, personal));
         });
@@ -241,6 +265,7 @@ public partial class CdLibrary : Node
                 continue;
             }
             _all[cd.Id] = cd;
+            Note(cd);
             Save();
             GD.Print($"[cd] CD {cd.Id} ready: {cd.Describe()}");
             Changed?.Invoke();
@@ -261,6 +286,7 @@ public partial class CdLibrary : Node
         foreach (var cd in LoadIndex(Directory))
         {
             _all[cd.Id] = cd;
+            Note(cd);
             _nextId = Math.Max(_nextId, cd.Id + 1);
         }
         GD.Print($"[cd] library: {_all.Count} CD(s) in {Directory}");
@@ -318,6 +344,40 @@ public partial class CdLibrary : Node
         do id = -Random.Shared.Next(1, int.MaxValue);
         while (_personal.ContainsKey(id));
         return id;
+    }
+
+    private void Note(CdInfo cd)
+    {
+        if (cd.Source == RatBeatSource) RatBeatId = cd.Id;
+    }
+
+    /// <summary>Where the shipped chess type beat is copied for the burner, which needs a real file.</summary>
+    private string? _ratBeatFile;
+
+    /// <summary>
+    /// The server (or offline game) burns the shipped chess type beat into the shared list once, the
+    /// way a fixture is burnt: ffmpeg encodes it and the analyser finds its tempo and first beat,
+    /// which the rat dance and its intro run on. The res:// file sits in the pck in an export, so it
+    /// is copied out first; its name is the CD's title.
+    /// </summary>
+    private void EnsureRatBeat()
+    {
+        if (!Owns || RatBeatId >= 0) return;
+        try
+        {
+            using var src = Godot.FileAccess.Open(RatBeatRes, Godot.FileAccess.ModeFlags.Read);
+            if (src == null) { GD.PushWarning($"[cd] {RatBeatRes} is missing: no chess type beat"); return; }
+            string dir = Path.Combine(Directory, "_bundled");
+            System.IO.Directory.CreateDirectory(dir);
+            _ratBeatFile = Path.Combine(dir, "Chess Type Beat.ogg");
+            File.WriteAllBytes(_ratBeatFile, src.GetBuffer((long)src.GetLength()));
+            _fixtures.Enqueue(_ratBeatFile);
+            GD.Print("[cd] burning the chess type beat");
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[cd] could not burn the chess type beat: {e.Message}");
+        }
     }
 
     /// <summary>

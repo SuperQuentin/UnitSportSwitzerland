@@ -20,6 +20,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
+    private Interiors.ChurchRadios? _churchRadios;
     private Items.DroppedItems? _dropped;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
@@ -127,6 +128,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _dropped = Items.DroppedItems.Create(this, origin);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
+        // the radio by the pastor rat in every church (#370)
+        _churchRadios = Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
         Audio.Live.WebRadio.Create(this);
@@ -376,6 +379,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (node is Node3D player)
             _chunks!.AddAnchor(player);
         _interiors?.SendTableTo(id);
+        _churchRadios?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);

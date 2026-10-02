@@ -108,6 +108,8 @@ public enum FurnitureType
     IroningBoard, Amplifier,
     // #273: a PAUSA vending machine (Loot/ShopService)
     VendingMachine,
+    // #370: the church radio by the pastor rat
+    ChurchRadio,
 }
 
 public sealed class FurniturePlan
@@ -157,7 +159,7 @@ public sealed class EntrancePlan
 public sealed class InteriorLayout
 {
     /// <summary>Bumped whenever the generator changes enough that old plans should be regenerated.</summary>
-    public const int CurrentVersion = 11; // 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 12; // 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";

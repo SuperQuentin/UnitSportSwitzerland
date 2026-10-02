@@ -1702,13 +1702,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>
-    /// Whether the owner may go on dancing: on foot, upright, outdoors, and a radio still playing
-    /// within a little more than the radius that let it start (hysteresis, so the edge of
-    /// earshot does not flicker).
+    /// Whether the owner may go on dancing: on foot, upright, and a radio still playing within a
+    /// little more than the radius that let it start (hysteresis, so the edge of earshot does not
+    /// flicker). Outdoors, or indoors to the chess type beat (#370): the rat dance goes anywhere.
     /// </summary>
     private bool DanceAllowed() =>
-        Ride == RideKind.OnFoot && !KnockedOut && !_sliding && !Indoors
-        && Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius * 1.15f) != null;
+        Ride == RideKind.OnFoot && !KnockedOut && !_sliding
+        && Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius * 1.15f) is { } music
+        && (!Indoors || Audio.Cd.CdLibrary.IsRatBeat(music.CdId));
+
+    /// <summary>Indoors, the chess type beat heard here (#370): E dances, as outdoors to any music.</summary>
+    public bool RatBeatHere(bool heard) =>
+        Indoors && Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius, heard) is { } music
+        && Audio.Cd.CdLibrary.IsRatBeat(music.CdId);
 
     /// <summary>
     /// The beat-driven pose for this frame, or null. Everything comes off the replicated
@@ -2206,7 +2212,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             if (_ride == null && !_mantling && _deadTimer <= 0 && TryVehicleAt()) return true;
             var interiors = Interiors.InteriorManager.Instance;
+            if (Interiors.ChurchRadios.TryOpen(this)) return true;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
+            // the chess type beat in here: E dances to it, as outdoors (#370)
+            if (interiors?.AtExit(this) != true && (DanceId != 0 || RatBeatHere(heard: true)))
+            {
+                DanceId = DanceId == 0 ? 1 : 0;
+                return true;
+            }
             return interiors?.TryDoor(this) ?? true;
         }
         if (_ride != null || _mantling || _deadTimer > 0) return false;

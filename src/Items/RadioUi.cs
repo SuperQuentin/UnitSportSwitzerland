@@ -41,7 +41,7 @@ public partial class RadioUi : CanvasLayer
     private const float WalkAway = 4f;
     private const float MaxWidth = 700, MaxHeight = 660, Gutter = 16;
 
-    private enum Target { World, Held, Car }
+    private enum Target { World, Held, Car, Church }
 
     /// <summary>The live panel, for <see cref="FootPlayer.TryInteract"/>.</summary>
     public static RadioUi? Instance { get; private set; }
@@ -50,6 +50,8 @@ public partial class RadioUi : CanvasLayer
     private Inventory _inventory = new();
     private Target _target;
     private RadioBody? _radio;
+    /// <summary>The church whose radio the panel is on (#370), by plan key.</summary>
+    private string _churchPlan = "";
     private int _heldSlot = -1;
 
     // the mode a held or car radio starts its next CD with, when none plays to carry it
@@ -331,10 +333,20 @@ public partial class RadioUi : CanvasLayer
         OpenPanel(Target.Car);
     }
 
+    /// <summary>Opens the panel on the radio by the pastor rat of the church the player is in (#370).</summary>
+    public void OpenChurch(string plan)
+    {
+        if (IsOpen) return;
+        _radio = null;
+        _heldSlot = -1;
+        _churchPlan = plan;
+        OpenPanel(Target.Church);
+    }
+
     private void OpenPanel(Target target)
     {
         _target = target;
-        _title.Text = target == Target.Car ? "Car radio" : "Radio";
+        _title.Text = target switch { Target.Car => "Car radio", Target.Church => "Church radio", _ => "Radio" };
         _pick.Visible = target == Target.World;
         _search.Text = "";
         _search.PlaceholderText = target == Target.Car ? "Search CDs and stations   ( / )" : "Search CDs   ( / )";
@@ -356,6 +368,7 @@ public partial class RadioUi : CanvasLayer
         _panel.Visible = false;
         _radio = null;
         _heldSlot = -1;
+        _churchPlan = "";
         _link.ReleaseFocus();
         _search.ReleaseFocus();
         RadioSpeaker.SaveVolume();
@@ -392,6 +405,9 @@ public partial class RadioUi : CanvasLayer
                 if (owner.PlayingCarCd is { } c && c.Sounding(now)) return (c.CdId, 0, c.StartedAt, c.Length, c.Mode);
                 if (owner.PlayingCarRadio is > 0 and var station) return (0, station, 0, 0, _pendingMode);
                 break;
+            case Target.Church when Interiors.ChurchRadios.Instance is { } church:
+                var cm = church.ModeOf(_churchPlan);
+                return church.PlayOf(_churchPlan) is { } c2 ? (c2.CdId, 0, c2.StartedAt, c2.Length, cm) : (0, 0, 0, 0, cm);
         }
         return (0, 0, 0, 0, _target == Target.World ? RadioMode.Once : _pendingMode);
     }
@@ -422,6 +438,9 @@ public partial class RadioUi : CanvasLayer
                 me.CarRadio = 0;
                 me.CarCd = new RadioPlay(id, ClockSync.ServerNow, cd.Duration, mode).Encode();
                 break;
+            case Target.Church:
+                Interiors.ChurchRadios.Instance?.Play(_churchPlan, id, cd.Duration);
+                break;
         }
     }
 
@@ -446,6 +465,9 @@ public partial class RadioUi : CanvasLayer
             case Target.Car:
                 if (Stereo() is { } me) { me.CarCd = ""; me.CarRadio = 0; }
                 break;
+            case Target.Church:
+                Interiors.ChurchRadios.Instance?.Stop(_churchPlan);
+                break;
         }
     }
 
@@ -454,6 +476,8 @@ public partial class RadioUi : CanvasLayer
     {
         var now = Now();
         if (now.Cd != 0 || now.Station != 0) { StopRadio(); return; }
+        // the church radio has the chess type beat loaded (#370)
+        if (_target == Target.Church && CdLibrary.Instance is { RatBeatId: > 0 and var rat }) { PlayCd(rat); return; }
         if (FocusedRow() is { } focused) { focused.EmitSignal(BaseButton.SignalName.Pressed); return; }
         PressFirstRow();
     }
@@ -490,6 +514,9 @@ public partial class RadioUi : CanvasLayer
                 break;
             case Target.Car:
                 if (Stereo() is { } me && RadioPlay.Decode(me.CarCd) is { } car) me.CarCd = (car with { Mode = mode }).Encode();
+                break;
+            case Target.Church:
+                Interiors.ChurchRadios.Instance?.SetMode(_churchPlan, mode);
                 break;
         }
         UpdateNow();
@@ -776,7 +803,10 @@ public partial class RadioUi : CanvasLayer
         else
         {
             _nowTitle.Text = "Nothing playing";
-            _nowMeta.Text = locked ? "The driver picks the music." : _target == Target.Car ? "Pick a station or a CD below." : "Pick a CD below.";
+            _nowMeta.Text = locked ? "The driver picks the music."
+                : _target == Target.Car ? "Pick a station or a CD below."
+                : _target == Target.Church && CdLibrary.Instance is { RatBeatId: > 0 } ? "Chess Type Beat is loaded: press Play."
+                : "Pick a CD below.";
             _bar.Value = 0;
             _time.Text = "";
         }
@@ -784,6 +814,7 @@ public partial class RadioUi : CanvasLayer
         {
             Target.World => "On the ground · everyone near hears it",
             Target.Held => "In your hand · it plays as you carry it",
+            Target.Church => "By the pastor rat · everyone in the church hears it",
             _ => locked ? "Riding along · only the driver changes the music" : "At the wheel · everyone near the car hears it",
         };
         bool playing = now.Cd != 0 || now.Station != 0;
@@ -805,6 +836,8 @@ public partial class RadioUi : CanvasLayer
         {
             Target.Held => !HeldLive(),
             Target.Car => Stereo() == null,
+            Target.Church => _local() is not { } me || !IsInstanceValid(me) || !me.Indoors
+                || Interiors.InteriorManager.Instance?.Current?.Key != _churchPlan,
             _ => Live() is not { } radio || _local() is { } player && IsInstanceValid(player)
                 && player.GlobalPosition.DistanceTo(radio.GlobalPosition) > WalkAway,
         };
