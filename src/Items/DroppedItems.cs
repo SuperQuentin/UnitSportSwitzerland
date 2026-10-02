@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Net;
 using UnitSport.Player;
 
 namespace UnitSport.Items;
@@ -70,8 +71,7 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
         if (Instance == this) Instance = null;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     // ---- client API ----------------------------------------------------------------------------
 

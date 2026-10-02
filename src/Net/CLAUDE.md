@@ -18,8 +18,13 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `lean-dedicated-server` — Dedicated server: proxy players, fps cap, coarse grids, asset prep off the main thread, throttled vehicles
 - `lan-discovery` — mDNS browse for `_unitsport._udp` (avahi on the server); the Multiplayer screen lists LAN servers, legacy unicast queries, `--discovercheck`
 - `server-query` — UDP status query on port + 1 (`USQ1`/`USR1` + JSON): LAN broadcast list, saved servers' players and ping, `--server-name`, `--query-bind`
+- `udp-receive-loop` — every UDP reader goes through `Udp.ReceiveLoop(udp, token, handler)`; never hand-write a ReceiveAsync loop
+- `region-file-sync` — region-wide files a client pulls once (horizon, places) go through `ClientTerrainSync.SyncFileAsync`
 - `hosting` — Host from the menu: the client starts itself headless as a server (`--parent-pid` watchdog), joins it, kills it on leave
 - `clock-sync` — One shared clock: `ClockSync.ServerNow` from min-RTT ping/pong samples; song position and beat phase are functions of it, never of anything local
+- `perf-server-frame-metrics` — Server cost = `--serverstats` per-frame busy + `[stats] slow frame` lines; wrap periodic jobs in `ServerStats.Ran`; never the 1 s-max `TimeProcess` monitor
+- `perf-no-main-thread-periodic-jobs` — No per-player `GD.Print` on a server timer (blocks ms on Windows), file writes on a worker, `/proc` reads Linux-only
+- `perf-mcp-logger-gated` — godot_ai `game_helper` adds its Logger only when `EngineDebugger.is_active()`; keep the gate on addon updates (it leaked every log line)
 
 ## Commands
 

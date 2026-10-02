@@ -1,7 +1,8 @@
 # Runtime
 
 - **Runtime** (`src/`): `Terrain/ChunkManager` streams LOD rings around anchors (workers
-  build arrays, main thread commits ≤2 meshes + 1 collision per frame);
+  build arrays, main thread commits meshes against a ms budget and collision one piece a
+  frame, see `perf-collision-commits`);
   `HeightMapShape3D` collision on d≤1 tiles (CollisionShape3D scale derived from
   `ChunkFormat.SpacingM`, currently 1 m — see the road-collision-merge entry above for how it
   gets blended toward road height, and a second small `ConcavePolygonShape3D` body for bridge
