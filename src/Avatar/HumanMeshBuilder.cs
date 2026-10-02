@@ -144,12 +144,13 @@ public static partial class HumanMeshBuilder
         Vector3 HipR, Vector3 KneeR, Vector3 AnkleR, Vector3 ToeR,
         float TorsoLean, Vector3 HandDir = default);
 
+    /// <param name="into">A mesh to rebuild in place (a figure redrawn while it moves keeps one), or null for a new one.</param>
     public static ArrayMesh Build(HumanPalette palette, HumanPose pose = HumanPose.Standing,
-        bool includeLegs = true, bool helmet = false, Headwear hat = Headwear.None)
+        bool includeLegs = true, bool helmet = false, Headwear hat = Headwear.None, ArrayMesh? into = null)
     {
-        var scratch = new MeshScratch();
+        var scratch = ScratchFor(into);
         Append(scratch, palette, pose, includeLegs, helmet, hat);
-        return scratch.Build();
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
     }
 
     /// <summary>

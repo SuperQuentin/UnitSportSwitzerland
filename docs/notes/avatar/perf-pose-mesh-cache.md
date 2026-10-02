@@ -33,12 +33,18 @@ client in Riddes among 24 swarm bots + a second client, vsync off, 75 s steady s
 | offline road bike, before → after | 1.53 / 2.78 → 1.43 / 1.85 | 0.43 → 0.37 | 126 → 30 |
 | offline car (driver) | unchanged (1.42 → 1.48) | 0.37 → 0.39 | 36 → 34 |
 
+Round 2, GPX replay of 8 runners at Riddes (`--gpx` ×8, `--perflog 80`, steady part t 47–80 s,
+allocation and GC pause from `GC.GetTotalAllocatedBytes` / `GetTotalPauseDuration`): allocated
+1338 → 386 MB, GC pause 154 → 110 ms, gen0 207 → 60 per minute. gen1 rises 9 → 55 per minute: with
+far less short-lived garbage almost every remaining collection is a gen1 one (the runtime's choice);
+the total pause still drops. Do not read the gen1 column alone for this change.
+
 ## Same logic, preserved
 - The figure geometry for a given pose is byte-identical (same builder, same inputs); only the
   number of times it is built changes.
 - Accepted visual deltas: a standing figure ignores speed changes under 0.005 m/s; a remote figure
   far away or off screen animates at 15 Hz; cranks and legs move in 2.8° steps; a driver's hands
-  follow the wheel in 0.03 rad steps (they did before too, from the key change frame).
+  follow the wheel in 0.03 rad steps (they did before too, from the key change frame); a skirted cyclist ignores wind changes under 0.005 m/s.
 - Traps: a new input to the figure (a new replicated field that changes the mesh: an accessory, a
   palette change, a new arm pose parameter) MUST go into `FootPoseKey`, or the figure keeps its old
   look until the pose next changes. A new `_walker` instance is part of the key, so a rebuilt visual
@@ -60,10 +66,13 @@ client in Riddes among 24 swarm bots + a second client, vsync off, 75 s steady s
   `HumanMeshBuilder.cs`, `FootPlayer.cs`, `Cyclist.cs`, `CarRig.cs`, `HeavyRig.cs` (#220, #222,
   #225, #223, #169 at the time). Their hunks are next to, not inside, the changed lines; a conflict in
   `ApplyFootPose` resolves as above.
-- Still building per frame, to migrate the same way: `Gpx/Runner.cs` (`BuildStride` per runner),
-  `Interiors/PortalDemo.cs`, `AvatarPreview` (preview only), and a cyclist in a fluttering skirt
-  (`Cyclist._Process`, #251: the rider is rebuilt every frame while the wind moves it). A figure
-  with a fluttering skirt keys on the wind too, so it still rebuilds (in place) while moving.
+- Migrated in round 2 (PR "figure meshes rebuilt in place"): `Gpx/Runner` (one `_bodyMesh`, key
+  (speed cm/s, phase): a paused ghost builds nothing), `Interiors/PortalDemo` (walker in place),
+  and the skirted cyclist (`Cyclist._Process`: `HumanMeshBuilder.Build(..., into: _riderMesh)`
+  keyed on the wind rounded to the cm/s, so it rebuilds in place while the wind moves and stops
+  once it settles). `HumanMeshBuilder.Build` takes `into:` like `BuildStride`/`BuildPosed`.
+  A branch that edits those lines keeps the key check and the `into:` argument.
+- Still building per frame: `AvatarPreview` only (a preview tool, not the game).
 
 ## How to check
 - `--perflog` on a client among on-foot remotes (swarm walkers in Riddes): `gc0` per minute in
