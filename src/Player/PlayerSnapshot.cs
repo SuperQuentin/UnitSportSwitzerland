@@ -23,6 +23,9 @@ public static class PlayerSnapshot
     /// at that moment: a player stepped later in the same tick shows where it was (one tick, at
     /// most). Read it from physics code only; never keep the list past the call.
     /// </summary>
+    /// <summary>The origin moved (#185): the next caller takes positions in the new world space.</summary>
+    public static void Forget() => _tick = ulong.MaxValue;
+
     public static List<Sample> Of(SceneTree tree)
     {
         ulong tick = Engine.GetPhysicsFrames();

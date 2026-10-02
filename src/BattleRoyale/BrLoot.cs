@@ -131,7 +131,7 @@ public static class BrLoot
         if (Rideable.Create(kind) is not { IsVehicle: true } ride) return false;
         // on the verge, nose along the road
         double e = r.E + Math.Cos(r.Heading) * side, n = r.N - Math.Sin(r.Heading) * side;
-        var state = new VehicleState(kind, origin.ToWorld(e, n, r.Alt + 0.6f), -r.Heading, Vector3.Zero, ride.MaxHealth,
+        var state = new VehicleState(kind, new GlobalPos(e, n, r.Alt + 0.6f), -r.Heading, Vector3.Zero, ride.MaxHealth,
             EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
         return vehicles.Place(state, name) != null;
     }
@@ -144,7 +144,7 @@ public static class BrLoot
         if (bikes.Length == 0) return false;
         var kind = bikes[new Random(seed).Next(bikes.Length)];
         if (Rideable.Create(kind) is not { IsVehicle: true } ride) return false;
-        var state = new VehicleState(kind, origin.ToWorld(e, n, alt + 0.6f), yaw, Vector3.Zero, ride.MaxHealth,
+        var state = new VehicleState(kind, new GlobalPos(e, n, alt + 0.6f), yaw, Vector3.Zero, ride.MaxHealth,
             EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
         return vehicles.Place(state, name) != null;
     }

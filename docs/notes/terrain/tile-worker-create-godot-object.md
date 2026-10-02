@@ -7,4 +7,4 @@
   `ChunkManager._ExitTree` cancels every build and waits up to 3 s for `_buildsInFlight` to reach
   0, and every worker checks its token right before each Godot call; either alone leaves a race.
   Related: `ClientTerrainSync` continues on the thread pool, so anything it raises that touches UI
-  or nodes must be marshalled (`Status` is deferred; the rebase/merge runs via `OnMainThread`).
+  or nodes must be marshalled (`Status` is deferred; the merge runs via `OnMainThread`).

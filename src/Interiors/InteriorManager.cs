@@ -192,6 +192,35 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     public IReadOnlyDictionary<string, DoorLink> Links => _links;
     public DoorPortals? Portals => _portals;
 
+    // ---- a camera with no player: the shot queue's "i" heights (#320) ---------------------------
+
+    /// <summary>
+    /// Opens the front door nearest <paramref name="at"/> (asked again while a request is pending
+    /// is harmless), and returns its key; null while no door within <paramref name="reach"/> has
+    /// streamed in. Offline only: online a door is the server's, for a player standing at it.
+    /// </summary>
+    public string? OpenDoorForCamera(Vector3 at, float reach)
+    {
+        if (Online) return null;
+        var door = DoorIndex.NearestEntrance(at, reach)?.Key.ToString();
+        if (door != null && !_doors.ContainsKey(door) && _requestingDoor == null) AskDoor(door, true);
+        return door;
+    }
+
+    /// <summary>A door's link once its interior is built here, else null.</summary>
+    public DoorLink? BuiltLink(string door) =>
+        _links.TryGetValue(door, out var link) && _built.ContainsKey(link.Plan) ? link : null;
+
+    /// <summary>
+    /// The free camera stands in <paramref name="plan"/>'s rooms, or back outside (null): the
+    /// building then stays built and shown, as for a player inside it. Offline, with no player.
+    /// </summary>
+    public void CameraInside(string? plan)
+    {
+        _current = plan != null && _cache.TryGetValue(plan, out var layout) ? layout : null;
+        Maintain();
+    }
+
     /// <summary>Whether a world point is down where the interiors are, not in the world above.</summary>
     public static bool InInteriorSpace(Vector3 at) => at.Y < InteriorBaseY + 1000f;
 
@@ -205,6 +234,14 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (!InInteriorSpace(at)) return at;
         float floor = ground?.Invoke(at) ?? 0f;
         return at with { Y = floor + (at.Y - InteriorBaseY) };
+    }
+
+    /// <summary>The same in LV95 (#185): an interior differs from its building only in altitude.</summary>
+    public static GlobalPos SurfacePoint(GlobalPos at, Func<GlobalPos, float?>? ground = null)
+    {
+        if (!(at.Alt < InteriorBaseY + 1000f)) return at;
+        float floor = ground?.Invoke(at) ?? 0f;
+        return at with { Alt = floor + (at.Alt - InteriorBaseY) };
     }
 
     /// <summary>The built interior whose plan holds a point far underground, if any (none on a dedicated server).</summary>

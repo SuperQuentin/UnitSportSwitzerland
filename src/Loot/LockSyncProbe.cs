@@ -71,8 +71,9 @@ public partial class LockSyncProbe : ChatProbe
         var lockType = plan.Furniture[index].Type;
         GD.Print($"[locksync {_role}] building {doorKey} ({door.Kind}), {lockType} #{index} in the {plan.RoomOf(plan.Furniture[index])?.Type}");
 
-        var inward = -door.Outward;
-        me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
+        var at = Fresh(door);
+        var inward = -at.Outward;
+        me.LeaveInterior(at.World + at.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
         me.Velocity = Vector3.Zero;
         await Seconds(1.5);
         await Until(() => me.IsOnFloor(), 10);
@@ -146,7 +147,7 @@ public partial class LockSyncProbe : ChatProbe
 
             // out and back in through the door: the open locker comes from the server's lock state, not from memory
             interiors.Leave(me);
-            me.LeaveInterior(door.World + door.Outward * 2.5f + Vector3.Up * 0.3f, 0);
+            me.LeaveInterior(Fresh(door).World + Fresh(door).Outward * 2.5f + Vector3.Up * 0.3f, 0);
             await Seconds(1.5);
             Expect(interiors.CurrentNode == null && !loot.IsUnlocked(layout.Key, index), "outside, the client keeps no lock state");
             if (!await WalkIn(me, interiors, door)) return;
@@ -194,9 +195,17 @@ public partial class LockSyncProbe : ChatProbe
         await Finish(2);
     }
 
+    /// <summary>
+    /// The door as the index has it now: an entry kept across awaits holds world space from before
+    /// any origin shift since (#185, <c>--originstress</c>); the index itself follows the shifts.
+    /// </summary>
+    private static DoorIndex.Entry Fresh(DoorIndex.Entry door) =>
+        DoorIndex.All().Where(d => d.Key.Equals(door.Key)).Select(d => (DoorIndex.Entry?)d).FirstOrDefault() ?? door;
+
     /// <summary>From just outside the door: open it unless it stands open, and walk through.</summary>
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, DoorIndex.Entry door)
     {
+        door = Fresh(door);
         string doorKey = door.Key.ToString();
         var inward = -door.Outward;
         me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));

@@ -54,6 +54,20 @@ public sealed class RaceLine
     /// <summary>True once the verge has been surveyed (<see cref="Widen"/>); before that the line keeps to the tarmac.</summary>
     public bool Surveyed { get; private set; }
 
+    /// <summary>The frame <see cref="Points"/> are in (#185); null: taken to be the first one <see cref="Follow"/> is given.</summary>
+    public OriginFrame? Frame { get; set; }
+
+    /// <summary>Moves the points into <paramref name="now"/> (the origin moved, #185); a no-op once they are there.</summary>
+    public void Follow(OriginFrame now)
+    {
+        if (Frame is { } was && !(was.E == now.E && was.N == now.N))
+        {
+            var shift = now.Since(was);
+            for (int i = 0; i < Points.Count; i++) Points[i] = shift.Point(Points[i]);
+        }
+        Frame = now;
+    }
+
     /// <summary>What stopped the verge on one side of one point.</summary>
     public enum Block : byte { Clear, NoData, Drop, Bank, Tree, Wall, Water, Building }
 
@@ -288,11 +302,15 @@ public sealed class RaceLine
     /// the data every client has: the height grid, the <c>.trees</c> trunks, walls and watercourses
     /// in the <c>.road</c> tiles, the cover raster (water) and building footprints. Runs off the
     /// main thread; the line keeps the same point count, so indices into the old one stay valid.
+    /// It works on a copy of the route taken in one frame, the route's (the origin may move while
+    /// it runs, #185), and the line it returns is in that frame: <see cref="Follow"/> it before use.
     /// </summary>
-    public static async Task<RaceLine> Widen(RaceRoute route, IChunkSource source, WorldOrigin origin,
+    public static async Task<RaceLine> Widen(RaceRoute route, IChunkSource source, WorldOrigin live,
         float carHalfWidth = 0.9f, CancellationToken ct = default)
     {
-        var centre = route.Centre;
+        var origin = route.Frame ?? live.Frame;
+        var centre = route.Centre.ToArray();
+        var widths = route.Width.ToArray();
         var tiles = new HashSet<TileId>();
         foreach (var p in centre)
             for (int dx = -12; dx <= 12; dx += 12)
@@ -385,7 +403,7 @@ public sealed class RaceLine
 
         return await Task.Run(() =>
         {
-            int n = centre.Count;
+            int n = centre.Length;
             var ml = new float[n]; var mr = new float[n];
             var wl = new Block[n]; var wr = new Block[n];
             for (int i = 0; i < n; i++)
@@ -404,7 +422,8 @@ public sealed class RaceLine
                 if (sl[i] == 0f && swl[i] == Block.Drop) sl[i] = -DropClearance;
                 if (sr[i] == 0f && swr[i] == Block.Drop) sr[i] = -DropClearance;
             }
-            var line = Build(centre, route.Width, carHalfWidth, sl, sr);
+            var line = Build(centre, widths, carHalfWidth, sl, sr);
+            line.Frame = origin;
             line.WhyLeft.Clear(); line.WhyLeft.AddRange(swl);
             line.WhyRight.Clear(); line.WhyRight.AddRange(swr);
             return line;
@@ -436,7 +455,7 @@ public sealed class RaceLine
             var nrm2 = Normal(centre, i) * side;
             var nrm = new Vector3(nrm2.X, 0, nrm2.Y);
             var tan = new Vector2(-nrm2.Y, nrm2.X) * side;   // along the road
-            var edge = centre[i] + nrm * route.Width[i] * 0.5f;
+            var edge = centre[i] + nrm * widths[i] * 0.5f;
             why = Block.NoData;
             if (!Height(edge, out float h0)) return 0f;
             // the road is not on the ground here (bridge, embankment, cutting): nothing beside it to use

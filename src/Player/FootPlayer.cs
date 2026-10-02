@@ -58,6 +58,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public ChunkManager? Terrain { get; set; }
 
+    /// <summary>
+    /// The world origin, to put positions on the wire (#185): handed over by the spawner, which
+    /// builds the node before it can find the terrain; else the terrain's.
+    /// </summary>
+    public WorldOrigin? Origin { get => _origin ?? Terrain?.Origin; set => _origin = value; }
+    private WorldOrigin? _origin;
+
     private const float Gravity = 9.81f;
     private const float EyeHeight = 1.68f;   // average adult eye level
     private const float BaseFov = 68f;
@@ -194,12 +201,30 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     // Not `position`/`rotation` themselves: a remote copy would snap to every packet, which at
     // 150 km/h is a 0.7-2 m hop and a freeze-then-jump whenever one is late. The owner writes these
     // with its own clock; a remote copy interpolates them, and the server's proxy copy applies them.
+    // The position is LV95 and altitude in doubles, never world space: every peer has its own
+    // origin (#185), and the server relays these unchanged, so nothing on the way rounds them.
 
-    [Export] public Vector3 NetPos { get; set; }
+    [Export] public double NetE { get; set; }
+    [Export] public double NetN { get; set; }
+    [Export] public double NetAlt { get; set; }
     [Export] public Vector3 NetVel { get; set; }
     [Export] public float NetYaw { get; set; }
 
-    /// <summary>The owner's clock when <see cref="NetPos"/> was taken. Replicated LAST, so its
+    /// <summary>The position the owner last published.</summary>
+    public GlobalPos NetGlobal
+    {
+        get => new(NetE, NetN, NetAlt);
+        set { NetE = value.E; NetN = value.N; NetAlt = value.Alt; }
+    }
+
+    /// <summary>
+    /// Where this player is, origin-free: on a copy, what its owner last published (exact on the
+    /// server's proxies, which is what the server measures with); on the owner, its own body.
+    /// </summary>
+    public GlobalPos Global => !IsMultiplayerAuthority() && _netTime > 0 || Origin is not { } origin
+        ? NetGlobal : origin.ToGlobal(GlobalPosition);
+
+    /// <summary>The owner's clock when <see cref="NetGlobal"/> was taken. Replicated LAST, so its
     /// setter sees a complete state.</summary>
     [Export]
     public double NetTime
@@ -253,14 +278,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (!IsInsideTree() || NetProxy)
         {
             // spawn state, or the server's proxy: exactly where the owner says, no smoothing
-            Position = NetPos;
+            if (Origin is { } origin) Position = origin.ToWorld(NetGlobal);
             Rotation = new Vector3(0, NetYaw, 0);
             return;
         }
         if (IsMultiplayerAuthority()) return;
         double now = Time.GetTicksUsec() / 1e6;
         _interp.BeginCorrection(now);
-        _interp.Push(_netTime, now, NetPos, NetVel, NetYaw);
+        _interp.Push(_netTime, now, NetGlobal, NetVel, NetYaw);
         _interp.EndCorrection();
     }
 
@@ -972,7 +997,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _walkMask = CollisionMask;
         // authority pushes its transform to everyone else (server relays)
         var replication = new SceneReplicationConfig();
-        replication.AddProperty(".:NetPos");
+        replication.AddProperty(".:NetE");
+        replication.AddProperty(".:NetN");
+        replication.AddProperty(".:NetAlt");
         replication.AddProperty(".:NetVel");
         replication.AddProperty(".:NetYaw");
         // What you are riding travels with where you are. Without it a remote client sees a
@@ -1011,7 +1038,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
         foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
-        NetPos = Position;
+        Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
+        if (Origin is { } start) NetGlobal = start.ToGlobal(Position);
         NetYaw = Rotation.Y;
         var sync = new MultiplayerSynchronizer
         {
@@ -1110,8 +1138,6 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         FloorBlockOnWall = false;
         SlideOnCeiling = true;
 
-        Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
-
         if (IsMultiplayerAuthority() && Npc)
         {
             // no camera to anchor the streamer: the body asks for its own ground and trunks
@@ -1160,7 +1186,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         if (!IsMultiplayerAuthority())
-            GD.Print($"[net] player {Name} came into view at {GlobalPosition.Round()}");
+            GD.Print($"[net] player {Name} came into view at {GlobalPosition.Round()} ({Global})");
 
         RefreshVisual();
 
@@ -1336,7 +1362,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _jolt *= Mathf.Exp(-9f * (float)delta);
         if (IsMultiplayerAuthority())
         {
-            NetPos = Position;
+            if (Origin is { } origin) NetGlobal = origin.ToGlobal(Position);
             NetVel = Velocity;
             NetYaw = Rotation.Y;
             NetTime = Time.GetTicksUsec() / 1e6;
@@ -1441,7 +1467,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // the new simulator takes it over where it is drawn, a metre or two off the line in a bend
             _interp.MaxAhead = Npc ? 1.6f : Net.RemoteInterpolator.MaxExtrapolation;
             var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
-            Position = p;
+            if (Origin is { } origin) Position = origin.ToWorld(p);
             Rotation = new Vector3(0, yaw, 0);
         }
         RefreshVisual();
@@ -2120,7 +2146,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // between stood the bus just got into on its own parked deck, 0.7 m up, then on its roof (#323)
         if (Aboard) LeaveDeck(keepVelocity: false);
         ClearDecks();
-        GlobalPosition = state.Position;
+        var at = Origin!.ToWorld(state.Position);
+        GlobalPosition = at;
         Rotation = new Vector3(0, state.Yaw, 0);
         // the same car: its preset, its garage parts and whatever doors were left open come with it; the
         // driver's door opens to let them in, and once seated every door shuts (and stays shut:
@@ -2129,7 +2156,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // where it stood, on its wheels: ApplyRide lifts a body that grew (a walker's 0.32 m to a
         // bus's 1.05), and the bus got into stood 0.73 m up for a frame, then dropped (#323). A craft
         // keeps the lift, it is what keeps one on a slope from reading its first step as a crash.
-        if (_ride is not Flyer) GlobalPosition = state.Position;
+        if (_ride is not Flyer) GlobalPosition = at;
         if (HeavyCatalog.For(state.Kind) != null && state.CreateRide() is Truck train)
         {
             // the truck as it was left: its trailer, its angles, its doors and display, its load
@@ -2163,7 +2190,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var velocity = _ride is Flyer
             ? _flight.Velocity
             : heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Vector3.Up * Velocity.Y;
-        return new VehicleState((RideKind)RideKindId, GlobalPosition,
+        return new VehicleState((RideKind)RideKindId, Origin!.ToGlobal(GlobalPosition),
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
@@ -2255,7 +2282,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // clear of the whole machine — past the wing of a plane, not 2 m into it
         float side = Mathf.Max(vehicle.BodyRadius, vehicle.ParkedBox.Size.X * 0.5f) + BodyRadius + 0.5f;
         // beside the door, not the middle: a bus's front door is six metres ahead of it
-        var door = vehicle.EntryPoint == Vector3.Zero ? state.Position : ToGlobal(new Vector3(0, 0, vehicle.EntryPoint.Z));
+        var door = vehicle.EntryPoint == Vector3.Zero ? Origin!.ToWorld(state.Position) : ToGlobal(new Vector3(0, 0, vehicle.EntryPoint.Z));
         bool grounded = IsOnFloor();
         var frame = GlobalTransform;
         // out of a car through the driver's door: it opens, and shuts behind (unless left open)
@@ -2350,14 +2377,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         Announced?.Invoke("WRECKED!", false);
         PlayerInput.Rumble(1f, 1f, 0.6f);
         ApplyRide(RideKind.OnFoot, state.Velocity * 0.25f + away * 5f + Vector3.Up * 7f);
-        GlobalPosition = state.Position + Vector3.Up * 1.5f + away * 1.5f;
+        GlobalPosition = Origin!.ToWorld(state.Position) + Vector3.Up * 1.5f + away * 1.5f;
         _stunTimer = 1.5f;
         _ejected = 2.0;
         // everyone aboard goes out with the driver
         if (OnlineSeats && (SeatIndex > 0 || Riders.Any())) PassengerService.Instance!.Wrecked(state.Velocity);
         SeatIndex = 0;
         Vehicles?.Park(state);
-        if (Vehicles == null) Explosion.Spawn(GetParent(), state.Position + Vector3.Up);
+        if (Vehicles == null) Explosion.Spawn(GetParent(), Origin!.ToWorld(state.Position) + Vector3.Up);
     }
 
     // ------------------------------------------------------------------------------------
