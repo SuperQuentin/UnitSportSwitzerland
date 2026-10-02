@@ -28,8 +28,8 @@
   each voice. **Nobody can hear them here, so judge them by numbers**: peak, RMS, crest, clipped
   samples, DC, spectral centroid and band shares, spectral peaks (pitch), the envelope's beat
   rate (autocorrelation) and its depth (10th to 90th percentile of a 20 ms RMS envelope), and a
-  waveform + spectrogram PNG to look at (numpy/scipy/matplotlib in a scratch venv; the script is in
-  PR #380's body). What it caught: the steam engine (a petrol model at 3 Hz: a 2 dB dip in a roar),
+  waveform + spectrogram PNG to look at: `python tools/soundstats.py test_output/sound [png dir]`
+  (numpy, scipy, matplotlib: a scratch venv). What it caught: the steam engine (a petrol model at 3 Hz: a 2 dB dip in a roar),
   the paddles' beat at low speed, the whistle's dead start and stop, a gasp with a quarter of its
   energy under 100 Hz (wind on a microphone). A steam engine is `EngineProfile.Steam`: puffs of
   hiss through the funnel comb, the chip voices gated by the puff (`EngineFrame.SteamGate`).
