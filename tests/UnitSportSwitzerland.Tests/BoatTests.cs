@@ -131,7 +131,8 @@ public class BoatTests
         Run(s, ref b, lake, new BoatControls(1f, 0f, 0f), 25f);
         float worstRoll = 0f;
         float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
-        float speed = 0f;
+        float speed = 0f, rollSum = 0f;
+        int rolls = 0;
         Run(s, ref b, lake, new BoatControls(1f, 0f, 1f), 30f, t =>
         {
             worstRoll = Mathf.Max(worstRoll, Mathf.Abs(Deg(b.Roll)));
@@ -140,13 +141,15 @@ public class BoatTests
                 minX = Mathf.Min(minX, b.Position.X); maxX = Mathf.Max(maxX, b.Position.X);
                 minZ = Mathf.Min(minZ, b.Position.Z); maxZ = Mathf.Max(maxZ, b.Position.Z);
                 speed = new Vector2(b.Velocity.X, b.Velocity.Z).Length();
+                rollSum += Deg(b.Roll);
+                rolls++;
             }
         });
         float circle = 0.5f * (maxX - minX + maxZ - minZ);
-        _out.WriteLine($"{name}: turning circle {circle:F1} m at {speed * 3.6f:F0} km/h, roll {Deg(b.Roll):F1}° (worst {worstRoll:F1}°)");
+        _out.WriteLine($"{name}: turning circle {circle:F1} m at {speed * 3.6f:F0} km/h, roll {rollSum / rolls:F1}° on average (worst {worstRoll:F1}°)");
         Assert.True(worstRoll < 50f, $"stays upright ({worstRoll:F0}°)");
         Assert.InRange(circle, 6f, 90f);
-        Assert.True(Deg(b.Roll) > 1f, "leans into the turn (starboard down)");
+        Assert.True(rollSum / rolls > 1f, "leans into the turn (starboard down)");
     }
 
     [Fact]
