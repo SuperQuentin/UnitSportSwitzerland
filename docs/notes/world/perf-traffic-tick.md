@@ -13,7 +13,12 @@
   shared, so never change one (set `MaterialOverride` on the instance instead).
 
 ## Why
-See PR PRNUM: physics ms and GC at traffic 35 and 150, before and after.
+PR PRNUM, `--perflog`, static camera over traffic at Mollendruz, 2 runs each (physics ms p50):
+
+| traffic | before | after |
+|---|---|---|
+| 35 | 0.76, 0.77 | 0.70, 0.61 |
+| 150 | 2.16, 1.93 | 1.57, 1.55 |
 
 ## Same logic, preserved
 - Sampling: the samples were only ever read for obstacles inside the skip radius. They are now taken at
@@ -27,8 +32,9 @@ See PR PRNUM: physics ms and GC at traffic 35 and 150, before and after.
 
 ## Migrating old code / open branches
 - `grep -n "foreach (var other in _cars)" src/World/Traffic.cs`: the gap check now walks `_byX`.
-  PR #230 (`feat/114-road-network`) adds `GiveWay`, which loops every car up to 200 m. That is past
-  the window, so it stays a full loop. Keep its distance filter before `other.Route.At(0)`.
+  `GiveWay` (#121, from #230) still loops every car (it watches up to 200 m, past the window), and
+  only for a car within 40 m of a yield line. Keep its distance filter before `other.Route.At(0)`.
+  ponytail: if it shows at traffic 150, walk `_byX` with a 200 m window there too.
 - `grep -n "Route.At(4f \* (Behind - k))"`: the sampling must stay inside `if (!sampled)`, right
   after the skip. Branches that edit the skip line (#159 `feat/159-races-in-traffic-2`:
   `300f * 300f` to `450f * 450f`) resolve the conflict by keeping both: their radius, then the block.

@@ -13,23 +13,26 @@
 ## Why
 Every driven motorbike, car or truck (and NPC car with a preset) calls `At` every physics tick.
 Above ~2 m/s the 0.5 m cache missed every tick, and the one shared cache was overwritten by the next
-caller. Each miss scanned every point of the tile. Numbers: see PR PRNUM.
+caller, so each miss scanned every point of the tile. `--surfacecheck` on 5 Mollendruz tiles (600-1642
+pieces): a full scan cost 12-175 µs per lookup, a cell lookup 0.3-6 µs (×30-75), with 0 differences in
+17,380 lookups. That is per driven vehicle per tick at speed (PR PRNUM).
 
 ## Same logic, preserved
 - The answer is the same as the old full scan, ties included. A piece is listed in every cell its
   box touches, grown by its reach (`Width/2 + 0.3`). Cells list the pieces in (segment, point) order,
   so the first piece found still wins a tie.
 - Trap: a rule that widens the reach (a larger tolerance, a verge) must widen it in the
-  `RoadIndex` constructor too, or cells silently miss pieces. A segment filter (like PR #230's
-  `Embedded`) belongs in `Walkable`, which runs before indexing.
+  `RoadIndex` constructor too, or cells silently miss pieces. A segment filter (like the
+  `Embedded` one from #230) belongs in `Walkable`, which runs before indexing.
 - The cache (0.25 s, 0.5 m) is unchanged, now per caller.
 
 ## Migrating old code / open branches
 - `grep -n "Surfaces.At(" src`. A call for a vehicle gets the vehicle as the 4th argument.
   PR #169 (`feat/162-walk-in-bus`) adds `Audio.Surfaces.At(Terrain, GlobalPosition, inside)` in
   `VehicleBody.StepDriverless`: make it `(..., inside, this)`.
-- PR #230 (`feat/114-road-network`) edits `Walkable` (adds `!s.Attributes.Has(RoadAttrFlags.Embedded)`).
-  On rebase keep main's `RoadIndex` / `Load` / `Evict` code and re-apply only the `Walkable` line.
+- A branch that still has the old `RoadUnder` loop over `segs` / `s.Points`: take main's version
+  whole (`RoadIndex`, `Load`, `Evict`, `Watch`) and re-apply only its own edits to `Walkable` or to
+  the surface choice in `RoadIndex.Nearest`.
 - `Roads` is now `Dictionary<TileId, RoadIndex?>`. Code that read it as `List<RoadSegment>` goes
   through `RoadIndex`.
 
