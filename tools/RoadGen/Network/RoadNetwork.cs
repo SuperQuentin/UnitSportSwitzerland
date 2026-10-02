@@ -51,9 +51,6 @@ public sealed class RoadLink
 
     public Vec2 First => Centreline[0];
     public Vec2 Last => Centreline[^1];
-
-    /// <summary>Remaining length once both junctions have taken their share.</summary>
-    public double UsableLength => Alignment is null ? 0 : Math.Max(0, Alignment.Length - TrimStart - TrimEnd);
 }
 
 public sealed class RoadNode
