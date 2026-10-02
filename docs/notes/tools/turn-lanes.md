@@ -36,7 +36,17 @@
   and the junction's guide line on that side (`junction-priority`) moves out onto its edge. Signs beside the old edge (#121's 3.03)
   move out by the widening there (8 in the test region). Sidewalks, bike paths and painted bike
   lanes beside the widening move out with the edge instead of being dropped (#120,
-  `bike-infrastructure`: `RoadSide` shifts). Arrows two per lane in the storage,
+  `bike-infrastructure`: `RoadSide` shifts).
+- **Beside a painted bike lane** (#120): along the solid centre line a car must pass a cyclist
+  without crossing it, so every car lane beside the bike lane is 3.0 m (ZH Standards
+  Veloverkehr): the pocket is the approach lane widened to 3.0 m (`_pocket`), the through lane
+  3.0 m, the bike lane outside. The extra comes on over a 1:6 lead-in (at least 6 m) before the
+  taper, and goes again over a lead-out after an exit's hatch; where the street has no room for
+  it, with the taper itself. The solid centre line covers the lead-in too. Nyon: 16 of 18
+  pockets beside a bike lane, 14 with a lead-in.
+- **Solid centre line fix** (#120): `SolidCentre` matched the centre line by segment object and
+  missed a town street's (painted on a copy carrying the Urban flag: matched by points now); a
+  road with none (Kernfahrbahn, or too narrow) gets a solid line at its middle along the pocket. Arrows two per lane in the storage,
   tips 5 m from the stop bar and 15 m apart (Bern Normalien; 8 m apart in a 20 m pocket): left in the pocket, straight (or straight + right)
   in the through lane, as `PaintType.Arrow` triangles (variant = `PaintArrow` bits): outlines
   traced from the Commons SVG of SSV 6.06 (`road-markings` has the link), scaled so the straight

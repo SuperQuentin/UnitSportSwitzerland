@@ -61,6 +61,8 @@
   The game (slabs, kerb collision, corner kerbs, blend reach, paint heights) adds the shift; a
   painted bike lane moves out too: lanes are painted per final piece (`PaintEmitter.BikeLanes`),
   offset along a steady shift, as their own geometry along a taper (no symbol there).
+  A pocket beside a bike lane is widened so its lanes are full width along the solid centre
+  line, with a 1:6 lead-in before it (`turn-lanes`).
 - **Format**: `RoadSide.BufferDm` (was a pad byte, older readers skip it), `BikeKind.TrackMid`,
   `RoadSide.OuterDm` (verge + path + buffer + sidewalk: what blend, embankments, cover, corners and
   signs now use instead of `SidewalkDm`). Paint past the carriageway edge lies on the side's
