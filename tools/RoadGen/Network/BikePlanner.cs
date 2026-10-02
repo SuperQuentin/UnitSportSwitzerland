@@ -351,7 +351,7 @@ public static class BikePlanner
     /// <summary>A street carries on through a node where it turns less than 30 degrees.</summary>
     private const double ParallelCosStroke = 0.866;
 
-    private static uint Fnv(string s)
+    internal static uint Fnv(string s)
     {
         uint h = 2166136261;
         foreach (char ch in s) { h ^= ch; h *= 16777619; }

@@ -123,6 +123,38 @@ public static class StreetView
                 }
             }
 
+            // turn lanes' widenings (#123, #348): flush asphalt beside the ribbon
+            foreach (var area in tile.AreaProps)
+            {
+                if (area.Type != AreaPropType.Pavement) continue;
+                var v = area.Vertices;
+                for (int k = 0; k + 2 < area.Indices.Length; k += 3)
+                {
+                    int i0 = area.Indices[k] * 3, i1 = area.Indices[k + 1] * 3, i2 = area.Indices[k + 2] * 3;
+                    roads.Append(c, $"<path d=\"M{X(id.MinE + v[i0])} {Y(id.MaxN - v[i0 + 2])}L{X(id.MinE + v[i1])} {Y(id.MaxN - v[i1 + 2])}L{X(id.MinE + v[i2])} {Y(id.MaxN - v[i2 + 2])}Z\" fill=\"#8a8a8a\" stroke=\"#8a8a8a\" stroke-width=\"0.5\"/>");
+                }
+            }
+
+            // white paint (lane lines, stop lines, arrows, hatches) under the bike paint
+            foreach (var paint in tile.Paint)
+            {
+                if (paint.Rgba != Meshing.PaintEmitter.White || paint.Vertices.Length < 6) continue;
+                var v = paint.Vertices;
+                if (paint.Shape == PaintShape.Triangles)
+                {
+                    for (int k = 0; k + 2 < paint.Indices.Length; k += 3)
+                    {
+                        int i0 = paint.Indices[k] * 3, i1 = paint.Indices[k + 1] * 3, i2 = paint.Indices[k + 2] * 3;
+                        bikes.Append(c, $"<path d=\"M{X(id.MinE + v[i0])} {Y(id.MaxN - v[i0 + 2])}L{X(id.MinE + v[i1])} {Y(id.MaxN - v[i1 + 2])}L{X(id.MinE + v[i2])} {Y(id.MaxN - v[i2 + 2])}Z\" fill=\"#ffffff\"/>");
+                    }
+                    continue;
+                }
+                var pts = new (double E, double N)[v.Length / 3];
+                for (int i = 0; i < pts.Length; i++) pts[i] = (id.MinE + v[i * 3], id.MaxN - v[i * 3 + 2]);
+                string dash = paint.Dash > 0 ? string.Create(c, $" stroke-dasharray=\"{paint.Dash * PxPerM:F1} {paint.Gap * PxPerM:F1}\"") : "";
+                bikes.Append(c, $"<path d=\"{Offset(pts, 0, X, Y)}\" stroke=\"#ffffff\" stroke-width=\"{Math.Max(paint.Width, 0.1) * PxPerM:F1}\" fill=\"none\"{dash}/>");
+            }
+
             foreach (var area in tile.AreaProps)
             {
                 if (!StreetAreas.Is(area.Type)) continue;
@@ -139,7 +171,7 @@ public static class StreetView
             // bike paint (#120): lines and crossings as drawn, a symbol as a dot
             foreach (var paint in tile.Paint)
             {
-                if (paint.Type is not (PaintType.YellowDashed or PaintType.BikeCrossing or PaintType.BikeSymbol) || paint.Vertices.Length < 6) continue;
+                if (paint.Type is not (PaintType.YellowDashed or PaintType.YellowSolid or PaintType.BikeCrossing or PaintType.BikeSymbol) || paint.Vertices.Length < 6) continue;
                 var v = paint.Vertices;
                 var pts = new (double E, double N)[v.Length / 3];
                 for (int i = 0; i < pts.Length; i++) pts[i] = (id.MinE + v[i * 3], id.MaxN - v[i * 3 + 2]);
