@@ -462,6 +462,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested
+            || Items.BonkCheck.Requested
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
@@ -1124,6 +1125,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
         if (_items != null && Items.CarCdCheck.Create(() => LocalPlayer, () => _players, _items.Inventory, networked: true) is { } carCdCheck) AddChild(carCdCheck);
         if (Items.DropCheck.Create(() => LocalPlayer, () => _players, _items) is { } dropCheck) AddChild(dropCheck);
+        if (_items != null && Items.BonkCheck.Create(() => LocalPlayer, () => _players, _items.Inventory) is { } bonkCheck) AddChild(bonkCheck);
         if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: true) is { } webRadioCheck) AddChild(webRadioCheck);
 
         _chat!.Kicked += OnKicked;

@@ -17,3 +17,12 @@
   about the hips away from the blow (0.42 rad x strength, damped spring, 1.2 s) on every copy. The
   victim's own machine: health, screen shake, a step back (2.2 m/s + up 1.6) and the dance stops. The
   thrower sees a hit marker.
+- **Check**: `tools/bonkcheck.sh` (net tier, `GODOT=`; no terrain: a headless server on a generated
+  world and two headless clients). The thrower carries a playing radio in its pack, stands 4 m off and
+  throws a stone, then a radio; the victim must lose health on the first, is held at 9 until the
+  second (20.5 damage) and must end at the floor (5), never knocked out, and must have seen the
+  thrower's `BackItemId` radio, playing. Read the RESULT lines.
+- **Visual check**: `<godot> --path . -- --chunks <main>/terrain_chunks --view third --interactcheck`
+  (offline, windowed, scratch inventory): door aim and E/E flow asserted, screenshots
+  `test_output/interact_door*.png`, `interact_back.png` (radio on the back), `interact_pogo.png`,
+  `interact_jump.png` (crowd moves forced with `FootPlayer.DanceMoveOverride`), `interact_radio_bounce.png`.

@@ -25,4 +25,4 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 
 ## Commands
 
-- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh, tools/radiocheck.sh, tools/carcdcheck.sh, --carcdcheck shots, --cdfixture, tools/dropcheck.sh
+- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh, tools/radiocheck.sh, tools/carcdcheck.sh, --carcdcheck shots, --cdfixture, tools/dropcheck.sh, tools/bonkcheck.sh, --interactcheck
