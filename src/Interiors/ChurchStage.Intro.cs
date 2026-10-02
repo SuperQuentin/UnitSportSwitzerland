@@ -44,13 +44,17 @@ public partial class ChurchStage
         float headY = rat.Parts[RatParts.Head].Pivot.Y + 0.14f;
         float side = AwayFromAltar(rat);
         // the shots, in the rat's frame (it faces +Z, toward the pews)
+        // the head as posed this frame, in the rat's frame: the shots follow the crouch and the lean
+        var headNow = rat.Frame.AffineInverse() * ToLocal(_parts[_rat][RatParts.Head].GlobalPosition) + new Vector3(0, 0.12f, 0);
         var (eye, look, fov) = k switch
         {
             0 => (new Vector3(0, 0.5f, 4.5f), new Vector3(0, headY * 0.8f, 0), 60f),           // low and wide, from the aisle
-            1 => (new Vector3(0.12f, headY, 0.95f), new Vector3(0, headY, 0), 45f),           // the face
+            1 => (new Vector3(0.12f, headY, 0.95f), headNow, 45f),                           // the face
             2 => (new Vector3(0.6f * side, 2.6f, -1.1f), new Vector3(0, headY * 0.6f, 0.2f), 60f), // high, from behind the altar
-            3 => (new Vector3(1.5f * side, headY * 0.8f, 0.15f), new Vector3(0, headY * 0.7f, 0), 50f), // in profile
-            _ => (new Vector3(0, headY - 0.02f, 0.55f), new Vector3(0, headY - 0.05f, 0.1f), 38f), // right in its face
+            // three-quarters from the front, on the side away from the altar: clear of the radio stand too
+            3 => (new Vector3(0.9f * side, headY * 0.75f, 1.6f), headNow - new Vector3(0, 0.25f, 0), 50f),
+            // low and close, looking up at the crouch about to spring: the whole rat, mitre to feet
+            _ => (new Vector3(0.15f * side, 0.25f, 1.5f), headNow - new Vector3(0, 0.35f, 0), 62f),
         };
         var frame = rat.Frame;
         var at = frame * eye;
