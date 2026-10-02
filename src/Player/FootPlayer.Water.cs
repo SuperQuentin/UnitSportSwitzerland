@@ -77,11 +77,12 @@ public partial class FootPlayer
         Announced?.Invoke("SUNK!", false);
         PlayerInput.Rumble(0.6f, 0.4f, 0.5f);
         ApplyRide(RideKind.OnFoot, Vector3.Up * 1.5f);
-        GlobalPosition = state.Position with { Y = Mathf.Max(state.Position.Y, level - 0.2f) };
+        var at = Origin!.ToWorld(state.Position);
+        GlobalPosition = at with { Y = Mathf.Max(at.Y, level - 0.2f) };
         // everyone aboard goes out with the driver
         if (OnlineSeats && (SeatIndex > 0 || Riders.Any())) PassengerService.Instance!.Wrecked(Vector3.Zero);
         SeatIndex = 0;
         Vehicles?.Park(state);
-        GD.Print($"[water] {Name} sank at {state.Position.X:F0},{state.Position.Z:F0}, wrecked");
+        GD.Print($"[water] {Name} sank at {at.X:F0},{at.Z:F0}, wrecked");
     }
 }
