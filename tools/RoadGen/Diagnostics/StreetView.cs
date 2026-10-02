@@ -171,7 +171,7 @@ public static class StreetView
             // bike paint (#120): lines and crossings as drawn, a symbol as a dot
             foreach (var paint in tile.Paint)
             {
-                if (paint.Type is not (PaintType.YellowDashed or PaintType.YellowSolid or PaintType.BikeCrossing or PaintType.BikeSymbol) || paint.Vertices.Length < 6) continue;
+                if ((paint.Type is not (PaintType.YellowDashed or PaintType.YellowSolid or PaintType.BikeCrossing or PaintType.BikeSymbol) && paint.Rgba != Meshing.PaintEmitter.Yellow) || paint.Shape != PaintShape.Polyline || paint.Vertices.Length < 6) continue;
                 var v = paint.Vertices;
                 var pts = new (double E, double N)[v.Length / 3];
                 for (int i = 0; i < pts.Length; i++) pts[i] = (id.MinE + v[i * 3], id.MaxN - v[i * 3 + 2]);

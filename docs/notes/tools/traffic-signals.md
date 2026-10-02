@@ -133,7 +133,8 @@
   boxes, 10 advanced lines), 217 approaches with a bike signal, 97 right pockets; beside a painted
   lane (a) 2, (b) by hash 0, (b) forced 1. Rule-only copy: 163 junctions, (a) 1, (b) 1, forced 1.
   Martigny-Riddes: no signalised junction, all 0. Rebuild byte-identical. Screenshots from above:
-  (a) LV95 2500713,1115381, (b) 2500569,1117717, the crossing before and after.
+  (a) LV95 2500713,1115381, (b) 2500569,1117717, an advanced line 2499495,1117708, the crossing
+  before and after. `--street-svg` now draws the widenings and the white and yellow paint.
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` and restrictions not read yet (#347 has them); thin median (optional); crossings of divided roads
   (several nodes); 3-lane roads; at a compact junction a left + right pocket's mouth reaches into
