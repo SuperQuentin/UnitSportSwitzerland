@@ -355,19 +355,21 @@ public partial class SettingsScreen : Screen
     }
 
     /// <summary>
-    /// 3D render scales offered as the resolution they produce. The low end is the PS1 look
-    /// pushed further; 75% is the tuned default; above 100% supersamples.
+    /// 3D render scales of the window's real pixels, offered as the resolution they produce in the
+    /// window as it is when the screen opens. 100% is native; the low end is the PS1 look pushed
+    /// further; above 100% supersamples.
     /// </summary>
     private static readonly float[] RenderScales = { 0.25f, 0.35f, 0.5f, 0.625f, 0.75f, 0.875f, 1f, 1.25f, 1.5f, 2f };
 
-    private static void ScaleRow(Container into, string name, float current, Action<float> set)
+    private void ScaleRow(Container into, string name, float current, Action<float> set)
     {
         var scales = RenderScales.ToList();
         int index = scales.FindIndex(v => Math.Abs(v - current) < 0.001f);
         if (index < 0) { scales.Add(current); scales.Sort(); index = scales.IndexOf(current); }
+        var window = GetTree().Root.Size;
         var labels = scales.Select(v =>
-            $"{Math.Round(GameSettings.BaseWidth * v)} x {Math.Round(GameSettings.BaseHeight * v)}  ({v * 100:F0} %)").ToArray();
-        UiKit.OptionRow(into, name, labels, index, i => set(scales[i]), "The PS1 look gets chunkier below 75 %");
+            $"{Math.Round(window.X * v)} x {Math.Round(window.Y * v)}  ({v * 100:F0} %)").ToArray();
+        UiKit.OptionRow(into, name, labels, index, i => set(scales[i]), "100 % is the window's own resolution; lower is chunkier and faster");
     }
 
     /// <summary>Common window sizes that fit on the screen the window is on.</summary>

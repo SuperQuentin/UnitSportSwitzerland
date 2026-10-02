@@ -32,7 +32,7 @@ public partial class ZoomBubble : CanvasLayer, Core.IOriginShiftAware
 
     private const float FadeRate = 4f;
 
-    /// <summary>Disc radius in canvas pixels (the canvas is the fixed 1152x648 internal viewport).</summary>
+    /// <summary>Disc radius in canvas pixels (the UI canvas, a fixed 1152x648 scaled to the window).</summary>
     private const float Radius = 98f;
 
     /// <summary>Gap between the disc and the runner's screen point that the tail spans.</summary>
