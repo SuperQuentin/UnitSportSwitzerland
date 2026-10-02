@@ -20,6 +20,8 @@ public static class BusMeshBuilder
     private static readonly Color Pole = new(0.95f, 0.78f, 0.15f);
     private static readonly Color CoachSeat = new(0.2f, 0.22f, 0.3f);
     private static readonly Color LightStrip = new(0.95f, 0.95f, 0.88f);
+    private static readonly Color DoorButton = new(0.95f, 0.78f, 0.15f);
+    private static readonly Color DoorButtonLamp = new(0.2f, 0.75f, 0.3f);
     private const float Wall = 0.08f;
     /// <summary>Window pillars: their width, and the glass between them a bus is built with.</summary>
     private const float Pillar = 0.1f, WindowLength = 1.35f;
@@ -50,11 +52,18 @@ public static class BusMeshBuilder
         float winHigh = coach ? 3.3f : 2.6f;
         float roof = s.Height - (coach ? 0.1f : 0.17f);
 
-        // the articulated rear half starts with its bellows
+        // the articulated rear half starts with its bellows: rings of folds you walk through (#162)
         float from = !first && s.Pivot == Coupling.BusJoint ? 0.9f : 0f;
         if (from > 0f)
             for (int i = 0; i < 6; i++)
-                Along(m, cg, i * 0.15f, i * 0.15f + 0.12f, floor + 0.05f, roof - 0.05f, s.Width - (i % 2 == 0 ? 0.08f : 0.2f), Bellows);
+            {
+                float w = s.Width - (i % 2 == 0 ? 0.08f : 0.2f);
+                float a0 = i * 0.15f, a1 = a0 + 0.12f;
+                foreach (int side in new[] { 1, -1 })
+                    Along(m, cg, a0, a1, floor + 0.05f, roof - 0.05f, 0.1f, Bellows, side * (w * 0.5f - 0.05f));
+                Along(m, cg, a0, a1, roof - 0.15f, roof - 0.05f, w, Bellows);
+                Along(m, cg, a0, a1, floor, floor + 0.05f, w, Bellows);
+            }
 
         // this section's doors, in its own stations
         var doors = new List<(int Index, float At, float Width)>();
@@ -94,24 +103,70 @@ public static class BusMeshBuilder
                 Cut(m, cg, from + 2.5f, s.Length - 3f, belt - 0.06f, belt, side * (hw + 0.005f), archCuts, Trim, 0.02f);
         }
 
+        // ---- the deck you walk on (#162): the walls with their door holes, floor and roof ----
+        var dk = new DeckBuilder(cg);
+        dk.Along(0f, s.Length, floor - 0.12f, floor, s.Width);
+        dk.Along(0f, s.Length, roof, roof + 0.12f, s.Width);
+        foreach (int side in new[] { 1, -1 })
+            DeckWall(dk, from, s.Length, floor - 0.12f, roof, side * (hw - Wall * 0.5f), side < 0 ? doorCuts : new List<(float, float)>());
+        if (from > 0f)
+            // along the bellows: their folds, inside the wall line
+            foreach (int side in new[] { 1, -1 })
+                dk.Along(0f, from, floor, roof, 0.12f, side * (hw - 0.1f));
+        foreach (var d in doors)
+        {
+            // a button by each door, inside and out, anyone presses to open or shut it: just ahead
+            // of the opening, at hand height
+            float buttonAt = d.At - d.Width * 0.5f - 0.14f;
+            foreach (bool outside in new[] { false, true })
+            {
+                float x = outside ? -(hw + 0.012f) : -(inner + 0.012f);
+                var normal = new Vector3(outside ? -1f : 1f, 0, 0);
+                var at = new Vector3(x, (coach && !outside ? deck : floor) + 0.95f, cg - buttonAt);
+                m.Box(at, new Vector3(0.024f, 0.12f, 0.08f), DoorButton);
+                m.Box(at + normal * 0.012f + new Vector3(0, 0.02f, 0), new Vector3(0.004f, 0.04f, 0.04f), DoorButtonLamp);
+                dk.Button(d.Index, at, normal);
+            }
+            // a shut door is solid; an open one has a step down to the road outside it (the walk has no
+            // step-up), meeting the floor flush at its edge: a lip of even a centimetre stops the walk on it
+            dk.Along(d.At - d.Width * 0.5f, d.At + d.Width * 0.5f, floor, roof, Wall, -(hw - Wall * 0.5f), DeckPart.DoorShut, d.Index);
+            dk.RampAcross(d.At, -(hw + 0.8f), -0.05f, -hw, floor, d.Width - 0.06f, DeckPart.DoorStep, d.Index);
+        }
+        bool jointAhead = !first && s.Pivot == Coupling.BusJoint, jointBehind = !last && s.Hitch == Coupling.BusJoint;
+        if (first) EndWall(dk, 0f, 0.08f, floor, roof, s.Width, inner, open: false);
+        else if (jointAhead) EndWall(dk, from, 0.06f, floor, roof, s.Width, inner, open: true);
+        EndWall(dk, s.Length - 0.08f, 0.08f, floor, roof, s.Width, inner, open: jointBehind);
+
         // ---- the saloon: floor, podiums over the wheels, a coach's high deck and its stairwells ----
         float saloonFrom = from + Wall, saloonTo = s.Length - Wall;
         Along(m, cg, saloonFrom, saloonTo, floor, floor + 0.02f, inner * 2f, HeavyCabin.FloorColour);
         foreach (var (a0, a1) in archCuts)
             foreach (int side in new[] { 1, -1 })
+            {
                 Along(m, cg, a0, a1, floor, archTop, 0.95f, HeavyCabin.Dash, side * (inner - 0.475f));
-        // a city bus's last section: the back raised over the engine
+                dk.Along(a0, a1, floor, archTop, 0.95f, side * (inner - 0.475f));
+            }
+        // a city bus's last section: the back raised over the engine, a ramp up the aisle to it
         float podiumFrom = last && !coach ? s.Length - 2.6f : float.MaxValue;
-        if (podiumFrom < s.Length) Along(m, cg, podiumFrom, saloonTo, floor, floor + 0.3f, inner * 2f, HeavyCabin.Dash);
+        if (podiumFrom < s.Length)
+        {
+            Along(m, cg, podiumFrom, saloonTo, floor, floor + 0.3f, inner * 2f, HeavyCabin.Dash);
+            dk.Along(podiumFrom, saloonTo, floor, floor + 0.3f, inner * 2f);
+            dk.RampAlong(podiumFrom - 0.7f, floor, podiumFrom, floor + 0.3f, 1.1f);
+        }
         float deckFrom = first ? 2.2f : saloonFrom;
         if (coach)
         {
             // the deck over the luggage bays, cut where each door's stairwell comes up on the right
             Along(m, cg, deckFrom, saloonTo, floor, deck, inner, Underfloor, inner * 0.5f);
+            dk.Along(deckFrom, saloonTo, floor, deck, inner, inner * 0.5f);
             float at = deckFrom;
             foreach (var d in doors.Where(d => d.At > deckFrom).OrderBy(d => d.At))
             {
                 Along(m, cg, at, d.At - d.Width * 0.5f - 0.1f, floor, deck, inner, Underfloor, -inner * 0.5f);
+                dk.Along(at, d.At - d.Width * 0.5f - 0.1f, floor, deck, inner, -inner * 0.5f);
+                // the stairwell, a slope to the walk: from the door up to the deck by the aisle
+                dk.RampAcross(d.At, -(inner - 0.02f), floor, -0.02f, deck, d.Width + 0.2f);
                 // three steps down toward the door
                 for (int k = 0; k < 3; k++)
                     Along(m, cg, d.At - d.Width * 0.5f - 0.1f, d.At + d.Width * 0.5f + 0.1f, floor, deck - (k + 1) * (deck - floor) / 4f,
@@ -119,10 +174,14 @@ public static class BusMeshBuilder
                 at = d.At + d.Width * 0.5f + 0.1f;
             }
             Along(m, cg, at, saloonTo, floor, deck, inner, Underfloor, -inner * 0.5f);
+            dk.Along(at, saloonTo, floor, deck, inner, -inner * 0.5f);
             if (first)
+            {
                 // the steps up from the front door, beside the driver
                 for (int k = 0; k < 3; k++)
                     Along(m, cg, deckFrom - (k + 1) * 0.25f, deckFrom, floor, deck - (k + 1) * (deck - floor) / 4f, inner, HeavyCabin.Dash, -inner * 0.5f);
+                dk.RampAlong(deckFrom - 1f, floor, deckFrom, deck, inner, -inner * 0.5f);
+            }
         }
 
         // ---- passenger seats in rows, 2 + 2 across the aisle ----
@@ -131,7 +190,7 @@ public static class BusMeshBuilder
         float seatsFrom = first ? deckFrom + (coach ? 0.2f : -0.2f) : saloonFrom + 0.3f;
         if (first)
         {
-            cockpit = DriverPlace(m, spec, s, cg, hw, inner, floor, roof, coach);
+            cockpit = DriverPlace(m, dk, spec, s, cg, hw, inner, floor, roof, coach);
             seats.Add(new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip), cockpit.Seat.Recline, cockpit.Frame.Floor));
             seatsFrom = Mathf.Max(seatsFrom, cg - cockpit.Seat.Hip.Z + 0.6f);
         }
@@ -156,22 +215,33 @@ public static class BusMeshBuilder
                     var hip = new Vector3(side * (inner - col), under + 0.5f, cg - at);
                     float recline = HeavyCabin.PassengerSeat(m, hip, under, seatColour, coach);
                     seats.Add(new SeatAnchor(section, CarMeshBuilder.Turned(hip), recline, under));
+                    // the seat as a block from its foot to the top of its back
+                    float top = hip.Y + (coach ? 0.85f : 0.6f);
+                    dk.Box(new Vector3(hip.X, (under + top) * 0.5f, hip.Z + 0.05f), new Vector3(0.44f, top - under, 0.62f));
                 }
                 if (!coach && row % 2 == 0)
+                {
                     // a pole at the aisle end of every other row
                     m.Tube(new Vector3(side * aisle, under, cg - at + 0.32f), new Vector3(side * aisle, roof - 0.02f, cg - at + 0.32f), 0.018f, Pole, 5);
+                    dk.Box(new Vector3(side * aisle, (under + roof) * 0.5f, cg - at + 0.32f), new Vector3(0.05f, roof - under, 0.05f));
+                    dk.Hold(side * aisle, at - 0.32f);
+                }
             }
         }
         if (!coach)
         {
             // rails under the ceiling along the aisle, and a pole each side of every door
             foreach (int side in new[] { 1, -1 })
+            {
                 m.Tube(new Vector3(side * aisle, roof - 0.28f, cg - seatsFrom), new Vector3(side * aisle, roof - 0.28f, cg - saloonTo + 0.3f), 0.016f, Pole, 5);
+            }
             foreach (var d in doors)
                 foreach (float e in new[] { -1f, 1f })
                 {
                     float z = cg - d.At - e * (d.Width * 0.5f + 0.06f);
                     m.Tube(new Vector3(-(inner - 0.12f), floor, z), new Vector3(-(inner - 0.12f), roof - 0.02f, z), 0.018f, Pole, 5);
+                    dk.Box(new Vector3(-(inner - 0.12f), (floor + roof) * 0.5f, z), new Vector3(0.05f, roof - floor, 0.05f));
+                    dk.Hold(-(inner - 0.12f), cg - z);
                 }
         }
         else
@@ -201,7 +271,7 @@ public static class BusMeshBuilder
                 Lamp(m, sx * (hw - 0.07f), floor + 0.35f, front + 0.05f, 0.1f, 0.14f, 0.04f, Amber);
             }
         }
-        else Along(m, cg, from, from + 0.06f, floor, s.Height, s.Width - 0.04f, look.Paint);
+        else EndWall(m, cg, from, from + 0.06f, floor, s.Height, s.Width - 0.04f, look.Paint, inner);
 
         if (last)
         {
@@ -215,7 +285,7 @@ public static class BusMeshBuilder
                 Lamp(rev, sx * (hw - 0.35f), 0.7f, rear - 0.03f, 0.18f, 0.12f, 0.04f, White);
             }
         }
-        else Along(m, cg, s.Length - 0.06f, s.Length, floor, s.Height, s.Width - 0.04f, look.Paint);
+        else EndWall(m, cg, s.Length - 0.06f, s.Length, floor, s.Height, s.Width - 0.04f, look.Paint, inner);
 
         // the door leaves: two per opening on a city bus, one on the coach, glass in a frame
         var leaves = new List<HeavyDoorLeaf>();
@@ -249,6 +319,9 @@ public static class BusMeshBuilder
             Cockpit = cockpit,
             Seats = seats.ToArray(),
             Glow = glow.Build(),
+            // aboard: anywhere inside the walls, floor to roof, from end to end of the section
+            Deck = dk.Build(section, new Aabb(new Vector3(-inner, floor - 0.3f, cg - s.Length + 0.06f),
+                new Vector3(inner * 2f, roof - floor + 0.3f, s.Length - 0.12f))),
         };
         if (first && look.Destinations.Length > 0)
         {
@@ -263,7 +336,7 @@ public static class BusMeshBuilder
     /// on it (<see cref="HeavyCabin"/>), a city bus's partition behind the seat, the mirrors out on
     /// their long stalks.
     /// </summary>
-    private static HeavyCockpit DriverPlace(MeshScratch m, HeavySpec spec, SectionSpec s, float cg, float hw, float inner,
+    private static HeavyCockpit DriverPlace(MeshScratch m, DeckBuilder dk, HeavySpec spec, SectionSpec s, float cg, float hw, float inner,
         float floor, float roof, bool coach)
     {
         float front = cg;
@@ -295,6 +368,9 @@ public static class BusMeshBuilder
         if (!coach)
             // the cab's partition behind the driver: solid to the shoulder, nothing above
             m.Box(new Vector3((inner + x1) * 0.5f, platform + 0.55f, cg - behind), new Vector3(inner - x1, 1.1f, 0.04f), HeavyCabin.Dash);
+        // the driver's corner, to the walk: one block from the face to behind the seat, beside the door
+        float top = platform + 1.25f;
+        dk.Box(new Vector3((inner + x1) * 0.5f, (floor + top) * 0.5f, cg - behind * 0.5f), new Vector3(inner - x1, top - floor, behind));
         return cockpit;
     }
 
@@ -329,6 +405,42 @@ public static class BusMeshBuilder
                 if (i < panes) SidePane(m, paneX, cg - (p0 + Pillar), cg - (p0 + Pillar + glass), y0 + 0.03f, y1 - 0.03f);
             }
         }
+    }
+
+    /// <summary>A side wall of the deck between two stations, with holes where the doors are (<see cref="Cut"/>, for walking).</summary>
+    private static void DeckWall(DeckBuilder dk, float fromAt, float toAt, float y0, float y1, float x, List<(float, float)> cuts)
+    {
+        float at = fromAt;
+        foreach (var (c0, c1) in cuts.OrderBy(c => c.Item1))
+        {
+            if (c1 <= at) continue;
+            if (c0 > at) dk.Along(at, Mathf.Min(c0, toAt), y0, y1, Wall, x);
+            at = Mathf.Max(at, c1);
+            if (at >= toAt) return;
+        }
+        if (at < toAt) dk.Along(at, toAt, y0, y1, Wall, x);
+    }
+
+    /// <summary>The width of the way through an articulated bus's joint, and how high it is.</summary>
+    private const float PassageWidth = 1.3f, PassageHeight = 2.1f;
+
+    /// <summary>An end of a section: shut, or at an articulated bus's joint, open for walking through.</summary>
+    private static void EndWall(MeshScratch m, float cg, float fromAt, float toAt, float floor, float height, float width, Color colour, float inner)
+    {
+        float side = (width - PassageWidth) * 0.5f;
+        foreach (int sx in new[] { 1, -1 })
+            Along(m, cg, fromAt, toAt, floor, height, side, colour, sx * (PassageWidth * 0.5f + side * 0.5f));
+        Along(m, cg, fromAt, toAt, floor + PassageHeight, height, PassageWidth, colour);
+    }
+
+    /// <summary>The deck's end wall at a station, <paramref name="depth"/> deep: shut, or with the passage of a joint.</summary>
+    private static void EndWall(DeckBuilder dk, float at, float depth, float floor, float roof, float width, float inner, bool open)
+    {
+        if (!open) { dk.Along(at, at + depth, floor, roof, width); return; }
+        float side = (width - PassageWidth) * 0.5f;
+        foreach (int sx in new[] { 1, -1 })
+            dk.Along(at, at + depth, floor, roof, side, sx * (PassageWidth * 0.5f + side * 0.5f));
+        dk.Along(at, at + depth, floor + PassageHeight, roof, PassageWidth);
     }
 
     /// <summary>A wall panel at <paramref name="x"/> between two stations, with holes where <paramref name="cuts"/> are.</summary>

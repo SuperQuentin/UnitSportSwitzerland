@@ -221,6 +221,9 @@ public abstract class Rideable
     /// </summary>
     public virtual float WheelLock => 0f;
 
+    /// <summary>What its steering wheel feels after the last step, for force feedback; nothing by default.</summary>
+    public virtual Core.WheelFeel Feel => default;
+
     /// <summary>The mesh as it stands with nobody on it (a bike without its rider).</summary>
     public virtual Node3D BuildParkedVisual(int riderIndex) => BuildVisual(riderIndex);
 
@@ -266,6 +269,14 @@ public abstract class Rideable
     /// truck). A motorbike does not: its pillion gets off with the rider.
     /// </summary>
     public virtual bool Driverless => false;
+
+    /// <summary>
+    /// The decks a player can walk about on, one per section that has one (#162): a bus's saloon.
+    /// Empty: not walkable. Read from the drawn model, once per kind.
+    /// </summary>
+    public virtual Avatar.VehicleDeck[] Decks => System.Array.Empty<Avatar.VehicleDeck>();
+
+    public bool Walkable => Decks.Length > 0;
 
     /// <summary>Seat <paramref name="i"/>'s hip in this ride's node frame, the train straight: for picking the nearest seat.</summary>
     public virtual Vector3 SeatPosition(int i) => Seats[i].Hip;

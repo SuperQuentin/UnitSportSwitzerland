@@ -202,6 +202,15 @@ public sealed class Truck : Rideable, IEngined
     public bool Headlights { get; set; }
     /// <summary>Passenger doors open, one bit per door (<see cref="HeavyLook.Doors"/>).</summary>
     public byte DoorsOpen { get; set; }
+    private bool _pulledAway;
+
+    /// <summary>A door's button pressed (#162): that door opens or shuts; a stopped city bus kneels while any is open.</summary>
+    public void ToggleDoor(int door)
+    {
+        if (door < 0 || door >= DoorCount) return;
+        DoorsOpen ^= (byte)(1 << door);
+        if (Spec.Class != HeavyClass.Coach && !_pulledAway) Kneeling = DoorsOpen != 0;
+    }
     public int DoorCount => Spec.Look.Doors.Length;
     /// <summary>Lowered on the door side for boarding (buses).</summary>
     public bool Kneeling { get; set; }
@@ -252,7 +261,11 @@ public sealed class Truck : Rideable, IEngined
     public override bool CanHop => false;
     public override float MaxHealth => 400f;
     /// <summary>Lock to lock through the cab's ratio: ~1800° for a 0.78 rad box, what a truck wheel is set to.</summary>
-    public override float WheelLock => 2f * Spec.MaxSteer * HeavyCockpit.SteerRatio;
+    public override float WheelLock => Core.SteeringWheel.LockOverride ?? 2f * Spec.MaxSteer * HeavyCockpit.SteerRatio;
+    /// <summary>The cab's ratio, unless <c>--wheellock</c> sets another lock.</summary>
+    private float Ratio => WheelLock * 0.5f / Spec.MaxSteer;
+    public override Core.WheelFeel Feel => _feel;
+    private Core.WheelFeel _feel;
 
     public override Vector3 FirstPersonEye
     {
@@ -363,17 +376,31 @@ public sealed class Truck : Rideable, IEngined
     public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
 
     /// <summary>Every seat of the truck's own sections (a bus's both halves), the driver's first (#158).</summary>
-    public override SeatAnchor[] Seats => SeatsOf(Kind, () =>
+    public override SeatAnchor[] Seats => Model.Seats;
+
+    /// <summary>The bus's saloon, each half of it, for walking about in (#162); none on a truck.</summary>
+    public override VehicleDeck[] Decks => Model.Decks;
+
+    private static readonly Dictionary<RideKind, (SeatAnchor[] Seats, VehicleDeck[] Decks)> _models = new();
+
+    /// <summary>The seats and decks of this kind's sections, read once from a throwaway build of each.</summary>
+    private (SeatAnchor[] Seats, VehicleDeck[] Decks) Model
     {
-        var seats = new List<SeatAnchor>();
-        for (int k = 0; k < Spec.Sections.Length; k++)
+        get
         {
-            var rig = HeavyRig.Create(Spec, k, 0.5f);
-            seats.AddRange(rig.Seats);
-            rig.Free();
+            if (_models.TryGetValue(Kind, out var known)) return known;
+            var seats = new List<SeatAnchor>();
+            var decks = new List<VehicleDeck>();
+            for (int k = 0; k < Spec.Sections.Length; k++)
+            {
+                var rig = HeavyRig.Create(Spec, k, 0.5f);
+                seats.AddRange(rig.Seats);
+                if (rig.Deck != null) decks.Add(rig.Deck);
+                rig.Free();
+            }
+            return _models[Kind] = (seats.ToArray(), decks.ToArray());
         }
-        return seats.ToArray();
-    });
+    }
 
     public override bool Driverless => true;
 
@@ -445,7 +472,7 @@ public sealed class Truck : Rideable, IEngined
         if (!float.IsNaN(input.WheelAngle))
         {
             // a steering wheel (#68): the box follows the driver's hands through the cab's ratio, to the stop
-            delta = Mathf.Clamp(-input.WheelAngle / HeavyCockpit.SteerRatio, -Spec.MaxSteer, Spec.MaxSteer);
+            delta = Mathf.Clamp(-input.WheelAngle / Ratio, -Spec.MaxSteer, Spec.MaxSteer);
             _steer = -delta / Spec.MaxSteer;
         }
         else
@@ -507,9 +534,30 @@ public sealed class Truck : Rideable, IEngined
             WheelSpin[k] += b.V.Dot(b.Forward) / WheelRadius * dt;
         }
 
-        // a bus comes up off its knees when it pulls away
-        if (Kneeling && motion.Speed > 1.5f) Kneeling = false;
-        if (DoorsOpen != 0 && motion.Speed > 1.5f) DoorsOpen = 0;
+        // the wheel's feel: the front (fully steered) axles of the tractor or the bus's first section
+        float fy = 0f, alpha = 0f, peak = 0f;
+        int steered = 0;
+        for (int i = 0; i < b0.Spec.Axles.Length; i++)
+        {
+            if (b0.Spec.Axles[i].Steer < 0.99f) continue;
+            fy += b0.AxleFy[i];
+            alpha += b0.AxleAlpha[i];
+            peak += b0.StaticLoad[i] * Spec.Grip;
+            steered++;
+        }
+        // big tyres on stiff springs pass less of the road than a car's
+        var (road, roadHz) = Core.WheelFeel.RoadFrom(ground.OnFloor ? 0.7f * CarSetups.Roughness(ground.Surface) : 0f, u2);
+        _feel = new Core.WheelFeel(
+            ground.OnFloor && steered > 0 ? Core.WheelFeel.Aligning(fy, alpha / steered, peak, u2) : 0f,
+            road, roadHz,
+            // assisted, but six tonnes on the front axle still scrub when turned on the spot
+            ground.OnFloor ? Core.WheelFeel.WeightFrom(0.45f, u2) : 0f);
+
+        // a bus shuts its doors and comes up off its knees as it pulls away; a door opened after
+        // that (a passenger's button, #162) stays open, at their own risk
+        bool moving = motion.Speed > 1.5f;
+        if (moving && !_pulledAway) { DoorsOpen = 0; Kneeling = false; }
+        _pulledAway = moving;
     }
 
     /// <summary>
@@ -589,7 +637,7 @@ public sealed class Truck : Rideable, IEngined
     /// <summary>The cockpit's wheel, pedals and dials (#157), on the owner and every copy alike.</summary>
     private void DressCockpit(HeavyRig rig, float kmh, float rpm)
     {
-        rig.WheelTurn = SteerAngle * HeavyCockpit.SteerRatio;
+        rig.WheelTurn = SteerAngle * Ratio;
         rig.Throttle = ThrottlePedal;
         rig.Brake = BrakePedal;
         rig.SpeedKmh = kmh;
