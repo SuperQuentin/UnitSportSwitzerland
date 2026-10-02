@@ -338,13 +338,14 @@ public static partial class Planner
         });
 
         string? osmSkip = !wantOsm ? "OSM layer off"
-            : toBuild.Count == 0 && featureTiles.Count == 0 && File.Exists(Path.Combine(p.Temp, "osm_overlay.tsv")) ? "overlay up to date" : null;
+            : toBuild.Count == 0 && featureTiles.Count == 0 && File.Exists(Path.Combine(p.Temp, "osm_overlay.tsv"))
+              && File.Exists(Path.Combine(p.Temp, "osm_nodes.tsv")) ? "overlay up to date" : null; // osm_nodes.tsv: #347
         // Before the extraction: the road network stage at its end reads the overlay. The whole
         // built region, not just the selection, so a second selection does not shrink it.
         steps.Add(new Step
         {
             Title = "OpenStreetMap overlay",
-            Detail = "OSM road attributes matched to TLM lines (osm_overlay.tsv, temp dir)",
+            Detail = "OSM road attributes, signals and turn restrictions matched to TLM lines (osm_overlay.tsv, osm_nodes.tsv, temp dir)",
             Seconds = 10 + builtTotal * 0.01,
             Skip = osmSkip,
             Run = r =>
