@@ -255,6 +255,13 @@ public partial class ChunkNode : Node3D
         foreach (var t in trees) if (wanted(t)) count++;
         var buffer = new float[count * FloatsPerInstance];
 
+        // Instances go out in a shuffled order, so any prefix is an even thinning of the whole
+        // tile: a far tile draws only the first VisibleInstanceCount (SetTreeDensity). Seeded,
+        // so every peer and every rebuild thins the same trees.
+        var slot = new int[count];
+        for (int k = 0; k < count; k++) slot[k] = k;
+        new Random(count).Shuffle(slot);
+
         int i = 0;
         foreach (var t in trees)
         {
@@ -281,7 +288,7 @@ public partial class ChunkNode : Node3D
 
             // Transform3D as three rows of (basis column x, y, z, origin): a diagonal basis
             // of (radius, height, radius) with the tree's position as the last column.
-            int o = i * FloatsPerInstance;
+            int o = slot[i] * FloatsPerInstance;
             buffer[o + 0] = radius; buffer[o + 1] = 0; buffer[o + 2] = 0; buffer[o + 3] = t.X;
             buffer[o + 4] = 0; buffer[o + 5] = t.Height; buffer[o + 6] = 0; buffer[o + 7] = t.Y;
             buffer[o + 8] = 0; buffer[o + 9] = 0; buffer[o + 10] = radius; buffer[o + 11] = t.Z;
@@ -317,14 +324,36 @@ public partial class ChunkNode : Node3D
     public static TreeMeshes BuildTreeMeshes(TreeBuffers trees, Material material, Aabb bounds,
         Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
-        var conifers = Make(trees.Conifers, trees.ConiferCount, ConeMesh(material), bounds);
-        var broadleaves = Make(trees.Broadleaves, trees.BroadleafCount, CrownMesh(material), bounds);
+        var conifers = Make(trees.Conifers, trees.ConiferCount, UnitMesh(material, 0), bounds);
+        var broadleaves = Make(trees.Broadleaves, trees.BroadleafCount, UnitMesh(material, 1), bounds);
         if (Styles.StyleKit.TreeFarMaterial is not { } far)
             return new TreeMeshes(conifers, broadleaves);
         // the same instances again as billboards: the shaders crossfade the two per tree
         return new TreeMeshes(conifers, broadleaves,
-            Make(trees.Conifers, trees.ConiferCount, BillboardMesh(far, 0f), bounds),
-            Make(trees.Broadleaves, trees.BroadleafCount, BillboardMesh(far, 1f), bounds));
+            Make(trees.Conifers, trees.ConiferCount, UnitMesh(far, 2), bounds),
+            Make(trees.Broadleaves, trees.BroadleafCount, UnitMesh(far, 3), bounds));
+    }
+
+    private static readonly Dictionary<(Material, int), ArrayMesh> UnitMeshes = new();
+
+    /// <summary>
+    /// The unit tree meshes, shared by every tile: 0 cone, 1 crown, 2/3 conifer/broadleaf
+    /// billboard. They used to be built per tile build and never freed (a MultiMesh does not own
+    /// its mesh), four RenderingServer meshes leaked with every tree tile.
+    /// </summary>
+    private static ArrayMesh UnitMesh(Material material, int kind)
+    {
+        lock (UnitMeshes)
+        {
+            if (!UnitMeshes.TryGetValue((material, kind), out var mesh))
+                UnitMeshes[(material, kind)] = mesh = kind switch
+                {
+                    0 => ConeMesh(material),
+                    1 => CrownMesh(material),
+                    _ => BillboardMesh(material, kind - 2),
+                };
+            return mesh;
+        }
     }
 
     private static MultiMesh? Make(float[] buffer, int count, ArrayMesh mesh, Aabb bounds)
@@ -354,6 +383,27 @@ public partial class ChunkNode : Node3D
         foreach (var near in new[] { _coniferInstance, _broadleafInstance })
             if (near?.Multimesh is { } multi)
                 near.VisibilityRangeEnd = billboards ? Styles.StyleKit.TreeNearRange(multi.CustomAabb) : 0f;
+        ApplyTreeDensity();
+    }
+
+    private float _treeDensity = 1f;
+
+    /// <summary>
+    /// The share of this tile's trees drawn, 0..1 (<see cref="LodPolicy.TreeDensity"/>): the
+    /// first that many of the shuffled instances, so a far forest thins evenly, never in patches.
+    /// </summary>
+    public void SetTreeDensity(float density)
+    {
+        if (density == _treeDensity) return;
+        _treeDensity = density;
+        ApplyTreeDensity();
+    }
+
+    private void ApplyTreeDensity()
+    {
+        foreach (var node in new[] { _coniferInstance, _broadleafInstance, _coniferFarInstance, _broadleafFarInstance })
+            if (node?.Multimesh is { } multi)
+                multi.VisibleInstanceCount = _treeDensity >= 1f ? -1 : (int)Math.Ceiling(multi.InstanceCount * _treeDensity);
     }
 
     private void Fill(ref MultiMeshInstance3D? node, string name, MultiMesh? multi)

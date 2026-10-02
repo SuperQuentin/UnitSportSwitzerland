@@ -1210,7 +1210,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     Interiors.DoorIndex.SetTile(result.Id, _origin!.ToWorld(result.Id.MinE, result.Id.MaxN, 0), result.Doors);
                 TileFurnished?.Invoke(result.Id, EnsureNode(result.Id, state), result.Doors ?? []);
                 if (result.Trees != null)
-                    EnsureNode(result.Id, state).SetTrees(result.Trees);
+                {
+                    var node = EnsureNode(result.Id, state);
+                    node.SetTrees(result.Trees);
+                    int dist = int.MaxValue;
+                    foreach (var anchor in _anchors)
+                        dist = Math.Min(dist, LodPolicy.Distance(result.Id, _origin!.TileAt(anchor.GlobalPosition)));
+                    node.SetTreeDensity(Lod.TreeDensity(dist));
+                }
                 if (result.Water != null)
                     EnsureNode(result.Id, state).SetWater(result.Water);
                 state.HasBuildings = true;
@@ -1510,6 +1517,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _wanted = desired.ToArray();
         _desired.Clear();
         foreach (var (id, _) in _wanted) _desired.Add(id);
+        // a tile's ring changed: so does how many of its trees are drawn
+        foreach (var (id, want) in _wanted)
+            if (_chunks.TryGetValue(id, out var loaded) && loaded.Node != null)
+                loaded.Node.SetTreeDensity(Lod.TreeDensity(want.Dist));
 
         // unload with hysteresis
         var toRemove = new List<TileId>();
