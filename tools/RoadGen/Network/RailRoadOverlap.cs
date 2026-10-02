@@ -53,7 +53,7 @@ public sealed class RailRoadOverlap
     /// </summary>
     public const float RailTop = 0.16f;
 
-    private sealed record Road(Vec2[] Plan, float[] Height, double Half);
+    private sealed record Road(Vec2[] Plan, float[] Height, double Half, bool Bridge);
 
     private readonly List<Road> _roads = new();
     private readonly Dictionary<(long, long), List<(int Road, int Seg)>> _grid = new();
@@ -74,14 +74,23 @@ public sealed class RailRoadOverlap
             + $"{PaintCut:N0} road paint lines cut at a track; {SeamBlends} height blends cut by a tile seam");
     }
 
-    /// <summary>A carriageway a rail can be embedded in: a car road or a Platz, at ground level.</summary>
+    /// <summary>
+    /// A carriageway a rail can be embedded in: a car road or a Platz, at ground level or on a
+    /// bridge (a tram crossing a river on the road bridge: its ballast lay on the deck at the deck's
+    /// height and fought it). A rail is matched with carriageways of its own level only.
+    /// </summary>
     public static bool IsCarriageway(RoadSegment s) =>
         (s.Class <= RoadClass.Lane || s.Class == RoadClass.Square)
-        && (s.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel | RoadFlags.Stairs)) == 0;
+        && (s.Flags & (RoadFlags.Tunnel | RoadFlags.Stairs)) == 0;
 
-    /// <summary>A rail that can be embedded: at ground level, not a funicular.</summary>
+    /// <summary>A rail that can be embedded: at ground level or on a bridge, not a funicular.</summary>
     public static bool IsEmbeddable(RoadSegment s) =>
-        s.Class == RoadClass.Railway && (s.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel | RoadFlags.Funicular)) == 0;
+        s.Class == RoadClass.Railway && (s.Flags & (RoadFlags.Tunnel | RoadFlags.Funicular)) == 0;
+
+    /// <summary>Mirror of <c>RoadMeshBuilder.BridgeLift</c>: a deck and its paint are drawn this far above the line.</summary>
+    private const float BridgeLift = 0.15f;
+
+    private static bool IsBridge(RoadSegment s) => (s.Flags & RoadFlags.Bridge) != 0;
 
     /// <summary>
     /// Indexes every carriageway of the block and its halo (untrimmed: junction areas included),
@@ -99,7 +108,7 @@ public sealed class RailRoadOverlap
             var height = new float[seg.PointCount];
             for (int i = 0; i < height.Length; i++) height[i] = seg.Points[i * 3 + 1];
             int r = _roads.Count;
-            _roads.Add(new Road(plan, height, width * 0.5));
+            _roads.Add(new Road(plan, height, width * 0.5, IsBridge(seg)));
             for (int i = 1; i < plan.Length; i++)
             {
                 double pad = width * 0.5 + StreetMargin + 5.0;   // every margin Covered is asked with
@@ -121,7 +130,7 @@ public sealed class RailRoadOverlap
     /// The carriageway covering <paramref name="p"/> (centreline within half width + margin), the
     /// one it is deepest inside, and the road's height at the foot of the perpendicular.
     /// </summary>
-    private bool Covered(Vec2 p, double margin, out float height)
+    private bool Covered(Vec2 p, double margin, out float height, bool bridge)
     {
         height = 0;
         if (!_grid.TryGetValue(((long)Math.Floor(p.X / Cell), (long)Math.Floor(p.Y / Cell)), out var list)) return false;
@@ -129,6 +138,7 @@ public sealed class RailRoadOverlap
         foreach (var (r, i) in list)
         {
             var road = _roads[r];
+            if (road.Bridge != bridge) continue;
             var a = road.Plan[i - 1];
             var ab = road.Plan[i] - a;
             double len2 = ab.LengthSquared;
@@ -152,6 +162,7 @@ public sealed class RailRoadOverlap
     {
         if (!IsEmbeddable(rail) || plan.Count < 2) return null;
         bool onStreet = rail.Attributes.Has(RoadAttrFlags.OnStreet);
+        bool bridge = IsBridge(rail);
         double margin = onStreet ? StreetMargin : 0;
         var arc = Polyline.ArcLengths(plan);
         double total = arc[^1];
@@ -164,7 +175,7 @@ public sealed class RailRoadOverlap
         for (int k = 0; k <= samples; k++)
         {
             double s = total * k / samples;
-            bool inside = Covered(Polyline.PointAt(plan, arc, s), margin, out _);
+            bool inside = Covered(Polyline.PointAt(plan, arc, s), margin, out _, bridge);
             if (inside && runStart < 0) runStart = s;
             if ((!inside || k == samples) && runStart >= 0)
             {
@@ -185,8 +196,8 @@ public sealed class RailRoadOverlap
             // crossing it would otherwise pull the road edge down to the ballast line.
             double clear = margin + Math.Max(rail.Width * 0.5, 1.0) + 0.3;
             double a = Math.Max(0, merged[i].A - Extend), b = Math.Min(total, merged[i].B + Extend);
-            for (double lim = a - MaxExtend; a > 0 && a > lim && Covered(Polyline.PointAt(plan, arc, a), clear, out _);) a = Math.Max(0, a - Step);
-            for (double lim = b + MaxExtend; b < total && b < lim && Covered(Polyline.PointAt(plan, arc, b), clear, out _);) b = Math.Min(total, b + Step);
+            for (double lim = a - MaxExtend; a > 0 && a > lim && Covered(Polyline.PointAt(plan, arc, a), clear, out _, bridge);) a = Math.Max(0, a - Step);
+            for (double lim = b + MaxExtend; b < total && b < lim && Covered(Polyline.PointAt(plan, arc, b), clear, out _, bridge);) b = Math.Min(total, b + Step);
             merged[i] = (a, b);
         }
         for (int i = merged.Count - 1; i > 0; i--)
@@ -204,7 +215,7 @@ public sealed class RailRoadOverlap
         foreach (double s in stations) if (at.Count == 0 || s - at[^1] > 1e-3) at.Add(s);
         if (total - at[^1] > 1e-9) at.Add(total); else at[^1] = total;
 
-        float RoadHeight(Vec2 p, float fallback) => Covered(p, 3.0 + margin, out float h) ? h : fallback;
+        float RoadHeight(Vec2 p, float fallback) => Covered(p, 3.0 + margin, out float h, bridge) ? h : fallback;
         var points = at.Select(s => Polyline.PointAt(plan, arc, s)).ToList();
         var heights = new float[at.Count];
         var edgeHeight = merged.Select(r => (
@@ -282,12 +293,14 @@ public sealed class RailRoadOverlap
     /// at the road's height under each rail (the road ribbon is flat across, the rail centreline
     /// crosses it at an angle).
     /// </summary>
-    public void EmitGrooves(Piece piece, RoadSegment rail, TileId tile, List<RoadPaint> into, bool count = true)
+    public void EmitGrooves(Piece piece, RoadSegment rail, TileId tile, List<RoadPaint> into, bool count = true, bool ownHeight = false)
     {
         float gauge = RoadFormat.RailGauge(rail.Flags), track = RoadFormat.TrackOffset(rail.Flags);
         var centres = track > 0 ? new[] { -track, track } : new[] { 0f };
         var plan = piece.Plan;
         int n = plan.Count;
+        bool bridge = IsBridge(rail);
+        float lift = bridge ? BridgeLift : 0f;   // on a deck the paint rides at the deck's lift
         foreach (float c in centres)
         foreach (int side in new[] { -1, 1 })
         {
@@ -298,7 +311,7 @@ public sealed class RailRoadOverlap
                 var f = plan[Math.Min(n - 1, i + 1)] - plan[Math.Max(0, i - 1)];
                 f = f.LengthSquared < 1e-12 ? new Vec2(0, 1) : f.Normalized();
                 var q = plan[i] + f.Perp * offset;
-                float y = Covered(q, 3.0, out float h) ? h : piece.Height[i];
+                float y = (!ownHeight && Covered(q, 3.0, out float h, bridge) ? h : piece.Height[i]) + lift;
                 v.Add((float)(q.X - tile.MinE)); v.Add(y); v.Add((float)(tile.MaxN - q.Y));
             }
             into.Add(new RoadPaint

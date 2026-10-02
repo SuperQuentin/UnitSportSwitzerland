@@ -14,3 +14,6 @@
 - Road embankments (no Godot): `dotnet run --project tools/BlendCheck -c Release -- --roads DIR
   [--tiles E_N,...] [--render E,N --scale M] [--walls]`; in game `--roadcheck --embankments [--at E,N]`
   (`road-embankments-walls`).
+- Sidewalks and tunnels (#119, `sidewalks-tunnels-runtime`): `--roadcheck --sidewalks [--at E,N]
+  --traffic 0`, `--roadcheck --floorat E,N --at E,N`, `--roadperf DIR[,label]` (headless cost per
+  tile).

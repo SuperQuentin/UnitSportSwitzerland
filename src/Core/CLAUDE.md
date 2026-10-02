@@ -18,6 +18,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `permissions` — Permissions: (`Core/Permissions`): what the menus may offer; online, spawning a vehicle is an admin's...
 - `licenses` — Licenses page: (`Core/Licenses`, Settings > About tab, `--licenses`): every data source and bundled component with its attribution and link, plus Godot's notices...
 - `floating-origin` — Floating origin (#185): world space follows the camera; keep `GlobalPos` or handle `IOriginShiftAware`; containers; Jolt kinematic teleport; `--origincheck`, `--originstress`
+- `json-store` — Persist JSON only via `JsonStore.Save` (atomic, `user://` ok, static options); never `FileAccess` Write / `File.WriteAllText`; how Bank/Inventory/LootService/InteriorManager/GameSettings migrate
 
 ## Commands
 
@@ -32,3 +33,4 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `menu-refuses-close-still-consume` — A menu that refuses to close must still CONSUME the key
 - `driving-settings-panel-through-godot` — Driving the Settings panel through the godot-ai MCP changes real settings
 - `macos-launch-steals-focus` — Every Godot launch (and editor play) steals focus on macOS; --headless draws nothing; use --shot-queue
+- `windows-launch-focus` — Windows: game windows may open but never in front or on top; no --always-on-top / no_focus, no editor play while the user works

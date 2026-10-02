@@ -132,9 +132,6 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
     /// <summary>True once this runner has reached the end of its own track.</summary>
     public bool Finished { get; private set; }
 
-    /// <summary>Gait cycle position, 0..1. Held across an edit skip rather than advanced.</summary>
-    public float StridePhase => _stridePhase;
-
     /// <summary>
     /// Camera mounts on this runner, in world space, refreshed every <see cref="UpdateTo"/>.
     ///

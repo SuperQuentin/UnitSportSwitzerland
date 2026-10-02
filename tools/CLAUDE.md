@@ -35,6 +35,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `junction-priority` — #121: main road per junction (importance, owner, width, straightness), Wartelinie teeth, 3.02/3.03 signs (sizes from RoadSigns), centre line through, yield bits for traffic; region stats, checks
 - `roundabouts` — #122: flagged rings fitted to a circle and rebuilt as arcs before the graph, arms moved onto them, grassed raised island (APRP, kerb, collision, blend hold) or flush mini disc; checks
 - `turn-lanes` — #123: left-turn pockets on main-road approaches as a flush APRP Pavement strip (taper + storage) plus an exit taper with a hatched median past the junction, edge line cut, divider, arrows; blend holds the strip as road; rejects and checks
+- `urban-streets` — #119 build side: UrbanField (walls, local + city scale), RoadHeights (rural +8 cm, town ground − kerb), StreetPlanner sidewalks (facade rays, medians, splits), CornerPlanner, ramp shoulders, TownPaving/TunnelRoof cover, tram PavedBed, cost, --street-svg
 - `tlm-road-attribute-domains` — swissTLM3D `kreisel`, `verkehrsbedeutung`, `eigentuemer`, `stufe` value domains (SELECT DISTINCT counts) and where each goes in v3
 
 ## Commands

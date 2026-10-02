@@ -72,17 +72,4 @@ public readonly record struct CinemaEvent(
     Vector3 Where,
     string? Label = null)
 {
-    /// <summary>
-    /// Broad grouping, so the director can reason about an event without a switch over every kind.
-    /// </summary>
-    public bool IsScenery => Kind is CinemaEventKind.Rooftop or CinemaEventKind.Village
-        or CinemaEventKind.Structure or CinemaEventKind.Cableway or CinemaEventKind.Water
-        or CinemaEventKind.NamedPlace or CinemaEventKind.BorderCrossing or CinemaEventKind.HighGround;
-
-    public bool IsEffort => Kind is CinemaEventKind.SpeedSurge or CinemaEventKind.Fade
-        or CinemaEventKind.Stop or CinemaEventKind.PeakSpeed or CinemaEventKind.GaitChange;
-
-    public bool IsTerrain => Kind is CinemaEventKind.ClimbOnset or CinemaEventKind.DescentOnset
-        or CinemaEventKind.Summit or CinemaEventKind.Valley or CinemaEventKind.Wall
-        or CinemaEventKind.AscentMilestone;
 }

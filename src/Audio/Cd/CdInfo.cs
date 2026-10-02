@@ -22,9 +22,6 @@ public enum MusicStyle { Pop = 0, Rock = 1, Electronic = 2, HipHop = 3, Chill = 
 /// <param name="Energy">0..1, loudness of the track overall.</param>
 public sealed record CdInfo(int Id, string Title, float Duration, float Bpm, float BeatOffset, MusicStyle Style, float Energy)
 {
-    /// <summary>Seconds per beat.</summary>
-    [JsonIgnore] public float BeatPeriod => Bpm > 1f ? 60f / Bpm : 0.5f;
-
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,

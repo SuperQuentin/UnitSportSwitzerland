@@ -5,6 +5,7 @@
 # out; the watcher (windowed: a headless client draws no parked vehicles) must see all of it on the
 # moving car and on the parked one, and saves test_output/switchcheck_watch.png.
 #   tools/switchcheck.sh [E,N]      (default: the spawn; CHUNKS=<dir> for another terrain_chunks)
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 AT=${1:-}
 PORT=7796

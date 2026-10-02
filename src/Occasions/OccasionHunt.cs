@@ -192,9 +192,7 @@ public partial class OccasionHunt : Node, Core.IOriginShiftAware
     {
         try
         {
-            DirAccess.MakeDirRecursiveAbsolute("user://occasions");
-            using var f = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
-            f.StoreString(JsonSerializer.Serialize(_claims, new JsonSerializerOptions { WriteIndented = true }));
+            Core.JsonStore.Save(File, _claims, Core.JsonStore.Indented);
         }
         catch (Exception e)
         {
