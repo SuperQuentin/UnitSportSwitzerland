@@ -103,8 +103,24 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
         && s.Surface != RoadSurface.Natural && s.PointCount >= 2
         && RoadEmbankment.IsAtGrade(s) && (s.Flags & (RoadFlags.Ford | RoadFlags.Stairs)) == 0;
 
-    /// <summary>One side's state over a stretch: urban or not, sidewalk width in decimetres (0 none).</summary>
-    private readonly record struct SideState(bool Urban, byte WidthDm);
+    /// <summary>
+    /// One side's state over a stretch: urban or not, sidewalk width in decimetres (0 none), and
+    /// the bike path layout between the kerb and the sidewalk (#120, <see cref="BikePlanner.Layouts"/>; 0 none).
+    /// </summary>
+    private readonly record struct SideState(bool Urban, byte WidthDm, byte Layout = 0)
+    {
+        /// <summary>Everything beside the carriageway, decimetres.</summary>
+        public int OuterDm => WidthDm + (int)Math.Round(BikePlanner.LayoutWidth(Layout) * 10);
+    }
+
+    /// <summary>
+    /// A street that should get a separated bike path (#120): the layout its street takes, and
+    /// <see cref="BikePlanner.Stats"/> to count in. Default: no path.
+    /// </summary>
+    public readonly record struct BikeRequest(int Layout, BikePlanner.Stats? Stats);
+
+    /// <summary>A street keeps its paths when they fit along at least this share of its urban stations; else it keeps its painted lanes.</summary>
+    public const double TrackShare = 0.5;
 
     private readonly record struct Station(double X, double Z, double Along, double Fx, double Fz, double Y = 0)
     {
@@ -118,9 +134,19 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
     /// is its own line in <see cref="Obstacles"/>. <paramref name="urban"/>: urban for most of its
     /// length, so its paint follows the built-up rules.
     /// </summary>
-    public List<RoadSegment> Plan(RoadSegment seg, TileId id, int self, out bool urban)
+    public List<RoadSegment> Plan(RoadSegment seg, TileId id, int self, out bool urban) =>
+        Plan(seg, id, self, out urban, out _, default);
+
+    /// <summary>
+    /// As <see cref="Plan(RoadSegment, TileId, int, out bool)"/>, with a separated bike path where
+    /// <paramref name="bike"/> asks for one (#120): on both sides of a two-way street, on the right
+    /// of travel of a one-way one, and on a side OSM maps a track on. <paramref name="track"/>: the
+    /// street got its paths (so its painted lanes are dropped).
+    /// </summary>
+    public List<RoadSegment> Plan(RoadSegment seg, TileId id, int self, out bool urban, out bool track, BikeRequest bike)
     {
         urban = false;
+        track = false;
         if (!IsCandidate(seg)) return [seg];
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var stations = Stations(seg);
@@ -133,8 +159,34 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
         var l = Measure(id, self, stations, half, right: false);
         var r = Measure(id, self, stations, half, right: true);
         var street = Urban(seg, id, stations);
-        var left = Widths(seg, street, l, seg.Attributes.Left);
-        var right = Widths(seg, street, r, seg.Attributes.Right);
+        var a0 = seg.Attributes;
+        bool divided = (seg.Flags & RoadFlags.Divided) != 0;
+        int layout = bike.Layout;
+        bool PathOn(bool right)
+        {
+            var side = right ? a0.Right : a0.Left;
+            if (side.Bike is BikeKind.Track or BikeKind.TrackMid) return true;   // OSM maps one
+            if (layout <= 0) return false;
+            return right ? a0.OneWay >= 0 : a0.OneWay <= 0 && !(divided && a0.OneWay == 0);
+        }
+        int Want(bool right) => !PathOn(right) ? 0 : layout > 0 ? layout : 1;
+        var left = Widths(seg, street, l, a0.Left, Want(false), bike.Stats);
+        var right = Widths(seg, street, r, a0.Right, Want(true), bike.Stats);
+        if (Want(false) > 0 || Want(true) > 0)
+        {
+            int eligible = street.Count(u => u), fitted = 0;
+            for (int i = 0; i < street.Length; i++)
+                if (left[i].Layout > 0 || right[i].Layout > 0) fitted++;
+            track = eligible > 0 && fitted >= TrackShare * eligible;
+            if (!track)
+            {
+                // too little room for a path along this street: its painted lanes stay
+                left = Widths(seg, street, l, a0.Left, count: false);
+                right = Widths(seg, street, r, a0.Right, count: false);
+                if (bike.Stats is { } bs && fitted > 0) bs.LaneStreets++;
+            }
+            else if (bike.Stats is { } bs) bs.TrackStreets++;
+        }
         if (Debug is { } dbg && stations.Any(st => Math.Abs(id.MinE + st.X - dbg.E) < 3 && Math.Abs(id.MaxN - st.Z - dbg.N) < 3))
         {
             var c = CultureInfo.InvariantCulture;
@@ -149,7 +201,7 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
         int urbanStations = street.Count(u => u);
         urban = urbanStations * 2 > stations.Count;
 
-        var pieces = Cut(seg, stations, left, right);
+        var pieces = Cut(seg, stations, left, right, track);
         stats.Pieces += pieces.Count;
         foreach (var p in pieces)
         {
@@ -206,7 +258,7 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
                 if (double.IsPositiveInfinity(median[i]) && d <= MedianReach
                     && obstacles.ParallelCarriageway(e, nn, self, st.Fx, -st.Fz))
                     median[i] = d;
-                if (double.IsPositiveInfinity(line[i]) && d <= MaxSidewalk + LineClearance
+                if (double.IsPositiveInfinity(line[i]) && d <= MaxSidewalk + BikePlanner.LayoutWidth(5) + LineClearance
                     && obstacles.Covers(e, nn, self, id.MinE + st.X, id.MaxN - st.Z, half + 1.0, st.Fx, -st.Fz))
                     line[i] = d;
             }
@@ -234,49 +286,85 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
     /// One side's sidewalk along an urban street: to the facade where it stands within
     /// <see cref="MaxSidewalk"/>, an ordinary <see cref="OpenSidewalk"/> where it stands back or
     /// is missing, what is free at the narrowest of the station and its two neighbours; none where
-    /// another line begins within that width (it stops, it does not narrow).
+    /// another line begins within that width (it stops, it does not narrow). With a bike path
+    /// (<paramref name="layout"/> &gt; 0, #120) the path layout goes against the kerb first, the
+    /// sidewalk takes what is left (at least <see cref="MinSidewalk"/>), and where the corridor is
+    /// too short the next smaller layout is tried (<see cref="BikePlanner.Smaller"/>), then none.
+    /// <paramref name="count"/>: add to the street numbers (false on a second pass).
     /// </summary>
-    private SideState[] Widths(RoadSegment seg, bool[] urban, SideRays rays, RoadSide osm)
+    private SideState[] Widths(RoadSegment seg, bool[] urban, SideRays rays, RoadSide osm, int layout = 0,
+        BikePlanner.Stats? bikeStats = null, bool count = true)
     {
         int n = urban.Length;
         bool square = seg.Class == RoadClass.Square;
         var widthDm = new byte[n];
+        var layouts = new byte[n];
+        var st = count ? stats : new Stats();   // a second pass counts into a throwaway
+        static byte Dm(double w) => (byte)Math.Round(Math.Floor(w / WidthStep + 1e-9) * WidthStep * 10);
         for (int i = 0; i < n; i++)
         {
             if (!urban[i]) continue;
             // a median or an island: another carriageway alongside, nothing built between
-            if (rays.Median[i] < rays.Facade[i] && osm.SidewalkDm == 0) { stats.Median++; continue; }
-            double f = rays.Free[i];
+            if (rays.Median[i] < rays.Facade[i] && osm.SidewalkDm == 0) { st.Median++; continue; }
+            double f = rays.Free[i], line = rays.Line[i];
             for (int k = Math.Max(0, i - 1); k <= Math.Min(n - 1, i + 1); k++)
+            {
                 f = Math.Min(f, rays.Free[k]);
+                line = Math.Min(line, rays.Line[k]);
+            }
+
+            if (layout > 0 && !square)
+            {
+                double room = Math.Min(f, line - LineClearance);
+                int fit = layout;
+                while (fit > 0 && room < BikePlanner.LayoutWidth(fit) + MinSidewalk - 1e-9) fit = BikePlanner.Smaller(fit);
+                if (bikeStats is not null)
+                {
+                    bikeStats.TrackStations[fit]++;
+                    if (fit > 0 && fit != layout) bikeStats.TrackNarrowed++;
+                }
+                if (fit > 0)
+                {
+                    double lw = BikePlanner.LayoutWidth(fit);
+                    double w = f - lw <= MaxSidewalk ? f - lw : Math.Min(OpenSidewalk, room - lw);
+                    if (f - lw <= MaxSidewalk) st.ByFacade++;
+                    else if (double.IsPositiveInfinity(rays.Facade[i])) st.Open++;
+                    else st.Yard++;
+                    layouts[i] = (byte)fit;
+                    widthDm[i] = Dm(w);
+                    continue;
+                }
+            }
+
             double width;
             if (f <= MaxSidewalk)
             {
                 width = f;
-                stats.ByFacade++;
+                st.ByFacade++;
                 if (rays.FacadeAt[i] is { } at && ground != null && ground(at.E, at.N) is var g && !double.IsNaN(g))
-                    stats.FacadeStep.Add(g - (rays.Y[i] + (square ? 0 : KerbCm / 100.0)));
+                    st.FacadeStep.Add(g - (rays.Y[i] + (square ? 0 : KerbCm / 100.0)));
             }
-            else if (double.IsPositiveInfinity(rays.Facade[i])) { width = OpenSidewalk; stats.Open++; }
-            else { width = OpenSidewalk; stats.Yard++; }
+            else if (double.IsPositiveInfinity(rays.Facade[i])) { width = OpenSidewalk; st.Open++; }
+            else { width = OpenSidewalk; st.Yard++; }
             double least = square ? WidthStep : NarrowSidewalk;
-            if (width < least) { stats.TooNarrow++; continue; }
+            if (width < least) { st.TooNarrow++; continue; }
             // another line (a crossing street's sidewalk zone, a path, a stream) within the width:
             // the sidewalk stops there rather than narrowing, so it runs full width up to a junction
             // and the corner patch (CornerPlanner) joins it to the next one
-            if (rays.Line[i] - LineClearance < width) { stats.ByLine++; continue; }
-            widthDm[i] = (byte)Math.Round(Math.Floor(width / WidthStep + 1e-9) * WidthStep * 10);
+            if (rays.Line[i] - LineClearance < width) { st.ByLine++; continue; }
+            widthDm[i] = Dm(width);
         }
 
         var states = new SideState[n];
-        for (int i = 0; i < n; i++) states[i] = new SideState(urban[i], widthDm[i]);
+        for (int i = 0; i < n; i++) states[i] = new SideState(urban[i], widthDm[i], layouts[i]);
         MergeShort(states, (int)Math.Round(MinPiece / Step));
         return states;
     }
 
     /// <summary>
-    /// A sidewalk piece shorter than <paramref name="shorter"/> stations takes the width of its
-    /// widest neighbour that is a sidewalk no wider than itself, so the street does not change
+    /// A sidewalk piece shorter than <paramref name="shorter"/> stations takes the width (and bike
+    /// path) of its widest neighbour that is a sidewalk no wider than itself (everything beside the
+    /// kerb counted), so the street does not change
     /// house by house; a sidewalk never grows over a station that could not hold it, and a short
     /// gap (a wall at the kerb) stays. A fragment under half that, between two gaps, is dropped.
     /// </summary>
@@ -290,16 +378,16 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
             {
                 var (from, to) = runs[r];
                 var me = s[from];
-                if (to - from + 1 >= shorter || me.WidthDm == 0) continue;
+                if (to - from + 1 >= shorter || me.OuterDm == 0) continue;
                 SideState? take = null;
                 foreach (int nb in (ReadOnlySpan<int>)[r - 1, r + 1])
                 {
                     if (nb < 0 || nb >= runs.Count) continue;
                     var other = s[runs[nb].From];
-                    if (other.WidthDm == 0 || other.WidthDm > me.WidthDm) continue;
-                    if (take is not { } t || other.WidthDm > t.WidthDm) take = other;
+                    if (other.OuterDm == 0 || other.OuterDm > me.OuterDm) continue;
+                    if (take is not { } t || other.OuterDm > t.OuterDm) take = other;
                 }
-                if (take is null && 2 * (to - from + 1) < shorter) take = me with { WidthDm = 0 };
+                if (take is null && 2 * (to - from + 1) < shorter) take = me with { WidthDm = 0, Layout = 0 };
                 if (take is not { } apply) continue;
                 for (int k = from; k <= to; k++) s[k] = apply;
                 changed = true;
@@ -323,7 +411,7 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
     }
 
     /// <summary>Cuts the segment wherever either side changes, halfway between two stations.</summary>
-    private static List<RoadSegment> Cut(RoadSegment seg, List<Station> st, SideState[] left, SideState[] right)
+    private static List<RoadSegment> Cut(RoadSegment seg, List<Station> st, SideState[] left, SideState[] right, bool track)
     {
         var cuts = new List<(double Along, int Station)>();
         for (int i = 1; i < st.Count; i++)
@@ -353,8 +441,8 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
                     Attributes = a with
                     {
                         Flags = l.Urban || r.Urban ? flags | RoadAttrFlags.Urban : flags,
-                        Left = Side(a.Left, l, seg.Class),
-                        Right = Side(a.Right, r, seg.Class),
+                        Left = Side(a.Left, l, seg.Class, track),
+                        Right = Side(a.Right, r, seg.Class, track),
                     },
                 });
             }
@@ -365,10 +453,22 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
     }
 
     /// <summary>
-    /// The side's record: a kerbed sidewalk, or flush paving (no kerb) on a square.
+    /// The side's record: a kerbed sidewalk, or flush paving (no kerb) on a square; behind a bike
+    /// path where the state has one (#120). On a street that got its paths (<paramref name="track"/>)
+    /// the painted lanes go, also where the path stops for a stretch.
     /// </summary>
-    private static RoadSide Side(RoadSide side, SideState s, RoadClass cls) =>
-        side with { SidewalkDm = s.WidthDm, KerbCm = s.WidthDm == 0 || cls == RoadClass.Square ? (byte)0 : KerbCm };
+    private static RoadSide Side(RoadSide side, SideState s, RoadClass cls, bool track)
+    {
+        side = side with { SidewalkDm = s.WidthDm, KerbCm = s.WidthDm == 0 || cls == RoadClass.Square ? (byte)0 : KerbCm };
+        if (s.Layout > 0)
+        {
+            var (kind, verge, buffer) = BikePlanner.Layouts[s.Layout];
+            return side with { Bike = kind, BikeDm = BikePlanner.TrackDm, VergeDm = verge, BufferDm = buffer };
+        }
+        // no path here: an OSM track that did not fit, or a lane on a street that got its paths
+        return side.HasTrack || (track && side.Bike == BikeKind.Lane)
+            ? side with { Bike = BikeKind.None, BikeDm = 0, VergeDm = 0, BufferDm = 0 } : side;
+    }
 
     /// <summary>The part of the polyline from <paramref name="a0"/> to <paramref name="a1"/> metres (plan) along it.</summary>
     private static float[] Slice(RoadSegment seg, double a0, double a1)

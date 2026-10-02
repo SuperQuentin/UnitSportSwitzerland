@@ -2,6 +2,7 @@ namespace UnitSport.Tools.RoadGen.Meshing;
 
 using System.Globalization;
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Network;
 
 /// <summary>
 /// Road paint for the <c>.road</c> v3 <c>PANT</c> layer (#116), from one finished segment of the
@@ -28,6 +29,15 @@ public static class PaintEmitter
 {
     /// <summary>RGBA of today's marking colour (<c>ps1_road.gdshader</c> marking_color, sRGB).</summary>
     public const uint White = 0xE0DED1FF;
+
+    /// <summary>
+    /// Yellow of bike markings (SSV Art. 74a: Radstreifen 6.09, Velo symbol), toned like
+    /// <see cref="White"/> (the Commons diagrams use #FCD213).
+    /// </summary>
+    public const uint Yellow = 0xE6BE33FF;
+
+    /// <summary>Red surface of a bike lane across a junction (RAL 3020 Verkehrsrot, Stadt Bern C 2.10.10), toned down.</summary>
+    public const uint Red = 0xB8392CFF;
 
     /// <summary>
     /// Leitlinie, Sicherheitslinie and Randlinie of ordinary roads: 15 cm (SN 640 850a, as the
@@ -96,7 +106,10 @@ public static class PaintEmitter
     }
 
     /// <param name="station">Along-line metre of the segment's first point on its TLM line (0 unknown).</param>
-    public static void Emit(RoadSegment seg, double station, List<RoadPaint> into)
+    /// <param name="startsAtJunction">The segment's first point is a junction's mouth or a dead end
+    /// (a bike lane starts or ends there: its symbol, #120); same for <paramref name="endsAtJunction"/>.</param>
+    public static void Emit(RoadSegment seg, double station, List<RoadPaint> into,
+        bool startsAtJunction = false, bool endsAtJunction = false)
     {
         if (seg.Surface != RoadSurface.Paved || seg.Class > RoadClass.Minor || seg.PointCount < 2) return;
         if ((seg.Flags & RoadFlags.Stairs) != 0) return;
@@ -117,27 +130,78 @@ public static class PaintEmitter
 
         if (CrossSectionLines(seg, Line)) return;
 
+        // bike lanes (#120) take their width off the carriageway's edges; the car lanes share the rest
+        float leftBike = a.Left.HasLane ? a.Left.BikeDm / 10f : 0f, rightBike = a.Right.HasLane ? a.Right.BikeDm / 10f : 0f;
         if (oneDirection)
         {
             int lanes = Math.Max(a.LanesForward, a.LanesBackward);
             if (lanes == 0) lanes = motorway ? 2 : 1;
             bool edges = motorway || divided || seg.Class == RoadClass.Ramp;
             float e = edges ? half * EdgeFraction : half;
-            if (edges) { Line(-e, false); Line(e, false); }
-            for (int k = 1; k < lanes; k++) Line(-e + k * 2 * e / lanes, true);
+            // no Randlinie where a bike lane runs: its yellow line is the edge (Stadt Bern C 2.10.2 §6)
+            if (edges && leftBike == 0) Line(-e, false);
+            if (edges && rightBike == 0) Line(e, false);
+            float lo = leftBike > 0 ? -half + leftBike : -e, hi = rightBike > 0 ? half - rightBike : e;
+            for (int k = 1; k < lanes; k++) Line(lo + k * (hi - lo) / lanes, true);
         }
-        else
+        else if (!BikePlanner.IsKernfahrbahn(seg.Width, a.Left, a.Right)   // a Kernfahrbahn has no centre line
+                 && seg.Width >= MinCentreLineWidth(a.Has(RoadAttrFlags.Urban)))   // nor a road too narrow to pass on its halves
         {
-            // a road too narrow for two vehicles to pass on their halves has no centre line
-            if (seg.Width < MinCentreLineWidth(a.Has(RoadAttrFlags.Urban))) return;
             // traffic keeps right: the lanes against the drawing are on its left
             int back = Math.Max(1, (int)a.LanesBackward), fwd = Math.Max(1, (int)a.LanesForward);
-            float w = 2 * half / (back + fwd);
-            for (int k = 1; k < back + fwd; k++) Line(-half + k * w, true);   // k == back is the centre
+            float lo = -half + leftBike, w = (2 * half - leftBike - rightBike) / (back + fwd);
+            for (int k = 1; k < back + fwd; k++) Line(lo + k * w, true);   // k == back is the centre
             // Randlinien outside built-up areas, on roads wide enough for a centre line too (BE
-            // Handbuch Markierung 1 p. 17, Stadt Bern C 2.10.11; inside a town only exceptionally)
-            if (!a.Has(RoadAttrFlags.Urban)) { Line(-half + EdgeLineInset, false); Line(half - EdgeLineInset, false); }
+            // Handbuch Markierung 1 p. 17, Stadt Bern C 2.10.11; inside a town only exceptionally);
+            // none beside a bike lane
+            if (!a.Has(RoadAttrFlags.Urban))
+            {
+                if (leftBike == 0) Line(-half + EdgeLineInset, false);
+                if (rightBike == 0) Line(half - EdgeLineInset, false);
+            }
         }
+
+        foreach (bool right in (ReadOnlySpan<bool>)[false, true])
+            if ((right ? a.Right : a.Left).HasLane) BikeLane(seg, right, station, into, startsAtJunction, endsAtJunction);
+    }
+
+    /// <summary>
+    /// A Radstreifen (SSV 6.09, #120): its yellow dashed line (3 m / 3 m, 0.15 m) at the lane's
+    /// width in from the carriageway edge, phased like the Leitlinien, and a Velo symbol near each
+    /// end that lies at a junction or a dead end (Stadt Bern C 2.10.2 §5: at the start and end of
+    /// every Radstreifen), facing the lane's traffic (right side with the drawing, left against).
+    /// </summary>
+    private static void BikeLane(RoadSegment seg, bool right, double station, List<RoadPaint> into,
+        bool startsAtJunction, bool endsAtJunction)
+    {
+        var side = right ? seg.Attributes.Right : seg.Attributes.Left;
+        float sign = right ? 1f : -1f, half = seg.Width * 0.5f, lane = side.BikeDm / 10f;
+        AddDashed(seg, sign * (half - lane), station, into, PaintType.YellowDashed, Yellow,
+            BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap);
+        Symbols(seg, sign * (half - lane * 0.5f), right, into, startsAtJunction, endsAtJunction);
+    }
+
+    /// <summary>
+    /// Velo symbols along a bike lane or path at <paramref name="offset"/>: one
+    /// <see cref="BikePlanner.SymbolFromEnd"/> in from each end flagged as a junction, on a piece
+    /// long enough to hold both.
+    /// </summary>
+    public static int Symbols(RoadSegment seg, float offset, bool right, List<RoadPaint> into,
+        bool atStart, bool atEnd)
+    {
+        if (!atStart && !atEnd) return 0;
+        double length = RoadPaintGeometry.Length(RoadPaintGeometry.Offset(seg, RoadPaint.FileOffset(offset)));
+        float size = BikePlanner.SymbolSize, gap = BikePlanner.SymbolFromEnd;
+        if (length < 2 * (gap + size) + 2) return 0;
+        byte variant = right ? (byte)0 : RoadPaintGeometry.BikeReversed;
+        int n = 0;
+        foreach (var (from, on) in (ReadOnlySpan<(double, bool)>)[(gap, atStart), (length - gap - size, atEnd)])
+        {
+            if (!on) continue;
+            Add(into, RoadPaint.AlongSegment(seg, PaintType.BikeSymbol, Yellow, size, 0, 0, offset, from, from + size, variant));
+            n++;
+        }
+        return n;
     }
 
     /// <summary>
@@ -186,6 +250,13 @@ public static class PaintEmitter
     private static void AddDashed(RoadSegment seg, float offset, double station, List<RoadPaint> into)
     {
         var (dash, gap) = Leitlinie(seg);
+        AddDashed(seg, offset, station, into, PaintType.WhiteDashed, White, LineWidth, dash, gap);
+    }
+
+    /// <summary>A dashed line along the segment, phased on its TLM line's metre so dashes run on across seams.</summary>
+    public static void AddDashed(RoadSegment seg, float offset, double station, List<RoadPaint> into,
+        PaintType type, uint rgba, float width, float dash, float gap)
+    {
         var line = RoadPaintGeometry.Offset(seg, RoadPaint.FileOffset(offset));
         if (line.Length < 6) return;
         double length = RoadPaintGeometry.Length(line);
@@ -199,7 +270,7 @@ public static class PaintEmitter
         {
             double lead = Math.Min(dash - phase, length);
             if (seamStart || lead >= 0.4 * dash)
-                Add(into, RoadPaint.AlongSegment(seg, PaintType.WhiteDashed, White, LineWidth, 0, 0, offset, 0,
+                Add(into, RoadPaint.AlongSegment(seg, type, rgba, width, 0, 0, offset, 0,
                     lead >= length ? double.PositiveInfinity : lead));
         }
 
@@ -211,7 +282,7 @@ public static class PaintEmitter
             if (length - lastStart < 0.4 * dash) end = lastStart - gap;
         }
         if (end - first > 1e-3)
-            Add(into, RoadPaint.AlongSegment(seg, PaintType.WhiteDashed, White, LineWidth, dash, gap, offset, first,
+            Add(into, RoadPaint.AlongSegment(seg, type, rgba, width, dash, gap, offset, first,
                 end >= length ? double.PositiveInfinity : end));
     }
 

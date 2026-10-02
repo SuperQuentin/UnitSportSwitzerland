@@ -150,14 +150,14 @@ public static class CornerPlanner
             var side = right ? seg.Attributes.Right : seg.Attributes.Left;
             var edge = Edge(seg, right);
             if (!cur.AtStart) edge.Reverse();
-            if (side.SidewalkDm > 0)
+            if (side.OuterDm > 0)   // the whole side: a bike path (#120) and its sidewalk
             {
                 if (kerb.Count == 0) kerb.Add(edge[0]);   // else the last piece ended there
                 var dir = edge.Count > 1 ? (edge[1].P - edge[0].P) : Outward(seg, cur.AtStart);
                 dir = dir / Math.Max(dir.Length, 1e-9);
                 // away from the carriageway: left of the outward direction for a left side
                 var across = left ? new Vec2(-dir.Y, dir.X) : new Vec2(dir.Y, -dir.X);
-                double w = side.SidewalkDm / 10.0;
+                double w = side.OuterDm / 10.0;
                 return new Chain(kerb, edge[0].P + across * w, w, side.KerbCm / 100f, dir * -1);
             }
             if (!IsStreet(seg)) return null;

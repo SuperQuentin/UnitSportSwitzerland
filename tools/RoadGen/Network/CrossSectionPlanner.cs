@@ -74,6 +74,11 @@ public static class CrossSectionPlanner
         /// <summary>The plan the geometry is built from: <see cref="Plan"/>, shifted for a motorway carriageway.</summary>
         public Vec2[] Shifted { get; internal set; } = [];
         public bool IsShifted { get; internal set; }
+        /// <summary>Bike infrastructure wanted here (#120: a candidate with no parallel alternative).</summary>
+        public bool BikeWanted { get; internal set; }
+        /// <summary>Painted bike lane width (dm) the carriageway holds, 0 none (#120).</summary>
+        public byte BikeLaneDm { get; internal set; }
+        public BikePlanner.Why BikeWhy { get; internal set; }
 
         internal sbyte PartnerVote;
         internal double Length;
@@ -165,11 +170,11 @@ public static class CrossSectionPlanner
         if (a.OneWay > 0) (fwd, bwd) = (line.LanesOneWay, 0);
         else if (a.OneWay < 0) (fwd, bwd) = (0, line.LanesOneWay);
         else (fwd, bwd) = (line.LanesFwd, line.LanesBwd);
-        return a with
+        return BikePlanner.Apply(a with
         {
             LanesForward = (byte)Math.Min(fwd, 15), LanesBackward = (byte)Math.Min(bwd, 15),
             WidthCm = (ushort)Math.Round(line.Width * 100), Priority = line.Priority,
-        };
+        }, line);
     }
 
     /// <summary>Attributes of the whole line, before any piece-level OSM row.</summary>

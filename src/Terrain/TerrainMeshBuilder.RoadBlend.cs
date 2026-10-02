@@ -253,8 +253,9 @@ public static partial class TerrainMeshBuilder
             // round the line's ends only the carriageway is level: a sidewalk stops at the end of
             // its piece, and past it may lie a corner patch (or nothing) at another height
             _endEdge = Math.Max(Math.Max(seg.Width, a.WidthCm / 100.0) * 0.5, ChunkFormat.SpacingM);
-            _raiseLeft = a.Left.SidewalkDm > 0 ? a.Left.KerbCm / 100.0 : 0;
-            _raiseRight = a.Right.SidewalkDm > 0 ? a.Right.KerbCm / 100.0 : 0;
+            // the side's outer height (#119 sidewalk top; #120 the sidewalk behind a bike path)
+            _raiseLeft = RoadStreetSection.For(a.Left)?.OuterHeight ?? 0;
+            _raiseRight = RoadStreetSection.For(a.Right)?.OuterHeight ?? 0;
         }
 
         private double X(int i) => _p[i * 3] / ChunkFormat.SpacingM;

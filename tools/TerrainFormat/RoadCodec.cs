@@ -503,7 +503,7 @@ public static class RoadCodec
         w.Write(s.BikeDm);
         w.Write(s.KerbCm);
         w.Write(s.VergeDm);
-        w.Write((byte)0);
+        w.Write(s.BufferDm);   // #120; a pad byte before, so older readers ignore it
     }
 
     private static RoadAttributes ReadAttributes(BinaryReader r)
@@ -521,9 +521,7 @@ public static class RoadCodec
 
     private static RoadSide ReadSide(BinaryReader r)
     {
-        var side = new RoadSide(r.ReadByte(), (BikeKind)r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte());
-        r.ReadByte();
-        return side;
+        return new RoadSide(r.ReadByte(), (BikeKind)r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte());
     }
 
     private static byte[] Section(Action<BinaryWriter> write)

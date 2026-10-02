@@ -132,7 +132,7 @@ public static class RoadEmbankment
         var a = seg.Attributes;
         double half = Math.Max(seg.Width, a.WidthCm / 100.0) * 0.5;
         var side = right ? a.Right : a.Left;
-        half += (side.SidewalkDm + side.VergeDm) / 10.0;
+        half += side.OuterDm / 10.0;
         return Math.Max(half, ChunkFormat.SpacingM);
     }
 

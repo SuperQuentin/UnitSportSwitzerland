@@ -134,17 +134,32 @@ public enum RoadAttrFlags : ushort
 public enum BikeKind : byte
 {
     None = 0,
-    Lane = 1,    // painted lane on the carriageway (yellow dashes)
-    Track = 2,   // separated path beside it
+    Lane = 1,    // painted lane on the carriageway (yellow dashes), BikeDm wide, inside the carriageway
+    Track = 2,   // separated path beside it, at the sidewalk's height
     Shared = 3,  // shared lane, symbol only
+    TrackMid = 4,// separated path beside it, halfway between the road and the sidewalk
 }
 
 /// <summary>
 /// Cross-section of one side of a carriageway, outward from its edge. Left and right are in the
 /// segment's drawing direction. Widths in decimetres, kerb height in centimetres; 0 = none.
+/// With a separated path (<see cref="BikeKind.Track"/>/<see cref="BikeKind.TrackMid"/>) the bands
+/// run outward: verge (<see cref="VergeDm"/>, grass), path (<see cref="BikeDm"/>), buffer
+/// (<see cref="BufferDm"/>, grass), sidewalk; <see cref="RoadStreetSection"/> lays them out.
 /// </summary>
 public readonly record struct RoadSide(
-    byte SidewalkDm = 0, BikeKind Bike = BikeKind.None, byte BikeDm = 0, byte KerbCm = 0, byte VergeDm = 0);
+    byte SidewalkDm = 0, BikeKind Bike = BikeKind.None, byte BikeDm = 0, byte KerbCm = 0, byte VergeDm = 0,
+    byte BufferDm = 0)
+{
+    /// <summary>A separated bike path beside the carriageway.</summary>
+    public bool HasTrack => Bike is BikeKind.Track or BikeKind.TrackMid && BikeDm > 0;
+
+    /// <summary>A painted bike lane inside the carriageway.</summary>
+    public bool HasLane => Bike == BikeKind.Lane && BikeDm > 0;
+
+    /// <summary>Everything beside the carriageway on this side, in decimetres: verge, path, buffer, sidewalk.</summary>
+    public int OuterDm => SidewalkDm + VergeDm + (HasTrack ? BikeDm + BufferDm : 0);
+}
 
 /// <summary>
 /// The v3 per-segment attribute record (24 bytes on disk). Everything zero means "not decided":
@@ -199,6 +214,8 @@ public enum PaintType : byte
     GiveWayLine = 9,
     RailGroove = 10,
     Hatch = 11,
+    /// <summary>Coloured surface of a bike lane or path where it crosses a roadway (#120): a wide polyline.</summary>
+    BikeCrossing = 12,
 }
 
 /// <summary><see cref="PaintType.Arrow"/> variant bits; combine for a combined arrow.</summary>

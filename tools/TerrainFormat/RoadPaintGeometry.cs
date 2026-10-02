@@ -30,13 +30,16 @@ public static class RoadPaintGeometry
     /// The line <paramref name="offset"/> metres to the right of the centreline, as the ribbon's
     /// edges are built (per-vertex bisector, no miter), on the deck of a bridge. A point whose
     /// offset edge runs backwards against the centreline (inside a bend tighter than the offset)
-    /// is dropped: a gap is honest, a bow-tie is not.
+    /// is dropped: a gap is honest, a bow-tie is not. Past the carriageway's edge the line lies on
+    /// that side's street profile (#120: a bike path's symbols and its line to the sidewalk).
     /// </summary>
     public static float[] Offset(RoadSegment seg, float offset)
     {
         var p = seg.Points;
         int n = seg.PointCount;
         float lift = (seg.Flags & RoadFlags.Bridge) != 0 ? BridgeLift : 0f;
+        float beyond = MathF.Abs(offset) - seg.Width * 0.5f;
+        if (beyond > 0) lift += RoadStreetSection.HeightAt(offset > 0 ? seg.Attributes.Right : seg.Attributes.Left, beyond);
         var result = new List<float>(n * 3);
         for (int i = 0; i < n; i++)
         {
@@ -182,7 +185,85 @@ public static class RoadPaintGeometry
     public static int TriangleCount(RoadPaint p) =>
         p.Shape == PaintShape.Triangles ? p.Indices.Length / 3
         : p.Type == PaintType.SharkTooth ? Runs(p).Count
+        : p.Type == PaintType.BikeSymbol ? (p.Vertices.Length >= 6 ? BikeGlyphTriangles : 0)
         : Runs(p).Sum(r => Math.Max(0, r.Length / 3 - 1) * 2);
+
+    /// <summary><see cref="PaintType.BikeSymbol"/> variant bit: the rider travels from the last vertex to the first.</summary>
+    public const byte BikeReversed = 1;
+
+    private const int WheelSegments = 10;
+
+    /// <summary>
+    /// The bicycle of a <see cref="PaintType.BikeSymbol"/> (#120) in side view, x along the bike
+    /// (rear wheel's outer edge -0.5, front's +0.5), y up from the ground (0..<see cref="GlyphTop"/>):
+    /// two wheel rings and the frame's tubes as bars (from, to, thickness).
+    /// </summary>
+    private static readonly (float X0, float Y0, float X1, float Y1, float T)[] GlyphBars =
+    [
+        (-0.28f, 0.22f, -0.02f, 0.22f, 0.045f),   // chain stay
+        (-0.28f, 0.22f, -0.10f, 0.50f, 0.04f),    // seat stay
+        (-0.02f, 0.22f, -0.10f, 0.50f, 0.045f),   // seat tube
+        (-0.10f, 0.50f, 0.20f, 0.48f, 0.045f),    // top tube
+        (-0.02f, 0.22f, 0.20f, 0.48f, 0.05f),     // down tube
+        (0.20f, 0.48f, 0.28f, 0.22f, 0.045f),     // fork
+        (-0.10f, 0.50f, -0.12f, 0.58f, 0.035f),   // seat post
+        (-0.20f, 0.59f, -0.04f, 0.59f, 0.05f),    // saddle
+        (0.20f, 0.48f, 0.17f, 0.60f, 0.035f),     // stem
+        (0.12f, 0.62f, 0.24f, 0.60f, 0.045f),     // handlebar
+    ];
+
+    private const float GlyphTop = 0.64f, WheelX = 0.28f, WheelY = 0.22f, WheelOuter = 0.22f, WheelInner = 0.17f;
+
+    private static readonly int BikeGlyphTriangles = GlyphBars.Length * 2 + 2 * WheelSegments * 2;
+
+    /// <summary>
+    /// A <see cref="PaintType.BikeSymbol"/> as triangles, xyz × 3 each. Stored as a polyline whose
+    /// first and last vertices are the symbol's back and front along the travel direction (its
+    /// length) and <c>Width</c> its size across: read upright by a rider coming along it, so the
+    /// bicycle's length lies across the lane, its front wheel on the rider's right.
+    /// </summary>
+    public static List<float[]> BikeSymbol(RoadPaint p)
+    {
+        var tris = new List<float[]>();
+        var v = p.Vertices;
+        if (v.Length < 6) return tris;
+        bool reversed = (p.Variant & BikeReversed) != 0;
+        float ax = v[0], ay = v[1], az = v[2], bx = v[^3], by = v[^2], bz = v[^1];
+        if (reversed) (ax, ay, az, bx, by, bz) = (bx, by, bz, ax, ay, az);
+        float fx = bx - ax, fz = bz - az, len = MathF.Sqrt(fx * fx + fz * fz);
+        if (len < 1e-3f) return tris;
+        fx /= len; fz /= len;
+        float rx = -fz, rz = fx;   // the rider's right (x east, z south)
+
+        // side view (x along the bike, y up) onto the ground: x across to the right, y forward
+        float[] At(float x, float y)
+        {
+            float along = y / GlyphTop, across = x * p.Width;
+            return [ax + fx * along * len + rx * across, ay + (by - ay) * along, az + fz * along * len + rz * across];
+        }
+        void Quad(float[] a, float[] b, float[] c, float[] d)
+        {
+            tris.Add([.. a, .. b, .. c]);
+            tris.Add([.. a, .. c, .. d]);
+        }
+
+        foreach (var (x0, y0, x1, y1, t) in GlyphBars)
+        {
+            float dx = x1 - x0, dy = y1 - y0, l = MathF.Sqrt(dx * dx + dy * dy);
+            float nx = -dy / l * t * 0.5f, ny = dx / l * t * 0.5f;
+            Quad(At(x0 + nx, y0 + ny), At(x1 + nx, y1 + ny), At(x1 - nx, y1 - ny), At(x0 - nx, y0 - ny));
+        }
+        foreach (float cx in (ReadOnlySpan<float>)[-WheelX, WheelX])
+            for (int k = 0; k < WheelSegments; k++)
+            {
+                float a0 = MathF.Tau * k / WheelSegments, a1 = MathF.Tau * (k + 1) / WheelSegments;
+                Quad(At(cx + MathF.Cos(a0) * WheelOuter, WheelY + MathF.Sin(a0) * WheelOuter),
+                    At(cx + MathF.Cos(a1) * WheelOuter, WheelY + MathF.Sin(a1) * WheelOuter),
+                    At(cx + MathF.Cos(a1) * WheelInner, WheelY + MathF.Sin(a1) * WheelInner),
+                    At(cx + MathF.Cos(a0) * WheelInner, WheelY + MathF.Sin(a0) * WheelInner));
+            }
+        return tris;
+    }
 
     /// <summary>
     /// A <see cref="PaintType.SharkTooth"/> polyline (#121, the Swiss Wartelinie 6.13) as triangles,

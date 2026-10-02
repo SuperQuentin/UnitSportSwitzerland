@@ -385,7 +385,7 @@ public static class EmbankmentPlanner
                         && (seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) == 0))) continue;
                 // a street's sidewalks are part of it: no wall stands on them (#119)
                 double half = wall ? 0 : seg.Width * 0.5 + 0.3
-                    + Math.Max(seg.Attributes.Left.SidewalkDm, seg.Attributes.Right.SidewalkDm) / 10.0;
+                    + Math.Max(seg.Attributes.Left.OuterDm, seg.Attributes.Right.OuterDm) / 10.0;
                 var p = seg.Points;
                 for (int i = 0; i < seg.PointCount - 1; i++)
                 {
