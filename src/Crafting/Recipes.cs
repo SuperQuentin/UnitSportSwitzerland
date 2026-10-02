@@ -80,6 +80,14 @@ public static class Recipes
         Bench(ItemId.Backpack, 1, 4f, I(ItemId.Cloth, 8), I(ItemId.Rope, 2), I(ItemId.DuctTape)),
         Bench(ItemId.Hammer, 1, 3f, I(ItemId.ScrapMetal, 2), I(ItemId.WoodPlanks)),
 
+        // gadgets (#275): getting up high, and hiding
+        Bench(ItemId.Zipline, 1, 4f, I(ItemId.Rope, 3), I(ItemId.ScrapMetal, 2)),
+        Bench(ItemId.RopeLadder, 1, 3f, I(ItemId.Rope, 2), I(ItemId.WoodPlanks, 2)),
+        Bench(ItemId.Trampoline, 1, 5f, I(ItemId.Tyre, 3), I(ItemId.Rubber, 2), I(ItemId.WoodPlanks, 4)),
+        Bench(ItemId.LaunchPad, 1, 6f, I(ItemId.CarBattery), I(ItemId.Electronics, 2), I(ItemId.ScrapMetal, 4), I(ItemId.Cloth)),
+        Bench(ItemId.CamoNet, 1, 3f, I(ItemId.Cloth, 4), I(ItemId.Rope, 2)),
+        Bench(ItemId.HayHideout, 1, 3f, I(ItemId.Firewood, 6), I(ItemId.Rope, 2), I(ItemId.Cloth, 2)),
+
         // ---- salvage: parts back into materials (always worth less than the part) ----
         Strip(ItemId.Tyre, I(ItemId.Rubber, 3)),
         Strip(ItemId.Electronics, I(ItemId.CopperWire), I(ItemId.Plastic), I(ItemId.Screws, 2)),

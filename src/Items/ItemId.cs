@@ -113,6 +113,11 @@ public enum ItemId
     // ---- building (#274, docs/notes/build/building.md) ----
     /// <summary>Held, it builds structure pieces from the pack's materials (<see cref="ItemUse.Build"/>).</summary>
     Hammer = 150,
+
+    // 151-179 are taken by the campfire / cooking (#272) and the shops / vending machines (#273)
+
+    // ---- gadgets (#275, docs/notes/build/gadgets.md): placed, to get up high or to hide ----
+    Zipline = 180, RopeLadder = 181, Trampoline = 182, LaunchPad = 183, CamoNet = 184, HayHideout = 185,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -151,4 +156,6 @@ public enum ItemUse
     Bag,
     /// <summary>Use builds the piece the ghost shows; Aim + Use takes your own piece back (<c>Build.BuildTool</c>).</summary>
     Build,
+    /// <summary>Use sets the gadget down where the ghost shows; Aim + Use takes your own back (<c>Build.GadgetTool</c>).</summary>
+    Gadget,
 }
