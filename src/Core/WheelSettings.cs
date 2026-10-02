@@ -75,8 +75,10 @@ public sealed class WheelSettings
     public float FfbStrength { get; set; } = 0.7f;
     /// <summary>Self-aligning torque and the soft lock past the vehicle's lock, 0..1.5.</summary>
     public float FfbAligning { get; set; } = 1f;
-    /// <summary>The road's rumble, 0..1.</summary>
-    public float FfbRoad { get; set; } = 0.5f;
+    /// <summary>The road's rumble off tarmac, 0..1.</summary>
+    public float FfbRoad { get; set; } = 0.35f;
+    /// <summary>The engine's shake through the column, following the rpm, 0..1.</summary>
+    public float FfbEngine { get; set; } = 0.5f;
     /// <summary>Crashes and hard landings, 0..1.</summary>
     public float FfbKnocks { get; set; } = 0.8f;
     /// <summary>Damping, and the steering's weight when parked, 0..1.</summary>
@@ -93,6 +95,7 @@ public sealed class WheelSettings
         FfbStrength = Math.Clamp(FfbStrength, 0f, 1f);
         FfbAligning = Math.Clamp(FfbAligning, 0f, 1.5f);
         FfbRoad = Math.Clamp(FfbRoad, 0f, 1f);
+        FfbEngine = Math.Clamp(FfbEngine, 0f, 1f);
         FfbKnocks = Math.Clamp(FfbKnocks, 0f, 1f);
         FfbWeight = Math.Clamp(FfbWeight, 0f, 1f);
         Device ??= "";

@@ -164,7 +164,11 @@ public partial class WheelProbe : Node
         var ae86 = CarCatalog.All[0];
         var gravel = Hold(ae86, 0f, 20f, Audio.Surface.Gravel);
         var tarmac = Hold(ae86, 0f, 20f);
-        expect(gravel.Road > tarmac.Road + 0.1f && tarmac.Road > 0f, $"road: gravel {gravel.Road:F2} against tarmac {tarmac.Road:F2}");
+        expect(gravel.Road > 0.1f && tarmac.Road == 0f, $"road: gravel {gravel.Road:F2} against tarmac {tarmac.Road:F2}");
+        var (idle, idleHz) = WheelFeel.EngineFrom(900f, 0f);
+        var (high, highHz) = WheelFeel.EngineFrom(7000f, 0.95f);
+        expect(idle > 0f && high > idle && highHz > idleHz && highHz <= 60f,
+            $"engine: {idle:F2} at {idleHz:F0} Hz idling, {high:F2} at {highHz:F0} Hz near the redline");
         var parked86 = Hold(ae86, 0f, 0f, seconds: 0.1f);
         var parkedFd = Hold(CarCatalog.All[1], 0f, 0f, seconds: 0.1f);
         expect(parked86.Weight > parkedFd.Weight && parkedFd.Weight > 0f, $"parked: unassisted AE86 {parked86.Weight:F2}, FD3S {parkedFd.Weight:F2}");

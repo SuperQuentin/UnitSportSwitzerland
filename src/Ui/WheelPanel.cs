@@ -207,6 +207,7 @@ public partial class WheelPanel : VBoxContainer
         UiKit.SliderRow(this, "Aligning torque", 0, 1.5, 0.05, W.FfbAligning, v => W.FfbAligning = (float)v, Percent,
             "The tyres pulling the wheel straight; light when the fronts slide");
         UiKit.SliderRow(this, "Road", 0, 1, 0.05, W.FfbRoad, v => W.FfbRoad = (float)v, Percent, "Gravel, grass, bumps");
+        UiKit.SliderRow(this, "Engine", 0, 1, 0.05, W.FfbEngine, v => W.FfbEngine = (float)v, Percent, "The engine's shake, with the revs");
         UiKit.SliderRow(this, "Knocks", 0, 1, 0.05, W.FfbKnocks, v => W.FfbKnocks = (float)v, Percent, "Crashes and hard landings");
         UiKit.SliderRow(this, "Weight", 0, 1, 0.05, W.FfbWeight, v => W.FfbWeight = (float)v, Percent,
             "Damping, and the steering's weight when parked");

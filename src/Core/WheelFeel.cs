@@ -17,7 +17,9 @@ namespace UnitSport.Core;
 /// How stiff the wheel is to turn on the spot, 0..1: tyres scrubbing at a standstill, heavy without
 /// power assist, gone once rolling.
 /// </param>
-public readonly record struct WheelFeel(float Torque, float Road, float RoadHz, float Weight)
+/// <param name="Engine">The engine's shake through the column, 0..1 (<see cref="EngineFrom"/>); 0 with it off.</param>
+/// <param name="EngineHz">Its rate, Hz: the crankshaft's turns per second.</param>
+public readonly record struct WheelFeel(float Torque, float Road, float RoadHz, float Weight, float Engine = 0f, float EngineHz = 0f)
 {
     /// <summary>
     /// Pneumatic trail at zero slip, m, and the slip angle by which it is gone (the tyre's contact
@@ -41,15 +43,24 @@ public readonly record struct WheelFeel(float Torque, float Road, float RoadHz, 
 
     /// <summary>
     /// The road through the rim: <paramref name="roughness"/> of the surface (0 tarmac .. 1 forest
-    /// floor) at <paramref name="speed"/> m/s, plus a little tarmac texture so a road is never dead.
+    /// floor) once rolling at <paramref name="speed"/> m/s, at most half the scale: off-road, not
+    /// everywhere. It once added a tarmac texture growing with speed and reached 0.8 on a gravel
+    /// track, a buzz drowning everything else. What keeps a smooth road alive is the engine.
     /// </summary>
     public static (float Road, float Hz) RoadFrom(float roughness, float speed)
     {
         float v = Mathf.Abs(speed);
-        float road = Mathf.Clamp(0.04f * Mathf.Clamp(v / 10f, 0f, 1f) + roughness * Mathf.Clamp(v / 15f, 0f, 1.2f), 0f, 1f);
+        float road = Mathf.Clamp(0.5f * roughness * Mathf.Clamp(v / 15f, 0f, 1f), 0f, 1f);
         // the lattice of bumps under a tyre is about half a metre apart
         return (road, Mathf.Clamp(v / 0.5f, 6f, 40f));
     }
+
+    /// <summary>
+    /// The engine through the column: a light shake at idle, a little more toward the redline, at
+    /// the crankshaft's rate (rpm / 60), held to what a wheel's motor can draw (8..60 Hz).
+    /// </summary>
+    public static (float Engine, float Hz) EngineFrom(float rpm, float rpm01) =>
+        (0.15f + 0.35f * rpm01 * rpm01, Mathf.Clamp(rpm / 60f, 8f, 60f));
 
     /// <summary>Static steering weight: <paramref name="parked"/> at a standstill, gone by 6 m/s.</summary>
     public static float WeightFrom(float parked, float speed) => parked * (1f - Mathf.Clamp(Mathf.Abs(speed) / 6f, 0f, 1f));

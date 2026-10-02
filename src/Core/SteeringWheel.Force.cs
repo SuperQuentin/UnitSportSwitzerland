@@ -11,7 +11,8 @@ namespace UnitSport.Core;
 /// <list type="bullet">
 /// <item>a <b>constant</b> force, updated every frame: the vehicle's self-aligning torque
 /// (<see cref="WheelFeel.Torque"/>) plus the <b>soft lock</b> past the vehicle's lock;</item>
-/// <item>a <b>sine</b> for the road (<see cref="WheelFeel.Road"/>), and a short one for knocks
+/// <item>a <b>sine</b> for the road (<see cref="WheelFeel.Road"/>), one for the engine
+/// (<see cref="WheelFeel.Engine"/>, at the crankshaft's rate), and a short one for knocks
 /// (<see cref="Knock"/>: crashes, hard landings);</item>
 /// <item><b>damper</b> and <b>friction</b> conditions, which the wheel runs itself at its own rate:
 /// the weight of the steering at a standstill (<see cref="WheelFeel.Weight"/>).</item>
@@ -51,6 +52,7 @@ public partial class SteeringWheel
     private unsafe SDL_Haptic* _haptic;
     private bool _hapticSdl, _hapticOpen;
     private uint _features;
+    private SDL_HapticEffectID _engine = (SDL_HapticEffectID)(-1);
     private SDL_HapticEffectID _constant = (SDL_HapticEffectID)(-1), _road = (SDL_HapticEffectID)(-1),
         _knock = (SDL_HapticEffectID)(-1), _damper = (SDL_HapticEffectID)(-1), _friction = (SDL_HapticEffectID)(-1);
 
@@ -65,6 +67,7 @@ public partial class SteeringWheel
     private float _softDeepest, _softHardest;
     private float _lastAngle, _rate;
     private float _sentConstant = float.NaN, _sentRoad = float.NaN, _sentRoadHz, _sentDamper = float.NaN, _sentFriction = float.NaN;
+    private float _sentEngine = float.NaN, _sentEngineHz;
 
     /// <summary>
     /// The vehicle being driven with this wheel this frame: what its steering feels and how far its
@@ -132,7 +135,7 @@ public partial class SteeringWheel
     /// The forces for one frame, as the constant level and the three other channels.
     /// <paramref name="rate"/> is the rim's speed, rad/s, + right.
     /// </summary>
-    public static (float Constant, float Road, float Damper, float Friction) Compose(
+    public static (float Constant, float Road, float Damper, float Friction, float Engine) Compose(
         in WheelFeel feel, float lockToLock, float angle, float rate, WheelSettings s)
     {
         float softAt = SoftLockAt(lockToLock, Mathf.DegToRad(s.RangeDeg));
@@ -149,7 +152,8 @@ public partial class SteeringWheel
         return (Math.Clamp(constant, -1f, 1f),
             Math.Clamp(feel.Road * s.FfbRoad, 0f, 1f) * master,
             damper,
-            Math.Clamp(feel.Weight * s.FfbWeight, 0f, 1f) * master);
+            Math.Clamp(feel.Weight * s.FfbWeight, 0f, 1f) * master,
+            Math.Clamp(feel.Engine * s.FfbEngine, 0f, 1f) * master);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -167,16 +171,16 @@ public partial class SteeringWheel
         if (!_hapticOpen) return;
 
         _feelAge += dt;
-        float constant, road, damper, friction;
+        float constant, road, damper, friction, engine;
         float hz = _feel.RoadHz;
         bool driving = _feelAge <= StaleSeconds && !Assigning;
         // the rim's speed, smoothed over a few frames: a 1° step of the axis in one frame is noise, not 60°/s
         if (dt > 0f) _rate = Mathf.Lerp(_rate, (Angle - _lastAngle) / dt, Mathf.Clamp(dt * 10f, 0f, 1f));
         _lastAngle = Angle;
         if (driving)
-            (constant, road, damper, friction) = Compose(_feel, _lock, Angle, _rate, s);
+            (constant, road, damper, friction, engine) = Compose(_feel, _lock, Angle, _rate, s);
         else
-            (constant, road, damper, friction) = (0f, 0f, 0.1f * s.FfbStrength, 0f);
+            (constant, road, damper, friction, engine) = (0f, 0f, 0.1f * s.FfbStrength, 0f, 0f);
         // a test push rides on top of whatever is being driven (so --ffbcheck can push into the soft lock)
         if (_testTimer > 0f)
         {
@@ -202,7 +206,7 @@ public partial class SteeringWheel
         if (TraceForces && (_traceIn -= dt) <= 0f)
         {
             _traceIn = 2f;
-            GD.Print($"[ffb] driving {driving} (feel {_feelAge:F2} s old)  torque {_feel.Torque:+0.00;-0.00}  road {_feel.Road:F2}  "
+            GD.Print($"[ffb] driving {driving} (feel {Math.Min(_feelAge, 99):F2} s old)  torque {_feel.Torque:+0.00;-0.00}  road {_feel.Road:F2}  engine {_feel.Engine:F2} at {_feel.EngineHz:F0} Hz  "
                 + $"weight {_feel.Weight:F2}  wheel {Mathf.RadToDeg(Angle):+0;-0}°  sent {constant:+0.00;-0.00}  refused {_sendFailures}");
         }
 
@@ -223,6 +227,13 @@ public partial class SteeringWheel
             (_sentRoad, _sentRoadHz) = (road, hz);
             var e = Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, (ushort)Math.Clamp(1000f / Math.Max(hz, 1f), 20f, 500f), road, SDL_HAPTIC_INFINITY);
             Send(_road, &e);
+        }
+        float engineHz = _feel.EngineHz;
+        if ((int)_engine >= 0 && (MathF.Abs(engine - _sentEngine) > 0.01f || MathF.Abs(engineHz - _sentEngineHz) > 1f || float.IsNaN(_sentEngine)))
+        {
+            (_sentEngine, _sentEngineHz) = (engine, engineHz);
+            var e = Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, (ushort)Math.Clamp(1000f / Math.Max(engineHz, 1f), 16f, 125f), engine, SDL_HAPTIC_INFINITY);
+            Send(_engine, &e);
         }
         if ((int)_damper >= 0 && (MathF.Abs(damper - _sentDamper) > 0.01f || float.IsNaN(_sentDamper)))
         {
@@ -301,12 +312,13 @@ public partial class SteeringWheel
             return e;
         }, run: true);
         _road = Start(SDL_HAPTIC_SINE, () => Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, 50, 0f, SDL_HAPTIC_INFINITY), run: true);
+        _engine = Start(SDL_HAPTIC_SINE, () => Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, 60, 0f, SDL_HAPTIC_INFINITY), run: true);
         _knock = Start(SDL_HAPTIC_SINE, () => Periodic(SDL_HapticEffectType.SDL_HAPTIC_SINE, 70, 0f, 160), run: false);
         _damper = Start(SDL_HAPTIC_DAMPER, () => Condition(SDL_HapticEffectType.SDL_HAPTIC_DAMPER, 0f), run: true);
         _friction = Start(SDL_HAPTIC_FRICTION, () => Condition(SDL_HapticEffectType.SDL_HAPTIC_FRICTION, 0f), run: true);
-        _sentConstant = _sentRoad = _sentDamper = _sentFriction = float.NaN;
+        _sentConstant = _sentRoad = _sentDamper = _sentFriction = _sentEngine = float.NaN;
         GD.Print($"[wheel] force feedback on {SDL_GetHapticName(_haptic)}: features 0x{_features:x}, "
-            + $"constant {(int)_constant >= 0}, road {(int)_road >= 0}, knock {(int)_knock >= 0}, "
+            + $"constant {(int)_constant >= 0}, road {(int)_road >= 0}, engine {(int)_engine >= 0}, knock {(int)_knock >= 0}, "
             + $"damper {(int)_damper >= 0}, friction {(int)_friction >= 0}");
     }
 
@@ -335,8 +347,8 @@ public partial class SteeringWheel
         }
         _haptic = null;
         _hapticOpen = false;
-        _constant = _road = _knock = _damper = _friction = (SDL_HapticEffectID)(-1);
-        _sentConstant = _sentRoad = _sentDamper = _sentFriction = float.NaN;
+        _constant = _road = _engine = _knock = _damper = _friction = (SDL_HapticEffectID)(-1);
+        _sentConstant = _sentRoad = _sentDamper = _sentFriction = _sentEngine = float.NaN;
     }
 
     private static short Level(float v) => (short)Math.Clamp(MathF.Round(v * 32767f), -32767f, 32767f);

@@ -171,7 +171,16 @@ public partial class PlayerFeel : Node3D
         _screen.Visible = viewing;
         // a steering wheel's forces (#68): what this vehicle's steering feels, while it is on screen
         if (viewing && _player.Vehicle is { WheelLock: > 0f } wheeled)
-            SteeringWheel.Drive(wheeled.Feel, wheeled.WheelLock);
+        {
+            var feel = wheeled.Feel;
+            // the engine's shake, from the rpm: the player, not the vehicle model, knows it is running
+            if (wheeled is IEngined engined && _player.EngineOn)
+            {
+                var (shake, hz) = WheelFeel.EngineFrom(engined.Rpm, engined.Rpm01);
+                feel = feel with { Engine = shake, EngineHz = hz };
+            }
+            SteeringWheel.Drive(feel, wheeled.WheelLock);
+        }
         if (!viewing)
         {
             // someone else's camera is on screen (the fly camera): nothing of this belongs there
