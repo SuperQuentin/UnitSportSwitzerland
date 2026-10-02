@@ -264,13 +264,16 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         if (!Multiplayer.IsServer()) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car } vehicle) return;
+        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car or Player.Truck { IsBus: true } } vehicle) return;
         // the server's copy of the asker: only someone standing at the car works its doors
         var asker = GetTree().GetNodesInGroup(Player.FootPlayer.Group).OfType<Player.FootPlayer>()
             .FirstOrDefault(p => p.Name == sender.ToString());
         if (asker == null) return;
         var gap = (asker.GlobalPosition - vehicle.GlobalPosition) with { Y = 0 };
-        if (gap.Length() - vehicle.Ride.ParkedBox.Size.X * 0.5f > DoorReach) return;
+        // a car's doors from its side; a bus's buttons are along its whole length (#162)
+        var box = vehicle.Ride.ParkedBox.Size;
+        float half = vehicle.Ride is Player.Truck ? Mathf.Max(box.X, box.Z) * 0.5f : box.X * 0.5f;
+        if (gap.Length() - half > DoorReach) return;
         int authority = vehicle.GetMultiplayerAuthority();
         if (authority == 1) vehicle.ToggleDoor(bit);
         else RpcId(authority, MethodName.DoorToggled, name, bit);
