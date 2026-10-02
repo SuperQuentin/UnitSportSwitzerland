@@ -144,17 +144,42 @@ public partial class ChunkNode : Node3D
     /// <summary>The buildings' collision shape — one place, so <c>--hitboxcheck</c> tests exactly what the world gets.</summary>
     public static ConcavePolygonShape3D BuildingShape(Vector3[] faces) => new() { Data = faces };
 
-    public void SetBuildingCollision(Vector3[] faces)
+    private CollisionShape3D?[]? _buildingCells;
+
+    /// <summary>
+    /// Sorts collision triangles into the ground's 4×4 cells by centroid, on the build worker:
+    /// a town tile's one BVH was up to 56 ms on the main thread, a cell's is a fraction of it.
+    /// </summary>
+    public static Vector3[][] SplitByCell(Vector3[] faces)
     {
-        var shape = BuildingShape(faces);
+        var cells = new List<Vector3>[CollisionCellCount];
+        for (int c = 0; c < CollisionCellCount; c++) cells[c] = new List<Vector3>();
+        float spacing = (float)ChunkFormat.SpacingM;
+        for (int t = 0; t + 2 < faces.Length; t += 3)
+        {
+            var mid = (faces[t] + faces[t + 1] + faces[t + 2]) / 3f;
+            var list = cells[CollisionCell((int)(mid.X / spacing), (int)(mid.Z / spacing))];
+            list.Add(faces[t]); list.Add(faces[t + 1]); list.Add(faces[t + 2]);
+        }
+        var result = new Vector3[CollisionCellCount][];
+        for (int c = 0; c < CollisionCellCount; c++) result[c] = cells[c].ToArray();
+        return result;
+    }
+
+    /// <summary>Builds (or clears, when empty) one cell of the building collision.</summary>
+    public void SetBuildingCell(Vector3[] faces, int cell)
+    {
         if (_buildingBody == null)
         {
             _buildingBody = new StaticBody3D { Name = "BuildingBody" };
             AddChild(_buildingBody);
         }
-        foreach (Node child in _buildingBody.GetChildren())
-            child.QueueFree();
-        _buildingBody.AddChild(new CollisionShape3D { Shape = shape });
+        _buildingCells ??= new CollisionShape3D?[CollisionCellCount];
+        _buildingCells[cell]?.QueueFree();
+        _buildingCells[cell] = null;
+        if (faces.Length == 0) return;
+        _buildingCells[cell] = new CollisionShape3D { Shape = BuildingShape(faces) };
+        _buildingBody.AddChild(_buildingCells[cell]);
     }
 
     private StaticBody3D? _roadBody;
@@ -165,14 +190,16 @@ public partial class ChunkNode : Node3D
     /// other at-grade road/path already stands on terrain collision blended toward it; see
     /// <c>TerrainMeshBuilder.ComputeRoadBlend</c>.
     /// </summary>
-    public void SetRoadCollision(Vector3[] faces)
+    /// <remarks>
+    /// Road collision (decks, walls, railings, islands, sign poles, kerbs) is cut into the same
+    /// 4×4 cells as the ground (<see cref="SplitByCell"/>) and committed one cell per frame.
+    /// </remarks>
+    public void SetRoadCell(Vector3[] faces, int cell)
     {
-        if (faces.Length == 0)
-        {
-            _roadBody?.QueueFree();
-            _roadBody = null;
-            return;
-        }
+        _roadCells ??= new CollisionShape3D?[CollisionCellCount];
+        _roadCells[cell]?.QueueFree();
+        _roadCells[cell] = null;
+        if (faces.Length == 0) return;
 
         // BackfaceCollision: a bridge deck is walked on from above, but Godot's default (false)
         // makes a ConcavePolygonShape3D one-sided for exactly the queries a player's own
@@ -187,10 +214,11 @@ public partial class ChunkNode : Node3D
             _roadBody = new StaticBody3D { Name = "RoadBody" };
             AddChild(_roadBody);
         }
-        foreach (Node child in _roadBody.GetChildren())
-            child.QueueFree();
-        _roadBody.AddChild(new CollisionShape3D { Shape = shape });
+        _roadCells[cell] = new CollisionShape3D { Shape = shape };
+        _roadBody.AddChild(_roadCells[cell]);
     }
+
+    private CollisionShape3D?[]? _roadCells;
 
     private MultiMeshInstance3D? _coniferInstance;
     private MultiMeshInstance3D? _broadleafInstance;
@@ -485,23 +513,48 @@ public partial class ChunkNode : Node3D
         }
     }
 
-    public void SetCollision(float[] collisionMap)
+    // ---- Height-field collision, in cells ------------------------------------------------
+    //
+    // One 1001² HeightMapShape3D took ~80 ms on the main thread. The tile's ground is cut into
+    // 4×4 cells of 251² samples (neighbours share their edge row), committed one per frame by
+    // ChunkManager, nearest a body first.
+
+    private const int CellsPerSide = 4;
+    private const int CellQuads = (ChunkFormat.GridSize - 1) / CellsPerSide;   // 250
+    public const int CollisionCellCount = CellsPerSide * CellsPerSide;
+    public const int AllCollisionCells = (1 << CollisionCellCount) - 1;
+    public const float TileSizeM = (float)((ChunkFormat.GridSize - 1) * ChunkFormat.SpacingM);
+    private CollisionShape3D?[]? _cells;
+
+    /// <summary>The cell holding grid sample (col, row); row 0 is the tile's north edge.</summary>
+    public static int CollisionCell(int col, int row) =>
+        Math.Clamp(row / CellQuads, 0, CellsPerSide - 1) * CellsPerSide
+        + Math.Clamp(col / CellQuads, 0, CellsPerSide - 1);
+
+    /// <summary>A cell's extent in tile-local metres: x east, y = z south, from the NW corner.</summary>
+    public static Rect2 CollisionCellRect(int cell)
     {
-        var shape = new HeightMapShape3D
-        {
-            MapWidth = ChunkFormat.GridSize,
-            MapDepth = ChunkFormat.GridSize,
-            MapData = collisionMap,
-        };
+        float size = (float)(CellQuads * ChunkFormat.SpacingM);
+        return new Rect2(cell % CellsPerSide * size, cell / CellsPerSide * size, size, size);
+    }
+
+    /// <summary>Builds (or replaces) one cell of the ground collision from the tile's full map.</summary>
+    public void SetCollisionCell(float[] collisionMap, int cell)
+    {
+        const int side = CellQuads + 1;
+        int cx = cell % CellsPerSide, cz = cell / CellsPerSide;
+        var data = new float[side * side];
+        for (int r = 0; r < side; r++)
+            Array.Copy(collisionMap, (cz * CellQuads + r) * ChunkFormat.GridSize + cx * CellQuads, data, r * side, side);
+
+        float spacing = (float)ChunkFormat.SpacingM;
         var collisionShape = new CollisionShape3D
         {
-            Shape = shape,
-            // HeightMapShape3D cells are 1 unit and the shape is XZ-centered; scale to
-            // ChunkFormat.SpacingM and move to the tile center. Verified against the height
-            // sampler in M3. Position is half the 1000 m tile size, not the grid spacing —
-            // unaffected by a spacing change.
-            Position = new Vector3(500f, 0f, 500f),
-            Scale = new Vector3((float)ChunkFormat.SpacingM, 1f, (float)ChunkFormat.SpacingM),
+            Shape = new HeightMapShape3D { MapWidth = side, MapDepth = side, MapData = data },
+            // HeightMapShape3D cells are 1 unit and the shape is XZ-centred: scale to the grid
+            // spacing and move to the cell's centre
+            Position = new Vector3((cx * CellQuads + CellQuads / 2f) * spacing, 0f, (cz * CellQuads + CellQuads / 2f) * spacing),
+            Scale = new Vector3(spacing, 1f, spacing),
         };
 
         if (_body == null)
@@ -509,8 +562,9 @@ public partial class ChunkNode : Node3D
             _body = new StaticBody3D();
             AddChild(_body);
         }
-        foreach (Node child in _body.GetChildren())
-            child.QueueFree();
+        _cells ??= new CollisionShape3D?[CollisionCellCount];
+        _cells[cell]?.QueueFree();
+        _cells[cell] = collisionShape;
         _body.AddChild(collisionShape);
     }
 }
