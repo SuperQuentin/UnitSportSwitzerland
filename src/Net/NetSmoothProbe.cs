@@ -128,7 +128,9 @@ public partial class NetSmoothProbe : Node
             float d = new Vector2(off.X, off.Z).Length();
             if (d < best) { best = d; _target = p; }
         }
-        if (_target == null && _t > PickAfter + PickWindow + 30) Finish("no moving remote player found");
+        // up to 90 s: a scripted driver (--garagecheck drive) starts once this client has landed
+        // from its spawn drop and has collision under the remote
+        if (_target == null && _t > PickAfter + PickWindow + 90) Finish("no moving remote player found");
         else if (_target != null)
         {
             _targetInfo = $"{_target.Name} ({(CarCatalog.For(((FootPlayer)_target).Ride)?.Label ?? ((FootPlayer)_target).Ride.ToString())}) at {best:F0} m";

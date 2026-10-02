@@ -48,12 +48,12 @@ src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
 
 # tier 1: one headless Godot on a synthetic course (src/Terrain/Fixture), ~2 min
-src/Terrain/Fixture/     quick  --drivecheck --chunks fixture:hairpin --traffic 0
-src/Player/AutoPilot     quick  --drivecheck --chunks fixture:hairpin --traffic 0
-src/Player/RaceRoute     quick  --drivecheck --chunks fixture:hairpin --traffic 0
-src/Player/RaceLine      quick  --drivecheck --chunks fixture:hairpin --traffic 0
-src/Player/DriveProbe    quick  --drivecheck --chunks fixture:hairpin --traffic 0
-src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 0
+src/Terrain/Fixture/     quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/AutoPilot     quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/RaceRoute     quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/RaceLine      quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Player/DriveProbe    quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
