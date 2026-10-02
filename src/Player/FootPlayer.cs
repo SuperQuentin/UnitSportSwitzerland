@@ -551,6 +551,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private MeshInstance3D? _walker;
     private Avatar.HumanPalette _walkPalette = Avatar.HumanPalette.Default;
     private float _stridePhase;
+    /// <summary>The priority whoever made this player gave it (a probe orders it after itself, #279): seated or on a deck it runs at 10, back to this after.</summary>
+    private int _basePriority;
     /// <summary>Remote: the last replicated gait phase, so a fresh one is taken and a repeat integrated.</summary>
     private float _seenPhase = float.NaN;
     /// <summary>Owner: the stunned figure's lean toward the ground, eased.</summary>
@@ -1032,6 +1034,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public override void _Ready()
     {
+        _basePriority = ProcessPriority;
         CollisionMask |= World.TreeColliders.Layer;   // trunks are solid (layer 2)
         // and the decks of walkable vehicles (#162), which only exist on a walking player's own peer
         CollisionMask |= DeckLayer;

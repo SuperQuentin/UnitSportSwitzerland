@@ -270,7 +270,7 @@ public partial class FootPlayer
             if (known != null) FreeDeck(known);
             _decks[key] = BuildDeck(host, key, RideOfHost(host)!);
         }
-        int priority = _decks.Count > 0 || RidingWith != 0 || Aboard ? 10 : 0;
+        int priority = _decks.Count > 0 || RidingWith != 0 || Aboard ? 10 : _basePriority;
         if (ProcessPriority != priority) ProcessPriority = priority;
     }
 

@@ -97,7 +97,7 @@ public partial class FootPlayer
     {
         // a passenger's copy (and one walking about aboard) is placed from its vehicle's: after the
         // vehicle has moved this frame, on every peer
-        int priority = RidingWith != 0 || DeckOn != "" || _decks.Count > 0 ? 10 : 0;
+        int priority = RidingWith != 0 || DeckOn != "" || _decks.Count > 0 ? 10 : _basePriority;
         if (ProcessPriority != priority) ProcessPriority = priority;
         var at = WhereSeated();
         if (at is not { } s)
@@ -260,7 +260,7 @@ public partial class FootPlayer
         RidingWith = 0;
         SeatIndex = 0;
         _host = null;
-        ProcessPriority = 0;
+        ProcessPriority = _basePriority;
         _body.Disabled = false;
         _lookYaw = 0f;
         _viewYaw = yaw;
@@ -305,7 +305,7 @@ public partial class FootPlayer
         _seated = null;
         RidingWith = 0;
         _host = null;
-        ProcessPriority = 0;
+        ProcessPriority = _basePriority;
         _body.Disabled = false;
         EnterVehicle(state);   // where it is, how it moves, its train, its damage
         SeatIndex = seat;

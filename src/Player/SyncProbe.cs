@@ -56,7 +56,7 @@ public partial class SyncProbe : Node
     private float? _ownerCrank;
     private RideKind _ownerKind;
     private float _ownerCadence;
-    private double _lastDelta;
+    private double _lastDelta, _copyDelta;
 
     private float _basisErr, _handErr, _crankErr, _freshBasis, _freshHand, _freshCrank;
     private int _samples, _freshSamples, _kindMismatch;
@@ -127,7 +127,10 @@ public partial class SyncProbe : Node
             float he = _ownerHand is { } oh && _mirror.HandLocal is { } mh ? oh.Origin.DistanceTo(mh.Origin) : 0f;
             // The crank turns during a frame on both sides, each on its own dt, so the two may be one
             // frame of cadence apart (more across a hitch frame); only what is beyond that counts.
-            float turnedOn = _ownerCadence / 60f * Mathf.Tau * (float)Math.Max(delta, _lastDelta);
+            // The owner publishes its crank before its Cyclist turns it that frame, so the mirror's copy
+            // is the copy frame's turn behind until the next update: a long copy frame (a hitch under
+            // machine load, #279) is a long turn behind, though nothing is lost.
+            float turnedOn = _ownerCadence / 60f * Mathf.Tau * (float)Math.Max(Math.Max(delta, _lastDelta), _copyDelta);
             float ce = _ownerCrank is { } oc && mv is Avatar.Cyclist mc
                 ? Math.Max(0f, Mathf.Abs(Mathf.AngleDifference(oc, mc.CrankAngle)) - turnedOn)
                 : _ownerCrank is { } os && mv is Avatar.CarRig mr ? Mathf.Abs(os - mr.SteerAngle)
@@ -185,7 +188,7 @@ public partial class SyncProbe : Node
         // 3. the network: exactly the replicated properties, at 20 Hz
         _sinceUpdate += delta;
         _copiedLastFrame = _sinceUpdate >= UpdateInterval;
-        if (_copiedLastFrame) { _sinceUpdate = 0; Replicate(); }
+        if (_copiedLastFrame) { _sinceUpdate = 0; _copyDelta = delta; Replicate(); }
 
         if (_t > StageEnd[^1]) End();
     }
