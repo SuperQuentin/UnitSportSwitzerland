@@ -23,9 +23,9 @@ public static class PierMeshBuilder
     public const float RailHeight = 1.05f;
 
     // vertex colours, raw linear (the prop shader takes them as they are); alpha 0 = no glow
-    private static readonly Color PierDeck = new(0.42f, 0.33f, 0.24f, 0f);
+    private static readonly Color PierDeck = new(0.40f, 0.28f, 0.17f, 0f);
     private static readonly Color PierSide = new(0.56f, 0.56f, 0.54f, 0f);
-    private static readonly Color JettyDeck = new(0.47f, 0.43f, 0.37f, 0f);
+    private static readonly Color JettyDeck = new(0.44f, 0.36f, 0.27f, 0f);
     private static readonly Color JettySide = new(0.33f, 0.27f, 0.21f, 0f);
     private static readonly Color Pile = new(0.27f, 0.25f, 0.23f, 0f);
     private static readonly Color Rail = new(0.82f, 0.83f, 0.81f, 0f);

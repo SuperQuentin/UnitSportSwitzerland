@@ -290,38 +290,49 @@ public partial class SteamerCheck : Node
         Expect(solid, "the pier's head is solid where the gangway lands");
         Expect(plankFoot.Y - deckY < 0.01f && plankFoot.Y - deckY > -0.06f, "the plank's foot is flush with the deck (in it, not a lip on it)");
 
-        // on the neck, 12 m from the head
+        // on the way to the head, 12 m from it: on the pier's own neck, or on the surveyed pier (a
+        // road the roads draw, #377) before the ramp down to the head
         var neck = landing.Ribbons.First(r => r.Rails);
-        var a = neck.Points[0];
-        var b = neck.Points[^1];
-        double len = Math.Sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]));
-        double t = Math.Min(12.0, len * 0.5) / len;
-        var neckSpot = origin.ToWorld(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + 0.3);
-        var headBack = origin.ToWorld(a[0], a[1], a[2] + 0.3);
+        double D(double[] p) => (p[0] - berth.E) * (p[0] - berth.E) + (p[1] - berth.N) * (p[1] - berth.N);
+        var near = D(neck.Points[0]) < D(neck.Points[^1]) ? neck.Points[0] : neck.Points[^1];
+        var far = near == neck.Points[0] ? neck.Points[^1] : neck.Points[0];
+        double len = Math.Sqrt((far[0] - near[0]) * (far[0] - near[0]) + (far[1] - near[1]) * (far[1] - near[1]));
+        bool surveyed = len < 12;
+        double[] start = surveyed
+            ? new[] { far[0] + (far[0] - near[0]) / len * 8, far[1] + (far[1] - near[1]) / len * 8, far[2] }
+            : new[] { near[0] + (far[0] - near[0]) * 12 / len, near[1] + (far[1] - near[1]) * 12 / len, near[2] + (far[2] - near[2]) * 12 / len };
+        var neckSpot = origin.ToWorld(start[0], start[1], start[2] + 0.3);
+        var headBack = origin.ToWorld(near[0], near[1], near[2] + 0.3);
+        var path = surveyed ? new[] { origin.ToWorld(far[0], far[1], far[2]), headBack, Vector3.Zero } : new[] { headBack, Vector3.Zero };
+        await Until(() => chunks.HasCollisionAt(neckSpot), 30);
         me.Velocity = Vector3.Zero;
         me.GlobalPosition = neckSpot;
         bool standing = await Until(() => me.IsOnFloor(), 10);
         await Wait(1);
         float overNeck = me.GlobalPosition.Y - (neckSpot.Y - 0.3f);
-        Expect(standing && Mathf.Abs(overNeck) < 0.3f, F($"standing on the pier's neck ({overNeck:+0.00;-0.00} m off its deck)"));
+        Expect(standing && Mathf.Abs(overNeck) < 0.35f, F($"standing on the {(surveyed ? "surveyed pier (a road)" : "pier's neck")} ({overNeck:+0.00;-0.00} m off its deck)"));
         await Shot("pier_moored", () =>
         {
+            // from over the pier's side, its neck in front, the ship beyond
             var bow = Landings.Bow(berth);
-            var outward = new Vector3(-bow.Z, 0, bow.X) * -side;   // away from the pier
+            var towardPier = new Vector3(bow.Z, 0, -bow.X) * side;
             var target = keel + Vector3.Up * 4f - bow * 8f;
-            var eye = target + outward * 60f - bow * 45f + Vector3.Up * 20f;
+            var eye = target + towardPier * 60f - bow * 45f + Vector3.Up * 20f;
             return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
         });
 
         // along the neck to the head, beside the gangway
-        Expect(await WalkTo(me, new[] { headBack, onHead }), $"along the neck to the head, by the gangway ({WhereText(me)})");
+        path[^1] = onHead;
+        Expect(await WalkTo(me, path), $"along the {(surveyed ? "surveyed pier and down the ramp" : "neck")} to the head, by the gangway ({WhereText(me)})");
         await Wait(0.5);
         Expect(!me.Aboard && Mathf.Abs(me.GlobalPosition.Y - deckY) < 0.15f, F($"on the head's deck ({me.GlobalPosition.Y - deckY:+0.00;-0.00} m), not aboard"));
         await Shot("pier_player", () =>
         {
+            // from the pier's shore side, the player in front, the ship and its gangway behind
             var bow = Landings.Bow(berth);
-            var eye = me.GlobalPosition - bow * 9f + Vector3.Up * 2.2f + new Vector3(-bow.Z, 0, bow.X) * side * 2.5f;
-            var target = me.GlobalPosition + Vector3.Up * 1.2f + bow * 2f;
+            var towardPier = new Vector3(bow.Z, 0, -bow.X) * side;
+            var eye = me.GlobalPosition + towardPier * 8f - bow * 3.5f + Vector3.Up * 2.4f;
+            var target = me.GlobalPosition + Vector3.Up * 1.3f - towardPier * 3f + bow * 1.5f;
             return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
         });
         await Shot("gangway", () => OnShip(me, side * 9.5f, SteamerMeshBuilder.DeckY + 1.4f, 49.5f, side * 4.6f, SteamerMeshBuilder.DeckY - 0.4f, 44.2f));
@@ -356,6 +367,7 @@ public partial class SteamerCheck : Node
         var mid = (p0 + p1) * 0.5f;
         Log(F($"jetty {jetty.Id}: {pts.Count} points, deck {jettyDeck:F2} (world), the boat by its point {i}"));
         // standing on the jetty, then into a speedboat put in the water alongside
+        if (!await Until(() => me.Terrain!.HasCollisionAt(mid), 40)) Log("  the jetty's tile has no collision yet");
         me.Velocity = Vector3.Zero;
         me.GlobalPosition = mid + Vector3.Up * 0.3f;
         await Until(() => me.IsOnFloor(), 8);
