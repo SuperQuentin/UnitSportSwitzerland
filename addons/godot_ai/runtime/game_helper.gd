@@ -123,9 +123,13 @@ func _ready() -> void:
 	## Capture print() / printerr() / push_error() / push_warning() and
 	## ferry them to the editor in mcp:log_batch messages flushed from
 	## _process.
-	_logger = GameLogger.new()
-	OS.add_logger(_logger)
-	_logger_attached = true
+	## UnitSportSwitzerland (#221): only with the editor debugger attached. The queue is drained
+	## only through it, so without one (dedicated server, exported or command-line runs) every log
+	## line, plus a backtrace per warning, piled up for the life of the process.
+	if EngineDebugger.is_active():
+		_logger = GameLogger.new()
+		OS.add_logger(_logger)
+		_logger_attached = true
 	## Routed to the editor's Output panel via Godot's remote-stdout
 	## forwarder — handy when diagnosing why capture timed out.
 	print("[godot_ai game_helper] registered mcp capture (debugger active=%s, logger=%s)"

@@ -1700,6 +1700,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
         if (dance != null && ItemAction == 0) { arm = Avatar.ItemArmPose.None; blend = 0f; }
         bool armed = arm != Avatar.ItemArmPose.None && blend > 0.001f;
+        if (!armed) { arm = Avatar.ItemArmPose.None; blend = 0f; }   // what the builder does with them anyway
+        // Rebuilt only when what it shows changes (#221): a figure standing still is built once, and
+        // a remote one far away or out of view at most 15 times a second. The speed is keyed to the
+        // centimetre per second, so a standing figure's float noise does not rebuild it.
         // a skirt streams in the air the figure moves through (#251): walking, running, falling
         var palette = _walkPalette;
         if (Avatar.HumanMeshBuilder.Flutters(palette.Outfit))
@@ -1708,24 +1712,35 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _slidePose = null;
             _airPose = null;
         }
-        Avatar.HumanMeshBuilder.GaitMounts mounts;
-        switch (PoseKind)
+        _poseWait += dt;
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette);
+        // the hand is placed from fresh mounts every time the pose changes, even while a throttled
+        // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
+        if (key != _mountsKey)
         {
-            case PoseTucked:
-                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Tucked, arm, blend, Hat)
-                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat);
-                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend);
-                break;
-            case PoseAir:
-                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat)
-                    : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat);
-                mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend);
-                break;
-            default:
-                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend, dance: dance);
-                mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance);
-                break;
+            _mountsKey = key;
+            _poseMounts = PoseKind switch
+            {
+                PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
+                PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
+                _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance),
+            };
         }
+        if (key != _poseKey && !HoldRemoteFigure())
+        {
+            _poseKey = key;
+            _poseWait = 0f;
+            _walker.Mesh = PoseKind switch
+            {
+                PoseTucked => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Tucked, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
+                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat),
+                PoseAir => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
+                    : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
+                _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
+                    dance: dance, into: _poseMesh ??= new ArrayMesh()),
+            };
+        }
+        var mounts = _poseMounts;
         _walker.Transform = BodyPose;
         if (_jolt > 0.01f)
         {
@@ -1738,6 +1753,37 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _walker.Transform *= FlinchPose(dt);
         PlaceHand(mounts);
         PlaceBack(mounts);
+    }
+
+    /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
+    private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
+        Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette);
+
+    private FootPoseKey _poseKey, _mountsKey;
+    private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;
+    /// <summary>The animated figure's one mesh, rebuilt in place (the cached held poses aside).</summary>
+    private ArrayMesh? _poseMesh;
+    private float _poseWait;
+
+    /// <summary>
+    /// Whether a remote figure keeps last frame's mesh: beyond 40 m or outside the camera's view
+    /// cone it is rebuilt at 15 Hz, not every frame. Not frozen: mirrors, portals and photos see
+    /// what the main camera does not. The cone holds the whole screen and the figure's size, so a
+    /// figure at the edge of the picture still counts as in view.
+    /// </summary>
+    private bool HoldRemoteFigure()
+    {
+        if (IsMultiplayerAuthority() || _poseWait >= 1f / 15f || XR.XrSession.Active) return false;
+        var cam = GetViewport().GetCamera3D();
+        if (cam == null || _walker == null) return false;
+        var to = _walker.GlobalPosition + new Vector3(0, 0.9f, 0) - cam.GlobalPosition;
+        float d = to.Length();
+        if (d > 40f) return true;
+        if (d < 2f) return false;
+        var size = GetViewport().GetVisibleRect().Size;
+        float aspect = Mathf.Max(size.X / Mathf.Max(size.Y, 1f), size.Y / Mathf.Max(size.X, 1f));
+        float halfDiagonal = Mathf.Atan(Mathf.Tan(Mathf.DegToRad(cam.Fov) * 0.5f) * Mathf.Sqrt(1f + aspect * aspect));
+        return (-cam.GlobalBasis.Z).AngleTo(to) > halfDiagonal + Mathf.Asin(1.2f / d);
     }
 
     /// <summary>
@@ -1992,13 +2038,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Items.RadioUi.Instance?.Open(radio);
             return true;
         }
-        // music in earshot: E starts or stops the dance
-        if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius) != null)
+        // a building's door in reach beats the dance: music next door must not lock you out
+        if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
+        // music heard here: E starts the dance; stopping works for as long as it lasts
+        if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius, heard: DanceId == 0) != null)
         {
             DanceId = DanceId == 0 ? 1 : 0;
             return true;
         }
-        return IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true;
+        if (DanceId != 0) { DanceId = 0; return true; }
+        return false;
     }
 
     /// <summary>

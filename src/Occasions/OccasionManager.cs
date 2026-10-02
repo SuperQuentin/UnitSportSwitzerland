@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Godot;
+using UnitSport.Net;
 using UnitSport.Core;
 
 namespace UnitSport.Occasions;
@@ -139,8 +140,7 @@ public partial class OccasionManager : Node
 
     // ---- roles ---------------------------------------------------------------------------------
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     private bool ClientOnline => Online && !Multiplayer.IsServer();
     private bool DedicatedServer => Online && Multiplayer.IsServer();

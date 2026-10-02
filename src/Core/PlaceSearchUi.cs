@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
+using UnitSport.Ui;
 
 namespace UnitSport.Core;
 
@@ -59,8 +60,7 @@ public partial class PlaceSearchUi : CanvasLayer
         var rows = new VBoxContainer();
         _panel.AddChild(rows);
 
-        _title = new Label { Text = $"Teleport — {_index.Places.Count} places with terrain" };
-        _title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
+        _title = UiTheme.Title($"Teleport — {_index.Places.Count} places with terrain", 0);
         rows.AddChild(_title);
 
         _query = new LineEdit { PlaceholderText = "type a town name…" };

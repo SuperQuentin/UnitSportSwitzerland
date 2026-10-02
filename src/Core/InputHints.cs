@@ -27,7 +27,24 @@ public static class InputHints
     public static string Label(string action) =>
         Label(action, PlayerInput.LastDevice);
 
+    // Memoised (#221): HUD prompts ask every frame, and each lookup marshals the action's events
+    // and builds a list. Bindings only change in PlayerInput.Bind, which calls Invalidate.
+    private static readonly Dictionary<(string, InputDevice), string> Labels = new(), Formatted = new();
+
+    /// <summary>Forget the memoised labels: call after any change to the input map.</summary>
+    public static void Invalidate()
+    {
+        Labels.Clear();
+        Formatted.Clear();
+    }
+
     public static string Label(string action, InputDevice device)
+    {
+        if (Labels.TryGetValue((action, device), out var label)) return label;
+        return Labels[(action, device)] = Lookup(action, device);
+    }
+
+    private static string Lookup(string action, InputDevice device)
     {
         if (!InputMap.HasAction(action)) return "?";
         var events = InputMap.ActionGetEvents(action);
@@ -59,8 +76,14 @@ public static class InputHints
     /// </summary>
     public static string Format(string text) => Format(text, PlayerInput.LastDevice);
 
-    public static string Format(string text, InputDevice device) =>
-        Placeholder.Replace(text, m => InputMap.HasAction(m.Groups[1].Value) ? Label(m.Groups[1].Value, device) : m.Value);
+    public static string Format(string text, InputDevice device)
+    {
+        if (Formatted.TryGetValue((text, device), out var done)) return done;
+        // ponytail: some texts carry numbers (loot toasts), so the cache is simply dropped when it grows
+        if (Formatted.Count > 256) Formatted.Clear();
+        return Formatted[(text, device)] =
+            Placeholder.Replace(text, m => InputMap.HasAction(m.Groups[1].Value) ? Label(m.Groups[1].Value, device) : m.Value);
+    }
 
     // ------------------------------------------------------------------------------------
 

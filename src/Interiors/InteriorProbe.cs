@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Godot;
+using UnitSport.Net;
 using UnitSport.Core;
 using UnitSport.Player;
 using UnitSport.Terrain;
@@ -43,8 +44,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     private bool _viewed;
 
     /// <summary>Connected to a server: the probe drives this client's own networked player.</summary>
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
     private long Me => Online ? Multiplayer.GetUniqueId() : 1;
 
     public InteriorProbe(ChunkManager chunks, WorldOrigin origin, IChunkSource source, string? shot)

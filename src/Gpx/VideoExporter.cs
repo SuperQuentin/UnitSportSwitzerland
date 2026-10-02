@@ -1,6 +1,7 @@
 ﻿using Godot;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
+using UnitSport.Ui;
 
 namespace UnitSport.Gpx;
 
@@ -557,23 +558,15 @@ public partial class VideoExporter : Node
             AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 1, AnchorBottom = 1,
             OffsetLeft = -260, OffsetRight = 260, OffsetTop = -96, OffsetBottom = -20,
         };
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.04f, 0.05f, 0.07f, 0.92f),
-            ContentMarginLeft = 18, ContentMarginRight = 18,
-            ContentMarginTop = 12, ContentMarginBottom = 12,
-        };
-        style.SetCornerRadiusAll(6);
-        panel.AddThemeStyleboxOverride("panel", style);
+        panel.AddThemeStyleboxOverride("panel", UiTheme.Flat(new Color(0.04f, 0.05f, 0.07f, 0.92f), 6, 18, 12));
         _overlay.AddChild(panel);
 
         var rows = new VBoxContainer();
         rows.AddThemeConstantOverride("separation", 6);
         panel.AddChild(rows);
 
-        var title = new Label { Text = "Recording", HorizontalAlignment = HorizontalAlignment.Center };
-        title.AddThemeFontSizeOverride("font_size", 18);
-        title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
+        var title = UiTheme.Title("Recording", 18);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
         rows.AddChild(title);
 
         _bar = new ProgressBar { MinValue = 0, MaxValue = 1, Step = 0.0001, ShowPercentage = false,

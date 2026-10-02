@@ -65,32 +65,39 @@ public partial class DoorLights : Node3D, Core.IOriginContainer
     public override void _ExitTree()
     {
         for (int i = 0; i < Slots; i++) RenderingServer.GlobalShaderParameterSet(Globals[i], Vector4.Zero);
+        _lit = 0;
     }
+
+    // reused every frame (#221): the nearest open doors, and what each slot last sent
+    private readonly List<(float D, Vector3 At, float Strength)> _lit2 = new();
+    private readonly Vector4[] _sent = new Vector4[Slots];
 
     public override void _Process(double delta)
     {
         float night = World.DayNight.Instance?.Night ?? 0f;
         var cam = GetViewport()?.GetCamera3D();
-        var lit = new List<(Vector3 At, float Strength)>();
+        var lit = _lit2;
+        lit.Clear();
         if (night > 0f && cam != null)
         {
             var eye = cam.GlobalPosition;
             // from inside, the camera is 3 km down: measure to the doorway on its own side
-            lit = _links()
-                .Where(l => l.Swing > 0f)
-                .OrderBy(l => Mathf.Min(eye.DistanceSquaredTo(l.Outside.Origin), eye.DistanceSquaredTo(l.Inside.Origin)))
-                .Take(Slots)
-                .Select(l => (l.Outside * Lamp, night * Mathf.SmoothStep(0f, 1f, l.Swing)))
-                .ToList();
+            foreach (var l in _links())
+                if (l.Swing > 0f)
+                    lit.Add((Mathf.Min(eye.DistanceSquaredTo(l.Outside.Origin), eye.DistanceSquaredTo(l.Inside.Origin)),
+                        l.Outside * Lamp, night * Mathf.SmoothStep(0f, 1f, l.Swing)));
+            if (lit.Count > 1) lit.Sort(static (a, b) => a.D.CompareTo(b.D));
         }
+        int count = Math.Min(lit.Count, Slots);
 
         for (int i = 0; i < Slots; i++)
         {
             var light = _lights[i];
-            if (i < lit.Count)
+            if (i < count)
             {
-                var (at, strength) = lit[i];
-                RenderingServer.GlobalShaderParameterSet(Globals[i], new Vector4(at.X, at.Y, at.Z, strength));
+                var (_, at, strength) = lit[i];
+                var v = new Vector4(at.X, at.Y, at.Z, strength);
+                if (i >= _lit || v != _sent[i]) RenderingServer.GlobalShaderParameterSet(Globals[i], _sent[i] = v);
                 light.GlobalPosition = at;
                 light.LightEnergy = strength * Energy;
                 light.Visible = true;
@@ -101,6 +108,6 @@ public partial class DoorLights : Node3D, Core.IOriginContainer
                 light.Visible = false;
             }
         }
-        _lit = lit.Count;
+        _lit = count;
     }
 }
