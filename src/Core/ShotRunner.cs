@@ -63,6 +63,7 @@ public partial class ShotRunner : Node
     private readonly WorldOrigin? _origin;
     private readonly OriginFrame? _start;
     private readonly bool _hideHud = HideHudRequested();
+    private List<CanvasLayer>? _hudLayers;
     private Shot? _shot;
     private double _elapsed;
     private bool _done;
@@ -105,6 +106,35 @@ public partial class ShotRunner : Node
 
     private static bool HideHudRequested() => CmdArgs.Has("--nohud");
 
+    /// <summary>
+    /// Hides every CanvasLayer. The tree is walked once, then followed through
+    /// <c>NodeAdded</c>: a whole-tree <c>FindChildren</c> every frame visited each tile node and
+    /// was 90 % of the main thread at 40 rings, the very cost the shots were measuring (#221).
+    /// </summary>
+    private void HideHud()
+    {
+        if (_hudLayers == null)
+        {
+            _hudLayers = new List<CanvasLayer>();
+            foreach (var node in GetTree().Root.FindChildren("*", "CanvasLayer", true, false))
+                _hudLayers.Add((CanvasLayer)node);
+            GetTree().NodeAdded += OnNodeAdded;
+        }
+        _hudLayers.RemoveAll(layer => !IsInstanceValid(layer));
+        foreach (var layer in _hudLayers) layer.Visible = false;
+    }
+
+    private void OnNodeAdded(Node node)
+    {
+        if (node is CanvasLayer layer) _hudLayers!.Add(layer);
+    }
+
+    public override void _ExitTree()
+    {
+        if (_hudLayers != null) GetTree().NodeAdded -= OnNodeAdded;
+        _hudLayers = null;
+    }
+
     private void Aim(Shot shot)
     {
         _shot = shot;
@@ -123,9 +153,7 @@ public partial class ShotRunner : Node
         // transform, so take it back every frame until the picture is written.
         _camera.Current = true;
         // every frame: a panel opened since (the start menu, a toast) would land in the picture
-        if (_hideHud)
-            foreach (var layer in GetTree().Root.FindChildren("*", "CanvasLayer", true, false))
-                ((CanvasLayer)layer).Visible = false;
+        if (_hideHud) HideHud();
         if (_shot!.Value.Inside is { } inside && !_through)
         {
             GoInside(inside, delta);
