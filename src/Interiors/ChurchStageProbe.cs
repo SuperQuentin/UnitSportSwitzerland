@@ -185,11 +185,39 @@ public partial class ChurchStageProbe : Node3D
                 var room = _church.GetNode<MeshInstance3D>("Mesh");
                 Check(room.GetInstanceShaderParameter("disco").AsSingle() > 0.5f, "the walls are in the disco");
                 if (Windowed) Shot("_dance");
-                ChurchRadios.Instance!.Stop(Plan);
+                // a player walks up in front of the left-hand row
+                _visitor = new Node3D { Name = "Visitor", Position = new Vector3(-4.0f, 0, 7.6f) };
+                AddChild(_visitor);
+                ChurchStage.ProbeWatchers = () => new[] { _visitor };
                 Next();
                 break;
             }
             case 4:
+            {
+                if (_t < 1.5) return;
+                var (f, want, rat) = NearestCongregant(_visitor!.Position);
+                float yaw = _stage.YawOf(f);
+                Check(Mathf.Abs(Mathf.AngleDifference(yaw, want)) < 0.25f,
+                    $"the dancer nearest a player in front turns to face them (yaw {yaw:F2}, wants {want:F2}, the rat is at {rat:F2})");
+                if (Windowed) Shot("_facing");
+                // and walks back past the row
+                _visitor.Position = new Vector3(-4.0f, 0, 2.0f);
+                Next();
+                break;
+            }
+            case 5:
+            {
+                if (_t < 1.5) return;
+                var (f, want, rat) = NearestCongregant(new Vector3(-4.0f, 0, 7.6f));
+                float yaw = _stage.YawOf(f);
+                Check(Mathf.Abs(Mathf.AngleDifference(yaw, rat)) < 0.25f,
+                    $"with the player behind them they look back to the rat (yaw {yaw:F2}, the rat at {rat:F2})");
+                ChurchStage.ProbeWatchers = null;
+                ChurchRadios.Instance!.Stop(Plan);
+                Next();
+                break;
+            }
+            case 6:
             {
                 // one frame after the stop: exactly as before
                 Check(PartTransforms().SequenceEqual(_restParts), "every figure is back in its place at once");
@@ -199,7 +227,7 @@ public partial class ChurchStageProbe : Node3D
                 Next();
                 break;
             }
-            case 5:
+            case 7:
                 if (_t < 0.5) return;
                 if (Windowed && _restImage != null)
                 {
@@ -210,6 +238,28 @@ public partial class ChurchStageProbe : Node3D
                 Finish();
                 break;
         }
+    }
+
+    private Node3D? _visitor;
+
+    /// <summary>The congregant whose standing spot is nearest <paramref name="at"/>: its index, the yaw toward <paramref name="at"/>, and toward the rat.</summary>
+    private (int F, float Want, float Rat) NearestCongregant(Vector3 at)
+    {
+        var figures = _stage.Figures;
+        int best = -1;
+        float bestD = float.MaxValue;
+        Vector3 rat = Vector3.Zero;
+        for (int f = 0; f < figures.Count; f++)
+        {
+            if (figures[f].Kind == FigureKind.Rat) { rat = figures[f].Frame.Origin; continue; }
+            float d = (figures[f].Frame * _stage.StandSpot(f)).DistanceTo(at);
+            if (d < bestD) { bestD = d; best = f; }
+        }
+        var inv = figures[best].Frame.AffineInverse();
+        var spot = _stage.StandSpot(best);
+        var toAt = inv * at - spot;
+        var toRat = inv * rat - spot;
+        return (best, Mathf.Atan2(toAt.X, toAt.Z), Mathf.Atan2(toRat.X, toRat.Z));
     }
 
     private void Next()
@@ -246,6 +296,7 @@ public partial class ChurchStageProbe : Node3D
     {
         GD.Print($"[churchstage] RESULT: {(_ok ? "ok" : "FAILED")}");
         ChurchStage.ProbePlan = null;
+        ChurchStage.ProbeWatchers = null;
         GetTree().Quit(_ok ? 0 : 1);
         SetProcess(false);
     }

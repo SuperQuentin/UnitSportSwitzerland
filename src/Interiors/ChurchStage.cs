@@ -60,6 +60,7 @@ public partial class ChurchStage : Node3D
         };
         stage._meshes.Add(room);
         stage._parts = new Node3D[figures.Length][];
+        var roots = new Node3D[figures.Length];
         stage._rest = new Transform3D[figures.Length][];
         for (int f = 0; f < figures.Length; f++)
         {
@@ -67,6 +68,7 @@ public partial class ChurchStage : Node3D
             if (figure.Kind == FigureKind.Rat && stage._rat < 0) stage._rat = f;
             var root = new Node3D { Name = $"Figure{f}", Transform = figure.Frame };
             stage.AddChild(root);
+            roots[f] = root;
             var parts = new Node3D[figure.Parts.Length];
             var rest = new Transform3D[parts.Length];
             for (int i = 0; i < parts.Length; i++)
@@ -89,11 +91,15 @@ public partial class ChurchStage : Node3D
             stage._parts[f] = parts;
             stage._rest[f] = rest;
         }
+        stage.InitFacing(roots);
         return stage;
     }
 
+    private double _delta;
+
     public override void _Process(double delta)
     {
+        _delta = delta;
         bool on = ChurchRadios.RatBeatPlaying(_plan, out var play)
             && CdLibrary.Instance?.Find(play.CdId) is { Bpm: >= 1f } cd;
         if (!on)
@@ -136,6 +142,7 @@ public partial class ChurchStage : Node3D
                 _parts[f][i].Visible = !_figures[f].Parts[i].Hidden;
             }
         _standing = -1;
+        StopFacing();
         StopDisco();
         StopIntro();
     }
@@ -190,6 +197,8 @@ public partial class ChurchStage : Node3D
             }
             else if (!intro) PersonDance(f, beat, stand);
         }
+        // up and dancing, they face whoever is in front of them, else the rat
+        if (!intro) StepFacing(stand, _delta);
     }
 
     private void Set(int f, int part, Basis rotation, Vector3 offset = default) =>

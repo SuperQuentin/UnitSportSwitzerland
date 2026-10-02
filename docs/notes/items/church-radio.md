@@ -30,6 +30,8 @@
 - **Dance**: the rat swings a beat each way (body roll/yaw, head against it, arms pumping, a full
   turn every 8th bar); people stand on the trumpet and dance one of five variants by hash, with
   hashed amplitude and phase; every 4th bar they all copy the rat.
+  Up and dancing, each turns where it stands (`ChurchStage.Face.cs`, scanned at 10 Hz, eased) toward
+  the nearest player in front of it within 12 m, else back to the rat; seated and on stop they face the altar as built.
 - **Night club** (`ChurchStage.Disco.cs`): `ps1_interior` `instance uniform disco` / `disco_center`
   on the room and every part mesh, global `world_disco_beat` written per frame while on: the room
   at ~20 %, rotating hue beams and mirror-ball sparkles. A ball, additive beam cones, four
