@@ -78,8 +78,12 @@ public partial class ChunkNode : Node3D
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
+        arrays[(int)Mesh.ArrayType.TexUV] = data.Uvs;
         arrays[(int)Mesh.ArrayType.Index] = data.Indices;
-        return Finish(arrays, material);
+        var mesh = Finish(arrays, material);
+        // the shader lifts crests above the still surface (#299): grow the bounds by the most a wave moves
+        mesh.CustomAabb = mesh.GetAabb().Grow(WaterMeshBuilder.WaveMargin);
+        return mesh;
     }
 
     /// <summary>

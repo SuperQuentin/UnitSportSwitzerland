@@ -14,6 +14,8 @@ namespace UnitSport.Terrain.Fixture;
 /// <item><c>narrow</c>: a winding 4 m road with a trunk every 5 m on both edges: no verge to use;</item>
 /// <item><c>junction</c>: a 9 m road through a T junction and a crossroads with 6 m side roads;</item>
 /// <item><c>verge</c>: two bends with 6 m of grass verge then a tree line on each side.</item>
+/// <item><c>lake</c> (#299): a 2.6 x 2 km lake east of the start, with a beach, a 150 m shelf, a
+/// drop-off to 25 m and a river coming in from the west; a slipway road runs into it.</item>
 /// </list>
 /// </summary>
 public sealed class FixtureCourse
@@ -24,7 +26,22 @@ public sealed class FixtureCourse
     public List<(RoadClass Class, List<(double X, double Y, double Z)> Points)> Roads { get; } = new();
     public List<(double X, double Y, double Z, float Height)> Trees { get; } = new();
 
-    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge" };
+    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake" };
+
+    /// <summary>The ground as a function, instead of following the roads; null: <see cref="Ground"/>'s roads.</summary>
+    public Func<double, double, double>? Terrain { get; init; }
+
+    /// <summary>
+    /// Still water (#299): the level at a point and the fetch there, the level NaN where dry. Null:
+    /// the course has no water (its source answers no water layer).
+    /// </summary>
+    public Func<double, double, (double Level, double Fetch)>? Water { get; init; }
+
+    /// <summary>Ground cover per point; null: open grass everywhere.</summary>
+    public Func<double, double, CoverClass>? Cover { get; init; }
+
+    /// <summary>The box the course needs whatever its roads, metres from the start; null: the roads' box.</summary>
+    public (double MinX, double MinY, double MaxX, double MaxY)? Extent { get; init; }
 
     public static FixtureCourse? Create(string name) => name switch
     {
@@ -34,6 +51,7 @@ public sealed class FixtureCourse
         "narrow" => Narrow(),
         "junction" => Junction(),
         "verge" => Verge(),
+        "lake" => Lake.Create(),
         _ => null,
     };
 
@@ -79,6 +97,13 @@ public sealed class FixtureCourse
         return c.TreesAlong(pen, RoadFormat.DefaultWidth(RoadClass.Road) / 2 + 6, 10, 18f);
     }
 
+    /// <summary>A road through given points (heights included), for a course whose ground is a function.</summary>
+    public FixtureCourse Road(RoadClass cls, List<(double X, double Y, double Z)> points)
+    {
+        Roads.Add((cls, points));
+        return this;
+    }
+
     private FixtureCourse Road(RoadClass cls, Pen pen)
     {
         Roads.Add((cls, pen.Points));
@@ -105,6 +130,7 @@ public sealed class FixtureCourse
     /// </summary>
     public double Ground(double x, double y)
     {
+        if (Terrain != null) return Terrain(x, y);
         if (Roads.Count == 0) return FlatHeight;
         double sum = 0, weights = 0;
         foreach (var (_, pts) in Roads)
@@ -125,6 +151,7 @@ public sealed class FixtureCourse
     /// <summary>The box the course covers, in metres from the start, with <paramref name="margin"/> round it.</summary>
     public (double MinX, double MinY, double MaxX, double MaxY) Bounds(double margin)
     {
+        if (Extent is { } box) return box;
         double minX = 0, minY = 0, maxX = 0, maxY = 0;
         foreach (var (_, pts) in Roads)
             foreach (var p in pts)

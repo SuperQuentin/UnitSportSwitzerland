@@ -290,7 +290,7 @@ public partial class ChatManager : Node
         {
             case "help":
                 Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /catalogue  /clear  /money <amount>  "
-                    + "/bank [set|add|take <amount>]  /occasion  /time  /style  — Tab completes.", ChatKind.Private);
+                    + "/bank [set|add|take <amount>]  /occasion  /time  /seastate  /style  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 
@@ -320,6 +320,16 @@ public partial class ChatManager : Node
 
             case "time":
                 Show(LocalTime(parts[1..], out bool failed), failed ? ChatKind.Error : ChatKind.Admin);
+                return;
+
+            case "seastate":
+                if (parts.Length == 1) Show($"The sea is {World.SeaStateCommand.Describe(World.WaterField.SeaState)}.", ChatKind.Private);
+                else if (World.SeaStateCommand.TryParse(rest, out float sea, out string seaError))
+                {
+                    World.WaterField.SetSeaState(sea);
+                    Show($"Sea state set to {World.SeaStateCommand.Describe(sea)}.", ChatKind.Admin);
+                }
+                else Show(seaError, ChatKind.Error);
                 return;
 
             case "give":
@@ -539,6 +549,8 @@ public partial class ChatManager : Node
                 return;
             // anyone may ask; set/add/speed are checked inside, against the same IsAdmin
             case "time": CommandTime(sender, parts[1..]); return;
+            // anyone may ask; setting it is an admin's (checked inside)
+            case "seastate": CommandSeaState(sender, rest); return;
             // anyone may list; start/stop/auto are checked inside, against the same IsAdmin
             case "occasion" or "occasions":
                 if (Occasions.OccasionManager.Instance is not { } occasions)
@@ -626,7 +638,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /br join|leave|status  /occasion  /time  /clear", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /br join|leave|status  /occasion  /time  /seastate  /clear", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -638,7 +650,7 @@ public partial class ChatManager : Node
                 + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  "
                 + "/give <player> <item> [count]  /clear [player]  /money <amount> [player]  "
                 + "/bank <player> [set|add|take <amount>]  "
-                + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  — Tab completes",
+                + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /seastate <0..1|calm|chop|storm|gamey>  — Tab completes",
                 ChatKind.Private);
     }
 
@@ -975,6 +987,47 @@ public partial class ChatManager : Node
         Broadcast(op != World.TimeOp.Speed ? $"{who} set the time to {World.TimeCommand.Format(hour)}"
             : speed > 0 ? $"{who} set the day to {World.TimeCommand.DescribeSpeed(speed)}"
             : $"{who} stopped the clock at {World.TimeCommand.Format(hour)}", ChatKind.Admin);
+    }
+
+    // ---- /seastate (#299) ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Server <c>/seastate</c>: anyone may ask, an admin sets it for everyone. The waves are a
+    /// function of the server clock and this number, so it is all that crosses the wire.
+    /// </summary>
+    private void CommandSeaState(long sender, string arg)
+    {
+        if (arg.Length == 0)
+        {
+            ReplyTo(sender, $"The sea is {World.SeaStateCommand.Describe(World.WaterField.SeaState)}.", ChatKind.Private);
+            return;
+        }
+        if (!World.SeaStateCommand.TryParse(arg, out float sea, out string error))
+        {
+            ReplyTo(sender, error, ChatKind.Error);
+            return;
+        }
+        if (!IsAdmin(sender))
+        {
+            ReplyTo(sender, "Changing the sea state is an admin command.", ChatKind.Error);
+            return;
+        }
+        World.WaterField.SetSeaState(sea);
+        Rpc(MethodName.SeaState, sea);
+        GD.Print($"[admin] {NameOf(sender)} set the sea state to {World.SeaStateCommand.Describe(sea)}");
+        Broadcast($"{NameOf(sender)} set the sea to {World.SeaStateCommand.Describe(sea)}", ChatKind.Admin);
+    }
+
+    /// <summary>Server: tells a newly connected peer the sea state (always: a client may have set its own offline).</summary>
+    public void SendSeaStateTo(long peerId) => RpcId(peerId, MethodName.SeaState, World.WaterField.SeaState);
+
+    /// <summary>Client: the server's sea state, on join and on every change.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void SeaState(float seaState)
+    {
+        World.WaterField.SetSeaState(seaState);
+        GD.Print($"[water] the server's sea state: {World.SeaStateCommand.Describe(World.WaterField.SeaState)}");
     }
 
     /// <summary>Server: tells a newly connected peer the world's time, if an admin has set one.</summary>

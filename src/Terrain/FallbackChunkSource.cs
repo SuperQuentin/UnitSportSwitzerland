@@ -196,6 +196,10 @@ public sealed class FallbackChunkSource : IChunkSource
         return await Task.Run<byte[]?>(() => World.BuildCover(id, blend), ct).ConfigureAwait(false);
     }
 
+    /// <summary>Generated tiles have no water layer yet: their lakes are cover, the legacy way.</summary>
+    public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default) =>
+        Covers(id) ? Task.FromResult<WaterTile?>(null) : _inner.LoadWaterAsync(id, ct);
+
     public async Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default)
     {
         if (!Covers(id)) return await _inner.LoadTreesAsync(id, ct).ConfigureAwait(false);
