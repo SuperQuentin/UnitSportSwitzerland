@@ -513,7 +513,7 @@ public static partial class TileRewriter
 
                 EmitPriority(priority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
                 var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs, netStats.TurnLanes);
-                EmitSignals(priority, result, pockets, block, wanted, paint, signalRecords, cantons, field, netStats.Signals);
+                EmitSignals(priority, result, pockets, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals);
 
                 // now the streets are cut into their sidewalk pieces (#119); a side that would stand on
                 // a turn lane's widening (#123) moves out past it (#120)

@@ -30,8 +30,8 @@
   same side. Its lane line dashed then solid, right arrows; without a left pocket the original
   lane gets straight (+ left) arrows; with one, the through lane's arrow loses its right.
 - **Stop line** (SSV 6.10, 0.50 m white, `SignalStopLine`) across all approach lanes, set back
-  `SignalStopSetback` 3 m from the mouth (behind a #120 red bike crossing; #292 moves it behind a
-  pedestrian crossing) plus the mouth's skew (`MouthSkew`: a skewed mouth's far corner). Lane
+  `SignalStopSetback` 4.5 m from the mouth (behind a #120 red bike crossing, room for #292's
+  pedestrian crossing, and the 4 m a driver needs before a roadside head) plus the mouth's skew (`MouthSkew`: a skewed mouth's far corner). Lane
   dividers start at it; arrows count from it. No guide line across the junction (`Across`).
 - **Record** (`SGNL`, `RoadSignal`, `road-format-v3`): per arm heading, in/out, pockets,
   pedestrians (every car arm), 50 km/h in a locality (density >= 0.4) else 60, crossing width,
@@ -72,8 +72,29 @@
   decides: agree 75, rule only 83, OSM only 240 (OSM signals Ts and crossings of lesser roads the
   rule never takes): the rule is a fallback for regions without data, not a substitute. Martigny-Riddes (E 2581-2585 N 1110-1114): none (no crossing of two main roads
   that dense). Screenshots from above at LV95 2499901,1118599 and 2499132,1116455.
+- **Poles and heads** (#350). Build (`PoleWish`, `PlacePole`): per arm a pole on each kerb
+  `PoleAlong` 0.6 m past the mouth, `PoleClear` 0.5 m out from the kerb, stepping 0.4 m out (6
+  tries) until clear of carriageways and junctions (`PriorityPlanner.Clearance`), widening strips
+  (`OnPavement`) and buildings; foot at the road height plus the kerb where there is a sidewalk.
+  The right pole of an approach is `Main` (main head, pocket arrows, flashers), the left one
+  `Second` only when the approach has a pocket (main head and left arrow, never the right
+  arrow); both carry the arm's pedestrian head, facing across. No pole on a link inside a
+  junction. The approach's 3.02/3.03 (fallback) moves onto its main pole, plate top 2.25 m.
+  `SGNL` version 2 stores the poles (`SignalPole`, 22 B); version 1 still reads. Geneva: 1,489
+  poles, 259 rejected (no clear spot), 390 signs moved. Runtime: `SignalBuilder` (worker) bakes
+  RAL 7001 poles, RAL 9017 housings, black backboards with a white border and brackets into the
+  road mesh, pole collision (4 m columns), and the lens layout; car heads lower edge 2.35 m, 3.35 m
+  above a pedestrian head (lower edge 2.3 m), 0.55 m apart, left arrow / main / right arrow as
+  the driver sees them, the flasher beside the green. `SignalLamps` (a child of the `ChunkNode`)
+  draws the lenses as one `MultiMesh` per shape (round, left/right arrow, pedestrian square),
+  unshaded so they glow at night, and recolours a junction's instances only when one of its
+  groups changes (`UntilChange`) or a flasher blinks (0.5 s, on the server clock); otherwise one
+  comparison per junction per frame, no allocation. Tier 0 `SignalBuilderTests` (layout,
+  facings, the second pole's missing right arrow, 2-lens Geneva heads, flashers). Screenshots:
+  driver's view by day and night at LV95 2499901,1118599.
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` and restrictions not read yet (#347 has them); thin median (optional); crossings of divided roads
   (several nodes); 3-lane roads; a #120 red bike crossing drawn for the narrow mouth runs skewed
-  across a widened arm's stop line (2499132,1116455; #351 reworks bikes at signals); heads and
-  poles (#350); traffic obeying them (#353).
+  across a widened arm's stop line (2499132,1116455; #351 reworks bikes at signals); bike heads
+  (#351); traffic obeying them (#353); 300 mm overhead heads (#354); rejected poles are dropped,
+  not moved along the kerb.

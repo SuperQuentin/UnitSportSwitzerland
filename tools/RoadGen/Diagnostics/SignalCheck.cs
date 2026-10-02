@@ -57,7 +57,10 @@ public static class SignalCheck
                     {
                         string arms = string.Join("\n", p.Arms.Select((a, i) => string.Create(c,
                             $"    arm {i}: heading {a.Heading * 180 / Math.PI:F0} deg, in {a.In}, out {a.Out}, left pocket {a.LeftPocket}, right pocket {a.RightPocket}, peds {a.Pedestrians}, {a.SpeedKmh:F0} km/h, crossing {a.CrossingM:F1} m, rank {a.Rank}")));
-                        nearest = (d, $"  nearest to {at}: {where} ({d:F0} m away), {shape}\n{arms}\n{p.Describe()}");
+                        var tileId = tile.Id;
+                        string poles = string.Join("\n", s.Poles.Select(q => string.Create(c,
+                            $"    pole arm {q.Arm} {q.Flags}: LV95 {tileId.MinE + q.X:F1},{tileId.MaxN - q.Z:F1} y {q.Y:F2}, cars face {q.CarHeading * 180 / Math.PI:F0} deg, pedestrians {q.PedHeading * 180 / Math.PI:F0} deg")));
+                        nearest = (d, $"  nearest to {at}: {where} ({d:F0} m away), {shape}\n{arms}\n{poles}\n{p.Describe()}");
                     }
                 }
             }

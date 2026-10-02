@@ -690,10 +690,34 @@ public sealed class SignalPlan
     }
 }
 
+/// <summary>What a signal pole carries (#350): the heads for its arm's approach, and a pedestrian head.</summary>
+[Flags]
+public enum SignalPoleFlags : byte
+{
+    None = 0,
+    /// <summary>Near side, on the approach's right: the main head, its pockets' arrows, the flashers.</summary>
+    Main = 1,
+    /// <summary>On the approach's left (the other kerb, or a median): the main head and the left arrow, never the right arrow.</summary>
+    Second = 2,
+    /// <summary>A pedestrian head for the crossing of its arm, facing across.</summary>
+    Pedestrian = 4,
+}
+
+/// <summary>
+/// A signal pole (#350), tile-local like the record it belongs to: its foot (on the sidewalk or
+/// the verge), the heading its car heads face (toward the approaching drivers) and its pedestrian
+/// head faces (across the crossing), as <see cref="RoadPointProp.Heading"/> (radians about +Y, 0
+/// facing -Z), and the plan arm it serves.
+/// </summary>
+public readonly record struct SignalPole(float X, float Y, float Z, float CarHeading, float PedHeading, byte Arm, SignalPoleFlags Flags)
+{
+    public const int RecordSize = 22;
+}
+
 /// <summary>
 /// A signalised junction in a <c>.road</c> tile (#349, section <c>SGNL</c>): its centre and,
 /// per arm, the middle of the stop line across its approach lanes (tile-local, NaN where nothing
-/// approaches), and its plan. Heads and poles (#350) and lane records (#353) come later as a
+/// approaches), its plan, and (version 2, #350) its poles. Lane records (#353) come later as a
 /// new section version.
 /// </summary>
 public sealed class RoadSignal
@@ -704,8 +728,10 @@ public sealed class RoadSignal
     /// <summary>Arm count × 3: the stop line's middle per arm.</summary>
     public required float[] Stops { get; init; }
     public required SignalPlan Plan { get; init; }
+    public List<SignalPole> Poles { get; init; } = new();
 
-    public const byte SectionVersion = 1;
+    /// <summary>2 adds the poles (#350); 1 is still read.</summary>
+    public const byte SectionVersion = 2;
 
     [Flags]
     private enum ArmBits : byte { In = 1, Out = 2, LeftPocket = 4, RightPocket = 8, Pedestrians = 16, Bike = 32 }
@@ -748,6 +774,13 @@ public sealed class RoadSignal
                     w.Write((ushort)MathF.Round(iv.To * 10));
                 }
             }
+            w.Write(checked((ushort)s.Poles.Count));
+            foreach (var pole in s.Poles)
+            {
+                w.Write(pole.X); w.Write(pole.Y); w.Write(pole.Z);
+                w.Write(pole.CarHeading); w.Write(pole.PedHeading);
+                w.Write(pole.Arm); w.Write((byte)pole.Flags);
+            }
         }
     }
 
@@ -755,7 +788,8 @@ public sealed class RoadSignal
     public static List<RoadSignal>? Read(BinaryReader r)
     {
         uint n = r.ReadUInt32();
-        if (r.ReadByte() != SectionVersion) return null;
+        byte version = r.ReadByte();
+        if (version is < 1 or > SectionVersion) return null;
         var list = new List<RoadSignal>((int)n);
         for (uint k = 0; k < n; k++)
         {
@@ -787,7 +821,12 @@ public sealed class RoadSignal
                     group.Intervals.Add(new SignalInterval((SignalAspect)r.ReadByte(), r.ReadUInt16() / 10f, r.ReadUInt16() / 10f));
                 plan.Groups.Add(group);
             }
-            list.Add(new RoadSignal { X = x, Y = y, Z = z, Stops = stops, Plan = plan });
+            var poles = new List<SignalPole>();
+            if (version >= 2)
+                for (int i = r.ReadUInt16(); i > 0; i--)
+                    poles.Add(new SignalPole(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(),
+                        r.ReadByte(), (SignalPoleFlags)r.ReadByte()));
+            list.Add(new RoadSignal { X = x, Y = y, Z = z, Stops = stops, Plan = plan, Poles = poles });
         }
         return list;
     }

@@ -28,7 +28,20 @@ public static partial class TileRewriter
     /// bike crossing there (#120, about 2 m) with a metre to spare. #292 moves it back behind a
     /// pedestrian crossing.
     /// </summary>
-    private const double SignalStopSetback = 3.0;
+    private const double SignalStopSetback = 4.5;
+
+    /// <summary>
+    /// Signal poles (#350) stand this far past the mouth along their arm, at the kerb plus
+    /// <see cref="PoleClear"/>, stepping out by <see cref="PoleStep"/> up to <see cref="PoleTries"/>
+    /// times until clear of every carriageway, widening and building. With the stop line
+    /// <see cref="SignalStopSetback"/> back that leaves the 4 m a driver needs to see a roadside
+    /// head (Kanton Bern Handbuch Markierung).
+    /// </summary>
+    private const double PoleAlong = 0.6, PoleClear = 0.5, PoleStep = 0.4;
+    private const int PoleTries = 6;
+
+    /// <summary>A priority sign on a signal pole (#350) has its plate's top this high: below the heads' 2.35 m (SSV Art. 71).</summary>
+    private const float SignOnPoleTop = 2.25f;
 
     /// <summary>
     /// A link this short between two signalised junction nodes is inside one junction (a large
@@ -62,6 +75,7 @@ public static partial class TileRewriter
         public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, RightPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
         /// <summary>Where OSM decides, what the inference rule would have said: both, rule only, OSM only (#348 tuning).</summary>
         public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
+        public int Poles, PolesRejected, SignsOnPoles;
         public readonly List<string> InvalidExamples = new();
         public readonly SortedDictionary<int, int> Cycles = new();
 
@@ -73,6 +87,7 @@ public static partial class TileRewriter
             sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
             sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}").AppendLine();
             sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes").AppendLine();
+            sb.Append(c, $"      poles (#350) {Poles:N0}, rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}").AppendLine();
             foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
             return sb.ToString();
         }
@@ -169,9 +184,11 @@ public static partial class TileRewriter
 
     private static void EmitSignals(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), (bool Left, bool Right)> pockets,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
-        Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, SignalStats stats)
+        Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, Footprints buildings,
+        Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs, SignalStats stats)
     {
         var net = result.Network;
+        PriorityPlanner.Clearance? clearance = null;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
         foreach (var (junction, plan) in priority.Plans)
         {
@@ -181,6 +198,7 @@ public static partial class TileRewriter
 
             var arms = new List<SignalArm>();
             var stops = new List<float>();
+            var wantPoles = new List<PoleWish>();
             // 50 km/h inside a locality: the yellow lasts 3 s (#349)
             bool urban = field.Density(junction.Centre.X, junction.Centre.Y) >= UrbanField.UrbanAt;
             for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
@@ -212,6 +230,20 @@ public static partial class TileRewriter
                 var stop = bar + right * ((from + to) * 0.5);
                 if (approach) stops.AddRange(Local(home, [stop], source.SampleHeight, 0f));
                 else stops.AddRange([float.NaN, float.NaN, float.NaN]);
+                // poles (#350): on the approach's right the main heads, on its left a second head
+                // where the approach has more than one lane; a pedestrian head on both kerbs
+                double along = MouthSkew(junction, arm) + PoleAlong;
+                var drawnRight = plan.Arms[i].End == LinkEnd.End;   // +Perp(u) is the segment's right side when it ends here
+                var sides = CrossSectionPlanner.Attributes(source.Line);
+                var rightSide = drawnRight ? sides.Right : sides.Left;
+                var leftSide = drawnRight ? sides.Left : sides.Right;
+                // none on a link inside a junction of several nodes: its ends are the junction's own
+                var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | SignalPoleFlags.Pedestrian;
+                var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | SignalPoleFlags.Pedestrian;
+                wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,
+                    rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));
+                wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, -right, half, u, right,
+                    leftSide.OuterDm > 0 ? leftSide.KerbCm / 100f : 0f, secondFlags, -1));
                 arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, pocket, rightPocket, Pedestrians: true,
                     BikeSignal: false, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
                     Rank: (byte)Math.Clamp(PriorityPlanner.Rank(info) / 4, 1, 255)));
@@ -236,7 +268,30 @@ public static partial class TileRewriter
 
             var anchors = Anchors(junction, net);
             var centre = Local(home, [junction.Centre], p => HeightAt(anchors, p), 0f);
-            Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan });
+            clearance ??= new PriorityPlanner.Clearance(result.Ribbons, result.Junctions);
+            var poles = new List<SignalPole>();
+            foreach (var wish in wantPoles)
+            {
+                if (wish.Flags == SignalPoleFlags.None) continue;
+                if (PlacePole(wish, home, clearance, buildings, areas) is not { } pole) { stats.PolesRejected++; continue; }
+                poles.Add(pole);
+                stats.Poles++;
+                // the approach's priority sign (#121, for when the lights are off) on the main pole, below the heads
+                if (wish.SignLink >= 0 && priority.SignsOf.TryGetValue(wish.SignLink, out var signSpots))
+                    foreach (var (signTile, index) in signSpots)
+                    {
+                        if (!signs.TryGetValue(signTile, out var list) || index >= list.Count) continue;
+                        var sign = list[index];
+                        if (Math.Abs(Math.IEEERemainder(sign.Heading - pole.CarHeading, 2 * Math.PI)) > 0.5) continue;
+                        list[index] = sign with
+                        {
+                            X = (float)(pole.X + home.MinE - signTile.MinE), Y = pole.Y, Z = (float)(pole.Z + signTile.MaxN - home.MaxN),
+                            Height = SignOnPoleTop,
+                        };
+                        stats.SignsOnPoles++;
+                    }
+            }
+            Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan, Poles = poles });
             stats.Junctions++;
             if (priority.SignalsFromData.Contains(junction.NodeId)) stats.FromData++; else stats.Inferred++;
             stats.Groups += signalPlan.Groups.Count;
@@ -244,6 +299,62 @@ public static partial class TileRewriter
             int cycle = (int)MathF.Round(signalPlan.Cycle);
             stats.Cycles[cycle] = stats.Cycles.GetValueOrDefault(cycle) + 1;
         }
+    }
+
+    /// <summary>
+    /// A pole wanted beside an arm (#350): the arm's plan index, its source line, the point on the
+    /// arm's axis it stands beside, the way out to its kerb and the kerb's distance, the way its
+    /// car heads and its pedestrian head face (plan view), the kerb height, what it carries, and
+    /// the link whose priority sign moves onto it (-1 none).
+    /// </summary>
+    private sealed record PoleWish(byte Arm, Source Source, Vec2 Axis, Vec2 Out, double Kerb, Vec2 CarFacing, Vec2 PedFacing,
+        float KerbHeight, SignalPoleFlags Flags, int SignLink);
+
+    /// <summary>The first spot out from the kerb that is clear of carriageways, widenings and buildings, in the home tile's frame; null when none is.</summary>
+    private static SignalPole? PlacePole(PoleWish wish, TileId home, PriorityPlanner.Clearance clearance, Footprints buildings,
+        Dictionary<TileId, List<RoadAreaProp>> areas)
+    {
+        if (wish.Flags == SignalPoleFlags.None) return null;
+        for (int k = 0; k < PoleTries; k++)
+        {
+            var at = wish.Axis + wish.Out * (wish.Kerb + PoleClear + k * PoleStep);
+            if (!clearance.IsClear(at, RoadSigns.PoleDiameter) || buildings.Contains(at) || OnPavement(at, areas)) continue;
+            float road = wish.Source.SampleHeight(wish.Axis + wish.Out * wish.Kerb);
+            var local = Local(home, [at], _ => road + wish.KerbHeight, 0f);
+            return new SignalPole(local[0], local[1], local[2], Heading(wish.CarFacing), Heading(wish.PedFacing), wish.Arm, wish.Flags);
+        }
+        return null;
+    }
+
+    /// <summary>Radians about +Y, 0 facing -Z (north), facing along a plan-view direction (as the signs).</summary>
+    private static float Heading(Vec2 facing) => (float)Math.Atan2(-facing.X, facing.Y);
+
+    /// <summary>Whether a point stands on a widening strip (#123/#348) of its tile.</summary>
+    private static bool OnPavement(Vec2 p, Dictionary<TileId, List<RoadAreaProp>> areas)
+    {
+        var tile = TileId.FromLv95(p.X, p.Y);
+        if (!areas.TryGetValue(tile, out var list)) return false;
+        double x = p.X - tile.MinE, z = tile.MaxN - p.Y;
+        foreach (var a in list)
+        {
+            if (a.Type != AreaPropType.Pavement) continue;
+            var v = a.Vertices;
+            for (int t = 0; t + 2 < a.Indices.Length; t += 3)
+            {
+                int i0 = a.Indices[t] * 3, i1 = a.Indices[t + 1] * 3, i2 = a.Indices[t + 2] * 3;
+                if (InTriangle2(x, z, v[i0], v[i0 + 2], v[i1], v[i1 + 2], v[i2], v[i2 + 2])) return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool InTriangle2(double px, double pz, double ax, double az, double bx, double bz, double cx, double cz)
+    {
+        double d1 = (px - bx) * (az - bz) - (ax - bx) * (pz - bz);
+        double d2 = (px - cx) * (bz - cz) - (bx - cx) * (pz - cz);
+        double d3 = (px - ax) * (cz - az) - (cx - ax) * (pz - az);
+        bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+        return !(neg && pos);
     }
 
     /// <summary>
