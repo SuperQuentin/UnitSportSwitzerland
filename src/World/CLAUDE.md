@@ -16,3 +16,4 @@ touches its topic; search with `grep -ril <word> docs/notes/world`.
 - `npc-handoff` — Race NPCs and races belong to nobody (#50): simulator = authority, 600 m zone, handoff on leave/crash/distance, host migration
 - `africa-twin-egg` — A random Africa Twin in a parking bay at Riddes (#55): `TileEntered`, server-placed, server authority at rest, `--eggcheck`
 - `perf-traffic-tick` — Traffic per tick: road sampled only near an obstacle, gap check on the X-sorted `_byX` window, cars drawn to 600 m, shared cached meshes (#221)
+- `perf-racenpc-server-physics` — `RaceNpc` has no physics step on the dedicated server (a data proxy, never the simulator) (#221)
