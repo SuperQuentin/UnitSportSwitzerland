@@ -22,11 +22,10 @@ p99 3.48 -> 2.78 ms; 32 players busy p50 3.43 -> 3.03 ms, p99 18.48 -> 6.68 ms, 
   a node read in the pair loop.
 
 ## Migrating old code / open branches
-- #269 (floating origin, LV95) rewrites `Where` to return a `GlobalPos` and judges each viewer's
-  pairs in a frame anchored at the viewer. Merge: make `_at` a `List<GlobalPos>`, fill it with
-  `Where(p)` once per target, keep its `Local(to)` per pair (cheap arithmetic), and compute
-  `_agl` once per target as `to.Alt + 1 - Ground(to)` (it does not depend on the viewer). Its
-  `_sight` field replaces the one here (same name, same role).
+- Since #269 (LV95) the per-round `_at` holds `GlobalPos` from `Where(p)`; each viewer's pairs are
+  judged in a frame at that viewer (`Local(_at[ti])` per pair, cheap arithmetic), and `_agl` is
+  `to.Alt + 1 - Ground(to)` once per target (it does not depend on the viewer). `_sight` is
+  #269's lazily built line of sight in that frame.
 - `grep -n "Where(" src/Net/InterestService.cs` after a merge: only the fill loop should call it.
 
 ## How to check

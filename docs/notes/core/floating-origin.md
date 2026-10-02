@@ -5,9 +5,11 @@
   follows in one synchronous call at the start of a frame (`ProcessPriority = int.MinValue`).
   Altitude never shifts. Plan and later phases: `docs/plans/floating-origin.md`,
   `docs/plans/spherical-world.md` (#187).
-- **Offline only for now.** Positions on the wire are still world space, so online the shifter is
-  off, and `ClientWorld.StartNetworking` first puts the origin back on the one the game started
-  with (`ShiftTo(..., exact: true)`): a game that travelled offline then joins in the server's frame.
+- **Online too, and every peer has its own origin**: positions cross the network in LV95, never
+  world space (`net/positions-on-the-wire`). The server keeps the manifest's origin and never
+  shifts (its players can be anywhere); it measures with what players publish (`FootPlayer.Global`),
+  and runs each race in a frame of its own at the host (`RaceManager`). A client's origin is its
+  own from boot: joining neither checks nor adopts the server's.
 - **A world-space `Vector3` means a place only in the frame it was computed in.** Anything that
   keeps a position across frames either keeps a `GlobalPos` (LV95 doubles), keeps it relative to its
   tile (trunks, bird perches, gathering trees are stored as the `.trees` file has them), or
@@ -24,6 +26,11 @@
 - **Worker threads take `origin.Frame` once** (an immutable `OriginFrame`) and work in it; the
   main thread maps the result with `origin.Since(frame)` (`Traffic`'s lane graphs, `RaceRoute`).
   Reading the live origin twice from a worker can straddle a shift.
+- **Shared point lists know their frame**: `RaceRoute`, `RaceLine` and `RaceCourse` record the frame
+  their points are in and `Follow(origin.Frame)` moves them once, however many holders call it (a
+  runner, its pilot, an NPC's driver share one route). `AutoPilot` also follows its route at every
+  step, so a pilot whose owner does not (a probe) still drives in the right frame. A line surveyed off-thread (`RaceLine.Widen`)
+  comes back in the frame it started in and is followed before it is swapped in.
 - **Keys must be global**: lane graph junction keys and gathering spot names are LV95 cells. A key
   built from world coordinates names another place after a shift (and on another client).
 - **Jolt does not teleport a kinematic body whose transform is set**: it sweeps it there with
@@ -39,14 +46,17 @@
   positions that are not pushed every frame must be re-pushed on a shift (`cover_origin`, the
   building shader's occupancy and open-door boxes).
 - **Cost**: ~5 ms per shift with ~1,500 nodes moved (headless), once every few km.
-- **Checks**: `--origincheck` (headless: frames, lane keys, the node walk, the kinematic case;
-  RESULT line). `--originstress <m>` shifts past `m` metres, to the metre: run any probe with it,
+- **Checks**: `--origincheck` (headless: frames, lane keys, the wire between two origins, a race
+  road followed across a shift, a remote interpolated 3,600 km out, the node walk, the kinematic
+  case; RESULT line). Multiplayer: the `tools/*check.sh` loopback scripts with `--originstress` on
+  the clients, and `--netsmooth` (records LV95). `--originstress <m>` shifts past `m` metres, to the metre: run any probe with it,
   e.g. `--ride car:1,25 --originstress 20`, `--flycheck plane --originstress 20`, and compare with a
   plain run. `--originshift <m>` changes the threshold and keeps the km snap. A probe that keeps a
   world `Vector3` start point reports nonsense distances under stress: give it a `GlobalPos`.
 - **`--shot` / `--shot-queue` coordinates are world space as the game started** (the manifest's
-  origin), as before #185: `ShotRunner` maps each from that first frame when it aims, so a queue
-  keeps meaning the same places however far the origin has moved since.
+  origin, or `--origin E,N`, which pins only that start), as before #185: `ShotRunner` maps each from
+  that first frame when it aims, so a queue keeps meaning the same places however far the origin has
+  moved since. `--originshift 1000000` keeps the origin still (a precision screenshot "before").
 - **Seen in a window** (Riddes, 86 km from the manifest origin, `--time 12`): with the origin there,
   vine rows and flat-shaded facets are clean; with it 86 km away (as before) the vine rows break
   into horizontal streaks, the ground shading becomes per-pixel noise and house walls sparkle.

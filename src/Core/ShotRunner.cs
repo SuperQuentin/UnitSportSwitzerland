@@ -16,7 +16,13 @@ namespace UnitSport.Core;
 /// The queue form stays up and takes one shot per line appended to the file (same seven
 /// fields as --shot; blank lines and # comments skipped, "quit" exits). On macOS every
 /// launch brings Godot to the front, so a series of pictures should cost one launch.
-/// A queued shot's y may be "g1.7": that high above the ground, once it has streamed in.
+/// A queued shot's y may be "g1.7": that high above the ground, once it has streamed in. Or
+/// "i1.6", inside a house (#320): x, z is a point in front of a front door (within 30 m, on its
+/// outer side); that door is opened, and once its interior is built the camera goes as far
+/// behind the doorway as the point stands in front of it, 1.6 m above the sill, turned as asked,
+/// carried into the rooms (<see cref="Interiors.DoorLink.ToInside"/>): stand in front of a house
+/// looking at it, and the picture is from that far inside, looking on. Offline only, and best
+/// last in a queue: the door is left open.
 /// A line starting with '/' is typed into the chat between two shots (<c>/style cartoon</c>,
 /// <c>/time set 19:30</c>), so one launch can picture a live change.
 /// Each shot logs the frame time averaged over its last second of settling.
@@ -24,7 +30,18 @@ namespace UnitSport.Core;
 public partial class ShotRunner : Node
 {
     private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath,
-        float? AboveGround = null, string? Command = null);
+        float? AboveGround = null, string? Command = null, float? Inside = null);
+
+    /// <summary>How far from an "i" shot's point its door may be, m.</summary>
+    private const float InsideDoorReach = 30f;
+
+    /// <summary>How long an "i" shot waits for its door and its interior before it fails, s.</summary>
+    private const double InsideTimeout = 40;
+
+    // an "i" shot: the door it goes in by, and whether the camera is through it yet
+    private string? _door;
+    private bool _through;
+    private double _waited;
 
     /// <summary>Runs a queued chat line ("/style cartoon"); the client world sends it to its chat.</summary>
     public System.Action<string>? RunCommand { get; set; }
@@ -125,6 +142,11 @@ public partial class ShotRunner : Node
         if (_hideHud)
             foreach (var layer in GetTree().Root.FindChildren("*", "CanvasLayer", true, false))
                 ((CanvasLayer)layer).Visible = false;
+        if (_shot!.Value.Inside is { } inside && !_through)
+        {
+            GoInside(inside, delta);
+            return;
+        }
         _elapsed += delta;
         if (_elapsed > _shot!.Value.SettleSeconds - 1.0)
         {
@@ -137,6 +159,9 @@ public partial class ShotRunner : Node
 
         bool ok = Save(_shot.Value.OutPath);
         _failed |= !ok;
+        if (_through) Interiors.InteriorManager.Instance?.CameraInside(null);
+        _through = false;
+        _door = null;
         _shot = null;
         if (_queuePath == null)
         {
@@ -215,7 +240,7 @@ public partial class ShotRunner : Node
         if (p.Length != 7
             || !float.TryParse(p[0], NumberStyles.Float, inv, out float x)
             || !(float.TryParse(p[1], NumberStyles.Float, inv, out float y)
-                || (p[1].StartsWith('g') && float.TryParse(p[1][1..], NumberStyles.Float, inv, out y)))
+                || ((p[1].StartsWith('g') || p[1].StartsWith('i')) && float.TryParse(p[1][1..], NumberStyles.Float, inv, out y)))
             || !float.TryParse(p[2], NumberStyles.Float, inv, out float z)
             || !float.TryParse(p[3], NumberStyles.Float, inv, out float pitch)
             || !float.TryParse(p[4], NumberStyles.Float, inv, out float yaw)
@@ -223,10 +248,45 @@ public partial class ShotRunner : Node
             || p[6].Trim().Length == 0)
             return false;
         // above the ground: start high, so nothing is clipped while the ground streams in
-        bool aboveGround = p[1].StartsWith('g');
-        shot = new Shot(new Vector3(x, aboveGround ? 2000f : y, z), pitch, yaw, seconds, p[6].Trim(),
-            aboveGround ? y : null);
+        bool aboveGround = p[1].StartsWith('g'), inside = p[1].StartsWith('i');
+        shot = new Shot(new Vector3(x, aboveGround || inside ? 2000f : y, z), pitch, yaw, seconds, p[6].Trim(),
+            aboveGround ? y : null, Inside: inside ? y : null);
         return true;
+    }
+
+    /// <summary>
+    /// An "i" shot before it is through the door: down to the ground, the door opened, the
+    /// interior waited for, then the camera carried through. The settle starts inside.
+    /// </summary>
+    private void GoInside(float height, double delta)
+    {
+        var interiors = Interiors.InteriorManager.Instance;
+        _waited += delta;
+        if (interiors == null || _waited > InsideTimeout)
+        {
+            GD.PrintErr($"[shot] FAILED {_shot!.Value.OutPath}: no door or interior near {_camera.GlobalPosition} after {_waited:F0} s");
+            _failed = true;
+            _shot = null;
+            _door = null;
+            _waited = 0;
+            return;
+        }
+        if (GroundHeight?.Invoke(_camera.GlobalPosition) is not { } ground) return;
+        var at = _camera.GlobalPosition with { Y = ground + height };
+        _camera.GlobalPosition = at;
+        _door = interiors.OpenDoorForCamera(at, InsideDoorReach) ?? _door;
+        if (_door == null || interiors.BuiltLink(_door) is not { } link) return;
+
+        // as far behind the doorway as the point stands in front of it, at the height asked above
+        // the sill, turned as asked: then carried into the rooms
+        var local = link.Outside.AffineInverse() * at;
+        var behind = link.Outside * new Vector3(local.X, height, -local.Z);
+        _camera.GlobalTransform = link.ToInside * (_camera.GlobalTransform with { Origin = behind });
+        interiors.CameraInside(link.Plan);
+        GD.Print($"[shot] inside through door {_door}: door at {link.Outside.Origin}, facing {link.Outside.Basis.Z}");
+        _through = true;
+        _waited = 0;
+        _elapsed = 0;
     }
 
     /// <summary>

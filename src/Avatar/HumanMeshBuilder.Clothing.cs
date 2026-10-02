@@ -83,7 +83,7 @@ public static partial class HumanMeshBuilder
         var headBasis = UprightBasis(headAxis);
         var headCentre = (rig.HeadBase + rig.HeadTop) * 0.5f;
         s.Tube(rig.Neck, rig.HeadBase, 0.052f, p.Skin, 6);
-        s.Box(headCentre, new Vector3(0.150f, headAxis.Length() + 0.055f, 0.180f), p.Skin, headBasis);
+        s.RoundedBox(headCentre, new Vector3(0.150f, headAxis.Length() + 0.055f, 0.180f), p.Skin, headBasis);
 
         if (o[WearSlot.Neck] is { } neck) AppendNeckwear(s, rig, neck);
         if (helmet)
@@ -363,7 +363,7 @@ public static partial class HumanMeshBuilder
                     break;
             }
         }
-        s.Box(wrist, new Vector3(0.055f, 0.075f, 0.085f), skin);
+        s.RoundedBox(wrist, new Vector3(0.055f, 0.075f, 0.085f), skin, rings: 6, segments: 8);
         if (hands != null) AppendHandwear(s, hands, elbow, wrist);
     }
 
@@ -628,6 +628,7 @@ public static partial class HumanMeshBuilder
     /// </summary>
     public static void AppendLeg(MeshScratch s, HumanPalette p, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe)
     {
+        using var smoothing = s.Smoothing(SmoothFigures);
         var o = p.Outfit;
         if (o.IsEmpty)
         {

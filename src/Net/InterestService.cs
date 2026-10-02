@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using UnitSport.Core;
 using UnitSport.Player;
 using UnitSport.Terrain.Format;
 
@@ -24,6 +25,12 @@ namespace UnitSport.Net;
 /// being sent: if A stopped sending to B and B to A, neither would ever learn the other had come
 /// back into view. The server hears everyone, always.
 /// </para>
+///
+/// <para>
+/// It measures in LV95, from what each owner published (#185): the server's players can be
+/// thousands of kilometres apart and its own origin far from all of them. Each viewer's pairs are
+/// judged in a frame anchored at that viewer, so the rules' float arithmetic stays precise.
+/// </para>
 /// </summary>
 public partial class InterestService : Node
 {
@@ -41,7 +48,7 @@ public partial class InterestService : Node
     public Node? Players { get; set; }
 
     /// <summary>Server: coarse ground height for line of sight and height above ground.</summary>
-    public Func<Vector3, float?>? Ground { get; set; }
+    public Func<GlobalPos, float?>? Ground { get; set; }
 
     /// <summary>Server: true when two peers race each other; always relevant then.</summary>
     public Func<long, long, bool>? Together { get; set; }
@@ -59,16 +66,23 @@ public partial class InterestService : Node
     /// what it rides, and the index of each viewer in it. Read once per target, not once per pair
     /// (#221): a pair used to cost three native position reads and two ground lookups.
     /// </summary>
-    private readonly List<Vector3> _at = new();
+    private readonly List<GlobalPos> _at = new();
     private readonly List<float> _agl = new();
     private readonly List<RideKind> _ride = new();
     private readonly List<int> _viewerIndex = new();
     /// <summary>The pairs that race each other this round, asked once per pair.</summary>
     private readonly HashSet<(long Viewer, long Target)> _together = new();
+
+    /// <summary>
+    /// The frame the current viewer's pairs are judged in (<see cref="Evaluate"/>), as doubles, and
+    /// the line of sight in it: built once, so a round allocates nothing.
+    /// </summary>
+    private double _frameE, _frameN;
     private Func<Vector3, Vector3, bool>? _sight;
+    private Vector3 Local(GlobalPos g) => new((float)(g.E - _frameE), (float)g.Alt, (float)-(g.N - _frameN));
     private double _timer;
 
-    public static InterestService CreateServer(Node parent, Node players, Func<Vector3, float?>? ground)
+    public static InterestService CreateServer(Node parent, Node players, Func<GlobalPos, float?>? ground)
     {
         var s = new InterestService { Name = NodeName, Players = players, Ground = ground };
         parent.AddChild(s);
@@ -145,13 +159,12 @@ public partial class InterestService : Node
                 if (id > 0) { _scratch.Add((id, p)); _viewerIndex.Add(_targets.Count); }
                 _targets.Add((id, p));
                 _byId[id] = p;
-                var where = Where(p);
-                _at.Add(where);
-                var at = where + Vector3.Up;
-                _agl.Add(Ground?.Invoke(at) is { } g ? at.Y - g : 0f);
+                var to = Where(p);
+                _at.Add(to);
+                // height above ground does not depend on the viewer's frame
+                _agl.Add(Ground?.Invoke(to) is { } g ? (float)(to.Alt + 1 - g) : 0f);
                 _ride.Add(p.Ride);
             }
-        _sight ??= LineOfSight;
 
         for (int vi = 0; vi < _scratch.Count; vi++)
         {
@@ -162,7 +175,16 @@ public partial class InterestService : Node
             if (first) _sets[viewer] = set = new HashSet<long>();
             var view = _views.TryGetValue(viewer, out var v) ? v : Interest.View.Default;
             // someone inside a building is 3 km under it: seen, and seeing, from where the building is
-            var eye = _at[_viewerIndex[vi]] + Vector3.Up * 1.7f;
+            var from = _at[_viewerIndex[vi]];
+            // the rules work in floats: in a frame at this viewer, whatever the server's origin is
+            _frameE = Math.Round(from.E / 1000) * 1000;
+            _frameN = Math.Round(from.N / 1000) * 1000;
+            var eye = Local(from) + Vector3.Up * 1.7f;
+            if (Ground != null && _sight == null)
+            {
+                var groundHere = (Func<Vector3, float?>)(p => Ground(new GlobalPos(_frameE + p.X, _frameN - p.Z, p.Y)));
+                _sight = (a, b) => Interest.Clear(a, b, groundHere);
+            }
             _changed.Clear();
 
             for (int ti = 0; ti < _targets.Count; ti++)
@@ -173,7 +195,7 @@ public partial class InterestService : Node
                 if (first) _changed.Add(target);
                 bool together = Together?.Invoke(viewer, target) == true;
                 if (together) _together.Add((viewer, target));
-                bool now_ = Interest.Relevant(eye, _at[ti] + Vector3.Up, _ride[ti], _agl[ti], view, was,
+                bool now_ = Interest.Relevant(eye, Local(_at[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
                     together, Ground == null ? null : _sight);
                 if (now_ == was) continue;
                 if (first) { if (now_) set.Add(target); continue; }
@@ -208,7 +230,7 @@ public partial class InterestService : Node
                 if (viewer == target || !_sets.TryGetValue(viewer, out var set) || !set.Contains(target)) continue;
                 float radius = lastNear != null && lastNear.Contains(viewer) ? NearRadius * 1.2f : NearRadius;
                 bool near = _together.Contains((viewer, target))
-                    || _at[_viewerIndex[vi]].DistanceSquaredTo(at) < radius * radius;
+                    || _at[_viewerIndex[vi]].DistanceTo(at) < radius;
                 (near ? _near : _far).Add(viewer);
             }
             if (lastNear != null && _farOf.TryGetValue(target, out var lastFar)
@@ -231,10 +253,11 @@ public partial class InterestService : Node
     private readonly HashSet<long> _near = new(), _far = new();
     private readonly Dictionary<long, HashSet<long>> _nearOf = new(), _farOf = new();
 
-    private bool LineOfSight(Vector3 eye, Vector3 target) => Interest.Clear(eye, target, Ground!);
-
-    /// <summary>Where a player is for interest: up in the world, even inside a building (<see cref="Interiors.InteriorManager.SurfacePoint"/>).</summary>
-    private Vector3 Where(Node3D player) => Interiors.InteriorManager.SurfacePoint(player.GlobalPosition, Ground);
+    /// <summary>
+    /// Where a player is for interest, from what it published: up in the world, even inside a
+    /// building (<see cref="Interiors.InteriorManager.SurfacePoint(GlobalPos, Func{GlobalPos, float?})"/>).
+    /// </summary>
+    private GlobalPos Where(FootPlayer player) => Interiors.InteriorManager.SurfacePoint(player.Global, Ground);
 
     /// <summary>Client → server: the lens this client views the world through.</summary>
     public void ReportView(float far, float fovDeg)
@@ -252,9 +275,9 @@ public partial class InterestService : Node
     }
 
     /// <summary>A coarse ground function over <c>horizon.bin</c>'s 100 m lattice, for the server.</summary>
-    public static Func<Vector3, float?> HorizonGround(HorizonIndex index, Core.WorldOrigin origin) => world =>
+    public static Func<GlobalPos, float?> HorizonGround(HorizonIndex index) => at =>
     {
-        var (e, n) = origin.ToLv95(world);
+        var (e, n) = (at.E, at.N);
         var id = TileId.FromLv95(e, n);
         if (!index.TryGet(id, out _)) return null;
         double fc = (e - id.MinE) / HorizonFormat.SpacingM, fr = (id.MaxN - n) / HorizonFormat.SpacingM;

@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Net;
 
 namespace UnitSport.Items;
@@ -13,27 +14,31 @@ public readonly record struct DropState(
     string Name,
     long Owner,
     ItemStack Stack,
-    Vector3 Position,
+    GlobalPos Position,
     Vector3 Rotation,
     Vector3 Velocity,
     Vector3 Spin,
     bool Settled = false,
     int Token = 0)
 {
-    public Godot.Collections.Dictionary ToDict() => new()
+    public Godot.Collections.Dictionary ToDict()
     {
+        var d = new Godot.Collections.Dictionary
+        {
         ["name"] = Name,
         ["owner"] = Owner,
         ["id"] = (int)Stack.Id,
         ["count"] = Stack.Count,
         ["data"] = Stack.Data ?? "",
-        ["pos"] = Position,
         ["rot"] = Rotation,
         ["vel"] = Velocity,
         ["spin"] = Spin,
         ["settled"] = Settled,
         ["token"] = Token,
-    };
+        };
+        Position.Write(d);
+        return d;
+    }
 
     public static DropState FromDict(Godot.Collections.Dictionary d)
     {
@@ -42,7 +47,7 @@ public readonly record struct DropState(
             d["name"].AsString(),
             d["owner"].AsInt64(),
             new ItemStack((ItemId)d["id"].AsInt32(), d["count"].AsInt32(), data.Length == 0 ? null : data),
-            d["pos"].AsVector3(),
+            GlobalPos.Read(d),
             d["rot"].AsVector3(),
             d["vel"].AsVector3(),
             d["spin"].AsVector3(),
@@ -64,7 +69,7 @@ public readonly record struct DropState(
 /// synchronizer when the dropper's first update comes in.
 /// </para>
 /// </summary>
-public partial class DroppedItem : RigidBody3D
+public partial class DroppedItem : RigidBody3D, IOriginShiftAware
 {
     public const string Group = "dropped_items";
 
@@ -92,6 +97,9 @@ public partial class DroppedItem : RigidBody3D
 
     private const double SettleAfter = 10, RestFor = 0.6;
     private DropState _initial;
+    private WorldOrigin _origin = null!;
+    /// <summary>The position on the wire (#185): published by whoever simulates the fall, applied everywhere else.</summary>
+    private NetPlace _place = null!;
     private MultiplayerSynchronizer? _sync;
     private double _age, _restTime;
     private bool _predicting;
@@ -105,10 +113,11 @@ public partial class DroppedItem : RigidBody3D
     /// <summary>At rest and drawn floating (<see cref="DropFloat"/>).</summary>
     internal bool Floating { get; private set; }
 
-    public static DroppedItem Create(DropState state, bool proxy = false)
+    public static DroppedItem Create(DropState state, WorldOrigin origin, bool proxy = false)
     {
         var item = new DroppedItem
         {
+            _origin = origin,
             Name = string.IsNullOrEmpty(state.Name) ? $"drop_local_{Interlocked.Increment(ref _localCounter)}" : state.Name,
             _initial = state,
             Owner = state.Owner,
@@ -125,7 +134,8 @@ public partial class DroppedItem : RigidBody3D
         AddToGroup(Group);
         CollisionMask |= World.TreeColliders.Layer;
         var s = _initial;
-        Position = s.Position;
+        Position = _origin.ToWorld(s.Position);
+        AddChild(_place = new NetPlace(_origin, s.Position));
         Rotation = s.Rotation;
 
         // the collider is the drawn item's box (thin cards and bars get a minimum, or they sink)
@@ -148,7 +158,7 @@ public partial class DroppedItem : RigidBody3D
         }
 
         var fall = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:position", ".:rotation", ".:Settled" }) fall.AddProperty(prop);
+        foreach (var prop in NetPlace.Properties.Append(".:rotation").Append(".:Settled")) fall.AddProperty(prop);
         fall.PropertySetReplicationMode(".:Settled", SceneReplicationConfig.ReplicationMode.OnChange);
         _sync = new MultiplayerSynchronizer
         {
@@ -180,8 +190,15 @@ public partial class DroppedItem : RigidBody3D
     {
         LinearVelocity = s.Velocity;
         AngularVelocity = s.Spin;
-        _lastPos = s.Position;
+        _lastPos = _origin.ToWorld(s.Position);
         _lastVel = s.Velocity;
+    }
+
+    /// <summary>The origin moved (#185): the last step of the flight, kept for hitting someone on the way, moves with it.</summary>
+    public void OnOriginShifted(OriginShift shift)
+    {
+        _lastPos = shift.Point(_lastPos);
+        _lastVel = shift.Direction(_lastVel);
     }
 
     /// <summary>The flight so far, for hitting someone on the way (#261): last step's position and speed, and whether it already has.</summary>
@@ -298,6 +315,7 @@ public partial class DroppedItem : RigidBody3D
             if (_age > SettleAfter) StopPredicting();
             return;
         }
+        if (!Proxy) _place.Publish(Position);
         // simulated here (the thrower's proxy or body): someone in the way takes it (#261)
         if (!_bonked && _age < 4) _bonked = ThrowHits.Step(this, _lastPos, GlobalPosition, _lastVel, Stack.Id);
         _lastPos = GlobalPosition;
@@ -307,5 +325,5 @@ public partial class DroppedItem : RigidBody3D
     }
 
     /// <summary>The state to respawn it from: where it lies now, what it is.</summary>
-    public DropState Capture() => new(Name, Owner, Stack, Position, Rotation, Vector3.Zero, Vector3.Zero, Settled);
+    public DropState Capture() => new(Name, Owner, Stack, _place.Global, Rotation, Vector3.Zero, Vector3.Zero, Settled);
 }

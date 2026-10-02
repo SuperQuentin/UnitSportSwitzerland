@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Player;
 
 namespace UnitSport.Avatar;
@@ -95,8 +96,10 @@ public partial class HeavyRig : Node3D
     private Node3D[] _pedals = System.Array.Empty<Node3D>();
     private HumanPalette? _driverPalette;
     private MeshInstance3D? _driverBody, _driverHead;
-    private (int Turn, int Throttle, int Brake) _driverPose = (int.MinValue, 0, 0);
-    private readonly Dictionary<(int Turn, int Throttle, int Brake), ArrayMesh> _driverPoses = new();
+    private (int Turn, int Throttle, int Brake, bool Smooth) _driverPose = (int.MinValue, 0, 0, false);
+    private readonly Dictionary<(int Turn, int Throttle, int Brake, bool Smooth), ArrayMesh> _driverPoses = new();
+    /// <summary>Whether the driver's head was built smooth (<see cref="HumanMeshBuilder.SmoothFigures"/>).</summary>
+    private bool _driverSmooth;
     private float _rpmShown, _speedShown, _airShown = HeavyDriveline.AirMax;
     private string _gearShown = "";
     private CabMirrors? _mirrors;
@@ -218,9 +221,8 @@ public partial class HeavyRig : Node3D
         if (_driverPalette is { } palette)
         {
             _driverBody = new MeshInstance3D { Name = "Driver", MaterialOverride = body };
-            var head = new MeshScratch();
-            HumanMeshBuilder.AppendDriver(head, palette, c.Seat, 0f, 0f, 0f, body: false);
-            _driverHead = new MeshInstance3D { Name = "DriverHead", Mesh = head.Build(), MaterialOverride = body };
+            _driverSmooth = HumanMeshBuilder.SmoothFigures;
+            _driverHead = new MeshInstance3D { Name = "DriverHead", Mesh = HumanMeshBuilder.DriverHead(palette, c.Seat), MaterialOverride = body };
             _body.AddChild(_driverBody);
             _body.AddChild(_driverHead);
         }
@@ -257,10 +259,10 @@ public partial class HeavyRig : Node3D
         if (_cockpit is not { } c) return;
         _wheel.Basis = new Basis(c.ColumnAxis, WheelTurn);
         // needles swing to a reading rather than jump to it, like a real movement's damping
-        float ease = 1f - Mathf.Exp(-10f * dt);
+        float ease = MathX.Damp(10f, dt);
         _rpmShown = Mathf.Lerp(_rpmShown, EngineRunning ? Rpm : 0f, ease);
         _speedShown = Mathf.Lerp(_speedShown, Mathf.Abs(SpeedKmh), ease);
-        _airShown = Mathf.Lerp(_airShown, Air, 1f - Mathf.Exp(-3f * dt));
+        _airShown = Mathf.Lerp(_airShown, Air, MathX.Damp(3f, dt));
         _tach.Basis = new Basis(c.Tach.Axis, CarNeedle.Angle(_rpmShown / c.Gauges.TachRpm));
         _speedo.Basis = new Basis(c.Speedo.Axis, CarNeedle.Angle(_speedShown / c.Gauges.SpeedoKmh));
         _air.Basis = new Basis(c.Air.Axis, CarNeedle.Angle(_airShown / HeavyDriveline.AirMax));
@@ -292,8 +294,11 @@ public partial class HeavyRig : Node3D
         _driverBody.Visible = DriverShown && View != CockpitView.Bare;
         _driverHead.Visible = DriverShown && View == CockpitView.Outside;
         if (!_driverBody.Visible) return;
-        var pose = (Mathf.RoundToInt(WheelTurn / 0.03f), Mathf.RoundToInt(Throttle * 8f), Mathf.RoundToInt(Brake * 8f));
+        var pose = (Mathf.RoundToInt(WheelTurn / 0.03f), Mathf.RoundToInt(Throttle * 8f), Mathf.RoundToInt(Brake * 8f),
+            HumanMeshBuilder.SmoothFigures);
         if (pose == _driverPose) return;
+        // a restyle to or from a lit style (#311): the head is rebuilt with the body
+        if (pose.Item4 != _driverSmooth) (_driverHead.Mesh, _driverSmooth) = (HumanMeshBuilder.DriverHead(palette, c.Seat), pose.Item4);
         _driverPose = pose;
         _driverBody.Mesh = HumanMeshBuilder.DriverBody(_driverPoses, pose, palette, c.Seat);
     }

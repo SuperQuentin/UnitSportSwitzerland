@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Player;
 
 namespace UnitSport.World;
@@ -269,6 +270,13 @@ public sealed class NpcArrival
         _flickAt = style == ArrivalStyle.Behind && variant == 1 ? _slotS - 17f : float.NaN;
     }
 
+    /// <summary>The origin moved (#185): the lane follows it, and so does the spot checked clear for a turn.</summary>
+    public void OnOriginShifted(OriginShift shift, OriginFrame now)
+    {
+        Road.Follow(now);
+        _spotCentre = shift.Point(_spotCentre);
+    }
+
     /// <summary>The grid is known: this slot, GO in <paramref name="countdown"/> s.</summary>
     public void SetSlot(Vector3 at, double countdown)
     {
@@ -290,7 +298,7 @@ public sealed class NpcArrival
     }
 
     private static Vector3 Nose(float yaw) => new(-Mathf.Sin(yaw), 0, -Mathf.Cos(yaw));
-    private static float Wrap(float a) => Mathf.Wrap(a, -Mathf.Pi, Mathf.Pi);
+    private static float Wrap(float a) => Core.MathX.WrapAngle(a);
 
     private void Begin(Step step)
     {
@@ -443,6 +451,9 @@ public sealed class NpcArrival
     /// <summary>Radius of clear ground a donut and a handbrake turn need, m.</summary>
     public static float DonutRoom = 5.5f, JTurnRoom = 6.5f;
 
+    /// <summary>The verge and obstacle rays: one query, reused (#221).</summary>
+    private readonly Core.RayQuery _ray = new();
+
     /// <summary>
     /// The safe-verge test: a disc of <paramref name="r"/> round <paramref name="c"/> is clear if
     /// the ground stays within 0.9 m of the centre's height (no drop, no bank) and a ray at knee
@@ -460,8 +471,7 @@ public sealed class NpcArrival
             for (float x = 1f; x <= r + 0.5f; x += 1f)
                 if (!terrain.TryGetHeight(c + d * x, out float h) || Mathf.Abs(h - h0) > 0.9f) return false;
             var from = c with { Y = h0 + 0.7f };
-            var q = PhysicsRayQueryParameters3D.Create(from, from + d * (r + 0.5f), 0xFFFFFFFF, new Godot.Collections.Array<Rid> { Me.GetRid() });
-            var hit = space.IntersectRay(q);
+            var hit = _ray.Cast(space, from, from + d * (r + 0.5f), 0xFFFFFFFF, Me.SelfExclude);
             if (hit.Count > 0 && Mathf.Abs(hit["normal"].AsVector3().Y) < 0.75f) return false;
         }
         return true;
@@ -534,8 +544,7 @@ public sealed class NpcArrival
         }
         var space = Me.GetWorld3D().DirectSpaceState;
         var from = pos + Vector3.Up * 0.1f;
-        var q = PhysicsRayQueryParameters3D.Create(from, from + move * reach, 0xFFFFFFFF, new Godot.Collections.Array<Rid> { Me.GetRid() });
-        var hit = space.IntersectRay(q);
+        var hit = _ray.Cast(space, from, from + move * reach, 0xFFFFFFFF, Me.SelfExclude);
         return hit.Count > 0 && Mathf.Abs(hit["normal"].AsVector3().Y) < 0.75f;
     }
 
