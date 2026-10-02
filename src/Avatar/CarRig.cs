@@ -354,6 +354,25 @@ public partial class CarRig : Node3D
     public (Node3D Wheel, Vector3 Axis, float Radius)? SteeringGrip =>
         _cabin == null ? null : (_wheel, _cabin.ColumnAxis, _cabin.Seat.WheelRadius);
 
+    /// <summary>How many hinged doors the car has.</summary>
+    public int DoorCount => _doors.Length;
+
+    /// <summary>The middle of a door in world space (the door shut), or the car's origin for a bit it has not got.</summary>
+    public Vector3 DoorCentre(byte bit)
+    {
+        foreach (var door in _doors)
+            if (door.Bit == bit) return _body.ToGlobal(door.Centre + ShellOffset);
+        return GlobalPosition;
+    }
+
+    /// <summary>The hinge node a door swings on (its panel and glass under it), for outlining it; null for a bit it has not got.</summary>
+    public Node3D? DoorPivot(byte bit)
+    {
+        for (int i = 0; i < _doors.Length; i++)
+            if (_doors[i].Bit == bit) return _doorPivots[i];
+        return null;
+    }
+
     /// <summary>The bit of the door whose middle is nearest a world point, and how far it is.</summary>
     public (byte Bit, float Distance) NearestDoor(Vector3 point)
     {

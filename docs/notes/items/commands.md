@@ -3,10 +3,12 @@
 - `<godot> --headless --path . -- --invcheck`: every cursor operation on scratch inventories, never
   the save.
 - `<godot> --path . -- --ride foot,60 --invuicheck`: synthetic mouse events at the real slot
-  rectangles (drag and drop, click-carry, spread, shift-click, right-click).
+  rectangles (drag and drop, click-carry, spread, shift-click, right-click), then the catalogue
+  (#262: real clicks on a tile; `test_output/catalogue.png` when windowed).
 - `--connect <host> --econcheck <admin password>` against a server started with that password:
   non-admin vehicle refused, `/login` flips the flag, admin vehicle spawned, cash
-  deposit refused outside a bank (#213); the counter itself: `tools/bankcheck.sh` (loot `banks` note).
+  deposit refused outside a bank (#213); `/money` `/give` refused, then as admin `/money`,
+  `/give me`, `/bank set` (restored after), `/clear` (#262); the counter itself: `tools/bankcheck.sh` (loot `banks` note).
 - `--invuicheck`/`--econcheck` use a scratch inventory (`Inventory.Scratch`, `Persist = false`).
 - `GODOT=<exe> tools/useanimcheck.sh`: loopback server + A (first person: drink, eat, GPS, hat, clothes) + B (remote: sees Mouth arm pose, hat, OutfitBits); screenshots in `test_output/useanim_*.png`.
 - `<godot> --headless --path . -- --iconsheet`: renders every item icon to `test_output/iconsheet.png` (see `pixel-icons`).
@@ -26,3 +28,4 @@
   image fetched by hash); see `item-net-events`.
 - `<godot> --path . -- --ride foot,120 --view first --photocheck --photo-dir <abs dir>`: the Polaroid offline
   with screenshots (see `polaroid`).
+- `tools/bonkcheck.sh` (net tier, no terrain) and `--interactcheck` (offline, windowed, `--view third`, needs `--chunks`): thrown hits over loopback, and the #261 interactions photographed; see `throw-hits`.

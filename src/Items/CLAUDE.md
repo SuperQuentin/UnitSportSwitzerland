@@ -21,8 +21,10 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `flag-plant` — Swiss flag: placement ghost (green/red, pick-up halo), raise-and-stab / pull-up strokes, replicated Plant arms, spawn thud + dirt
 - `bags` — Bag slot adds pack rows (pouch/handbag/backpack/hiking +9..+36), one array with a moving Capacity, ChangeBag compacts or refuses, found in wardrobes/halls/nightstands (#208)
 - `throw-drop` — Drop (Q / Ctrl+Q / pack panel), pointing outline (inverted hull overlay), E pick-up, grenade-style charged throw (arc, ring, shoulder cam, wind-up arm pose), local proxy + remote prediction, CCD + under-terrain rescue, ImpactFx, Minecraft-style floating/spinning look at rest (DropFloat); `tools/dropcheck.sh` (#206)
+- `throw-hits` — A thrown item hitting a player (#261): thrower-side path test, `ItemEventKind.Bonk` relayed by the server, non-lethal damage (floor 5), flinch on every copy, bonk + oof + dizzy tune
+- `catalogue` — Item catalogue (#262): every item as tiles, tabs + search, click 1 / right 10 / shift stack, money + clear buttons; only sends chat commands, so the server checks admin
 - `smart-binoculars` — Held at a building's door (or inside): reads out its loot table (LootTables.BuildingTable); no aim, no zoom (#165)
 
 ## Commands
 
-- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh, tools/radiocheck.sh, tools/carcdcheck.sh, --carcdcheck shots, --cdfixture, tools/dropcheck.sh
+- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh, tools/radiocheck.sh, tools/carcdcheck.sh, --carcdcheck shots, --cdfixture, tools/dropcheck.sh, tools/bonkcheck.sh, --interactcheck
