@@ -52,6 +52,12 @@ public partial class DebugMenu : CanvasLayer
 
     public bool IsOpen => _panel.Visible;
 
+    // for --debugcheck (DebugMenuCheck), which clicks them like a player would
+    internal CheckBox SwitchBox(string key) => _toggles[key];
+    internal OptionButton ViewPicker => _viewPicker;
+    internal DebugViewMode View => _view;
+    internal DebugOverlay Overlay => _overlay;
+
     public DebugMenu(ChunkManager chunks, WorldOrigin origin, Func<Node3D?> nearTrees, Action<string> say)
     {
         _chunks = chunks;
