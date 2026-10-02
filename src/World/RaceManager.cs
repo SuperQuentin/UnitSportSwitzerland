@@ -476,28 +476,57 @@ public partial class RaceManager : Node, IOriginShiftAware
         _clock += delta;
         bool reviewHosts = (_hostReview += delta) >= 1.0;
         if (reviewHosts) _hostReview = 0;
-        foreach (var race in _races.Values.ToList())
+        if (_races.Count == 0) return;
+        // per frame, so nothing allocated and no node looked up here (#221): a copy, as Go and
+        // Results change the set, and the departed entrants checked on the 1 s pass
+        _tick.Clear();
+        _tick.AddRange(_races.Values);
+        foreach (var race in _tick)
         {
             if (reviewHosts && (race.Host == 0 || _players?.GetNodeOrNull(race.Host.ToString()) == null))
             {
                 MigrateHost(race);
                 if (!_races.ContainsKey(race.Id)) continue;   // ended: nobody to take it
             }
-            // entrants whose player (or NPC owner) left the server
-            foreach (long e in race.Entrants.Where(e => !race.Out.Contains(e) && _players?.GetNodeOrNull(PlayerReplication.NodeName(e)) == null).ToList())
-            {
-                _raceOf.Remove(e);
-                if (race.Phase == Phase.Running) race.Out.Add(e);
-                else race.Entrants.Remove(e);
-            }
-            if (race.Phase == Phase.Entry && _clock >= race.HoldUntil
-                && (_clock >= race.ArriveBy || !race.Arriving.Any(race.Entrants.Contains))
-                && (_clock >= race.EntryEnds || (race.Invited != 0 && race.Entrants.Contains(race.Invited))))
-                Go(race);
-            else if (race.Phase == Phase.Running
-                && (_clock > race.Deadline || race.Entrants.All(e => race.Finished.ContainsKey(e) || race.Out.Contains(e))))
+            bool go = race.Phase == Phase.Entry && GoDue(race);
+            // and right before GO, so a grid never lines up someone who just left
+            if (reviewHosts || go) DropDeparted(race);
+            if (go && GoDue(race)) Go(race);
+            else if (race.Phase == Phase.Running && (_clock > race.Deadline || AllDone(race)))
                 Results(race);
         }
+    }
+
+    private readonly List<Race> _tick = new();
+    private readonly List<long> _departed = new();
+
+    /// <summary>Entrants whose player (or NPC owner) left the server.</summary>
+    private void DropDeparted(Race race)
+    {
+        _departed.Clear();
+        foreach (long e in race.Entrants)
+            if (!race.Out.Contains(e) && _players?.GetNodeOrNull(PlayerReplication.NodeName(e)) == null) _departed.Add(e);
+        foreach (long e in _departed)
+        {
+            _raceOf.Remove(e);
+            if (race.Phase == Phase.Running) race.Out.Add(e);
+            else race.Entrants.Remove(e);
+        }
+    }
+
+    private bool GoDue(Race race)
+    {
+        if (_clock < race.HoldUntil) return false;
+        if (_clock < race.EntryEnds && (race.Invited == 0 || !race.Entrants.Contains(race.Invited))) return false;
+        if (_clock >= race.ArriveBy) return true;
+        foreach (long e in race.Arriving) if (race.Entrants.Contains(e)) return false;
+        return true;
+    }
+
+    private static bool AllDone(Race race)
+    {
+        foreach (long e in race.Entrants) if (!race.Finished.ContainsKey(e) && !race.Out.Contains(e)) return false;
+        return true;
     }
 
     // ---- the host role (#50): a race belongs to nobody either ----
