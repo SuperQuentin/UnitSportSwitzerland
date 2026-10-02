@@ -260,6 +260,14 @@ public partial class Gathering : Node, Core.IOriginShiftAware
 
     private (ItemId Id, int Count) Yield((Resource Kind, string Spot, CoverClass Cover) t)
     {
+        // in a Battle Royale match (#276) the land gives building material: planks off a tree, more stone
+        if (BattleRoyale.BrManager.Instance?.InMatch == true)
+            switch (t.Kind)
+            {
+                case Resource.TreeWood: return (ItemId.WoodPlanks, 3);
+                case Resource.Deadwood: return (ItemId.WoodPlanks, 1);
+                case Resource.Stone: return (ItemId.Stone, 4);
+            }
         switch (t.Kind)
         {
             case Resource.Water:
@@ -297,13 +305,13 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         var tile = _origin.TileAt(feet);
         EnsureLoaded(tile);
 
-        // water: a mapped lake or river in reach, at about the height of the feet (not under a bridge)
+        // water: a lake or river in reach (World/WaterField), its surface about the height of the
+        // feet (not under a bridge, not over the head)
         foreach (float d in new[] { 0.6f, 1.4f, 2.2f })
         {
             var at = feet + fwd * d;
-            if (_chunks.TryGetCover(at, out var c) && c == CoverClass.Water
-                && _chunks.TryGetHeight(at, out float h) && feet.Y - h < 2.5f && h - feet.Y < 1f)
-                return (Resource.Water, "water", c);
+            if (World.WaterField.TryLevelAt(at, out float h) && feet.Y - h < 2.5f && h - feet.Y < 1f)
+                return (Resource.Water, "water", CoverClass.Water);
         }
         if (NearStream(tile, feet, ahead)) return (Resource.Water, "water", CoverClass.Water);
 

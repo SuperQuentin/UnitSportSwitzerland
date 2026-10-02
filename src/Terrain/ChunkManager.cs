@@ -364,6 +364,11 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         public bool HolesLoaded;
         public byte[]? Cover;
         public bool CoverLoaded;
+        /// <summary>
+        /// The tile's still water (#299; null: none, or not kept). Kept where the cover is (tiles
+        /// drawn finer than the coarse stride) and on a server; see <see cref="TryGetWaterLevel"/>.
+        /// </summary>
+        public WaterLayer? Water;
         public ChunkNode? Node;
 
         /// <summary>Cancels the build in flight, if any. Bumping Generation orphans its results.</summary>
@@ -399,7 +404,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         ChunkNode.TreeMeshes? Trees, ArrayMesh? Water,
         Vector3[][]? RoadCollisionFaces = null, long[]? StageMs = null,
         Interiors.DoorSpot[]? Doors = null,
-        List<(float[] Points, int Count, float Half, float Height)>? Bores = null);
+        List<(float[] Points, int Count, float Half, float Height)>? Bores = null,
+        WaterLayer? WaterLayer = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -759,6 +765,59 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         Horizon.EnsureCoverage(minE, maxE, minN, maxN);
     }
 
+    // ---- debug menu (#339) -------------------------------------------------------------
+
+    /// <summary>The tile layers the debug menu hid on every tile; none in play.</summary>
+    public TileLayers HiddenLayers { get; private set; }
+
+    private bool _hideReal, _hideGenerated;
+
+    /// <summary>
+    /// Hides tile layers, and whole tiles by where their data comes from, on every loaded tile and
+    /// every tile built later. The horizon and the near trees are the caller's: they are nodes of
+    /// their own. Main thread.
+    /// </summary>
+    public void SetDebugHidden(TileLayers layers, bool real, bool generated)
+    {
+        HiddenLayers = layers;
+        _hideReal = real;
+        _hideGenerated = generated;
+        foreach (var (id, state) in _chunks)
+            if (state.Node != null) ApplyDebugHidden(id, state.Node);
+    }
+
+    private void ApplyDebugHidden(TileId id, ChunkNode node)
+    {
+        node.HideLayers(HiddenLayers);
+        node.Visible = !(IsGenerated(id) ? _hideGenerated : _hideReal);
+    }
+
+    /// <summary>
+    /// Stops the rings following the anchors: what is loaded stays loaded, at the stride it has,
+    /// so the camera can leave and look at it from outside. Builds already queued still commit.
+    /// </summary>
+    public bool FreezeRings
+    {
+        get => _freezeRings;
+        set
+        {
+            _freezeRings = value;
+            _sinceEval = double.MaxValue;
+        }
+    }
+
+    private bool _freezeRings;
+
+    /// <summary>Every loaded tile and the stride its ground is drawn at (-1: not built yet), for the debug overlay.</summary>
+    public void ListTiles(List<(TileId Id, int Stride)> into)
+    {
+        into.Clear();
+        foreach (var (id, state) in _chunks) into.Add((id, state.ActiveStride));
+    }
+
+    /// <summary>The stride a loaded tile's ground is drawn at; -1 when it is not loaded or not built yet.</summary>
+    public int StrideAt(TileId id) => _chunks.TryGetValue(id, out var state) ? state.ActiveStride : -1;
+
     /// <summary>Real or generated: whether the rings may ask for a tile.</summary>
     private bool IsAvailable(TileId id) => _available.Contains(id) || _fallback?.Covers(id) == true;
 
@@ -959,6 +1018,43 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         return true;
     }
 
+    /// <summary>
+    /// The still water level at a point (#299): the altitude of the water surface at rest, without
+    /// waves (<see cref="World.WaterField.TryLevelAt"/> adds them). False where there is no water, or
+    /// the tile's water is not loaded (far tiles drop it with their cover; a server has it only from
+    /// a source layer, never the legacy one, which needs the cover). On a legacy tile (#298 not
+    /// there yet) the level is the terrain + 0.12 m, so the water there is 0.12 m deep.
+    /// </summary>
+    public bool TryGetWaterLevel(Vector3 worldPos, out float stillLevel) =>
+        TryGetWater(worldPos, out stillLevel, out _);
+
+    /// <summary>
+    /// <see cref="TryGetWaterLevel"/> plus the wave scale there, 0..1 (fetch x depth), the factor the
+    /// water mesh bakes into its vertices: what <see cref="World.WaterField"/> multiplies the waves by.
+    /// </summary>
+    public bool TryGetWater(Vector3 worldPos, out float stillLevel, out float waveScale)
+    {
+        stillLevel = 0f;
+        waveScale = 0f;
+        if (_origin == null) return false;
+        var (e, n) = _origin.ToLv95(worldPos);
+        var id = TileId.FromLv95(e, n);
+        return _chunks.TryGetValue(id, out var state) && state.Water is { } water
+            && water.TrySample(e - id.MinE, id.MaxN - n, out stillLevel, out waveScale);
+    }
+
+    /// <summary>
+    /// Where something put down here rests (#299): the ground, or the still water surface where
+    /// there is water over it. <see cref="TryGetHeight"/> is the terrain, which under a lake is now
+    /// its bed: spawns, respawns, drops, birds and the void rescue want this one.
+    /// </summary>
+    public bool TryGetSurface(Vector3 worldPos, out float height)
+    {
+        if (!TryGetHeight(worldPos, out height)) return false;
+        if (TryGetWaterLevel(worldPos, out float still) && still > height) height = still;
+        return true;
+    }
+
     public bool TryGetHeight(Vector3 worldPos, out float height)
     {
         height = 0f;
@@ -1059,7 +1155,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         // idle and capped the whole loader at MaxConcurrentBuilds per interval — 24 tiles a
         // second however fast the disk actually is.
         _sinceEval += delta;
-        if (_sinceEval >= EvalInterval || committed > 0)
+        if (!_freezeRings && (_sinceEval >= EvalInterval || committed > 0))
         {
             _sinceEval = 0;
             EvaluateRings();
@@ -1133,6 +1229,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             bool keepCover = result.Stride > 0 && result.Stride < ChunkFormat.CoarseStride;
             state.Cover = keepCover ? result.Cover : null;
             state.CoverLoaded = keepCover;
+            // a server keeps every tile's water (it holds only the tiles round players); a client the fine ones
+            state.Water = keepCover || !BuildMeshes ? result.WaterLayer : null;
 
             // An interim result is the terrain half of a build whose roads and buildings are
             // still being assembled on the worker. The tile must stay marked pending, or the
@@ -1195,11 +1293,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         dist = Math.Min(dist, LodPolicy.Distance(result.Id, _origin!.TileAt(anchor.GlobalPosition)));
                     node.SetTreeDensity(Lod.TreeDensity(dist));
                 }
-                if (result.Water != null)
-                    EnsureNode(result.Id, state).SetWater(result.Water);
                 state.HasBuildings = true;
                 state.PendingBuildings = false;
             }
+            // near tiles' water comes with their buildings, far tiles' (flat, #299) on its own
+            if (result.Water != null)
+                EnsureNode(result.Id, state).SetWater(result.Water);
             state.ActiveStride = result.Stride;
             // a single commit past a frame is worth knowing about: it is what a hitch IS
             double took = clock.Elapsed.TotalMilliseconds - t0;
@@ -1334,6 +1433,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 Name = $"Chunk_{id}",
                 Position = _origin!.ToWorld(id.MinE, id.MaxN, 0),
             };
+            ApplyDebugHidden(id, state.Node);
             AddChild(state.Node);
         }
         return state.Node;
@@ -1353,7 +1453,28 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private KeyValuePair<TileId, Want>[] _wanted = [];
     private KeyValuePair<TileId, Want>[] _ordered = [];
     private double[] _orderKeys = [];
-    private string _desiredKey = "";
+    /// <summary>
+    /// What the desired set was computed from: each anchor's tile and whether it wants collision,
+    /// the LOD policy, the world version and <see cref="BuildMeshes"/>. Compared field by field at
+    /// 10 Hz, with nothing allocated (it was a string built every evaluation, #221).
+    /// </summary>
+    private readonly List<(TileId Tile, bool Collision)> _desiredKey = new(), _keyNow = new();
+    private (LodPolicy? Lod, long Version, bool Meshes) _desiredKeyRest;
+
+    private bool RingKeyChanged()
+    {
+        _keyNow.Clear();
+        foreach (var anchor in _anchors)
+            _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor)));
+        (LodPolicy? Lod, long Version, bool Meshes) rest = (Lod, _worldVersion, BuildMeshes);
+        if (rest == _desiredKeyRest   // the policy by reference: a new one is a new key
+            && System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_keyNow).SequenceEqual(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_desiredKey)))
+            return false;
+        _desiredKeyRest = rest;
+        _desiredKey.Clear();
+        _desiredKey.AddRange(_keyNow);
+        return true;
+    }
     private ViewCone? _orderedView;
 
     /// <summary>
@@ -1386,16 +1507,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     private void EvaluateRings()
     {
-        var keyBuilder = new System.Text.StringBuilder();
-        foreach (var anchor in _anchors)
-            keyBuilder.Append(_origin!.TileAt(anchor.GlobalPosition)).Append(_collisionAnchors.Contains(anchor) ? 'p' : 'c').Append(';');
-        keyBuilder.Append('|').Append(Lod.GetHashCode())
-            .Append('|').Append(_worldVersion).Append('|').Append(BuildMeshes);
-        string key = keyBuilder.ToString();
-
-        if (key != _desiredKey)
+        if (RingKeyChanged())
         {
-            _desiredKey = key;
             _orderedView = null;
             RecomputeDesired();
         }
@@ -1587,6 +1700,18 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         clock.Restart();
     }
 
+    /// <summary>
+    /// A tile's still water (#299): the source's water layer when it has one (fixture courses, #298's
+    /// file), else the legacy layer derived from the cover raster, which needs the full grid. Null
+    /// when the tile has no water, or when only a coarse grid and no source layer is at hand.
+    /// </summary>
+    private static async Task<WaterLayer?> LoadWaterLayerAsync(IChunkSource source, TileId id, ChunkGrid grid,
+        byte[]? cover, CancellationToken ct)
+    {
+        if (await source.LoadWaterAsync(id, ct) is { } tile) return WaterLayer.Create(tile, grid);
+        return cover != null && grid.Stride == 1 ? WaterLayer.FromCover(grid, cover) : null;
+    }
+
     private static void Release(BuildResult r)
     {
         r.Mesh?.Dispose();
@@ -1631,6 +1756,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         bool holesLoaded = state.HolesLoaded;
         var cachedCover = state.Cover;
         bool coverLoaded = state.CoverLoaded;
+        var cachedWater = state.Water;
         var source = _source!;
         bool buildMesh = BuildMeshes && stride > 0;
         bool streaming = Streaming?.Invoke() == true;
@@ -1670,6 +1796,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // a headless server draws nothing: holes and the 1 MB cover raster are for meshes
                 var holes = holesLoaded || !BuildMeshes ? cachedHoles : await source.LoadHolesAsync(id, ct);
                 var cover = coverLoaded || !BuildMeshes ? cachedCover : await source.LoadCoverAsync(id, ct);
+                // still water (#299): the source's layer, else the legacy one from the cover
+                var waterLayer = cachedWater ?? await LoadWaterLayerAsync(source, id, grid, cover, ct);
                 Lap(StAux, stageMs, clock);
                 ct.ThrowIfCancellationRequested();
 
@@ -1717,7 +1845,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 if (mesh != null || publishInterimCollision)
                     _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: true,
                         mesh, publishInterimCollision ? collision : null, null, false, holes, cover,
-                        null, null, false, null, null));
+                        null, null, false, null, null, WaterLayer: waterLayer));
 
                 ArrayMesh? roads = null;
                 RoadTile? roadTile = null;
@@ -1767,12 +1895,21 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
                     // watercourses ride in the road tile but are meshed here, so a stream gets
                     // the water material instead of being drawn as a narrow blue road
-                    if (cover != null && waterMaterial != null
-                        && WaterMeshBuilder.Build(grid, cover, roadTile, detail) is { } waterData)
+                    if (waterMaterial != null
+                        && WaterMeshBuilder.Build(waterLayer, roadTile, stride, detail) is { } waterData)
                     {
                         ct.ThrowIfCancellationRequested();
                         water = ChunkNode.ToArrayMesh(waterData, waterMaterial);
                     }
+                    Lap(StWater, stageMs, clock);
+                }
+                else if (buildMesh && waterMaterial != null && waterLayer is { Legacy: false }
+                    && WaterMeshBuilder.Build(waterLayer, null, stride, detail) is { } farWater)
+                {
+                    // a far tile with a source water layer (#298's lakes over their beds): a flat
+                    // surface at the still level as coarse as its ground, or the lake is a pit
+                    ct.ThrowIfCancellationRequested();
+                    water = ChunkNode.ToArrayMesh(farWater, waterMaterial);
                     Lap(StWater, stageMs, clock);
                 }
 
@@ -1876,7 +2013,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: false,
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
-                    bridgeCollision, stageMs, doors, bores));
+                    bridgeCollision, stageMs, doors, bores, waterLayer));
             }
             catch (OperationCanceledException)
             {

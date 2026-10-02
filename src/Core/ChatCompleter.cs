@@ -48,9 +48,12 @@ public sealed class ChatCompleter
         ("city", false, true, "<town>"),
         ("occasion", false, true, "[list | start | stop | auto] [id]"),
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
+        ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]"),
+        ("water", false, true, "[E N]"),
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("spawn", true, true, "<item> [count]"),
         ("catalogue", true, true, ""),
+        ("debug", true, true, ""),
         ("clear", false, true, "[player]"),
         ("money", true, true, "<amount> [player]"),
         ("bank", true, true, "[player] [set | add | take <amount>]"),
@@ -226,6 +229,11 @@ public sealed class ChatCompleter
 
             case "style":
                 options = argIndex == 0 ? Styles.StyleCommand.Words : [];
+                break;
+
+            case "seastate":
+                options = argIndex == 0 && (!Permissions.Online || Permissions.IsAdmin)
+                    ? World.SeaStateCommand.Named.Select(n => n.Name) : [];
                 break;
 
             case "occasion":

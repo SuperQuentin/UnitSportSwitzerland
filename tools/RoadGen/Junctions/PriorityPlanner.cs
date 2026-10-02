@@ -205,7 +205,7 @@ public static class PriorityPlanner
             var road = centre + u * (SignBehindTeeth + RoadSigns.ToothHeight);
             var sidewalk = ends[i] == LinkEnd.End ? info.Attributes.Right : info.Attributes.Left;   // +Perp(u) in drawing terms
             plan.Signs.Add(new SignSpot(arm.LinkId, PointPropType.YieldSign, variant, road + right * lateral, u,
-                road + right * h, sidewalk.SidewalkDm / 10.0 > lateral - h));
+                road + right * h, sidewalk.OuterDm / 10.0 > lateral - h));
         }
 
         // 3.03 on the main road: inside localities just before the junction, outside just after
@@ -227,7 +227,7 @@ public static class PriorityPlanner
                 var road = j.Centre + u * (arm.Trim + MainSignPastTrim);
                 var sidewalk = (ends[i] == LinkEnd.End) == urban ? info.Attributes.Right : info.Attributes.Left;
                 plan.Signs.Add(new SignSpot(arm.LinkId, PointPropType.MainRoadSign, variant, road + right * lateral,
-                    urban ? u : -u, road + right * arm.HalfWidth, sidewalk.SidewalkDm / 10.0 > lateral - arm.HalfWidth));
+                    urban ? u : -u, road + right * arm.HalfWidth, sidewalk.OuterDm / 10.0 > lateral - arm.HalfWidth));
             }
         }
 

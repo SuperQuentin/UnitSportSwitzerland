@@ -86,9 +86,7 @@ public partial class LootService : Node
     {
         _storeDir = ProjectSettings.GlobalizePath("user://loot");
         // "--lootepoch N" pretends N restock periods have passed, to test a refill
-        var args = OS.GetCmdlineUserArgs();
-        int at = Array.IndexOf(args, "--lootepoch");
-        if (at >= 0 && at + 1 < args.Length && long.TryParse(args[at + 1].TrimStart('+'), out long offset))
+        if (long.TryParse(CmdArgs.Value("--lootepoch")?.TrimStart('+'), out long offset))
             LootTables.EpochOffset = offset;
 
         if (DisplayServer.GetName() == "headless" && Multiplayer.IsServer() && Online) return;

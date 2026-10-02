@@ -113,22 +113,16 @@ public partial class Swarm : Node
 
     public static Swarm? ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
-        string? Arg(string flag)
-        {
-            int i = Array.IndexOf(args, flag);
-            return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-        }
-        if (Arg("--swarm") is not { } n || !int.TryParse(n, out int count) || count < 1) return null;
-        var (host, port) = NetworkManager.ParseEndpoint(Arg("--connect") ?? "127.0.0.1");
-        int seed = int.TryParse(Arg("--seed"), out int s) ? s : 1;
-        var regions = Arg("--regions") is { } list
+        if (CmdArgs.Value("--swarm") is not { } n || !int.TryParse(n, out int count) || count < 1) return null;
+        var (host, port) = NetworkManager.ParseEndpoint(CmdArgs.Value("--connect") ?? "127.0.0.1");
+        int seed = CmdArgs.Int("--seed") ?? 1;
+        var regions = CmdArgs.Value("--regions") is { } list
             ? list.Split(',').Select(r => Regions.FirstOrDefault(x => x.Name == r.Trim())).OfType<Region>().ToArray()
             : Regions;
         if (regions.Length == 0) regions = Regions;
-        double seconds = double.TryParse(Arg("--seconds"), NumberStyles.Float, CultureInfo.InvariantCulture, out double sec) ? sec : 0;
-        int first = int.TryParse(Arg("--first"), out int f) ? f : 0;
-        int total = int.TryParse(Arg("--total"), out int t) ? t : 0;
+        double seconds = CmdArgs.Double("--seconds") ?? 0;
+        int first = CmdArgs.Int("--first") ?? 0;
+        int total = CmdArgs.Int("--total") ?? 0;
         return new Swarm(count, first, total, host, port, seed, regions, seconds);
     }
 

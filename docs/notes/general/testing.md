@@ -18,7 +18,8 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   `tools/test.sh quick|net|full [area]`. A new multi-process script sources `guard.sh` and runs each
   process through `guard_run <timeout_s> <log> cmd...`, after `guard_lock` + `guard_wait_ram <GB>`
   for a server or several clients, and `guard_unlock` in its `EXIT` trap. No bare
-  `godot ... &` without a timeout.
+  `godot ... &` without a timeout. A server + clients check sources `tools/lib/twoclient.sh`
+  instead, which does all of that (`twoclient-checks`).
 - **Never kill by name or pattern** (`taskkill /im`, `pkill`, `Stop-Process` on a match): other
   agents run Godot at the same time. Only the PIDs you started; `guard_run` already does it.
 - Network, authority or replicated state changed: `tools/test.sh net` before the PR (root `CLAUDE.md`).
@@ -58,7 +59,8 @@ fixture courses for driving, switchable systems, migrating a probe) are in `test
 - `--world fixture` = every system but the map and the generated fill, on `--chunks fixture:<course>`
   (`flat` by default). Courses (`Terrain/Fixture/FixtureCourse`): `flat`, `straight` (3 km),
   `hairpin` (6 legs, 15 m hairpins, 7 % down), `narrow` (4 m, a trunk every 5 m on both edges),
-  `junction` (9 m road, a T and a crossroads), `verge` (two bends, 6 m of grass, then trees). A
+  `junction` (9 m road, a T and a crossroads), `verge` (two bends, 6 m of grass, then trees), `lake`
+  (#299: beach, shelf, drop-off, a river, a slipway; `--watercheck`). A
   course starts at the spawn (`--at`), so `--drivecheck` runs on it unchanged.
 - Absent flags: today's boot, for players and every old command line.
 

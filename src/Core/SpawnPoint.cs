@@ -72,7 +72,7 @@ public partial class SpawnPoint : Node
 
     private static (double E, double N)? ParseLv95(string flag)
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         for (int i = 0; i < args.Length - 1; i++)
             if (args[i] == flag)
@@ -92,7 +92,7 @@ public partial class SpawnPoint : Node
         if (_settled) return;
         _waited += delta;
 
-        if (_chunks.TryGetHeight(_target.GlobalPosition, out float ground))
+        if (_chunks.TryGetSurface(_target.GlobalPosition, out float ground))
         {
             var p = _target.GlobalPosition;
             _target.GlobalPosition = new Vector3(p.X, ground + _arrivalHeight, p.Z);

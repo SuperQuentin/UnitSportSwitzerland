@@ -147,6 +147,16 @@ public sealed class NetworkChunkSource : IChunkSource
             .ConfigureAwait(false);
     }
 
+    /// <summary>The <c>.water</c> layer (#298): shipped, cached, else streamed like the cover.</summary>
+    public async Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default)
+    {
+        if (await _local.LoadWaterAsync(id, ct).ConfigureAwait(false) is { } local) return local;
+
+        return await ObtainAsync(AssetKind.Water, id, ct,
+            bytes => { using var ms = new MemoryStream(bytes); return WaterFormat.Decode(ms).ToTile(); })
+            .ConfigureAwait(false);
+    }
+
     public async Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default)
     {
         if (await _local.LoadTreesAsync(id, ct).ConfigureAwait(false) is { } local) return local;

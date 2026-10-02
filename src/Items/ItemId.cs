@@ -110,6 +110,22 @@ public enum ItemId
     PlatformBoots = 139, CombatBoots = 140, PinkSneakers = 141, WhiteSneakers = 142, MaryJanes = 143, DiscoPlatforms = 144,
     LaceArmWarmers = 145, FingerlessGloves = 146, PawGloves = 147, StripedArmWarmers = 148, NeonGloves = 149,
 
+    // ---- building (#274, docs/notes/build/building.md) ----
+    /// <summary>Held, it builds structure pieces from the pack's materials (<see cref="ItemUse.Build"/>).</summary>
+    Hammer = 150,
+
+    // ---- fire and placeables (#272, docs/notes/crafting/campfire.md) ----
+    /// <summary>Cooked at a fire (#272).</summary>
+    Fondue = 151,
+    HotChocolate = 152,
+    ToastedBread = 153,
+    /// <summary>Placed: a fire that burns 20 minutes, a cooking station (<c>PlacedKind.Campfire</c>).</summary>
+    Campfire = 154,
+    /// <summary>Held: a light in the hand, seen by everyone (it follows the replicated held item).</summary>
+    Torch = 155,
+    /// <summary>Placed: a workbench station anywhere (<c>PlacedKind.FieldWorkbench</c>).</summary>
+    FieldWorkbench = 156,
+
     // ---- shops and PAUSA vending machines (#273, docs/notes/loot/shops.md): never crafted ----
     /// <summary>Only from a PAUSA vending machine, like the three after it.</summary>
     IceTea = 160,
@@ -118,6 +134,9 @@ public enum ItemId
     IsotonicDrink = 163,
     /// <summary>Sold at hardware, sport and gun shops; carried, a tree gives one more log (<c>Loot.Gathering</c>).</summary>
     SwissArmyKnife = 164,
+
+    // ---- gadgets (#275, docs/notes/build/gadgets.md): placed, to get up high or to hide ----
+    Zipline = 180, RopeLadder = 181, Trampoline = 182, LaunchPad = 183, CamoNet = 184, HayHideout = 185,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -154,4 +173,8 @@ public enum ItemUse
     Signal,
     /// <summary>Worn in the bag slot, it adds <see cref="ItemDef.PackSlots"/> to the pack (<see cref="Inventory.Bag"/>).</summary>
     Bag,
+    /// <summary>Use builds the piece the ghost shows; Aim + Use takes your own piece back (<c>Build.BuildTool</c>).</summary>
+    Build,
+    /// <summary>Use sets the gadget down where the ghost shows; Aim + Use takes your own back (<c>Build.GadgetTool</c>).</summary>
+    Gadget,
 }

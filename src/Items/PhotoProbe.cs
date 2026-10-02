@@ -18,7 +18,7 @@ namespace UnitSport.Items;
 /// </summary>
 public partial class PhotoProbe : ChatProbe
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--photocheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--photocheck");
 
     public PhotoProbe(ItemController items) : base(items, "photocheck", shots: "photocheck_") { }
     public PhotoProbe() : this(null!) { }

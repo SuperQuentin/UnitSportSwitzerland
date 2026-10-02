@@ -99,6 +99,18 @@ public sealed class LocalChunkSource : IChunkSource
         }, ct);
     }
 
+    /// <summary>The preprocessor's <c>.water</c> layer (#298), on the runtime's 2 m lattice; null where the tile has no water file.</summary>
+    public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default)
+    {
+        return Task.Run(() =>
+        {
+            string path = Path.Combine(_dir, WaterFormat.FileName(id));
+            if (!File.Exists(path)) return (WaterTile?)null;
+            using var fs = File.OpenRead(path);
+            return WaterFormat.Decode(fs).ToTile();
+        }, ct);
+    }
+
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default)
     {
         return Task.Run(() =>

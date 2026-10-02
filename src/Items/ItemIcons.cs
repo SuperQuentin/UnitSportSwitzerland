@@ -1034,6 +1034,27 @@ public static class ItemIcons
             "..kkk...........",
         };
 
+        // building (#274): a claw hammer, steel head top right, wooden handle down to the left
+        d[ItemId.Hammer] = new[]
+        {
+            "................",
+            "................",
+            "..........kkk...",
+            ".........kwagk..",
+            "........kwaaggk.",
+            ".......kkkagGGk.",
+            "......kNnkkGGk..",
+            ".....kNnk..kk...",
+            "....kNnk........",
+            "...kNnk.........",
+            "..kNnk..........",
+            ".kNnk...........",
+            ".knk............",
+            "..k.............",
+            "................",
+            "................",
+        };
+
         d[ItemId.Ammo9mm] = new[]
         {
             "................",
@@ -1190,6 +1211,105 @@ public static class ItemIcons
             "..kOkkkkkkkkOk..",
             "..kkOOOOOOOOkk..",
             "...kk......kk...",
+        };
+
+        // ---- fire and placeables (#272) ----
+        d[ItemId.Fondue] = new[]
+        {
+            "..........k.....",
+            "..........gk....",
+            ".........kgk....",
+            "........kgk.....",
+            ".kkkkkkkgkkkkk..",
+            "kllllyyygyyyyyk.",
+            "kryyyyyyyyyyYrk.",
+            ".krrrrrrrrrrRk..",
+            ".krwrrrwrrrrRk..",
+            ".krrrrrrrrrrRk..",
+            "..krrrwrrrwRk...",
+            "...kRRRRRRRk....",
+            "....kkkkkkk.....",
+        };
+
+        d[ItemId.HotChocolate] = new[]
+        {
+            "...a...a........",
+            "....a...a.......",
+            "...a...a........",
+            ".kkkkkkkkk......",
+            ".kNnnnnnNkkk....",
+            ".kwwwwwwwk..k...",
+            ".kwwrrwwwk..k...",
+            ".kwwrrwwwk..k...",
+            ".kwwwwwwak.k....",
+            ".kwwwwwwakk.....",
+            "..kaaaaak.......",
+            "...kkkkk........",
+        };
+
+        d[ItemId.ToastedBread] = new[]
+        {
+            "...kkkkkkkkk....",
+            "..kNNNNNNNNNk...",
+            ".kNnttttttttNk..",
+            ".kNtnttttnttNk..",
+            ".kNttttnttttNk..",
+            "..kNtnttttnNk...",
+            "..kNttttnttNk...",
+            "..kNttntttnNk...",
+            "..kNtttttttNk...",
+            "..kNNNNNNNNNk...",
+            "...kkkkkkkkk....",
+        };
+
+        d[ItemId.Campfire] = new[]
+        {
+            ".......o........",
+            "......oyo.......",
+            ".....oyly.o.....",
+            "....ooyllyoo....",
+            "....oyllllyo....",
+            ".....oyllyo.....",
+            "...kNnNkkNnNk...",
+            "..knNnNnnNnNnk..",
+            ".kgakNnNNnNkagk.",
+            "kgaGkkkkkkkkGagk",
+            ".kGgkgaGgakgGk..",
+            "..kkk.kkk.kkk...",
+        };
+
+        d[ItemId.Torch] = new[]
+        {
+            "..........o.....",
+            ".........oyo....",
+            "........oylyo...",
+            "........oyly....",
+            ".........oo.....",
+            "........kNNk....",
+            ".......kNNk.....",
+            "......knnk......",
+            ".....knnk.......",
+            "....knnk........",
+            "...knnk.........",
+            "..knnk..........",
+            "..kkk...........",
+        };
+
+        d[ItemId.FieldWorkbench] = new[]
+        {
+            "..........kkk...",
+            "..........kgk...",
+            ".kkkkkkkkkkgkkk.",
+            ".kttttttttttttk.",
+            ".kNnnnnnnnnnnNk.",
+            ".kkkkkkkkkkkkkk.",
+            "..knk......knk..",
+            "..knk......knk..",
+            "..knkkkkkkkknk..",
+            "..knNNNNNNNNnk..",
+            "..knkkkkkkkknk..",
+            "..knk......knk..",
+            "..kkk......kkk..",
         };
 
         // ---- shops and PAUSA machines (#273) ----

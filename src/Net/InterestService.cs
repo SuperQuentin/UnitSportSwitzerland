@@ -61,6 +61,17 @@ public partial class InterestService : Node
     private readonly List<(long Id, FootPlayer Player)> _targets = new();
     private readonly Dictionary<long, FootPlayer> _byId = new();
     private readonly List<long> _changed = new();
+    /// <summary>
+    /// Per round, parallel to <see cref="_targets"/>: where each one is, its height above ground,
+    /// what it rides, and the index of each viewer in it. Read once per target, not once per pair
+    /// (#221): a pair used to cost three native position reads and two ground lookups.
+    /// </summary>
+    private readonly List<GlobalPos> _at = new();
+    private readonly List<float> _agl = new();
+    private readonly List<RideKind> _ride = new();
+    private readonly List<int> _viewerIndex = new();
+    /// <summary>The pairs that race each other this round, asked once per pair.</summary>
+    private readonly HashSet<(long Viewer, long Target)> _together = new();
 
     /// <summary>
     /// The frame the current viewer's pairs are judged in (<see cref="Evaluate"/>), as doubles, and
@@ -141,23 +152,30 @@ public partial class InterestService : Node
         _scratch.Clear();
         _targets.Clear();
         _byId.Clear();
+        _at.Clear(); _agl.Clear(); _ride.Clear(); _viewerIndex.Clear(); _together.Clear();
         foreach (var child in Players!.GetChildren())
             if (child is FootPlayer p && FootPlayer.NetId(p.Name) is long id)
             {
+                if (id > 0) { _scratch.Add((id, p)); _viewerIndex.Add(_targets.Count); }
                 _targets.Add((id, p));
                 _byId[id] = p;
-                if (id > 0) _scratch.Add((id, p));
+                var to = Where(p);
+                _at.Add(to);
+                // height above ground does not depend on the viewer's frame
+                _agl.Add(Ground?.Invoke(to) is { } g ? (float)(to.Alt + 1 - g) : 0f);
+                _ride.Add(p.Ride);
             }
 
-        foreach (var (viewer, viewerNode) in _scratch)
+        for (int vi = 0; vi < _scratch.Count; vi++)
         {
+            var (viewer, _) = _scratch[vi];
             // A new viewer was spawned everyone before its first set existed: its first round
             // re-decides every target, even if the answer is "nobody", or they stay for ever.
             bool first = !_sets.TryGetValue(viewer, out var set);
             if (first) _sets[viewer] = set = new HashSet<long>();
             var view = _views.TryGetValue(viewer, out var v) ? v : Interest.View.Default;
             // someone inside a building is 3 km under it: seen, and seeing, from where the building is
-            var from = Where(viewerNode);
+            var from = _at[_viewerIndex[vi]];
             // the rules work in floats: in a frame at this viewer, whatever the server's origin is
             _frameE = Math.Round(from.E / 1000) * 1000;
             _frameN = Math.Round(from.N / 1000) * 1000;
@@ -169,16 +187,16 @@ public partial class InterestService : Node
             }
             _changed.Clear();
 
-            foreach (var (target, targetNode) in _targets)
+            for (int ti = 0; ti < _targets.Count; ti++)
             {
+                long target = _targets[ti].Id;
                 if (target == viewer) continue;
                 bool was = set.Contains(target);
                 if (first) _changed.Add(target);
-                var to = Where(targetNode);
-                var at = Local(to) + Vector3.Up;
-                float agl = Ground?.Invoke(to) is { } g ? (float)(to.Alt + 1 - g) : 0f;
-                bool now_ = Interest.Relevant(eye, at, targetNode.Ride, agl, view, was,
-                    Together?.Invoke(viewer, target) == true, Ground == null ? null : _sight);
+                bool together = Together?.Invoke(viewer, target) == true;
+                if (together) _together.Add((viewer, target));
+                bool now_ = Interest.Relevant(eye, Local(_at[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
+                    together, Ground == null ? null : _sight);
                 if (now_ == was) continue;
                 if (first) { if (now_) set.Add(target); continue; }
                 // an edge case must not blink: each pair flips at most once a second
@@ -200,17 +218,19 @@ public partial class InterestService : Node
         // audience, not the set: visibility is asymmetric (a plane is seen 8 km away, a walker
         // 0.9 km), so what counts is who sees the target, not whom the target sees.
         // A race NPC is a target like a player (#50): relayed from where IT is, whoever simulates it.
-        foreach (var (target, targetNode) in _targets)
+        for (int ti = 0; ti < _targets.Count; ti++)
         {
+            var (target, targetNode) = _targets[ti];
             _near.Clear(); _far.Clear();
-            var at = Where(targetNode);
+            var at = _at[ti];
             _nearOf.TryGetValue(target, out var lastNear);
-            foreach (var (viewer, viewerNode) in _scratch)
+            for (int vi = 0; vi < _scratch.Count; vi++)
             {
+                long viewer = _scratch[vi].Id;
                 if (viewer == target || !_sets.TryGetValue(viewer, out var set) || !set.Contains(target)) continue;
                 float radius = lastNear != null && lastNear.Contains(viewer) ? NearRadius * 1.2f : NearRadius;
-                bool near = Together?.Invoke(viewer, target) == true
-                    || Where(viewerNode).DistanceTo(at) < radius;
+                bool near = _together.Contains((viewer, target))
+                    || _at[_viewerIndex[vi]].DistanceTo(at) < radius;
                 (near ? _near : _far).Add(viewer);
             }
             if (lastNear != null && _farOf.TryGetValue(target, out var lastFar)
@@ -264,8 +284,9 @@ public partial class InterestService : Node
         int last = HorizonFormat.SamplesPerSide - 1;
         int c0 = Math.Clamp((int)fc, 0, last - 1), r0 = Math.Clamp((int)fr, 0, last - 1);
         double tx = Math.Clamp(fc - c0, 0, 1), ty = Math.Clamp(fr - r0, 0, 1);
-        double h00 = index.HeightMetersAt(id, c0, r0), h10 = index.HeightMetersAt(id, c0 + 1, r0);
-        double h01 = index.HeightMetersAt(id, c0, r0 + 1), h11 = index.HeightMetersAt(id, c0 + 1, r0 + 1);
+        // the surface, not the ground: over a lake that is its water (#298), not its bed
+        double h00 = index.SurfaceMetersAt(id, c0, r0), h10 = index.SurfaceMetersAt(id, c0 + 1, r0);
+        double h01 = index.SurfaceMetersAt(id, c0, r0 + 1), h11 = index.SurfaceMetersAt(id, c0 + 1, r0 + 1);
         return (float)((h00 * (1 - tx) + h10 * tx) * (1 - ty) + (h01 * (1 - tx) + h11 * tx) * ty);
     };
 }

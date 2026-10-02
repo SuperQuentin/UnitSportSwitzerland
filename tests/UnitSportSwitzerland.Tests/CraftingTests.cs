@@ -132,4 +132,59 @@ public class CraftingTests
         store.Held[ItemId.DuctTape] = 9;
         Assert.Equal(1, Recipes.MaxTimes(store, Find(ItemId.Backpack)));   // 2 rope each
     }
+
+    // ---- fire and placeables (#272) ----
+
+    [Fact]
+    public void Cooking_needs_a_fire()
+    {
+        var store = new FakeStore();
+        store.Held[ItemId.Cheese] = 2;
+        store.Held[ItemId.Bread] = 1;
+        store.Held[ItemId.MineralWater] = 1;
+        var fondue = Find(ItemId.Fondue);
+        Assert.Equal(Station.Fire, fondue.Station);
+        Assert.Equal(0, Recipes.Craft(store, fondue, 1, Station.Hands | Station.Workbench));
+        Assert.Equal(2, store.Count(ItemId.Cheese));
+        Assert.Equal(1, Recipes.Craft(store, fondue, 1, Station.Hands | Station.Fire));
+        Assert.Equal(1, store.Count(ItemId.Fondue));
+        Assert.Equal(0, store.Count(ItemId.Cheese) + store.Count(ItemId.Bread) + store.Count(ItemId.MineralWater));
+    }
+
+    [Fact]
+    public void Every_fire_recipe_cooks_one_thing()
+    {
+        var cooking = Recipes.All.Where(r => r.Station == Station.Fire).Select(r => r.Out).ToList();
+        Assert.Equal(new[] { ItemId.Fondue, ItemId.HotChocolate, ItemId.ToastedBread, ItemId.CaramelApple, ItemId.MineralWater }, cooking);
+        Assert.All(Recipes.All.Where(r => r.Station == Station.Fire), r => Assert.Equal(1, r.Count));
+        Assert.DoesNotContain(ItemId.CaramelApple, Recipes.NeverCrafted);
+    }
+
+    [Fact]
+    public void Placeables_and_the_torch_are_made_where_the_issue_says()
+    {
+        Assert.Equal(Station.Hands, Find(ItemId.Campfire).Station);
+        Assert.Equal(new[] { new Ingredient(ItemId.Firewood, 5), new Ingredient(ItemId.Stone, 4) }, Find(ItemId.Campfire).In);
+        Assert.Equal(Station.Hands, Find(ItemId.Torch).Station);
+        Assert.Equal(Station.Workbench, Find(ItemId.FieldWorkbench).Station);
+        Assert.Equal(new[] { new Ingredient(ItemId.WoodPlanks, 6), new Ingredient(ItemId.Screws, 10), new Ingredient(ItemId.ScrapMetal, 2) },
+            Find(ItemId.FieldWorkbench).In);
+    }
+
+    [Fact]
+    public void A_campfire_burns_twenty_minutes()
+    {
+        const double lit = 1_790_000_000;
+        string payload = CampfireClock.Lit(lit);
+        Assert.Equal("1790000000", payload);
+        Assert.True(CampfireClock.Burning(payload, lit));
+        Assert.True(CampfireClock.Burning(payload, lit + 19 * 60));
+        Assert.False(CampfireClock.Burning(payload, lit + 20 * 60));
+        Assert.Equal(60, CampfireClock.SecondsLeft(payload, lit + 19 * 60), 3);
+        // a clock behind the server's never shows more than a whole fire
+        Assert.Equal(CampfireClock.BurnSeconds, CampfireClock.SecondsLeft(payload, lit - 500));
+        // not a time: out, so anyone may clear it
+        Assert.False(CampfireClock.Burning("", lit));
+        Assert.False(CampfireClock.Burning("soon", lit));
+    }
 }

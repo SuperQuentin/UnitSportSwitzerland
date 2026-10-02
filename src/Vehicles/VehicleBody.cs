@@ -211,7 +211,7 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         _wasWrecked = Wrecked;
-        if (Wrecked)
+        if (Wrecked && !Drowned)
         {
             Char();
             // A fresh wreck (a crash just now) goes up where every peer can see it. One spawned
@@ -251,6 +251,20 @@ public partial class VehicleBody : CharacterBody3D
         _anchored = on;
         if (on) Terrain.AddAnchor(this, collision: true);
         else Terrain.RemoveAnchor(this);
+    }
+
+    /// <summary>
+    /// Claimed: out of the world at once, until it is freed (offline, at the end of the frame;
+    /// online, when the server's despawn arrives). The driver who took it stands where its box is,
+    /// and a step against it shoved the bus they had just got into up onto its roof (#323).
+    /// </summary>
+    public void Retire()
+    {
+        CollisionLayer = 0;
+        CollisionMask = 0;
+        Visible = false;
+        SetPhysicsProcess(false);
+        RemoveFromGroup(Group);
     }
 
     /// <summary>What this vehicle is right now, for handing it to a driver.</summary>
@@ -476,7 +490,12 @@ public partial class VehicleBody : CharacterBody3D
     {
         float dt = (float)delta;
 
-        if (Wrecked && !_wasWrecked) { _wasWrecked = true; Char(); Detonate(); }
+        if (Wrecked && !_wasWrecked)
+        {
+            _wasWrecked = true;
+            // sunk (#299): a wreck on the bed, neither burnt nor blown up under water
+            if (!Drowned) { Char(); Detonate(); }
+        }
         if (Wrecked) WreckAge += delta;
 
         if (_shutDriverIn > 0f && (_shutDriverIn -= dt) <= 0f) DoorsOpen &= unchecked((byte)~CarRig.DriverDoor);
@@ -635,6 +654,9 @@ public partial class VehicleBody : CharacterBody3D
         // a little of the momentum survives the blast
         Velocity = Velocity * 0.4f + Vector3.Up * 4f;
     }
+
+    /// <summary>Under water (#299): every peer asks its own <see cref="World.WaterField"/>, which they share.</summary>
+    private bool Drowned => World.WaterField.IsUnderwater(GlobalPosition + Vector3.Up * 0.5f);
 
     private void Detonate()
     {

@@ -368,6 +368,7 @@ void fragment() {{
                 * RadioBounce(0.7f);
         }
         else _inHand.Visible = false;
+        StepTorch(id == ItemId.Torch && any, dt);
 
         // --- in front of the local camera ---
         if (!_player.IsMultiplayerAuthority()) return;
@@ -434,6 +435,38 @@ void fragment() {{
             _print.Position = new Vector3(0, Mathf.Lerp(0.03f, -0.045f, u), 0.001f);
             _print.Rotation = new Vector3(-0.12f * u, 0, 0);
         }
+    }
+
+    private OmniLight3D? _torchLight;
+    private float _torchT;
+
+    /// <summary>The name of a held torch's light: probes look for it.</summary>
+    public const string TorchLightName = "TorchLight";
+
+    /// <summary>
+    /// A torch in the hand lights the world round it (#272), on every copy of the player: it follows
+    /// the replicated <see cref="FootPlayer.HeldItemId"/>, so others see it with no extra state.
+    /// </summary>
+    private void StepTorch(bool lit, float dt)
+    {
+        if (lit && _torchLight == null)
+        {
+            _torchLight = new OmniLight3D
+            {
+                Name = TorchLightName, TopLevel = true, LightColor = new Color(1f, 0.66f, 0.32f),
+                LightEnergy = 1.4f, OmniRange = 7f, ShadowEnabled = false,
+            };
+            AddChild(_torchLight);
+        }
+        if (_torchLight == null) return;
+        _torchLight.Visible = lit;
+        if (!lit) return;
+        _torchT += dt;
+        _torchLight.LightEnergy = 1.4f + 0.25f * Mathf.Sin(_torchT * 13f) + 0.15f * Mathf.Sin(_torchT * 29f);
+        // at the flame on the figure's hand; with no figure drawn, about where a hand would hold it up
+        _torchLight.GlobalPosition = _inHand.Visible && _inHand.IsInsideTree()
+            ? _inHand.GlobalTransform * new Vector3(0, 0.42f, 0)
+            : _player.GlobalPosition + Vector3.Up * 1.7f;
     }
 
     /// <summary>A playing radio in the hand bounces to its beat (#261), a little less than on the ground; identity otherwise.</summary>

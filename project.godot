@@ -89,6 +89,42 @@ world_origin_offset={
 "type": "vec2",
 "value": Vector2(0, 0)
 }
+water_wave_0={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+water_wave_1={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+water_wave_2={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+water_wave_3={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+water_wave_4={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+water_wave_5={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+water_amp_a={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+water_amp_b={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+water_time={
+"type": "float",
+"value": 0.0
+}
 world_cam_pos={
 "type": "vec3",
 "value": Vector3(0, 0, 0)

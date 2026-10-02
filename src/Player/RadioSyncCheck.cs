@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Audio.Cd;
 using UnitSport.Items;
 using UnitSport.Net;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -55,10 +56,8 @@ public partial class RadioSyncCheck : Node
 
     public static RadioSyncCheck? Create(Func<FootPlayer?> local, Func<Node?> players, Inventory? inventory)
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--radiocheck");
-        if (i < 0) return null;
-        bool thrower = i + 1 < args.Length && args[i + 1] == "thrower";
+        if (!CmdArgs.Has("--radiocheck")) return null;
+        bool thrower = CmdArgs.Value("--radiocheck") == "thrower";
         GD.Print($"[radiocheck] role {(thrower ? "thrower" : "watch")}");
         return new RadioSyncCheck(thrower, local, players, inventory);
     }
@@ -172,7 +171,7 @@ public partial class RadioSyncCheck : Node
             }
             case 6 when t > 88:
             {
-                string file = Arg("--radiopersonal") ?? "";
+                string file = CmdArgs.Value("--radiopersonal") ?? "";
                 if (CdLibrary.Instance is not { } library || !File.Exists(file)) { Finish(false, $"no personal fixture ({file})"); return; }
                 foreach (int id in library.Personal.Keys) _personalBefore.Add(id);
                 library.RequestBurn(file, personal: true);
@@ -199,13 +198,6 @@ public partial class RadioSyncCheck : Node
                 Finish(true, "threw, played, changed CD, picked up, played in the hand, played a personal CD");
                 break;
         }
-    }
-
-    private static string? Arg(string name)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, name);
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
     }
 
     // ---- watcher -------------------------------------------------------------------------------

@@ -38,7 +38,8 @@ to every peer, whatever their origin (#185); `o.WorldTransform(placed.Origin)` c
   "Disconnected from the server." if the link drops — refund whatever was spent then (the flag does).
 - Server checks: kind defined, payload ≤ 512 chars, finite values, requester's body within
   `PlacedObjects.Reach` (10 m) of the spot, ≤ 200 objects per owner; removal only by the owner unless
-  the kind is in `PlacedObjects.RemovableByAnyone` (default: `Flag`; `Photo` is owner-only).
+  `PlacedObjects.AnyoneMayRemove(o)` (a kind in `RemovableByAnyone`, default `Flag`, or a burnt-out
+  `Campfire`; `Photo` and `FieldWorkbench` are owner-only; the `campfire` note).
   Owner = the chat display name (`NameOfPeer`), "local" offline — a renamed player loses its objects.
 - Clients: `Add`/`Remove` broadcasts, `Snapshot` on join (replaces everything shown). `All`,
   `Added`, `Removed` to read/observe.

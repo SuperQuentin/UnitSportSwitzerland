@@ -413,43 +413,32 @@ public partial class GpxSession : Node
 
                 // "--snap" turns road matching on as soon as there is something to match, which
                 // is how it gets verified headlessly alongside --gpx and --shot
-                if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--snap") >= 0)
+                if (CmdArgs.Has("--snap"))
                     _race.SetSnapToRoads(true);
 
                 // "--speed <n>" sets the playback multiplier, which is what the cut-pacing
                 // check varies - the whole claim being tested is that shot length does not
                 // depend on it.
-                var sargs = OS.GetCmdlineUserArgs();
-                int si = Array.IndexOf(sargs, "--speed");
-                if (si >= 0 && si + 1 < sargs.Length && double.TryParse(sargs[si + 1],
-                        System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out double sp))
-                    _race.Speed = sp;
+                if (CmdArgs.Double("--speed") is double sp) _race.Speed = sp;
 
                 // "--path <0..100>" sets the course line's opacity, so the setting can be
                 // screenshotted and exported headlessly like the lens.
-                int pi = Array.IndexOf(sargs, "--path");
-                if (pi >= 0 && pi + 1 < sargs.Length && float.TryParse(sargs[pi + 1],
-                        System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out float op))
-                    SetRibbonOpacity(op / 100f);
+                if (CmdArgs.Float("--path") is float op) SetRibbonOpacity(op / 100f);
 
                 // "--lens <n>" picks a lens by index, which is how the optics get screenshotted
                 // with --shot and compared against the undistorted frame.
-                var user = OS.GetCmdlineUserArgs();
-                int li = Array.IndexOf(user, "--lens");
-                if (li >= 0 && li + 1 < user.Length && int.TryParse(user[li + 1], out int lens))
+                if (CmdArgs.Int("--lens") is int lens)
                     _hud.LensName = _lens.Select(lens).Name;
 
                 // "--cinemamode" starts in Absolute Cinema, which is how it gets exported and
                 // screenshotted without anyone pressing C four times.
-                if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--cinemamode") >= 0)
+                if (CmdArgs.Has("--cinemamode"))
                 {
                     _camera.Mode = CameraMode.Cinema;
                     EnsureCinemaPlan();
                 }
                 // "--racingmode": Absolute Racing, the car-battle director
-                if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--racingmode") >= 0)
+                if (CmdArgs.Has("--racingmode"))
                 {
                     _camera.Mode = CameraMode.Racing;
                     EnsureCinemaPlan();
@@ -458,19 +447,15 @@ public partial class GpxSession : Node
                 // "--forceshot <name>" pins Absolute Cinema to one shot, matching the HUD's
                 // override list — how a single shot gets screenshotted or exported on its own
                 // without hoping the director happens to cut to it in time.
-                int fi = Array.IndexOf(user, "--forceshot");
-                if (fi >= 0 && fi + 1 < user.Length) _camera.ForcedCinemaShot = user[fi + 1];
+                if (CmdArgs.Value("--forceshot") is { } forced) _camera.ForcedCinemaShot = forced;
 
                 // "--bubble off" turns off the zoom bubble, for a screenshot comparison against
                 // one with it on. "--arrow" is the old name, from when it was a "HERE" marker.
                 foreach (var flag in new[] { "--bubble", "--arrow" })
-                    if (Array.IndexOf(user, flag) is var bi && bi >= 0 && bi + 1 < user.Length)
-                        _camera.ZoomBubbleEnabled = user[bi + 1] != "off";
+                    if (CmdArgs.Value(flag) is { } bubble)
+                        _camera.ZoomBubbleEnabled = bubble != "off";
 
-                int ci = Array.IndexOf(sargs, "--cinemastats");
-                if (ci >= 0 && ci + 1 < sargs.Length && double.TryParse(sargs[ci + 1],
-                        System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out double secs))
+                if (CmdArgs.Double("--cinemastats") is double secs)
                 {
                     _statsFor = secs;
                     SetProcess(true);
@@ -479,11 +464,9 @@ public partial class GpxSession : Node
                 // "--export <dir>[,fps][,speed]" runs the whole thing from the command line,
                 // which is both how it gets verified and how you would batch a folder of tracks
                 // overnight without sitting through the render.
-                var args = OS.GetCmdlineUserArgs();
-                int i = Array.IndexOf(args, "--export");
-                if (i >= 0 && i + 1 < args.Length) Callable.From(() =>
+                if (CmdArgs.Value("--export") is { } export) Callable.From(() =>
                 {
-                    var parts = args[i + 1].Split(',');
+                    var parts = export.Split(',');
                     int fps = parts.Length > 1 && int.TryParse(parts[1], out int f) ? f : 30;
                     if (parts.Length > 2 && double.TryParse(parts[2],
                             System.Globalization.NumberStyles.Float,

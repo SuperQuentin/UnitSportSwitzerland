@@ -37,7 +37,7 @@ public partial class OccasionDecor : Node
     private volatile bool _closing;
 
     /// <summary><c>--decorlog</c>: print what each tile got and where, for aiming a <c>--shot</c> at it.</summary>
-    private static readonly bool LogPlacement = OS.GetCmdlineUserArgs().Contains("--decorlog");
+    private static readonly bool LogPlacement = CmdArgs.Has("--decorlog");
 
     /// <summary>Hunt claims, supplied by <see cref="OccasionHunt"/>: a claimed spot is not drawn.</summary>
     public Func<string, bool> IsClaimed { get; set; } = _ => false;
@@ -194,7 +194,7 @@ public partial class OccasionDecor : Node
             World = _origin,
             Doors = tile.Doors,
             Roads = tile.Roads,
-            HeightAtWorld = p => _chunks.TryGetHeight(p, out float h) ? h : null,
+            HeightAtWorld = p => _chunks.TryGetSurface(p, out float h) ? h : null,
             CoverAtWorld = p => _chunks.TryGetCover(p, out var c) ? c : null,
             Towns = OccasionTowns.Near(id.MinE + 500, id.MaxN - 500, 3000).ToList(),
         };

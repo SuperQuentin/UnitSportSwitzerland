@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Avatar;
 
@@ -37,14 +38,9 @@ public partial class AvatarPreview : Node3D
         seconds = 6;
         output = "avatars.png";
 
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--avatars");
-        if (i < 0) return false;
-
-        if (i + 1 < args.Length && double.TryParse(args[i + 1],
-            System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out double s)) seconds = s;
-        if (i + 2 < args.Length && !args[i + 2].StartsWith("--")) output = args[i + 2];
+        if (!CmdArgs.Has("--avatars")) return false;
+        if (CmdArgs.Double("--avatars") is double s) seconds = s;
+        if (CmdArgs.Value("--avatars", 2, notFlag: true) is { } o) output = o;
         return true;
     }
 
@@ -97,7 +93,7 @@ public partial class AvatarPreview : Node3D
         // stays put between frames, which needs the frames side by side.
         // "--hats": every Headwear side by side on a standing figure, turned three-quarters to the
         // camera, so the occasions' hats (#18) can be judged together.
-        if (OS.GetCmdlineUserArgs().Contains("--hats"))
+        if (CmdArgs.Has("--hats"))
         {
             var hats = Enum.GetValues<Headwear>();
             for (int i = 0; i < hats.Length; i++)
@@ -120,7 +116,7 @@ public partial class AvatarPreview : Node3D
         // "--outfits [page] [--walk]" (#251): figures in the clothes, turned toward the camera (or by
         // --view degrees). Page 0 (default) is whole outfits, gothic, kawaii and the finishes; a slot
         // name (top, bottom, legs, head, …) lines up every look for that slot. --walk strides them.
-        if (OS.GetCmdlineUserArgs().Contains("--outfits"))
+        if (CmdArgs.Has("--outfits"))
         {
             BuildOutfits();
             return;
@@ -130,12 +126,9 @@ public partial class AvatarPreview : Node3D
         // [--mirrors] [--lights] [--front] [--pitch rad]" (#157): a truck or bus (HeavyCatalog index) with its driver,
         // from the driver's eye, a three-quarter front view, the left side, through the windscreen, or
         // down a bus's aisle from the back
-        if (OS.GetCmdlineUserArgs().Contains("--cockpit") && OS.GetCmdlineUserArgs().Contains("--heavy"))
+        if (CmdArgs.Has("--cockpit") && CmdArgs.Has("--heavy"))
         {
-            var args = OS.GetCmdlineUserArgs();
-            string? After(string flag) => Array.IndexOf(args, flag) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-            float Number(string flag, float fallback) => float.TryParse(After(flag), System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : fallback;
+            float Number(string flag, float fallback) => CmdArgs.Float(flag) ?? fallback;
             var spec = Player.HeavyCatalog.All[Mathf.Clamp((int)Number("--heavy", 0), 0, Player.HeavyCatalog.All.Count - 1)];
             int section = Mathf.Clamp((int)Number("--section", 0), 0, spec.Sections.Length - 1);
             var rig = HeavyRig.Create(spec, section, 0.5f, section == 0 ? HumanPalette.ForRider(1) : null);
@@ -149,14 +142,14 @@ public partial class AvatarPreview : Node3D
             rig.Gear = "A9";
             rig.Air = 8.4f;
             rig.Retarder = 2;
-            rig.Headlights = args.Contains("--lights");
-            string view = args.Contains("--outside") ? "outside" : args.Contains("--side") ? "side" : args.Contains("--saloon") ? "saloon"
-                : args.Contains("--front") ? "front" : args.Contains("--door") ? "door" : "eye";
-            rig.View = view != "eye" ? CockpitView.Outside : args.Contains("--bare") ? CockpitView.Bare : CockpitView.Body;
-            rig.MirrorsOn = args.Contains("--mirrors");
+            rig.Headlights = CmdArgs.Has("--lights");
+            string view = CmdArgs.Has("--outside") ? "outside" : CmdArgs.Has("--side") ? "side" : CmdArgs.Has("--saloon") ? "saloon"
+                : CmdArgs.Has("--front") ? "front" : CmdArgs.Has("--door") ? "door" : "eye";
+            rig.View = view != "eye" ? CockpitView.Outside : CmdArgs.Has("--bare") ? CockpitView.Bare : CockpitView.Body;
+            rig.MirrorsOn = CmdArgs.Has("--mirrors");
             AddChild(rig);
             // --deck (#162): what the walk collides with, see-through: solid grey, shut doors red, door steps green
-            if (args.Contains("--deck") && rig.Deck is { } deck)
+            if (CmdArgs.Has("--deck") && rig.Deck is { } deck)
                 foreach (var box in deck.Boxes)
                     rig.AddChild(new MeshInstance3D
                     {
@@ -175,7 +168,7 @@ public partial class AvatarPreview : Node3D
                         },
                     });
             // --fill (#158): somebody in every other seat, as passengers sit
-            if (args.Contains("--fill"))
+            if (CmdArgs.Has("--fill"))
                 for (int i = 1; i < rig.Seats.Length; i++)
                     if (rig.Seats[i].Section == section)
                         rig.AddChild(new MeshInstance3D
@@ -229,28 +222,25 @@ public partial class AvatarPreview : Node3D
         // its driver, seen from the driver's own eye (head hidden, or the whole figure with
         // --bare), or with --outside from a three-quarter front view through the glass. --turn
         // turns the steering wheel (+ = anticlockwise, a left turn).
-        if (OS.GetCmdlineUserArgs().Contains("--cockpit"))
+        if (CmdArgs.Has("--cockpit"))
         {
-            var args = OS.GetCmdlineUserArgs();
-            string? After(string flag) => Array.IndexOf(args, flag) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-            float Number(string flag, float fallback) => float.TryParse(After(flag), System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : fallback;
+            float Number(string flag, float fallback) => CmdArgs.Float(flag) ?? fallback;
             var cars = Player.CarCatalog.All;
             var spec = cars[Mathf.Clamp((int)Number("--car", 0), 0, cars.Count - 1)];
             var rig = CarRig.Create(spec.Body, spec.Wheelbase, spec.Gauges, HumanPalette.ForRider(1));
-            bool outside = args.Contains("--outside");
+            bool outside = CmdArgs.Has("--outside");
             rig.WheelTurn = Mathf.DegToRad(Number("--turn", 0f));
             rig.SteerAngle = rig.WheelTurn / spec.SteerRatio;
             rig.Throttle = Number("--throttle", 0.4f);
             rig.Rpm = Mathf.Lerp(spec.IdleRpm, spec.Redline, rig.Throttle);
             rig.SpeedKmh = 88f;
             rig.Gear = 3;
-            rig.Headlights = args.Contains("--lights");
-            rig.View = outside ? CockpitView.Outside : args.Contains("--bare") ? CockpitView.Bare : CockpitView.Body;
-            rig.MirrorsOn = args.Contains("--mirrors");
+            rig.Headlights = CmdArgs.Has("--lights");
+            rig.View = outside ? CockpitView.Outside : CmdArgs.Has("--bare") ? CockpitView.Bare : CockpitView.Body;
+            rig.MirrorsOn = CmdArgs.Has("--mirrors");
             AddChild(rig);
             // --fill (#158): somebody in every other seat, as passengers sit
-            if (args.Contains("--fill"))
+            if (CmdArgs.Has("--fill"))
                 for (int i = 1; i < rig.Seats.Length; i++)
                     rig.AddChild(new MeshInstance3D
                     {
@@ -290,7 +280,7 @@ public partial class AvatarPreview : Node3D
         // top down, lights on half a second in (so the shot shows where the animation ENDS; a
         // short [seconds] catches it mid-fold), then the NB with both set from the start and a
         // pop-up coupe with its lights on.
-        if (OS.GetCmdlineUserArgs().Contains("--cartops"))
+        if (CmdArgs.Has("--cartops"))
         {
             var cars = Player.CarCatalog.All;
             Player.CarSpec Find(string label) => cars.First(c => c.Label == label);
@@ -338,12 +328,10 @@ public partial class AvatarPreview : Node3D
         }
 
         // "--carsetups [--car N] [--setups 0,3,2,4]": one car in several presets (#40), side by side
-        if (OS.GetCmdlineUserArgs().Contains("--carsetups"))
+        if (CmdArgs.Has("--carsetups"))
         {
-            var args = OS.GetCmdlineUserArgs();
-            string? After(string flag) => Array.IndexOf(args, flag) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-            var car = Player.CarCatalog.All[int.TryParse(After("--car"), out int n) ? Mathf.Clamp(n, 0, Player.CarCatalog.All.Count - 1) : 0];
-            var setups = (After("--setups") ?? "0,3,2,4").Split(',').Select(w => Player.CarSetups.Parse(w) ?? Player.CarSetups.All[0]).ToArray();
+            var car = Player.CarCatalog.All[CmdArgs.Int("--car") is int n ? Mathf.Clamp(n, 0, Player.CarCatalog.All.Count - 1) : 0];
+            var setups = (CmdArgs.Value("--setups") ?? "0,3,2,4").Split(',').Select(w => Player.CarSetups.Parse(w) ?? Player.CarSetups.All[0]).ToArray();
             for (int i = 0; i < setups.Length; i++)
             {
                 var spec = setups[i].Apply(car);
@@ -484,14 +472,12 @@ public partial class AvatarPreview : Node3D
 
     private void BuildOutfits()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int at = Array.IndexOf(args, "--outfits");
-        string page = at + 1 < args.Length && !args[at + 1].StartsWith("--") ? args[at + 1] : "0";
-        _outfitWalk = args.Contains("--walk");
+        string page = CmdArgs.Value("--outfits", notFlag: true) ?? "0";
+        _outfitWalk = CmdArgs.Has("--walk");
 
         if (page == "riders")
         {
-            BuildRiders(args);
+            BuildRiders();
             return;
         }
 
@@ -507,7 +493,7 @@ public partial class AvatarPreview : Node3D
         // --focus N: that one close up; --focus N --count k: k of them from N
         if (_focus >= 0 && _focus < looks.Count)
         {
-            int count = Array.IndexOf(args, "--count") is var c and >= 0 && c + 1 < args.Length && int.TryParse(args[c + 1], out int n) ? n : 1;
+            int count = CmdArgs.Int("--count") ?? 1;
             looks = looks.Skip(_focus).Take(Mathf.Max(1, count)).ToList();
         }
 
@@ -547,11 +533,9 @@ public partial class AvatarPreview : Node3D
     /// all moving together at --speed (default 12) with the camera alongside, so the skirts feel
     /// the wind of their own motion (<see cref="FigureWind"/>) exactly as in the game.
     /// </summary>
-    private void BuildRiders(string[] args)
+    private void BuildRiders()
     {
-        int si = Array.IndexOf(args, "--speed");
-        _convoySpeed = si >= 0 && si + 1 < args.Length && float.TryParse(args[si + 1], System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : 12f;
+        _convoySpeed = CmdArgs.Float("--speed") ?? 12f;
         _convoy = new Node3D { Name = "Convoy" };
         AddChild(_convoy);
         var yaw = new Vector3(0, Mathf.Pi * 0.5f, 0);   // facing −X: side-on to the camera, riding left

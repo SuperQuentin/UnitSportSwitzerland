@@ -75,6 +75,9 @@ public static class Surfaces
 
     private static Surface Compute(ChunkManager chunks, Vector3 feet)
     {
+        // standing in water (World/WaterField, #299): a lake's shallows over a gravel bed are water
+        if (chunks.TryGetWaterLevel(feet, out float still) && still - feet.Y > 0.05f) return Surface.Water;
+
         bool known = chunks.TryGetCover(feet, out var cover);
 
         // water is water even where a road is mapped across it: the raster says the lake is here
@@ -236,7 +239,7 @@ public static class Surfaces
 
     private static int _epoch;
     private static ChunkManager? _watched;
-    private static readonly bool CheckIndex = OS.GetCmdlineUserArgs().Contains("--surfacecheck");
+    private static readonly bool CheckIndex = CmdArgs.Has("--surfacecheck");
 
     /// <summary>A road tile goes when its terrain tile unloads: they used to pile up for the whole session (#221).</summary>
     private static void Watch(ChunkManager chunks)

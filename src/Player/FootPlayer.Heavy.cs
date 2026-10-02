@@ -21,7 +21,8 @@ public partial class FootPlayer
     [Export] public int TrailerCode { get; set; }
 
     /// <summary>The train's joint angles (rad), written by the owner every frame: what a remote copy poses the sections from.</summary>
-    [Export] public Vector4 TrainPose { get; set; }
+    /// Replicated inside <see cref="NetPose"/>, and only while not all zero.
+    public Vector4 TrainPose { get; set; }
 
     /// <summary>A truck being driven, or null.</summary>
     public Truck? Heavy => _ride as Truck;
