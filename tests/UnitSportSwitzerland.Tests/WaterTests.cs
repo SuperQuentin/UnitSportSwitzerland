@@ -332,6 +332,10 @@ public class FixtureLakeTests
         Assert.True(river.TrySample(StartE - 600 - riverTile.MinE, riverTile.MaxN - (StartN + Lake.RiverY), out _, out float riverScale));
         Assert.True(riverScale < 0.02f, $"a river stays flat, scale {riverScale}");
 
+        // a server builds the layer on the coarse grid, a client on the full one: the same wave scale
+        var coarse = WaterLayer.Create(tile, (await source.LoadCoarseChunkAsync(deepTile))!)!;
+        for (int i = 0; i < layer.Scale.Length; i += 997) Assert.Equal(layer.Scale[i], coarse.Scale[i]);
+
         // a course with no water answers none
         Assert.Null(await FixtureChunkSource.Create("flat", StartE, StartN)!.LoadWaterAsync(TileId.FromLv95(StartE, StartN)));
     }

@@ -15,7 +15,7 @@
      real course). Tier 3, never in `quick`/`net`.
 - **Driving, racing and traffic checks run on a fixture course, never require the Col du
   Mollendruz** (or any real course): `--drivecheck --chunks fixture:hairpin --traffic 0`. Courses:
-  `flat straight hairpin narrow junction verge` (`FixtureCourse`). A real course is an optional
+  `flat straight hairpin narrow junction verge lake` (`FixtureCourse`). A real course is an optional
   final tier-3 check on a racing change.
 - **A probe that runs on `--world flat`** takes a nullable `ChunkManager`, asks the ground through
   `TestWorld.TryGround(_chunks, at, out y)` (the plane when null), places its `FootPlayer` with

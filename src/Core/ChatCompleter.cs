@@ -49,6 +49,7 @@ public sealed class ChatCompleter
         ("occasion", false, true, "[list | start | stop | auto] [id]"),
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
         ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]"),
+        ("water", false, true, "[E N]"),
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("spawn", true, true, "<item> [count]"),
         ("catalogue", true, true, ""),

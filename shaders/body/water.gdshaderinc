@@ -40,7 +40,9 @@ void vertex() {
     // UV.x: the water layer's wave scale (fetch x depth). The tile's transform is a translation,
     // so the world displacement is the local one.
     vec3 rest = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    vec3 d = water_wave_displace(pattern_xz(rest), UV.x, wave_normal);
+    vec3 n;
+    vec3 d = water_wave_displace(pattern_xz(rest), UV.x, n);
+    wave_normal = n;
     VERTEX += d;
     wave_lift = d.y;
     world_pos = rest + d;
@@ -74,7 +76,8 @@ void fragment() {
 
     vec3 col = mix(deep_color, shallow_color, band);
 #ifndef STYLE_LIT
-    col = FRONT_FACING ? col : mix(col, underside_color, 0.65);
+    // from below: a bright skin, the waves' slopes in its bands
+    col = FRONT_FACING ? col : underside_color * (0.5 + 0.7 * band);
 #endif
 
     // sparse glints on the wave crests — kept small and infrequent, otherwise they read

@@ -552,15 +552,14 @@ public partial class Ambience : Node, IOriginShiftAware
             }
         }
 
-        // mapped water cover (lakes and wide rivers the raster does see): a soft lapping instead
+        // still water (lakes and wide rivers, World/WaterField): a soft lapping instead, at the surface
         for (int r = 1; r <= 4; r++)
             for (int k = 0; k < 8; k++)
             {
                 float d = r * 15f, a = k * Mathf.Tau / 8f + r * 0.4f;
                 var p = pos + new Vector3(Mathf.Cos(a) * d, 0, Mathf.Sin(a) * d);
                 if (d >= best) continue;
-                // the still level, not the ground: since #298 the ground under a lake is its bed
-                if (_chunks.TryGetWaterLevel(p, out float y))
+                if (World.WaterField.TryLevelAt(p, out float y))
                 {
                     best = d; bestPos = new Vector3(p.X, y, p.Z); bestWidth = 12f; lake = true;
                 }

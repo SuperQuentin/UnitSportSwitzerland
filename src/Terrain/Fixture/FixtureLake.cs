@@ -94,17 +94,17 @@ public static class Lake
 
     /// <summary>
     /// Still water: the lake's level inside its shore, the river's in its channel. Wet a little
-    /// past the waterline (0.3 m of ground above the level) so the surface meets the beach under
-    /// it rather than stopping a lattice square short.
+    /// past the waterline (up to 1 m of ground above the level) so the surface runs on under the
+    /// beach, which hides its edge, rather than stopping in 2 m steps short of it.
     /// </summary>
     public static (double Level, double Fetch) Water(double x, double y)
     {
         double g = Ground(x, y);
-        if (Inside(x, y) > -40 && g < Level + 0.3) return (Level, LakeFetch);
+        if (Inside(x, y) > -60 && g < Level + 1.0) return (Level, LakeFetch);
         if (x < RiverJoinX + 30 && Math.Abs(y - RiverY) < RiverHalfWidth + 1)
         {
             double level = RiverLevel(x);
-            if (g < level + 0.3) return (level, 2 * RiverHalfWidth);
+            if (g < level + 1.0) return (level, 2 * RiverHalfWidth);
         }
         return (double.NaN, 0);
     }

@@ -83,10 +83,27 @@ public sealed class WaterLayer
             {
                 int i = r * Size + c;
                 if (float.IsNaN(level[i])) continue;
-                float depth = level[i] - (float)bed.HeightMetersAt(c * Stride, r * Stride);
+                float depth = level[i] - BedAt(bed, c * Stride, r * Stride);
                 scale[i] = Quantize(FetchFactor(fetch[i]) * DepthFactor(depth));
             }
         return new WaterLayer(level, scale);
+    }
+
+    /// <summary>
+    /// The bed under full-resolution vertex (col, row) for the wave scale: bilinear over the 10 m
+    /// lattice (<see cref="ChunkFormat.CoarseStride"/>), which the full grid and the coarse companion
+    /// hold alike. A server builds its layer on the coarse grid and a client on the full one, and
+    /// their waves must still match to the millimetre.
+    /// </summary>
+    public static float BedAt(ChunkGrid grid, int col, int row)
+    {
+        const int L = ChunkFormat.CoarseStride, Last = ChunkFormat.GridSize - 1;
+        int c0 = Math.Min(col / L * L, Last - L), r0 = Math.Min(row / L * L, Last - L);
+        float fu = (col - c0) / (float)L, fv = (row - r0) / (float)L;
+        float h00 = (float)grid.HeightMetersAt(c0, r0), h10 = (float)grid.HeightMetersAt(c0 + L, r0);
+        float h01 = (float)grid.HeightMetersAt(c0, r0 + L), h11 = (float)grid.HeightMetersAt(c0 + L, r0 + L);
+        float north = h00 + (h10 - h00) * fu, south = h01 + (h11 - h01) * fu;
+        return north + (south - north) * fv;
     }
 
     /// <summary>

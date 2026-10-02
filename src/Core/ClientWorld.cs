@@ -126,6 +126,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             OriginCheck.Run(this);
             return;
         }
+        // the wave shader against the C# wave field (#299): needs frames and a GPU, builds no world
+        if (World.WaterParity.Requested)
+        {
+            AddChild(new World.WaterParity { Name = "WaterParity" });
+            return;
+        }
         // idempotent: the shell, which owns the window settings, has usually installed it already
         PlayerInput.Install(GetParent());
         if (Player.WheelProbe.ForceCheckRequested)
@@ -554,6 +560,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.PassengerProbe.ParseArgs() is { } passengerRole) AddChild(new Player.PassengerProbe(passengerRole, () => LocalPlayer));
         if (Player.DeckProbe.ParseArgs() is { } deckRole) AddChild(new Player.DeckProbe(deckRole, () => LocalPlayer));
         if (Player.ExitProbe.Requested) AddChild(new Player.ExitProbe(() => LocalPlayer));
+        if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
