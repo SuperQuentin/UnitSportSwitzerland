@@ -12,7 +12,7 @@
 `ShotRunner --nohud` hid the CanvasLayers with a whole-tree `FindChildren` every frame. dotnet-trace
 at 40 rings: 91 % of the main thread inside that call. It was the "~4.5 ms per frame that grows with
 the tile count, independent of draws" every `--shot-queue --nohud` perf measurement saw; the game
-itself never paid it. Medians, Sion, windowed, vsync off, real chunks (PR #<this PR>):
+itself never paid it. Medians, Sion, windowed, vsync off, real chunks (PR #334):
 
 | rings / view | frame before | frame after | process_ms before / after |
 |---|---|---|---|
