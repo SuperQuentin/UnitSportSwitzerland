@@ -80,6 +80,9 @@ public sealed class CachingChunkSource : IChunkSource
     public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default) =>
         GetAsync(AssetSlot.Cover, id, () => _inner.LoadCoverAsync(id, ct), c => c.LongLength + 32);
 
+    /// <summary>Not cached yet: only the fixture courses answer it (#299); #298's file may want a slot.</summary>
+    public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default) => _inner.LoadWaterAsync(id, ct);
+
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default) =>
         GetAsync(AssetSlot.Trees, id, () => _inner.LoadTreesAsync(id, ct),
             t => 64 + t.Count * 17L);
