@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Player;
+using UnitSport.Core;
 
 namespace UnitSport.XR;
 
@@ -450,7 +451,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
                 target = (Mathf.Clamp((speed - 1.5f) / 14f, 0f, 0.55f) + Mathf.Clamp((turn - 0.4f) / 2.5f, 0f, 0.45f)) * frame;
             }
         }
-        _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, 1f - Mathf.Exp(-6f * dt));
+        _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, MathX.Damp(6f, dt));
         _blink = Mathf.Max(0f, _blink - dt / BlinkSeconds);
         _vignette.Visible = _vignetteLevel > 0.02f || _blink > 0f;
         _vignetteMat.SetShaderParameter("strength", _vignetteLevel);

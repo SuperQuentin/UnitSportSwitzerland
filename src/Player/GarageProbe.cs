@@ -524,7 +524,7 @@ public partial class GarageProbe : Node
         for (float t = 0; t < 3f; t += Dt, n++)
         {
             car.Step(new RideInput(0.4f, 0f, -0.6f, false), ground, Dt, ref m);
-            sum += Mathf.Abs(Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi));
+            sum += Mathf.Abs(MathX.WrapAngle(m.Slip));
         }
         GameSettings.Current.RideProfile = profile;
         return sum / n;

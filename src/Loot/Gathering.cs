@@ -423,7 +423,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
                     if (Mathf.Abs(t.Y - feet.Y) > 3f) continue;
                     // measured from wherever is closer, the feet or a step ahead, so a tree
                     // beside the player counts as well as one in front
-                    float d = Mathf.Min(Flat(t - feet), Flat(t - ahead));
+                    float d = Mathf.Min(MathX.FlatLength(t - feet), MathX.FlatLength(t - ahead));
                     if (d < bestD) { bestD = d; best = t; }
                 }
             }
@@ -453,7 +453,6 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         return false;
     }
 
-    private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
     /// <summary>The origin moved (#185): where the current harvest started moved with it.</summary>
     public void OnOriginShifted(Core.OriginShift shift) => _startedAt = shift.Point(_startedAt);

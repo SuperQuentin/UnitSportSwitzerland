@@ -153,7 +153,7 @@ public partial class HeavyNetProbe : Node
         {
             var pin = v.ToGlobal(v.Trailer!.PivotNode);
             Log($"kingpin of {v.Name}: {new Vector2(pin.X - hitch.X, pin.Z - hitch.Z).Length():F2} m across, {pin.Y - hitch.Y:F2} m up, "
-                + $"{Mathf.RadToDeg(Mathf.Wrap(v.Rotation.Y - me.Rotation.Y, -Mathf.Pi, Mathf.Pi)):F0}°, moving {v.Velocity.Length():F2} m/s; candidate {me.CoupleCandidate(t)?.Name ?? "none"}"
+                + $"{Mathf.RadToDeg(MathX.WrapAngle(v.Rotation.Y - me.Rotation.Y)):F0}°, moving {v.Velocity.Length():F2} m/s; candidate {me.CoupleCandidate(t)?.Name ?? "none"}"
                 + $"; tractor y {me.GlobalPosition.Y:F2} (terrain {Height(me.GlobalPosition):F2}), trailer y {v.GlobalPosition.Y:F2} (terrain {Height(v.GlobalPosition):F2}), asleep-ish {v.Velocity.Y:F2}");
         }
     }
@@ -172,7 +172,7 @@ public partial class HeavyNetProbe : Node
             string where = string.Join(" ", sections.Select(s =>
             {
                 var local = p.ToLocal(s.GlobalPosition);
-                float yaw = Mathf.RadToDeg(Mathf.Wrap(s.GlobalRotation.Y - p.GlobalRotation.Y, -Mathf.Pi, Mathf.Pi));
+                float yaw = Mathf.RadToDeg(MathX.WrapAngle(s.GlobalRotation.Y - p.GlobalRotation.Y));
                 return $"{s.Name}@({local.X:F1},{local.Z:F1}) yaw {yaw:F0}°";
             }));
             lines.Add($"player {p.Name}: {p.Ride} trailer {p.TrailerCode} pose ({Mathf.RadToDeg(p.TrainPose.X):F0}°,{Mathf.RadToDeg(p.TrainPose.Y):F0}°) flags {Mathf.RoundToInt(p.Anim.W)} sections [{where}]");

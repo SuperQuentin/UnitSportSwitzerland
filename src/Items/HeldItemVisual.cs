@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using UnitSport.Player;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -191,7 +192,7 @@ void fragment() {{
             end?.Invoke();
         }
         w = Mathf.Clamp(w, 0f, 1f);
-        _shotW = w * w * (3f - 2f * w);
+        _shotW = Mathf.SmoothStep(0f, 1f, w);
     }
 
     /// <summary>Text drawn on the GPS screen (first person); null leaves it blank.</summary>
@@ -390,7 +391,7 @@ void fragment() {{
         var euler = turn.GetEuler();
         var target = new Vector3(-euler.Y, euler.X, 0) * 0.35f;
         target = target.LimitLength(0.06f);
-        _sway = _sway.Lerp(target, 1f - Mathf.Exp(-10f * dt));
+        _sway = _sway.Lerp(target, MathX.Damp(10f, dt));
 
         _raise = Mathf.MoveToward(_raise, 1f, dt * 4f);
         Kick = Mathf.MoveToward(Kick, 0f, dt * 5f);
@@ -398,7 +399,7 @@ void fragment() {{
 
         // ease toward the pose; Rest keeps the old hand-held tilt
         var (tp, tr) = PoseTransform(_pose);
-        float k = 1f - Mathf.Exp(-12f * dt);
+        float k = MathX.Damp(12f, dt);
         _curPos = _curPos.Lerp(tp, k);
         _curRot = _curRot.Lerp(tr, k);
         float remaining = (tp - _curPos).Length() + (tr - _curRot).Length() * 0.2f;

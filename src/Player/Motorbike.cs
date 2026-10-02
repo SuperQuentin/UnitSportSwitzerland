@@ -3,6 +3,7 @@ using System.Linq;
 using Godot;
 using UnitSport.Audio;
 using UnitSport.Avatar;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -132,7 +133,7 @@ public sealed class Motorbike : Rideable, IEngined
         if (!ground.OnFloor)
         {
             // off a crest: the rear spins free and the air is all that acts
-            Rpm = Mathf.Lerp(Rpm, Mathf.Lerp(s.IdleRpm, s.Redline, input.Throttle), 1f - Mathf.Exp(-6f * dt));
+            Rpm = Mathf.Lerp(Rpm, Mathf.Lerp(s.IdleRpm, s.Redline, input.Throttle), MathX.Damp(6f, dt));
             v -= 0.5f * AirDensity * s.DragArea * v * v / m * dt;
             motion.Speed = Mathf.Max(0f, v);
             AccelX = 0f;
