@@ -403,12 +403,46 @@ public partial class PlacedObjects : Node
     }
 
     /// <summary>Within reach of the requester's body; offline there is nobody to doubt.</summary>
-    private bool InReach(long peer, double e, double n, double alt)
+    private bool InReach(long peer, double e, double n, double alt, float reach = Reach)
     {
         if (!Online) return true;
         if (GetNodeOrNull<Player.FootPlayer>("../Players/" + peer) is not { } body) return false;
         // in LV95, from what the player published: the server's origin may be far away (#185)
-        return body.Global.DistanceTo(new GlobalPos(e, n, alt)) <= Reach;
+        return body.Global.DistanceTo(new GlobalPos(e, n, alt)) <= reach;
+    }
+
+    // ---- a flare sets a hay hideout alight (#359) --------------------------------------------------
+
+    /// <summary>How far from the shooter a flare can set a hay hideout alight (server check).</summary>
+    public const float BurnReach = 30f;
+
+    /// <summary>Asks to burn a hay hideout the requester's flare hit; anyone's, not only one's own.</summary>
+    public void RequestBurn(long id)
+    {
+        if (Online) RpcId(1, MethodName.AskBurn, id);
+        else ServeBurn(1, id);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void AskBurn(long id) => ServeBurn(Multiplayer.GetRemoteSenderId(), id);
+
+    private void ServeBurn(long peer, long id)
+    {
+        if (!_objects.TryGetValue(id, out var o) || o.Kind != PlacedKind.HayHideout || !InReach(peer, o.E, o.N, o.Altitude, BurnReach)) return;
+        GD.Print($"[placed] HayHideout #{id} set alight by {OwnerName(peer)}");
+        if (Online)
+            foreach (int p in Multiplayer.GetPeers())
+                RpcId(p, MethodName.Burnt, id);
+        Burnt(id);   // here: offline the client's own fire, on a server just the removal
+        if (o.Owner != MatchOwner) Save();
+    }
+
+    /// <summary>Burns down where it stands (fire, smoke, light for a few seconds), then is gone.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Burnt(long id)
+    {
+        if (!_server && _objects.TryGetValue(id, out var o)) Build.GadgetMeshes.Burn(this, o.WorldTransform(_origin));
+        Drop(id);
     }
 
     // ---- persistence ----------------------------------------------------------------------------

@@ -423,6 +423,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public void RefreshNetVisibility(long viewer) => _vis?.UpdateVisibility((int)viewer);
 
     public const int PoseStride = 0, PoseAir = 1, PoseTucked = 2;
+    /// <summary>Hanging from a zipline; climbing a ladder, <c>Anim.X</c> = which half of the step (#359).</summary>
+    public const int PoseHang = 4, PoseClimb = 5;
 
     /// <summary>
     /// The hat on the figure, as an <see cref="Avatar.Headwear"/> (occasions, #18). Replicated like
@@ -1651,6 +1653,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
 
+        // held by a zipline or a ladder (#359): the gadget says how to hang, everyone sees it
+        if (_carried && CarriedPose != 0)
+        {
+            PoseKind = CarriedPose == 1 ? PoseHang : PoseClimb;
+            Anim = new Vector4(CarriedPose == 1 ? 0f : ClimbStep & 1, 0f, 0f, 0f);
+            BodyPose = Transform3D.Identity;
+            return;
+        }
+
         PoseKind = _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
         if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
         Anim = new Vector4(speed, _stridePhase, 0f, 0f);
@@ -1766,6 +1777,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>Draws the on-foot figure from the published pose — the same code for the owner and every remote copy.</summary>
+    /// <summary>The figure for a hang or a climbing step (<see cref="PoseHang"/>, <see cref="PoseClimb"/>).</summary>
+    private Avatar.HumanPose CarriedFigure() =>
+        PoseKind == PoseHang ? Avatar.HumanPose.Hanging
+        : Anim.X > 0.5f ? Avatar.HumanPose.ClimbRight : Avatar.HumanPose.ClimbLeft;
+
     private void ApplyFootPose()
     {
         if (_walker == null) return;
@@ -1815,6 +1831,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             {
                 PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
                 PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
+                PoseHang or PoseClimb => Avatar.HumanMeshBuilder.MountsForPose(CarriedFigure(), arm, blend),
                 _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance),
             };
         }
@@ -1828,6 +1845,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                     : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat),
                 PoseAir => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
                     : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
+                PoseHang or PoseClimb => Avatar.HumanMeshBuilder.BuildPosed(palette, CarriedFigure(), arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
                 _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
                     dance: dance, into: _poseMesh ??= new ArrayMesh()),
             };

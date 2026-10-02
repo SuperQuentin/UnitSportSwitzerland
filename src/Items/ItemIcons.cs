@@ -1312,6 +1312,133 @@ public static class ItemIcons
             "..kkk......kkk..",
         };
 
+        // ---- gadgets (#275, drawn in #359) ----
+        // two posts and the cable between them, the pulley on it
+        d[ItemId.Zipline] = new[]
+        {
+            "................",
+            ".kk.............",
+            ".kNkk...........",
+            ".kNkgkkk........",
+            ".kNk...gkkk.....",
+            ".kNk......gkkk..",
+            ".kNk......kak.kk",
+            ".kNk......kgk.kN",
+            ".kNk.......k..kN",
+            ".kNk..........kN",
+            ".kNk..........kN",
+            ".kNk..........kN",
+            ".kNk..........kN",
+            "kkkkk........kkk",
+            "eeeeeeeeeeeeeeee",
+            "................",
+        };
+
+        // two ropes and wooden rungs
+        d[ItemId.RopeLadder] = new[]
+        {
+            "...gg......gg...",
+            "...kTk....kTk...",
+            "...kTkkkkkkTk...",
+            "...kTnnnnnnTk...",
+            "...kTkkkkkkTk...",
+            "...kTk....kTk...",
+            "...kTkkkkkkTk...",
+            "...kTnnnnnnTk...",
+            "...kTkkkkkkTk...",
+            "...kTk....kTk...",
+            "...kTkkkkkkTk...",
+            "...kTnnnnnnTk...",
+            "...kTkkkkkkTk...",
+            "...kTk....kTk...",
+            "...ktk....ktk...",
+            "................",
+        };
+
+        // the mat in its tyre rim on plank legs
+        d[ItemId.Trampoline] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            ".....kkkkkk.....",
+            "...kkddddddkk...",
+            "..kddGGGGGGddk..",
+            ".kdGGGyyyyGGGdk.",
+            ".kdGGyGGGGyGGdk.",
+            ".kdGGGyyyyGGGdk.",
+            "..kddGGGGGGddk..",
+            "...kkddddddkk...",
+            "...kNk....kNk...",
+            "...kNk....kNk...",
+            "...kkk....kkk...",
+            "................",
+            "................",
+        };
+
+        // the pad and its chevrons pointing up
+        d[ItemId.LaunchPad] = new[]
+        {
+            "................",
+            "................",
+            ".......kk.......",
+            "......kyyk......",
+            ".....kyyyyk.....",
+            "......kyyk......",
+            ".....kkyykk.....",
+            "....kyykkyyk....",
+            "...kkkkkkkkkk...",
+            "..kcccccccccck..",
+            ".kcCCCCCCCCCCck.",
+            ".kGGGGGGGGGGGGk.",
+            ".kGgGgGgGgGgGGk.",
+            "..kkkkkkkkkkkk..",
+            "................",
+            "................",
+        };
+
+        // the patched net on its four poles
+        d[ItemId.CamoNet] = new[]
+        {
+            "................",
+            "................",
+            "..kkkkkkkkkkkk..",
+            ".keEneEnEeneEek.",
+            ".kEneEeEnEeEnek.",
+            ".knEeEnEeEneEnk.",
+            "..kkkkkkkkkkkk..",
+            "..kN........Nk..",
+            "..kN........Nk..",
+            "..kN........Nk..",
+            "..kN........Nk..",
+            "..kN........Nk..",
+            "..kN........Nk..",
+            ".kkkk......kkkk.",
+            "................",
+            "................",
+        };
+
+        // a bale hut with its dark doorway
+        d[ItemId.HayHideout] = new[]
+        {
+            "................",
+            "................",
+            "..kkkkkkkkkkkk..",
+            ".kyyyyyyyyyyyyk.",
+            ".kYYYYYYYYYYYYk.",
+            ".kyyyyyyyyyyyyk.",
+            ".kyyykkkkkkyyyk.",
+            ".kYYYkddddkYYYk.",
+            ".kyyykddddkyyyk.",
+            ".kyyykddddkyyyk.",
+            ".kYYYkddddkYYYk.",
+            ".kyyykddddkyyyk.",
+            ".kyyykddddkyyyk.",
+            ".kkkkkkkkkkkkkk.",
+            "................",
+            "................",
+        };
+
         return d;
     }
 }
