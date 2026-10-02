@@ -28,3 +28,4 @@
   image fetched by hash); see `item-net-events`.
 - `<godot> --path . -- --ride foot,120 --view first --photocheck --photo-dir <abs dir>`: the Polaroid offline
   with screenshots (see `polaroid`).
+- `tools/bonkcheck.sh` (net tier, no terrain) and `--interactcheck` (offline, windowed, `--view third`, needs `--chunks`): thrown hits over loopback, and the #261 interactions photographed; see `throw-hits`.

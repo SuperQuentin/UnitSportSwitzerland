@@ -414,9 +414,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private float _itemArmBlend;
     private bool _itemArmInit;
 
-    /// <summary>The dance's 0..1 ease, and the radio it follows (kept through the ease-out).</summary>
+    /// <summary>The dance's 0..1 ease, and the music it follows (kept through the ease-out).</summary>
     private float _danceWeight;
-    private Items.RadioBody? _danceRadio;
+    private Items.RadioManager.Music? _danceMusic;
+    /// <summary>How many are dancing to the same music, counted twice a second (#261).</summary>
+    private int _danceCrowd;
+    private double _danceCrowdAt;
 
     /// <summary>An item asking for a narrower view (binoculars, a camera's viewfinder); null for the normal FOV.</summary>
     public float? FovOverride { get; set; }
@@ -986,6 +989,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:OutfitBits");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:HeldRadio");
+        replication.AddProperty(".:BackItemId");
         replication.AddProperty(".:Down");
         replication.AddProperty(".:CarRadio");
         replication.AddProperty(".:CarCd");
@@ -997,7 +1001,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:CarRadio", ".:CarCd", ".:Down" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1580,7 +1584,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private bool DanceAllowed() =>
         Ride == RideKind.OnFoot && !KnockedOut && !_sliding && !Indoors
-        && Items.RadioManager.Instance?.NearestPlaying(GlobalPosition, Items.RadioManager.DanceRadius * 1.15f) != null;
+        && Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius * 1.15f) != null;
 
     /// <summary>
     /// The beat-driven pose for this frame, or null. Everything comes off the replicated
@@ -1590,31 +1594,85 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private Avatar.DanceParams? StepDance(float dt)
     {
-        Items.RadioBody? radio = null;
+        Items.RadioManager.Music? music = null;
         bool want = DanceId != 0 && Ride == RideKind.OnFoot && !KnockedOut && !_sliding;
         if (want)
         {
             // a remote copy tolerates a wider ring: its position lags the owner's a little
-            radio = Items.RadioManager.Instance?.NearestPlaying(GlobalPosition, Items.RadioManager.DanceRadius * 1.3f);
-            want = radio != null;
+            music = Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius * 1.3f);
+            want = music != null;
         }
         _danceWeight = Mathf.MoveToward(_danceWeight, want ? 1f : 0f, dt * 4f);
-        if (radio != null) _danceRadio = radio;
-        if (_danceWeight <= 0.001f || _danceRadio == null || !IsInstanceValid(_danceRadio) || !_danceRadio.IsInsideTree()
-            || !_danceRadio.BeatAt(Net.ClockSync.ServerNow, out float phase, out int beat, out int bar, out var style))
+        if (music != null) _danceMusic = music;
+        if (_danceWeight <= 0.001f || _danceMusic is not { } m || !IsInstanceValid(m.Source) || !m.Source.IsInsideTree()
+            || !m.BeatAt(Net.ClockSync.ServerNow, out float phase, out int beat, out int bar, out var style))
         {
-            _danceRadio = null;
+            _danceMusic = null;
             _danceWeight = 0f;
             return null;
         }
-        // The move changes every couple of bars, the same one on every peer: a hash of the bar
-        // slot and the style, so a figure that joins mid-song lands on the move the others are on.
+
+        double now = Time.GetTicksMsec() / 1000.0;
+        if (now - _danceCrowdAt > 0.5)
+        {
+            _danceCrowdAt = now;
+            _danceCrowd = DancersAround(m.Source.GlobalPosition);
+        }
+        // The move changes every couple of bars. Each dancer has its own pick (a hash of the bar
+        // slot, the style and who it is), so a crowd is not a drill team; but with two or more
+        // dancing to the same music, one slot in three is a crowd move everyone hits together —
+        // the same hash with no "who" in it, so every peer lands on it on the same bar (#261).
         int slot = Mathf.FloorToInt(bar / (float)Avatar.HumanMeshBuilder.BarsPerMove);
-        uint h = (uint)slot * 2654435761u ^ (uint)style * 40503u;
-        h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
-        int move = (int)(h % (uint)Avatar.HumanMeshBuilder.MoveCount(style));
+        int move = DanceMoveFor(slot, style), prev = DanceMoveFor(slot - 1, style);
+        if (DanceMoveOverride >= 0) move = prev = DanceMoveOverride;
         float barPhase = (beat - bar * 4 + phase) / 4f;
-        return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight);
+        // beats into this slot: the first one flows out of the last move instead of cutting to the next
+        float into = (bar - slot * Avatar.HumanMeshBuilder.BarsPerMove) * 4 + (beat - bar * 4) + phase;
+        return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev, Mathf.Clamp(into / 0.9f, 0f, 1f));
+    }
+
+    /// <summary>A move forced on every dancer on this machine (a probe's screenshot), -1 for none.</summary>
+    internal static int DanceMoveOverride = -1;
+
+    /// <summary>This dancer's move for a bar slot: its own, or the crowd's when the slot is a crowd one.</summary>
+    private int DanceMoveFor(int slot, Audio.Cd.MusicStyle style)
+    {
+        uint shared = DanceHash((uint)slot * 2654435761u ^ (uint)style * 40503u);
+        if (_danceCrowd >= 2 && shared % 3u == 1u)
+            return (shared >> 8) % 2u == 0u ? Avatar.HumanMeshBuilder.GroupJump : Avatar.HumanMeshBuilder.GroupPogo;
+        uint own = DanceHash(shared ^ DanceSeed());
+        return (int)(own % (uint)Avatar.HumanMeshBuilder.MoveCount(style));
+    }
+
+    private static uint DanceHash(uint h)
+    {
+        h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
+        return h;
+    }
+
+    /// <summary>A number of this player's own, the same on every peer (FNV-1a of the node name; string.GetHashCode differs per process).</summary>
+    private uint DanceSeed()
+    {
+        if (_danceSeed == 0)
+        {
+            uint h = 2166136261u;
+            foreach (char c in Name.ToString()) { h ^= c; h *= 16777619u; }
+            _danceSeed = h | 1u;
+        }
+        return _danceSeed;
+    }
+
+    private uint _danceSeed;
+
+    /// <summary>Players (this one included) dancing within earshot of the music at <paramref name="at"/>.</summary>
+    private int DancersAround(Vector3 at)
+    {
+        int n = 0;
+        float r = Items.RadioManager.DanceRadius * 1.3f;
+        foreach (var node in GetTree().GetNodesInGroup(Group))
+            if (node is FootPlayer p && p.DanceId != 0 && p.Ride == RideKind.OnFoot && p.GlobalPosition.DistanceTo(at) < r)
+                n++;
+        return n;
     }
 
     /// <summary>Draws the on-foot figure from the published pose — the same code for the owner and every remote copy.</summary>
@@ -1671,7 +1729,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             var hip = new Vector3(0, 0.95f, 0);
             _walker.Transform = BodyPose * new Transform3D(Basis.Identity, hip) * t * new Transform3D(Basis.Identity, -hip);
         }
+        // hit by a thrown thing (#261): rocked away from the blow, then a wobble home
+        _walker.Transform *= FlinchPose(dt);
         PlaceHand(mounts);
+        PlaceBack(mounts);
     }
 
     /// <summary>
@@ -1897,43 +1958,72 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // but a car parked in the garage is got into like anywhere else
         if (Indoors)
         {
-            if (_ride == null && !_mantling && _deadTimer <= 0 && Vehicles?.Nearest(GlobalPosition, EnterReach) is { } parked)
-            {
-                Vehicles.Claim(parked, EnterVehicle);
-                return true;
-            }
+            if (_ride == null && !_mantling && _deadTimer <= 0 && TryVehicleAt()) return true;
             var interiors = Interiors.InteriorManager.Instance;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             return interiors?.TryDoor(this) ?? true;
         }
         if (_ride != null || _mantling || _deadTimer > 0) return false;
 
-        // a radio within reach, the one pointed at first: its panel (play a CD, burn one, pick it up)
-        if ((Items.Highlight.Pointed as Items.RadioBody ?? Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach)) is { } radio)
+        // the radio pointed at: its panel (play a CD, burn one, pick it up)
+        if (Items.Highlight.Pointed is Items.RadioBody pointed && IsInstanceValid(pointed))
         {
-            Items.RadioUi.Instance?.Open(radio);
+            Items.RadioUi.Instance?.Open(pointed);
             return true;
         }
 
-        var vehicle = Vehicles?.Nearest(GlobalPosition, EnterReach);
-        // someone else's vehicle, being driven: a seat in it (#158), when it is nearer than a parked one
-        if (OnlineSeats && DrivenVehicleInReach(EnterReach) is { } driven
-            && (vehicle == null || driven.GlobalPosition.DistanceTo(GlobalPosition) < vehicle.GlobalPosition.DistanceTo(GlobalPosition)))
+        // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"
+        if (TryVehicleAt()) return true;
+
+        // someone else's vehicle, being driven: a seat in it (#158), standing at it
+        if (OnlineSeats && DrivenVehicleInReach(EnterReach) is { } driven)
         {
             PassengerService.Instance!.AskSeat(driven);
             return true;
         }
-        if (vehicle == null)
+        // a radio at your feet you were not looking at
+        if (Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach) is { } radio)
         {
-            // music in earshot: E starts or stops the dance
-            if (Items.RadioManager.Instance?.NearestPlaying(GlobalPosition, Items.RadioManager.DanceRadius) != null)
-            {
-                DanceId = DanceId == 0 ? 1 : 0;
-                return true;
-            }
-            return IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true;
+            Items.RadioUi.Instance?.Open(radio);
+            return true;
         }
-        Vehicles!.Claim(vehicle, EnterVehicle);
+        // music in earshot: E starts or stops the dance
+        if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius) != null)
+        {
+            DanceId = DanceId == 0 ? 1 : 0;
+            return true;
+        }
+        return IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true;
+    }
+
+    /// <summary>
+    /// E at a parked vehicle (#261): at a shut car door it opens that door; at an open one it gets
+    /// in; at a machine without doors it gets on. False when there is none in reach.
+    /// </summary>
+    private bool TryVehicleAt()
+    {
+        if (Vehicles is not { } vehicles) return false;
+        if (vehicles.Claiming) return true;   // already asked: wait for the answer
+        if ((VehicleReach.Current ?? VehicleReach.Find(this)) is not { } aim || !IsInstanceValid(aim.Vehicle) || !vehicles.Enterable(aim.Vehicle))
+            return false;
+        if (aim.HasDoor && !aim.DoorOpen)
+        {
+            vehicles.ToggleDoor(aim.Vehicle, aim.Door);
+            return true;
+        }
+        vehicles.Claim(aim.Vehicle, EnterVehicle);
+        return true;
+    }
+
+    /// <summary>
+    /// For the probes: E at a car, and E again when that only opened its door (#261), so "get in"
+    /// stays one call. The second only follows an own car's door, which opens at once.
+    /// </summary>
+    public bool TryGetIn()
+    {
+        if (!TryInteract()) return false;
+        if (_ride == null && Vehicles is { Claiming: false } && VehicleReach.Find(this) is { HasDoor: true, DoorOpen: true })
+            TryInteract();
         return true;
     }
 
@@ -2030,11 +2120,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public bool TryToggleCarDoor()
     {
-        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+        // the door you are at or looking at (#261), open or shut
+        if (_ride != null || Vehicles is not { } vehicles || (VehicleReach.Current ?? VehicleReach.Find(this)) is not { HasDoor: true } aim)
             return false;
-        var (bit, distance) = rig.NearestDoor(GlobalPosition);
-        if (bit == 0 || distance > VehicleManager.DoorReach) return false;
-        Vehicles.ToggleDoor(vehicle, bit);
+        vehicles.ToggleDoor(aim.Vehicle, aim.Door);
         return true;
     }
 

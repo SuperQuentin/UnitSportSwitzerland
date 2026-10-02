@@ -390,8 +390,18 @@ public static class SfxBus
 {
     public const string Name = "Sfx";
 
+    /// <summary>
+    /// The music bus (#261): radios, car stereos, live stations. Its own slider in Settings, and its
+    /// own reverb kept in step with the Sfx one by <see cref="ReverbZones"/>, so a boombox in a
+    /// tunnel rings like the footsteps beside it.
+    /// </summary>
+    public const string Music = "Music";
+
     /// <summary>The bus's reverb, or null before <see cref="Ensure"/>.</summary>
     public static AudioEffectReverb? Reverb { get; private set; }
+
+    /// <summary>The music bus's reverb, or null before <see cref="Ensure"/>.</summary>
+    public static AudioEffectReverb? MusicReverb { get; private set; }
 
     /// <summary>
     /// A volume slider position as decibels. Hearing is logarithmic: a LINEAR 5 % is only -26 dB,
@@ -419,6 +429,12 @@ public static class SfxBus
             AudioServer.SetBusVolumeDb(idx, SliderDb(s.SfxVolume));
             AudioServer.SetBusMute(idx, s.SfxVolume <= 0.001f);
         }
+        int music = AudioServer.GetBusIndex(Music);
+        if (music >= 0)
+        {
+            AudioServer.SetBusVolumeDb(music, SliderDb(s.MusicVolume));
+            AudioServer.SetBusMute(music, s.MusicVolume <= 0.001f);
+        }
     }
 
     private static bool _subscribed;
@@ -440,6 +456,21 @@ public static class SfxBus
         }
         for (int e = 0; e < AudioServer.GetBusEffectCount(idx); e++)
             if (AudioServer.GetBusEffect(idx, e) is AudioEffectReverb r) Reverb = r;
+
+        int music = AudioServer.GetBusIndex(Music);
+        if (music < 0)
+        {
+            AudioServer.AddBus();
+            music = AudioServer.BusCount - 1;
+            AudioServer.SetBusName(music, Music);
+            AudioServer.SetBusSend(music, "Master");
+            AudioServer.AddBusEffect(music, new AudioEffectReverb
+            {
+                RoomSize = 0.3f, Damping = 0.5f, Wet = 0f, Dry = 1f, Spread = 1f, Hipass = 0.15f,
+            });
+        }
+        for (int e = 0; e < AudioServer.GetBusEffectCount(music); e++)
+            if (AudioServer.GetBusEffect(music, e) is AudioEffectReverb r) MusicReverb = r;
         ApplyVolumes();
         if (!_subscribed) { _subscribed = true; Core.GameSettings.Changed += ApplyVolumes; }
     }

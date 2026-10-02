@@ -322,6 +322,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.DroppedItems.Create(this).PlayerPositions = vehicles.PlayerPositions;
         var chunksForDrops = _chunks;
         Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetHeight(p, out float y) ? y : null;
+        Audio.Hearing.Ground = Items.DroppedItems.GroundHeight;
         // every body that may hold a radio that plays (#168): the remote players and this one
         radios.Players = () =>
         {
@@ -500,7 +501,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
-            || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null
+            || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested
+            || Items.BonkCheck.Requested
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
@@ -574,6 +576,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _radioUi.Give = items.Give;
         AddChild(_radioUi);
         if (Items.CarCdCheck.Create(() => LocalPlayer, () => _players, items.Inventory, networked: false) is { } carCdShots) AddChild(carCdShots);
+        if (Items.InteractCheck.Create(() => LocalPlayer, items.Inventory) is { } interactCheck) AddChild(interactCheck);
         // ...and from the land itself: stone, water, firewood (hold G / pad X outdoors)
         // (null only with loot or birds off, when no probe that needs them runs)
         Loot.Gathering gathering = null!;
@@ -1172,6 +1175,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
         if (_items != null && Items.CarCdCheck.Create(() => LocalPlayer, () => _players, _items.Inventory, networked: true) is { } carCdCheck) AddChild(carCdCheck);
         if (Items.DropCheck.Create(() => LocalPlayer, () => _players, _items) is { } dropCheck) AddChild(dropCheck);
+        if (_items != null && Items.BonkCheck.Create(() => LocalPlayer, () => _players, _items.Inventory) is { } bonkCheck) AddChild(bonkCheck);
         if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: true) is { } webRadioCheck) AddChild(webRadioCheck);
 
         _chat!.Kicked += OnKicked;
@@ -1399,14 +1403,22 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else if (Items.Highlight.Pointed is Items.DroppedItem pointed)
                 yield return (PlayerInput.InteractMount, $"Pick up {pointed.Label}");
+            else if (Items.Highlight.Pointed is Items.RadioBody)
+            {
+                yield return (PlayerInput.UseItem, "Take the radio");
+                yield return (PlayerInput.InteractMount, "Radio");
+            }
             else if (!p.Indoors)
             {
-                if (Items.Highlight.Pointed is Items.RadioBody || Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
+                if (Vehicles.VehicleReach.Current == null && Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
                     yield return (PlayerInput.InteractMount, "Radio");
-                else if (Items.RadioManager.Instance?.NearestPlaying(p.GlobalPosition, Items.RadioManager.DanceRadius) != null)
+                else if (Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
-                if (Vehicles.VehicleManager.Instance?.Nearest(p.GlobalPosition, FootPlayer.EnterReach) is { } parked)
-                    yield return (PlayerInput.InteractMount, $"Get in the {parked.Ride.Label.ToLowerInvariant()}");
+                if (Vehicles.VehicleReach.Current is { } at)
+                {
+                    yield return (PlayerInput.InteractMount, at.Action);
+                    if (at is { HasDoor: true, DoorOpen: true }) yield return (PlayerInput.CarDoor, "Close the door");
+                }
                 yield return (PlayerInput.RideMenu, "Travel");
                 yield return (PlayerInput.Inventory, "Inventory");
                 yield return (PlayerInput.Teleport, "Map");

@@ -17,19 +17,21 @@
 | Pop | 6 | Floss |
 | Pop | 7 | OrangeJustice |
 | Pop | 8 | GangnamStyle |
-| Rock (MoveCount 6) | 0 | Headbang |
+| Rock (MoveCount 7) | 0 | Headbang |
 | Rock | 1 | AirGuitar |
 | Rock | 2 | FistPump |
 | Rock | 3 | Bounce |
 | Rock | 4 | ClapBackbeat |
 | Rock | 5 | ArmWave |
-| Electronic (MoveCount 7) | 0 | Bounce |
+| Rock | 6 | Pogo |
+| Electronic (MoveCount 8) | 0 | Bounce |
 | Electronic | 1 | FistPump |
 | Electronic | 2 | RunningMan |
 | Electronic | 3 | TStep |
 | Electronic | 4 | Robot |
 | Electronic | 5 | Sprinkler |
 | Electronic | 6 | ArmWave |
+| Electronic | 7 | Pogo |
 | HipHop (MoveCount 8) | 0 | Bounce |
 | HipHop | 1 | ShoulderLean |
 | HipHop | 2 | Twerk |
@@ -53,6 +55,28 @@
 | Folk | 6 | GangnamStyle |
 
 `MoveCount`: Pop 9, Rock 6, Electronic 7, HipHop 8, Chill 6, Folk 7. Tempo coverage: Sway/HipSway 60-110, ArmWave 60-130, Bounce 70-200, Headbang 90-200, FistPump 110-200, everything else inside 70-170, so 60-200 BPM is covered.
+
+Crowd moves (#261), outside the tables: `Move = HumanMeshBuilder.GroupPogo` (1000) is **Pogo**,
+`GroupJump` (1001) is **JumpTogether**.
+
+## Picking, flowing and crowds (#261)
+
+- **Who does what** (`FootPlayer.StepDance`): the move changes every `BarsPerMove` (2) bars. Each
+  dancer picks its own (`hash(slot, style) ^ seed`, the seed an FNV-1a of the node name: the same on
+  every peer, unlike `string.GetHashCode`), so a crowd is not a drill team. With two or more dancing
+  to the same music (counted twice a second within `DanceRadius * 1.3`), one slot in three
+  (`hash(slot, style) % 3 == 1`, no seed) is a crowd move, Pogo or JumpTogether, so everyone jumps
+  on the same beat. Peers can disagree on the count for half a second; harmless.
+- **Flow**: `DanceParams.PrevMove` and `MoveBlend` (beats into the slot / 0.9): the first beat of a
+  slot mixes the channels of the move before into the new one (`Mix(DanceCh)`), no cut.
+- **Groove** (every table move, not the jumps): the knees give 1.8 cm on each beat, the head nods
+  0.045 rad into it, the shoulders bounce 1 cm a beat-fraction later, the hips sway 1.2 cm over two beats.
+- **Pogo**: one jump per beat, off at b = 0.16, down at 0.94, 22 cm up (ankles raised with the hip,
+  so the feet really leave the ground), a soft knee give on landing, one fist punched up every
+  other beat. **JumpTogether**: beats 1-3 bounce deeper (3.5, 6, 8.5 cm) with the arms swinging back,
+  beat 4 crouches 13 cm and jumps 34 cm with both arms thrown up, landing on the next bar's one.
+- **Music to dance to** (`RadioManager.NearestMusic`): a playing radio in the world, or a player
+  carrying one that plays (hand or back); the beat from `RadioBody.BeatOf(cd, startedAt, clock)`.
 
 ## Notation (used by every move section)
 
