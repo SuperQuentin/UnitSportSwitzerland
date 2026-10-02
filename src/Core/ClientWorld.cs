@@ -700,6 +700,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(recorder);
         AddChild(new PerfOverlay(_chunks, _cache, recorder));
 
+        // F9 or /debug: overlays, terrain layers and view modes, alone or as an admin (#339)
+        var debug = new DebugMenu(_chunks, origin, () => _nearTrees, Toast);
+        AddChild(debug);
+        _chat.DebugRequested += debug.Open;
+
         // G opens a GPX track for playback; the session owns its own camera and HUD
         _gpx = GpxSession.Create(_chunks, origin, _spectator);
         _gpx.ExitRequested += () => EnterMode(GameMode.Explore);
@@ -938,6 +943,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             CatalogueTree(ModelCatalog.TreeBroadleaf) ?? crown, StyleKit.TreeReach);
         // under the terrain, an origin container: the floating origin moves it with the tiles
         _chunks!.AddChild(_nearTrees);
+        // the debug menu may have hidden the trees before this style made its own
+        _nearTrees.Visible = (_chunks.HiddenLayers & TileLayers.Trees) == 0;
     }
 
     /// <summary>

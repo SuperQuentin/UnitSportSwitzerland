@@ -116,6 +116,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Chat / command", Keys: "Enter or /", Pad: "—"),
             new("This screen", PlayerInput.Help),
             new("Performance overlay / log", Keys: "F3 / F4", Pad: "—"),
+            new("Debug menu (offline or admin)", PlayerInput.DebugMenu),
         }),
     };
 

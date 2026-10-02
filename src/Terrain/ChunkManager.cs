@@ -759,6 +759,59 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         Horizon.EnsureCoverage(minE, maxE, minN, maxN);
     }
 
+    // ---- debug menu (#339) -------------------------------------------------------------
+
+    /// <summary>The tile layers the debug menu hid on every tile; none in play.</summary>
+    public TileLayers HiddenLayers { get; private set; }
+
+    private bool _hideReal, _hideGenerated;
+
+    /// <summary>
+    /// Hides tile layers, and whole tiles by where their data comes from, on every loaded tile and
+    /// every tile built later. The horizon and the near trees are the caller's: they are nodes of
+    /// their own. Main thread.
+    /// </summary>
+    public void SetDebugHidden(TileLayers layers, bool real, bool generated)
+    {
+        HiddenLayers = layers;
+        _hideReal = real;
+        _hideGenerated = generated;
+        foreach (var (id, state) in _chunks)
+            if (state.Node != null) ApplyDebugHidden(id, state.Node);
+    }
+
+    private void ApplyDebugHidden(TileId id, ChunkNode node)
+    {
+        node.HideLayers(HiddenLayers);
+        node.Visible = !(IsGenerated(id) ? _hideGenerated : _hideReal);
+    }
+
+    /// <summary>
+    /// Stops the rings following the anchors: what is loaded stays loaded, at the stride it has,
+    /// so the camera can leave and look at it from outside. Builds already queued still commit.
+    /// </summary>
+    public bool FreezeRings
+    {
+        get => _freezeRings;
+        set
+        {
+            _freezeRings = value;
+            _sinceEval = double.MaxValue;
+        }
+    }
+
+    private bool _freezeRings;
+
+    /// <summary>Every loaded tile and the stride its ground is drawn at (-1: not built yet), for the debug overlay.</summary>
+    public void ListTiles(List<(TileId Id, int Stride)> into)
+    {
+        into.Clear();
+        foreach (var (id, state) in _chunks) into.Add((id, state.ActiveStride));
+    }
+
+    /// <summary>The stride a loaded tile's ground is drawn at; -1 when it is not loaded or not built yet.</summary>
+    public int StrideAt(TileId id) => _chunks.TryGetValue(id, out var state) ? state.ActiveStride : -1;
+
     /// <summary>Real or generated: whether the rings may ask for a tile.</summary>
     private bool IsAvailable(TileId id) => _available.Contains(id) || _fallback?.Covers(id) == true;
 
@@ -1059,7 +1112,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         // idle and capped the whole loader at MaxConcurrentBuilds per interval — 24 tiles a
         // second however fast the disk actually is.
         _sinceEval += delta;
-        if (_sinceEval >= EvalInterval || committed > 0)
+        if (!_freezeRings && (_sinceEval >= EvalInterval || committed > 0))
         {
             _sinceEval = 0;
             EvaluateRings();
@@ -1334,6 +1387,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 Name = $"Chunk_{id}",
                 Position = _origin!.ToWorld(id.MinE, id.MaxN, 0),
             };
+            ApplyDebugHidden(id, state.Node);
             AddChild(state.Node);
         }
         return state.Node;

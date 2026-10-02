@@ -109,6 +109,8 @@ public partial class PlayerInput : Node
     public const string RideMenu = "ride_menu";
     /// <summary>The controls overlay (<see cref="ControlsHelp"/>), built from the live bindings.</summary>
     public const string Help = "help";
+    /// <summary>The debug menu (<see cref="DebugMenu"/>): overlays, terrain layers, view modes. Offline or as an admin.</summary>
+    public const string DebugMenu = "debug_menu";
 
     // --- items (on foot) ---
     public const string UseItem = "use_item";
@@ -440,6 +442,7 @@ public partial class PlayerInput : Node
         Bind(Tune, Keys(Key.T), Button(JoyButton.DpadDown));
         Bind(CarDoor, Keys(Key.G), Button(JoyButton.X));
         Bind(Help, Keys(Key.F1));
+        Bind(DebugMenu, Keys(Key.F9));
 
         // Items are an on-foot thing, so they reuse the shoulders that only mean something
         // mounted (RB trick, LB boost). The inventory is on the two keys players try first, I
