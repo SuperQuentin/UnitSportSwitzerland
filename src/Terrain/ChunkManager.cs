@@ -1024,10 +1024,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         return _chunks.TryGetValue(TileId.FromLv95(e, n), out var state) && state.HasCollision;
     }
 
-    /// <summary>Script/debug-friendly variant of TryGetHeight; -inf when unknown.</summary>
-    public float GetHeightAt(Vector3 worldPos) =>
-        TryGetHeight(worldPos, out float h) ? h : float.NegativeInfinity;
-
     private long _allocatedAtLastCollect;
     private const long CollectEveryBytes = 1L << 30;
 

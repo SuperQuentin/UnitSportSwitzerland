@@ -148,6 +148,39 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
         return best;
     }
 
+    /// <summary>Music to dance to: where it plays (a radio lying there, or the player carrying one), which CD, since when.</summary>
+    public readonly record struct Music(Node3D Source, int CdId, double StartedAt)
+    {
+        public bool BeatAt(double now, out float phase, out int beat, out int bar, out MusicStyle style) =>
+            RadioBody.BeatOf(CdId, StartedAt, now, out phase, out beat, out bar, out style);
+    }
+
+    /// <summary>
+    /// The nearest music within <paramref name="radius"/> (#261): a playing radio in the world, or a
+    /// player carrying one that plays, in the hand or on the back. Null when none, or when the CD
+    /// is unknown here (nothing to take the beat from).
+    /// </summary>
+    public Music? NearestMusic(Vector3 point, float radius)
+    {
+        Music? best = null;
+        float bestDist = radius;
+        if (NearestPlaying(point, radius) is { } radio)
+        {
+            best = new Music(radio, radio.CdId, radio.StartedAt);
+            bestDist = radio.GlobalPosition.DistanceTo(point);
+        }
+        if (Players == null) return best;
+        double now = ClockSync.ServerNow;
+        foreach (var p in Players())
+        {
+            if (!IsInstanceValid(p) || !p.IsInsideTree() || RadioPlay.Decode(p.HeldRadio) is not { } play || !play.Sounding(now)) continue;
+            if (CdLibrary.Instance?.Find(play.CdId) == null) continue;
+            float d = p.GlobalPosition.DistanceTo(point);
+            if (d < bestDist) { bestDist = d; best = new Music(p, play.CdId, play.StartedAt); }
+        }
+        return best;
+    }
+
     // ---- server side ---------------------------------------------------------------------------
 
     private static void StartOn(RadioBody radio, int cdId, float length)
@@ -285,8 +318,8 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
     }
 
     /// <summary>
-    /// Client: a speaker on every player holding a radio that plays, none on anyone else. The
-    /// holder's own copy too: they hear their radio from their hand like everyone near them.
+    /// Client: a speaker on every player carrying a radio that plays — in the hand or on the back
+    /// (#261) — none on anyone else. The carrier's own copy too: they hear their radio like everyone near them.
     /// </summary>
     private void UpdateHeld()
     {
@@ -295,7 +328,7 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
         {
             if (!IsInstanceValid(player)) continue;
             var speaker = player.GetNodeOrNull<RadioSpeaker>(HeldSpeakerName);
-            var play = player.HeldItemId == (int)ItemId.Radio ? RadioPlay.Decode(player.HeldRadio) : null;
+            var play = RadioPlay.Decode(player.HeldRadio);
             if (play is not { } p)
             {
                 if (speaker != null) speaker.On = false;   // kept, silent: cheaper than a node per switch
@@ -303,7 +336,7 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
             }
             if (speaker == null)
             {
-                speaker = new RadioSpeaker { Name = HeldSpeakerName, Position = new Vector3(0, 1.1f, 0) };
+                speaker = new RadioSpeaker { Name = HeldSpeakerName, Position = new Vector3(0, 1.15f, 0) };
                 player.AddChild(speaker);
             }
             speaker.CdId = p.CdId;
