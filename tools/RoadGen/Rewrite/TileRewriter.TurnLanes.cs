@@ -87,7 +87,7 @@ public static partial class TileRewriter
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
         Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
-        Dictionary<TileId, List<RoadPointProp>> signs, TurnLaneStats stats)
+        Dictionary<TileId, List<RoadPointProp>> signs, TurnLaneStats stats, List<PocketOpening>? openings = null)
     {
         var net = result.Network;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
@@ -212,6 +212,8 @@ public static partial class TileRewriter
             bool hasRight = rightOf.ContainsKey((pocket.Node, pocket.Arm));
             placed[(pocket.Node, pocket.Arm)] = (true, hasRight);
             var (inSlot, outSlot) = (pocket.In, pocket.Out);
+            // where the left-turn lane appears (#352): the end of the hatch, or of a merged strip's entry
+            openings?.Add(new PocketOpening(inSlot.Segment, pocket.InAtEnd, inSlot.Merged ? inSlot.Storage + TurnEntry : inSlot.Storage));
             var approach = inSlot.ApproachWay!;
             var departure = outSlot.ExitWay!;
             if (!approach.Emitted)
@@ -269,6 +271,13 @@ public static partial class TileRewriter
 
     /// <summary>Right-turn pockets, (taper, storage) in metres, longest first: shorter than a left pocket, beside its full width.</summary>
     private static readonly (double Taper, double Storage)[] RightPocketSizes = [(15, 30), (10, 25), (10, 15)];
+
+    /// <summary>
+    /// Where a placed left-turn pocket's lane appears (#352): its approach segment, whether the
+    /// junction is at the segment's end, and the distance from the mouth. The approach's right side
+    /// (right of the drawing when the junction is at the end) is the one cyclists cross from.
+    /// </summary>
+    public sealed record PocketOpening(RoadSegment Segment, bool AtEnd, double FromMouth);
 
     /// <summary>A left-turn pocket being planned: the slot its approach runs along, and its exit's.</summary>
     private sealed record PocketPlan(TileId Home, Slot In, bool InAtEnd, Slot Out, bool OutAtEnd, bool RightTurn)
