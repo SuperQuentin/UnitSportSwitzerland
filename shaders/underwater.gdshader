@@ -11,7 +11,7 @@ render_mode unshaded, cull_disabled, depth_test_disabled, depth_draw_never, blen
 uniform sampler2D scene_depth : hint_depth_texture, filter_nearest;
 uniform vec3 water_color : source_color = vec3(0.09, 0.22, 0.25);
 // metres of water that take 63 % of the view
-uniform float visibility = 14.0;
+uniform float visibility = 22.0;
 // the water surface's altitude over the camera, world space (set every frame while shown)
 uniform float surface_y = 0.0;
 

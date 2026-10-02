@@ -1982,6 +1982,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (kind == (RideKind)RideKindId) return true;
         if (!IsOnFloor() || _sliding || Indoors || Ragdolled) return false;
+        // no car, motorbike or truck conjured in water deeper than it could wade (#299; boats are #302)
+        if (World.WaterField.Submersion(GlobalPosition) > 0.45f && Rideable.Create(kind) is Car or Motorbike or Truck) return false;
 
         float speed = new Vector2(Velocity.X, Velocity.Z).Length();
         float limit = _ride?.DismountSpeed ?? RunSpeed + 0.5f;
@@ -2511,6 +2513,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void RememberSafe(Vector3 at)
     {
+        // a lake bed is not a place to be put back on (#299)
+        if (World.WaterField.IsUnderwater(at + Vector3.Up)) return;
         _lastSafe = at;
         _hasSafe = true;
         _safeSpace = InteriorKey;
@@ -2767,7 +2771,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             // and its collision: the fly camera does not ask for one, so the tile this body
             // was dropped onto may have a mesh and no ground to stand on for a few frames
-            if (Terrain == null || !Terrain.TryGetHeight(GlobalPosition, out float g)
+            // over water on the surface, never on a lake bed (#299)
+            if (Terrain == null || !Terrain.TryGetSurface(GlobalPosition, out float g)
                 || !Terrain.HasCollisionAt(GlobalPosition))
                 return;
             GlobalPosition = new Vector3(GlobalPosition.X, Mathf.Max(GlobalPosition.Y, g + 1f), GlobalPosition.Z);
@@ -3214,7 +3219,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             if (GlobalPosition.Y >= ground - 2f || Terrain.InTunnel(GlobalPosition)
                 || Terrain.FloorBelow(this, GlobalPosition, GetRid())) return false;
-            to = GlobalPosition with { Y = ground + 1f };
+            // back up on the ground, or on the water where there is some: never on a lake bed (#299)
+            to = GlobalPosition with { Y = (Terrain.TryGetSurface(GlobalPosition, out float surface) ? surface : ground) + 1f };
         }
         else
         {

@@ -306,7 +306,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // items dropped and thrown on the ground (#206)
         Items.DroppedItems.Create(this).PlayerPositions = vehicles.PlayerPositions;
         var chunksForDrops = _chunks;
-        Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetHeight(p, out float y) ? y : null;
+        // on the water where there is some (#299): nothing is dropped onto a lake bed
+        Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetSurface(p, out float y) ? y : null;
         Audio.Hearing.Ground = Items.DroppedItems.GroundHeight;
         // every body that may hold a radio that plays (#168): the remote players and this one
         radios.Players = () =>
@@ -511,7 +512,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             {
                 FreeSpectator();
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
-                runner.GroundHeight = at => chunks.TryGetHeight(at, out float h) ? h : null;
+                runner.GroundHeight = at => chunks.TryGetSurface(at, out float h) ? h : null;
                 runner.RunCommand = line => _chat?.Send(line);
                 return runner;
             }),
@@ -1114,7 +1115,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         br.Source = () => _chunks?.Source;
         // the match's crates (#194): drawn on this client's own ground
         var crates = BattleRoyale.BrCrates.Create(this, _worldOrigin!, server: false);
-        crates.GroundAt = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
+        crates.GroundAt = at => _chunks != null && _chunks.TryGetSurface(at, out float h) ? h : null;
         br.Places = () => (IEnumerable<Terrain.Format.Place>?)_places?.All ?? Array.Empty<Terrain.Format.Place>();
         AddChild(br);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
@@ -1481,7 +1482,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private void EnterFootMode(FootPlayer player)
     {
         var pos = _spectator!.GlobalPosition;
-        float ground = _chunks!.TryGetHeight(pos, out float h) ? h : pos.Y;
+        float ground = _chunks!.TryGetSurface(pos, out float h) ? h : pos.Y;
         player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
         player.Velocity = Vector3.Zero;
         player.Camera.Current = true;

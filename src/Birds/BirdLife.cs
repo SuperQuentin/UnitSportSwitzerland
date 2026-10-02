@@ -270,7 +270,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
     /// <summary>The ground (or water surface) under a point, or the point's own height when the tile is not loaded.</summary>
-    public float Ground(Vector3 p) => _chunks.TryGetHeight(p, out float h) ? h : p.Y;
+    public float Ground(Vector3 p) => _chunks.TryGetSurface(p, out float h) ? h : p.Y;
 
     // ------------------------------------------------------------------------------------
     // habitat and species
@@ -698,6 +698,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         bool percher = b.Species.Body is BodyPlan.Passerine or BodyPlan.Corvid or BodyPlan.Pigeon or BodyPlan.Woodpecker;
         if (percher && NearestTreeTop(near, 16f) is { } top) return (top, Bird.Mode.Perched, null);
         if (b.Species.Body is BodyPlan.Woodpecker || !_chunks.TryGetHeight(near, out float ground)
+            || World.WaterField.TryGetStill(near, out float still, out _) && still > ground
             || CoverAt(near, out var cover) && cover is CoverClass.Water or CoverClass.Forest) return null;
         return (near with { Y = ground }, Bird.Mode.Ground, null);
     }
