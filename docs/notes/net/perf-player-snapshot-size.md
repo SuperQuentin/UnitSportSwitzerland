@@ -11,7 +11,7 @@
 - The only scale a body pose may carry is the squash `(1 + s/2, 1 - s, 1 + s/2)` after the
   rotation (on foot). Any other scale in `_visual.Transform` on a ride would be lost on the wire:
   add a slot for it in `NetPose` instead.
-- Any change to `NetPose`'s layout is a wire change: bump `Handshake.Protocol` once #269 has it.
+- Any change to `NetPose`'s layout is a wire change: bump `Handshake.Protocol` (3 since this change; #269 must take 4 if it lands after).
 
 ## Why
 ~32 B less in every 30 Hz state packet to every viewer. `tools/loadtest.sh` (real terrain), server
