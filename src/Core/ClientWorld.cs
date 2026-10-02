@@ -465,6 +465,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _spectator!.Position = origin.ToWorld(e, n, 1200);
                 return new TunnelProbe(chunks, origin, e, n, double.Parse(probe[2], inv));
             }),
+            new(() => Terrain.WaterProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var w = Terrain.WaterProbe.ParseArgs()!;
+                // the anchor on the point, so its tile streams in with collision
+                _spectator!.Position = origin.ToWorld(w[0], w[1], 1200);
+                return new Terrain.WaterProbe(chunks, origin, w[0], w[1], w[2], w.Length > 3 ? w[3] : 0);
+            }),
             new(() => FlightProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var fly = FlightProbe.ParseArgs()!;

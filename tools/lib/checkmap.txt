@@ -21,6 +21,11 @@ src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
 src/Core/                quick  --origincheck
 src/Terrain/             quick  --origincheck
+# #298: a generated lake (Haut-Lac, inside the fill round the default spawn) has its bed 10 m+ under
+# the level the runtime reads, and collision is the bed
+src/Terrain/ProceduralWorld quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
+src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
+tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck
 src/Crafting/            quick  --invcheck
 src/Loot/                quick  --lootchancecheck
