@@ -75,7 +75,7 @@ cp "$TOOLS/yt-dlp.exe" "$TOOLS/ffmpeg.exe" "$TOOLS/qjs.exe" build/windows/bin/
 
 ZIP="$REPO/$OUT/UnitSportSwitzerland-v$V-windows.zip"; rm -f "$ZIP"
 if command -v zip >/dev/null; then (cd build/windows && zip -qr "$ZIP" .)
-else powershell -NoProfile -Command "Compress-Archive -Path 'build/windows/*' -DestinationPath '$ZIP'"; fi
+else powershell -NoProfile -Command "Compress-Archive -Path 'build/windows/*' -DestinationPath '$(cygpath -w "$ZIP" 2>/dev/null || echo "$ZIP")'"; fi
 
 gh release create "v$V" "$ZIP" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
 echo "Released v$V"
