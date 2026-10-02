@@ -112,6 +112,9 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     /// <summary>Overrides who the birds react to; probes set it to their own body.</summary>
     public Func<FootPlayer?>? PlayerOverride { get; set; }
 
+    /// <summary>This peer's origin: the birds fly in world space, <see cref="BirdNet"/> sends them in LV95 (#185).</summary>
+    public WorldOrigin Origin => _origin;
+
     public BirdLife(ChunkManager chunks, WorldOrigin origin, ItemController? items)
     {
         _chunks = chunks;
@@ -910,30 +913,46 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private BinaryWriter _snapshotWriter => _writer ??= new BinaryWriter(_snapshotBuffer);
     private BinaryWriter? _writer;
 
-    /// <summary>Server: what <see cref="BirdNet"/> sends one peer: the birds within range of <paramref name="focus"/>.</summary>
-    public List<byte[]> Snapshot(Vector3 focus, int tick)
+    /// <summary>
+    /// Server: what <see cref="BirdNet"/> sends one peer: the birds within range of <paramref name="focus"/>.
+    /// Each packet starts with an LV95 anchor near the peer (#185), and every bird is a float offset from it.
+    /// </summary>
+    public List<byte[]> Snapshot(GlobalPos focus, int tick)
     {
         var chunks = _snapshotChunks;
         chunks.Clear();
         var ms = _snapshotBuffer;
         var w = _snapshotWriter;
-        ms.SetLength(0);
+        double anchorE = System.Math.Round(focus.E / 1000) * 1000, anchorN = System.Math.Round(focus.N / 1000) * 1000;
+        var toAnchor = _origin.SinceAnchor(anchorE, anchorN).Inverse;
+        var near = _origin.ToWorld(focus);
+        BeginSnapshot(anchorE, anchorN);
         int n = 0;
         foreach (var b in _birds)
         {
-            var p = b.Node.GlobalPosition;
-            if (Flat(p - focus) > DespawnDistance + 30f) continue;
+            var world = b.Node.GlobalPosition;
+            if (Flat(world - near) > DespawnDistance + 30f) continue;
+            var p = toAnchor.Point(world);
+            var v = toAnchor.Direction(b.Vel);
             // flying birds every time; walking and swimming ones at a quarter of the rate (they amble);
             // perched and dead ones at an eighth: they only turn their heads (a town has dozens)
             int every = b.State switch { Bird.Mode.Perched or Bird.Mode.Dead => 8, Bird.Mode.Ground or Bird.Mode.Swimming => 4, _ => 1 };
             if ((tick + b.Id) % every != 0) continue;
             w.Write(b.Id); w.Write((ushort)b.Species.Index); w.Write((byte)((byte)b.State | (b.Town ? TownBit : 0)));
             w.Write(p.X); w.Write(p.Y); w.Write(p.Z); w.Write(b.Yaw);
-            w.Write(b.Vel.X); w.Write(b.Vel.Y); w.Write(b.Vel.Z);
-            if (++n == 32) { chunks.Add(ms.ToArray()); ms.SetLength(0); n = 0; }
+            w.Write(v.X); w.Write(v.Y); w.Write(v.Z);
+            if (++n == 32) { chunks.Add(ms.ToArray()); BeginSnapshot(anchorE, anchorN); n = 0; }
         }
         if (n > 0) chunks.Add(ms.ToArray());
         return chunks;
+    }
+
+    /// <summary>A new snapshot packet: it starts with its LV95 anchor.</summary>
+    private void BeginSnapshot(double anchorE, double anchorN)
+    {
+        _snapshotBuffer.SetLength(0);
+        _snapshotWriter.Write(anchorE);
+        _snapshotWriter.Write(anchorN);
     }
 
     /// <summary>The state byte's top bit: a town bird (tame: it lets people come much closer).</summary>
@@ -943,15 +962,16 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     public void ApplySnapshot(byte[] data)
     {
         using var r = new BinaryReader(new MemoryStream(data));
+        var here = _origin.SinceAnchor(r.ReadDouble(), r.ReadDouble());
         while (r.BaseStream.Position < r.BaseStream.Length)
         {
             int id = r.ReadInt32();
             int species = r.ReadUInt16();
             byte bits = r.ReadByte();
             var state = (Bird.Mode)(bits & ~TownBit);
-            var p = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+            var p = here.Point(new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()));
             float yaw = r.ReadSingle();
-            var v = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+            var v = here.Direction(new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()));
             if (!_byId.TryGetValue(id, out var b))
             {
                 var sp = BirdNet.Species(species);
@@ -1259,6 +1279,9 @@ public sealed class Bird
         _anchor = shift.Point(_anchor);
         _walkTo = shift.Point(_walkTo);
         _velocity = shift.Direction(_velocity);
+        // a remote bird's last word from the server: followed until the next one (#185)
+        _netPos = shift.Point(_netPos);
+        _netVel = shift.Direction(_netVel);
     }
 
     /// <summary>What the shot pattern has to touch: the body, plus the wings when they are spread.</summary>

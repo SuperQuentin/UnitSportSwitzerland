@@ -35,4 +35,14 @@ pastel greens, a soft rim, strong aerial haze.
   far: billboards tracing the same shapes (`hit_tier`, `hit_puff`, `hit_trunk6`).
 - **Avatars, vehicles, birds, items:** `HumanMeshBuilder.Material()` goes through
   `StyleKit.Figure`: toon diffuse and specular, rim 0.35. Restyled live with the shader materials.
-- **Settings:** "Visual style" in Video (PS1, Cartoon), saved; `/style` stays session-only.
+  Dressed figures: `MaterialRole.Figure` (`cartoon_avatar`).
+- **Smooth figures** (#311): with `MeshDetail.High`, `HumanMeshBuilder.SmoothFigures` turns on
+  `MeshScratch.Smooth` around each figure: tubes get at least 12 sides and smooth normals, boxes
+  flat normals, head and hands are rounded boxes (`RoundedBox`, a superellipsoid: faces nearly
+  flat, so masks, glasses and helmets still sit flush). Without normals the toon light and the
+  rim had nothing to work with. Same joints and sizes, so poses, hitboxes and clothes are
+  unchanged. A vehicle drawn into the same scratch (motorbike, aircraft, skis) keeps its look
+  (its vertices get Godot's no-normal default, +Z). Live: `FootPoseKey`, the driver-body cache
+  and the cyclist's legs key on `SmoothFigures`; other figures (NPCs, passengers, seated figures,
+  the preview) take it at their next build.
+- **Settings:** "Visual style" in Video (all four), saved; `/style` stays session-only.
