@@ -160,9 +160,15 @@ public partial class BoatNetProbe : ChatProbe
             return null;
         }
         Expect(Parked() != null, "A left the boat floating (an admin may park it)");
+        if (Parked() is { } left)
+            GD.Print($"{Log} over the side: swimming {me.IsSwimming}, {MathX.FlatDistance(me.GlobalPosition, left.GlobalPosition):F1} m from the boat, " +
+                $"{me.GlobalPosition.Y - left.GlobalPosition.Y:F2} m above its keel");
         Say("parked go");
         var p = await Sample(() => Parked() is { } v ? ((Boat)v.Ride, v.GlobalPosition, v.Rotation.Y, ((Boat)v.Ride).State.Pitch) : null, 8);
         Say($"parked {Line(p)}");
+        if (Parked() is { } still)
+            GD.Print($"{Log} after: swimming {me.IsSwimming}, {MathX.FlatDistance(me.GlobalPosition, still.GlobalPosition):F1} m from the boat, " +
+                $"{me.GlobalPosition.Y - still.GlobalPosition.Y:F2} m above its keel");
         await Heard("B", "seen parked", 15);
     }
 

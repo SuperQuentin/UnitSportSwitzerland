@@ -6,6 +6,7 @@
 # under B's surface as A's is under A's. No terrain data needed.
 #   tools/boatnetcheck.sh             (GODOT = the editor executable, docs/notes/general/godot-exe.md)
 #   SHOTS=1 tools/boatnetcheck.sh     (B windowed: its view of A's boat in test_output/boatnet_B_*.png)
+#   STYLE=ps1 SHOTS=1 ...             (that style for B)
 . "$(dirname "$0")/lib/guard.sh"
 set -u
 GODOT=${GODOT:-godot}
@@ -33,7 +34,7 @@ done
 A=$!
 guard_watch $A > /dev/null
 WINDOW=--headless; [ -n "${SHOTS:-}" ] && WINDOW=
-guard_run 300 $OUT/boatnet_B.log "$GODOT" $WINDOW --path . -- --connect 127.0.0.1:$PORT --name WatcherB $WORLD --view first --nocapture --time 14 --boatnet B
+guard_run 300 $OUT/boatnet_B.log "$GODOT" $WINDOW --path . -- --connect 127.0.0.1:$PORT --name WatcherB $WORLD --view first --nocapture --time 14 ${STYLE:+--style $STYLE} --boatnet B
 for _ in $(seq 1 30); do kill -0 "$A" 2>/dev/null || break; sleep 1; done
 grep -h "\[boatnet" $OUT/boatnet_A.log $OUT/boatnet_B.log
 code=0

@@ -1438,7 +1438,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _interp.MaxAhead = Npc ? 1.6f : Net.RemoteInterpolator.MaxExtrapolation;
             var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
             // a boat rides this peer's own copy of the waves, at the owner's height over them (#302)
-            if (_remoteRide is Boat afloat) p.Y = afloat.RemoteY(p, yaw, Anim.Z);
+            // (only while it still is that boat: _remoteRide outlives the ride, and a swimmer's Anim is its stroke)
+            if (_remoteRide is Boat afloat && afloat.Kind == (RideKind)RideKindId) p.Y = afloat.RemoteY(p, yaw, Anim.Z);
             Position = p;
             Rotation = new Vector3(0, yaw, 0);
         }
