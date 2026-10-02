@@ -269,8 +269,15 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
-    /// <summary>The ground (or water surface) under a point, or the point's own height when the tile is not loaded.</summary>
-    public float Ground(Vector3 p) => _chunks.TryGetHeight(p, out float h) ? h : p.Y;
+    /// <summary>
+    /// The ground (or water surface) under a point, or the point's own height when the tile is not
+    /// loaded. On water it is the still level less the 0.12 m the swimmers add back: since #298 the
+    /// ground under a lake is its bed, and on a legacy tile (level = terrain + 0.12) this is the
+    /// terrain, as before.
+    /// </summary>
+    public float Ground(Vector3 p) =>
+        _chunks.TryGetWaterLevel(p, out float w) ? w - Terrain.WaterLayer.LegacyLift
+        : _chunks.TryGetHeight(p, out float h) ? h : p.Y;
 
     // ------------------------------------------------------------------------------------
     // habitat and species
