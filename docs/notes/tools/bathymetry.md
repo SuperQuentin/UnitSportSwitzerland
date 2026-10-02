@@ -91,10 +91,10 @@ is #299: `terrain/water-level-layer`.
   % gap fill, published max), the survey/synthetic join (bed step between neighbouring vertices:
   median, p99, max and where), seam verify; `water_shade_*` (hillshade x3 at 2 m/px, a seam is a
   line) and `water_depth_*` per cluster; `--png-crop E,N[,size]` adds 1 m/px crops.
-- Petit Lac (in region): max **78.2 m** (published ~76 m), mean 44.4 m, 97.8% surveyed, 2.2% gap
-  fill; join median 0.15 m, p99 1.06 m (the 1:1 bank), max 1.76 m. 132 bodies, 55 km² of water.
-  Rhône at Martigny (synthetic channel): max 3.4 m. 15.6 s for the region with 16 jobs (peak
-  4.2 GB), 21-36 s with 8. A second run, and a run with another job count, writes byte-identical
+- Petit Lac (in region): max **78.2 m** (published ~76 m), mean 44.5 m, 97.9% surveyed, 2.1% gap
+  fill; join median 0.15 m, p99 1.09 m (the 1:1 bank), max 1.74 m. 132 bodies, 55 km² of water.
+  Rhône at Martigny (synthetic channel): max 3.4 m. 15-36 s for the region (16 jobs, peak 4.2 GB
+  with the 500 m halo; the 600 m one costs ~45% more per window). A second run, and a run with another job count, writes byte-identical
   files (SHA-256 of every `.terr/.terrc/.water`, the manifest and horizon.bin); every vertex off the
   Water cover is unchanged.
 - `--waterprobe lv95E,lv95N,seconds[,minDepth]` (`Terrain/WaterProbe`): the runtime's level, the
