@@ -8,8 +8,14 @@
   all-in junction is a divided road cut into nodes), two roads crossing that are both priority
   roads (#121: importance, cantonal, or 6 m class and up; pairs of arms within 40 deg of
   opposite), in a dense core: `UrbanField` >= `SignalDensity` 0.6 (towns are 0.4). A T keeps
-  its yield treatment. OSM signal nodes (#347, `osm_nodes.tsv`) are not read yet: data first
-  is the next step (placement where the overlay covers a tile).
+  its yield treatment. **Data first** (`Lights`, `SignalSites`): where most of a junction's car
+  arms were matched to OSM ways and `osm_nodes.tsv` (#347) sits beside the overlay, it has lights
+  only if a `highway=traffic_signals` (not a pedestrian-only `crossing=traffic_signals`) anchors
+  within 12 m of its centre: on its node, or on an approach of one of its arms' TLM lines (anchored
+  at that line's end); any shape with 3+ car arms (`SignalShape`: a T too). Elsewhere the rule.
+- **Junctions of several nodes**: a link under 30 m between two signalised nodes (`Internal`) is
+  inside one junction (tram tracks, a divided road's carriageways): no stop line, not an
+  approach, no pocket. A node left with fewer than 2 approaches gets no record.
 - **Priority stays chosen** at a signalised junction: the best pair is the main road even on
   equal ranks, the 3.02/3.03 signs and the ATTR yield bits stay (they rule when the lights are
   off, #357; traffic still uses the yield bits until #353). No Wartelinie, no centre or guide
@@ -53,13 +59,21 @@
   server clock: every peer agrees, nothing is replicated.
 - **Checks**: `RoadGen --signal-check --chunks DIR [--at E,N] [--list]` validates every plan
   (no hard conflict live at once, red+yellow before green, yellow after, min green, every group
-  served) and dumps one; `--priority-check` has the inference cases.
+  served) and dumps one; `--priority-check` has the inference cases. Invalid plans are not written
+  and the rewrite log prints up to 5 (arms as heading + i/o/L/R + rank). Found that way: a skewed
+  T paired the wrong arms (now the straightest pairs first, and a scheme running two hard
+  conflicts together falls back to split phasing); an approach whose only movement a pocket
+  takes had no main group (now one group).
 - **Geneva centre** (28 tiles E 2498-2502 N 1115-1119, copy in `D:\UnitSportSwitzerland\test348`):
-  164 signalised junctions inferred, 496 approaches, 22 left pockets, 69 right pockets (195
-  rejected), 1,765 groups, cycles 60 s x119 ... 92 s x1, no invalid plan; rebuild
-  byte-identical. Martigny-Riddes (E 2581-2585 N 1110-1114): none (no crossing of two main roads
+  with #347's `osm_nodes.tsv`: 286 signalised junctions (280 from OSM, 6 inferred where the
+  overlay does not cover the arms), 765 approaches, 17 left pockets, 89 right pockets, 2,525
+  groups, cycles 60 s x113, 75-79 s x141 (Ts and split phases), max 106 s (8 arms); no invalid
+  plan; rebuild byte-identical. Rule alone (no data): 164 junctions. **Rule vs OSM** where OSM
+  decides: agree 75, rule only 83, OSM only 240 (OSM signals Ts and crossings of lesser roads the
+  rule never takes): the rule is a fallback for regions without data, not a substitute. Martigny-Riddes (E 2581-2585 N 1110-1114): none (no crossing of two main roads
   that dense). Screenshots from above at LV95 2499901,1118599 and 2499132,1116455.
-- **Not done**: OSM placement (#347 data); thin median (optional); crossings of divided roads
+- **Not done**: one record for a junction of several nodes (the internal links are only kept
+  clean); OSM `turn:lanes` and restrictions not read yet (#347 has them); thin median (optional); crossings of divided roads
   (several nodes); 3-lane roads; a #120 red bike crossing drawn for the narrow mouth runs skewed
   across a widened arm's stop line (2499132,1116455; #351 reworks bikes at signals); heads and
   poles (#350); traffic obeying them (#353).
