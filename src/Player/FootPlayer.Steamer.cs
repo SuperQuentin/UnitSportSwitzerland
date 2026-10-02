@@ -45,6 +45,15 @@ public partial class FootPlayer
         return true;
     }
 
+    /// <summary>For checks taking pictures: first or third person, without saving it as the player's setting.</summary>
+    public void ViewForCheck(bool thirdPerson)
+    {
+        if (_thirdPerson == thirdPerson) return;
+        _thirdPerson = thirdPerson;
+        _pivotY = float.NaN;
+        RefreshVisual(force: true);
+    }
+
     /// <summary>For probes: the steamer being driven, or null.</summary>
     public Steamer? SteamerDriven => _ride as Steamer;
 

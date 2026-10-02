@@ -174,7 +174,11 @@ public partial class SteamerCheck : Node
         }
         if (me == null) { Finish("no local player"); return; }
         if (!await Until(() => WaterField.TryGetStill(At(Lake.ShoreX + 700, 0), out _, out _), 90)) { Finish("the lake's water layer never loaded"); return; }
-        if (_shots) AddChild(_cam = new Camera3D { Name = "SteamerCheckCamera", Fov = 60f, Far = 4000f });
+        if (_shots)
+        {
+            AddChild(_cam = new Camera3D { Name = "SteamerCheckCamera", Fov = 60f, Far = 4000f });
+            me.ViewForCheck(true);
+        }
         Log(F($"on the lake fixture, wave clock {WaterField.Now:F1} s"));
 
         await SeaState("calm", 0f);
@@ -253,7 +257,7 @@ public partial class SteamerCheck : Node
         Expect(draught > 1.45f && draught < 1.9f, "floats at its draught");
         Expect(Mathf.Abs(Deg(s.Pitch)) < 1f && Mathf.Abs(Deg(s.Roll)) < 1f, "floats level in a calm");
         Expect(me.DeckSetsBuilt == 0, "its driver builds no decks of its own");
-        await Shot("parked_calm", () => Look(me, side: -1f, back: -0.2f, up: 0.18f, distance: 1.25f));
+        await Shot("parked_calm", () => Look(me, side: -1f, back: -0.35f, up: 0.16f, distance: 0.75f));
     }
 
     private async Task Ahead(FootPlayer me, Steamer steamer)
@@ -271,7 +275,14 @@ public partial class SteamerCheck : Node
         {
             await Wait(1);
             if (i == 44) await Shot("underway_wake", () => Look(me, side: 0.75f, back: 1f, up: 0.38f, distance: 1.05f));
-            if (i == 48) await Shot("wheelhouse_hud", () => HelmEye(me));
+            if (i == 48 && _shots)
+            {
+                // the helmsman's own view, with the HUD: first person for the picture, not saved
+                me.ViewForCheck(false);
+                await Wait(0.5);
+                await Shot("wheelhouse_hud", null);
+                me.ViewForCheck(true);
+            }
         }
         _each = null;
         float speed = me.BoatMotion.WaterSpeed;
@@ -453,23 +464,17 @@ public partial class SteamerCheck : Node
         return new Transform3D(Basis.LookingAt(target - eye, t.Basis.Y.Normalized()), eye);
     }
 
-    /// <summary>The helmsman's eye, looking ahead over the bow.</summary>
-    private Transform3D HelmEye(FootPlayer me)
-    {
-        if (me.Visual is not { } v || me.Vehicle is not { } ride) return me.GlobalTransform;
-        var t = v.GlobalTransform;
-        var eye = t * (ride.FirstPersonEye + new Vector3(0, 0.05f, 0.25f));
-        var target = t * BoatMeshBuilder.Flip(new Vector3(0, SteamerMeshBuilder.DeckY + 1f, SteamerMeshBuilder.Z(-20f)));
-        return new Transform3D(Basis.LookingAt(target - eye, t.Basis.Y.Normalized()), eye);
-    }
-
-    private async Task Shot(string name, Func<Transform3D> where)
+    /// <summary>A picture: from <paramref name="where"/> (followed while it settles), or through the player's own camera with the HUD when null.</summary>
+    private async Task Shot(string name, Func<Transform3D>? where)
     {
         if (!_shots || _cam == null) return;
         var before = GetViewport().GetCamera3D();
-        _follow = where;
-        _cam.GlobalTransform = where();
-        _cam.MakeCurrent();
+        if (where != null)
+        {
+            _follow = where;
+            _cam.GlobalTransform = where();
+            _cam.MakeCurrent();
+        }
         for (int i = 0; i < 6; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         var args = OS.GetCmdlineUserArgs();
         int si = Array.IndexOf(args, "--style");
@@ -480,6 +485,6 @@ public partial class SteamerCheck : Node
         var error = GetViewport().GetTexture().GetImage().SavePng(file);
         Log($"shot {file}: {error}");
         _follow = null;
-        before?.MakeCurrent();
+        if (where != null) before?.MakeCurrent();
     }
 }

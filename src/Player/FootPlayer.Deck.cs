@@ -338,6 +338,18 @@ public partial class FootPlayer
         foreach (var other in set.Excepted) if (IsInstanceValid(other)) RemoveCollisionExceptionWith(other);
     }
 
+    /// <summary>Off any deck and every deck body out of the physics now (getting into a vehicle).</summary>
+    private void LeaveDecksNow()
+    {
+        if (Aboard) LeaveDeck(keepVelocity: false);
+        _deckWait = 0f;
+        _standInExit = null;
+        foreach (var set in _decks.Values)
+            foreach (var (_, body, _) in set.Sections)
+                if (IsInstanceValid(body)) { body.CollisionLayer = 0; body.ProcessMode = ProcessModeEnum.Disabled; }
+        ClearDecks();
+    }
+
     private void ClearDecks()
     {
         if (_decks.Count == 0) return;

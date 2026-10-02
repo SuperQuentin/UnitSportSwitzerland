@@ -81,14 +81,15 @@ public partial class FootPlayer
         if (_settle > 0f)
         {
             _settle -= dt;
-            // the solver easing a fresh hull out of whatever it was put down on is not a crash
-            if (lost.LengthSquared() > 1f) s.Velocity = real;
+            // the solver easing a fresh hull out of whatever it was put down on is not a crash, and
+            // only ever slows it: a shove faster than the model is the solver, not motion (#303)
+            if (lost.LengthSquared() > 1f && real.Length() <= wanted.Length() + 0.5f) s.Velocity = real;
         }
         else if (lost.LengthSquared() > 4f)
         {
             // a pier, the shore's rocks, another hull: what it took off is the impact
             float impact = lost.Length();
-            s.Velocity = real;
+            if (real.Length() <= wanted.Length() + 0.5f) s.Velocity = real;
             if (impact > BoatCrashSpeed) { Impacted?.Invoke(impact); WreckVehicle(); return; }
             if (impact > 4f)
             {
@@ -124,6 +125,8 @@ public partial class FootPlayer
             return;
         }
         if (_visual != null) boat.Pose(_visual, yaw, s.Attitude);
+        // the helmsman in first person is the camera: his own head would fill the wheelhouse (#303)
+        if (_visual is Avatar.SteamerRig helm) helm.DriverShown = SeatIndex == 0 && (_thirdPerson || !IsMultiplayerAuthority());
         UpdateRideCamera(dt);
         // first person: from the helm, pitching and rolling with the hull (the horizon only half)
         if (!_thirdPerson && _camera != null && _visual != null && SeatIndex == 0)

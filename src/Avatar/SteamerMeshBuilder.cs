@@ -38,7 +38,7 @@ public static class SteamerMeshBuilder
     public const float SaloonFrom = 13f, SaloonTo = 29f, SaloonHalf = 3.4f;
     public const float CasingFrom = 31f, CasingTo = 43f, CasingHalf = 1.6f;
     public const float UpperFrom = 13f, UpperTo = 62f, UpperHalf = 4.15f;
-    public const float HouseFrom = 30.6f, HouseTo = 34f, HouseHalf = 1.9f, HouseTop = 7.9f;
+    public const float HouseFrom = 30.6f, HouseTo = 34f, HouseHalf = 1.9f, HouseTop = 8.35f;
     public const float FunnelAt = 37.6f, FunnelTop = 12.4f, FunnelRadius = 0.95f;
     public const float AwningFrom = 40f, AwningY = 8.0f;
     /// <summary>The gangway openings, both sides, just aft of the paddle boxes.</summary>
@@ -57,7 +57,7 @@ public static class SteamerMeshBuilder
 
     /// <summary>The helmsman: on a tall stool at the wheel, mid-wheelhouse.</summary>
     public static readonly Vector3 HelmHip = new(0, UpperY + 0.78f, Bow - 32.25f);
-    public static readonly Vector3 HelmWheel = new(0, UpperY + 1.25f, Bow - 31.65f);
+    public static readonly Vector3 HelmWheel = new(0, UpperY + 1.0f, Bow - 31.65f);
     public const float HelmRadius = 0.5f;
     /// <summary>The telegraph's pedestal, to port of the wheel; its handle's pivot on top.</summary>
     public static readonly Vector3 TelegraphAt = new(0.85f, UpperY + 1.05f, Bow - 31.55f);
@@ -608,7 +608,7 @@ public static class SteamerMeshBuilder
     private static void Wheelhouse(MeshScratch m, DeckBuilder dk, List<SeatAnchor> seats)
     {
         float z0 = Z(HouseFrom), z1 = Z(HouseTo), zc = (z0 + z1) * 0.5f, len = HouseTo - HouseFrom;
-        float sill = UpperY + 1.0f, head = HouseTop - 0.3f;
+        float sill = UpperY + 1.0f, head = HouseTop - 0.25f;
         foreach (float side in new[] { 1f, -1f })
         {
             float x = side * HouseHalf;

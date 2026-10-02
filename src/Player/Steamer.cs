@@ -68,6 +68,9 @@ public sealed class Steamer : Boat
 
     public override SeatAnchor[] Seats => SteamerMeshBuilder.Parts().Seats;
 
+    /// <summary>First person at the wheel: the helmsman's eye half risen off the stool, over the wheel and down the bow.</summary>
+    public override Vector3 FirstPersonEye => BoatMeshBuilder.Flip(SteamerMeshBuilder.HelmHip + new Vector3(0, 0.88f, -0.3f));
+
     private static VehicleDeck[]? _decks;
     public override VehicleDeck[] Decks => _decks ??= new[] { SteamerMeshBuilder.Parts().Deck };
 

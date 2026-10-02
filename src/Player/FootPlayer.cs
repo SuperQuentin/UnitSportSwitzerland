@@ -2620,6 +2620,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
         if (kind != RideKind.OnFoot) EndRagdoll();
+        // and the decks walked about on go at once, not at the next frame (#303): a steamer taken
+        // from its own deck had its hull inside that deck's boxes for a physics step and was shot
+        // into the sky by the solver
+        if (kind != RideKind.OnFoot) LeaveDecksNow();
         LeaveWater();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there

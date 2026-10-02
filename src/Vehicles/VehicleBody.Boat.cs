@@ -43,7 +43,8 @@ public partial class VehicleBody
         var real = GetRealVelocity();
         // a pier, the shore, another hull took what it could not keep (not in the first second:
         // that is the driver who just got off, still in the box)
-        if (_life > SettleTime && (wanted - real).LengthSquared() > 4f) s.Velocity = real;
+        // (only ever slower: faster is the solver shoving it out of something, not motion, #303)
+        if (_life > SettleTime && (wanted - real).LengthSquared() > 4f && real.Length() <= wanted.Length() + 0.5f) s.Velocity = real;
         s.Position = GlobalPosition + boat.Pivot;
         if (IsOnFloor()) BoatDynamics.Beached(ref s, dt);
         float yaw = s.Yaw(Rotation.Y);
