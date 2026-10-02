@@ -15,6 +15,7 @@
 src/Net/                 quick  --interestcheck
 src/Audio/Cd/            quick  --beatcheck
 src/Avatar/              quick  --meshcheck
+src/Avatar/              quick  --outfitcheck
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
@@ -46,6 +47,8 @@ src/Ui/                  quick  --menucheck --systems ui
 src/Core/GameShell       quick  --menucheck --systems ui
 src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
+src/BattleRoyale/        quick  --brcheck
+src/Combat/              quick  --brcheck
 
 # tier 1: one headless Godot on a synthetic course (src/Terrain/Fixture), ~2 min
 src/Terrain/Fixture/     quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
@@ -60,6 +63,9 @@ src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
 @rpc                     net    @netsmoke
 
+src/BattleRoyale/        full   tools/brcheck.sh
+src/Combat/              full   tools/pvpcheck.sh
+src/Items/Weapons        full   tools/pvpcheck.sh
 src/Items/               full   tools/gunshotcheck.sh
 src/Items/               full   tools/placedcheck.sh
 src/Items/               full   tools/plantcheck.sh

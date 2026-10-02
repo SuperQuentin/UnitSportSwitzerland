@@ -72,7 +72,6 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private readonly List<Perch> _perchScratch = new();
     private readonly List<Observer> _localWho = new(1);
     private Droppings? _droppings;
-    private AudioStreamPlayer _gun = null!;
     private AudioStreamPlayer3D _call = null!;
     private double _spawnTimer;
     private double _callCooldown;
@@ -134,8 +133,6 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         Instance = this;
         Journal = new BirdJournal();
         AddChild(Journal);
-        _gun = new AudioStreamPlayer { Name = "Gun", Bus = SfxBus.Name, VolumeDb = -3f };
-        AddChild(_gun);
         _call = new AudioStreamPlayer3D { Name = "Call", Bus = SfxBus.Name, UnitSize = 12f, VolumeDb = -4f };
         AddChild(_call);
         _droppings = new Droppings();
@@ -763,37 +760,9 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     // the hunt
     // ------------------------------------------------------------------------------------
 
-    /// <summary>Called by the item controller with a shell already spent.</summary>
-    private void Fire(FootPlayer player)
+    /// <summary>Called by the item controller after a shotgun shot (the blast already heard).</summary>
+    private void Fire(FootPlayer player, Vector3 eye, Vector3 aim)
     {
-        // The shot leaves the EYE. In third person the camera is ~3 m behind and to the side: the
-        // camera's ray finds what the crosshair is on, then the barrel aims from the eye at that point.
-        var cam = player.Camera;
-        var eye = player.EyePosition;
-        var look = -cam.GlobalTransform.Basis.Z;
-        var aim = look;
-        if (!player.IsFirstPerson && !player.ScopeView)
-        {
-            var start = cam.GlobalPosition + look * Mathf.Max(0f, (eye - cam.GlobalPosition).Dot(look));
-            var end = start + look * (Range + 10f);
-            var ray = GetWorld3D().DirectSpaceState.IntersectRay(
-                PhysicsRayQueryParameters3D.Create(start, end, uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() }));
-            var point = ray.Count > 0 ? ray["position"].AsVector3() : end;
-            if (point.DistanceTo(eye) > 1f) aim = (point - eye).Normalized();
-        }
-        // the blast is an item event: heard (in 3D, at the muzzle) and seen by everyone near,
-        // this player included. Without the event node (a probe world) it stays a local sound.
-        if (ItemEvents.Instance is { } events)
-            events.Send(ItemEventKind.Shot, ItemEvents.MuzzleOf(player, aim), aim);
-        else
-        {
-            var (stream, pitch, db) = SfxSynth.Shotgun.Pick(_rng);
-            _gun.Stream = stream;
-            _gun.PitchScale = pitch;
-            _gun.VolumeDb = -3f + db;
-            _gun.Play();
-        }
-
         // online the server decides and tells everyone (and us, which is when the bird is bagged)
         var bird = Shoot(eye, aim, player);
         if (bird != null && Authority) Bag(bird.Species);

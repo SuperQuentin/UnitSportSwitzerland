@@ -35,6 +35,11 @@ public static class LootChanceCheck
             (BuildingKind.House, FurnitureType.Fridge, 0.5f, ItemId.Apple),
             (BuildingKind.Apartment, FurnitureType.Fridge, 1f, ItemId.Bread),          // RollFactor 0.8: random rounding
             (BuildingKind.House, FurnitureType.Wardrobe, 1f, ItemId.Cloth),
+            // clothes to wear (#251): a plain one, a gothic one, a rare finish
+            (BuildingKind.House, FurnitureType.Wardrobe, 1f, ItemId.WhiteTee),
+            (BuildingKind.House, FurnitureType.Wardrobe, 1f, ItemId.BuckleCorset),
+            (BuildingKind.House, FurnitureType.Wardrobe, 1f, ItemId.RainbowTee),
+            (BuildingKind.Apartment, FurnitureType.Dryer, 1f, ItemId.BeeStockings),
             (BuildingKind.House, FurnitureType.Nightstand, 0.6f, ItemId.Electronics),
             (BuildingKind.Commercial, FurnitureType.ShopCounter, 1f, ItemId.Chocolate),
             (BuildingKind.Industrial, FurnitureType.Crate, 1f, ItemId.ScrapMetal),

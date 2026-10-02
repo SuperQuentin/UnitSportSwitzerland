@@ -285,7 +285,7 @@ public partial class ChatManager : Node
                         Show(line, ChatKind.Private);
                 return;
 
-            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick":
+            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
@@ -411,6 +411,9 @@ public partial class ChatManager : Node
     /// <summary>Races (<c>/race</c>), wired by ServerWorld.</summary>
     public World.RaceManager? Race { get; set; }
 
+    /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
+    public BattleRoyale.BrManager? BattleRoyale { get; set; }
+
     /// <summary>For races: the place index (air courses to a town), a player by name, a private line.</summary>
     public PlaceIndex? Places => _places;
     public long PeerByName(string name) => _registry?.FindByName(name)?.PeerId ?? -1;
@@ -480,6 +483,10 @@ public partial class ChatManager : Node
                     foreach (string line in occasions.RunCommand(parts[1..], IsAdmin(sender)))
                         ReplyTo(sender, line, ChatKind.Private);
                 return;
+            case "br":
+                if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
+                else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
+                return;
             case "race":
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId && !rest.StartsWith("cancel") && !rest.StartsWith("list")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
@@ -506,6 +513,7 @@ public partial class ChatManager : Node
             case "tpall": CommandTeleportEveryone(sender, rest); return;
             case "kick": CommandKick(sender, parts); return;
             case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;
+            case "pvp": CommandPvp(sender, rest); return;
 
             default:
                 ReplyTo(sender, $"Unknown command '/{verb}'. Try /help.", ChatKind.Error);
@@ -513,9 +521,29 @@ public partial class ChatManager : Node
         }
     }
 
+    /// <summary>/pvp on|off: whether foot weapons hurt players (#178). Bare /pvp says which.</summary>
+    private void CommandPvp(long sender, string rest)
+    {
+        switch (rest.Trim().ToLowerInvariant())
+        {
+            case "":
+                ReplyTo(sender, $"PvP is {(Combat.PvpRules.Enabled ? "on" : "off")}.", ChatKind.Private);
+                return;
+            case "on" or "off":
+                Combat.PvpRules.Enabled = rest.Trim().ToLowerInvariant() == "on";
+                Broadcast(Combat.PvpRules.Enabled
+                    ? "PvP is ON: weapons hurt players."
+                    : "PvP is off: weapons no longer hurt players.", ChatKind.System);
+                return;
+            default:
+                ReplyTo(sender, "Usage: /pvp on|off", ChatKind.Error);
+                return;
+        }
+    }
+
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /occasion  /time", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /br join|leave|status  /occasion  /time", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -669,6 +697,11 @@ public partial class ChatManager : Node
 
     private void CommandCity(long sender, string query)
     {
+        if (BattleRoyale?.Playing(sender) == true)
+        {
+            ReplyTo(sender, "No teleporting out of a Battle Royale. /br leave to give up.", ChatKind.Error);
+            return;
+        }
         if (query.Length == 0)
         {
             ReplyTo(sender, "Usage: /city <town>", ChatKind.Error);

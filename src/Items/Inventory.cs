@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using UnitSport.Avatar;
 
 namespace UnitSport.Items;
 
@@ -39,6 +40,14 @@ public readonly record struct ItemStack(ItemId Id, int Count, string? Data = nul
 /// </para>
 ///
 /// <para>
+/// <b>Clothes.</b> After the bag slot come <see cref="Outfit.SlotCount"/> body slots, one per
+/// <see cref="WearSlot"/> (<see cref="SlotOf"/>): a <see cref="ItemUse.Wear"/> item goes only in its
+/// own, and what is in them is what the figure wears (<see cref="Outfit"/>). A robe or dress in
+/// the top slot takes the bottom one too: whatever was there goes back in the pack, and nothing
+/// goes on it while the dress is worn (<see cref="ChangeWorn"/>).
+/// </para>
+///
+/// <para>
 /// <b>Money is not an item.</b> Swiss francs picked up go to <see cref="Cash"/>, a counter, rather
 /// than a slot a 30 CHF find would fill: money is counted, not stacked. Cash is what you carry, and
 /// is lost when you are knocked out; claiming it moves it to the account the server keeps
@@ -64,10 +73,14 @@ public sealed class Inventory
     public const int Size = HotbarSize + MaxPack;
     /// <summary>The worn bag's slot, after all the item slots.</summary>
     public const int BagSlot = Size;
+    /// <summary>The first body slot (<see cref="WearSlot.Head"/>); the others follow in <see cref="WearSlot"/> order.</summary>
+    public const int FirstWearSlot = BagSlot + 1;
+    /// <summary>The last slot of all (<see cref="WearSlot.Hands"/>).</summary>
+    public const int LastSlot = FirstWearSlot + Outfit.SlotCount - 1;
 
     private const string File = "user://inventory.json";
 
-    private ItemStack[] _slots = new ItemStack[Size + 1];
+    private ItemStack[] _slots = new ItemStack[LastSlot + 1];
     private int _batch;
     private bool _dirty;
 
@@ -102,8 +115,35 @@ public sealed class Inventory
 
     public static bool IsBag(ItemStack s) => !s.IsEmpty && ItemDefs.Get(s.Id)?.Use == ItemUse.Bag;
 
-    /// <summary>A slot that can hold something now: an item slot within <see cref="Capacity"/>, or the bag slot.</summary>
-    public bool IsOpen(int slot) => slot == BagSlot || (slot >= 0 && slot < Capacity);
+    /// <summary>A slot that can hold something now: an item slot within <see cref="Capacity"/>, the bag slot or a body slot.</summary>
+    public bool IsOpen(int slot) => slot == BagSlot || IsWearSlot(slot) || (slot >= 0 && slot < Capacity);
+
+    public static bool IsWearSlot(int slot) => slot >= FirstWearSlot && slot <= LastSlot;
+
+    /// <summary>The array index of a body slot.</summary>
+    public static int SlotOf(WearSlot slot) => FirstWearSlot + (int)slot - 1;
+
+    /// <summary>The body slot an array index is, or None.</summary>
+    public static WearSlot WearSlotAt(int slot) => IsWearSlot(slot) ? (WearSlot)(slot - FirstWearSlot + 1) : WearSlot.None;
+
+    /// <summary>Where a stack is worn, or None when it is not something to wear.</summary>
+    public static WearSlot WornOn(ItemStack s) =>
+        !s.IsEmpty && ItemDefs.Get(s.Id) is { Use: ItemUse.Wear } def ? def.Slot : WearSlot.None;
+
+    /// <summary>What is worn in a body slot, or empty.</summary>
+    public ItemStack WornIn(WearSlot slot) => slot == WearSlot.None ? ItemStack.Empty : _slots[SlotOf(slot)];
+
+    /// <summary>Everything worn, as the figure draws it (<see cref="Player.FootPlayer.OutfitBits"/>).</summary>
+    public Outfit Outfit
+    {
+        get
+        {
+            var o = Outfit.Empty;
+            for (int i = FirstWearSlot; i <= LastSlot; i++)
+                if (!_slots[i].IsEmpty && Garments.Get(_slots[i].Id) is { } g) o = o.With(g.Slot, g.Code);
+            return o;
+        }
+    }
 
     /// <summary>Write every change to <c>user://inventory.json</c>. Off for the check's scratch inventories.</summary>
     public bool Persist { get; init; } = true;
@@ -243,6 +283,12 @@ public sealed class Inventory
             ChangeBag(() => (_slots[from], _slots[to]) = (_slots[to], _slots[from]));
             return;
         }
+        if (IsWearSlot(from) || IsWearSlot(to))
+        {
+            if (!Fits(to, _slots[from]) || !Fits(from, _slots[to])) return;
+            ChangeWorn(() => (_slots[from], _slots[to]) = (_slots[to], _slots[from]));
+            return;
+        }
         var a = _slots[from];
         var b = _slots[to];
 
@@ -273,6 +319,11 @@ public sealed class Inventory
         if (slot == BagSlot)
         {
             ClickBag();
+            return;
+        }
+        if (IsWearSlot(slot))
+        {
+            ClickWorn(slot);
             return;
         }
         if (!IsOpen(slot)) return;
@@ -313,6 +364,11 @@ public sealed class Inventory
         if (slot == BagSlot)
         {
             ClickBag();
+            return;
+        }
+        if (IsWearSlot(slot))
+        {
+            ClickWorn(slot);
             return;
         }
         if (!IsOpen(slot)) return;
@@ -364,6 +420,19 @@ public sealed class Inventory
             ChangeBag(() => (_slots[BagSlot], _slots[slot]) = (s, ItemStack.Empty));
             return;
         }
+        // worn clothes come off into the first free slot; clothes go on when their slot is free
+        if (IsWearSlot(slot))
+        {
+            int free = Array.FindIndex(_slots, 0, Capacity, x => x.IsEmpty);
+            if (free < 0) return;
+            ChangeWorn(() => (_slots[free], _slots[slot]) = (s, ItemStack.Empty));
+            return;
+        }
+        if (WornOn(s) is var ws && ws != WearSlot.None && WornIn(ws).IsEmpty)
+        {
+            ChangeWorn(() => (_slots[SlotOf(ws)], _slots[slot]) = (s, ItemStack.Empty));
+            return;
+        }
         (int from, int to) = IsHotbar(slot) ? (HotbarSize, Capacity) : (0, HotbarSize);
         int left = s.Count, max = MaxStack(s.Id);
 
@@ -412,7 +481,7 @@ public sealed class Inventory
     public void SwapWithHotbar(int slot, int hotbar)
     {
         if (slot == hotbar || hotbar < 0 || hotbar >= HotbarSize || !IsOpen(slot)) return;
-        if (slot == BagSlot)
+        if (slot == BagSlot || IsWearSlot(slot))
         {
             Move(slot, hotbar);
             return;
@@ -433,7 +502,7 @@ public sealed class Inventory
         if (Carried.IsEmpty) return;
         var carried = Carried;
         int max = MaxStack(carried.Id);
-        var usable = slots.Where(i => i != BagSlot && IsOpen(i)).Where(i => _slots[i].IsEmpty || (_slots[i].SameKind(carried) && _slots[i].Count < max)).ToList();
+        var usable = slots.Where(i => i != BagSlot && !IsWearSlot(i) && IsOpen(i)).Where(i => _slots[i].IsEmpty || (_slots[i].SameKind(carried) && _slots[i].Count < max)).ToList();
         if (usable.Count == 0) return;
 
         int share = oneEach ? 1 : Math.Max(1, Carried.Count / usable.Count);
@@ -584,14 +653,139 @@ public sealed class Inventory
         return ChangeBag(() => (_slots[BagSlot], _slots[slot]) = (_slots[slot], _slots[BagSlot]));
     }
 
+    // ------------------------------------------------------------------------------------
+    // clothes
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>Whether <paramref name="s"/> may sit in <paramref name="slot"/>: anything in an item slot, only its own clothes in a body slot.</summary>
+    private static bool Fits(int slot, ItemStack s) =>
+        !IsWearSlot(slot) || s.IsEmpty || WornOn(s) == WearSlotAt(slot);
+
+    /// <summary>
+    /// A click on a body slot. Empty hand: take it off onto the cursor. Something for that slot on
+    /// the cursor: put it on, swapping with what was worn. Anything else: refused.
+    /// </summary>
+    private void ClickWorn(int slot)
+    {
+        var worn = _slots[slot];
+        if (Carried.IsEmpty)
+        {
+            if (worn.IsEmpty) return;
+            ChangeWorn(() => { Carried = worn; _slots[slot] = ItemStack.Empty; });
+        }
+        else if (Fits(slot, Carried) && Carried.Count == 1)
+        {
+            var carried = Carried;
+            ChangeWorn(() => { _slots[slot] = carried; Carried = worn; });
+        }
+        else Refused?.Invoke($"Only something for the {Garments.SlotName(WearSlotAt(slot))} goes there.");
+    }
+
+    /// <summary>
+    /// Puts on the clothes in <paramref name="slot"/> (Use on them): what was worn in their body
+    /// slot takes their place. False when they are not clothes or the change was refused.
+    /// </summary>
+    public bool Wear(int slot)
+    {
+        if (!IsOpen(slot) || IsWearSlot(slot) || slot == BagSlot) return false;
+        var ws = WornOn(_slots[slot]);
+        if (ws == WearSlot.None) return false;
+        int body = SlotOf(ws);
+        return ChangeWorn(() => (_slots[body], _slots[slot]) = (_slots[slot], _slots[body]));
+    }
+
+    /// <summary>
+    /// Makes a change to what is worn, then keeps a one-piece (a robe or dress, which takes the
+    /// bottom slot too) from sharing the outfit with a skirt: a bottom that was already on goes back
+    /// in the pack, one being put on is refused. True when the change was made.
+    /// </summary>
+    public bool ChangeWorn(Action change)
+    {
+        var snap = Snapshot();
+        change();
+        int top = SlotOf(WearSlot.Top), bottom = SlotOf(WearSlot.Bottom);
+        if (!_slots[bottom].IsEmpty && Garments.Get(_slots[top].Id) is { CoversBottom: true } dress)
+        {
+            if (!snap.Slots[bottom].SameKind(_slots[bottom]))
+            {
+                Restore(snap, notify: false);
+                Refused?.Invoke($"Take the {dress.Name.ToLowerInvariant()} off first: it is a one-piece.");
+                return false;
+            }
+            var off = _slots[bottom];
+            int free = Array.FindIndex(_slots, 0, Capacity, x => x.IsEmpty);
+            if (free < 0)
+            {
+                Restore(snap, notify: false);
+                Refused?.Invoke($"Your pack is too full to take off the {ItemDefs.Get(off.Id)?.Name.ToLowerInvariant()}.");
+                return false;
+            }
+            _slots[free] = off;
+            _slots[bottom] = ItemStack.Empty;
+        }
+        Notify();
+        return true;
+    }
+
+    /// <summary>
+    /// Empties every item slot and the bag slot, the cursor and the bin (a Battle Royale match starts
+    /// empty-handed). Cash is left alone: it is the account's business; so are the clothes worn
+    /// (#251), which are only a look and come to the match on you.
+    /// </summary>
+    public void Clear()
+    {
+        Array.Fill(_slots, ItemStack.Empty, 0, FirstWearSlot);
+        Carried = ItemStack.Empty;
+        Trashed = ItemStack.Empty;
+        Notify();
+    }
+
+    /// <summary>The free-roam pack while a Battle Royale match has this inventory (<see cref="BeginMatch"/>).</summary>
+    private (ItemStack[] Slots, int Selected)? _lent;
+
+    /// <summary>A match is using this inventory: nothing is saved, the file keeps the free-roam pack.</summary>
+    public bool InMatch => _lent != null;
+
+    /// <summary>
+    /// Lends the inventory to a Battle Royale match: the free-roam pack is saved as it is, put aside
+    /// and the slots emptied. Nothing is saved until <see cref="EndMatch"/>, so a crash mid-match
+    /// still loads the free-roam pack. Cash is not touched.
+    /// </summary>
+    public void BeginMatch()
+    {
+        if (_lent != null) return;
+        Save();
+        _lent = ((ItemStack[])_slots.Clone(), Selected);
+        // the clothes stay on (#251): the match borrows a copy of them, the pack keeps its own
+        Array.Fill(_slots, ItemStack.Empty, 0, FirstWearSlot);
+        Carried = ItemStack.Empty;
+        Trashed = ItemStack.Empty;
+        Selected = 0;
+        Notify();
+    }
+
+    /// <summary>The match is over: whatever was found in it is gone, the free-roam pack is back and saved.</summary>
+    public void EndMatch()
+    {
+        if (_lent is not { } lent) return;
+        _lent = null;
+        _slots = lent.Slots;
+        Selected = lent.Selected;
+        Carried = ItemStack.Empty;
+        Trashed = ItemStack.Empty;
+        Notify();
+    }
+
     /// <summary>Everything the cursor operations touch, for undoing a drag in progress.</summary>
     public (ItemStack[] Slots, ItemStack Carried) Snapshot() => ((ItemStack[])_slots.Clone(), Carried);
 
-    public void Restore((ItemStack[] Slots, ItemStack Carried) snap)
+    public void Restore((ItemStack[] Slots, ItemStack Carried) snap) => Restore(snap, notify: true);
+
+    private void Restore((ItemStack[] Slots, ItemStack Carried) snap, bool notify)
     {
         _slots = (ItemStack[])snap.Slots.Clone();
         Carried = snap.Carried;
-        Notify();
+        if (notify) Notify();
     }
 
     private static ItemStack Less(ItemStack s, int n) =>
@@ -647,19 +841,8 @@ public sealed class Inventory
         Save();
     }
 
-    // ---- worn -----------------------------------------------------------------------------------
-
-    /// <summary>The hat being worn (an <see cref="ItemUse.Wear"/> item still in the pack), or None.</summary>
-    public ItemId Worn => _worn != ItemId.None && Contains(_worn) ? _worn : ItemId.None;
-
-    private ItemId _worn;
-
-    public void SetWorn(ItemId id)
-    {
-        if (id == _worn) return;
-        _worn = id;
-        Notify();
-    }
+    /// <summary>What is worn on the head (a hat or clothes), or None.</summary>
+    public ItemId Worn => WornIn(WearSlot.Head) is { IsEmpty: false } s ? s.Id : ItemId.None;
 
     public bool Contains(ItemId id)
     {
@@ -675,7 +858,8 @@ public sealed class Inventory
 
     private sealed class SaveData
     {
-        public string Worn { get; set; } = "";
+        /// <summary>The hat worn before body slots existed (a reference to one in the pack): read once, moved to the head slot.</summary>
+        public string? Worn { get; set; }
         public int Selected { get; set; }
         public int Cash { get; set; }
         public List<SavedSlot> Slots { get; set; } = new();
@@ -723,7 +907,7 @@ public sealed class Inventory
         inv.Cash = Math.Max(0, data.Cash);
         // saved by name, so a renumbered enum cannot turn binoculars into a flag
         foreach (var s in data.Slots)
-            if (s.Slot >= 0 && s.Slot <= BagSlot && Parse(s) is { } stack)
+            if (s.Slot >= 0 && s.Slot <= LastSlot && Parse(s) is { } stack)
             {
                 // francs saved in a slot before money had its own counter
                 if (stack.Id == ItemId.Francs) inv.Cash += stack.Count;
@@ -732,7 +916,27 @@ public sealed class Inventory
         if (!IsBag(inv.Bag)) inv._slots[BagSlot] = ItemStack.Empty;
         inv.Compact();   // stacks a save left beyond the pack (a changed bag size): moved in where they fit
         inv.Selected = Math.Clamp(data.Selected, 0, HotbarSize - 1);
-        if (Enum.TryParse<ItemId>(data.Worn, out var worn)) inv._worn = worn;
+        inv._batch++;   // no save from inside Load
+        // a body slot holding what does not go there (an item that changed slot): back into the pack
+        for (int i = FirstWearSlot; i <= LastSlot; i++)
+            if (!Fits(i, inv._slots[i]))
+            {
+                var misplaced = inv._slots[i];
+                inv._slots[i] = ItemStack.Empty;
+                if (inv.Add(misplaced) > 0) inv.Trashed = misplaced;
+            }
+        // a hat worn before body slots existed: out of the pack onto the head
+        if (Enum.TryParse<ItemId>(data.Worn, out var worn) && WornOn(new ItemStack(worn, 1)) == WearSlot.Head
+            && inv.WornIn(WearSlot.Head).IsEmpty)
+        {
+            int at = Array.FindIndex(inv._slots, 0, inv.Capacity, x => x.Id == worn && !x.IsEmpty);
+            if (at >= 0)
+            {
+                inv._slots[SlotOf(WearSlot.Head)] = inv._slots[at] with { Count = 1 };
+                inv._slots[at] = Less(inv._slots[at], 1);
+            }
+        }
+        inv._batch--;
         // quit with something on the cursor: back into the slots
         if (data.Carried is { } c && Parse(c) is { } carried)
         {
@@ -778,7 +982,7 @@ public sealed class Inventory
 
     private void Save()
     {
-        if (!Persist) return;
+        if (!Persist || _lent != null) return;
         using var f = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
         f?.StoreString(ToJson());
     }
@@ -786,7 +990,7 @@ public sealed class Inventory
     /// <summary>The save format: stacks by item name, their data only when there is some.</summary>
     internal string ToJson()
     {
-        var data = new SaveData { Selected = Selected, Cash = Cash, Worn = _worn == ItemId.None ? "" : _worn.ToString() };
+        var data = new SaveData { Selected = Selected, Cash = Cash };
         for (int i = 0; i < _slots.Length; i++)
             if (!_slots[i].IsEmpty)
                 data.Slots.Add(new SavedSlot { Slot = i, Item = _slots[i].Id.ToString(), Count = _slots[i].Count, Data = _slots[i].Data });

@@ -66,8 +66,11 @@ public partial class ItemController : Node
     /// <summary>Vertical FOV in degrees of a 35 mm-equivalent focal length (35 mm is about 38 degrees).</summary>
     public static float FovFromFocal(float mm) => Mathf.RadToDeg(2f * Mathf.Atan(12f / mm));
 
-    /// <summary>Fires the held gun (a shell already taken); set by the bird hunt, <c>Birds.BirdLife</c>.</summary>
-    public Action<FootPlayer>? Fire { get; set; }
+    /// <summary>
+    /// A shotgun shot left the eye along the aim (both given), the shell already spent and the
+    /// blast already sent; set by the bird hunt, <c>Birds.BirdLife</c>.
+    /// </summary>
+    public Action<FootPlayer, Vector3, Vector3>? Fire { get; set; }
 
     /// <summary>Resolved per frame, never captured: the local on-foot player, or null (fly camera, replay).</summary>
     public Func<FootPlayer?>? ActivePlayer { get; set; }
@@ -189,7 +192,7 @@ public partial class ItemController : Node
         }
 
         // cash you carry is lost when you go down; what you claimed to the account is not
-        if (player.KnockedOut && !_wasKnockedOut && _inventory.Cash > 0)
+        if (player.KnockedOut && !_wasKnockedOut && _inventory.Cash > 0 && !_inventory.InMatch)
         {
             int lost = _inventory.Cash;
             _inventory.TakeCash(lost);
@@ -226,10 +229,13 @@ public partial class ItemController : Node
         float breathFov = 1f + 0.012f * Mathf.Sin(breath * 1.3f);
         _ui.OpticSway = aiming && def!.Use == ItemUse.Optic
             ? new Vector2(0.0035f * Mathf.Sin(breath * 0.9f + 1f), 0.005f * Mathf.Sin(breath * 1.3f)) : Vector2.Zero;
-        player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f * breathFov, ItemUse.Photo => FovFromFocal(_focalMm), _ => 50f } : null;
+        var weapon = Weapons.Get(_inventory.HeldId);
+        // a scoped gun is held to the eye like the binoculars, and drawn as their overlay
+        bool scoped = aiming && weapon is { AimFov: < 20f };
+        player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f * breathFov, ItemUse.Photo => FovFromFocal(_focalMm), _ => weapon?.AimFov ?? 50f } : null;
         player.ScopeView = aiming;
         player.ItemAction = _planting || _useBusy ? 2 : aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
-        player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => 0.6f } : 1f;
+        player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => scoped ? 0.15f : 0.6f } : 1f;
         // held items stay visible while aiming: they are raised to a pose. Binoculars and the
         // camera hide once at the eye (you look through them: the overlay is the view).
         bool poseSettled = visual?.PoseSettled ?? true;
@@ -247,11 +253,12 @@ public partial class ItemController : Node
             });
             if (!aiming && def?.Use == ItemUse.Readout) visual.SetPose(ViewPose.Read);   // the GPS is held up to read
             visual.ScreenText = _inventory.HeldId == ItemId.Gps && usable ? GpsScreen(player) : null;
-            visual.Suppressed = (aiming && def!.Use is (ItemUse.Optic or ItemUse.Photo) && poseSettled);
+            visual.Suppressed = (aiming && (def!.Use is (ItemUse.Optic or ItemUse.Photo) || scoped) && poseSettled);
         }
 
         // the viewfinder / binocular overlay appears once the item has been raised
-        _ui.Scope = aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def.Use : null;
+        _ui.Scope = scoped ? (poseSettled ? ItemUse.Optic : null)
+            : aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def!.Use : null;
         StepThrow(player, def, usable, aiming, (float)delta);
 
         // the smart binoculars read out the building at hand while held (#165): no aiming
@@ -409,33 +416,87 @@ public partial class ItemController : Node
 
             case ItemUse.Shoot:
             {
-                // the action has to be pumped before the next shell: no firing until it has cycled
+                if (Weapons.Get(stack.Id) is not { } weapon) break;
+                // the action has to cycle before the next round (the shotgun's pump, a rifle's bolt)
                 if (Time.GetTicksMsec() < _nextShotMs) break;
-                int shells = -1;
-                for (int i = 0; i < Inventory.Size && shells < 0; i++)
-                    if (_inventory[i].Id == ItemId.Shells && !_inventory[i].IsEmpty) shells = i;
-                if (shells < 0)
+                int ammo = -1;
+                for (int i = 0; i < Inventory.Size && ammo < 0; i++)
+                    if (_inventory[i].Id == weapon.Ammo && !_inventory[i].IsEmpty) ammo = i;
+                if (ammo < 0)
                 {
                     Play(SfxSynth.Tick, 0.5f);
-                    _ui.Toast("Out of shells.");
+                    _ui.Toast(weapon.Ammo == ItemId.Shells ? "Out of shells." : $"Out of {ItemDefs.Get(weapon.Ammo)?.Name ?? "ammunition"}.");
                     break;
                 }
-                _inventory.TakeOne(shells);
-                _nextShotMs = Time.GetTicksMsec() + (ulong)((HeldItemVisual.PumpDelay + HeldItemVisual.PumpTime + 0.1f) * 1000f);
-                Recoil(player);
-                Fire?.Invoke(player);
+                _inventory.TakeOne(ammo);
+                _nextShotMs = Time.GetTicksMsec() + (ulong)(weapon.Interval * 1000f);
+                Recoil(player, weapon);
+                Shoot(player, weapon);
                 break;
             }
 
-            case ItemUse.Wear:
+            case ItemUse.Melee:
+            {
+                if (Weapons.Get(stack.Id) is not { } blade || Time.GetTicksMsec() < _nextShotMs) break;
+                _nextShotMs = Time.GetTicksMsec() + (ulong)(blade.Interval * 1000f);
+                Kick(player);
+                Play(SfxSynth.WhooshBank.Variants[SfxRng.Next(SfxSynth.WhooshBank.Variants.Length)], 1.3f);
+                var (eye, aim) = AimFrom(player, blade.Range);
+                if (!PlayerHits.Stab(player, eye, aim, blade)) BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, blade.Range);
+                break;
+            }
+
+            case ItemUse.Signal:
+            {
+                // a flare calls a supply drop (#198): only where there is a match to drop into
+                if (BattleRoyale.BrManager.Instance?.CallDrop() != true)
+                {
+                    _ui.Toast("The flare would only call a supply drop in a Battle Royale.");
+                    break;
+                }
+                _inventory.TakeOne(slot);
+                Kick(player);
+                var up = (Vector3.Up * 3f - player.Camera.GlobalTransform.Basis.Z).Normalized();
+                ItemEvents.Instance?.Send(ItemEventKind.Flare, ItemEvents.MuzzleOf(player, up), up);
+                _ui.Toast("Flare up: a supply drop is on its way.");
+                break;
+            }
+
+            case ItemUse.Armor:
                 if (_useBusy) break;
-                var hat = stack.Id;
+                if (player.Armor >= FootPlayer.MaxArmor - 0.01f)
+                {
+                    _ui.Toast("Your vest is already whole.");
+                    break;
+                }
+                StartUse(player, slot, def, ViewPose.Head, 0.4f, 0.5f, 0.3f, () =>
+                {
+                    if (!player.AddArmor(FootPlayer.MaxArmor)) return;
+                    _inventory.TakeOne(slot);
+                    Play(SfxSynth.Tick, 0.8f);
+                    _ui.Toast($"{def.Name} on: {FootPlayer.MaxArmor:F0} armour.");
+                });
+                break;
+
+            case ItemUse.Wear:
+                // worn: off into the pack; carried: on in its body slot, swapping with what was there
+                if (Inventory.IsWearSlot(slot))
+                {
+                    _inventory.QuickMove(slot);
+                    Play(SfxSynth.Tick, 0.9f);
+                    break;
+                }
+                if (_useBusy) break;
+                var worn = stack.Id;
                 StartUse(player, slot, def, ViewPose.Head, 0.3f, 0.2f, 0.3f, () =>
                 {
-                    bool on = _inventory.Worn != hat;
-                    _inventory.SetWorn(on ? hat : ItemId.None);
-                    Play(SfxSynth.Tick, on ? 1.2f : 0.9f);
-                    _ui.Toast(on ? $"You put on the {def.Name.ToLowerInvariant()}." : $"You take off the {def.Name.ToLowerInvariant()}.");
+                    // the stack may have moved during the wind-up: wear it from wherever it is now
+                    int at = _inventory[slot].Id == worn ? slot : -1;
+                    for (int i = 0; at < 0 && i < _inventory.Capacity; i++)
+                        if (_inventory[i].Id == worn) at = i;
+                    if (at < 0 || !_inventory.Wear(at)) return;
+                    Play(SfxSynth.Tick, 1.2f);
+                    _ui.Toast($"You put on the {def.Name.ToLowerInvariant()}.");
                 });
                 break;
 
@@ -674,16 +735,61 @@ public partial class ItemController : Node
         tween.TweenCallback(Callable.From(ghost.QueueFree));
     }
 
-    /// <summary>A shotgun's kick: the viewmodel jolts, the view punches up a few degrees, the action cycles.</summary>
-    private static void Recoil(FootPlayer player)
+    /// <summary>A gun's kick: the viewmodel jolts, the view punches up a few degrees, a shotgun's action cycles.</summary>
+    private static void Recoil(FootPlayer player, WeaponDef weapon)
     {
+        bool shotgun = weapon.Id == ItemId.Shotgun;
         if (player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v)
         {
             v.Kick = 1f;
-            v.Recoil = 1f;
-            v.Pump();
+            v.Recoil = shotgun || weapon.Id == ItemId.HuntingRifle ? 1f : 0.45f;
+            if (shotgun) v.Pump();
         }
-        player.Punch(Mathf.DegToRad(4.5f));
+        player.Punch(Mathf.DegToRad(weapon.Id switch { ItemId.Shotgun => 4.5f, ItemId.HuntingRifle => 5f, ItemId.Pistol => 2.5f, _ => 1.4f }));
+    }
+
+    /// <summary>
+    /// Where a shot from <paramref name="player"/> starts and goes. It leaves the EYE: in third
+    /// person the camera is ~3 m behind and to the side, so the camera's ray finds what the
+    /// crosshair is on and the barrel aims from the eye at that point.
+    /// </summary>
+    public static (Vector3 Eye, Vector3 Aim) AimFrom(FootPlayer player, float range)
+    {
+        var cam = player.Camera;
+        var eye = player.EyePosition;
+        var look = -cam.GlobalTransform.Basis.Z;
+        var aim = look;
+        if (!player.IsFirstPerson && !player.ScopeView)
+        {
+            var start = cam.GlobalPosition + look * Mathf.Max(0f, (eye - cam.GlobalPosition).Dot(look));
+            var end = start + look * (range + 10f);
+            var ray = player.GetWorld3D().DirectSpaceState.IntersectRay(
+                PhysicsRayQueryParameters3D.Create(start, end, uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() }));
+            var point = ray.Count > 0 ? ray["position"].AsVector3() : end;
+            if (point.DistanceTo(eye) > 1f) aim = (point - eye).Normalized();
+        }
+        return (eye, aim);
+    }
+
+    /// <summary>
+    /// A shot: heard and seen by everyone near (an item event, this player included), traced
+    /// against the other players, and for the shotgun against the birds.
+    /// </summary>
+    private void Shoot(FootPlayer player, WeaponDef weapon)
+    {
+        var (eye, aim) = AimFrom(player, weapon.Range);
+        if (ItemEvents.Instance is { } events)
+            events.Send(ItemEventKind.Shot, ItemEvents.MuzzleOf(player, aim), aim, ((int)weapon.Id).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        else
+        {
+            // a probe world without the event node: a plain sound
+            var (stream, pitch, db) = SfxSynth.Shotgun.Pick(SfxRng);
+            Play(stream, pitch * weapon.Pitch);
+        }
+        PlayerHits.Shoot(player, eye, aim, weapon);
+        // a shot through a supply crate breaks it open (#198)
+        BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, weapon.Range);
+        if (weapon.Id == ItemId.Shotgun) Fire?.Invoke(player, eye, aim);
     }
 
     private static void Kick(FootPlayer player)
