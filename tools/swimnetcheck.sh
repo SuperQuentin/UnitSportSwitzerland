@@ -4,7 +4,7 @@
 # see A's copy in the swim pose, the right style, and as deep under the surface as A says it is.
 # No terrain data needed.
 #   tools/swimnetcheck.sh             (GODOT = the editor executable, docs/notes/general/godot-exe.md)
-#   SHOTS=1 tools/swimnetcheck.sh     (B windowed: its view of A in test_output/swimnet_B_*.png)
+#   SHOTS=1 [STYLE=ps1] tools/swimnetcheck.sh   (B windowed: its view of A in test_output/swimnet_B_*.png)
 . "$(dirname "$0")/lib/guard.sh"
 set -u
 GODOT=${GODOT:-godot}
@@ -32,7 +32,8 @@ done
 A=$!
 guard_watch $A > /dev/null
 WINDOW=--headless; [ -n "${SHOTS:-}" ] && WINDOW=
-guard_run 300 $OUT/swimnet_B.log "$GODOT" $WINDOW --path . -- --connect 127.0.0.1:$PORT --name WatcherB $WORLD --view first --nocapture --time 14 --swimnet B
+STYLEARG=; [ -n "${STYLE:-}" ] && STYLEARG="--style $STYLE"
+guard_run 300 $OUT/swimnet_B.log "$GODOT" $WINDOW --path . -- --connect 127.0.0.1:$PORT --name WatcherB $WORLD --view first --nocapture --time 14 $STYLEARG --swimnet B
 for _ in $(seq 1 30); do kill -0 "$A" 2>/dev/null || break; sleep 1; done
 grep -h "\[swimnet" $OUT/swimnet_A.log $OUT/swimnet_B.log
 code=0
