@@ -177,6 +177,10 @@ public static class StreetView
     /// <c>--dump-street E,N</c>: the corner patches and segment ends within 12 m of a point, with
     /// heights, for chasing a step the plan view cannot show.
     /// </summary>
+    /// <summary>A side's bands outward, in metres: verge + path (kind) + buffer + sidewalk, and the kerb.</summary>
+    private static string Bands(RoadSide s) => string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"v{s.VergeDm / 10.0:F1}+{s.Bike}{s.BikeDm / 10.0:F1}+b{s.BufferDm / 10.0:F1}+s{s.SidewalkDm / 10.0:F1} k{s.KerbCm}");
+
     public static int Dump(string chunks, double e, double n, Action<string> log)
     {
         var id = TileId.FromLv95(e, n);
@@ -217,7 +221,7 @@ public static class StreetView
                 if (d < best) { best = d; bx = px; bz = pz; by = s.Points[i * 3 + 1] + (s.Points[i * 3 + 4] - s.Points[i * 3 + 1]) * t; }
             }
             if (best < 15)
-                log(string.Create(c, $"passes {s.Class} {s.Flags} at {best:F1} m: ({id.MinE + bx:F1},{id.MaxN - bz:F1}) y {by:F3} width {s.Width:F1} sidewalks {s.Attributes.Left.SidewalkDm / 10.0:F1}/{s.Attributes.Right.SidewalkDm / 10.0:F1}"
+                log(string.Create(c, $"passes {s.Class} {s.Flags} at {best:F1} m: ({id.MinE + bx:F1},{id.MaxN - bz:F1}) y {by:F3} width {s.Width:F1} sidewalks {s.Attributes.Left.SidewalkDm / 10.0:F1}/{s.Attributes.Right.SidewalkDm / 10.0:F1} sides {Bands(s.Attributes.Left)} / {Bands(s.Attributes.Right)}"
                     + $"; ends ({id.MinE + s.Points[0]:F1},{id.MaxN - s.Points[2]:F1} y {s.Points[1]:F2}) ({id.MinE + s.Points[^3]:F1},{id.MaxN - s.Points[^1]:F1} y {s.Points[^2]:F2})"));
         }
         foreach (var s in tile.Segments)
