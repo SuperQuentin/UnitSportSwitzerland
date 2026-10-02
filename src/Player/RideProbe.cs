@@ -52,7 +52,7 @@ public partial class RideProbe : Node
 
     private static float? Arg(string name)
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int i = System.Array.IndexOf(args, name);
         return i >= 0 && i + 1 < args.Length && float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : null;
@@ -72,14 +72,14 @@ public partial class RideProbe : Node
 
         // The probe checks the physics against real-world numbers (180 W -> 32.7 km/h flat), so
         // it rides the Sim profile unless told otherwise with --profile game. Not saved.
-        if (!OS.GetCmdlineUserArgs().Contains("--profile"))
+        if (!CmdArgs.Has("--profile"))
             Core.GameSettings.Current.RideProfile = Core.RideProfile.Sim;
     }
 
     /// <summary>Returns the requested vehicle and duration, or null when --ride was not given.</summary>
     public static (RideKind Kind, double Seconds, string? Shot)? ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         for (int i = 0; i < args.Length - 1; i++)
         {
             if (args[i] != "--ride") continue;
@@ -127,7 +127,7 @@ public partial class RideProbe : Node
             _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
             // --heading is a compass bearing: a node faces −Z (north) and +yaw turns it toward −X
             // (west). Set before the node enters the tree, whose _Ready takes its view from it.
-            var args = OS.GetCmdlineUserArgs();
+            var args = CmdArgs.All;
             int hi = System.Array.IndexOf(args, "--heading");
             if (hi >= 0 && hi + 1 < args.Length && float.TryParse(args[hi + 1], System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out float bearing))
@@ -162,14 +162,14 @@ public partial class RideProbe : Node
                 ? $"[ride] mounted {_kind}"
                 : $"[ride] MOUNT REFUSED for {_kind}");
             if (!_mounted) { _done = true; GetTree().Quit(1); }
-            int si = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--setup");
-            if (_mounted && si >= 0 && si + 1 < OS.GetCmdlineUserArgs().Length)
+            int si = System.Array.IndexOf(CmdArgs.All, "--setup");
+            if (_mounted && si >= 0 && si + 1 < CmdArgs.All.Length)
             {
-                var setup = CarSetups.Parse(OS.GetCmdlineUserArgs()[si + 1]);
+                var setup = CarSetups.Parse(CmdArgs.All[si + 1]);
                 GD.Print(setup != null && _player.SetCarSetup(setup.Id) ? $"[ride] preset {setup.Name}" : "[ride] PRESET REFUSED");
             }
 
-            var a = OS.GetCmdlineUserArgs();
+            var a = CmdArgs.All;
             int ti = System.Array.IndexOf(a, "--trailer");
             if (_mounted && ti >= 0 && ti + 1 < a.Length && int.TryParse(a[ti + 1], out int trailer))
                 GD.Print(_player.SpawnTrailer(trailer, 1f) ? $"[ride] coupled {TrailerCatalog.All[trailer].Label}" : "[ride] TRAILER REFUSED");
@@ -286,7 +286,7 @@ public partial class RideProbe : Node
         wall.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size } });
         AddChild(wall);
         wall.GlobalTransform = new Transform3D(Basis.LookingAt(fwd.Normalized(), Vector3.Up), new Vector3(at.X, g + size.Y * 0.5f - 0.3f, at.Z));
-        var a = OS.GetCmdlineUserArgs();
+        var a = CmdArgs.All;
         int si = System.Array.IndexOf(a, "--crashshots");
         if (si >= 0 && si + 1 < a.Length)
             foreach (var t in a[si + 1].Split(','))

@@ -25,7 +25,7 @@ public partial class LeaveCheck : Node
         Name = "LeaveCheck";
         _sessions.Add(new WorldLaunch { Mode = GameMode.Explore });
         _sessions.Add(new WorldLaunch { Mode = GameMode.Explore });
-        var a = OS.GetCmdlineUserArgs();
+        var a = CmdArgs.All;
         int c = Array.IndexOf(a, "connect");
         if (c >= 0 && c + 1 < a.Length)
             for (int i = 0; i < 2; i++)
@@ -38,7 +38,7 @@ public partial class LeaveCheck : Node
 
     private int _hostedPid = -1;
 
-    public static bool Requested() => Array.IndexOf(OS.GetCmdlineUserArgs(), "--leavecheck") >= 0;
+    public static bool Requested() => CmdArgs.Has("--leavecheck");
 
     public override void _Process(double delta)
     {

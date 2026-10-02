@@ -23,18 +23,14 @@ public partial class DeckProbe : Node
 {
     public static string? ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, "--decknet");
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        return CmdArgs.Value("--decknet");
     }
 
     private static string? Password
     {
         get
         {
-            var args = OS.GetCmdlineUserArgs();
-            int i = System.Array.IndexOf(args, "--decknet");
-            return i >= 0 && i + 2 < args.Length && !args[i + 2].StartsWith("--") ? args[i + 2] : null;
+            return CmdArgs.Value("--decknet", 2, notFlag: true);
         }
     }
 

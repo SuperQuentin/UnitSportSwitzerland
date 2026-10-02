@@ -37,7 +37,7 @@ public partial class FlightCheckProbe : Node
 
     public static (string Kind, string? Shot)? ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int i = Array.IndexOf(args, "--flycheck");
         if (i < 0 || i + 1 >= args.Length) return null;
         var parts = args[i + 1].Split(',');

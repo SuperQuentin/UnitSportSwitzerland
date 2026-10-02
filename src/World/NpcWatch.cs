@@ -37,7 +37,7 @@ public partial class NpcWatch : Node
 
     public static NpcWatch? FromArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int i = System.Array.IndexOf(args, "--npcwatch");
         if (i < 0 || i + 1 >= args.Length) return null;
         var parts = args[i + 1].Split(',');

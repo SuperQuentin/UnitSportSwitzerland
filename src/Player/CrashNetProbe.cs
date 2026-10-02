@@ -21,18 +21,14 @@ public partial class CrashNetProbe : Node
 {
     public static string? ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, "--crashnet");
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        return CmdArgs.Value("--crashnet");
     }
 
     private static string? Password
     {
         get
         {
-            var args = OS.GetCmdlineUserArgs();
-            int i = System.Array.IndexOf(args, "--crashnet");
-            return i >= 0 && i + 2 < args.Length && !args[i + 2].StartsWith("--") ? args[i + 2] : null;
+            return CmdArgs.Value("--crashnet", 2, notFlag: true);
         }
     }
 

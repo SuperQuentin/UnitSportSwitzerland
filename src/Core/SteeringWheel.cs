@@ -66,7 +66,7 @@ public partial class SteeringWheel : Node
     /// <see cref="FakePeriod"/> s with a steady throttle, so the wheel path can be checked on a
     /// machine without one (<c>--wheelwatch</c>).
     /// </summary>
-    public static readonly bool Simulated = Array.IndexOf(OS.GetCmdlineUserArgs(), "--fakewheel") >= 0;
+    public static readonly bool Simulated = CmdArgs.Has("--fakewheel");
     public const float FakeSweepDeg = 180f, FakePeriod = 4f, FakeThrottle = 0.35f;
     private double _fakeTime;
 

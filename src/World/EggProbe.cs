@@ -31,9 +31,7 @@ public partial class EggProbe : Node
 
     public static string? Mode()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--eggcheck");
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        return CmdArgs.Value("--eggcheck");
     }
 
     public EggProbe(string mode, Func<FootPlayer?> player, ChunkManager chunks, WorldOrigin origin)

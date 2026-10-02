@@ -37,7 +37,7 @@ public partial class WallOffProbe : Node
 
     public static double? ParseArgs()
     {
-        foreach (var a in OS.GetCmdlineUserArgs())
+        foreach (var a in CmdArgs.All)
             if (a.StartsWith("--walloff"))
             {
                 var parts = a.Split(',');

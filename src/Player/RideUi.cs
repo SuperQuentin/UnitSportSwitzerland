@@ -598,7 +598,7 @@ public partial class RideUi : CanvasLayer
     /// <summary>"--ridemenu &lt;tab&gt; &lt;card&gt;" (0-based): opens on that tab with that card pointed at, for screenshots.</summary>
     private void ApplyShotArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int at = Array.IndexOf(args, "--ridemenu");
         if (at < 0 || at + 1 >= args.Length || !int.TryParse(args[at + 1], out int tab)) return;
         SelectTab(tab);

@@ -98,7 +98,7 @@ public sealed class HostedServer
 
     public static int? ParseParentPid()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         for (int i = 0; i < args.Length - 1; i++)
             if (args[i] == "--parent-pid" && int.TryParse(args[i + 1], out int pid)) return pid;
         return null;

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Godot;
 using UnitSport.Net;
 using UnitSport.Terrain.Format;
+using UnitSport.Core;
 
 namespace UnitSport.BattleRoyale;
 
@@ -65,13 +66,7 @@ public partial class BrManager : Node
     /// <summary>"--brpace f" on the server: every match's timings times f (the loopback check runs a match in a minute).</summary>
     private static readonly float PaceScale = ParsePace();
 
-    private static float ParsePace()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--brpace");
-        return i >= 0 && i + 1 < args.Length && float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out float f) && f > 0 ? f : 1f;
-    }
+    private static float ParsePace() => CmdArgs.Float("--brpace") is float f && f > 0 ? f : 1f;
 
     /// <summary>
     /// <c>/br ...</c> from <paramref name="sender"/>. Returns the private reply; public news goes

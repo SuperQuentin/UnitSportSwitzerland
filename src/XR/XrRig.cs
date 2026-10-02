@@ -161,7 +161,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
         // "--xrheadshot <png> [seconds]": what the headset camera itself renders, saved to a file
         // (with --xrsim the headset viewport is otherwise not drawn); for checks of the panel
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int shot = Array.IndexOf(args, "--xrheadshot");
         if (shot >= 0 && shot + 1 < args.Length)
         {

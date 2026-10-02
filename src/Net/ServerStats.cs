@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using Godot;
 using UnitSport.Terrain;
+using UnitSport.Core;
 
 namespace UnitSport.Net;
 
@@ -36,7 +37,7 @@ public partial class ServerStats : Node
 
     private static ServerStats? _active;
 
-    private static readonly string[] Args = OS.GetCmdlineUserArgs();
+    private static readonly string[] Args = CmdArgs.All;
     public static bool Requested => Args.Any(a => a.StartsWith("--serverstats"));
 
     private readonly string _label = Args.FirstOrDefault(a => a.StartsWith("--serverstats"))?.Split(',') is { Length: > 1 } p

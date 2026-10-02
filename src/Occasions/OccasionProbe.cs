@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Occasions;
 
@@ -14,7 +15,7 @@ namespace UnitSport.Occasions;
 /// </summary>
 public static class OccasionProbe
 {
-    public static bool Requested => OS.GetCmdlineUserArgs().Contains("--occasioncheck");
+    public static bool Requested => CmdArgs.Has("--occasioncheck");
 
     public static int Run()
     {

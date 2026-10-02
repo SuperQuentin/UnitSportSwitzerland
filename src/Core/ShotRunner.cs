@@ -81,28 +81,12 @@ public partial class ShotRunner : Node
     }
 
     /// <summary>Parses "--shot x,y,z,pitch,yaw,seconds,path" from the command line.</summary>
-    public static string[]? ParseArgs()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--shot")
-            {
-                var parts = args[i + 1].Split(',');
-                return parts.Length == 7 ? parts : null;
-            }
-        return null;
-    }
+    public static string[]? ParseArgs() => CmdArgs.Value("--shot")?.Split(',') is { Length: 7 } parts ? parts : null;
 
     /// <summary>Parses "--shot-queue path" from the command line.</summary>
-    public static string? ParseQueueArg()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--shot-queue") return args[i + 1];
-        return null;
-    }
+    public static string? ParseQueueArg() => CmdArgs.Value("--shot-queue");
 
-    private static bool HideHudRequested() => System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--nohud") >= 0;
+    private static bool HideHudRequested() => CmdArgs.Has("--nohud");
 
     private void Aim(Shot shot)
     {

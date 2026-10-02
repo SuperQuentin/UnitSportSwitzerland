@@ -236,7 +236,7 @@ public sealed class Motorbike : Rideable, IEngined
         int failures = 0;
         var settings = Core.GameSettings.Current;
         var was = settings.RideProfile;
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int ai = System.Array.IndexOf(args, "--motocheck");
         var only = ai >= 0 && ai + 1 < args.Length && !args[ai + 1].StartsWith("--")
             ? args[ai + 1].Split(',').Select(int.Parse).ToHashSet() : null;

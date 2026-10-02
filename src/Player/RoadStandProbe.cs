@@ -40,14 +40,14 @@ public partial class RoadStandProbe : Node
         _origin = origin;
     }
 
-    public static bool Requested() => OS.GetCmdlineUserArgs().Contains("--roadcheck");
+    public static bool Requested() => CmdArgs.Has("--roadcheck");
 
     /// <summary>
     /// <c>--bridges</c>: test bridge decks instead. They are not in the terrain heightfield at all
     /// (a heightfield cannot hold a deck over a gorge) but on their own collision body, drawn
     /// <see cref="BridgeLift"/> above the stored deck line.
     /// </summary>
-    private static readonly bool Bridges = OS.GetCmdlineUserArgs().Contains("--bridges");
+    private static readonly bool Bridges = CmdArgs.Has("--bridges");
 
     /// <summary>
     /// <c>--embankments</c> (#125): add the tile's retaining walls and road slopes. A body must
@@ -57,19 +57,19 @@ public partial class RoadStandProbe : Node
     /// triangulation between them does not matter. Slopes are probed with a ray only: a body
     /// slides on a 1:1 cut.
     /// </summary>
-    private static readonly bool Embankments = OS.GetCmdlineUserArgs().Contains("--embankments");
+    private static readonly bool Embankments = CmdArgs.Has("--embankments");
 
     /// <summary>
     /// <c>--sidewalks</c> (#119): only sidewalk samples. A body rests on a kerbed sidewalk's top
     /// (middle, and just past the chamfer at the kerb) and on the carriageway beside the kerb, and
     /// the ground just past a sidewalk's outer edge is the blend's own height.
     /// </summary>
-    private static readonly bool Sidewalks = OS.GetCmdlineUserArgs().Contains("--sidewalks");
+    private static readonly bool Sidewalks = CmdArgs.Has("--sidewalks");
 
     /// <summary><c>--floorat E,N</c>: only the four lattice vertices around one LV95 point (with <c>--at</c> on its tile).</summary>
     private static (double E, double N)? FloorAtArg()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int i = Array.IndexOf(args, "--floorat");
         if (i < 0 || i + 1 >= args.Length) return null;
         var p = args[i + 1].Split(',');

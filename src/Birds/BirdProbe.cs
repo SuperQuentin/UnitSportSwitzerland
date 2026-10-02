@@ -36,16 +36,7 @@ public partial class BirdProbe : Node
         _shot = shot;
     }
 
-    public static (bool Requested, string? Shot) ParseArgs()
-    {
-        foreach (var a in OS.GetCmdlineUserArgs())
-            if (a.StartsWith("--birdcheck"))
-            {
-                var parts = a.Split(',');
-                return (true, parts.Length > 1 ? parts[1] : null);
-            }
-        return (false, null);
-    }
+    public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--birdcheck");
 
     private void Check(bool condition, string what)
     {
@@ -58,7 +49,7 @@ public partial class BirdProbe : Node
     public override async void _Ready()
     {
         _birds.AutoSpawn = false;
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--birdmonth") < 0) _birds.Month = 10;
+        if (!CmdArgs.Has("--birdmonth")) _birds.Month = 10;
         GD.Print($"[birds] catalogue: {BirdCatalog.All.Length} species, {BirdCatalog.All.Count(s => s.IsGame)} game; month {_birds.Month}");
         Check(BirdCatalog.All.All(s => BirdMesh.Get(s).Body.GetSurfaceCount() == 1), "every species builds a mesh");
 

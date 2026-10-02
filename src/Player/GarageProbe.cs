@@ -27,9 +27,7 @@ public partial class GarageProbe : Node
 {
     public static string? ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--garagecheck");
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        return CmdArgs.Value("--garagecheck");
     }
 
     /// <summary>The parts a puts on: F1 slicks, GT wing, splitter, pink, slammed, blue neon, scissor doors.</summary>
@@ -89,9 +87,7 @@ public partial class GarageProbe : Node
     {
         get
         {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--garagecheck");
-            return i >= 0 && i + 2 < args.Length && !args[i + 2].StartsWith("--") ? args[i + 2] : null;
+            return CmdArgs.Value("--garagecheck", 2, notFlag: true);
         }
     }
 
@@ -102,8 +98,8 @@ public partial class GarageProbe : Node
         if (at(1.8)) Log($"admin: {Permissions.IsAdmin}");
         if (at(2)) Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
         // --setup <preset> (#40): the garage parts go on over a car preset, and both travel with the car
-        if (at(2.5) && Array.IndexOf(OS.GetCmdlineUserArgs(), "--setup") is var si and >= 0 && si + 1 < OS.GetCmdlineUserArgs().Length
-            && CarSetups.Parse(OS.GetCmdlineUserArgs()[si + 1]) is { } preset)
+        if (at(2.5) && Array.IndexOf(CmdArgs.All, "--setup") is var si and >= 0 && si + 1 < CmdArgs.All.Length
+            && CarSetups.Parse(CmdArgs.All[si + 1]) is { } preset)
             Log($"preset {preset.Name}: {me.SetCarSetup(preset.Id)} -> {me.CarSetupId}");
         if (at(3)) { me.SetTuning(Tuned); Log($"tuned: bits {me.TuningBits:X}, preset {me.CarSetupId}"); }
         // the menu itself, on the tuned car, for a look
@@ -231,7 +227,7 @@ public partial class GarageProbe : Node
 
     private static float? Arg(string name)
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int i = Array.IndexOf(args, name);
         return i >= 0 && i + 1 < args.Length && float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : null;
@@ -255,7 +251,7 @@ public partial class GarageProbe : Node
         && Interiors.InteriorManager.Instance?.LayoutAt(p.GlobalPosition)?.DressedKind() == TargetKind;
 
     /// <summary>With no <c>--heading</c>, the probes pick the garage nearest where they spawned (a generated world has no fixed one).</summary>
-    private static bool AutoGarage => Array.IndexOf(OS.GetCmdlineUserArgs(), "--heading") < 0;
+    private static bool AutoGarage => !CmdArgs.Has("--heading");
 
     /// <summary>
     /// The garage nearest <paramref name="me"/>, and <paramref name="me"/> stood in front of its door:

@@ -59,7 +59,7 @@ public partial class CarSwitchCheck : Node
 
     public static CarSwitchCheck? Create(Func<FootPlayer?> local, Func<Node?> players)
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int i = Array.IndexOf(args, "--switchcheck");
         if (i < 0) return null;
         bool driver = i + 1 < args.Length && args[i + 1] == "driver";
@@ -91,7 +91,7 @@ public partial class CarSwitchCheck : Node
             _since = _t;
             GD.Print("[switchcheck] driver: the watcher is here");
             // --switchcheck driver <password>: an admin, whose conjured car the server lets it park
-            var args = OS.GetCmdlineUserArgs();
+            var args = CmdArgs.All;
             int i = Array.IndexOf(args, "--switchcheck");
             if (i + 2 < args.Length && !args[i + 2].StartsWith("--"))
                 GetParent().GetNodeOrNull<Net.ChatManager>("Chat")?.Send($"/login {args[i + 2]}");
@@ -200,7 +200,7 @@ public partial class CarSwitchCheck : Node
     private void TakeCockpitShot()
     {
         if (_shotCamera == null || ++_shotFrames < 3) return;
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int i = Array.IndexOf(args, "--switchcheck");
         if (i + 2 < args.Length && args[i + 2].EndsWith(".png"))
         {
@@ -215,7 +215,7 @@ public partial class CarSwitchCheck : Node
 
     private void Shot()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         int i = Array.IndexOf(args, "--switchcheck");
         if (i + 2 >= args.Length || !args[i + 2].EndsWith(".png")) return;
         GD.Print($"[switchcheck] watch: wrote {args[i + 2]}: {GetViewport().GetTexture().GetImage().SavePng(args[i + 2])}");
