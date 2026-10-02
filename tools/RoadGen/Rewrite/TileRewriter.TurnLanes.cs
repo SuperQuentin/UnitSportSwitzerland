@@ -24,12 +24,12 @@ public static partial class TileRewriter
 {
     public sealed class TurnLaneStats
     {
-        public int Candidates, Placed, Merged, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars, SignsMoved;
+        public int Candidates, Placed, Merged, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars, SignsMoved, BesideBike, LeadIns;
         /// <summary>Pockets placed per storage length, metres.</summary>
         public readonly SortedDictionary<double, int> Storage = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes, {SignsMoved:N0} signs moved off the widening; " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes, {SignsMoved:N0} signs moved off the widening, {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}\n");
 
         public void Reject(string why)
@@ -67,6 +67,16 @@ public static partial class TileRewriter
     private const double TurnRejoin = 30, TurnEntry = 15, TurnMinHatch = 5;
 
     private const double TurnStation = 2.5, TurnGroundStep = 1.2, TileSizeM = 1000;
+
+    /// <summary>
+    /// With a painted bike lane on the widened side (#120), every car lane beside it along the
+    /// solid centre line is at least this wide: a car must pass a cyclist without crossing the
+    /// solid line (Kanton Zürich Standards Veloverkehr: 3.00 m beside a Radstreifen).
+    /// </summary>
+    private const double CarLaneBesideBike = 3.0;
+
+    /// <summary>The lead-in that widens a narrow approach for that runs at 1:6 (a town street), at least this long.</summary>
+    private const double LeadInMin = 6, LeadInPerMetre = 6;
     private const double HatchStep = 2.5, HatchWidth = 0.3;
 
     private static double Sq(double v) => v * v;
@@ -176,6 +186,7 @@ public static partial class TileRewriter
             // a sign beside the old edge (#121's 3.03) would now stand on the widening
             stats.SignsMoved += approach.PushOut(Get(signs, inSlot.Tile)) + departure.PushOut(Get(signs, outSlot.Tile));
             stats.Storage[inSlot.Storage] = stats.Storage.GetValueOrDefault(inSlot.Storage) + 1;
+            if (approach.BesideBike) { stats.BesideBike++; if (approach.HasLeadIn) stats.LeadIns++; }
             if (inSlot.Merged) stats.Merged++;
             stats.Placed++;
         }
@@ -214,14 +225,22 @@ public static partial class TileRewriter
             ApproachWay = ExitWay = null;
             Merged = false;
             int self = tileSegments.IndexOf(Segment);
-            Widening Way(PocketPlan p, bool exit, double length, double taper, double clear = TurnClear, double[]? stations = null) =>
+            Widening Way(PocketPlan p, bool exit, double length, double taper, double clear = TurnClear, double[]? stations = null,
+                bool lead = true) =>
                 new(Segment, Painted, Tile, self, junctionAtEnd: exit ? p.OutAtEnd : p.InAtEnd,
-                    side: (exit ? p.OutAtEnd : p.InAtEnd) == exit ? -1 : 1, length, taper, clear, stations);
+                    side: (exit ? p.OutAtEnd : p.InAtEnd) == exit ? -1 : 1, length, taper, clear, stations, exit, lead);
 
             if (e is not null)
             {
-                ExitWay = Way(e, exit: true, TurnExit, TurnExit);
-                if (ExitWay.Check(lines, grids, buildings) is { } exitWhy) { ExitWay = null; return (e, exitWhy); }
+                // a lead-out (#120: a bike lane beside the through lane) where the segment has room, else none
+                string? exitWhy = null;
+                foreach (bool lead in (ReadOnlySpan<bool>)[true, false])
+                {
+                    ExitWay = Way(e, exit: true, TurnExit, TurnExit, lead: lead);
+                    exitWhy = ExitWay.Check(lines, grids, buildings);
+                    if (exitWhy is null) break;
+                }
+                if (exitWhy is not null) { ExitWay = null; return (e, exitWhy); }
             }
             if (a is null) return null;
 
@@ -231,23 +250,25 @@ public static partial class TileRewriter
             double total = SegmentLength(Segment);
             bool close = e is not null && total < TurnExit + TurnRejoin + PocketSizes[0].Taper + PocketSizes[0].Storage + TurnClear;
             bool[] modes = e is null ? [false] : close ? [true, false] : [false, true];
+            // a pocket apart tries a lead-in first (#120: a bike lane beside it), then none
             foreach (bool merge in modes)
-                foreach (var (taper, storage) in PocketSizes)
-                {
-                    Widening way;
-                    if (merge)
+                foreach (bool lead in merge ? [false] : (ReadOnlySpan<bool>)[true, false])
+                    foreach (var (taper, storage) in PocketSizes)
                     {
-                        if (storage + TurnEntry + TurnMinHatch > total) { why = "short"; continue; }
-                        way = Way(a, exit: false, total, 0, clear: 0, stations: [storage, storage + TurnEntry]);
+                        Widening way;
+                        if (merge)
+                        {
+                            if (storage + TurnEntry + TurnMinHatch > total) { why = "short"; continue; }
+                            way = Way(a, exit: false, total, 0, clear: 0, stations: [storage, storage + TurnEntry], lead: false);
+                        }
+                        else way = Way(a, exit: false, taper + storage, taper, clear: e is null ? TurnClear : TurnExit + TurnRejoin, lead: lead);
+                        why = way.Check(lines, grids, buildings);
+                        if (why is not null) { if (merge) break; continue; }   // a merged strip is the same for every storage
+                        ApproachWay = way;
+                        Storage = storage;
+                        if (merge) { Merged = true; ExitWay = way; }
+                        return null;
                     }
-                    else way = Way(a, exit: false, taper + storage, taper, clear: e is null ? TurnClear : TurnExit + TurnRejoin);
-                    why = way.Check(lines, grids, buildings);
-                    if (why is not null) { if (merge) break; continue; }   // a merged strip is the same for every storage
-                    ApproachWay = way;
-                    Storage = storage;
-                    if (merge) { Merged = true; ExitWay = way; }
-                    return null;
-                }
             return (a, why!);
         }
     }
@@ -316,30 +337,70 @@ public static partial class TileRewriter
         private readonly double[] _along;
         private readonly double _half, _length, _taper, _total, _clear;
         private readonly List<double> _dists = new();
+        private readonly bool _exit;
+        /// <summary>
+        /// The widened side's bike lane (#120, 0 none), the car width between the centre and it,
+        /// the extra widening that makes that a full lane (<see cref="CarLaneBesideBike"/>), the
+        /// lead-in that brings it on before the taper (0: with the taper itself), and the pocket's
+        /// width (the approach lane once widened; the hatch's width at an exit's mouth).
+        /// </summary>
+        private readonly double _bike, _car, _extra, _lead, _pocket;
+
+        /// <summary>A bike lane on the widened side (#120), and whether a lead-in brings its extra width on.</summary>
+        public bool BesideBike => _extra > 0.05;
+        public bool HasLeadIn => _lead > 0;
+
+        /// <summary>How far from the mouth the widening reaches: the taper and storage (or exit taper), then the lead-in.</summary>
+        private double Reach => _length + _lead;
 
         /// <summary>Set once its strip and paint are out (a merged one serves two pockets).</summary>
         public bool Emitted { get; private set; }
 
         /// <param name="painted">The segment the road's lines were laid on (the one they name), <paramref name="seg"/> or an Urban-flagged copy of it.</param>
         public Widening(RoadSegment seg, RoadSegment painted, TileId tile, int self, bool junctionAtEnd, int side, double length, double taper,
-            double clear = TurnClear, double[]? stations = null)
+            double clear = TurnClear, double[]? stations = null, bool exit = false, bool leadIn = true)
         {
             _seg = seg; _painted = painted; _tile = tile; _self = self; _atEnd = junctionAtEnd; _side = side;
-            _length = length; _taper = taper; _clear = clear; _half = seg.Width * 0.5;
+            _length = length; _taper = taper; _clear = clear; _half = seg.Width * 0.5; _exit = exit;
+            var widened = side > 0 ? seg.Attributes.Right : seg.Attributes.Left;
+            _bike = widened.HasLane ? widened.BikeDm / 10.0 : 0;
+            _car = _half - _bike;
+            _extra = _bike > 0 ? Math.Max(0, CarLaneBesideBike - _car) : 0;
+            // no room for a lead-in (a short street), or a strip full width all along: the extra comes with the taper
+            _lead = _extra > 0.05 && leadIn && taper > 0 ? Math.Max(LeadInMin, _extra * LeadInPerMetre) : 0;
+            _pocket = _car + _extra;
             int n = seg.PointCount;
             var p = seg.Points;
             _along = new double[n];
             for (int k = 1; k < n; k++)
                 _along[k] = _along[k - 1] + Math.Sqrt(Sq(p[k * 3] - p[k * 3 - 3]) + Sq(p[k * 3 + 2] - p[k * 3 - 1]));
             _total = _along[^1];
-            for (double dd = 0; dd < length - 1e-6; dd += TurnStation) _dists.Add(dd);
+            for (double dd = 0; dd < Reach - 1e-6; dd += TurnStation) _dists.Add(dd);
             foreach (double extra in stations ?? [length - taper])
                 if (!_dists.Any(x => Math.Abs(x - extra) < 1e-6)) _dists.Add(extra);
-            if (!_dists.Any(x => Math.Abs(x - length) < 1e-6)) _dists.Add(length);
+            foreach (double at in (ReadOnlySpan<double>)[length, Reach])
+                if (!_dists.Any(x => Math.Abs(x - at) < 1e-6)) _dists.Add(at);
             _dists.Sort();
         }
 
-        private double Widen(double dist) => _taper <= 0 ? TurnLane : TurnLane * Math.Clamp((_length - dist) / _taper, 0, 1);
+        /// <summary>
+        /// The widening at a distance from the mouth. Without a bike lane on the widened side, one
+        /// lane (#123). With one (#120): on an approach, the lead-in's extra (the car lane beside
+        /// the bike lane brought to a full lane) and then the lane; at an exit, the through lane
+        /// and the bike lane beside the closing hatch, then the extra easing back over the lead-out;
+        /// with no room for a lead-in or lead-out, the extra rides on the taper.
+        /// </summary>
+        private double Widen(double dist)
+        {
+            if (_taper <= 0) return TurnLane + _extra;
+            double main = Math.Clamp((_length - dist) / _taper, 0, 1);
+            if (_lead <= 0 || (_exit && _bike <= 0)) return (TurnLane + _extra) * main;
+            double lead = _extra * Math.Clamp((Reach - dist) / _lead, 0, 1);
+            if (!_exit) return TurnLane * main + lead;
+            if (dist > _length) return lead;
+            // the hatch closes from the pocket's width to nothing; the through lane and the bike lane keep their widths
+            return Math.Max(0, _pocket * (1 - dist / _length) + TurnLane - _car);
+        }
 
         /// <summary>The segment at a distance from the mouth: position, road height, unit vector to the widened side.</summary>
         private (double X, double Y, double Z, double Sx, double Sz) At(double dist)
@@ -371,7 +432,7 @@ public static partial class TileRewriter
             float[] In(float[] p) =>
                 [(float)(p[0] + _tile.MinE - frame.MinE), p[1], (float)(p[2] + frame.MaxN - _tile.MaxN)];
             double at = far ? _length : 0;
-            return (In(Point(at, _half)), In(Point(at, _half + TurnLane - inset)));
+            return (In(Point(at, _half)), In(Point(at, _half + Widen(at) - inset)));
         }
 
         /// <summary>
@@ -402,10 +463,10 @@ public static partial class TileRewriter
                     offset = ((prop.X - px) * (-dz / len) + (prop.Z - pz) * (dx / len)) * _side;   // right of the drawing is (-dz, dx)
                 }
                 double dist = _atEnd ? _total - at : at;
-                if (dist < -1 || dist > _length) continue;
+                if (dist < -1 || dist > Reach) continue;
                 double w = Widen(Math.Clamp(dist, 0, _length));
                 if (w < 0.05 || offset < _half - 0.3 || offset > _half + w + 2.0) continue;
-                var (x, _, z, sx, sz) = At(Math.Clamp(dist, 0, _length));
+                var (x, _, z, sx, sz) = At(Math.Clamp(dist, 0, Reach));
                 double o = offset + w;
                 props[i] = prop with { X = (float)(x + sx * o), Z = (float)(z + sz * o) };
                 moved++;
@@ -419,7 +480,7 @@ public static partial class TileRewriter
         /// <summary>Null when it fits; else why not.</summary>
         public string? Check(EmbankmentPlanner.LineIndex lines, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings)
         {
-            if (_total < _length + _clear) return "short";
+            if (_total < Reach + _clear) return "short";
             foreach (double dist in _dists)
             {
                 double w = Widen(dist);
@@ -506,7 +567,7 @@ public static partial class TileRewriter
         {
             double storage = _length - _taper;
             SolidCentre(paint);
-            Hatch(paint, stats, storage, _length, d => _half * Math.Clamp((_length - d) / _taper, 0, 1));
+            Hatch(paint, stats, storage, _length, d => _pocket * Math.Clamp((_length - d) / _taper, 0, 1));
             Lanes(paint, storage, storage, rightTurn, stats);
         }
 
@@ -519,7 +580,7 @@ public static partial class TileRewriter
         public void Through(List<RoadPaint> paint, double storage, bool rightTurn, TurnLaneStats stats)
         {
             SolidCentre(paint);
-            Hatch(paint, stats, storage, _length, d => _half * Math.Clamp((d - storage) / TurnEntry, 0, 1));
+            Hatch(paint, stats, storage, _length, d => _pocket * Math.Clamp((d - storage) / TurnEntry, 0, 1));
             Lanes(paint, storage, storage + TurnEntry, rightTurn, stats);
         }
 
@@ -529,7 +590,7 @@ public static partial class TileRewriter
         /// </summary>
         private void Lanes(List<RoadPaint> paint, double storage, double dashedTo, bool rightTurn, TurnLaneStats stats)
         {
-            double offset = _side * _half;
+            double offset = _side * _pocket;
             paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, offset, TurnSolid, dashedTo));
             paint.Add(Line(PaintType.WhiteSolid, 0, 0, offset, 0, TurnSolid));
 
@@ -538,7 +599,7 @@ public static partial class TileRewriter
             paint.Add(new RoadPaint
             {
                 Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = StopBar,
-                Vertices = [.. Point(bar, 0.1), .. Point(bar, _half - 0.1)],
+                Vertices = [.. Point(bar, 0.1), .. Point(bar, _pocket - 0.1)],
             });
             stats.StopBars++;
 
@@ -551,8 +612,8 @@ public static partial class TileRewriter
                 var (x, y, z, sx, sz) = At(back);
                 // the through lane lies on the driver's right (sx, sz): their forward is that turned a quarter left
                 double fx = sz, fz = -sx;
-                paint.Add(Arrow(x + sx * _half * 0.5, y, z + sz * _half * 0.5, fx, fz, PaintArrow.Left));
-                paint.Add(Arrow(x + sx * (_half + TurnLane * 0.5), y, z + sz * (_half + TurnLane * 0.5), fx, fz,
+                paint.Add(Arrow(x + sx * _pocket * 0.5, y, z + sz * _pocket * 0.5, fx, fz, PaintArrow.Left));
+                paint.Add(Arrow(x + sx * (_pocket + TurnLane * 0.5), y, z + sz * (_pocket + TurnLane * 0.5), fx, fz,
                     rightTurn ? PaintArrow.Straight | PaintArrow.Right : PaintArrow.Straight));
                 stats.Arrows += 2;
             }
@@ -567,16 +628,21 @@ public static partial class TileRewriter
         public void Median(List<RoadPaint> paint, TurnLaneStats stats)
         {
             SolidCentre(paint);
-            Hatch(paint, stats, 0, _length, d => _half * Math.Clamp(1 - d / _length, 0, 1));
+            Hatch(paint, stats, 0, _length, d => _pocket * Math.Clamp(1 - d / _length, 0, 1));
         }
 
-        /// <summary>The dashed centre line along the widening turned solid: no overtaking into the junction.</summary>
+        /// <summary>The dashed centre line along the widening turned solid: no overtaking into the junction (#120: drawn where the road has none).</summary>
         private void SolidCentre(List<RoadPaint> paint)
         {
-            var centre = paint.FirstOrDefault(q => q.Segment == _painted && q.Dash > 0 && Math.Abs(q.Offset) < 0.3);
-            if (centre is null) return;
-            Cut(paint, centre);
-            paint.Add(Line(PaintType.WhiteSolid, 0, 0, centre.Offset, 0, _length));
+            // the middle of the car lanes (#120: bike lanes off the edges); a road with none there
+            // (a Kernfahrbahn, or too narrow for one) gets a solid line: the pocket must be kept off
+            // the oncoming lane. Along the taper and storage only: over a lead-in the lane beside
+            // the bike lane is not yet full width, the road's own line carries on there.
+            var a = _seg.Attributes;
+            double middle = ((a.Left.HasLane ? a.Left.BikeDm : 0) - (a.Right.HasLane ? a.Right.BikeDm : 0)) / 20.0;
+            var centre = paint.FirstOrDefault(q => q.Segment == _painted && q.Dash > 0 && Math.Abs(q.Offset - middle) < 0.3);
+            if (centre is not null) Cut(paint, centre);
+            paint.Add(Line(PaintType.WhiteSolid, 0, 0, centre?.Offset ?? middle, 0, _length));
         }
 
         /// <summary>

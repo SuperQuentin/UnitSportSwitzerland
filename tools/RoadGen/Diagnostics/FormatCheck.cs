@@ -237,7 +237,7 @@ public static class FormatCheck
     private static RoadTile Sample(RoadSegment road) => new()
     {
         Id = new TileId(2583, 1113),
-        Flags = RoadTileFlags.Network | RoadTileFlags.Osm,
+        Flags = RoadTileFlags.Network | RoadTileFlags.Osm | RoadTileFlags.Bikes,
         Segments = new()
         {
             road,

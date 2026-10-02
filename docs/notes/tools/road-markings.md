@@ -61,5 +61,7 @@
     168 game triangles/tile (max 3,484); 4 m Minor roads lost their centre dash (under 5.5/6 m).
     Tiles 54.3 KB raw, 41.4 KB deflated (net8 Fastest; the net9 TerrainPreprocessor prints 48.7
     for the same bytes: its zlib-ng Fastest compresses worse, compare with `RoadGen --rewrite --dry-run`).
+  - Bike lanes and paths (#120): yellow (`PaintEmitter.Yellow`) Radstreifen lines, Velo symbols,
+    red crossings, no centre line on a Kernfahrbahn, no Randlinie beside a lane: `bike-infrastructure`.
   - No paint LOD: roads are only built within `RoadMaxDist` (4 rings) and never rebuilt per
     stride, so a coarse-ring skip has nothing to hook into; the dither takes far lines out.

@@ -45,7 +45,9 @@
   new one follows it. Across the junction the through lane's outer part is one more strip, from
   the approach strip's mouth to the exit's (the junction polygon only covers the original road),
   and the junction's guide line on that side (`junction-priority`) moves out onto its edge. Signs beside the old edge (#121's 3.03)
-  move out by the widening there (8 in the test region). Arrows two per lane in the storage,
+  move out by the widening there (8 in the test region). Sidewalks, bike paths and painted bike
+  lanes beside the widening move out with the edge instead of being dropped (#120,
+  `bike-infrastructure`: `RoadSide` shifts). Arrows two per lane in the storage,
   tips 5 m from the stop bar and 15 m apart (Bern Normalien; 8 m apart in a 20 m pocket): left in the pocket, straight (or straight + right)
   in the through lane, as `PaintType.Arrow` triangles (variant = `PaintArrow` bits): outlines
   traced from the Commons SVG of SSV 6.06 (`road-markings` has the link), scaled so the straight
@@ -53,6 +55,15 @@
   notched dart head; left: the shaft jogs left near its end into an open corner head at 45 deg,
   within 0.55 m of the lane's middle. Two attempts from memory were wrong (the old Swiss
   branch arrow, then a guessed jog). The stop bar is a `StopLine` polyline.
+- **Beside a painted bike lane** (#120): along the solid centre line a car must pass a cyclist
+  without crossing it, so every car lane beside the bike lane is 3.0 m (ZH Standards
+  Veloverkehr): the pocket is the approach lane widened to 3.0 m (`_pocket`), the through lane
+  3.0 m, the bike lane outside. The extra comes on over a 1:6 lead-in (at least 6 m) before the
+  taper, and goes again over a lead-out after an exit's hatch; where the slot has no room for it,
+  with the taper itself; a merged strip (#325) is that wide all along. The solid centre line
+  runs along the taper and storage only (the lane beside the bike lane is full width there); a
+  road with no centre line (a Kernfahrbahn, or too narrow) gets one at the middle of its car
+  lanes along the pocket.
 - **Runtime**: `src/Terrain/PavementBuilder.cs` draws the strip in the road's asphalt; the road
   blend (`HoldUnderPavement`, sharing `Rasterise` with `HoldUnderIsland`) holds its cells at the
   strip's height as road core, so the heightfield collision carries it like a ribbon.
