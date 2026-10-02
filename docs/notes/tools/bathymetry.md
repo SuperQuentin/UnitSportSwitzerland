@@ -138,3 +138,7 @@ is #299: `terrain/water-level-layer`.
 - Memory: every water tile's wet mask + surface (3 MB) stay in memory for the region-wide
   labelling, plus ~200 MB of window arrays per job: 4.2 GB peak at 16 jobs for 152 water tiles.
   A country-wide build would want fewer `--jobs`.
+- Judging lakes in shots: pass `--occasion none` (Halloween's valley mist, active in October, turns
+  every low surface, the lake first, pale lilac in PS1), and run `--headless --path . --import`
+  once in a new worktree (without the imported Realistic textures Realistic− draws the land white
+  and the trees blue). Side by side: `test_output/shots298/sbs_*.png`.
