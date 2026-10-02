@@ -229,6 +229,7 @@ public partial class PlayerFeel : Node3D
             RideKind.Skis => (9f, 22f),        // 32 → 80 km/h
             _ when CarCatalog.IsCar(ride) => (15f, 40f),   // 54 → 144 km/h
             _ when MotorbikeCatalog.IsMotorbike(ride) => (15f, 45f),   // 54 → 162 km/h
+            _ when Boat.IsBoat(ride) => (9f, 20f),   // 32 → 72 km/h: fast on the water
             _ => (4.8f, 9f),                   // above a run: only slides and launches get here
         };
         return Mathf.Clamp((speed - calm) / (fast - calm), 0f, 1.5f);
@@ -853,6 +854,16 @@ public partial class PlayerFeel : Node3D
                 sb.Append($"{speed * 3.6f:0} km/h    ");
                 if (c.Gear < 0) sb.Append('R'); else sb.Append(c.Gear);
                 sb.Append($"    {c.Rpm:0} rpm").Append(wear);
+            }
+            else if (_player.Vehicle is Boat boat)
+            {
+                // a boat's log reads knots; km/h beside it, the engine, and what the hull is doing
+                var s = boat.State;
+                sb.Append($"{speed / 0.5144f:0} kn  {speed * 3.6f:0} km/h    {boat.Rpm:0} rpm");
+                if (s.Gear < 0 && boat.Throttle > 0.02f) sb.Append("    ASTERN");
+                if (s.Airborne > 0.15f) sb.Append("    AIR");
+                else if (s.Grounded) sb.Append("    AGROUND");
+                else if (boat.Spec.LiftShare > 0f && boat.Spec.Planing(s.WaterSpeed) > 0.8f) sb.Append("    PLANING");
             }
             else if (_player.Vehicle is IEngined e)
                 sb.Append($"{speed * 3.6f:0} km/h    {e.Gear}    {e.Rpm:0} rpm");

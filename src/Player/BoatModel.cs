@@ -192,29 +192,30 @@ public sealed record BoatSpec
         }
     }
 
+    /// <summary>The hull's lines (a planing hull's), shared by its columns and its drawn mesh.</summary>
+    public HullShape Shape { get; init; }
+
     /// <summary>
-    /// Columns for a planing hull: <paramref name="stations"/> fore and aft by <paramref name="across"/>
-    /// athwart. The transom is <paramref name="sternZ"/> behind the centre of mass; the beam holds
-    /// full to midships then narrows to the bow; the bottom is a vee (<paramref name="deadrise"/> m
-    /// up at the chine) whose keel sweeps up <paramref name="bowRise"/> m to the stem.
+    /// Columns for a planing hull of these dimensions and <paramref name="shape"/>:
+    /// <see cref="HullShape.Stations"/> fore and aft by <see cref="HullShape.Across"/> athwart.
     /// </summary>
-    public static HullColumn[] PlaningHull(float length, float beam, float depth, float sternZ,
-        float deadrise, float bowRise, int stations, int across, float sheerRise = 0.15f)
+    public static HullColumn[] PlaningHull(float length, float beam, float depth, HullShape shape)
     {
+        int stations = shape.Stations, across = shape.Across;
         var cols = new HullColumn[stations * across];
         float dz = length / stations;
         int n = 0;
         for (int k = 0; k < stations; k++)
         {
             float t = (k + 0.5f) / stations;          // 0 at the transom .. 1 at the stem
-            float z = sternZ - (k + 0.5f) * dz;
+            float z = shape.SternZ - (k + 0.5f) * dz;
             float half = beam * 0.5f * HalfBeam(t);
-            float keel = t > 0.55f ? bowRise * Mathf.Pow((t - 0.55f) / 0.45f, 2f) : 0f;
-            float top = depth + sheerRise * t;
+            float keel = shape.Keel(t);
+            float top = shape.Sheer(depth, t);
             for (int j = 0; j < across; j++)
             {
                 float x = (-1f + (2f * j + 1f) / across) * half;
-                float foot = keel + deadrise * Mathf.Abs(x) / (beam * 0.5f);
+                float foot = keel + shape.Deadrise * Mathf.Abs(x) / (beam * 0.5f);
                 cols[n++] = new HullColumn(new Vector3(x, foot, z), 2f * half / across, dz, Mathf.Max(0.1f, top - foot));
             }
         }
@@ -224,6 +225,23 @@ public sealed record BoatSpec
     /// <summary>The half-beam at a station as a share of the widest: full aft, a rounded taper to the bow.</summary>
     public static float HalfBeam(float t) => t <= 0.5f ? 1f - 0.06f * (0.5f - t) / 0.5f
         : Mathf.Sqrt(Mathf.Max(0.02f, 1f - 0.85f * Mathf.Pow((t - 0.5f) / 0.5f, 2f)));
+}
+
+/// <summary>
+/// A planing hull's lines: the transom <see cref="SternZ"/> behind the centre of mass (hull frame
+/// +Z), a vee bottom <see cref="Deadrise"/> m up at the chine, the keel sweeping up
+/// <see cref="BowRise"/> m to the stem over the forward 45 %, the sheer rising <see cref="SheerRise"/>
+/// m to the bow; the beam full aft and tapering forward (<see cref="BoatSpec.HalfBeam"/>). The
+/// columns the boat floats on and the mesh it is drawn as are both made from these, so what is
+/// drawn is what floats.
+/// </summary>
+public readonly record struct HullShape(float SternZ, float Deadrise, float BowRise, float SheerRise, int Stations, int Across)
+{
+    /// <summary>The keel's height above the lowest point at <paramref name="t"/> (0 transom .. 1 stem).</summary>
+    public float Keel(float t) => t > 0.55f ? BowRise * Mathf.Pow((t - 0.55f) / 0.45f, 2f) : 0f;
+
+    /// <summary>The gunwale's height at <paramref name="t"/>.</summary>
+    public float Sheer(float depth, float t) => depth + SheerRise * t;
 }
 
 /// <summary>The helm as the boat sees it: throttle forward, throttle astern, steer (−1 port .. +1 starboard).</summary>
@@ -310,6 +328,21 @@ public struct BoatState
 public static class BoatDynamics
 {
     private const float Rho = BoatSpec.Rho, G = BoatSpec.G;
+
+    /// <summary>A hull on gravel or sand, sliding: its friction coefficient.</summary>
+    public const float GroundFriction = 0.5f;
+
+    /// <summary>
+    /// The body that carries the boat stands on the ground (its keel is on a beach, a slipway):
+    /// the hull drags on it, slowing along the ground at μ g whatever the hull's columns felt.
+    /// </summary>
+    public static void Beached(ref BoatState b, float dt)
+    {
+        var flat = new Vector3(b.Velocity.X, 0, b.Velocity.Z).MoveToward(Vector3.Zero, GroundFriction * G * dt);
+        b.Velocity = new Vector3(flat.X, Mathf.Min(b.Velocity.Y, 0f), flat.Z);
+        b.Spin *= Mathf.Exp(-3f * dt);
+        b.Grounded = true;
+    }
 
     /// <summary>
     /// Advances a boat by <paramref name="dt"/> in <paramref name="substeps"/> steps: buoyancy and

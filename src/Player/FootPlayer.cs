@@ -1437,6 +1437,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // the new simulator takes it over where it is drawn, a metre or two off the line in a bend
             _interp.MaxAhead = Npc ? 1.6f : Net.RemoteInterpolator.MaxExtrapolation;
             var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
+            // a boat rides this peer's own copy of the waves, at the owner's height over them (#302)
+            if (_remoteRide is Boat afloat) p.Y = afloat.RemoteY(p, yaw, Anim.Z);
             Position = p;
             Rotation = new Vector3(0, yaw, 0);
         }
@@ -1482,15 +1484,29 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _seenSeatAt = Time.GetTicksMsec() / 1000.0;
         }
         else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
-        SetRemoteEngine(_remoteRide as Flyer);
+        else if (_visual is Avatar.BoatRig boatRig) boatRig.DriverShown = SeatIndex == 0;
+        SetRemoteEngine(_remoteRide);
     }
 
     /// <summary>
     /// Another player's helicopter or plane is heard where it is, from the spool and throttle it
     /// publishes — the same sound a parked one makes (<c>VehicleBody</c>), driven like the pilot's own.
     /// </summary>
-    private void SetRemoteEngine(Flyer? craft)
+    private void SetRemoteEngine(Rideable? ride)
     {
+        // a boat's engine (#302): its own voice, from the rpm and thrust it publishes
+        if (ride is Boat boat && DisplayServer.GetName() != "headless")
+        {
+            if (_remoteEngine?.Profile != boat.Sound)
+            {
+                _remoteEngine?.QueueFree();
+                _remoteEngine = new Audio.EngineSynth(boat.Sound, spatial: true, seed: GetMultiplayerAuthority()) { Name = "RemoteEngine" };
+                AddChild(_remoteEngine);
+            }
+            _remoteEngine.Set(Anim.X, Anim.Y, Anim.Y, 0.15f + 0.25f * Anim.X);
+            return;
+        }
+        var craft = ride as Flyer;
         bool wanted = craft is { HasEngine: true } && DisplayServer.GetName() != "headless";
         if (!wanted)
         {
@@ -2123,6 +2139,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _shutDriverIn = 1f;
         }
         _flight.Control = state.Throttle;
+        // a boat as it floated: its attitude (#302)
+        if (_ride is Boat boarded && state.Angles != default) boarded.State.Attitude = Quaternion.FromEuler(state.Angles);
         EngineOn = true;
         VehicleHealth = state.Health;
         if (_ride is Car car)
@@ -2142,13 +2160,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
         var velocity = _ride is Flyer
             ? _flight.Velocity
+            : _ride is Boat afloat ? afloat.State.Velocity
             : heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Vector3.Up * Velocity.Y;
         return new VehicleState((RideKind)RideKindId, GlobalPosition,
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
             Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId,
-            Train: _ride is Truck t ? t.TrailerCode : 0, Angles: _ride is Truck ta ? ta.Angles : default,
+            Train: _ride is Truck t ? t.TrailerCode : 0,
+            // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
+            Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler() : default,
             Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd);
     }
@@ -2612,10 +2633,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (flyer.LookSteers) _viewYaw = Rotation.Y;
         }
         else _flight = default;
+        if (_ride is Boat boat) BeginBoat(boat, velocity);
         // a craft skimming the ground must not be snapped onto it
         // a car stays on its wheels over a crest the way a suspension keeps it there; 0.5 m let every
         // Jura hump launch it for a second at 100 km/h, and a car in the air cannot steer
-        FloorSnapLength = _ride switch { Flyer => 0.05f, Car or Motorbike or Truck => 1.2f, _ => 0.5f };
+        // and a boat never: snapped, a hull in a metre of water sat on the bed
+        FloorSnapLength = _ride switch { Flyer => 0.05f, Boat => 0f, Car or Motorbike or Truck => 1.2f, _ => 0.5f };
 
         // the body is the machine's size while in it — a helicopter is not a 0.3 m person
         if (_capsule != null && !_sliding)
@@ -2792,6 +2815,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride != null)
         {
             if (_ride is Flyer flyer) FlyPhysics(dt, onFloor, flyer);
+            else if (_ride is Boat boat) BoatPhysics(dt, boat);   // #302, FootPlayer.Boat.cs
             else RidePhysics(dt, onFloor);
             return;
         }
@@ -3712,7 +3736,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void UpdateRideCamera(float dt)
     {
-        if (_visual != null)
+        // (a boat's attitude is posed by BoatPhysics)
+        if (_visual != null && _ride is not Boat)
             PoseRideVisual();
 
         if (_camera == null || _ride == null) return;
