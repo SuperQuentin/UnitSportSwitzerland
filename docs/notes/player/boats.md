@@ -48,6 +48,17 @@
   (Stokes drift + orbital flow: ~0.1 m/s gamey), runs aground, and **sleeps** when its speed and spin
   are small and the swell where it floats is under 6 cm (calm). Its attitude rides in `Tilt`, its
   height over the waves in `Heave`; parked boats' attitude travels as `VehicleState.Angles` (Euler).
+- **Moored** (#378, `BoatDynamics.Moor`, after the driverless step): pulled softly back to its spot
+  and heading against the drift, as lines to a berth would: a critically damped spring (0.5 rad/s, a
+  ~13 s swing back), at most 0.6 m/s² (shoved far off, it comes back slowly, not flung), the heading
+  likewise (0.5 rad/s, 0.3 rad/s²); level only, so it still heaves, pitches and rolls (and its
+  collision with it). An acceleration, not a force: the same for a jetski and the 518 t steamer. A
+  boat left in the world moors itself where it comes to rest (under 0.6 m/s; one left running moors
+  where it stops); `VehicleBody.Moor(GlobalPos, yaw)` / `Unmoor()` for a berth or #379's AI steamer
+  at a landing (the spot is origin-free). Taking the wheel ends it (the parked body goes; parked
+  again, it moors where it is left). Measured: `BoatTests` with 0.16 m/s of drift, 60 s gamey: jetski
+  0.89 m off at worst, speedboat 0.66 m, steamer 0.28 m (free: 8 m); `--boatcheck` a minute moored
+  gamey within 1 m (speedboat 0.36 m, heading 1°).
 - **Its collision is where it is drawn** (#378, `VehicleBody.PoseHull`, from `DrawBoat`): the hull's
   shape (the parked box, the steamer's shaped hull) takes the drawn frame's pose every frame, heave,
   pitch and roll, on every peer: the authority from its model, a copy on its own waves at the sent

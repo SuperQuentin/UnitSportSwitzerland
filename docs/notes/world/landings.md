@@ -98,8 +98,8 @@ the steamer AI (#379) reads.
 
 ## Not done / decisions
 
-- The steamer is not moored: parked, it floats where it was put and sleeps in a calm; in a swell it
-  drifts like any parked boat (a mooring spring is `VehicleBody.Boat.cs`, #378's file).
+- The steamer is moored where it was put (#378, `player/boats`, "Moored"): a parked boat at rest moors
+  itself; `VehicleBody.Moor(GlobalPos, yaw)` puts one on a berth. No lines are drawn.
 - The plank is fixed (0.3 m down), so the head sits at 1.08 m over the water whatever the real pier's
   height (Nyon's Steg ends 1.6 m up: a 2 m ramp joins them). An adjustable gangway would let the head
   be the Steg's height.

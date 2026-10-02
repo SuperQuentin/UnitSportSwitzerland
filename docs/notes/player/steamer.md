@@ -84,7 +84,7 @@
   B walks aboard A's steamer from a quay it builds, up the stairs, rides the upper deck through a
   gamey swell at full ahead, both peers agree where B stands to 3 cm; B over the rail, A sees it
   swimming; `SHOTS=1 STYLE=ps1` A windowed: `remote_passenger.png`).
-- **Not done**: mooring lines (parked, it floats free and drifts in a swell); a server-placed parked steamer only heaves on
+- **Not done**: mooring lines drawn (parked, it is moored by a spring, `boats`, "Moored"); a server-placed parked steamer only heaves on
   clients (no pitch/roll until a client claims it); the parked collision is the hull only (no paddle boxes);
   no hands drawn on the wheel in first person; the telegraph handle on a remote copy follows the
   shaft, not the order; the sounds were not listened to.
