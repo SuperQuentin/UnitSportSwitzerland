@@ -324,20 +324,22 @@ public partial class SwimCheck : Node
         await Wait(0.2);
 
         await FloatAt(Lake.ShoreX + 125 - 9, 30);
-        _me.LookYaw = YawOf(East) + 0.9f;
+        _me.LookYaw = YawOf(East) + 1.3f;
+        _me.LookPitch = -0.2f;
         _wish = East;
-        float shotAt = -1f;
+        bool shot = false;
         bool climbed = false;
-        for (double t = 0; t < 14 && !climbed; t += 0.05)
+        for (double t = 0; t < 14 && !climbed; t += 0.02)
         {
-            if (ShotsMode && shotAt < 0f && !_me.IsSwimming)
+            if (ShotsMode && !shot && !_me.IsSwimming)
             {
-                shotAt = 0f;
-                await Wait(0.12);
-                await Shot("swim_climb_out", yaw: YawOf(East) + 1.3f, pitch: -0.2f);
+                // half way up the pull (0.36 s)
+                shot = true;
+                await Wait(0.14);
+                await Shot("swim_climb_out", null, null, settle: 0);
             }
             climbed = !_me.IsSwimming && _me.IsOnFloor() && Mathf.Abs(_me.GlobalPosition.Y - top) < 0.25f;
-            await Wait(0.05);
+            await Wait(0.02);
         }
         Expect(climbed, $"swims to the pontoon and climbs out onto its deck (feet {_me.GlobalPosition.Y - top:+0.00;-0.00} m from it, swimming {_me.IsSwimming})");
         _wish = Vector3.Zero;
