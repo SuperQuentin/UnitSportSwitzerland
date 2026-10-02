@@ -413,7 +413,7 @@ public partial class FootPlayer
         }
         _poseWait += dt;
         var key = new FootPoseKey(_walker, PoseSwim, 1000f * (int)style + Mathf.Round(Anim.X * 10f), _swimDrawPhase,
-            ItemArmPose.None, 0f, null, Hat, _walkPalette);
+            ItemArmPose.None, 0f, null, Hat, _walkPalette, HumanMeshBuilder.SmoothFigures);
         if (key != _poseKey && !HoldRemoteFigure())
         {
             _poseKey = key;
