@@ -34,7 +34,9 @@
   new one follows it. Across the junction the through lane's outer part is one more strip, from
   the approach strip's mouth to the exit's (the junction polygon only covers the original road),
   and the junction's guide line on that side (`junction-priority`) moves out onto its edge. Signs beside the old edge (#121's 3.03)
-  move out by the widening there (8 in the test region). Arrows two per lane in the storage,
+  move out by the widening there (8 in the test region). Sidewalks, bike paths and painted bike
+  lanes beside the widening move out with the edge instead of being dropped (#120,
+  `bike-infrastructure`: `RoadSide` shifts). Arrows two per lane in the storage,
   tips 5 m from the stop bar and 15 m apart (Bern Normalien; 8 m apart in a 20 m pocket): left in the pocket, straight (or straight + right)
   in the through lane, as `PaintType.Arrow` triangles (variant = `PaintArrow` bits): outlines
   traced from the Commons SVG of SSV 6.06 (`road-markings` has the link), scaled so the straight

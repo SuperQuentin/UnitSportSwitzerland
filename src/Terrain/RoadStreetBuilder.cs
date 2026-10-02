@@ -248,6 +248,8 @@ public static class RoadStreetBuilder
         var pts = new Vector3[n];
         for (int i = 0; i < n; i++) pts[i] = new Vector3(seg.Points[i * 3], seg.Points[i * 3 + 1], seg.Points[i * 3 + 2]);
         float half = seg.Width * 0.5f, width = profile.Width, sign = right ? 1f : -1f;
+        var side = right ? seg.Attributes.Right : seg.Attributes.Left;
+        var along = RoadStreetSection.Fractions(seg);   // a turn lane's widening pushes the side out (#120)
         var inner = new Vector3[n];
         var outer = new Vector3[n];
         var across = new Vector3[n];
@@ -260,8 +262,9 @@ public static class RoadStreetBuilder
             if (f.LengthSquared() < 1e-8f) f = Vector3.Forward;
             f = f.Normalized();
             across[i] = new Vector3(-f.Z, 0, f.X) * sign;
-            inner[i] = pts[i] + across[i] * half;
-            outer[i] = pts[i] + across[i] * (half + width);
+            float start = half + side.ShiftAt(along[i]);
+            inner[i] = pts[i] + across[i] * start;
+            outer[i] = pts[i] + across[i] * (start + width);
             forward[i] = f;
         }
         var keep = Simplify(inner, outer);

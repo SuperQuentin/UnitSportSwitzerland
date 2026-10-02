@@ -110,6 +110,26 @@ public static class RoadStreetSection
         return new Profile { D = d, H = p.H, Surface = p.Surface };
     }
 
+    /// <summary>
+    /// Where each point of the segment lies along it, 0 at the first to 1 at the last, by plan
+    /// length: the parameter of <see cref="RoadSide.ShiftAt"/>.
+    /// </summary>
+    public static float[] Fractions(RoadSegment seg)
+    {
+        var p = seg.Points;
+        int n = seg.PointCount;
+        var t = new float[n];
+        double total = 0;
+        for (int i = 1; i < n; i++)
+        {
+            double dx = p[i * 3] - p[i * 3 - 3], dz = p[i * 3 + 2] - p[i * 3 - 1];
+            total += Math.Sqrt(dx * dx + dz * dz);
+            t[i] = (float)total;
+        }
+        for (int i = 0; i < n; i++) t[i] = total > 1e-9 ? (float)(t[i] / total) : 0f;
+        return t;
+    }
+
     /// <summary>Height of the side's surface at <paramref name="distance"/> metres out from the carriageway edge (0 on it).</summary>
     public static float HeightAt(RoadSide side, float distance)
     {

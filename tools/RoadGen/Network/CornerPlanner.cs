@@ -505,8 +505,12 @@ public static class CornerPlanner
         int n = seg.PointCount;
         var result = new List<(Vec2, float)>(n);
         double half = seg.Width * 0.5, sign = right ? 1 : -1;
+        // the kerb runs past a turn lane's widening where the side is shifted out (#120)
+        var side = right ? seg.Attributes.Right : seg.Attributes.Left;
+        var along = side.ShiftStartCm != 0 || side.ShiftEndCm != 0 ? RoadStreetSection.Fractions(seg) : null;
         for (int i = 0; i < n; i++)
         {
+            double off = half + (along is null ? 0 : side.ShiftAt(along[i]));
             int a = i == 0 ? 0 : i - 1, b = i == n - 1 ? n - 1 : i + 1;
             if (i == 0) b = 1; else if (i == n - 1) a = n - 2;
             double fx = seg.Points[b * 3] - seg.Points[a * 3], fz = seg.Points[b * 3 + 2] - seg.Points[a * 3 + 2];
@@ -514,7 +518,7 @@ public static class CornerPlanner
             if (len < 1e-9) { fx = 0; fz = -1; len = 1; }
             fx /= len; fz /= len;
             // right of travel, tile-local (X east, Z south): (-fz, fx)
-            double x = seg.Points[i * 3] + -fz * half * sign, z = seg.Points[i * 3 + 2] + fx * half * sign;
+            double x = seg.Points[i * 3] + -fz * off * sign, z = seg.Points[i * 3 + 2] + fx * off * sign;
             result.Add((new Vec2(x, -z), seg.Points[i * 3 + 1]));
         }
         return result;

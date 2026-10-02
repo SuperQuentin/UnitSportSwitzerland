@@ -9,6 +9,9 @@
 - **Header flags word** (reserved before v3): `Osm` (1) = some segment carries OSM attributes,
   the tile is an ODbL derived database; `Network` (2) = written by the network stage. A v3 tile
   without `Network` is raw extractor output, the only valid stage input.
+- **Record size** (#120): 32 B, the 24 below plus per side `shiftStartCm, shiftEndCm u16` (left
+  then right): the side starts that far out from the ribbon's edge, linear along the segment (a
+  turn lane's widening lies between). Readers accept 24 and skip anything past what they know.
 - **`ATR2`** (always, #116b; replaces `ATTR`, which readers still accept): `distinct varint`
   (7-bit, `BinaryWriter.Write7BitEncodedInt`), `recordSize u8` (24; readers skip a longer
   record's tail), the distinct records, then one varint index per segment. Record layout = the

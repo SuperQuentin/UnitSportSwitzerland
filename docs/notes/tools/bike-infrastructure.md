@@ -53,12 +53,21 @@
   ends, replacing the sidewalk corner there (centroid test); only when both arms have the same
   profile. Samples thinned to 2 cm on the outer edge (9 per band cost +23 KB/tile).
   3.03 signs that stood on a path move onto the buffer or sidewalk.
+- **Turn lanes** (#123 pockets widen the approach on its right, through traffic moves into the
+  widening): a side standing on a widening (`AreaPropType.Pavement`) moves out by it instead of
+  being dropped (#123 dropped sidewalks there; 39 path pieces in Nyon). `ShiftOffPavement` probes
+  the widening every 0.5 m out from the ribbon edge, cuts the piece where it stops being a straight
+  ramp (3 cm), and stores a linear shift per side (`RoadSide.ShiftStartCm/EndCm`, record 32 B).
+  The game (slabs, kerb collision, corner kerbs, blend reach, paint heights) adds the shift; a
+  painted bike lane moves out too: lanes are painted per final piece (`PaintEmitter.BikeLanes`),
+  offset along a steady shift, as their own geometry along a taper (no symbol there).
 - **Format**: `RoadSide.BufferDm` (was a pad byte, older readers skip it), `BikeKind.TrackMid`,
   `RoadSide.OuterDm` (verge + path + buffer + sidewalk: what blend, embankments, cover, corners and
   signs now use instead of `SidewalkDm`). Paint past the carriageway edge lies on the side's
   profile (`RoadPaintGeometry.Offset`).
-- **Cost** (Nyon, 6 tiles, against main on the same raw input): 203.3 → 221.0 KB/tile raw
-  (+8.7 %, APRP +12 KB: paths and their kerbs through junctions), 133.1 → 141.9 deflated; paint 2.6k → 6.4k game triangles/tile; stage 6.1 → 6.3 s.
+- **Cost** (Nyon, 6 tiles, against main on the same raw input): 203.3 → 229.0 KB/tile raw
+  (+12.6 %: APRP +16 KB paths and kerbs through junctions, ATR2 +4 KB the 32 B records), 133.1 → 141.3
+  deflated (+6.2 %); paint 2.6k → 6.4k game triangles/tile; stage 6.1 → 6.3 s.
   Numbers there: 20.8 km candidates, Kernfahrbahn 15.2 km, path sides 20.3 km (layouts 1..5
   3.3/4.2/5.2/2.8/4.8), 306 symbols, 83 red crossings (37 lane, 46 path), 136 paths carried through (101 corners
   replaced), 40 Wartelinien moved.

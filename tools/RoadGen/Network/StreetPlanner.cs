@@ -471,7 +471,7 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
     }
 
     /// <summary>The part of the polyline from <paramref name="a0"/> to <paramref name="a1"/> metres (plan) along it.</summary>
-    private static float[] Slice(RoadSegment seg, double a0, double a1)
+    internal static float[] Slice(RoadSegment seg, double a0, double a1)
     {
         var p = seg.Points;
         var result = new List<float>();

@@ -98,16 +98,17 @@ public static class StreetView
                 {
                     var side = right ? a.Right : a.Left;
                     double sign = right ? 1 : -1;
-                    double inner = 0;   // a path's bands first, then the sidewalk behind them (#120)
+                    // a path's bands first, then the sidewalk behind them, past a turn lane's widening (#120)
+                    double inner = (side.ShiftStartCm + side.ShiftEndCm) / 200.0;
                     if (side.HasTrack)
                     {
                         void Band(double from, double width, string fill) =>
                             walks.Append(c, $"<path d=\"{Offset(pts, sign * (half + from + width / 2), X, Y)}\" stroke=\"{fill}\" stroke-width=\"{(width * PxPerM):F1}\" fill=\"none\" stroke-linecap=\"butt\"/>");
                         double verge = side.VergeDm / 10.0, path = side.BikeDm / 10.0, buffer = side.BufferDm / 10.0;
-                        if (verge > 0) Band(0, verge, "#7caa4a");
-                        Band(verge, path, LayoutColours[Rewrite.TileRewriter.LayoutOf(side)]);
-                        if (buffer > 0) Band(verge + path, buffer, "#7caa4a");
-                        inner = verge + path + buffer;
+                        if (verge > 0) Band(inner, verge, "#7caa4a");
+                        Band(inner + verge, path, LayoutColours[Rewrite.TileRewriter.LayoutOf(side)]);
+                        if (buffer > 0) Band(inner + verge + path, buffer, "#7caa4a");
+                        inner += verge + path + buffer;
                         tracks++;
                     }
                     if (side.SidewalkDm > 0)

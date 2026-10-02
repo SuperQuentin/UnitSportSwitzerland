@@ -47,7 +47,10 @@ public static partial class TileRewriter
             {
                 var side = right ? p.Attributes.Right : p.Attributes.Left;
                 if (!side.HasTrack) continue;
-                float sign = right ? 1f : -1f, half = p.Width * 0.5f;
+                // beside a turn lane's widening the side is shifted out (#123): along a steady shift the
+                // paint moves with it, along a taper (a varying shift) there is none
+                if (side.ShiftStartCm != side.ShiftEndCm) continue;
+                float sign = right ? 1f : -1f, half = p.Width * 0.5f + side.ShiftStartCm / 100f;
                 if (side.Bike == BikeKind.Track && side.BufferDm == 0 && side.SidewalkDm > 0)
                     PaintEmitter.AddDashed(p, sign * (half + (side.VergeDm + side.BikeDm) / 10f), 0, into,
                         PaintType.YellowDashed, PaintEmitter.Yellow, BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap);
@@ -115,6 +118,8 @@ public static partial class TileRewriter
                 var mainDir = (Vec2.FromHeading(b.OutwardHeading) - ua).Normalized();
 
                 // the bike side of an arm's end piece on its left or right looking outward
+                // the side's shift off a turn lane's widening where the arm ends here (#123)
+                var endShift = new Dictionary<(int, bool), double>();
                 RoadSide SideOf(int armIndex, bool armLeft)
                 {
                     var arm = junction.Arms[armIndex];
@@ -124,7 +129,9 @@ public static partial class TileRewriter
                     {
                         var pieces = finalPieces.TryGetValue(so.Segment, out var list) && list.Count > 0 ? list : [so.Segment];
                         var seg = end == LinkEnd.Start ? pieces[0] : pieces[^1];
-                        return segRight ? seg.Attributes.Right : seg.Attributes.Left;
+                        var found = segRight ? seg.Attributes.Right : seg.Attributes.Left;
+                        endShift[(armIndex, armLeft)] = found.ShiftAt(end == LinkEnd.Start ? 0 : 1);
+                        return found;
                     }
                     // an arm in the halo: its lanes as the line decided them (paths are not known there)
                     if (net.Links[arm.LinkId].Tag is not Source src) return default;
@@ -138,6 +145,7 @@ public static partial class TileRewriter
                     var (ca, cb) = k == 0 ? (a.Left, b.Right) : (a.Right, b.Left);
                     var sa = SideOf(ia, armLeft: k == 0);
                     var sb = SideOf(ib, armLeft: k != 0);
+                    double xa = endShift.GetValueOrDefault((ia, k == 0)), xb = endShift.GetValueOrDefault((ib, k != 0));
                     double sideSign = Math.Sign(ua.Cross(ca - from));
                     var joined = car.Where(i => i != ia && i != ib
                             && Math.Sign(ua.Cross(Vec2.FromHeading(junction.Arms[i].OutwardHeading))) == sideSign)
@@ -170,23 +178,24 @@ public static partial class TileRewriter
                         double la = sa.BikeDm / 10.0, lb = sb.BikeDm / 10.0;
                         if (joined.Count == 0)
                         {
-                            Add(Curve(-la, -lb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.Dash);
+                            Add(Curve(-la + xa, -lb + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.Dash);
                             stats.LanesThrough++;
                             continue;
                         }
                         // between the outer line (on the edge) and the lane's own line, 5 cm clear of both
                         double redA = (lw + la - lw * 0.5) * 0.5, redB = (lw + lb - lw * 0.5) * 0.5;
                         float red = (float)(Math.Min(la, lb) - lw * 1.5 - 2 * RedInset);
-                        if (red > 0.3f) Add(Curve(-redA, -redB), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
-                        Add(Curve(-lw * 0.5, -lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
-                        Add(Curve(-la, -lb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                        // a lane shifted off a turn lane's widening (#123) crosses from its shifted place
+                        if (red > 0.3f) Add(Curve(-redA + xa, -redB + xb), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
+                        Add(Curve(-lw * 0.5 + xa, -lw * 0.5 + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                        Add(Curve(-la + xa, -lb + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
                         if (isMain && priority.GuideAt.Remove((junction.NodeId, k), out var guide)) paint[guide.Tile].Remove(guide.Paint);
                         stats.Crossings++;
                         stats.CrossingsLane++;
                     }
                     else if (sa.HasTrack && sb.HasTrack && joined.Count > 0)
                     {
-                        double ta = RoadStreetSection.TrackCentre(sa), tb = RoadStreetSection.TrackCentre(sb);
+                        double ta = RoadStreetSection.TrackCentre(sa) + xa, tb = RoadStreetSection.TrackCentre(sb) + xb;
                         double ha = sa.BikeDm / 20.0 - lw * 0.5, hb = sb.BikeDm / 20.0 - lw * 0.5;
                         float red = (float)(Math.Min(sa.BikeDm, sb.BikeDm) / 10.0 - 2 * lw - 2 * RedInset);
                         if (red > 0.3f) Add(Curve(ta, tb), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
@@ -201,7 +210,7 @@ public static partial class TileRewriter
                     else if (sa.HasTrack && sb.HasTrack)
                     {
                         var ub = Vec2.FromHeading(b.OutwardHeading);
-                        if (BridgePath(home, sa, sb, ua, ub, (oa, ob) => Curve(oa, ob, simplify: false), p => HeightAt(anchors, p)) is { } bands)
+                        if (BridgePath(home, sa, sb, ua, ub, (oa, ob) => Curve(oa + xa, ob + xb, simplify: false), p => HeightAt(anchors, p)) is { } bands)
                         {
                             Get(bridges, home).AddRange(bands);
                             stats.PathsThrough++;
@@ -372,7 +381,7 @@ public static partial class TileRewriter
                 bool right = lateral > 0;
                 var side = right ? seg.Attributes.Right : seg.Attributes.Left;
                 if (!side.HasTrack) continue;
-                double edge = seg.Width * 0.5, from = edge + side.VergeDm / 10.0 - 0.3, to = edge + (side.VergeDm + side.BikeDm) / 10.0 + 0.3;
+                double edge = seg.Width * 0.5 + (side.ShiftStartCm + side.ShiftEndCm) / 200.0, from = edge + side.VergeDm / 10.0 - 0.3, to = edge + (side.VergeDm + side.BikeDm) / 10.0 + 0.3;
                 if (Math.Abs(lateral) < from || Math.Abs(lateral) > to) continue;
                 double outward = (side.VergeDm + side.BikeDm) / 10.0 + (side.BufferDm > 0 ? side.BufferDm / 20.0 : 0.4);
                 double sign = right ? 1 : -1;

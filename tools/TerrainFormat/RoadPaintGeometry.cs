@@ -38,8 +38,11 @@ public static class RoadPaintGeometry
         var p = seg.Points;
         int n = seg.PointCount;
         float lift = (seg.Flags & RoadFlags.Bridge) != 0 ? BridgeLift : 0f;
-        float beyond = MathF.Abs(offset) - seg.Width * 0.5f;
-        if (beyond > 0) lift += RoadStreetSection.HeightAt(offset > 0 ? seg.Attributes.Right : seg.Attributes.Left, beyond);
+        var side = offset > 0 ? seg.Attributes.Right : seg.Attributes.Left;
+        bool shifted = side.ShiftStartCm != 0 || side.ShiftEndCm != 0;
+        var along = shifted ? RoadStreetSection.Fractions(seg) : null;
+        float edge = MathF.Abs(offset) - seg.Width * 0.5f;
+        float baseLift = lift;
         var result = new List<float>(n * 3);
         for (int i = 0; i < n; i++)
         {
@@ -54,6 +57,9 @@ public static class RoadPaintGeometry
                 float cx = p[i * 3] - p[i * 3 - 3], cz = p[i * 3 + 2] - p[i * 3 - 1];
                 if ((x - result[^3]) * cx + (z - result[^1]) * cz <= 0) continue;
             }
+            // past the carriageway's edge (and a turn lane's widening there), on the side's profile
+            float beyond = edge - (along is null ? 0f : side.ShiftAt(along[i]));
+            lift = baseLift + (beyond > 0 ? RoadStreetSection.HeightAt(side, beyond) : 0f);
             result.Add(x); result.Add(p[i * 3 + 1] + lift); result.Add(z);
         }
         return result.ToArray();

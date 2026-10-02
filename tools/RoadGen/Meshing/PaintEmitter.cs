@@ -108,8 +108,10 @@ public static class PaintEmitter
     /// <param name="station">Along-line metre of the segment's first point on its TLM line (0 unknown).</param>
     /// <param name="startsAtJunction">The segment's first point is a junction's mouth or a dead end
     /// (a bike lane starts or ends there: its symbol, #120); same for <paramref name="endsAtJunction"/>.</param>
+    /// <param name="bikeLanes">Paint the bike lanes too; the network stage paints them later, on the
+    /// street's final pieces (<see cref="BikeLanes"/>), which may be shifted off a turn lane.</param>
     public static void Emit(RoadSegment seg, double station, List<RoadPaint> into,
-        bool startsAtJunction = false, bool endsAtJunction = false)
+        bool startsAtJunction = false, bool endsAtJunction = false, bool bikeLanes = true)
     {
         if (seg.Surface != RoadSurface.Paved || seg.Class > RoadClass.Minor || seg.PointCount < 2) return;
         if ((seg.Flags & RoadFlags.Stairs) != 0) return;
@@ -161,8 +163,53 @@ public static class PaintEmitter
             }
         }
 
+        if (bikeLanes) BikeLanes(seg, station, into, startsAtJunction, endsAtJunction);
+    }
+
+    /// <summary>
+    /// The bike lanes of a segment or street piece (#120). A lane beside a turn lane's widening
+    /// (#123: <see cref="RoadSide.ShiftStartCm"/>/<see cref="RoadSide.ShiftEndCm"/>) moves out with
+    /// the carriageway's edge, through traffic taking its old place: along a steady shift its line
+    /// is offset by it, along a taper drawn as its own geometry, with no symbol there.
+    /// </summary>
+    public static void BikeLanes(RoadSegment seg, double station, List<RoadPaint> into, bool startsAtJunction, bool endsAtJunction)
+    {
+        if (seg.Surface != RoadSurface.Paved || seg.Class > RoadClass.Minor || seg.PointCount < 2) return;
+        var a = seg.Attributes;
         foreach (bool right in (ReadOnlySpan<bool>)[false, true])
-            if ((right ? a.Right : a.Left).HasLane) BikeLane(seg, right, station, into, startsAtJunction, endsAtJunction);
+        {
+            var side = right ? a.Right : a.Left;
+            if (!side.HasLane) continue;
+            if (side.ShiftStartCm == side.ShiftEndCm) BikeLane(seg, right, station, into, startsAtJunction, endsAtJunction);
+            else TaperLane(seg, right, into);
+        }
+    }
+
+    /// <summary>A bike lane's line along a turn lane's taper: its offset follows the shift vertex by vertex.</summary>
+    private static void TaperLane(RoadSegment seg, bool right, List<RoadPaint> into)
+    {
+        var side = right ? seg.Attributes.Right : seg.Attributes.Left;
+        float sign = right ? 1f : -1f, half = seg.Width * 0.5f, lane = side.BikeDm / 10f;
+        var along = RoadStreetSection.Fractions(seg);
+        var p = seg.Points;
+        int n = seg.PointCount;
+        float lift = (seg.Flags & RoadFlags.Bridge) != 0 ? RoadPaintGeometry.BridgeLift : 0f;
+        var v = new List<float>(n * 3);
+        for (int i = 0; i < n; i++)
+        {
+            int i0 = Math.Max(0, i - 1), i1 = Math.Min(n - 1, i + 1);
+            float fx = p[i1 * 3] - p[i0 * 3], fz = p[i1 * 3 + 2] - p[i0 * 3 + 2], fl = MathF.Sqrt(fx * fx + fz * fz);
+            if (fl < 1e-4f) continue;
+            fx /= fl; fz /= fl;
+            float o = sign * (half + side.ShiftAt(along[i]) - lane);
+            v.Add(p[i * 3] - fz * o); v.Add(p[i * 3 + 1] + lift); v.Add(p[i * 3 + 2] + fx * o);
+        }
+        if (v.Count < 6) return;
+        Add(into, new RoadPaint
+        {
+            Shape = PaintShape.Polyline, Type = PaintType.YellowDashed, Rgba = Yellow, Width = BikePlanner.LineWidth,
+            Dash = BikePlanner.Dash, Gap = BikePlanner.Gap, Vertices = RoadPaintGeometry.Simplify(v.ToArray()),
+        });
     }
 
     /// <summary>
@@ -175,7 +222,7 @@ public static class PaintEmitter
         bool startsAtJunction, bool endsAtJunction)
     {
         var side = right ? seg.Attributes.Right : seg.Attributes.Left;
-        float sign = right ? 1f : -1f, half = seg.Width * 0.5f, lane = side.BikeDm / 10f;
+        float sign = right ? 1f : -1f, half = seg.Width * 0.5f + side.ShiftStartCm / 100f, lane = side.BikeDm / 10f;
         AddDashed(seg, sign * (half - lane), station, into, PaintType.YellowDashed, Yellow,
             BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap);
         Symbols(seg, sign * (half - lane * 0.5f), right, into, startsAtJunction, endsAtJunction);

@@ -22,7 +22,7 @@ public static class CoverStage
             // are exactly where a stray tree ruins the shot
             // a street's sidewalk and verge (#119) are part of the corridor
             var a = seg.Attributes;
-            double side = Math.Max(a.Left.OuterDm, a.Right.OuterDm) / 10.0;   // bike paths (#120) included
+            double side = Math.Max(a.Left.Reach, a.Right.Reach);   // bike paths and their shift off a turn lane (#120) included
             double radius = seg.Width * 0.5 + side + RoadClearance
                 + ((seg.Flags & (RoadFlags.Tunnel | RoadFlags.Bridge)) != 0 ? 4.0 : 0.0);
             int cells = (int)Math.Ceiling(radius / spacing);
@@ -75,7 +75,7 @@ public static class CoverStage
             if (seg.PointCount < 2 || !seg.Attributes.Has(RoadAttrFlags.Urban)) continue;
             if ((seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0 || seg.Class > RoadClass.Square) continue;
             var a = seg.Attributes;
-            double radius = seg.Width * 0.5 + Math.Max(a.Left.OuterDm, a.Right.OuterDm) / 10.0 + PaveReach;
+            double radius = seg.Width * 0.5 + Math.Max(a.Left.Reach, a.Right.Reach) + PaveReach;
             int cr = (int)Math.Ceiling(radius / spacing);
             for (int i = 0; i < seg.PointCount - 1; i++)
             {

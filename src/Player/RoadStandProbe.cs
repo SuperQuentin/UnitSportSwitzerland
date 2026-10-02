@@ -254,7 +254,7 @@ public partial class RoadStandProbe : Node
         foreach (var s in tile.Segments)
         {
             if (!RoadStreetBuilder.HasSidewalk(s) || ReferenceEquals(s, except)) continue;
-            float reach = s.Width * 0.5f + Math.Max(s.Attributes.Left.OuterDm, s.Attributes.Right.OuterDm) / 10f + 0.5f;
+            float reach = s.Width * 0.5f + Math.Max(s.Attributes.Left.Reach, s.Attributes.Right.Reach) + 0.5f;
             for (int i = 0; i + 1 < s.PointCount; i++)
             {
                 var a = new Vector2(s.Points[i * 3], s.Points[i * 3 + 2]);
@@ -296,18 +296,20 @@ public partial class RoadStandProbe : Node
                 if (side.KerbCm == 0 || RoadStreetSection.For(side) is not { } profile) continue;
                 var across = r ? right : -right;
                 float w = profile.Width;
+                // past a turn lane's widening the side is shifted out (#120)
+                float edge = half + side.ShiftAt(RoadStreetSection.Fractions(s)[i]);
                 void Add(Vector3 at, string what, Kind kind) { var q = basePos + at; if (_chunks.HasCollisionAt(q)) result.Add((q, what, kind)); }
                 // the middle of every band at its height (#120: grass, bike path, sidewalk)
                 for (int m = 0; m + 1 < profile.Count; m++)
                     if (profile.Surface[m] != StreetSurface.Kerb)
-                        Add(p + across * (half + (profile.D[m] + profile.D[m + 1]) * 0.5f) + Vector3.Up * profile.H[m + 1],
+                        Add(p + across * (edge + (profile.D[m] + profile.D[m + 1]) * 0.5f) + Vector3.Up * profile.H[m + 1],
                             $"{s.Class} {profile.Surface[m].ToString().ToLowerInvariant()} {profile.D[m + 1] - profile.D[m]:F1}", Kind.Body);
                 // a vertical kerb at the edge: just past its chamfer
                 if (profile.Count > 2 && profile.D[1] < 1e-4f && profile.D[2] >= 1f)
-                    Add(p + across * (half + RoadStreetBuilder.Chamfer + 0.35f) + Vector3.Up * profile.H[1], $"{s.Class} kerb top", Kind.Body);
+                    Add(p + across * (edge + RoadStreetBuilder.Chamfer + 0.35f) + Vector3.Up * profile.H[1], $"{s.Class} kerb top", Kind.Body);
                 Add(p + across * (half - 0.4f), $"{s.Class} by the kerb", Kind.Body);
                 // 1.2 m out: the lattice vertex it rounds to (up to 0.71 m off) stays off the slab
-                var o = p + across * (half + w + 1.2f);
+                var o = p + across * (edge + w + 1.2f);
                 int c = Math.Clamp((int)Math.Round(o.X), 0, last), rr = Math.Clamp((int)Math.Round(o.Z), 0, last);
                 // a retaining wall there (#125): its cap is the floor, not the blend
                 bool walled = walls.Any(wl => Enumerable.Range(0, wl.PointCount).Any(m =>

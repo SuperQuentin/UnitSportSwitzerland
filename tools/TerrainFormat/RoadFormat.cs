@@ -149,8 +149,18 @@ public enum BikeKind : byte
 /// </summary>
 public readonly record struct RoadSide(
     byte SidewalkDm = 0, BikeKind Bike = BikeKind.None, byte BikeDm = 0, byte KerbCm = 0, byte VergeDm = 0,
-    byte BufferDm = 0)
+    byte BufferDm = 0, ushort ShiftStartCm = 0, ushort ShiftEndCm = 0)
 {
+    /// <summary>
+    /// How far out from the ribbon's edge the side starts, at <paramref name="t"/> (0 the segment's
+    /// first point, 1 its last, by plan length), metres: a turn lane's widening (#123) lies between
+    /// (<see cref="ShiftStartCm"/>, <see cref="ShiftEndCm"/>, varying linearly; #120).
+    /// </summary>
+    public float ShiftAt(double t) => (float)((ShiftStartCm + (ShiftEndCm - ShiftStartCm) * Math.Clamp(t, 0, 1)) / 100.0);
+
+    /// <summary>Everything beside the ribbon on this side, metres: the shift (at its widest) and the bands.</summary>
+    public float Reach => OuterDm / 10f + Math.Max(ShiftStartCm, ShiftEndCm) / 100f;
+
     /// <summary>A separated bike path beside the carriageway.</summary>
     public bool HasTrack => Bike is BikeKind.Track or BikeKind.TrackMid && BikeDm > 0;
 
@@ -181,7 +191,10 @@ public readonly record struct RoadAttributes(
     RoadSide Left = default,
     RoadSide Right = default)
 {
-    public const int RecordSize = 24;
+    /// <summary>Bytes written per record: the v3 24 and each side's shift (#120: 2 x 2 ushort).</summary>
+    public const int RecordSize = 32;
+    /// <summary>The shortest record a reader accepts (before #120's shifts).</summary>
+    public const int BaseRecordSize = 24;
     public bool Has(RoadAttrFlags f) => (Flags & f) != 0;
 }
 
