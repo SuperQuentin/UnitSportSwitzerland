@@ -37,6 +37,7 @@
   keep it still. Online too: every peer has its own origin since #185. On a server it moves the
   server's own world space (the server never shifts): `--server --origin 3583250,1113250` runs a
   generated world 1,000 km from the server's origin, the check that nothing on the server depends on it.
+- `--debugview a,b,...`: debug menu tools on from boot (`debug-menu`): `open`, `tiles`, `labels`, `origin`, `freeze`, `no<layer>`, `wireframe` / `clay` / `colours` / `overdraw`.
 - `--nocapture`: never grab the mouse (`Core/MouseCapture`). Every probe and tool run implies it,
   so a check running in a window leaves the pointer to whoever is using the machine.
 - `--chatcheck`: chat tab completion, `/spawn` parsing and Up/Down history (a real `ChatUi`), headless, RESULT PASS/FAIL (`Core/ChatCheck`).
