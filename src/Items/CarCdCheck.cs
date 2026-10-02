@@ -286,8 +286,9 @@ public partial class CarCdCheck : Node
                 Shoot("radio_held.png");
                 RadioUi.Instance?.Close();
                 var forward = -me.GlobalTransform.Basis.Z with { Y = 0 };
-                RadioManager.Instance?.Throw(new RadioState("", 0, me.GlobalPosition + Vector3.Up * 1.2f + forward.Normalized() * 1.2f,
-                    me.Rotation.Y, Vector3.Zero));
+                if (RadioManager.Instance is { } radios)
+                    radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(me.GlobalPosition + Vector3.Up * 1.2f + forward.Normalized() * 1.2f),
+                        me.Rotation.Y, Vector3.Zero));
                 _step++;
                 break;
             case 6 when t > 17:

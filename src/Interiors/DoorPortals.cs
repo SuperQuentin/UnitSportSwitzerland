@@ -277,7 +277,8 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         var direct = _direct;
         direct.Clear();
         if (cam != null) Seen(cam, cam.GlobalTransform, links, null, Width, direct);
-        var screen = GetViewport().GetVisibleRect().Size;
+        // the 3D's own pixels (the window's, at the render scale), not the UI canvas's
+        var screen = (Vector2)GetWindow().Size * GetViewport().Scaling3DScale;
         for (int i = 0; i < Width; i++)
         {
             var view = _views[i];

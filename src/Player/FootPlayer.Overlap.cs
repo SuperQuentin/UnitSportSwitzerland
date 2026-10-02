@@ -78,9 +78,8 @@ public partial class FootPlayer
     private bool AnyPlayerNear()
     {
         if (_overlapping.Count > 0) return true;
-        foreach (var node in GetTree().GetNodesInGroup(Group))
-            if (node != this && node is FootPlayer p && p.IsInsideTree()
-                && p.GlobalPosition.DistanceSquaredTo(GlobalPosition) < SeparateRange * SeparateRange)
+        foreach (var s in PlayerSnapshot.Of(GetTree()))
+            if (s.Player != this && s.Pos.DistanceSquaredTo(GlobalPosition) < SeparateRange * SeparateRange)
                 return true;
         return false;
     }

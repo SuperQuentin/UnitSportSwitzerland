@@ -87,7 +87,7 @@ public partial class AfricaTwinEgg : Node
             var ride = Rideable.Create(kind)!;
             // nose in or backed in, as the cars beside it would be
             float yaw = slot.Yaw + (Random.Shared.Next(2) == 0 ? 0f : Mathf.Pi);
-            var state = new VehicleState(kind, origin.ToWorld(slot.E, slot.N, slot.Height), yaw,
+            var state = new VehicleState(kind, new GlobalPos(slot.E, slot.N, slot.Height), yaw,
                 Vector3.Zero, ride.MaxHealth, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
             if (vehicles.Place(state, EggName) != null)
                 GD.Print($"[egg] {MotorbikeCatalog.For(kind)!.Label} parked at LV95 {slot.E:F1}/{slot.N:F1} "

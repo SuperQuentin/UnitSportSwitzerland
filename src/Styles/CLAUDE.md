@@ -15,7 +15,7 @@ touches its topic; search with `grep -ril <word> docs/notes/styles`.
 - `realistic-plus` — Realistic+: Effects/Photos look items, the Forward+ relaunch (settings, boot, guard flag), SSAO/SSR/volumetrics, --sdfgi, testing gotcha
 - `swissimage` — SWISSIMAGE: TerrainPreprocessor --photos (WMS, © swisstopo), PhotoLayer's Texture2DArray + photo_slot instance uniform, the blend, client-local
 - `assets` — Git LFS, assets/ASSETS.md, texture import settings (edited by hand), regenerating trees and impostors, ModelCatalog
-- `cartoon` — Cartoon: lit wrappers, cel light (shadow faded at the terminator against acne, hard shadows), grade, sky/haze/sun, who casts shadows, toon figures, settings entry
+- `cartoon` — Cartoon: lit wrappers, cel light (shadow faded at the terminator against acne, hard shadows), grade, sky/haze/sun, who casts shadows, toon figures, smooth figures (`MeshScratch.Smooth`, #311), settings entry
 
 ## Commands
 
