@@ -98,13 +98,15 @@ public static class RoadStreetBuilder
             }
         }
 
-        // junction corners (APRP): the top, and a face down every open edge (kerb or outer, the same skirt)
+        // junction corners (APRP), and a path's bands carried through a junction (#120): the top,
+        // and a face down every open edge (kerb or outer, the same skirt)
         foreach (var area in tile.AreaProps)
         {
-            if (area.Type != AreaPropType.Sidewalk || area.Vertices.Length < 9) continue;
+            if (!StreetAreas.Is(area.Type) || area.Vertices.Length < 9) continue;
             var up = new Vector3(0, area.Height, 0);
             var down = new Vector3(0, area.Height - Skirt, 0);
-            var surface = area.Height > 0 ? top : paving;
+            var surface = area.Type == AreaPropType.BikePath ? PathColor.SrgbToLinear()
+                : area.Type == AreaPropType.Grass ? GrassColor.SrgbToLinear() : area.Height > 0 ? top : paving;
             for (int k = 0; k + 2 < area.Indices.Length; k += 3)
             {
                 int i0 = vertices.Count;
@@ -176,7 +178,7 @@ public static class RoadStreetBuilder
         // junction corners: the top and its edges, vertical (a corner patch is a few metres across)
         foreach (var area in tile.AreaProps)
         {
-            if (area.Type != AreaPropType.Sidewalk || (area.Flags & PropFlags.Solid) == 0 || area.Height <= 0) continue;
+            if (!StreetAreas.Is(area.Type) || (area.Flags & PropFlags.Solid) == 0 || area.Height <= 0) continue;
             var up = new Vector3(0, area.Height, 0);
             for (int k = 0; k + 2 < area.Indices.Length; k += 3)
             {

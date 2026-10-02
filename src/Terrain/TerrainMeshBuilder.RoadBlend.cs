@@ -134,7 +134,7 @@ public static partial class TerrainMeshBuilder
                 if (cap.Layer == 0) UnderSurface(scratch, cap.Vertices, cap.Indices, core: true);
             // sidewalk corners (#119): the ground under a patch is its base, so it never pokes through
             foreach (var area in roadTile.AreaProps)
-                if (area.Type == AreaPropType.Sidewalk)
+                if (StreetAreas.Is(area.Type))   // and a path's bands through a junction (#120)
                     UnderSurface(scratch, area.Vertices, area.Indices, core: false);
 
             foreach (var wall in roadTile.LinearProps)

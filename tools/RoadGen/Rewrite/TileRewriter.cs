@@ -320,6 +320,7 @@ public static partial class TileRewriter
             var caps = new Dictionary<TileId, List<RoadJunction>>();
             var paint = new Dictionary<TileId, List<RoadPaint>>();
             var signs = new Dictionary<TileId, List<RoadPointProp>>();
+            var bikeBridges = new Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>>();   // paths through junctions (#120)
 
             // the full-res terrain of the block and its halo: the height audit and the walls (#125)
             var grids = LoadGrids(chunkDir, context);
@@ -520,7 +521,7 @@ public static partial class TileRewriter
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
                 foreach (var (segment, tileId, start, end) in trackPaint)
                     EmitTrackPaint(finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment], start, end, Get(paint, tileId));
-                EmitBikeCrossings(priority, result, segmentOf, finalPieces, block, wanted, paint, signs, netStats.Bikes);
+                EmitBikeCrossings(priority, result, segmentOf, finalPieces, block, wanted, paint, signs, bikeBridges, netStats.Bikes);
             }
 
             foreach (var id in block)
@@ -537,6 +538,7 @@ public static partial class TileRewriter
                 if (segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) flags |= RoadTileFlags.Osm;
                 streetStats.Tiles++;
                 var pointProps = signs.TryGetValue(id, out var sp) ? sp : new List<RoadPointProp>();
+                var bridges = bikeBridges.TryGetValue(id, out var br) ? br : [];
                 MoveSignsOffPaths(segments, pointProps, netStats.Bikes);   // #120
                 var walls = new List<RoadLinearProp>();
                 if (grids is not null)
@@ -551,7 +553,8 @@ public static partial class TileRewriter
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
                     AreaProps = [.. islands.TryGetValue(id, out var isl) ? isl : [],
-                        .. CornerPlanner.Plan(id, segments, junctions, facades, cornerStats)],   // sidewalk corners (#119)
+                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats), bridges, netStats.Bikes),   // sidewalk corners (#119)
+                        .. bridges.Select(x => x.Band)],
                     PointProps = pointProps,
                 };
                 rails.ClearTrackZones(tile.Paint, id);

@@ -347,6 +347,14 @@ public enum AreaPropType : byte
     SplitterIsland = 2, // raised island at a roundabout entry (#122)
     Sidewalk = 3,     // a sidewalk patch not carried by a segment, e.g. a junction corner (#119)
     Pavement = 4,     // flush carriageway beside a segment: a turn lane's widening (#123); Height 0
+    BikePath = 5,     // a bike path carried through a junction where no road joins (#120); Height = its level
+    Grass = 6,        // a grass strip beside such a path (#120)
+}
+
+/// <summary>Area props that are part of a street's side, drawn and solid like a sidewalk slab.</summary>
+public static class StreetAreas
+{
+    public static bool Is(AreaPropType t) => t is AreaPropType.Sidewalk or AreaPropType.BikePath or AreaPropType.Grass;
 }
 
 /// <summary>A raised surface: a triangulated polygon lifted by <see cref="Height"/> with a kerb face.</summary>

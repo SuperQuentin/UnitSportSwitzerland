@@ -38,22 +38,29 @@
   come in from a junction, 4 m in, on pieces ≥ 25 m (Bern asks start and end; the end's is left
   out, town pieces are short). Stored as a 1 m polyline along the segment (kind 1 reference),
   `Width` = size across, `Variant` 1 = reversed; the game expands the glyph (52 triangles).
-- **Crossings** at main-road junctions (#121 `Kind.Main`), per side of the main road with a lane
-  on both main arms: a road joins on that side (SSV Art. 74a al. 1: a Radstreifen crosses only
-  where entering traffic gives way) → red surface (RAL 3020, `PaintType.BikeCrossing`, a wide
+- **Crossings** along each road carried straight through a junction: the main road at a #121
+  `Kind.Main` junction, else every pair of car arms turning < 60° (right-before-left, equal ranks:
+  the user wants them marked too, though SSV Art. 74a al. 1 marks a Radstreifen across only where
+  entering traffic gives way). Per side with a lane on both arms: a road joins on that side → red surface (RAL 3020, `PaintType.BikeCrossing`, a wide
   polyline, 5 cm clear of the lines, Stadt Bern C 2.10.10) between yellow 1 m / 1 m lines on both
   edges, replacing the white guide line there; none joins → the lane line carried through. Paths
   on both arms with a road joining: the same outside the carriageway (red on paths is the user's
   choice: the UVEK Weisung allows red only with Radstreifen), and that road's Wartelinie and 3.02
-  move out behind it. 3.03 signs that stood on a path move onto the buffer or sidewalk.
+  move out behind it. No road joining on the path's side (the straight side of a T): the path
+  runs on through the junction (`BridgePath`): each profile band as an APRP `BikePath`/`Grass`/
+  `Sidewalk` strip at its level along the junction's edge curve, 15 cm over the pieces' chamfered
+  ends, replacing the sidewalk corner there (centroid test); only when both arms have the same
+  profile. Samples thinned to 2 cm on the outer edge (9 per band cost +23 KB/tile).
+  3.03 signs that stood on a path move onto the buffer or sidewalk.
 - **Format**: `RoadSide.BufferDm` (was a pad byte, older readers skip it), `BikeKind.TrackMid`,
   `RoadSide.OuterDm` (verge + path + buffer + sidewalk: what blend, embankments, cover, corners and
   signs now use instead of `SidewalkDm`). Paint past the carriageway edge lies on the side's
   profile (`RoadPaintGeometry.Offset`).
-- **Cost** (Nyon, 6 tiles, against main on the same raw input): 203.3 → 209.0 KB/tile raw
-  (+2.8 %), 133.1 → 136.6 deflated; paint 2.6k → 6.4k game triangles/tile; stage 6.1 → 6.3 s.
+- **Cost** (Nyon, 6 tiles, against main on the same raw input): 203.3 → 218.2 KB/tile raw
+  (+7.3 %, APRP +9 KB: paths through junctions), 133.1 → 140.5 deflated; paint 2.6k → 6.4k game triangles/tile; stage 6.1 → 6.3 s.
   Numbers there: 20.8 km candidates, Kernfahrbahn 15.2 km, path sides 20.3 km (layouts 1..5
-  3.3/4.2/5.2/2.8/4.8), 306 symbols, 73 red crossings (30 lane, 43 path), 40 Wartelinien moved.
+  3.3/4.2/5.2/2.8/4.8), 306 symbols, 83 red crossings (37 lane, 46 path), 136 paths carried through (101 corners
+  replaced), 40 Wartelinien moved.
 - **Test region** (D: on the dev machine, not in the repo): Nyon E 2506-2508 N 1137-1138 copied
   with a one-tile halo and its raw roads; `--roadcheck --sidewalks --at 2507650,1137678` samples
   verge, path, buffer bands.

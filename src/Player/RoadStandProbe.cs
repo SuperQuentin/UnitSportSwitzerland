@@ -243,7 +243,7 @@ public partial class RoadStandProbe : Node
         if (p.X < 6 || p.Z < 6 || p.X > 994 || p.Z > 994) return true;
         foreach (var a in tile.AreaProps)
         {
-            if (a.Type != AreaPropType.Sidewalk) continue;
+            if (!StreetAreas.Is(a.Type)) continue;
             var v = a.Vertices;
             for (int t = 0; t + 2 < a.Indices.Length; t += 3)
             {
@@ -319,7 +319,7 @@ public partial class RoadStandProbe : Node
         // junction corners: the middle of each patch's largest triangle, at its top. The floor is
         // asserted, not the body: a patch on a sloping junction is warped, and a capsule resting
         // on it touches the higher triangle beside the sample
-        var corners = tile.AreaProps.Where(a => a.Type == AreaPropType.Sidewalk && (a.Flags & PropFlags.Solid) != 0).ToList();
+        var corners = tile.AreaProps.Where(a => StreetAreas.Is(a.Type) && (a.Flags & PropFlags.Solid) != 0).ToList();
         for (int k = 0; k < corners.Count && k < 3 * Samples; k += Math.Max(1, corners.Count / Samples))
         {
             var a = corners[k];

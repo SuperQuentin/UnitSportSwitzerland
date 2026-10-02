@@ -124,9 +124,10 @@ public static class StreetView
 
             foreach (var area in tile.AreaProps)
             {
-                if (area.Type != AreaPropType.Sidewalk) continue;
+                if (!StreetAreas.Is(area.Type)) continue;
                 var v = area.Vertices;
-                string fill = area.Height > 0 ? "#c9a96a" : "#b9a6d6";
+                string fill = area.Type == AreaPropType.BikePath ? "#8e8ec2" : area.Type == AreaPropType.Grass ? "#7caa4a"
+                    : area.Height > 0 ? "#c9a96a" : "#b9a6d6";
                 for (int k = 0; k + 2 < area.Indices.Length; k += 3)
                 {
                     int i0 = area.Indices[k] * 3, i1 = area.Indices[k + 1] * 3, i2 = area.Indices[k + 2] * 3;

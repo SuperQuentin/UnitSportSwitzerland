@@ -59,124 +59,255 @@ public static partial class TileRewriter
     }
 
     /// <summary>
-    /// The crossings of every main-road junction of the block (#121's <see cref="PriorityPlanner.Kind.Main"/>):
-    /// on each side of the main road that carries a bike lane on both its arms, the lane goes on
-    /// across the junction. Where a side road joins on that side (SSV Art. 74a al. 1: a Radstreifen
-    /// crosses a junction only where the entering traffic gives way), as a red surface (RAL 3020,
-    /// the full lane width, 5 cm clear of the lines) between yellow 1 m / 1 m lines on both edges,
-    /// replacing the white guide line there; where none joins, as its yellow line carried through.
-    /// A separated path on both arms crosses a joining road's mouth the same way, outside the main
-    /// carriageway, and that road's Wartelinie and 3.02 sign move back behind it.
+    /// The crossings of every junction of the block, along each road carried straight through it:
+    /// at a main-road junction (#121's <see cref="PriorityPlanner.Kind.Main"/>) its main road, at any
+    /// other each pair of car arms turning less than 60 degrees. On each side of such a road that
+    /// carries a bike lane on both arms, the lane goes on across the junction. Where a road joins on
+    /// that side, as a red surface (RAL 3020, the full lane width, 5 cm clear of the lines) between
+    /// yellow 1 m / 1 m lines on both edges, replacing the white guide line there (SSV Art. 74a al. 1
+    /// marks a Radstreifen across a junction only where the entering traffic gives way: the game
+    /// marks it at every junction, the user's choice for #120); where none joins, as its yellow line
+    /// carried through. A separated path on both arms crosses a joining road's mouth the same way,
+    /// outside the carriageway, and that road's Wartelinie and 3.02 move back behind it; where none
+    /// joins, the path runs on through the junction (<see cref="BridgePath"/>) instead of stopping at
+    /// a sidewalk corner.
     /// </summary>
     private static void EmitBikeCrossings(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile)> segmentOf, Dictionary<RoadSegment, List<RoadSegment>> finalPieces,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
-        Dictionary<TileId, List<RoadPointProp>> signs, BikePlanner.Stats stats)
+        Dictionary<TileId, List<RoadPointProp>> signs, Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges,
+        BikePlanner.Stats stats)
     {
         var net = result.Network;
+        bool IsCar(int linkId) => net.Links[linkId].Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)
+            && (s.Segment.Flags & RoadFlags.Stairs) == 0;
         foreach (var (junction, plan) in priority.Plans)
         {
-            if (plan.Kind != PriorityPlanner.Kind.Main || plan.Arms.Count != junction.Arms.Count) continue;
+            if (plan.Arms.Count != junction.Arms.Count) continue;
             var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
-            var main = Enumerable.Range(0, plan.Arms.Count).Where(i => plan.Arms[i].Role == PriorityPlanner.Role.Main).ToArray();
-            if (main.Length != 2) continue;
-            var a = junction.Arms[main[0]];
-            var b = junction.Arms[main[1]];
-            if (-Math.Cos(a.OutwardHeading - b.OutwardHeading) < 0.5) continue;   // turns more than 60 degrees
             var anchors = Anchors(junction, net);
             if (anchors.Count == 0) continue;
-            Vec2 from = (a.Left + a.Right) * 0.5, to = (b.Left + b.Right) * 0.5;
-            var ua = Vec2.FromHeading(a.OutwardHeading);
-            var mainDir = (Vec2.FromHeading(b.OutwardHeading) - ua).Normalized();
 
-            // the bike side of an arm's end piece on its left or right looking outward
-            RoadSide SideOf(int armIndex, bool armLeft)
+            // the roads carried straight through: the main road, else every straight pair of car arms
+            var car = Enumerable.Range(0, junction.Arms.Count).Where(i => IsCar(junction.Arms[i].LinkId)).ToList();
+            var pairs = new List<(int A, int B, bool Main)>();
+            if (plan.Kind == PriorityPlanner.Kind.Main)
             {
-                var arm = junction.Arms[armIndex];
-                var end = plan.Arms[armIndex].End;
-                bool segRight = (end == LinkEnd.End) == armLeft;   // looking outward, an arm ending here has the drawing's right on its left
-                if (segmentOf.TryGetValue(arm.LinkId, out var so))
-                {
-                    var pieces = finalPieces.TryGetValue(so.Segment, out var list) && list.Count > 0 ? list : [so.Segment];
-                    var seg = end == LinkEnd.Start ? pieces[0] : pieces[^1];
-                    return segRight ? seg.Attributes.Right : seg.Attributes.Left;
-                }
-                // an arm in the halo: its lanes as the line decided them (paths are not known there)
-                if (net.Links[arm.LinkId].Tag is not Source src) return default;
-                var attrs = CrossSectionPlanner.Attributes(src.Line);
-                var s = segRight ? attrs.Right : attrs.Left;
-                return s.HasLane ? s : default;
+                var main = Enumerable.Range(0, plan.Arms.Count).Where(i => plan.Arms[i].Role == PriorityPlanner.Role.Main).ToArray();
+                if (main.Length == 2) pairs.Add((main[0], main[1], true));
+            }
+            else if (plan.Kind is not (PriorityPlanner.Kind.Roundabout or PriorityPlanner.Kind.HighSpeed))
+            {
+                var used = new HashSet<int>();
+                foreach (var (x, y) in car.SelectMany(x => car.Where(y => y > x).Select(y => (x, y)))
+                             .OrderByDescending(p => -Math.Cos(junction.Arms[p.x].OutwardHeading - junction.Arms[p.y].OutwardHeading)))
+                    if (!used.Contains(x) && !used.Contains(y)) { used.Add(x); used.Add(y); pairs.Add((x, y, false)); }
             }
 
-            for (int k = 0; k < 2; k++)
+            foreach (var (ia, ib, isMain) in pairs)
             {
-                var (ca, cb) = k == 0 ? (a.Left, b.Right) : (a.Right, b.Left);
-                var sa = SideOf(main[0], armLeft: k == 0);
-                var sb = SideOf(main[1], armLeft: k != 0);
-                double sideSign = Math.Sign(ua.Cross(ca - from));
-                var joined = Enumerable.Range(0, junction.Arms.Count)
-                    .Where(i => i != main[0] && i != main[1] && plan.Arms[i].Role == PriorityPlanner.Role.Yield
-                        && Math.Sign(ua.Cross(Vec2.FromHeading(junction.Arms[i].OutwardHeading))) == sideSign)
-                    .ToList();
-                Vec2 da = (ca - from).Normalized(), db = (cb - to).Normalized();
-                // a curve through the junction, offset from the carriageway edge (+ outward, - inward) at each arm
-                List<Vec2> Curve(double oa, double ob)
-                {
-                    var pa = ca + da * oa;
-                    var pb = cb + db * ob;
-                    var control = junction.Centre + ((pa - from) + (pb - to)) * 0.5;
-                    var line = new List<Vec2>();
-                    for (int s = 0; s <= 8; s++)
-                    {
-                        double t = s / 8.0, mt = 1 - t;
-                        line.Add(pa * (mt * mt) + control * (2 * mt * t) + pb * (t * t));
-                    }
-                    return Polyline.Simplify(line, 0.02);
-                }
-                void Add(List<Vec2> line, PaintType type, uint rgba, float width, float dash) =>
-                    Get(paint, home).Add(new RoadPaint
-                    {
-                        Shape = PaintShape.Polyline, Type = type, Rgba = rgba, Width = width, Dash = dash, Gap = dash,
-                        Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
-                    });
-                float lw = BikePlanner.LineWidth;
+                var a = junction.Arms[ia];
+                var b = junction.Arms[ib];
+                if (-Math.Cos(a.OutwardHeading - b.OutwardHeading) < 0.5) continue;   // turns more than 60 degrees
+                Vec2 from = (a.Left + a.Right) * 0.5, to = (b.Left + b.Right) * 0.5;
+                var ua = Vec2.FromHeading(a.OutwardHeading);
+                var mainDir = (Vec2.FromHeading(b.OutwardHeading) - ua).Normalized();
 
-                if (sa.HasLane && sb.HasLane)
+                // the bike side of an arm's end piece on its left or right looking outward
+                RoadSide SideOf(int armIndex, bool armLeft)
                 {
-                    double ia = sa.BikeDm / 10.0, ib = sb.BikeDm / 10.0;
-                    if (joined.Count == 0)
+                    var arm = junction.Arms[armIndex];
+                    var end = plan.Arms[armIndex].End;
+                    bool segRight = (end == LinkEnd.End) == armLeft;   // looking outward, an arm ending here has the drawing's right on its left
+                    if (segmentOf.TryGetValue(arm.LinkId, out var so))
                     {
-                        Add(Curve(-ia, -ib), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.Dash);
-                        stats.LanesThrough++;
-                        continue;
+                        var pieces = finalPieces.TryGetValue(so.Segment, out var list) && list.Count > 0 ? list : [so.Segment];
+                        var seg = end == LinkEnd.Start ? pieces[0] : pieces[^1];
+                        return segRight ? seg.Attributes.Right : seg.Attributes.Left;
                     }
-                    // between the outer line (on the edge) and the lane's own line, 5 cm clear of both
-                    double redA = (lw + ia - lw * 0.5) * 0.5, redB = (lw + ib - lw * 0.5) * 0.5;
-                    float red = (float)(Math.Min(ia, ib) - lw * 1.5 - 2 * RedInset);
-                    if (red > 0.3f) Add(Curve(-redA, -redB), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
-                    Add(Curve(-lw * 0.5, -lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
-                    Add(Curve(-ia, -ib), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
-                    if (priority.GuideAt.Remove((junction.NodeId, k), out var guide)) paint[guide.Tile].Remove(guide.Paint);
-                    stats.Crossings++;
-                    stats.CrossingsLane++;
+                    // an arm in the halo: its lanes as the line decided them (paths are not known there)
+                    if (net.Links[arm.LinkId].Tag is not Source src) return default;
+                    var attrs = CrossSectionPlanner.Attributes(src.Line);
+                    var s = segRight ? attrs.Right : attrs.Left;
+                    return s.HasLane ? s : default;
                 }
-                else if (sa.HasTrack && sb.HasTrack && joined.Count > 0)
+
+                for (int k = 0; k < 2; k++)
                 {
-                    double ta = RoadStreetSection.TrackCentre(sa), tb = RoadStreetSection.TrackCentre(sb);
-                    double ha = sa.BikeDm / 20.0 - lw * 0.5, hb = sb.BikeDm / 20.0 - lw * 0.5;
-                    float red = (float)(Math.Min(sa.BikeDm, sb.BikeDm) / 10.0 - 2 * lw - 2 * RedInset);
-                    if (red > 0.3f) Add(Curve(ta, tb), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
-                    Add(Curve(ta - ha, tb - hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
-                    Add(Curve(ta + ha, tb + hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
-                    stats.Crossings++;
-                    stats.CrossingsTrack++;
-                    // the joining road gives way before the path, not on it
-                    double beyond = Math.Max(sa.VergeDm + sa.BikeDm, sb.VergeDm + sb.BikeDm) / 10.0 + 0.1;
-                    foreach (int i in joined) MoveYieldBack(priority, net, junction.Arms[i], mainDir, beyond, paint, signs, stats);
+                    var (ca, cb) = k == 0 ? (a.Left, b.Right) : (a.Right, b.Left);
+                    var sa = SideOf(ia, armLeft: k == 0);
+                    var sb = SideOf(ib, armLeft: k != 0);
+                    double sideSign = Math.Sign(ua.Cross(ca - from));
+                    var joined = car.Where(i => i != ia && i != ib
+                            && Math.Sign(ua.Cross(Vec2.FromHeading(junction.Arms[i].OutwardHeading))) == sideSign)
+                        .ToList();
+                    Vec2 da = (ca - from).Normalized(), db = (cb - to).Normalized();
+                    // a curve through the junction, offset from the carriageway edge (+ outward, - inward) at each arm
+                    List<Vec2> Curve(double oa, double ob, bool simplify = true)
+                    {
+                        var pa = ca + da * oa;
+                        var pb = cb + db * ob;
+                        var control = junction.Centre + ((pa - from) + (pb - to)) * 0.5;
+                        var line = new List<Vec2>();
+                        for (int s = 0; s <= 8; s++)
+                        {
+                            double t = s / 8.0, mt = 1 - t;
+                            line.Add(pa * (mt * mt) + control * (2 * mt * t) + pb * (t * t));
+                        }
+                        return simplify ? Polyline.Simplify(line, 0.02) : line;
+                    }
+                    void Add(List<Vec2> line, PaintType type, uint rgba, float width, float dash) =>
+                        Get(paint, home).Add(new RoadPaint
+                        {
+                            Shape = PaintShape.Polyline, Type = type, Rgba = rgba, Width = width, Dash = dash, Gap = dash,
+                            Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
+                        });
+                    float lw = BikePlanner.LineWidth;
+
+                    if (sa.HasLane && sb.HasLane)
+                    {
+                        double la = sa.BikeDm / 10.0, lb = sb.BikeDm / 10.0;
+                        if (joined.Count == 0)
+                        {
+                            Add(Curve(-la, -lb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.Dash);
+                            stats.LanesThrough++;
+                            continue;
+                        }
+                        // between the outer line (on the edge) and the lane's own line, 5 cm clear of both
+                        double redA = (lw + la - lw * 0.5) * 0.5, redB = (lw + lb - lw * 0.5) * 0.5;
+                        float red = (float)(Math.Min(la, lb) - lw * 1.5 - 2 * RedInset);
+                        if (red > 0.3f) Add(Curve(-redA, -redB), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
+                        Add(Curve(-lw * 0.5, -lw * 0.5), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                        Add(Curve(-la, -lb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                        if (isMain && priority.GuideAt.Remove((junction.NodeId, k), out var guide)) paint[guide.Tile].Remove(guide.Paint);
+                        stats.Crossings++;
+                        stats.CrossingsLane++;
+                    }
+                    else if (sa.HasTrack && sb.HasTrack && joined.Count > 0)
+                    {
+                        double ta = RoadStreetSection.TrackCentre(sa), tb = RoadStreetSection.TrackCentre(sb);
+                        double ha = sa.BikeDm / 20.0 - lw * 0.5, hb = sb.BikeDm / 20.0 - lw * 0.5;
+                        float red = (float)(Math.Min(sa.BikeDm, sb.BikeDm) / 10.0 - 2 * lw - 2 * RedInset);
+                        if (red > 0.3f) Add(Curve(ta, tb), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
+                        Add(Curve(ta - ha, tb - hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                        Add(Curve(ta + ha, tb + hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                        stats.Crossings++;
+                        stats.CrossingsTrack++;
+                        // the joining road gives way before the path, not on it
+                        double beyond = Math.Max(sa.VergeDm + sa.BikeDm, sb.VergeDm + sb.BikeDm) / 10.0 + 0.1;
+                        foreach (int i in joined) MoveYieldBack(priority, net, junction.Arms[i], mainDir, beyond, paint, signs, stats);
+                    }
+                    else if (sa.HasTrack && sb.HasTrack)
+                    {
+                        var ub = Vec2.FromHeading(b.OutwardHeading);
+                        if (BridgePath(home, sa, sb, ua, ub, (oa, ob) => Curve(oa, ob, simplify: false), p => HeightAt(anchors, p)) is { } bands)
+                        {
+                            Get(bridges, home).AddRange(bands);
+                            stats.PathsThrough++;
+                        }
+                    }
                 }
             }
         }
+    }
+
+    /// <summary>Douglas-Peucker on a polyline, returning the indices kept (both ends always).</summary>
+    private static List<int> KeepIndices(List<Vec2> line, double tolerance)
+    {
+        var keep = new bool[line.Count];
+        keep[0] = keep[^1] = true;
+        var stack = new Stack<(int, int)>();
+        stack.Push((0, line.Count - 1));
+        while (stack.Count > 0)
+        {
+            var (a, b) = stack.Pop();
+            int worst = -1;
+            double far = tolerance;
+            for (int i = a + 1; i < b; i++)
+            {
+                double d = PriorityPlanner.DistanceToSegment(line[i], line[a], line[b]);
+                if (d > far) { far = d; worst = i; }
+            }
+            if (worst < 0) continue;
+            keep[worst] = true;
+            stack.Push((a, worst));
+            stack.Push((worst, b));
+        }
+        return Enumerable.Range(0, line.Count).Where(i => keep[i]).ToList();
+    }
+
+    /// <summary>The sidewalk corners of a tile, less those a path carried through the junction (#120) now covers.</summary>
+    private static IEnumerable<RoadAreaProp> Unbridged(TileId id, List<RoadAreaProp> corners,
+        List<(RoadAreaProp Band, List<Vec2> Ring)> bridges, BikePlanner.Stats stats)
+    {
+        foreach (var corner in corners)
+        {
+            var v = corner.Vertices;
+            int n = v.Length / 3;
+            double x = 0, z = 0;
+            for (int i = 0; i < n; i++) { x += v[i * 3]; z += v[i * 3 + 2]; }
+            var centre = new Vec2(id.MinE + x / Math.Max(n, 1), id.MaxN - z / Math.Max(n, 1));
+            if (n > 0 && bridges.Any(b => PriorityPlanner.Inside(b.Ring, centre))) { stats.CornersReplaced++; continue; }
+            yield return corner;
+        }
+    }
+
+    /// <summary>Each end of a path carried through a junction reaches this far back over its piece: the piece's open end is chamfered down.</summary>
+    private const double BridgeOverlap = 0.15;
+
+    /// <summary>
+    /// A separated path carried on through a junction where no road joins on its side (#120): each
+    /// band of its profile (grass, path, sidewalk; a sloped kerb goes to the band outside it) as a
+    /// solid area prop at its level, between the two arms' ends along the junction's edge curve.
+    /// Null when the two arms' profiles differ (their bands would not meet): the sidewalk corner
+    /// stays. <paramref name="curve"/> gives the curve at an offset outward from each arm's edge.
+    /// </summary>
+    private static List<(RoadAreaProp Band, List<Vec2> Ring)>? BridgePath(TileId home, RoadSide sa, RoadSide sb, Vec2 ua, Vec2 ub,
+        Func<double, double, List<Vec2>> curve, Func<Vec2, float> height)
+    {
+        if (RoadStreetSection.For(sa) is not { } pa || RoadStreetSection.For(sb) is not { } pb) return null;
+        if (!pa.Surface.SequenceEqual(pb.Surface) || !pa.H.SequenceEqual(pb.H)) return null;
+        // the samples the outer edge needs to stay within 2 cm, shared by every band (a straight mouth keeps its ends)
+        var keep = KeepIndices(curve(pa.Width, pb.Width), 0.02);
+        List<Vec2> At(double oa, double ob) { var c = curve(oa, ob); return keep.Select(i => c[i]).ToList(); }
+        var result = new List<(RoadAreaProp, List<Vec2>)>();
+        for (int k = 0; k + 1 < pa.Count; k++)
+        {
+            var surface = pa.Surface[k];
+            if (surface == StreetSurface.Kerb) continue;
+            // a sloped kerb before this band belongs to it
+            int from = k > 0 && pa.Surface[k - 1] == StreetSurface.Kerb ? k - 1 : k;
+            var inner = At(pa.D[from], pb.D[from]);
+            var outer = At(pa.D[k + 1], pb.D[k + 1]);
+            inner.Insert(0, inner[0] + ua * BridgeOverlap);
+            outer.Insert(0, outer[0] + ua * BridgeOverlap);
+            inner.Add(inner[^1] + ub * BridgeOverlap);
+            outer.Add(outer[^1] + ub * BridgeOverlap);
+            int n = inner.Count;
+            var plan = inner.Concat(outer).ToList();
+            var vertices = Local(home, plan, height, 0f);
+            var indices = new List<ushort>();
+            for (int i = 0; i + 1 < n; i++)
+            {
+                ushort a = (ushort)i, b = (ushort)(i + 1), c = (ushort)(n + i + 1), d = (ushort)(n + i);
+                indices.AddRange([a, b, c, a, c, d]);
+            }
+            var type = surface switch
+            {
+                StreetSurface.Track => AreaPropType.BikePath,
+                StreetSurface.Verge or StreetSurface.Buffer => AreaPropType.Grass,
+                _ => AreaPropType.Sidewalk,
+            };
+            var ring = new List<Vec2>(inner);
+            ring.AddRange(Enumerable.Reverse(outer));
+            result.Add((new RoadAreaProp
+            {
+                Type = type, Flags = pa.H[k + 1] > 0 ? PropFlags.Solid : PropFlags.None, Height = pa.H[k + 1],
+                Vertices = vertices, Indices = indices.ToArray(),
+            }, ring));
+        }
+        return result;
     }
 
     /// <summary>A yielding arm's Wartelinie rows and 3.02 sign moved out along it by <paramref name="beyond"/> (measured across the main road).</summary>
