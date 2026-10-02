@@ -327,7 +327,7 @@ public partial class ItemController : Node
             // E by a zipline's top post, a ladder's foot, on a launch pad: ride it (#275)
             GetViewport().SetInputAsHandled();
         }
-        else if (_inventory.HeldId == ItemId.Hammer && e.IsActionPressed(PlayerInput.RideMenu))
+        else if (_inventory.HeldId == ItemId.Hammer && e.IsActionPressed(PlayerInput.BuildTurn))
         {
             // the hammer in hand: R turns the piece, Aim + R changes its material (the travel picker waits)
             if (PlayerInput.Held(PlayerInput.AimItem)) _build.CycleMaterial();
@@ -543,6 +543,8 @@ public partial class ItemController : Node
                 Kick(player);
                 var up = (Vector3.Up * 3f - player.Camera.GlobalTransform.Basis.Z).Normalized();
                 ItemEvents.Instance?.Send(ItemEventKind.Flare, ItemEvents.MuzzleOf(player, up), up);
+                // a hay hideout it was fired from or at goes up in flames (#359)
+                Build.GadgetTool.TryBurn(player, player.Camera.GlobalPosition, -player.Camera.GlobalTransform.Basis.Z);
                 _ui.Toast("Flare up: a supply drop is on its way.");
                 break;
             }

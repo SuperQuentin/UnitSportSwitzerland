@@ -127,6 +127,8 @@ public partial class PlayerInput : Node
     public const string PrevItem = "prev_item";
     /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
     public const string BirdJournal = "bird_journal";
+    /// <summary>The hammer in hand (#359): turns the piece; with Aim, changes its material. R, or D-pad up on a pad.</summary>
+    public const string BuildTurn = "build_turn";
 
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;
@@ -462,6 +464,9 @@ public partial class PlayerInput : Node
         Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
         Bind(PrevItem, Mouse(MouseButton.WheelUp));
         Bind(BirdJournal, Keys(Key.J));
+        // R is the travel picker on foot, D-pad up the engine in a vehicle: with the hammer in hand
+        // the item controller takes either first (Build.BuildTool)
+        Bind(BuildTurn, Keys(Key.R), Button(JoyButton.DpadUp));
 
         // Godot's built-in UI actions map the D-pad but not the face buttons, so a pad could
         // walk a menu's focus and never press anything. A confirms and B backs out, as on

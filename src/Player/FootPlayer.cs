@@ -423,6 +423,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public void RefreshNetVisibility(long viewer) => _vis?.UpdateVisibility((int)viewer);
 
     public const int PoseStride = 0, PoseAir = 1, PoseTucked = 2;
+    /// <summary>Hanging from a zipline; climbing a ladder, <c>Anim.X</c> = which half of the step (#359).</summary>
+    public const int PoseHang = 4, PoseClimb = 5;
 
     /// <summary>
     /// The hat on the figure, as an <see cref="Avatar.Headwear"/> (occasions, #18). Replicated like
@@ -1677,6 +1679,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
 
+        // held by a zipline or a ladder (#359): the gadget says how to hang, everyone sees it
+        if (_carried && CarriedPose != 0)
+        {
+            PoseKind = CarriedPose == 1 ? PoseHang : PoseClimb;
+            Anim = new Vector4(CarriedPose == 1 ? 0f : ClimbStep & 1, 0f, 0f, 0f);
+            BodyPose = Transform3D.Identity;
+            return;
+        }
+
         PoseKind = _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
         if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
         Anim = new Vector4(speed, _stridePhase, 0f, 0f);
@@ -1792,6 +1803,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>Draws the on-foot figure from the published pose — the same code for the owner and every remote copy.</summary>
+    /// <summary>The figure for a hang or a climbing step (<see cref="PoseHang"/>, <see cref="PoseClimb"/>).</summary>
+    private Avatar.HumanPose CarriedFigure() =>
+        PoseKind == PoseHang ? Avatar.HumanPose.Hanging
+        : Anim.X > 0.5f ? Avatar.HumanPose.ClimbRight : Avatar.HumanPose.ClimbLeft;
+
     private void ApplyFootPose()
     {
         if (_walker == null) return;
@@ -1842,6 +1858,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             {
                 PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
                 PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
+                PoseHang or PoseClimb => Avatar.HumanMeshBuilder.MountsForPose(CarriedFigure(), arm, blend),
                 _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance),
             };
         }
@@ -1855,6 +1872,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                     : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat),
                 PoseAir => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
                     : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
+                PoseHang or PoseClimb => Avatar.HumanMeshBuilder.BuildPosed(palette, CarriedFigure(), arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
                 _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
                     dance: dance, into: _poseMesh ??= new ArrayMesh()),
             };
@@ -1991,15 +2009,40 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             exclude = WithShell(exclude, shell);
             var sill = from.Lerp(to, t);
-            var near = _camRay.Cast(space, from, sill, CameraMask, exclude);
-            if (near.Count > 0) return Shorten((near["position"].AsVector3() - from).Length());
+            if (ArmHit(space, from, sill, exclude) is { } near) return Shorten(near);
             through = t;
             across = map;
-            var far = _camRay.Cast(space, map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, CameraMask, exclude);
-            return far.Count > 0 ? Shorten(t * span + (far["position"].AsVector3() - map * sill).Length()) : 1f;
+            return ArmHit(space, map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, exclude) is { } far
+                ? Shorten(t * span + 0.1f + far) : 1f;
         }
+        return ArmHit(space, from, to, exclude) is { } hit ? Shorten(hit) : 1f;
+    }
+
+    private const float ArmRadius = 0.2f;
+    private static readonly SphereShape3D ArmBall = new() { Radius = ArmRadius };
+    /// <summary>The camera arm's ball sweep: one query, reused (#221).</summary>
+    private readonly PhysicsShapeQueryParameters3D _armSweep = new() { Shape = ArmBall };
+
+    /// <summary>
+    /// How far the camera arm gets from <paramref name="from"/> toward <paramref name="to"/> before a
+    /// ball the size of the lens touches something, or null for all the way. A thin ray slipped
+    /// past door frames and ceiling edges on one frame and hit them the next; indoors, where the
+    /// arm is always near a wall, that flicker made the camera shake.
+    /// </summary>
+    private float? ArmHit(PhysicsDirectSpaceState3D space, Vector3 from, Vector3 to, Godot.Collections.Array<Rid> exclude)
+    {
+        var motion = to - from;
+        float len = motion.Length();
+        if (len < 1e-3f) return null;
+        _armSweep.Transform = new Transform3D(Basis.Identity, from);
+        _armSweep.Motion = motion;
+        _armSweep.Exclude = exclude;
+        _armSweep.CollisionMask = CameraMask;
+        var f = space.CastMotion(_armSweep);
+        if (f.Length >= 1 && f[0] < 1f && f[0] > 0f) return f[0] * len + ArmRadius;
+        // the ball already touching at the start (a low ceiling over the shoulder): fall back to a ray
         var hit = _camRay.Cast(space, from, to, CameraMask, exclude);
-        return hit.Count > 0 ? Shorten((hit["position"].AsVector3() - from).Length()) : 1f;
+        return hit.Count > 0 ? (hit["position"].AsVector3() - from).Length() : null;
     }
 
     private void UpdateThirdPersonCamera(float dt)
@@ -2039,7 +2082,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a quarter metre short of what it hits, never under a tenth of the arm
         float want = ArmReach(pivot, wanted, SelfExclude, 0.25f, 1f, 0.1f, out float through, out var across);
         // snap in, ease out: late at a wall is a frame with the lens inside it
-        _armBlend = want < _armBlend ? want : Mathf.Lerp(_armBlend, want, MathX.Damp(5f, dt));
+        // (a small dead band: indoors the wanted length moves by centimetres every frame with the
+        // stride and the speed term, and chasing each of those read as a shaking camera)
+        if (want < _armBlend - 0.02f) _armBlend = want;
+        else if (want > _armBlend) _armBlend = Mathf.Lerp(_armBlend, want, MathX.Damp(3f, dt));
 
         var position = pivot.Lerp(wanted, _armBlend) + Vector3.Up * _landingDip * 0.5f;
         var lens = new Transform3D(view, position);
@@ -2773,8 +2819,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             flyer.Begin(ref _flight, velocity, Rotation.Y);
             _camFwd = -GlobalTransform.Basis.Z;
-            // the helicopter turns to the camera; start the camera where the nose already is
-            if (flyer.LookSteers) _viewYaw = Rotation.Y;
+            // the helicopter turns to the camera; start the camera where the nose already is.
+            // The wingsuit keeps the look it was deployed with — it banks round to it — and the
+            // view drops to the trim glide, so a level look does not flare the moment it opens.
+            if (flyer is Wingsuit) _pitch = Mathf.Min(_pitch, -0.35f);
+            else if (flyer.LookSteers) _viewYaw = Rotation.Y;
         }
         else _flight = default;
         if (_ride is Boat boat) BeginBoat(boat, velocity);
@@ -3443,7 +3492,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Action: action,
             Effort: PlayerInput.Held(PlayerInput.TuckBoost),
             ViewYaw: _viewYaw,
-            Engine: EngineOn || !flyer.HasEngine);
+            Engine: EngineOn || !flyer.HasEngine,
+            ViewPitch: _pitch);
 
         Clearance = Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground)
             ? GlobalPosition.Y - ground : 999f;
@@ -3539,8 +3589,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         Vector3 fwd;
         if (flyer.LookSteers)
         {
-            // the helicopter camera is the look itself; the craft chases it
-            fwd = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, _pitch * 0.8f) * Vector3.Forward;
+            // the helicopter and wingsuit cameras are the look itself; the craft chases it (the
+            // wingsuit's full pitch: its look pitch is its glide, so the view is down the path)
+            float pitch = flyer is Wingsuit ? _pitch : _pitch * 0.8f;
+            fwd = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, pitch) * Vector3.Forward;
         }
         else
         {

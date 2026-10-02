@@ -49,6 +49,13 @@ public partial class Minimap : Control
         var nw = ToScreen(new Vector2(-side * 0.5f, side * 0.5f));
         DrawTextureRect(tex, new Rect2(nw, new Vector2(side, side) * ppm), false);
         BrMapDraw.Overlays(this, _br, ToScreen, ppm, s * 2f);
+        // the radar (#359): opponents close by, unless hidden under a net or in a bale
+        foreach (var at in _br.Nearby())
+        {
+            var p = ToScreen(at);
+            DrawCircle(p, 5f, new Color(0, 0, 0, 0.75f));
+            DrawCircle(p, 3.5f, new Color(0.95f, 0.22f, 0.18f));
+        }
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 
         DrawRect(new Rect2(Vector2.Zero, Size), new Color(0, 0, 0, 0.9f), false, 3f);

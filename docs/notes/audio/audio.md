@@ -14,7 +14,9 @@
   short-mode LFSR, nonlinear mixer), C64 SID 6581 (hard sync + resonant filter), YM2612 (4-op FM,
   feedback, PSG noise, 9-bit ladder DAC). `Surfaces.At` picks footstep/landing banks and ski hiss
   colour from road-under-feet then cover (`Surfaces.Origin` must be set); `ReverbZones` eases the
-  bus reverb (indoors/tunnel/forest/valley/high). `Ambience` (volume setting): cowbells on pasture
+  bus reverb (indoors/tunnel/forest/valley/high). Open air is dry (wet 0): the slap-back rays tilt
+  ~11° up and a valley needs 3 of 4 hits, or every hillside read as a hall. `ReverbZones.Enclosure`
+  (0 open .. 1 indoors) also scales the PS1 voice's built-in SPU tail. `Ambience` (volume setting): cowbells on pasture
   700-2450 m, a Farnell bubble brook near watercourses, per-forest bird species seeded by tile,
   church bells on the hour at towns < 1.5 km (local clock — the game has none), alpine rockfall.
   Check: `<godot> --headless --path . -- --soundcheck test_output/soundcheck` writes every bank variant and a 7 s

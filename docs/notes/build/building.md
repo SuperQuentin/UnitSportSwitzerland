@@ -35,9 +35,13 @@
   the weapon's `MaxHit` (shotgun 121.5), the owner may always, others only with `/pvp on`; in a match any
   living entrant (`BrManager.Playing`). Player shots already stop at any non-player collider, so cover works.
 - **Switchable**: `Systems.Build` ("build"); null-safe users (`Structures.Instance?`).
-- **Not yet**: ladders and gadgets (#275), Battle Royale prefabs and the match material economy (#276), road /
-  property restrictions in free roam (only "not indoors"), interest by distance (everyone gets every structure),
-  doors that open, pad bindings, building off a structure across another structure's grid.
+- **Interest** (#359): a peer is sent a structure (whole) when its body comes within 1.2 km of the structure's
+  origin, and it is taken back past 1.5 km (`Structures._known`, swept every 2 s; new structures go to peers
+  in range, changes only to peers that have it).
+- **Controls**: `build_turn` (R, D-pad up) turns, Aim + `build_turn` changes the material, Aim + `next_item`
+  (wheel, D-pad right) the piece.
+- **Not yet**: road / property restrictions in free roam (only "not indoors"), doors that open, building off a
+  structure across another structure's grid.
 - **Checks**: `tools/test.sh unit` (`BuildGridTests`); `--buildcheck --systems ui,physics,build` (offline:
   real aim/Use path, a hut of every piece and material, refusals, the span row, a capped hit ignored, the grown
   metal wall breaking on the 5th 120 hit and its 8 floors falling, a real shot trace, a refunded pick-up,

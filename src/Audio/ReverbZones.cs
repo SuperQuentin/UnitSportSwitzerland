@@ -27,6 +27,8 @@ public partial class ReverbZones : Node
     private const float EaseSeconds = 0.4f;   // time constant: ~1 s to settle
     private const float CoverRange = 12f;
     private const float SlapRange = 300f;
+    /// <summary>Upward tilt of the slap-back rays (~11°): enough to clear the slope underfoot.</summary>
+    private const float SlapRise = 0.2f;
 
     private readonly Func<Node3D?> _listener;
     private readonly Func<bool> _indoors;
@@ -65,6 +67,7 @@ public partial class ReverbZones : Node
         _room += (_tRoom - _room) * k;
         _damp += (_tDamp - _damp) * k;
         _wet += (_tWet - _wet) * k;
+        Enclosure += (_tEnclosure - Enclosure) * k;
         r.RoomSize = _room;
         r.Damping = _damp;
         r.Wet = _wet;
@@ -108,35 +111,39 @@ public partial class ReverbZones : Node
         bool wooded = _chunks != null && _chunks.TryGetCover(head, out var c) && CoverFormat.IsWooded(c);
         if (wooded)
         {
-            Set("forest", 0.4f, 0.55f, 0.12f);
+            Set("forest", 0.25f, 0.7f, 0.04f);
             return;
         }
         if (up < 6f)
         {
             // eaves, a bridge, an overhang: covered but not enclosed
-            Set("covered", 0.45f, 0.45f, 0.16f);
+            Set("covered", 0.3f, 0.55f, 0.08f);
             return;
         }
 
-        // open air: how much rock is standing around to throw the sound back?
+        // open air: how much rock is standing around to throw the sound back? The rays climb a
+        // little: level rays hit the slope the player stands on (in Switzerland that is nearly
+        // everywhere), which made every hillside a "valley" and put a hall on every footstep.
+        // A real wall has to stand up and face the listener on at least three sides.
         float nearest = SlapRange;
         int hits = 0;
         for (int i = 0; i < 4; i++)
         {
             var dir = fwd.Rotated(Vector3.Up, Mathf.Pi * 0.25f + i * Mathf.Pi * 0.5f);
+            dir = (dir + Vector3.Up * SlapRise).Normalized();
             float d = Cast(space, head, dir, SlapRange);
             if (d < SlapRange) { hits++; nearest = Mathf.Min(nearest, d); }
         }
-        if (hits >= 2 && nearest < SlapRange)
+        if (hits >= 3 && nearest < SlapRange)
         {
-            // walls close by raise the wet a little; a canyon is louder than a far valley side
+            // open air has almost no reverb: a gorge only adds a faint, short tail, never a room
             float close = 1f - nearest / SlapRange;
-            Set("valley", 0.6f + 0.2f * close, 0.4f, 0.05f + 0.14f * close);
+            Set("valley", 0.3f + 0.15f * close, 0.6f, 0.02f + 0.05f * close);
         }
         else if (head.Y > 2200f)
-            Set("high", 0.5f, 0.5f, 0.02f);
+            Set("high", 0.2f, 0.7f, 0f);
         else
-            Set("open", 0.5f, 0.5f, 0.04f);
+            Set("open", 0.2f, 0.7f, 0f);
     }
 
     /// <summary>Distance to the first hit along <paramref name="dir"/>, or <paramref name="range"/> for none.</summary>
@@ -147,14 +154,23 @@ public partial class ReverbZones : Node
         return hit.Count > 0 ? from.DistanceTo((Vector3)hit["position"]) : range;
     }
 
+    /// <summary>
+    /// How enclosed the listener is, 0 (open air) to 1 (indoors), eased like the bus reverb. Voices
+    /// with a built-in tail (<see cref="PsxSpuVoice"/>) scale it by this, or engines echo outdoors.
+    /// </summary>
+    public static float Enclosure { get; private set; }
+    private float _tEnclosure;
+
     private void Set(string env, float room, float damp, float wet)
     {
         Environment = env;
+        _tEnclosure = env switch { "indoors" or "tunnel" => 1f, "covered" => 0.5f, _ => 0f };
         if (GameSettings.Current.EngineVoice == EngineVoice.Ps1)
         {
             // the PlayStation's SPU reverb is a fixed hall: a touch wetter and darker than a
             // real space would be, and it is part of that console's sound
-            wet = Mathf.Min(1f, wet * 1.25f + 0.03f);
+            // (outdoors stays dry: a constant floor put that hall on every sound in the open)
+            wet = Mathf.Min(1f, wet * 1.25f);
             damp = Mathf.Min(1f, damp + 0.15f);
             room = Mathf.Min(1f, room + 0.05f);
         }

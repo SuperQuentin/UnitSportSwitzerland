@@ -14,7 +14,8 @@ public readonly record struct BuildAim(
 /// (<see cref="Aim"/>): on the structure looked at or one close by, else a new structure whose first
 /// cell sits where you look; a green or red ghost shows it, with a line saying what it costs or why
 /// not. Use builds it (the materials leave the pack at once and come back if the server refuses);
-/// Aim + Use takes back your own piece. Aim + wheel picks the piece, R turns it, Aim + R the
+/// Aim + Use takes back your own piece. Aim + next item (wheel, D-pad right) picks the piece, build turn
+/// (R, D-pad up) turns it, Aim + build turn the
 /// material. <see cref="TryHit"/> is the weapons' side: a shot that meets a piece first damages it.
 /// Docs: <c>docs/notes/build/building.md</c>.
 /// </summary>
@@ -254,8 +255,8 @@ public partial class BuildTool : Node
             _ghost.Visible = true;
             _material.AlbedoColor = aim.Valid ? new Color(0.3f, 1f, 0.4f, 0.35f) : new Color(1f, 0.25f, 0.2f, 0.35f);
             _hint.Text = aiming
-                ? $"{what}\n" + InputHints.Format("wheel: piece · R: material · {use_item}: take back your piece")
-                : aim.Valid ? $"{what} — {CostText()}\n" + InputHints.Format("{use_item}: build · R: turn · {aim_item} + wheel: piece")
+                ? $"{what}\n" + InputHints.Format("{next_item}: piece · {build_turn}: material · {use_item}: take back your piece")
+                : aim.Valid ? $"{what} — {CostText()}\n" + InputHints.Format("{use_item}: build · {build_turn}: turn · {aim_item} + {next_item}: piece")
                 : $"{what}\n{aim.Reason}";
         }
         _hint.Visible = _hint.Text.Length > 0;
