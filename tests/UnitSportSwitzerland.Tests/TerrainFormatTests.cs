@@ -178,7 +178,7 @@ public class TerrainFormatTests
     [Fact]
     public void Water_round_trips_through_deflate()
     {
-        var layer = WaterLayer.Dry(Id);
+        var layer = WaterGrid.Dry(Id);
         var rng = new Random(298);
         for (int i = 0; i < layer.Levels.Length; i += 41)
         {
@@ -193,14 +193,14 @@ public class TerrainFormatTests
         Assert.Equal(layer.Levels, back.Levels);
         Assert.Equal(layer.Fetch, back.Fetch);
         Assert.Equal("water_2579_1109.water", WaterFormat.FileName(Id));
-        Assert.Throws<ArgumentException>(() => new WaterLayer(Id, new ushort[10], new byte[10]));
+        Assert.Throws<ArgumentException>(() => new WaterGrid(Id, new ushort[10], new byte[10]));
     }
 
     [Fact]
     public void Water_level_samples_only_the_wet_corners()
     {
-        var layer = WaterLayer.Dry(Id);
-        int s = WaterLayer.Size;
+        var layer = WaterGrid.Dry(Id);
+        int s = WaterGrid.Size;
         ushort q = ChunkFormat.Quantize(372.14);
         // one wet vertex at (10, 20): its cell's other corners are dry
         layer.Levels[20 * s + 10] = q;

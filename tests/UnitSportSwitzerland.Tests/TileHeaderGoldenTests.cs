@@ -93,7 +93,7 @@ public class TileHeaderGoldenTests
     [Fact]
     public void Water_header_bytes_unchanged_and_payload_inflates_back()
     {
-        var layer = WaterLayer.Dry(Id);
+        var layer = WaterGrid.Dry(Id);
         for (int i = 0; i < layer.Levels.Length; i += 13) { layer.Levels[i] = (ushort)(i * 7 + 1); layer.Fetch[i] = (byte)(i % 251 + 1); }
         using var ms = new MemoryStream();
         WaterFormat.Encode(layer, ms);

@@ -292,7 +292,7 @@ public static class WaterStage
         byte[]? cover = null;
         if (File.Exists(coverPath))
             using (var fs = File.OpenRead(coverPath)) cover = CoverFormat.Decode(fs);
-        WaterLayer? old = null;
+        WaterGrid? old = null;
         if (File.Exists(waterPath))
             using (var fs = File.OpenRead(waterPath)) old = WaterFormat.Decode(fs);
 
@@ -367,7 +367,7 @@ public static class WaterStage
         public string? Lake;
     }
 
-    private sealed record TileResult(ChunkGrid Grid, WaterLayer? Layer, Dictionary<int, LabelStats> Stats,
+    private sealed record TileResult(ChunkGrid Grid, WaterGrid? Layer, Dictionary<int, LabelStats> Stats,
         List<float> JoinSteps, (float Step, double E, double N) WorstJoin);
 
     private static TileResult ComputeTile(string outDir, TileId id, ConcurrentDictionary<TileId, TileData> data,
@@ -549,7 +549,7 @@ public static class WaterStage
         ushort qMin = ushort.MaxValue, qMax = 0;
         foreach (ushort q in heights) { if (q < qMin) qMin = q; if (q > qMax) qMax = q; }
         var outGrid = new ChunkGrid(id, heights, (float)ChunkFormat.Dequantize(qMin), (float)ChunkFormat.Dequantize(qMax));
-        return new TileResult(outGrid, anyWet ? new WaterLayer(id, levels, fetch) : null, stats, join, worst);
+        return new TileResult(outGrid, anyWet ? new WaterGrid(id, levels, fetch) : null, stats, join, worst);
     }
 
     /// <summary>
@@ -750,14 +750,14 @@ public static class WaterStage
         var elev = new float[w * h];
         var level = new float[w * h];
         Array.Fill(elev, float.NaN);
-        var grids = new Dictionary<TileId, (ChunkGrid G, WaterLayer? L)>();
-        (ChunkGrid G, WaterLayer? L)? Tile(TileId id)
+        var grids = new Dictionary<TileId, (ChunkGrid G, WaterGrid? L)>();
+        (ChunkGrid G, WaterGrid? L)? Tile(TileId id)
         {
             if (!region.Contains(id)) return null;
             if (grids.TryGetValue(id, out var t)) return t;
             ChunkGrid g;
             using (var fs = File.OpenRead(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)))) g = ChunkCodec.Decode(fs);
-            WaterLayer? l = null;
+            WaterGrid? l = null;
             string wp = Path.Combine(outDir, WaterFormat.FileName(id));
             if (File.Exists(wp)) using (var fs = File.OpenRead(wp)) l = WaterFormat.Decode(fs);
             return grids[id] = (g, l);

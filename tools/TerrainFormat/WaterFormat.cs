@@ -40,7 +40,7 @@ public static class WaterFormat
     public static byte QuantizeFetch(double metres) =>
         (byte)Math.Clamp((int)Math.Round(metres / FetchUnitM), 1, 255);
 
-    public static void Encode(WaterLayer layer, Stream output)
+    public static void Encode(WaterGrid layer, Stream output)
     {
         // flags 1 = deflate; the count word holds the cell side, as in .cover
         new TileHeader(Magic, Version, 1, layer.Id, Size).Write(output);
@@ -56,7 +56,7 @@ public static class WaterFormat
         deflate.Write(layer.Fetch);
     }
 
-    public static WaterLayer Decode(Stream input)
+    public static WaterGrid Decode(Stream input)
     {
         var header = TileHeader.Read(input, Magic, "water");
         header.CheckVersion(Version, "water");
@@ -72,7 +72,7 @@ public static class WaterFormat
 
         var levels = new ushort[n];
         for (int i = 0; i < n; i++) levels[i] = (ushort)(bytes[2 * i] | bytes[2 * i + 1] << 8);
-        return new WaterLayer(header.Id, levels, fetch);
+        return new WaterGrid(header.Id, levels, fetch);
     }
 }
 
@@ -80,7 +80,7 @@ public static class WaterFormat
 /// One tile's decoded water layer (<see cref="WaterFormat"/>). Row 0 is the north edge, column 0
 /// the west edge, exactly as in <see cref="ChunkGrid"/>.
 /// </summary>
-public sealed class WaterLayer
+public sealed class WaterGrid
 {
     public const int Size = WaterFormat.Size;
 
@@ -92,7 +92,7 @@ public sealed class WaterLayer
     /// <summary>Fetch per vertex in <see cref="WaterFormat.FetchUnitM"/> steps; 0 = dry.</summary>
     public byte[] Fetch { get; }
 
-    public WaterLayer(TileId id, ushort[] levels, byte[] fetch)
+    public WaterGrid(TileId id, ushort[] levels, byte[] fetch)
     {
         if (levels.Length != Size * Size || fetch.Length != Size * Size)
             throw new ArgumentException($"Expected {Size}^2 water cells, got {levels.Length} / {fetch.Length}");
@@ -101,7 +101,7 @@ public sealed class WaterLayer
         Fetch = fetch;
     }
 
-    public static WaterLayer Dry(TileId id) => new(id, new ushort[Size * Size], new byte[Size * Size]);
+    public static WaterGrid Dry(TileId id) => new(id, new ushort[Size * Size], new byte[Size * Size]);
 
     public bool IsWet(int col, int row) => Levels[row * Size + col] != 0;
 
