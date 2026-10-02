@@ -71,7 +71,7 @@ public partial class FootPlayer
             ApplyRide(RideKind.OnFoot, fwd * hit * 0.25f + Vector3.Up * 4f);
             GlobalPosition += Vector3.Up * 1.2f;
             _stunTimer = 1.2f;
-            TakeDamage((hit - 8f) * 3f);
+            TakeDamage((hit - 8f) * 3f, 0, DamageCause.Crash);
             return;
         }
 
@@ -81,7 +81,7 @@ public partial class FootPlayer
         ApplyRide(RideKind.OnFoot, launch);
         StartRagdoll(joints, launch, Mathf.Clamp(hit * 0.35f, 3f, 10f), car);
         BeginCrashCamera(fwd);
-        TakeDamage((hit - 8f) * 2f);
+        TakeDamage((hit - 8f) * 2f, 0, DamageCause.Crash);
     }
 
     /// <summary>

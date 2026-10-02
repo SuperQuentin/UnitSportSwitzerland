@@ -32,12 +32,17 @@ src/Vehicles/            quick  --driftcheck
 src/Vehicles/            quick  --truckcheck
 src/Player/              quick  --synccheck
 src/Ui/                  quick  --leavecheck
+src/BattleRoyale/        quick  --brcheck
+src/Combat/              quick  --brcheck
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
 @rpc                     net    @netsmoke
 
+src/BattleRoyale/        full   tools/brcheck.sh
+src/Combat/              full   tools/pvpcheck.sh
+src/Items/Weapons        full   tools/pvpcheck.sh
 src/Items/               full   tools/gunshotcheck.sh
 src/Items/               full   tools/placedcheck.sh
 src/Items/               full   tools/plantcheck.sh
