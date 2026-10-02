@@ -481,7 +481,9 @@ public static partial class TileRewriter
         /// <summary>
         /// The dashed centre line along the widening turned solid: no overtaking into the junction.
         /// A road with none (a Kernfahrbahn, #120, or one too narrow for one) gets a solid line in
-        /// the middle of its car lanes there: the pocket must be kept off the oncoming lane.
+        /// the middle of its car lanes there: the pocket must be kept off the oncoming lane. The
+        /// solid line covers the taper and storage (or the exit's hatch) only: over a lead-in the
+        /// lane beside the bike lane is not yet full width.
         /// </summary>
         private void SolidCentre(List<RoadPaint> paint)
         {
@@ -489,7 +491,11 @@ public static partial class TileRewriter
             double middle = ((a.Left.HasLane ? a.Left.BikeDm : 0) - (a.Right.HasLane ? a.Right.BikeDm : 0)) / 20.0;
             var centre = paint.FirstOrDefault(q => SameLine(q.Segment) && q.Dash > 0 && Math.Abs(q.Offset - middle) < 0.3);
             if (centre is not null) Cut(paint, centre);
-            paint.Add(Line(PaintType.WhiteSolid, 0, 0, centre?.Offset ?? middle, 0, Reach));
+            // solid only where the lane beside it is full width: not over a lead-in or lead-out
+            // (#120), which keeps the road's own centre line, dashed (or none on a Kernfahrbahn)
+            paint.Add(Line(PaintType.WhiteSolid, 0, 0, centre?.Offset ?? middle, 0, _length));
+            if (centre is not null && _lead > 0 && centre.Dash > 0)
+                paint.Add(Line(centre.Type, centre.Dash, centre.Gap, centre.Offset, _length, Reach));
         }
 
         /// <summary>

@@ -631,8 +631,11 @@ public static partial class TileRewriter
     private const double WideningStep = 0.5;
     /// <summary>A widening is looked for this far out from the ribbon's edge, in steps of <see cref="WideningProbe"/>.</summary>
     private const double WideningReach = 6.0, WideningProbe = 0.05;
-    /// <summary>The shift may leave the measured widening by this much between two of its breakpoints.</summary>
-    private const double WideningTolerance = 0.03;
+    /// <summary>
+    /// The shift may leave the measured widening by this much between two of its breakpoints: more
+    /// than a probe step, so the probe's own 5 cm jitter cuts no piece.
+    /// </summary>
+    private const double WideningTolerance = 0.08;
 
     /// <summary>
     /// A street piece beside a turn lane's widening (#123's flush <see cref="AreaPropType.Pavement"/>
