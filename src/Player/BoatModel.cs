@@ -84,6 +84,11 @@ public sealed record BoatSpec
     /// </summary>
     public float HumpTrim { get; init; }
     public float PlaneTrim { get; init; }
+    /// <summary>
+    /// How much more the bottom lifts per angle of a wave face against it, as a share of the running
+    /// trim's: what throws a PWC off a crest (#302: "jumps on swell").
+    /// </summary>
+    public float FaceKick { get; init; } = 0.5f;
     /// <summary>A fixed fin at the stern (a skeg, a jet's pump housing and ride plate), m²: it keeps the stern behind the bow.</summary>
     public float SkegArea { get; init; }
     /// <summary>Top speed in flat calm at full throttle, m/s: the drag is calibrated to it.</summary>
@@ -383,6 +388,9 @@ public static class BoatDynamics
         float displaced = 0f;
         var flowSum = Vector3.Zero;
         bool grounded = false;
+        // the water's own slope under the hull, fore and aft: a wave face ahead meets the bottom
+        float foreLevel = 0f, aftLevel = 0f, foreZ = 0f, aftZ = 0f;
+        int fore = 0, aft = 0;
         float slamIn = 0f;
         // the ground's contact stiffness: each column's share of the weight pushes it 4 cm in
         float kGround = weight / Mathf.Max(1, n) / 0.04f;
@@ -400,6 +408,8 @@ public static class BoatDynamics
             var cb = foot;
             if (water.Surface(foot.X, foot.Z, out float level, out flow))
             {
+                if (col.Foot.Z < 0f) { foreLevel += level; foreZ += col.Foot.Z; fore++; }
+                else { aftLevel += level; aftZ += col.Foot.Z; aft++; }
                 level -= trimSlope * col.Foot.Z * b.Wet;
                 bool footLow = foot.Y <= top.Y;
                 float lo = footLow ? foot.Y : top.Y, hi = footLow ? top.Y : foot.Y, span = hi - lo;
@@ -471,7 +481,15 @@ public static class BoatDynamics
             // acts where the hull meets the water, so a bow dipping into a wave meets more of it
             // and is pushed back up (lift at the centre of mass alone left the plane with no pitch
             // stiffness, and the bow dug in).
+            // A planing bottom lifts with its angle to the water: on a wave face rising ahead that
+            // angle (and the lift) grows several times over, and a fast hull is thrown off the crest
+            float face = fore > 0 && aft > 0 && aftZ / aft - foreZ / fore > 0.5f
+                ? (foreLevel / fore - aftLevel / aft) / (aftZ / aft - foreZ / fore) : 0f;
+            // (the ripples a hull this long rides over do not count, and the kick lifts the whole hull
+            // at its centre of mass: spread like the rest, it all went into the bow and flipped it)
+            float kick = Mathf.Clamp(s.FaceKick * Mathf.Max(0f, face - 0.015f) / Mathf.Max(0.02f, s.PlaneTrim), 0f, 2f);
             float lift = weight * s.LiftShare * plane * wet;
+            force += up * (lift * kick);
             if (lift > 0f && displaced > 1e-6f)
                 for (int i = 0; i < n; i++)
                 {

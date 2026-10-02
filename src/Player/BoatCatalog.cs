@@ -32,7 +32,7 @@ public static class BoatCatalog
         PowerKw = 125f, Efficiency = 0.5f, StaticThrust = 3600f, ReverseShare = 0.3f,
         ThrustAt = new Vector3(0, 0.12f, 1.5f),
         MaxSteer = 0.5f, SteerRate = 4f,
-        HumpSpeed = 3.5f, PlaneSpeed = 7f, LiftShare = 0.75f, HumpDrag = 0.16f, HumpTrim = 0.09f, PlaneTrim = 0.05f, SkegArea = 0.004f,
+        HumpSpeed = 3.5f, PlaneSpeed = 7f, LiftShare = 0.75f, HumpDrag = 0.16f, HumpTrim = 0.09f, PlaneTrim = 0.05f, SkegArea = 0.004f, FaceKick = 1.2f,
         TopSpeed = 22.5f,            // ~81 km/h
         LateralDrag = 1.0f, HeaveDamping = 0.8f, SlamDrag = 0.6f,
         BankPerG = 0.9f, MaxBank = 0.6f,
@@ -60,7 +60,7 @@ public static class BoatCatalog
         ThrustAt = new Vector3(0, -0.25f, 1.9f),
         DiscArea = 0.11f, RudderArea = 0.12f,
         MaxSteer = 0.55f, SteerRate = 1.6f,
-        HumpSpeed = 5f, PlaneSpeed = 9.5f, LiftShare = 0.7f, HumpDrag = 0.2f, HumpTrim = 0.1f, PlaneTrim = 0.06f, SkegArea = 0.01f,
+        HumpSpeed = 5f, PlaneSpeed = 9.5f, LiftShare = 0.7f, HumpDrag = 0.2f, HumpTrim = 0.1f, PlaneTrim = 0.06f, SkegArea = 0.01f, FaceKick = 0.6f,
         TopSpeed = 19.5f,            // ~70 km/h, 38 kn
         LateralDrag = 1.6f, HeaveDamping = 0.8f, SlamDrag = 0.6f,
         BankPerG = 0.5f, MaxBank = 0.3f,

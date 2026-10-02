@@ -75,7 +75,7 @@ public static class BoatMeshBuilder
     public static ArrayMesh JetskiRider(HumanPalette palette)
     {
         var m = new MeshScratch();
-        HumanMeshBuilder.AppendRider(m, palette, JetSeat, JetGrip, JetPeg);
+        HumanMeshBuilder.AppendRider(m, palette, JetSeat, JetGrip, JetPeg, fullFace: false);   // nobody wears a helmet on a jetski
         return m.Build();
     }
 
