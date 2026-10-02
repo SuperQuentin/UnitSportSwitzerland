@@ -38,6 +38,7 @@
   a pole each side of every door; a coach has luggage racks. Ceiling light strips (`Glow`, unshaded)
   light with the headlights. Mirrors on a bus's long stalks, two each side on a truck (main and
   wide-angle), `CabMirrors` shared with the cars.
+- **The deck** to walk on (#162) is built with the saloon: `HeavyParts.Deck`, `HeavyRig.Deck` (`walk-aboard`).
 - **Seat anchors** (`SeatAnchor`, `HeavyRig.Seats`): every seat of a section, node space, the driver's
   first: for #158's passengers. Truck 1 passenger seat, Citaro 34, Citaro G 52, Setra 38.
 - **`--cockpitcheck`** checks the heavies too: head under the ceiling, the windscreen ≥ 50 cm ahead

@@ -30,6 +30,15 @@ public partial class PassengerService : Node
 
     public static void Say(string message) => Said?.Invoke(message);
 
+    /// <summary>How a standing passenger feels the vehicle move (#162): carried exactly, swaying, or every acceleration.</summary>
+    public enum DeckInertia { Steady, Sway, Full }
+
+    /// <summary>The server's choice (<c>--deck-inertia</c>, <c>/inertia</c>), sent to every client; offline, this client's.</summary>
+    public static DeckInertia Inertia { get; private set; } = DeckInertia.Sway;
+
+    public static bool TryParseInertia(string text, out DeckInertia mode) =>
+        Enum.TryParse(text, ignoreCase: true, out mode) && Enum.IsDefined(mode);
+
     /// <summary>Server: the players, <c>World/Players</c>.</summary>
     public Node? Players { get; set; }
 
@@ -56,7 +65,23 @@ public partial class PassengerService : Node
         var service = new PassengerService { Name = NodeName };
         world.AddChild(service);
         Instance = service;
+        var args = OS.GetCmdlineUserArgs();
+        int i = Array.IndexOf(args, "--deck-inertia");
+        if (i >= 0 && i + 1 < args.Length && TryParseInertia(args[i + 1], out var mode)) Inertia = mode;
         return service;
+    }
+
+    /// <summary>Server: how standing passengers feel the vehicles move, for everyone from now on.</summary>
+    public void SetInertia(DeckInertia mode)
+    {
+        Inertia = mode;
+        if (Online && Multiplayer.IsServer()) Rpc(MethodName.InertiaIs, (int)mode);
+    }
+
+    /// <summary>Server: tells a client that just joined.</summary>
+    public void SendTo(long peer)
+    {
+        if (Online && Multiplayer.IsServer()) RpcId(peer, MethodName.InertiaIs, (int)Inertia);
     }
 
     public override void _ExitTree()
@@ -94,6 +119,15 @@ public partial class PassengerService : Node
     /// <summary>A passenger, or a host sat in its own driverless vehicle: the driver's seat, please.</summary>
     public void AskWheel() { if (Online) RpcId(1, MethodName.RequestWheel); }
 
+    /// <summary>At a door's button of <paramref name="host"/>'s bus (#162): open or shut that door.</summary>
+    public void PressDoor(FootPlayer host, int door) { if (Online) RpcId(1, MethodName.RequestDoorPress, host.Name.ToString(), door); }
+
+    /// <summary>Walking about in <paramref name="host"/>'s vehicle (#162): that seat, please.</summary>
+    public void AskSeatAt(FootPlayer host, int seat) { if (Online) RpcId(1, MethodName.RequestSeatAt, host.Name.ToString(), seat); }
+
+    /// <summary>Walking about in <paramref name="host"/>'s vehicle, rolling with nobody at its wheel: the wheel, please.</summary>
+    public void AskWheelOf(FootPlayer host) { if (Online) RpcId(1, MethodName.RequestWheelOf, host.Name.ToString()); }
+
     /// <summary>The host gets out with people aboard: the vehicle goes on with them (or is parked if they have gone).</summary>
     public void HostLeaving(VehicleState state) { if (Online) RpcId(1, MethodName.HostLeft, state.ToDict()); }
 
@@ -126,14 +160,15 @@ public partial class PassengerService : Node
         var vehicle = CarSetups.Ride(them.Ride, them.CarSetupId, them.TuningBits) ?? Rideable.Create(them.Ride);
         var seats = vehicle.Seats;
         if (seats.Length < 2) return "There is no seat for a passenger.";
-        if (vehicle is Truck { IsBus: true } && them.DoorsOpen == 0) return "The doors are shut.";
+        if (vehicle is Truck { IsBus: true } && them.BusDoors == 0) return "The doors are shut.";
         if (them.WorldVelocity.Length() > BoardSpeed) return "It is moving.";
         float reach = vehicle.ParkedBox.Size.Z * 0.5f + BoardReach;
         if (me.GlobalPosition.DistanceTo(them.GlobalPosition) > reach) return "Too far from it.";
 
         var ride = _byHost.GetValueOrDefault(host);
         if (ride is { PendingTo: not 0 }) return "Wait a moment.";
-        int hostSeat = ride?.HostSeat ?? 0;
+        // a host sat in its own driverless vehicle is not at the wheel: its copy says where it sits
+        int hostSeat = ride?.HostSeat ?? them.SeatIndex;
         var taken = new HashSet<int> { hostSeat };
         if (ride != null) foreach (var (_, s) in ride.Riders) taken.Add(s);
         float best = float.MaxValue;
@@ -150,6 +185,81 @@ public partial class PassengerService : Node
         _byRider[peer] = ride;
         GD.Print($"[passengers] {peer} takes seat {seat} in {host}'s {them.Ride} ({ride.Riders.Count} aboard)");
         return null;
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestDoorPress(string hostName, int door)
+    {
+        if (!Multiplayer.IsServer()) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        long host = long.TryParse(hostName, out long h) ? h : 0;
+        var (me, them) = (Player(sender), Player(host));
+        if (me == null || them == null || them.Ride == RideKind.OnFoot) return;
+        var vehicle = CarSetups.Ride(them.Ride, them.CarSetupId, them.TuningBits) ?? Rideable.Create(them.Ride);
+        // only someone standing at one of that door's buttons (the bus straight: a joint moves little)
+        bool there = vehicle.Decks.SelectMany(d => d.Buttons.Where(b => b.Door == door).Select(b =>
+            them.ToGlobal(d.Section == 0 || vehicle is not Truck t ? b.At : t.NodeLocal(d.Section) * b.At)))
+            .Any(at => at.DistanceTo(me.GlobalPosition + Vector3.Up * 1.1f) < ButtonReach + 1f);
+        if (there) RpcId(host, MethodName.DoorPress, door);
+    }
+
+    /// <summary>How far from a door's button a player may press it, m (a hand's reach from the chest).</summary>
+    public const float ButtonReach = 0.9f;
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void DoorPress(int door) => Local?.DoorPressed(door);
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestSeatAt(string hostName, int seat)
+    {
+        if (!Multiplayer.IsServer()) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        long host = long.TryParse(hostName, out long h) ? h : 0;
+        string? why = SeatAt(sender, host, seat);
+        if (why != null) { RpcId(sender, MethodName.Refused, why); return; }
+        RpcId(sender, MethodName.Seated, (int)host, seat);
+    }
+
+    /// <summary>Server: <paramref name="peer"/>, walking about in <paramref name="host"/>'s vehicle, sits in <paramref name="seat"/>, or why not. Moving or not.</summary>
+    private string? SeatAt(long peer, long host, int seat)
+    {
+        if (peer == host || RideOf(peer) != null) return "You are already sat down.";
+        var (me, them) = (Player(peer), Player(host));
+        if (me == null || them == null || them.Ride == RideKind.OnFoot || them.RidingAlong) return "Nobody is driving that.";
+        var vehicle = CarSetups.Ride(them.Ride, them.CarSetupId, them.TuningBits) ?? Rideable.Create(them.Ride);
+        if (seat <= 0 || seat >= vehicle.Seats.Length) return "There is no such seat.";
+        if (me.GlobalPosition.DistanceTo(them.ToGlobal(vehicle.SeatPosition(seat))) > SeatReach) return "Too far from that seat.";
+        var ride = _byHost.GetValueOrDefault(host);
+        if (ride is { PendingTo: not 0 }) return "Wait a moment.";
+        int hostSeat = ride?.HostSeat ?? them.SeatIndex;
+        if (seat == hostSeat || ride?.Riders.Any(r => r.Seat == seat) == true) return "Somebody sits there.";
+        if (ride == null) _byHost[host] = ride = new Ride { Host = host, HostSeat = hostSeat };
+        ride.Riders.Add((peer, seat));
+        _byRider[peer] = ride;
+        GD.Print($"[passengers] {peer} sits down in seat {seat} of {host}'s {them.Ride} ({ride.Riders.Count} sat)");
+        return null;
+    }
+
+    /// <summary>How far from a seat (its hip) a player standing aboard may be to sit in it, m: what the server allows.</summary>
+    public const float SeatReach = 2.5f;
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestWheelOf(string hostName)
+    {
+        if (!Multiplayer.IsServer()) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        long host = long.TryParse(hostName, out long h) ? h : 0;
+        var (me, them) = (Player(sender), Player(host));
+        if (me == null || them == null || them.Ride == RideKind.OnFoot || RideOf(sender) != null) return;
+        var ride = _byHost.GetValueOrDefault(host);
+        int hostSeat = ride?.HostSeat ?? them.SeatIndex;
+        if (hostSeat == 0) { RpcId(sender, MethodName.Refused, "Somebody is driving."); return; }
+        var vehicle = CarSetups.Ride(them.Ride, them.CarSetupId, them.TuningBits) ?? Rideable.Create(them.Ride);
+        if (me.GlobalPosition.DistanceTo(them.ToGlobal(vehicle.SeatPosition(0))) > SeatReach) { RpcId(sender, MethodName.Refused, "Too far from the wheel."); return; }
+        if (ride == null) _byHost[host] = ride = new Ride { Host = host, HostSeat = hostSeat };
+        if (ride.PendingTo != 0) return;
+        ride.PendingTo = sender;
+        RpcId(host, MethodName.GiveUp, (int)sender);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -300,4 +410,7 @@ public partial class PassengerService : Node
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Eject(Vector3 velocity) => Local?.ThrownOut(velocity);
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void InertiaIs(int mode) => Inertia = (DeckInertia)mode;
 }
