@@ -66,7 +66,7 @@ public sealed class ParkedTrailer : Rideable
     private static (Vector3 Centre, Vector3 Size) Box(float cg, float fromAt, float toAt, float y0, float y1, float width) =>
         (new Vector3(0f, (y0 + y1) * 0.5f, -(cg - (fromAt + toAt) * 0.5f)), new Vector3(width, y1 - y0, toAt - fromAt));
 
-    public override Node3D BuildVisual(int riderIndex)
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default)
     {
         var root = HeavyRig.CreateTrailer(Spec, 0, Load);
         for (int k = 1; k < Spec.Sections.Length; k++)

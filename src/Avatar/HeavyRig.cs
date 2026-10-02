@@ -112,7 +112,7 @@ public partial class HeavyRig : Node3D
     private static HeavyRig Assemble(HeavyParts p, HumanPalette? driver)
     {
         var rig = new HeavyRig { Name = "Heavy", _driverPalette = driver, Seats = p.Seats };
-        var body = HumanMeshBuilder.Material();
+        var body = HumanMeshBuilder.FigureMaterial();   // the driver wears clothes, maybe with a finish (#251)
         var glass = rig._glass = CarRig.GlassMaterial();
         rig._head = TrafficMeshBuilder.LampMaterial();
         rig._tail = TrafficMeshBuilder.LampMaterial();

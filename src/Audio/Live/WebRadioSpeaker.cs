@@ -33,18 +33,22 @@ public partial class WebRadioSpeaker : AudioStreamPlayer3D
     public override void _Ready()
     {
         SfxBus.Ensure();
-        Bus = SfxBus.Name;
+        Bus = SfxBus.Music;
         // a car stereo: loud in the cabin, heard across a car park, gone down the road
         UnitSize = 3f;
         MaxDistance = 45f;
         AttenuationModel = AttenuationModelEnum.InverseDistance;
         AttenuationFilterCutoffHz = 6000f;
         Stream = new AudioStreamGenerator { MixRate = WebRadio.Rate, BufferLength = 0.25f };
+        _hearing.Attach(this);
     }
+
+    private readonly Hearing _hearing = new(6000f);
 
     public override void _Process(double delta)
     {
-        VolumeDb = RadioSpeaker.UserVolume <= 0.001f ? -80f : BaseDb + Mathf.LinearToDb(RadioSpeaker.UserVolume);
+        _hearing.Step(this, (float)delta);
+        VolumeDb = BaseDb + _hearing.Db;
         var buffer = WebRadio.Instance?.Buffer(Station);
         if (buffer == null || buffer.End == 0)
         {

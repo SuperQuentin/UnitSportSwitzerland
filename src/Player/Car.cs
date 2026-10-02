@@ -325,8 +325,8 @@ public sealed class Car : Rideable, IEngined
     /// </summary>
     public Car Clone() => (Car)MemberwiseClone();
 
-    public override Node3D BuildVisual(int riderIndex) =>
-        CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges, HumanPalette.ForRider(riderIndex));
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) =>
+        CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
 
     public override Avatar.SeatAnchor[] Seats => SeatsOf((Kind, Spec.SetupId), () =>
     {

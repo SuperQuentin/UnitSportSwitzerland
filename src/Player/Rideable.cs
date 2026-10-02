@@ -197,7 +197,7 @@ public abstract class Rideable
     public virtual float DismountSpeed => 2.5f;
 
     /// <summary>The mesh, parented under the player body. Built facing +Z, origin on the ground.</summary>
-    public abstract Node3D BuildVisual(int riderIndex);
+    public abstract Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default);
 
     // ---- vehicles vs equipment ------------------------------------------------------------
     /// <summary>

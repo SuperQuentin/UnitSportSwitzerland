@@ -34,6 +34,9 @@ public partial class Cyclist : Node3D
     private readonly MeshInstance3D[] _legs = new MeshInstance3D[2];
     private HumanPalette _palette = HumanPalette.Default;
     private BikePalette _bikePalette = BikePalette.Default;
+    private MeshInstance3D _rider = null!;
+    private readonly FigureWind _wind = new();
+    private bool Flutters => HumanMeshBuilder.Flutters(_palette.Outfit);
 
     private float _crankAngle;
     private float _cadenceRpm;
@@ -59,10 +62,11 @@ public partial class Cyclist : Node3D
         UpdateLegs();
     }
 
-    public static Cyclist Create(int riderIndex = 0) => new()
+    /// <summary>A rider on their own bike, in <paramref name="outfit"/> (#251).</summary>
+    public static Cyclist Create(int riderIndex = 0, Outfit outfit = default) => new()
     {
         Name = "Cyclist",
-        _palette = HumanPalette.ForRider(riderIndex),
+        _palette = HumanPalette.ForRider(riderIndex) with { Outfit = outfit },
         _bikePalette = BikePalette.ForRider(riderIndex),
     };
 
@@ -87,7 +91,8 @@ public partial class Cyclist : Node3D
     public override void _Ready()
     {
         var bikePalette = _bikePalette;
-        var material = HumanMeshBuilder.Material();
+        // clothes may carry a finish only the figure shader draws (#251)
+        Material material = _palette.Outfit.IsEmpty ? HumanMeshBuilder.Material() : HumanMeshBuilder.FigureMaterial();
 
         AddChild(new MeshInstance3D
         {
@@ -97,12 +102,13 @@ public partial class Cyclist : Node3D
         });
 
         // rider without legs: those are separate so they can be driven by the cranks
-        AddChild(new MeshInstance3D
+        _rider = new MeshInstance3D
         {
             Name = "Rider",
             Mesh = HumanMeshBuilder.Build(_palette, HumanPose.Cycling, includeLegs: false, helmet: true),
             MaterialOverride = material,
-        });
+        };
+        AddChild(_rider);
 
         _cranks = new MeshInstance3D
         {
@@ -123,6 +129,12 @@ public partial class Cyclist : Node3D
 
     public override void _Process(double delta)
     {
+        // a skirt streams back in the wind of the ride (#251): measured from the bike's own motion
+        if (Flutters)
+        {
+            var wind = _wind.Update(_rider, (float)delta);
+            _rider.Mesh = HumanMeshBuilder.Build(_palette with { Wind = wind }, HumanPose.Cycling, includeLegs: false, helmet: true);
+        }
         if (_cadenceRpm <= 0.01f) return;
 
         _crankAngle = Mathf.Wrap(_crankAngle + (float)(_cadenceRpm / 60.0 * Mathf.Tau * delta), 0f, Mathf.Tau);
@@ -157,6 +169,13 @@ public partial class Cyclist : Node3D
             var knee = Limb.Solve(hip, pedal, ThighLength, ShinLength, new Vector3(0, 0, 1));
 
             var scratch = new MeshScratch();
+            if (!_palette.Outfit.IsEmpty)
+            {
+                // dressed (#251): stockings, boots and trousers on the pedalling leg, the foot along the pedal
+                HumanMeshBuilder.AppendLeg(scratch, _palette, hip, knee, pedal + new Vector3(0, 0.03f, -0.03f), pedal + new Vector3(0, 0, 0.09f));
+                _legs[i].Mesh = scratch.Build();
+                continue;
+            }
             scratch.Tube(hip, knee, 0.088f, 0.062f, _palette.Shorts, 6);
             scratch.Tube(knee, pedal, 0.062f, 0.042f, _palette.Skin, 6);
             scratch.Box(pedal, new Vector3(0.058f, 0.045f, 0.115f), _palette.Shoes);

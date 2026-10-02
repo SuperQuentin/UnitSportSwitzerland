@@ -15,3 +15,4 @@ touches its topic; search with `grep -ril <word> docs/notes/world`.
 - `npc-arrivals` — Race NPCs drive in to the grid: (`World/NpcArrival`, #51) out of sight on the race road, from behind or from ahead with a three-point turn, handbrake turn or donut; `--arrivalcheck`...
 - `npc-handoff` — Race NPCs and races belong to nobody (#50): simulator = authority, 600 m zone, handoff on leave/crash/distance, host migration
 - `africa-twin-egg` — A random Africa Twin in a parking bay at Riddes (#55): `TileEntered`, server-placed, server authority at rest, `--eggcheck`
+- `perf-traffic-tick` — Traffic per tick: road sampled only near an obstacle, gap check on the X-sorted `_byX` window, cars drawn to 600 m, shared cached meshes (#221)
