@@ -3,10 +3,9 @@
 
 # Visual styles: PS1, Cartoon, Realistic− and Realistic+
 
-Status: **phase 1 in progress** (issue #212: part 1 merged in #224, part 2 next; the issue's
-"Status and how to resume" section has the current steps). Phase 0 is done (issue #181): the
-prototype's results, at the end of this file, decided to build the framework and to do Cartoon
-first.
+Status: **phases 0–4 done** (prototype #181, framework #212, Cartoon #238, Realistic− #250,
+Realistic+ #255); each phase below lists what it left out. What's left, phase 5 (the default
+style) and the open questions are tracked in **#312**.
 
 ## Goal
 
