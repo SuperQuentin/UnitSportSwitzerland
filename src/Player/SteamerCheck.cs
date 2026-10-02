@@ -39,6 +39,8 @@ public partial class SteamerCheck : Node
 
     private readonly Func<FootPlayer?> _local;
     private readonly bool _shots;
+    private readonly string _role;
+
     /// <summary><c>walk</c>: straight from the calm float to the walk (no run ahead and astern).</summary>
     private readonly bool _walkOnly;
     private int _failures;
@@ -51,6 +53,7 @@ public partial class SteamerCheck : Node
         _local = local;
         _shots = role.Contains("shots") && DisplayServer.GetName() != "headless";
         _walkOnly = role.Contains("walk");
+        _role = role;
         Name = "SteamerCheck";
     }
 
@@ -173,12 +176,13 @@ public partial class SteamerCheck : Node
             await Wait(0.1);
         }
         if (me == null) { Finish("no local player"); return; }
-        if (!await Until(() => WaterField.TryGetStill(At(Lake.ShoreX + 700, 0), out _, out _), 90)) { Finish("the lake's water layer never loaded"); return; }
         if (_shots)
         {
             AddChild(_cam = new Camera3D { Name = "SteamerCheckCamera", Fov = 60f, Far = 4000f });
             me.ViewForCheck(true);
         }
+        if (_role.Contains("nyon")) { await Nyon(me); Finish(null); return; }
+        if (!await Until(() => WaterField.TryGetStill(At(Lake.ShoreX + 700, 0), out _, out _), 90)) { Finish("the lake's water layer never loaded"); return; }
         Log(F($"on the lake fixture, wave clock {WaterField.Now:F1} s"));
 
         await SeaState("calm", 0f);
@@ -201,6 +205,48 @@ public partial class SteamerCheck : Node
         await Overboard(me);
         await Seat(me);
         Finish(null);
+    }
+
+    /// <summary>
+    /// <c>nyon</c> (real tiles, <c>--at</c> the landing): the steamer the berth placed lies in deep water
+    /// by the CGN pier and floats at its draught; its pictures from the lake, the town behind.
+    /// </summary>
+    private async Task Nyon(FootPlayer me)
+    {
+        VehicleBody? Berth() => VehicleManager.Instance?.GetNodeOrNull<VehicleBody>(SteamerBerth.BerthName);
+        if (!await Until(() => Berth() != null, 90)) { Expect(false, "the steamer is placed at the Nyon landing"); return; }
+        await Wait(12);
+        var v = Berth()!;
+        var chunks = me.Terrain!;
+        chunks.TryGetWater(v.GlobalPosition, out float still, out _);
+        chunks.TryGetHeight(v.GlobalPosition, out float bed);
+        float draught = still - v.GlobalPosition.Y;
+        var (e, n) = chunks.Origin!.ToLv95(v.GlobalPosition);
+        Log(F($"at Nyon: LV95 {e:F0}/{n:F0}, heading {Mathf.RadToDeg(v.Rotation.Y):F0}°, draught {draught:F2} m, {still - bed:F1} m of water, keel {v.GlobalPosition.Y - bed:F1} m over the bed"));
+        Expect(draught > 1.45f && draught < 1.9f, "floats at its draught");
+        Expect(v.GlobalPosition.Y - bed > 0.3f, "clear of the lake bed");
+        // from the open lake toward the town: the way the water deepens, 90 m off, 14 m up
+        var offshore = Vector3.Zero;
+        for (int j = 0; j < 16; j++)
+        {
+            var dir = new Vector3(Mathf.Cos(Mathf.Tau * j / 16f), 0, Mathf.Sin(Mathf.Tau * j / 16f));
+            var p = v.GlobalPosition + dir * 150f;
+            if (chunks.TryGetWater(p, out float s2, out _) && chunks.TryGetHeight(p, out float b2)) offshore += dir * Mathf.Max(0f, s2 - b2);
+        }
+        offshore = offshore.LengthSquared() > 1e-4f ? offshore.Normalized() : Vector3.Back;
+        var side = offshore.Rotated(Vector3.Up, 0.45f);
+        await Shot("parked_nyon", () =>
+        {
+            var target = v.GlobalPosition + Vector3.Up * 6f;
+            var eye = v.GlobalPosition + side * 95f + Vector3.Up * 16f;
+            return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
+        });
+        await Shot("parked_nyon_close", () =>
+        {
+            var target = v.GlobalPosition + Vector3.Up * 4f;
+            var eye = v.GlobalPosition + offshore.Rotated(Vector3.Up, -0.6f) * 50f + Vector3.Up * 7f;
+            return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
+        });
     }
 
     private bool Expect2(bool ok, string what) { Expect(ok, what); return ok; }

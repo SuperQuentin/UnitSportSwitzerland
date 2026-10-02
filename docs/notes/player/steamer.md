@@ -53,11 +53,15 @@
   `DoorsOpen` (as a bus's). One placed by the dedicated server never moves (asleep): it sends its
   height over the still water (`Heave`) so clients draw it riding their own waves, level.
 - **At Nyon** (`World/SteamerBerth.cs`, on client offline and server): the CGN landing at 46.382049 N,
-  6.243945 E; when its tile loads, `FindBerth` looks for the nearest spot (rings every 4 m to 400 m)
-  where the whole hull has 1 m under its keel, lying along the isobath, and places
-  `veh_steamer_nyon` there. **Today's tiles are legacy water (0.12 m deep, no bathymetry until #298):
-  nothing is placed and it is logged.** The search is checked on the lake fixture (180 m off the
-  shore, past the shelf). Piers as structures, the timetable and docking assist are follow-ups.
+  6.243945 E; when its tile loads, `FindBerth` is tried every 2 s for 30 s (the water layers arrive after
+  the tile: at once it found nothing on 30 m deep tiles) for the nearest spot (rings every 4 m to 400 m)
+  where the whole hull, every 5 m along and ±4.5 m across, has 0.6 m under its keel and 1.2 m of water
+  stands 8 m either side (checked only at its ends, it lay against the quay with its collision box on
+  the bank, 2 m out of the water), lying along the isobath; it places `veh_steamer_nyon` there. On the
+  lake-bed tiles (#298) it lies 184 m south-west of the landing along the quay (LV95 2507989/1137291,
+  3.3 m of water, the bathymetry by the pier is shallower than its draught) and floats at 1.66 m.
+  Check: `--steamercheck nyon[,shots] --chunks <real tiles> --at 2507900,1137600` (tier 3, not in the
+  map: needs the real tiles). Piers as structures, the timetable and docking assist are follow-ups.
 - **Network**: the owner sends `Anim = (shaft (signed), thrust share, Heave, wet + 2 airborne +
   4 whistling + 8 gangways)` (`Steamer.WritePose`/`DoorsOf`); `BusDoors` reads the gangways on a copy.
   Walkers aboard are the bus's mechanism (`walk-aboard`).
@@ -67,7 +71,7 @@
   B walks aboard A's steamer from a quay it builds, up the stairs, rides the upper deck through a
   gamey swell at full ahead, both peers agree where B stands to 3 cm; B over the rail, A sees it
   swimming; `SHOTS=1 STYLE=ps1` A windowed: `remote_passenger.png`).
-- **Not done**: Nyon on real tiles (no lake bed yet); a server-placed parked steamer only heaves on
+- **Not done**: a berth alongside the pier itself (the bathymetry there is too shallow; piers are a follow-up); a server-placed parked steamer only heaves on
   clients (no pitch/roll until a client claims it); the parked collision box is the hull only, level;
   no hands drawn on the wheel in first person; the telegraph handle on a remote copy follows the
   shaft, not the order; the sounds were not listened to.

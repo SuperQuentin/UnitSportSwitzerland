@@ -27,7 +27,9 @@ public partial class SteamerBerth : Node
     public const string BerthName = "veh_steamer_nyon";
 
     /// <summary>Water under the keel the berth wants, beyond the draught, m.</summary>
-    public const float Clearance = 1.0f;
+    public const float Clearance = 0.6f;
+    /// <summary>Water a few metres either side of the hull, m: no bank under its collision box or its paddle boxes.</summary>
+    public const float MarginDepth = 1.2f;
     /// <summary>How far from the landing the berth is looked for, m.</summary>
     public const float SearchRadius = 400f;
 
@@ -69,13 +71,20 @@ public partial class SteamerBerth : Node
         _busy = true;
         try
         {
-            // the water layer comes with the tile a moment later on some sources: give it a second
-            await ToSignal(GetTree().CreateTimer(1.0), SceneTreeTimer.SignalName.Timeout);
-            if (!IsInsideTree() || !Decides) return;
+            // The tile's water layer (and its neighbours', where the hull reaches) arrives after the
+            // tile itself: looked for every 2 s for half a minute. At once, the search found nothing
+            // on the real Nyon tiles though they are 30 m deep (#303).
             var landing = origin.ToWorld(_e, _n, 0);
-            if (FindBerth(_chunks, landing) is not { } berth)
+            Berth? found = null;
+            for (int attempt = 0; attempt < 15 && found == null; attempt++)
             {
-                GD.Print($"[steamer] no water at Nyon deep enough for the steamer within {SearchRadius:0} m of the landing (legacy lake tiles are 0.12 m deep until #298)");
+                await ToSignal(GetTree().CreateTimer(2.0), SceneTreeTimer.SignalName.Timeout);
+                if (!IsInsideTree() || !Decides) return;
+                found = FindBerth(_chunks, landing);
+            }
+            if (found is not { } berth)
+            {
+                GD.Print($"[steamer] no water at Nyon deep enough for the steamer within {SearchRadius:0} m of the landing ({Survey(_chunks, landing)})");
                 return;
             }
             if (vehicles.GetNodeOrNull(BerthName) is { } old) old.Free();
@@ -97,6 +106,23 @@ public partial class SteamerBerth : Node
         var state = new VehicleState(RideKind.Steamer, origin.ToGlobal(keel), yaw, Vector3.Zero, ride.MaxHealth,
             EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
         return vehicles.Place(state, name);
+    }
+
+    /// <summary>For the log when no berth is found: how much of the search area has water loaded, and the deepest.</summary>
+    private static string Survey(ChunkManager chunks, Vector3 landing)
+    {
+        int wet = 0, all = 0;
+        float deepest = 0f;
+        for (float x = -SearchRadius; x <= SearchRadius; x += 20f)
+            for (float z = -SearchRadius; z <= SearchRadius; z += 20f)
+            {
+                var p = landing + new Vector3(x, 0, z);
+                all++;
+                if (!chunks.TryGetWater(p, out float still, out _)) continue;
+                wet++;
+                if (chunks.TryGetHeight(p, out float bed)) deepest = Mathf.Max(deepest, still - bed);
+            }
+        return $"water loaded at {wet} of {all} samples, deepest {deepest:F1} m";
     }
 
     public readonly record struct Berth(Vector3 Keel, float Yaw, float Depth, float FromLanding);
@@ -134,9 +160,12 @@ public partial class SteamerBerth : Node
                     var bow = along.Rotated(Vector3.Up, Mathf.Pi * t / 12f * (t % 2 == 0 ? 1f : -1f));
                     var beam = bow.Cross(Vector3.Up);
                     bool floats = true;
-                    foreach (float s in new[] { -36f, -18f, 18f, 36f })
-                        foreach (float c in new[] { -4.5f, 4.5f })
-                            if (Depth(p + bow * s + beam * c) < need) { floats = false; break; }
+                    // the whole hull and a margin round it (its box, the paddle boxes, a gangway's plank):
+                    // checked at its ends and sides only, it lay against the quay at Nyon with its
+                    // collision box on the bank, two metres out of the water
+                    for (float s = -40f; s <= 40.1f && floats; s += 5f)
+                        foreach (float c in new[] { -8f, -4.5f, 0f, 4.5f, 8f })
+                            if (Depth(p + bow * s + beam * c) < (Mathf.Abs(c) > 5f ? MarginDepth : need)) { floats = false; break; }
                     if (!floats) continue;
                     chunks.TryGetWater(p, out float still, out _);
                     float yaw = Mathf.Atan2(-bow.X, -bow.Z);
