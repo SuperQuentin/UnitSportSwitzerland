@@ -560,7 +560,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || World.PedNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested
             || Items.BonkCheck.Requested
@@ -584,6 +584,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
+        if (World.PedNetProbe.Role != null) AddChild(new World.PedNetProbe(items));
         if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));
         if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
@@ -649,6 +650,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(birds = new Birds.BirdLife(_chunks, origin, items));
             // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
             Birds.BirdNet.Create(this, birds, server: false);
+            // pedestrians walk the birds' street spots (#217): online the server's puppets, offline kept here
+            if (Systems.On(Systems.Npcs)) World.Pedestrians.Create(this, origin, _chunks, server: false);
         }
 
         // occasions: the treat / gift hunt (taken with the gather hold) and the seasonal hat

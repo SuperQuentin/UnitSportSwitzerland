@@ -36,6 +36,27 @@ public sealed class TownPerches
     public readonly Dictionary<(int, int), List<Perch>> Cells = new();
     public readonly Dictionary<(int, int), int> Density = new();
 
+    private readonly List<Rect2> _boxes = new();
+    private readonly Dictionary<(int, int), List<int>> _boxGrid = new();
+
+    /// <summary>Inside some building's flat box (its footprint's bounding box).</summary>
+    public bool Inside(Vector3 p)
+    {
+        if (!_boxGrid.TryGetValue(CellOf(p, DensityCell), out var list)) return false;
+        var flat = new Vector2(p.X, p.Z);
+        foreach (int i in list) if (_boxes[i].HasPoint(flat)) return true;
+        return false;
+    }
+
+    /// <summary>A straight walk from <paramref name="a"/> to <paramref name="b"/> crosses a building (sampled every metre).</summary>
+    public bool Blocked(Vector3 a, Vector3 b)
+    {
+        int n = (int)a.DistanceTo(b);
+        for (int i = 1; i < n; i++)
+            if (Inside(a.Lerp(b, (float)i / n))) return true;
+        return false;
+    }
+
     public static (int, int) CellOf(Vector3 p, float size) => ((int)Mathf.Floor(p.X / size), (int)Mathf.Floor(p.Z / size));
 
     /// <summary>Worker-thread safe: plain maths over the tile's triangles.</summary>
@@ -45,9 +66,9 @@ public sealed class TownPerches
         var id = tile.Id;
         Vector3 W(float x, float y, float z) => origin.ToWorld(id.MinE + x, id.MaxN - z, y);
 
-        // every building's flat box, so a street spot is never inside a house
-        var boxes = new List<Rect2>(tile.Buildings.Count);
-        var boxGrid = new Dictionary<(int, int), List<int>>();
+        // every building's flat box, so a street spot is never inside a house (kept: pedestrians, #217)
+        var boxes = town._boxes;
+        var boxGrid = town._boxGrid;
         foreach (var b in tile.Buildings)
         {
             var box = FlatBox(b, W);
@@ -59,13 +80,7 @@ public sealed class TownPerches
                 }
             boxes.Add(box);
         }
-        bool Inside(Vector3 p)
-        {
-            if (!boxGrid.TryGetValue(CellOf(p, DensityCell), out var list)) return false;
-            var flat = new Vector2(p.X, p.Z);
-            foreach (int i in list) if (boxes[i].HasPoint(flat)) return true;
-            return false;
-        }
+        bool Inside(Vector3 p) => town.Inside(p);
 
         var seen = new HashSet<(int, int, int)>();
         var ridge = new List<Perch>(); var eave = new List<Perch>(); var ledge = new List<Perch>(); var street = new List<Perch>();

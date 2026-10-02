@@ -88,3 +88,5 @@ src/Vehicles/            full   tools/decknetcheck.sh
 src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
 tools/lib/               quick  tools/lib/guard_selftest.sh
+src/World/Pedestrian     full   tools/pednetcheck.sh
+src/World/PedNet         full   tools/pednetcheck.sh

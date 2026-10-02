@@ -579,6 +579,13 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
 
     private TownPerches? TownAt(Vector3 p) => _town.TryGetValue(_origin.TileAt(p), out var t) ? t : null;
 
+    /// <summary>The town data of the tile under <paramref name="p"/>, loading it if needed (pedestrians, #217); null until read.</summary>
+    public TownPerches? Town(Vector3 p)
+    {
+        EnsureTown(_origin.TileAt(p));
+        return TownAt(p);
+    }
+
     /// <summary>True where the buildings make a town (for probes); false until the tile's buildings are read.</summary>
     public bool IsTown(Vector3 p)
     {
