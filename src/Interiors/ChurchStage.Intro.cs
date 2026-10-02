@@ -19,7 +19,7 @@ public partial class ChurchStage
     private void StartIntro(double t)
     {
         if (t >= IntroEnd - 0.1 || _rat < 0) return;
-        if (InteriorManager.Instance?.Current?.Key != _plan || XR.XrSession.Active) return;
+        if (!LocalHere() || XR.XrSession.Active) return;
         var own = GetViewport().GetCamera3D();
         if (own == null) return;
         _ownCam = own;
@@ -69,6 +69,12 @@ public partial class ChurchStage
         _ownCam = null;
         Core.UiFocus.Set(this, false);
     }
+
+    /// <summary>The church a probe stands in with no <see cref="InteriorManager"/> (<c>ChurchStageProbe</c>).</summary>
+    internal static string? ProbePlan;
+
+    /// <summary>Whether the local player is in this church.</summary>
+    private bool LocalHere() => (InteriorManager.Instance?.Current?.Key ?? ProbePlan) == _plan;
 
     /// <summary>+1 or -1: the rat's side (its local X) away from the altar, for the profile shot.</summary>
     private float AwayFromAltar(Figure rat)

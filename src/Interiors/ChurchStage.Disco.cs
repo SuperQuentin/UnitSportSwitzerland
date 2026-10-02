@@ -67,7 +67,7 @@ public partial class ChurchStage
             _pulse.LightEnergy = 0.4f + 2.2f * pulse;
         }
         // the room around a character goes dark only for whoever is in this church
-        bool here = InteriorManager.Instance?.Current?.Key == _plan;
+        bool here = LocalHere();
         if (here) World.DayNight.Disco = 1f;
         else if (_darkening) World.DayNight.Disco = 0f;
         _darkening = here;

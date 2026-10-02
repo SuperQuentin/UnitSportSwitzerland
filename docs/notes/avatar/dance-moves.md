@@ -54,7 +54,15 @@
 | Folk | 5 | Macarena |
 | Folk | 6 | GangnamStyle |
 
-`MoveCount`: Pop 9, Rock 6, Electronic 7, HipHop 8, Chill 6, Folk 7. Tempo coverage: Sway/HipSway 60-110, ArmWave 60-130, Bounce 70-200, Headbang 90-200, FistPump 110-200, everything else inside 70-170, so 60-200 BPM is covered.
+| RatDance (MoveCount 4, #370) | 0 | RatSwing |
+| RatDance | 1 | RatArmPump |
+| RatDance | 2 | RatHeadBob |
+| RatDance | 3 | RatHop |
+
+`RatDance` is never analysed: `RadioBody.BeatOf` reports it for the chess type beat
+(`docs/notes/items/church-radio.md`), and its crowd slot is `RatSwing`, not Pogo/JumpTogether.
+
+`MoveCount`: Pop 9, Rock 6, Electronic 7, HipHop 8, Chill 6, Folk 7, RatDance 4. Tempo coverage: Sway/HipSway 60-110, ArmWave 60-130, Bounce 70-200, Headbang 90-200, FistPump 110-200, everything else inside 70-170, so 60-200 BPM is covered.
 
 Crowd moves (#261), outside the tables: `Move = HumanMeshBuilder.GroupPogo` (1000) is **Pogo**,
 `GroupJump` (1001) is **JumpTogether**.

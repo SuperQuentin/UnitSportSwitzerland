@@ -156,6 +156,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // a hand-made church whose radio plays the chess type beat (#370): no terrain, no server
+        if (Interiors.ChurchStageProbe.ParseArgs() is { Requested: true } churchStage)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.ChurchStageProbe(churchStage.Shot) { Name = "ChurchStageProbe" });
+            return;
+        }
 
         // a test course built in code instead of the map: --chunks fixture:<course>, --world fixture,
         // or --systems without terrain (Terrain/Fixture, docs/notes/general/testing.md)

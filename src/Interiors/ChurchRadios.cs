@@ -156,9 +156,9 @@ public partial class ChurchRadios : Node
 
     // ---- server ----------------------------------------------------------------------------------
 
-    /// <summary>Only someone inside that church works its radio.</summary>
-    private static bool Inside(long peer, string plan) =>
-        plan.Length > 0 && InteriorManager.Instance is { } im && im.SpaceOf(peer) == plan;
+    /// <summary>Only someone inside that church works its radio (offline, with no interiors, the probe's church).</summary>
+    private bool Inside(long peer, string plan) =>
+        plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
 
     private void ServePlay(long peer, string plan, int cdId, float length)
     {
