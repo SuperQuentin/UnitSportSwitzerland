@@ -825,7 +825,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         {
             approach.LaneError = Mathf.Max(approach.LaneError, Mathf.Abs(car.Lane - car.LaneWanted));
             approach.Crossings[car.LaneIndex]++;
-            approach.OffsetSum[car.LaneIndex] += car.Lane;
+            // from the original lane's centre, as the records give the lanes (car.Lane is from its usual line)
+            approach.OffsetSum[car.LaneIndex] += car.Lane - (approach.LaneCentre - KeepRight(car.Route.Edge));
         }
 
         if (approach.Site is not { } site || car.Group < 0)

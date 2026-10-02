@@ -59,10 +59,11 @@
   - inferred lights at 2499883,1116759, two dense runs: 12 and 21 stops at red.
   - `--at 2499641,1118692` (lights, L|T|R pocket approach), dense 150 s: 108 stops, 5 lefts from a
     pocket, 1 permissive wait, 3 waits for room; through cars cross the line at +5.0 m (their lane +5.0).
-  - #123 pockets without lights, dense 120 s: Geneva 2499916,1118335, 5 lefts from pockets (at
-    -0.8 m: the original lane's centre, a bike lane on the right), through cars at +2.5 m (lane
-    +3.3, the lane-change ramp still on the hatch's taper); Valais 2584437,1110600: 15 through
-    cars at +3.0 m (lane +3.7), none turned left there.
+  - #123 pockets without lights, dense 120 s: Geneva 2499916,1118335, 5 lefts from pockets,
+    through cars in their lane (worst lag 0.00 m); Valais 2584437,1110600: 15 through cars in
+    their lane, none turned left there. The probe gives crossings from the original lane's
+    centre (`LaneCentre`), like the lanes; a car's `Lane` counts from its usual line
+    (`KeepRight`), 0.8 m right of that centre where a bike lane narrows the lane.
   Screenshots from above (windowed `--trafficcheck,<png>`): cars queued at the red of the
   Geneva junction and in the through lane past the pocket. Not done: a capture of a queue moving
   off on green; two clients comparing group states (traffic is local, the lamps' `State` is
