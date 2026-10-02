@@ -105,8 +105,7 @@ public sealed class RailRoadOverlap
             if (!IsCarriageway(seg) || seg.PointCount < 2) continue;
             var plan = line.Shifted;
             float width = line.Width > 0.1f ? line.Width : seg.Width;
-            var height = new float[seg.PointCount];
-            for (int i = 0; i < height.Length; i++) height[i] = seg.Points[i * 3 + 1];
+            var height = HeightsAlong(plan, line.Plan, seg);
             int r = _roads.Count;
             _roads.Add(new Road(plan, height, width * 0.5, IsBridge(seg)));
             for (int i = 1; i < plan.Length; i++)
@@ -124,6 +123,33 @@ public sealed class RailRoadOverlap
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// The segment's heights at each point of <paramref name="plan"/>. A roundabout ring rebuilt as
+    /// an arc (#122) has other points than its segment, so there they are read by the share of the
+    /// length along the original plan (a tram near a Geneva roundabout ran off the end).
+    /// </summary>
+    private static float[] HeightsAlong(Vec2[] plan, Vec2[] original, RoadSegment seg)
+    {
+        var height = new float[plan.Length];
+        if (plan.Length == seg.PointCount)
+        {
+            for (int i = 0; i < height.Length; i++) height[i] = seg.Points[i * 3 + 1];
+            return height;
+        }
+        int n = Math.Min(original.Length, seg.PointCount);
+        var from = Polyline.ArcLengths(original.Length == n ? original : original[..n]);
+        var to = Polyline.ArcLengths(plan);
+        for (int i = 0, j = 0; i < plan.Length; i++)
+        {
+            double s = to[^1] > 0 ? to[i] / to[^1] * from[^1] : 0;
+            while (j < n - 2 && from[j + 1] < s) j++;
+            double span = from[j + 1] - from[j];
+            double t = span > 1e-9 ? Math.Clamp((s - from[j]) / span, 0, 1) : 0;
+            height[i] = (float)(seg.Points[j * 3 + 1] + t * (seg.Points[(j + 1) * 3 + 1] - seg.Points[j * 3 + 1]));
+        }
+        return height;
     }
 
     /// <summary>
