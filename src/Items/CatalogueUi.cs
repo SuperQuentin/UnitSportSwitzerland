@@ -112,7 +112,10 @@ public partial class CatalogueUi : CanvasLayer
         left.AddChild(_search);
 
         // category tabs: All, then each category that has something in it
-        var tabs = UiKit.HBox(4);
+        // a flow, so more categories wrap onto a second row instead of widening the panel past the grid
+        var tabs = new HFlowContainer();
+        tabs.AddThemeConstantOverride("h_separation", 4);
+        tabs.AddThemeConstantOverride("v_separation", 4);
         var group = new ButtonGroup();
         tabs.AddChild(Tab("All", null, group, pressed: true));
         foreach (var category in Enum.GetValues<ItemCategory>())

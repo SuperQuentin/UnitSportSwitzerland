@@ -1,0 +1,177 @@
+using UnitSport.Terrain.Format;
+
+namespace UnitSport.Terrain.Fixture;
+
+/// <summary>
+/// A synthetic test course built in code (#221): roads with designed heights, the trees beside
+/// them, and ground that follows the roads. No file, no download, no seed: the same course every
+/// run. Coordinates are metres from the start, X east, Y north; Z is the altitude.
+/// <see cref="FixtureChunkSource"/> turns one into tiles. Each course targets a known failure:
+/// <list type="bullet">
+/// <item><c>flat</c>: no road, flat ground (UI, physics, network tests);</item>
+/// <item><c>straight</c>: 3 km of straight 6 m road, flat: top speed, overtaking;</item>
+/// <item><c>hairpin</c>: a fast downhill with six 15 m-radius hairpins, 7 % down;</item>
+/// <item><c>narrow</c>: a winding 4 m road with a trunk every 5 m on both edges: no verge to use;</item>
+/// <item><c>junction</c>: a 9 m road through a T junction and a crossroads with 6 m side roads;</item>
+/// <item><c>verge</c>: two bends with 6 m of grass verge then a tree line on each side.</item>
+/// </list>
+/// </summary>
+public sealed class FixtureCourse
+{
+    public const double FlatHeight = 500;
+
+    public required string Name { get; init; }
+    public List<(RoadClass Class, List<(double X, double Y, double Z)> Points)> Roads { get; } = new();
+    public List<(double X, double Y, double Z, float Height)> Trees { get; } = new();
+
+    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge" };
+
+    public static FixtureCourse? Create(string name) => name switch
+    {
+        "flat" => new FixtureCourse { Name = name },
+        "straight" => new FixtureCourse { Name = name }.Road(RoadClass.Road, new Pen(0, 0, FlatHeight, 0, 0).Straight(3000)),
+        "hairpin" => Hairpin(),
+        "narrow" => Narrow(),
+        "junction" => Junction(),
+        "verge" => Verge(),
+        _ => null,
+    };
+
+    private static FixtureCourse Hairpin()
+    {
+        // legs 8 degrees off east-west, so they fan apart away from each hairpin as on a real slope
+        var pen = new Pen(0, 0, 1200, -8, -0.07);
+        for (int leg = 0; leg < 6; leg++)
+        {
+            pen.Straight(450);
+            if (leg < 5) pen.Arc(15, leg % 2 == 0 ? -164 : 164);
+        }
+        return new FixtureCourse { Name = "hairpin" }.Road(RoadClass.Road, pen);
+    }
+
+    private static FixtureCourse Narrow()
+    {
+        var pen = new Pen(0, 0, 700, 0, -0.03).Straight(150).Arc(60, 45).Straight(100).Arc(50, -90)
+            .Straight(120).Arc(80, 70).Straight(200).Arc(40, -60).Straight(150).Arc(70, 35).Straight(200);
+        var c = new FixtureCourse { Name = "narrow" }.Road(RoadClass.Minor, pen);
+        // the edges are blocked: a trunk every 5 m, just off each edge of the 4 m tarmac
+        return c.TreesAlong(pen, RoadFormat.DefaultWidth(RoadClass.Minor) / 2 + 0.8, 5, 14f);
+    }
+
+    private static FixtureCourse Junction()
+    {
+        // the main road is split where the side roads meet it: a lane graph links ends only
+        var c = new FixtureCourse { Name = "junction" }
+            .Road(RoadClass.Major, new Pen(0, 0, FlatHeight, 0, 0).Straight(700))
+            .Road(RoadClass.Major, new Pen(700, 0, FlatHeight, 0, 0).Straight(700))
+            .Road(RoadClass.Major, new Pen(1400, 0, FlatHeight, 0, 0).Straight(800));
+        c.Road(RoadClass.Road, new Pen(700, 0, FlatHeight, 90, 0).Straight(600));      // T: north
+        c.Road(RoadClass.Road, new Pen(1400, 0, FlatHeight, 90, 0).Straight(500));     // crossroads: north
+        c.Road(RoadClass.Road, new Pen(1400, 0, FlatHeight, -90, 0).Straight(500));    // and south
+        return c;
+    }
+
+    private static FixtureCourse Verge()
+    {
+        var pen = new Pen(0, 0, 600, 0, -0.02).Straight(400).Arc(120, 90).Straight(300).Arc(200, -60).Straight(400);
+        var c = new FixtureCourse { Name = "verge" }.Road(RoadClass.Road, pen);
+        // 6 m of open grass on each side, then a line of trunks
+        return c.TreesAlong(pen, RoadFormat.DefaultWidth(RoadClass.Road) / 2 + 6, 10, 18f);
+    }
+
+    private FixtureCourse Road(RoadClass cls, Pen pen)
+    {
+        Roads.Add((cls, pen.Points));
+        return this;
+    }
+
+    private FixtureCourse TreesAlong(Pen pen, double offset, double spacing, float height)
+    {
+        var p = pen.Points;
+        int every = Math.Max(1, (int)Math.Round(spacing / Pen.Step));
+        for (int i = every; i + 1 < p.Count; i += every)
+        {
+            double dx = p[i + 1].X - p[i - 1].X, dy = p[i + 1].Y - p[i - 1].Y, len = Math.Sqrt(dx * dx + dy * dy);
+            double nx = -dy / len, ny = dx / len;   // left of the direction of travel
+            foreach (int side in new[] { 1, -1 })
+                Trees.Add((p[i].X + nx * offset * side, p[i].Y + ny * offset * side, p[i].Z, height));
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// The ground: inverse-distance weighting (power 4) of the road heights, so it is the road's
+    /// own height beside it and a smooth slope between two legs. Flat with no road.
+    /// </summary>
+    public double Ground(double x, double y)
+    {
+        if (Roads.Count == 0) return FlatHeight;
+        double sum = 0, weights = 0;
+        foreach (var (_, pts) in Roads)
+            for (int i = 0; i < pts.Count; i += GroundSampleEvery)
+            {
+                double dx = pts[i].X - x, dy = pts[i].Y - y;
+                double d2 = dx * dx + dy * dy + 1;
+                double w = 1 / (d2 * d2);
+                sum += w * pts[i].Z;
+                weights += w;
+            }
+        return sum / weights;
+    }
+
+    /// <summary>Road points used for the ground, every 10 m: plenty for a 10 m height lattice.</summary>
+    private const int GroundSampleEvery = 5;
+
+    /// <summary>The box the course covers, in metres from the start, with <paramref name="margin"/> round it.</summary>
+    public (double MinX, double MinY, double MaxX, double MaxY) Bounds(double margin)
+    {
+        double minX = 0, minY = 0, maxX = 0, maxY = 0;
+        foreach (var (_, pts) in Roads)
+            foreach (var p in pts)
+            {
+                minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+                minY = Math.Min(minY, p.Y); maxY = Math.Max(maxY, p.Y);
+            }
+        return (minX - margin, minY - margin, maxX + margin, maxY + margin);
+    }
+
+    /// <summary>Draws a road like a turtle: straights and arcs at a fixed grade, a point every 2 m.</summary>
+    public sealed class Pen
+    {
+        public const double Step = 2;
+        public readonly List<(double X, double Y, double Z)> Points = new();
+        private double _x, _y, _z, _heading;
+        private readonly double _grade;
+
+        /// <param name="headingDeg">0 east, 90 north.</param>
+        /// <param name="grade">Height change per metre along the road (negative: downhill).</param>
+        public Pen(double x, double y, double z, double headingDeg, double grade)
+        {
+            (_x, _y, _z, _heading, _grade) = (x, y, z, headingDeg * Math.PI / 180, grade);
+            Points.Add((x, y, z));
+        }
+
+        public Pen Straight(double length) => Walk(length, 0);
+
+        /// <summary>An arc of <paramref name="radius"/> m turning <paramref name="degrees"/> (positive: left).</summary>
+        public Pen Arc(double radius, double degrees) =>
+            Walk(radius * Math.Abs(degrees) * Math.PI / 180, degrees * Math.PI / 180 / (radius * Math.Abs(degrees) * Math.PI / 180));
+
+        private Pen Walk(double length, double turnPerMetre)
+        {
+            int steps = Math.Max(1, (int)Math.Ceiling(length / Step));
+            double ds = length / steps;
+            for (int k = 0; k < steps; k++)
+            {
+                // the midpoint heading of the step, so an arc closes on its true end point
+                double h = _heading + turnPerMetre * ds / 2;
+                _x += Math.Cos(h) * ds;
+                _y += Math.Sin(h) * ds;
+                _z += _grade * ds;
+                _heading += turnPerMetre * ds;
+                Points.Add((_x, _y, _z));
+            }
+            return this;
+        }
+    }
+}

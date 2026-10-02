@@ -74,7 +74,9 @@ public partial class InventoryUi : CanvasLayer
 
     // the panel
     private Control _panel = null!;
-    private readonly SlotButton[] _panelSlots = new SlotButton[Inventory.Size + 1];   // the last is the bag slot
+    // after the item slots: the bag slot, then the body slots (#251)
+    private readonly SlotButton[] _panelSlots = new SlotButton[Inventory.LastSlot + 1];
+    private const int WearSlotPx = 42;
     private SlotButton _trash = null!;
     private Label _capacity = null!, _packHint = null!, _controlsHint = null!, _dropHint = null!;
     private Label _bagName = null!, _bagInfo = null!;
@@ -355,6 +357,28 @@ public partial class InventoryUi : CanvasLayer
         _trash.Pressed += ClickTrash;
         bagRow.AddChild(_trash);
         gear.AddChild(bagRow);
+
+        // what you have on (#251): one slot per body part, head to hands
+        gear.AddChild(UiKit.Section("Wearing"));
+        var worn = new GridContainer { Columns = 5 };
+        worn.AddThemeConstantOverride("h_separation", Gap);
+        worn.AddThemeConstantOverride("v_separation", Gap);
+        for (var ws = Avatar.WearSlot.Head; ws <= Avatar.WearSlot.Hands; ws++)
+        {
+            int slot = Inventory.SlotOf(ws);
+            var button = new SlotButton
+            {
+                // "BOTTOM" does not fit the small slot
+                Slot = slot, KeyHint = "", Placeholder = ws == Avatar.WearSlot.Bottom ? "LOWER" : Avatar.Garments.SlotName(ws).ToUpperInvariant(),
+                CustomMinimumSize = new Vector2(WearSlotPx, WearSlotPx),
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            };
+            button.Pressed += () => { Inv.PrimaryClick(slot); Inspect(slot); };
+            button.FocusEntered += () => Inspect(slot);
+            _panelSlots[slot] = button;
+            worn.AddChild(button);
+        }
+        gear.AddChild(worn);
         right.AddChild(UiKit.Card(gear, 0.55f, 14));
 
         // the item under the pointer (or the focused slot)
@@ -566,16 +590,22 @@ public partial class InventoryUi : CanvasLayer
             : ItemIcons.Get(stack.Id);
         _infoName.Text = def == null ? "Empty slot" : def.MaxStack > 1 ? $"{def.Name}  ×{stack.Count}" : def.Name;
         _infoName.AddThemeColorOverride("font_color", def == null ? UiTheme.TextFaint : UiTheme.Text);
+        bool worn = Inventory.IsWearSlot(slot);
+        string part = Avatar.Garments.SlotName(Inventory.WearSlotAt(slot));
         _infoKind.Text = slot == Inventory.BagSlot ? "Worn bag"
+            : worn ? $"Worn · {part}"
             : def != null ? def.Category.ToString() + (slot < Inventory.HotbarSize ? " · hotbar" : " · pack")
             : slot < Inventory.HotbarSize ? "Hotbar slot" : "Pack slot";
         _infoBlurb.Text = def != null ? InputHints.Format(def.Blurb)
             : slot == Inventory.BagSlot ? "A bag worn here adds rows to the pack."
+            : worn ? $"Nothing on your {part}. Clothes found in wardrobes go here, and everyone sees them."
             : slot < Inventory.HotbarSize ? "Whatever is here can be in your hand." : "Room for anything you find.";
         _infoValue.Text = def is { Value: > 0 } ? $"Worth about {def.Value * stack.Count:0.#} CHF" : "";
         _useButton.Disabled = def?.Use is not (ItemUse.Consume or ItemUse.Wear or ItemUse.Print or ItemUse.Bag);
-        _useButton.Text = def?.Use == ItemUse.Bag ? slot == Inventory.BagSlot ? "Take off" : "Wear" : "Use";
-        _handButton.Disabled = def == null || slot == Inv.Selected || slot == Inventory.BagSlot;
+        _useButton.Text = def?.Use is ItemUse.Bag or ItemUse.Wear
+            ? slot == Inventory.BagSlot || worn ? "Take off" : "Wear"
+            : "Use";
+        _handButton.Disabled = def == null || slot == Inv.Selected || slot == Inventory.BagSlot || worn;
         _dropButton.Disabled = def == null || !ItemsActive;
     }
 
@@ -699,7 +729,7 @@ public partial class InventoryUi : CanvasLayer
                 {
                     _hover = hover;
                     if (hover >= 0) Inspect(hover);
-                    if (_paintButton != MouseButton.None && hover >= 0 && hover != Inventory.BagSlot && !_paintSlots.Contains(hover))
+                    if (_paintButton != MouseButton.None && hover >= 0 && hover != Inventory.BagSlot && !Inventory.IsWearSlot(hover) && !_paintSlots.Contains(hover))
                         AddPaint(hover);
                     Refresh();
                 }
@@ -735,12 +765,12 @@ public partial class InventoryUi : CanvasLayer
                 _lastClickTime = now;
 
                 if (left && b.ShiftPressed && Inv.Carried.IsEmpty) Inv.QuickMove(slot);
-                else if (doubleClick && !Inv.Carried.IsEmpty && slot != Inventory.BagSlot)
+                else if (doubleClick && !Inv.Carried.IsEmpty && slot != Inventory.BagSlot && !Inventory.IsWearSlot(slot))
                 {
                     EndPaint(commit: false);
                     Inv.Collect();
                 }
-                else if (Inv.Carried.IsEmpty || slot == Inventory.BagSlot)
+                else if (Inv.Carried.IsEmpty || slot == Inventory.BagSlot || Inventory.IsWearSlot(slot))
                 {
                     if (left) Inv.PrimaryClick(slot);
                     else Inv.SecondaryClick(slot);
@@ -823,8 +853,9 @@ public partial class InventoryUi : CanvasLayer
         var def = ItemDefs.Get(stack.Id)!;
         string count = def.MaxStack > 1 ? $"  ×{stack.Count}" : "";
         string worth = def.Value > 0 ? $"\n{def.Value * stack.Count:0.#} CHF" : "";
-        string swap = _hover == Inventory.BagSlot ? "\nClick to take it off · Shift+click into the pack"
+        string swap = _hover == Inventory.BagSlot || Inventory.IsWearSlot(_hover) ? "\nClick to take it off · Shift+click into the pack"
             : def.Use == ItemUse.Bag && Inv.Bag.IsEmpty ? "\nShift+click to wear it"
+            : Inventory.WornOn(stack) is var ws && ws != Avatar.WearSlot.None && Inv.WornIn(ws).IsEmpty ? "\nShift+click to wear it"
             : _hover >= Inventory.HotbarSize ? "\n1–6 swap into hotbar · Shift+click to hotbar" : "\nShift+click to pack";
         _tooltipText.Text = $"{def.Name}{count}\n{InputHints.Format(def.Blurb)}{worth}{swap}";
         _tooltip.ResetSize();

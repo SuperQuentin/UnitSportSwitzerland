@@ -43,7 +43,7 @@ public partial class SyncProbe : Node
     private const float FreshErr = 0.02f, FreshCrank = 0.05f;
     private const float MaxBasisErr = 0.3f, MaxHandErr = 0.25f, MaxCrankErr = 0.25f;
 
-    private readonly ChunkManager _chunks;
+    private readonly ChunkManager? _chunks;   // null on --world flat
     private readonly WorldOrigin _origin;
     private FootPlayer? _owner, _mirror;
     private double _t, _wait;
@@ -73,7 +73,7 @@ public partial class SyncProbe : Node
         { (20.0, PlayerInput.RoofToggle), (20.5, PlayerInput.LightsToggle), (23.0, PlayerInput.LightsToggle) };
     private readonly System.Collections.Generic.Dictionary<string, (float Basis, float Hand, float Crank, int N, float Speed, int Poses)> _byStage = new();
 
-    public SyncProbe(ChunkManager chunks, WorldOrigin origin)
+    public SyncProbe(ChunkManager? chunks, WorldOrigin origin)
     {
         _chunks = chunks;
         _origin = origin;
@@ -97,11 +97,12 @@ public partial class SyncProbe : Node
 
         var (e, n) = SpawnPoint.ParseTarget();
         var at = _origin.ToWorld(e, n, 0);
-        if (!_chunks.TryGetHeight(at, out float g)) return;   // collision follows the player, who asks for it
+        if (!TestWorld.TryGround(_chunks, at, out float g)) return;   // collision follows the player, who asks for it
 
         _owner = new FootPlayer { Name = "Owner", Terrain = _chunks };
         AddChild(_owner);
         _owner.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
+        if (_chunks == null) _owner.DebugLaunch(_owner.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
 
         _mirror = new FootPlayer { Name = "Mirror", ProcessPriority = 2 };
         _mirror.SetMultiplayerAuthority(2);   // not us: it takes the remote path, as another peer's copy would

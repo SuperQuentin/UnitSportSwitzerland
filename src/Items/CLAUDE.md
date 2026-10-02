@@ -10,6 +10,7 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `inventory` — Inventory: (`src/Items/`): `Inventory` is pure data — a 6-slot hotbar plus a 27-slot pack, stacks, `Changed` —...
 - `viewmodel-poses` — ViewPose enum, SetPose/PlayOneShot, aim poses, viewmodel drawn over the world (depth squeeze, own layer vs portals); use one-shots (eat, hat), GPS screen, binocular sway
 - `cursor-inventory` — The panel works like Minecraft's: a carried stack on the cursor, click/right-click/shift/double-click/drag, click outside to drop on the ground, menu look (#208)...
+- `wear-slots` — Ten body slots after the bag slot: Fits/ChangeWorn (a dress takes the bottom), Wear/QuickMove/click, legacy hat migration, the Wearing card (#251)
 - `pixel-icons` — 16x16 item icons: grids + palette, generic fallback, held card, --iconsheet
 - `shotgun-feel` — Shotgun ADS pose + bead reticle, recoil/camera punch, pump fore-end + sound, rate limit, eye-origin shots, remote jolt
 - `camera-zoom` — Camera focal-length zoom (wheel while aiming), LookScale, viewfinder readout + autofocus hunt, --zoom

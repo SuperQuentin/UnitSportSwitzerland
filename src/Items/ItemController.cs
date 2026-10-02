@@ -488,14 +488,24 @@ public partial class ItemController : Node
                 break;
 
             case ItemUse.Wear:
+                // worn: off into the pack; carried: on in its body slot, swapping with what was there
+                if (Inventory.IsWearSlot(slot))
+                {
+                    _inventory.QuickMove(slot);
+                    Play(SfxSynth.Tick, 0.9f);
+                    break;
+                }
                 if (_useBusy) break;
-                var hat = stack.Id;
+                var worn = stack.Id;
                 StartUse(player, slot, def, ViewPose.Head, 0.3f, 0.2f, 0.3f, () =>
                 {
-                    bool on = _inventory.Worn != hat;
-                    _inventory.SetWorn(on ? hat : ItemId.None);
-                    Play(SfxSynth.Tick, on ? 1.2f : 0.9f);
-                    _ui.Toast(on ? $"You put on the {def.Name.ToLowerInvariant()}." : $"You take off the {def.Name.ToLowerInvariant()}.");
+                    // the stack may have moved during the wind-up: wear it from wherever it is now
+                    int at = _inventory[slot].Id == worn ? slot : -1;
+                    for (int i = 0; at < 0 && i < _inventory.Capacity; i++)
+                        if (_inventory[i].Id == worn) at = i;
+                    if (at < 0 || !_inventory.Wear(at)) return;
+                    Play(SfxSynth.Tick, 1.2f);
+                    _ui.Toast($"You put on the {def.Name.ToLowerInvariant()}.");
                 });
                 break;
 

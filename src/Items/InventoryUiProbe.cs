@@ -88,6 +88,28 @@ public partial class InventoryUiProbe : Node
         Expect(Inv.Carried.IsEmpty && Inv[dropSlot].IsEmpty && after > before && before >= 0,
             $"click outside drops {dropped} on the ground (dropped items {before} -> {after})");
 
+        // 7: clothes (#251): carried onto their body slot, shift-clicked on, refused in the wrong one
+        int top = Inventory.SlotOf(Avatar.WearSlot.Top), head = Inventory.SlotOf(Avatar.WearSlot.Head);
+        int free = Enumerable.Range(pack, Inv.PackSize).First(i => Inv[i].IsEmpty);
+        Inv.Put(free, new ItemStack(ItemId.BuckleCorset, 1));
+        int ears = Enumerable.Range(pack, Inv.PackSize).First(i => Inv[i].IsEmpty);
+        Inv.Put(ears, new ItemStack(ItemId.CatEarsBlack, 1));
+        await Click(free, MouseButton.Left);
+        await Click(head, MouseButton.Left);
+        Expect(Inv[head].IsEmpty && Inv.Carried.Id == ItemId.BuckleCorset, "the corset is refused on the head");
+        await Click(top, MouseButton.Left);
+        Expect(Inv[top].Id == ItemId.BuckleCorset && Inv.Carried.IsEmpty, "and put on in the top slot");
+        await Click(ears, MouseButton.Left, shift: true);
+        Expect(Inv[head].Id == ItemId.CatEarsBlack && Inv[ears].IsEmpty, "shift-click puts the cat ears on");
+        await Move(top);
+        await Frames(4);
+        var dir = ProjectSettings.GlobalizePath("res://test_output");
+        System.IO.Directory.CreateDirectory(dir);
+        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "invui_wearing.png"));
+        await Click(top, MouseButton.Left);
+        Expect(Inv.Carried.Id == ItemId.BuckleCorset && Inv[top].IsEmpty, "a click takes the corset off");
+        Inv.ReturnCarried();
+
         await Catalogue();
 
         _items.Ui.Close();
@@ -96,7 +118,7 @@ public partial class InventoryUiProbe : Node
     }
 
     /// <summary>
-    /// 7 (#262): the inventory's catalogue button opens the catalogue; real clicks on a tile give
+    /// 8 (#262): the inventory's catalogue button opens the catalogue; real clicks on a tile give
     /// one, right click ten, shift-click a stack; a screenshot lands in test_output/ when windowed.
     /// Offline, so the clicks run /spawn on this machine.
     /// </summary>
