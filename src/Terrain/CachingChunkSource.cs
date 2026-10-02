@@ -85,8 +85,21 @@ public sealed class CachingChunkSource : IChunkSource
             t => 64 + t.Count * 17L);
 
     // One object for the whole region, read once at boot: nothing to cache.
-    public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default) =>
-        _inner.LoadHorizonAsync(ct);
+    /// <summary>
+    /// The horizon lattice, decoded once and shared: it is the whole region (megabytes, and the
+    /// generated fill merged in), and the Battle Royale map and site search ask for it every match.
+    /// Forgotten with the rest of the cache (<see cref="Invalidate"/>).
+    /// </summary>
+    public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            if (_horizon is { IsFaulted: false, IsCanceled: false } cached) return cached;
+            return _horizon = _inner.LoadHorizonAsync(CancellationToken.None);
+        }
+    }
+
+    private Task<HorizonIndex?>? _horizon;
 
     private static long Weigh(ChunkGrid g) => g.Heights.LongLength * 2 + 64;
     private static long Weigh(RoadTile t)
@@ -185,6 +198,7 @@ public sealed class CachingChunkSource : IChunkSource
     /// </summary>
     public void Invalidate(Func<TileId, bool>? affected)
     {
+        lock (_gate) _horizon = null;
         if (affected == null) { Clear(); return; }
         lock (_gate)
         {

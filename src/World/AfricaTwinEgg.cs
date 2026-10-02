@@ -39,7 +39,7 @@ public partial class AfricaTwinEgg : Node
     {
         Name = "AfricaTwinEgg";
         _chunks = chunks;
-        (_e, _n) = Gpx.SwissProjection.ToLv95(Lat, Lon);
+        (_e, _n) = SwissProjection.ToLv95(Lat, Lon);
         _tile = TileId.FromLv95(_e, _n);
     }
 

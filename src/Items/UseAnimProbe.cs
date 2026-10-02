@@ -8,8 +8,9 @@ namespace UnitSport.Items;
 /// <summary>
 /// <c>--useanim A|B</c> with <c>--connect</c> (driven by <c>tools/useanimcheck.sh</c>): the use animations over loopback.
 /// A (first person) hurts itself, drinks, eats, looks at the GPS, holds and puts on a hat, screenshotting its own view
-/// mid-animation; B stands nearby and must see A's replicated <c>ItemAction</c> turn into the Mouth arm pose for both the
-/// drink and the hat, then A's worn hat, and screenshots A in third person. Uses a scratch inventory.
+/// mid-animation, then dresses (#251); B stands nearby and must see A's replicated <c>ItemAction</c> turn into the Mouth
+/// arm pose for both the drink and the hat, then A's worn hat and outfit, and screenshots A in third person. Uses a
+/// scratch inventory.
 /// </summary>
 public partial class UseAnimProbe : Node
 {
@@ -127,9 +128,37 @@ public partial class UseAnimProbe : Node
         await Burst("hat_up_1p", 6, 0.12);
         await Seconds(1.0);
         Expect(inv.Worn == ItemId.WitchHat, "the hat is worn");
+
+        // clothes (#251): one put on with Use (the head-height animation), the rest straight into their slots
+        for (int i = 0; i < Outfit.Length; i++) inv.Put(Inventory.HotbarSize + i, new ItemStack(Outfit[i], 1));
+        inv.Move(Inventory.HotbarSize, 3);
+        inv.Select(3);
+        await Seconds(0.8);
+        _items.UseSlot(me, 3);
+        await Seconds(1.2);
+        Expect(inv.WornIn(Avatar.WearSlot.Face).Id == Outfit[0], "Use put the mask on");
+        for (int i = 1; i < Outfit.Length; i++) inv.Wear(Inventory.HotbarSize + i);
+        Expect(inv.Outfit.Bits == Dressed.Bits, "every piece is in its body slot");
+        Expect(await Until(() => me.OutfitBits == Dressed.Bits, 5), "the outfit is published on A's player");
+        Say("dressed");
+        // dressed on a bike too: B must see the cyclist in the same clothes
+        await Heard("B", "seen", 60);
+        bool mounted = me.SetRide(RideKind.RoadBike);
+        if (!mounted) { me.DebugLaunch(me.GlobalPosition, Vector3.Zero); mounted = me.SetRide(RideKind.RoadBike); }
+        Expect(mounted, "A mounts a road bike");
+        Say("riding");
         Say("done");
         await Heard("B", "done", 30);
     }
+
+    /// <summary>What A puts on, and so what B must see: a mask, a corset, tartan, stockings, boots, lace and a disco finish.</summary>
+    private static readonly ItemId[] Outfit =
+    {
+        ItemId.MaskUwu, ItemId.BuckleCorset, ItemId.TartanSkirt, ItemId.BeeStockings, ItemId.PlatformBoots,
+        ItemId.LaceArmWarmers, ItemId.DiscoShades,
+    };
+
+    private static readonly Avatar.Outfit Dressed = Avatar.Outfit.Of(Outfit);
 
     private async Task RunB(FootPlayer me)
     {
@@ -148,6 +177,17 @@ public partial class UseAnimProbe : Node
         Expect(await Until(() => a.HeadwearId == (int)Avatar.Headwear.WitchHat, 60), "A's hat arrived as Headwear.WitchHat");
         await Seconds(0.5);
         Shot("hat_on_3p_remote");
+        // the clothes (#251): one replicated long, drawn here from it
+        Expect(await Until(() => a.OutfitBits == Dressed.Bits, 60), "A's outfit arrived as OutfitBits");
+        await Seconds(0.8);
+        Shot("outfit_3p_remote");
+        Say("seen");
+        // A gets on a bike (#251): the remote cyclist wears the outfit, drawn in the figure shader
+        Expect(await Until(() => a.RideKindId == (int)RideKind.RoadBike
+            && a.FindChild("Rider", true, false) is MeshInstance3D { MaterialOverride: ShaderMaterial }, 60),
+            "A's cyclist is drawn dressed");
+        await Seconds(0.8);
+        Shot("outfit_bike_3p_remote");
         Say("done");
     }
 

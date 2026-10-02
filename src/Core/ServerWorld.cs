@@ -29,12 +29,18 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Items.PlacedObjects? _placed;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
+    private BattleRoyale.BrManager? _br;
+    private BattleRoyale.BrCrates? _brCrates;
 
     public override async void _Ready()
     {
         if (ServerStats.Requested) AddChild(new ServerStats { Name = "ServerStats" });
         string chunkDir = TerrainPaths.FindChunkDir();
-        var local = new LocalChunkSource(chunkDir);
+        // a test course built in code instead of the map (#221, Core/Systems): the same as the clients'
+        IChunkSource local = Systems.FixtureCourse is { } course
+            ? Terrain.Fixture.FixtureChunkSource.Create(course, SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N)
+                ?? throw new ArgumentException($"no fixture course '{course}'")
+            : new LocalChunkSource(chunkDir);
         var manifest = await local.LoadManifestAsync();
         var args = OS.GetCmdlineUserArgs();
         bool generatedWorld = Array.IndexOf(args, "--generated-world") >= 0;
@@ -64,14 +70,15 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // The same generated fill as every client's, anchored at the same point, so height
         // queries, interiors and loot work on generated ground and agree with what players see.
         // "--generated off" turns it off, as on a client.
-        var fallback = new FallbackChunkSource(local,
+        var fallback = !Systems.On(Systems.Generated) || local is Terrain.Fixture.FixtureChunkSource ? null
+            : new FallbackChunkSource(local,
             new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N),
             SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N,
             enabled: generatedWorld || !GeneratedOff(args)) { Log = s => GD.Print(s) };
         // The server holds 5 KB coarse grids (ChunkManager, BuildMeshes off), plus whatever an
         // interior plan reads lazily: 32 MB is thousands of tiles, and a fixed ceiling.
-        var source = new CachingChunkSource(fallback, 32L * 1024 * 1024);
-        fallback.Neighbours = source;
+        var source = new CachingChunkSource(fallback ?? local, 32L * 1024 * 1024);
+        if (fallback != null) fallback.Neighbours = source;
 
         // A headless server draws nothing, so nothing capped its loop: it spun as fast as a core
         // allows. 60 matches the physics tick and every client's send rate is well under it.
@@ -79,7 +86,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = false };
         _chunks.Initialize(source, origin, manifest, null);
-        _chunks.UseFallback(fallback, source.Invalidate);
+        if (fallback != null) _chunks.UseFallback(fallback, source.Invalidate);
         AddChild(_chunks);
 
         _players = new Node3D { Name = "Players" };
@@ -142,9 +149,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // racers see each other however far apart the field spreads (Net/InterestService)
         // and everyone aboard one vehicle sees everyone else aboard it, wherever it goes
         var passengers = _passengers;
-        if (_interest != null) _interest.Together = (a, b) => race.SameRace(a, b) || passengers.Together(a, b);
         AddChild(race);
         _chat.Race = race;
+
+        // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
+        _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
+        var br = _br = BattleRoyale.BrManager.CreateServer(_chat, _players, places?.Places ?? new(), manifest.Tiles,
+            (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), source, _brCrates);
+        br.Origin = origin;
+        AddChild(br);
+        _chat.BattleRoyale = br;
+        if (_interest != null) _interest.Together = (a, b) => race.SameRace(a, b) || passengers.Together(a, b) || br.Together(a, b);
 
         // deposited cash, kept per player name on this server
         var bank = Items.Bank.Create(this, null, server: true);
@@ -312,6 +327,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _interiors?.SendTableTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _br?.SendTo(id);
+        _brCrates?.SendTo(id);
         _chat?.SendWorldTimeTo(id);
     }
 
@@ -321,6 +338,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);
+        _br?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
         _dropped?.ForgetOwner(id);

@@ -20,14 +20,7 @@ public static class TreeFormat
 
     public static void Encode(TileId id, IReadOnlyList<TreeInstance> trees, Stream output)
     {
-        Span<byte> header = stackalloc byte[HeaderSize];
-        BinaryPrimitives.WriteUInt32LittleEndian(header[0..], Magic);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[4..], Version);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[6..], 0);
-        BinaryPrimitives.WriteInt32LittleEndian(header[8..], id.E);
-        BinaryPrimitives.WriteInt32LittleEndian(header[12..], id.N);
-        BinaryPrimitives.WriteUInt32LittleEndian(header[16..], (uint)trees.Count);
-        output.Write(header);
+        new TileHeader(Magic, Version, 0, id, (uint)trees.Count).Write(output);
 
         Span<byte> rec = stackalloc byte[20];
         foreach (var t in trees)
@@ -43,13 +36,8 @@ public static class TreeFormat
 
     public static List<TreeInstance> Decode(Stream input)
     {
-        Span<byte> header = stackalloc byte[HeaderSize];
-        input.ReadExactly(header);
-
-        uint magic = BinaryPrimitives.ReadUInt32LittleEndian(header[0..]);
-        if (magic != Magic)
-            throw new InvalidDataException($"Bad tree magic 0x{magic:X8}");
-        uint count = BinaryPrimitives.ReadUInt32LittleEndian(header[16..]);
+        // no version check: there never was one, and tree files on disk must keep loading
+        uint count = TileHeader.Read(input, Magic, "tree").Count;
 
         var trees = new List<TreeInstance>((int)count);
         var bytes = new byte[count * 20];
