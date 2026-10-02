@@ -10,7 +10,8 @@ namespace UnitSport.Net;
 /// <c>godot --headless --path . -- --server --serverstats[,label] [--seconds S]</c>: every 5 s prints
 /// frame time (p50/p99/max), players, tiles, memory, GC and ENet traffic (total and per peer), and
 /// rewrites <c>test_output/loadtest/&lt;label&gt;/server_summary.txt</c>, so a killed server still
-/// leaves one. With <c>--seconds S</c> the server quits after S seconds. Load-test tooling: see
+/// leaves one. With <c>--seconds S</c> the server quits after S seconds, or once every player has
+/// left. Load-test tooling: see
 /// <c>tools/loadtest.sh</c> and <see cref="Swarm"/>.
 ///
 /// <para>
@@ -158,7 +159,7 @@ public partial class ServerStats : Node
         if (_quitAfter > 0 && _elapsed >= _quitAfter)
         {
             _quitAfter = 0;
-            GD.Print("[stats] --seconds reached, quitting");
+            GD.Print("[stats] run over (--seconds, or everyone left), quitting");
             GetTree().Quit();
         }
     }
@@ -197,6 +198,9 @@ public partial class ServerStats : Node
         var world = GetParent();
         int players = world.GetNodeOrNull("Players")?.GetChildCount() ?? 0;
         _peakPlayers = Math.Max(_peakPlayers, players);
+        // --seconds is an upper bound: the run is over once everyone who came has left. A slow
+        // start (it varies by seconds) must not end the server under clients still running.
+        if (_quitAfter > 0 && _peakPlayers > 0 && players == 0) _quitAfter = _elapsed;
         var chunks = world.GetNodeOrNull<ChunkManager>("Terrain");
         long ws = System.Environment.WorkingSet;
         _peakWs = Math.Max(_peakWs, ws);

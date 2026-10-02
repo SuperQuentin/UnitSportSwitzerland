@@ -38,7 +38,7 @@ MEM_START=$(avail_mb); MEM_MIN=$MEM_START
 (( MEM_START < 5000 )) && echo "[loadtest] WARNING: only $MEM_START MB available"
 echo "[loadtest] $LABEL: $BOTS bots + 1 observer, ${SECONDS_RUN}s, chunks $CHUNKS, $MEM_START MB available"
 "$GODOT" --headless --path . -- --title "loadtest $LABEL server" --server --port $PORT --serverstats,$LABEL --chunks "$CHUNKS" \
-    --seconds $((SECONDS_RUN + 40)) > "$OUT/server.log" 2>&1 &
+    --seconds $((SECONDS_RUN + 90)) > "$OUT/server.log" 2>&1 &
 SERVER=$!
 for _ in $(seq 60); do grep -q "server listening" "$OUT/server.log" 2>/dev/null && break; sleep 0.5; done
 
