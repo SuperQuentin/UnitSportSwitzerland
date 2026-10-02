@@ -13,6 +13,18 @@ public enum PlacedKind
     Flag = 1,
     /// <summary>A photo stuck on something. Payload: the photo's id/hash. Only its owner removes it.</summary>
     Photo = 2,
+
+    // 3 and 4 are the campfire and the field workbench (#272)
+
+    // gadgets (#275, Build.Gadgets): only their owner removes them
+    /// <summary>The low end of a zipline. Payload: the high end, "E;N;altitude" (invariant).</summary>
+    Zipline = 5,
+    /// <summary>A rope ladder hanging from its top. Payload: its length in metres (invariant).</summary>
+    RopeLadder = 6,
+    Trampoline = 7,
+    LaunchPad = 8,
+    CamoNet = 9,
+    HayHideout = 10,
 }
 
 /// <summary>
@@ -72,6 +84,12 @@ public partial class PlacedObjects : Node
     {
         [PlacedKind.Flag] = _ => FlagVisual(),
         [PlacedKind.Photo] = PhotoVisuals.Placed,
+        [PlacedKind.Zipline] = Build.GadgetMeshes.Visual,
+        [PlacedKind.RopeLadder] = Build.GadgetMeshes.Visual,
+        [PlacedKind.Trampoline] = Build.GadgetMeshes.Visual,
+        [PlacedKind.LaunchPad] = Build.GadgetMeshes.Visual,
+        [PlacedKind.CamoNet] = Build.GadgetMeshes.Visual,
+        [PlacedKind.HayHideout] = Build.GadgetMeshes.Visual,
     };
 
     /// <summary>
@@ -294,7 +312,8 @@ public partial class PlacedObjects : Node
             : !double.IsFinite(e) || !double.IsFinite(n) || !double.IsFinite(alt) || !rot.IsFinite() ? "Bad position."
             : !InReach(peer, e, n, alt) ? "Too far away."
             : _objects.Values.Count(o => o.Owner == owner) >= MaxPerOwner ? $"You already placed {MaxPerOwner} things."
-            : null;
+            // a kind's own rules (a zipline's length and slope): Build.Gadgets
+            : Build.Gadgets.Check(new PlacedObject(0, (PlacedKind)kind, owner, e, n, alt, rot, payload), _origin);
         if (refused != null)
         {
             Reply(peer, req, 0, refused);

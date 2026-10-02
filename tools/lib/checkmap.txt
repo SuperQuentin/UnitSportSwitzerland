@@ -25,6 +25,8 @@ src/Items/               quick  --invcheck
 src/Crafting/            quick  --invcheck
 src/Build/               quick  --buildcheck --systems ui,physics,build
 src/Build/               net    tools/buildnetcheck.sh
+src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
+src/Build/Gadget         net    tools/gadgetnetcheck.sh
 src/Loot/                quick  --lootchancecheck
 src/Occasions/           quick  --occasioncheck
 src/Occasions/           quick  --huntcheck

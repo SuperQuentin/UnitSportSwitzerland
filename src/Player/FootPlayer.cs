@@ -2117,6 +2117,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // a Battle Royale crate at your feet (#194), indoors or out: a death box falls where its owner did
         if (_ride == null && !_mantling && _deadTimer <= 0 && BattleRoyale.BrCrates.Instance?.TryOpen(this) == true) return true;
+        // a zipline's top post, a ladder's foot, a launch pad (#275)
+        if (_ride == null && !_mantling && _deadTimer <= 0 && !Indoors && Items.ItemController.Instance?.GadgetTool.TryInteract(this) == true) return true;
 
         // what the view points at and the border outlines (#206): a dropped item is picked up
         if (_ride == null && !_mantling && _deadTimer <= 0 && Items.Highlight.Pointed is Items.DroppedItem dropped
@@ -4096,8 +4098,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PlayerInput.Rumble(0.2f, Mathf.Clamp((_fallSpeed - 3f) / 7f, 0.15f, 1f), 0.15f);
             if (_fallSpeed > 1.5f) Landed?.Invoke(_fallSpeed);
             // a 6 m drop is free, a 15 m one hurts a lot, a 25 m one is the end
-            if (_fallSpeed > 11f && _ejected <= 0) TakeDamage((_fallSpeed - 11f) * 9f, 0, DamageCause.Fall);
+            if (_fallSpeed > 11f && _ejected <= 0 && !SoftLanding) TakeDamage((_fallSpeed - 11f) * 9f, 0, DamageCause.Fall);
             _fallSpeed = 0f;
+            SoftLanding = false;
         }
         _wasOnFloor = onFloor;
 

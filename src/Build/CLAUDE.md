@@ -4,3 +4,4 @@ Player-built structures (#270 epic, #274). Index only: one line per note in `doc
 Read a note only when the task touches its topic.
 
 - `building` — Hammer controls, BuildGrid rules (slots, touch points, 0-1 support, spans, grounded/legs, growth), Structures network + saves (free roam vs match), damage (TryHit, caps, who may), Systems.Build, what is not done, checks
+- `gadgets` — Zipline, rope ladder, trampoline, launch pad, camo net, hay hideout: placed kinds 5-10 with Gadgets.Check, GadgetMeshes, GadgetTool rides (Carrier + ShowWhileCarried, Release, Leap, SoftLanding), checks
