@@ -39,8 +39,59 @@ namespace UnitSport.Tools.Preprocessor;
 /// </summary>
 public static class WaterStage
 {
-    /// <summary>Metres of neighbouring tiles each tile is computed with; distances saturate here.</summary>
-    public const int Halo = 500;
+    /// <summary>
+    /// Metres of neighbouring tiles each tile is computed with. Everything a core vertex reads must
+    /// be exact inside it: the gap fill reads the smoothed edge depth up to 2·<see cref="EdgeSmoothM"/>
+    /// out, whose nearest survey vertex may be <see cref="FillReachM"/> + 2·EdgeSmoothM further
+    /// (482 m), so 600; the distance to the shore saturates at <see cref="DistanceCapM"/>.
+    /// </summary>
+    public const int Halo = 600;
+
+    /// <summary>
+    /// Distances to the shore saturate here (deep enough for every body's maximum but the biggest
+    /// lakes', which are surveyed), well short of the halo: a window's outermost
+    /// <see cref="BankProbe"/> cells are refined from a truncated neighbourhood, so a shore site
+    /// there must never decide a core vertex's distance.
+    /// </summary>
+    private const int DistanceCapM = 490;
+
+    /// <summary>
+    /// A Water cover vertex whose swissALTI3D surface stands more than <see cref="BankRiseQ"/>
+    /// quanta (0.5 m) above the lowest wet surface within <see cref="BankProbe"/> vertices is on
+    /// the bank, not in the water: the TLM polygon's edge lies on the dyke or beach slope (the
+    /// Rhône at Martigny has 468.2 m on its bank vertex over 466.8 m water), and taking its height
+    /// as the level drew the surface climbing the bank. It stays dry ground.
+    /// </summary>
+    private const int BankProbe = 4, BankRiseQ = 7;
+
+    private static void RefineWet(byte[] state, ushort[] surfaceQ, int w)
+    {
+        // separable min of the wet surface over a (2·BankProbe+1)² square, in quanta (exact)
+        var rowMin = new ushort[w * w];
+        for (int y = 0; y < w; y++)
+            for (int x = 0; x < w; x++)
+            {
+                ushort m = ushort.MaxValue;
+                for (int dx = Math.Max(0, x - BankProbe); dx <= Math.Min(w - 1, x + BankProbe); dx++)
+                {
+                    int i = y * w + dx;
+                    if (state[i] == 1 && surfaceQ[i] < m) m = surfaceQ[i];
+                }
+                rowMin[y * w + x] = m;
+            }
+        var dry = new List<int>();
+        for (int y = 0; y < w; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x;
+                if (state[i] != 1) continue;
+                ushort m = ushort.MaxValue;
+                for (int dy = Math.Max(0, y - BankProbe); dy <= Math.Min(w - 1, y + BankProbe); dy++)
+                    m = Math.Min(m, rowMin[dy * w + x]);
+                if (surfaceQ[i] > m + BankRiseQ) dry.Add(i);
+            }
+        foreach (int i in dry) state[i] = 0;
+    }
 
     /// <summary>How far from the survey a gap is still filled toward the survey's edge depth.</summary>
     public const double FillReachM = 400;
@@ -416,7 +467,9 @@ public static class WaterStage
                 }
             }
 
-        // distance to the shore (any known dry vertex), capped at the halo
+        RefineWet(state, surfaceQ, W);
+
+        // distance to the shore (any known dry vertex), capped short of the halo
         var land = new bool[W * W];
         for (int i = 0; i < land.Length; i++) land[i] = state[i] == 0;
         var ds = new float[W * W];
@@ -485,7 +538,7 @@ public static class WaterStage
                     continue;
                 }
                 anyWet = true;
-                double dShore = Math.Min(ds[wi], (float)Halo);
+                double dShore = Math.Min(ds[wi], (float)DistanceCapM);
                 int gl = label[wi];
                 double maxDepth = maxDepthOf[gl];
                 double half = HalfWidth(ds, W, x, y);

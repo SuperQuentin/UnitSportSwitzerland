@@ -43,11 +43,16 @@ is #299: `terrain/water-level-layer`.
    `.water` is written before the `.terr`, so an interrupted run repeats safely.
 2. Water bodies across the region: 4-connected flood fill per tile, union-find along the shared
    edges. Body area -> max depth (`WaterBed.MaxDepthForArea`).
-3. Each tile in a window of itself + **500 m** of its neighbours (3x3 tiles), every per-vertex value
+3. Each tile in a window of itself + **600 m** of its neighbours (3x3 tiles), every per-vertex value
    read from the window with a canonical tile order, so a vertex two tiles share gets the same
-   inputs in both:
+   inputs in both (600 m: the gap fill's smoothed edge depth reads survey vertices up to 482 m
+   beyond a cell 80 m out of the tile; with 500 it was not exact, though the seams happened to pass):
+   - **bank vertices stay dry**: a Water cover vertex whose surface stands > 0.5 m above the lowest
+     wet surface within 4 vertices is on the dyke or beach slope (the TLM polygon's edge; the Rhône
+     at Martigny: 468.2 m on the bank vertex over 466.8 m water) and taking it as the level drew
+     the surface climbing the bank. ~100,000 such vertices in the western region;
    - distance to shore = exact Euclidean distance transform (`DistanceTransform`, Felzenszwalb) to
-     the nearest known dry vertex, capped at 500 m (missing tiles are neither land nor water: the
+     the nearest known dry vertex, capped at 490 m (missing tiles are neither land nor water: the
      lake does not end at the region's edge);
    - local half width = climb that distance field to the ridge in the middle (infinite past 70 m);
    - survey depth = level - `BathySource.SampleBed` (bilinear between cell centres, valid only if
