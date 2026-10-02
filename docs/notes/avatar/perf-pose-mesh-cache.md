@@ -8,8 +8,9 @@
 - **Rebuild only when the pose changes.** Key what the mesh is built from (pose kind, speed
   rounded to the cm/s, phase, arm pose + blend, dance params, hat, the palette with its outfit and
   skirt wind (#251), the `MeshInstance3D`) and skip
-  the build when the key is equal; keep the last `GaitMounts` with it so the held item stays on
-  the hand that was drawn (`FootPlayer.ApplyFootPose`, `FootPoseKey`).
+  the build when the key is equal. The hand mounts (`HandLocal`, held items) are recomputed on
+  every key change even while a throttled mesh waits: joint math only, and `--synccheck` holds the
+  remote hand to 0.25 m of the owner's (`FootPlayer.ApplyFootPose`, `FootPoseKey`).
 - **Remote figures are throttled:** beyond 40 m or outside the main camera's view cone, at most
   15 Hz (`FootPlayer.HoldRemoteFigure`). Never freeze them completely: mirrors (`CabMirrors`),
   door portals and photos render other cameras.

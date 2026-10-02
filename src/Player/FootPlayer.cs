@@ -1709,28 +1709,31 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         _poseWait += dt;
         var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette);
+        // the hand is placed from fresh mounts every time the pose changes, even while a throttled
+        // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
+        if (key != _mountsKey)
+        {
+            _mountsKey = key;
+            _poseMounts = PoseKind switch
+            {
+                PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
+                PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
+                _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance),
+            };
+        }
         if (key != _poseKey && !HoldRemoteFigure())
         {
             _poseKey = key;
             _poseWait = 0f;
-            switch (PoseKind)
+            _walker.Mesh = PoseKind switch
             {
-                case PoseTucked:
-                    _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Tucked, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
-                        : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat);
-                    _poseMounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend);
-                    break;
-                case PoseAir:
-                    _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
-                        : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat);
-                    _poseMounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend);
-                    break;
-                default:
-                    _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
-                        dance: dance, into: _poseMesh ??= new ArrayMesh());
-                    _poseMounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance);
-                    break;
-            }
+                PoseTucked => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Tucked, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
+                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat),
+                PoseAir => armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat, _poseMesh ??= new ArrayMesh())
+                    : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
+                _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
+                    dance: dance, into: _poseMesh ??= new ArrayMesh()),
+            };
         }
         var mounts = _poseMounts;
         _walker.Transform = BodyPose;
@@ -1751,7 +1754,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette);
 
-    private FootPoseKey _poseKey;
+    private FootPoseKey _poseKey, _mountsKey;
     private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;
     /// <summary>The animated figure's one mesh, rebuilt in place (the cached held poses aside).</summary>
     private ArrayMesh? _poseMesh;
