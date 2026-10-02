@@ -1190,16 +1190,23 @@ public partial class RaceManager : Node, IOriginShiftAware
         me.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, Others(me));
     }
 
-    /// <summary>Everyone else on the road, for a pilot (a player's or an NPC's).</summary>
-    internal static IEnumerable<AutoPilot.Other> Others(FootPlayer me)
+    /// <summary>
+    /// Everyone else on the road, for a pilot (a player's or an NPC's): this tick's
+    /// <see cref="PlayerSnapshot"/> into one shared list, refilled per call (#221) — read it within
+    /// the pilot's <c>Drive</c>, never keep it.
+    /// </summary>
+    internal static List<AutoPilot.Other> Others(FootPlayer me)
     {
-        foreach (var node in me.GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (node is FootPlayer p && p != me)
+        OthersList.Clear();
+        foreach (var s in PlayerSnapshot.Of(me.GetTree()))
+            if (s.Player != me)
                 // every player, whatever race they are in: a race does not suspend the road.
-                // WorldVelocity, because a remote's Velocity is always zero — a pilot reading it
-                // took every other car on the road for a parked one
-                yield return new AutoPilot.Other(p.GlobalPosition, p.WorldVelocity, false);
+                // WorldVelocity (the snapshot's Vel), because a remote's Velocity is always zero — a
+                // pilot reading it took every other car on the road for a parked one
+                OthersList.Add(new AutoPilot.Other(s.Pos, s.Vel, false));
+        return OthersList;
     }
+    private static readonly List<AutoPilot.Other> OthersList = new();
 
     private void ShowHud(string? text)
     {

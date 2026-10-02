@@ -1876,6 +1876,32 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
     }
 
+    /// <summary>
+    /// Just this body, for a ray that must not hit the one casting it: one array per player, never
+    /// changed (#221: a new one per ray per frame before). Callers must not add to it.
+    /// </summary>
+    public Godot.Collections.Array<Rid> SelfExclude => _selfExclude ??= new() { GetRid() };
+    private Godot.Collections.Array<Rid>? _selfExclude;
+
+    /// <summary>Every camera pull-in ray of this player: one query, reused (#221).</summary>
+    private readonly Core.RayQuery _camRay = new();
+
+    /// <summary><paramref name="rids"/> plus a doorway's shell, kept while neither changes (the camera's arm through a door).</summary>
+    private Godot.Collections.Array<Rid> WithShell(Godot.Collections.Array<Rid> rids, Rid shell)
+    {
+        if (!shell.IsValid) return rids;
+        if (!ReferenceEquals(rids, _shellBase) || shell != _shell || _withShell == null)
+        {
+            _withShell = rids.Duplicate();
+            _withShell.Add(shell);
+            _shellBase = rids;
+            _shell = shell;
+        }
+        return _withShell;
+    }
+    private Godot.Collections.Array<Rid>? _withShell, _shellBase;
+    private Rid _shell;
+
     private void UpdateThirdPersonCamera(float dt)
     {
         if (_camera == null) return;
@@ -1920,26 +1946,24 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var across = Transform3D.Identity;
         if (Interiors.InteriorManager.Instance?.ArmThroughDoor(this, pivot, wanted, out float t, out var map, out var shell) == true)
         {
-            var exclude = new Godot.Collections.Array<Rid> { GetRid() };
-            if (shell.IsValid) exclude.Add(shell);
+            var exclude = WithShell(SelfExclude, shell);
             var sill = pivot.Lerp(wanted, t);
-            var near = space.IntersectRay(PhysicsRayQueryParameters3D.Create(pivot, sill, CameraMask, exclude));
+            var near = _camRay.Cast(space, pivot, sill, CameraMask, exclude);
             if (near.Count > 0)
                 want = Mathf.Clamp(((near["position"].AsVector3() - pivot).Length() - 0.25f) / span, 0.1f, 1f);
             else
             {
                 through = t;
                 across = map;
-                var far = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                    map * pivot.Lerp(wanted, Mathf.Min(1f, t + 0.1f / span)), map * wanted, CameraMask, exclude));
+                var far = _camRay.Cast(space,
+                    map * pivot.Lerp(wanted, Mathf.Min(1f, t + 0.1f / span)), map * wanted, CameraMask, exclude);
                 if (far.Count > 0)
                     want = Mathf.Clamp((t * span + (far["position"].AsVector3() - map * sill).Length() - 0.25f) / span, 0.1f, 1f);
             }
         }
         else
         {
-            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                pivot, wanted, CameraMask, new Godot.Collections.Array<Rid> { GetRid() }));
+            var hit = _camRay.Cast(space, pivot, wanted, CameraMask, SelfExclude);
             if (hit.Count > 0)
                 want = Mathf.Clamp(((hit["position"].AsVector3() - pivot).Length() - 0.25f) / span, 0.1f, 1f);
         }
@@ -3418,8 +3442,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var wanted = pivot - fwd * flyer.CameraDistance + Vector3.Up * flyer.CameraHeight;
 
         float want = 1f;
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            pivot, wanted, CameraMask, new Godot.Collections.Array<Rid> { GetRid() }));
+        var hit = _camRay.Cast(GetWorld3D().DirectSpaceState, pivot, wanted, CameraMask, SelfExclude);
         if (hit.Count > 0)
         {
             float span = Mathf.Max(0.01f, (wanted - pivot).Length());
@@ -3440,13 +3463,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The slipstream this vehicle rode last step, 0..<see cref="RideGround.MaxDraft"/>.</summary>
     public float Draft { get; private set; }
 
-    /// <summary>Every other player on something, where it is and how it moves (a remote's replicated velocity).</summary>
-    private IEnumerable<(Vector3, Vector3)> OtherVehicles()
+    /// <summary>
+    /// Every other player on something, where it is and how it moves (a remote's replicated
+    /// velocity): this tick's <see cref="PlayerSnapshot"/> into one reused list (#221).
+    /// </summary>
+    private List<(Vector3, Vector3)> OtherVehicles()
     {
-        foreach (var node in GetTree().GetNodesInGroup(Group))
-            if (node is FootPlayer p && p != this && p.Ride != RideKind.OnFoot)
-                yield return (p.GlobalPosition, p.WorldVelocity);
+        _otherVehicles.Clear();
+        foreach (var s in PlayerSnapshot.Of(GetTree()))
+            if (s.Player != this && s.Ride != RideKind.OnFoot)
+                _otherVehicles.Add((s.Pos, s.Vel));
+        return _otherVehicles;
     }
+    private readonly List<(Vector3, Vector3)> _otherVehicles = new();
 
     private void RidePhysics(float dt, bool onFloor)
     {
@@ -3805,31 +3834,30 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float wanted = 1f;
         float span = Mathf.Max(0.01f, (to - from).Length());
         var space = GetWorld3D().DirectSpaceState;
-        var exclude = new Godot.Collections.Array<Rid> { GetRid() };
-        ExcludeTrain(exclude);   // a truck's own trailer is not in the way
+        var exclude = TrainRids();   // a truck's own trailer is not in the way
         // An arm reaching back through an open doorway (a car in a garage, looking out) goes on in
         // the space on the other side, as the third-person arm does: the lens ends up out there.
         float through = 2f;
         var across = Transform3D.Identity;
         if (Interiors.InteriorManager.Instance?.ArmThroughDoor(this, from, to, out float t, out var map, out var shell) == true)
         {
-            if (shell.IsValid) exclude.Add(shell);
-            var near = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, from.Lerp(to, t), CameraMask, exclude));
+            exclude = WithShell(exclude, shell);
+            var near = _camRay.Cast(space, from, from.Lerp(to, t), CameraMask, exclude);
             if (near.Count > 0)
                 wanted = Mathf.Clamp((near["position"].AsVector3() - from).Length() / span * 0.85f, 0.15f, 1f);
             else
             {
                 through = t;
                 across = map;
-                var far = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                    map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, CameraMask, exclude));
+                var far = _camRay.Cast(space,
+                    map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, CameraMask, exclude);
                 if (far.Count > 0)
                     wanted = Mathf.Clamp((t * span + (far["position"].AsVector3() - map * from.Lerp(to, t)).Length()) / span * 0.85f, 0.15f, 1f);
             }
         }
         else
         {
-            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to, CameraMask, exclude));
+            var hit = _camRay.Cast(space, from, to, CameraMask, exclude);
             // 0.85 keeps the lens off the rock face it just found
             if (hit.Count > 0)
                 wanted = Mathf.Clamp((hit["position"].AsVector3() - from).Length() / span * 0.85f, 0.15f, 1f);
