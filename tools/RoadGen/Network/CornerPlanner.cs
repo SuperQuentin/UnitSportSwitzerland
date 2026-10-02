@@ -352,7 +352,49 @@ public static class CornerPlanner
         }
         outer[0] = (a.Out, kerb[0].Y);
         outer[^1] = (b.Out, kerb[^1].Y);
+        Unfold(outer, kerb);
         return outer;
+    }
+
+    /// <summary>
+    /// An outer line offset further than the kerb's radius round a tight corner runs backwards or
+    /// crosses itself, and the band folds over at two heights (#120: a side with a bike path is up
+    /// to 5 m wide). An outer point stepping back against the kerb's direction holds the previous
+    /// one; every remaining loop is cut at its crossing, the points between collapsing onto it at
+    /// their mean height. Their quads become triangles fanning to that point.
+    /// </summary>
+    private static void Unfold(List<(Vec2 P, float Y)> outer, List<(Vec2 P, float Y)> kerb)
+    {
+        for (int k = 1; k + 1 < outer.Count; k++)
+            if ((outer[k].P - outer[k - 1].P).Dot(kerb[k].P - kerb[k - 1].P) <= 0) outer[k] = outer[k - 1];
+        // the last step into B's end may run back too: hold from that end
+        for (int k = outer.Count - 2; k > 0; k--)
+            if ((outer[k + 1].P - outer[k].P).Dot(kerb[k + 1].P - kerb[k].P) <= 0) outer[k] = outer[k + 1];
+        for (int pass = 0; pass < 32; pass++)
+        {
+            bool cut = false;
+            for (int i = 0; i + 2 < outer.Count && !cut; i++)
+                for (int j = outer.Count - 2; j > i + 1 && !cut; j--)
+                {
+                    if (Crossing(outer[i].P, outer[i + 1].P, outer[j].P, outer[j + 1].P) is not { } x) continue;
+                    float y = 0;
+                    for (int k = i + 1; k <= j; k++) y += outer[k].Y;
+                    y /= j - i;
+                    for (int k = i + 1; k <= j; k++) outer[k] = (x, y);
+                    cut = true;
+                }
+            if (!cut) return;
+        }
+    }
+
+    private static Vec2? Crossing(Vec2 a, Vec2 b, Vec2 c, Vec2 d)
+    {
+        var r = b - a;
+        var s = d - c;
+        double den = r.Cross(s);
+        if (Math.Abs(den) < 1e-12) return null;
+        double t = (c - a).Cross(s) / den, u = (c - a).Cross(r) / den;
+        return t > 1e-6 && t < 1 - 1e-6 && u > 1e-6 && u < 1 - 1e-6 ? a + r * t : null;
     }
 
     /// <summary>
