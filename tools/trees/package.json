@@ -1,0 +1,10 @@
+{
+  "name": "unitsport-trees",
+  "private": true,
+  "type": "module",
+  "description": "Generates the realistic styles' trees (EZ-Tree, MIT) as .glb into assets/realistic/trees",
+  "dependencies": {
+    "@dgreenheck/ez-tree": "^1.0.0",
+    "three": "^0.170.0"
+  }
+}

@@ -47,6 +47,9 @@ The plan and the prototype's results: `docs/plans/visual-styles.md` (issues #181
   (`StyleKit.Choose`): the saved setting is the future settings menu's, and a test run's
   command-line overrides must not be written over the player's file. The chat answers it on the
   client and never sends it to a server.
-- As of phase 1, part 2, only PS1 has shaders: `--style cartoon` is PS1's materials with the
-  retro finish off (smooth, undithered), and the road still retro. The settings menu gets a
-  "Visual style" entry once a second style has shaders of its own.
+- **`StyleKit.Figure`** shades the vertex-coloured standard material of avatars, vehicles, birds
+  and items (`HumanMeshBuilder.Material`) for the style (Cartoon: toon), kept weakly and
+  restyled live like the shader materials. Any thread.
+- **The settings menu's "Visual style"** (Video tab) saves the setting and ends a `/style`
+  choice (`StyleKit.ChooseSetting`); it offers the styles in `StyleKit.MenuStyles`, those with a
+  look of their own. Cartoon: `cartoon`.

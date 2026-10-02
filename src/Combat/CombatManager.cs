@@ -92,7 +92,14 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
     private int _voice, _barrel;
     private float _cooldown;
     private readonly Random _rng = new();
-    private readonly Dictionary<long, Godot.Collections.Array<Rid>> _exclude = new();
+    // per shooter, its exclude array and the physics tick it was filled on: refilled, never reallocated (#221)
+    private readonly Dictionary<long, (ulong Tick, Godot.Collections.Array<Rid> Rids)> _exclude = new();
+    // reused every tick: the crosshair ray, each tracer's ray, and the targets list (#221)
+    private readonly PhysicsRayQueryParameters3D _crossQuery = new();
+    private readonly Godot.Collections.Array<Rid> _crossExclude = new();
+    private readonly PhysicsRayQueryParameters3D _tracerQuery = new();
+    private readonly List<(Vector3 Pos, Vector3 Vel)> _targets = new();
+    private static readonly StringName DroneGroup = TargetDrone.Group;
 
     public static CombatManager Create(Node world, ChunkManager? terrain, bool server)
     {
@@ -159,7 +166,6 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
         if (_server) return;
         float dt = (float)delta;
         HitFlash = Mathf.Max(0f, HitFlash - dt);
-        _exclude.Clear();
 
         TickGuns(dt);
         StepTracers(dt);
@@ -264,8 +270,12 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
         var from = cam.GlobalPosition;
         var fwd = -cam.GlobalBasis.Z;
         float dist = TurretRange;
-        var query = PhysicsRayQueryParameters3D.Create(from, from + fwd * TurretRange);
-        query.Exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
+        var query = _crossQuery;
+        query.From = from;
+        query.To = from + fwd * TurretRange;
+        _crossExclude.Clear();
+        _crossExclude.Add(me.GetRid());
+        query.Exclude = _crossExclude;
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         if (hit.Count > 0) dist = (hit["position"].AsVector3() - from).Length();
         foreach (var (pos, _) in Targets(me))
@@ -320,7 +330,9 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
             var next = t.Pos + t.Vel * dt;
             t.Vel += Vector3.Down * Rideable.Gravity * dt;
 
-            var query = PhysicsRayQueryParameters3D.Create(t.Pos, next);
+            var query = _tracerQuery;
+            query.From = t.Pos;
+            query.To = next;
             query.Exclude = ExcludeFor(t.Shooter);
             var hit = space.IntersectRay(query);
             if (hit.Count > 0)
@@ -356,9 +368,10 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
     /// </summary>
     private FootPlayer? WingHit(Vector3 from, Vector3 to, long shooter)
     {
-        foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
+        foreach (var s in PlayerSnapshot.Of(GetTree()))
         {
-            if (node is not FootPlayer fp || fp.Ride != RideKind.Paraglider || IsShooter(fp, shooter)) continue;
+            var fp = s.Player;
+            if (fp.Ride != RideKind.Paraglider || IsShooter(fp, shooter)) continue;
             var inv = fp.GlobalTransform.AffineInverse();
             if (SegmentHitsBox(inv * from, inv * to, WingCentre, WingHalf)) return fp;
         }
@@ -388,12 +401,16 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
     /// <summary>The shooter's own body, which the rounds leave from inside.</summary>
     private Godot.Collections.Array<Rid> ExcludeFor(long shooter)
     {
-        if (_exclude.TryGetValue(shooter, out var rids)) return rids;
-        rids = new Godot.Collections.Array<Rid>();
-        foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (node is FootPlayer fp && IsShooter(fp, shooter)) rids.Add(fp.GetRid());
+        ulong tick = Engine.GetPhysicsFrames();
+        _exclude.TryGetValue(shooter, out var e);
+        if (e.Rids != null && e.Tick == tick) return e.Rids;
+        var rids = e.Rids ?? new Godot.Collections.Array<Rid>();
+        rids.Clear();
+        foreach (var s in PlayerSnapshot.Of(GetTree()))
+            if (IsShooter(s.Player, shooter)) rids.Add(s.Player.GetRid());
         if (LocalPlayer?.Invoke() is { } me && shooter == LocalId) rids.Add(me.GetRid());
-        return _exclude[shooter] = rids;
+        _exclude[shooter] = (tick, rids);
+        return rids;
     }
 
     /// <summary>
@@ -466,16 +483,23 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
         return best;
     }
 
-    private IEnumerable<(Vector3 Pos, Vector3 Vel)> Targets(FootPlayer me)
+    /// <summary>Everything worth aiming at but <paramref name="me"/>, into the reused <see cref="_targets"/>.</summary>
+    private List<(Vector3 Pos, Vector3 Vel)> Targets(FootPlayer me)
     {
-        foreach (var node in GetTree().GetNodesInGroup(TargetDrone.Group))
-            if (node is TargetDrone d) yield return (d.GlobalPosition, d.Velocity);
-        foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (node is FootPlayer fp && fp != me)
-            {
-                yield return (fp.GlobalPosition + Vector3.Up, fp.Velocity);
-                if (fp.Ride == RideKind.Paraglider) yield return (fp.GlobalTransform * WingCentre, fp.Velocity);
-            }
+        _targets.Clear();
+        var tree = GetTree();
+        if (tree.GetNodeCountInGroup(DroneGroup) > 0)
+            foreach (var node in tree.GetNodesInGroup(DroneGroup))
+                if (node is TargetDrone d) _targets.Add((d.GlobalPosition, d.Velocity));
+        foreach (var s in PlayerSnapshot.Of(tree))
+        {
+            var fp = s.Player;
+            if (fp == me) continue;
+            // Velocity, not the snapshot's WorldVelocity: a remote target is led as before (not at all)
+            _targets.Add((s.Pos + Vector3.Up, fp.Velocity));
+            if (fp.Ride == RideKind.Paraglider) _targets.Add((fp.GlobalTransform * WingCentre, fp.Velocity));
+        }
+        return _targets;
     }
 
     // ------------------------------------------------------------------------------------
@@ -489,7 +513,7 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
         var p = LocalPlayer?.Invoke();
         if (p == null) return;
 
-        int alive = GetTree().GetNodesInGroup(TargetDrone.Group).Count;
+        int alive = GetTree().GetNodeCountInGroup(DroneGroup);
         _droneRespawn -= dt;
         if (alive >= DroneCount || _droneRespawn > 0f) return;
         _droneRespawn = alive == 0 ? 0f : 8f;

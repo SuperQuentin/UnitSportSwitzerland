@@ -13,7 +13,8 @@ reason (numbers), the traps and the exact migration steps; read only the ones yo
   checks use fixture courses (`--chunks fixture:<course>`), never a required real map. → `test-systems-optin`
 - **Nothing allocated per frame** (LINQ, `new` collections, string building, `"literal"` → `StringName`,
   new ray queries, shader params / label text written without a change). → `perf-no-per-frame-allocations`
-- **Saves**: every persisted JSON file through `JsonStore.Save` (atomic). → `json-store`
+- **Saves**: every persisted JSON file through `JsonStore.Save` (atomic); saves a player triggers while
+  playing through `JsonStore.SaveAsync` (background writer, flushed on quit). → `json-store`, `perf-saves-background`
 - **Visibility**: player synchronizers update visibility on change only; any change to what a peer may see
   calls `UpdateVisibility`. → `perf-visibility-on-change`
 
@@ -24,7 +25,7 @@ reason (numbers), the traps and the exact migration steps; read only the ones yo
 | Server / net | `perf-server-frame-metrics` (busy is per frame now), `perf-no-main-thread-periodic-jobs` (no IO / prints per player on the main thread; `--player-status` is opt-in), `perf-mcp-logger-gated`, `perf-visibility-on-change`, `udp-receive-loop` (`Udp.ReceiveLoop`), `region-file-sync`, `is-online` (`NetLink.Online`) |
 | Terrain | `perf-collision-commits` (collision is queued in 4×4 cell pieces; a new collision layer goes through the queue), `perf-lod-trees` (ring strides, trees by ring, shared tree meshes, free replaced meshes), `perf-door-portals`, `building-triangles` (`b.Tri(t)`, one `RoofNormalY`) |
 | Avatars | `perf-pose-mesh-cache` (rebuild a figure only on a new pose key, in place; no `ArrayMesh` per frame), `perf-shared-materials`, `cockpit-kit` (cabin wheel/dials/lamps/pedals/mirrors through `CockpitKit` + `CockpitSpec`) |
-| Vehicles / world / audio | `perf-surface-grid` (`Surfaces.At(..., caller)`), `perf-traffic-tick` (lazy obstacle sampling, lane neighbours, shared traffic meshes, 600 m car draw), `perf-parked-vehicles` (nothing per frame while asleep, reused ray queries), `perf-engine-synth-idle` |
+| Vehicles / world / audio | `perf-surface-grid` (`Surfaces.At(..., caller)`), `perf-traffic-tick` (lazy obstacle sampling, lane neighbours, shared traffic meshes, 600 m car draw), `perf-racenpc-server-physics` (no NPC physics step on the server), `perf-parked-vehicles` (nothing per frame while asleep, reused ray queries), `perf-engine-synth-idle`, `perf-player-snapshot` (per-tick player scans read `PlayerSnapshot.Of`: traffic, combat; FootPlayer's slipstream/overlap next) |
 | Probes / UI | `chat-probe` (two-client probes derive from `ChatProbe`, register in `ClientWorld`'s check tables), `ui-theme-panels` (`UiTheme.Title/Prompt/Flat/Amber`, no hand-built styles) |
 | Tools / formats | `perf-tile-header` (`TileHeader`, byte-identical goldens in `tests/`), `perf-road-segment-helpers` (`RoadSegment.Lv95`, `RoadProfiles.For`), `dead-code-and-shared-helpers`, `mathx` (`MathX.Flat/Damp/WrapAngle`, `Mathf.SmoothStep`) |
 

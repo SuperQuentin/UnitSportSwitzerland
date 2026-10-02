@@ -192,7 +192,8 @@ public partial class OccasionHunt : Node, Core.IOriginShiftAware
     {
         try
         {
-            Core.JsonStore.Save(File, _claims, Core.JsonStore.Indented);
+            Core.JsonStore.SaveAsync(File, _claims, Core.JsonStore.Indented,
+                e => GD.PushWarning($"[occasions] could not write {File}: {e.Message}"));
         }
         catch (Exception e)
         {
