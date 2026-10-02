@@ -547,6 +547,10 @@ public partial class ChatManager : Node
                     foreach (string line in occasions.RunCommand(parts[1..], IsAdmin(sender)))
                         ReplyTo(sender, line, ChatKind.Private);
                 return;
+            // how standing passengers feel a vehicle move (#162): anyone may ask, an admin may change it
+            case "inertia" when parts.Length == 1:
+                ReplyTo(sender, $"Standing passengers: {Vehicles.PassengerService.Inertia.ToString().ToLowerInvariant()} (steady, sway or full).", ChatKind.Private);
+                return;
             // your own inventory is yours to empty; someone else's is an admin's (checked inside)
             case "clear": CommandClear(sender, rest); return;
             case "br":
@@ -571,6 +575,16 @@ public partial class ChatManager : Node
         {
             case "say":
                 if (rest.Length > 0) Broadcast($"[server] {Scrub(rest)}", ChatKind.Admin);
+                return;
+
+            case "inertia":
+                if (!Vehicles.PassengerService.TryParseInertia(rest, out var inertia) || Vehicles.PassengerService.Instance is not { } passengers)
+                    ReplyTo(sender, "Usage: /inertia steady|sway|full", ChatKind.Error);
+                else
+                {
+                    passengers.SetInertia(inertia);
+                    Broadcast($"[server] Standing passengers now feel the vehicles: {rest.ToLowerInvariant()}.", ChatKind.Admin);
+                }
                 return;
 
             case "admin": CommandAdmin(sender, parts); return;

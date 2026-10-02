@@ -25,6 +25,12 @@ public partial class FootPlayer
 
     public bool RidingAlong => RidingWith != 0;
 
+    /// <summary>The vehicle this passenger sits in can be walked about in: E stands up into it rather than getting out.</summary>
+    public bool HostWalkable => Host is { } host && VehicleOf(host) is { Walkable: true };
+
+    /// <summary>A bus's doors, one bit each: its own while driving it, from the published pose on a copy (the server's too).</summary>
+    public byte BusDoors => _ride is Truck own ? own.DoorsOpen : Ride == RideKind.OnFoot ? (byte)0 : (byte)((Mathf.RoundToInt(Anim.W) >> 4) & 15);
+
     /// <summary>One's own vehicle with nobody at the wheel: no input, it rolls on under its own physics.</summary>
     public bool RollingDriverless => _ride != null && SeatIndex != 0;
 
@@ -88,8 +94,9 @@ public partial class FootPlayer
     /// </summary>
     private void UpdateSeated()
     {
-        // a passenger's copy is placed from its host's: after the host has moved this frame, on every peer
-        int priority = RidingWith != 0 ? 10 : 0;
+        // a passenger's copy (and one walking about aboard) is placed from its vehicle's: after the
+        // vehicle has moved this frame, on every peer
+        int priority = RidingWith != 0 || DeckOn != "" || _decks.Count > 0 ? 10 : 0;
         if (ProcessPriority != priority) ProcessPriority = priority;
         var at = WhereSeated();
         if (at is not { } s)
@@ -174,7 +181,8 @@ public partial class FootPlayer
         foreach (var p in GetTree().GetNodesInGroup(Group).OfType<FootPlayer>())
         {
             if (p == this || p.RidingAlong || p.Ride == RideKind.OnFoot || VehicleOf(p) is not { IsVehicle: true } vehicle) continue;
-            if (vehicle.Seats.Length < 2) continue;
+            // a vehicle you can walk about in is boarded by walking in (#162)
+            if (vehicle.Seats.Length < 2 || vehicle.Walkable) continue;
             // at its door, or right against its side (#261): not anywhere within a few metres of its middle
             var entry = vehicle.EntryPoint;
             float d = entry != Vector3.Zero
@@ -249,6 +257,8 @@ public partial class FootPlayer
     public void BoardAs(int host, int seat)
     {
         if (_sliding) EndSlide();
+        if (Aboard) LeaveDeck(keepVelocity: false);
+        _deckWait = 0f;
         bool boarding = RidingWith == 0;
         RidingWith = host;
         SeatIndex = seat;
@@ -269,6 +279,8 @@ public partial class FootPlayer
     public void TakeVehicle(VehicleState state, int seat)
     {
         float look = _lookYaw;
+        if (Aboard) LeaveDeck(keepVelocity: false);
+        _deckWait = 0f;
         if (_seated != null && IsInstanceValid(_seated)) _seated.QueueFree();
         _seated = null;
         RidingWith = 0;
