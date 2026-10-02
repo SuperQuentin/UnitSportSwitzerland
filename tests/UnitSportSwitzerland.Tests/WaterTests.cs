@@ -1,5 +1,6 @@
 using System.Globalization;
 using UnitSport.Terrain;
+using UnitSport.Terrain.Fixture;
 using UnitSport.Terrain.Format;
 using UnitSport.World;
 using Xunit;
@@ -282,5 +283,56 @@ public class SeaStateArgsTests
         Assert.NotEmpty(missing);
         Assert.Null(SeaStateCommand.FromArgs(["--sea-state", "2"], out string bad));
         Assert.NotEmpty(bad);
+    }
+}
+
+/// <summary>The <c>lake</c> fixture course (src/Terrain/Fixture/FixtureLake.cs): beach, shelf, drop-off, river.</summary>
+public class FixtureLakeTests
+{
+    private const double StartE = 2_560_000, StartN = 1_130_000;
+
+    [Fact]
+    public void Profile_from_the_beach_out()
+    {
+        Assert.InRange(Lake.Ground(0, 0) - Lake.Level, 1.5, 3.0);                      // the start: dry beach
+        Assert.True(double.IsNaN(Lake.Water(0, 0).Level));
+        Assert.Equal(Lake.Level, Lake.Ground(Lake.ShoreX, 0), 1);                     // the waterline
+        Assert.InRange(Lake.Level - Lake.Ground(Lake.ShoreX + 100, 0), 1.4, 1.9);     // the shelf: wading
+        Assert.InRange(Lake.Level - Lake.Ground(Lake.ShoreX + 400, 0), 24.9, 25.1);   // past the drop-off
+        Assert.Equal(Lake.Level, Lake.Water(Lake.ShoreX + 400, 0).Level);
+        Assert.Equal(Lake.LakeFetch, Lake.Water(Lake.ShoreX + 400, 0).Fetch);
+    }
+
+    [Fact]
+    public void River_runs_down_into_the_lake()
+    {
+        var (up, fetch) = Lake.Water(-600, Lake.RiverY);
+        Assert.False(double.IsNaN(up));
+        Assert.True(up > Lake.Level + 3, $"upstream level {up}");
+        Assert.InRange(up - Lake.Ground(-600, Lake.RiverY), 1.9, 2.1);
+        Assert.Equal(2 * Lake.RiverHalfWidth, fetch);
+        Assert.True(double.IsNaN(Lake.Water(-600, Lake.RiverY + 30).Level));
+    }
+
+    [Fact]
+    public async Task Source_serves_a_water_layer_with_waves_on_the_lake_only()
+    {
+        var source = FixtureChunkSource.Create("lake", StartE, StartN)!;
+        var deepTile = TileId.FromLv95(StartE + 800, StartN);
+        var tile = (await source.LoadWaterAsync(deepTile))!;
+        var grid = (await source.LoadChunkAsync(deepTile))!;
+        var layer = WaterLayer.Create(tile, grid)!;
+        double lx = StartE + 800 - deepTile.MinE, lz = deepTile.MaxN - StartN;
+        Assert.True(layer.TrySample(lx, lz, out float level, out float scale));
+        Assert.Equal((float)Lake.Level, level, 3);
+        Assert.InRange(scale, 0.8f, 1f);
+
+        var riverTile = TileId.FromLv95(StartE - 600, StartN + Lake.RiverY);
+        var river = WaterLayer.Create((await source.LoadWaterAsync(riverTile))!, (await source.LoadChunkAsync(riverTile))!)!;
+        Assert.True(river.TrySample(StartE - 600 - riverTile.MinE, riverTile.MaxN - (StartN + Lake.RiverY), out _, out float riverScale));
+        Assert.True(riverScale < 0.02f, $"a river stays flat, scale {riverScale}");
+
+        // a course with no water answers none
+        Assert.Null(await FixtureChunkSource.Create("flat", StartE, StartN)!.LoadWaterAsync(TileId.FromLv95(StartE, StartN)));
     }
 }
