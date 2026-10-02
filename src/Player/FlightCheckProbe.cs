@@ -158,8 +158,11 @@ public partial class FlightCheckProbe : Node
                 _peak = Mathf.Max(_peak, Agl(_player!.GlobalPosition));
                 if (t > 11 && _player.IsOnFloor() && _player.Ride == RideKind.Pigeon && Pigeon.ModeOf(_player.Flight) == PigeonFlight.Mode.Ground)
                 {
-                    GD.Print($"[flycheck] pigeon walked {_walk:F2} m/s, peak {_peak:F1} m agl");
-                    if (_walk is < 0.8f or > 1.5f || _peak < 8f) _crashed = true;
+                    // in VR (--xrsim) the camera is the bird's eye, level: no roll on the head
+                    var cam = _player.Camera.GlobalTransform;
+                    float eye = cam.Origin.DistanceTo(_player.GlobalPosition), roll = Mathf.Abs(cam.Basis.X.Y);
+                    GD.Print($"[flycheck] pigeon walked {_walk:F2} m/s, peak {_peak:F1} m agl, camera {eye:F2} m from the body, roll {roll:F3}{(XR.XrSession.Active ? " (VR)" : "")}");
+                    if (_walk is < 0.8f or > 1.5f || _peak < 8f || XR.XrSession.Active && (eye > 0.5f || roll > 0.01f)) _crashed = true;
                     End("landed, walking");
                 }
                 if (t > 40) End("still airborne");
