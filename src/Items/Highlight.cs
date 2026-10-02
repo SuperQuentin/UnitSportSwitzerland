@@ -27,7 +27,8 @@ public static class Highlight
             dir = length(dir) > 0.0001 ? normalize(dir) : NORMAL;
             float d = length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
             float pulse = 1.0 + 0.3 * sin(TIME * 6.5);
-            VERTEX += dir * width * clamp(d, 0.6, 14.0) * pulse;
+            // in the mesh's own units: a blown-up floating item keeps the same rim
+            VERTEX += dir * width * clamp(d, 0.6, 14.0) * pulse / max(length(MODEL_MATRIX[0].xyz), 0.001);
         }
         void fragment() {
             float pulse = 0.75 + 0.25 * sin(TIME * 6.5);
@@ -38,21 +39,86 @@ public static class Highlight
     private static ShaderMaterial? _material;
     public static ShaderMaterial Material => _material ??= new ShaderMaterial { Shader = new Shader { Code = Shader } };
 
-    /// <summary>Draws (or removes) the border on every mesh under <paramref name="root"/>.</summary>
-    public static void Set(Node? root, bool on)
+    /// <summary>
+    /// A warm pulsing glow laid over the surface itself, then the border: for parts set flush in
+    /// something bigger (a car door in its body), whose rim the body around them hides (#261).
+    /// </summary>
+    private const string TintShader = """
+        shader_type spatial;
+        render_mode unshaded, blend_add, depth_draw_never, cull_back, shadows_disabled, fog_disabled;
+        uniform vec4 color : source_color = vec4(1.0, 0.82, 0.3, 1.0);
+        void vertex() {
+            VERTEX += NORMAL * 0.004;
+        }
+        void fragment() {
+            float pulse = 0.5 + 0.5 * sin(TIME * 6.5);
+            ALBEDO = color.rgb * (0.12 + 0.16 * pulse);
+        }
+        """;
+
+    private static ShaderMaterial? _tint;
+    private static ShaderMaterial Tint => _tint ??= new ShaderMaterial { Shader = new Shader { Code = TintShader }, NextPass = Material };
+
+    /// <summary>
+    /// Draws (or removes) the border on every mesh under <paramref name="root"/>; with
+    /// <paramref name="tint"/> the surfaces glow too (a flush part, whose rim does not show).
+    /// </summary>
+    public static void Set(Node? root, bool on, bool tint = false)
     {
         if (root == null || !GodotObject.IsInstanceValid(root)) return;
         if (root is MeshInstance3D mi && mi.Mesh != null)
         {
             if (on)
             {
-                mi.MaterialOverlay = Material;
                 mi.SetInstanceShaderParameter("center", mi.Mesh.GetAabb().GetCenter());
+                // a car door's window: the hull would show through the glass as a solid sheet, so
+                // the border goes on the opaque surfaces only, as a second pass of each (#261)
+                if (tint || HasGlass(mi.Mesh)) OutlineSurfaces(mi, tint ? Tint : Material);
+                else mi.MaterialOverlay = Material;
             }
-            else if (mi.MaterialOverlay == Material) mi.MaterialOverlay = null;
+            else
+            {
+                if (mi.MaterialOverlay == Material) mi.MaterialOverlay = null;
+                if (mi.HasMeta(SurfacesMeta)) RestoreSurfaces(mi);
+            }
         }
         foreach (var child in root.GetChildren())
-            if (child is not CpuParticles3D) Set(child, on);
+            if (child is not CpuParticles3D) Set(child, on, tint);
+    }
+
+    private const string SurfacesMeta = "highlight_surfaces";
+
+    private static bool HasGlass(Mesh mesh)
+    {
+        if (mesh is not ArrayMesh am) return false;
+        for (int i = 0; i < am.GetSurfaceCount(); i++)
+            if (am.SurfaceGetName(i) == Avatar.MeshScratch.GlassSurface) return true;
+        return false;
+    }
+
+    private static void OutlineSurfaces(MeshInstance3D mi, Material pass)
+    {
+        if (mi.HasMeta(SurfacesMeta) || mi.Mesh is not ArrayMesh am) return;
+        var originals = new Godot.Collections.Array();
+        for (int i = 0; i < am.GetSurfaceCount(); i++)
+        {
+            var original = mi.GetSurfaceOverrideMaterial(i);
+            originals.Add(original);
+            if (am.SurfaceGetName(i) == Avatar.MeshScratch.GlassSurface) continue;
+            if ((original ?? am.SurfaceGetMaterial(i)) is not { } shown) continue;
+            var outlined = (Material)shown.Duplicate();
+            outlined.NextPass = pass;
+            mi.SetSurfaceOverrideMaterial(i, outlined);
+        }
+        mi.SetMeta(SurfacesMeta, originals);
+    }
+
+    private static void RestoreSurfaces(MeshInstance3D mi)
+    {
+        var originals = mi.GetMeta(SurfacesMeta).AsGodotArray();
+        for (int i = 0; i < originals.Count && i < mi.GetSurfaceOverrideMaterialCount(); i++)
+            mi.SetSurfaceOverrideMaterial(i, originals[i].As<Material>());
+        mi.RemoveMeta(SurfacesMeta);
     }
 
     // ---- what is pointed at ----------------------------------------------------------------------

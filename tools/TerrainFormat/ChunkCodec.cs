@@ -12,13 +12,9 @@ public static class ChunkCodec
     public static void Encode(ChunkGrid grid, Stream output)
     {
         Span<byte> header = stackalloc byte[ChunkFormat.HeaderSize];
-        BinaryPrimitives.WriteUInt32LittleEndian(header[0..], ChunkFormat.Magic);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[4..], ChunkFormat.Version);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[6..], 0); // flags
-        BinaryPrimitives.WriteInt32LittleEndian(header[8..], grid.Id.E);
-        BinaryPrimitives.WriteInt32LittleEndian(header[12..], grid.Id.N);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[16..], ChunkFormat.GridSize);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[18..], (ushort)grid.Stride);
+        // u16 grid size then u16 stride: the tile header's u32 count word, read little-endian
+        new TileHeader(ChunkFormat.Magic, ChunkFormat.Version, 0, grid.Id,
+            ChunkFormat.GridSize | (uint)(ushort)grid.Stride << 16).Write(header);
         BinaryPrimitives.WriteSingleLittleEndian(header[20..], grid.MinHeight);
         BinaryPrimitives.WriteSingleLittleEndian(header[24..], grid.MaxHeight);
         BinaryPrimitives.WriteUInt32LittleEndian(header[28..], 0); // reserved
@@ -41,35 +37,21 @@ public static class ChunkCodec
 
     public static ChunkGrid Decode(Stream input)
     {
-        Span<byte> header = stackalloc byte[ChunkFormat.HeaderSize];
-        input.ReadExactly(header);
+        Span<byte> bytes = stackalloc byte[ChunkFormat.HeaderSize];
+        input.ReadExactly(bytes);
+        var header = ReadHeader(bytes);
+        var tile = header.Tile;
 
-        uint magic = BinaryPrimitives.ReadUInt32LittleEndian(header[0..]);
-        if (magic != ChunkFormat.Magic)
-            throw new InvalidDataException($"Bad chunk magic 0x{magic:X8}");
-        ushort version = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
-        if (version != ChunkFormat.Version)
-            throw new InvalidDataException($"Unsupported chunk version {version}");
-        ushort flags = BinaryPrimitives.ReadUInt16LittleEndian(header[6..]);
-        if (flags != 0)
-            throw new InvalidDataException($"Unsupported chunk flags 0x{flags:X4}");
-        var id = new TileId(
-            BinaryPrimitives.ReadInt32LittleEndian(header[8..]),
-            BinaryPrimitives.ReadInt32LittleEndian(header[12..]));
-        ushort gridSize = BinaryPrimitives.ReadUInt16LittleEndian(header[16..]);
-        if (gridSize != ChunkFormat.GridSize)
-            throw new InvalidDataException($"Unsupported grid size {gridSize}");
+        tile.CheckMagic(ChunkFormat.Magic, "chunk");
+        tile.CheckVersion(ChunkFormat.Version, "chunk");
+        if (tile.Flags != 0)
+            throw new InvalidDataException($"Unsupported chunk flags 0x{tile.Flags:X4}");
+        if (header.GridSize != ChunkFormat.GridSize)
+            throw new InvalidDataException($"Unsupported grid size {header.GridSize}");
 
-        // This word was written as zero and ignored, which is what lets the coarse tile share the
-        // format instead of needing one of its own: every .terr already on disk reads back as
-        // stride 1, and the decimated companion is the same file with a different number here.
-        int stride = BinaryPrimitives.ReadUInt16LittleEndian(header[18..]);
-        if (stride == 0) stride = 1;
+        int stride = header.Stride;
         if ((ChunkFormat.GridSize - 1) % stride != 0)
             throw new InvalidDataException($"Unsupported chunk stride {stride}");
-
-        float minH = BinaryPrimitives.ReadSingleLittleEndian(header[20..]);
-        float maxH = BinaryPrimitives.ReadSingleLittleEndian(header[24..]);
 
         int size = (ChunkFormat.GridSize - 1) / stride + 1;
         var heights = new ushort[size * size];
@@ -78,6 +60,29 @@ public static class ChunkCodec
             for (int i = 0; i < heights.Length; i++)
                 heights[i] = BinaryPrimitives.ReverseEndianness(heights[i]);
 
-        return new ChunkGrid(id, heights, minH, maxH, stride);
+        return new ChunkGrid(tile.Id, heights, header.MinHeight, header.MaxHeight, stride);
     }
+
+    /// <summary>
+    /// The 32-byte .terr header, parsed without any check: <see cref="Decode"/> validates it and
+    /// throws, the preprocessor's resume scan only looks (<c>TerrainBuild.IsValidTerr</c>).
+    /// </summary>
+    public static ChunkHeader ReadHeader(ReadOnlySpan<byte> h)
+    {
+        var tile = TileHeader.Read(h);
+        return new ChunkHeader(tile, (ushort)tile.Count, (ushort)(tile.Count >> 16),
+            BinaryPrimitives.ReadSingleLittleEndian(h[20..]),
+            BinaryPrimitives.ReadSingleLittleEndian(h[24..]));
+    }
+}
+
+/// <param name="RawStride">
+/// The stride word as stored. It was written as zero and ignored before coarse tiles existed, which
+/// is what lets the coarse tile share the format instead of needing one of its own: every old .terr
+/// reads back as stride 1, and the decimated companion is the same file with a different number here.
+/// </param>
+public readonly record struct ChunkHeader(TileHeader Tile, ushort GridSize, ushort RawStride, float MinHeight, float MaxHeight)
+{
+    /// <summary><see cref="RawStride"/> with the legacy 0 read as 1.</summary>
+    public int Stride => RawStride == 0 ? 1 : RawStride;
 }

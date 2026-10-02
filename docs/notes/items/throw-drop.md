@@ -45,6 +45,14 @@
   ping first (bars in the thrower's hand -> a stone in the watcher's): right after a join everything
   reliable to the second client can arrive ~10 s late and in one burst, which swallows a wind-up and its
   release. Under load (other sessions' loopback checks) a windowed client can also time out its link; rerun.
-  Offline: `<godot> --path . -- --ride foot,60 --dropcheck solo` drops bars, points at them while the
-  `--ride` harness walks past, screenshots `test_output/dropcheck_solo.png`, picks them up. Every role
+  Offline: `<godot> --path . -- --ride foot,60 --brake-at 0 --dropcheck solo` drops bars in front of
+  the standing body, waits for them to float, points at them, screenshots `test_output/dropcheck_solo.png`,
+  picks them up (without `--brake-at 0` the harness walks off before they settle). Every role
   uses a scratch inventory (`DropCheck.Requested`): `user://inventory.json` is shared by all worktrees.
+- **Floating look** (`DropFloat.cs`): once `Settled`, only the visual changes — blown up so its largest
+  side is 0.4 m (x1..x3.5; bigger items unchanged), upright, hovering 0.14 m over where the collider rests,
+  spinning (~4 s a turn) and bobbing, Minecraft style. The body and collider stay on the ground. One loop in
+  `DroppedItems._Process` for all items (no per-item process): posed each frame only within 45 m of the
+  camera, frozen beyond, not drawn past 90 m (`VisibilityRangeEnd`). The pose is written in the body's
+  local frame (it lies however it landed), so the origin shift needs nothing. The outline shader divides
+  its push by the model scale so the rim keeps its width; `FlyToHand` starts from the blown-up scale.

@@ -107,6 +107,9 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         return name;
     }
 
+    /// <summary>A claim is on its way to the server: another E would ask twice.</summary>
+    public bool Claiming => _pendingClaim != null;
+
     /// <summary>Asks for a vehicle to get into. <paramref name="granted"/> runs if it is still free.</summary>
     public void Claim(VehicleBody vehicle, Action<VehicleState> granted)
     {
@@ -134,6 +137,10 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
 
     /// <summary>How far from a car's side a player may be to work its doors, m.</summary>
     public const float DoorReach = 3f;
+
+    /// <summary>A vehicle someone could get into now: not burnt out, not a lone trailer, not being claimed.</summary>
+    public bool Enterable(VehicleBody v) =>
+        IsInstanceValid(v) && v.GetParent() == this && !v.Wrecked && v.Trailer == null && !_claimed.Contains(v.Name);
 
     /// <summary>The nearest drivable vehicle within reach of a point, or null.</summary>
     public VehicleBody? Nearest(Vector3 point, float reach)
@@ -299,6 +306,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         if (_housekeeping < 5) return;
         double step = _housekeeping;
         _housekeeping = 0;
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // a car parked in a garage is 3 km under it: measured from up in the world
         float? Ground(Vector3 at) => Terrain != null && Terrain.TryGetHeight(at, out float g) ? g : null;
@@ -312,5 +320,6 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
             v.LonelyFor = near ? 0 : v.LonelyFor + step;
             if (v.LonelyFor > LonelyTime) v.QueueFree();
         }
+        Net.ServerStats.Ran("vehicle housekeeping", t0);
     }
 }

@@ -202,15 +202,25 @@ public partial class WebRadio : Node
 
     // ---- server: one tap per wanted station, chunks to whoever wants it ----------------------
 
+    private readonly HashSet<int> _wantedIds = new();
+    private readonly List<int> _tapIds = new();
+
     private void Serve(double delta)
     {
-        var wanted = _subs.Values.SelectMany(s => s).ToHashSet();
+        // reused, not rebuilt every frame (#221)
+        var wanted = _wantedIds;
+        wanted.Clear();
+        foreach (var s in _subs.Values) wanted.UnionWith(s);
+        if (wanted.Count == 0 && _taps.Count == 0) return;   // nobody listens, no tap to close
         foreach (int id in wanted)
             if (!_taps.ContainsKey(id) && Stations.For(id) is { } station) _taps[id] = new StationTap(station);
 
         long me = Multiplayer.GetUniqueId();
-        foreach (var (id, tap) in _taps.ToList())
+        _tapIds.Clear();
+        _tapIds.AddRange(_taps.Keys);
+        foreach (int id in _tapIds)
         {
+            var tap = _taps[id];
             if (!wanted.Contains(id))
             {
                 tap.Unwanted += delta;

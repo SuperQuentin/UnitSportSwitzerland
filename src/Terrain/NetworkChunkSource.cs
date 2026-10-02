@@ -79,9 +79,6 @@ public sealed class NetworkChunkSource : IChunkSource
     /// </summary>
     public long MaxCacheBytes { get; set; } = 2L * 1024 * 1024 * 1024;
 
-    /// <summary>Bytes currently held in the cache.</summary>
-    public long CacheBytes { get { lock (_gate) return _cacheBytes; } }
-
     /// <summary>Files served from the cache or the network this session.</summary>
     public int StreamedFiles { get; private set; }
 
@@ -451,26 +448,5 @@ public sealed class NetworkChunkSource : IChunkSource
     private static void TryDelete(string path)
     {
         try { if (File.Exists(path)) File.Delete(path); } catch { /* nothing useful to do */ }
-    }
-
-    /// <summary>Empties the cache. Exposed for a "clear downloaded terrain" action.</summary>
-    public void ClearCache()
-    {
-        try
-        {
-            foreach (var file in new DirectoryInfo(_cacheDirectory).EnumerateFiles())
-                TryDelete(file.FullName);
-
-            lock (_gate)
-            {
-                _cacheBytes = 0;
-                _knownMissing.Clear();
-            }
-            GD.Print("[stream] cache cleared");
-        }
-        catch (Exception e)
-        {
-            GD.PushWarning($"[stream] cache clear failed: {e.Message}");
-        }
     }
 }

@@ -4,117 +4,6 @@ using UnitSport.Avatar;
 namespace UnitSport.Items;
 
 /// <summary>
-/// Every item in the game. Replicated as an int (<see cref="Player.FootPlayer.HeldItemId"/>) and
-/// saved by name, so <b>append only, never reorder</b> — the same rule as <c>RideKind</c>.
-/// </summary>
-public enum ItemId
-{
-    None = 0,
-    Binoculars = 1,
-    Camera = 2,
-    Gps = 3,
-    SwissFlag = 4,
-    EnergyBar = 5,
-    WaterBottle = 6,
-
-    // ---- scavenged (src/Loot) ----
-    Bread = 7,
-    CannedFood = 8,
-    Apple = 9,
-    Cheese = 10,
-    Chocolate = 11,
-    MineralWater = 12,
-    Francs = 13,
-    Bandage = 14,
-    FirstAidKit = 15,
-    ScrapMetal = 16,
-    Plastic = 17,
-    WoodPlanks = 18,
-    Cloth = 19,
-    Glass = 20,
-    CopperWire = 21,
-    Screws = 22,
-    Rubber = 23,
-    DuctTape = 24,
-    Rope = 25,
-    Stone = 26,
-    SandBag = 27,
-    Firewood = 28,
-    RockSalt = 29,
-    Coal = 30,
-    BikeChain = 31,
-    Tyre = 32,
-    CarBattery = 33,
-    Electronics = 34,
-    FuelCan = 35,
-    EnginePart = 36,
-
-    // ---- hunting (src/Birds) ----
-    Shotgun = 37,
-    Shells = 38,
-
-    // ---- occasions (src/Occasions) ----
-    Candy = 39,
-    Pumpkin = 40,
-    CaramelApple = 41,
-    Biberli = 42,
-    Mandarin = 43,
-    Grittibaenz = 44,
-    Gluehwein = 45,
-    WitchHat = 46,
-    PumpkinHead = 47,
-    SantaHat = 48,
-    ReindeerAntlers = 49,
-
-    // ---- the Polaroid camera (docs/notes/items/polaroid.md) ----
-    /// <summary>A printed photo; which one is <see cref="ItemStack.Data"/> (the photo id).</summary>
-    Photo = 50,
-    // ---- optics (src/Items/SmartBinocularsHud) ----
-    SmartBinoculars = 51,
-
-    // ---- radio (src/Items/Radio*, src/Audio/Cd) ----
-    Radio = 52,
-
-    // 53-60 are taken by the Battle Royale weapons and the flare gun (#178, #198)
-
-    // ---- bags (docs/notes/items/bags.md): worn in the bag slot, each adds pack slots ----
-    BeltPouch = 61,
-    Handbag = 62,
-    Backpack = 63,
-    HikingPack = 64,
-}
-
-/// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
-public enum ItemCategory { Gear, Food, Water, Money, Medical, Scrap, Mineral, Part, Cosmetic }
-
-/// <summary>What pressing Use does with the item in hand.</summary>
-public enum ItemUse
-{
-    /// <summary>Held to the eye with Aim; Use does nothing.</summary>
-    Optic,
-    /// <summary>Aim frames, Use takes a picture.</summary>
-    Photo,
-    /// <summary>Shows a readout while held.</summary>
-    Readout,
-    /// <summary>Use plants one in the ground in front of you, or picks a planted one back up.</summary>
-    Place,
-    /// <summary>Use eats or drinks one, for health.</summary>
-    Consume,
-    /// <summary>A material: kept for trading and building; Use does nothing.</summary>
-    Material,
-    /// <summary>Aim shoulders it, Use fires one shell (<see cref="ItemController.Fire"/>).</summary>
-    Shoot,
-    /// <summary>Use puts it on, or takes it off (a hat — <see cref="Inventory.Worn"/>).</summary>
-    Wear,
-    /// <summary>A printed photo: Use looks at it, Aim + Use (or the stick key) sticks it where you look.</summary>
-    Print,
-    /// <summary>Use throws it into the world, where it stays as a thing (<see cref="RadioManager"/>).</summary>
-    Throw,
-    /// <summary>Worn in the bag slot, it adds <see cref="ItemDef.PackSlots"/> to the pack (<see cref="Inventory.Bag"/>).</summary>
-    Bag,
-}
-
-/// <summary>
 /// One kind of item: a row of data plus how it looks in the hand. Behaviour lives in
 /// <see cref="ItemController"/>, keyed on <see cref="Use"/>, so adding an item of an existing kind
 /// is a line in <see cref="ItemDefs.All"/> and a mesh.
@@ -132,11 +21,16 @@ public sealed record ItemDef(
     /// <summary>Worth in Swiss francs, for trade later on.</summary>
     float Value = 0f,
     /// <summary>A bag's extra pack slots while it is worn (<see cref="ItemUse.Bag"/>).</summary>
-    int PackSlots = 0);
+    int PackSlots = 0,
+    /// <summary>The body slot a <see cref="ItemUse.Wear"/> item goes in (hats: the head).</summary>
+    WearSlot Slot = WearSlot.None);
 
 public static class ItemDefs
 {
-    public static readonly ItemDef[] All =
+    /// <summary>Every item: the authored rows, then one per look in the wardrobe (<see cref="Garments.All"/>).</summary>
+    public static readonly ItemDef[] All = Authored().Concat(Garments.All.Select(Cloth)).ToArray();
+
+    private static ItemDef[] Authored() => new[]
     {
         new(ItemId.Binoculars, "Binoculars", "Hold {aim_item} to look through them. 8x.",
             ItemUse.Optic, 1, new Color(0.30f, 0.38f, 0.26f), "BN"),
@@ -209,9 +103,26 @@ public static class ItemDefs
         new(ItemId.Photo, "Photo", "A Polaroid you took. {use_item} to look at it; {aim_item} + {use_item} sticks it on a wall or the ground, {use_item} on it again takes it back.",
             ItemUse.Print, 1, new Color(0.96f, 0.95f, 0.90f), "PH"),
         // radio (#104): thrown into the world, plays burned CDs for whoever stands near
-        new(ItemId.Radio, "Radio", "{use_item} opens it in your hand: it plays as you carry it. {aim_item} + {use_item} throws it; stand beside it and press {interact_mount} to play a CD or pick it up.",
+        new(ItemId.Radio, "Radio", "{use_item} opens it in your hand; put away, it rides on your back and keeps playing. {aim_item} + {use_item} throws it (it hurts whoever it hits). Lying in the world: point at it, {use_item} takes it in hand, {interact_mount} opens it to play a CD.",
             ItemUse.Throw, 1, new Color(0.16f, 0.17f, 0.19f), "RD", 0, ItemCategory.Gear, 80f),
 
+        // weapons (#178): they hurt players only while the server allows it (/pvp, a Battle Royale match)
+        new(ItemId.Pistol, "Pistol", "{aim_item} to raise it, {use_item} to fire. 9 mm.",
+            ItemUse.Shoot, 1, new Color(0.18f, 0.18f, 0.20f), "PI", 0, ItemCategory.Gear, 300f),
+        new(ItemId.Rifle, "Assault rifle", "{aim_item} to shoulder it, {use_item} to fire. 7.5 mm, the army's Stgw.",
+            ItemUse.Shoot, 1, new Color(0.24f, 0.28f, 0.20f), "AR", 0, ItemCategory.Gear, 900f),
+        new(ItemId.HuntingRifle, "Hunting rifle", "{aim_item} looks through the scope, {use_item} fires. 7.5 mm, one shot at a time.",
+            ItemUse.Shoot, 1, new Color(0.42f, 0.28f, 0.16f), "HR", 0, ItemCategory.Gear, 1200f),
+        new(ItemId.Knife, "Army knife", "{use_item} to stab whoever stands in front of you.",
+            ItemUse.Melee, 1, new Color(0.80f, 0.10f, 0.12f), "KN", 0, ItemCategory.Gear, 40f),
+        new(ItemId.Ammo9mm, "9 mm rounds", "Ammunition for the pistol.",
+            ItemUse.Material, 90, new Color(0.80f, 0.66f, 0.30f), "9M", 0, ItemCategory.Gear, 0.5f),
+        new(ItemId.Ammo75, "7.5 mm rounds", "Ammunition for the assault rifle and the hunting rifle.",
+            ItemUse.Material, 90, new Color(0.70f, 0.52f, 0.22f), "75", 0, ItemCategory.Gear, 1f),
+        new(ItemId.ArmorVest, "Armour vest", "{use_item} to put it on: it takes half of every hit until it has soaked up 50.",
+            ItemUse.Armor, 1, new Color(0.30f, 0.34f, 0.24f), "AV", 0, ItemCategory.Gear, 200f),
+        new(ItemId.FlareGun, "Flare gun", "{use_item} fires its one flare into the sky: in a Battle Royale, a supply drop comes down where you stand. Everyone sees the flare.",
+            ItemUse.Signal, 1, new Color(0.95f, 0.45f, 0.10f), "FG", 0, ItemCategory.Gear, 60f),
         // bags (#208): found in houses, worn in the bag slot, one row of the pack per 9 slots
         Bag(ItemId.BeltPouch, "Belt pouch", "#6a5a3a", "BP", 9, 15),
         Bag(ItemId.Handbag, "Handbag", "#8a2a3a", "HB", 18, 40),
@@ -229,8 +140,32 @@ public static class ItemDefs
             ItemUse.Consume, stack, new Color(tint), glyph, heal, category, value);
 
     private static ItemDef Hat(ItemId id, string name, string tint, string glyph) =>
-        new(id, name, "{use_item} to put it on, or take it off. Others see you wearing it.",
-            ItemUse.Wear, 1, new Color(tint), glyph, 0, ItemCategory.Cosmetic, 10);
+        new(id, name, "{use_item} puts it on your head, in place of what was there. Others see you wearing it.",
+            ItemUse.Wear, 1, new Color(tint), glyph, 0, ItemCategory.Cosmetic, 10, Slot: WearSlot.Head);
+
+    /// <summary>A look from the wardrobe as an item: one to a slot, worn in its body slot.</summary>
+    private static ItemDef Cloth(Garment g)
+    {
+        string look = g.Style switch
+        {
+            GarmentStyle.Gothic => " Gothic.",
+            GarmentStyle.Kawaii => " Kawaii.",
+            GarmentStyle.Special => $" Rare: a {Garments.FinishName(g.Finish)} finish that moves.",
+            _ => "",
+        };
+        string covers = g.CoversBottom ? " One piece: it takes the bottom slot too." : "";
+        string glyph = string.Concat(g.Name.Split(' ', '-').Where(w => w.Length > 0).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+        float value = g.Style switch { GarmentStyle.Special => 300f, GarmentStyle.Basic => 20f, _ => 45f };
+        // a finish's tint is what it looks like at a glance, not its plain base colour
+        var tint = g.Finish switch
+        {
+            Finish.Rainbow => new Color("ff4fa8"), Finish.Disco => new Color("d8dce8"), Finish.Galaxy => new Color("5a2a9a"),
+            Finish.Holo => new Color("a8f0f8"), Finish.Glitch => new Color("30f0c8"), Finish.Lava => new Color("f05a10"),
+            Finish.Neon => new Color("30f0ff"), _ => g.A,
+        };
+        return new(g.Item, g.Name, $"{{use_item}} puts it on ({Garments.SlotName(g.Slot)}), in place of what was there.{look}{covers}",
+            ItemUse.Wear, 1, tint, glyph, 0, ItemCategory.Clothing, value, Slot: g.Slot);
+    }
 
     private static ItemDef Mat(ItemId id, string name, int stack, string tint, string glyph,
         ItemCategory category, float value) =>
@@ -364,6 +299,57 @@ public static class ItemDefs
                     s.Tube(new Vector3(x, 0.03f, 0.08f), new Vector3(x, 0.03f, 0.72f), 0.011f, steel, 6);
                 s.Box(new Vector3(0, 0.048f, 0.40f), new Vector3(0.012f, 0.006f, 0.64f), new Color(0.55f, 0.56f, 0.6f));   // rib between the barrels
                 s.Box(new Vector3(0, 0.056f, 0.70f), new Vector3(0.009f, 0.012f, 0.012f), new Color(1f, 0.85f, 0.25f));   // front bead
+                break;
+            }
+            case ItemId.Pistol:
+            {
+                var steel = new Color(0.16f, 0.16f, 0.18f);
+                s.Box(new Vector3(0, -0.045f, -0.01f), new Vector3(0.03f, 0.09f, 0.035f), new Color(0.10f, 0.10f, 0.11f));  // grip
+                s.Box(new Vector3(0, 0.02f, 0.05f), new Vector3(0.03f, 0.035f, 0.18f), steel);                              // slide
+                s.Box(new Vector3(0, 0.042f, 0.13f), new Vector3(0.006f, 0.008f, 0.006f), new Color(1f, 0.85f, 0.25f));     // front sight
+                break;
+            }
+            case ItemId.Rifle:
+            {
+                var green = new Color(0.24f, 0.28f, 0.20f);
+                var steel = new Color(0.18f, 0.19f, 0.20f);
+                s.Box(new Vector3(0, -0.02f, -0.22f), new Vector3(0.04f, 0.08f, 0.28f), green);        // stock
+                s.Box(new Vector3(0, 0.01f, 0.06f), new Vector3(0.05f, 0.07f, 0.30f), steel);         // receiver
+                s.Box(new Vector3(0, -0.09f, 0.10f), new Vector3(0.03f, 0.13f, 0.05f), steel);        // magazine
+                s.Box(new Vector3(0, 0.02f, 0.30f), new Vector3(0.045f, 0.05f, 0.18f), green);        // hand guard
+                s.Tube(new Vector3(0, 0.03f, 0.38f), new Vector3(0, 0.03f, 0.62f), 0.010f, steel, 6); // barrel
+                s.Box(new Vector3(0, 0.056f, 0.56f), new Vector3(0.009f, 0.012f, 0.012f), new Color(1f, 0.85f, 0.25f));
+                break;
+            }
+            case ItemId.HuntingRifle:
+            {
+                var wood = new Color(0.42f, 0.28f, 0.16f);
+                var steel = new Color(0.20f, 0.21f, 0.23f);
+                s.Box(new Vector3(0, -0.03f, -0.20f), new Vector3(0.04f, 0.09f, 0.34f), wood);
+                s.Box(new Vector3(0, 0.0f, 0.18f), new Vector3(0.045f, 0.05f, 0.42f), wood);
+                s.Tube(new Vector3(0, 0.03f, 0.05f), new Vector3(0, 0.03f, 0.80f), 0.010f, steel, 6);
+                s.Tube(new Vector3(0, 0.085f, -0.02f), new Vector3(0, 0.085f, 0.26f), 0.018f, new Color(0.08f, 0.08f, 0.09f), 8);   // scope
+                break;
+            }
+            case ItemId.Knife:
+            {
+                s.Box(new Vector3(0, 0.0f, 0.0f), new Vector3(0.022f, 0.028f, 0.10f), new Color(0.80f, 0.10f, 0.12f));   // the red handle
+                s.Box(new Vector3(0, 0.003f, 0.10f), new Vector3(0.006f, 0.022f, 0.10f), new Color(0.80f, 0.82f, 0.86f)); // blade
+                break;
+            }
+            case ItemId.FlareGun:
+            {
+                var orange = new Color(0.95f, 0.45f, 0.10f);
+                s.Box(new Vector3(0, -0.045f, -0.01f), new Vector3(0.03f, 0.09f, 0.035f), orange);
+                s.Tube(new Vector3(0, 0.02f, -0.03f), new Vector3(0, 0.02f, 0.16f), 0.022f, orange, 8);
+                s.Tube(new Vector3(0, 0.02f, 0.16f), new Vector3(0, 0.02f, 0.17f), 0.018f, new Color(0.15f, 0.15f, 0.15f), 8);
+                break;
+            }
+            case ItemId.ArmorVest:
+            {
+                var cloth = new Color(0.30f, 0.34f, 0.24f);
+                s.Box(new Vector3(0, 0.12f, 0), new Vector3(0.36f, 0.42f, 0.06f), cloth);
+                s.Box(new Vector3(0, 0.20f, 0.035f), new Vector3(0.22f, 0.12f, 0.02f), new Color(0.22f, 0.25f, 0.18f));  // plate pocket
                 break;
             }
             case ItemId.WitchHat or ItemId.PumpkinHead or ItemId.SantaHat or ItemId.ReindeerAntlers:

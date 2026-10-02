@@ -15,7 +15,7 @@
 - **Shot event** (`ItemEvents.ShotEffect`, every peer): `FootPlayer.BodyJolt()` rocks the body back
   about the hips (remote and own 3P body), remote copies start `Pump()`, `SfxSynth.Pump` (two clacks)
   plays in 3D after `PumpDelay + 0.1`.
-- **Muzzle origin**: `BirdLife.Fire` casts from `FootPlayer.EyePosition`. First person / scope view:
+- **Muzzle origin**: `ItemController.AimFrom` (was `BirdLife.Fire`; shared by every gun since #178) casts from `FootPlayer.EyePosition`. First person / scope view:
   along the camera. Third person hip-fire: a ray from the camera (started at the eye's depth, so the
   spring arm's wall is not hit) finds the target point, the cone aims from the eye at it.
 - **3P shoulder pose**: `ItemArmPose.ShoulderAim` (see `item-arm-poses`); head tips onto the stock.

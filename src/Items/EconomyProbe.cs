@@ -63,6 +63,14 @@ public partial class EconomyProbe : ChatProbe
         await Seconds(1);
         Expect(Count(vehicles) == count, "and no vehicle appeared");
 
+        // #262: the admin item and money commands are refused to a plain player
+        int cash0 = _inventory.Cash;
+        _chat.Send("/money 100");
+        _chat.Send("/give me bread 2");
+        await Seconds(1.5);
+        Expect(_inventory.Cash == cash0 && !_inventory.Contains(ItemId.Bread), "a plain player's /money and /give are refused");
+        Expect(!_chat.CanUseCatalogue && !CatalogueUi.Allowed, "no catalogue for a plain player");
+
         _chat.Send($"/login {Password}");
         Expect(await Until(() => Permissions.IsAdmin, 5), "/login: the server says admin");
         Expect(Permissions.CanSpawnVehicles, "an admin may spawn vehicles");
@@ -77,6 +85,21 @@ public partial class EconomyProbe : ChatProbe
         Expect(await Until(() => !Bank.Instance.Pending, 5), "the server answered the deposit");
         Expect(_inventory.Cash == 25 && Bank.Instance.Balance == before,
             $"refused outside a bank: account {before} -> {Bank.Instance.Balance}, pocket {_inventory.Cash}");
+
+        // #262, as an admin: the server's commands reach this client
+        Expect(_chat.CanUseCatalogue && CatalogueUi.Allowed, "an admin gets the catalogue");
+        int cash = _inventory.Cash;
+        _chat.Send("/money 500");
+        Expect(await Until(() => _inventory.Cash == cash + 500, 5), $"/money: pocket {cash} -> {_inventory.Cash}");
+        _chat.Send("/give me bread 2");
+        Expect(await Until(() => _inventory.Contains(ItemId.Bread), 5), "/give me: bread arrives");
+        _chat.Send("/bank set 777");
+        Expect(await Until(() => Bank.Instance.Balance == 777, 5), $"/bank set: account {Bank.Instance.Balance}");
+        // the server's accounts file is shared user data: put it back
+        _chat.Send($"/bank set {Math.Max(before, 0)}");
+        await Until(() => Bank.Instance.Balance == Math.Max(before, 0), 5);
+        _chat.Send("/clear");
+        Expect(await Until(() => !_inventory.Contains(ItemId.Bread), 5), "/clear: the pack is empty");
 
         await Finish(0);
     }

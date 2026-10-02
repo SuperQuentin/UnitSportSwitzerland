@@ -230,6 +230,7 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
     /// <summary>Clears items nobody has been near for a long time; done by whoever owns the list.</summary>
     public override void _Process(double delta)
     {
+        DropFloat.Step(GetViewport().GetCamera3D()?.GlobalPosition, (float)(Time.GetTicksMsec() / 1000.0 % 3600.0));
         if (Online && !Multiplayer.IsServer()) return;
         _housekeeping += delta;
         if (_housekeeping < 2) return;

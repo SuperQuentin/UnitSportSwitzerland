@@ -39,15 +39,15 @@ probe for the camera height).
 - Conflict in `ClientWorld._Ready` near the top (`if (Array.IndexOf(scArgs, "--xcheck") >= 0) { GetTree().Quit(X.Run()); return; }`
   or `if (X.Requested) GetTree().Quit(X.Run());`): drop the block, add
   `(() => X.Requested, X.Run)` (or `(() => Has("--xcheck"), X.Run)`) to `QuickChecks`.
-  Open: #188 (`BrCheck.Requested`). (`WheelProbe.CheckRequested` and `RoadPerfProbe` were migrated in the merge.)
+  (`WheelProbe`, `BrCheck`, `OutfitCheck` and `RoadPerfProbe`, merged meanwhile, were moved into the tables.)
 - Conflict on `bool placedByTool = ...` or on the `if (XProbe.ParseArgs() is ...) { _spectator.Position = ...; AddChild(...); return; }`
   chain: add one `ToolRun` to `tools` instead, in the same place in the order.
 - A probe of your own with `private async Task<bool> Until(` + `_heard` + `Chat?.Send($"XX {_role} ...")`:
   derive from `ChatProbe` and delete those members (grep `private async Task<bool> Until(` in `src/`).
   Still to migrate on main: `Loot/BankProbe` (#213, merged after this PR was cut; verify with `tools/bankcheck.sh`).
-  Open: #188 and its BR follow-ups #191/#197/#201/#223 (`BattleRoyale/BrProbe`), #180 (`Items/PvpProbe`).
+  Also on main with their own copy: `BattleRoyale/BrProbe`, `Items/PvpProbe` (merged after this PR was cut).
 - The scratch-inventory OR list and the `if (XProbe.Role != null) AddChild(new XProbe(items))` lines
-  further down are unchanged: keep adding there (#169, #180, #188 do).
+  further down are unchanged: keep adding there (#169 does).
 
 ## How to check
 

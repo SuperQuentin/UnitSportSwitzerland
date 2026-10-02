@@ -116,6 +116,15 @@ public partial class Main : Node
 			return;
 		}
 
+		// a test that names its systems (#221, Core/Systems): physics off is a stub, the space never steps;
+		// --world flat is the flat TestWorld, no map at all
+		if (!Systems.On(Systems.Physics)) PhysicsServer3D.SetActive(false);
+		if (Systems.World == Systems.WorldKind.Flat)
+		{
+			AddChild(new TestWorld { Name = "World" });
+			return;
+		}
+
 		bool isServer = OS.HasFeature("dedicated_server")
 			|| OS.GetCmdlineUserArgs().Contains("--server");
 
