@@ -103,7 +103,7 @@ public sealed class CdBurner
             }
 
             var info = new CdInfo(id, Clean(title), duration, bpm, offset, style, energy);
-            await File.WriteAllTextAsync(Path.Combine(CdDirectory, $"{id}.json"), info.ToJson(), ct);
+            Core.JsonStore.Save(Path.Combine(CdDirectory, $"{id}.json"), info, CdInfo.Json);
             status.Report($"Burnt: {info.Describe()}");
             return info;
         }

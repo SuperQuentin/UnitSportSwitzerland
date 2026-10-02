@@ -17,9 +17,12 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
+`twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
 `dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
-`test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses).
+`test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
+`perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),
+`perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order).
 
 ## Rules
 

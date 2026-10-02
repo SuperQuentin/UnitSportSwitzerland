@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Ui;
+using UnitSport.Core;
 
 namespace UnitSport.XR;
 
@@ -164,7 +165,7 @@ public partial class XrUi : Node3D
         if (float.IsNaN(_yaw)) _yaw = headYaw;
         // glide toward the head's heading only once it has looked well away
         float off = Mathf.AngleDifference(_yaw, headYaw);
-        if (Mathf.Abs(off) > FollowAngle) _yaw += off * (1f - Mathf.Exp(-3f * dt));
+        if (Mathf.Abs(off) > FollowAngle) _yaw += off * MathX.Damp(3f, dt);
 
         var forward = new Basis(Vector3.Up, _yaw) * Vector3.Forward;
         var centre = eye.Origin + forward * Distance + Vector3.Down * 0.12f;

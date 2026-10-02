@@ -30,16 +30,7 @@ public partial class TreeCheck : Node
         _shot = shot;
     }
 
-    public static (bool Requested, string? Shot) ParseArgs()
-    {
-        foreach (var a in OS.GetCmdlineUserArgs())
-            if (a.StartsWith("--treecheck"))
-            {
-                var parts = a.Split(',');
-                return (true, parts.Length > 1 ? parts[1] : null);
-            }
-        return (false, null);
-    }
+    public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--treecheck");
 
     public override void _PhysicsProcess(double delta)
     {
@@ -69,9 +60,9 @@ public partial class TreeCheck : Node
                 for (float min = 20f; min < 40f; min += 1f)
                 {
                     if (pool.NearestLive(me, min) is not { } t) break;
-                    float d = Flat(t.Base - me).Length();
+                    float d = MathX.Flat(t.Base - me).Length();
                     if (d > 40f) break;
-                    var dir = Flat(t.Base - me).Normalized();
+                    var dir = MathX.Flat(t.Base - me).Normalized();
                     var start = t.Base - dir * 25f;
                     if (!_chunks.TryGetHeight(start, out float gs) || Mathf.Abs(gs - t.Base.Y) > 3f) continue;
                     if (Blocked(pool, start, t.Base, dir)) continue;
@@ -99,8 +90,8 @@ public partial class TreeCheck : Node
                 _player.RideControls = () =>
                 {
                     // hold the line at the trunk
-                    var to = Flat(_tree - _player.GlobalPosition);
-                    var fwd = Flat(-_player.GlobalBasis.Z);
+                    var to = MathX.Flat(_tree - _player.GlobalPosition);
+                    var fwd = MathX.Flat(-_player.GlobalBasis.Z);
                     float err = Mathf.Atan2(fwd.Z * to.X - fwd.X * to.Z, fwd.Dot(to));
                     return new RideInput(1f, 0f, Mathf.Clamp(-err * 3f, -1f, 1f), true);
                 };
@@ -118,13 +109,13 @@ public partial class TreeCheck : Node
                     bool low = !_chunks.TryGetHeight(_player!.GlobalPosition, out float gh) || _player.GlobalPosition.Y < gh + 4f;
                     if (low) Input.ActionPress(Core.PlayerInput.Jump); else Input.ActionRelease(Core.PlayerInput.Jump);
                 }
-                if (System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trace") >= 0 && (int)(_t * 2) != (int)((_t - delta) * 2))
-                    GD.Print($"[treecheck]   t={_t:F1} d={Flat(_player!.GlobalPosition - _tree).Length():F1} v={_player.Velocity} floor={_player.IsOnFloor()} wall={_player.IsOnWall()} ride={_player.Ride}");
+                if (CmdArgs.Has("--trace") && (int)(_t * 2) != (int)((_t - delta) * 2))
+                    GD.Print($"[treecheck]   t={_t:F1} d={MathX.Flat(_player!.GlobalPosition - _tree).Length():F1} v={_player.Velocity} floor={_player.IsOnFloor()} wall={_player.IsOnWall()} ride={_player.Ride}");
                 var p = _player!.GlobalPosition;
-                _closest = Mathf.Min(_closest, Flat(p - _tree).Length());
+                _closest = Mathf.Min(_closest, MathX.Flat(p - _tree).Length());
                 _topSpeed = Mathf.Max(_topSpeed, _player.GroundSpeed);
                 if (_t < 9) return;
-                float past = Flat(p - _tree).Dot(_dir);   // > 0 once beyond the trunk
+                float past = MathX.Flat(p - _tree).Dot(_dir);   // > 0 once beyond the trunk
                 bool through = past > _radius + 0.3f;
                 // a crash that ends the ride (thrown off, wreck) is the tree stopping it too
                 bool crashed = _player.Ride != _kind;
@@ -145,21 +136,17 @@ public partial class TreeCheck : Node
     private static bool Blocked(TreeColliders pool, Vector3 from, Vector3 tree, Vector3 dir)
     {
         for (float s = 2f; s < 24f; s += 2f)
-            if (pool.NearestLive(from + dir * s) is { } o && Flat(o.Base - tree).Length() > 0.5f
-                && Flat(o.Base - (from + dir * s)).Length() < 1.5f)
+            if (pool.NearestLive(from + dir * s) is { } o && MathX.Flat(o.Base - tree).Length() > 0.5f
+                && MathX.Flat(o.Base - (from + dir * s)).Length() < 1.5f)
                 return true;
         return false;
     }
 
-    private static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
 
     /// <summary><c>--ride bike|car|heli|plane</c>: what to throw at the trunk (bike by default).</summary>
     private static RideKind Kind()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, "--ride");
-        string v = i >= 0 && i + 1 < args.Length ? args[i + 1] : "bike";
-        return v switch
+        return (CmdArgs.Value("--ride") ?? "bike") switch
         {
             "car" => (RideKind)Player.CarCatalog.First,
             "heli" or "helicopter" => RideKind.Helicopter,

@@ -161,6 +161,14 @@ public partial class ChatManager : Node
             else CatalogueRequested();
             return;
         }
+        // the debug menu draws on this screen only; a server never hears of it (#339)
+        if (text.Trim().ToLowerInvariant() == "/debug")
+        {
+            if (!DebugMenu.Allowed) LineReceived?.Invoke("The debug menu is for admins on a server.", ChatKind.Error);
+            else if (DebugRequested is null) LineReceived?.Invoke("No debug menu here.", ChatKind.Error);
+            else DebugRequested();
+            return;
+        }
         if (IsLocal)
         {
             text = text.Trim();
@@ -219,6 +227,9 @@ public partial class ChatManager : Node
 
     /// <summary>Client: <c>/catalogue</c> was typed by someone allowed it; the item catalogue opens.</summary>
     public event Action? CatalogueRequested;
+
+    /// <summary>Client: <c>/debug</c> was typed by someone allowed it (alone, or an admin); the debug menu opens.</summary>
+    public event Action? DebugRequested;
 
     /// <summary>Client: the catalogue is offered alone, or to an admin. The server re-checks every <c>/spawn</c> it sends.</summary>
     public bool CanUseCatalogue => IsLocal || Permissions.IsAdmin;
@@ -290,7 +301,7 @@ public partial class ChatManager : Node
         {
             case "help":
                 Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /catalogue  /clear  /money <amount>  "
-                    + "/bank [set|add|take <amount>]  /occasion  /time  /style  — Tab completes.", ChatKind.Private);
+                    + "/bank [set|add|take <amount>]  /occasion  /time  /style  /debug  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 
@@ -547,6 +558,10 @@ public partial class ChatManager : Node
                     foreach (string line in occasions.RunCommand(parts[1..], IsAdmin(sender)))
                         ReplyTo(sender, line, ChatKind.Private);
                 return;
+            // how standing passengers feel a vehicle move (#162): anyone may ask, an admin may change it
+            case "inertia" when parts.Length == 1:
+                ReplyTo(sender, $"Standing passengers: {Vehicles.PassengerService.Inertia.ToString().ToLowerInvariant()} (steady, sway or full).", ChatKind.Private);
+                return;
             // your own inventory is yours to empty; someone else's is an admin's (checked inside)
             case "clear": CommandClear(sender, rest); return;
             case "br":
@@ -571,6 +586,16 @@ public partial class ChatManager : Node
         {
             case "say":
                 if (rest.Length > 0) Broadcast($"[server] {Scrub(rest)}", ChatKind.Admin);
+                return;
+
+            case "inertia":
+                if (!Vehicles.PassengerService.TryParseInertia(rest, out var inertia) || Vehicles.PassengerService.Instance is not { } passengers)
+                    ReplyTo(sender, "Usage: /inertia steady|sway|full", ChatKind.Error);
+                else
+                {
+                    passengers.SetInertia(inertia);
+                    Broadcast($"[server] Standing passengers now feel the vehicles: {rest.ToLowerInvariant()}.", ChatKind.Admin);
+                }
                 return;
 
             case "admin": CommandAdmin(sender, parts); return;
@@ -621,7 +646,7 @@ public partial class ChatManager : Node
             ReplyTo(sender,
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
                 + "/kick <player> [reason]  /admin list|add <name>|remove <name>  "
-                + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  "
+                + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  /debug  "
                 + "/give <player> <item> [count]  /clear [player]  /money <amount> [player]  "
                 + "/bank <player> [set|add|take <amount>]  "
                 + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  — Tab completes",
@@ -815,13 +840,14 @@ public partial class ChatManager : Node
 
         target = found;
 
-        if (_players.GetNodeOrNull<Node3D>(found.PeerId.ToString()) is not { } node)
+        if (_players.GetNodeOrNull<Player.FootPlayer>(found.PeerId.ToString()) is not { } node)
         {
             ReplyTo(sender, $"{found.Name} has no position yet.", ChatKind.Error);
             return false;
         }
 
-        (e, n) = _origin.ToLv95(node.GlobalPosition);
+        // what the player published, exact: not the server's own world, far from its origin (#185)
+        (e, n) = (node.Global.E, node.Global.N);
         return true;
     }
 
@@ -1149,11 +1175,19 @@ public partial class ChatManager : Node
 
         string reason = parts.Length > 2 ? Scrub(string.Join(' ', parts[2..])) : "no reason given";
 
-        RpcId(target.PeerId, MethodName.NotifyKicked, reason);
+        KickPeer(target.PeerId, reason);
         Broadcast($"{target.Name} was kicked by {NameOf(sender)} ({reason})", ChatKind.Admin);
+    }
 
+    /// <summary>
+    /// Server: tells a peer why, then disconnects it. Also how a client too old for the version
+    /// check is turned away (<see cref="Handshake"/>): <c>NotifyKicked</c> is in every version, so
+    /// this node's RPCs must not change either, or an old client is shown nothing.
+    /// </summary>
+    public void KickPeer(long peerId, string reason)
+    {
+        RpcId(peerId, MethodName.NotifyKicked, reason);
         // Give the notification a moment to reach them before the socket closes under it.
-        var peerId = target.PeerId;
         GetTree().CreateTimer(0.2).Timeout += () =>
         {
             if (Multiplayer.MultiplayerPeer is ENetMultiplayerPeer peer)

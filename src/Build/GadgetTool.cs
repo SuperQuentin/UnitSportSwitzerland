@@ -24,7 +24,8 @@ public partial class GadgetTool : Node
     private MeshInstance3D _ghost = null!, _cable = null!;
     private StandardMaterial3D _material = null!;
     private Label _hint = null!;
-    private Vector3? _zipStart;   // world foot of the high post, once set
+    // the high post's foot once set: in LV95, the origin can shift while you walk down to the bottom one (#185)
+    private Core.GlobalPos? _zipStart;
     private bool _busy;
 
     private enum Mode { None, Zip, Ladder, Launch }
@@ -106,12 +107,12 @@ public partial class GadgetTool : Node
                     : new Spot(true, drop > Gadgets.LadderMax ? $"{Gadgets.LadderMax:F0} m: it will not reach the bottom." : "", top,
                         Gadgets.LadderPayload(length), GadgetMeshes.Ladder(length));
             }
-            case PlacedKind.Zipline when _zipStart is { } start:
+            case PlacedKind.Zipline when _zipStart is { } startGlobal:
             {
+                var start = PlacedObjects.Instance!.Origin.ToWorld(startGlobal);
                 string? problem = Gadgets.ZipProblem(start, point);
                 var local = at.AffineInverse() * start;
-                var (e, n) = PlacedObjects.Instance!.Origin.ToLv95(start);
-                return new Spot(problem == null, problem ?? "", at, Gadgets.ZipPayload(e, n, start.Y), GadgetMeshes.Zipline(local));
+                return new Spot(problem == null, problem ?? "", at, Gadgets.ZipPayload(startGlobal.E, startGlobal.N, startGlobal.Alt), GadgetMeshes.Zipline(local));
             }
             default:
                 return new Spot(true, "", at, "", GadgetMeshes.Mesh(kind));
@@ -179,7 +180,7 @@ public partial class GadgetTool : Node
         if (kind == PlacedKind.Zipline && _zipStart == null)
         {
             if (spot.Mesh == null || (!spot.Valid && spot.Reason.Length > 0)) { _items.Toast(spot.Reason); return; }
-            _zipStart = spot.At.Origin;
+            _zipStart = placed.Origin.ToGlobal(spot.At.Origin);
             _items.Toast("Top post set. Now walk down to where it ends and Use again.");
             return;
         }

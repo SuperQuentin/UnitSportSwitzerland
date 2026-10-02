@@ -47,6 +47,8 @@ src/Avatar/              quick  --hitboxcheck --world flat
 src/Player/              quick  --ride bike,20 --world flat
 src/Player/              quick  --ride car,15 --world flat
 src/Vehicles/            quick  --ride car,15 --world flat
+src/Player/              quick  --exitcheck --world fixture
+src/Vehicles/            quick  --exitcheck --world fixture
 src/Core/TestWorld       quick  --hitboxcheck --world flat
 src/Core/Systems         quick  --hitboxcheck --world flat
 src/Ui/                  quick  --leavecheck --world fixture
@@ -54,6 +56,9 @@ src/Ui/                  quick  --menucheck --systems ui
 src/Core/GameShell       quick  --menucheck --systems ui
 src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
+src/Core/Debug           quick  --debugcheck --systems ui
+src/Styles/StyleKit      quick  --debugcheck --systems ui
+src/Terrain/ChunkNode    quick  --debugcheck --systems ui
 src/BattleRoyale/        quick  --brcheck
 src/Combat/              quick  --brcheck
 
@@ -68,6 +73,7 @@ src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
+src/Core/Debug           net    tools/debugcheck.sh
 @rpc                     net    @netsmoke
 src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh
@@ -87,5 +93,8 @@ src/World/               full   tools/racecheck.sh
 src/Audio/               full   tools/radiocheck.sh
 src/Player/              full   tools/switchcheck.sh
 src/Vehicles/            full   tools/switchcheck.sh
+src/Player/              full   tools/decknetcheck.sh
+src/Vehicles/            full   tools/decknetcheck.sh
+src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
 tools/lib/               quick  tools/lib/guard_selftest.sh

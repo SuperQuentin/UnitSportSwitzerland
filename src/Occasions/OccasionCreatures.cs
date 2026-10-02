@@ -39,7 +39,7 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
     private readonly Dictionary<CritterKind, double[]> _born = new();
     private ShaderMaterial _material = null!;
     private double _t;
-    private static readonly bool LogFlocks = OS.GetCmdlineUserArgs().Contains("--decorlog");
+    private static readonly bool LogFlocks = CmdArgs.Has("--decorlog");
     private double _logIn;
     private Vector3 _crowCentre;
 
@@ -200,7 +200,7 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
     private void FlyCrows(MultiMesh multi, Vector3 eye, float dt)
     {
         var target = eye + new Vector3(Mathf.Sin((float)_t * 0.02f) * 70f, 0, Mathf.Cos((float)_t * 0.017f) * 70f);
-        _crowCentre = _crowPlaced ? _crowCentre.Lerp(target, 1f - Mathf.Exp(-0.05f * dt)) : target;
+        _crowCentre = _crowPlaced ? _crowCentre.Lerp(target, MathX.Damp(0.05f, dt)) : target;
         _crowPlaced = true;
         float ground = _chunks.TryGetHeight(_crowCentre, out float g) ? g : eye.Y - 60f;
         for (int i = 0; i < multi.InstanceCount; i++)

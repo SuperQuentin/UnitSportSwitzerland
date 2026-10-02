@@ -86,6 +86,12 @@ public partial class Swarm : Node
     private readonly Region[] _regions;
     private readonly double _seconds;
 
+    /// <summary>
+    /// The frame the bots drive in. Any will do since #185: what they publish is LV95, and
+    /// their tracks are built in this same frame.
+    /// </summary>
+    private readonly WorldOrigin _origin = WorldOrigin.SwissDefault();
+
     private readonly List<Bot> _bots = new();
     private readonly Dictionary<Region, Track> _tracks = new();
     private double _t, _sinceReport, _sinceSpawn, _maxDt;
@@ -107,22 +113,16 @@ public partial class Swarm : Node
 
     public static Swarm? ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
-        string? Arg(string flag)
-        {
-            int i = Array.IndexOf(args, flag);
-            return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-        }
-        if (Arg("--swarm") is not { } n || !int.TryParse(n, out int count) || count < 1) return null;
-        var (host, port) = NetworkManager.ParseEndpoint(Arg("--connect") ?? "127.0.0.1");
-        int seed = int.TryParse(Arg("--seed"), out int s) ? s : 1;
-        var regions = Arg("--regions") is { } list
+        if (CmdArgs.Value("--swarm") is not { } n || !int.TryParse(n, out int count) || count < 1) return null;
+        var (host, port) = NetworkManager.ParseEndpoint(CmdArgs.Value("--connect") ?? "127.0.0.1");
+        int seed = CmdArgs.Int("--seed") ?? 1;
+        var regions = CmdArgs.Value("--regions") is { } list
             ? list.Split(',').Select(r => Regions.FirstOrDefault(x => x.Name == r.Trim())).OfType<Region>().ToArray()
             : Regions;
         if (regions.Length == 0) regions = Regions;
-        double seconds = double.TryParse(Arg("--seconds"), NumberStyles.Float, CultureInfo.InvariantCulture, out double sec) ? sec : 0;
-        int first = int.TryParse(Arg("--first"), out int f) ? f : 0;
-        int total = int.TryParse(Arg("--total"), out int t) ? t : 0;
+        double seconds = CmdArgs.Double("--seconds") ?? 0;
+        int first = CmdArgs.Int("--first") ?? 0;
+        int total = CmdArgs.Int("--total") ?? 0;
         return new Swarm(count, first, total, host, port, seed, regions, seconds);
     }
 
@@ -199,10 +199,7 @@ public partial class Swarm : Node
     private async Task BuildTracksAsync()
     {
         var source = new LocalChunkSource(TerrainPaths.FindChunkDir());
-        var manifest = await source.LoadManifestAsync();
-        var origin = manifest.Tiles.Count > 0
-            ? new WorldOrigin(manifest.SuggestedOriginLv95.E, manifest.SuggestedOriginLv95.N)
-            : WorldOrigin.SwissDefault();
+        var origin = _origin;
         var tracks = new Dictionary<Region, Track>();
         foreach (var region in _bots.Select(b => b.Region).Distinct())
         {
@@ -303,15 +300,19 @@ public partial class Swarm : Node
         {
             if (node is FootPlayer p) p.Ready += () => Tame(bot, p);
         };
+        // the version check: the server spawns nothing for a bot before it
+        var handshake = Handshake.CreateClient();
+        handshake.Refused += reason => GD.PushError($"[swarm] bot {bot.Index}: {reason}");
+        world.AddChild(handshake);
         // before the players: each one's synchronizer asks it whom to send to
         InterestService.CreateClient(world);
         world.AddChild(World.RaceNpcs.CreateClient());
         world.AddChild(bot.Players);
-        world.AddChild(PlayerReplication.CreateSpawner());
+        world.AddChild(PlayerReplication.CreateSpawner(_origin));
         // the real client-side managers where they are plain per-branch nodes, stubs where the
         // class is a per-process singleton (Instance) that a second copy would clobber
         world.AddChild(ChatManager.CreateClient());
-        world.AddChild(World.RaceManager.CreateClient());
+        world.AddChild(World.RaceManager.CreateClient(_origin));
         // ChunkStream only answers requests, and a bot makes none
         foreach (string stub in new[] { "Vehicles", "Combat", "Interiors", "Loot", "ChunkStream" })
             world.AddChild(new Node { Name = stub });
@@ -324,7 +325,11 @@ public partial class Swarm : Node
         var err = peer.CreateClient(_host, _port);
         if (err != Error.Ok) { GD.PushError($"[swarm] bot {bot.Index}: cannot connect: {err}"); return; }
         bot.Api.MultiplayerPeer = peer;
-        bot.Api.ConnectedToServer += () => bot.Connected = true;
+        bot.Api.ConnectedToServer += () =>
+        {
+            bot.Connected = true;
+            handshake.Begin();
+        };
         bot.Api.ConnectionFailed += () => GD.PushError($"[swarm] bot {bot.Index}: connection failed");
         bot.Api.ServerDisconnected += () =>
         {
@@ -365,11 +370,11 @@ public partial class Swarm : Node
 
     /// <summary>
     /// What a real owner's FootPlayer._Process writes for the synchronizer: the transform travels
-    /// as NetPos/NetVel/NetYaw stamped with NetTime (last), not as position/rotation.
+    /// as NetGlobal/NetVel/NetYaw stamped with NetTime (last), not as position/rotation.
     /// </summary>
-    private static void PublishNet(FootPlayer me, Vector3 before, float dt)
+    private void PublishNet(FootPlayer me, Vector3 before, float dt)
     {
-        me.NetPos = me.Position;
+        me.NetGlobal = _origin.ToGlobal(me.Position);
         me.NetVel = dt > 0 ? (me.Position - before) / dt : Vector3.Zero;
         me.NetYaw = me.Rotation.Y;
         me.NetTime = Time.GetTicksUsec() / 1e6;

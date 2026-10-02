@@ -142,9 +142,19 @@ public partial class Structures : Node
     /// <summary>The yaw that turns a piece authored facing +Z toward <paramref name="dir"/> (0 −Z, 1 +X, 2 +Z, 3 −X).</summary>
     public static float DirYaw(int dir) => (dir & 3) switch { 0 => Mathf.Pi, 1 => Mathf.Pi / 2, 2 => 0f, _ => -Mathf.Pi / 2 };
 
-    /// <summary>The middle of a piece in world space: what reach is measured to.</summary>
+    /// <summary>The middle of a piece in this peer's world space (a client's ghost and rubble).</summary>
     public Vector3 Centre(Structure s, Piece p) =>
         s.WorldTransform(_origin) * (LocalTransform(p) * new Vector3(0, BuildGrid.Storey * 0.5f, 0));
+
+    /// <summary>
+    /// The middle of a piece in LV95: what the server measures reach to, against the position the
+    /// player published (#185: the server's own world floats mean little far from its origin).
+    /// </summary>
+    public static GlobalPos CentreGlobal(Structure s, Piece p)
+    {
+        var local = new Basis(Vector3.Up, s.Yaw) * (LocalTransform(p) * new Vector3(0, BuildGrid.Storey * 0.5f, 0));
+        return new GlobalPos(s.E + local.X, s.N - local.Z, s.Altitude + local.Y);   // world Z points south
+    }
 
     // ---- client API -----------------------------------------------------------------------------
 
@@ -187,9 +197,6 @@ public partial class Structures : Node
                 return (node.GetMeta(StructureMeta).AsInt64(), UnpackSlot(node.GetMeta(SlotMeta).AsInt32Array()));
         return null;
     }
-
-    /// <summary>After an origin rebase: every structure back where its LV95 position now is.</summary>
-    public void Reposition() => _visuals?.RedrawAll();
 
     private int Track(Action<string?> done)
     {
@@ -394,7 +401,7 @@ public partial class Structures : Node
         {
             var probe = s ?? new Structure { E = e, N = n, Altitude = alt, Yaw = yaw };
             int mine = _structures.Values.Sum(x => x.Pieces.Values.Count(q => q.Owner == owner && x.Match == match));
-            var centre = Centre(probe, piece!.Value);
+            var centre = CentreGlobal(probe, piece!.Value);
             refused = !InReach(peer, centre) ? "Too far away."
                 : mine >= (match ? BuildGrid.MaxPiecesMatch : BuildGrid.MaxPiecesFree) ? "You have built as much as you may."
                 : piece.Value.Grounded && !GroundOk(probe, piece.Value) ? "Not on the ground there."
@@ -425,7 +432,7 @@ public partial class Structures : Node
         Placed? p = null;
         string? refused = !_structures.TryGetValue(structure, out var s) || !s.Pieces.TryGetValue(slot, out p) ? "It is not there any more."
             : p.Owner != OwnerName(peer) ? "That is not yours."
-            : !InReach(peer, Centre(s, p.Piece)) ? "Too far away."
+            : !InReach(peer, CentreGlobal(s, p.Piece)) ? "Too far away."
             : null;
         if (refused != null)
         {
@@ -444,7 +451,7 @@ public partial class Structures : Node
         if (def == null || !float.IsFinite(damage) || damage <= 0 || damage > def.MaxHit) return;
         // offline there is no match: whoever plays alone may break a match structure (the prefab probe)
         bool may = s.Match ? !Online || PeerInMatch(peer) : p.Owner == OwnerName(peer) || Combat.PvpRules.Enabled;
-        if (!may || !InReach(peer, Centre(s, p.Piece), def.Range + 8f)) return;
+        if (!may || !InReach(peer, CentreGlobal(s, p.Piece), def.Range + 8f)) return;
 
         p.Damage += damage;
         if (p.Hp(Now) > 0)
@@ -514,11 +521,11 @@ public partial class Structures : Node
         else Answer(req, refused);
     }
 
-    private bool InReach(long peer, Vector3 at, float reach = Reach)
+    private bool InReach(long peer, GlobalPos at, float reach = Reach)
     {
         if (!Online) return true;
-        if (GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body) return false;
-        return body.GlobalPosition.DistanceTo(at) <= reach;
+        if (GetNodeOrNull<Player.FootPlayer>("../Players/" + peer) is not { } body) return false;
+        return body.Global.DistanceTo(at) <= reach;
     }
 
     // ---- persistence (free roam only) -----------------------------------------------------------

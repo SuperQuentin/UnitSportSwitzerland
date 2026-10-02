@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Net;
 using UnitSport.Player;
 
@@ -7,7 +8,7 @@ namespace UnitSport.World;
 /// <summary>
 /// The driver of a race NPC (issue #39): a child of an NPC <see cref="FootPlayer"/> on every peer,
 /// active only on the NPC's current simulator (its multiplayer authority). The NPC is a real racer —
-/// the same body, car and physics as a player, replicated like one (NetPos from its simulator),
+/// the same body, car and physics as a player, replicated like one (NetGlobal from its simulator),
 /// solid to everyone — simulated first on the client that asked for it, then on whichever client
 /// the server hands it to (<see cref="RaceNpcs"/>, issue #50), and driven by an
 /// <see cref="AutoPilot"/> through <see cref="FootPlayer.RideControls"/>.
@@ -18,7 +19,7 @@ namespace UnitSport.World;
 /// <see cref="RaceManager.TrackNpc"/>, and says when it finished or was dropped.
 /// </para>
 /// </summary>
-public partial class RaceNpc : Node
+public partial class RaceNpc : Node, IOriginShiftAware
 {
     public const string NodeName = "Npc";
 
@@ -45,12 +46,25 @@ public partial class RaceNpc : Node
     /// <summary>This peer simulates it (it can start or stop doing so at any time, #50).</summary>
     private bool _active;
 
+    private static RideInput Coast() => new(0f, 0f, 0f, false);
+
     private static RideInput Hold() => new(0f, 0f, 0f, false, Handbrake: true);
+
+    /// <summary>The origin moved (#185): the road it drives, and where it is driving in to, move with it.</summary>
+    public void OnOriginShifted(OriginShift shift)
+    {
+        if (_me.Origin is not { } origin) return;
+        _route?.Follow(origin.Frame);
+        _arrival?.OnOriginShifted(shift, origin.Frame);
+    }
 
     public override void _Ready()
     {
         _me = GetParent<FootPlayer>();
         _me.RideControls = Hold;
+        // a dedicated server's copy is a data proxy: never its authority (SetSimulator gives it to
+        // clients only, and returns early on a proxy), so its physics step only ever returned (#221)
+        if (Net.NetworkManager.DedicatedServer) SetPhysicsProcess(false);
         _race = _me.GetParent()?.GetParent()?.GetNodeOrNull<RaceManager>(RaceManager.NodeName);
         if (_race == null) return;
         _race.NpcSetup += OnSetup;
@@ -76,7 +90,13 @@ public partial class RaceNpc : Node
             if (_active) { _active = false; _route = null; _pilot = null; _arrival = null; }
             return;
         }
-        if (!_active) { _active = true; _me.RideControls = Hold; }
+        if (!_active)
+        {
+            _active = true;
+            // a handoff takes over a car that is rolling: coast until the pilot is armed. The handbrake
+            // of Hold stopped it from 72 km/h in 0.4 s (#159)
+            _me.RideControls = _me.RideSpeed > 3f ? Coast : Hold;
+        }
         // on its mount, and back on it after being thrown off (the mount waits for the ground)
         if (_me.Ride != Kind && _me.IsOnFloor()) _me.SetRide(Kind);
         if (Setup != 0 && _me.Vehicle is Car && _me.CarSetupId != Setup && _pilot == null && _me.SetCarSetup(Setup))
@@ -119,14 +139,15 @@ public partial class RaceNpc : Node
         GD.Print($"[npc] {_me.Name} arriving {a.Style} for slot {a.Slot + 1} of {a.Count}");
     }
 
-    /// <summary>Everyone else, for driving in: players, NPCs, parked or moving.</summary>
+    /// <summary>Everyone else, for driving in: players, NPCs, parked or moving. One reused list, from this tick's <see cref="PlayerSnapshot"/> (#221).</summary>
     private List<NpcArrival.Body> Bodies()
     {
-        var list = new List<NpcArrival.Body>();
-        foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (node is FootPlayer p && p != _me) list.Add(new NpcArrival.Body(p.GlobalPosition, p.WorldVelocity, p.Npc));
-        return list;
+        _bodies.Clear();
+        foreach (var s in PlayerSnapshot.Of(GetTree()))
+            if (s.Player != _me) _bodies.Add(new NpcArrival.Body(s.Pos, s.Vel, s.Player.Npc));
+        return _bodies;
     }
+    private readonly List<NpcArrival.Body> _bodies = new();
 
     private void OnSetup(RaceManager.NpcGrid g)
     {
@@ -245,9 +266,16 @@ public partial class RaceNpcs : Node
     private const double MinHold = 5.0;
 
     /// <summary>No state from the simulator for this long: it is gone (ENet takes 5-30 s to notice a crash).</summary>
-    public const double StaleSeconds = 2.5;
+    public const double StaleSeconds = 1.2;
 
-    private const double ReviewPeriod = 1.0;
+    /// <summary>
+    /// A new simulator's first states take longer than a running one's next: taking the car over and
+    /// re-arming the pilot on a busy client. Judged at <see cref="StaleSeconds"/> from the handoff, both
+    /// NPCs were handed to B and retired again within the second (#159 loopback, B at 300 m).
+    /// </summary>
+    private const double HandoffGrace = 2.5;
+
+    private const double ReviewPeriod = 0.25;
 
     private MultiplayerSpawner? _spawner;
     private Node3D? _players;
@@ -275,7 +303,7 @@ public partial class RaceNpcs : Node
     /// <summary>Server: spawns up to <paramref name="count"/> NPCs for <paramref name="owner"/> behind <paramref name="at"/>; returns their ids.</summary>
     /// <param name="place">Where the i-th one appears and its yaw (<see cref="NpcArrival.Plan"/>); null: behind <paramref name="at"/>.</param>
     /// <param name="setup">A car preset for all of them (<see cref="CarSetups"/> id); 0 stock.</param>
-    public List<long> Spawn(long owner, int count, RideKind kind, Vector3 at, float yaw, System.Func<int, (Vector3 At, float Yaw)>? place = null, int setup = 0)
+    public List<long> Spawn(long owner, int count, RideKind kind, GlobalPos at, float yaw, System.Func<int, (GlobalPos At, float Yaw)>? place = null, int setup = 0)
     {
         var ids = new List<long>();
         if (_spawner == null || !AutoPilot.Drives(kind)) return ids;
@@ -327,12 +355,12 @@ public partial class RaceNpcs : Node
             // silent counts from the handoff too: the new simulator's first state takes a moment, and
             // judged by the old one's last state, a car just handed over was "silent" again a second
             // later and retired (seen in the #85 loopback check: both NPCs gone mid-race)
-            if (simNode == null || Now - System.Math.Max(npc.LastNetState, _live[id].Since) > StaleSeconds)
+            if (simNode == null || Now - System.Math.Max(npc.LastNetState, _live[id].Since + HandoffGrace) > StaleSeconds)
             {
                 HandOff(id, sim, simNode == null ? "its simulator left" : "its simulator stopped sending");
                 continue;
             }
-            float d = Flat(npc.GlobalPosition, simNode.GlobalPosition);
+            float d = Flat(npc.Global, simNode.Global);
             if (d > Zone * LeaveFactor && Now - _live[id].Since >= MinHold)
                 HandOff(id, sim, $"its simulator is {d:F0} m away");
         }
@@ -373,7 +401,7 @@ public partial class RaceNpcs : Node
         foreach (var child in _players!.GetChildren())
         {
             if (child is not FootPlayer { Npc: false } p || !long.TryParse(p.Name, out long peer) || peer == exclude) continue;
-            float d = Flat(p.GlobalPosition, npc.GlobalPosition);
+            float d = Flat(p.Global, npc.Global);
             if (d > Zone || Now - p.LastNetState > StaleSeconds || SimulatedBy(peer) >= MaxSimulated) continue;
             var key = (race != 0 && Race?.RaceOf(peer) == race ? 0 : 1,
                 p.Ride is >= RideKind.Wingsuit and <= RideKind.Plane ? 1 : 0, d);
@@ -383,6 +411,9 @@ public partial class RaceNpcs : Node
     }
 
     public static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
+
+    /// <summary>Horizontal metres between two players' published positions: the server measures in LV95, not in its own world (#185).</summary>
+    public static float Flat(GlobalPos a, GlobalPos b) => (float)a.HorizontalDistanceTo(b);
 
     /// <summary>
     /// Server → everyone: the NPC is simulated by <paramref name="peer"/> from now on. Each peer
@@ -399,7 +430,7 @@ public partial class RaceNpcs : Node
     }
 
     // ---- --npccheck (loopback test, on a client that does not own the NPCs): are they solid here? ----
-    private readonly bool _check = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--npccheck") >= 0;
+    private readonly bool _check = CmdArgs.Has("--npccheck");
     private double _sinceCheck;
 
     public override void _PhysicsProcess(double delta)

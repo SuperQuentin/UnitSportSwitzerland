@@ -17,7 +17,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     [Export] public bool BuildCollision { get; set; } = true;
 
     private const double PlayEvalInterval = 0.1;
-    private const int PlayCollisionCommitsPerFrame = 1;
 
     /// <summary>
     /// Loads as fast as the machine allows, for an offline render that owns the clock.
@@ -33,7 +32,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public bool OfflineMode { get; set; }
 
     private double EvalInterval => OfflineMode ? 0 : PlayEvalInterval;
-    private int CollisionCommitsPerFrame => OfflineMode ? int.MaxValue : PlayCollisionCommitsPerFrame;
 
     /// <summary>
     /// Main-thread milliseconds a frame may spend turning finished builds into Godot meshes.
@@ -194,8 +192,11 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// <summary>Raised on the main thread when a build's last result is committed.</summary>
     public event Action<BuildLog>? BuildLogged;
 
-    /// <summary>Raised on the main thread for every result committed: tile, stride, interim, ms.</summary>
-    public event Action<TileId, int, bool, double>? CommitLogged;
+    /// <summary>
+    /// Raised on the main thread for every commit: tile, stride, kind, ms. Kind is "ground" (an
+    /// interim result), "tail", or one collision piece: "coll-height", "coll-road", "coll-bldg".
+    /// </summary>
+    public event Action<TileId, int, string, double>? CommitLogged;
 
     /// <summary>The current cap on builds in flight, so a saturated loader can be recognised.</summary>
     public int BuildCap => MaxConcurrentBuilds;
@@ -345,6 +346,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         public bool HasBuildings;
         public bool PendingBuildings;
         public bool HasBuildingCollision;
+
+        // Collision waiting for its frame, one piece at a time (see CommitCollisionPieces).
+        // Height cells are bits in ChunkNode.CollisionCell order; Done bits are never cleared,
+        // so a rebuild keeps the old cell standing until its replacement lands.
+        public float[]? QueuedHeight;
+        public int HeightCellsQueued, HeightCellsDone;
+        public Vector3[][]? QueuedRoadCells, QueuedBuildingCells;
+        public int RoadCellsQueued, RoadCellsDone, BuildingCellsQueued;
+        public bool CollisionQueued =>
+            HeightCellsQueued != 0 || RoadCellsQueued != 0 || BuildingCellsQueued != 0;
+
         public ChunkGrid? Grid;
         public HashSet<int>? Holes;   // tunnel portals; null until the tile is first loaded
         /// <summary>The tile's tunnel bores (#119), with its collision: a body inside one is not under the ground.</summary>
@@ -383,9 +395,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         ArrayMesh? Mesh, float[]? CollisionMap,
         ArrayMesh? Roads, bool RoadsRequested,
         HashSet<int>? Holes, byte[]? Cover,
-        ArrayMesh? Buildings, Vector3[]? BuildingFaces, bool BuildingsRequested,
+        ArrayMesh? Buildings, Vector3[][]? BuildingFaces, bool BuildingsRequested,
         ChunkNode.TreeMeshes? Trees, ArrayMesh? Water,
-        Vector3[]? RoadCollisionFaces = null, long[]? StageMs = null,
+        Vector3[][]? RoadCollisionFaces = null, long[]? StageMs = null,
         Interiors.DoorSpot[]? Doors = null,
         List<(float[] Points, int Count, float Half, float Height)>? Bores = null);
 
@@ -526,6 +538,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// <summary>A loaded tile's building collision body, if it has one.</summary>
     public StaticBody3D? BuildingBodyAt(TileId id) =>
         _chunks.TryGetValue(id, out var state) ? state.Node?.BuildingBody : null;
+
+    /// <summary>A loaded tile's ground mesh, for per-tile shader parameters (<see cref="PhotoLayer"/>).</summary>
+    public MeshInstance3D? GroundAt(TileId id) =>
+        _chunks.TryGetValue(id, out var state) ? state.Node?.Ground : null;
 
     /// <summary>
     /// The buildings with players inside, for the facade shader's occupancy cues (more lit
@@ -717,33 +733,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
-    /// Throws the whole world away — every tile, every cached asset and blend, the horizon — for
-    /// a rebase, which changes what every world coordinate means. <paramref name="moveOrigin"/>
-    /// runs once nothing placed against the old origin is left; the rings then rebuild everything
-    /// round the new one. Main thread only.
-    /// </summary>
-    public void ResetAll(Action? moveOrigin = null)
-    {
-        foreach (var id in _chunks.Keys.ToList()) UnloadTile(id);
-        _desired.Clear();
-        _wanted = [];
-        _ordered = [];
-        _desiredKey = "";
-        _orderedView = null;
-        _worldVersion++;
-        _sinceEval = double.MaxValue;
-        _invalidate?.Invoke(null);
-        _fallback?.ClearBlends();
-        Horizon?.Clear();
-        moveOrigin?.Invoke();
-        // the coverage texture is placed in world space: after the move, not before
-        FitHorizonCoverage();
-        Horizon?.Reload();
-        GD.Print("[terrain] world reset");
-        TerrainReplaced?.Invoke(null);
-    }
-
-    /// <summary>
     /// Sizes the horizon's coverage texture to every tile that can be drawn: the real set and the
     /// generated fill's domain.
     /// </summary>
@@ -769,6 +758,59 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         if (minE > maxE) return;
         Horizon.EnsureCoverage(minE, maxE, minN, maxN);
     }
+
+    // ---- debug menu (#339) -------------------------------------------------------------
+
+    /// <summary>The tile layers the debug menu hid on every tile; none in play.</summary>
+    public TileLayers HiddenLayers { get; private set; }
+
+    private bool _hideReal, _hideGenerated;
+
+    /// <summary>
+    /// Hides tile layers, and whole tiles by where their data comes from, on every loaded tile and
+    /// every tile built later. The horizon and the near trees are the caller's: they are nodes of
+    /// their own. Main thread.
+    /// </summary>
+    public void SetDebugHidden(TileLayers layers, bool real, bool generated)
+    {
+        HiddenLayers = layers;
+        _hideReal = real;
+        _hideGenerated = generated;
+        foreach (var (id, state) in _chunks)
+            if (state.Node != null) ApplyDebugHidden(id, state.Node);
+    }
+
+    private void ApplyDebugHidden(TileId id, ChunkNode node)
+    {
+        node.HideLayers(HiddenLayers);
+        node.Visible = !(IsGenerated(id) ? _hideGenerated : _hideReal);
+    }
+
+    /// <summary>
+    /// Stops the rings following the anchors: what is loaded stays loaded, at the stride it has,
+    /// so the camera can leave and look at it from outside. Builds already queued still commit.
+    /// </summary>
+    public bool FreezeRings
+    {
+        get => _freezeRings;
+        set
+        {
+            _freezeRings = value;
+            _sinceEval = double.MaxValue;
+        }
+    }
+
+    private bool _freezeRings;
+
+    /// <summary>Every loaded tile and the stride its ground is drawn at (-1: not built yet), for the debug overlay.</summary>
+    public void ListTiles(List<(TileId Id, int Stride)> into)
+    {
+        into.Clear();
+        foreach (var (id, state) in _chunks) into.Add((id, state.ActiveStride));
+    }
+
+    /// <summary>The stride a loaded tile's ground is drawn at; -1 when it is not loaded or not built yet.</summary>
+    public int StrideAt(TileId id) => _chunks.TryGetValue(id, out var state) ? state.ActiveStride : -1;
 
     /// <summary>Real or generated: whether the rings may ask for a tile.</summary>
     private bool IsAvailable(TileId id) => _available.Contains(id) || _fallback?.Covers(id) == true;
@@ -1021,7 +1063,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     {
         if (_origin == null) return false;
         var (e, n) = _origin.ToLv95(worldPos);
-        return _chunks.TryGetValue(TileId.FromLv95(e, n), out var state) && state.HasCollision;
+        var id = TileId.FromLv95(e, n);
+        if (!_chunks.TryGetValue(id, out var state)) return false;
+        // the cell under the point, not the whole tile: cells land one per frame, nearest first,
+        // so a body waits only for its own; and a bridge is ground too
+        int cell = ChunkNode.CollisionCell((int)(e - id.MinE), (int)(id.MaxN - n));
+        return (state.HeightCellsDone & (1 << cell)) != 0
+            && ((state.RoadCellsQueued & (1 << cell)) == 0 || (state.RoadCellsDone & (1 << cell)) != 0);
     }
 
     private long _allocatedAtLastCollect;
@@ -1064,7 +1112,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         // idle and capped the whole loader at MaxConcurrentBuilds per interval — 24 tiles a
         // second however fast the disk actually is.
         _sinceEval += delta;
-        if (_sinceEval >= EvalInterval || committed > 0)
+        if (!_freezeRings && (_sinceEval >= EvalInterval || committed > 0))
         {
             _sinceEval = 0;
             EvaluateRings();
@@ -1095,7 +1143,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// <summary>Returns how many results were committed, so the caller knows a slot freed.</summary>
     private int CommitReadyResults()
     {
-        int collisionBudget = CollisionCommitsPerFrame;
         int committed = 0;
         int meshCommits = 0;
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -1105,8 +1152,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         // allowed collision commit ended the whole loop for that frame — leaving the mesh
         // budget untouched and everything behind it waiting, which throttled the queue to
         // roughly one tile per frame exactly when tiles were arriving fastest.
-        // Meshes are budgeted by time, at least one a frame; collision stays a count, because
-        // one 1001^2 HeightMapShape3D is the single most expensive thing committed here.
+        // Meshes are budgeted by time, at least one a frame. Collision is not committed here at
+        // all, only queued: see CommitCollisionPieces.
         while (_ready.TryPeek(out var next))
         {
             // every result counts against the time budget - a tail with buildings and 60k
@@ -1115,7 +1162,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             bool overBudget = !OfflineMode && meshCommits > 0
                 && clock.Elapsed.TotalMilliseconds >= CommitBudgetMs;
             if (overBudget) break;
-            if (next.CollisionMap != null && collisionBudget <= 0) break;
             if (!_ready.TryDequeue(out var result)) break;
 
             if (!_chunks.TryGetValue(result.Id, out var state)
@@ -1153,22 +1199,31 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 EnsureNode(result.Id, state).SetMesh(result.Mesh);
                 Horizon?.SetCovered(result.Id, true);
             }
+            // collision is only queued here; a newer piece replaces a queued older one
             if (result.CollisionMap != null)
             {
-                EnsureNode(result.Id, state).SetCollision(result.CollisionMap);
-                state.HasCollision = true;
+                state.QueuedHeight = result.CollisionMap;
+                state.HeightCellsQueued = ChunkNode.AllCollisionCells;
                 state.PendingCollision = false;
-                collisionBudget--;
             }
             if (result.BuildingFaces != null)
             {
-                if (result.BuildingFaces.Length > 0)
-                    EnsureNode(result.Id, state).SetBuildingCollision(result.BuildingFaces);
+                // every cell, empty ones too: an empty one clears what a rebuild replaces
+                state.QueuedBuildingCells = result.BuildingFaces;
+                state.BuildingCellsQueued = ChunkNode.AllCollisionCells;
                 state.HasBuildingCollision = true;
             }
             if (result.RoadCollisionFaces != null)
-                EnsureNode(result.Id, state).SetRoadCollision(result.RoadCollisionFaces);
+            {
+                state.QueuedRoadCells = result.RoadCollisionFaces;
+                state.RoadCellsQueued = ChunkNode.AllCollisionCells;
+            }
             if (result.Bores != null) state.Bores = result.Bores;
+            if (state.CollisionQueued)
+            {
+                EnsureNode(result.Id, state);
+                _collisionQueue.Add(result.Id);
+            }
             if (result.RoadsRequested)
             {
                 if (result.Roads != null)
@@ -1185,7 +1240,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     Interiors.DoorIndex.SetTile(result.Id, _origin!.ToWorld(result.Id.MinE, result.Id.MaxN, 0), result.Doors);
                 TileFurnished?.Invoke(result.Id, EnsureNode(result.Id, state), result.Doors ?? []);
                 if (result.Trees != null)
-                    EnsureNode(result.Id, state).SetTrees(result.Trees);
+                {
+                    var node = EnsureNode(result.Id, state);
+                    node.SetTrees(result.Trees);
+                    int dist = int.MaxValue;
+                    foreach (var anchor in _anchors)
+                        dist = Math.Min(dist, LodPolicy.Distance(result.Id, _origin!.TileAt(anchor.GlobalPosition)));
+                    node.SetTreeDensity(Lod.TreeDensity(dist));
+                }
                 if (result.Water != null)
                     EnsureNode(result.Id, state).SetWater(result.Water);
                 state.HasBuildings = true;
@@ -1194,14 +1256,126 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             state.ActiveStride = result.Stride;
             // a single commit past a frame is worth knowing about: it is what a hitch IS
             double took = clock.Elapsed.TotalMilliseconds - t0;
-            CommitLogged?.Invoke(result.Id, result.Stride, result.Interim, took);
+            CommitLogged?.Invoke(result.Id, result.Stride, result.Interim ? "ground" : "tail", took);
             if (took > 33)
                 GD.Print($"[commit] {result.Id} stride {result.Stride} {(result.Interim ? "interim" : "tail")} took {took:F0} ms");
         }
 
+        committed += CommitCollisionPieces(clock);
         _lastCommitMs = clock.Elapsed.TotalMilliseconds;
         _lastCommits = committed;
         return committed;
+    }
+
+    /// <summary>Tiles with collision pieces waiting; see <see cref="CommitCollisionPieces"/>.</summary>
+    private readonly HashSet<TileId> _collisionQueue = new();
+    private readonly List<Vector3> _anchorScratch = new();
+    private readonly List<TileId> _staleScratch = new();
+
+    // piece ids: 0-15 height cells, 16-31 road cells, 32-47 building cells
+    private const int PieceRoads = ChunkNode.CollisionCellCount, PieceBuildings = 2 * ChunkNode.CollisionCellCount;
+    private static readonly string[] PieceKinds = ["coll-height", "coll-road", "coll-bldg"];
+
+    /// <summary>
+    /// Commits queued collision one piece per frame (more while the frame's commit budget
+    /// lasts), the piece nearest a collision anchor first. A tile's collision used to land in
+    /// one frame: a 1001² HeightMapShape3D (~80 ms), the buildings' BVH (up to 80 ms) and the
+    /// bridges together. Now the height field is 16 cells of 251², the bridges and buildings
+    /// are a piece each, and the cell a body stands in goes first, then its bridge, so
+    /// <see cref="HasCollisionAt"/> turns true as early as it can.
+    /// </summary>
+    private int CommitCollisionPieces(System.Diagnostics.Stopwatch clock)
+    {
+        if (_collisionQueue.Count == 0) return 0;
+        _anchorScratch.Clear();
+        foreach (var anchor in _collisionAnchors)
+            if (GodotObject.IsInstanceValid(anchor)) _anchorScratch.Add(anchor.GlobalPosition);
+
+        int done = 0;
+        while (done == 0 || OfflineMode || clock.Elapsed.TotalMilliseconds < CommitBudgetMs)
+        {
+            TileId bestId = default;
+            ChunkState? best = null;
+            int bestPiece = -1;
+            float bestKey = float.MaxValue;
+            _staleScratch.Clear();
+            foreach (var id in _collisionQueue)
+            {
+                if (!_chunks.TryGetValue(id, out var s) || s.Node == null || !s.CollisionQueued)
+                {
+                    _staleScratch.Add(id);
+                    continue;
+                }
+                var corner = s.Node.GlobalPosition;
+                // the kind breaks a tie in distance: the ground under a body, then the road
+                // collision on it (bridge decks), then the buildings
+                for (int cell = 0; cell < ChunkNode.CollisionCellCount; cell++)
+                {
+                    var rect = ChunkNode.CollisionCellRect(cell);
+                    if ((s.HeightCellsQueued & (1 << cell)) != 0) Consider(s, id, cell, rect, corner, 0f);
+                    if ((s.RoadCellsQueued & (1 << cell)) != 0) Consider(s, id, PieceRoads + cell, rect, corner, 0.5f);
+                    if ((s.BuildingCellsQueued & (1 << cell)) != 0) Consider(s, id, PieceBuildings + cell, rect, corner, 1f);
+                }
+            }
+            foreach (var id in _staleScratch) _collisionQueue.Remove(id);
+            if (best == null) break;
+
+            double t0 = clock.Elapsed.TotalMilliseconds;
+            var node = best.Node!;
+            int kind;
+            if (bestPiece >= PieceRoads && bestPiece < PieceBuildings)
+            {
+                int cell = bestPiece - PieceRoads;
+                node.SetRoadCell(best.QueuedRoadCells![cell], cell);
+                best.RoadCellsQueued &= ~(1 << cell);
+                best.RoadCellsDone |= 1 << cell;
+                if (best.RoadCellsQueued == 0) best.QueuedRoadCells = null;
+                kind = 1;
+            }
+            else if (bestPiece >= PieceBuildings)
+            {
+                int cell = bestPiece - PieceBuildings;
+                node.SetBuildingCell(best.QueuedBuildingCells![cell], cell);
+                best.BuildingCellsQueued &= ~(1 << cell);
+                if (best.BuildingCellsQueued == 0) best.QueuedBuildingCells = null;
+                kind = 2;
+            }
+            else
+            {
+                node.SetCollisionCell(best.QueuedHeight!, bestPiece);
+                best.HeightCellsQueued &= ~(1 << bestPiece);
+                best.HeightCellsDone |= 1 << bestPiece;
+                if (best.HeightCellsQueued == 0) best.QueuedHeight = null;
+                if (best.HeightCellsDone == ChunkNode.AllCollisionCells) best.HasCollision = true;
+                kind = 0;
+            }
+            done++;
+            double took = clock.Elapsed.TotalMilliseconds - t0;
+            CommitLogged?.Invoke(bestId, best.ActiveStride, PieceKinds[kind], took);
+            if (took > 33)
+                GD.Print($"[commit] {bestId} {PieceKinds[kind]} {bestPiece} took {took:F0} ms");
+
+            void Consider(ChunkState s, TileId id, int piece, Rect2 rect, Vector3 corner, float tie)
+            {
+                // tile-local metres from the NW corner (EnsureNode's position): x east, z south
+                float dist = 0f;
+                if (_anchorScratch.Count > 0)
+                {
+                    dist = float.MaxValue;
+                    foreach (var a in _anchorScratch)
+                    {
+                        float x = a.X - corner.X, z = a.Z - corner.Z;
+                        float dx = Math.Max(Math.Max(rect.Position.X - x, x - rect.End.X), 0f);
+                        float dz = Math.Max(Math.Max(rect.Position.Y - z, z - rect.End.Y), 0f);
+                        dist = Math.Min(dist, MathF.Sqrt(dx * dx + dz * dz));
+                    }
+                }
+                float key = dist + tie;
+                if (key >= bestKey) return;
+                (bestKey, best, bestId, bestPiece) = (key, s, id, piece);
+            }
+        }
+        return done;
     }
 
     private ChunkNode EnsureNode(TileId id, ChunkState state)
@@ -1213,6 +1387,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 Name = $"Chunk_{id}",
                 Position = _origin!.ToWorld(id.MinE, id.MaxN, 0),
             };
+            ApplyDebugHidden(id, state.Node);
             AddChild(state.Node);
         }
         return state.Node;
@@ -1232,7 +1407,28 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private KeyValuePair<TileId, Want>[] _wanted = [];
     private KeyValuePair<TileId, Want>[] _ordered = [];
     private double[] _orderKeys = [];
-    private string _desiredKey = "";
+    /// <summary>
+    /// What the desired set was computed from: each anchor's tile and whether it wants collision,
+    /// the LOD policy, the world version and <see cref="BuildMeshes"/>. Compared field by field at
+    /// 10 Hz, with nothing allocated (it was a string built every evaluation, #221).
+    /// </summary>
+    private readonly List<(TileId Tile, bool Collision)> _desiredKey = new(), _keyNow = new();
+    private (LodPolicy? Lod, long Version, bool Meshes) _desiredKeyRest;
+
+    private bool RingKeyChanged()
+    {
+        _keyNow.Clear();
+        foreach (var anchor in _anchors)
+            _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor)));
+        (LodPolicy? Lod, long Version, bool Meshes) rest = (Lod, _worldVersion, BuildMeshes);
+        if (rest == _desiredKeyRest   // the policy by reference: a new one is a new key
+            && System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_keyNow).SequenceEqual(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_desiredKey)))
+            return false;
+        _desiredKeyRest = rest;
+        _desiredKey.Clear();
+        _desiredKey.AddRange(_keyNow);
+        return true;
+    }
     private ViewCone? _orderedView;
 
     /// <summary>
@@ -1265,16 +1461,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     private void EvaluateRings()
     {
-        var keyBuilder = new System.Text.StringBuilder();
-        foreach (var anchor in _anchors)
-            keyBuilder.Append(_origin!.TileAt(anchor.GlobalPosition)).Append(_collisionAnchors.Contains(anchor) ? 'p' : 'c').Append(';');
-        keyBuilder.Append('|').Append(Lod.GetHashCode())
-            .Append('|').Append(_worldVersion).Append('|').Append(BuildMeshes);
-        string key = keyBuilder.ToString();
-
-        if (key != _desiredKey)
+        if (RingKeyChanged())
         {
-            _desiredKey = key;
             _orderedView = null;
             RecomputeDesired();
         }
@@ -1295,7 +1483,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             }
 
             bool needMesh = BuildMeshes && state.ActiveStride != want.Stride;
-            bool needCollision = want.Collision && !state.PendingCollision
+            bool needCollision = want.Collision && !state.PendingCollision && !state.CollisionQueued
                 && (!state.HasCollision || !state.HasBuildingCollision);
             bool needRoads = want.Roads && !state.HasRoads && !state.PendingRoads;
             bool needBuildings = want.Buildings && !state.HasBuildings && !state.PendingBuildings;
@@ -1373,6 +1561,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _wanted = desired.ToArray();
         _desired.Clear();
         foreach (var (id, _) in _wanted) _desired.Add(id);
+        // a tile's ring changed: so does how many of its trees are drawn
+        foreach (var (id, want) in _wanted)
+            if (_chunks.TryGetValue(id, out var loaded) && loaded.Node != null)
+                loaded.Node.SetTreeDensity(Lod.TreeDensity(want.Dist));
 
         // unload with hysteresis
         var toRemove = new List<TileId>();
@@ -1656,7 +1848,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // town tile), and only the tile a body stands on needs one. Empty faces still
                 // mark the tile done, so it is not asked again.
                 ArrayMesh? buildings = null;
-                Vector3[]? buildingFaces = null;
+                Vector3[][]? buildingFaces = null;
                 Interiors.DoorSpot[]? doors = null;
                 if (wantBuildings || wantCollision)
                 {
@@ -1679,7 +1871,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         }
                     }
                     if (wantCollision)
-                        buildingFaces = bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : [];
+                        buildingFaces = ChunkNode.SplitByCell(bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : []);
                     Lap(StBldgMesh, stageMs, clock);
                 }
 
@@ -1704,7 +1896,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     ? TerrainMeshBuilder.ComputeRoadBlend(roadTile) : null;
 
                 float[]? blendedCollision = null;
-                Vector3[]? bridgeCollision = null;
+                Vector3[][]? bridgeCollision = null;
                 List<(float[] Points, int Count, float Half, float Height)>? bores = null;
                 if (wantCollision && roadTile != null)
                 {
@@ -1713,11 +1905,11 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     // bridges get their own small collision body alongside the blended ground.
                     // and retaining walls (#125): a heightfield cannot stand a vertical face either,
                     // nor a railing (#126), nor a kerb (#119)
-                    bridgeCollision = [.. RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile),
+                    bridgeCollision = ChunkNode.SplitByCell([.. RoadMeshBuilder.BuildBridgeCollisionFaces(roadTile),
                         .. RoadWallBuilder.BuildCollisionFaces(roadTile), .. RailingBuilder.BuildCollisionFaces(roadTile),
                         .. IslandBuilder.BuildCollisionFaces(roadTile),   // roundabout islands (#122)
                         .. RoadSignBuilder.BuildCollisionFaces(roadTile),   // sign poles (#121)
-                        .. RoadStreetBuilder.BuildCollisionFaces(roadTile)];   // sidewalks and kerbs (#119)
+                        .. RoadStreetBuilder.BuildCollisionFaces(roadTile)]);   // sidewalks and kerbs (#119)
                     bores = RoadTunnels.Bores(roadTile);
                 }
                 else if (wantCollision && !publishInterimCollision)

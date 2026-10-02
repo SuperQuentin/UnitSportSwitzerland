@@ -19,43 +19,24 @@ namespace UnitSport.Loot;
 /// checks the front door cannot be used from down there. Run all three with the same
 /// <c>--lootepoch N</c> and <c>--at E,N</c>; <c>tools/bankcheck.sh</c> does.
 /// </summary>
-public partial class BankProbe : Node
+public partial class BankProbe : ChatProbe
 {
-    public static string? Role
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--bankcheck");
-            return i >= 0 && i + 1 < args.Length ? args[i + 1].ToUpperInvariant() : null;
-        }
-    }
+    public static string? Role => RoleArg("--bankcheck");
 
-    private readonly ItemController _items;
     private readonly WorldOrigin _origin;
-    private readonly List<string> _heard = new();
-    private string _role = "";
-    private int _failures;
 
-    public BankProbe(ItemController items, WorldOrigin origin)
-    {
-        _items = items;
-        _origin = origin;
-    }
+    public BankProbe(ItemController items, WorldOrigin origin) : base(items, "bank", "BK", "bank_") => _origin = origin;
 
     public BankProbe() : this(null!, null!) { }
 
-    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
-    private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
+    protected override bool EchoSay => false;
 
     public override async void _Ready()
     {
         _role = Role ?? "A";
         string other = _role == "A" ? "B" : "A";
 
-        if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor()
-            && GetParent() is ClientWorld { Stage: LoadStage.Ready }, 180)) { Fail("no player on the ground"); return; }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
+        if (!await Joined(180, () => GetParent() is ClientWorld { Stage: LoadStage.Ready })) return;
         var me = Me!;
         var interiors = InteriorManager.Instance!;
         var loot = LootService.Instance!;
@@ -86,7 +67,7 @@ public partial class BankProbe : Node
         if (found is not { } door || plan == null) { Fail($"no bank among {doors.Count} commercial doors"); return; }
         int counter = plan.Furniture.FindIndex(f => f.Type == FurnitureType.TellerDesk);
         int safe = plan.Furniture.FindIndex(f => f.Type == FurnitureType.VaultSafe);
-        GD.Print($"[bank {_role}] bank {door.Key} at {door.World}, counter #{counter}, vault safe #{safe}");
+        GD.Print($"{Log} bank {door.Key} at {door.World}, counter #{counter}, vault safe #{safe}");
         if (counter < 0 || safe < 0) { Fail("the bank has no counter or no vault safe"); return; }
 
         // in the street, in front of the door: the sign is up, and no deposit goes through out here
@@ -150,7 +131,7 @@ public partial class BankProbe : Node
         var seq = LootTables.SimonSequence(layout, safe, epoch);
         var dial = loot.LockUi!;
         var simon = loot.Simon!;
-        GD.Print($"[bank {_role}] vault safe: dial {string.Join("-", combo)}, Simon {seq.Length} long");
+        GD.Print($"{Log} vault safe: dial {string.Join("-", combo)}, Simon {seq.Length} long");
 
         if (_role == "B")
         {
@@ -227,9 +208,7 @@ public partial class BankProbe : Node
             await Cellar(me, interiors, spot);
         }
 
-        GD.Print(_failures == 0 ? $"[bank {_role}] RESULT: ok" : $"[bank {_role}] RESULT: FAILED ({_failures})");
-        await Seconds(2);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(2);
     }
 
     /// <summary>A house with a cellar: stand in its shelter and its music room, if it has them, and look around.</summary>
@@ -332,40 +311,11 @@ public partial class BankProbe : Node
         return false;
     }
 
-    private void Shot(string name)
+    /// <summary>What this client sees: test_output/bank_ROLE_NAME.png.</summary>
+    protected override string Shot(string name)
     {
-        string path = ProjectSettings.GlobalizePath($"res://test_output/bank_{_role}_{name}.png");
-        GetViewport().GetTexture().GetImage().SavePng(path);
-        GD.Print($"[bank {_role}] screenshot {path}");
-    }
-
-    private void Say(string what) => Chat?.Send($"BK {_role} {what}");
-
-    private Task<bool> Heard(string role, string what, double seconds) =>
-        Until(() => _heard.Any(l => l.Contains($"BK {role} {what}")), seconds);
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[bank {_role}] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[bank {_role}] RESULT: FAILED — {why}");
-        GetTree().Quit(1);
+        string path = base.Shot($"{_role}_{name}");
+        GD.Print($"{Log} screenshot {path}");
+        return path;
     }
 }

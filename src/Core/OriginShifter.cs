@@ -28,7 +28,8 @@ namespace UnitSport.Core;
 ///
 /// <para>
 /// Altitude never shifts: it stays absolute, and under 10 km float32 is finer than 1 mm.
-/// Online it is off until positions on the wire are origin-independent (#185, phase 2).
+/// Online too: every peer has its own origin, and positions on the wire are LV95. The dedicated
+/// server has no shifter: its players can be anywhere, and it measures in LV95.
 /// </para>
 /// </summary>
 public partial class OriginShifter : Node
@@ -64,7 +65,7 @@ public partial class OriginShifter : Node
     private readonly HashSet<string> _warned = new();
 
     /// <param name="focus">Where precision matters most: the active camera.</param>
-    /// <param name="allowed">False while shifting would break something (online, until phase 2).</param>
+    /// <param name="allowed">False while shifting would break something.</param>
     public OriginShifter(WorldOrigin origin, Func<Vector3?> focus, Func<bool> allowed)
     {
         _origin = origin;
@@ -91,14 +92,7 @@ public partial class OriginShifter : Node
     /// <summary>"--originshift &lt;m&gt;": a different threshold, still snapped to whole tiles.</summary>
     public static double? ParseThreshold() => ParseMetres("--originshift");
 
-    private static double? ParseMetres(string flag)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, flag);
-        if (i < 0 || i + 1 >= args.Length) return null;
-        return double.TryParse(args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out double m) && m > 0
-            ? m : null;
-    }
+    private static double? ParseMetres(string flag) => CmdArgs.Double(flag) is double m && m > 0 ? m : null;
 
     public override void _EnterTree()
     {
@@ -141,6 +135,7 @@ public partial class OriginShifter : Node
         foreach (var node in pass.Doppler) ResetDoppler(node);
         double nodesMs = clock.Elapsed.TotalMilliseconds;
         foreach (var node in pass.Aware) node.OnOriginShifted(shift);
+        Player.PlayerSnapshot.Forget();   // this tick's positions were taken in the old world space
         _origin.RaiseShifted(shift);
         PushPatternOffset();
 
@@ -242,7 +237,8 @@ public partial class OriginShifter : Node
             }
             if (global)
             {
-                if (_stress) WarnIfContainer(spatial);
+                // a node that handles the shift itself (ThrowAim) knows what it holds
+                if (_stress && spatial is not IOriginShiftAware) WarnIfContainer(spatial);
                 spatial.Transform = pass.Shift.Apply(spatial.Transform);
                 pass.Moved++;
             }
@@ -277,7 +273,8 @@ public partial class OriginShifter : Node
     /// </summary>
     private void WarnIfContainer(Node3D node)
     {
-        if (node.Transform != Transform3D.Identity) return;
+        // a body standing at the origin (a player spawned before its first state) is an object, not a manager
+        if (node.Transform != Transform3D.Identity || node is PhysicsBody3D) return;
         bool hasSpatialChild = false;
         for (int i = 0; i < node.GetChildCount() && !hasSpatialChild; i++) hasSpatialChild = node.GetChild(i) is Node3D;
         if (!hasSpatialChild) return;

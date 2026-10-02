@@ -77,7 +77,8 @@ public partial class ControlsHelp : CanvasLayer
         }),
         ("Passengers (online)", new Row[]
         {
-            new("Get into a seat of a vehicle someone drives / get out", PlayerInput.InteractMount),
+            new("Get into a seat of a car someone drives / get out", PlayerInput.InteractMount),
+            new("In a bus: walk in by a door, E at a seat sits, E again stands up, E at the wheel drives", PlayerInput.InteractMount),
             new("Take the wheel, when nobody holds it", PlayerInput.TakeWheel),
             new("Look round from your seat / chase view", PlayerInput.CameraToggle),
         }),
@@ -115,6 +116,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Chat / command", Keys: "Enter or /", Pad: "—"),
             new("This screen", PlayerInput.Help),
             new("Performance overlay / log", Keys: "F3 / F4", Pad: "—"),
+            new("Debug menu (offline or admin)", PlayerInput.DebugMenu),
         }),
     };
 
@@ -162,7 +164,7 @@ public partial class ControlsHelp : CanvasLayer
         GetViewport().SizeChanged += Rebuild;
         Rebuild();
         // "--controls" opens it from boot, for screenshotting it
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--controls") >= 0) Callable.From(Open).CallDeferred();
+        if (CmdArgs.Has("--controls")) Callable.From(Open).CallDeferred();
     }
 
     public override void _ExitTree()

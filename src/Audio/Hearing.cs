@@ -105,16 +105,22 @@ public sealed class Hearing
         speaker.AttenuationFilterCutoffHz = _cut;
     }
 
+    private static readonly Core.RayQuery OccluderRay = new();
+    private static readonly Godot.Collections.Array<Rid> OccluderExclude = new();
+
     /// <summary>Anything solid on the line, other than a body or the source's own (the radio's box, the parked car its stereo is in).</summary>
     private static bool Occluded(Node3D source3D, Vector3 listener, Vector3 source)
     {
         var space = source3D.GetWorld3D()?.DirectSpaceState;
         if (space == null || listener.DistanceSquaredTo(source) < 1f) return false;
-        var exclude = new Godot.Collections.Array<Rid>();
+        // one query and one exclude array for every source, refilled per call (#221)
+        var exclude = OccluderExclude;
+        exclude.Clear();
         if (source3D is CollisionObject3D own) exclude.Add(own.GetRid());
         for (int i = 0; i < 3; i++)
         {
-            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(listener, source, uint.MaxValue, exclude));
+            OccluderRay.Forget();   // the array changed in place since the last cast
+            var hit = OccluderRay.Cast(space, listener, source, uint.MaxValue, exclude);
             if (hit.Count == 0) return false;
             var at = hit["position"].AsVector3();
             if (at.DistanceTo(source) < 0.15f) return false;   // touching it: whatever it lies on

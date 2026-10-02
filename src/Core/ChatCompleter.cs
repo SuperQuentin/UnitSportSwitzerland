@@ -51,6 +51,7 @@ public sealed class ChatCompleter
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("spawn", true, true, "<item> [count]"),
         ("catalogue", true, true, ""),
+        ("debug", true, true, ""),
         ("clear", false, true, "[player]"),
         ("money", true, true, "<amount> [player]"),
         ("bank", true, true, "[player] [set | add | take <amount>]"),

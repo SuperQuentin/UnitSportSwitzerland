@@ -6,6 +6,12 @@
   `Sidewalk`): top + faces on the outline. Collision in the two-sided road body: top + kerb
   **chamfered 45°** (a 0.32 m foot capsule meets a vertical 12 cm step at 51°, its floor limit is
   52°); corners vertical.
+- **Bike paths (#120)**: a side is drawn from its `RoadStreetSection` profile (shared with the
+  network stage): verge / path / buffer / sidewalk bands, each piece coloured (grass, darker
+  asphalt for the path), vertical kerbs and the sloped 0.30 m kerbs beside a path; the collision
+  is the same profile with every vertical step chamfered 45°. The blend raises to the side's outer
+  height (`OuterHeight`), so a mid-level path lies on the slab, not on the ground. Bike symbols:
+  `RoadPaintBuilder` expands `RoadPaintGeometry.BikeSymbol`. Note `bike-infrastructure`.
 - **Road blend** (`TerrainMeshBuilder.RoadBlend.cs`): under a slab the ground stays at road height
   (raising it let the lattice poke through on climbing bends); that side's slopes start 8 cm under
   the sidewalk top; round a line's *real* ends (not straight cuts between pieces, `CarriedOn`) only

@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Birds;
 
@@ -93,7 +94,7 @@ public partial class Droppings : Node3D
             {
                 // the authority saw it fall on this player: it lands on them, wherever they stepped since
                 var head = d.Victim.GlobalPosition + Vector3.Up * 1.65f;
-                next = next with { X = Mathf.Lerp(next.X, head.X, 1f - Mathf.Exp(-6f * dt)), Z = Mathf.Lerp(next.Z, head.Z, 1f - Mathf.Exp(-6f * dt)) };
+                next = next with { X = Mathf.Lerp(next.X, head.X, MathX.Damp(6f, dt)), Z = Mathf.Lerp(next.Z, head.Z, MathX.Damp(6f, dt)) };
                 if (next.Y <= head.Y)
                 {
                     OnPlayer(d.Victim);

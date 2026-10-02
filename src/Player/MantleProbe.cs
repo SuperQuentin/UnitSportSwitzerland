@@ -39,7 +39,7 @@ public partial class MantleProbe : Node
         _origin = origin;
     }
 
-    public static bool Requested() => OS.GetCmdlineUserArgs().Contains("--mantlecheck");
+    public static bool Requested() => CmdArgs.Has("--mantlecheck");
 
     public override void _PhysicsProcess(double delta)
     {

@@ -66,7 +66,7 @@ public partial class SteeringWheel : Node
     /// <see cref="FakePeriod"/> s with a steady throttle, so the wheel path can be checked on a
     /// machine without one (<c>--wheelwatch</c>).
     /// </summary>
-    public static readonly bool Simulated = Array.IndexOf(OS.GetCmdlineUserArgs(), "--fakewheel") >= 0;
+    public static readonly bool Simulated = CmdArgs.Has("--fakewheel");
     public const float FakeSweepDeg = 180f, FakePeriod = 4f, FakeThrottle = 0.35f;
     private double _fakeTime;
 
@@ -145,6 +145,9 @@ public partial class SteeringWheel : Node
             SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
             _sdl = SDL_Init(SDL_InitFlags.SDL_INIT_JOYSTICK);
             if (!_sdl) GD.PushWarning($"[wheel] SDL_Init failed: {SDL_GetError()}");
+            // force feedback is a separate subsystem: a wheel still steers if it will not start
+            _hapticSdl = _sdl && SDL_InitSubSystem(SDL_InitFlags.SDL_INIT_HAPTIC);
+            if (_sdl && !_hapticSdl) GD.PushWarning($"[wheel] no force feedback, SDL haptics failed: {SDL_GetError()}");
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
@@ -157,7 +160,9 @@ public partial class SteeringWheel : Node
     {
         if (!Simulated) Input.JoyConnectionChanged -= OnGodotJoypads;
         Release();
+        if (_hapticSdl) SDL_QuitSubSystem(SDL_InitFlags.SDL_INIT_HAPTIC);
         if (_sdl) SDL_QuitSubSystem(SDL_InitFlags.SDL_INIT_JOYSTICK);
+        _hapticSdl = false;
         _sdl = false;
         if (_instance == this) _instance = null;
     }
@@ -186,6 +191,7 @@ public partial class SteeringWheel : Node
         if (!_claimed) return;
 
         Read();
+        UpdateForces((float)delta);
         if (Assigning)
         {
             Neutral();
@@ -285,6 +291,8 @@ public partial class SteeringWheel : Node
 
     private unsafe void Release()
     {
+        CloseHaptic();
+        _hapticFailed = false;
         if (_joy != null) SDL_CloseJoystick(_joy);
         _joy = null;
         if (_claimed) GD.Print($"[wheel] {_name} released");

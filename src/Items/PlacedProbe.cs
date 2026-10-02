@@ -22,38 +22,20 @@ namespace UnitSport.Items;
 /// </list>
 /// Scratch inventories. The server's list is the real <c>user://placed/server.json</c>.
 /// </summary>
-public partial class PlacedProbe : Node
+public partial class PlacedProbe : ChatProbe
 {
-    public static string? Role
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--placedcheck");
-            return i >= 0 && i + 1 < args.Length ? args[i + 1].ToUpperInvariant() : null;
-        }
-    }
+    public static string? Role => RoleArg("--placedcheck");
 
-    private readonly ItemController _items;
-    private readonly List<string> _heard = new();
     private readonly List<ItemEvent> _events = new();
-    private string _role = "";
-    private int _failures;
 
-    public PlacedProbe(ItemController items) => _items = items;
+    public PlacedProbe(ItemController items) : base(items, "placedcheck", "PC", "placedcheck_") { }
     public PlacedProbe() : this(null!) { }
-
-    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
-    private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
 
     public override async void _Ready()
     {
         _role = Role ?? "A";
         ItemEvents.Received += e => { if (!e.Local) _events.Add(e); };
-        if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor()
-                               && PlacedObjects.Instance != null && ItemEvents.Instance != null, 150))
-        { Fail("no player on the ground"); return; }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
+        if (!await Joined(150, () => PlacedObjects.Instance != null && ItemEvents.Instance != null)) return;
         var me = Me!;
         var placed = PlacedObjects.Instance!;
         await Seconds(2.0);   // the join snapshot, and the server's copy of our position
@@ -62,9 +44,7 @@ public partial class PlacedProbe : Node
         else if (_role == "B") await RunB(me, placed);
         else await RunC(placed);
 
-        GD.Print(_failures == 0 ? $"[placedcheck {_role}] RESULT: ok" : $"[placedcheck {_role}] RESULT: FAILED ({_failures})");
-        await Seconds(1.5);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(1.5);
     }
 
     private async Task RunA(FootPlayer me, PlacedObjects placed)
@@ -215,9 +195,7 @@ public partial class PlacedProbe : Node
         }
 
         await Seconds(0.5);
-        var dir = ProjectSettings.GlobalizePath("res://test_output");
-        System.IO.Directory.CreateDirectory(dir);
-        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "placedcheck_b.png"));
+        Shot("b");
 
         // A's Polaroid: in the snapshot by id only; the image must come from the server, by hash
         var polaroid = placed.All.Values.FirstOrDefault(o => o.Kind == PlacedKind.Photo && o.Owner == "PlacedA"
@@ -246,7 +224,7 @@ public partial class PlacedProbe : Node
             await Until(() => me.IsOnFloor(), 10);
             me.LookPitch = -1.1f;
             await Seconds(1.0);
-            GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "placedcheck_b_photo.png"));
+            Shot("b_photo");
         }
 
         // the same print on a wall: drawn here poster-sized, with the image
@@ -273,7 +251,7 @@ public partial class PlacedProbe : Node
             me.LookYaw = Mathf.Atan2(-to.X, -to.Z);
             me.LookPitch = Mathf.Atan2(to.Y, new Vector2(to.X, to.Z).Length());
             await Seconds(1.0);
-            GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "placedcheck_b_poster.png"));
+            Shot("b_poster");
         }
         Say("done");
     }
@@ -296,56 +274,9 @@ public partial class PlacedProbe : Node
         Expect(await Until(() => r != null, 5) && r!.Value.Ok, $"C (not the planter) pulled the flag up ({r?.Refused})");
     }
 
-    private int SlotOf(ItemId id)
-    {
-        for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].Id == id && !_items.Inventory[i].IsEmpty) return i;
-        return -1;
-    }
-
     private int SlotOfPhoto(string? id)
     {
         for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].Id == ItemId.Photo && _items.Inventory[i].Data == id) return i;
         return -1;
-    }
-
-    private int CountOf(ItemId id)
-    {
-        int n = 0;
-        for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].Id == id) n += _items.Inventory[i].Count;
-        return n;
-    }
-
-    private void Say(string what)
-    {
-        GD.Print($"[placedcheck {_role}] say {what}");
-        Chat?.Send($"PC {_role} {what}");
-    }
-
-    private Task<bool> Heard(string role, string what, double seconds) =>
-        Until(() => _heard.Any(l => l.Contains($"PC {role} {what}")), seconds);
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[placedcheck {_role}] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[placedcheck {_role}] RESULT: FAILED — {why}");
-        GetTree().Quit(1);
     }
 }

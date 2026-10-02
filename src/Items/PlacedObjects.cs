@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using UnitSport.Net;
 using UnitSport.Core;
 
 namespace UnitSport.Items;
@@ -159,8 +160,7 @@ public partial class PlacedObjects : Node
         if (Instance == this) Instance = null;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     // ---- client API -----------------------------------------------------------------------------
 
@@ -184,14 +184,6 @@ public partial class PlacedObjects : Node
         int req = Track(done);
         if (Online) RpcId(1, MethodName.AskRemove, req, id);
         else ServeRemove(1, req, id);
-    }
-
-    /// <summary>After an origin rebase: puts every visual back where its LV95 position now is.</summary>
-    public void Reposition()
-    {
-        foreach (var (id, node) in _visuals)
-            if (_objects.TryGetValue(id, out var o) && IsInstanceValid(node))
-                node.Transform = o.WorldTransform(_origin);
     }
 
     private int Track(Action<PlacedResult>? done)
@@ -397,8 +389,9 @@ public partial class PlacedObjects : Node
     private bool InReach(long peer, double e, double n, double alt)
     {
         if (!Online) return true;
-        if (GetNodeOrNull<Node3D>("../Players/" + peer) is not { } body) return false;
-        return body.GlobalPosition.DistanceTo(_origin.ToWorld(e, n, alt)) <= Reach;
+        if (GetNodeOrNull<Player.FootPlayer>("../Players/" + peer) is not { } body) return false;
+        // in LV95, from what the player published: the server's origin may be far away (#185)
+        return body.Global.DistanceTo(new GlobalPos(e, n, alt)) <= Reach;
     }
 
     // ---- persistence ----------------------------------------------------------------------------
@@ -456,7 +449,7 @@ public partial class PlacedObjects : Node
                     Rotation = new[] { o.Rotation.X, o.Rotation.Y, o.Rotation.Z, o.Rotation.W }, Payload = o.Payload,
                 }).ToList(),
             };
-            Core.JsonStore.Save(_storePath, store, Core.JsonStore.Indented);
+            Core.JsonStore.SaveAsync(_storePath, store, Core.JsonStore.Indented, e => GD.PushError($"[placed] saving: {e.Message}"));
         }
         catch (Exception ex) { GD.PushError($"[placed] saving: {ex.Message}"); }
     }

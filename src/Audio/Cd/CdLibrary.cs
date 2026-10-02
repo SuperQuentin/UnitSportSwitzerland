@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using Godot;
+using UnitSport.Net;
+using UnitSport.Core;
 
 namespace UnitSport.Audio.Cd;
 
@@ -100,8 +102,7 @@ public partial class CdLibrary : Node
         if (Instance == this) Instance = null;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     /// <summary>The copy that runs the burner: the server, or the client offline.</summary>
     private bool Owns => _server || !Online;
@@ -326,7 +327,7 @@ public partial class CdLibrary : Node
     private void BurnFixture()
     {
         if (!Owns) return;
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         for (int i = 0; i + 1 < args.Length; i++)
         {
             if (args[i] != "--cdfixture") continue;
