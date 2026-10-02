@@ -914,10 +914,11 @@ public partial class SteamerRig : Node3D
             {
                 Size = new Vector2(size, size),
                 Orientation = flat ? PlaneMesh.OrientationEnum.Y : PlaneMesh.OrientationEnum.Z,
-                Material = new StandardMaterial3D
+                // foam on the moving waves, in every style (#380); the smoke as it was
+                Material = flat ? WakeFoam.Material(true) : new StandardMaterial3D
                 {
                     ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                    BillboardMode = flat ? BaseMaterial3D.BillboardModeEnum.Disabled : BaseMaterial3D.BillboardModeEnum.Particles,
+                    BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
                     CullMode = BaseMaterial3D.CullModeEnum.Disabled,
                     VertexColorUseAsAlbedo = true,
                     Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
@@ -999,9 +1000,9 @@ public partial class SteamerRig : Node3D
         Set(_wake, afloat ? Mathf.Clamp((speed - 0.5f) / 6f, 0f, 1f) : 0f, ref _shownWake);
         Set(_bowWave!, afloat ? Mathf.Clamp((speed - 2f) / 6f, 0f, 1f) : 0f, ref _shownBow);
         Set(_smoke!, 0.15f + 0.85f * work, ref _shownSmoke);
-        if (_shownWake > 0f) OnSurface(_wake, _wakeAnchor);
-        if (_shownBow > 0f) OnSurface(_bowWave!, _bowAnchor);
-        if (_shownChurn > 0f) for (int i = 0; i < 2; i++) OnSurface(_churn[i]!, _churnAnchor[i]);
+        if (_shownWake > 0f) WakeFoam.OnSurface(_wake, GlobalTransform * _wakeAnchor, 0.04f, ref _foamWater[0]);
+        if (_shownBow > 0f) WakeFoam.OnSurface(_bowWave!, GlobalTransform * _bowAnchor, 0.04f, ref _foamWater[1]);
+        if (_shownChurn > 0f) for (int i = 0; i < 2; i++) WakeFoam.OnSurface(_churn[i]!, GlobalTransform * _churnAnchor[i], 0.04f, ref _foamWater[2 + i]);
 
         if (_paddles != null)
         {
@@ -1021,12 +1022,8 @@ public partial class SteamerRig : Node3D
         }
     }
 
-    /// <summary>Puts an emitter at its anchor on the hull (rig space) on the water's surface there.</summary>
-    private void OnSurface(GpuParticles3D p, Vector3 anchor)
-    {
-        var at = GlobalTransform * anchor;
-        if (World.WaterField.TryLevelAt(at, out float level)) p.GlobalPosition = at with { Y = level + 0.04f };
-    }
+    /// <summary>What each foam emitter (wake, bow wave, both churns) was last told of the water under it.</summary>
+    private readonly Vector2[] _foamWater = new Vector2[4];
 
     private static void Set(GpuParticles3D p, float amount, ref float shown)
     {
