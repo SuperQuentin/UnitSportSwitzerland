@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -14,7 +15,7 @@ namespace UnitSport.Items;
 public readonly record struct RadioState(
     string Name,
     long Owner,
-    Vector3 Position,
+    GlobalPos Position,
     float Yaw,
     Vector3 Velocity,
     int CdId = 0,
@@ -23,11 +24,12 @@ public readonly record struct RadioState(
     bool Settled = false,
     float Length = 0)
 {
-    public Godot.Collections.Dictionary ToDict() => new()
+    public Godot.Collections.Dictionary ToDict()
     {
+        var d = new Godot.Collections.Dictionary
+        {
         ["name"] = Name,
         ["owner"] = Owner,
-        ["pos"] = Position,
         ["yaw"] = Yaw,
         ["vel"] = Velocity,
         ["cd"] = CdId,
@@ -35,12 +37,15 @@ public readonly record struct RadioState(
         ["playing"] = Playing,
         ["settled"] = Settled,
         ["len"] = Length,
-    };
+        };
+        Position.Write(d);
+        return d;
+    }
 
     public static RadioState FromDict(Godot.Collections.Dictionary d) => new(
         d["name"].AsString(),
         d["owner"].AsInt64(),
-        d["pos"].AsVector3(),
+        GlobalPos.Read(d),
         d["yaw"].AsSingle(),
         d["vel"].AsVector3(),
         d["cd"].AsInt32(),

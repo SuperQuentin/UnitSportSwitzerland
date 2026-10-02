@@ -733,33 +733,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
-    /// Throws the whole world away — every tile, every cached asset and blend, the horizon — for
-    /// a rebase, which changes what every world coordinate means. <paramref name="moveOrigin"/>
-    /// runs once nothing placed against the old origin is left; the rings then rebuild everything
-    /// round the new one. Main thread only.
-    /// </summary>
-    public void ResetAll(Action? moveOrigin = null)
-    {
-        foreach (var id in _chunks.Keys.ToList()) UnloadTile(id);
-        _desired.Clear();
-        _wanted = [];
-        _ordered = [];
-        _desiredKey = "";
-        _orderedView = null;
-        _worldVersion++;
-        _sinceEval = double.MaxValue;
-        _invalidate?.Invoke(null);
-        _fallback?.ClearBlends();
-        Horizon?.Clear();
-        moveOrigin?.Invoke();
-        // the coverage texture is placed in world space: after the move, not before
-        FitHorizonCoverage();
-        Horizon?.Reload();
-        GD.Print("[terrain] world reset");
-        TerrainReplaced?.Invoke(null);
-    }
-
-    /// <summary>
     /// Sizes the horizon's coverage texture to every tile that can be drawn: the real set and the
     /// generated fill's domain.
     /// </summary>
