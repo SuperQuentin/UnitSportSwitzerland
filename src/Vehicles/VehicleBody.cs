@@ -240,6 +240,20 @@ public partial class VehicleBody : CharacterBody3D
         else Terrain.RemoveAnchor(this);
     }
 
+    /// <summary>
+    /// Claimed: out of the world at once, until it is freed (offline, at the end of the frame;
+    /// online, when the server's despawn arrives). The driver who took it stands where its box is,
+    /// and a step against it shoved the bus they had just got into up onto its roof (#323).
+    /// </summary>
+    public void Retire()
+    {
+        CollisionLayer = 0;
+        CollisionMask = 0;
+        Visible = false;
+        SetPhysicsProcess(false);
+        RemoveFromGroup(Group);
+    }
+
     /// <summary>What this vehicle is right now, for handing it to a driver.</summary>
     /// <remarks>
     /// Heading from the body's own yaw, which is replicated: the server captures vehicles it
