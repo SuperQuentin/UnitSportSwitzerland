@@ -14,8 +14,9 @@
 - Any change to `NetPose`'s layout is a wire change: bump `Handshake.Protocol` once #269 has it.
 
 ## Why
-~32 B less in every 30 Hz state packet to every viewer. `tools/loadtest.sh`: see the PR for net out
-at 16 and 32 players.
+~32 B less in every 30 Hz state packet to every viewer. `tools/loadtest.sh` (real terrain), server
+net out in steady state (all players in), before -> after: 16 players 169.0 -> 141.0 KB/s (-17 %),
+32 players 577.4 -> 461.5 KB/s (-20 %); net in -20 % / -12 % (the owners' sends shrink too).
 
 ## Same logic, preserved
 - `--synccheck`: fresh-frame pose error 0.0000 before and after (owner vs mirror, every stage
