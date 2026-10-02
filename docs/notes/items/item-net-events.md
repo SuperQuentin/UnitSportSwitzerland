@@ -13,7 +13,9 @@ more than 30 m from the sender's body.
   It runs the handler locally first (the owner sees/hears the 3D effect too), then RPCs the server.
   `ItemEvents.MuzzleOf(FootPlayer p, Vector3 dir, float reach = 0.55f)` = hand + reach along the aim
   (camera fallback in first person).
-- Kinds: `ItemEventKind { Shot = 1, PhotoFlash = 2 }` — append new values, the int goes over the wire.
+- Kinds: `ItemEventKind { Shot = 1, PhotoFlash = 2, Hit = 3 }` — append new values, the int goes over the wire.
+  `Hit` is not relayed to viewers: the server checks it and sends it to the victim alone (`combat/pvp-weapons`).
+  Shot's Extra is the weapon's item id (empty = shotgun).
 - Handler: `ItemEvents.Register(kind, (ItemEvents node, ItemEvent e) => ...)` replaces the built-in.
   `ItemEvent(long Peer, Kind, Position, Direction, string Extra, bool Local)`. On remote peers the
   position is recomputed on the owner's interpolated body (`World/Players/<peer>`) when it exists.

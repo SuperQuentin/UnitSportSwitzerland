@@ -33,3 +33,4 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `menu-refuses-close-still-consume` — A menu that refuses to close must still CONSUME the key
 - `driving-settings-panel-through-godot` — Driving the Settings panel through the godot-ai MCP changes real settings
 - `macos-launch-steals-focus` — Every Godot launch (and editor play) steals focus on macOS; --headless draws nothing; use --shot-queue
+- `windows-launch-focus` — Windows: game windows may open but never in front or on top; no --always-on-top / no_focus, no editor play while the user works

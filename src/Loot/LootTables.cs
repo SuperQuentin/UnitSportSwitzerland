@@ -521,6 +521,14 @@ public static class LootTables
 
     public const long RestockSeconds = 24 * 3600;
 
+    /// <summary>
+    /// A Battle Royale match's say over a building (#194): its own epoch for the buildings in the
+    /// match region, null everywhere else. Those buildings restock for every match and roll
+    /// <see cref="MatchLoot"/> instead of their free-roam table. Set on the server and the clients
+    /// by <c>BattleRoyale.BrManager</c>.
+    /// </summary>
+    public static Func<string, long?>? MatchEpoch { get; set; }
+
     /// <summary>Added to every epoch, for testing a restock without waiting a day (<c>--lootepoch +N</c>).</summary>
     public static long EpochOffset { get; set; }
 
@@ -530,6 +538,7 @@ public static class LootTables
     /// </summary>
     public static long Epoch(string buildingKey, long unixSeconds)
     {
+        if (MatchEpoch?.Invoke(buildingKey) is long match) return match;
         long stagger = (uint)InteriorGenerator.StableHash(buildingKey) % RestockSeconds;
         return (unixSeconds + stagger) / RestockSeconds + EpochOffset;
     }
@@ -543,6 +552,8 @@ public static class LootTables
     {
         if (furnitureIndex < 0 || furnitureIndex >= layout.Furniture.Count) return new();
         var f = layout.Furniture[furnitureIndex];
+        if (MatchEpoch?.Invoke(layout.Key) != null)
+            return MatchLoot.Roll(MatchLoot.ForFurniture(f.Type), RngFor(layout.Key, furnitureIndex, epoch));
         return Roll(layout.Kind, f.Type, RngFor(layout.Key, furnitureIndex, epoch), AbundanceFor(layout, f.Type), layout.RoomOf(f)?.Type);
     }
 

@@ -4,6 +4,7 @@
 # (killed on the server, scored in A's journal only, falling on B's screen too); A's air shot flushes the
 # birds for B. Output in test_output/birdnet_*.log.  GODOT=<exe> [PORT=] [SERVER_ARGS=] [WINDOWED=1] [TOWN=1] [SWARM=n] tools/birdnetcheck.sh [E,N]
 # WARNING: the clients write the real user://birds.json of this machine (a kill scores in A's journal).
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 AT=${1:-2583250,1113250}
 PORT=${PORT:-7795}

@@ -80,6 +80,13 @@ public abstract class Flyer : Rideable
     /// <summary>The look input turns the craft (helicopter) rather than looking around it.</summary>
     public virtual bool LookSteers => false;
 
+    /// <summary>
+    /// How much looking aside (mouse or right stick, the free look) banks the craft that way, on top
+    /// of the stick: 0 for craft flown by the stick alone. The look recentres on its own, so a flick
+    /// is a nudge and a held look a turn.
+    /// </summary>
+    public virtual float LookBank => 0f;
+
     /// <summary>Chase camera distance and height, and the point on the craft it looks at.</summary>
     public virtual float CameraDistance => 7f;
     public virtual float CameraHeight => 2f;
@@ -176,6 +183,7 @@ public sealed class Wingsuit : Flyer
     private const float MaxBank = 1.0f;
 
     public override float CrashSpeed => 12f;
+    public override float LookBank => 0.6f;
     public override float CameraDistance => 5.5f;
     public override float CameraHeight => 1.2f;
     public override float CameraPivot => 1.0f;
@@ -277,6 +285,7 @@ public class Canopy : Flyer
     private float TurnRate => _paraglider ? 0.9f : 1.2f;
 
     public override float CrashSpeed => 9f;
+    public override float LookBank => 0.6f;
     public override float CameraDistance => _paraglider ? 13f : 10f;
     public override float CameraHeight => _paraglider ? 4f : 3.5f;
     public override float CameraPivot => _paraglider ? 3f : 2.5f;

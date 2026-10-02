@@ -26,6 +26,17 @@ uniform vec3 sleeper_color : source_color = vec3(0.26, 0.21, 0.16);
 // Paint is pulled this fraction of its distance toward the camera, so it wins the depth test
 // over the carriageway it lies on at any range, snapped vertices and all.
 uniform float paint_depth_bias = 0.002;
+// The whole road mesh (ribbons, sidewalks, rails) is pulled this fraction of its distance toward
+// the eye: with roads at the ground (#119) the decimated terrain of the stride-2/4 rings lies in
+// the road's plane beside it, and only a bias that grows with distance wins that depth test.
+uniform float road_depth_bias = 0.0004;
+// Past the rings whose terrain is blended under the roads (stride <= 4), roads are still drawn on
+// coarse terrain that was never cut for them, and a road at the ground would sink into it. Past
+// far_lift_start the whole road mesh is pulled this many metres per metre toward the eye, up to
+// far_lift_max: it wins the depth test against the ground it lies on.
+uniform float far_lift_start = 800.0;
+uniform float far_lift_rate = 0.001;
+uniform float far_lift_max = 2.0;
 
 varying vec2 surf;   // along, lateral
 varying float style;
@@ -36,6 +47,9 @@ void vertex() {
     surf = UV;
     style = UV2.x;
     vec4 view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
+    float dist = length(view.xyz);
+    float lift = clamp((dist - far_lift_start) * far_lift_rate, 0.0, far_lift_max);
+    view.xyz *= 1.0 - lift / max(dist, 1.0) - road_depth_bias;
     if (int(UV2.x + 0.5) == 6) {
         view.xyz *= 1.0 - paint_depth_bias;   // toward the eye: same pixel, nearer depth
     }

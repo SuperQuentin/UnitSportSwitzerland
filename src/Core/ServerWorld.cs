@@ -29,6 +29,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Items.PlacedObjects? _placed;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
+    private BattleRoyale.BrManager? _br;
+    private BattleRoyale.BrCrates? _brCrates;
 
     public override async void _Ready()
     {
@@ -142,9 +144,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // racers see each other however far apart the field spreads (Net/InterestService)
         // and everyone aboard one vehicle sees everyone else aboard it, wherever it goes
         var passengers = _passengers;
-        if (_interest != null) _interest.Together = (a, b) => race.SameRace(a, b) || passengers.Together(a, b);
         AddChild(race);
         _chat.Race = race;
+
+        // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
+        _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
+        var br = _br = BattleRoyale.BrManager.CreateServer(_chat, _players, places?.Places ?? new(), manifest.Tiles,
+            (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), source, _brCrates);
+        br.Origin = origin;
+        AddChild(br);
+        _chat.BattleRoyale = br;
+        if (_interest != null) _interest.Together = (a, b) => race.SameRace(a, b) || passengers.Together(a, b) || br.Together(a, b);
 
         // deposited cash, kept per player name on this server
         var bank = Items.Bank.Create(this, null, server: true);
@@ -312,6 +322,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _interiors?.SendTableTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _br?.SendTo(id);
+        _brCrates?.SendTo(id);
         _chat?.SendWorldTimeTo(id);
     }
 
@@ -321,6 +333,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);
+        _br?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
         _dropped?.ForgetOwner(id);

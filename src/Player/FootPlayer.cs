@@ -5,6 +5,9 @@ using UnitSport.Vehicles;
 
 namespace UnitSport.Player;
 
+/// <summary>What took a player's health: kept with the last attacker for the kill credit.</summary>
+public enum DamageCause { Other, Weapon, Blast, Fall, Crash, Zone }
+
 /// <summary>
 /// First-person on-foot controller tuned for human scale: WASD / left stick, mouse or right
 /// stick look, Shift / L3 to run, Space / A to jump, Ctrl / B to slide, jump against a wall to
@@ -397,6 +400,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     [Export] public int DanceId { get; set; }
 
+    /// <summary>
+    /// 1 while down (knocked out, or eliminated in a match), else 0. Replicated like
+    /// <see cref="DanceId"/>; written by the owner. Other peers' hit tests skip a downed body
+    /// (<c>Items.PlayerHits</c>).
+    /// </summary>
+    [Export] public int Down { get; set; }
+
     /// <summary>The arm pose currently drawn and its 0..1 blend, eased in and out on every peer.</summary>
     public Avatar.ItemArmPose DrawnArmPose => _itemArmCur;
     public float DrawnArmBlend => _itemArmBlend;
@@ -718,6 +728,30 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>Hurt by this much (the feel layer flashes and shakes).</summary>
     public event Action<float>? Hurt;
+
+    /// <summary>
+    /// Health reached zero. The peer is whoever last hurt this player within
+    /// <see cref="CreditSeconds"/> (0 for nobody), the cause is what finished them.
+    /// </summary>
+    public event Action<long, DamageCause>? Died;
+
+    /// <summary>
+    /// Asked when this player goes down: true keeps them down (<see cref="Eliminated"/>) instead
+    /// of the knockout's revive a few seconds later. A Battle Royale match sets it.
+    /// </summary>
+    public static Func<FootPlayer, bool>? StayDown;
+
+    /// <summary>Down for good, until <see cref="Respawn"/>: out of the match.</summary>
+    public bool Eliminated { get; private set; }
+
+    /// <summary>Armour left, 0..<see cref="MaxArmor"/>: it takes half of every weapon hit while it lasts.</summary>
+    public float Armor { get; private set; }
+    public const float MaxArmor = 50f;
+
+    /// <summary>A hit this recent still credits its shooter with the kill, whatever finishes the job.</summary>
+    public const double CreditSeconds = 10;
+    private long _lastAttacker;
+    private double _lastAttackedAt = -99;
     /// <summary>Shaken by something nearby — an explosion — at this strength, 0..1.</summary>
     public event Action<float>? Shaken;
     public event Action<bool>? EngineToggled;
@@ -952,6 +986,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:OutfitBits");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:HeldRadio");
+        replication.AddProperty(".:Down");
         replication.AddProperty(".:CarRadio");
         replication.AddProperty(".:CarCd");
         if (Npc)
@@ -962,7 +997,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:CarRadio", ".:CarCd" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:CarRadio", ".:CarCd", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1355,7 +1390,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // someone in another building (or out while we are in) is not here: hidden, and their
         // last replicated position must not stand in a doorway as an invisible wall
-        bool here = Interiors.InteriorManager.Instance?.SameSpaceAsLocal(GetMultiplayerAuthority()) != false;
+        bool here = !Stowed && Interiors.InteriorManager.Instance?.SameSpaceAsLocal(GetMultiplayerAuthority()) != false;
         if (Visible != here)
         {
             Visible = here;
@@ -1847,6 +1882,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ExitVehicle();
             return true;
         }
+        // a Battle Royale crate at your feet (#194), indoors or out: a death box falls where its owner did
+        if (_ride == null && !_mantling && _deadTimer <= 0 && BattleRoyale.BrCrates.Instance?.TryOpen(this) == true) return true;
+
         // what the view points at and the border outlines (#206): a dropped item is picked up
         if (_ride == null && !_mantling && _deadTimer <= 0 && Items.Highlight.Pointed is Items.DroppedItem dropped
             && IsInstanceValid(dropped) && Items.ItemController.Instance is { } items)
@@ -2074,9 +2112,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (raw != over && InsideVehicle(raw, frame, vehicle)) continue;
             // on a slope the ground beside the seat is not at the seat's height: stand on it,
             // or the uphill side reads as blocked and the player is put on the vehicle's roof
-            // (indoors the terrain is 3 km overhead: the floor is at the seat's height)
+            // (indoors, or in a tunnel, the terrain is overhead: the floor is at the seat's height)
             var candidate = raw;
-            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && Terrain.TryGetHeight(raw, out float g))
+            // in a tunnel, out beside the vehicle only within the bore: past its wall is the hill
+            if (Terrain != null && Terrain.InTunnel(at) && !Terrain.InTunnel(raw)) continue;
+            if (raw.Y <= at.Y + 0.01f && !Indoors && Terrain != null && !Terrain.InTunnel(raw) && Terrain.TryGetHeight(raw, out float g))
                 candidate = raw with { Y = Mathf.Max(raw.Y, g) };
             var query = new PhysicsShapeQueryParameters3D
             {
@@ -2136,14 +2176,63 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     // health
     // ------------------------------------------------------------------------------------
 
-    public void TakeDamage(float amount)
+    public void TakeDamage(float amount) => TakeDamage(amount, 0, DamageCause.Other);
+
+    /// <summary>
+    /// Takes <paramref name="amount"/> of health. A weapon hit names its shooter
+    /// (<paramref name="attacker"/>, a peer id) and is half soaked by <see cref="Armor"/> while it lasts.
+    /// </summary>
+    public void TakeDamage(float amount, long attacker, DamageCause cause)
     {
         if (amount <= 0 || _deadTimer > 0) return;
+        if (cause == DamageCause.Weapon && Armor > 0)
+        {
+            float soaked = Mathf.Min(Armor, amount * 0.5f);
+            Armor -= soaked;
+            amount -= soaked;
+        }
+        double now = Time.GetTicksMsec() / 1000.0;
+        if (attacker != 0)
+        {
+            _lastAttacker = attacker;
+            _lastAttackedAt = now;
+        }
         Health = Mathf.Max(0f, Health - amount);
         _sinceHurt = 0;
         Hurt?.Invoke(amount);
         PlayerInput.Rumble(0.6f, Mathf.Clamp(amount / 40f, 0.2f, 1f), 0.25f);
-        if (Health <= 0f) Die();
+        if (Health <= 0f)
+        {
+            long killer = now - _lastAttackedAt <= CreditSeconds ? _lastAttacker : 0;
+            Die();
+            Died?.Invoke(killer, cause);
+        }
+    }
+
+    /// <summary>Puts on a vest: armour back to full. False when it already is.</summary>
+    public bool AddArmor(float amount)
+    {
+        if (amount <= 0 || _deadTimer > 0 || Armor >= MaxArmor - 0.01f) return false;
+        Armor = Mathf.Min(MaxArmor, Armor + amount);
+        return true;
+    }
+
+    /// <summary>
+    /// Back in the game after <see cref="Eliminated"/> (a match ended): full health, no armour, at
+    /// <paramref name="at"/>.
+    /// </summary>
+    public void Respawn(Vector3 at)
+    {
+        Eliminated = false;
+        _deadTimer = 0;
+        _stunTimer = 0;
+        Down = 0;
+        Health = MaxHealth;
+        Armor = 0;
+        _lastAttacker = 0;
+        GlobalPosition = at;
+        Velocity = Vector3.Zero;
+        RequestReplacement();
     }
 
     /// <summary>
@@ -2151,7 +2240,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// occupant, and going to zero wrecks it with them inside; on foot or on equipment it is the
     /// player who is hit.
     /// </summary>
-    public void ShotHit(float damage)
+    public void ShotHit(float damage, long attacker = 0)
     {
         if (_ride is { IsVehicle: true })
         {
@@ -2159,7 +2248,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (VehicleHealth <= 0f) WreckVehicle();
             return;
         }
-        TakeDamage(damage);
+        TakeDamage(damage, attacker, DamageCause.Weapon);
     }
 
     /// <summary>
@@ -2201,6 +2290,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (_ride is { IsVehicle: true }) WreckVehicle();
         else if (_ride != null) ApplyRide(RideKind.OnFoot, Velocity);
+        Down = 1;
+        if (StayDown?.Invoke(this) == true)
+        {
+            // out of the match: never revived by the timer, only by Respawn
+            Eliminated = true;
+            Announced?.Invoke("ELIMINATED", false);
+            _deadTimer = float.PositiveInfinity;
+            _stunTimer = float.PositiveInfinity;
+            return;
+        }
         Announced?.Invoke("KNOCKED OUT", false);
         _deadTimer = 3.5f;
         _stunTimer = 3.5f;
@@ -2208,6 +2307,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void Revive()
     {
+        Down = 0;
         // knocked out while still tumbling from a crash (#214): up at the safe spot, not lying there
         if (Ragdolled) { EndRagdoll(); _stunTimer = 0.3f; }
         Health = MaxHealth;
@@ -2285,7 +2385,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         float damage = 75f * t;
         if (_ejected > 0) damage = Mathf.Min(damage, EjectBlastCap);
-        TakeDamage(damage);
+        TakeDamage(damage, 0, DamageCause.Blast);
         if (_ride == null)
         {
             var away = (GlobalPosition - at) with { Y = 0 };
@@ -2483,6 +2583,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public override void _PhysicsProcess(double delta)
     {
+        // held by the Battle Royale cargo plane (#207): it moves the body, nothing else does
+        if (Carried()) return;
         // drop onto the terrain surface once its height data is available
         if (!_placed && !Indoors)
         {
@@ -2904,7 +3006,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>
     /// Safety net for a player who glitched through the world, on foot, mounted or flying:
     /// <list type="bullet">
-    /// <item>outdoors, more than 2 m under the terrain: straight up onto it;</item>
+    /// <item>outdoors, more than 2 m under the terrain, not inside a tunnel bore and with no floor
+    /// under them (a ramp the road blend cut into the ground): straight up onto it;</item>
     /// <item>outdoors, far below any ground and no height known here (the tile has not streamed, or
     /// there is no data): back to the last safe spot outside, or held here until the ground arrives;</item>
     /// <item>indoors, under the interior's floor: back where they last stood in it.</item>
@@ -2930,7 +3033,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else if (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground))
         {
-            if (GlobalPosition.Y >= ground - 2f) return false;
+            if (GlobalPosition.Y >= ground - 2f || Terrain.InTunnel(GlobalPosition)
+                || Terrain.FloorBelow(this, GlobalPosition, GetRid())) return false;
             to = GlobalPosition with { Y = ground + 1f };
         }
         else
@@ -2942,7 +3046,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_sinceSnapWarning > 2)
         {
             _sinceSnapWarning = 0;
-            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}");
+            GD.Print($"[player] {Name} fell through the world at {GlobalPosition.Round()}{(Indoors ? " indoors" : "")}, back to {to.Round()}"
+                + (Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float gh) ? $" (ground {gh:F1}, in a tunnel: {Terrain.InTunnel(GlobalPosition)}, y {GlobalPosition.Y:F2})" : ""));
         }
         RequestReplacement();
         _flight.Velocity = Vector3.Zero;
@@ -2972,8 +3077,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _jumpHeld = jumpDown;
         bool downHeld = PlayerInput.Held(PlayerInput.CrouchSlide);
 
+        // a wingsuit or canopy also leans toward where the free look points (#207)
+        var stick = PlayerInput.Move;
+        if (flyer.LookBank > 0f && !typing && !onFloor)
+            stick.X = Mathf.Clamp(stick.X - Mathf.Clamp(_lookYaw / 0.8f, -1f, 1f) * flyer.LookBank, -1f, 1f);
+
         var input = new FlightInput(
-            Stick: PlayerInput.Move,
+            Stick: stick,
             Up: Mathf.Max(jumpDown ? 1f : 0f, tr),
             Down: Mathf.Max(downHeld ? 1f : 0f, tl),
             LeverUp: Mathf.Max(PlayerInput.Held(PlayerInput.Sprint) ? 1f : 0f, tr),
@@ -3058,7 +3168,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
         // a wingsuit into the ground is the pilot hitting it, not a machine
-        TakeDamage((speed - 8f) * 3.5f);
+        TakeDamage((speed - 8f) * 3.5f, 0, DamageCause.Crash);
         Impacted?.Invoke(Mathf.Max(speed, 8f));
         Announced?.Invoke(flyer is Wingsuit ? "SPLAT!" : "CRASH!", false);
         PlayerInput.Rumble(1f, 1f, 0.5f);
@@ -3200,7 +3310,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
         var surface = (_ride is Motorbike or Truck || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
-            ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
+            ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors, this) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
@@ -3721,7 +3831,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PlayerInput.Rumble(0.2f, Mathf.Clamp((_fallSpeed - 3f) / 7f, 0.15f, 1f), 0.15f);
             if (_fallSpeed > 1.5f) Landed?.Invoke(_fallSpeed);
             // a 6 m drop is free, a 15 m one hurts a lot, a 25 m one is the end
-            if (_fallSpeed > 11f && _ejected <= 0) TakeDamage((_fallSpeed - 11f) * 9f);
+            if (_fallSpeed > 11f && _ejected <= 0) TakeDamage((_fallSpeed - 11f) * 9f, 0, DamageCause.Fall);
             _fallSpeed = 0f;
         }
         _wasOnFloor = onFloor;

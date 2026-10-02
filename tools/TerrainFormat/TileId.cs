@@ -19,4 +19,19 @@ public readonly record struct TileId(int E, int N)
         new((int)Math.Floor(e / 1000.0), (int)Math.Floor(n / 1000.0));
 
     public override string ToString() => $"{E}_{N}";
+
+    /// <summary>A tiles file (--tiles-file of MapSetup, RoadGen, TerrainPreprocessor): one "E-N"
+    /// ("E_N", "E,N") per line, "#" starts a comment.</summary>
+    public static List<TileId> ReadList(string path)
+    {
+        var ids = new List<TileId>();
+        foreach (var raw in File.ReadLines(path))
+        {
+            var line = raw.Split('#')[0].Trim();
+            if (line.Length == 0) continue;
+            var parts = line.Split('-', '_', ',');
+            ids.Add(new TileId(int.Parse(parts[0]), int.Parse(parts[1])));
+        }
+        return ids;
+    }
 }

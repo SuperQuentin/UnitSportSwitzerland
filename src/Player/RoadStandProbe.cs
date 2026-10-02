@@ -59,6 +59,23 @@ public partial class RoadStandProbe : Node
     /// </summary>
     private static readonly bool Embankments = OS.GetCmdlineUserArgs().Contains("--embankments");
 
+    /// <summary>
+    /// <c>--sidewalks</c> (#119): only sidewalk samples. A body rests on a kerbed sidewalk's top
+    /// (middle, and just past the chamfer at the kerb) and on the carriageway beside the kerb, and
+    /// the ground just past a sidewalk's outer edge is the blend's own height.
+    /// </summary>
+    private static readonly bool Sidewalks = OS.GetCmdlineUserArgs().Contains("--sidewalks");
+
+    /// <summary><c>--floorat E,N</c>: only the four lattice vertices around one LV95 point (with <c>--at</c> on its tile).</summary>
+    private static (double E, double N)? FloorAtArg()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int i = Array.IndexOf(args, "--floorat");
+        if (i < 0 || i + 1 >= args.Length) return null;
+        var p = args[i + 1].Split(',');
+        return (double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture), double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     /// <summary>What a sample asserts: a body rests on it, the ray floor is it, or a body falls past it.</summary>
     private enum Kind { Body, Floor, Fall }
 
@@ -68,7 +85,8 @@ public partial class RoadStandProbe : Node
     public override void _PhysicsProcess(double delta)
     {
         _wait += delta;
-        if (_wait > 120) { GD.Print("[roadcheck] TIMEOUT"); GetTree().Quit(2); SetPhysicsProcess(false); return; }
+        // loading, then 1.2 s of settling per sample
+        if (_wait > 60 + 2.0 * (_points?.Count ?? 30)) { GD.Print("[roadcheck] TIMEOUT"); GetTree().Quit(2); SetPhysicsProcess(false); return; }
 
         var (e, n) = SpawnPoint.ParseTarget();
         var at = _origin.ToWorld(e, n, 0);
@@ -81,7 +99,7 @@ public partial class RoadStandProbe : Node
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, g + 1.5f, at.Z);
             _roads = _chunks.Source!.LoadRoadsAsync(tile);
-            if (Embankments) _grid = _chunks.Source!.LoadChunkAsync(tile);
+            if (Embankments || Sidewalks || FloorAtArg() != null) _grid = _chunks.Source!.LoadChunkAsync(tile);
             return;
         }
 
@@ -89,8 +107,22 @@ public partial class RoadStandProbe : Node
         if (_points == null)
         {
             if (_roads is not { IsCompleted: true } || !_chunks.HasCollisionAt(at) || _wait < 8) return;
-            if (Embankments && _grid is not { IsCompleted: true }) return;
-            _points = PickPoints(_roads.Result, tile);
+            if ((Embankments || Sidewalks || FloorAtArg() != null) && _grid is not { IsCompleted: true }) return;
+            _points = Sidewalks || FloorAtArg() != null ? new() : PickPoints(_roads.Result, tile);
+            if (FloorAtArg() is { } fa && _roads.Result is { } ft && _grid?.Result is { } fg)
+            {
+                // --floorat E,N: the blend's height at the four lattice vertices around a point
+                var b = _origin.ToWorld(tile.MinE, tile.MaxN, 0);
+                var ground = TerrainMeshBuilder.GroundHeights(fg, TerrainMeshBuilder.ComputeRoadBlend(ft), 0.0);
+                var pt = _origin.ToWorld(fa.E, fa.N, 0) - b;
+                foreach (var (dc, dr) in new[] { (0, 0), (1, 0), (0, 1), (1, 1) })
+                {
+                    int c = (int)Math.Floor(pt.X) + dc, r = (int)Math.Floor(pt.Z) + dr;
+                    var q = b + new Vector3(c, ground(c, r), r);
+                    _points.Add((q, $"floorat vertex {c},{r}", Kind.Floor));
+                }
+            }
+            if (Sidewalks && _roads.Result is { } st && _grid!.Result is { } sg) _points.AddRange(PickSidewalkPoints(st, sg, tile));
             if (Embankments && _roads.Result is { } rt && _grid!.Result is { } g) _points.AddRange(PickEmbankmentPoints(rt, g, tile));
             GD.Print($"[roadcheck] {_points.Count} road/path samples in tile {tile}");
             if (_points.Count == 0) { GetTree().Quit(2); SetPhysicsProcess(false); return; }
@@ -123,10 +155,11 @@ public partial class RoadStandProbe : Node
         GD.Print($"[roadcheck] floor-ribbon mean {_floorGap.Average():+0.000;-0.000} min {_floorGap.Min():+0.000;-0.000}; "
             + $"body-ribbon mean {_bodyGap.Average():+0.000;-0.000} min {worst:+0.000;-0.000} "
             + $"max {_bodyGap.Max():+0.000;-0.000} over {_bodyGap.Count}");
-        if (Embankments)
+        if (Embankments || Sidewalks)
             GD.Print($"[roadcheck] embankment floor off the blend by >{Tolerance} m: {_floorFails}; "
                 + $"bodies that did not fall off a wall edge: {_fallFails}/{_falls}");
-        bool ok = worst > -Tolerance && _floorFails == 0 && _fallFails == 0;
+        // a sidewalk sample may not float either: a body held up by something above the slab
+        bool ok = worst > -Tolerance && (!Sidewalks || _bodyGap.Max() < Tolerance) && _floorFails == 0 && _fallFails == 0;
         GD.Print(ok ? "[roadcheck] RESULT: body stands on the ribbon"
                     : "[roadcheck] RESULT: FAILED — body rests below the ribbon");
         SetPhysicsProcess(false);
@@ -200,6 +233,106 @@ public partial class RoadStandProbe : Node
     }
 
     /// <summary>
+    /// Whether a tile-local point lies on a street's carriageway or sidewalk (#119), other than
+    /// <paramref name="except"/>'s, or on a corner patch: its floor is that slab, not the blend.
+    /// </summary>
+    private static bool OnSidewalk(RoadTile tile, Vector3 p, RoadSegment? except = null)
+    {
+        var xz = new Vector2(p.X, p.Z);
+        // near a seam the neighbouring tile's sidewalks are not in this tile's data
+        if (p.X < 6 || p.Z < 6 || p.X > 994 || p.Z > 994) return true;
+        foreach (var a in tile.AreaProps)
+        {
+            if (a.Type != AreaPropType.Sidewalk) continue;
+            var v = a.Vertices;
+            for (int t = 0; t + 2 < a.Indices.Length; t += 3)
+            {
+                Vector2 V(int i) => new(v[a.Indices[t + i] * 3], v[a.Indices[t + i] * 3 + 2]);
+                if (Geometry2D.PointIsInsideTriangle(xz, V(0), V(1), V(2))) return true;
+            }
+        }
+        foreach (var s in tile.Segments)
+        {
+            if (!RoadStreetBuilder.HasSidewalk(s) || ReferenceEquals(s, except)) continue;
+            float reach = s.Width * 0.5f + Math.Max(s.Attributes.Left.SidewalkDm, s.Attributes.Right.SidewalkDm) / 10f + 0.5f;
+            for (int i = 0; i + 1 < s.PointCount; i++)
+            {
+                var a = new Vector2(s.Points[i * 3], s.Points[i * 3 + 2]);
+                var b = new Vector2(s.Points[i * 3 + 3], s.Points[i * 3 + 5]);
+                var q = new Vector2(p.X, p.Z);
+                var ab = b - a;
+                float t = ab.LengthSquared() < 1e-6f ? 0 : Math.Clamp((q - a).Dot(ab) / ab.LengthSquared(), 0, 1);
+                if ((a + ab * t).DistanceTo(q) < reach) return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Sidewalk samples of the tile (#119), spread over its kerbed sidewalks: the slab's middle
+    /// and its kerb edge (just past the chamfer) at road + kerb, the carriageway 0.4 m in from
+    /// the kerb at road height, and the lattice vertex past the outer edge at the blend's height.
+    /// </summary>
+    private List<(Vector3, string, Kind)> PickSidewalkPoints(RoadTile tile, ChunkGrid grid, TileId id)
+    {
+        var result = new List<(Vector3, string, Kind)>();
+        var basePos = _origin.ToWorld(id.MinE, id.MaxN, 0);
+        var ground = TerrainMeshBuilder.GroundHeights(grid, TerrainMeshBuilder.ComputeRoadBlend(tile), 0.0);
+        int last = ChunkFormat.GridSize - 1;
+        var walls = tile.LinearProps.Where(RoadWallBuilder.IsWall).ToList();
+        var kerbed = tile.Segments.Where(s => RoadStreetBuilder.HasSidewalk(s) && s.PointCount >= 3
+            && (s.Attributes.Left.KerbCm > 0 || s.Attributes.Right.KerbCm > 0)).ToList();
+        for (int k = 0; k < kerbed.Count && result.Count < 4 * Samples; k += Math.Max(1, kerbed.Count / Samples))
+        {
+            var s = kerbed[k];
+            int i = s.PointCount / 2;
+            var p = new Vector3(s.Points[i * 3], s.Points[i * 3 + 1], s.Points[i * 3 + 2]);
+            var d = new Vector3(s.Points[i * 3 + 3] - s.Points[i * 3 - 3], 0, s.Points[i * 3 + 5] - s.Points[i * 3 - 1]).Normalized();
+            var right = new Vector3(-d.Z, 0, d.X);
+            float half = s.Width * 0.5f;
+            foreach (bool r in (ReadOnlySpan<bool>)[false, true])
+            {
+                var side = r ? s.Attributes.Right : s.Attributes.Left;
+                if (side.KerbCm == 0) continue;
+                var across = r ? right : -right;
+                float w = side.SidewalkDm / 10f, kerb = side.KerbCm / 100f;
+                void Add(Vector3 at, string what, Kind kind) { var q = basePos + at; if (_chunks.HasCollisionAt(q)) result.Add((q, what, kind)); }
+                Add(p + across * (half + w * 0.5f) + Vector3.Up * kerb, $"{s.Class} sidewalk {w:F1}", Kind.Body);
+                if (w >= 1f) Add(p + across * (half + RoadStreetBuilder.Chamfer + 0.35f) + Vector3.Up * kerb, $"{s.Class} kerb top", Kind.Body);
+                Add(p + across * (half - 0.4f), $"{s.Class} by the kerb", Kind.Body);
+                // 1.2 m out: the lattice vertex it rounds to (up to 0.71 m off) stays off the slab
+                var o = p + across * (half + w + 1.2f);
+                int c = Math.Clamp((int)Math.Round(o.X), 0, last), rr = Math.Clamp((int)Math.Round(o.Z), 0, last);
+                // a retaining wall there (#125): its cap is the floor, not the blend
+                bool walled = walls.Any(wl => Enumerable.Range(0, wl.PointCount).Any(m =>
+                    new Vector2(wl.Points[m * 4] - c, wl.Points[m * 4 + 2] - rr).Length() < RoadEmbankment.CoverDepth + 2f));
+                var past = new Vector3(c, ground(c, rr), rr);
+                if (!walled && !OnSidewalk(tile, past, except: s)) Add(past, $"{s.Class} past sidewalk", Kind.Floor);
+            }
+        }
+        // junction corners: the middle of each patch's largest triangle, at its top. The floor is
+        // asserted, not the body: a patch on a sloping junction is warped, and a capsule resting
+        // on it touches the higher triangle beside the sample
+        var corners = tile.AreaProps.Where(a => a.Type == AreaPropType.Sidewalk && (a.Flags & PropFlags.Solid) != 0).ToList();
+        for (int k = 0; k < corners.Count && k < 3 * Samples; k += Math.Max(1, corners.Count / Samples))
+        {
+            var a = corners[k];
+            Vector3 V(int i) => new(a.Vertices[i * 3], a.Vertices[i * 3 + 1], a.Vertices[i * 3 + 2]);
+            Vector3 best = default;
+            float area = 0;
+            for (int t = 0; t + 2 < a.Indices.Length; t += 3)
+            {
+                var (p0, p1, p2) = (V(a.Indices[t]), V(a.Indices[t + 1]), V(a.Indices[t + 2]));
+                float ar = (p1 - p0).Cross(p2 - p0).Length();
+                if (ar > area) { area = ar; best = (p0 + p1 + p2) / 3f; }
+            }
+            var q = basePos + best + Vector3.Up * a.Height;
+            if (area > 0.5f && _chunks.HasCollisionAt(q)) result.Add((q, "corner", Kind.Floor));
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Wall caps, wall edges, wall feet and road slopes of the tile (#125). Expected heights come
     /// from the same blend the collision was built from, at lattice vertices.
     /// </summary>
@@ -243,7 +376,9 @@ public partial class RoadStandProbe : Node
                 if (_chunks.HasCollisionAt(edge)) result.Add((edge, $"wall {name} off edge", Kind.Fall));
             }
             var foot = face - left * 2.0f;
-            Lattice(foot.X, foot.Z, $"wall {name} foot");
+            // a cut wall's foot lies toward its road: on a street that is the sidewalk (#119), whose
+            // slab, not the blend, is the floor there
+            if (!OnSidewalk(tile, foot)) Lattice(foot.X, foot.Z, $"wall {name} foot");
         }
 
         int slopes = 0;
@@ -261,7 +396,7 @@ public partial class RoadStandProbe : Node
                 // a walled side has no slope: its cap is there instead
                 bool walled = walls.Any(w => Enumerable.Range(0, w.PointCount).Any(k =>
                     new Vector2(w.Points[k * 4] - q.X, w.Points[k * 4 + 2] - q.Z).Length() < RoadEmbankment.CoverDepth + 2f));
-                if (!walled) Lattice(q.X, q.Z, $"{s.Class} slope");
+                if (!walled && !OnSidewalk(tile, q)) Lattice(q.X, q.Z, $"{s.Class} slope");
             }
             slopes++;
         }

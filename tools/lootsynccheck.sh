@@ -6,6 +6,7 @@
 # The epoch must be one no earlier run emptied (the server remembers what was taken), and it must
 # roll a ground-floor container with two stacks; if it says there is none, run it again.
 # WARNING: the server writes the taken masks to the real user://loot of this project.
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 EP=${1:-$((700000 + RANDOM * 8 + RANDOM % 8))}
 AT=${2:-2583250,1113250}

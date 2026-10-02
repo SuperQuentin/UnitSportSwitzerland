@@ -75,7 +75,16 @@ public enum ItemId
     // ---- radio (src/Items/Radio*, src/Audio/Cd) ----
     Radio = 52,
 
-    // 53-60 are taken by the Battle Royale weapons and the flare gun (#178, #198)
+    // ---- weapons (src/Items/Weapons.cs; Battle Royale, #177) ----
+    Pistol = 53,
+    Rifle = 54,
+    HuntingRifle = 55,
+    Knife = 56,
+    Ammo9mm = 57,
+    Ammo75 = 58,
+    ArmorVest = 59,
+    /// <summary>One flare: fired, it calls a Battle Royale supply drop where you stand (#198).</summary>
+    FlareGun = 60,
 
     // ---- bags (docs/notes/items/bags.md): worn in the bag slot, each adds pack slots ----
     BeltPouch = 61,
@@ -129,6 +138,12 @@ public enum ItemUse
     Print,
     /// <summary>Use throws it into the world, where it stays as a thing (<see cref="RadioManager"/>).</summary>
     Throw,
+    /// <summary>Use swings it at whoever stands in front (<see cref="Weapons"/>).</summary>
+    Melee,
+    /// <summary>Use puts it on: body armour, used up as it absorbs hits (<see cref="Player.FootPlayer.Armor"/>).</summary>
+    Armor,
+    /// <summary>Use fires it into the sky: a flare that calls a supply drop (<see cref="ItemId.FlareGun"/>).</summary>
+    Signal,
     /// <summary>Worn in the bag slot, it adds <see cref="ItemDef.PackSlots"/> to the pack (<see cref="Inventory.Bag"/>).</summary>
     Bag,
 }
@@ -236,6 +251,23 @@ public static class ItemDefs
         new(ItemId.Radio, "Radio", "{use_item} opens it in your hand: it plays as you carry it. {aim_item} + {use_item} throws it; stand beside it and press {interact_mount} to play a CD or pick it up.",
             ItemUse.Throw, 1, new Color(0.16f, 0.17f, 0.19f), "RD", 0, ItemCategory.Gear, 80f),
 
+        // weapons (#178): they hurt players only while the server allows it (/pvp, a Battle Royale match)
+        new(ItemId.Pistol, "Pistol", "{aim_item} to raise it, {use_item} to fire. 9 mm.",
+            ItemUse.Shoot, 1, new Color(0.18f, 0.18f, 0.20f), "PI", 0, ItemCategory.Gear, 300f),
+        new(ItemId.Rifle, "Assault rifle", "{aim_item} to shoulder it, {use_item} to fire. 7.5 mm, the army's Stgw.",
+            ItemUse.Shoot, 1, new Color(0.24f, 0.28f, 0.20f), "AR", 0, ItemCategory.Gear, 900f),
+        new(ItemId.HuntingRifle, "Hunting rifle", "{aim_item} looks through the scope, {use_item} fires. 7.5 mm, one shot at a time.",
+            ItemUse.Shoot, 1, new Color(0.42f, 0.28f, 0.16f), "HR", 0, ItemCategory.Gear, 1200f),
+        new(ItemId.Knife, "Army knife", "{use_item} to stab whoever stands in front of you.",
+            ItemUse.Melee, 1, new Color(0.80f, 0.10f, 0.12f), "KN", 0, ItemCategory.Gear, 40f),
+        new(ItemId.Ammo9mm, "9 mm rounds", "Ammunition for the pistol.",
+            ItemUse.Material, 90, new Color(0.80f, 0.66f, 0.30f), "9M", 0, ItemCategory.Gear, 0.5f),
+        new(ItemId.Ammo75, "7.5 mm rounds", "Ammunition for the assault rifle and the hunting rifle.",
+            ItemUse.Material, 90, new Color(0.70f, 0.52f, 0.22f), "75", 0, ItemCategory.Gear, 1f),
+        new(ItemId.ArmorVest, "Armour vest", "{use_item} to put it on: it takes half of every hit until it has soaked up 50.",
+            ItemUse.Armor, 1, new Color(0.30f, 0.34f, 0.24f), "AV", 0, ItemCategory.Gear, 200f),
+        new(ItemId.FlareGun, "Flare gun", "{use_item} fires its one flare into the sky: in a Battle Royale, a supply drop comes down where you stand. Everyone sees the flare.",
+            ItemUse.Signal, 1, new Color(0.95f, 0.45f, 0.10f), "FG", 0, ItemCategory.Gear, 60f),
         // bags (#208): found in houses, worn in the bag slot, one row of the pack per 9 slots
         Bag(ItemId.BeltPouch, "Belt pouch", "#6a5a3a", "BP", 9, 15),
         Bag(ItemId.Handbag, "Handbag", "#8a2a3a", "HB", 18, 40),
@@ -412,6 +444,57 @@ public static class ItemDefs
                     s.Tube(new Vector3(x, 0.03f, 0.08f), new Vector3(x, 0.03f, 0.72f), 0.011f, steel, 6);
                 s.Box(new Vector3(0, 0.048f, 0.40f), new Vector3(0.012f, 0.006f, 0.64f), new Color(0.55f, 0.56f, 0.6f));   // rib between the barrels
                 s.Box(new Vector3(0, 0.056f, 0.70f), new Vector3(0.009f, 0.012f, 0.012f), new Color(1f, 0.85f, 0.25f));   // front bead
+                break;
+            }
+            case ItemId.Pistol:
+            {
+                var steel = new Color(0.16f, 0.16f, 0.18f);
+                s.Box(new Vector3(0, -0.045f, -0.01f), new Vector3(0.03f, 0.09f, 0.035f), new Color(0.10f, 0.10f, 0.11f));  // grip
+                s.Box(new Vector3(0, 0.02f, 0.05f), new Vector3(0.03f, 0.035f, 0.18f), steel);                              // slide
+                s.Box(new Vector3(0, 0.042f, 0.13f), new Vector3(0.006f, 0.008f, 0.006f), new Color(1f, 0.85f, 0.25f));     // front sight
+                break;
+            }
+            case ItemId.Rifle:
+            {
+                var green = new Color(0.24f, 0.28f, 0.20f);
+                var steel = new Color(0.18f, 0.19f, 0.20f);
+                s.Box(new Vector3(0, -0.02f, -0.22f), new Vector3(0.04f, 0.08f, 0.28f), green);        // stock
+                s.Box(new Vector3(0, 0.01f, 0.06f), new Vector3(0.05f, 0.07f, 0.30f), steel);         // receiver
+                s.Box(new Vector3(0, -0.09f, 0.10f), new Vector3(0.03f, 0.13f, 0.05f), steel);        // magazine
+                s.Box(new Vector3(0, 0.02f, 0.30f), new Vector3(0.045f, 0.05f, 0.18f), green);        // hand guard
+                s.Tube(new Vector3(0, 0.03f, 0.38f), new Vector3(0, 0.03f, 0.62f), 0.010f, steel, 6); // barrel
+                s.Box(new Vector3(0, 0.056f, 0.56f), new Vector3(0.009f, 0.012f, 0.012f), new Color(1f, 0.85f, 0.25f));
+                break;
+            }
+            case ItemId.HuntingRifle:
+            {
+                var wood = new Color(0.42f, 0.28f, 0.16f);
+                var steel = new Color(0.20f, 0.21f, 0.23f);
+                s.Box(new Vector3(0, -0.03f, -0.20f), new Vector3(0.04f, 0.09f, 0.34f), wood);
+                s.Box(new Vector3(0, 0.0f, 0.18f), new Vector3(0.045f, 0.05f, 0.42f), wood);
+                s.Tube(new Vector3(0, 0.03f, 0.05f), new Vector3(0, 0.03f, 0.80f), 0.010f, steel, 6);
+                s.Tube(new Vector3(0, 0.085f, -0.02f), new Vector3(0, 0.085f, 0.26f), 0.018f, new Color(0.08f, 0.08f, 0.09f), 8);   // scope
+                break;
+            }
+            case ItemId.Knife:
+            {
+                s.Box(new Vector3(0, 0.0f, 0.0f), new Vector3(0.022f, 0.028f, 0.10f), new Color(0.80f, 0.10f, 0.12f));   // the red handle
+                s.Box(new Vector3(0, 0.003f, 0.10f), new Vector3(0.006f, 0.022f, 0.10f), new Color(0.80f, 0.82f, 0.86f)); // blade
+                break;
+            }
+            case ItemId.FlareGun:
+            {
+                var orange = new Color(0.95f, 0.45f, 0.10f);
+                s.Box(new Vector3(0, -0.045f, -0.01f), new Vector3(0.03f, 0.09f, 0.035f), orange);
+                s.Tube(new Vector3(0, 0.02f, -0.03f), new Vector3(0, 0.02f, 0.16f), 0.022f, orange, 8);
+                s.Tube(new Vector3(0, 0.02f, 0.16f), new Vector3(0, 0.02f, 0.17f), 0.018f, new Color(0.15f, 0.15f, 0.15f), 8);
+                break;
+            }
+            case ItemId.ArmorVest:
+            {
+                var cloth = new Color(0.30f, 0.34f, 0.24f);
+                s.Box(new Vector3(0, 0.12f, 0), new Vector3(0.36f, 0.42f, 0.06f), cloth);
+                s.Box(new Vector3(0, 0.20f, 0.035f), new Vector3(0.22f, 0.12f, 0.02f), new Color(0.22f, 0.25f, 0.18f));  // plate pocket
                 break;
             }
             case ItemId.WitchHat or ItemId.PumpkinHead or ItemId.SantaHat or ItemId.ReindeerAntlers:

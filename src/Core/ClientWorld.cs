@@ -154,6 +154,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             GetTree().Quit(StyleKit.Report());
             return;
         }
+        if (BattleRoyale.BrCheck.Requested)
+        {
+            GetTree().Quit(BattleRoyale.BrCheck.Run());
+            return;
+        }
         if (Occasions.OccasionProbe.Requested)
         {
             GetTree().Quit(Occasions.OccasionProbe.Run());
@@ -396,7 +401,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || FlightProbe.ParseArgs() != null
             || RideProbe.ParseArgs() != null || TruckProbe.Requested || DriveProbe.ParseArgs().Requested || World.ArrivalProbe.ParseArgs().Requested || World.TreeCheck.ParseArgs().Requested
             || Gpx.Cinema.CinemaProbe.ParseArgs() != null
-            || RoadStandProbe.Requested() || MantleProbe.Requested() || VoidProbe.Requested()
+            || RoadStandProbe.Requested() || RoadPerfProbe.ParseArgs() != null || MantleProbe.Requested() || VoidProbe.Requested()
             || FlightCheckProbe.ParseArgs() != null || Vehicles.VehicleProbe.ParseArgs().Requested
             || Interiors.InteriorProbe.ParseArgs().Requested || Interiors.DoorWatchProbe.ParseArgs().Requested
             || Loot.LootProbe.ParseArgs() != null
@@ -460,9 +465,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
+            || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
+        if (Items.PvpProbe.Role != null) Items.PvpProbe.Stock(inventory);
         // the account claimed cash goes to: the server's online, this machine's offline. Made
         // before the items, whose panel shows the balance from its first frame.
         Items.Bank.Create(this, inventory);
@@ -483,6 +490,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
+        if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
+        if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
             && Items.DropCheck.Requested && Items.DropCheck.Create(() => LocalPlayer, () => _players, items) is { } soloDrop)
             AddChild(soloDrop);
@@ -697,6 +706,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             var (vE, vN) = SpawnPoint.ParseTarget();
             _spectator.Position = origin.ToWorld(vE, vN, 1200);
             AddChild(new VoidProbe(_chunks, origin));
+            return;
+        }
+
+        if (RoadPerfProbe.ParseArgs() is { } roadPerf)
+        {
+            AddChild(new RoadPerfProbe(roadPerf.Dir, roadPerf.Label));
             return;
         }
 
@@ -1094,6 +1109,20 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var race = World.RaceManager.CreateClient();
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
+
+        // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
+        var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
+        br.LocalPlayer = () => _onFoot ? LocalPlayer : null;
+        br.Inventory = () => _items?.Inventory;
+        br.Teleport = (e, n, label) => _teleporter?.TeleportTo(e, n, label) == true;
+        br.AddAnchor = node => _chunks?.AddAnchor(node);
+        br.RemoveAnchor = node => _chunks?.RemoveAnchor(node);
+        br.Source = () => _chunks?.Source;
+        // the match's crates (#194): drawn on this client's own ground
+        var crates = BattleRoyale.BrCrates.Create(this, _worldOrigin!, server: false);
+        crates.GroundAt = at => _chunks != null && _chunks.TryGetHeight(at, out float h) ? h : null;
+        br.Places = () => (IEnumerable<Terrain.Format.Place>?)_places?.All ?? Array.Empty<Terrain.Format.Place>();
+        AddChild(br);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
         if (RadioSyncCheck.Create(() => LocalPlayer, () => _players, _items?.Inventory) is { } radioCheck) AddChild(radioCheck);
         if (_items != null && Items.CarCdCheck.Create(() => LocalPlayer, () => _players, _items.Inventory, networked: true) is { } carCdCheck) AddChild(carCdCheck);
@@ -1240,6 +1269,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // while the search box has focus, keys belong to it
         if (@event.IsActionPressed(PlayerInput.Teleport))
         {
+            // in a Battle Royale match M is the match map, and there is no teleporting anyway
+            if (BattleRoyale.BrManager.Instance?.ToggleMap() == true) return;
             _places?.Toggle();
             return;
         }

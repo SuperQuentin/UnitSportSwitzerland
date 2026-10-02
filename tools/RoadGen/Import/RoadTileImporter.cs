@@ -48,13 +48,11 @@ public static class RoadTileImporter
                 var points = new List<Vec2>(segment.PointCount);
                 for (int i = 0; i < segment.PointCount; i++)
                 {
-                    // tile-local is X east, Z south from the NW corner; plan view wants LV95
-                    double east = id.MinE + segment.Points[i * 3];
-                    double north = id.MaxN - segment.Points[i * 3 + 2];
+                    var (east, north) = segment.Lv95(id, i);
                     points.Add(new Vec2(east, north));
                 }
 
-                net.AddLink(Polyline.Dedupe(points), ProfileFor(segment, dividedScale), LayerFor(segment.Flags));
+                net.AddLink(Polyline.Dedupe(points), RoadProfiles.For(segment, dividedScale), LayerFor(segment.Flags));
                 segments++;
             }
         }
@@ -70,35 +68,4 @@ public static class RoadTileImporter
     /// </summary>
     private static int LayerFor(RoadFlags flags) =>
         (flags & RoadFlags.Bridge) != 0 ? 1 : (flags & RoadFlags.Tunnel) != 0 ? -1 : 0;
-
-    private static RoadProfile ProfileFor(RoadSegment segment, double dividedScale)
-    {
-        var baseProfile = segment.Class switch
-        {
-            RoadClass.Motorway => RoadProfile.Motorway,
-            RoadClass.Expressway => RoadProfile.Expressway,
-            RoadClass.Ramp => RoadProfile.Ramp,
-            RoadClass.Major => RoadProfile.Major,
-            RoadClass.Road => RoadProfile.Road,
-            RoadClass.Minor => RoadProfile.Minor,
-            RoadClass.Lane or RoadClass.Link or RoadClass.Square => RoadProfile.Lane,
-            RoadClass.Track => RoadProfile.Track,
-            RoadClass.Path => RoadProfile.Path,
-            RoadClass.Railway => RoadProfile.Railway,
-            _ => RoadProfile.Lane,
-        };
-
-        // the surveyed width wins where TLM gives one, and an unpaved road loses its markings
-        // regardless of how wide it is
-        double width = segment.Width > 0.1 ? segment.Width : baseProfile.Width;
-        if ((segment.Flags & RoadFlags.Divided) != 0) width *= dividedScale;
-        bool paved = segment.Surface == RoadSurface.Paved;
-
-        return baseProfile with
-        {
-            Width = width,
-            Paved = paved,
-            Markings = paved ? baseProfile.Markings : MarkingPlan.None,
-        };
-    }
 }

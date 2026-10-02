@@ -238,8 +238,6 @@ public static class HeavyCatalog
         return i >= 0 && i < All.Count ? All[i] : null;
     }
 
-    public static bool IsHeavy(RideKind kind) => (int)kind >= First && (int)kind <= Last;
-
     private static IReadOnlyList<HeavySpec> Number(HeavySpec[] specs)
     {
         if (specs.Length > Last - First + 1)

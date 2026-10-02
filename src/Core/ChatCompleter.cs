@@ -54,12 +54,14 @@ public sealed class ChatCompleter
         ("login", false, false, "<password>"),
         ("stream", false, false, ""),
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
+        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | start | cancel | status"),
         ("say", true, false, "<message>"),
         ("admin", true, false, "list | add <player> | remove <player>"),
         ("tp", true, false, "<player>"),
         ("bring", true, false, "<player>"),
         ("tpall", true, false, "<town>"),
         ("kick", true, false, "<player> [reason]"),
+        ("pvp", true, false, "on | off"),
     ];
 
     /// <summary>The commands this player can run right now.</summary>
@@ -152,6 +154,20 @@ public sealed class ChatCompleter
                     1 when words[1].ToLowerInvariant() is "add" or "remove" => PlayerNames(),
                     _ => [],
                 };
+                break;
+
+            case "br":
+                bool admin = Permissions.IsAdmin;
+                options = argIndex switch
+                {
+                    0 => admin ? ["join", "leave", "status", "open", "start", "cancel"] : ["join", "leave", "status"],
+                    _ when admin && words[1].ToLowerInvariant() == "open" => ["here", "short", "normal", "long", "5", "6", "7"],
+                    _ => [],
+                };
+                break;
+
+            case "pvp":
+                options = argIndex == 0 ? ["on", "off"] : [];
                 break;
 
             case "race":

@@ -727,6 +727,55 @@ public sealed class Inventory
         return true;
     }
 
+    /// <summary>
+    /// Empties every item slot and the bag slot, the cursor and the bin (a Battle Royale match starts
+    /// empty-handed). Cash is left alone: it is the account's business; so are the clothes worn
+    /// (#251), which are only a look and come to the match on you.
+    /// </summary>
+    public void Clear()
+    {
+        Array.Fill(_slots, ItemStack.Empty, 0, FirstWearSlot);
+        Carried = ItemStack.Empty;
+        Trashed = ItemStack.Empty;
+        Notify();
+    }
+
+    /// <summary>The free-roam pack while a Battle Royale match has this inventory (<see cref="BeginMatch"/>).</summary>
+    private (ItemStack[] Slots, int Selected)? _lent;
+
+    /// <summary>A match is using this inventory: nothing is saved, the file keeps the free-roam pack.</summary>
+    public bool InMatch => _lent != null;
+
+    /// <summary>
+    /// Lends the inventory to a Battle Royale match: the free-roam pack is saved as it is, put aside
+    /// and the slots emptied. Nothing is saved until <see cref="EndMatch"/>, so a crash mid-match
+    /// still loads the free-roam pack. Cash is not touched.
+    /// </summary>
+    public void BeginMatch()
+    {
+        if (_lent != null) return;
+        Save();
+        _lent = ((ItemStack[])_slots.Clone(), Selected);
+        // the clothes stay on (#251): the match borrows a copy of them, the pack keeps its own
+        Array.Fill(_slots, ItemStack.Empty, 0, FirstWearSlot);
+        Carried = ItemStack.Empty;
+        Trashed = ItemStack.Empty;
+        Selected = 0;
+        Notify();
+    }
+
+    /// <summary>The match is over: whatever was found in it is gone, the free-roam pack is back and saved.</summary>
+    public void EndMatch()
+    {
+        if (_lent is not { } lent) return;
+        _lent = null;
+        _slots = lent.Slots;
+        Selected = lent.Selected;
+        Carried = ItemStack.Empty;
+        Trashed = ItemStack.Empty;
+        Notify();
+    }
+
     /// <summary>Everything the cursor operations touch, for undoing a drag in progress.</summary>
     public (ItemStack[] Slots, ItemStack Carried) Snapshot() => ((ItemStack[])_slots.Clone(), Carried);
 
@@ -933,7 +982,7 @@ public sealed class Inventory
 
     private void Save()
     {
-        if (!Persist) return;
+        if (!Persist || _lent != null) return;
         using var f = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
         f?.StoreString(ToJson());
     }
