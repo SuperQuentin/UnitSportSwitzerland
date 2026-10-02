@@ -327,7 +327,9 @@ public partial class PortalDemo : Node3D
         const float speed = 1.3f;
         _walkerZ -= speed * dt;
         _phase = Avatar.HumanMeshBuilder.AdvancePhase(_phase, speed, dt);
-        _walkerMesh.Mesh = Avatar.HumanMeshBuilder.BuildStride(Avatar.HumanPalette.Default, speed, _phase);
+        // one mesh rebuilt in place, not a new ArrayMesh per frame (#221)
+        _walkerMesh.Mesh = Avatar.HumanMeshBuilder.BuildStride(Avatar.HumanPalette.Default, speed, _phase,
+            into: _walkerMesh.Mesh as ArrayMesh ?? new ArrayMesh());
         var a = _links.First(l => l.Plan == "0_0_0" && l.Outside.Basis.Z.Z > 0);
         // facing north: the figure is authored facing +Z
         var street = new Transform3D(new Basis(Vector3.Up, Mathf.Pi), new Vector3(0.15f, 0, _walkerZ));

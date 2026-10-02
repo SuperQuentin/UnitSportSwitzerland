@@ -3,6 +3,7 @@
 
 #include "res://shaders/common/world.gdshaderinc"
 #include "res://shaders/common/retro.gdshaderinc"
+#include "res://shaders/common/style.gdshaderinc"
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
 #include "res://shaders/world_origin.gdshaderinc"
@@ -87,6 +88,22 @@ void fragment() {
                                          + floor(TIME * 3.0)) * 43758.5453));
     col = mix(col, glint_color, crest * sparkle * 0.55);
 
+#ifdef STYLE_LIT
+    // the two wave trains' slopes as a normal, so the sun catches the ripples
+    float dx = cos(ground.x * 0.35 + t) * 0.35 * 0.5;
+    float dz = -sin(ground.y * 0.27 - t * 0.8) * 0.27 * 0.5;
+    vec3 ripple = normalize(vec3(-dx * 0.6, 1.0, -dz * 0.6));
+    NORMAL = style_view_normal(VIEW_MATRIX, ripple);
+#ifdef STYLE_REAL
+    // dark and glossy: the sky's reflection and the sun's glint do the rest
+    ALBEDO = occasion_mist(deep_color * 0.6, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
+    ROUGHNESS = 0.05;
+    SPECULAR = 0.6;
+#else
+    ALBEDO = style_grade(occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX)));
+    ROUGHNESS = 0.6;
+#endif
+#else
     col *= world_tint;
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
@@ -94,4 +111,5 @@ void fragment() {
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
     ALBEDO = mix(col, world_sky, fog);
+#endif
 }

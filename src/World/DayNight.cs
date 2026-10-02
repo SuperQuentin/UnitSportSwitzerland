@@ -111,7 +111,12 @@ public partial class DayNight : Node
     {
         Hour = TimeCommand.Advance(Hour, delta, MinutesPerDay);
         Apply((float)delta);
-        if (GetViewport()?.GetCamera3D() is { } cam) cam.Environment = EnvironmentAt(cam.GlobalPosition);
+        if (GetViewport()?.GetCamera3D() is { } cam)
+        {
+            cam.Environment = EnvironmentAt(cam.GlobalPosition);
+            // the rooms under the terrain are out of the sun (nothing down there casts its shadow)
+            if (Sun != null) Sun.Visible = cam.Environment == null;
+        }
     }
 
     /// <summary>"14:05", for the HUD and chat.</summary>
@@ -165,27 +170,14 @@ public partial class DayNight : Node
         RenderingServer.GlobalShaderParameterSet(GNight, Night);
         ApplyOccasionGlobals(atmo, tintLinear, delta);
 
-        if (Sun != null)
-        {
-            // it shines along -shade, as the shaders light: from the sun by day, from the moon
-            // at night; the light's own -Z is the direction it shines
-            var down = -shade.Normalized();
-            Sun.Basis = Basis.LookingAt(down, Mathf.Abs(down.Y) > 0.999f ? Vector3.Forward : Vector3.Up);
-            Sun.LightColor = tint;
-            Sun.LightEnergy = Mathf.Lerp(1.0f, 0.2f, Night);
-        }
-
-        // the palette is flat through most of the day and night: only write when it moved (#221).
-        // Whatever swaps an environment in must reset _applied, or the new one waits for a change.
-        bool moved = (sky, tint, Night) != _applied;
-        _applied = (sky, tint, Night);
-        if (moved && _environment != null)
-        {
-            _environment.BackgroundColor = sky;
-            _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
-            _environment.AmbientLightColor = sky.Lerp(new Color(tint.R, tint.G, tint.B), 0.5f);
-            _environment.AmbientLightEnergy = Mathf.Lerp(1.0f, 0.55f, Night);
-        }
+        // the visual style's sky, ambient and haze follow the palette, which is flat through most
+        // of the day and night: only write them when it moved (#221). Whatever swaps an environment
+        // in must reset _applied, or the new one waits for a change. The sun moves every frame.
+        var applied = (sky, tint, Night, Styles.StyleKit.Dusk(SunElevationDeg));
+        bool moved = applied != _applied;
+        _applied = applied;
+        if (_environment != null)
+            Styles.StyleKit.DriveEnvironment(_environment, Sun, shade, tint, sky, Night, SunElevationDeg, moved);
         if (moved && _indoor != null)
         {
             _indoor.BackgroundColor = sky;
@@ -199,7 +191,7 @@ public partial class DayNight : Node
     private static readonly StringName GLights = "world_lights", GMistColor = "world_mist_color",
         GMistDensity = "world_mist_density", GMistTop = "world_mist_top", GNight = "world_night", GSky = "world_sky",
         GSnow = "world_snow", GSunDir = "world_sun_dir", GTint = "world_tint";
-    private (Color, Color, float)? _applied;
+    private (Color, Color, float, float)? _applied;
 
     // ---- occasion globals (shaders/world_occasion.gdshaderinc) ------------------------------------
 

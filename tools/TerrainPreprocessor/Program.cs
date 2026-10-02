@@ -7,6 +7,7 @@ using UnitSport.Tools.RoadGen.Rewrite;
 // Usage:
 //   dotnet run --project tools/TerrainPreprocessor -c Release -- --in <dir> [--in <dir> ...] --out terrain_chunks
 //       [--temp <cache dir>] [--jobs N] [--io-jobs N] [--force] [--fresh] [--verify] [--dump-png <dir>]
+//   ... --out terrain_chunks --photos [--tiles-file f] [--io-jobs N] [--force]   (SWISSIMAGE, PhotoStage)
 // --in is searched recursively and may be repeated (sources can live on any drive); the build is
 // incremental — see TerrainBuild.
 
@@ -22,7 +23,7 @@ string? tilesFile = null;
 // stage and the network stage after it
 string? coverOverrides = File.Exists("docs/data/cover_overrides.json") ? "docs/data/cover_overrides.json" : null;
 bool coverOnly = false;
-bool coarseOnly = false, horizonOnly = false;
+bool coarseOnly = false, horizonOnly = false, photosOnly = false;
 // lake and river beds + the .water level layer (#298): standalone with --water, and after every
 // cover pass; --bathy points at the swissBATHY3D zips (without it every bed is synthetic)
 bool waterOnly = false;
@@ -69,6 +70,7 @@ for (int i = 0; i < args.Length; i++)
                 p.Length > 2 ? int.Parse(p[2]) : 1500));
             break;
         }
+        case "--photos": photosOnly = true; break;
         case "--verify": verify = true; break;
         case "--france": franceBox = args[++i]; break;
         case "--osm-overlay": osmPbf = args[++i]; break;
@@ -100,6 +102,22 @@ if (osmPbf != null)
         : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
         : new HashSet<TileId>();
     return OsmOverlay.Run(osmPbf, tlmGpkg, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", region, jobs);
+}
+
+// ---- SWISSIMAGE photos: one aerial JPEG per tile, for the realistic styles' terrain -------------
+// Standalone: it needs only the manifest (or --tiles-file), and fetches what is missing.
+if (photosOnly)
+{
+    if (outDir == null)
+    {
+        Console.Error.WriteLine("--photos requires --out <chunk dir>");
+        return 2;
+    }
+    var manifestPath = Path.Combine(outDir, "manifest.json");
+    var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
+        : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+        : new HashSet<TileId>();
+    return await PhotoStage.Run(outDir, region, ioJobs, force);
 }
 
 // ---- horizon: one region-wide 100 m lattice, from the tiles already built ------------------
