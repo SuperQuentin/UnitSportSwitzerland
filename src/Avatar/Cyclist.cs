@@ -36,6 +36,9 @@ public partial class Cyclist : Node3D
     private BikePalette _bikePalette = BikePalette.Default;
     private MeshInstance3D _rider = null!;
     private readonly FigureWind _wind = new();
+    // the fluttering rider keeps one mesh, rebuilt in place when the wind moves by a cm/s (#221)
+    private ArrayMesh? _riderMesh;
+    private Vector3 _riderWindKey = new(float.NaN, 0, 0);
     private bool Flutters => HumanMeshBuilder.Flutters(_palette.Outfit);
 
     private float _crankAngle;
@@ -140,7 +143,13 @@ public partial class Cyclist : Node3D
         if (Flutters)
         {
             var wind = _wind.Update(_rider, (float)delta);
-            _rider.Mesh = HumanMeshBuilder.Build(_palette with { Wind = wind }, HumanPose.Cycling, includeLegs: false, helmet: true);
+            var key = (wind * 100f).Round();
+            if (key != _riderWindKey)
+            {
+                _riderWindKey = key;
+                _rider.Mesh = HumanMeshBuilder.Build(_palette with { Wind = wind }, HumanPose.Cycling,
+                    includeLegs: false, helmet: true, into: _riderMesh ??= new ArrayMesh());
+            }
         }
         if (_cadenceRpm <= 0.01f) return;
 

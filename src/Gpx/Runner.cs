@@ -84,6 +84,9 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
     }
     private UnitSport.Avatar.HumanPalette _palette = null!;
     private float _stridePhase;
+    // the runner's one mesh, rebuilt in place only when speed (cm/s) or phase changes (#221)
+    private readonly ArrayMesh _bodyMesh = new();
+    private (float Speed, float Phase) _poseKey = (float.NaN, 0f);
     private Vector3 _smoothPos;
 
     /// <summary>The origin moved (#185): the smoothed position it eases toward the track follows.</summary>
@@ -340,8 +343,13 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
                     _stridePhase, (float)Speed, scaled);
             }
 
-            _body!.Mesh = UnitSport.Avatar.HumanMeshBuilder.BuildStride(
-                _palette, (float)Speed, _stridePhase);
+            var key = (Mathf.Round((float)Speed * 100f), _stridePhase);
+            if (key != _poseKey)
+            {
+                _poseKey = key;
+                _body!.Mesh = UnitSport.Avatar.HumanMeshBuilder.BuildStride(
+                    _palette, (float)Speed, _stridePhase, into: _bodyMesh);
+            }
         }
 
         RefreshMounts();
