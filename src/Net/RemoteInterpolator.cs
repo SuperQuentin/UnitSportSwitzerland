@@ -201,12 +201,14 @@ public sealed class RemoteInterpolator
     /// <summary>
     /// Self-check (<c>--interestcheck</c>): a car at 150 and 300 km/h sent at 30 Hz with 60 ms of
     /// arrival jitter and 5% (then 20%) loss must be drawn with no step over 1.5 × v·dt at 60 fps
-    /// and no freeze.
+    /// and no freeze. Then a wingsuit or the cargo plane at 80 m/s whose sender hitches, a third of a
+    /// second of states lost at once now and then (#207): no snap, the catch-up eased (no step over 3.5 × v·dt).
     /// </summary>
-    public static bool SelfCheck() => Run(42f, 0.05) & Run(83f, 0.05) & Run(42f, 0.2);
+    public static bool SelfCheck() => Run(42f, 0.05) & Run(83f, 0.05) & Run(42f, 0.2) & Run(80f, 0.03, 10, 3.5);
 
-    private static bool Run(float v, double loss)
+    private static bool Run(float v, double loss, int burst = 1, double maxRatio = 1.5)
     {
+        int dropping = 0;
         var rng = new Random(7);
         var ip = new RemoteInterpolator();
         double send = 0, sendDt = 1.0 / 30.0, frameDt = 1.0 / 60.0;
@@ -216,7 +218,9 @@ public sealed class RemoteInterpolator
         {
             while (send <= now)
             {
-                if (rng.NextDouble() > loss) inFlight.Add((send + 0.05 + rng.NextDouble() * 0.06, send));
+                if (dropping == 0 && rng.NextDouble() < loss) dropping = burst;
+                if (dropping > 0) dropping--;
+                else inFlight.Add((send + 0.05 + rng.NextDouble() * 0.06, send));
                 send += sendDt;
             }
             inFlight.Sort((x, y) => x.Arrive.CompareTo(y.Arrive));
@@ -238,8 +242,9 @@ public sealed class RemoteInterpolator
             }
             prev = p;
         }
-        bool ok = worstRatio < 1.5 && freezes == 0;
-        GD.Print($"[interp] {(ok ? "ok  " : "FAIL")} {v:F0} m/s, 30 Hz, jitter 60 ms, {loss:P0} loss: worst step {worstRatio:F2}x v·dt, {freezes} freeze frames");
+        bool ok = worstRatio < maxRatio && (freezes == 0 || burst > 1);
+        string lost = burst > 1 ? $"{loss:P0} chance of losing {burst} states at once" : $"{loss:P0} loss";
+        GD.Print($"[interp] {(ok ? "ok  " : "FAIL")} {v:F0} m/s, 30 Hz, jitter 60 ms, {lost}: worst step {worstRatio:F2}x v·dt, {freezes} freeze frames");
         return ok;
     }
 }

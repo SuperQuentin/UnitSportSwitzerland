@@ -79,6 +79,8 @@ public partial class SettingsScreen : Screen
                 v => GameSettings.Current.SfxVolume = (float)v, Percent);
             UiKit.SliderRow(rows, "Ambience", 0, 1, 0.05, s.AmbienceVolume,
                 v => GameSettings.Current.AmbienceVolume = (float)v, Percent);
+            UiKit.SliderRow(rows, "Music", 0, 1, 0.05, s.MusicVolume,
+                v => GameSettings.Current.MusicVolume = (float)v, Percent);
             UiKit.OptionRow(rows, "Engine voice", new[] { "Realistic", "PS1 SPU", "NES 2A03", "C64 SID", "Genesis FM" }, (int)s.EngineVoice,
                 i => GameSettings.Current.EngineVoice = (UnitSport.Audio.EngineVoice)i, "Which sound chip the engines are rendered as");
         });
@@ -281,6 +283,17 @@ public partial class SettingsScreen : Screen
         UiKit.OptionRow(rows, "Monitor view in VR", Enum.GetValues<XR.MonitorView>().Select(XR.XrMonitor.Label).ToArray(),
             (int)GameSettings.Current.VrMonitor, i => GameSettings.Current.VrMonitor = (XR.MonitorView)i,
             "What the computer screen shows while you play in the headset (F7 cycles it)");
+        // the headset's picture (#244, docs/notes/xr/air-link.md)
+        int[] samples = { 0, 2, 4, 8 };
+        UiKit.OptionRow(rows, "VR anti-aliasing", new[] { "Off", "MSAA 2x", "MSAA 4x", "MSAA 8x" },
+            Math.Max(0, Array.IndexOf(samples, GameSettings.Current.VrMsaa)), i => GameSettings.Current.VrMsaa = samples[i],
+            "Steady edges stream cleanly over Air Link");
+        float[] scales = { 0.5f, 0.625f, 0.75f, 0.875f, 1f, 1.25f, 1.5f };
+        int scale = Array.FindIndex(scales, v => Math.Abs(v - GameSettings.Current.VrRenderScale) < 0.001f);
+        UiKit.OptionRow(rows, "VR resolution", scales.Select(v => $"{v * 100:F0} %").ToArray(), scale < 0 ? 4 : scale,
+            i => GameSettings.Current.VrRenderScale = scales[i], "Of the eye size the headset asks for. Lower it if the picture stutters");
+        UiKit.ToggleRow(rows, "VR foveated rendering", GameSettings.Current.VrFoveation, on => GameSettings.Current.VrFoveation = on,
+            "Coarser shading towards the edge of each eye (GPUs with variable rate shading)");
     }
 
     /// <summary>
@@ -297,7 +310,7 @@ public partial class SettingsScreen : Screen
         {
             GameSettings.Current.VrMode = on;
             GameSettings.Current.Commit();
-            if (XR.XrSession.Relaunch(on)) shell.Quit();
+            if (XR.XrSession.Relaunch(on, asked: true)) shell.Quit();
             else cancel?.Invoke();
         }, cancel);
     }

@@ -2,6 +2,7 @@
 # Use animations over loopback (src/Items/UseAnimProbe): dedicated server + client A (first person: drinks, eats, GPS, hat)
 # + client B (remote: must see A's Mouth arm pose and hat). Screenshots go to test_output/useanim_*.png.
 #   GODOT=<exe> tools/useanimcheck.sh [E,N]
+. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
 set -u
 AT=${1:-2583250,1113250}
 PORT=7794

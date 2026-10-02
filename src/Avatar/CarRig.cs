@@ -208,7 +208,7 @@ public partial class CarRig : Node3D
 
     private void Assemble(CarParts p)
     {
-        var body = HumanMeshBuilder.Material();
+        var body = HumanMeshBuilder.FigureMaterial();   // the driver wears clothes, maybe with a finish (#251)
         var glass = _glass = GlassMaterial();
         _headMaterial = TrafficMeshBuilder.LampMaterial();
         _tailMaterial = TrafficMeshBuilder.LampMaterial();
@@ -345,6 +345,33 @@ public partial class CarRig : Node3D
 
     /// <summary>A seat's hip in the rig's own frame, on the pitching body: where someone sitting in it goes.</summary>
     public Transform3D SeatFrame(SeatAnchor seat) => _body.Transform * new Transform3D(Basis.Identity, seat.Hip + ShellOffset);
+
+    /// <summary>
+    /// The steering wheel for VR hands (#243): its node (hub at the origin, turned by
+    /// <see cref="WheelTurn"/> about <c>Axis</c>, which is in the node's parent's frame) and the rim's radius.
+    /// Null on a car built without its cabin.
+    /// </summary>
+    public (Node3D Wheel, Vector3 Axis, float Radius)? SteeringGrip =>
+        _cabin == null ? null : (_wheel, _cabin.ColumnAxis, _cabin.Seat.WheelRadius);
+
+    /// <summary>How many hinged doors the car has.</summary>
+    public int DoorCount => _doors.Length;
+
+    /// <summary>The middle of a door in world space (the door shut), or the car's origin for a bit it has not got.</summary>
+    public Vector3 DoorCentre(byte bit)
+    {
+        foreach (var door in _doors)
+            if (door.Bit == bit) return _body.ToGlobal(door.Centre + ShellOffset);
+        return GlobalPosition;
+    }
+
+    /// <summary>The hinge node a door swings on (its panel and glass under it), for outlining it; null for a bit it has not got.</summary>
+    public Node3D? DoorPivot(byte bit)
+    {
+        for (int i = 0; i < _doors.Length; i++)
+            if (_doors[i].Bit == bit) return _doorPivots[i];
+        return null;
+    }
 
     /// <summary>The bit of the door whose middle is nearest a world point, and how far it is.</summary>
     public (byte Bit, float Distance) NearestDoor(Vector3 point)

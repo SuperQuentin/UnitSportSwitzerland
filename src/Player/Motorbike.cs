@@ -54,7 +54,7 @@ public sealed class Motorbike : Rideable, IEngined
     public override Vector3 FirstPersonEye =>
         HumanMeshBuilder.MountsForRider(Spec.Look.Seat, Spec.Look.Grip, Spec.Look.Peg).Eye + new Vector3(0, 0.02f, -0.08f);
 
-    public override Node3D BuildVisual(int riderIndex) => Motorcyclist.Create(Spec.Look, riderIndex);
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => Motorcyclist.Create(Spec.Look, riderIndex, outfit: outfit);
     public override Node3D BuildParkedVisual(int riderIndex) => Motorcyclist.Create(Spec.Look, riderIndex, rider: false);
 
     /// <summary>The rider's place and a pillion's (#158).</summary>

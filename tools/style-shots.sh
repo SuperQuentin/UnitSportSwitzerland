@@ -35,9 +35,11 @@ if [[ -n $VIEWS ]]; then
     keep="_warmup.png|quit$(for v in ${=VIEWS}; do printf '|_%s.png' $v; done)"
     grep -E "($keep)" $q > $q.tmp && mv $q.tmp $q
 fi
-# a fixed window size and place: the size is the frame being timed, and Godot skips drawing
-# while its window is covered (another game window in the middle of the screen)
-godot --always-on-top --resolution 1152x648 --position 24,48 ${=ENGINE} --path . -- --shot-queue $q --origin $OE,$ON --nohud --nocapture \
+# a fixed window size and place: the size is the frame being timed. On macOS Godot skips drawing
+# while its window is covered (another game window in the middle of the screen), hence on top
+# there; never on Windows, where it stays above the person's work (core/windows-launch-focus)
+ontop=(); [[ $OSTYPE == darwin* ]] && ontop=(--always-on-top)
+godot $ontop --resolution 1152x648 --position 24,48 ${=ENGINE} --path . -- --shot-queue $q --origin $OE,$ON --nohud --nocapture \
     --time ${TIME:-14} --title "212 $tag" "$@" > $d/$tag.log 2>&1 || echo "exit $?"
 grep -E '\[shot\] (wrote|FAILED)' $d/$tag.log | sed -E 's/.*(wrote|FAILED[^ ]*) ([^ ]+).*/\1 \2/' > $d/$tag.names
 grep -E '\[shot\] fps' $d/$tag.log | sed -E 's/.*(prims=[0-9]+).*(frame=[0-9.]+ms).*/\2 \1/' | paste $d/$tag.names - | column -t

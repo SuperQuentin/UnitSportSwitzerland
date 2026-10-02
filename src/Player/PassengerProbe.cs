@@ -215,7 +215,7 @@ public partial class PassengerProbe : Node
         if (_seen.Add("walk"))
         {
             // up to the car's side: on the left for b, the right for c
-            me.GlobalPosition = driver.GlobalPosition + driver.GlobalTransform.Basis.X * (_role == "b" ? -2.3f : 2.3f) + Vector3.Up * 0.3f;
+            me.GlobalPosition = driver.GlobalPosition + driver.GlobalTransform.Basis.X * (_role == "b" ? -1.7f : 1.7f) + Vector3.Up * 0.3f;
             return;
         }
         if (InStage < delay + 1.5 || !_seen.Add("ask")) return;

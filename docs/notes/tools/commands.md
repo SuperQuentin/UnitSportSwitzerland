@@ -24,7 +24,10 @@
   extraction. To rerun it alone (e.g. after a new OSM overlay), from the kept raw input:
   `dotnet run --project tools/RoadGen -c Release -- --rewrite --chunks terrain_chunks`
   (`--temp DIR` if not `<chunks>_temp`, `--dry-run` to measure only, `--tiles "E,N;E,N"` to
-  limit, `--skip-rewritten` / `--force` for rewritten tiles with no raw input)
+  limit, `--skip-rewritten` / `--force` for rewritten tiles with no raw input, `--debug-street
+  E,N` to trace the street and corner decisions near a point)
+- Street review (#119, `urban-streets`): `RoadGen --street-svg E,N [--size M] --chunks DIR --svg
+  FILE` (plan view), `--dump-street E,N --chunks DIR`, `--street-check` (self-check).
 - Place index: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --places --gwr ressources/data/gwr/data.sqlite --tlm <tlm.gpkg>`
   (`--tlm` adds named summits and passes; without it the index is towns only). This also
   re-runs roads and the network stage; `--places-only` skips them.

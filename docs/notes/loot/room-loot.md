@@ -10,6 +10,11 @@
   `ChanceFrancs`, `ContentsOf`, `BuildingChance` all take/compute the same room and cannot drift
   (`--lootchancecheck` has room cases).
 - **Bags** (#208): wardrobes and hall/lobby shelves can hold any bag, nightstands and bedroom desks a pouch or a handbag (the items `bags` note).
+- **Clothes** (#251): wardrobes roll 1-2 times from `Clothes` 70 (every plain/gothic/kawaii look; tiers
+  Basic common, styled uncommon) and `Specials` 1.6 (the finishes, tier rare), plus cloth/medical/scrap/bags.
+  Washing machines and dryers give `Laundry` (tees, polos, shorts, socks). About 63% of house wardrobes
+  hold something to wear and ~1.5% a special (`--lootchancecheck` cases WhiteTee, BuckleCorset, RainbowTee).
+  Category `Clothing` is in no category pool, like bags.
 - **Kind extras** (`InteriorGenerator.KindExtras`): pieces a building kind adds after a room's own (shop store:
   rack + crate; works store/workshop: rack + crate; farm store/workshop: bale + crate; office in a
   shop/works/civic: a filing shelf; restaurant kitchen: second fridge + shelf). Placed last, so they only use space left.

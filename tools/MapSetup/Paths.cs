@@ -49,8 +49,6 @@ public sealed class Paths
 
     public string CountrySourceFile => Path.Combine(Tools, "MapSetup", CountryData.FileName);
 
-    /// <summary>The regional buildings export the feature pass reads (see tools/export_buildings.py).</summary>
-    public string BuildingsGpkg => Path.Combine(BuildingsDir, "buildings.gpkg");
     public string GwrSqlite => Path.Combine(GwrDir, "data.sqlite");
     public string RouteKeys => Path.Combine(RoutesDir, "route_keys.sqlite");
 

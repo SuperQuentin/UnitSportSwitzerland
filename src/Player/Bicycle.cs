@@ -90,7 +90,7 @@ public sealed class Bicycle : Rideable
 
     private float _cadence;
 
-    public override Node3D BuildVisual(int riderIndex) => Cyclist.Create(riderIndex);
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => Cyclist.Create(riderIndex, outfit);
 
     public override bool IsVehicle => true;
 

@@ -30,7 +30,7 @@ public partial class FootPlayer
 
     private FootPlayer? _host;
     private MeshInstance3D? _seated;
-    private (Node3D? Rig, int Seat, bool Head) _seatedFor;
+    private (Node3D? Rig, int Seat, bool Head, long Outfit) _seatedFor;
     private bool _walkerHidden;
 
     /// <summary>The player whose vehicle this one rides in, as this peer has it; null if none (or not here yet).</summary>
@@ -102,17 +102,17 @@ public partial class FootPlayer
         }
         // first person: no head of your own in front of the lens
         bool head = !(IsMultiplayerAuthority() && !_thirdPerson);
-        if (_seated == null || !IsInstanceValid(_seated) || _seatedFor != (s.Rig, SeatIndex, head))
+        if (_seated == null || !IsInstanceValid(_seated) || _seatedFor != (s.Rig, SeatIndex, head, OutfitBits))
         {
             if (_seated != null && IsInstanceValid(_seated)) _seated.QueueFree();
             _seated = new MeshInstance3D
             {
                 Name = $"Seated_{Name}",
-                Mesh = SeatedFigure.Build(HumanPalette.ForRider(GetMultiplayerAuthority()), s.Seat, Hat, head),
-                MaterialOverride = HumanMeshBuilder.Material(),
+                Mesh = SeatedFigure.Build(FigurePalette(GetMultiplayerAuthority()), s.Seat, Hat, head),
+                MaterialOverride = HumanMeshBuilder.FigureMaterial(),
             };
             s.Rig.AddChild(_seated);
-            _seatedFor = (s.Rig, SeatIndex, head);
+            _seatedFor = (s.Rig, SeatIndex, head, OutfitBits);
         }
         _seated.Transform = SeatedFigure.FrameOf(s.Rig, s.Seat);
         // a pillion in first person: the helmet would fill the lens
@@ -175,10 +175,11 @@ public partial class FootPlayer
         {
             if (p == this || p.RidingAlong || p.Ride == RideKind.OnFoot || VehicleOf(p) is not { IsVehicle: true } vehicle) continue;
             if (vehicle.Seats.Length < 2) continue;
+            // at its door, or right against its side (#261): not anywhere within a few metres of its middle
             var entry = vehicle.EntryPoint;
             float d = entry != Vector3.Zero
-                ? p.ToGlobal(entry).DistanceTo(GlobalPosition)
-                : p.GlobalPosition.DistanceTo(GlobalPosition) - vehicle.ParkedBox.Size.X * 0.25f;
+                ? p.ToGlobal(entry).DistanceTo(GlobalPosition + Vector3.Up)
+                : VehicleReach.HullDistance(p, vehicle.ParkedBox, GlobalPosition + Vector3.Up) + reach - 1.2f;
             if (d < bestDist) { bestDist = d; best = p; }
         }
         return best;

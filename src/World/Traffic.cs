@@ -181,6 +181,12 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     private const float CarNear = 70f, CarSpawnMin = 180f, CarSpawnMax = 750f, CarDespawn = 950f;
     private const float TrainSpawnMin = 700f, TrainSpawnMax = 2500f, TrainDespawn = 3200f;
+    /// <summary>
+    /// A car is drawn to here (#221): past it, 4 m of car is a few pixels, and cars live out to
+    /// <see cref="CarDespawn"/>. Trains, 50-120 m long, stay drawn as far as they run: seeing one
+    /// cross the valley is the point of them.
+    /// </summary>
+    private const float CarDrawn = 600f;
 
     public Traffic(ChunkManager chunks, WorldOrigin origin)
     {
@@ -322,6 +328,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         }
 
         var obstacles = Obstacles?.Invoke().ToList() ?? new List<(Vector3 Pos, Vector3 Vel)>();
+        _byX.Clear();
+        _byX.AddRange(_cars);
+        _byX.Sort(ByX);
         foreach (var car in _cars) StepCar(car, dt, obstacles);
         foreach (var train in _trains) StepTrain(train, dt);
 
@@ -371,13 +380,23 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         bool van = _rng.NextDouble() < 0.18;
         var (body, lamps) = TrafficMeshBuilder.Car(TrafficMeshBuilder.Paints[_rng.Next(TrafficMeshBuilder.Paints.Length)], van);
         var v = new Vehicle(route, CruiseSpeed(edge.Class) * 0.8f, new[] { 0f },
-            new[] { Unit(body, lamps) }) { Reaction = 0.5f + 0.5f * (float)_rng.NextDouble() };
+            new[] { Unit(body, lamps, CarDrawn) }) { Reaction = 0.5f + 0.5f * (float)_rng.NextDouble() };
         AddVehicle(v);
         _cars.Add(v);
     }
 
     /// <summary>Braking a traffic driver plans with, m/s²: the speed from which it stops within <paramref name="gap"/> m.</summary>
     private static float StopWithin(float gap) => Mathf.Sqrt(2f * 4f * Mathf.Max(0f, gap));
+
+    /// <summary>
+    /// The cars by east-west position, for the gap to the car ahead: a car looks only at those
+    /// within <see cref="GapWindow"/> m of it that way instead of at every car (O(n²) at traffic
+    /// 150, #221). The window is the 40 m it looks ahead with room for a tick's travel.
+    /// </summary>
+    private readonly List<Vehicle> _byX = new();
+    private static readonly Comparer<Vehicle> ByX = Comparer<Vehicle>.Create((a, b) => a.Head.X.CompareTo(b.Head.X));
+    private const float GapWindow = 45f;
+    private readonly Vehicle _xKey = new(0f);
 
     /// <summary>This car's road from 80 m behind to 120 m ahead, every 4 m (<see cref="Behind"/> is the index of the car).</summary>
     private readonly Vector3[] _roadPos = new Vector3[51], _roadDir = new Vector3[51];
@@ -414,8 +433,12 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // coming the other way in the other lane (1.5 m over) counted as "in the lane": two met nose to
         // nose, stopped for each other for good and blocked the whole road — racers stopped behind
         // both (#85)
-        foreach (var other in _cars)
+        // only the cars within reach east-west (sorted at the start of the tick; none moves a metre in one)
+        _xKey.Head.X = car.Head.X - GapWindow;
+        int from = _byX.BinarySearch(_xKey, ByX);
+        for (int o = from < 0 ? ~from : from; o < _byX.Count && _byX[o].Head.X <= car.Head.X + GapWindow; o++)
         {
+            var other = _byX[o];
             if (other == car) continue;
             var d = other.Head - car.Head;
             float along = d.Dot(dir);
@@ -450,13 +473,19 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         }
         target = Mathf.Min(target, GiveWay(car, obstacles));
 
-        if (obstacles.Count > 0)
-            for (int k = 0; k < _roadPos.Length; k++) (_roadPos[k], _roadDir[k]) = car.Route.At(4f * (Behind - k));
+        bool sampled = false;
         foreach (var (oPos, oVel) in obstacles)
         {
             var rel = oPos - pos;
             // a racer 9 s from a junction at 50 m/s is 450 m away
             if (new Vector2(rel.X, rel.Z).LengthSquared() > 450f * 450f) continue;
+            // the road is sampled only for a car with someone that near: the local player alone is
+            // an obstacle, and sampling for every car every tick was most of the traffic's cost (#221)
+            if (!sampled)
+            {
+                for (int k = 0; k < _roadPos.Length; k++) (_roadPos[k], _roadDir[k]) = car.Route.At(4f * (Behind - k));
+                sampled = true;
+            }
             float oSpeed = new Vector2(oVel.X, oVel.Z).Length();
 
             // where it is on this car's road (bends and all): metres ahead (- behind), and right of the centreline
@@ -814,11 +843,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// One solid unit. Its box is the mesh's own bounds: the hand-typed ones stood 15 cm over a
     /// car, 20 cm over a van and 30 cm short of a carriage roof.
     /// </summary>
-    private Node3D Unit(ArrayMesh body, ArrayMesh lamps)
+    private Node3D Unit(ArrayMesh body, ArrayMesh lamps, float drawn = 0f)
     {
         var node = new AnimatableBody3D { SyncToPhysics = false };
-        node.AddChild(new MeshInstance3D { Mesh = body, MaterialOverride = _bodyMaterial });
-        node.AddChild(new MeshInstance3D { Mesh = lamps, MaterialOverride = _lampMaterial });
+        node.AddChild(new MeshInstance3D { Mesh = body, MaterialOverride = _bodyMaterial, VisibilityRangeEnd = drawn });
+        node.AddChild(new MeshInstance3D { Mesh = lamps, MaterialOverride = _lampMaterial, VisibilityRangeEnd = drawn });
         var box = body.GetAabb().Merge(lamps.GetAabb());
         node.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = box.Size }, Position = box.GetCenter() });
         return node;
@@ -900,6 +929,15 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         /// <summary>When it was spawned (ms): a car met just after it appeared (#159 logs).</summary>
         public readonly ulong Born = Time.GetTicksMsec();
         public bool StartleBrake;
+
+        /// <summary>A search key for <see cref="Traffic._byX"/>: a vehicle that is only a position east-west.</summary>
+        public Vehicle(float x)
+        {
+            Route = null!;
+            Offsets = Array.Empty<float>();
+            Units = Array.Empty<Node3D>();
+            Head = new Vector3(x, 0, 0);
+        }
 
         public Vehicle(Route route, float cruise, float[] offsets, Node3D[] units)
         {

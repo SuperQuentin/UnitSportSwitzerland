@@ -121,8 +121,7 @@ public sealed class LaneGraph
                 long keyStart = 0, keyEnd = 0;
                 for (int i = 0; i < pts.Length; i++)
                 {
-                    double e = tile.Id.MinE + seg.Points[i * 3];
-                    double n = tile.Id.MaxN - seg.Points[i * 3 + 2];
+                    var (e, n) = seg.Lv95(tile.Id, i);
                     pts[i] = origin.ToWorld(e, n, seg.Points[i * 3 + 1] - sink);
                     if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
                     if (i == 0) keyStart = Key(e, n);
