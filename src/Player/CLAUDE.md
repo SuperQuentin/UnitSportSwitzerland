@@ -30,6 +30,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `trucks-buses` — Trucks and buses (#70): `HeavyCatalog` RideKind 96..119, trailers by code, a planar multi-body train (pins, per-axle tyres), sections as their own bodies, clutch/converter driveline in five shift modes, retarder, air, rollover, coupling, bus doors/kneel/destination, `--truckcheck`, `--truckprobe`, `--heavynet`
 - `vehicles-sink` — Cars, motorbikes and trucks over their wading depth float, sink and are wrecked, the driver out swimming (#299); no blast under water; legacy 0.12 m lakes still drivable
 - `swimming` — Swimming, diving, the air reserve (#301): `FootPlayer.Swim.cs` on `WaterField`, riding the waves, look-steered under water, mantle out, water landings by drag, drowning via `Health`, air bar, `PoseSwim` replicated, items holstered, `StartSwimming` for boats, `--swimcheck`, `tools/swimnetcheck.sh`
+- `boats` — Boats (#302): `BoatModel` hull columns on `WaterField` (buoyancy, slam, hump and plane, jet/rudder, beaching), `Boat` rideable (RideKind 121 jetski, 122 speedboat), `FootPlayer.Boat.cs`, `VehicleBody.Boat.cs` (float, drift, sleep), remote copies on their own waves (`Heave`), thrown riders swim, steamer (#303) hooks, `--boatcheck`, `tools/boatnetcheck.sh`
 
 ## Commands
 
