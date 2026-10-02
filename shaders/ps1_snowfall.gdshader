@@ -11,10 +11,12 @@ render_mode unshaded, cull_disabled, skip_vertex_transform;
 // share this mesh with the screen's camera, so the snow cannot be hidden by node: a camera down
 // there (indoors, or a portal camera looking in) draws no flake, every camera up here draws them all.
 
+#include "res://shaders/world_origin.gdshaderinc"
+
 global uniform vec3 world_tint;
 global uniform vec3 world_sky;
 
-uniform float box = 60.0;
+uniform float box = 60.0;          // m; divides OriginShifter.PatternPeriodM, or flakes jump at a shift
 uniform float fall = 1.3;          // m/s
 uniform vec2 wind = vec2(0.35, 0.15);
 uniform float density = 1.0;       // 0..1: the share of flakes drawn at altitude
@@ -33,8 +35,11 @@ void vertex() {
         wind.x * TIME + sin(TIME * (0.6 + h) + home.y) * 0.7,
         -fall * (0.8 + 0.4 * h) * TIME,
         wind.y * TIME + cos(TIME * (0.5 + h) + home.x) * 0.7);
-    vec3 corner = cam - vec3(box * 0.5);
-    vec3 world = corner + mod(home + drift - corner, vec3(box));
+    // wrapped in pattern space (pattern_xz), fixed to the ground: in raw world space every flake
+    // would land somewhere else when the floating origin moves (#185)
+    vec3 pattern = vec3(world_origin_offset.x, 0.0, world_origin_offset.y);
+    vec3 corner = cam + pattern - vec3(box * 0.5);
+    vec3 world = corner + mod(home + drift - corner, vec3(box)) - pattern;
 
     // per camera, from its own height: a door portal shows the street's snow, not the lens's
     keep = step(h, density * mix(0.45, 1.0, smoothstep(thin_below.x, thin_below.y, cam.y)));

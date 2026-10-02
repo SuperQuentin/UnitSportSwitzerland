@@ -31,6 +31,10 @@
   as asked, carried into the rooms (`InteriorManager.OpenDoorForCamera`/`CameraInside`). Stand
   2-3 m from a house looking at it to look into its ground floor. The door is left open, so
   queue it last; it fails after 40 s without a door or an interior.
+  A line `shift dE,dN` moves the floating origin by that many metres (LV95 E, N) with the camera
+  still, then logs the CPU and GPU time of the 120 frames after it against the 30 before (#185):
+  what a shift costs the renderer. Time it with no shot right after it (saving a PNG stalls the
+  GPU); picture it in a second run, with settles of 0 for the very next frames.
 - `--origin E,N` (LV95): pins the starting world origin, so shots at fixed world coordinates stay put
   when the manifest's suggested origin moves. The floating origin still moves it as the camera
   travels (`ShotRunner` maps queued shots from that first frame); add `--originshift 1000000` to
