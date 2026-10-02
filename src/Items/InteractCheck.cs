@@ -57,7 +57,7 @@ public partial class InteractCheck : Node
     public override void _Process(double delta)
     {
         _t += delta;
-        if (_t > Timeout) { Finish($"timed out at step {_step}"); return; }
+        if (_t > Timeout) { _failed = true; Finish($"timed out at step {_step}"); return; }
         if (_local() is not { } me)
         {
             if (_t > 10 && !_steppedDown && GetParent() is ClientWorld world) { world.ToggleMode(); _steppedDown = true; }
@@ -192,6 +192,9 @@ public partial class InteractCheck : Node
                 Next();
                 break;
             case 15 when InStep > 1:
+                // getting in froze the old body: the car standing there now is the one parked on the way out
+                _car = VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().Where(v => v.Ride is Car)
+                    .OrderBy(v => v.GlobalPosition.DistanceTo(me.GlobalPosition)).FirstOrDefault();
                 if (playing == null || _car == null) { Finish(_failed ? string.Join("; ", _notes) : "all steps (no music)"); return; }
                 Check(_inventory.HeldId == ItemId.Radio && RadioPlay.Decode(_inventory.Held.Data) is { CdId: var c } && c == cd,
                     "in the hand, with its CD still playing");

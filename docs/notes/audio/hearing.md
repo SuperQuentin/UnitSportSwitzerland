@@ -8,7 +8,7 @@
   wet x0.75.
 - **`Audio/Hearing`** (one per speaker; the speaker goes `TopLevel` and is placed every frame from
   its parent + its original offset): listener = the viewport camera.
-  - same space: a ray ear -> source at 5 Hz, bodies (`CharacterBody3D`) skipped, a hit within 0.7 m of
+  - same space: a ray ear -> source at 5 Hz, players (`FootPlayer`, a parked car is a `CharacterBody3D` too and does count) and the source's own collider skipped, a hit within 0.15 m of
     the source ignored; blocked = -9 dB, 900 Hz cutoff ("wall").
   - other space (interiors are 3 km down): through the nearest linked doorway of the interior holding
     the inside point (`InteriorManager.Links`, `DoorLink.ToInside/ToOutside`), level and cutoff by the

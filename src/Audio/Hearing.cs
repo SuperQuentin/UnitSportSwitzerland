@@ -75,7 +75,7 @@ public sealed class Hearing
                 if (_poll <= 0)
                 {
                     _poll = PollSeconds;
-                    _occluded = Occluded(speaker, listener, source);
+                    _occluded = Occluded(parent, listener, source);
                 }
                 Path = _occluded ? "wall" : "open";
                 _wantDb = _occluded ? WallDb : 0f;
@@ -105,20 +105,21 @@ public sealed class Hearing
         speaker.AttenuationFilterCutoffHz = _cut;
     }
 
-    /// <summary>Anything solid on the line, other than a body or the source itself.</summary>
-    private static bool Occluded(Node3D from, Vector3 listener, Vector3 source)
+    /// <summary>Anything solid on the line, other than a body or the source's own (the radio's box, the parked car its stereo is in).</summary>
+    private static bool Occluded(Node3D source3D, Vector3 listener, Vector3 source)
     {
-        var space = from.GetWorld3D()?.DirectSpaceState;
+        var space = source3D.GetWorld3D()?.DirectSpaceState;
         if (space == null || listener.DistanceSquaredTo(source) < 1f) return false;
         var exclude = new Godot.Collections.Array<Rid>();
+        if (source3D is CollisionObject3D own) exclude.Add(own.GetRid());
         for (int i = 0; i < 3; i++)
         {
             var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(listener, source, uint.MaxValue, exclude));
             if (hit.Count == 0) return false;
             var at = hit["position"].AsVector3();
-            if (at.DistanceTo(source) < 0.7f) return false;   // the radio's own box, the car it is in
+            if (at.DistanceTo(source) < 0.15f) return false;   // touching it: whatever it lies on
             // a person in the way (the holder's own capsule under a third-person camera) is no wall
-            if (hit["collider"].AsGodotObject() is CharacterBody3D body) { exclude.Add(body.GetRid()); continue; }
+            if (hit["collider"].AsGodotObject() is Player.FootPlayer body) { exclude.Add(body.GetRid()); continue; }
             return true;
         }
         return false;
