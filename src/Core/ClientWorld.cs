@@ -362,13 +362,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Traffic) || Systems.On(Systems.Trains))
         {
             if (!Systems.On(Systems.Traffic)) GameSettings.Current.TrafficCars = 0;
+            var obstacles = new List<(Vector3 Pos, Vector3 Vel)>();
             _traffic = new World.Traffic(_chunks, origin)
             {
                 Focus = () => GetViewport().GetCamera3D()?.GlobalPosition,
                 // every player it can meet — the local one, remote racers, race NPCs — with how each moves:
                 // the traffic makes way for a race going through it (#85)
-                Obstacles = () => GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
-                    .Select(p => (p.GlobalPosition, p.WorldVelocity)),
+                // from the tick's shared snapshot, into one reused list (#221)
+                Obstacles = () =>
+                {
+                    obstacles.Clear();
+                    foreach (var s in PlayerSnapshot.Of(GetTree())) obstacles.Add((s.Pos, s.Vel));
+                    return obstacles;
+                },
             };
             AddChild(_traffic);
         }

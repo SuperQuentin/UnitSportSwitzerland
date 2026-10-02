@@ -138,6 +138,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// junction for one about to pass it.
     /// </summary>
     public Func<IEnumerable<(Vector3 Pos, Vector3 Vel)>>? Obstacles { get; set; }
+    private readonly List<(Vector3 Pos, Vector3 Vel)> _obstacles = new();
 
     /// <summary>
     /// The traffic of this client, for the race pilots that drive among it (one world per process).
@@ -327,7 +328,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (_trains.Count < wantTrains) SpawnTrain(focus);
         }
 
-        var obstacles = Obstacles?.Invoke().ToList() ?? new List<(Vector3 Pos, Vector3 Vel)>();
+        // one list for the traffic's life, refilled each tick (#221)
+        var obstacles = _obstacles;
+        obstacles.Clear();
+        if (Obstacles?.Invoke() is { } seen) obstacles.AddRange(seen);
         _byX.Clear();
         _byX.AddRange(_cars);
         _byX.Sort(ByX);
@@ -688,7 +692,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         if (remaining > YieldLookAhead) return float.MaxValue;
         var junction = forward ? edge.Points[^1] : edge.Points[0];
 
-        bool conflict = obstacles.Any(o => FlatLength(o.Pos - junction) < 8f);
+        bool conflict = false;
+        foreach (var o in obstacles)
+            if (FlatLength(o.Pos - junction) < 8f) { conflict = true; break; }
         foreach (var other in _cars)
         {
             if (conflict) break;
