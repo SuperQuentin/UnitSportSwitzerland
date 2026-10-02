@@ -23,6 +23,11 @@ string? tilesFile = null;
 string? coverOverrides = File.Exists("docs/data/cover_overrides.json") ? "docs/data/cover_overrides.json" : null;
 bool coverOnly = false;
 bool coarseOnly = false, horizonOnly = false;
+// lake and river beds + the .water level layer (#298): standalone with --water, and after every
+// cover pass; --bathy points at the swissBATHY3D zips (without it every bed is synthetic)
+bool waterOnly = false;
+string? bathyDir = null;
+var pngCrops = new List<(double E, double N, int Size)>();
 bool force = false, fresh = false;
 string? franceBox = null;
 // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
@@ -54,6 +59,16 @@ for (int i = 0; i < args.Length; i++)
         case "--features-only": featuresOnly = true; break;
         case "--coarse": coarseOnly = true; break;
         case "--horizon": horizonOnly = true; break;
+        case "--water": waterOnly = true; break;
+        case "--bathy": bathyDir = args[++i]; break;
+        case "--png-crop":
+        {
+            var p = args[++i].Split(',');
+            pngCrops.Add((double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture),
+                double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture),
+                p.Length > 2 ? int.Parse(p[2]) : 1500));
+            break;
+        }
         case "--verify": verify = true; break;
         case "--france": franceBox = args[++i]; break;
         case "--osm-overlay": osmPbf = args[++i]; break;
@@ -97,6 +112,19 @@ if (horizonOnly)
     }
     return HorizonStage.Run(outDir, jobs);
 }
+
+// ---- water: beds into the .terr heights, the still level into .water ----------------------
+if (waterOnly)
+{
+    if (outDir == null)
+    {
+        Console.Error.WriteLine("--water requires --out <chunk dir>");
+        return 2;
+    }
+    return WaterStage.Run(outDir, WaterOptions());
+}
+
+WaterStage.Options WaterOptions() => new() { Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops };
 
 // ---- coarse companion tiles: decimate what is already built -----------------------------
 // Standalone because it needs nothing but the .terr files themselves. A region built before
@@ -375,5 +403,8 @@ int RunFeatures(TerrainManifest existing)
             if (rc != 0) return rc;
         }
     }
+    // the cover says where the water is, so the beds follow every cover pass (whole region: the
+    // water bodies and their depths are region-wide)
+    if (doCover) return WaterStage.Run(outDir!, WaterOptions());
     return 0;
 }

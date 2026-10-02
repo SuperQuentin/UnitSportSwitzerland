@@ -30,6 +30,8 @@
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\MathX.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the water pass's exact distance transform (#298); the rest of the preprocessor is not linked -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\DistanceTransform.cs" Link="Tools\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
