@@ -166,6 +166,9 @@ public partial class BrManager
                 inv.BeginMatch();
                 inv.Add(ItemId.Knife, 1);
                 inv.Add(ItemId.Bandage, 3);
+                // building (#274): a hammer and enough planks for a first wall or two
+                inv.Add(ItemId.Hammer, 1);
+                inv.Add(ItemId.WoodPlanks, 15);
             }
             FootPlayer.StayDown = _ => InMatch && _state.Phase == BrPhase.Playing;
             Permissions.SetRidesLocked(true);

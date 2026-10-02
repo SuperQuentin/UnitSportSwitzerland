@@ -204,27 +204,19 @@ public static class RoadCodec
                     uint n = r.ReadUInt32();
                     int recordSize = r.ReadUInt16();
                     r.ReadUInt16();
-                    if (n != count || recordSize < RoadAttributes.RecordSize)
+                    if (n != count || recordSize < RoadAttributes.BaseRecordSize)
                         throw new InvalidDataException($"Bad attribute section ({n} records of {recordSize} B for {count} segments)");
                     attributes = new RoadAttributes[n];
-                    for (int i = 0; i < n; i++)
-                    {
-                        attributes[i] = ReadAttributes(r);
-                        Skip(r, recordSize - RoadAttributes.RecordSize);
-                    }
+                    for (int i = 0; i < n; i++) attributes[i] = ReadAttributes(r, recordSize);
                 }
                 else if (tag == TagAttributePalette)
                 {
                     int distinct = r.Read7BitEncodedInt();
                     int recordSize = r.ReadByte();
-                    if (recordSize < RoadAttributes.RecordSize)
+                    if (recordSize < RoadAttributes.BaseRecordSize)
                         throw new InvalidDataException($"Bad attribute palette record size {recordSize}");
                     var palette = new RoadAttributes[distinct];
-                    for (int i = 0; i < distinct; i++)
-                    {
-                        palette[i] = ReadAttributes(r);
-                        Skip(r, recordSize - RoadAttributes.RecordSize);
-                    }
+                    for (int i = 0; i < distinct; i++) palette[i] = ReadAttributes(r, recordSize);
                     attributes = new RoadAttributes[count];
                     for (int i = 0; i < count; i++) attributes[i] = palette[r.Read7BitEncodedInt()];
                 }
@@ -312,7 +304,8 @@ public static class RoadCodec
             tile.Segments.Add(new RoadSegment
             {
                 Class = cls, Surface = surface, Flags = flags, Width = width, Points = points,
-                Attributes = attributes?[i] ?? default,
+                Attributes = attributes is null ? default
+                    : (tile.Flags & RoadTileFlags.Bikes) != 0 ? attributes[i] : WithoutBikes(attributes[i]),
             });
         }
         if (references is not null)
@@ -494,6 +487,9 @@ public static class RoadCodec
         WriteSide(w, a.Left);
         WriteSide(w, a.Right);
         w.Write((ushort)0);
+        // #120: each side's shift off the ribbon's edge, after the 24 B older readers stop at
+        w.Write(a.Left.ShiftStartCm); w.Write(a.Left.ShiftEndCm);
+        w.Write(a.Right.ShiftStartCm); w.Write(a.Right.ShiftEndCm);
     }
 
     private static void WriteSide(BinaryWriter w, RoadSide s)
@@ -503,10 +499,11 @@ public static class RoadCodec
         w.Write(s.BikeDm);
         w.Write(s.KerbCm);
         w.Write(s.VergeDm);
-        w.Write((byte)0);
+        w.Write(s.BufferDm);   // #120; a pad byte before, so older readers ignore it
     }
 
-    private static RoadAttributes ReadAttributes(BinaryReader r)
+    /// <summary>One record of <paramref name="recordSize"/> bytes: the base 24, the side shifts when present, the rest skipped.</summary>
+    private static RoadAttributes ReadAttributes(BinaryReader r, int recordSize)
     {
         var flags = (RoadAttrFlags)r.ReadUInt16();
         sbyte oneWay = r.ReadSByte(), layer = r.ReadSByte();
@@ -516,14 +513,28 @@ public static class RoadCodec
         var left = ReadSide(r);
         var right = ReadSide(r);
         r.ReadUInt16();
+        int read = RoadAttributes.BaseRecordSize;
+        if (recordSize >= RoadAttributes.RecordSize)
+        {
+            left = left with { ShiftStartCm = r.ReadUInt16(), ShiftEndCm = r.ReadUInt16() };
+            right = right with { ShiftStartCm = r.ReadUInt16(), ShiftEndCm = r.ReadUInt16() };
+            read = RoadAttributes.RecordSize;
+        }
+        Skip(r, recordSize - read);
         return new RoadAttributes(flags, oneWay, layer, fwd, bwd, priority, width, left, right);
+    }
+
+    /// <summary>A record from before #120: OSM's cycleway tags, never planned, are not drawn (<see cref="RoadTileFlags.Bikes"/>).</summary>
+    private static RoadAttributes WithoutBikes(RoadAttributes a)
+    {
+        static RoadSide Clear(RoadSide s) => s.Bike == BikeKind.None && s.BikeDm == 0 ? s
+            : s with { Bike = BikeKind.None, BikeDm = 0, VergeDm = 0, BufferDm = 0 };
+        return a with { Left = Clear(a.Left), Right = Clear(a.Right) };
     }
 
     private static RoadSide ReadSide(BinaryReader r)
     {
-        var side = new RoadSide(r.ReadByte(), (BikeKind)r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte());
-        r.ReadByte();
-        return side;
+        return new RoadSide(r.ReadByte(), (BikeKind)r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte());
     }
 
     private static byte[] Section(Action<BinaryWriter> write)

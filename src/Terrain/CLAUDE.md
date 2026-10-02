@@ -8,7 +8,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 ## Architecture
 
 - `roads-merged-into-terrain-collision` — Roads are merged into terrain collision, not just draped over it
-- `sidewalks-tunnels-runtime` — #119 runtime: sidewalk slabs + chamfered kerb collision, blend under slabs/caps/bores, road depth bias, tunnel mouths (punch at surface ends only), bore floor/wall collision, safety nets skip bores and cut ramps, checks
+- `sidewalks-tunnels-runtime` — #119 runtime: sidewalk slabs + chamfered kerb collision, blend under slabs/caps/bores, road depth bias, tunnel mouths (punch at surface ends only), bore floor/wall collision, safety nets skip bores and cut ramps, checks; #120 side profiles (grass, bike path, sloped kerbs) from `RoadStreetSection`
 - `road-embankments-walls` — Road embankments (#125): level cross-section, 2:3 fill / 1:1 cut clamp in RoadBlend, retaining walls planned in RoadGen (LPRP), 40 cm crown with a cover over the heightfield step, cost
 - `road-railings` — Road railings (#126): guardrails on fill-wall crowns, above drops and as back-to-back median beams; fences; RailingBuilder mesh and collision strip, racing-line obstacle
 - `surface-patterns` — Surface patterns: `CoverPalette` writes a `SurfacePattern` code into vertex-colour alpha in quarter steps (0 none,...

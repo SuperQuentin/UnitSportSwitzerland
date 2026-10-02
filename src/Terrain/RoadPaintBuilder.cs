@@ -48,9 +48,10 @@ public static class RoadPaintBuilder
                 continue;
             }
 
-            if (paint.Type == PaintType.SharkTooth)   // a Wartelinie row stored as its base line (#121)
+            // a Wartelinie row stored as its base line (#121), a Velo symbol as its length (#120)
+            if (paint.Type is PaintType.SharkTooth or PaintType.BikeSymbol)
             {
-                foreach (var t in RoadPaintGeometry.Teeth(paint))
+                foreach (var t in paint.Type == PaintType.SharkTooth ? RoadPaintGeometry.Teeth(paint) : RoadPaintGeometry.BikeSymbol(paint))
                     for (int k = 0; k < 9; k += 3)
                     {
                         indices.Add(vertices.Count);

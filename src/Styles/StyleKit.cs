@@ -333,6 +333,28 @@ public static class StyleKit
             foreach (var (name, file) in RealTextures(role))
                 if (ResourceLoader.Exists(file))
                     m.SetShaderParameter(name, GD.Load<Texture2D>(file));
+        // last, so the style's parameters are set and kept for when the override goes
+        if (_debugShader != null) m.Shader = _debugShader;
+    }
+
+    private static Shader? _debugShader;
+
+    /// <summary>
+    /// Draws every world material with <paramref name="shader"/> instead of its style's (the debug
+    /// menu's clay and vertex-colour views, #339), or with its own again when null. In place, like
+    /// <see cref="Restyle"/>, so materials made meanwhile follow too. Main thread.
+    /// </summary>
+    public static void OverrideShader(Shader? shader)
+    {
+        if (shader == _debugShader) return;
+        _debugShader = shader;
+        lock (Live)
+        {
+            Live.RemoveAll(l => !l.Material.TryGetTarget(out _));
+            foreach (var (weak, role) in Live)
+                if (weak.TryGetTarget(out var m))
+                    Configure(m, role, Applied);
+        }
     }
 
     private const string RealTex = "res://assets/realistic/textures/";

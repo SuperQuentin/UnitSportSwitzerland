@@ -35,6 +35,7 @@
     <Compile Include="..\..\src\World\SeaStateCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\WaterLayer.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Build\BuildGrid.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

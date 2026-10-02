@@ -241,7 +241,7 @@ public partial class RoadStandProbe : Node
         if (p.X < 6 || p.Z < 6 || p.X > 994 || p.Z > 994) return true;
         foreach (var a in tile.AreaProps)
         {
-            if (a.Type != AreaPropType.Sidewalk) continue;
+            if (!StreetAreas.Is(a.Type)) continue;
             var v = a.Vertices;
             for (int t = 0; t + 2 < a.Indices.Length; t += 3)
             {
@@ -252,7 +252,7 @@ public partial class RoadStandProbe : Node
         foreach (var s in tile.Segments)
         {
             if (!RoadStreetBuilder.HasSidewalk(s) || ReferenceEquals(s, except)) continue;
-            float reach = s.Width * 0.5f + Math.Max(s.Attributes.Left.SidewalkDm, s.Attributes.Right.SidewalkDm) / 10f + 0.5f;
+            float reach = s.Width * 0.5f + Math.Max(s.Attributes.Left.Reach, s.Attributes.Right.Reach) + 0.5f;
             for (int i = 0; i + 1 < s.PointCount; i++)
             {
                 var a = new Vector2(s.Points[i * 3], s.Points[i * 3 + 2]);
@@ -291,15 +291,23 @@ public partial class RoadStandProbe : Node
             foreach (bool r in (ReadOnlySpan<bool>)[false, true])
             {
                 var side = r ? s.Attributes.Right : s.Attributes.Left;
-                if (side.KerbCm == 0) continue;
+                if (side.KerbCm == 0 || RoadStreetSection.For(side) is not { } profile) continue;
                 var across = r ? right : -right;
-                float w = side.SidewalkDm / 10f, kerb = side.KerbCm / 100f;
+                float w = profile.Width;
+                // past a turn lane's widening the side is shifted out (#120)
+                float edge = half + side.ShiftAt(RoadStreetSection.Fractions(s)[i]);
                 void Add(Vector3 at, string what, Kind kind) { var q = basePos + at; if (_chunks.HasCollisionAt(q)) result.Add((q, what, kind)); }
-                Add(p + across * (half + w * 0.5f) + Vector3.Up * kerb, $"{s.Class} sidewalk {w:F1}", Kind.Body);
-                if (w >= 1f) Add(p + across * (half + RoadStreetBuilder.Chamfer + 0.35f) + Vector3.Up * kerb, $"{s.Class} kerb top", Kind.Body);
+                // the middle of every band at its height (#120: grass, bike path, sidewalk)
+                for (int m = 0; m + 1 < profile.Count; m++)
+                    if (profile.Surface[m] != StreetSurface.Kerb)
+                        Add(p + across * (edge + (profile.D[m] + profile.D[m + 1]) * 0.5f) + Vector3.Up * profile.H[m + 1],
+                            $"{s.Class} {profile.Surface[m].ToString().ToLowerInvariant()} {profile.D[m + 1] - profile.D[m]:F1}", Kind.Body);
+                // a vertical kerb at the edge: just past its chamfer
+                if (profile.Count > 2 && profile.D[1] < 1e-4f && profile.D[2] >= 1f)
+                    Add(p + across * (edge + RoadStreetBuilder.Chamfer + 0.35f) + Vector3.Up * profile.H[1], $"{s.Class} kerb top", Kind.Body);
                 Add(p + across * (half - 0.4f), $"{s.Class} by the kerb", Kind.Body);
                 // 1.2 m out: the lattice vertex it rounds to (up to 0.71 m off) stays off the slab
-                var o = p + across * (half + w + 1.2f);
+                var o = p + across * (edge + w + 1.2f);
                 int c = Math.Clamp((int)Math.Round(o.X), 0, last), rr = Math.Clamp((int)Math.Round(o.Z), 0, last);
                 // a retaining wall there (#125): its cap is the floor, not the blend
                 bool walled = walls.Any(wl => Enumerable.Range(0, wl.PointCount).Any(m =>
@@ -311,7 +319,7 @@ public partial class RoadStandProbe : Node
         // junction corners: the middle of each patch's largest triangle, at its top. The floor is
         // asserted, not the body: a patch on a sloping junction is warped, and a capsule resting
         // on it touches the higher triangle beside the sample
-        var corners = tile.AreaProps.Where(a => a.Type == AreaPropType.Sidewalk && (a.Flags & PropFlags.Solid) != 0).ToList();
+        var corners = tile.AreaProps.Where(a => StreetAreas.Is(a.Type) && (a.Flags & PropFlags.Solid) != 0).ToList();
         for (int k = 0; k < corners.Count && k < 3 * Samples; k += Math.Max(1, corners.Count / Samples))
         {
             var a = corners[k];
