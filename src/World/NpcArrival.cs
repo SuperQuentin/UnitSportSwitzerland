@@ -290,7 +290,7 @@ public sealed class NpcArrival
     }
 
     private static Vector3 Nose(float yaw) => new(-Mathf.Sin(yaw), 0, -Mathf.Cos(yaw));
-    private static float Wrap(float a) => Mathf.Wrap(a, -Mathf.Pi, Mathf.Pi);
+    private static float Wrap(float a) => Core.MathX.WrapAngle(a);
 
     private void Begin(Step step)
     {

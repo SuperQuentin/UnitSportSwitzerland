@@ -115,14 +115,8 @@ public partial class FootPlayer
 
     /// <summary>The ground's height under a point: whatever is solid there (a road, a bridge deck), else the terrain.</summary>
 
-    private float GroundUnder(Vector3 p, Godot.Collections.Array<Rid> exclude)
-    {
-
-        var hit = _groundRay.Cast(GetWorld3D().DirectSpaceState, p + Vector3.Up * 3f, p + Vector3.Down * 6f,
-            CollisionMask & ~World.TreeColliders.Layer, exclude);
-        if (hit.Count > 0) return hit["position"].AsVector3().Y;
-        return Terrain != null && Terrain.TryGetHeight(p, out float g) ? g : p.Y;
-    }
+    private float GroundUnder(Vector3 p, Godot.Collections.Array<Rid> exclude) =>
+        World.GroundQuery.Under(this, _groundRay, exclude, p, Terrain);
 
     /// <summary>
     /// The cab's pitch on the ground under its axles: a 12 m bus on a 10% road leans with it, and its
@@ -216,7 +210,7 @@ public partial class FootPlayer
                 if (toPin.LengthSquared() > 0.01f && b.PivotZ > 0.1f)
                 {
                     float actual = Mathf.Atan2(toPin.Y, toPin.X);
-                    float change = Mathf.Wrap(actual - psi, -Mathf.Pi, Mathf.Pi);
+                    float change = MathX.WrapAngle(actual - psi);
                     if (Mathf.Abs(change) < 0.5f)
                     {
                         truck.Articulation[k - 1] = Mathf.Clamp(truck.Articulation[k - 1] + change, -b.Spec.MaxArticulation, b.Spec.MaxArticulation);
@@ -240,7 +234,7 @@ public partial class FootPlayer
     {
         if (_remoteRide is not Truck truck) return;
         if (TrailerCode != _visualTrailer) { RefreshVisual(force: true); return; }
-        float ease = 1f - Mathf.Exp(-15f * dt);
+        float ease = MathX.Damp(15f, dt);
         var angles = new Vector3(TrainPose.X, TrainPose.Y, TrainPose.Z);
         for (int j = 0; j < Truck.MaxJoints; j++) _shownAngles[j] = Mathf.Lerp(_shownAngles[j], angles[j], ease);
         truck.SetAngles(new Vector3(_shownAngles[0], _shownAngles[1], _shownAngles[2]));
@@ -352,7 +346,7 @@ public partial class FootPlayer
         float tolerance = truck.Spec.Takes == Coupling.Drawbar ? 1.2f : 0.9f;
         return Vehicles?.NearestTrailer(hitch, CoupleReach, v =>
             truck.Accepts(v.Trailer!.Spec)
-            && Mathf.Abs(Mathf.Wrap(v.Rotation.Y - Rotation.Y, -Mathf.Pi, Mathf.Pi)) < tolerance);
+            && Mathf.Abs(MathX.WrapAngle(v.Rotation.Y - Rotation.Y)) < tolerance);
     }
 
     /// <summary>{couple}: drops the trailer where it stands, or backs onto the one whose pivot is over the hitch.</summary>
@@ -370,7 +364,7 @@ public partial class FootPlayer
         Vehicles!.Claim(target, state =>
         {
             if (_ride is not Truck t) { Vehicles?.Park(state); return; }
-            float yaw = Mathf.Wrap(state.Yaw - Rotation.Y, -Mathf.Pi, Mathf.Pi);
+            float yaw = MathX.WrapAngle(state.Yaw - Rotation.Y);
             if (!t.Couple(state.Train, new Vector3(yaw, state.Angles.X, state.Angles.Y))) { Vehicles?.Park(state); return; }
             TrailerCode = t.TrailerCode;
             RefreshVisual(force: true);

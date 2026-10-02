@@ -578,7 +578,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>Horizontal speed, m/s, whatever is carrying the player.</summary>
     public float GroundSpeed => _ride is Flyer ? _flight.Velocity.Length()
-        : _ride != null ? _motion.Speed : new Vector2(Velocity.X, Velocity.Z).Length();
+        : _ride != null ? _motion.Speed : MathX.FlatLength(Velocity);
 
     /// <summary>The vehicle's live state (bank, lean, yaw rate) — zeroed on foot.</summary>
     public RideMotion Motion => _motion;
@@ -1578,7 +1578,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // Remotes only ease out on what they receive.
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
-        float speed = new Vector2(Velocity.X, Velocity.Z).Length();
+        float speed = MathX.FlatLength(Velocity);
 
         PoseKind = _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
         if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
@@ -1590,7 +1590,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float squash = Mathf.Clamp(-_landingDip * 1.2f, 0f, 0.22f);
         // thrown, stunned or knocked out: flat on the ground
         float down = _stunTimer > 0 && IsOnFloor() ? -1.45f : 0f;
-        _downRot = Mathf.Lerp(_downRot, down, 1f - Mathf.Exp(-10f * dt));
+        _downRot = Mathf.Lerp(_downRot, down, MathX.Damp(10f, dt));
         BodyPose = new Transform3D(
             new Basis(Vector3.Right, _downRot) * Basis.FromScale(new Vector3(1f + squash * 0.5f, 1f - squash, 1f + squash * 0.5f)),
             new Vector3(0, Mathf.Abs(_downRot) * 0.12f, 0));
@@ -1819,7 +1819,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void StepThrowView(float dt)
     {
         float want = ScopeView ? 0f : Mathf.Clamp(ThrowAim, 0f, 1f);
-        _throwBlend = Mathf.Lerp(_throwBlend, want, 1f - Mathf.Exp(-(want > _throwBlend ? 9f : 7f) * dt));
+        _throwBlend = Mathf.Lerp(_throwBlend, want, MathX.Damp(want > _throwBlend ? 9f : 7f, dt));
         if (want == 0f && _throwBlend < 0.01f) _throwBlend = 0f;
         if (!_thirdPerson && want > 0f)
         {
@@ -1864,6 +1864,38 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private Godot.Collections.Array<Rid>? _withShell, _shellBase;
     private Rid _shell;
 
+    /// <summary>
+    /// How much of the camera arm from <paramref name="from"/> to <paramref name="to"/> is free, as a
+    /// fraction: a hit at distance d gives <c>clamp((d - margin) / span * scale, min, 1)</c>. An arm
+    /// reaching back through an open doorway goes on in the space on the other side: this side up
+    /// to the sill (the building's shell there is the doorway, not a wall), then the rest carried
+    /// across by the door's map; <paramref name="through"/> (2 when not) is where along the arm it
+    /// crosses and <paramref name="across"/> the map, for a lens that gets that far. The on-foot and
+    /// the chase camera share it (#221), each with its own margin, scale and minimum.
+    /// </summary>
+    private float ArmReach(Vector3 from, Vector3 to, Godot.Collections.Array<Rid> exclude, float margin, float scale, float min,
+        out float through, out Transform3D across)
+    {
+        float span = Mathf.Max(0.01f, (to - from).Length());
+        float Shorten(float d) => Mathf.Clamp((d - margin) / span * scale, min, 1f);
+        var space = GetWorld3D().DirectSpaceState;
+        through = 2f;
+        across = Transform3D.Identity;
+        if (Interiors.InteriorManager.Instance?.ArmThroughDoor(this, from, to, out float t, out var map, out var shell) == true)
+        {
+            exclude = WithShell(exclude, shell);
+            var sill = from.Lerp(to, t);
+            var near = _camRay.Cast(space, from, sill, CameraMask, exclude);
+            if (near.Count > 0) return Shorten((near["position"].AsVector3() - from).Length());
+            through = t;
+            across = map;
+            var far = _camRay.Cast(space, map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, CameraMask, exclude);
+            return far.Count > 0 ? Shorten(t * span + (far["position"].AsVector3() - map * sill).Length()) : 1f;
+        }
+        var hit = _camRay.Cast(space, from, to, CameraMask, exclude);
+        return hit.Count > 0 ? Shorten((hit["position"].AsVector3() - from).Length()) : 1f;
+    }
+
     private void UpdateThirdPersonCamera(float dt)
     {
         if (_camera == null) return;
@@ -1877,7 +1909,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
-            : Mathf.Lerp(_pivotY, pivotTarget, 1f - Mathf.Exp(-10f * dt));
+            : Mathf.Lerp(_pivotY, pivotTarget, MathX.Damp(10f, dt));
         var pivot = new Vector3(GlobalPosition.X, _pivotY, GlobalPosition.Z);
 
         var view = new Basis(Vector3.Up, _viewYaw) * new Basis(Vector3.Right, _pitch + _punch);
@@ -1890,7 +1922,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
-        float speed = new Vector2(Velocity.X, Velocity.Z).Length();
+        float speed = MathX.FlatLength(Velocity);
         float distance = Mathf.Lerp(_borrowedThird ? 0f : ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f, ThrowCamDistance, tb);
 
         var shoulder = pivot + view.X * Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset, ThrowCamOffset, tb);
@@ -1898,39 +1930,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // cast from the body's centre, not the shoulder, so a wall at the player's right does not
         // leave the lens behind it
-        float want = 1f;
-        float span = Mathf.Max(0.01f, (wanted - pivot).Length());
-        var space = GetWorld3D().DirectSpaceState;
-        // An arm reaching back through an open doorway goes on in the space on the other side:
-        // this side up to the sill (the building's shell there is the doorway, not a wall), then
-        // the rest carried across by the door's map, where the lens ends up if it gets that far.
-        float through = 2f;
-        var across = Transform3D.Identity;
-        if (Interiors.InteriorManager.Instance?.ArmThroughDoor(this, pivot, wanted, out float t, out var map, out var shell) == true)
-        {
-            var exclude = WithShell(SelfExclude, shell);
-            var sill = pivot.Lerp(wanted, t);
-            var near = _camRay.Cast(space, pivot, sill, CameraMask, exclude);
-            if (near.Count > 0)
-                want = Mathf.Clamp(((near["position"].AsVector3() - pivot).Length() - 0.25f) / span, 0.1f, 1f);
-            else
-            {
-                through = t;
-                across = map;
-                var far = _camRay.Cast(space,
-                    map * pivot.Lerp(wanted, Mathf.Min(1f, t + 0.1f / span)), map * wanted, CameraMask, exclude);
-                if (far.Count > 0)
-                    want = Mathf.Clamp((t * span + (far["position"].AsVector3() - map * sill).Length() - 0.25f) / span, 0.1f, 1f);
-            }
-        }
-        else
-        {
-            var hit = _camRay.Cast(space, pivot, wanted, CameraMask, SelfExclude);
-            if (hit.Count > 0)
-                want = Mathf.Clamp(((hit["position"].AsVector3() - pivot).Length() - 0.25f) / span, 0.1f, 1f);
-        }
+        // a quarter metre short of what it hits, never under a tenth of the arm
+        float want = ArmReach(pivot, wanted, SelfExclude, 0.25f, 1f, 0.1f, out float through, out var across);
         // snap in, ease out: late at a wall is a frame with the lens inside it
-        _armBlend = want < _armBlend ? want : Mathf.Lerp(_armBlend, want, 1f - Mathf.Exp(-5f * dt));
+        _armBlend = want < _armBlend ? want : Mathf.Lerp(_armBlend, want, MathX.Damp(5f, dt));
 
         var position = pivot.Lerp(wanted, _armBlend) + Vector3.Up * _landingDip * 0.5f;
         var lens = new Transform3D(view, position);
@@ -1999,7 +2002,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (kind == (RideKind)RideKindId) return true;
         if (!IsOnFloor() || _sliding || Indoors || Ragdolled) return false;
 
-        float speed = new Vector2(Velocity.X, Velocity.Z).Length();
+        float speed = MathX.FlatLength(Velocity);
         float limit = _ride?.DismountSpeed ?? RunSpeed + 0.5f;
         if (speed > limit) return false;
 
@@ -2623,7 +2626,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // Momentum carries across the change: freewheeling to a halt and stepping off should
         // leave you walking, not standing still, and the reverse is what makes a rolling start
         // off a slide feel continuous.
-        float speed = new Vector2(velocity.X, velocity.Z).Length();
+        float speed = MathX.FlatLength(velocity);
         _motion = new RideMotion { Speed = speed, Yaw = Rotation.Y, Lean = 0f };
         // Getting off, the view carries on looking where it was — the body's heading plus
         // whatever free look was held — rather than snapping to the bike's nose.
@@ -2900,14 +2903,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _groundCoyote = onFloor ? GroundCoyoteTime : Mathf.Max(0f, _groundCoyote - dt);
         if (!_sliding && _wallCoyote > 0 && direction != Vector3.Zero
             && direction.Dot(-_coyoteNormal) > 0.5f && (!onFloor || jumpPressed)
-            && TryBeginMantle(-_coyoteNormal, new Vector2(velocity.X, velocity.Z).Length()))
+            && TryBeginMantle(-_coyoteNormal, MathX.FlatLength(velocity)))
         {
             _jumpBuffer = 0;
             return;
         }
 
         // --- enter / leave the slide -------------------------------------------------
-        float flatSpeed = new Vector2(velocity.X, velocity.Z).Length();
+        float flatSpeed = MathX.FlatLength(velocity);
 
         if (!_sliding && crouchPressed && onFloor && _slideCooldown <= 0
             && flatSpeed >= SlideEntrySpeed)
@@ -3048,7 +3051,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         interiors?.AfterMove(this, before);
 
         // a slide that ran into a wall has no speed left to give
-        if (_sliding && new Vector2(Velocity.X, Velocity.Z).Length() < SlideMinSpeed * 0.5f)
+        if (_sliding && MathX.FlatLength(Velocity) < SlideMinSpeed * 0.5f)
             EndSlide();
 
         if (_thirdPerson) FaceTravel(dt, direction);
@@ -3174,7 +3177,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // winding up a throw: square up to where the view points, whatever the feet do
         if (_throwBlend > 0.05f)
         {
-            Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, _viewYaw, 1f - Mathf.Exp(-18f * dt)), 0);
+            Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, _viewYaw, MathX.Damp(18f, dt)), 0);
             return;
         }
         var flat = new Vector3(Velocity.X, 0, Velocity.Z);
@@ -3187,7 +3190,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float target = Mathf.Atan2(-facing.X, -facing.Z);
         // a little slower airborne: you can steer a jump, not pirouette in it
         float rate = IsOnFloor() ? BodyTurnRate : BodyTurnRate * 0.4f;
-        Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, target, 1f - Mathf.Exp(-rate * dt)), 0);
+        Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, target, MathX.Damp(rate, dt)), 0);
     }
 
     /// <summary>
@@ -3306,7 +3309,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // touching down onto a floor is not an impact: only its horizontal part counts,
             // plus a hard vertical arrival
             float impact = IsOnFloor()
-                ? Mathf.Max(new Vector2(lost.X, lost.Z).Length(), -_flight.Velocity.Y - 6f)
+                ? Mathf.Max(MathX.FlatLength(lost), -_flight.Velocity.Y - 6f)
                 : lost.Length();
             if (_settle > 0f)
             {
@@ -3389,7 +3392,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
             var nose = flyer.CameraForward(_flight);
-            _camFwd = _camFwd.Lerp(nose, 1f - Mathf.Exp(-3.5f * dt));
+            _camFwd = _camFwd.Lerp(nose, MathX.Damp(3.5f, dt));
             if (_camFwd.LengthSquared() < 1e-4f) _camFwd = nose;
             _camFwd = _camFwd.Normalized();
             // free look orbits around the craft, and pitch looks up and down on top of it
@@ -3410,7 +3413,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             float span = Mathf.Max(0.01f, (wanted - pivot).Length());
             want = Mathf.Clamp(((hit["position"].AsVector3() - pivot).Length() - 0.4f) / span, 0.1f, 1f);
         }
-        _chaseBlend = want < _chaseBlend ? want : Mathf.Lerp(_chaseBlend, want, 1f - Mathf.Exp(-4f * dt));
+        _chaseBlend = want < _chaseBlend ? want : Mathf.Lerp(_chaseBlend, want, MathX.Damp(4f, dt));
         var eye = pivot.Lerp(wanted, _chaseBlend);
 
         var look = pivot + fwd * 8f - eye;
@@ -3419,7 +3422,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         float t = Mathf.Clamp(_flight.Velocity.Length() / flyer.FovSpeed, 0f, 1f);
         _camera.Fov = Mathf.Lerp(_camera.Fov, Mathf.Lerp(flyer.BaseFov, flyer.MaxFov, t * t),
-            1f - Mathf.Exp(-3f * dt));
+            MathX.Damp(3f, dt));
     }
 
     /// <summary>The slipstream this vehicle rode last step, 0..<see cref="RideGround.MaxDraft"/>.</summary>
@@ -3586,8 +3589,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // acceleration by a/ImpactResponse, and past the tolerance that lag read as a wall — it
         // capped every launch at 6 m/s² (a motorbike measured 0-100 in 5.2 s instead of 3.3).
         var real = GetRealVelocity();
-        float achieved = new Vector2(real.X, real.Z).Length();
-        _shortfall = Mathf.Lerp(_shortfall, Mathf.Max(0f, _motion.Speed - achieved), 1f - Mathf.Exp(-ImpactResponse * dt));
+        float achieved = MathX.FlatLength(real);
+        _shortfall = Mathf.Lerp(_shortfall, Mathf.Max(0f, _motion.Speed - achieved), MathX.Damp(ImpactResponse, dt));
         _realSpeed = _motion.Speed - _shortfall;
         // The settle after mounting is time, not contact: counted only while touching something,
         // it swallowed the first second of the first real crash, and nobody was ever thrown (#214).
@@ -3646,8 +3649,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void GradeLanding()
     {
-        float pitchErr = Mathf.Abs(Mathf.Wrap(_airPitch, -Mathf.Pi, Mathf.Pi));
-        float spinErr = Mathf.Abs(Mathf.Wrap(_airSpin, -Mathf.Pi, Mathf.Pi));
+        float pitchErr = Mathf.Abs(MathX.WrapAngle(_airPitch));
+        float spinErr = Mathf.Abs(MathX.WrapAngle(_airSpin));
         float err = Mathf.Max(pitchErr, spinErr);
         int flips = Mathf.RoundToInt(Mathf.Abs(_airPitch) / Mathf.Tau);
         int spins = Mathf.RoundToInt(Mathf.Abs(_airSpin) / Mathf.Tau);
@@ -3773,11 +3776,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // proportional to the yaw rate, so a gentle bend barely moves it and a hairpin swings it
         // well out; eased, so the trail itself never snaps
         float lagTarget = Mathf.Clamp(-_motion.YawRate * 0.28f, -0.42f, 0.42f);
-        _turnLag = Mathf.Lerp(_turnLag, lagTarget, 1f - Mathf.Exp(-3.5f * dt));
+        _turnLag = Mathf.Lerp(_turnLag, lagTarget, MathX.Damp(3.5f, dt));
         // In a drift the camera swings part of the way toward where the car is going, so the
         // road stays in view while the nose points at the inside verge. Not when reversing.
-        float slip = Mathf.Wrap(_motion.Slip, -Mathf.Pi, Mathf.Pi);
-        _slipCam = Mathf.Lerp(_slipCam, Mathf.Abs(slip) < 1.4f ? slip * _ride.ChaseFollowsTravel : 0f, 1f - Mathf.Exp(-4f * dt));
+        float slip = MathX.WrapAngle(_motion.Slip);
+        _slipCam = Mathf.Lerp(_slipCam, Mathf.Abs(slip) < 1.4f ? slip * _ride.ChaseFollowsTravel : 0f, MathX.Damp(4f, dt));
         // the garage walks the camera all the way round the car instead
         float orbit = ShowroomYaw ?? _lookYaw + _turnLag + _slipCam + (_ride is Truck { } swing ? swing.ChaseSwing : 0f);
 
@@ -3793,42 +3796,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var from = GlobalPosition + basis * eye;
         var to = GlobalPosition + basis * back;
 
-        float wanted = 1f;
-        float span = Mathf.Max(0.01f, (to - from).Length());
-        var space = GetWorld3D().DirectSpaceState;
-        var exclude = TrainRids();   // a truck's own trailer is not in the way
-        // An arm reaching back through an open doorway (a car in a garage, looking out) goes on in
-        // the space on the other side, as the third-person arm does: the lens ends up out there.
-        float through = 2f;
-        var across = Transform3D.Identity;
-        if (Interiors.InteriorManager.Instance?.ArmThroughDoor(this, from, to, out float t, out var map, out var shell) == true)
-        {
-            exclude = WithShell(exclude, shell);
-            var near = _camRay.Cast(space, from, from.Lerp(to, t), CameraMask, exclude);
-            if (near.Count > 0)
-                wanted = Mathf.Clamp((near["position"].AsVector3() - from).Length() / span * 0.85f, 0.15f, 1f);
-            else
-            {
-                through = t;
-                across = map;
-                var far = _camRay.Cast(space,
-                    map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, CameraMask, exclude);
-                if (far.Count > 0)
-                    wanted = Mathf.Clamp((t * span + (far["position"].AsVector3() - map * from.Lerp(to, t)).Length()) / span * 0.85f, 0.15f, 1f);
-            }
-        }
-        else
-        {
-            var hit = _camRay.Cast(space, from, to, CameraMask, exclude);
-            // 0.85 keeps the lens off the rock face it just found
-            if (hit.Count > 0)
-                wanted = Mathf.Clamp((hit["position"].AsVector3() - from).Length() / span * 0.85f, 0.15f, 1f);
-        }
+        // a truck's own trailer is not in the way; 0.85 of the way to what it hits keeps the lens off
+        // the rock face it just found, never under 0.15 of the arm. Through an open doorway (a car in
+        // a garage, looking out) the lens ends up out there, as the third-person arm does.
+        float wanted = ArmReach(from, to, TrainRids(), 0f, 0.85f, 0.15f, out float through, out var across);
 
         // ease out, snap in: arriving late at a wall means a frame with the camera inside it
         _chaseBlend = wanted < _chaseBlend
             ? wanted
-            : Mathf.Lerp(_chaseBlend, wanted, 1f - Mathf.Exp(-4f * dt));
+            : Mathf.Lerp(_chaseBlend, wanted, MathX.Damp(4f, dt));
 
         _camera.Position = eye.Lerp(back, _chaseBlend);
 
@@ -3855,7 +3831,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var settings = Core.GameSettings.Current;
         if (_lookIdle > 0.6f)
         {
-            float back = 1f - Mathf.Exp(-5f * dt);
+            float back = MathX.Damp(5f, dt);
             _lookYaw = Mathf.Lerp(_lookYaw, 0f, back);
             _pitch = Mathf.Lerp(_pitch, _ride is Truck ? HeavyCockpitPitch : CockpitPitch, back);
         }
@@ -3866,7 +3842,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // thrown back by acceleration and forward by braking (+AccelX forward, the head to +Z),
             // out of a bend (+AccelY left, the head to +X)
             sway = new Vector3(Mathf.Clamp(ay * 0.006f, -0.06f, 0.06f), 0f, Mathf.Clamp(ax * 0.005f, -0.05f, 0.05f));
-        _headSway = _headSway.Lerp(sway, 1f - Mathf.Exp(-6f * dt));
+        _headSway = _headSway.Lerp(sway, MathX.Damp(6f, dt));
         // looking over a shoulder, the head goes a little that way and forward, past the pillar
         var lean = new Vector3(-Mathf.Sin(_lookYaw) * 0.07f, 0f, -Mathf.Abs(Mathf.Sin(_lookYaw)) * 0.05f);
         var seat = new Vector3(0f, settings.SeatHeight, -settings.SeatForward);
@@ -3883,7 +3859,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             eye.Origin + seat + (XR.XrSession.Active ? Vector3.Zero : _headSway) + lean);
 
         float t = Mathf.Clamp(_motion.Speed / _ride.FovSpeed, 0f, 1f);
-        _camera.Fov = Mathf.Lerp(_camera.Fov, settings.CockpitFov + 6f * t * t, 1f - Mathf.Exp(-3f * dt));
+        _camera.Fov = Mathf.Lerp(_camera.Fov, settings.CockpitFov + 6f * t * t, MathX.Damp(3f, dt));
     }
 
     /// <summary>Resting look from the seat: a touch down, so the bonnet and the dials share the view with the road.</summary>
@@ -3896,10 +3872,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (_camera == null || _ride == null) return;
         // boost punches the FOV out, the cheapest way to make acceleration felt
-        if (Boosting) _camera.Fov = Mathf.Lerp(_camera.Fov, _ride.MaxFov + 8f, 1f - Mathf.Exp(-4f * dt));
+        if (Boosting) _camera.Fov = Mathf.Lerp(_camera.Fov, _ride.MaxFov + 8f, MathX.Damp(4f, dt));
         float t = Mathf.Clamp(_motion.Speed / _ride.FovSpeed, 0f, 1f);
         _camera.Fov = Mathf.Lerp(_camera.Fov, Mathf.Lerp(_ride.BaseFov, _ride.MaxFov, t * t),
-            1f - Mathf.Exp(-3f * dt));
+            MathX.Damp(3f, dt));
     }
 
     /// <summary>A/D or the left stick as -1..1. Zero while a text field has the keyboard.</summary>
@@ -4002,13 +3978,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (_camera == null) return;
 
-        float groundSpeed = new Vector2(Velocity.X, Velocity.Z).Length();
-        _speedSmoothed = Mathf.Lerp(_speedSmoothed, groundSpeed, 1f - Mathf.Exp(-8f * dt));
+        float groundSpeed = MathX.FlatLength(Velocity);
+        _speedSmoothed = Mathf.Lerp(_speedSmoothed, groundSpeed, MathX.Damp(8f, dt));
 
         // the eye drops faster than it rises: going down should feel like a commitment,
         // coming up like recovering your feet
         float blendRate = _sliding ? 16f : 9f;
-        _slideBlend = Mathf.Lerp(_slideBlend, _sliding ? 1f : 0f, 1f - Mathf.Exp(-blendRate * dt));
+        _slideBlend = Mathf.Lerp(_slideBlend, _sliding ? 1f : 0f, MathX.Damp(blendRate, dt));
 
         // step cadence scales with speed, so running steps land faster and harder
         if (onFloor && !_sliding && groundSpeed > 0.15f)
@@ -4016,11 +3992,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             float cadence = Mathf.Lerp(1.5f, 2.6f, Mathf.Clamp(groundSpeed / RunSpeed, 0f, 1f));
             _bobPhase += groundSpeed * cadence * dt;
             _bobStrength = Mathf.Lerp(_bobStrength, Mathf.Clamp(groundSpeed / RunSpeed, 0f, 1f),
-                1f - Mathf.Exp(-6f * dt));
+                MathX.Damp(6f, dt));
         }
         else
         {
-            _bobStrength = Mathf.Lerp(_bobStrength, 0f, 1f - Mathf.Exp(-9f * dt));
+            _bobStrength = Mathf.Lerp(_bobStrength, 0f, MathX.Damp(9f, dt));
         }
 
         // landing: convert the arrested fall into a downward dip that springs back
@@ -4072,9 +4048,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a held optic wins, and settles faster: a zoom that drifts in reads as lag
         if (FovOverride is { } zoom)
         {
-            _camera.Fov = Mathf.Lerp(_camera.Fov, zoom, 1f - Mathf.Exp(-14f * dt));
+            _camera.Fov = Mathf.Lerp(_camera.Fov, zoom, MathX.Damp(14f, dt));
             return;
         }
-        _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov, 1f - Mathf.Exp(-5f * dt));
+        _camera.Fov = Mathf.Lerp(_camera.Fov, targetFov, MathX.Damp(5f, dt));
     }
 }

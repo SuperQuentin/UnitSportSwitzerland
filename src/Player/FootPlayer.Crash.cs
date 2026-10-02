@@ -181,7 +181,7 @@ public partial class FootPlayer
         {
             // the owner's body is pinned to its hips, so the replicated position is where they are
             var off = GlobalPosition - _ragdoll.Pelvis;
-            _ragdoll.Shift(off.LengthSquared() > 64f ? off : off * (1f - Mathf.Exp(-2f * dt)));
+            _ragdoll.Shift(off.LengthSquared() > 64f ? off : off * MathX.Damp(2f, dt));
         }
 
         var pelvis = _ragdoll.Pelvis;
@@ -366,7 +366,7 @@ public partial class FootPlayer
         if (!_crashCam || _camera == null || _ragdoll == null) return;
         _crashTime += dt;
         var body = _ragdoll.Centre;
-        _crashLook = _crashLook.Lerp(body, 1f - Mathf.Exp(-12f * dt));
+        _crashLook = _crashLook.Lerp(body, MathX.Damp(12f, dt));
         float dist = _crashAnchor.DistanceTo(body);
         float fov;
         if (_crashTime < 1.8f && dist < 15f)
@@ -392,10 +392,10 @@ public partial class FootPlayer
             // the body down behind something (the bonnet, a kerb): look down on it from higher up
             if (!Sees(space, wanted, body))
                 wanted = CameraReach(space, from, body + side * 3.5f + Vector3.Up * 4.5f);
-            _crashAnchor = _crashAnchor.Lerp(wanted, 1f - Mathf.Exp(-2.5f * dt));
+            _crashAnchor = _crashAnchor.Lerp(wanted, MathX.Damp(2.5f, dt));
             fov = 55f;
         }
-        _camera.Fov = Mathf.Lerp(_camera.Fov, fov, 1f - Mathf.Exp(-5f * dt));
+        _camera.Fov = Mathf.Lerp(_camera.Fov, fov, MathX.Damp(5f, dt));
         var look = _crashLook - _crashAnchor;
         if (look.LengthSquared() > 0.01f && Mathf.Abs(look.Normalized().Y) < 0.99f)
             _camera.GlobalTransform = new Transform3D(Basis.Identity, _crashAnchor).LookingAt(_crashLook, Vector3.Up);
@@ -423,7 +423,7 @@ public partial class FootPlayer
         if (_crashOut <= 0f || _camera == null) return;
         _crashOut = Mathf.Max(0f, _crashOut - dt / 0.9f);
         float t = 1f - _crashOut;
-        t = t * t * (3f - 2f * t);
+        t = Mathf.SmoothStep(0f, 1f, t);   // t is already in [0, 1] (_crashOut runs 1 to 0): the clamp changes nothing
         _camera.GlobalTransform = _crashFrom.InterpolateWith(_camera.GlobalTransform, t);
         _camera.Fov = Mathf.Lerp(_crashFromFov, _camera.Fov, t);
     }

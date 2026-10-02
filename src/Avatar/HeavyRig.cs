@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Player;
 
 namespace UnitSport.Avatar;
@@ -257,10 +258,10 @@ public partial class HeavyRig : Node3D
         if (_cockpit is not { } c) return;
         _wheel.Basis = new Basis(c.ColumnAxis, WheelTurn);
         // needles swing to a reading rather than jump to it, like a real movement's damping
-        float ease = 1f - Mathf.Exp(-10f * dt);
+        float ease = MathX.Damp(10f, dt);
         _rpmShown = Mathf.Lerp(_rpmShown, EngineRunning ? Rpm : 0f, ease);
         _speedShown = Mathf.Lerp(_speedShown, Mathf.Abs(SpeedKmh), ease);
-        _airShown = Mathf.Lerp(_airShown, Air, 1f - Mathf.Exp(-3f * dt));
+        _airShown = Mathf.Lerp(_airShown, Air, MathX.Damp(3f, dt));
         _tach.Basis = new Basis(c.Tach.Axis, CarNeedle.Angle(_rpmShown / c.Gauges.TachRpm));
         _speedo.Basis = new Basis(c.Speedo.Axis, CarNeedle.Angle(_speedShown / c.Gauges.SpeedoKmh));
         _air.Basis = new Basis(c.Air.Axis, CarNeedle.Angle(_airShown / HeavyDriveline.AirMax));
