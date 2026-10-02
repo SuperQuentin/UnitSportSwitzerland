@@ -68,6 +68,13 @@ public partial class ReverbZones : Node
         r.RoomSize = _room;
         r.Damping = _damp;
         r.Wet = _wet;
+        if (SfxBus.MusicReverb is { } m)
+        {
+            // music is mixed drier: a song drowned in reverb is mud, but the room still tells
+            m.RoomSize = _room;
+            m.Damping = _damp;
+            m.Wet = _wet * 0.75f;
+        }
     }
 
     private void Poll()

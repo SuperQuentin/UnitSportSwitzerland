@@ -62,7 +62,7 @@ Directory.CreateDirectory(paths.Temp);
 bool scripted = false;
 if (Arg("--tiles-file") is { } tilesFile)
 {
-    selection.AddAll(Selection.ReadTilesFile(tilesFile));
+    selection.AddAll(TileId.ReadList(tilesFile));
     scripted = true;
 }
 if (Arg("--bbox") is { } bboxText)

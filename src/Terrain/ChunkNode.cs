@@ -513,12 +513,6 @@ public partial class ChunkNode : Node3D
         }
     }
 
-    public void ClearRoads()
-    {
-        _roadInstance?.QueueFree();
-        _roadInstance = null;
-    }
-
     // ---- Height-field collision, in cells ------------------------------------------------
     //
     // One 1001² HeightMapShape3D took ~80 ms on the main thread. The tile's ground is cut into
@@ -572,11 +566,5 @@ public partial class ChunkNode : Node3D
         _cells[cell]?.QueueFree();
         _cells[cell] = collisionShape;
         _body.AddChild(collisionShape);
-    }
-
-    public void ClearCollision()
-    {
-        _body?.QueueFree();
-        _body = null;
     }
 }

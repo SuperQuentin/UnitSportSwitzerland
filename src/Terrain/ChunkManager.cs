@@ -1042,10 +1042,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             && ((state.RoadCellsQueued & (1 << cell)) == 0 || (state.RoadCellsDone & (1 << cell)) != 0);
     }
 
-    /// <summary>Script/debug-friendly variant of TryGetHeight; -inf when unknown.</summary>
-    public float GetHeightAt(Vector3 worldPos) =>
-        TryGetHeight(worldPos, out float h) ? h : float.NegativeInfinity;
-
     private long _allocatedAtLastCollect;
     private const long CollectEveryBytes = 1L << 30;
 

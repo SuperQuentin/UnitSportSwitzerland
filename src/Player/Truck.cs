@@ -360,7 +360,7 @@ public sealed class Truck : Rideable, IEngined
         ? Solid(Measured((Kind, k), _ => HeavyRig.Create(Spec, k, 0.5f)), k)
         : Measured(("trailer", TrailerCatalog.Index(TrailerCode), k - OwnSections), _ => HeavyRig.CreateTrailer(Trailer!, k - OwnSections, 1f));
 
-    public override Node3D BuildVisual(int riderIndex) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex));
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => HeavyRig.Create(Spec, 0, Load, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
 
     /// <summary>Every seat of the truck's own sections (a bus's both halves), the driver's first (#158).</summary>
     public override SeatAnchor[] Seats => SeatsOf(Kind, () =>

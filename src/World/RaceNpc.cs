@@ -382,10 +382,6 @@ public partial class RaceNpcs : Node
         return best;
     }
 
-    /// <summary>Server: whether <paramref name="peer"/>'s player may take on an NPC at <paramref name="at"/> (the host role uses the same zone).</summary>
-    public bool InZone(long peer, Vector3 at) =>
-        _players?.GetNodeOrNull<FootPlayer>(peer.ToString()) is { } p && Flat(p.GlobalPosition, at) <= Zone;
-
     public static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
 
     /// <summary>

@@ -31,14 +31,14 @@ public partial class HitboxProbe : Node3D
 {
     public static bool Requested() => Array.IndexOf(OS.GetCmdlineUserArgs(), "--hitboxcheck") >= 0;
 
-    private readonly ChunkManager _chunks;
+    private readonly ChunkManager? _chunks;   // null on --world flat: no buildings to test
     private readonly WorldOrigin _origin;
     private int _frame;
     private int _failures;
     private readonly List<(StaticBody3D Body, Rideable Ride)> _live = new();
     private readonly List<(StaticBody3D Body, BuildingTile Tile)> _buildings = new();
 
-    public HitboxProbe(ChunkManager chunks, WorldOrigin origin)
+    public HitboxProbe(ChunkManager? chunks, WorldOrigin origin)
     {
         _chunks = chunks;
         _origin = origin;
@@ -88,7 +88,7 @@ public partial class HitboxProbe : Node3D
     /// <summary>The real .bldg tiles around --at, each in the same shape ChunkNode gives the world.</summary>
     private void LoadBuildings()
     {
-        if (_chunks.Source is not { } source) return;
+        if (_chunks?.Source is not { } source) return;
         var (e, n) = SpawnPoint.ParseTarget();
         var centre = TileId.FromLv95(e, n);
         for (int dy = -1; dy <= 1; dy++)

@@ -123,7 +123,7 @@ public partial class GarageProbe : Node
         {
             var v = VehicleManager.Instance?.Nearest(me.GlobalPosition, 4f);
             Log($"parked before getting in: doors {v?.DoorsOpen} tune {(v?.Ride as Car)?.Tuning.Bits:X}");
-            Log($"get back in: {me.TryInteract()}");
+            Log($"get back in: {me.TryGetIn()}");
         }
         if (at(70.3)) Log($"getting in: doors {me.DoorsOpen}");
         if (at(73)) Log($"in again: ride {me.Ride}, bits {me.TuningBits:X} (same car: {me.TuningBits == Tuned.Pack()}), preset {me.CarSetupId}, doors {me.DoorsOpen} (all shut: {me.DoorsOpen == 0})");
@@ -365,7 +365,7 @@ public partial class GarageProbe : Node
         if (_drive == 4 && _t - _stepAt > 4)
         {
             var parked = VehicleManager.Instance?.Nearest(me.GlobalPosition, 6f);
-            Log($"parked car still inside: {parked != null && Interiors.InteriorManager.InInteriorSpace(parked.GlobalPosition)}; get back in: {me.TryInteract()}");
+            Log($"parked car still inside: {parked != null && Interiors.InteriorManager.InInteriorSpace(parked.GlobalPosition)}; get back in: {me.TryGetIn()}");
             _drive = 5;
             _stepAt = _t;
         }

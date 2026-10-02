@@ -500,4 +500,104 @@ public static class SfxSynth
 
     private static SfxBank? _doorOpenBank, _doorCloseBank;
     private static AudioStreamWav? _street;
+
+    // ---- a thrown thing hitting someone (#261) ------------------------------------------------
+
+    private static SfxBank? _bonkBank, _oofBank, _dizzyBank;
+
+    /// <summary>
+    /// A cartoon bonk: a hollow knock whose pitch drops fast, a woody second partial, a short
+    /// tick of contact on top. The sound of a thing bouncing off a head rather than a wound.
+    /// </summary>
+    public static SfxBank BonkBank => _bonkBank ??= SfxBank.Build("bonk", 5, 0.35f, 261, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        float f0 = 520f * J(), f1 = 260f * J(), d = 14f * J();
+        var tick = HighPass(Noise(rng, n), 0.4f);
+        var s = new float[n];
+        float pa = 0, pb = 0;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float f = Mathf.Lerp(f0, f1, Mathf.Min(1f, t / 0.06f));
+            pa += Mathf.Tau * f / Rate;
+            pb += Mathf.Tau * f * 2.71f / Rate;
+            float env = Mathf.Min(1f, t * 900f) * Mathf.Exp(-d * t);
+            s[i] = env * (Mathf.Sin(pa) * 0.85f + Mathf.Sin(pb) * 0.25f * Mathf.Exp(-40f * t))
+                   + tick[i] * 1.2f * Mathf.Exp(-260f * t);
+        }
+        return s;
+    });
+
+    /// <summary>
+    /// "Oof": a short voiced grunt, a buzzy glottal pulse falling in pitch through two vowel
+    /// resonances (an "u" sliding toward "o"). Not a scream: it hurts, it does not kill.
+    /// </summary>
+    public static SfxBank OofBank => _oofBank ??= SfxBank.Build("oof", 4, 0.42f, 262, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        float g0 = 170f * J(), g1 = 105f * J();
+        var s = new float[n];
+        // two resonators (formants) over a sawtooth pulse train, plus breath
+        float y1a = 0, y2a = 0, y1b = 0, y2b = 0, phase = 0;
+        var breath = BandPass(Noise(rng, n), 0.05f, 0.3f);
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float u = Mathf.Min(1f, t / 0.35f);
+            phase += Mathf.Lerp(g0, g1, u) / Rate;
+            phase -= Mathf.Floor(phase);
+            float src = (phase * 2f - 1f) * 0.6f + breath[i] * 0.8f;
+            float fa = Mathf.Lerp(330f, 480f, u), fb = Mathf.Lerp(800f, 900f, u);
+            Resonate(src, fa, 0.94f, ref y1a, ref y2a);
+            Resonate(src, fb, 0.92f, ref y1b, ref y2b);
+            float env = Mathf.Min(1f, t * 60f) * Mathf.Exp(-5.5f * t) * (t < 0.36f ? 1f : Mathf.Exp(-60f * (t - 0.36f)));
+            s[i] = env * (y1a * 0.09f + y1b * 0.05f);
+        }
+        return s;
+    });
+
+    /// <summary>A two-pole resonator step: rings at <paramref name="f"/> Hz, <paramref name="r"/> the pole radius (bandwidth).</summary>
+    private static void Resonate(float x, float f, float r, ref float y1, ref float y2)
+    {
+        float y = x + 2f * r * Mathf.Cos(Mathf.Tau * f / Rate) * y1 - r * r * y2;
+        y2 = y1;
+        y1 = y;
+    }
+
+    /// <summary>
+    /// The "seeing stars" tune after a hit: four quick square-wave notes stepping down, then a
+    /// trill — a little chiptune song played over the one who was hit.
+    /// </summary>
+    public static SfxBank DizzyBank => _dizzyBank ??= SfxBank.Build("dizzy", 3, 1.1f, 263, (rng, n) =>
+    {
+        float key = 1f + (rng.Next(3) - 1) * 0.06f;
+        float[] notes = { 1568f, 1319f, 1175f, 988f };   // G6 E6 D6 B5
+        var s = new float[n];
+        float phase = 0;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float f, local;
+            if (t < 0.48f)
+            {
+                int k = Mathf.Min((int)(t / 0.12f), 3);
+                f = notes[k] * key;
+                local = t - k * 0.12f;
+            }
+            else
+            {
+                // the trill: between the last two notes, eight times a second, fading
+                int k = (int)((t - 0.48f) / 0.0625f);
+                f = ((k & 1) == 0 ? notes[3] : notes[2]) * key;
+                local = (t - 0.48f) % 0.0625f;
+            }
+            phase += f / Rate;
+            phase -= Mathf.Floor(phase);
+            float sq = phase < 0.5f ? 1f : -1f;
+            float env = Mathf.Min(1f, local * 400f) * Mathf.Exp(-9f * local) * (t < 0.48f ? 1f : Mathf.Exp(-3.5f * (t - 0.48f)));
+            s[i] = sq * env * 0.22f;
+        }
+        return s;
+    });
 }
