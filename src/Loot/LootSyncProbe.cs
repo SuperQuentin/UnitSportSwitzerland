@@ -69,9 +69,9 @@ public partial class LootSyncProbe : ChatProbe
         var node = interiors.CurrentNode!;
         GD.Print($"[lootsync {_role}] inside {layout.Key}");
 
-        // the first ground-floor container with something in it this restock period
+        // the first ground-floor container with something in it this restock period (floor 0 is a cellar under a house that has one)
         long epoch = LootTables.Epoch(layout.Key, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-        int index = layout.Furniture.FindIndex(f => f.Floor == 0 && LootTables.IsLootable(f.Type) && !LootTables.IsLocked(f.Type)
+        int index = layout.Furniture.FindIndex(f => f.Floor == layout.Below && LootTables.IsLootable(f.Type) && !LootTables.IsLocked(f.Type)
             && LootTables.ContentsOf(layout, layout.Furniture.IndexOf(f), epoch).Count >= 2);
         if (index < 0) { Fail("no ground-floor container holding two stacks"); return; }
         var f = layout.Furniture[index];
