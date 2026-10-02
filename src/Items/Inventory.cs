@@ -238,6 +238,36 @@ public sealed class Inventory
         return room;
     }
 
+    /// <summary>
+    /// How many of <paramref name="id"/> the hotbar and pack hold, counting only plain stacks (no
+    /// per-instance data: a photo is never an ingredient). Worn things and the bag are not counted.
+    /// </summary>
+    public int CountPlain(ItemId id)
+    {
+        int n = 0;
+        for (int i = 0; i < Capacity; i++)
+            if (_slots[i].Id == id && _slots[i].Data == null && !_slots[i].IsEmpty) n += _slots[i].Count;
+        return n;
+    }
+
+    /// <summary>
+    /// Removes up to <paramref name="count"/> plain <paramref name="id"/>, from the end of the pack
+    /// first so the hotbar keeps what is in reach. Returns how many were taken.
+    /// </summary>
+    public int TakePlain(ItemId id, int count)
+    {
+        int taken = 0;
+        for (int i = Capacity - 1; i >= 0 && taken < count; i--)
+        {
+            if (_slots[i].Id != id || _slots[i].Data != null || _slots[i].IsEmpty) continue;
+            int take = Math.Min(count - taken, _slots[i].Count);
+            _slots[i] = Less(_slots[i], take);
+            taken += take;
+        }
+        if (taken > 0) Notify();
+        return taken;
+    }
+
     /// <summary>Rewrites a stack's per-instance data (a radio's CD). False if the slot is empty.</summary>
     public bool SetData(int slot, string? data)
     {

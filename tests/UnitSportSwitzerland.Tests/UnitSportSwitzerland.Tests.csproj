@@ -24,6 +24,8 @@
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\IChunkSource.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

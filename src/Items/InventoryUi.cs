@@ -289,7 +289,7 @@ public partial class InventoryUi : CanvasLayer
         centre.AddChild(panel);
         _panel = panel;
 
-        var columns = UiKit.HBox(22);
+        var columns = UiKit.HBox(18);
         panel.AddChild(columns);
 
         // ---- left: hotbar and pack ----
@@ -441,6 +441,9 @@ public partial class InventoryUi : CanvasLayer
         var album = UiKit.Button("Photo album");
         album.Pressed += () => _items.PhotoUi.OpenAlbum();
         right.AddChild(album);
+
+        // ---- third column: crafting (#271, InventoryUi.Crafting) ----
+        BuildCrafting(columns);
     }
 
     private void BuildTooltip()
@@ -521,6 +524,7 @@ public partial class InventoryUi : CanvasLayer
         _carried.QueueRedraw();
         RefreshMoney();
         RefreshDropHint();
+        if (IsOpen) RefreshCrafting();
 
         // the name of what just came into the hand, briefly
         if (Inv.HeldId != _lastHeld)
@@ -657,6 +661,7 @@ public partial class InventoryUi : CanvasLayer
     {
         if (!IsOpen) return;
         EndPaint(commit: true);
+        StopMaking();
         _panel.Visible = false;
         _tooltip.Visible = false;
         _hover = -1;
@@ -960,6 +965,7 @@ public partial class InventoryUi : CanvasLayer
             CloseWheel(false);
         }
 
+        ProcessCrafting(dt);
         _hotbar.Visible = ItemsActive && !IsOpen && Scope == null;
         _cashHud.Visible = _hotbar.Visible;
         _readoutPanel.Visible = Readout != null && !IsOpen;
