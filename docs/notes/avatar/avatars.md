@@ -10,7 +10,8 @@
   crossing 0.5, which is what creates the flight phase. `Cyclist` combines them
   and splits the mesh three ways — frame, rider, and per-leg — so the cranks turn with cadence
   and the knees follow by a two-bone solve rather than keyframes. Preview with
-  `<godot> --path . -- --avatars <seconds> <out.png> [--view deg] [--focus 0..4]`;
+  `<godot> --path . -- --avatars <seconds> <out.png> [--view deg] [--focus 0..4]` (in the saved
+  visual style, or `--style`: the preview loads the settings since #311);
   `--crank <rad>` parks the cranks and `--stride <m/s>` lays one gait cycle out as a strip.
   Neither a crank's direction nor a foot's slip can be judged from a single frame.
   All limbs go through `Limb.Solve` (two-bone IK), never keyframes.

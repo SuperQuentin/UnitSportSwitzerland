@@ -36,3 +36,15 @@ Riddes viewpoints, M1 Pro: 33–36M primitives a frame on `main`, 25–30M with 
   the billboard's orientation and rays use the rendering camera, which is what it is drawn for.
 - `--tree-lod off` restores every tree as 3D (pixel-identical to before, the check for changes
   here); `--tree-near m` moves the handover.
+- **Heavier trees (Cartoon, `MeshDetail.High`) are culled per tree on the CPU: `NearTrees`.** A
+  tile then builds only its billboards and hands its instance buffers over (`TreeMeshes.Near`,
+  registered when the trees commit, dropped on release). One MultiMesh per kind holds the trees
+  within `StyleKit.TreeReach` (range plus crossfade) of the camera, refilled when the camera
+  moves 4 m **or a tile's trees come or go**: a camera standing still while tiles commit
+  otherwise never got its near trees. It is a child of the terrain container, so the floating
+  origin moves it with the tiles; instances are placed relative to it, refilled on a shift.
+  The same tree shader's LOD fade crossfades them against the billboards.
+- **Cartoon's billboards trace Cartoon's shapes** (`hit_tier`: 7-sided pyramids, their dented
+  underside traced flat; `hit_puff`: ellipsoids, the low-poly puffs traced smooth;
+  `hit_trunk6`). Far billboards cast no shadow: traced from the rendering camera, a shadow pass
+  would trace them from the light.

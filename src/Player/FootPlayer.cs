@@ -1729,7 +1729,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _airPose = null;
         }
         _poseWait += dt;
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette);
+        // a restyle to or from a lit style changes the figure's build (#311): the held poses go too
+        bool smooth = Avatar.HumanMeshBuilder.SmoothFigures;
+        if (smooth != _poseKey.Smooth)
+        {
+            _slidePose = null;
+            _airPose = null;
+        }
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
@@ -1773,7 +1780,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
-        Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette);
+        Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
+        bool Smooth);
 
     private FootPoseKey _poseKey, _mountsKey;
     private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;

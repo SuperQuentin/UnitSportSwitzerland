@@ -72,6 +72,8 @@ public partial class Main : Node
 		// there is no point streaming terrain to look at them.
 		if (UnitSport.Avatar.AvatarPreview.Requested(out double seconds, out string output))
 		{
+			// the figures are built and shaded for the visual style: the saved one, or --style
+			GameSettings.Load();
 			float view = 90;
 			var a = OS.GetCmdlineUserArgs();
 			int vi = Array.IndexOf(a, "--view");
@@ -149,4 +151,7 @@ public partial class Main : Node
 		shell.Attach(world);
 		AddChild(world);
 	}
+
+	// after every child's _ExitTree (Godot exits children first): saves still queued reach the disk
+	public override void _ExitTree() => SaveQueue.Flush();
 }

@@ -23,5 +23,6 @@
   both ways, in a second surface (`glass`), so it has no volume and `--meshcheck` leaves it out.
 - **Still true:** thin decals on a surface z-fight at distance — 24-bit depth resolves ~4 mm at 60 m.
   Make overlays stand at least ~1 cm proud (the Swiss flag cross was 2 mm proud and flickered;
-  it now stands 12 mm proud each side, `ItemDefs.AppendFlag`). `MeshScratch.Build` writes no normals;
-  flat shading with the vertex-colour material looks right without them.
+  it now stands 12 mm proud each side, `ItemDefs.AppendFlag`). `MeshScratch.Build` writes no normals
+  unless a `Smooth` primitive was drawn (lit styles' figures, #311); `--meshcheck` also checks the
+  smooth tube, flat box and `RoundedBox`: every face clockwise from outside, every normal out.
