@@ -13,41 +13,22 @@ namespace UnitSport.Items;
 /// frames after the "go" of A (<c>test_output/plant_b_NN.png</c>); it must see exactly one live spawn effect.
 /// Scratch inventories.
 /// </summary>
-public partial class PlantProbe : Node
+public partial class PlantProbe : ChatProbe
 {
-    public static string? Role
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--plantcheck");
-            return i >= 0 && i + 1 < args.Length ? args[i + 1].ToUpperInvariant() : null;
-        }
-    }
+    public static string? Role => RoleArg("--plantcheck");
 
-    private readonly ItemController _items;
-    private readonly List<string> _heard = new();
-    private string _role = "";
-    private int _failures;
-
-    public PlantProbe(ItemController items) => _items = items;
+    public PlantProbe(ItemController items) : base(items, "plantcheck", "PL", "plant_") { }
     public PlantProbe() : this(null!) { }
 
-    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
-    private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
+    protected override string Dash => "-";
 
     public override async void _Ready()
     {
         _role = Role ?? "A";
-        if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor()
-                               && PlacedObjects.Instance != null, 150))
-        { Fail("no player on the ground"); return; }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
+        if (!await Joined(150, () => PlacedObjects.Instance != null)) return;
         await Seconds(2.0);
         if (_role == "A") await RunA(Me!); else await RunB(Me!);
-        GD.Print(_failures == 0 ? $"[plantcheck {_role}] RESULT: ok" : $"[plantcheck {_role}] RESULT: FAILED ({_failures})");
-        await Seconds(1.0);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(1.0);
     }
 
     private async Task RunA(FootPlayer me)
@@ -148,61 +129,5 @@ public partial class PlantProbe : Node
         Expect(PlacedObjects.Instance.All.Count == stood + 1, "the flag arrived here live");
         Expect(FlagFx.Spawns == 1, $"exactly one spawn effect here ({FlagFx.Spawns}): none for the join snapshot");
         Say("done");
-    }
-
-    private void Shot(string name)
-    {
-        var dir = ProjectSettings.GlobalizePath("res://test_output");
-        System.IO.Directory.CreateDirectory(dir);
-        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, $"plant_{name}.png"));
-    }
-
-    private static float Float(string s) => float.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
-
-    private int SlotOf(ItemId id)
-    {
-        for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].Id == id && !_items.Inventory[i].IsEmpty) return i;
-        return -1;
-    }
-
-    private int CountOf(ItemId id)
-    {
-        int n = 0;
-        for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].Id == id) n += _items.Inventory[i].Count;
-        return n;
-    }
-
-    private void Say(string what)
-    {
-        GD.Print($"[plantcheck {_role}] say {what}");
-        Chat?.Send($"PL {_role} {what}");
-    }
-
-    private Task<bool> Heard(string role, string what, double seconds) =>
-        Until(() => _heard.Any(l => l.Contains($"PL {role} {what}")), seconds);
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[plantcheck {_role}] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[plantcheck {_role}] RESULT: FAILED - {why}");
-        GetTree().Quit(1);
     }
 }

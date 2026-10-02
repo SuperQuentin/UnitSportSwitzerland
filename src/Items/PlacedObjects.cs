@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using UnitSport.Net;
 using UnitSport.Core;
 
 namespace UnitSport.Items;
@@ -138,8 +139,7 @@ public partial class PlacedObjects : Node
         if (Instance == this) Instance = null;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     // ---- client API -----------------------------------------------------------------------------
 

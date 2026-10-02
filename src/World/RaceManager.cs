@@ -942,7 +942,7 @@ public partial class RaceManager : Node, IOriginShiftAware
     /// <summary>Points the server sent as offsets from a race's anchor, in this client's world space now (#185).</summary>
     private Vector3[] Here(double frameE, double frameN, Vector3[] points)
     {
-        var shift = _origin!.Since(OriginFrame.Anchor(frameE, frameN));
+        var shift = _origin!.SinceAnchor(frameE, frameN);
         return points.Select(shift.Point).ToArray();
     }
 

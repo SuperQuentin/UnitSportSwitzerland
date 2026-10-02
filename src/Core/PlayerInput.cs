@@ -144,6 +144,17 @@ public partial class PlayerInput : Node
     /// <summary>Raised when the player switches between keyboard and pad, so on-screen key hints can follow.</summary>
     public static event Action? DeviceChanged;
 
+    // Per-frame reads: a string action converts to a new StringName on every call (#221).
+    private static readonly StringName NLeft = MoveLeft, NRight = MoveRight, NForward = MoveForward, NBack = MoveBack,
+        NLookLeft = LookLeft, NLookRight = LookRight, NLookUp = LookUp, NLookDown = LookDown;
+    private static readonly Dictionary<string, StringName> Names = new();
+
+    private static StringName ActionName(string action)
+    {
+        if (!Names.TryGetValue(action, out var name)) Names[action] = name = action;
+        return name;
+    }
+
     /// <summary>True when the player cannot be steering, because a text field has the keyboard.</summary>
     private static bool Blocked => UiFocus.TextEntryActive;
 
@@ -154,7 +165,7 @@ public partial class PlayerInput : Node
     /// </summary>
     public static Vector2 Move => Blocked
         ? Vector2.Zero
-        : Input.GetVector(MoveLeft, MoveRight, MoveForward, MoveBack);
+        : Input.GetVector(NLeft, NRight, NForward, NBack);
 
     /// <summary>
     /// Right-stick look for this frame, in radians per second: x yaw right, y pitch down.
@@ -167,7 +178,7 @@ public partial class PlayerInput : Node
         get
         {
             if (Blocked) return Vector2.Zero;
-            var v = Input.GetVector(LookLeft, LookRight, LookUp, LookDown);
+            var v = Input.GetVector(NLookLeft, NLookRight, NLookUp, NLookDown);
             float m = v.Length();
             if (m < 1e-4f) return Vector2.Zero;
             var s = GameSettings.Current;
@@ -179,11 +190,11 @@ public partial class PlayerInput : Node
 
     /// <summary>Held, for buttons. For an axis-bound action it means past the deadzone (a wheel's pedal: half way).</summary>
     public static bool Held(string action) =>
-        !Blocked && (Input.IsActionPressed(action) || SteeringWheel.Strength(action) > 0.5f);
+        !Blocked && (Input.IsActionPressed(ActionName(action)) || SteeringWheel.Strength(action) > 0.5f);
 
     /// <summary>0..1 — a trigger's or a pedal's travel, or 1 for a pressed key.</summary>
     public static float Strength(string action) =>
-        Blocked ? 0f : Mathf.Max(Input.GetActionStrength(action), SteeringWheel.Strength(action));
+        Blocked ? 0f : Mathf.Max(Input.GetActionStrength(ActionName(action)), SteeringWheel.Strength(action));
 
     /// <summary>
     /// Steering axis −1 left .. +1 right, from the left stick or A/D, else a steering wheel turned
@@ -195,7 +206,7 @@ public partial class PlayerInput : Node
         get
         {
             if (Blocked) return 0f;
-            float keys = Input.GetAxis(MoveLeft, MoveRight);
+            float keys = Input.GetAxis(NLeft, NRight);
             if (keys != 0f || !SteeringWheel.Active) return keys;
             return Mathf.Clamp(SteeringWheel.Angle / Mathf.DegToRad(SteeringWheel.PlainSpanDeg), -1f, 1f);
         }
@@ -207,7 +218,7 @@ public partial class PlayerInput : Node
     /// while the keys or the stick are steering, so they still can.
     /// </summary>
     public static float WheelAngle(float lockToLock) =>
-        Blocked || !SteeringWheel.Active || Input.GetAxis(MoveLeft, MoveRight) != 0f
+        Blocked || !SteeringWheel.Active || Input.GetAxis(NLeft, NRight) != 0f
             ? float.NaN
             : SteeringWheel.GameAngle(lockToLock);
 
@@ -470,6 +481,7 @@ public partial class PlayerInput : Node
         foreach (var group in groups)
             foreach (var e in group)
                 if (!InputMap.ActionHasEvent(action, e)) InputMap.ActionAddEvent(action, e);
+        InputHints.Invalidate();
     }
 
     /// <summary>

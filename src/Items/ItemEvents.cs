@@ -19,6 +19,11 @@ public enum ItemEventKind
     Hit = 3,
     /// <summary>A flare fired into the sky (#198). Position = the muzzle; it climbs and burns red.</summary>
     Flare = 4,
+    /// <summary>
+    /// A thrown item hit a player (#261). Position = where, direction = the item's velocity, extra =
+    /// <see cref="ThrowHits.Bonk"/>. Relayed to everyone near: all play the reaction, the victim takes it.
+    /// </summary>
+    Bonk = 5,
 }
 
 /// <summary>
@@ -67,6 +72,7 @@ public partial class ItemEvents : Node
         [ItemEventKind.PhotoFlash] = (n, e) => n.FlashEffect(e),
         [ItemEventKind.Hit] = PlayerHits.OnHit,
         [ItemEventKind.Flare] = (n, e) => n.FlareEffect(e),
+        [ItemEventKind.Bonk] = ThrowHits.OnBonk,
     };
 
     /// <summary>
@@ -132,6 +138,11 @@ public partial class ItemEvents : Node
             RelayHit(sender, at, direction, extra);
             return;
         }
+        if (kind == (int)ItemEventKind.Bonk)
+        {
+            RelayBonk(sender, at, direction, extra);
+            return;
+        }
         // a sound somewhere the sender is not is not an item it is holding
         if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && !(body.Global.DistanceTo(at) <= MaxOffset))
             return;
@@ -165,12 +176,35 @@ public partial class ItemEvents : Node
         Combat.PvpRules.RaiseHit(sender, hit.Victim, hit.Damage);
     }
 
+    /// <summary>
+    /// Server: a player says something it threw hit another (#261). Passed on to everyone who can
+    /// see the thrower or the victim when it could be true: a real throw's speed, the victim where
+    /// the hit says, the thrower within a long throw of it, no more damage than a throw can do.
+    /// Not a weapon and never lethal, so it is not a PvP matter.
+    /// </summary>
+    private void RelayBonk(long sender, Core.GlobalPos position, Vector3 direction, string extra)
+    {
+        if (ThrowHits.Bonk.Parse(extra) is not { } bonk || bonk.Victim == sender || bonk.Damage > ThrowHits.MaxDamage + 0.5f) return;
+        if (!direction.IsFinite() || direction.Length() > 45f) return;
+        var thrower = GetNodeOrNull<FootPlayer>("../Players/" + sender);
+        var victim = GetNodeOrNull<FootPlayer>("../Players/" + bonk.Victim);
+        if (thrower == null || victim == null || victim.Down != 0) return;
+        const float Slack = 8f;
+        // in LV95, from what the players published (#185)
+        if (!(victim.Global.DistanceTo(position) <= Slack) || !(thrower.Global.DistanceTo(position) <= 60f)) return;
+        GD.Print(FormattableString.Invariant($"[bonk] peer {sender} hit peer {bonk.Victim} with {bonk.Item} for {bonk.Damage:F1}"));
+        var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
+        foreach (int peer in Multiplayer.GetPeers())
+            if (peer != sender && (peer == bonk.Victim || interest?.ServerSees(peer, sender) != false || interest?.ServerSees(peer, bonk.Victim) != false))
+                RpcId(peer, MethodName.Deliver, sender, (int)ItemEventKind.Bonk, position.E, position.N, position.Alt, direction, extra);
+    }
+
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Deliver(long sender, int kind, double e, double n, double alt, Vector3 direction, string extra)
     {
         var position = _origin.ToWorld(e, n, alt);
         // on the owner's body as this peer shows it, when it is here
-        if (kind != (int)ItemEventKind.Hit && GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && direction.LengthSquared() > 1e-6f)
+        if (kind is not ((int)ItemEventKind.Hit or (int)ItemEventKind.Bonk) && GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && direction.LengthSquared() > 1e-6f)
             position = MuzzleOf(body, direction.Normalized(), kind == (int)ItemEventKind.Shot ? 0.55f : 0.1f);
         GD.Print(FormattableString.Invariant($"[items] event {(ItemEventKind)kind} from peer {sender} at {position.X:F1},{position.Y:F1},{position.Z:F1}"));
         Run(new ItemEvent(sender, (ItemEventKind)kind, position, direction, extra, Local: false));

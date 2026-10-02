@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Core;
+using UnitSport.Net;
 using UnitSport.Player;
 
 namespace UnitSport.Birds;
@@ -51,8 +52,7 @@ public partial class BirdNet : Node
         return n;
     }
 
-    public bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    public bool Online => NetLink.Online(this);
 
     public override void _Process(double delta)
     {

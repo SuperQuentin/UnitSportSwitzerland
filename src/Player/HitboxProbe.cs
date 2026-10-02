@@ -150,10 +150,7 @@ public partial class HitboxProbe : Node3D
                 c /= b.Triangles.Length / 3;
                 for (int t = 0; t < b.TriangleCount && tested < 5000; t++)
                 {
-                    int o = t * 9;
-                    var a = new Vector3(b.Triangles[o], b.Triangles[o + 1], b.Triangles[o + 2]);
-                    var p1 = new Vector3(b.Triangles[o + 3], b.Triangles[o + 4], b.Triangles[o + 5]);
-                    var p2 = new Vector3(b.Triangles[o + 6], b.Triangles[o + 7], b.Triangles[o + 8]);
+                    var (a, p1, p2) = b.Tri(t);
                     var nrm = (p1 - a).Cross(p2 - a);
                     if (nrm.Length() < 0.5f) continue;   // slivers are no wall to walk into
                     var mid = (a + p1 + p2) / 3f;

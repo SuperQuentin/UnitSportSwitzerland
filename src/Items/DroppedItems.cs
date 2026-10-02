@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Net;
 using UnitSport.Player;
 
 namespace UnitSport.Items;
@@ -73,8 +74,7 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
         if (Instance == this) Instance = null;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     // ---- client API ----------------------------------------------------------------------------
 
@@ -233,6 +233,7 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
     /// <summary>Clears items nobody has been near for a long time; done by whoever owns the list.</summary>
     public override void _Process(double delta)
     {
+        DropFloat.Step(GetViewport().GetCamera3D()?.GlobalPosition, (float)(Time.GetTicksMsec() / 1000.0 % 3600.0));
         if (Online && !Multiplayer.IsServer()) return;
         _housekeeping += delta;
         if (_housekeeping < 2) return;

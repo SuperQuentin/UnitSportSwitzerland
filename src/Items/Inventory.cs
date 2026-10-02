@@ -154,6 +154,24 @@ public sealed class Inventory
 
     public ItemId HeldId => Held.IsEmpty ? ItemId.None : Held.Id;
 
+    /// <summary>
+    /// The radio this player carries and plays (#261): the one in the hand, else the first one in
+    /// the hotbar or pack with a CD in it, else the first one at all; -1 for none. Only one radio
+    /// sounds at a time, and a radio put away keeps playing on its owner's back.
+    /// </summary>
+    public int RadioSlot()
+    {
+        if (HeldId == ItemId.Radio) return Selected;
+        int any = -1;
+        for (int i = 0; i < Capacity; i++)
+        {
+            if (_slots[i].IsEmpty || _slots[i].Id != ItemId.Radio) continue;
+            if (!string.IsNullOrEmpty(_slots[i].Data)) return i;
+            if (any < 0) any = i;
+        }
+        return any;
+    }
+
     public static bool IsHotbar(int slot) => slot < HotbarSize;
 
     public void Select(int hotbarSlot)
@@ -236,6 +254,36 @@ public sealed class Inventory
             if (_slots[i].IsEmpty) room += def.MaxStack;
             else if (_slots[i].Id == id && _slots[i].Data == data) room += Math.Max(0, def.MaxStack - _slots[i].Count);
         return room;
+    }
+
+    /// <summary>
+    /// How many of <paramref name="id"/> the hotbar and pack hold, counting only plain stacks (no
+    /// per-instance data: a photo is never an ingredient). Worn things and the bag are not counted.
+    /// </summary>
+    public int CountPlain(ItemId id)
+    {
+        int n = 0;
+        for (int i = 0; i < Capacity; i++)
+            if (_slots[i].Id == id && _slots[i].Data == null && !_slots[i].IsEmpty) n += _slots[i].Count;
+        return n;
+    }
+
+    /// <summary>
+    /// Removes up to <paramref name="count"/> plain <paramref name="id"/>, from the end of the pack
+    /// first so the hotbar keeps what is in reach. Returns how many were taken.
+    /// </summary>
+    public int TakePlain(ItemId id, int count)
+    {
+        int taken = 0;
+        for (int i = Capacity - 1; i >= 0 && taken < count; i--)
+        {
+            if (_slots[i].Id != id || _slots[i].Data != null || _slots[i].IsEmpty) continue;
+            int take = Math.Min(count - taken, _slots[i].Count);
+            _slots[i] = Less(_slots[i], take);
+            taken += take;
+        }
+        if (taken > 0) Notify();
+        return taken;
     }
 
     /// <summary>Rewrites a stack's per-instance data (a radio's CD). False if the slot is empty.</summary>

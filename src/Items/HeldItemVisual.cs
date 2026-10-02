@@ -363,7 +363,8 @@ void fragment() {{
             _inHand.Visible = true;
             // the wrist is the end of the arm, so the grip sits a hand's length past it
             _inHand.Scale = Vector3.One * ItemScale;
-            _inHand.Transform = new Transform3D(hand.Basis, hand.Origin + hand.Basis * new Vector3(0, -0.05f, -0.03f));
+            _inHand.Transform = new Transform3D(hand.Basis, hand.Origin + hand.Basis * new Vector3(0, -0.05f, -0.03f))
+                * RadioBounce(0.7f);
         }
         else _inHand.Visible = false;
 
@@ -421,6 +422,7 @@ void fragment() {{
         float rc = Recoil * Recoil;   // squared: a sharp hit that tails off
         _viewmodel.Position = (pos + _sway * swayScale + new Vector3(rc * 0.012f, -lowered + rc * 0.03f, Kick * 0.06f + rc * 0.13f)) * ViewScale;
         _viewmodel.Rotation = rot + new Vector3(Kick * 0.3f + rc * 0.22f, rc * 0.03f, rc * 0.07f);
+        if (_shown == ItemId.Radio) _viewmodel.Transform *= RadioBounce(0.45f);
 
         if (_print != null && IsInstanceValid(_print))
         {
@@ -432,6 +434,13 @@ void fragment() {{
             _print.Rotation = new Vector3(-0.12f * u, 0, 0);
         }
     }
+
+    /// <summary>A playing radio in the hand bounces to its beat (#261), a little less than on the ground; identity otherwise.</summary>
+    private Transform3D RadioBounce(float amount) =>
+        _shown == ItemId.Radio && _player != null && RadioPlay.Decode(_player.HeldRadio) is { } play
+        && RadioBody.BeatOf(play.CdId, play.StartedAt, Net.ClockSync.ServerNow, out float phase, out int beat, out _, out _)
+            ? RadioBody.Bounce(phase, beat, 0.11f, amount)
+            : Transform3D.Identity;
 
     /// <summary>
     /// The GPS screen: a SubViewport drawing the readout in a Label, shown on a quad just in front of the

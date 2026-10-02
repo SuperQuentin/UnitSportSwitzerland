@@ -17,6 +17,8 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `key-hints` — Key hints: (`Core/InputHints`): never type a key into a UI string; bindings named for the device in hand, prompt bar, F1...
 - `permissions` — Permissions: (`Core/Permissions`): what the menus may offer; online, spawning a vehicle is an admin's...
 - `licenses` — Licenses page: (`Core/Licenses`, Settings > About tab, `--licenses`): every data source and bundled component with its attribution and link, plus Godot's notices...
+- `chat-probe` — MP probes derive from `Core/ChatProbe`; quick self-checks go in `ClientWorld.QuickChecks`, camera-placing tools in the `tools` table (`placedByTool` derived), never a hand-kept list
+- `is-online` — "online?" is `NetLink.Online(this)`; never copy the `not OfflineMultiplayerPeer && Connected` check again
 - `floating-origin` — Floating origin (#185): world space follows the camera, online too (each peer its own origin, LV95 on the wire); keep `GlobalPos` or handle `IOriginShiftAware`; containers; `Follow` for shared point lists; Jolt kinematic teleport; `--origincheck`, `--originstress`
 - `json-store` — Persist JSON only via `JsonStore.Save` (atomic, `user://` ok, static options); never `FileAccess` Write / `File.WriteAllText`; how Bank/Inventory/LootService/InteriorManager/GameSettings migrate
 
@@ -34,3 +36,4 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `driving-settings-panel-through-godot` — Driving the Settings panel through the godot-ai MCP changes real settings
 - `macos-launch-steals-focus` — Every Godot launch (and editor play) steals focus on macOS; --headless draws nothing; use --shot-queue
 - `windows-launch-focus` — Windows: game windows may open but never in front or on top; no --always-on-top / no_focus, no editor play while the user works
+- `perf-no-per-frame-allocations` (general) — `PlayerInput` reads use static `StringName`s (`ActionName`); `InputHints.Label`/`Format` are memoised, anything changing the `InputMap` calls `InputHints.Invalidate()`

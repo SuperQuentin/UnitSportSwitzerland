@@ -251,6 +251,11 @@ public sealed class RaceLine
             // two wheels on grass and dirt: roughly half the grip under half the car
             float verge = i < Beyond.Count ? Mathf.Clamp(Beyond[i] / 0.9f, 0f, 1f) : 0f;
             float corner = Mathf.Sqrt(lateral * (1f - 0.25f * verge) / Mathf.Max(k, 1e-5f));
+            // a margin where a slip is a crash (#159): above ~80 km/h camber, bumps and the late line
+            // corrections eat into the grip (up to 6% of the speed at 120 km/h), and on a steep descent the
+            // car is already working its brakes and its weight forward (up to 5% more at -6%)
+            float down = i + 1 < n ? Mathf.Clamp((Points[i].Y - Points[i + 1].Y) / Mathf.Max(Arc[i + 1] - Arc[i], 0.1f) / 0.06f, 0f, 1f) : 0f;
+            corner *= (1f - 0.06f * Mathf.Clamp((corner - 22f) / 12f, 0f, 1f)) * (1f - 0.05f * down);
             float crest = Mathf.Sqrt(0.9f * g / Mathf.Max(Crest(i), 1e-5f));
             v[i] = Mathf.Min(corner, crest);
         }

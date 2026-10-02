@@ -923,15 +923,10 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         chunks.Clear();
         var ms = _snapshotBuffer;
         var w = _snapshotWriter;
-        var anchor = OriginFrame.AnchorNear(focus);
-        var toAnchor = anchor.Since(_origin.Frame);
+        double anchorE = System.Math.Round(focus.E / 1000) * 1000, anchorN = System.Math.Round(focus.N / 1000) * 1000;
+        var toAnchor = _origin.SinceAnchor(anchorE, anchorN).Inverse;
         var near = _origin.ToWorld(focus);
-        void Begin()
-        {
-            ms.SetLength(0);
-            w.Write(anchor.E); w.Write(anchor.N);
-        }
-        Begin();
+        BeginSnapshot(anchorE, anchorN);
         int n = 0;
         foreach (var b in _birds)
         {
@@ -946,10 +941,18 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
             w.Write(b.Id); w.Write((ushort)b.Species.Index); w.Write((byte)((byte)b.State | (b.Town ? TownBit : 0)));
             w.Write(p.X); w.Write(p.Y); w.Write(p.Z); w.Write(b.Yaw);
             w.Write(v.X); w.Write(v.Y); w.Write(v.Z);
-            if (++n == 32) { chunks.Add(ms.ToArray()); Begin(); n = 0; }
+            if (++n == 32) { chunks.Add(ms.ToArray()); BeginSnapshot(anchorE, anchorN); n = 0; }
         }
         if (n > 0) chunks.Add(ms.ToArray());
         return chunks;
+    }
+
+    /// <summary>A new snapshot packet: it starts with its LV95 anchor.</summary>
+    private void BeginSnapshot(double anchorE, double anchorN)
+    {
+        _snapshotBuffer.SetLength(0);
+        _snapshotWriter.Write(anchorE);
+        _snapshotWriter.Write(anchorN);
     }
 
     /// <summary>The state byte's top bit: a town bird (tame: it lets people come much closer).</summary>
@@ -959,7 +962,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     public void ApplySnapshot(byte[] data)
     {
         using var r = new BinaryReader(new MemoryStream(data));
-        var here = _origin.Since(OriginFrame.Anchor(r.ReadDouble(), r.ReadDouble()));
+        var here = _origin.SinceAnchor(r.ReadDouble(), r.ReadDouble());
         while (r.BaseStream.Position < r.BaseStream.Length)
         {
             int id = r.ReadInt32();

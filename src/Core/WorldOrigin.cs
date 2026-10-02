@@ -51,8 +51,14 @@ public sealed class OriginFrame
     }
 
     /// <summary>What turns a position in <paramref name="earlier"/>'s world space into this one's.</summary>
-    public OriginShift Since(OriginFrame earlier) =>
-        new(new Transform3D(Basis.Identity, new Vector3((float)(earlier.E - E), 0, (float)-(earlier.N - N))));
+    public OriginShift Since(OriginFrame earlier) => SinceAnchor(earlier.E, earlier.N);
+
+    /// <summary>
+    /// The same from an anchor given as LV95 (<see cref="Anchor"/> without the object): what turns a
+    /// position relative to it into this frame. Nothing allocated, for code that runs every tick.
+    /// </summary>
+    public OriginShift SinceAnchor(double e, double n) =>
+        new(new Transform3D(Basis.Identity, new Vector3((float)(e - E), 0, (float)-(n - N))));
 }
 
 /// <summary>
@@ -113,6 +119,9 @@ public sealed class WorldOrigin
 
     /// <summary>What turns a position in <paramref name="earlier"/>'s world space into the current one's.</summary>
     public OriginShift Since(OriginFrame earlier) => _frame.Since(earlier);
+
+    /// <summary>What turns a position relative to an LV95 anchor into the current world space (<see cref="OriginFrame.SinceAnchor"/>).</summary>
+    public OriginShift SinceAnchor(double e, double n) => _frame.SinceAnchor(e, n);
 
     public Vector3 ToWorld(double lv95E, double lv95N, double altitude) => _frame.ToWorld(lv95E, lv95N, altitude);
 

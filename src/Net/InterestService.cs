@@ -61,6 +61,14 @@ public partial class InterestService : Node
     private readonly List<(long Id, FootPlayer Player)> _targets = new();
     private readonly Dictionary<long, FootPlayer> _byId = new();
     private readonly List<long> _changed = new();
+
+    /// <summary>
+    /// The frame the current viewer's pairs are judged in (<see cref="Evaluate"/>), as doubles, and
+    /// the line of sight in it: built once, so a round allocates nothing.
+    /// </summary>
+    private double _frameE, _frameN;
+    private Func<Vector3, Vector3, bool>? _sight;
+    private Vector3 Local(GlobalPos g) => new((float)(g.E - _frameE), (float)g.Alt, (float)-(g.N - _frameN));
     private double _timer;
 
     public static InterestService CreateServer(Node parent, Node players, Func<GlobalPos, float?>? ground)
@@ -151,11 +159,14 @@ public partial class InterestService : Node
             // someone inside a building is 3 km under it: seen, and seeing, from where the building is
             var from = Where(viewerNode);
             // the rules work in floats: in a frame at this viewer, whatever the server's origin is
-            var frame = OriginFrame.AnchorNear(from);
-            var eye = frame.ToWorld(from) + Vector3.Up * 1.7f;
-            Func<Vector3, Vector3, bool>? sight = Ground is { } ground
-                ? (a, b) => Interest.Clear(a, b, p => ground(frame.ToGlobal(p)))
-                : null;
+            _frameE = Math.Round(from.E / 1000) * 1000;
+            _frameN = Math.Round(from.N / 1000) * 1000;
+            var eye = Local(from) + Vector3.Up * 1.7f;
+            if (Ground != null && _sight == null)
+            {
+                var groundHere = (Func<Vector3, float?>)(p => Ground(new GlobalPos(_frameE + p.X, _frameN - p.Z, p.Y)));
+                _sight = (a, b) => Interest.Clear(a, b, groundHere);
+            }
             _changed.Clear();
 
             foreach (var (target, targetNode) in _targets)
@@ -164,10 +175,10 @@ public partial class InterestService : Node
                 bool was = set.Contains(target);
                 if (first) _changed.Add(target);
                 var to = Where(targetNode);
-                var at = frame.ToWorld(to) + Vector3.Up;
+                var at = Local(to) + Vector3.Up;
                 float agl = Ground?.Invoke(to) is { } g ? (float)(to.Alt + 1 - g) : 0f;
                 bool now_ = Interest.Relevant(eye, at, targetNode.Ride, agl, view, was,
-                    Together?.Invoke(viewer, target) == true, sight);
+                    Together?.Invoke(viewer, target) == true, Ground == null ? null : _sight);
                 if (now_ == was) continue;
                 if (first) { if (now_) set.Add(target); continue; }
                 // an edge case must not blink: each pair flips at most once a second

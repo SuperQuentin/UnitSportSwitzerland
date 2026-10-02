@@ -19,7 +19,7 @@ namespace UnitSport.Items;
 /// </list>
 /// Runs on a scratch inventory.
 /// </summary>
-public partial class EconomyProbe : Node
+public partial class EconomyProbe : ChatProbe
 {
     public static string? Password
     {
@@ -33,10 +33,9 @@ public partial class EconomyProbe : Node
 
     private readonly ChatManager _chat;
     private readonly Inventory _inventory;
-    private int _failures;
     private string? _refused;
 
-    public EconomyProbe(ChatManager chat, Inventory inventory)
+    public EconomyProbe(ChatManager chat, Inventory inventory) : base(null!, "econ")
     {
         _chat = chat;
         _inventory = inventory;
@@ -64,6 +63,14 @@ public partial class EconomyProbe : Node
         await Seconds(1);
         Expect(Count(vehicles) == count, "and no vehicle appeared");
 
+        // #262: the admin item and money commands are refused to a plain player
+        int cash0 = _inventory.Cash;
+        _chat.Send("/money 100");
+        _chat.Send("/give me bread 2");
+        await Seconds(1.5);
+        Expect(_inventory.Cash == cash0 && !_inventory.Contains(ItemId.Bread), "a plain player's /money and /give are refused");
+        Expect(!_chat.CanUseCatalogue && !CatalogueUi.Allowed, "no catalogue for a plain player");
+
         _chat.Send($"/login {Password}");
         Expect(await Until(() => Permissions.IsAdmin, 5), "/login: the server says admin");
         Expect(Permissions.CanSpawnVehicles, "an admin may spawn vehicles");
@@ -79,34 +86,23 @@ public partial class EconomyProbe : Node
         Expect(_inventory.Cash == 25 && Bank.Instance.Balance == before,
             $"refused outside a bank: account {before} -> {Bank.Instance.Balance}, pocket {_inventory.Cash}");
 
-        GD.Print(_failures == 0 ? "[econ] RESULT: ok" : $"[econ] RESULT: FAILED ({_failures})");
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        // #262, as an admin: the server's commands reach this client
+        Expect(_chat.CanUseCatalogue && CatalogueUi.Allowed, "an admin gets the catalogue");
+        int cash = _inventory.Cash;
+        _chat.Send("/money 500");
+        Expect(await Until(() => _inventory.Cash == cash + 500, 5), $"/money: pocket {cash} -> {_inventory.Cash}");
+        _chat.Send("/give me bread 2");
+        Expect(await Until(() => _inventory.Contains(ItemId.Bread), 5), "/give me: bread arrives");
+        _chat.Send("/bank set 777");
+        Expect(await Until(() => Bank.Instance.Balance == 777, 5), $"/bank set: account {Bank.Instance.Balance}");
+        // the server's accounts file is shared user data: put it back
+        _chat.Send($"/bank set {Math.Max(before, 0)}");
+        await Until(() => Bank.Instance.Balance == Math.Max(before, 0), 5);
+        _chat.Send("/clear");
+        Expect(await Until(() => !_inventory.Contains(ItemId.Bread), 5), "/clear: the pack is empty");
+
+        await Finish(0);
     }
 
     private static int Count(Node vehicles) => vehicles.GetChildren().OfType<VehicleBody>().Count();
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[econ] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[econ] RESULT: FAILED — {why}");
-        GetTree().Quit(1);
-    }
 }

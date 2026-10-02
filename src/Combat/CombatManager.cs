@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Net;
 using UnitSport.Audio;
 using UnitSport.Core;
 using UnitSport.Player;
@@ -151,8 +152,7 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
         AddChild(hud);
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     /// <summary>This peer's id as a shooter; offline, the local player's default authority (1).</summary>
     private long LocalId => Online ? Multiplayer.GetUniqueId() : 1;

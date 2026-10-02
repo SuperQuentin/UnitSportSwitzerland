@@ -19,42 +19,24 @@ namespace UnitSport.Loot;
 /// stacks, and, after leaving and coming back, still find it open (the server's lock state, not a
 /// local memory). Run server and clients with the same <c>--lootepoch N</c> and <c>--at E,N</c>.
 /// </summary>
-public partial class LockSyncProbe : Node
+public partial class LockSyncProbe : ChatProbe
 {
-    public static string? Role
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--locksynccheck");
-            return i >= 0 && i + 1 < args.Length ? args[i + 1].ToUpperInvariant() : null;
-        }
-    }
+    public static string? Role => RoleArg("--locksynccheck");
 
-    private readonly ItemController _items;
     private readonly WorldOrigin _origin;
-    private readonly List<string> _heard = new();
-    private string _role = "";
-    private int _failures;
 
-    public LockSyncProbe(ItemController items, WorldOrigin origin)
-    {
-        _items = items;
-        _origin = origin;
-    }
+    public LockSyncProbe(ItemController items, WorldOrigin origin) : base(items, "locksync", "LS", "locksync_") => _origin = origin;
 
     public LockSyncProbe() : this(null!, null!) { }
 
-    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
-    private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
+    protected override bool EchoSay => false;
 
     public override async void _Ready()
     {
         _role = Role ?? "A";
         string other = _role == "A" ? "B" : "A";
 
-        if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor(), 120)) { Fail("no player on the ground"); return; }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
+        if (!await Joined(120)) return;
         var me = Me!;
         var interiors = InteriorManager.Instance!;
         var loot = LootService.Instance!;
@@ -204,15 +186,13 @@ public partial class LockSyncProbe : Node
             GD.Print($"[locksync A] it holds {string.Join(", ", contents.Select(c => $"{c.Stack.Id} x{c.Stack.Count}"))}");
             Say($"cracked [{string.Join(",", contents.Select(c => $"{c.Stack.Id}x{c.Stack.Count}"))}]");
             if (!await Heard("B", "done", 90)) { Fail("B never finished"); return; }
-            int before = Count();
+            int before = PackTotal();
             loot.TakeAll();
             await Until(() => !loot.Waiting && !loot.OpenContents().Any(), 10);
-            Expect(Count() - before == contents.Sum(c => c.Stack.Count), $"A took it all ({Count() - before})");
+            Expect(PackTotal() - before == contents.Sum(c => c.Stack.Count), $"A took it all ({PackTotal() - before})");
         }
 
-        GD.Print(_failures == 0 ? $"[locksync {_role}] RESULT: ok" : $"[locksync {_role}] RESULT: FAILED ({_failures})");
-        await Seconds(2);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(2);
     }
 
     /// <summary>
@@ -270,48 +250,10 @@ public partial class LockSyncProbe : Node
     }
 
     /// <summary>What this client sees, for the PR: test_output/locksync_ROLE_NAME.png.</summary>
-    private void Shot(string name)
+    protected override string Shot(string name)
     {
-        string path = ProjectSettings.GlobalizePath($"res://test_output/locksync_{_role}_{name}.png");
-        GetViewport().GetTexture().GetImage().SavePng(path);
-        GD.Print($"[locksync {_role}] screenshot {path}");
-    }
-
-    private int Count()
-    {
-        var inv = _items.Inventory;
-        int n = inv.Cash;
-        for (int i = 0; i < Inventory.Size; i++) if (!inv[i].IsEmpty) n += inv[i].Count;
-        return n;
-    }
-
-    private void Say(string what) => Chat?.Send($"LS {_role} {what}");
-
-    private Task<bool> Heard(string role, string what, double seconds) =>
-        Until(() => _heard.Any(l => l.Contains($"LS {role} {what}")), seconds);
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[locksync {_role}] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[locksync {_role}] RESULT: FAILED — {why}");
-        GetTree().Quit(1);
+        string path = base.Shot($"{_role}_{name}");
+        GD.Print($"{Log} screenshot {path}");
+        return path;
     }
 }

@@ -50,6 +50,11 @@ public sealed class ChatCompleter
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("spawn", true, true, "<item> [count]"),
+        ("catalogue", true, true, ""),
+        ("clear", false, true, "[player]"),
+        ("money", true, true, "<amount> [player]"),
+        ("bank", true, true, "[player] [set | add | take <amount>]"),
+        ("give", true, false, "<player> <item> [count]"),
         ("name", false, false, "<name>"),
         ("login", false, false, "<password>"),
         ("stream", false, false, ""),
@@ -137,6 +142,36 @@ public sealed class ChatCompleter
                 if (argIndex != 0) return [];
                 options = PlayerNames();
                 break;
+
+            case "give":
+                options = argIndex switch
+                {
+                    0 => PlayerNames().Prepend("me"),
+                    1 => ItemLookup.Names(),
+                    _ => [],
+                };
+                break;
+
+            case "clear":
+                options = argIndex == 0 && Permissions.Online && Permissions.IsAdmin ? PlayerNames().Prepend("me") : [];
+                break;
+
+            case "money":
+                options = argIndex == 1 && Permissions.Online ? PlayerNames().Prepend("me") : [];
+                break;
+
+            case "bank":
+            {
+                string[] verbs = ["set", "add", "take"];
+                bool named = words.Length > 1 && !verbs.Contains(words[1].ToLowerInvariant());
+                options = argIndex switch
+                {
+                    0 => Permissions.Online ? verbs.Concat(PlayerNames()) : verbs,
+                    1 when named => verbs,
+                    _ => [],
+                };
+                break;
+            }
 
             case "kick":
                 // the reason after the name is free text

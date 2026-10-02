@@ -267,7 +267,7 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         foreach (var key in drop)
         {
             _stale.Remove(key);
-            _blocks[key]?.QueueFree();
+            Free(_blocks[key]);
             _blocks.Remove(key);
         }
     }
@@ -306,19 +306,11 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     private void Commit((int E, int N) key, TerrainMeshBuilder.MeshData? data)
     {
         // what this replaces, if it is a rebuild from a newer lattice
-        _blocks[key]?.QueueFree();
+        Free(_blocks[key]);
         _blocks[key] = null;
         if (data == null) return;   // nothing built there; keep the key so it is not retried
 
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
-        arrays[(int)Mesh.ArrayType.Color] = data.Colors;
-        arrays[(int)Mesh.ArrayType.Index] = data.Indices;
-
-        var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        mesh.SurfaceSetMaterial(0, _material);
+        var mesh = ChunkNode.ToArrayMesh(data, _material!);
 
         var instance = new MeshInstance3D
         {
@@ -329,5 +321,18 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         };
         AddChild(instance);
         _blocks[key] = instance;
+    }
+
+    /// <summary>
+    /// Frees a block and its mesh now: the mesh's memory is the RenderingServer's, so left to the
+    /// finalizer every rebuilt or dropped block kept its mesh alive (see ChunkNode.ReleaseResources).
+    /// </summary>
+    private static void Free(MeshInstance3D? block)
+    {
+        if (block == null) return;
+        var mesh = block.Mesh;
+        block.Mesh = null;
+        mesh?.Dispose();
+        block.QueueFree();
     }
 }

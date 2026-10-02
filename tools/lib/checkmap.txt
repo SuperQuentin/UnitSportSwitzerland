@@ -22,6 +22,7 @@ src/World/TimeCommand    quick  --chatcheck
 src/Core/                quick  --origincheck
 src/Terrain/             quick  --origincheck
 src/Items/               quick  --invcheck
+src/Crafting/            quick  --invcheck
 src/Loot/                quick  --lootchancecheck
 src/Occasions/           quick  --occasioncheck
 src/Occasions/           quick  --huntcheck
@@ -62,6 +63,10 @@ src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
 @rpc                     net    @netsmoke
+src/Items/ThrowHits      net    tools/bonkcheck.sh
+src/Items/ItemEvents     net    tools/bonkcheck.sh
+src/Items/DroppedItem    net    tools/bonkcheck.sh
+src/Player/FootPlayer.B  net    tools/bonkcheck.sh
 
 src/BattleRoyale/        full   tools/brcheck.sh
 src/Combat/              full   tools/pvpcheck.sh

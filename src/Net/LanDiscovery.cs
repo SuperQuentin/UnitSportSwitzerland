@@ -62,7 +62,7 @@ public sealed class LanDiscovery : IDisposable
                 udp.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
                 _sockets.Add(udp);
                 var token = _cts.Token;
-                Task.Run(() => ReceiveLoop(udp, token));
+                Task.Run(() => Udp.ReceiveLoop(udp, token, (p, from) => Handle(p, from.Address)));
             }
             catch (SocketException e)
             {
@@ -129,20 +129,6 @@ public sealed class LanDiscovery : IDisposable
         {
             try { s.Send(packet, packet.Length, Group); }
             catch (Exception) { /* interface went away or was disposed; the next round retries */ }
-        }
-    }
-
-    private async Task ReceiveLoop(UdpClient udp, CancellationToken token)
-    {
-        while (!token.IsCancellationRequested)
-        {
-            UdpReceiveResult got;
-            try { got = await udp.ReceiveAsync(token); }
-            catch (OperationCanceledException) { return; }
-            catch (ObjectDisposedException) { return; }
-            catch (SocketException) { continue; }   // e.g. ICMP unreachable reported on the next receive (Windows)
-            try { Handle(got.Buffer, got.RemoteEndPoint.Address); }
-            catch (Exception) { /* malformed packet: ignore it */ }
         }
     }
 
