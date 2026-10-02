@@ -68,6 +68,23 @@ is #299: `terrain/water-level-layer`.
 4. Writes `.water`, `.terr`, `.terrc`, the manifest's min/max, `horizon.bin`, then
    `TerrainBuild.VerifySeams` on every touched tile and its neighbours (exit 1 on a seam error).
 
+## Far products: the horizon draws the water, `.terrc` stays the bed
+
+- `horizon.bin` **v2** (`HorizonFormat`): the heights (beds, unchanged: the generated fill blends
+  on them as knots, so they must equal the tiles), then a water section, one record per tile with
+  a wet sample: i32 E, N, 121 u16 levels (0 dry). Written as v1 when no tile has water, so a
+  region without lakes is byte-identical to before; the decoder reads both. `HorizonStage` takes
+  the levels from `.water` (`ExtractWater`, every 100th vertex).
+- `HorizonIndex.Surface` = the level where it stands above the ground, else the ground:
+  `BuildHorizonBlock` draws it, water-coloured (`CoverClass.Water`) where wet, and the server's
+  `InterestService.HorizonGround` reads it. `FallbackChunkSource.MergeHorizon` adds the generated
+  lakes' levels (`ProceduralWorld.HorizonWater`, from the lake field alone, microseconds a tile,
+  so the generated horizon cache is untouched).
+- `.terrc` keeps the bed: every ring tile, coarse ones included, gets its water layer from the
+  source and #299 meshes a far surface over it (`ChunkManager`, `farWater`).
+- Shots: `test_output/shots298/nyon_hill_lake_far_*.png`, `nyon_high_lake_horizon_*.png` (PS1 and
+  Realistic−): Léman flat at its level to the horizon, no pit.
+
 ## Synthetic bed: `WaterBed` (`tools/TerrainFormat/WaterBed.cs`, shared)
 
 - Open water: shelf 1:12 out to 24 m (2 m deep), then drop-off 1:4 down to the body's max
