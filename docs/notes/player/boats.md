@@ -18,7 +18,9 @@
   the plane's lift leaning back), a **hump** in it (`x² e^(1−x²)` of speed over `HumpSpeed`),
   **planing lift** (`LiftShare` of the weight by `PlaneSpeed`) **spread over the wet columns** (at the
   centre of mass alone the plane had no pitch stiffness and the bow dug in), normal to the bottom
-  (banked, it pulls the boat round), **trim** as the hull's own wave tilting the water it floats on
+  (banked, it pulls the boat round), plus a **wave-face kick** (`FaceKick`: the water's slope under the
+  hull fore and aft against the running trim, ripples under 1.5 % ignored, applied at the centre of mass:
+  spread over the columns it all went into the bow and flipped the jetski), **trim** as the hull's own wave tilting the water it floats on
   (`HumpTrim`, `PlaneTrim`, rad: a torque fought the buoyancy and gave 1-2°), thrust from a prop at
   `ThrustAt` (none out of the water: the engine races) or a jet whose nozzle turns the thrust (no
   thrust, no steering), a **rudder and skeg** as fins lifting with the flow past them (way + prop
@@ -64,8 +66,9 @@
 - **Measured** (`--boatcheck`, calm unless said): jetski draft 0.23 m, on the plane in 1.4 s, top
   82 km/h (spec 81), bow up 7° over the hump, running trim 2-3°, circle 59 m at 64 km/h banked 11°;
   speedboat draft 0.28 m, plane 3.2 s, top 70.5 km/h (38 kn), hump 6.6°, trim 3°, circle 55 m at
-  52 km/h. Gamey flat out: pitch ±10°, hops of 0.2-0.35 s off crests (the jetski sometimes throws
-  its rider), the speedboat rolls 7° at worst. Parked gamey: heaves 1.3-1.7 m, keel within 5 cm of
+  52 km/h. Gamey flat out **into the swell** (west; running with it, east, a hull hardly leaves the water):
+  the jetski leaves crests for up to ~1 s, keel up to 1.5 m clear, and usually throws its rider within
+  20 s (a crooked or hard landing); the speedboat ~0.7 s, never thrown. Parked gamey: heaves 1.3-1.7 m, keel within 5 cm of
   its draft under the surface.
 - **Checks**: `tools/test.sh unit` (`BoatTests`: floats level, rights itself, hump and plane and top
   speed, turns without capsizing, a jet does not steer off throttle, gamey, parked drift, beaching);

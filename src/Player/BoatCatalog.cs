@@ -38,7 +38,7 @@ public static class BoatCatalog
         BankPerG = 0.9f, MaxBank = 0.6f,
         WindArea = 1.2f,
         IdleRpm = 1600f, MaxRpm = 8000f, SpoolRate = 3.5f,
-        ThrowsRider = true, ThrowLanding = 7.5f, ThrowTilt = 0.75f, FlipAngle = 1.6f,
+        ThrowsRider = true, ThrowLanding = 8f, ThrowTilt = 0.9f, FlipAngle = 1.6f,
     };
 
     /// <summary>

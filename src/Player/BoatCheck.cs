@@ -258,9 +258,10 @@ public partial class BoatCheck : Node
     private async Task Gamey(FootPlayer me)
     {
         await SeaState("gamey", 1f);
-        var at = At(Lake.ShoreX + 400, -200);
+        // west, into the swell (the waves run east-ish): head seas, where a fast hull leaves the crests
+        var at = At(Lake.ShoreX + 1100, -200);
         WaterField.TryLevelAt(at, out float level);
-        me.PlaceBoat(at with { Y = level - 0.2f }, East);
+        me.PlaceBoat(at with { Y = level - 0.2f }, West);
         float pitchLo = 0f, pitchHi = 0f, air = 0f, worst = 0f;
         bool airShot = false, pitchShot = false, thrown = false;
         _each = () =>
@@ -273,7 +274,7 @@ public partial class BoatCheck : Node
             worst = Mathf.Max(worst, Mathf.Abs(Deg(s.Roll)));
         };
         // a slow run first, pitching over the swell, then flat out
-        me.RideControls = Helm(me, 0.25f, hold: East);
+        me.RideControls = Helm(me, 0.25f, hold: West);
         for (int i = 0; i < 12 && !thrown; i++)
         {
             await Wait(0.5);
@@ -283,17 +284,13 @@ public partial class BoatCheck : Node
                 await Shot("pitching_swell", () => Look(me, side: 1f, back: 0.1f, up: 0.12f, distance: 1.9f));
             }
         }
-        me.RideControls = Helm(me, 1f, hold: East);
+        me.RideControls = Helm(me, 1f, hold: West);
         double until = Time.GetTicksMsec() / 1000.0 + 20.0;
         while (!thrown && Time.GetTicksMsec() / 1000.0 < until)
         {
             // watched every physics frame: a jump off a crest lasts a few tenths of a second
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-            if (_shots && !airShot && me.Vehicle is Boat && me.BoatMotion.Airborne > 0.06f)
-            {
-                airShot = true;
-                await Shot("airborne", () => Look(me, side: 1f, back: 0.2f, up: 0.08f, distance: 1.8f));
-            }
+            if (_shots && !airShot) airShot = await JumpShot(me);
         }
         _each = null;
         Log(string.Create(CultureInfo.InvariantCulture,
@@ -304,18 +301,61 @@ public partial class BoatCheck : Node
         {
             // a jetski's rider in the water: the machine floats on, riderless; back on it to go on
             Expect(me.Ride == RideKind.OnFoot && me.IsSwimming, "thrown off: swimming (#301)");
-            await Wait(2);
-            if (Nearest(me) is { } loose && IsInstanceValid(loose))
+            Expect(await Reboard(me), "climbs back aboard from the water");
+        }
+        // pictures only: more runs into the swell until one leaves a crest well clear (it is the waves' timing)
+        for (int attempt = 0; _shots && !airShot && attempt < 4 && me.Ride == _kind; attempt++)
+        {
+            WaterField.TryLevelAt(at, out level);
+            me.PlaceBoat(at with { Y = level - 0.2f }, West);
+            me.RideControls = Helm(me, 1f, hold: West);
+            double end = Time.GetTicksMsec() / 1000.0 + 18.0;
+            while (!airShot && me.Ride == _kind && Time.GetTicksMsec() / 1000.0 < end)
             {
-                me.StartSwimmingAtSurface(loose.GlobalPosition + loose.GlobalTransform.Basis.X * (loose.Ride.ParkedBox.Size.X * 0.5f + 0.5f));
-                await Wait(0.3);
-                Expect(me.TryGetIn() && await Until(() => me.Ride == _kind, 5), "climbs back aboard from the water");
+                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                airShot = await JumpShot(me);
             }
-            else Expect(false, "the riderless jetski floats on");
+            Log($"jump attempt {attempt + 1}: {(airShot ? "pictured" : me.Ride == _kind ? "no clear jump" : "thrown off")}");
+            if (me.Ride != _kind && !await Reboard(me)) break;
         }
         // let it come off the plane and settle before it is left
         me.RideControls = Helm(me, 0f);
         await Until(() => me.Vehicle is not Boat || me.BoatMotion.Velocity.Length() < 0.6f, 40);
+    }
+
+    /// <summary>At the top of a jump well clear (the keel 0.35 m over the water under it, no longer rising): its picture.</summary>
+    private async Task<bool> JumpShot(FootPlayer me)
+    {
+        var m = me.BoatMotion;
+        if (me.Vehicle is not Boat || m.Airborne < 0.15f || m.Velocity.Y > 0.8f
+            || !WaterField.TryLevelAt(me.GlobalPosition, out float clear) || me.GlobalPosition.Y - clear < 0.35f)
+            return false;
+        Log(string.Create(CultureInfo.InvariantCulture,
+            $"in the air {m.Airborne:F2} s: keel {me.GlobalPosition.Y - clear:F2} m over the water, pitch {Deg(m.Pitch):F0}°"));
+        // from just over the water beside it, looking up at it: the horizon shows under the hull
+        await Shot("airborne", () =>
+        {
+            var side = (me.GlobalTransform.Basis.X with { Y = 0 }).Normalized();
+            var aft = (me.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+            var eye = me.GlobalPosition + side * 6.5f + aft * 1.5f;
+            eye.Y = (WaterField.TryLevelAt(eye, out float w) ? w : eye.Y) + 0.3f;
+            var target = me.GlobalPosition + Vector3.Up * 0.4f;
+            return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
+        });
+        return true;
+    }
+
+    /// <summary>Thrown off: wait for the loose jetski to slow, swim up to it and climb aboard.</summary>
+    private async Task<bool> Reboard(FootPlayer me)
+    {
+        await Wait(2);
+        if (Nearest(me) is not { } loose || !IsInstanceValid(loose)) return false;
+        // it coasts on riderless: swim to it once it has slowed
+        await Until(() => !IsInstanceValid(loose) || loose.Velocity.Length() < 0.8f, 30);
+        if (!IsInstanceValid(loose)) return false;
+        me.StartSwimmingAtSurface(loose.GlobalPosition + loose.GlobalTransform.Basis.X * (loose.Ride.ParkedBox.Size.X * 0.5f + 0.5f));
+        await Wait(0.3);
+        return me.TryGetIn() && await Until(() => me.Ride == _kind, 5);
     }
 
     private VehicleBody? Nearest(FootPlayer me)
@@ -401,7 +441,11 @@ public partial class BoatCheck : Node
             _cam.MakeCurrent();
         }
         for (int i = 0; i < 4; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-        string dir = ProjectSettings.GlobalizePath("res://test_output/boats");
+        // one folder per style (--style ps1|cartoon|real-|real+), the base style's when none is given
+        var args = OS.GetCmdlineUserArgs();
+        int si = Array.IndexOf(args, "--style");
+        string style = si >= 0 && si + 1 < args.Length ? args[si + 1].Replace('+', 'p').Replace('-', 'm') : "default";
+        string dir = ProjectSettings.GlobalizePath($"res://test_output/boats/{style}");
         System.IO.Directory.CreateDirectory(dir);
         string file = System.IO.Path.Combine(dir, $"{_name}_{name}.png");
         var error = GetViewport().GetTexture().GetImage().SavePng(file);
