@@ -20,8 +20,18 @@ namespace UnitSport.Interiors;
 /// </summary>
 public partial class ChurchStage : Node3D
 {
-    /// <summary>The trumpet comes in here, s: until then the rat strikes its intro poses (#370).</summary>
+    /// <summary>When the trumpet comes in if the CD's grid says nothing better, s (#370).</summary>
     public const float IntroEnd = 2.0f;
+
+    /// <summary>
+    /// When the trumpet comes in, s from the CD's start: on the beat after the five intro hits
+    /// (2.36 s on the chess type beat's grid), else <see cref="IntroEnd"/>.
+    /// </summary>
+    public static float IntroEndOf(CdInfo cd)
+    {
+        float end = cd.BeatOffset + IntroHits * 60f / cd.Bpm;
+        return cd.BeatOffset >= 0 && end > 1.6f && end < 2.8f ? end : IntroEnd;
+    }
 
     /// <summary>Hits before the trumpet, one pose (and one camera cut) each.</summary>
     public const int IntroHits = 5;
@@ -91,9 +101,10 @@ public partial class ChurchStage : Node3D
         var info = CdLibrary.Instance!.Find(play.CdId)!;
         double t = ClockSync.ServerNow - play.StartedAt;
         if (!_active) Start(info, t);
+
         // beats since the first one, continuous: the dance's whole clock
         float beat = (float)((t - info.BeatOffset) * info.Bpm / 60.0);
-        bool intro = t < IntroEnd;
+        bool intro = t < IntroEndOf(info);
         Pose((float)t, beat, intro, info);
         StepDisco(beat);
         StepIntro((float)t, intro, info);
@@ -108,7 +119,7 @@ public partial class ChurchStage : Node3D
     {
         _active = true;
         StartDisco(cd);
-        StartIntro(t);
+        StartIntro(cd, t);
     }
 
     /// <summary>The music stopped (or changed): everything as it was, in this frame.</summary>
@@ -136,7 +147,7 @@ public partial class ChurchStage : Node3D
     public static float HitTime(CdInfo cd, int k)
     {
         float spb = 60f / cd.Bpm, last = cd.BeatOffset + (IntroHits - 1) * spb;
-        if (cd.BeatOffset >= 0 && last < IntroEnd - 0.05f && last > IntroEnd * 0.6f) return cd.BeatOffset + k * spb;
+        if (cd.BeatOffset >= 0 && last < IntroEndOf(cd) - 0.05f && last > IntroEnd * 0.6f) return cd.BeatOffset + k * spb;
         return k * IntroEnd / IntroHits;
     }
 
@@ -154,7 +165,8 @@ public partial class ChurchStage : Node3D
     private void Pose(float t, float beat, bool intro, CdInfo cd)
     {
         // the congregation gets up on the trumpet, in a quarter of a second
-        float stand = intro ? 0f : Mathf.Clamp((t - IntroEnd) / 0.25f, 0f, 1f);
+        float end = IntroEndOf(cd);
+        float stand = intro ? 0f : Mathf.Clamp((t - end) / 0.25f, 0f, 1f);
         bool up = stand > 0.5f;
         if ((up ? 1 : 0) != _standing)
         {
@@ -171,7 +183,7 @@ public partial class ChurchStage : Node3D
             if (_figures[f].Kind == FigureKind.Rat)
             {
                 if (intro) RatIntro(f, t, cd);
-                else RatDance(f, beat, t - IntroEnd);
+                else RatDance(f, beat, t - end);
             }
             else if (!intro) PersonDance(f, beat, stand);
         }

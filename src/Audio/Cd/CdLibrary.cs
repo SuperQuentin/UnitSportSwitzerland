@@ -49,6 +49,13 @@ public partial class CdLibrary : Node
     /// </summary>
     public int RatBeatId { get; private set; } = -1;
 
+    /// <summary>
+    /// The chess type beat's grid, measured (onset autocorrelation, #370): 132.5 bpm, first hit at
+    /// 0.10 s. The analyser hears it at half tempo with an offset off the grid, and the rat's intro
+    /// and dance need the real one, so the server's copy of the CD carries these.
+    /// </summary>
+    public const float RatBeatBpm = 132.5f, RatBeatOffset = 0.10f;
+
     /// <summary>Whether this CD is the chess type beat.</summary>
     public static bool IsRatBeat(int cdId) => cdId >= 0 && Instance is { } lib && lib.RatBeatId == cdId;
     private const double BurnCooldown = 60;
@@ -159,8 +166,7 @@ public partial class CdLibrary : Node
     private void Added(Godot.Collections.Dictionary cd)
     {
         var info = CdInfo.FromDict(cd);
-        _all[info.Id] = info;
-        Note(info);
+        _all[info.Id] = Note(info);
         Changed?.Invoke();
     }
 
@@ -172,8 +178,7 @@ public partial class CdLibrary : Node
         foreach (var v in cds)
         {
             var info = CdInfo.FromDict(v.AsGodotDictionary());
-            _all[info.Id] = info;
-            Note(info);
+            _all[info.Id] = Note(info);
         }
         GD.Print($"[cd] library from the server: {_all.Count} CD(s)");
         Changed?.Invoke();
@@ -264,12 +269,11 @@ public partial class CdLibrary : Node
                 Changed?.Invoke();
                 continue;
             }
-            _all[cd.Id] = cd;
-            Note(cd);
+            _all[cd.Id] = Note(cd);
             Save();
             GD.Print($"[cd] CD {cd.Id} ready: {cd.Describe()}");
             Changed?.Invoke();
-            if (_server && Online) Rpc(MethodName.Added, cd.ToDict());
+            if (_server && Online) Rpc(MethodName.Added, _all[cd.Id].ToDict());
         }
         if (!_burning && _fixtures.TryDequeue(out string? next))
         {
@@ -285,8 +289,7 @@ public partial class CdLibrary : Node
         if (!Owns) return;
         foreach (var cd in LoadIndex(Directory))
         {
-            _all[cd.Id] = cd;
-            Note(cd);
+            _all[cd.Id] = Note(cd);
             _nextId = Math.Max(_nextId, cd.Id + 1);
         }
         GD.Print($"[cd] library: {_all.Count} CD(s) in {Directory}");
@@ -346,9 +349,12 @@ public partial class CdLibrary : Node
         return id;
     }
 
-    private void Note(CdInfo cd)
+    /// <summary>Remembers the chess type beat's id, and gives it its measured grid.</summary>
+    private CdInfo Note(CdInfo cd)
     {
-        if (cd.Source == RatBeatSource) RatBeatId = cd.Id;
+        if (cd.Source != RatBeatSource) return cd;
+        RatBeatId = cd.Id;
+        return cd with { Bpm = RatBeatBpm, BeatOffset = RatBeatOffset };
     }
 
     /// <summary>Where the shipped chess type beat is copied for the burner, which needs a real file.</summary>

@@ -233,7 +233,7 @@ public partial class ChurchRadios : Node
 
     private bool Occupied(string plan)
     {
-        if (InteriorManager.Instance is not { } im) return false;
+        if (InteriorManager.Instance is not { } im) return !Online;   // the probe's church, offline
         if (!Online) return im.SpaceOf(MyId) == plan;
         if (im.SpaceOf(MyId) == plan) return true;
         foreach (long peer in Multiplayer.GetPeers())

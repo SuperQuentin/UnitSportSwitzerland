@@ -65,7 +65,7 @@ public partial class ChurchStageProbe : Node3D
         AddChild(_church);
         _stage = _church.GetNode<ChurchStage>("ChurchStage");
 
-        _own = new Camera3D { Name = "Own", Fov = 70f, Position = new Vector3(0.3f, 1.7f, -3f) };
+        _own = new Camera3D { Name = "Own", Fov = 70f, Position = new Vector3(0.4f, 1.6f, 2.0f) };
         AddChild(_own);
         _own.LookAt(new Vector3(1.2f, 1.0f, 10.5f), Vector3.Up);
         _own.MakeCurrent();
@@ -109,7 +109,7 @@ public partial class ChurchStageProbe : Node3D
                 Check(cd.Source == CdLibrary.RatBeatSource && cd.Duration > 100, $"the chess type beat is a CD: {cd.Describe()}");
                 GD.Print($"[churchstage] beat offset {cd.BeatOffset:F3} s, hits at "
                     + string.Join(", ", Enumerable.Range(0, ChurchStage.IntroHits).Select(k => ChurchStage.HitTime(cd, k).ToString("F2"))));
-                Check(ChurchStage.HitTime(cd, ChurchStage.IntroHits - 1) < ChurchStage.IntroEnd, "five hits before the trumpet");
+                Check(ChurchStage.HitTime(cd, ChurchStage.IntroHits - 1) < ChurchStage.IntroEndOf(cd), $"five hits before the trumpet at {ChurchStage.IntroEndOf(cd):F2} s");
                 Check(ChurchRadios.Instance!.PlayOf(Plan) == null && ChurchRadios.Instance.ModeOf(Plan) == Items.RadioMode.Repeat,
                     "an untouched church radio is silent, on repeat");
                 Next();
@@ -127,7 +127,8 @@ public partial class ChurchStageProbe : Node3D
                 var play = ChurchRadios.Instance!.PlayOf(Plan);
                 double t = ClockSync.ServerNow - (play?.StartedAt ?? 0);
                 var cam = GetViewport().GetCamera3D();
-                if (t < ChurchStage.IntroEnd - 0.05)
+                float end = ChurchStage.IntroEndOf(lib.Find(lib.RatBeatId)!);
+                if (t < end - 0.05)
                 {
                     if (_t > 0.1 && cam == _own) { Check(false, "the intro takes the camera"); Next(); return; }
                     if (cam != _own && cam != null) _cuts.Add(cam.GlobalPosition.Snapped(Vector3.One * 0.01f));
@@ -140,7 +141,7 @@ public partial class ChurchStageProbe : Node3D
                     Check(UiFocus.TextEntryActive || _t < 0.05, "the controls wait during the intro");
                     return;
                 }
-                if (t < ChurchStage.IntroEnd + 0.6) return;
+                if (t < end + 0.6) return;
                 Check(_cuts.Count >= ChurchStage.IntroHits, $"the camera cut on every hit ({_cuts.Count} angles)");
                 Check(cam == _own, "the player's own camera is back on the trumpet");
                 Check(!UiFocus.TextEntryActive, "the controls are back");

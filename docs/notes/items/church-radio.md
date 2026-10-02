@@ -3,7 +3,7 @@
 - **The CD.** `assets/audio/chess_type_beat.ogg` (LFS, not openly licensed: `assets/ASSETS.md`) is
   shipped. `CdLibrary.EnsureRatBeat` (server, or offline game) copies it out of the pck to
   `user://cds/_bundled/Chess Type Beat.ogg` and burns it through the fixture queue (ffmpeg + the
-  beat analyser) once; `CdInfo.Source = "bundled:chess_type_beat"` marks it, and every peer knows
+  beat analyser) once; `CdInfo.Source = "bundled:chess_type_beat"` marks it, and `CdLibrary.Note` gives it the measured grid (132.5 bpm, first hit 0.10 s: the analyser hears 67 bpm, off the grid), and every peer knows
   `CdLibrary.RatBeatId` from the library list. `CdLibrary.IsRatBeat(cd)`.
 - **The radio.** `FurnitureType.ChurchRadio` (a boombox on a stand) beside the pastor rat
   (`InteriorGenerator.RadioByRat`, both church paths; `InteriorLayout` v12). What plays is
@@ -21,8 +21,8 @@
   play's start and `ClockSync.ServerNow` (nothing else replicated); off (stop, another CD, the end),
   `Stop()` puts every part back, hides the lights, resets the shader and the camera **in that
   frame**.
-- **Intro** (`ChurchStage.Intro.cs`): five hits before the trumpet at `IntroEnd` 2.0 s (`HitTime`: the
-  CD's first five beats if they fit, else every 0.4 s). The rat snaps to a pose per hit; every
+- **Intro** (`ChurchStage.Intro.cs`): five hits (0.10, 0.55, 1.01, 1.46, 1.91 s) before the trumpet on the next beat, 2.36 s
+  (`IntroEndOf`, else `IntroEnd` 2.0 s; `HitTime` falls back to every 0.4 s). The rat snaps to a pose per hit; every
   player in the church (`InteriorManager.Current`, not in VR) whose client sees the play start
   inside the intro gets a temporary `Camera3D` that cuts per hit, `UiFocus` held, `RadioUi`
   closed; own camera back on the trumpet. Joining later skips it.

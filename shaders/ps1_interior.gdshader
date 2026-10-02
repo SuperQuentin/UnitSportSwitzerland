@@ -67,8 +67,8 @@ void fragment() {
         float hue = fract(az / 6.2832 * 2.0 + floor(beat) * 0.17);
         vec3 beam = 0.5 + 0.5 * cos(6.2832 * (hue + vec3(0.0, 0.33, 0.67)));
         // the mirror ball's sparkles, drifting the other way
-        float sparkle = step(0.94, cos(46.0 * az + beat * 1.3) * cos(46.0 * el - beat * 0.9));
-        col = col * (0.16 + 0.12 * pulse) + beam * (beams * (0.55 + 0.45 * pulse)) + vec3(sparkle * 0.7);
+        float sparkle = step(0.985, cos(46.0 * az + beat * 1.3) * cos(46.0 * el - beat * 0.9));
+        col = col * (0.22 + 0.12 * pulse) + beam * (beams * (0.45 + 0.35 * pulse)) + vec3(sparkle * 0.5);
     }
 
     col = retro_posterize(col, FRAGCOORD.xy);

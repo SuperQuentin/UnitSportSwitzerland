@@ -133,7 +133,7 @@ public partial class ChurchStage
                 Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 BlendMode = BaseMaterial3D.BlendModeEnum.Add,
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                AlbedoColor = c with { A = 0.35f },
+                AlbedoColor = c with { A = 0.12f },
             };
             var pivot = new Node3D { Rotation = new Vector3(-0.55f - (i % 2) * 0.35f, i * Mathf.Tau / BeamColors.Length, 0) };
             _beams.AddChild(pivot);
@@ -141,7 +141,7 @@ public partial class ChurchStage
             pivot.AddChild(new MeshInstance3D
             {
                 Position = new Vector3(0, -reach / 2, 0),
-                Mesh = new CylinderMesh { TopRadius = 0.02f, BottomRadius = 0.35f, Height = reach, RadialSegments = 8, Rings = 1, Material = glow },
+                Mesh = new CylinderMesh { TopRadius = 0.02f, BottomRadius = 0.2f, Height = reach, RadialSegments = 8, Rings = 1, Material = glow },
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             });
         }

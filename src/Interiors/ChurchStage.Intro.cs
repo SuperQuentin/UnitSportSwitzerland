@@ -16,9 +16,9 @@ public partial class ChurchStage
     private Camera3D? _introCam;
     private Camera3D? _ownCam;
 
-    private void StartIntro(double t)
+    private void StartIntro(CdInfo cd, double t)
     {
-        if (t >= IntroEnd - 0.1 || _rat < 0) return;
+        if (t >= IntroEndOf(cd) - 0.1 || _rat < 0) return;
         if (!LocalHere() || XR.XrSession.Active) return;
         var own = GetViewport().GetCamera3D();
         if (own == null) return;
