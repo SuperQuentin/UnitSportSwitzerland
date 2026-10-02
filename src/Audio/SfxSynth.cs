@@ -600,4 +600,70 @@ public static class SfxSynth
         }
         return s;
     });
+
+    // ---- water (#301) ------------------------------------------------------------------------
+
+    private static SfxBank? _splashBank, _strokeBank, _gaspBank;
+
+    /// <summary>
+    /// Going into the water: a bright slap of spray (high-passed noise, very fast attack), a hollow
+    /// "plunk" falling in pitch as the cavity closes, then a bubbling, gurgling tail. Louder and
+    /// lower the harder the entry (the caller scales volume and pitch).
+    /// </summary>
+    public static SfxBank SplashBank => _splashBank ??= SfxBank.Build("splash", 5, 1.1f, 301, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        var spray = HighPass(Noise(rng, n), 0.18f * J());
+        var body = BandPass(Noise(rng, n), 0.02f, 0.22f * J());
+        var bubbles = BandPass(Noise(rng, n), 0.05f, 0.16f);
+        float f0 = 340f * J(), f1 = 110f * J(), bubbleHz = 11f * J();
+        var s = new float[n];
+        float phase = 0;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float attack = Mathf.Min(1f, t * 600f);
+            phase += Mathf.Tau * Mathf.Lerp(f0, f1, Mathf.Min(1f, t / 0.09f)) / Rate;
+            float plunk = Mathf.Sin(phase) * Mathf.Exp(-26f * t) * 0.55f;
+            float gurgle = bubbles[i] * 2.2f * Mathf.Exp(-3.2f * t) * (0.55f + 0.45f * Mathf.Sin(Mathf.Tau * bubbleHz * t + 3f * Mathf.Sin(t * 23f)));
+            s[i] = attack * (spray[i] * 1.6f * Mathf.Exp(-9f * t) + body[i] * 2.4f * Mathf.Exp(-6f * t) + plunk) + gurgle * Mathf.Min(1f, t * 8f);
+        }
+        return s;
+    });
+
+    /// <summary>One stroke: a hand entering and pulling through, a soft wet swish with a small slap at the start.</summary>
+    public static SfxBank StrokeBank => _strokeBank ??= SfxBank.Build("stroke", 6, 0.45f, 302, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.15f;
+        var swish = BandPass(Noise(rng, n), 0.03f * J(), 0.25f * J());
+        var slap = HighPass(Noise(rng, n), 0.3f);
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float x = (float)i / n, t = (float)i / Rate;
+            float env = Mathf.Sin(Mathf.Pi * Mathf.Pow(x, 0.45f));
+            s[i] = swish[i] * 2.2f * env * env + slap[i] * 0.8f * Mathf.Exp(-70f * t) * Mathf.Min(1f, t * 900f);
+        }
+        return s;
+    });
+
+    /// <summary>A breath taken after a long time under: a rough inhaled rush, rising.</summary>
+    public static SfxBank GaspBank => _gaspBank ??= SfxBank.Build("gasp", 3, 0.6f, 303, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        var air = Noise(rng, n);
+        var s = new float[n];
+        float lo = 0f, hi = 0f, open = J();
+        for (int i = 0; i < n; i++)
+        {
+            float x = (float)i / n;
+            // the band opens as the breath goes in: a vowel-less "haah" pulled inward
+            float a = Mathf.Lerp(0.04f, 0.16f, x) * open * 0.5f + 0.02f;
+            lo += a * (air[i] - lo);
+            hi += 0.35f * (lo - hi);
+            float env = Mathf.Min(1f, x * 6f) * Mathf.Pow(1f - x, 1.6f);
+            s[i] = (lo - hi * 0.6f) * 4.5f * env;
+        }
+        return s;
+    });
 }

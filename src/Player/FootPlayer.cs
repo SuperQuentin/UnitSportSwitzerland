@@ -6,7 +6,7 @@ using UnitSport.Vehicles;
 namespace UnitSport.Player;
 
 /// <summary>What took a player's health: kept with the last attacker for the kill credit.</summary>
-public enum DamageCause { Other, Weapon, Blast, Fall, Crash, Zone }
+public enum DamageCause { Other, Weapon, Blast, Fall, Crash, Zone, Drown }
 
 /// <summary>
 /// First-person on-foot controller tuned for human scale: WASD / left stick, mouse or right
@@ -1510,7 +1510,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // the new simulator takes it over where it is drawn, a metre or two off the line in a bend
             _interp.MaxAhead = Npc ? 1.6f : Net.RemoteInterpolator.MaxExtrapolation;
             var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
-            if (Origin is { } origin) Position = origin.ToWorld(p);
+            if (Origin is { } origin)
+            {
+                var at = origin.ToWorld(p);
+                // a boat rides this peer's own copy of the waves, at the owner's height over them (#302), in this
+                // peer's world frame (only while it still is that boat: _remoteRide outlives the ride, and a
+                // swimmer's Anim is its stroke)
+                if (_remoteRide is Boat afloat && afloat.Kind == (RideKind)RideKindId) at.Y = afloat.RemoteY(at, yaw, Anim.Z);
+                Position = at;
+            }
             Rotation = new Vector3(0, yaw, 0);
         }
         RefreshVisual();
@@ -1555,15 +1563,29 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _seenSeatAt = Time.GetTicksMsec() / 1000.0;
         }
         else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
-        SetRemoteEngine(_remoteRide as Flyer);
+        else if (_visual is Avatar.BoatRig boatRig) boatRig.DriverShown = SeatIndex == 0;
+        SetRemoteEngine(_remoteRide);
     }
 
     /// <summary>
     /// Another player's helicopter or plane is heard where it is, from the spool and throttle it
     /// publishes — the same sound a parked one makes (<c>VehicleBody</c>), driven like the pilot's own.
     /// </summary>
-    private void SetRemoteEngine(Flyer? craft)
+    private void SetRemoteEngine(Rideable? ride)
     {
+        // a boat's engine (#302): its own voice, from the rpm and thrust it publishes
+        if (ride is Boat boat && DisplayServer.GetName() != "headless")
+        {
+            if (_remoteEngine?.Profile != boat.Sound)
+            {
+                _remoteEngine?.QueueFree();
+                _remoteEngine = new Audio.EngineSynth(boat.Sound, spatial: true, seed: GetMultiplayerAuthority()) { Name = "RemoteEngine" };
+                AddChild(_remoteEngine);
+            }
+            _remoteEngine.Set(Anim.X, Anim.Y, Anim.Y, 0.15f + 0.25f * Anim.X);
+            return;
+        }
+        var craft = ride as Flyer;
         bool wanted = craft is { HasEngine: true } && DisplayServer.GetName() != "headless";
         if (!wanted)
         {
@@ -1647,6 +1669,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void PublishFootPose(float dt)
     {
+        if (_swimming) { PublishSwimPose(dt); return; }
         // The owner decides when the dance is over: out of earshot, or doing anything else.
         // Remotes only ease out on what they receive.
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
@@ -1793,6 +1816,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _slidePose = null; _airPose = null; _poseOutfit = OutfitBits;
             _walkPalette = _walkPalette with { Outfit = new(OutfitBits) };
         }
+        if (PoseKind == PoseSwim) { ApplySwimFigure(); return; }
         float dt = (float)GetProcessDeltaTime();
         StepArmPose(dt);
         var dance = StepDance(dt);
@@ -2288,6 +2312,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _shutDriverIn = 1f;
         }
         _flight.Control = state.Throttle;
+        // a boat as it floated: its attitude (#302)
+        if (_ride is Boat boarded && state.Angles != default) boarded.State.Attitude = Quaternion.FromEuler(state.Angles);
         EngineOn = true;
         VehicleHealth = state.Health;
         if (_ride is Car car)
@@ -2307,13 +2333,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
         var velocity = _ride is Flyer
             ? _flight.Velocity
+            : _ride is Boat afloat ? afloat.State.Velocity
             : heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Vector3.Up * Velocity.Y;
         return new VehicleState((RideKind)RideKindId, Origin!.ToGlobal(GlobalPosition),
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
             Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : DoorsOpen, Setup: CarSetupId,
-            Train: _ride is Truck t ? t.TrailerCode : 0, Angles: _ride is Truck ta ? ta.Angles : default,
+            Train: _ride is Truck t ? t.TrailerCode : 0,
+            // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
+            Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler() : default,
             Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd);
     }
@@ -2418,6 +2447,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
         if (aisle is { } spot) StandIn(spot, state.Velocity, (door, right, side, frame, vehicle));
         else GlobalPosition = FindExit(door, right, side, frame, vehicle, grounded);
+        // over the side of a boat: into the water beside it, swimming (#302, #301)
+        if (vehicle is Boat && aisle == null) IntoWater(GlobalPosition, state.Velocity with { Y = 0 } * 0.5f);
     }
 
     /// <summary>
@@ -2690,7 +2721,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Health = Mathf.Min(MaxHealth, Health + 12f * dt);
 
         _safeTimer += dt;
-        if (_safeTimer > 2 && _ride == null && onFloor && Health > 30f && _stunTimer <= 0
+        if (_safeTimer > 2 && _ride == null && onFloor && !_swimming && Health > 30f && _stunTimer <= 0
             && Velocity.LengthSquared() < 40f)
         {
             _safeTimer = 0;
@@ -2741,6 +2772,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // anything mounted ends a ragdoll (#214): the body is in the saddle now, not on the road
         if (kind != RideKind.OnFoot) EndRagdoll();
+        LeaveWater();
         _ride = CarSetups.Ride(kind, CarSetups.Clamp(setup), tuning);
         // a truck or bus from the picker comes with the load chosen there
         if (_ride is Truck picked && !Mathf.IsEqualApprox(picked.Load, NextLoad)) _ride = new Truck(picked.Spec, 0, NextLoad);
@@ -2782,10 +2814,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             else if (flyer.LookSteers) _viewYaw = Rotation.Y;
         }
         else _flight = default;
+        if (_ride is Boat boat) BeginBoat(boat, velocity);
         // a craft skimming the ground must not be snapped onto it
         // a car stays on its wheels over a crest the way a suspension keeps it there; 0.5 m let every
         // Jura hump launch it for a second at 100 km/h, and a car in the air cannot steer
-        FloorSnapLength = _ride switch { Flyer => 0.05f, Car or Motorbike or Truck => 1.2f, _ => 0.5f };
+        // and a boat never: snapped, a hull in a metre of water sat on the bed
+        FloorSnapLength = _ride switch { Flyer => 0.05f, Boat => 0f, Car or Motorbike or Truck => 1.2f, _ => 0.5f };
 
         // the body is the machine's size while in it — a helicopter is not a 0.3 m person
         if (_capsule != null && !_sliding)
@@ -2963,6 +2997,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride != null)
         {
             if (_ride is Flyer flyer) FlyPhysics(dt, onFloor, flyer);
+            else if (_ride is Boat boat) BoatPhysics(dt, boat);   // #302, FootPlayer.Boat.cs
             else RidePhysics(dt, onFloor);
             return;
         }
@@ -2972,6 +3007,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             StepMantle(dt);
             return;
         }
+
+        // in the water (#301, FootPlayer.Swim.cs)
+        if (SwimPhysics(dt, onFloor)) return;
 
         if (Npc)
         {
@@ -3412,6 +3450,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void FlyPhysics(float dt, bool onFloor, Flyer flyer)
     {
+        if (FlyerIntoWater(flyer)) return;
         bool typing = UiFocus.TextEntryActive;
         float tr = typing ? 0f : Mathf.Max(0f, Input.GetJoyAxis(0, JoyAxis.TriggerRight));
         float tl = typing ? 0f : Mathf.Max(0f, Input.GetJoyAxis(0, JoyAxis.TriggerLeft));
@@ -3892,7 +3931,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void UpdateRideCamera(float dt)
     {
-        if (_visual != null)
+        // (a boat's attitude is posed by BoatPhysics)
+        if (_visual != null && _ride is not Boat)
             PoseRideVisual();
 
         if (_camera == null || _ride == null) return;

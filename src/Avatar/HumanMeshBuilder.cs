@@ -320,10 +320,12 @@ public static partial class HumanMeshBuilder
     /// (+Z forward): <paramref name="seat"/> the seat surface under the pelvis, <paramref name="grip"/>
     /// the right grip (X is mirrored for the left), <paramref name="peg"/> the right footpeg.
     /// </summary>
-    public static void AppendRider(MeshScratch scratch, HumanPalette palette, Vector3 seat, Vector3 grip, Vector3 peg)
+    /// <remarks><paramref name="fullFace"/> false: no helmet, the bare head (a jetski's rider, #302).</remarks>
+    public static void AppendRider(MeshScratch scratch, HumanPalette palette, Vector3 seat, Vector3 grip, Vector3 peg, bool fullFace = true)
     {
         var rig = RiderRig(seat, grip, peg);
         AppendRig(scratch, palette, rig, includeLegs: true, helmet: false);
+        if (!fullFace) return;
         // a full-face helmet round the whole head, dark visor at the front (+Z); framed like
         // AppendHat (side, up, forward), a right-handed basis, or the box renders inside out
         var up = (rig.HeadTop - rig.HeadBase).Normalized();

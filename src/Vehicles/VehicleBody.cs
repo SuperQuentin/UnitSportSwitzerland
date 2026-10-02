@@ -45,8 +45,13 @@ public partial class VehicleBody : CharacterBody3D
     [Export] public byte DoorsOpen { get; set; }
     /// <summary>A truck's joints as its authority rolls it on (#162), for the copies: its trailer swings where it does.</summary>
     [Export] public Vector3 TrainAngles { get; set; }
+    /// <summary>A boat's height over the waves (#302, <see cref="Boat.Heave"/>): copies draw it on their own waves.</summary>
+    [Export] public float Heave { get; set; } = Boat.NoHeave;
 
     public ChunkManager? Terrain { get; set; }
+
+    /// <summary>At rest and not simulated until someone claims it (a heartbeat replicates it).</summary>
+    public bool Asleep => _asleep;
 
     /// <summary>This peer's origin, to put the position on the wire.</summary>
     public WorldOrigin Origin { get; private set; } = null!;
@@ -151,6 +156,7 @@ public partial class VehicleBody : CharacterBody3D
         FloorMaxAngle = Mathf.DegToRad(50f);
 
         _motion = new RideMotion { Speed = MathX.FlatLength(s.Velocity), Yaw = s.Yaw };
+        if (Ride is Boat boat) BeginBoat(boat, s);
         if (Ride is Flyer flyer)
         {
             flyer.Begin(ref _flight, s.Velocity, s.Yaw);
@@ -160,7 +166,7 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         var replication = new SceneReplicationConfig();
-        foreach (var prop in Net.NetPlace.Properties.Concat(new[] { ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen", ".:TrainAngles" }))
+        foreach (var prop in Net.NetPlace.Properties.Concat(new[] { ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen", ".:TrainAngles", ".:Heave" }))
             replication.AddProperty(prop);
         // states that change a few times per life of a vehicle go reliably on change; the motion
         // at 20 Hz while it moves (every frame before, for a bike standing in a field for hours)
@@ -276,7 +282,8 @@ public partial class VehicleBody : CharacterBody3D
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning,
         Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
-        _initial.Train, _initial.Angles,
+        // a boat's attitude as it floats now (#302; the replicated one, which the server has too)
+        _initial.Train, Ride is Boat ? new Basis(Tilt).GetEuler() : _initial.Angles,
         // a bus's doors as they are now, where a truck keeps them
         Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4) : _initial.Flags, _initial.Load,
         _initial.Radio, _initial.Cd);
@@ -343,12 +350,14 @@ public partial class VehicleBody : CharacterBody3D
         bool onFloor = IsOnFloor();
         if (Wrecked) StepWreck(dt, onFloor);
         else if (Ride is Flyer flyer) StepFlyer(dt, onFloor, flyer);
+        else if (Ride is Boat boat) StepBoat(dt, boat);   // #302, VehicleBody.Boat.cs
         else if (Ride.Driverless) StepDriverless(dt, onFloor);
         else StepRolling(dt, onFloor);
         _place.Publish(GlobalPosition);
 
         // at rest long enough: sleep, and stop asking for collision
-        bool still = onFloor && Velocity.LengthSquared() < 0.04f && _flight.Spool < 0.05f;
+        // (a boat: barely moving on water too flat to move it, or aground)
+        bool still = Ride is Boat ? _boatCalm : onFloor && Velocity.LengthSquared() < 0.04f && _flight.Spool < 0.05f;
         _restTime = still ? _restTime + dt : 0f;
         if (_restTime > 1f)
         {
@@ -511,6 +520,7 @@ public partial class VehicleBody : CharacterBody3D
 
         if (!IsMultiplayerAuthority() && Ride is Flyer remoteFlyer)
             remoteFlyer.Pose(_visual, Rotation.Y, new FlightMotion { Attitude = new Basis(Tilt) });
+        if (Ride is Boat afloat) DrawBoat(afloat, dt);
 
         if (Ride is Bicycle)
         {

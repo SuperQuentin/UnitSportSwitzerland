@@ -887,6 +887,8 @@ public partial class RaceManager : Node, IOriginShiftAware
             case "heli" or "helicopter": return (int)RideKind.Helicopter;
             case "paraglider" or "glider": return (int)RideKind.Paraglider;
             case "wingsuit": return (int)RideKind.Wingsuit;
+            case "jetski" or "pwc": return (int)RideKind.Jetski;
+            case "boat" or "speedboat": return (int)RideKind.Speedboat;
         }
         var car = CarCatalog.All.FirstOrDefault(c => c.Label.Split(' ')[0].Equals(word, System.StringComparison.OrdinalIgnoreCase));
         return car != null ? (int)car.Kind : null;
