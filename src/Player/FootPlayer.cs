@@ -296,6 +296,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var relay = new MultiplayerSynchronizer
         {
             Name = name, RootPath = new NodePath(".."), ReplicationConfig = config, ReplicationInterval = interval,
+            // the on-change properties (ride, seat, clothes, items) checked at 10 Hz, not every
+            // frame for every relay: a change reaches viewers at most 0.1 s later (#221)
+            DeltaInterval = 0.1f,
             // refreshed when the audience changes (RefreshRelays): Idle ran the filter every frame for every peer
             VisibilityUpdateMode = MultiplayerSynchronizer.VisibilityUpdateModeEnum.None,
         };

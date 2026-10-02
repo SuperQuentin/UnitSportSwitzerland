@@ -25,6 +25,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `player-overlap` — Two players set down on one spot ease apart (collision exception + 1.5 m/s nudge) instead of the solver throwing one kilometres (#203)
 - `perf-visibility-on-change` (net) — `FootPlayer`'s `Sync`/`RelayNear`/`RelayFar`/`Vis` keep `VisibilityUpdateMode.None`; any new visibility input must call `RefreshNetVisibility`/`RefreshRelays` on change
 - `perf-player-snapshot-size` (net) — `BodyPose`/`TrainPose` are not `[Export]`ed; `NetPose` carries them; only the landing squash survives as scale
+- `perf-relay-delta-interval` (net) — `MakeRelay` keeps `DeltaInterval = 0.1f`; state read with `NetTime` stays `Always`, not `OnChange`
 
 - `passengers` — Passengers (#158): seats from the models, `PassengerService` hands them out, riders moved and drawn from the host's copy, driverless vehicles when the driver jumps out, take the wheel (F / RB), hand-over between players, `--passengernet a|b|c`
 - `walk-aboard` — Walking about in a moving vehicle (#162): `VehicleDeck` from the model (ramps, flush door steps), decks as collision carried with the drawn vehicle, velocity measured from motion, hulls ignore their guests, steady/sway/full inertia (`--deck-inertia`, `/inertia`), seats by where you stand, `--decknet a|b|solo`
