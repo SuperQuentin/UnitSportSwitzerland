@@ -9,14 +9,16 @@
 # The origin is pinned with --origin, so the views do not move when the manifest's suggested
 # origin changes. Env: TIME=hour (default 14), SETTLE=seconds per shot (default 8),
 # ENGINE="godot engine args" (e.g. "--rendering-method forward_plus"), VIEWS="street top" to
-# take only those (the warm-up shot is always taken).
+# take only those (the warm-up shot is always taken). The interior goes last: it leaves its
+# front door open.
 # A run whose frame times are a flat ~6.9 ms with repeated primitive counts drew nothing new
 # (the macOS window stopped presenting): discard it and run again.
 set -e
 tag=$1; shift
 d=test_output/styles; mkdir -p $d
 OE=2590000; ON=1116500
-# LV95 E N + y (metres, or g<m> above the ground) -> x,y,z in world coordinates
+# LV95 E N + y (metres, g<m> above the ground, or i<m>: through the door in front, into the
+# house, docs/notes/core/commands.md) -> x,y,z in world coordinates
 p() { echo "$(( $1 - OE )),$3,$(( ON - $2 ))"; }
 s=${SETTLE:-8}
 q=$d/q_$tag.txt
@@ -25,10 +27,11 @@ $(p 2583250 1112800 900),-35,0,$s,$d/${tag}_warmup.png
 $(p 2583250 1112800 900),-35,0,$s,$d/${tag}_aerial.png
 $(p 2583250 1112900 560),-12,0,$s,$d/${tag}_low.png
 $(p 2583400 1113100 g2),-3,45,$s,$d/${tag}_street.png
-$(p 2583100 1113400 g2),-3,300,$s,$d/${tag}_house.png
+$(p 2583395 1113109 g1.7),-3,159,$s,$d/${tag}_house.png
 $(p 2583250 1113000 g12),-10,180,$s,$d/${tag}_chase.png
 $(p 2583100 1112600 700),-8,300,$s,$d/${tag}_valley.png
 $(p 2583100 1112600 1400),-70,300,$s,$d/${tag}_top.png
+$(p 2583390 1113097 i1.6),-8,192,$s,$d/${tag}_interior.png
 quit
 Q
 if [[ -n $VIEWS ]]; then

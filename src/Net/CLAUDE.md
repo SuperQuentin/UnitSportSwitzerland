@@ -13,7 +13,9 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `admin` — Admin: (`Net/PlayerRegistry`): identity is the ENet peer id, which a client cannot forge; the display name is a...
 - `vision-interest` — Vision-based interest: the server decides who sees whom (size at render resolution, sky, line of sight, race); out of view = despawned
 - `perf-visibility-on-change` — Player synchronizers keep `VisibilityUpdateMode.None`: every change to what a peer may see must call `UpdateVisibility` (`RefreshNetVisibility`/`RefreshRelays`) where it happens
-- `remote-interpolation` — Remote players are interpolated (NetPos/NetVel/NetTime at 30 Hz, Hermite, bounded extrapolation, smooth render clock)
+- `remote-interpolation` — Remote players are interpolated (NetGlobal/NetVel/NetTime at 30 Hz, Hermite on GlobalPos, bounded extrapolation, smooth render clock)
+- `positions-on-the-wire` — Positions cross the network as LV95 doubles (GlobalPos), lists as an anchor + offsets, bodies through NetPlace; never a world Vector3 (#185)
+- `protocol-handshake` — Connecting starts with Hello/Welcome (Handshake.Protocol); its RPCs never change; bump the protocol on any wire change
 - `load-testing` — Load testing: --swarm bots, --serverstats, --netsmooth, tools/loadtest.sh; before/after numbers at 32 players and a 30-min soak
 - `lean-dedicated-server` — Dedicated server: proxy players, fps cap, coarse grids, asset prep off the main thread, throttled vehicles
 - `lan-discovery` — mDNS browse for `_unitsport._udp` (avahi on the server); the Multiplayer screen lists LAN servers, legacy unicast queries, `--discovercheck`
@@ -25,6 +27,9 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `perf-server-frame-metrics` — Server cost = `--serverstats` per-frame busy + `[stats] slow frame` lines; wrap periodic jobs in `ServerStats.Ran`; never the 1 s-max `TimeProcess` monitor
 - `perf-no-main-thread-periodic-jobs` — No per-player `GD.Print` on a server timer (blocks ms on Windows), file writes on a worker, `/proc` reads Linux-only
 - `perf-mcp-logger-gated` — godot_ai `game_helper` adds its Logger only when `EngineDebugger.is_active()`; keep the gate on addon updates (it leaked every log line)
+- `perf-player-snapshot-size` — `BodyPose`/`TrainPose` go as one `float[] NetPose` (quat + offset + squash, train angles only on a train); no Transform3D on the wire
+- `perf-relay-delta-interval` — `RelayNear`/`RelayFar` check their OnChange properties at 10 Hz (`DeltaInterval = 0.1f`); per-packet state stays `Always`
+- `perf-interest-round` — `InterestService.Evaluate` reads each target once per round (`_at`/`_agl`/`_ride`), `Together` once per pair, cached `_sight`; nothing per pair from a node
 
 ## Commands
 

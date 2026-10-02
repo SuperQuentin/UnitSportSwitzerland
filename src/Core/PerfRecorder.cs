@@ -101,12 +101,8 @@ public partial class PerfRecorder : Node, IOriginShiftAware
     public override void _Ready()
     {
         EnableRenderTiming(GetViewport());
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--perflog");
-        if (i < 0) return;
-        if (i + 1 < args.Length && double.TryParse(args[i + 1], NumberStyles.Float,
-                CultureInfo.InvariantCulture, out double seconds))
-            _autoStop = seconds;
+        if (!CmdArgs.Has("--perflog")) return;
+        if (CmdArgs.Double("--perflog") is double seconds) _autoStop = seconds;
         Start();
     }
 

@@ -112,26 +112,6 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     /// <summary>Blocks on screen that were meshed from an older lattice.</summary>
     private readonly HashSet<(int E, int N)> _stale = new();
 
-    /// <summary>
-    /// Drops the lattice, every block and the coverage texture — for when the world they were
-    /// built for is being replaced (a rebase: the origin moves under them). <see cref="Reload"/> then reads whatever the source now has.
-    /// </summary>
-    public void Clear()
-    {
-        _epoch++;
-        _loading = false;
-        _reloadQueued = false;
-        _index = null;
-        foreach (var block in _blocks.Values) Free(block);
-        _blocks.Clear();
-        _building.Clear();
-        _stale.Clear();
-        _coverImage = null;
-        _coverTexture = null;
-        _coverDirty = false;
-        _material?.SetShaderParameter("use_cover", false);
-    }
-
     // ---- coverage: which km tiles have a real mesh on screen ---------------------------
     //
     // One texel per tile over the whole region (Switzerland is ~350 x 220 km, so a few hundred
@@ -336,6 +316,8 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
         {
             Name = $"Horizon_{key.E}_{key.N}",
             Mesh = mesh,
+            // ground: never a sun-shadow caster (lit styles)
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             // NW corner of the block, like a tile
             Position = _origin!.ToWorld(key.E * ChunkFormat.TileSizeM, (key.N + BlockTiles) * ChunkFormat.TileSizeM, 0),
         };

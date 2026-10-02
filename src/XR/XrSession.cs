@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.XR;
 
@@ -55,11 +56,10 @@ public static class XrSession
     /// </summary>
     public static bool TryStart(Node root)
     {
-        var args = OS.GetCmdlineUserArgs();
-        bool asked = System.Array.IndexOf(args, "--vr") >= 0;
+        bool asked = CmdArgs.Has("--vr");
         // the whole VR path without a headset, drawn on the monitor: the rig follows the game's
         // camera from an untracked head, the UI goes on the panel, the pad bridge runs idle
-        Simulated = System.Array.IndexOf(args, "--xrsim") >= 0;
+        Simulated = CmdArgs.Has("--xrsim");
         if (Simulated)
         {
             GD.Print("[xr] simulated: no headset, the rig's view on the monitor");
@@ -139,7 +139,7 @@ public static class XrSession
         // run from the editor binary (`godot --path .`): it has to be told the project again
         if (OS.HasFeature("editor")) args.AddRange(new[] { "--path", ProjectSettings.GlobalizePath("res://") });
         args.Add("--");
-        args.AddRange(OS.GetCmdlineUserArgs().Where(a => a is not "--vr" and not "--xrsim" and not AskedFlag));
+        args.AddRange(CmdArgs.All.Where(a => a is not "--vr" and not "--xrsim" and not AskedFlag));
         if (vr) args.Add("--vr");
         if (vr && asked) args.Add(AskedFlag);
 

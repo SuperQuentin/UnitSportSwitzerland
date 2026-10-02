@@ -42,17 +42,7 @@ public partial class FlightProbe : Node
     }
 
     /// <summary>Parses "--fly x,y,z,yaw,speed,seconds".</summary>
-    public static string[]? ParseArgs()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--fly")
-            {
-                var parts = args[i + 1].Split(',');
-                return parts.Length == 6 ? parts : null;
-            }
-        return null;
-    }
+    public static string[]? ParseArgs() => CmdArgs.Value("--fly")?.Split(',') is { Length: 6 } parts ? parts : null;
 
     public override void _Process(double delta)
     {

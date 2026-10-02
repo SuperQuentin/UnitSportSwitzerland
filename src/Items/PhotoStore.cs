@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -52,17 +53,7 @@ public static class PhotoStore
     private static string? _root;
 
     /// <summary><c>--photo-dir</c>, globalized, or the project's user:// folder.</summary>
-    private static string Root
-    {
-        get
-        {
-            if (_root != null) return _root;
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--photo-dir");
-            _root = i >= 0 && i + 1 < args.Length ? args[i + 1] : ProjectSettings.GlobalizePath("user://");
-            return _root;
-        }
-    }
+    private static string Root => _root ??= CmdArgs.Value("--photo-dir") ?? ProjectSettings.GlobalizePath("user://");
 
     public static string LocalDir => Path.Combine(Root, "photos", "polaroid");
     public static string CacheDir => Path.Combine(Root, "photo_cache");

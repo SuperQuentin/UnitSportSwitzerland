@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Player;
 
 namespace UnitSport.Vehicles;
@@ -6,11 +7,13 @@ namespace UnitSport.Vehicles;
 /// <summary>
 /// Everything a vehicle is, at the moment it changes hands: from the player who was driving it to
 /// the world (getting out, crashing), or back (getting in). Travels over the network as a
-/// Godot Dictionary, which is what a MultiplayerSpawner's spawn data and an RPC can carry.
+/// Godot Dictionary, which is what a MultiplayerSpawner's spawn data and an RPC can carry. Its
+/// position is LV95 (#185): it crosses the network, and the server keeps it for as long as the
+/// vehicle stands there.
 /// </summary>
 public readonly record struct VehicleState(
     RideKind Kind,
-    Vector3 Position,
+    GlobalPos Position,
     float Yaw,
     Vector3 Velocity,
     float Health,
@@ -57,10 +60,11 @@ public readonly record struct VehicleState(
     /// <summary>How many vehicles this state is to the server's count: a train is a truck and a trailer.</summary>
     public int Units => Kind != RideKind.Trailer && Train != 0 ? 2 : 1;
 
-    public Godot.Collections.Dictionary ToDict() => new()
+    public Godot.Collections.Dictionary ToDict()
     {
+        var d = new Godot.Collections.Dictionary
+        {
         ["kind"] = (int)Kind,
-        ["pos"] = Position,
         ["yaw"] = Yaw,
         ["vel"] = Velocity,
         ["hp"] = Health,
@@ -81,11 +85,14 @@ public readonly record struct VehicleState(
         ["load"] = Load,
         ["radio"] = Radio,
         ["cd"] = Cd,
-    };
+        };
+        Position.Write(d);
+        return d;
+    }
 
     public static VehicleState FromDict(Godot.Collections.Dictionary d) => new(
         (RideKind)d["kind"].AsInt32(),
-        d["pos"].AsVector3(),
+        GlobalPos.Read(d),
         d["yaw"].AsSingle(),
         d["vel"].AsVector3(),
         d["hp"].AsSingle(),

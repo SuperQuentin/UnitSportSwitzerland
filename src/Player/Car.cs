@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Audio;
 using UnitSport.Avatar;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -73,6 +74,8 @@ public sealed record CarSpec
     /// over the lock. What the cockpit's wheel turns and what a real steering wheel steers through.
     /// </summary>
     public float SteerRatio => LockTurns * Mathf.Pi / MaxSteer;
+    /// <summary>Assisted steering: light to turn on the spot. Off for the unassisted racks (heavy when parked).</summary>
+    public bool PowerSteering { get; init; } = true;
     /// <summary>Drag area Cd·A, m².</summary>
     public float DragArea { get; init; } = 0.65f;
 
@@ -199,7 +202,11 @@ public sealed class Car : Rideable, IEngined
     public override bool HasEngine => true;
     public override bool CanHop => false;
     public override float MaxHealth => 160f;
-    public override float WheelLock => Spec.LockTurns * Mathf.Tau;
+    public override float WheelLock => Core.SteeringWheel.LockOverride ?? Spec.LockTurns * Mathf.Tau;
+    /// <summary>Steering-wheel turn over road-wheel angle: the spec's, unless <c>--wheellock</c> sets another lock.</summary>
+    private float Ratio => Core.SteeringWheel.LockOverride is { } l ? l * 0.5f / Spec.MaxSteer : Spec.SteerRatio;
+    public override Core.WheelFeel Feel => _feel;
+    private Core.WheelFeel _feel;
 
     // the driver's own eye, in the visual's frame (faces −Z, so +X is the driver's right): the
     // seat is derived from the body (CarCabin), right-hand drive — these are Japanese-market cars
@@ -376,14 +383,14 @@ public sealed class Car : Rideable, IEngined
         BrakePedal = brake;
         HandbrakeOn = input.Handbrake;
 
-        float slipNow = Mathf.Wrap(motion.Slip, -Mathf.Pi, Mathf.Pi);
+        float slipNow = MathX.WrapAngle(motion.Slip);
         float delta;
         if (!float.IsNaN(input.WheelAngle))
         {
             // A steering wheel: the rack follows the driver's hands through the steering ratio, to
             // the lock stop. None of the helpers below: the easing, the speed-scaled lock and the
             // counter-steer assist all stand in for hands a wheel already has.
-            delta = Mathf.Clamp(-input.WheelAngle / s.SteerRatio, -s.MaxSteer, s.MaxSteer);
+            delta = Mathf.Clamp(-input.WheelAngle / Ratio, -s.MaxSteer, s.MaxSteer);
             _steer = -delta / s.MaxSteer;
         }
         else
@@ -410,6 +417,7 @@ public sealed class Car : Rideable, IEngined
         float slideAccum = 0f;
         float h = dt / Substeps;
 
+        float feelFy = 0f, feelAlpha = 0f, feelU = 0f;
         for (int i = 0; i < Substeps; i++)
         {
             float m = s.Mass, a = s.FrontAxle, b = s.RearAxle, L = s.Wheelbase;
@@ -497,6 +505,7 @@ public sealed class Car : Rideable, IEngined
                     * Mathf.Clamp((Mathf.Abs(slipNow) - 0.25f) / 0.2f, 0f, 1f);
             float fyF = -latF * Mathf.Sin(tyreC * Mathf.Atan(TyreB * alphaF));
             float fyR = -latR * Mathf.Sin(tyreC * Mathf.Atan(TyreB * alphaR));
+            (feelFy, feelAlpha, feelU) = (fyF, alphaF, u);
             if (TyreWearOn)
             {
                 // sliding power: side force times how fast the contact patch slides sideways, plus
@@ -545,6 +554,10 @@ public sealed class Car : Rideable, IEngined
             float rKin = u * Mathf.Tan(delta) / L;
             r = Mathf.Lerp(rKin, r, k);
             w = Mathf.Lerp(0f, w, k);
+            // the wheel's feel follows the same blend: crawling, the fronts carry only the side force
+            // the turn needs (front mass × u × yaw rate), not the tyre curve's force at noise-sized
+            // slip angles — that made a parked wheel pull back harder the further it turned (#68)
+            feelFy = Mathf.Lerp(m * b / L * u * rKin, feelFy, k);
 
             slideAccum += Mathf.Clamp(Mathf.Max(Mathf.Abs(alphaR), Mathf.Abs(alphaF) * 0.6f) * 3f
                 + wheelspin + (input.Handbrake && Mathf.Abs(u) > 2f ? 0.6f : 0f), 0f, 1f);
@@ -562,6 +575,15 @@ public sealed class Car : Rideable, IEngined
         }
 
         TyreSlide = ground.OnFloor ? Mathf.Clamp(slideAccum / Substeps, 0f, 1f) * Mathf.Clamp(Mathf.Abs(u) / 4f, 0f, 1f) : 0f;
+
+        // the wheel's feel: the front axle against what it gives at its peak on tarmac (a car on ice
+        // goes light), the road's roughness, and the weight of an unassisted rack at a standstill
+        float frontPeak = s.Mass * Gravity * s.RearAxle / s.Wheelbase * s.Grip * Tyres.Grip;
+        var (road, roadHz) = Core.WheelFeel.RoadFrom(ground.OnFloor ? CarSetups.Roughness(ground.Surface) * Mathf.Sqrt(Mathf.Max(s.Stiffness, 0.1f)) : 0f, u);
+        _feel = new Core.WheelFeel(
+            ground.OnFloor ? Core.WheelFeel.Aligning(feelFy, feelAlpha, frontPeak, feelU) : 0f,
+            road, roadHz,
+            ground.OnFloor ? Core.WheelFeel.WeightFrom(s.PowerSteering ? 0.25f : 0.8f, u) : 0f);
         WheelSpin += u / WheelRadius * dt;
 
         motion.Speed = Mathf.Sqrt(u * u + w * w);
@@ -603,7 +625,7 @@ public sealed class Car : Rideable, IEngined
         rig.Headlights = (flags & PoseHeadlights) != 0;
         rig.RoofOpen = (flags & PoseRoof) != 0;
         Rpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
-        rig.WheelTurn = pose.X * Spec.SteerRatio;
+        rig.WheelTurn = pose.X * Ratio;
         rig.Throttle = ((flags >> PoseThrottleShift) & PoseThrottleSteps) / (float)PoseThrottleSteps;
         rig.Brake = rig.BrakeLights ? 1f : 0f;
         rig.Rpm = Rpm;
@@ -619,7 +641,7 @@ public sealed class Car : Rideable, IEngined
         rig.BrakeLights = Braking;
         rig.Headlights = Headlights;
         rig.RoofOpen = RoofOpen;
-        rig.WheelTurn = SteerAngle * Spec.SteerRatio;
+        rig.WheelTurn = SteerAngle * Ratio;
         rig.Throttle = Throttle;
         rig.Brake = BrakePedal;
         rig.Handbrake = HandbrakeOn;

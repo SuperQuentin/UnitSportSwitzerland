@@ -24,8 +24,11 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `crash-ragdoll` — Crash ragdoll (#214): through the windscreen as verlet joints, crash camera, bone-break and glass sounds, `PoseRagdoll` replication, `--wall`, `tools/crashnetcheck.sh`
 - `player-overlap` — Two players set down on one spot ease apart (collision exception + 1.5 m/s nudge) instead of the solver throwing one kilometres (#203)
 - `perf-visibility-on-change` (net) — `FootPlayer`'s `Sync`/`RelayNear`/`RelayFar`/`Vis` keep `VisibilityUpdateMode.None`; any new visibility input must call `RefreshNetVisibility`/`RefreshRelays` on change
+- `perf-player-snapshot-size` (net) — `BodyPose`/`TrainPose` are not `[Export]`ed; `NetPose` carries them; only the landing squash survives as scale
+- `perf-relay-delta-interval` (net) — `MakeRelay` keeps `DeltaInterval = 0.1f`; state read with `NetTime` stays `Always`, not `OnChange`
 
 - `passengers` — Passengers (#158): seats from the models, `PassengerService` hands them out, riders moved and drawn from the host's copy, driverless vehicles when the driver jumps out, take the wheel (F / RB), hand-over between players, `--passengernet a|b|c`
+- `walk-aboard` — Walking about in a moving vehicle (#162): `VehicleDeck` from the model (ramps, flush door steps), decks as collision carried with the drawn vehicle, velocity measured from motion, hulls ignore their guests, steady/sway/full inertia (`--deck-inertia`, `/inertia`), seats by where you stand, `--decknet a|b|solo`
 - `trucks-buses` — Trucks and buses (#70): `HeavyCatalog` RideKind 96..119, trailers by code, a planar multi-body train (pins, per-axle tyres), sections as their own bodies, clutch/converter driveline in five shift modes, retarder, air, rollover, coupling, bus doors/kneel/destination, `--truckcheck`, `--truckprobe`, `--heavynet`
 
 ## Commands
@@ -59,3 +62,6 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `tyre-wear-brake-wear-fade` — Tyre wear, brake wear and fade: (Settings -> Feel, off by default; `--tyrewear on`, `--brakewear on`; #20). Tyres...
 - `car-soft-top-popups` — Car soft top and pop-up headlights: (`Car.Headlights`/`RoofOpen`, `CarRig`; #48). L lights (pop-ups rise), O roof on...
 - `perf-no-per-frame-allocations` (general) — `PlayerFeel` HUD labels go through reused `StringBuilder`s + `SetText` (assign only on change); per-frame `InputHints` calls are memoised, `Tag()` concatenates
+- `camera-arm-reach` — the on-foot and chase camera arms (pull-in, through doors) go through `ArmReach(..., margin, scale, min)`; never another copy (#221)
+- `perf-camera-rays` — per-frame rays cast through a `Core.RayQuery` field with a cached exclude array (`SelfExclude`, `TrainRids()`, `WithShell`, `SeatExclude`); never `PhysicsRayQueryParameters3D.Create(..., new Array<Rid>{...})` per frame (#221)
+- `perf-player-snapshot` — per-tick code reads `PlayerSnapshot.Of(GetTree())` (players' pos/vel/ride, built once per physics tick), never `GetNodesInGroup(FootPlayer.Group)` + LINQ; per-tick lists and ray queries are reused (#221)

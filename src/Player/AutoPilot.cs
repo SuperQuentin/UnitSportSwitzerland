@@ -267,6 +267,9 @@ public sealed class AutoPilot
     /// <summary>One step of driving. <paramref name="go"/> false holds the vehicle on the grid.</summary>
     public RideInput Drive(float dt, bool go, IEnumerable<Other> others)
     {
+        // the route in the frame the car is in (#185): whoever holds it may not follow the shifts
+        // (a probe), and a route already followed is left alone
+        if (Player.Origin is { } origin) Route.Follow(origin.Frame);
         TakeWiderLine();
         if (Kind == Mount.Lean) return Ride(dt, go, others);
         // On the grid: the handbrake, not the brake — at a standstill the brake pedal selects
@@ -319,7 +322,12 @@ public sealed class AutoPilot
     {
         if (_widen is { IsCompletedSuccessfully: true } done)
         {
-            if (Route.Line == _profiled && done.Result.Points.Count == Route.Line.Points.Count) Route.Line = done.Result;
+            if (Route.Line == _profiled && done.Result.Points.Count == Route.Line.Points.Count)
+            {
+                // surveyed in the frame the route was in then: the origin may have moved since (#185)
+                if (Route.Frame is { } frame) done.Result.Follow(frame);
+                Route.Line = done.Result;
+            }
             _widen = null;
         }
         if (Route.Line == _profiled) return;
@@ -1114,6 +1122,7 @@ public sealed class AutoPilot
     /// <summary>A runner: toward a point a few metres ahead on the line, running, stopping at the finish.</summary>
     private (Vector3 Wish, bool Run) Walk()
     {
+        if (Player.Origin is { } origin) Route.Follow(origin.Frame);   // as in Drive (#185)
         TakeWiderLine();
         if (!Go || Finished) return (Vector3.Zero, false);
         var pos = Player.GlobalPosition;
@@ -1278,7 +1287,7 @@ public sealed class AutoPilot
         return k;
     }
 
-    private static float Wrap(float a) => Mathf.Wrap(a, -Mathf.Pi, Mathf.Pi);
+    private static float Wrap(float a) => Core.MathX.WrapAngle(a);
 
     /// <summary>Whether <see cref="For"/> has a pilot for this class (the server asks it before spawning an NPC in it).</summary>
     public static bool Drives(RideKind kind) => kind == RideKind.OnFoot || CarCatalog.IsCar(kind)

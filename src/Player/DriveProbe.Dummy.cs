@@ -30,7 +30,7 @@ public partial class DriveProbe
     private static List<Dummy> ParseDummies()
     {
         var list = new List<Dummy>();
-        if (ArgAfter("--dummy") is not { } arg) return list;
+        if (CmdArgs.Value("--dummy") is not { } arg) return list;
         foreach (var part in arg.Split(';', System.StringSplitOptions.RemoveEmptyEntries))
         {
             var f = part.Split(':');

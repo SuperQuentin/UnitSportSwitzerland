@@ -29,15 +29,43 @@ public sealed class RaceRoute
     public readonly List<Vector3> Behind = new();
     public readonly List<float> BehindWidth = new();
 
+    /// <summary>
+    /// The frame <see cref="Centre"/>, <see cref="Behind"/> and the line are in (#185): the origin
+    /// they were built or received in, or a race's own frame on the server. Null: not known yet,
+    /// taken to be the first frame <see cref="Follow"/> is given.
+    /// </summary>
+    public OriginFrame? Frame { get; private set; }
+
+    /// <summary>
+    /// Moves every point into <paramref name="now"/>: the origin moved (#185). Whoever holds the
+    /// route calls it from its shift handler; a route held by several (a race's runner, its pilot,
+    /// an NPC's driver) moves once, on the first call.
+    /// </summary>
+    public void Follow(OriginFrame now)
+    {
+        if (Frame is { } was && !(was.E == now.E && was.N == now.N))
+        {
+            var shift = now.Since(was);
+            for (int i = 0; i < Centre.Count; i++) Centre[i] = shift.Point(Centre[i]);
+            for (int i = 0; i < Behind.Count; i++) Behind[i] = shift.Point(Behind[i]);
+        }
+        Frame = now;
+        Line?.Follow(now);
+    }
+
     public float Length => Line.Length;
 
     /// <param name="smallest">The narrowest class of road it may take (a truck's probe keeps to Road and wider).</param>
     /// <param name="toward">A point to drive to: the shortest way there by road, and on past it (default: the longer of the two ways along the road).</param>
-    public static async Task<RaceRoute?> BuildAsync(IChunkSource source, WorldOrigin origin, Vector3 at,
+    public static Task<RaceRoute?> BuildAsync(IChunkSource source, WorldOrigin origin, Vector3 at,
+        CancellationToken ct = default, RoadClass smallest = RoadClass.Minor, Vector3? toward = null) =>
+        // one origin frame for the whole build, which runs off the main thread (#185)
+        BuildAsync(source, origin.Frame, at, ct, smallest, toward);
+
+    /// <summary>The route from <paramref name="at"/>, a point in <paramref name="frame"/>, which the route is in too (and <paramref name="toward"/>).</summary>
+    public static async Task<RaceRoute?> BuildAsync(IChunkSource source, OriginFrame frame, Vector3 at,
         CancellationToken ct = default, RoadClass smallest = RoadClass.Minor, Vector3? toward = null)
     {
-        // one origin frame for the whole build, which runs off the main thread (#185)
-        var frame = origin.Frame;
         var (e, n) = frame.ToLv95(at);
         var here = TileId.FromLv95(e, n);
         var tiles = new List<RoadTile>();
@@ -70,15 +98,16 @@ public sealed class RaceRoute
             pts = path;
             back = Flat(a[Mathf.Min(5, a.Count - 1)].P - path[Mathf.Min(5, path.Count - 1)].P).Length() < 1f ? b : a;
         }
-        var route = FromPoints(pts.Select(p => p.P).ToList(), pts.Select(p => p.W).ToList(), best.Class);
+        var route = FromPoints(pts.Select(p => p.P).ToList(), pts.Select(p => p.W).ToList(), best.Class, frame);
         foreach (var (p, w) in back.Take(300)) { route.Behind.Add(p); route.BehindWidth.Add(w); }   // 600 m is plenty
         return route;
     }
 
-    /// <summary>A route from a centreline already known (sent by the race server, say).</summary>
-    public static RaceRoute FromPoints(IReadOnlyList<Vector3> centre, IReadOnlyList<float> width, RoadClass cls = RoadClass.Road)
+    /// <summary>A route from a centreline already known (sent by the race server, say), in <paramref name="frame"/>.</summary>
+    public static RaceRoute FromPoints(IReadOnlyList<Vector3> centre, IReadOnlyList<float> width, RoadClass cls = RoadClass.Road,
+        OriginFrame? frame = null)
     {
-        var r = new RaceRoute { Class = cls };
+        var r = new RaceRoute { Class = cls, Frame = frame };
         float s = 0;
         for (int i = 0; i < centre.Count; i++)
         {
@@ -88,6 +117,7 @@ public sealed class RaceRoute
             r.Width.Add(width[i]);
         }
         r.Line = RaceLine.Build(centre, width, 0.9f);
+        r.Line.Frame = frame;
         return r;
     }
 
@@ -228,7 +258,8 @@ public sealed class RaceRoute
         return i;
     }
 
-    public static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
+    /// <summary><see cref="MathX.Flat"/>, kept for its many callers; new code calls MathX.</summary>
+    public static Vector3 Flat(Vector3 v) => MathX.Flat(v);
 
     /// <summary>Angle from a to b about +Y, radians; + is anticlockwise from above (to the left).</summary>
     public static float SignedAngle(Vector3 a, Vector3 b) =>

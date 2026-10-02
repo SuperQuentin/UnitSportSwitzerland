@@ -13,25 +13,26 @@ namespace UnitSport.Player;
 /// was not in the physics yet, so the spot read clear, and the player was shoved onto its roof.
 ///
 /// Fails when the player ends up on the vehicle, off the ground, or inside its box, or when a
-/// truck's parked box is wider than its body (it used to be as wide as its mirrors).
+/// truck's parked box is wider than its body (it used to be as wide as its mirrors). A bus's
+/// driver (#162) gets up into its aisle instead: there it fails unless on the floor, under the roof.
 /// Read the <c>[exitcheck]</c> lines.
 /// </summary>
-public partial class ExitProbe : Node
+public partial class ExitProbe : Node, Core.IOriginShiftAware
 {
-    public static bool Requested => System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--exitcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--exitcheck");
 
-    private static string? Password
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = System.Array.IndexOf(args, "--exitcheck");
-            return i >= 0 && i + 1 < args.Length && !args[i + 1].StartsWith("--") ? args[i + 1] : null;
-        }
-    }
+    private static string? Password => CmdArgs.Value("--exitcheck", notFlag: true);
 
     private readonly System.Func<FootPlayer?> _local;
     private int _failed;
+    /// <summary>The last patch used, and where the vehicle was got out of: world space, moved with the origin (offline, #185).</summary>
+    private Vector3 _spot, _where;
+
+    public void OnOriginShifted(Core.OriginShift shift)
+    {
+        _spot = shift.Point(_spot);
+        _where = shift.Point(_where);
+    }
 
     public ExitProbe(System.Func<FootPlayer?> local)
     {
@@ -67,18 +68,21 @@ public partial class ExitProbe : Node
             chat.Send($"/login {pw}");
             await Wait(1.5);
         }
-        var spot = me.GlobalPosition;
+        _spot = me.GlobalPosition;
         var kinds = new List<RideKind> { CarCatalog.All[0].Kind };
         foreach (var heavy in HeavyCatalog.All) kinds.Add(heavy.Kind);
         foreach (var kind in kinds)
             foreach (bool walled in new[] { false, true })
             {
                 // each its own clear patch: online the last one's vehicle is still parked there
-                if (FindSpot(me, spot + new Vector3(30f, 0, 0)) is not { } clear) { Fail(Rideable.Create(kind)!.Label, "no clear spot"); continue; }
-                spot = clear;
-                await Case(me, kind, walled, spot);
+                if (FindSpot(me, _spot + new Vector3(30f, 0, 0)) is not { } clear) { Fail(Rideable.Create(kind)!.Label, "no clear spot"); continue; }
+                _spot = clear;
+                await Case(me, kind, walled, clear);
             }
-        Log(_failed == 0 ? $"RESULT: ok, {kinds.Count * 2} exits" : $"RESULT: FAIL {_failed} of {kinds.Count * 2} exits");
+        int exits = kinds.Count * 2;
+        // up from the wheel of a city bus going along: it rolls on driverless, its driver aboard (#162)
+        if (FindSpot(me, _spot + new Vector3(30f, 0, 0)) is { } road) { exits++; await Rolling(me, HeavyCatalog.All[2].Kind, road); }
+        Log(_failed == 0 ? $"RESULT: ok, {exits} exits" : $"RESULT: FAIL {_failed} of {exits} exits");
         GetTree().Quit(_failed == 0 ? 0 : 1);
     }
 
@@ -101,7 +105,8 @@ public partial class ExitProbe : Node
                     {
                         var p = at + new Vector3(i * 5f, 0, j * 5f);
                         float g = Ground(me, p);
-                        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(p with { Y = g + 30f }, p with { Y = g - 2f }, me.CollisionMask,
+                        // anything solid, whatever this player collides with: aboard a bus it is the deck only
+                        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(p with { Y = g + 30f }, p with { Y = g - 2f }, uint.MaxValue,
                             new Godot.Collections.Array<Rid> { me.GetRid() }));
                         clear = hit.Count > 0 && hit["position"].AsVector3().Y < g + 0.3f;
                         low = Mathf.Min(low, g);
@@ -144,13 +149,17 @@ public partial class ExitProbe : Node
                 walls.Add(wall);
             }
         await Wait(0.2);
-        var where = me.GlobalPosition;
+        _where = me.GlobalPosition;
         me.ExitVehicle();
-        await Wait(2.5);
-
+        // online the server spawns the parked vehicle a round trip later (longer under load)
         VehicleBody? parked = null;
-        foreach (var v in VehicleManager.Instance?.GetChildren().OfType<VehicleBody>() ?? Enumerable.Empty<VehicleBody>())
-            if (v.Kind == kind && v.GlobalPosition.DistanceTo(where) < 3f) parked = v;
+        for (int i = 0; i < 120 && parked == null; i++)
+        {
+            await Wait(0.1);
+            foreach (var v in VehicleManager.Instance?.GetChildren().OfType<VehicleBody>() ?? Enumerable.Empty<VehicleBody>())
+                if (v.Kind == kind && v.GlobalPosition.DistanceTo(_where) < 3f) parked = v;
+        }
+        await Wait(1.5);
         if (parked == null) { Fail(name, "no parked vehicle"); Clean(walls, null); return; }
 
         var feet = me.GlobalPosition;
@@ -163,13 +172,25 @@ public partial class ExitProbe : Node
         bool onTop = over && local.Y > 0.8f;
         string what = $"out at ({local.X:F2}, {local.Y:F2}, {local.Z:F2}) in its frame, {agl:F2} m over the ground; box {size.X:F2} x {size.Y:F2} x {size.Z:F2}";
         bool ok = !onTop && !over && agl < 0.8f;
+        // a vehicle you can walk about in (#162): its driver gets up into the aisle, on its floor
+        if (ride.Walkable)
+        {
+            float roof = centre.Y + size.Y * 0.5f;
+            // on its floor: not under it, on the ground inside the bus, nor up on its roof
+            bool aisle = over && local.Y > 0.15f && local.Y < roof - 1.5f && me.IsOnFloor();
+            // or, the parked bus not here within the wait (a slow server), out by its door on the ground
+            bool byDoor = !over && agl < 0.8f;
+            ok = aisle || byDoor;
+            onTop = over && !aisle && local.Y >= roof - 1.5f;
+            what = (aisle ? "in the aisle: " : byDoor ? "the deck never came, out by the door: " : "") + what;
+        }
         if (ride is Truck heavy && size.X > heavy.Spec.Sections[0].Width + 0.11f)
         {
             ok = false;
             what += $" WIDER than its {heavy.Spec.Sections[0].Width:F2} m body";
         }
         if (ok) Log($"ok   {name}: {what}");
-        else Fail(name, (onTop ? "ON TOP: " : over ? "INSIDE: " : agl >= 0.8f ? "OFF THE GROUND: " : "") + what);
+        else Fail(name, (onTop ? "ON TOP: " : ride.Walkable ? "NOT IN THE AISLE: " : over ? "INSIDE: " : agl >= 0.8f ? "OFF THE GROUND: " : "") + what);
         Clean(walls, parked);
         await Wait(0.3);
     }
@@ -214,6 +235,49 @@ public partial class ExitProbe : Node
         if (heavy == 0) Fail("watch", "saw no truck or bus");
         Log(_failed == 0 ? $"RESULT: ok, {heavy} truck and bus boxes seen" : $"RESULT: FAIL {_failed} of {heavy} boxes");
         GetTree().Quit(_failed == 0 ? 0 : 1);
+    }
+
+    /// <summary>
+    /// Drives a bus up to speed, gets up from the wheel: it rolls on driverless and the driver must
+    /// stay aboard, carried, on its floor, the whole way (offline the origin shifts under them as it
+    /// goes, #185: run with <c>--originstress 20</c>).
+    /// </summary>
+    private async Task Rolling(FootPlayer me, RideKind kind, Vector3 at)
+    {
+        string name = $"{Rideable.Create(kind)!.Label}, up from the wheel while it rolls";
+        me.GlobalPosition = at with { Y = Ground(me, at) + 1.5f };
+        me.Rotation = Vector3.Zero;
+        me.Velocity = Vector3.Zero;
+        for (int i = 0, still = 0; i < 150 && still < 5; i++)
+        {
+            await Wait(0.1);
+            still = me.IsOnFloor() && me.Velocity.Length() < 0.5f ? still + 1 : 0;
+        }
+        if (!me.SetRide(kind)) { Fail(name, "SetRide refused"); return; }
+        await Wait(1f);
+        Input.ActionPress(PlayerInput.Throttle, 1f);
+        for (int i = 0; i < 100 && me.GroundSpeed < 5f; i++) await Wait(0.1);
+        Input.ActionRelease(PlayerInput.Throttle);
+        float speed = me.GroundSpeed;
+        me.ExitVehicle();
+        float worst = 0f;
+        string? lost = null;
+        for (int i = 0; i < 60; i++)
+        {
+            await Wait(0.1);
+            var bus = VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().Where(v => v.Kind == kind)
+                .OrderBy(v => v.GlobalPosition.DistanceSquaredTo(me.GlobalPosition)).FirstOrDefault();
+            if (bus == null) continue;
+            var local = bus.ToLocal(me.GlobalPosition);
+            if (i >= 20 && (me.DeckOn == "" || local.Y < 0.15f || local.Y > 1.5f || Mathf.Abs(local.X) > 1.4f))
+            {
+                lost ??= $"at {i * 0.1f:F1} s: ({local.X:F2}, {local.Y:F2}, {local.Z:F2}) in its frame, aboard '{me.DeckOn}'";
+            }
+            worst = Mathf.Max(worst, bus.Velocity.Length());
+        }
+        string what = $"got up at {speed * 3.6f:F0} km/h, the bus rolled at up to {worst * 3.6f:F0} km/h";
+        if (lost == null) Log($"ok   {name}: {what}, aboard the whole way");
+        else Fail(name, $"{what}; LOST {lost}");
     }
 
     private void Fail(string name, string why)

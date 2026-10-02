@@ -35,6 +35,9 @@ public readonly struct OriginShift
     /// <summary>An axis-aligned box in the new world space (exact while the rotation is the identity).</summary>
     public Aabb Apply(Aabb box) => Transform * box;
 
+    /// <summary>The way back: from the new world space to the old.</summary>
+    public OriginShift Inverse => new(Transform.AffineInverse());
+
     /// <summary>This shift, then <paramref name="next"/>.</summary>
     public OriginShift Then(OriginShift next) => new(next.Transform * Transform);
 

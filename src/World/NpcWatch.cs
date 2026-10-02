@@ -1,6 +1,7 @@
 using System.Globalization;
 using Godot;
 using UnitSport.Player;
+using UnitSport.Core;
 
 namespace UnitSport.World;
 
@@ -36,10 +37,8 @@ public partial class NpcWatch : Node
 
     public static NpcWatch? FromArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, "--npcwatch");
-        if (i < 0 || i + 1 >= args.Length) return null;
-        var parts = args[i + 1].Split(',');
+        if (CmdArgs.Value("--npcwatch") is not { } value) return null;
+        var parts = value.Split(',');
         double Num(int k, double fallback) =>
             parts.Length > k && double.TryParse(parts[k], NumberStyles.Float, CultureInfo.InvariantCulture, out double v) ? v : fallback;
         return new NpcWatch(parts[0], Num(1, 4), Num(2, 4));
@@ -101,7 +100,7 @@ public partial class NpcWatch : Node
         }
         // a chase camera 9 m behind and 3.5 m above, eased so the picture shows the NPC's own motion
         var eye = _npc.GlobalPosition - _heading * 9f + Vector3.Up * 3.5f;
-        var at = _cam.GlobalPosition.DistanceTo(eye) > 30f ? eye : _cam.GlobalPosition.Lerp(eye, 1f - Mathf.Exp(-6f * (float)delta));
+        var at = _cam.GlobalPosition.DistanceTo(eye) > 30f ? eye : _cam.GlobalPosition.Lerp(eye, MathX.Damp(6f, (float)delta));
         _cam.GlobalTransform = new Transform3D(Flyer.Orient(_npc.GlobalPosition + Vector3.Up - at, Vector3.Up, Vector3.Forward), at);
         _cam.MakeCurrent();
         // headless: no picture, the log lines (speed per drawn frame around the handoff) still come
