@@ -527,6 +527,8 @@ public partial class VehicleBody : CharacterBody3D
         {
             // parked as the driver left it: lamps, doors, the display; every section's wheels roll
             truck.UnpackFlags(_initial.Flags);
+            // a bus's doors are live, worked by its buttons as it rolls: not as the driver left them
+            if (truck.IsBus) truck.DoorsOpen = DoorsOpen;
             _heavySpin += Velocity.Length() / truck.WheelRadius * dt;
             _dressedAtRest = Velocity == Vector3.Zero ? Wrecked : null;
             _heavySections ??= heavy.FindChildren("Section*", "", false, false).OfType<HeavyRig>().Prepend(heavy).ToArray();
