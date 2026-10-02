@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Avatar;
 using UnitSport.Vehicles;
 
@@ -177,7 +178,7 @@ public partial class FootPlayer
             var eye = frame * (SeatedFigure.Eye(s.Seat) - s.Seat.Hip);
             var basis = frame.Basis.Orthonormalized() * new Basis(Vector3.Up, _lookYaw) * new Basis(Vector3.Right, _pitch);
             _camera.GlobalTransform = new Transform3D(basis, eye);
-            _camera.Fov = Mathf.Lerp(_camera.Fov, Core.GameSettings.Current.CockpitFov, 1f - Mathf.Exp(-3f * dt));
+            _camera.Fov = Mathf.Lerp(_camera.Fov, Core.GameSettings.Current.CockpitFov, MathX.Damp(3f, dt));
             return;
         }
         // behind and above the vehicle, round it with the look, pulled in short of what is in the way
@@ -189,7 +190,7 @@ public partial class FootPlayer
         var at = hit.Count > 0 ? centre.Lerp(hit["position"].AsVector3(), 0.85f) : wanted;
         _camera.GlobalTransform = Transform3D.Identity.LookingAt(centre - at, Vector3.Up).Translated(at);
         _camera.RotateObjectLocal(Vector3.Right, _pitch + ride.ChasePitch + 0.1f);
-        _camera.Fov = Mathf.Lerp(_camera.Fov, ride.BaseFov, 1f - Mathf.Exp(-3f * dt));
+        _camera.Fov = Mathf.Lerp(_camera.Fov, ride.BaseFov, MathX.Damp(3f, dt));
     }
 
     /// <summary>E beside someone's vehicle: the nearest one being driven, within reach of its door, or null.</summary>

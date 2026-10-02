@@ -516,5 +516,5 @@ public sealed class RaceLine
         return o;
     }
 
-    private static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
+    private static Vector3 Flat(Vector3 v) => MathX.Flat(v);
 }

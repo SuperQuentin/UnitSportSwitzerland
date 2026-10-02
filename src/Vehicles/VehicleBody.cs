@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Audio;
 using UnitSport.Core;
 using UnitSport.Avatar;
@@ -149,7 +150,7 @@ public partial class VehicleBody : CharacterBody3D
             });
         FloorMaxAngle = Mathf.DegToRad(50f);
 
-        _motion = new RideMotion { Speed = new Vector2(s.Velocity.X, s.Velocity.Z).Length(), Yaw = s.Yaw };
+        _motion = new RideMotion { Speed = MathX.FlatLength(s.Velocity), Yaw = s.Yaw };
         if (Ride is Flyer flyer)
         {
             flyer.Begin(ref _flight, s.Velocity, s.Yaw);
@@ -379,7 +380,7 @@ public partial class VehicleBody : CharacterBody3D
         var real = GetRealVelocity();
         var lost = _flight.Velocity - real;
         float impact = IsOnFloor()
-            ? Mathf.Max(new Vector2(lost.X, lost.Z).Length(), -_flight.Velocity.Y - 6f)
+            ? Mathf.Max(MathX.FlatLength(lost), -_flight.Velocity.Y - 6f)
             : lost.Length();
         // The first second is not evidence of anything: the pilot who just got out is standing
         // in or against the box, and the solver shoving the two apart reads as an 80 m/s impact
@@ -452,7 +453,7 @@ public partial class VehicleBody : CharacterBody3D
         MoveAndSlide();
         // what it hit takes the speed it could not keep (a wall, a tree, another vehicle)
         var real = GetRealVelocity();
-        float achieved = new Vector2(real.X, real.Z).Length();
+        float achieved = MathX.FlatLength(real);
         if (achieved < _motion.Speed - 1f) _motion.Speed = Mathf.Max(achieved, _motion.Speed - 25f * dt);
         if (Ride is Truck rolled) TrainAngles = rolled.Angles;
     }
@@ -468,7 +469,7 @@ public partial class VehicleBody : CharacterBody3D
         Velocity = v;
         MoveAndSlide();
         var real = GetRealVelocity();
-        _motion.Speed = Mathf.Min(_motion.Speed, new Vector2(real.X, real.Z).Length() + 0.5f);
+        _motion.Speed = Mathf.Min(_motion.Speed, MathX.FlatLength(real) + 0.5f);
     }
 
     public override void _Process(double delta)
@@ -496,7 +497,7 @@ public partial class VehicleBody : CharacterBody3D
         {
             // tipped over once it stops, like any bike left without its rider
             float target = Velocity.Length() < 1.5f ? 1.35f : 0f;
-            _bikeRoll = Mathf.Lerp(_bikeRoll, target, 1f - Mathf.Exp(-4f * dt));
+            _bikeRoll = Mathf.Lerp(_bikeRoll, target, MathX.Damp(4f, dt));
             _visual.Rotation = new Vector3(0, 0, _bikeRoll);
         }
 
@@ -567,7 +568,8 @@ public partial class VehicleBody : CharacterBody3D
     private HeavyRig[]? _heavySections;
     /// <summary>The drawn sections by index (0 the visual itself), found by name once.</summary>
     private Node3D?[]? _standSections;
-    private PhysicsRayQueryParameters3D? _groundQuery;
+    private readonly Core.RayQuery _groundRay = new();
+    private Godot.Collections.Array<Rid>? _groundExclude;
 
     /// <summary>
     /// A truck, a bus or a trailer stands on the ground as it did when driven: every section pitched
@@ -617,32 +619,11 @@ public partial class VehicleBody : CharacterBody3D
     }
 
     /// <summary>The ground's height under a point: whatever is solid there (a road, a deck) but this vehicle, else the terrain.</summary>
-    private float Ground(Vector3 p)
-    {
-        // one query for all its rays (a new one and a new exclude array per ray before, #221)
-        var query = _groundQuery ??= new PhysicsRayQueryParameters3D { Exclude = new Godot.Collections.Array<Rid> { GetRid() } };
-        query.From = p + Vector3.Up * 3f;
-        query.To = p + Vector3.Down * 6f;
-        query.CollisionMask = CollisionMask & ~World.TreeColliders.Layer;
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
-        // not a player: one standing in a parked bus by its front axle (up from the wheel, #162) was
-        // read as the road, and the bus stood on their head, two metres up. Rare: a query of its own.
-        if (hit.Count > 0 && hit["collider"].AsGodotObject() is FootPlayer)
-        {
-            // (Exclude hands out a copy: added to in place, it would change nothing)
-            var exclude = new Godot.Collections.Array<Rid> { GetRid() };
-            var past = new PhysicsRayQueryParameters3D { From = query.From, To = query.To, CollisionMask = query.CollisionMask };
-            for (int tries = 0; tries < 4 && hit.Count > 0 && hit["collider"].AsGodotObject() is FootPlayer; tries++)
-            {
-                exclude.Add(hit["rid"].AsRid());
-                past.Exclude = exclude;
-                hit = GetWorld3D().DirectSpaceState.IntersectRay(past);
-            }
-            if (hit.Count > 0 && hit["collider"].AsGodotObject() is FootPlayer) hit.Clear();
-        }
-        if (hit.Count > 0) return hit["position"].AsVector3().Y;
-        return Terrain != null && Terrain.TryGetHeight(p, out float g) ? g : p.Y;
-    }
+    private float Ground(Vector3 p) =>
+        // one query for all its rays (a new one and a new exclude array per ray before, #221); not a
+        // player: one standing in a parked bus by its front axle (up from the wheel, #162) was read as
+        // the road, and the bus stood on their head, two metres up
+        World.GroundQuery.Under(this, _groundRay, _groundExclude ??= new Godot.Collections.Array<Rid> { GetRid() }, p, Terrain, pastPlayers: true);
 
     /// <summary>Blows it up: the flag every peer watches. Only the authority calls this.</summary>
     public void Explode()

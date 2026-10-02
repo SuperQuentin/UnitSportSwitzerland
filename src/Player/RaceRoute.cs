@@ -258,7 +258,8 @@ public sealed class RaceRoute
         return i;
     }
 
-    public static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
+    /// <summary><see cref="MathX.Flat"/>, kept for its many callers; new code calls MathX.</summary>
+    public static Vector3 Flat(Vector3 v) => MathX.Flat(v);
 
     /// <summary>Angle from a to b about +Y, radians; + is anticlockwise from above (to the left).</summary>
     public static float SignedAngle(Vector3 a, Vector3 b) =>

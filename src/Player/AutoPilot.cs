@@ -1281,7 +1281,7 @@ public sealed class AutoPilot
         return k;
     }
 
-    private static float Wrap(float a) => Mathf.Wrap(a, -Mathf.Pi, Mathf.Pi);
+    private static float Wrap(float a) => Core.MathX.WrapAngle(a);
 
     /// <summary>Whether <see cref="For"/> has a pilot for this class (the server asks it before spawning an NPC in it).</summary>
     public static bool Drives(RideKind kind) => kind == RideKind.OnFoot || CarCatalog.IsCar(kind)
