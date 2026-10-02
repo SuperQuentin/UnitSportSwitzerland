@@ -34,11 +34,12 @@ in 32 files; no behaviour change.
 - Grep your branch: `1f - Mathf.Exp(-`, `Mathf.Wrap(` with `-Mathf.Pi, Mathf.Pi`, `static .* Flat(`,
   `new Vector2(\w+.X, \w+.Z).Length()`, `* (3f - 2f *`. Replace per the rule; add `using UnitSport.Core;`.
 - Conflicts on a changed line of the 32 files: keep your logic, write the weight as `MathX.Damp(k, dt)`.
-- Not migrated yet (files of open PRs or out of scope, do it when they land): `FootPlayer*.cs` (~30 damping
-  weights, `FootPlayer.Crash` smoothstep), `HeavyRig`, `Vehicles/VehicleBody`, `Player/Rideable`, `Items/ThrowAim`,
+- Round 3 migrated `FootPlayer*.cs` (damping, wraps, flat lengths, the `Crash` smoothstep: its `t` is in [0, 1]),
+  `HeavyRig`, `VehicleBody`; `RaceRoute.Flat`, `RaceLine.Flat`, `AutoPilot.Wrap`, `NpcArrival.Wrap` now
+  forward to `MathX` (kept for their many callers and for #269; new code calls `MathX`).
+- Not migrated yet (files of open PRs or out of scope, do it when they land): `Player/Rideable`, `Items/ThrowAim`,
   `BattleRoyale/BrManager.Client` (damping); `Birds/BirdLife`, `BattleRoyale/BrCrates`, `Items/PvpProbe`
-  (private `Flat`); `Player/RaceLine`, `Player/RaceRoute` (public `Flat`, used by `AutoPilot`, `NpcArrival`…),
-  `World/RaceNpc.Flat(a, b)` (= `FlatDistance`); `AutoPilot.Wrap`, `NpcArrival.Wrap` (= `WrapAngle`).
+  (private `Flat`); `World/RaceNpc.Flat(a, b)` (= `FlatDistance`; #269 adds a `GlobalPos` overload next to it).
   Open PRs at the time: #248, #254, #264, #269, #281 (and `FootPlayer*`/`HeavyRig` were reserved for them).
 
 ## How to check

@@ -16,7 +16,7 @@
 # RAM watchdog: free RAM is read every GUARD_MEM_EVERY (2) s from /proc/meminfo (Git Bash maps it
 # to Windows' free physical memory, ~30 ms); under GUARD_MIN_FREE_MB (1500) the run is killed
 # before Windows or WSL run out of memory and take everything else down with them.
-# Works in Git Bash on Windows and on Linux. Never kills by name: only the PIDs it started.
+# Works in Git Bash on Windows, on Linux and on macOS (vm_stat). Never kills by name: only the PIDs it started.
 
 GUARD_LOCK_DIR=${GUARD_LOCK_DIR:-${TMPDIR:-${TEMP:-/tmp}}/unitsport-heavy.lock}
 GUARD_POLL=${GUARD_POLL:-10}
@@ -34,6 +34,10 @@ guard_free_mb() {
   # Git Bash and Linux both have /proc/meminfo (Git Bash: MemFree = Windows' free physical memory)
   if [ -r /proc/meminfo ]; then
     awk '/^MemAvailable:/ { a = $2 } /^MemFree:/ { f = $2 } END { print int((a ? a : f) / 1024) }' /proc/meminfo
+  elif [ "$(uname)" = Darwin ]; then
+    # macOS: free, inactive and purgeable pages are what can be had without swapping
+    vm_stat | awk '/page size of/ { size = $8 } /^Pages (free|inactive|purgeable):/ { gsub(/\./, "", $NF); pages += $NF }
+      END { print int(pages * size / 1048576) }'
   else
     local kb
     kb=$(powershell -NoProfile -c "(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory" | tr -dc '0-9')
@@ -57,7 +61,7 @@ guard_wait_ram() {
 
 _guard_lock_pid() { cat "$GUARD_LOCK_DIR/pid" 2>/dev/null; }
 _guard_field() { sed -n "s/^$1=//p" "$GUARD_LOCK_DIR/info" 2>/dev/null; }
-_guard_mtime() { stat -c %Y "$1" 2>/dev/null || echo 0; }
+_guard_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }   # GNU, then BSD (macOS)
 
 _guard_drop_lock() {
   rm -f "$GUARD_LOCK_DIR/pid" "$GUARD_LOCK_DIR/info" "$GUARD_LOCK_DIR/beat"
@@ -94,6 +98,11 @@ guard_status() {
   return 0
 }
 
+# this shell's PID, a subshell's too: BASHPID, or on bash 3.2 (macOS, no BASHPID) the parent of a
+# child it starts. Call it as a plain command, never in $(...): that would be another subshell.
+_guard_self_pid() { if [ -n "${BASHPID:-}" ]; then echo "$BASHPID"; else sh -c 'echo $PPID'; fi; }
+_guard_my_pid=
+
 guard_lock() {
   local max=${1:-3600} hold=${2:-3600} waited=0 why
   while ! mkdir "$GUARD_LOCK_DIR" 2>/dev/null; do
@@ -114,14 +123,15 @@ guard_lock() {
     [ $(( waited % 120 )) -eq 0 ] && guard_status >&2
     sleep 2; waited=$(( waited + 2 ))
   done
-  echo "$BASHPID" > "$GUARD_LOCK_DIR/pid"
+  _guard_self_pid > "$GUARD_LOCK_DIR/pid"
+  _guard_my_pid=$(_guard_lock_pid)
   printf 'started=%s
 max_hold=%s
 what=%s
 ' "$(date +%s)" "$hold" "${GUARD_WHAT:-$0 $*}" > "$GUARD_LOCK_DIR/info"
   touch "$GUARD_LOCK_DIR/beat"
   # heartbeat: dies with its owner, so a dead or PID-reused owner goes stale in GUARD_STALE s
-  local owner=$BASHPID
+  local owner=$_guard_my_pid
   ( while kill -0 "$owner" 2>/dev/null && [ -d "$GUARD_LOCK_DIR" ]; do touch "$GUARD_LOCK_DIR/beat" 2>/dev/null; sleep "$GUARD_BEAT"; done ) &
   _guard_beat_pid=$!
   _guard_have_lock=1
@@ -131,7 +141,7 @@ guard_unlock() {
   [ "$_guard_have_lock" = 1 ] || return 0
   [ -n "$_guard_beat_pid" ] && kill "$_guard_beat_pid" 2>/dev/null
   _guard_beat_pid=
-  [ "$(_guard_lock_pid)" = "$BASHPID" ] && _guard_drop_lock
+  [ "$(_guard_lock_pid)" = "$_guard_my_pid" ] && _guard_drop_lock
   _guard_have_lock=0
 }
 
@@ -153,10 +163,13 @@ _guard_kill_tree() {
       kill -KILL "$p" 2>/dev/null
     done
   else
-    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
+    # the tree first: once its root is dead, its children belong to init and cannot be found (macOS
+    # has no setsid, so there is no process group to kill instead)
+    local tree; tree=$(_guard_tree "$pid")
+    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM $tree 2>/dev/null
     sleep 2
     kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null
-    for p in $(_guard_tree "$pid"); do kill -KILL "$p" 2>/dev/null; done
+    for p in $tree $(_guard_tree "$pid"); do kill -KILL "$p" 2>/dev/null; done
   fi
 }
 

@@ -1,18 +1,22 @@
 using System.Globalization;
 using System.Text;
 using Godot;
+using UnitSport.Core;
 using UnitSport.Player;
 
 namespace UnitSport.Net;
 
 /// <summary>
-/// <c>godot --headless --path . -- --connect host:port --netsmooth[,seconds[,label]] [--at E,N]</c>: how
+/// <c>godot --headless --path . -- --connect host:port --netsmooth[,seconds[,label[,minspeed]]] [--at E,N]</c>: how
 /// smooth does a remote player look to this client? Picks the nearest remote <see cref="FootPlayer"/>
 /// that is moving (faster than 5 m/s if anyone is, so a vehicle rather than a walker), records its rendered position every frame, and at the end prints (and writes to
 /// <c>test_output/loadtest/&lt;label&gt;/netsmooth.txt</c>) per-frame step statistics against the
 /// distance it should cover at its own speed: freezes (a frame that hardly moved), snaps (a frame
 /// that jumped) and the acceleration a viewer would see. Frames are capped at 60 fps, since a
-/// headless process otherwise renders thousands of frames between two network updates.
+/// headless process otherwise renders thousands of frames between two network updates. Positions
+/// are recorded in LV95, so it can run with <c>--originstress</c>: a shift is not a snap (#185).
+/// <c>minspeed</c> (m/s): wait, up to 90 s, for a remote at least that fast (a race after its
+/// countdown) rather than take whoever moves first.
 /// </summary>
 public partial class NetSmoothProbe : Node
 {
@@ -21,30 +25,33 @@ public partial class NetSmoothProbe : Node
     private readonly Node3D _players;
     private readonly double _seconds;
     private readonly string _label;
+    private readonly float _minSpeed;
 
     private double _t;
-    private Node3D? _target;
-    private readonly Dictionary<Node3D, Vector3> _first = new();
-    private readonly List<(double T, double Dt, Vector3 P)> _rec = new();
+    private FootPlayer? _target;
+    private readonly Dictionary<FootPlayer, GlobalPos> _first = new();
+    private readonly List<(double T, double Dt, GlobalPos P)> _rec = new();
     private bool _done;
     private ulong _lastTicks;
     private string _targetInfo = "";
 
-    public NetSmoothProbe(Node3D players, double seconds, string label)
+    public NetSmoothProbe(Node3D players, double seconds, string label, float minSpeed = 0)
     {
+        _minSpeed = minSpeed;
         _players = players;
         _seconds = seconds;
         _label = label;
     }
 
-    public static (double Seconds, string Label)? ParseArgs()
+    public static (double Seconds, string Label, float MinSpeed)? ParseArgs()
     {
         foreach (var a in OS.GetCmdlineUserArgs())
             if (a.StartsWith("--netsmooth"))
             {
                 var parts = a.Split(',');
                 double s = parts.Length > 1 && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double v) ? v : 60;
-                return (s, parts.Length > 2 ? parts[2] : "default");
+                float min = parts.Length > 3 && float.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float m) ? m : 0;
+                return (s, parts.Length > 2 ? parts[2] : "default", min);
             }
         return null;
     }
@@ -63,14 +70,14 @@ public partial class NetSmoothProbe : Node
         double dt = _lastTicks == 0 ? delta : (now - _lastTicks) / 1e6;
         _lastTicks = now;
         _t += dt;
-        var local = _players.GetNodeOrNull<Node3D>(Multiplayer.GetUniqueId().ToString());
+        var local = _players.GetNodeOrNull<FootPlayer>(Multiplayer.GetUniqueId().ToString());
         if (_target == null)
         {
             Pick(local);
             return;
         }
         if (!GodotObject.IsInstanceValid(_target) || !_target.IsInsideTree()) { Finish("target left"); return; }
-        _rec.Add((_t, dt, _target.GlobalPosition));
+        _rec.Add((_t, dt, Drawn(_target)));
         FloorGap(_target);
         if (_t - _rec[0].T >= _seconds) Finish(null);
     }
@@ -105,27 +112,34 @@ public partial class NetSmoothProbe : Node
         _gapRows.Add(string.Format(CultureInfo.InvariantCulture, "{0:F2},{1:F1},{2:F1},{3:F1},{4:F3}", _t, p.X, p.Y, p.Z, _gaps[^1]));
     }
 
+    /// <summary>Where a player is drawn on this client, in LV95.</summary>
+    private static GlobalPos Drawn(FootPlayer p) => p.Origin!.ToGlobal(p.GlobalPosition);
+
     /// <summary>Watches every remote for PickWindow seconds, then takes the nearest one that moved.</summary>
-    private void Pick(Node3D? local)
+    private void Pick(FootPlayer? local)
     {
         if (local == null || _t < PickAfter) return;
         if (_first.Count == 0)
         {
             foreach (var n in _players.GetChildren())
-                if (n is FootPlayer p && p != local) _first[p] = p.GlobalPosition;
+                if (n is FootPlayer p && p != local) _first[p] = Drawn(p);
         }
         if (_t < PickAfter + PickWindow) return;
+        if (_minSpeed > 0)
+        {
+            PickFast(local);
+            return;
+        }
 
         // a vehicle if one is moving (the race pack is what the observer is parked beside), else
         // whoever is walking
         float best = float.MaxValue;
-        bool fast = _first.Any(kv => GodotObject.IsInstanceValid(kv.Key) && kv.Key.GlobalPosition.DistanceTo(kv.Value) > 5f * PickWindow);
+        bool fast = _first.Any(kv => GodotObject.IsInstanceValid(kv.Key) && Drawn(kv.Key).DistanceTo(kv.Value) > 5f * PickWindow);
         foreach (var (p, from) in _first)
         {
-            if (!GodotObject.IsInstanceValid(p) || p.GlobalPosition.DistanceTo(from) < (fast ? 5f : 1f) * PickWindow) continue;
+            if (!GodotObject.IsInstanceValid(p) || Drawn(p).DistanceTo(from) < (fast ? 5f : 1f) * PickWindow) continue;
             // flat: a client that has just connected may still be falling onto the terrain
-            var off = p.GlobalPosition - local.GlobalPosition;
-            float d = new Vector2(off.X, off.Z).Length();
+            float d = (float)Drawn(p).HorizontalDistanceTo(Drawn(local));
             if (d < best) { best = d; _target = p; }
         }
         // up to 90 s: a scripted driver (--garagecheck drive) starts once this client has landed
@@ -133,9 +147,27 @@ public partial class NetSmoothProbe : Node
         if (_target == null && _t > PickAfter + PickWindow + 90) Finish("no moving remote player found");
         else if (_target != null)
         {
-            _targetInfo = $"{_target.Name} ({(CarCatalog.For(((FootPlayer)_target).Ride)?.Label ?? ((FootPlayer)_target).Ride.ToString())}) at {best:F0} m";
+            _targetInfo = $"{_target.Name} ({(CarCatalog.For(_target.Ride)?.Label ?? _target.Ride.ToString())}) at {best:F0} m";
             GD.Print($"[netsmooth] watching {_targetInfo} for {_seconds:F0} s");
         }
+    }
+
+    /// <summary>The nearest remote moving at <see cref="_minSpeed"/> or more (over the last frame), within 90 s.</summary>
+    private void PickFast(FootPlayer local)
+    {
+        float best = float.MaxValue;
+        foreach (var n in _players.GetChildren())
+            if (n is FootPlayer p && p != local && p.WorldVelocity.Length() >= _minSpeed)
+            {
+                float d = (float)Drawn(p).HorizontalDistanceTo(Drawn(local));
+                if (d < best) { best = d; _target = p; }
+            }
+        if (_target != null)
+        {
+            _targetInfo = $"{_target.Name} ({CarCatalog.For(_target.Ride)?.Label ?? _target.Ride.ToString()}) at {best:F0} m";
+            GD.Print($"[netsmooth] watching {_targetInfo} for {_seconds:F0} s");
+        }
+        else if (_t > PickAfter + PickWindow + 90) Finish($"no remote player reached {_minSpeed:F0} m/s");
     }
 
     private void Finish(string? problem)
@@ -159,9 +191,10 @@ public partial class NetSmoothProbe : Node
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "netsmooth.txt"), sb.ToString());
             File.WriteAllLines(Path.Combine(dir, "floorgap.csv"), _gapRows);
-            // the raw track, for profiles the summary does not cover (a bump at a level crossing, #124)
+            // the raw track, for profiles the summary does not cover (a bump at a level crossing, #124);
+            // LV95 and altitude, so it means the same places however often the origin moved (#185)
             File.WriteAllLines(Path.Combine(dir, "netsmooth_track.csv"), _rec.Select(r =>
-                string.Create(inv, $"{r.T:F4},{r.P.X:F3},{r.P.Y:F3},{r.P.Z:F3}")));
+                string.Create(inv, $"{r.T:F4},{r.P.E:F3},{r.P.N:F3},{r.P.Alt:F3}")).Prepend("t,e,n,alt"));
         }
         catch (Exception e) { GD.PushWarning($"[netsmooth] cannot write result: {e.Message}"); }
         GetTree().Quit();

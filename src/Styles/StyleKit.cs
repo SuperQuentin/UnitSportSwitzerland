@@ -79,6 +79,7 @@ public static class StyleKit
     {
         _session = style;
         Chosen?.Invoke();
+        ChoiceChanged?.Invoke();
     }
 
     /// <summary>
@@ -94,6 +95,10 @@ public static class StyleKit
     /// <summary>The styles the settings menu offers: those with a look of their own so far.</summary>
     public static readonly VisualStyle[] MenuStyles =
         [VisualStyle.Ps1, VisualStyle.Cartoon, VisualStyle.RealisticLow, VisualStyle.RealisticHigh];
+
+    /// <summary>Styles the settings menu lists greyed out: still in development (Realistic+ can render nothing).
+    /// <c>--style</c> still picks them.</summary>
+    public static bool InDevelopment(VisualStyle style) => style == VisualStyle.RealisticHigh;
 
     /// <summary>Whether a style needs the Forward+ renderer, which Godot only picks at startup.</summary>
     public static bool NeedsForwardPlus(VisualStyle style) => Pick(style, l => l.Effects).Value;
@@ -112,6 +117,12 @@ public static class StyleKit
 
     /// <summary>Raised by <see cref="Choose"/>: the client world restyles itself. Main thread.</summary>
     public static event System.Action? Chosen;
+
+    /// <summary>
+    /// Raised by <see cref="Choose"/> for what is not the world (the render scale, which is style
+    /// dependent): a listener on <see cref="Chosen"/> would make <see cref="HasWorld"/> true.
+    /// </summary>
+    public static event System.Action? ChoiceChanged;
 
     /// <summary>Whether a client world is listening for <see cref="Chosen"/>.</summary>
     public static bool HasWorld => Chosen != null;

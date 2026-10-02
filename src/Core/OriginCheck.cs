@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Player;
 using UnitSport.Terrain.Format;
 using UnitSport.World;
 
@@ -10,7 +11,11 @@ namespace UnitSport.Core;
 /// still means the same LV95 place, that the frames compose, and that a lane graph's junction keys
 /// do not depend on the origin; then, with physics running, that a shift gives nothing a velocity:
 /// a kinematic body moved by a shift must not fling what stands on it (a parked car under a
-/// player, a radio on its roof). Prints each failure and a RESULT line; exits non-zero on any.
+/// player, a radio on its roof). And the wire (phase 2): a position written by one peer means the
+/// same LV95 place to another whose origin is elsewhere, a race road sent from a server's race
+/// frame lands where it was built and follows the receiver's shifts, and an interpolated remote
+/// 3,600 km out moves as smoothly as one next to the origin. Prints each failure and a RESULT
+/// line; exits non-zero on any.
 /// </summary>
 public static class OriginCheck
 {
@@ -23,6 +28,7 @@ public static class OriginCheck
     {
         Frames();
         Lanes();
+        Wire();
         Tree(host);
         await Physics(host);
         GD.Print($"[origincheck] RESULT {(_failures == 0 ? "PASS" : $"FAIL ({_failures})")}");
@@ -48,6 +54,36 @@ public static class OriginCheck
         // a tile corner stays an exact integer, whatever the frame
         var corner = origin.ToWorld(new TileId(2641, 1150).MinE, new TileId(2641, 1150).MaxN, 0);
         Expect(corner.X == 983 && corner.Z == -997, $"tile corner exact ({corner})");
+    }
+
+    private static void Wire()
+    {
+        // one place, written by a peer whose origin is here, read by one whose origin is 300 km off
+        var sender = new WorldOrigin(2_600_000, 1_200_000);
+        var receiver = new WorldOrigin(2_900_000, 1_100_000);
+        var at = sender.ToWorld(2_601_234.567, 1_199_876.125, 812.5);
+        var d = new Godot.Collections.Dictionary();
+        sender.ToGlobal(at).Write(d);
+        var read = GlobalPos.Read(d);
+        Expect(read.DistanceTo(new GlobalPos(2_601_234.567, 1_199_876.125, 812.5)) < 0.001, $"a dictionary carries the place ({read})");
+        Expect(receiver.ToWorld(read).DistanceTo(receiver.ToWorld(2_601_234.567, 1_199_876.125, 812.5)) < 0.001,
+            "the receiver puts it where its own origin says");
+
+        // a race road: built in a frame at the host, sent as offsets, mapped by a client, then shifted with it
+        var race = OriginFrame.Anchor(2_731_000, 1_105_000);
+        var pts = new[] { race.ToWorld(2_731_010.5, 1_105_020.25, 600), race.ToWorld(2_731_210.75, 1_105_420.5, 640) };
+        var client = new WorldOrigin(2_729_000, 1_104_000);
+        var map = client.Since(OriginFrame.Anchor(race.E, race.N));
+        var route = RaceRoute.FromPoints(pts.Select(map.Point).ToList(), [6f, 6f], frame: client.Frame);
+        Expect(client.ToGlobal(route.Centre[1]).DistanceTo(race.ToGlobal(pts[1])) < 0.01, "a sent road lands where it was built");
+        client.MoveTo(2_733_000, 1_106_000);
+        route.Follow(client.Frame);
+        route.Follow(client.Frame);   // a second holder of the same route: no second move
+        Expect(client.ToGlobal(route.Centre[0]).DistanceTo(race.ToGlobal(pts[0])) < 0.01, "a road follows the receiver's shift, once");
+        Expect(client.ToGlobal(route.Line.Points[0]).HorizontalDistanceTo(race.ToGlobal(pts[0])) < 3, "its racing line follows too");
+
+        // a remote 3,600 km out: float world positions there step by 25 cm
+        Expect(Net.RemoteInterpolator.SelfCheck(), "an interpolated remote far from everything is smooth");
     }
 
     private static void Lanes()
