@@ -107,6 +107,9 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         return name;
     }
 
+    /// <summary>A claim is on its way to the server: another E would ask twice.</summary>
+    public bool Claiming => _pendingClaim != null;
+
     /// <summary>Asks for a vehicle to get into. <paramref name="granted"/> runs if it is still free.</summary>
     public void Claim(VehicleBody vehicle, Action<VehicleState> granted)
     {
@@ -134,6 +137,10 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
 
     /// <summary>How far from a car's side a player may be to work its doors, m.</summary>
     public const float DoorReach = 3f;
+
+    /// <summary>A vehicle someone could get into now: not burnt out, not a lone trailer, not being claimed.</summary>
+    public bool Enterable(VehicleBody v) =>
+        IsInstanceValid(v) && v.GetParent() == this && !v.Wrecked && v.Trailer == null && !_claimed.Contains(v.Name);
 
     /// <summary>The nearest drivable vehicle within reach of a point, or null.</summary>
     public VehicleBody? Nearest(Vector3 point, float reach)

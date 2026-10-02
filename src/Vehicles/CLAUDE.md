@@ -12,4 +12,6 @@ touches its topic; search with `grep -ril <word> docs/notes/vehicles`.
 - `garage-buildings` — Garages (#56, #139): GKLAS 1242 -> `BuildingKind.Garage` (.bldg v2), sign and eave stripe flags in UV2.y, a portal interior (no hollow bay), roll-up `DoorLeaf` on the facade, doors open for a vehicle heading at them, generated-world garages, `--garagecheck drive/watch` (`--traffic 0`)
 - passengers (#158): `PassengerService` (World/Passengers) seats players in vehicles others drive and moves a vehicle between hosts; see the player note `passengers`
 - trucks and buses park as whole trains (trailer, angles, bus flags in `VehicleState`), a lone trailer is `RideKind.Trailer` (`ParkedTrailer`): see the player note `trucks-buses`
+- `door-reach` — Getting in by the door (#261): `VehicleReach` aims at one door (view ray, then the door you stand at, 1.35 m), E opens a shut door then gets in, G works it, door-less machines by hull/entry point, outline on the door, `TryGetIn` for probes
 - `admin-only-spawning` — Only an admin conjures vehicles online: the server counts claims and refuses other parks unless `MayPark`...
+- `perf-parked-vehicles` — Nothing per frame for a parked vehicle: dressed once at rest, cached sections, one reused ground ray query (#221)

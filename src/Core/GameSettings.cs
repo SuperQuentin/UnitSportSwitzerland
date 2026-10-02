@@ -153,6 +153,8 @@ public sealed class GameSettings
     public float SfxVolume { get; set; } = 0.5f;
     /// <summary>Ambience volume, 0..1.</summary>
     public float AmbienceVolume { get; set; } = 0.7f;
+    /// <summary>Music volume, 0..1 — the Music bus: radios, car stereos, live stations (#261).</summary>
+    public float MusicVolume { get; set; } = 0.7f;
 
     /// <summary>Which sound chip the engines are rendered as (<see cref="Audio.EngineSynth"/>).</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -249,8 +251,13 @@ public sealed class GameSettings
             if (Godot.FileAccess.FileExists(File))
             {
                 using var file = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Read);
-                loaded = JsonSerializer.Deserialize<GameSettings>(file.GetAsText(), JsonOptions) ?? loaded;
+                string text = file.GetAsText();
+                loaded = JsonSerializer.Deserialize<GameSettings>(text, JsonOptions) ?? loaded;
+                // before #261 the radios' volume lived in radio.cfg: carried over once
+                if (!text.Contains("\"musicVolume\"", StringComparison.OrdinalIgnoreCase) && OldRadioVolume() is float old)
+                    loaded.MusicVolume = old;
             }
+            else if (OldRadioVolume() is float old) loaded.MusicVolume = old;
         }
         catch (Exception e)
         {
@@ -279,6 +286,40 @@ public sealed class GameSettings
         }
     }
 
+    /// <summary>The radio panel's volume as it was kept before the Music bus (#261), if that file is there.</summary>
+    private static float? OldRadioVolume()
+    {
+        var cfg = new ConfigFile();
+        return cfg.Load("user://radio.cfg") == Error.Ok ? Math.Clamp(cfg.GetValue("radio", "volume", 0.7f).AsSingle(), 0f, 1f) : null;
+    }
+
+    /// <summary>
+    /// Writes one setting into the file without the rest of this run's values (a command-line
+    /// <c>--view</c> or <c>--traffic</c> must not become the saved choice): the radio panel's
+    /// volume slider, saved as it is dragged.
+    /// </summary>
+    public static void SaveOnly(string key, float value)
+    {
+        try
+        {
+            var root = Godot.FileAccess.FileExists(File)
+                ? System.Text.Json.Nodes.JsonNode.Parse(Godot.FileAccess.GetFileAsString(File)) as System.Text.Json.Nodes.JsonObject
+                : null;
+            root ??= System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(new GameSettings(), JsonOptions)) as System.Text.Json.Nodes.JsonObject;
+            if (root == null) return;
+            string name = JsonOptions.PropertyNamingPolicy?.ConvertName(key) ?? key;
+            foreach (var existing in root.Select(kv => kv.Key).Where(k => string.Equals(k, name, StringComparison.OrdinalIgnoreCase)).ToList())
+                root.Remove(existing);
+            root[name] = value;
+            using var file = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Write);
+            file.StoreString(root.ToJsonString(JsonOptions));
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[settings] could not write {File}: {e.Message}");
+        }
+    }
+
     /// <summary>Applies a change made in the UI: clamps, notifies the world, persists.</summary>
     public void Commit()
     {
@@ -300,6 +341,7 @@ public sealed class GameSettings
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);
+        MusicVolume = Math.Clamp(MusicVolume, 0f, 1f);
         DayLengthMinutes = Math.Clamp(DayLengthMinutes, 0f, 240f);
         StartHour = Math.Clamp(StartHour, 0f, 23.99f);
         TrafficCars = Math.Clamp(TrafficCars, 0, 150);
