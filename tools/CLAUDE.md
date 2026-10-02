@@ -38,6 +38,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `roundabouts` — #122: flagged rings fitted to a circle and rebuilt as arcs before the graph, arms moved onto them, grassed raised island (APRP, kerb, collision, blend hold) or flush mini disc; checks
 - `turn-lanes` — #123: left-turn pockets on main-road approaches as a flush APRP Pavement strip (taper + storage) plus an exit taper with a hatched median past the junction, edge line cut, divider, arrows; blend holds the strip as road; rejects and checks
 - `urban-streets` — #119 build side: UrbanField (walls, local + city scale), RoadHeights (rural +8 cm, town ground − kerb), StreetPlanner sidewalks (facade rays, medians, splits), CornerPlanner, ramp shoulders, TownPaving/TunnelRoof cover, tram PavedBed, cost, --street-svg
+- `bike-infrastructure` — #120: candidates (Major/Road, Minor on Veloland; rural parallel-alternative rule), Radstreifen widths, looser Kernfahrbahn, five path layouts per street (strokes), sloped kerbs, symbols, red crossings at main-road junctions, Wartelinie/sign moves, format (BufferDm, TrackMid, OuterDm), cost, Nyon test region
 - `tlm-road-attribute-domains` — swissTLM3D `kreisel`, `verkehrsbedeutung`, `eigentuemer`, `stufe` value domains (SELECT DISTINCT counts) and where each goes in v3
 
 ## Commands

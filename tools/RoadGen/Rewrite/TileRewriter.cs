@@ -533,7 +533,7 @@ public static partial class TileRewriter
                 // cableways and watercourses go back exactly as they came in
                 if (passthrough.TryGetValue(id, out var kept)) segments.AddRange(kept);
 
-                var flags = RoadTileFlags.Network;
+                var flags = RoadTileFlags.Network | RoadTileFlags.Bikes;
                 if (segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) flags |= RoadTileFlags.Osm;
                 streetStats.Tiles++;
                 var pointProps = signs.TryGetValue(id, out var sp) ? sp : new List<RoadPointProp>();

@@ -62,6 +62,14 @@
   Region: 2,933 walls, +1.5 KB/tile raw (+2.9 %).
 - **Sidewalks (#119, `urban-streets`)**: ATTR `Urban`, per side `sidewalkDm` and `kerbCm` (12, 0 =
   flush) are written by `StreetPlanner`; a segment is split wherever a side's sidewalk changes.
+- **Bike infrastructure (#120, `bike-infrastructure`)**: per side `bikeKind` (`Lane` painted in
+  the carriageway, `Track` path at sidewalk height, `TrackMid` halfway down), `bikeDm`, `vergeDm`
+  (grass between carriageway and path) and `bufferDm` (grass between path and sidewalk; the side's
+  former pad byte, older readers skip it); `RoadStreetSection` lays the bands out. Paint:
+  `YellowDashed` lane and path lines, `BikeSymbol` as a 1 m line along the segment (`Width` = size
+  across, `Variant` 1 = reversed, glyph built by `RoadPaintGeometry.BikeSymbol`), `BikeCrossing`
+  (12) a wide red polyline across a junction. A line offset past the carriageway edge lies on
+  that side's profile.
 - **`APRP`** area props (#122 island, splitter island; #119 junction-corner sidewalk, written by
   `CornerPlanner`: height = kerb, Solid when kerbed):
   `count u32`, per prop `type u8, variant u8, flags u16, height f32 (raise above the vertices,

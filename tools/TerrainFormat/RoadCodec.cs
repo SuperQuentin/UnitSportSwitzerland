@@ -312,7 +312,8 @@ public static class RoadCodec
             tile.Segments.Add(new RoadSegment
             {
                 Class = cls, Surface = surface, Flags = flags, Width = width, Points = points,
-                Attributes = attributes?[i] ?? default,
+                Attributes = attributes is null ? default
+                    : (tile.Flags & RoadTileFlags.Bikes) != 0 ? attributes[i] : WithoutBikes(attributes[i]),
             });
         }
         if (references is not null)
@@ -517,6 +518,14 @@ public static class RoadCodec
         var right = ReadSide(r);
         r.ReadUInt16();
         return new RoadAttributes(flags, oneWay, layer, fwd, bwd, priority, width, left, right);
+    }
+
+    /// <summary>A record from before #120: OSM's cycleway tags, never planned, are not drawn (<see cref="RoadTileFlags.Bikes"/>).</summary>
+    private static RoadAttributes WithoutBikes(RoadAttributes a)
+    {
+        static RoadSide Clear(RoadSide s) => s.Bike == BikeKind.None && s.BikeDm == 0 ? s
+            : s with { Bike = BikeKind.None, BikeDm = 0, VergeDm = 0, BufferDm = 0 };
+        return a with { Left = Clear(a.Left), Right = Clear(a.Right) };
     }
 
     private static RoadSide ReadSide(BinaryReader r)

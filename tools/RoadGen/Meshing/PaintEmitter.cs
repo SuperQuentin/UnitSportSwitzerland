@@ -182,26 +182,24 @@ public static class PaintEmitter
     }
 
     /// <summary>
-    /// Velo symbols along a bike lane or path at <paramref name="offset"/>: one
-    /// <see cref="BikePlanner.SymbolFromEnd"/> in from each end flagged as a junction, on a piece
-    /// long enough to hold both.
+    /// The Velo symbol of a bike lane or path at <paramref name="offset"/>: one,
+    /// <see cref="BikePlanner.SymbolFromEnd"/> past the end where its riders come in, when that end
+    /// is flagged a junction (Stadt Bern C 2.10.2 §5 asks for one at the start and one at the end
+    /// of every Radstreifen; the end's is left out: a town's short pieces between junctions would
+    /// carry four per piece). The right side's riders come in at the start, the left side's at the
+    /// end. None on a piece shorter than <see cref="BikePlanner.SymbolMinLength"/>.
     /// </summary>
     public static int Symbols(RoadSegment seg, float offset, bool right, List<RoadPaint> into,
         bool atStart, bool atEnd)
     {
-        if (!atStart && !atEnd) return 0;
+        if (right ? !atStart : !atEnd) return 0;
         double length = RoadPaintGeometry.Length(RoadPaintGeometry.Offset(seg, RoadPaint.FileOffset(offset)));
         float size = BikePlanner.SymbolSize, gap = BikePlanner.SymbolFromEnd;
-        if (length < 2 * (gap + size) + 2) return 0;
-        byte variant = right ? (byte)0 : RoadPaintGeometry.BikeReversed;
-        int n = 0;
-        foreach (var (from, on) in (ReadOnlySpan<(double, bool)>)[(gap, atStart), (length - gap - size, atEnd)])
-        {
-            if (!on) continue;
-            Add(into, RoadPaint.AlongSegment(seg, PaintType.BikeSymbol, Yellow, size, 0, 0, offset, from, from + size, variant));
-            n++;
-        }
-        return n;
+        if (length < BikePlanner.SymbolMinLength) return 0;
+        double from = right ? gap : length - gap - size;
+        Add(into, RoadPaint.AlongSegment(seg, PaintType.BikeSymbol, Yellow, size, 0, 0, offset, from, from + size,
+            right ? (byte)0 : RoadPaintGeometry.BikeReversed));
+        return 1;
     }
 
     /// <summary>

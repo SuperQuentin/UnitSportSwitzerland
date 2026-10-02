@@ -12,7 +12,7 @@ using UnitSport.Tools.RoadGen.Geometry;
 /// <item><b>Which roads</b> (<see cref="PlanLines"/>, on the raw lines before the geometry, so
 /// the junction priority sees the lanes): paved at-grade <c>Major</c> and <c>Road</c>, and
 /// <c>Minor</c> on a Veloland route; never motorways, ramps, roundabout rings, tunnels, stairs.
-/// Skipped where a smaller road, track or path runs alongside (<see cref="ParallelReach"/>,
+/// Outside towns, skipped where a smaller road, track or path runs alongside (<see cref="ParallelReach"/>,
 /// <see cref="ParallelCos"/>) for most of the line (<see cref="ParallelShare"/>): cyclists take
 /// that one.</item>
 /// <item><b>Painted lanes</b> (Radstreifen): yellow dashed, <see cref="LaneWidth"/> wide inside the
@@ -52,6 +52,8 @@ public static class BikePlanner
     public const float LineWidth = 0.15f, Dash = 3f, Gap = 3f, JunctionDash = 1f;
     /// <summary>Velo symbol, 1.00 x 1.00 m (Stadt Bern C 2.10.4; ZH p. 39), this far from a lane's end.</summary>
     public const float SymbolSize = 1.0f, SymbolFromEnd = 4.0f;
+    /// <summary>A bike lane or path piece shorter than this gets no symbol.</summary>
+    public const float SymbolMinLength = 25f;
 
     /// <summary>A parallel alternative lies within this distance of the road (centreline to centreline).</summary>
     public const double ParallelReach = 40.0;
@@ -155,8 +157,12 @@ public static class BikePlanner
             line.BikeWanted = true;
             double km = line.Length / 1000;
             if (line.Write) { stats.Candidates++; stats.CandidateKm += km; }
+            if (line.Write && line.Osm is { } row && (IsOsmBike(row.CyclewayLeft) || IsOsmBike(row.CyclewayRight))) stats.OsmKm += km;
+            int urbanPoints = line.Plan.Count(p => field.Density(p.X, p.Y) >= UrbanField.UrbanAt);
+            bool urban = urbanPoints * 2 > line.Plan.Length;
 
-            if (HasAlternative(line.Plan, alternatives))
+            // only out of town: in a town a footpath or a lane runs beside every street
+            if (!urban && HasAlternative(line.Plan, alternatives))
             {
                 line.BikeWanted = false;
                 line.BikeWhy = Why.Parallel;
@@ -165,8 +171,7 @@ public static class BikePlanner
             }
 
             bool oneWay = line.OneWay != 0 || (s.Flags & RoadFlags.Divided) != 0;
-            int urbanPoints = line.Plan.Count(p => field.Density(p.X, p.Y) >= UrbanField.UrbanAt);
-            (line.BikeLaneDm, line.BikeWhy) = LaneFor(line.Width, oneWay, urban: urbanPoints * 2 > line.Plan.Length);
+            (line.BikeLaneDm, line.BikeWhy) = LaneFor(line.Width, oneWay, urban);
             if (!line.Write) continue;
             switch (line.BikeWhy)
             {
@@ -221,6 +226,8 @@ public static class BikePlanner
         RoadSide Lane(RoadSide s) => s.Bike == BikeKind.None ? s with { Bike = BikeKind.Lane, BikeDm = line.BikeLaneDm } : s;
         return a with { Left = left ? Lane(a.Left) : a.Left, Right = right ? Lane(a.Right) : a.Right };
     }
+
+    private static bool IsOsmBike(string value) => value is "lane" or "opposite_lane" or "track" or "opposite_track";
 
     private static bool HasAlternative(Vec2[] plan, Grid alternatives)
     {

@@ -191,7 +191,7 @@ public static class RoadPaintGeometry
     /// <summary><see cref="PaintType.BikeSymbol"/> variant bit: the rider travels from the last vertex to the first.</summary>
     public const byte BikeReversed = 1;
 
-    private const int WheelSegments = 10;
+    private const int WheelSegments = 8;
 
     /// <summary>
     /// The bicycle of a <see cref="PaintType.BikeSymbol"/> (#120) in side view, x along the bike

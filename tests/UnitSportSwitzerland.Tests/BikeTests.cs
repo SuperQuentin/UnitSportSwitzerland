@@ -52,8 +52,8 @@ public class BikeTests
         var lines = paint.Where(p => p.Type == PaintType.YellowDashed).Select(p => p.Offset).Distinct().OrderBy(o => o).ToList();
         Assert.Equal(new[] { -1.7f, 1.7f }, lines);   // 3 m half width - 1.3 m lane
         var symbols = paint.Where(p => p.Type == PaintType.BikeSymbol).ToList();
-        Assert.Equal(4, symbols.Count);   // both ends of both lanes
-        Assert.Equal(2, symbols.Count(s => (s.Variant & RoadPaintGeometry.BikeReversed) != 0));   // the left lane's traffic runs against the drawing
+        Assert.Equal(2, symbols.Count);   // one per lane, where its riders come in
+        Assert.Equal(1, symbols.Count(s => (s.Variant & RoadPaintGeometry.BikeReversed) != 0));   // the left lane's traffic runs against the drawing
     }
 
     [Fact]
@@ -200,8 +200,8 @@ public class BikeTests
         var road = Road(6, right: side);
         var symbol = RoadPaint.AlongSegment(road, PaintType.BikeSymbol, PaintEmitter.Yellow, 1, 0, 0, 3 + 1.0, 10, 11);
         Assert.All(Enumerable.Range(0, symbol.Vertices.Length / 3), i => Assert.Equal(400.06f, symbol.Vertices[i * 3 + 1], 3));
-        Assert.Equal(60, RoadPaintGeometry.BikeSymbol(symbol).Count);
-        Assert.Equal(60, RoadPaintGeometry.TriangleCount(symbol));
+        Assert.Equal(52, RoadPaintGeometry.BikeSymbol(symbol).Count);
+        Assert.Equal(52, RoadPaintGeometry.TriangleCount(symbol));
         // on the carriageway, nothing changes
         var centre = RoadPaint.AlongSegment(road, PaintType.WhiteDashed, PaintEmitter.White, 0.15f, 3, 6, 0);
         Assert.Equal(400f, centre.Vertices[1]);
@@ -212,7 +212,7 @@ public class BikeTests
     {
         var side = new RoadSide(SidewalkDm: 15, Bike: BikeKind.TrackMid, BikeDm: 20, KerbCm: 12, VergeDm: 10, BufferDm: 8);
         var road = Road(6, left: Lane(13), right: side);
-        var tile = new RoadTile { Id = Tile, Segments = [road], Flags = RoadTileFlags.Network };
+        var tile = new RoadTile { Id = Tile, Segments = [road], Flags = RoadTileFlags.Network | RoadTileFlags.Bikes };
         tile.Paint.Add(RoadPaint.AlongSegment(road, PaintType.BikeSymbol, PaintEmitter.Yellow, 1, 0, 0, 3 + 2.0, 10, 11, RoadPaintGeometry.BikeReversed));
         using var ms = new MemoryStream();
         RoadCodec.Encode(tile, ms);
@@ -221,5 +221,16 @@ public class BikeTests
         Assert.Equal(road.Attributes, back.Segments[0].Attributes);
         Assert.Equal(tile.Paint[0].Vertices, back.Paint[0].Vertices);
         Assert.Equal(RoadPaintGeometry.BikeReversed, back.Paint[0].Variant);
+
+        // a tile from before #120: OSM's raw cycleway tags in the side records are not drawn
+        tile.Flags = RoadTileFlags.Network;
+        using var old = new MemoryStream();
+        RoadCodec.Encode(tile, old);
+        old.Position = 0;
+        var cleared = RoadCodec.Decode(old).Segments[0].Attributes;
+        Assert.Equal(BikeKind.None, cleared.Right.Bike);
+        Assert.Equal(15, cleared.Right.SidewalkDm);
+        Assert.Equal(15, cleared.Right.OuterDm);
+        Assert.False(cleared.Left.HasLane);
     }
 }

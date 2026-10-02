@@ -10,10 +10,16 @@ using UnitSport.Terrain.Format;
 /// slate blue, each
 /// sidewalk as a band beside its carriageway coloured by width (narrow red, 1.5-2.5 m tan,
 /// wider orange, flush squares lilac), urban roads with no sidewalk on a side as a thin red edge,
-/// retaining walls blue. Reads the final <c>.road</c> and <c>.bldg</c> files; nothing is built.
+/// retaining walls blue. Bike infrastructure (#120): a separated path as a band coloured by its
+/// layout (1 sky, 2 blue, 3 teal, 4 green, 5 purple) with its grass strips green, the sidewalk
+/// behind it; bike paint on top: yellow lines, red crossings, symbols as yellow dots. Reads the
+/// final <c>.road</c> and <c>.bldg</c> files; nothing is built.
 /// </summary>
 public static class StreetView
 {
+
+    /// <summary>Bike path colour by layout 1..5 (#120).</summary>
+    private static readonly string[] LayoutColours = ["#000", "#5fb4e8", "#2a6fd6", "#1fa39a", "#3c9a3c", "#8e5bc2"];
 
     public static int Run(string chunks, double e, double n, double size, string outFile, Action<string> log)
     {
@@ -33,7 +39,8 @@ public static class StreetView
             for (int tn = (int)Math.Floor((maxN - size) / 1000); tn <= (int)Math.Floor(maxN / 1000); tn++)
                 tiles.Add(new TileId(te, tn));
 
-        int segments = 0, sides = 0;
+        int segments = 0, sides = 0, tracks = 0;
+        var bikes = new StringBuilder();
         var roads = new StringBuilder();
         var walks = new StringBuilder();
         var walls = new StringBuilder();
@@ -91,11 +98,23 @@ public static class StreetView
                 {
                     var side = right ? a.Right : a.Left;
                     double sign = right ? 1 : -1;
+                    double inner = 0;   // a path's bands first, then the sidewalk behind them (#120)
+                    if (side.HasTrack)
+                    {
+                        void Band(double from, double width, string fill) =>
+                            walks.Append(c, $"<path d=\"{Offset(pts, sign * (half + from + width / 2), X, Y)}\" stroke=\"{fill}\" stroke-width=\"{(width * PxPerM):F1}\" fill=\"none\" stroke-linecap=\"butt\"/>");
+                        double verge = side.VergeDm / 10.0, path = side.BikeDm / 10.0, buffer = side.BufferDm / 10.0;
+                        if (verge > 0) Band(0, verge, "#7caa4a");
+                        Band(verge, path, LayoutColours[Rewrite.TileRewriter.LayoutOf(side)]);
+                        if (buffer > 0) Band(verge + path, buffer, "#7caa4a");
+                        inner = verge + path + buffer;
+                        tracks++;
+                    }
                     if (side.SidewalkDm > 0)
                     {
                         double w = side.SidewalkDm / 10.0;
                         string fill = side.KerbCm == 0 ? "#b9a6d6" : w < 1.5 ? "#d9534f" : w <= 2.5 ? "#d8c08a" : "#f0a040";
-                        walks.Append(c, $"<path d=\"{Offset(pts, sign * (half + w / 2), X, Y)}\" stroke=\"{fill}\" stroke-width=\"{(w * PxPerM):F1}\" fill=\"none\" stroke-linecap=\"butt\"/>");
+                        walks.Append(c, $"<path d=\"{Offset(pts, sign * (half + inner + w / 2), X, Y)}\" stroke=\"{fill}\" stroke-width=\"{(w * PxPerM):F1}\" fill=\"none\" stroke-linecap=\"butt\"/>");
                         sides++;
                     }
                     else if (a.Has(RoadAttrFlags.Urban))
@@ -115,6 +134,24 @@ public static class StreetView
                 }
             }
 
+            // bike paint (#120): lines and crossings as drawn, a symbol as a dot
+            foreach (var paint in tile.Paint)
+            {
+                if (paint.Type is not (PaintType.YellowDashed or PaintType.BikeCrossing or PaintType.BikeSymbol) || paint.Vertices.Length < 6) continue;
+                var v = paint.Vertices;
+                var pts = new (double E, double N)[v.Length / 3];
+                for (int i = 0; i < pts.Length; i++) pts[i] = (id.MinE + v[i * 3], id.MaxN - v[i * 3 + 2]);
+                if (paint.Type == PaintType.BikeSymbol)
+                    bikes.Append(c, $"<circle cx=\"{X(pts[0].E)}\" cy=\"{Y(pts[0].N)}\" r=\"{Math.Max(2, PxPerM * 0.6):F1}\" fill=\"#e6be33\" stroke=\"#5a4a00\" stroke-width=\"0.7\"/>");
+                else
+                {
+                    bool red = paint.Type == PaintType.BikeCrossing;
+                    double width = red ? paint.Width : Math.Max(paint.Width, 0.3);
+                    string dash = paint.Dash > 0 ? string.Create(c, $" stroke-dasharray=\"{paint.Dash * PxPerM:F1} {paint.Gap * PxPerM:F1}\"") : "";
+                    bikes.Append(c, $"<path d=\"{Offset(pts, 0, X, Y)}\" stroke=\"{(red ? "#c0392b" : "#e6be33")}\" stroke-width=\"{width * PxPerM:F1}\" fill=\"none\"{dash}/>");
+                }
+            }
+
             foreach (var prop in tile.LinearProps)
             {
                 var pts = new (double E, double N)[prop.PointCount];
@@ -125,8 +162,9 @@ public static class StreetView
 
         svg.Append("<g>").Append(roads).Append("</g>\n");
         svg.Append("<g>").Append(walks).Append("</g>\n");
+        svg.Append("<g>").Append(bikes).Append("</g>\n");
         svg.Append("<g fill=\"#222\" stroke=\"#222\" stroke-width=\"1\">").Append(walls).Append("</g>\n");
-        svg.Append(c, $"<text x=\"8\" y=\"20\" font-family=\"sans-serif\" font-size=\"16\">LV95 {e:F0},{n:F0}, {size:F0} m; {segments} segments, {sides} sidewalk sides</text>\n");
+        svg.Append(c, $"<text x=\"8\" y=\"20\" font-family=\"sans-serif\" font-size=\"16\">LV95 {e:F0},{n:F0}, {size:F0} m; {segments} segments, {sides} sidewalk sides, {tracks} bike path sides</text>\n");
         svg.Append("</svg>\n");
         File.WriteAllText(outFile, svg.ToString());
         log($"street view -> {outFile} ({segments} segments, {sides} sidewalk sides)");

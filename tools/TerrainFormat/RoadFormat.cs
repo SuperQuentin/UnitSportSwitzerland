@@ -197,6 +197,12 @@ public enum RoadTileFlags : ushort
     /// output, the only safe input for the stage: a second pass would trim trimmed roads.
     /// </summary>
     Network = 1 << 1,
+    /// <summary>
+    /// The bike fields of every <see cref="RoadSide"/> were planned (#120). A tile without it
+    /// (written before #120) holds OSM's raw cycleway tags there, which nothing was laid out
+    /// around: the decoder clears them.
+    /// </summary>
+    Bikes = 1 << 2,
 }
 
 /// <summary>Road paint (#116). Colour is stored separately, so a type does not fix it.</summary>
