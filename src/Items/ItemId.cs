@@ -126,7 +126,14 @@ public enum ItemId
     /// <summary>Placed: a workbench station anywhere (<c>PlacedKind.FieldWorkbench</c>).</summary>
     FieldWorkbench = 156,
 
-    // 160-179 are taken by the shops / vending machines (#273)
+    // ---- shops and PAUSA vending machines (#273, docs/notes/loot/shops.md): never crafted ----
+    /// <summary>Only from a PAUSA vending machine, like the three after it.</summary>
+    IceTea = 160,
+    Crisps = 161,
+    GummyBears = 162,
+    IsotonicDrink = 163,
+    /// <summary>Sold at hardware, sport and gun shops; carried, a tree gives one more log (<c>Loot.Gathering</c>).</summary>
+    SwissArmyKnife = 164,
 
     // ---- gadgets (#275, docs/notes/build/gadgets.md): placed, to get up high or to hide ----
     Zipline = 180, RopeLadder = 181, Trampoline = 182, LaunchPad = 183, CamoNet = 184, HayHideout = 185,

@@ -152,7 +152,15 @@ public sealed partial class ProceduralWorld
                     plans.Add(new Plan(new Footprint(c.E, c.N, t.E, t.N, 9 + rng.NextDouble() * 3, 6.5),
                         BuildingKind.Agricultural, 5, 24, 0, (ushort)(1880 + rng.Next(80))));
                 else
-                    plans.Add(House(rng, c, t, width, depth, edge < 0.3 ? 0.3 : 0.0));
+                {
+                    var plan = House(rng, c, t, width, depth, edge < 0.3 ? 0.3 : 0.0);
+                    // the village shops (#273): a third of the houses in its middle keep a shop on
+                    // the ground floor, by a hash of where they stand, so no other building moves
+                    if (plan.Kind == BuildingKind.House && edge < 0.35
+                        && Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 227) < 0.35)
+                        plan = plan with { Kind = BuildingKind.Commercial };
+                    plans.Add(plan);
+                }
             }
         }
 
