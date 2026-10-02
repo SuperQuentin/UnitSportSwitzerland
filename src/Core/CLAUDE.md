@@ -26,7 +26,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 ## Commands
 
-- `commands` — Commands: --at, --chatcheck, --fakewheel, --ffbcheck, --ffblog, --origincheck, --originshift, --originstress, --goto, --licenses, --menu, --nohud, --origin, --path, --probe, --settings wheel, --shot, --shot-queue (g heights, frame=), --title, --wheelcheck, --wheellock, --wheelwatch
+- `commands` — Commands: --at, --chatcheck, --fakewheel, --ffbcheck, --ffblog, --origincheck, --originshift, --originstress, --goto, --licenses, --menu, --nohud, --origin, --path, --probe, --settings wheel, --shot, --shot-queue (g and i heights, frame=), --title, --wheelcheck, --wheellock, --wheelwatch
 
 ## Gotchas
 
