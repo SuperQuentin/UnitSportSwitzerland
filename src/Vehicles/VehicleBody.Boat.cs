@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Avatar;
 using UnitSport.Player;
 using UnitSport.World;
@@ -25,6 +26,38 @@ public partial class VehicleBody
     /// <summary>Waves smaller than this (summed amplitude where it floats, m) do not keep a boat awake.</summary>
     private const float CalmSwell = 0.06f;
 
+    // ---- the mooring (#378) -------------------------------------------------------------------
+
+    /// <summary>Where it is moored (the body's place, origin-free) and its heading there; null: it floats free.</summary>
+    private GlobalPos? _mooredAt;
+    private float _mooredYaw;
+    /// <summary>Moors itself where it comes to rest (slower than <see cref="MoorBelow"/>) unless told otherwise.</summary>
+    private bool _moorWhereItStops = true;
+    private const float MoorBelow = 0.6f;
+
+    /// <summary>
+    /// Moors it (#378): from now on it is pulled softly back to <paramref name="at"/> (the body's place)
+    /// and <paramref name="yaw"/> against the waves' drift (<see cref="BoatDynamics.Moor"/>), still
+    /// riding the swell. A boat left in the world moors itself where it comes to rest; a berth
+    /// (#377's landings) or an AI steamer stopping at one (#379) moors it where it must lie. The
+    /// authority's call; taking the wheel ends it (the parked body goes).
+    /// </summary>
+    public void Moor(GlobalPos at, float yaw)
+    {
+        _mooredAt = at;
+        _mooredYaw = yaw;
+    }
+
+    /// <summary>Lets it float free (it does not moor itself again).</summary>
+    public void Unmoor()
+    {
+        _mooredAt = null;
+        _moorWhereItStops = false;
+    }
+
+    /// <summary>Where it is moored in this peer's frame (the body's place), null when it floats free; for checks.</summary>
+    public Vector3? MooringSpot => _mooredAt is { } at ? Origin.ToWorld(at) : null;
+
     private void BeginBoat(Boat boat, VehicleState s)
     {
         // from where the body was put in this peer's frame (_Ready: the state's GlobalPos, a hand's breadth up)
@@ -32,6 +65,8 @@ public partial class VehicleBody
         if (s.Angles != default) boat.State.Attitude = Quaternion.FromEuler(s.Angles);
         Tilt = boat.State.Attitude;
         _drawnTilt = Tilt;
+        // left at rest: moored where it lies (one left running moors where it comes to a stop)
+        if (MathX.FlatLength(s.Velocity) < MoorBelow) Moor(s.Position, s.Yaw);
         _hull = GetNodeOrNull<CollisionShape3D>("Hull");
         // where the shape was put in the level boat's frame: the box's centre, nothing for a shaped hull
         _hullCentre = _hull?.Position ?? Vector3.Zero;
@@ -49,6 +84,9 @@ public partial class VehicleBody
         _boatWater.Begin(GlobalPosition, WaterField.Now);
         // nobody at the helm: no throttle, the helm where it was left
         BoatDynamics.Step(boat.Spec, ref s, default, _boatWater, dt);
+        if (_mooredAt == null && _moorWhereItStops && MathX.FlatLength(s.Velocity) < MoorBelow && _life > SettleTime)
+            Moor(Origin.ToGlobal(GlobalPosition), Rotation.Y);
+        if (_mooredAt is { } moored) BoatDynamics.Moor(ref s, Origin.ToWorld(moored) + boat.Pivot, _mooredYaw, dt);
         var wanted = (s.Position - start) / Mathf.Max(dt, 1e-4f);
         Velocity = wanted;
         MoveAndSlide();
