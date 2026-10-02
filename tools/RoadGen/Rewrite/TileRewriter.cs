@@ -511,7 +511,7 @@ public static partial class TileRewriter
                     for (int i = list.Count - 1; i >= 0; i--)
                         if (streetPieces.TryGetValue(list[i], out var pieces))
                         {
-                            var final = strips.Count == 0 ? pieces : pieces.Select(x => OffPavement(x, strips)).ToList();
+                            var final = strips.Count == 0 ? pieces : pieces.Select(x => OffPavement(x, strips, netStats.Bikes)).ToList();
                             finalPieces[list[i]] = final;
                             list.RemoveAt(i);
                             list.InsertRange(i, final);
@@ -615,7 +615,7 @@ public static partial class TileRewriter
     }
 
     /// <summary>The piece with no sidewalk on a side whose sidewalk band crosses one of <paramref name="strips"/>.</summary>
-    private static RoadSegment OffPavement(RoadSegment seg, List<RoadAreaProp> strips)
+    private static RoadSegment OffPavement(RoadSegment seg, List<RoadAreaProp> strips, BikePlanner.Stats bikes)
     {
         var a = seg.Attributes;
         if (a.Left.OuterDm == 0 && a.Right.OuterDm == 0) return seg;
@@ -639,6 +639,7 @@ public static partial class TileRewriter
             return false;
         }
         bool left = Crosses(false), right = Crosses(true);
+        if ((left && a.Left.HasTrack) || (right && a.Right.HasTrack)) bikes.PathsOffTurnLanes++;
         if (!left && !right) return seg;
         return new RoadSegment
         {
