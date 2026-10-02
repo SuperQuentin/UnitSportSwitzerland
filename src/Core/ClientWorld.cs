@@ -652,7 +652,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
             Birds.BirdNet.Create(this, birds, server: false);
             // pedestrians walk the birds' street spots (#217): online the server's puppets, offline kept here
-            if (Systems.On(Systems.Npcs)) World.Pedestrians.Create(this, origin, _chunks, server: false);
+            if (Systems.On(Systems.Npcs)) World.Pedestrians.Create(this, origin, _chunks, birds, server: false);
         }
 
         // occasions: the treat / gift hunt (taken with the gather hold) and the seasonal hat

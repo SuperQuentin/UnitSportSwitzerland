@@ -197,7 +197,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(birds);
         Birds.BirdNet.Create(this, birds, server: true);
         // pedestrians where players look, kept here as light records (#217); they walk the birds' street spots
-        World.Pedestrians.Create(this, origin, _chunks, server: true);
+        World.Pedestrians.Create(this, origin, _chunks, birds, server: true);
         // stuck Polaroids' images: uploaded by their owner, kept here, served to the others
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);

@@ -35,9 +35,10 @@ public partial class Pedestrians : Node
 
     public static Pedestrians? Instance { get; private set; }
 
-    public static Pedestrians Create(Node world, WorldOrigin origin, Terrain.ChunkManager? chunks, bool server)
+    /// <param name="birds">Whose town data (street spots, building density) the people walk: one loader for both.</param>
+    public static Pedestrians Create(Node world, WorldOrigin origin, Terrain.ChunkManager? chunks, BirdLife birds, bool server)
     {
-        var p = new Pedestrians(origin, chunks) { Name = NodeName, _server = server };
+        var p = new Pedestrians(origin, chunks) { Name = NodeName, _server = server, _birds = birds };
         world.AddChild(p);
         return p;
     }
@@ -51,6 +52,7 @@ public partial class Pedestrians : Node
     public Pedestrians() : this(null!, null) { }
 
     private bool _stub;
+    private BirdLife? _birds;
 
     /// <summary>A swarm bot's (src/Net/Swarm): takes the snapshots, draws nothing, keeps nothing.</summary>
     public static Pedestrians Stub() => new() { Name = NodeName, _stub = true };
@@ -174,7 +176,7 @@ public partial class Pedestrians : Node
     /// <summary>Tops up the people around one player: in a town, where it is about to look, a couple per tick.</summary>
     private void Populate(in View v)
     {
-        if (BirdLife.Instance?.Town(v.Pos) is not { } town) return;
+        if (_birds?.Town(v.Pos) is not { } town) return;
         int wanted = (int)(WantedPerPlayer * Mathf.Clamp((town.BuildingsAround(v.Pos) - 10) / 40f, 0f, 1f));
         int around = 0;
         foreach (var p in _peds)
@@ -214,7 +216,7 @@ public partial class Pedestrians : Node
     /// <summary>Walks every record along its pavement: from one street spot to the next, nothing more.</summary>
     private void Advance(float dt)
     {
-        var life = BirdLife.Instance;
+        var life = _birds;
         foreach (var p in _peds)
         {
             if (p.Knocked > 0f) { p.Knocked -= dt; if (p.Knocked <= 0f) p.State &= unchecked((byte)~FlagKnocked); continue; }

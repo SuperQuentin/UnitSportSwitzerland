@@ -93,8 +93,10 @@ public partial class PigeonNetProbe : ChatProbe
     {
         if (!await Heard("A", "pigeon", 60)) { Fail("A never turned into a pigeon"); return; }
         var a = Other()!;
-        bool bird = await Until(() => a.Ride == RideKind.Pigeon && a.GetNodeOrNull("Body/Bird") != null, 10);
-        var box = bird ? Avatar.MeshBounds.Of(a.GetNode<Node3D>("Body")) : default;
+        // the visual is named Body, but the one it replaces may still be in the tree for a frame
+        Node3D? Drawn() => a.FindChild("Bird", true, false)?.GetParent() as Node3D;
+        bool bird = await Until(() => a.Ride == RideKind.Pigeon && Drawn() != null, 10);
+        var box = bird ? Avatar.MeshBounds.Of(Drawn()!) : default;
         Expect(bird && box.Size.Length() < 1.2f, $"B sees A as a bird, at bird size ({box.Size})");
         Say("seenbird");
 
