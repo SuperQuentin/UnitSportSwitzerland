@@ -267,13 +267,27 @@ public partial class BoatCheck : Node
     /// <summary>Half ahead across a gamey swell: the wake's foam from above and from low aft, riding the waves.</summary>
     private async Task WakeShots(FootPlayer me)
     {
-        await SeaState("gamey", 1f);
         var at = At(Lake.ShoreX + 1100, -200);
-        WaterField.TryLevelAt(at, out float level);
         float heading = West + 0.7f;
+        // the water slapping the hull (#380): how often and how hard, idle and under way
+        async Task Slaps(string what, float throttle, double seconds)
+        {
+            me.RideControls = Helm(me, throttle, hold: heading);
+            await Wait(2);
+            var slap = FindRig(me)?.Slap;
+            int n0 = slap?.Count ?? 0;
+            float s0 = slap?.Sum ?? 0f;
+            await Wait(seconds);
+            if (slap != null)
+                Log(string.Create(CultureInfo.InvariantCulture,
+                    $"hull slaps, {what}: {(slap.Count - n0) / seconds:F1} a second, mean strength {(slap.Sum - s0) / Mathf.Max(1, slap.Count - n0):F2}, {me.BoatMotion.WaterSpeed * 3.6f:F0} km/h"));
+        }
+        WaterField.TryLevelAt(at, out float level);
         me.PlaceBoat(at with { Y = level - 0.2f }, heading);
-        me.RideControls = Helm(me, 0.5f, hold: heading);
-        await Wait(10);
+        await Slaps("calm, idle", 0f, 5);
+        await SeaState("gamey", 1f);
+        await Slaps("gamey, idle", 0f, 6);
+        await Slaps("gamey, half ahead", 0.5f, 8);
         Log(string.Create(CultureInfo.InvariantCulture, $"wake: {me.BoatMotion.WaterSpeed * 3.6f:F0} km/h through a gamey swell"));
         await Shot("wake_swell_high", () => Look(me, side: 0.45f, back: 1f, up: 0.75f, distance: 3.6f));
         await Shot("wake_swell_low", () => Look(me, side: 0.9f, back: 1f, up: 0.14f, distance: 2.6f));
@@ -291,6 +305,14 @@ public partial class BoatCheck : Node
             return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
         });
         me.RideControls = Helm(me, 0f);
+    }
+
+    private static Avatar.BoatRig? FindRig(Node n)
+    {
+        if (n is Avatar.BoatRig r) return r;
+        foreach (var c in n.GetChildren())
+            if (FindRig(c) is { } found) return found;
+        return null;
     }
 
     // ---- gamey ---------------------------------------------------------------------------------

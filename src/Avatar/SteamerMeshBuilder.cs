@@ -840,6 +840,8 @@ public partial class SteamerRig : Node3D
         {
             rig.AddWater();
             rig.AddSound();
+            // the bow's forefoot at the waterline: a big hull's slap is low and carries (#380)
+            rig._slap = new HullSlap(rig, new Vector3(0, SteamerLines.Draught, -SteamerLines.WaterlineHalf + 5f), 0.55f, 1f, 20f);
         }
         return rig;
     }
@@ -965,6 +967,7 @@ public partial class SteamerRig : Node3D
     }
 
     private const float WhistleDb = 2f;
+    private HullSlap? _slap;
     private bool _blowing;
     private float _blowFor = 10f;
     private Vector2 _shownWhistle;
@@ -1021,6 +1024,7 @@ public partial class SteamerRig : Node3D
             }
             if (pitch != _soundPitch) { _soundPitch = pitch; _paddles.PitchScale = pitch; }
         }
+        _slap?.Tick(dt);
         if (_whistle != null)
         {
             // blown up to its note and let die away, never started or cut dead (#380)
