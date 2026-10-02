@@ -17,8 +17,8 @@ using UnitSport.Tools.RoadGen.Network;
 /// its place. The ribbon keeps one width per segment, so each widening is a flush
 /// <see cref="AreaPropType.Pavement"/> strip along a segment's edge (the road blend holds the
 /// ground under it at the road's height, so it is in the collision too). A pocket is placed only
-/// when both its approach and its exit fit. No lane-level topology is stored: traffic still
-/// drives the original lane.
+/// when both its approach and its exit fit. What each approach got is returned for the signal
+/// plans (#348) and the lane records traffic drives (#353, <c>TileRewriter.Lanes</c>).
 /// </summary>
 public static partial class TileRewriter
 {
@@ -96,8 +96,8 @@ public static partial class TileRewriter
 
     private static double Sq(double v) => v * v;
 
-    /// <returns>The pockets each approach got, by (junction node, arm index): signal plans (#348) read them.</returns>
-    private static Dictionary<(int Node, int Arm), (bool Left, bool Right)> EmitTurnLanes(PriorityResult priority, RoadGenResult result,
+    /// <returns>The pockets each approach got, by (junction node, arm index): signal plans (#348) and lane records (#353) read them.</returns>
+    private static Dictionary<(int Node, int Arm), ApproachPockets> EmitTurnLanes(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
         Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
@@ -226,12 +226,16 @@ public static partial class TileRewriter
         }
         var rightOf = rights.Where(r => r.Way is not null).ToDictionary(r => (r.Node, r.Arm));
 
-        var placed = new Dictionary<(int Node, int Arm), (bool Left, bool Right)>();
+        // what each approach got, for the signal plans (#348) and the lane records (#353)
+        var placed = new Dictionary<(int Node, int Arm), ApproachPockets>();
+        ApproachPockets Placed(int node, int arm, TileId home) =>
+            placed.TryGetValue((node, arm), out var a) ? a : placed[(node, arm)] = new ApproachPockets(home);
         foreach (var pocket in pockets)
         {
             if (pocket.Dropped) continue;
             bool hasRight = rightOf.ContainsKey((pocket.Node, pocket.Arm));
-            placed[(pocket.Node, pocket.Arm)] = (true, hasRight);
+            Placed(pocket.Node, pocket.Arm, pocket.Home).PlacedLeft(pocket.In.ApproachWay!, pocket.In.Storage, pocket.In.Merged,
+                pocket.RightTurn && !hasRight, pocket.Signal);
             var (inSlot, outSlot) = (pocket.In, pocket.Out);
             var approach = inSlot.ApproachWay!;
             var departure = outSlot.ExitWay!;
@@ -271,7 +275,7 @@ public static partial class TileRewriter
             r.Way.RightLane(Get(paint, tile), stats, r.Left is { Dropped: false } ? (PaintArrow?)null
                 : r.LeftTurn ? PaintArrow.Straight | PaintArrow.Left : PaintArrow.Straight);
             stats.SignsMoved += r.Way.PushOut(Get(signs, tile));
-            placed[(r.Node, r.Arm)] = (placed.GetValueOrDefault((r.Node, r.Arm)).Left, true);
+            Placed(r.Node, r.Arm, r.Home).PlacedRight(r.Way, r.LeftTurn);
             stats.RightPockets++;
         }
         return placed;
@@ -497,6 +501,28 @@ public static partial class TileRewriter
         /// <summary>Set once its strip and paint are out (a merged one serves two pockets).</summary>
         public bool Emitted { get; private set; }
 
+        // what the approach's lane record (#353, TileRewriter.Lanes) reads of the built widening:
+        // half the carriageway, the car lane between the centre and a bike lane, the pocket's
+        // width, the left-turn bike lane, how far out the strip starts, its length, taper, lead-in
+        public double Half => _half;
+        public double Car => _car;
+        public double PocketWidth => _pocket;
+        public double BikeLeft => _bikeLeft;
+        public double Base => _base;
+        public double Length => _length;
+        public double Taper => _taper;
+        public double Lead => _lead;
+
+        /// <summary>The painted bike lane on the widened side (#120), metres, 0 none, whatever this strip's own layout does with it.</summary>
+        public double KerbBike { get; }
+
+        /// <summary>A point beside the segment, <paramref name="offset"/> out from its centre line toward the widened side, <paramref name="dist"/> from the mouth, in <paramref name="frame"/>'s tile-local frame.</summary>
+        public float[] At(TileId frame, double dist, double offset)
+        {
+            var p = Point(dist, offset);
+            return [(float)(p[0] + _tile.MinE - frame.MinE), p[1], (float)(p[2] + frame.MaxN - _tile.MaxN)];
+        }
+
         /// <param name="painted">The segment the road's lines were laid on (the one they name), <paramref name="seg"/> or an Urban-flagged copy of it.</param>
         public Widening(RoadSegment seg, RoadSegment painted, TileId tile, int self, bool junctionAtEnd, int side, double length, double taper,
             double clear = TurnClear, double[]? stations = null, bool exit = false, bool leadIn = true, double baseOffset = 0,
@@ -508,6 +534,7 @@ public static partial class TileRewriter
             var widened = side > 0 ? seg.Attributes.Right : seg.Attributes.Left;
             // a right-turn pocket (#348) is a plain lane: a bike lane stays outside it (#351)
             _bike = widened.HasLane && baseOffset <= 0 ? widened.BikeDm / 10.0 : 0;
+            KerbBike = widened.HasLane ? widened.BikeDm / 10.0 : 0;
             _car = _half - _bike;
             _extra = _bike > 0 ? Math.Max(0, CarLaneBesideBike - _car) : 0;
             // no room for a lead-in (a short street), or a strip full width all along: the extra comes with the taper

@@ -67,8 +67,23 @@
 - **Runtime**: `src/Terrain/PavementBuilder.cs` draws the strip in the road's asphalt; the road
   blend (`HoldUnderPavement`, sharing `Rasterise` with `HoldUnderIsland`) holds its cells at the
   strip's height as road core, so the heightfield collision carries it like a ribbon.
-- **Not done**: lane-level topology in the format (which lane goes where); traffic still drives
-  the original lane and so turns left from it, and goes straight from it too. Right-turn lanes,
+- **Lane records** (#353, `TileRewriter.Lanes`, `LANE` in `road-format-v3`): `EmitTurnLanes`
+  returns each approach's built widenings (`ApproachPockets`); every pocket approach (with or
+  without lights) and every signalised one gets a `RoadApproach`, lanes from the widenings' actual
+  sizes: the pocket (offset of its centre from the original lane, full from the storage, appearing
+  there, or over the 15 m entry of a merged strip), the left-turn bike lane (#351), the through
+  lane (moving out from the taper's start plus the lead-in), then `RightLanes`: the right pocket
+  and the kerbside painted bike lane (#351 layout (a): outside the pocket). **`RightLanes` is the
+  one place to change for layout (b)** (bike lane between the pocket and the through lane).
+  Moves from the arrows painted; turns banned by OSM restrictions (#347 `osm_nodes.tsv`, from-line
+  of the arm, to-line among the junction's arms, via within 30 m: `no_*` bans that turn, `only_*`
+  the others). Geneva: 815 records (732 at lights, 83 pockets without), car lanes 999, bike 171;
+  banned turns on 142 approaches (left 112, through 4, right 50) from 154 of 216 restrictions at a
+  recorded approach (62 to-lines not an arm: junctions of several nodes; 15 name another turn than
+  the arms make); **10 left pockets were built where OSM forbids the left turn** (planning ignores
+  restrictions). Valais copy (Martigny-Riddes): 10 records, all without lights. `--signal-check`
+  checks them (exit 2 on a bad one) and lists those near `--at` (`--list`: every pocket approach).
+- **Not done**: right-turn lanes without lights,
   pockets across a tile seam, OSM `turn:lanes` (read, not used: #348). Roads with 3 lanes (8 m, lane lines at ±1.33 m,
   no centre line) still get a pocket laid out for 2 lanes of half the width: the hatch covers a
   lane and a half (seen at LV95 2506561,1138202).

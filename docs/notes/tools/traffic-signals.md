@@ -106,10 +106,15 @@
   priority sign. Geneva centre: 12 left-turn bike lanes (3 boxes, 9 advanced lines), 90
   approaches with a bike signal. Screenshots from above and from the driver's seat at LV95
   2499901,1118599. Not done: layout (b) (the painted lane between the right pocket and the through
-  lane); traffic's lane shift ignores the bike lane (#353 moves through cars 3 m, now 4.5 m).
+  lane; the lane records' `RightLanes` is where it goes, `turn-lanes`).
+- **Lanes and traffic** (#353): every signalised approach has a `LANE` record at its stop line
+  (`signal`/`arm` point at this record; `turn-lanes` has the lanes), with the turns OSM forbids
+  there; traffic drives them and obeys the plans (`traffic-trains`). A pocket's lane stops behind
+  a bike box (4 m). The stats print where the inferred junctions are (Geneva: 2498980,1118876
+  2498984,1118880 2498764,1118281 2499883,1116759 2500741,1117395 2500084,1118518).
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
-  clean); OSM `turn:lanes` and restrictions not read yet (#347 has them); thin median (optional); crossings of divided roads
+  clean); OSM `turn:lanes` not read yet, restrictions only for the lane records (a left pocket is
+  still built where the left turn is forbidden: 10 in Geneva); thin median (optional); crossings of divided roads
   (several nodes); 3-lane roads; a #120 red bike crossing drawn for the narrow mouth runs skewed
-  across a widened arm's stop line (2499132,1116455; #351 reworks bikes at signals); bike heads
-  (#351); traffic obeying them (#353); 300 mm overhead heads (#354); rejected poles are dropped,
-  not moved along the kerb.
+  across a widened arm's stop line (2499132,1116455; #351 reworks bikes at signals); 300 mm
+  overhead heads (#354); rejected poles are dropped, not moved along the kerb.

@@ -32,6 +32,8 @@ public static class RoadCodec
     public static readonly uint TagAreaProps = FourCC("APRP");
     /// <summary>#349: signalised junctions and their fixed-time plans (<see cref="RoadSignal"/>).</summary>
     public static readonly uint TagSignals = FourCC("SGNL");
+    /// <summary>#353: the lanes of each approach with a pocket or traffic lights (<see cref="RoadApproach"/>).</summary>
+    public static readonly uint TagApproaches = FourCC("LANE");
 
     private static uint FourCC(string s) => BitConverter.ToUInt32(Encoding.ASCII.GetBytes(s));
 
@@ -134,6 +136,8 @@ public static class RoadCodec
 
         if (tile.Signals.Count > 0)
             sections.Add((TagSignals, Section(s => RoadSignal.Write(s, tile.Signals))));
+        if (tile.Approaches.Count > 0)
+            sections.Add((TagApproaches, Section(s => RoadApproach.Write(s, tile.Approaches))));
 
         w.Write((uint)sections.Count);
         foreach (var (tag, payload) in sections)
@@ -301,6 +305,11 @@ public static class RoadCodec
                 {
                     if (RoadSignal.Read(r) is { } signals) tile.Signals.AddRange(signals);
                     else input.Position = end;   // a newer section version: skipped whole
+                }
+                else if (tag == TagApproaches)
+                {
+                    if (RoadApproach.Read(r) is { } approaches) tile.Approaches.AddRange(approaches);
+                    else input.Position = end;
                 }
                 if (input.Position > end)
                     throw new InvalidDataException($"Road section 0x{tag:X8} overran its length");

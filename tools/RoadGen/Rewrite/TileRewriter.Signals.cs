@@ -77,6 +77,8 @@ public static partial class TileRewriter
         public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
         public int Poles, PolesRejected, SignsOnPoles, BikeSignals;
         public readonly List<string> InvalidExamples = new();
+        /// <summary>Where the first inferred junctions are (LV95), to look at them (#353).</summary>
+        public readonly List<string> InferredAt = new();
         public readonly SortedDictionary<int, int> Cycles = new();
 
         public string Format()
@@ -86,7 +88,7 @@ public static partial class TileRewriter
             sb.Append(c, $"    traffic lights (#348): {Junctions:N0} junctions ({Inferred:N0} inferred, {FromData:N0} from data), {Arms:N0} arms, {Approaches:N0} approaches, ");
             sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
             sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}").AppendLine();
-            sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes").AppendLine();
+            sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes; inferred at LV95 {string.Join(" ", InferredAt)}").AppendLine();
             sb.Append(c, $"      poles (#350) {Poles:N0}, rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}, approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
             foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
             return sb.ToString();
@@ -182,10 +184,11 @@ public static partial class TileRewriter
         return r;
     }
 
-    private static void EmitSignals(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), (bool Left, bool Right)> pockets,
+    private static void EmitSignals(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), ApproachPockets> pockets,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, Footprints buildings,
-        Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs, SignalStats stats)
+        Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs, SignalStats stats,
+        Dictionary<TileId, List<RoadApproach>> approaches, Restrictions? restrictions, LaneStats laneStats)
     {
         var net = result.Network;
         PriorityPlanner.Clearance? clearance = null;
@@ -199,6 +202,7 @@ public static partial class TileRewriter
             var arms = new List<SignalArm>();
             var stops = new List<float>();
             var wantPoles = new List<PoleWish>();
+            var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
             // 50 km/h inside a locality: the yellow lasts 3 s (#349)
             bool urban = field.Density(junction.Centre.X, junction.Centre.Y) >= UrbanField.UrbanAt;
             for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
@@ -209,7 +213,8 @@ public static partial class TileRewriter
                 bool inside = Internal(link, junction.NodeId, signalNodes);
                 bool approach = plan.Arms[i].Approach && !inside, leaves = PriorityPlanner.Leaves(info, plan.Arms[i].End);
                 if (inside) stats.InternalArms++;
-                var (pocket, rightPocket) = pockets.GetValueOrDefault((junction.NodeId, i));
+                var built = pockets.GetValueOrDefault((junction.NodeId, i));
+                bool pocket = built?.Left is not null, rightPocket = built?.Right is not null;
                 var u = Vec2.FromHeading(arm.OutwardHeading);
                 var right = u.Perp;   // the approaching driver's right (they drive along -u)
                 var mid = (arm.Left + arm.Right) * 0.5;
@@ -228,7 +233,12 @@ public static partial class TileRewriter
                     stats.StopLines++;
                 }
                 var stop = bar + right * ((from + to) * 0.5);
-                if (approach) stops.AddRange(Local(home, [stop], source.SampleHeight, 0f));
+                if (approach)
+                {
+                    var local = Local(home, [stop], source.SampleHeight, 0f);
+                    stops.AddRange(local);
+                    approachArms.Add((i, arms.Count, local));
+                }
                 else stops.AddRange([float.NaN, float.NaN, float.NaN]);
                 // poles (#350): on the approach's right the main heads, on its left a second head
                 // where the approach has more than one lane; a pedestrian head on both kerbs
@@ -295,8 +305,16 @@ public static partial class TileRewriter
                     }
             }
             Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan, Poles = poles });
+            foreach (var (i, planArm, stopAt) in approachArms)
+                Get(approaches, home).Add(SignalApproach(junction, i, net, (short)(Get(signals, home).Count - 1), (byte)planArm, stopAt,
+                    signalPlan, pockets.GetValueOrDefault((junction.NodeId, i)), restrictions, laneStats));
             stats.Junctions++;
-            if (priority.SignalsFromData.Contains(junction.NodeId)) stats.FromData++; else stats.Inferred++;
+            if (priority.SignalsFromData.Contains(junction.NodeId)) stats.FromData++;
+            else
+            {
+                stats.Inferred++;
+                if (stats.InferredAt.Count < 8) stats.InferredAt.Add(string.Create(CultureInfo.InvariantCulture, $"{junction.Centre.X:F0},{junction.Centre.Y:F0}"));
+            }
             stats.Groups += signalPlan.Groups.Count;
             if (!amber) stats.TwoLensPedestrian++;
             int cycle = (int)MathF.Round(signalPlan.Cycle);

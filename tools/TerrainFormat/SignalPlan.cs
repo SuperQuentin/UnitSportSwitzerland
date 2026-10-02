@@ -717,8 +717,8 @@ public readonly record struct SignalPole(float X, float Y, float Z, float CarHea
 /// <summary>
 /// A signalised junction in a <c>.road</c> tile (#349, section <c>SGNL</c>): its centre and,
 /// per arm, the middle of the stop line across its approach lanes (tile-local, NaN where nothing
-/// approaches), its plan, and (version 2, #350) its poles. Lane records (#353) come later as a
-/// new section version.
+/// approaches), its plan, and (version 2, #350) its poles. The lanes of each approach (#353) are
+/// in their own section, <c>LANE</c> (<see cref="RoadApproach"/>).
 /// </summary>
 public sealed class RoadSignal
 {
