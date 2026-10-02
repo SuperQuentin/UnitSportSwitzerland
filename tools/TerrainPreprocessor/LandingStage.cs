@@ -66,9 +66,13 @@ public static class LandingStage
             }
         stops.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
         int skipped = 0;
+        int surveyed = 0;
         foreach (var (name, e, n, source) in stops)
         {
-            if (LandingPlanner.PlanLanding(name, e, n, sampler, source: source) is { } landing) index.Landings.Add(landing);
+            // a pier swissTLM3D maps (a Steg the roads draw) ending at the stop
+            var road = LandingPlanner.FindRoadEnd(e, n, RoadsAround(outDir, e, n), sampler);
+            if (road != null) surveyed++;
+            if (LandingPlanner.PlanLanding(name, e, n, sampler, source: source, road: road) is { } landing) index.Landings.Add(landing);
             else skipped++;
         }
 
@@ -93,13 +97,31 @@ public static class LandingStage
         file ??= Path.Combine(outDir, LandingIndex.FileName);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
         File.WriteAllText(file, index.ToJson());
-        Console.WriteLine($"Landings: {index.Landings.Count} landings ({skipped} stops with no water or shore by them), "
+        Console.WriteLine($"Landings: {index.Landings.Count} landings ({surveyed} at a surveyed pier, {skipped} stops with no water or shore by them), "
             + $"{index.Jetties.Count} jetties ({jettySkipped} dry), in {sw.Elapsed.TotalSeconds:F1}s");
         foreach (var l in index.Landings)
             if (l.Berth is { } b)
                 Console.WriteLine(FormattableString.Invariant(
                     $"  {l.Name}: berth {b.E:F0}/{b.N:F0} heading {b.Heading:F0}°, {b.Depth:F1} m of water{(b.Fits ? "" : " (too shallow for the steamer)")}, pier {PierLength(l):F0} m"));
         return 0;
+    }
+
+    /// <summary>The road segments of the tiles round a point (the built <c>.road</c> files: what the game draws).</summary>
+    private static IEnumerable<(TileId, RoadSegment)> RoadsAround(string dir, double e, double n)
+    {
+        var at = TileId.FromLv95(e, n);
+        for (int de = -1; de <= 1; de++)
+            for (int dn = -1; dn <= 1; dn++)
+            {
+                var id = new TileId(at.E + de, at.N + dn);
+                if (Math.Abs(e - Math.Clamp(e, id.MinE, id.MinE + ChunkFormat.TileSizeM)) > LandingPlanner.RoadEndReach
+                    || Math.Abs(n - Math.Clamp(n, id.MaxN - ChunkFormat.TileSizeM, id.MaxN)) > LandingPlanner.RoadEndReach) continue;
+                string path = Path.Combine(dir, RoadFormat.FileName(id));
+                if (!File.Exists(path)) continue;
+                RoadTile tile;
+                using (var fs = File.OpenRead(path)) tile = RoadCodec.Decode(fs);
+                foreach (var seg in tile.Segments) yield return (id, seg);
+            }
     }
 
     private static double PierLength(Landing l)

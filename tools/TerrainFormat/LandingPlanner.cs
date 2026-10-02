@@ -29,6 +29,13 @@ public interface IShoreSampler
 /// </para>
 ///
 /// <para>
+/// <b>A surveyed pier</b>: where swissTLM3D maps the landing's pier itself (a road with
+/// <c>kunstbaute = Steg</c> ending at the stop: Nyon's 4 m one from the quay), the roads draw and
+/// collide it as a bridge deck; the plan then has no neck of its own: a ramp from the road's end
+/// down (or up) to the head, the head across the pier's end, the ship along it.
+/// </para>
+///
+/// <para>
 /// <b>A jetty</b> (a <c>Hafensteg</c> line): its TLM heights, but at least
 /// <see cref="Options.JettyOverWater"/> over the water, meeting the ground where it runs ashore,
 /// no ramp steeper than <see cref="Options.MaxRamp"/>.
@@ -80,6 +87,44 @@ public static class LandingPlanner
 
     public static readonly Options Default = new();
 
+    /// <summary>
+    /// The end of a surveyed pier the roads already draw (a <c>Steg</c>): where it ends (LV95), its
+    /// deck's top there as the game draws it, the way it runs out (level, unit), its width.
+    /// </summary>
+    public readonly record struct RoadEnd(double E, double N, double Deck, double DirE, double DirN, double Width);
+
+    /// <summary>How near the stop a surveyed pier must end to be the landing's, m.</summary>
+    public const double RoadEndReach = 12;
+
+    /// <summary>A bridge deck's top over its road points as the game draws and collides it (<c>RoadMeshBuilder.BridgeLift</c>).</summary>
+    public const double RoadBridgeLift = 0.15;
+
+    /// <summary>
+    /// The surveyed pier ending at a stop: the nearest end within <see cref="RoadEndReach"/> of a
+    /// bridge-flagged road at most 6 m wide, over water; null when there is none.
+    /// </summary>
+    public static RoadEnd? FindRoadEnd(double e, double n, IEnumerable<(TileId Tile, RoadSegment Segment)> roads, IShoreSampler s)
+    {
+        RoadEnd? best = null;
+        double bestD = RoadEndReach;
+        foreach (var (tile, seg) in roads)
+        {
+            if ((seg.Flags & RoadFlags.Bridge) == 0 || seg.Width > 6 || seg.PointCount < 2) continue;
+            foreach (int i in new[] { 0, seg.PointCount - 1 })
+            {
+                var (pe, pn) = seg.Lv95(tile, i);
+                double d = Dist(pe, pn, e, n);
+                if (d > bestD || Depth(s, pe, pn) < 0.5) continue;
+                var (qe, qn) = seg.Lv95(tile, i == 0 ? 1 : seg.PointCount - 2);
+                double len = Dist(qe, qn, pe, pn);
+                if (len < 1e-3) continue;
+                bestD = d;
+                best = new RoadEnd(pe, pn, seg.Points[i * 3 + 1] + RoadBridgeLift, (pe - qe) / len, (pn - qn) / len, seg.Width);
+            }
+        }
+        return best;
+    }
+
     // ---- landings ------------------------------------------------------------------------------
 
     /// <summary>Water depth at a point: 0 where dry or unknown.</summary>
@@ -92,36 +137,53 @@ public static class LandingPlanner
     private static bool Dry(IShoreSampler s, double e, double n) => Depth(s, e, n) <= 0;
 
     /// <summary>Plans a landing's pier and berth from its stop; null when there is no water by it or no shore within reach.</summary>
-    public static Landing? PlanLanding(string name, double e, double n, IShoreSampler s, Options? o = null, string source = "Haltestelle Schiff")
+    /// <param name="road">The surveyed pier ending at the stop, if any (<see cref="RoadEnd"/>).</param>
+    public static Landing? PlanLanding(string name, double e, double n, IShoreSampler s, Options? o = null,
+        string source = "Haltestelle Schiff", RoadEnd? road = null)
     {
         o ??= Default;
         // the stop on the quay's edge: the nearest water a metre deep
         var (se, sn) = (e, n);
-        if (Depth(s, se, sn) < 1.0)
+        double ne, nn;
+        double ramp = 0;
+        if (road is { } r)
         {
-            if (NearestWhere(s, e, n, 80, (pe, pn) => Depth(s, pe, pn) >= 1.0) is not { } wet) return null;
-            (se, sn) = wet;
+            // the head beyond the surveyed pier's end, across it, a ramp between them
+            (ne, nn) = (r.DirE, r.DirN);
+            ramp = Math.Max(1.0, Math.Abs(r.Deck - (s.Level(r.E, r.N) + o.DeckOverWater)) / o.MaxRamp);
+            (se, sn) = (r.E, r.N);
         }
-        // offshore: away from the dry ground round the stop
-        if (Offshore(s, se, sn, o.MaxShore) is not { } off) return null;
-        var (ne, nn) = off;
+        else
+        {
+            if (Depth(s, se, sn) < 1.0)
+            {
+                if (NearestWhere(s, e, n, 80, (pe, pn) => Depth(s, pe, pn) >= 1.0) is not { } wet) return null;
+                (se, sn) = wet;
+            }
+            // offshore: away from the dry ground round the stop
+            if (Offshore(s, se, sn, o.MaxShore) is not { } off) return null;
+            (ne, nn) = off;
+        }
         // the bow along the shore, the port side (left of the bow) to the pier: left(b) = -n
         double be = -nn, bn = ne;
         double level = s.Level(se, sn);
         double deck = level + o.DeckOverWater;
 
-        // the head's face through the stop, a metre beyond it; moved out until the hull floats
+        // moved out until the hull floats
         double extend = 0, depth = 0;
         bool fits = false;
+        // the head's face with the head where the boats lie: through the stop, a metre beyond it; or
+        // past a surveyed pier's end by the ramp and the head's depth
+        double reach = road != null ? ramp + o.HeadDepth : 1;
         for (double x = 0; x <= o.MaxExtend; x += 2)
         {
-            double fe = se + ne * (1 + x), fn = sn + nn * (1 + x);
+            double fe = se + ne * (reach + x), fn = sn + nn * (reach + x);
             var (ce, cn) = Centre(fe, fn, ne, nn, be, bn, o);
             var (d, ok) = HullWater(s, ce, cn, be, bn, o);
             if (x == 0) depth = d;
             if (ok) { extend = x; depth = d; fits = true; break; }
         }
-        double faceE = se + ne * (1 + extend), faceN = sn + nn * (1 + extend);
+        double faceE = se + ne * (reach + extend), faceN = sn + nn * (reach + extend);
         var (keelE, keelN) = Centre(faceE, faceN, ne, nn, be, bn, o);
 
         var landing = new Landing { Name = name, E = e, N = n, Source = source };
@@ -150,8 +212,20 @@ public static class LandingPlanner
         foreach (double t in new[] { 0.42, -0.42 })
             landing.Bollards.Add(P(faceE - ne * 0.35 + be * o.HeadLength * t, faceN - nn * 0.35 + bn * o.HeadLength * t, deck));
 
-        // the neck: from the head's back toward the shore, onto the quay
         double pe0 = faceE - ne * o.HeadDepth, pn0 = faceN - nn * o.HeadDepth;
+        if (road is { } rd)
+        {
+            // the ramp from the surveyed pier's end: its deck there, down to the head's at the slope,
+            // then level out to the head (when the head was moved out for water)
+            var pts = new List<double[]> { P(rd.E, rd.N, rd.Deck) };
+            double run = Dist(rd.E, rd.N, pe0, pn0);
+            double slope = Math.Min(run, Math.Abs(rd.Deck - deck) / o.MaxRamp);
+            if (slope < run - 0.05) pts.Add(P(rd.E + ne * slope, rd.N + nn * slope, deck));
+            pts.Add(P(pe0, pn0, deck));
+            landing.Ribbons.Add(new PierRibbon { Kind = PierKind.Pier, Width = rd.Width, Rails = true, Points = pts });
+            return landing;
+        }
+        // the neck: from the head's back toward the shore, onto the quay
         if (Neck(s, pe0, pn0, -ne, -nn, deck, o.NeckWidth, o) is not { } neck) return null;
         landing.Ribbons.Add(new PierRibbon { Kind = PierKind.Pier, Width = o.NeckWidth, Rails = true, Points = neck });
         return landing;
@@ -330,6 +404,8 @@ public static class LandingPlanner
         }
         return null;
     }
+
+    private static double Dist(double e0, double n0, double e1, double n1) => Math.Sqrt(Sq(e1 - e0) + Sq(n1 - n0));
 
     private static double[] P(double e, double n, double h) => new[] { Round(e), Round(n), Round(h) };
     private static double Round(double v) => Math.Round(v, 3);

@@ -55,6 +55,33 @@ public class LandingTests
     }
 
     [Fact]
+    public void At_a_surveyed_pier_a_ramp_runs_from_its_end_down_to_a_head_across_it()
+    {
+        var shore = new Shore(0.1, 8);
+        // a 4 m Steg out to E = 30, its deck 1.5 m over the water, running east-north-east
+        double de = Math.Cos(0.2), dn = Math.Sin(0.2);
+        var road = new LandingPlanner.RoadEnd(30, 0, Water + 1.5, de, dn, 4);
+        var landing = LandingPlanner.PlanLanding("Steg (lac)", 30, 0, shore, road: road)!;
+        var berth = landing.Berth!;
+        Assert.True(berth.Fits);
+        // the ship lies across the pier's end
+        double h = berth.Heading * Math.PI / 180;
+        Assert.True(Math.Abs(Math.Sin(h) * de + Math.Cos(h) * dn) < 1e-3, $"heading {berth.Heading} not across the pier");
+        Assert.Equal(2, landing.Ribbons.Count);
+        var ramp = landing.Ribbons.Single(r => r.Rails);
+        Assert.Equal(4, ramp.Width);
+        Assert.Equal(30, ramp.Points[0][0], 3);
+        Assert.Equal(Water + 1.5, ramp.Points[0][2], 3);
+        Assert.Equal(berth.Deck, ramp.Points[^1][2], 3);
+        for (int i = 1; i < ramp.Points.Count; i++)
+            Assert.True(Math.Abs(ramp.Points[i][2] - ramp.Points[i - 1][2]) / Dist(ramp.Points[i], ramp.Points[i - 1]) <= LandingPlanner.Default.MaxRamp + 1e-3);
+        // the ramp's foot on the head's back edge
+        var head = landing.Ribbons.Single(r => !r.Rails);
+        var mid = new[] { (head.Points[0][0] + head.Points[1][0]) / 2, (head.Points[0][1] + head.Points[1][1]) / 2 };
+        Assert.Equal(head.Width * 0.5, Dist(mid, ramp.Points[^1]), 2);
+    }
+
+    [Fact]
     public void A_shallow_shelf_moves_the_head_out_until_the_hull_floats()
     {
         var shore = new Shore(0.02, 6);   // 2.28 m only 100 m out
