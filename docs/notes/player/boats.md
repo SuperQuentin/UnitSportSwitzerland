@@ -32,6 +32,9 @@
   for 0.3 s. `FootPlayer.ThrownFromBoat`: the machine is parked riderless (engine cut, lanyard),
   everyone aboard out (`PassengerService.Wrecked`), the rider **swimming** beside it
   (`StartSwimmingAtSurface`, #301). Getting out over the side swims too (`ExitVehicle`).
+  **Kept harsh on purpose (decided 2026-10-02):** flat out into a gamey swell the jetski throws
+  its rider within ~20 s. It is funny, so it stays for now; revisit it (raise `ThrowLanding` /
+  `ThrowTilt`, or scale with sea state) if players find it frustrating.
   **Boarding from the water**: E swimming beside the hull claims it like any vehicle (`--boatcheck`).
 - **At the helm** (`FootPlayer.Boat.cs`, one dispatch line in `_PhysicsProcess`): the model steps
   from where the body is, the body follows its path through `MoveAndSlide`, what the world took off
