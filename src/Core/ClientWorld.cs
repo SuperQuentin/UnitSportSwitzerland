@@ -550,6 +550,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             PlayersWanted = _chat.RequestPlayerNames,
         });
         AddChild(_chatUi);
+        // the item catalogue types its commands into the chat, so the server checks them (#262)
+        items.RunCommand = _chat.Send;
+        _chat.CatalogueRequested += () => items.Catalogue.Open();
 
         // bottom right: the controls that apply here (F1, every control, is the shell's)
         var prompts = PromptBar.Create();

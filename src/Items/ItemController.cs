@@ -77,6 +77,13 @@ public partial class ItemController : Node
 
     public Inventory Inventory => _inventory;
     public InventoryUi Ui => _ui;
+
+    /// <summary>Every item, for the offline player or an admin (#262).</summary>
+    public CatalogueUi Catalogue => _catalogue;
+    private CatalogueUi _catalogue = null!;
+
+    /// <summary>Sends a chat command (<c>ChatManager.Send</c>): how the catalogue asks for items.</summary>
+    public Action<string>? RunCommand { get; set; }
     public PhotoUi PhotoUi => _photoUi;
 
     /// <summary>Holds Use down as if pressed, for the throw's wind-up (<c>--dropcheck</c>).</summary>
@@ -108,6 +115,8 @@ public partial class ItemController : Node
         AddChild(_ui);
         _photoUi = new PhotoUi(this) { Name = "PhotoUi" };
         AddChild(_photoUi);
+        _catalogue = new CatalogueUi(this) { Name = "CatalogueUi" };
+        AddChild(_catalogue);
         _smart = new SmartBinocularsHud();
         AddChild(_smart);
         _flagGhost = new FlagGhost { Name = "FlagGhost" };
