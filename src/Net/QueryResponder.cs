@@ -31,6 +31,7 @@ public partial class QueryResponder : Node
     private readonly int _port;
     private readonly IPAddress _bind;
     private readonly Func<ServerStatus> _status;
+    private ServerStatus? _last;
     private UdpClient? _udp;
     private CancellationTokenSource? _cts;
     private byte[] _snapshot = Array.Empty<byte>();
@@ -80,7 +81,11 @@ public partial class QueryResponder : Node
     private void Refresh()
     {
         _sinceSnapshot = 0;
-        byte[] json = JsonSerializer.SerializeToUtf8Bytes(_status(), ServerQuery.Json);
+        // a record of scalars: equal means the same JSON, so only a change is serialised (#221)
+        var status = _status();
+        if (status == _last) return;
+        _last = status;
+        byte[] json = JsonSerializer.SerializeToUtf8Bytes(status, ServerQuery.Json);
         Volatile.Write(ref _snapshot, json);
     }
 
