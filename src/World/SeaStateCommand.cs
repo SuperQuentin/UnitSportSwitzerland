@@ -35,6 +35,19 @@ public static class SeaStateCommand
         return false;
     }
 
+    /// <summary>
+    /// <c>--sea-state &lt;0..1|name&gt;</c> on a command line (server, or an offline client for
+    /// screenshots); null when absent or unreadable (<paramref name="error"/> says why).
+    /// </summary>
+    public static float? FromArgs(string[] args, out string error)
+    {
+        error = string.Empty;
+        int i = Array.IndexOf(args, "--sea-state");
+        if (i < 0) return null;
+        if (i + 1 >= args.Length) { error = "--sea-state needs a value: 0..1, calm, chop, storm or gamey"; return null; }
+        return TryParse(args[i + 1], out float v, out error) ? v : null;
+    }
+
     /// <summary>"chop (0.35)", or "0.50 (between chop and storm)" for a value between names.</summary>
     public static string Describe(float value)
     {

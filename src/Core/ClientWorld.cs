@@ -251,6 +251,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!fixture) ClientTerrainSync.MergeCachedIndex(_chunks, origin);
 
         AddChild(_chunks);
+        // the water (#299): queries on these tiles, waves pushed to the shaders, the underwater look;
+        // --sea-state for an offline world (online the server's replaces it on join)
+        World.WaterField.Bind(_chunks);
+        if (World.SeaStateCommand.FromArgs(OS.GetCmdlineUserArgs(), out string seaError) is { } sea) World.WaterField.SetSeaState(sea);
+        else if (seaError.Length > 0) GD.PushWarning($"[water] {seaError}");
+        AddChild(new World.WaterSurface { Name = "WaterSurface" });
         Audio.Surfaces.Origin = origin;
         var chunksForAudio = _chunks;
         if (Systems.On(Systems.Audio))
@@ -909,6 +915,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     public override void _ExitTree()
     {
+        World.WaterField.Bind(null);
+        World.WaterField.SetSeaState(0f);
         GameSettings.Changed -= OnSettingsChanged;
         StyleCommand.RebuildRequested -= OnRebuildRequested;
         StyleKit.Chosen -= OnStyleChosen;

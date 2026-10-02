@@ -1838,8 +1838,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
                     // watercourses ride in the road tile but are meshed here, so a stream gets
                     // the water material instead of being drawn as a narrow blue road
-                    if (cover != null && waterMaterial != null
-                        && WaterMeshBuilder.Build(grid, cover, roadTile, detail) is { } waterData)
+                    if (waterMaterial != null
+                        && WaterMeshBuilder.Build(waterLayer, roadTile, stride, detail) is { } waterData)
                     {
                         ct.ThrowIfCancellationRequested();
                         water = ChunkNode.ToArrayMesh(waterData, waterMaterial);

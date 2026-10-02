@@ -88,6 +88,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chunks.Initialize(source, origin, manifest, null);
         if (fallback != null) _chunks.UseFallback(fallback, source.Invalidate);
         AddChild(_chunks);
+        // the water (#299): the server answers water queries too, and owns the sea state
+        World.WaterField.Bind(_chunks);
+        if (World.SeaStateCommand.FromArgs(args, out string seaError) is { } sea) World.WaterField.SetSeaState(sea);
+        else if (seaError.Length > 0) GD.PushWarning($"[water] {seaError}");
+        GD.Print($"[server] sea state {World.SeaStateCommand.Describe(World.WaterField.SeaState)}");
 
         _players = new Node3D { Name = "Players" };
         _players.AddToGroup(OriginShifter.ContainerGroup);
@@ -335,6 +340,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _br?.SendTo(id);
         _brCrates?.SendTo(id);
         _chat?.SendWorldTimeTo(id);
+        _chat?.SendSeaStateTo(id);
     }
 
     private void OnPeerDisconnected(long id)

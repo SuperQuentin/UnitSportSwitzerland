@@ -268,4 +268,18 @@ public class WaterTests
         }
         finally { CultureInfo.CurrentCulture = saved; }
     }
+
+public class SeaStateArgsTests
+{
+    [Fact]
+    public void Sea_state_flag()
+    {
+        Assert.Equal(1f, SeaStateCommand.FromArgs(["--server", "--sea-state", "gamey"], out _));
+        Assert.Null(SeaStateCommand.FromArgs(["--server"], out string none));
+        Assert.Equal(string.Empty, none);
+        Assert.Null(SeaStateCommand.FromArgs(["--sea-state"], out string missing));
+        Assert.NotEmpty(missing);
+        Assert.Null(SeaStateCommand.FromArgs(["--sea-state", "2"], out string bad));
+        Assert.NotEmpty(bad);
+    }
 }
