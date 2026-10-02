@@ -52,8 +52,11 @@ public static class CornerPlanner
     private sealed record Chain(List<(Vec2 P, float Y)> Kerb, Vec2 Out, double Width, float Kerb_, Vec2 Inward);
 
     public static List<RoadAreaProp> Plan(TileId id, IReadOnlyList<RoadSegment> segments, IReadOnlyList<RoadJunction> caps,
-        Facades facades, Stats stats)
+        Facades facades, Stats stats, IReadOnlyList<RoadAreaProp>? pavement = null)
     {
+        // a turn lane's widening (#123) is carriageway too: a corner never stands on it (#120:
+        // the sidewalk beside a pocket now carries on, and its corner reached across the lane)
+        _pavement = pavement?.Where(a => a.Type == AreaPropType.Pavement && a.Vertices.Length >= 9).ToList() ?? [];
         var props = new List<RoadAreaProp>();
         var ends = new Dictionary<(long, long), List<End>>();
         for (int s = 0; s < segments.Count; s++)
@@ -288,6 +291,30 @@ public static class CornerPlanner
         };
     }
 
+    /// <summary>The tile's turn-lane widenings while a tile is planned (<see cref="Plan"/>).</summary>
+    [ThreadStatic] private static List<RoadAreaProp>? _pavement;
+
+    /// <summary>Whether a plan point (x east, y = -z) lies on one of the tile's turn-lane widenings.</summary>
+    private static bool OnPavement(Vec2 q)
+    {
+        if (_pavement is null || _pavement.Count == 0) return false;
+        double x = q.X, z = -q.Y;
+        foreach (var a in _pavement)
+        {
+            var v = a.Vertices;
+            for (int t = 0; t + 2 < a.Indices.Length; t += 3)
+            {
+                int i0 = a.Indices[t] * 3, i1 = a.Indices[t + 1] * 3, i2 = a.Indices[t + 2] * 3;
+                double d1 = (x - v[i1]) * (v[i0 + 2] - v[i1 + 2]) - (v[i0] - v[i1]) * (z - v[i1 + 2]);
+                double d2 = (x - v[i2]) * (v[i1 + 2] - v[i2 + 2]) - (v[i1] - v[i2]) * (z - v[i2 + 2]);
+                double d3 = (x - v[i0]) * (v[i2 + 2] - v[i0 + 2]) - (v[i2] - v[i0]) * (z - v[i0 + 2]);
+                bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+                if (!(neg && pos)) return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>A wall or a carriageway inside a quad (sampled every 0.5 m), or null.</summary>
     private static string? QuadBlocked(TileId id, List<RoadSegment> segments, List<Vec2> quad, Facades facades)
     {
@@ -300,6 +327,7 @@ public static class CornerPlanner
                 if (facades.Occupied(id.MinE + x, id.MaxN + y)) return "wall";
                 foreach (var s in segments)
                     if (DistanceToLine(s, q) < s.Width * 0.5 - 0.3) return "road";
+                if (OnPavement(q)) return "road";
             }
         return null;
     }
@@ -465,6 +493,7 @@ public static class CornerPlanner
                     return Debug != null ? string.Create(CultureInfo.InvariantCulture, $"wall at ({id.MinE + x:F1},{id.MaxN + y:F1}), patch of {plan.Count} points, {area:F0} m2") : "wall";
                 foreach (var s in near)
                     if (DistanceToLine(s, q) < s.Width * 0.5 - 0.3) return "road";
+                if (OnPavement(q)) return "road";
             }
         return null;
     }
