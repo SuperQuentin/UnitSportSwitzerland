@@ -485,6 +485,31 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// physics and the network session carry on through it. Builds in flight are cancelled: they
     /// would commit the old detail. Main thread.
     /// </summary>
+    /// <summary>
+    /// Material of the piers and jetties (#377), a <see cref="Styles.MaterialRole.Prop"/> one; null:
+    /// they are not drawn (their collision still is).
+    /// </summary>
+    public Material? PierMaterial { get; set; }
+
+    /// <summary>
+    /// The landings changed (#377: <c>landings.json</c> streamed in after the tiles round the player
+    /// were built): the tiles <paramref name="affected"/> selects build their roads (the piers' mesh)
+    /// and their collision (the piers' faces) again. The old ones stay until the new ones land.
+    /// </summary>
+    public void RebuildPiers(Func<TileId, bool> affected)
+    {
+        int tiles = 0;
+        foreach (var (id, state) in _chunks)
+        {
+            if (!affected(id)) continue;
+            state.HasRoads = false;
+            state.HasCollision = false;
+            tiles++;
+        }
+        _sinceEval = double.MaxValue;
+        if (tiles > 0) GD.Print($"[terrain] {tiles} tiles build their piers");
+    }
+
     public void RebuildVisuals()
     {
         if (!BuildMeshes) return;
@@ -1765,6 +1790,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var buildingMaterial = _buildingMaterial;
         var waterMaterial = _waterMaterial;
         var treeMaterial = _treeMaterial;
+        var pierMaterial = PierMaterial;
+        // the landings as of now (#377): their piers ride in the roads mesh and the road collision
+        var landings = World.Landings.Current;
         var detail = Detail;
 
         Task.Run(async () =>
@@ -1864,6 +1892,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         ct.ThrowIfCancellationRequested();
                         roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));
                     }
+                    // the piers and jetties standing in the tile (#377): one more surface
+                    if (pierMaterial != null && PierMeshBuilder.Build(landings, id, grid, mesh: true, collision: false) is { Mesh: { } pierData })
+                        roads = ChunkNode.WithPiers(roads, pierData, pierMaterial);
                     Lap(StRoadMesh, stageMs, clock);
                 }
                 else if (roadsForCollision)
@@ -1984,6 +2015,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 }
                 else if (wantCollision && !publishInterimCollision)
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes); // no road tile after all
+                // piers and jetties (#377) are walked on like a bridge deck and stop a boat
+                if (wantCollision && PierMeshBuilder.Build(landings, id, grid, mesh: false, collision: true) is { Faces.Length: > 0 } piers)
+                {
+                    var cells = ChunkNode.SplitByCell(piers.Faces);
+                    if (bridgeCollision == null) bridgeCollision = cells;
+                    else
+                        for (int c = 0; c < cells.Length; c++)
+                            if (cells[c].Length > 0) bridgeCollision[c] = [.. bridgeCollision[c], .. cells[c]];
+                }
 
                 ArrayMesh? tailMesh = null;
                 if (visualBlend)

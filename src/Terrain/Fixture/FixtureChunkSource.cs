@@ -225,4 +225,31 @@ public sealed class FixtureChunkSource : IChunkSource
         Task.FromResult(_tiles.Contains(id) ? (_trees.TryGetValue(id, out var t) ? t : new()) : null);
 
     public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default) => Task.FromResult<HorizonIndex?>(null);
+
+    /// <summary>The course's stops and jetties (#377), planned over its own ground and water as the preprocessor plans the real ones.</summary>
+    public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default)
+    {
+        if (_course.Stops.Count == 0 && _course.Jetties.Count == 0) return Task.FromResult<LandingIndex?>(null);
+        return Task.Run(() =>
+        {
+            var shore = new Shore(_course, _startE, _startN);
+            var index = new LandingIndex();
+            foreach (var (name, x, y) in _course.Stops)
+                if (LandingPlanner.PlanLanding(name, _startE + x, _startN + y, shore) is { } landing) index.Landings.Add(landing);
+            int k = 0;
+            foreach (var line in _course.Jetties)
+                if (LandingPlanner.PlanJetty($"fixture-{k++}", line.Select(p => (_startE + p.X, _startN + p.Y, p.Z)).ToList(), shore) is { } jetty)
+                    index.Jetties.Add(jetty);
+            return (LandingIndex?)index;
+        }, ct);
+    }
+
+    /// <summary>The course's ground and water for the pier planner, in LV95.</summary>
+    private sealed class Shore(FixtureCourse course, double startE, double startN) : IShoreSampler
+    {
+        public double Ground(double e, double n) => course.Ground(e - startE, n - startN);
+
+        public double Level(double e, double n) =>
+            course.Water is { } water ? water(e - startE, n - startN).Level : double.NaN;
+    }
 }
