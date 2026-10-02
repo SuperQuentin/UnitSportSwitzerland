@@ -19,43 +19,34 @@ namespace UnitSport.BattleRoyale;
 /// </list>
 /// Scratch inventories; screenshots in <c>test_output/br_*.png</c>.
 /// </summary>
-public partial class BrProbe : Node
+public partial class BrProbe : ChatProbe
 {
-    public static string? Role
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--brprobe");
-            return i >= 0 && i + 1 < args.Length ? args[i + 1].ToUpperInvariant() : null;
-        }
-    }
+    public static string? Role => RoleArg("--brprobe");
 
-    private readonly ItemController _items;
-    private readonly List<string> _heard = new();
-    private string _role = "";
-    private int _failures;
-
-    public BrProbe(ItemController items) => _items = items;
+    public BrProbe(ItemController items) : base(items, "br", "BR", "br_") { }
     public BrProbe() : this(null!) { }
 
-    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
+    protected override string Dash => "-";
+    /// <summary>Our own body, not the one the camera follows (spectating after the knock-out).</summary>
+    protected override FootPlayer? Me => GetParent().GetNodeOrNull<FootPlayer>("Players/" + Multiplayer.GetUniqueId());
     private BrManager? Br => BrManager.Instance;
-    private FootPlayer? Me => GetParent().GetNodeOrNull<FootPlayer>("Players/" + Multiplayer.GetUniqueId());
+
+    /// <summary>Counts too: a failure inside a phase must stop <see cref="Released"/> and print RESULT: FAILED.</summary>
+    protected override void Fail(string why)
+    {
+        _failures++;
+        base.Fail(why);
+    }
 
     public override async void _Ready()
     {
         _role = Role ?? "A";
-        if (!await Until(() => Chat != null && Permissions.Online && Me is { } m && m.IsOnFloor() && Br != null, 150))
-        { Fail("no player on the ground"); return; }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
+        if (!await Joined(150, () => Br != null)) return;
         await Seconds(2.0);
         var start = Me!.GlobalPosition;
         if (_role == "A") await RunA(); else await RunB();
         if (_failures == 0) await Released(start);
-        GD.Print(_failures == 0 ? $"[br {_role}] RESULT: ok" : $"[br {_role}] RESULT: FAILED ({_failures})");
-        await Seconds(1.0);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(1.0);
     }
 
     private async Task RunA()
@@ -98,10 +89,10 @@ public partial class BrProbe : Node
                 me.LookYaw = Mathf.Atan2(-to.X, -to.Z);
                 me.LookPitch = 0.1f;
                 await Seconds(0.8);
-                Snap("a_beacon");
+                Shot("a_beacon");
             }
         }
-        Snap("a_drop");
+        Shot("a_drop");
 
         // wait for B next to us, then stab it until it goes down
         Say(Fmt($"posA {me.GlobalPosition.X:F2} {me.GlobalPosition.Y:F2} {me.GlobalPosition.Z:F2}"));
@@ -141,7 +132,7 @@ public partial class BrProbe : Node
         float hp = me.Health;
         bool hurt = await Until(() => me.Health < hp - 0.9f, 60);
         Expect(hurt, $"the zone hurts outside it ({hp:F1} -> {me.Health:F1}, phase {Br.ZoneNow?.Phase})");
-        Snap("b_outside");
+        Shot("b_outside");
         // back inside while A gets ready: the wait is long enough to die out there
         if (Br.ZoneNow is { } safe) Br.Teleport(s.AreaE + safe.NextCentre.X, s.AreaN + safe.NextCentre.Y, "back in the zone");
 
@@ -179,7 +170,7 @@ public partial class BrProbe : Node
         var plane = br.PlaneFrame(flight, ClockSync.ServerNow).At;
         Expect(me.GlobalPosition.DistanceTo(plane) < 8f + flight.Speed * 0.25f && !me.Visible,
             Fmt($"held in the hold, hidden ({me.GlobalPosition.DistanceTo(plane):F1} m from the plane)"));
-        Snap($"{_role.ToLowerInvariant()}_plane");
+        Shot($"{_role.ToLowerInvariant()}_plane");
         string other = _role == "A" ? "B" : "A";
         var them = GetParent().GetNodeOrNull<FootPlayer>("Players/" + PeerOf(other));
         if (_role == "A")
@@ -199,7 +190,7 @@ public partial class BrProbe : Node
             await Seconds(0.3);
             float turned = Mathf.AngleDifference(yaw0, me.GlobalRotation.Y);
             Expect(turned > 0.12f, Fmt($"looking left turns the wingsuit left ({Mathf.RadToDeg(turned):F0}°)"));
-            Snap("a_wingsuit");
+            Shot("a_wingsuit");
             Expect(await Until(() => br.State.Find(PeerOf("B"))?.Jumped == true && them is { Visible: true }, 90),
                 "B was pushed out when the doors closed, and shows again here");
         }
@@ -210,7 +201,7 @@ public partial class BrProbe : Node
                 Fmt($"pushed out in a wingsuit when the doors closed ({ClockSync.ServerNow - flight.ClosesAt:F1} s after)"));
             Expect(br.State.Find(PeerOf("A"))?.Jumped == true && them is { Visible: true }, "A jumped earlier and shows here");
             await Seconds(1.0);
-            Snap("b_pushed");
+            Shot("b_pushed");
         }
         // down under the jump, inside the region
         var s = br.State;
@@ -244,12 +235,12 @@ public partial class BrProbe : Node
         Expect(await Until(() => Vehicles() > 0, 6), $"vehicles parked in the region ({Vehicles()})");
         Br.Waypoint = new Vector2(400, 300);
         await Seconds(1.0);
-        Snap($"{_role.ToLowerInvariant()}_dropped");
+        Shot($"{_role.ToLowerInvariant()}_dropped");
         if (_role == "A")
         {
             Expect(Br.ToggleMap() && Br.MapOpen, "M opens the match map");
             await Seconds(1.0);
-            Snap("a_map");
+            Shot("a_map");
             Br.ToggleMap();
             Expect(!Br.MapOpen, "M closes it");
         }
@@ -263,7 +254,7 @@ public partial class BrProbe : Node
         Expect(s.Winner == PeerOf("A") && s.Find(s.Winner)?.Kills == 1, $"A won with one kill (winner {s.Find(s.Winner)?.Name})");
         Expect(_sawDrop && _heard.Any(l => l.Contains("supply drop is coming down")), "a supply drop came down, announced and on the map");
         await Seconds(1.0);
-        Snap($"{_role.ToLowerInvariant()}_results");
+        Shot($"{_role.ToLowerInvariant()}_results");
     }
 
     /// <summary>After the results: back where the player stood, with its own pack.</summary>
@@ -309,7 +300,7 @@ public partial class BrProbe : Node
         bool emptied = await Until(() => !crates.All.Any(c => c.Id == crate.Id), 10);
         Expect(emptied && Count() == before + stacks.Sum(s => s.Count), $"took it all: the crate is gone, the pack {before} -> {Count()}");
         Loot.LootService.Instance?.Close();
-        Snap("a_crate");
+        Shot("a_crate");
     }
 
     /// <summary>A: B's death box lies where B fell, with B's knife and bandages in it.</summary>
@@ -320,7 +311,7 @@ public partial class BrProbe : Node
         var box = crates.All.First(c => c.Style == CrateStyle.DeathBox);
         await Until(() => crates.NearestTo(me)?.Id == box.Id, 10);
         int knives = CountOf(ItemId.Knife);
-        Snap("a_deathbox");
+        Shot("a_deathbox");
         Expect(crates.TryOpen(me), $"E opens {box.Label}: {string.Join(", ", box.Stacks().Select(s => $"{s.Count} {s.Id}"))}");
         Loot.LootService.Instance?.TakeAll();
         Expect(await Until(() => CountOf(ItemId.Knife) == knives + 1, 10), $"B's knife is now A's ({knives} -> {CountOf(ItemId.Knife)})");
@@ -345,14 +336,14 @@ public partial class BrProbe : Node
             Br!.Teleport(bunker.E, bunker.N, "bunker");
             await Until(() => crates.NearestTo(me)?.Id == bunker.Id, 25);
             await Seconds(1.5);
-            Snap("a_bunker");
+            Shot("a_bunker");
             var loot = Loot.LootService.Instance!;
             Expect(crates.TryOpen(me) && loot.LockUi?.IsOpen == true, "E at the bunker door opens the dial");
             loot.SubmitCombination(BrCrates.Combination(bunker.Id, Br.State.Seed));
             Expect(await Until(() => !bunker.Locked && loot.IsOpen, 10), "the right numbers open the door, straight into its contents");
             loot.TakeAll();
             Expect(await Until(() => CountOf(ItemId.HuntingRifle) > 0, 10), "the bunker's hunting rifle is in the pack");
-            Snap("a_bunker_open");
+            Shot("a_bunker_open");
             loot.Close();
         }
 
@@ -387,7 +378,7 @@ public partial class BrProbe : Node
                 Expect(await Until(() => target.Style == CrateStyle.Pile, 5),
                     $"a shot breaks the supply crate open ({(shot ? "the rifle shot" : "a trace from the eye; the crosshair shot missed")})");
                 await Seconds(0.5);   // a frame or two: the screenshot is the last frame drawn
-                Snap("a_pile");
+                Shot("a_pile");
             }
         }
 
@@ -398,7 +389,7 @@ public partial class BrProbe : Node
         Expect(await Until(() => crates.All.Count(c => c.Style == CrateStyle.Airdrop) > drops && _heard.Any(l => l.Contains("fired a flare")), 10),
             "a flare calls a supply drop, announced to everyone");
         await Seconds(2.0);
-        Snap("a_flare");
+        Shot("a_flare");
     }
 
     private float Dist(Crate c)
@@ -408,7 +399,6 @@ public partial class BrProbe : Node
     }
 
     private int Count() => Enumerable.Range(0, Inventory.Size).Sum(i => _items.Inventory[i].Count);
-    private int CountOf(ItemId id) => Enumerable.Range(0, Inventory.Size).Where(i => _items.Inventory[i].Id == id).Sum(i => _items.Inventory[i].Count);
 
     private long PeerOf(string role)
     {
@@ -418,51 +408,5 @@ public partial class BrProbe : Node
 
     private bool Said(string role, string what) => _heard.Any(l => l.Contains($"BR {role} {what}"));
 
-    private void Snap(string name)
-    {
-        var dir = ProjectSettings.GlobalizePath("res://test_output");
-        System.IO.Directory.CreateDirectory(dir);
-        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, $"br_{name}.png"));
-    }
-
-    private int SlotOf(ItemId id)
-    {
-        for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].Id == id && !_items.Inventory[i].IsEmpty) return i;
-        return -1;
-    }
-
     private static string Fmt(FormattableString s) => FormattableString.Invariant(s);
-    private static float Float(string s) => float.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
-
-    private void Say(string what)
-    {
-        GD.Print($"[br {_role}] say {what}");
-        Chat?.Send($"BR {_role} {what}");
-    }
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[br {_role}] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[br {_role}] RESULT: FAILED - {why}");
-        _failures++;
-        GetTree().Quit(1);
-    }
 }

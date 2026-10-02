@@ -7,7 +7,8 @@ namespace UnitSport.Core;
 
 /// <summary>
 /// The scaffolding the multiplayer probes share (<c>--plantcheck</c>, <c>--gunshot</c>, <c>--placedcheck</c>,
-/// <c>--useanim</c>, <c>--lootsynccheck</c>, <c>--locksynccheck</c>, <c>--econcheck</c>, <c>--photocheck</c>):
+/// <c>--useanim</c>, <c>--lootsynccheck</c>, <c>--locksynccheck</c>, <c>--econcheck</c>, <c>--photocheck</c>,
+/// <c>--bankcheck</c>, <c>--brprobe</c>, <c>--pvpcheck</c>, <c>--birdnetcheck</c>):
 /// clients coordinate through chat lines (<c>"&lt;prefix&gt; &lt;role&gt; &lt;what&gt;"</c>), wait on conditions,
 /// count failed expectations and log as <c>[tag role]</c>. The scripts in <c>tools/</c> grep those lines.
 /// </summary>
@@ -46,7 +47,8 @@ public abstract partial class ChatProbe : Node
     protected virtual string Dash => "—";
 
     protected ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
-    protected FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
+    /// <summary>Our player: by default the one the camera rides.</summary>
+    protected virtual FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
 
     /// <summary>Waits for chat, a connection and our player on the ground (plus <paramref name="also"/>), then listens to chat. False after a <see cref="Fail"/>.</summary>
     protected async Task<bool> Joined(double seconds, Func<bool>? also = null)
@@ -96,7 +98,8 @@ public abstract partial class ChatProbe : Node
         if (!ok) _failures++;
     }
 
-    protected void Fail(string why)
+    /// <summary>Logs the failure and quits with 1.</summary>
+    protected virtual void Fail(string why)
     {
         GD.Print($"{Log} RESULT: FAILED {Dash} {why}");
         GetTree().Quit(1);
