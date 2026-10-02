@@ -43,14 +43,8 @@ public partial class FootPlayer
     /// <summary>Hitting the bed faster than this hurts, as a landing does (<see cref="UpdateCameraFeel"/>).</summary>
     private const float HardBed = 11f;
 
-    /// <summary>Seconds of air in a full breath (the reserve while the head is under).</summary>
-    public const float AirMax = 45f;
-    /// <summary>A sprint stroke under water uses air this much faster.</summary>
-    private const float AirSprintDrain = 1.7f;
-    /// <summary>Seconds of air won back per second with the head out.</summary>
-    private const float AirRefill = 9f;
-    /// <summary>Health lost per second with no air left.</summary>
-    public const float DrownDamage = 15f;
+    /// <summary>Seconds of air in a full breath (the reserve while the head is under, <see cref="AirReserve"/>).</summary>
+    public const float AirMax = AirReserve.Max;
 
     /// <summary>Stroke pace, m/s: Game swims faster, as it runs faster.</summary>
     public float SwimSpeed => Rideable.Arcade ? 1.5f : 1.15f;
@@ -61,8 +55,10 @@ public partial class FootPlayer
     private float _swimLunge;
     private float _swimLay;
     private float _swimPhase;
-    private float _swimMove, _swimClimb;
-    private float _drownTick;
+    private float _swimMove;
+    /// <summary>Where the swimmer strokes (m/s, not what the water or a plunge does to it): what the figure lies along.</summary>
+    private Vector3 _swimIntent;
+    private AirReserve _air = AirReserve.Full;
     private bool _wasSwimFloor;
     private bool _swimSprint;
     private float _swimDrawPhase, _swimSeenPhase = float.NaN;
@@ -78,13 +74,16 @@ public partial class FootPlayer
         : PoseKind == PoseSwim && RideKindId == (int)RideKind.OnFoot;
 
     /// <summary>Seconds of air left (owner only): drains with the head under water, refills above it.</summary>
-    public float Air { get; private set; } = AirMax;
+    public float Air => _air.Seconds;
 
     /// <summary>The eye is under the surface (owner only).</summary>
     public bool HeadUnderwater { get; private set; }
 
     /// <summary>Metres from the surface down to the feet while swimming (owner only), 0 otherwise.</summary>
     public float SwimDepth { get; private set; }
+
+    /// <summary>Seconds since this swim began (owner only).</summary>
+    public float SwimTime { get; private set; }
 
     /// <summary>Went into the water, 0 (waded in) .. 1 (a big plunge). Owner only.</summary>
     public event Action<float>? Splashed;
@@ -117,7 +116,7 @@ public partial class FootPlayer
         WaterField.TryLevelAt(at, out float level) && StartSwimming(at with { Y = level - SwimFloat }, Vector3.Zero);
 
     /// <summary>Probes: the air left, as if this long had been spent under already.</summary>
-    internal void DebugSetAir(float seconds) => Air = Mathf.Clamp(seconds, 0f, AirMax);
+    internal void DebugSetAir(float seconds) => _air.Seconds = Mathf.Clamp(seconds, 0f, AirMax);
 
     /// <summary>Probes and screenshots: third or first person for this run (V's switch, never saved to the settings).</summary>
     internal void DebugThirdPerson(bool third)
@@ -146,6 +145,7 @@ public partial class FootPlayer
     {
         if (_sliding) { _sliding = false; SetBodyHeight(StandHeight); }
         _swimming = true;
+        SwimTime = 0f;
         _swimLunge = 0f;
         _fallSpeed = 0f;
         _wasSwimFloor = false;
@@ -178,8 +178,7 @@ public partial class FootPlayer
     private void LeaveWater()
     {
         EndSwim();
-        Air = AirMax;
-        _drownTick = 0f;
+        _air = AirReserve.Full;
     }
 
     /// <summary>
@@ -211,6 +210,7 @@ public partial class FootPlayer
 
     private void StepSwim(float dt, float level, float sub)
     {
+        SwimTime += dt;
         bool limp = KnockedOut || Npc;
         var input = limp ? Vector2.Zero : PlayerInput.Move;
         if (_stunTimer > 0) { _stunTimer -= dt; input = Vector2.Zero; }
@@ -329,7 +329,7 @@ public partial class FootPlayer
         // what the figure shows: its own stroke, not the water carrying it
         var own = Velocity - water * surfaceW;
         _swimMove = new Vector2(own.X, own.Z).Length();
-        _swimClimb = own.Y;
+        _swimIntent = new Vector3(wish.X, vertical ? wishY : 0f, wish.Z);
         _swimSprint = sprint && amount > 0.1f;
 
         HeadUnderwater = under;
@@ -340,29 +340,13 @@ public partial class FootPlayer
         UpdateCameraFeel(dt, sprint, false);
     }
 
-    /// <summary>The reserve: drains with the head under, refills above, and drowning damage once it is empty.</summary>
+    /// <summary>The reserve (<see cref="AirReserve"/>): drowning damage once it is empty, a gasp coming up.</summary>
     private void TickAir(float dt, bool under, bool sprinting)
     {
-        if (under) Air = Mathf.Max(0f, Air - dt * (sprinting ? AirSprintDrain : 1f));
-        else
-        {
-            if (_airWasUnder && Air < AirMax * 0.5f) Gasped?.Invoke();
-            Air = Mathf.Min(AirMax, Air + AirRefill * dt);
-        }
-        _airWasUnder = under;
-        if (under && Air <= 0f)
-        {
-            _drownTick -= dt;
-            if (_drownTick <= 0f)
-            {
-                _drownTick = 1f;
-                TakeDamage(DrownDamage, 0, DamageCause.Drown);
-            }
-        }
-        else _drownTick = 0f;
+        var (damage, gasp) = _air.Step(dt, under, sprinting);
+        if (gasp) Gasped?.Invoke();
+        if (damage > 0f) TakeDamage(damage, 0, DamageCause.Drown);
     }
-
-    private bool _airWasUnder;
 
     /// <summary>
     /// The owner's swimming pose, published like the walk's (<see cref="PublishFootPose"/>): the
@@ -373,8 +357,10 @@ public partial class FootPlayer
         DanceId = 0;
         _airTime = 0f;
         bool under = HeadUnderwater && SwimDepth > SwimFloat + 0.3f;
+        // under water and going nowhere (rising on its own): hands sculling, upright
+        bool stroking = _swimIntent.Length() > 0.3f || _swimMove > 0.35f;
         var style = KnockedOut ? SwimStyle.Tread
-            : under ? SwimStyle.Under
+            : under && stroking ? SwimStyle.Under
             : _swimMove > 0.35f ? SwimStyle.Crawl
             : SwimStyle.Tread;
         float before = _swimPhase;
@@ -386,8 +372,11 @@ public partial class FootPlayer
         float lay = style switch
         {
             SwimStyle.Crawl => -1.45f,
-            // along its travel: straight down is head down, straight up is upright
-            SwimStyle.Under => _swimMove + Mathf.Abs(_swimClimb) > 0.3f ? Mathf.Atan2(_swimClimb, _swimMove) - Mathf.Pi * 0.5f : -0.35f,
+            // along its stroke: diving straight down is head down, rising straight up is upright; a
+            // plunge it is not stroking (feet first off a bridge) stays as it fell
+            SwimStyle.Under => _swimIntent.Length() > 0.3f
+                ? Mathf.Atan2(_swimIntent.Y, new Vector2(_swimIntent.X, _swimIntent.Z).Length()) - Mathf.Pi * 0.5f
+                : -0.35f,
             // floating face down, out cold; treading water, nearly upright
             _ => KnockedOut ? -1.5f : -0.12f,
         };
@@ -485,7 +474,7 @@ public partial class FootPlayer
     // ---- splash and sound ------------------------------------------------------------------
 
     private static StandardMaterial3D? _sprayMaterial;
-    private static BoxMesh? _sprayMesh;
+    private static QuadMesh? _sprayMesh;
 
     /// <summary>
     /// Spray thrown up where a body went in (every peer, its own copy), and with <paramref name="sound"/>
@@ -501,18 +490,18 @@ public partial class FootPlayer
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
         };
-        _sprayMesh ??= new BoxMesh { Size = new Vector3(0.09f, 0.09f, 0.09f) };
+        _sprayMesh ??= new QuadMesh { Size = new Vector2(0.07f, 0.07f) };
         var spray = new CpuParticles3D
         {
             Name = "Splash", TopLevel = true, Position = at + Vector3.Up * 0.05f,
-            Amount = 24 + (int)(96 * strength), Lifetime = 0.6f + 0.7f * strength, OneShot = true, Explosiveness = 0.9f,
+            Amount = 40 + (int)(160 * strength), Lifetime = 0.6f + 0.7f * strength, OneShot = true, Explosiveness = 0.9f,
             Emitting = true,
             EmissionShape = CpuParticles3D.EmissionShapeEnum.Ring, EmissionRingAxis = Vector3.Up,
             EmissionRingRadius = 0.45f + 0.4f * strength, EmissionRingInnerRadius = 0.15f, EmissionRingHeight = 0.05f,
             Direction = Vector3.Up, Spread = 22f + 18f * (1f - strength),
             InitialVelocityMin = 1.5f + 3f * strength, InitialVelocityMax = 3f + 7f * strength,
             Gravity = new Vector3(0, -9.8f, 0), DampingMin = 0.3f, DampingMax = 1.2f,
-            ScaleAmountMin = 0.6f, ScaleAmountMax = 1.6f,
+            ScaleAmountMin = 0.6f, ScaleAmountMax = 1.4f,
             Mesh = _sprayMesh, MaterialOverride = _sprayMaterial,
         };
         AddChild(spray);
