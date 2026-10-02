@@ -1164,6 +1164,8 @@ public static partial class HumanMeshBuilder
         GangnamStyle, Headbang, AirGuitar, FistPump, Bounce, ArmWave, RunningMan, TStep, Robot,
         Sprinkler, ShoulderLean, Twerk, Dab, Griddy, Moonwalk, Sway, FolkClap, HandsOnHipsSkip,
         Pogo, JumpTogether,
+        // #370: the rat dance, only to the chess type beat
+        RatSwing, RatArmPump, RatHeadBob, RatHop,
     }
 
     /// <summary>
@@ -1198,6 +1200,8 @@ public static partial class HumanMeshBuilder
         // Folk
         new[] { DanceMove.FolkClap, DanceMove.HandsOnHipsSkip, DanceMove.SideStepClap,
             DanceMove.HipSway, DanceMove.ClapBackbeat, DanceMove.Macarena, DanceMove.GangnamStyle },
+        // RatDance (#370): the chess type beat, whatever it was analysed as; RatSwing first, the crowd's move
+        new[] { DanceMove.RatSwing, DanceMove.RatArmPump, DanceMove.RatHeadBob, DanceMove.RatHop },
     };
 
     /// <summary>Number of moves a style has; <see cref="DanceParams.Move"/> is taken modulo this.</summary>
@@ -1647,7 +1651,73 @@ public static partial class HumanMeshBuilder
             case DanceMove.HandsOnHipsSkip: HandsOnHipsSkip(ref ch, t, mv); break;
             case DanceMove.Pogo: Pogo(ref ch, t, mv); break;
             case DanceMove.JumpTogether: JumpTogether(ref ch, t, mv); break;
+            case DanceMove.RatSwing: RatSwing(ref ch, t, mv); break;
+            case DanceMove.RatArmPump: RatArmPump(ref ch, t, mv); break;
+            case DanceMove.RatHeadBob: RatHeadBob(ref ch, t, mv); break;
+            case DanceMove.RatHop: RatHop(ref ch, t, mv); break;
         }
+    }
+
+    // ---- the rat dance (#370) -----------------------------------------------------------------
+    // The pastor rat's moves to the chess type beat: the whole body swinging a beat to each side,
+    // the head tilting with it, knees giving on every beat.
+
+    /// <summary>The swing: hips and head a beat to each side, the arm on that side thrown up.</summary>
+    private static void RatSwing(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float sw = t.D, dip = DDip(t.B);
+        ch.Px = 0.09f * sw; ch.Py = -0.03f - 0.04f * dip;
+        ch.Phi = -0.14f * sw; ch.Psi = 0.18f * sw; ch.PhH = 0.30f * sw; ch.ThN = 0.10f * dip;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f, up = Mathf.Max(0f, s * sw);
+            SetArm(ref ch, s, new Vector3(s * 0.25f, -0.35f + 0.85f * up, 0.10f), up > 0.3f ? HUp(s) : HOut(s));
+        }
+        Planted(ref ch, 0.13f, 0.15f);
+        HeelUp(ref ch, -1f, 0.03f * Mathf.Max(0f, sw)); HeelUp(ref ch, 1f, 0.03f * Mathf.Max(0f, -sw));
+        if (mv) MovingScale(ref ch, 0.6f, 1f);
+    }
+
+    /// <summary>Both fists pumped up on every beat, the head bobbing side to side.</summary>
+    private static void RatArmPump(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float dip = DDip(t.B), up = 1f - dip;
+        ch.Py = -0.05f * dip; ch.Px = 0.05f * t.D;
+        ch.Phi = -0.06f * t.D; ch.PhH = 0.20f * t.D; ch.ThN = 0.12f * dip;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            Aim(ref ch, s, 0.22f, -0.10f + 0.55f * up, 0.18f, HUp(s));
+        }
+        Planted(ref ch, 0.12f, 0.15f);
+        if (mv) MovingScale(ref ch, 0.6f, 1f);
+    }
+
+    /// <summary>Hands on the hips, the head tilted hard to one side then the other, hips following.</summary>
+    private static void RatHeadBob(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float dip = DDip(t.B);
+        ch.Px = 0.06f * t.D; ch.Py = -0.03f * dip;
+        ch.Phi = -0.08f * t.D; ch.PhH = 0.40f * t.D; ch.ThN = 0.15f * dip;
+        Akimbo(ref ch, -1f); Akimbo(ref ch, 1f);
+        Planted(ref ch, 0.12f, 0.2f);
+        if (mv) MovingScale(ref ch, 0.6f, 0.4f);
+    }
+
+    /// <summary>A little hop on every beat, swinging to the side, arms out flapping.</summary>
+    private static void RatHop(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float air = Air(t.B, 0.15f, 0.85f), h = 0.12f * air;
+        ch.Py = h - 0.05f * Give(t.B, 0.02f, 0.1f); ch.Px = 0.08f * t.D;
+        ch.Phi = -0.10f * t.D; ch.PhH = 0.25f * t.D; ch.ThN = 0.08f * (1f - air);
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            Aim(ref ch, s, 0.45f, -0.05f + 0.25f * air, 0.05f, HOut(s));
+        }
+        Foot(ref ch, -1f, -0.11f, AnkleHeight + h, 0f, 0.1f, air);
+        Foot(ref ch, 1f, 0.11f, AnkleHeight + h, 0f, 0.1f, air);
+        if (mv) { MovingScale(ref ch, 0.5f, 1f); ch.Py = Mathf.Clamp(h, 0f, 0.04f); }
     }
 
     /// <summary>0 on the ground, rising to 1 at the top of a jump that leaves at <paramref name="off"/> and lands at <paramref name="on"/> (beat phase).</summary>

@@ -156,6 +156,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // a hand-made church whose radio plays the chess type beat (#370): no terrain, no server
+        if (Interiors.ChurchStageProbe.ParseArgs() is { Requested: true } churchStage)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.ChurchStageProbe(churchStage.Shot) { Name = "ChurchStageProbe" });
+            return;
+        }
 
         // a test course built in code instead of the map: --chunks fixture:<course>, --world fixture,
         // or --systems without terrain (Terrain/Fixture, docs/notes/general/testing.md)
@@ -316,6 +323,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return all;
         };
         Audio.Cd.CdLibrary.Create(this, server: false);
+        // the radio by the pastor rat in every church (#370)
+        Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))
@@ -1398,7 +1407,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.UseItem, "Take the radio");
                 yield return (PlayerInput.InteractMount, "Radio");
             }
-            else if (!p.Indoors)
+            else if (p.Indoors)
+            {
+                // the chess type beat in a church (#370): dance to it, away from its radio and the door
+                if (Interiors.ChurchRadios.At(p) == null && Interiors.InteriorManager.Instance?.AtExit(p) != true
+                    && (p.DanceId != 0 || p.RatBeatHere(heard: true)))
+                    yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
+                yield return (PlayerInput.Inventory, "Inventory");
+            }
+            else
             {
                 if (Vehicles.VehicleReach.Current == null && Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
                     yield return (PlayerInput.InteractMount, "Radio");
@@ -1415,7 +1432,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.Teleport, "Map");
                 yield return (PlayerInput.ToggleMode, "Fly camera");
             }
-            else yield return (PlayerInput.Inventory, "Inventory");
         }
         yield return (PlayerInput.Help, "All controls");
     }

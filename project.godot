@@ -45,6 +45,10 @@ lights_and_shadows/directional_shadow/size.mobile=4096
 
 [shader_globals]
 
+world_disco_beat={
+"type": "float",
+"value": 0.0
+}
 xr_smooth={
 "type": "bool",
 "value": false

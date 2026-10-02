@@ -183,9 +183,20 @@ public partial class DayNight : Node
             _indoor.BackgroundColor = sky;
             _indoor.AmbientLightSource = Godot.Environment.AmbientSource.Color;
             _indoor.AmbientLightColor = RoomDaylight.Lerp(RoomLamp, Night);
-            _indoor.AmbientLightEnergy = 1.0f;
+        }
+        if ((moved || Disco != _appliedDisco) && _indoor != null)
+        {
+            _appliedDisco = Disco;
+            _indoor.AmbientLightEnergy = 1.0f - 0.8f * Disco;
         }
     }
+
+    /// <summary>
+    /// 0..1: the church the local player is in has turned night club (#370, <c>Interiors.ChurchStage</c>):
+    /// characters indoors are lit by its coloured lights, not the room's lamps. Back to 0 the same frame it stops.
+    /// </summary>
+    public static float Disco { get; set; }
+    private float _appliedDisco = -1f;
 
     // set every frame: a string would convert to a new StringName each call (#221)
     private static readonly StringName GLights = "world_lights", GMistColor = "world_mist_color",

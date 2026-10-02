@@ -250,7 +250,8 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         beatPhase = (float)(beat - floor);
         beatIndex = (int)floor;
         bar = (int)Math.Floor(floor / 4.0);
-        style = cd.Style;
+        // the chess type beat is danced as the rat dance, whatever the analyser made of it (#370)
+        style = CdLibrary.IsRatBeat(cdId) ? MusicStyle.RatDance : cd.Style;
         return true;
     }
 

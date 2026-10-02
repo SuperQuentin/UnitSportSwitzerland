@@ -7,7 +7,8 @@ namespace UnitSport.Interiors;
 /// each in a cat-ear headband with a kawaii face. One style for every face: features are
 /// pixels on a 17 x 17 grid over the head's front, eyes are 5 x 5 with white highlights and a
 /// lash flick, every cheek is blushed. Who sits where is a hash of the pew's position, so every
-/// peer builds the same people.
+/// peer builds the same people. Each is a <see cref="Figure"/> (#370): seated as before, with
+/// standing legs for when the chess type beat gets them up.
 /// </summary>
 public static partial class InteriorMeshBuilder
 {
@@ -50,22 +51,35 @@ public static partial class InteriorMeshBuilder
     private static readonly Color[] Ears =
         { C(0.12f, 0.11f, 0.13f), C(0.96f, 0.96f, 0.96f), C(0.95f, 0.60f, 0.75f), C(0.90f, 0.55f, 0.22f) };
 
-    private static void Congregation(FurniturePlan p, float w, float d, Action<Vector3, Vector3, Color> box)
+    private static void Congregation(FurniturePlan p, float w, float d, float y0, List<Figure> figures)
     {
         int n = Math.Max(1, (int)((p.W - 0.1f) / Seat));
         int seed = InteriorGenerator.StableHash($"{p.X:F2},{p.Z:F2}") & 0x7fffffff;
+        var pew = FrameOf(p, y0);
         for (int i = 0; i < n; i++)
         {
             float cx = -w + p.W * (i + 0.5f) / n;
             int h = InteriorGenerator.StableHash($"{seed}:{i}") & 0x7fffffff;
-            Person(cx, d, h, i + seed % 7, box);
+            figures.Add(new Figure(FigureKind.Person, pew * Transform3D.Identity.Translated(new Vector3(cx, 0, 0)), h,
+                Person(d, h, i + seed % 7)));
         }
     }
 
-    private static void Person(float cx, float d, int h, int k, Action<Vector3, Vector3, Color> box)
+    private static FigurePart[] Person(float d, int h, int k)
     {
+        // seated, leaning on the backrest, facing +Z (the altar)
+        float bz0 = -d + 0.09f, bz1 = bz0 + 0.2f;
+        float hz0 = bz0 + 0.02f;
+        var fb = new FigureBuilder();
+        int legs = fb.Part(-1, Vector3.Zero);
+        int standing = fb.Part(-1, new Vector3(0, 0, StandForward), hidden: true);
+        int torso = fb.Part(-1, new Vector3(0, 0.47f, bz0 + 0.10f));
+        int armL = fb.Part(torso, new Vector3(-0.195f, 0.83f, bz0 + 0.10f));
+        int armR = fb.Part(torso, new Vector3(0.195f, 0.83f, bz0 + 0.10f));
+        int head = fb.Part(torso, new Vector3(0, 0.86f, hz0 + 0.12f));
+        int part = torso;
         void B(float xa, float ya, float za, float xb, float yb, float zb, Color col) =>
-            box(new Vector3(cx + xa, ya, za), new Vector3(cx + xb, yb, zb), col);
+            fb.Box(part, new Vector3(xa, ya, za), new Vector3(xb, yb, zb), col);
         var skin = Skins[h % Skins.Length];
         int hairIx = (h >> 4) % Hairs.Length;
         var hair = Hairs[hairIx];
@@ -81,24 +95,34 @@ public static partial class InteriorMeshBuilder
         bool lash = EyeLash[k % Eyes.Length];
         var mouth = Mouths[(k * 3 + (h >> 16)) % Mouths.Length];
 
-        // seated, leaning on the backrest, facing +Z (the altar)
-        float bz0 = -d + 0.09f, bz1 = bz0 + 0.2f;
         B(-0.16f, 0.47f, bz0, 0.16f, 0.86f, bz1, cloth);                       // body
+        part = legs;
         B(-0.15f, 0.47f, bz1, -0.03f, 0.59f, bz1 + 0.26f, cloth * 0.85f);      // thighs
         B(0.03f, 0.47f, bz1, 0.15f, 0.59f, bz1 + 0.26f, cloth * 0.85f);
         B(-0.14f, 0.06f, bz1 + 0.15f, -0.04f, 0.47f, bz1 + 0.25f, skin);       // shins
         B(0.04f, 0.06f, bz1 + 0.15f, 0.14f, 0.47f, bz1 + 0.25f, skin);
         B(-0.15f, 0, bz1 + 0.13f, -0.03f, 0.06f, bz1 + 0.31f, shoe);
         B(0.03f, 0, bz1 + 0.13f, 0.15f, 0.06f, bz1 + 0.31f, shoe);
-        B(-0.23f, 0.62f, bz0 + 0.05f, -0.16f, 0.84f, bz0 + 0.15f, cloth);      // arms, hands on the lap
-        B(0.16f, 0.62f, bz0 + 0.05f, 0.23f, 0.84f, bz0 + 0.15f, cloth);
+        // standing (#370): straight legs under the body, a step in front of the seat
+        part = standing;
+        float sz = bz0 + StandForward;
+        B(-0.15f, 0.06f, sz + 0.04f, -0.03f, 0.47f, sz + 0.16f, cloth * 0.85f);
+        B(0.03f, 0.06f, sz + 0.04f, 0.15f, 0.47f, sz + 0.16f, cloth * 0.85f);
+        B(-0.15f, 0, sz + 0.02f, -0.03f, 0.06f, sz + 0.24f, shoe);
+        B(0.03f, 0, sz + 0.02f, 0.15f, 0.06f, sz + 0.24f, shoe);
+        part = armL;                                                           // arms, hands on the lap
+        B(-0.23f, 0.62f, bz0 + 0.05f, -0.16f, 0.84f, bz0 + 0.15f, cloth);
         B(-0.23f, 0.60f, bz0 + 0.15f, -0.12f, 0.67f, bz1 + 0.12f, cloth);
+        B(-0.12f, 0.60f, bz1 + 0.08f, 0, 0.66f, bz1 + 0.16f, skin);
+        part = armR;
+        B(0.16f, 0.62f, bz0 + 0.05f, 0.23f, 0.84f, bz0 + 0.15f, cloth);
         B(0.12f, 0.60f, bz0 + 0.15f, 0.23f, 0.67f, bz1 + 0.12f, cloth);
-        B(-0.12f, 0.60f, bz1 + 0.08f, 0.12f, 0.66f, bz1 + 0.16f, skin);
+        B(0, 0.60f, bz1 + 0.08f, 0.12f, 0.66f, bz1 + 0.16f, skin);
 
         // the big chibi head, hair cap, fringe and side locks
+        part = head;
         float hs = Grid * Px, hx0 = -hs / 2, hy0 = 0.88f, hy1 = hy0 + hs;
-        float hz0 = bz0 + 0.02f, hz1 = hz0 + 0.25f;
+        float hz1 = hz0 + 0.25f;
         B(-0.05f, 0.85f, hz0 + 0.07f, 0.05f, hy0, hz0 + 0.17f, skin);
         B(hx0, hy0, hz0, -hx0, hy1, hz1, skin);
         B(hx0 - 0.015f, hy0 + 0.04f, hz0 - 0.02f, -hx0 + 0.015f, hy1 + 0.02f, hz1 - 0.06f, hair);
@@ -155,5 +179,6 @@ public static partial class InteriorMeshBuilder
         Pix(new[] { "PP" }, 1, 11);   // blush
         Pix(new[] { "PP" }, 14, 11);
         Pix(mouth, 6, 12);
+        return fb.Done();
     }
 }
