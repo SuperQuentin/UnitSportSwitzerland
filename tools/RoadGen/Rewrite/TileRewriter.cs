@@ -543,8 +543,9 @@ public static partial class TileRewriter
                 // a turn lane's widening (#123) moves out past it (#120): its own street's widenings
                 // only (#351: at a signalised junction an arm's widening reaches the next arm's corner)
                 var finalPieces = new Dictionary<RoadSegment, List<RoadSegment>>(ReferenceEqualityComparer.Instance);
-                var stripsOf = stripOwners.GroupBy(kv => kv.Value, ReferenceEqualityComparer.Instance)
-                    .ToDictionary(g => (RoadSegment)g.Key!, g => g.Select(kv => kv.Key).ToList(), ReferenceEqualityComparer.Instance);
+                var stripsOf = new Dictionary<RoadSegment, List<RoadAreaProp>>(ReferenceEqualityComparer.Instance);
+                foreach (var (strip, owner) in stripOwners)
+                    (stripsOf.TryGetValue(owner, out var owned) ? owned : stripsOf[owner] = new()).Add(strip);
                 foreach (var (tileId, list) in output)
                 {
                     for (int i = list.Count - 1; i >= 0; i--)
