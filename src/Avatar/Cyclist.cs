@@ -51,8 +51,10 @@ public partial class Cyclist : Node3D
     // ponytail: one entry set per distinct palette, never evicted; a few hundred tiny meshes per
     // colour scheme. Evict by palette if riders with unique colours ever come by the thousand.
     private static readonly Dictionary<(BikePalette, int), ArrayMesh> CrankSteps = new();
-    private static readonly Dictionary<(HumanPalette, int, int), ArrayMesh> LegSteps = new();
+    private static readonly Dictionary<(HumanPalette, int, int, bool), ArrayMesh> LegSteps = new();
     private int _shownStep = -1;
+    /// <summary>Whether the rider and legs shown were built smooth (<see cref="HumanMeshBuilder.SmoothFigures"/>).</summary>
+    private bool _riderSmooth;
 
     /// <summary>Live cadence. Drives the crank; set it from the router and the legs follow.</summary>
     public float CadenceRpm
@@ -120,6 +122,7 @@ public partial class Cyclist : Node3D
             Mesh = HumanMeshBuilder.Build(_palette, HumanPose.Cycling, includeLegs: false, helmet: true),
             MaterialOverride = material,
         };
+        _riderSmooth = HumanMeshBuilder.SmoothFigures;
         AddChild(_rider);
 
         _cranks = new MeshInstance3D { Name = "Cranks", MaterialOverride = material };
@@ -136,6 +139,14 @@ public partial class Cyclist : Node3D
 
     public override void _Process(double delta)
     {
+        // a restyle to or from a lit style (#311): the rider and legs are built again, parked or not
+        if (HumanMeshBuilder.SmoothFigures != _riderSmooth)
+        {
+            _riderSmooth = HumanMeshBuilder.SmoothFigures;
+            _rider.Mesh = HumanMeshBuilder.Build(_palette, HumanPose.Cycling, includeLegs: false, helmet: true);
+            _shownStep = -1;
+            UpdateLegs();
+        }
         // a skirt streams back in the wind of the ride (#251): measured from the bike's own motion
         if (Flutters)
         {
@@ -163,7 +174,7 @@ public partial class Cyclist : Node3D
         _cranks.Mesh = cranks;
         for (int i = 0; i < 2; i++)
         {
-            var key = (_palette, i, step);
+            var key = (_palette, i, step, HumanMeshBuilder.SmoothFigures);
             if (!LegSteps.TryGetValue(key, out var leg)) LegSteps[key] = leg = BuildLeg(i, stepAngle);
             _legs[i].Mesh = leg;
         }
@@ -190,6 +201,7 @@ public partial class Cyclist : Node3D
         var knee = Limb.Solve(hip, pedal, ThighLength, ShinLength, new Vector3(0, 0, 1));
 
         var scratch = new MeshScratch();
+        using var smoothing = scratch.Smoothing(HumanMeshBuilder.SmoothFigures);
         if (!_palette.Outfit.IsEmpty)
         {
             // dressed (#251): stockings, boots and trousers on the pedalling leg, the foot along the pedal
