@@ -385,8 +385,62 @@ public partial class BrManager : Node
                 if (BrLoot.PlaceBike(Origin, e, n, alt, yaw, seed + bikes, $"{BrLoot.VehiclePrefix}barn{bikes}")) bikes++;
             GD.Print("[br] sites: " + string.Join(", ", sites.Crates.GroupBy(c => c.Style).Select(g => $"{g.Count()} {g.Key}"))
                 + $", {bikes} motorbikes by barns");
+
+            // the ready-made structures (#276): towers, ski jumps, barriers, checkpoints, forts, scaffolding, bridges
+            var placements = await BrStructures.Place(_source, area, seed, roads);
+            if (match != _match || _state.Phase != BrPhase.Playing) return;
+            SpawnStructures(placements);
         }
         catch (Exception ex) { GD.PushWarning($"[br] loot: {ex.Message}"); }
+    }
+
+    /// <summary>Server: where match structures and their gadgets go (set by <c>ServerWorld</c>; null: none).</summary>
+    public Build.Structures? Structures { get; set; }
+    public Items.PlacedObjects? Placed { get; set; }
+
+    /// <summary>Server: puts up the match's prefabs and sets down their gadgets, owned by the match.</summary>
+    private void SpawnStructures(List<BrStructures.Placement> placements)
+    {
+        if (Structures == null || Origin == null) return;
+        int gadgets = 0;
+        foreach (var p in placements)
+        {
+            var s = Structures.SpawnPrefab(p.Prefab.Pieces, p.E, p.N, p.Alt, p.Yaw);
+            var frame = s.WorldTransform(Origin);
+            foreach (var g in p.Prefab.Gadgets)
+            {
+                var at = frame * new Transform3D(new Basis(Vector3.Up, Build.Structures.DirYaw(g.Dir)), new Vector3(g.X, g.Y, g.Z));
+                if (Placed == null) continue;
+                switch (g.Kind)
+                {
+                    case PrefabGadget.Zipline when p.ZipEnd is { } end:
+                    {
+                        // placed at its low end, naming the high one: the platform's edge
+                        var (he, hn) = Origin.ToLv95(at.Origin);
+                        var low = new Transform3D(Basis.Identity, Origin.ToWorld(end.E, end.N, end.Alt));
+                        Placed.ServerPlace(Items.PlacedKind.Zipline, low, Build.Gadgets.ZipPayload(he, hn, at.Origin.Y), Items.PlacedObjects.MatchOwner);
+                        gadgets++;
+                        break;
+                    }
+                    case PrefabGadget.RopeLadder:
+                        Placed.ServerPlace(Items.PlacedKind.RopeLadder, at, Build.Gadgets.LadderPayload(g.Length), Items.PlacedObjects.MatchOwner);
+                        gadgets++;
+                        break;
+                    case PrefabGadget.Trampoline or PrefabGadget.LaunchPad or PrefabGadget.CamoNet:
+                        var kind = g.Kind switch
+                        {
+                            PrefabGadget.Trampoline => Items.PlacedKind.Trampoline,
+                            PrefabGadget.LaunchPad => Items.PlacedKind.LaunchPad,
+                            _ => Items.PlacedKind.CamoNet,
+                        };
+                        Placed.ServerPlace(kind, at, "", Items.PlacedObjects.MatchOwner);
+                        gadgets++;
+                        break;
+                }
+            }
+        }
+        GD.Print("[br] structures: " + string.Join(", ", placements.GroupBy(p => p.Prefab.Name).Select(g => $"{g.Count()} {g.Key}"))
+            + $", {placements.Sum(p => p.Prefab.Pieces.Length)} pieces, {gadgets} gadgets");
     }
 
     /// <summary>At the start of phases 2, 4 and 6 supply drops come down inside the next circle.</summary>
@@ -457,6 +511,8 @@ public partial class BrManager : Node
     {
         _match++;
         _crates?.ClearAll();
+        // the ready-made structures' gadgets (#276); the structures themselves go with the match (Structures)
+        Placed?.ClearOwner(Items.PlacedObjects.MatchOwner);
         BrLoot.RemoveVehicles();
         Loot.LootTables.MatchEpoch = null;
         Loot.LootService.Instance?.ForgetMatch();

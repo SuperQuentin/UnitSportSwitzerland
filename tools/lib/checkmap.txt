@@ -27,6 +27,8 @@ src/Build/               quick  --buildcheck --systems ui,physics,build
 src/Build/               net    tools/buildnetcheck.sh
 src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
 src/Build/Gadget         net    tools/gadgetnetcheck.sh
+src/BattleRoyale/BrPrefab quick  --prefabcheck --systems ui,physics,build
+src/BattleRoyale/BrStruct quick  --prefabcheck --systems ui,physics,build
 src/Loot/                quick  --lootchancecheck
 src/Occasions/           quick  --occasioncheck
 src/Occasions/           quick  --huntcheck

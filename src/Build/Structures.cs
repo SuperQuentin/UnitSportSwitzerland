@@ -70,6 +70,12 @@ public partial class Structures : Node
     public Func<bool>? MatchRunning { get; set; }
     /// <summary>Server: the terrain height under a world point, when this server holds that terrain.</summary>
     public Func<Vector3, float?>? GroundAt { get; set; }
+    /// <summary>
+    /// Server: a match piece broke (or fell): where, and the share of its materials left in the rubble
+    /// (<see cref="RubbleShare"/>). The Battle Royale turns it into a pile to loot (#276).
+    /// </summary>
+    public Action<Vector3, List<ItemStack>>? Rubble { get; set; }
+    public const float RubbleShare = 0.4f;
 
     public IReadOnlyDictionary<long, Structure> All => _structures;
     public WorldOrigin Origin => _origin;
@@ -230,6 +236,16 @@ public partial class Structures : Node
         PutPiece(s, new Placed { Piece = piece, Owner = owner, Damage = damage, BuiltAt = builtAt }, live);
     }
 
+    /// <summary>Many pieces at once, grown (a prefab at the start of a match): 9 ints per piece.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void AddPieces(long structure, int[] packed, string owner, double builtAt)
+    {
+        if (!_structures.TryGetValue(structure, out var s)) return;
+        for (int i = 0; i + 8 < packed.Length; i += 9)
+            if (Unpack(packed[i..(i + 9)]) is { } piece)
+                PutPiece(s, new Placed { Piece = piece, Owner = owner, BuiltAt = builtAt }, false);
+    }
+
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void SetDamage(long structure, int[] slot, float damage)
     {
@@ -302,9 +318,27 @@ public partial class Structures : Node
         foreach (var s in _structures.Values)
         {
             RpcId(peer, MethodName.AddStructure, s.Id, s.E, s.N, s.Altitude, s.Yaw, s.Owner, s.Match);
-            foreach (var p in s.Pieces.Values)
+            // undamaged pieces of one owner in one go (a prefab is dozens); the rest one by one
+            foreach (var group in s.Pieces.Values.Where(p => p.Damage == 0).GroupBy(p => p.Owner))
+                RpcId(peer, MethodName.AddPieces, s.Id, group.SelectMany(p => Pack(p.Piece)).ToArray(), group.Key, group.Min(p => p.BuiltAt));
+            foreach (var p in s.Pieces.Values.Where(p => p.Damage != 0))
                 RpcId(peer, MethodName.AddPiece, s.Id, Pack(p.Piece), p.Owner, p.Damage, p.BuiltAt, false);
         }
+    }
+
+    /// <summary>
+    /// Server: puts up a ready-made structure for the running match (#276): owned by nobody, so any
+    /// entrant may break it and nobody can take it; grown at once; cleared with the match.
+    /// </summary>
+    public Structure SpawnPrefab(IEnumerable<Piece> pieces, double e, double n, double alt, float yaw)
+    {
+        var s = new Structure { Id = _nextId++, E = e, N = n, Altitude = alt, Yaw = yaw, Owner = "", Match = true };
+        PutStructure(s);
+        double grown = Now - 1000;
+        foreach (var piece in pieces) PutPiece(s, new Placed { Piece = piece, Owner = "", BuiltAt = grown }, false);
+        Broadcast(MethodName.AddStructure, s.Id, s.E, s.N, s.Altitude, s.Yaw, s.Owner, s.Match);
+        Broadcast(MethodName.AddPieces, s.Id, s.Pieces.Values.SelectMany(p => Pack(p.Piece)).ToArray(), "", grown);
+        return s;
     }
 
     public override void _Process(double delta)
@@ -315,6 +349,12 @@ public partial class Structures : Node
         _sinceSweep = 0;
         // a match is over: its structures go with it
         if (MatchRunning?.Invoke() == true) return;
+        ClearMatch();
+    }
+
+    /// <summary>Server (or offline): every structure of a match goes, for everyone.</summary>
+    public void ClearMatch()
+    {
         foreach (var s in _structures.Values.Where(s => s.Match).ToList())
         {
             DropStructure(s.Id);
@@ -402,7 +442,8 @@ public partial class Structures : Node
         if (!_structures.TryGetValue(structure, out var s) || !s.Pieces.TryGetValue(slot, out var p)) return;
         var def = Weapons.Get((ItemId)weapon);
         if (def == null || !float.IsFinite(damage) || damage <= 0 || damage > def.MaxHit) return;
-        bool may = s.Match ? PeerInMatch(peer) : p.Owner == OwnerName(peer) || Combat.PvpRules.Enabled;
+        // offline there is no match: whoever plays alone may break a match structure (the prefab probe)
+        bool may = s.Match ? !Online || PeerInMatch(peer) : p.Owner == OwnerName(peer) || Combat.PvpRules.Enabled;
         if (!may || !InReach(peer, Centre(s, p.Piece), def.Range + 8f)) return;
 
         p.Damage += damage;
@@ -418,6 +459,8 @@ public partial class Structures : Node
     /// <summary>Server: takes a piece away, then everything it alone held up, and tells everyone.</summary>
     private void Break(Structure s, Slot slot, bool pickedUp)
     {
+        var lost = new List<Piece>();
+        if (s.Pieces.TryGetValue(slot, out var first) && !pickedUp) lost.Add(first.Piece);
         DropPiece(s, slot, broken: !pickedUp);
         var gone = new List<int>(PackSlot(slot));
         var fallen = BuildGrid.Fallen(s.Grid);
@@ -425,6 +468,16 @@ public partial class Structures : Node
         {
             DropPiece(s, f.Slot, broken: true);
             gone.AddRange(PackSlot(f.Slot));
+            lost.Add(f);
+        }
+        // in a match what comes down leaves some of what it was made of (#276)
+        if (s.Match && lost.Count > 0 && Rubble != null)
+        {
+            var stacks = lost.SelectMany(p => BuildGrid.Cost(p.Kind, p.Material))
+                .GroupBy(c => c.Id)
+                .Select(g => new ItemStack(g.Key, (int)Math.Floor(g.Sum(c => c.Count) * RubbleShare)))
+                .Where(st => st.Count > 0).ToList();
+            if (stacks.Count > 0) Rubble(Centre(s, lost[0]), stacks);
         }
         // a pick-up names the one piece first (no debris for it); the rest fell
         if (pickedUp) Broadcast(MethodName.RemovePieces, s.Id, PackSlot(slot), false);
