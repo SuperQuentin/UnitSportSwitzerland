@@ -52,7 +52,8 @@ public partial class PlayerFeel : Node3D
     private ColorRect _linesRect = null!;
     private CanvasLayer _screen = null!;
     private Label _speedLabel = null!, _popup = null!;
-    private ProgressBar _boostBar = null!, _healthBar = null!, _rpmBar = null!;
+    private ProgressBar _boostBar = null!, _healthBar = null!, _rpmBar = null!, _airBar = null!;
+    private StyleBoxFlat _airFill = null!;
     private Label _driftLabel = null!;
     private StyleBoxFlat _rpmFill = null!;
     private Label _engineLabel = null!, _hint = null!;
@@ -125,6 +126,14 @@ public partial class PlayerFeel : Node3D
             AddTrauma(0.18f);
         };
         _player.SlideStarted += () => Play(SfxSynth.WhooshBank, 0.45f, 0.7f);
+        // in the water (#301): the plunge, each stroke, a breath after a long time under
+        _player.Splashed += strength =>
+        {
+            Play(SfxSynth.SplashBank, 0.35f + 0.65f * strength, 1.15f - 0.3f * strength);
+            AddTrauma(strength * 0.35f);
+        };
+        _player.Stroked += () => Play(SfxSynth.StrokeBank, 0.22f, 0.9f + (float)_rng.NextDouble() * 0.2f);
+        _player.Gasped += () => Play(SfxSynth.GaspBank, 0.55f, 1f);
         _player.Mantled += () =>
         {
             Play(SfxSynth.StepsBank, 0.6f, 0.75f);   // hands on the lip
@@ -485,7 +494,8 @@ public partial class PlayerFeel : Node3D
     {
         // on foot only: time spent flying a plane is not a jump
         // and neither is being thrown through a windscreen (#214)
-        if (_player.Ride != RideKind.OnFoot || _player.Ragdolled) _airTime = 0;
+        // nor is swimming (#301)
+        if (_player.Ride != RideKind.OnFoot || _player.Ragdolled || _player.IsSwimming) _airTime = 0;
         else if (!grounded) _airTime += dt;
         else if (!_wasGrounded)
         {
@@ -737,6 +747,20 @@ public partial class PlayerFeel : Node3D
         _healthBar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.5f) });
         _screen.AddChild(_healthBar);
 
+        // the air reserve (#301), just above health: only while it is not full
+        _airBar = new ProgressBar
+        {
+            MinValue = 0, MaxValue = FootPlayer.AirMax, Step = 0.01, ShowPercentage = false,
+            MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
+        };
+        _airBar.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
+        _airBar.OffsetLeft = 18; _airBar.OffsetRight = 218;
+        _airBar.OffsetTop = -44; _airBar.OffsetBottom = -34;
+        _airFill = new StyleBoxFlat { BgColor = new Color(0.35f, 0.75f, 1f) };
+        _airBar.AddThemeStyleboxOverride("fill", _airFill);
+        _airBar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.5f) });
+        _screen.AddChild(_airBar);
+
         _engineLabel = HudLabel(16);
         _engineLabel.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
         _engineLabel.GrowHorizontal = Control.GrowDirection.Begin;
@@ -872,6 +896,16 @@ public partial class PlayerFeel : Node3D
         // health only when it is not full: a bar that is always full is clutter
         _healthBar.Visible = _player.Health < FootPlayer.MaxHealth - 0.5f;
         _healthBar.Value = _player.Health;
+        // air: shown while it is not full, blinking once it runs low
+        float air = _player.Air;
+        _airBar.Visible = air < FootPlayer.AirMax - 0.05f;
+        if (_airBar.Visible)
+        {
+            _airBar.Value = air;
+            bool low = air < FootPlayer.AirMax * 0.25f;
+            var colour = low && Mathf.PosMod(_time * 3f, 1f) < 0.5f ? new Color(1f, 0.35f, 0.25f) : new Color(0.35f, 0.75f, 1f);
+            if (_airFill.BgColor != colour) _airFill.BgColor = colour;
+        }
         _hurtFlash.Color = _hurtFlash.Color with { A = Mathf.MoveToward(_hurtFlash.Color.A, 0f, 1.2f * dt) };
 
         var vehicle = _player.Vehicle;
@@ -919,6 +953,10 @@ public partial class PlayerFeel : Node3D
 
         switch (ride)
         {
+            case RideKind.OnFoot when _player.IsSwimming:
+                // the first moments in the water (#301): how to go down and up
+                if (_player.SwimTime < 5f) text = InputHints.Format("{crouch_slide}  dive     {jump}  up · climb out");
+                break;
             case RideKind.OnFoot:
                 // mirrors FootPlayer's deploy test: falling, and more than 12 m of air below
                 if (!_player.IsOnFloor() && _player.Velocity.Y < -3f && _player.Terrain != null

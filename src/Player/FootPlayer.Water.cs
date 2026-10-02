@@ -7,9 +7,10 @@ namespace UnitSport.Player;
 
 /// <summary>
 /// A car, motorbike or truck driven into water deeper than it can wade (#299): it floats a moment,
-/// fills and sinks, and is lost; the driver comes out on foot (swimming is #301). Keyed on the real
+/// fills and sinks, and is lost; the driver comes out swimming. Keyed on the real
 /// depth (<see cref="WaterField"/>): a legacy tile's lake is 0.12 m deep, so cars still drive on it
 /// as they always did; only where a bed exists (the fixture lake, #298's lakes) does a lake take a car.
+/// Everyone aboard ends up swimming at the surface (#301).
 /// </summary>
 public partial class FootPlayer
 {
@@ -40,6 +41,7 @@ public partial class FootPlayer
     /// </summary>
     private bool WaterPhysics(float dt)
     {
+        if (RideIntoWater()) return true;   // a bike or skis: off and swimming (#301)
         if (_ride is not (Car or Motorbike or Truck)) { Sinking = 0; return false; }
         if (!WaterField.TryLevelAt(GlobalPosition, out float level)) { Sinking = 0; return false; }
         float depth = level - GlobalPosition.Y;
@@ -78,7 +80,8 @@ public partial class FootPlayer
         PlayerInput.Rumble(0.6f, 0.4f, 0.5f);
         ApplyRide(RideKind.OnFoot, Vector3.Up * 1.5f);
         var at = Origin!.ToWorld(state.Position);
-        GlobalPosition = at with { Y = Mathf.Max(at.Y, level - 0.2f) };
+        // out at the surface, swimming (#301)
+        if (!StartSwimmingAtSurface(at)) GlobalPosition = at with { Y = Mathf.Max(at.Y, level - 0.2f) };
         // everyone aboard goes out with the driver
         if (OnlineSeats && (SeatIndex > 0 || Riders.Any())) PassengerService.Instance!.Wrecked(Vector3.Zero);
         SeatIndex = 0;
