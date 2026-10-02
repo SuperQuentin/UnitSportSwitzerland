@@ -19,18 +19,9 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class CrashNetProbe : Node
 {
-    public static string? ParseArgs()
-    {
-        return CmdArgs.Value("--crashnet");
-    }
+    public static string? ParseArgs() => CmdArgs.Value("--crashnet");
 
-    private static string? Password
-    {
-        get
-        {
-            return CmdArgs.Value("--crashnet", 2, notFlag: true);
-        }
-    }
+    private static string? Password => CmdArgs.Value("--crashnet", 2, notFlag: true);
 
     private const float WallAhead = 70f;
     private readonly string _role;

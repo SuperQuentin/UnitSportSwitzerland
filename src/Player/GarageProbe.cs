@@ -25,10 +25,7 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class GarageProbe : Node
 {
-    public static string? ParseArgs()
-    {
-        return CmdArgs.Value("--garagecheck");
-    }
+    public static string? ParseArgs() => CmdArgs.Value("--garagecheck");
 
     /// <summary>The parts a puts on: F1 slicks, GT wing, splitter, pink, slammed, blue neon, scissor doors.</summary>
     public static readonly CarTuning Tuned = new CarTuning(0)
@@ -83,13 +80,7 @@ public partial class GarageProbe : Node
     /// admin may leave a conjured car in the world (the <c>admin-only-spawning</c> note), and a
     /// parks it to work its doors on foot and get back in.
     /// </summary>
-    private static string? Password
-    {
-        get
-        {
-            return CmdArgs.Value("--garagecheck", 2, notFlag: true);
-        }
-    }
+    private static string? Password => CmdArgs.Value("--garagecheck", 2, notFlag: true);
 
     private void Act(FootPlayer me, Func<double, bool> at)
     {
@@ -98,8 +89,7 @@ public partial class GarageProbe : Node
         if (at(1.8)) Log($"admin: {Permissions.IsAdmin}");
         if (at(2)) Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
         // --setup <preset> (#40): the garage parts go on over a car preset, and both travel with the car
-        if (at(2.5) && Array.IndexOf(CmdArgs.All, "--setup") is var si and >= 0 && si + 1 < CmdArgs.All.Length
-            && CarSetups.Parse(CmdArgs.All[si + 1]) is { } preset)
+        if (at(2.5) && CmdArgs.Value("--setup") is { } setup && CarSetups.Parse(setup) is { } preset)
             Log($"preset {preset.Name}: {me.SetCarSetup(preset.Id)} -> {me.CarSetupId}");
         if (at(3)) { me.SetTuning(Tuned); Log($"tuned: bits {me.TuningBits:X}, preset {me.CarSetupId}"); }
         // the menu itself, on the tuned car, for a look
@@ -225,14 +215,6 @@ public partial class GarageProbe : Node
     private Vector3 _from;
     private double _stillFor;
 
-    private static float? Arg(string name)
-    {
-        var args = CmdArgs.All;
-        int i = Array.IndexOf(args, name);
-        return i >= 0 && i + 1 < args.Length && float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : null;
-    }
-
     /// <summary>
     /// Inside a building or out. From position, so it holds for a remote copy too: the interior it
     /// is in (built here, as its door is open and near) is named when this peer has it.
@@ -291,7 +273,7 @@ public partial class GarageProbe : Node
             _searchIn = 1;
             if (!AutoGarage)
             {
-                me.PlaceAt(me.GlobalPosition, -Mathf.DegToRad(Arg("--heading") ?? 0f));
+                me.PlaceAt(me.GlobalPosition, -Mathf.DegToRad(CmdArgs.Float("--heading") ?? 0f));
                 _target = Interiors.DoorIndex.Nearest(me.GlobalPosition, 20f, TargetKind);
                 _readyAt = _t;
             }
@@ -311,7 +293,7 @@ public partial class GarageProbe : Node
         if (_readyAt < 0) return;
         if (at(_readyAt + 3)) Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
         // the watcher needs a moment to see the car before it moves
-        if (at(Arg("--drive-at") ?? _readyAt + 7)) { _from = me.GlobalPosition; Input.ActionPress(PlayerInput.Throttle); _drive = 1; Log($"throttle, {Where(me)}"); }
+        if (at(CmdArgs.Float("--drive-at") ?? _readyAt + 7)) { _from = me.GlobalPosition; Input.ActionPress(PlayerInput.Throttle); _drive = 1; Log($"throttle, {Where(me)}"); }
         float gone = new Vector2(me.GlobalPosition.X - _from.X, me.GlobalPosition.Z - _from.Z).Length();
         if (_target is { } tg && (_drive is 1 or 2 or 6 || _t < _readyAt + 7) && (_trace -= GetPhysicsProcessDeltaTime()) <= 0)
         {
@@ -327,7 +309,7 @@ public partial class GarageProbe : Node
                     .Where(c => c.GetNormal().Y < 0.7f)
                     .Select(c => $" hit {(c.GetCollider() as Node)?.GetPath().ToString().Split('/').LastOrDefault() ?? "?"} n({c.GetNormal().X:F2},{c.GetNormal().Y:F2},{c.GetNormal().Z:F2})")));
         }
-        float throttleM = Arg("--drive-m") ?? (AutoGarage ? 5f : 15f), brakeM = Arg("--brake-m") ?? (AutoGarage ? 12.5f : throttleM);
+        float throttleM = CmdArgs.Float("--drive-m") ?? (AutoGarage ? 5f : 15f), brakeM = CmdArgs.Float("--brake-m") ?? (AutoGarage ? 12.5f : throttleM);
         if (_drive == 1 && gone >= throttleM && Input.IsActionPressed(PlayerInput.Throttle))
         {
             Input.ActionRelease(PlayerInput.Throttle);
@@ -349,7 +331,7 @@ public partial class GarageProbe : Node
             _drive = 3;
             _stepAt = _t;
         }
-        if (Arg("--drive-end") is { } end && at(end)) { Log($"RESULT: {Where(me)} at {me.GlobalPosition}"); GetTree().Quit(); return; }
+        if (CmdArgs.Float("--drive-end") is { } end && at(end)) { Log($"RESULT: {Where(me)} at {me.GlobalPosition}"); GetTree().Quit(); return; }
         // parked inside: out on foot, and back in
         if (_drive == 3 && _t - _stepAt > 3)
         {

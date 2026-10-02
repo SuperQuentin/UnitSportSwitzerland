@@ -18,6 +18,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `permissions` — Permissions: (`Core/Permissions`): what the menus may offer; online, spawning a vehicle is an admin's...
 - `licenses` — Licenses page: (`Core/Licenses`, Settings > About tab, `--licenses`): every data source and bundled component with its attribution and link, plus Godot's notices...
 - `chat-probe` — MP probes derive from `Core/ChatProbe`; quick self-checks go in `ClientWorld.QuickChecks`, camera-placing tools in the `tools` table (`placedByTool` derived), never a hand-kept list
+- `cmd-args` — Read the command line only via `CmdArgs.Has/Value/Float/Double/Int/FlagWithShot` (cached, InvariantCulture); never `OS.GetCmdlineUserArgs()` + `IndexOf` again (#221)
 - `is-online` — "online?" is `NetLink.Online(this)`; never copy the `not OfflineMultiplayerPeer && Connected` check again
 - `floating-origin` — Floating origin (#185): world space follows the camera; keep `GlobalPos` or handle `IOriginShiftAware`; containers; Jolt kinematic teleport; `--origincheck`, `--originstress`
 - `json-store` — Persist JSON only via `JsonStore.Save` (atomic, `user://` ok, static options); never `FileAccess` Write / `File.WriteAllText`; InteriorManager still to migrate

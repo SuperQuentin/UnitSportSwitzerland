@@ -146,10 +146,7 @@ public partial class TreeCheck : Node
     /// <summary><c>--ride bike|car|heli|plane</c>: what to throw at the trunk (bike by default).</summary>
     private static RideKind Kind()
     {
-        var args = CmdArgs.All;
-        int i = System.Array.IndexOf(args, "--ride");
-        string v = i >= 0 && i + 1 < args.Length ? args[i + 1] : "bike";
-        return v switch
+        return (CmdArgs.Value("--ride") ?? "bike") switch
         {
             "car" => (RideKind)Player.CarCatalog.First,
             "heli" or "helicopter" => RideKind.Helicopter,

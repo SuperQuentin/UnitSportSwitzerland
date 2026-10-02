@@ -25,14 +25,11 @@ public partial class LeaveCheck : Node
         Name = "LeaveCheck";
         _sessions.Add(new WorldLaunch { Mode = GameMode.Explore });
         _sessions.Add(new WorldLaunch { Mode = GameMode.Explore });
-        var a = CmdArgs.All;
-        int c = Array.IndexOf(a, "connect");
-        if (c >= 0 && c + 1 < a.Length)
+        if (CmdArgs.Value("connect") is { } endpoint)
             for (int i = 0; i < 2; i++)
-                _sessions.Add(new WorldLaunch { Mode = GameMode.Multiplayer, Endpoint = a[c + 1], PlayerName = $"Leaver{i}" });
+                _sessions.Add(new WorldLaunch { Mode = GameMode.Multiplayer, Endpoint = endpoint, PlayerName = $"Leaver{i}" });
         // "host <port>": host from the menu, join it, leave, and check the server process went too
-        int h = Array.IndexOf(a, "host");
-        if (h >= 0 && h + 1 < a.Length && int.TryParse(a[h + 1], out int port))
+        if (CmdArgs.Int("host") is int port)
             _sessions.Add(new WorldLaunch { Mode = GameMode.Multiplayer, Hosted = true, Endpoint = $"127.0.0.1:{port}", ServerName = "LeaveCheck host" });
     }
 

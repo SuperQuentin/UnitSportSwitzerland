@@ -69,10 +69,8 @@ public partial class RoadStandProbe : Node
     /// <summary><c>--floorat E,N</c>: only the four lattice vertices around one LV95 point (with <c>--at</c> on its tile).</summary>
     private static (double E, double N)? FloorAtArg()
     {
-        var args = CmdArgs.All;
-        int i = Array.IndexOf(args, "--floorat");
-        if (i < 0 || i + 1 >= args.Length) return null;
-        var p = args[i + 1].Split(',');
+        if (CmdArgs.Value("--floorat") is not { } value) return null;
+        var p = value.Split(',');
         return (double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture), double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture));
     }
 

@@ -21,13 +21,7 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
 {
     public static bool Requested => CmdArgs.Has("--exitcheck");
 
-    private static string? Password
-    {
-        get
-        {
-            return CmdArgs.Value("--exitcheck", notFlag: true);
-        }
-    }
+    private static string? Password => CmdArgs.Value("--exitcheck", notFlag: true);
 
     private readonly System.Func<FootPlayer?> _local;
     private int _failed;

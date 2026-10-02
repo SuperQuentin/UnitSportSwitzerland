@@ -37,12 +37,10 @@ public partial class ServerStats : Node
 
     private static ServerStats? _active;
 
-    private static readonly string[] Args = CmdArgs.All;
-    public static bool Requested => Args.Any(a => a.StartsWith("--serverstats"));
+    public static bool Requested => CmdArgs.FlagWithShot("--serverstats").Requested;
 
-    private readonly string _label = Args.FirstOrDefault(a => a.StartsWith("--serverstats"))?.Split(',') is { Length: > 1 } p
-        ? p[1] : "default";
-    private double _quitAfter = SecondsArg();
+    private readonly string _label = CmdArgs.FlagWithShot("--serverstats").Shot ?? "default";
+    private double _quitAfter = CmdArgs.Double("--seconds") ?? 0;
 
     // frame: wall time between frames (headless idles ~6.9 ms per frame, so this bottoms out
     // there); busy: the work in the frame (poll, physics, process), what load moves first
@@ -66,13 +64,6 @@ public partial class ServerStats : Node
     private int _jobCount, _slowFrames, _gcSeen;
     private Task _summaryWrite = Task.CompletedTask;
     private readonly Dictionary<string, double> _jobMax = [];   // slowest run of each job, for the summary
-
-    private static double SecondsArg()
-    {
-        int i = Array.IndexOf(Args, "--seconds");
-        return i >= 0 && i + 1 < Args.Length
-            && double.TryParse(Args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out double s) ? s : 0;
-    }
 
     /// <summary>
     /// A periodic main-thread job ran from <paramref name="start"/> (<see cref="Stopwatch.GetTimestamp"/>)

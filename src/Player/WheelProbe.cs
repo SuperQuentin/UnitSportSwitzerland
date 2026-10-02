@@ -31,15 +31,7 @@ public partial class WheelProbe : Node
     /// </summary>
     public static bool ForceCheckRequested => CmdArgs.Has("--ffbcheck");
 
-    public static string? WatchRole
-    {
-        get
-        {
-            var args = CmdArgs.All;
-            int i = Array.IndexOf(args, "--wheelwatch");
-            return i < 0 ? null : i + 1 < args.Length && !args[i + 1].StartsWith("--") ? args[i + 1] : "A";
-        }
-    }
+    public static string? WatchRole => CmdArgs.Has("--wheelwatch") ? CmdArgs.Value("--wheelwatch", notFlag: true) ?? "A" : null;
 
     // ---------------------------------------------------------------------------------------
     // --wheelcheck

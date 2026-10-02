@@ -56,11 +56,10 @@ public static class XrSession
     /// </summary>
     public static bool TryStart(Node root)
     {
-        var args = CmdArgs.All;
-        bool asked = System.Array.IndexOf(args, "--vr") >= 0;
+        bool asked = CmdArgs.Has("--vr");
         // the whole VR path without a headset, drawn on the monitor: the rig follows the game's
         // camera from an untracked head, the UI goes on the panel, the pad bridge runs idle
-        Simulated = System.Array.IndexOf(args, "--xrsim") >= 0;
+        Simulated = CmdArgs.Has("--xrsim");
         if (Simulated)
         {
             GD.Print("[xr] simulated: no headset, the rig's view on the monitor");

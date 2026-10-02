@@ -63,10 +63,7 @@ public partial class WebRadioCheck : Node
         return new WebRadioCheck(role, local, players);
     }
 
-    private static string? Password()
-    {
-        return CmdArgs.Value("--webradiopw");
-    }
+    private static string? Password() => CmdArgs.Value("--webradiopw");
 
     private FootPlayer? Other()
     {

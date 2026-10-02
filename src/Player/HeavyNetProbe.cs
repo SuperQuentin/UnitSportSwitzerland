@@ -22,18 +22,9 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class HeavyNetProbe : Node
 {
-    public static string? ParseArgs()
-    {
-        return CmdArgs.Value("--heavynet");
-    }
+    public static string? ParseArgs() => CmdArgs.Value("--heavynet");
 
-    private static string? Password
-    {
-        get
-        {
-            return CmdArgs.Value("--heavynet", 2, notFlag: true);
-        }
-    }
+    private static string? Password => CmdArgs.Value("--heavynet", 2, notFlag: true);
 
     private readonly string _role;
     private readonly System.Func<FootPlayer?> _local;

@@ -21,18 +21,9 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class DeckProbe : Node
 {
-    public static string? ParseArgs()
-    {
-        return CmdArgs.Value("--decknet");
-    }
+    public static string? ParseArgs() => CmdArgs.Value("--decknet");
 
-    private static string? Password
-    {
-        get
-        {
-            return CmdArgs.Value("--decknet", 2, notFlag: true);
-        }
-    }
+    private static string? Password => CmdArgs.Value("--decknet", 2, notFlag: true);
 
     private readonly string _role;
     private readonly System.Func<FootPlayer?> _local;

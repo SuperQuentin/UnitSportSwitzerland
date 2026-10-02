@@ -37,10 +37,8 @@ public partial class NpcWatch : Node
 
     public static NpcWatch? FromArgs()
     {
-        var args = CmdArgs.All;
-        int i = System.Array.IndexOf(args, "--npcwatch");
-        if (i < 0 || i + 1 >= args.Length) return null;
-        var parts = args[i + 1].Split(',');
+        if (CmdArgs.Value("--npcwatch") is not { } value) return null;
+        var parts = value.Split(',');
         double Num(int k, double fallback) =>
             parts.Length > k && double.TryParse(parts[k], NumberStyles.Float, CultureInfo.InvariantCulture, out double v) ? v : fallback;
         return new NpcWatch(parts[0], Num(1, 4), Num(2, 4));

@@ -29,10 +29,7 @@ public partial class EggProbe : Node
     private static readonly (double E, double N) Far = (2515500, 1165500);
     private static readonly (double E, double N) Home = (2582700, 1112830);
 
-    public static string? Mode()
-    {
-        return CmdArgs.Value("--eggcheck");
-    }
+    public static string? Mode() => CmdArgs.Value("--eggcheck");
 
     public EggProbe(string mode, Func<FootPlayer?> player, ChunkManager chunks, WorldOrigin origin)
     {

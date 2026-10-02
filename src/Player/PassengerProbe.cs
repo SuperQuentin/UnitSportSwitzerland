@@ -24,18 +24,9 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class PassengerProbe : Node
 {
-    public static string? ParseArgs()
-    {
-        return CmdArgs.Value("--passengernet");
-    }
+    public static string? ParseArgs() => CmdArgs.Value("--passengernet");
 
-    private static string? Password
-    {
-        get
-        {
-            return CmdArgs.Value("--passengernet", 2, notFlag: true);
-        }
-    }
+    private static string? Password => CmdArgs.Value("--passengernet", 2, notFlag: true);
 
     private readonly string _role;
     private readonly System.Func<FootPlayer?> _local;

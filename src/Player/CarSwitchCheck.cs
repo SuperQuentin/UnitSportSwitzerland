@@ -59,10 +59,8 @@ public partial class CarSwitchCheck : Node
 
     public static CarSwitchCheck? Create(Func<FootPlayer?> local, Func<Node?> players)
     {
-        var args = CmdArgs.All;
-        int i = Array.IndexOf(args, "--switchcheck");
-        if (i < 0) return null;
-        bool driver = i + 1 < args.Length && args[i + 1] == "driver";
+        if (!CmdArgs.Has("--switchcheck")) return null;
+        bool driver = CmdArgs.Value("--switchcheck") == "driver";
         GD.Print($"[switchcheck] role {(driver ? "driver" : "watch")}");
         return new CarSwitchCheck(driver, local, players);
     }
@@ -91,10 +89,8 @@ public partial class CarSwitchCheck : Node
             _since = _t;
             GD.Print("[switchcheck] driver: the watcher is here");
             // --switchcheck driver <password>: an admin, whose conjured car the server lets it park
-            var args = CmdArgs.All;
-            int i = Array.IndexOf(args, "--switchcheck");
-            if (i + 2 < args.Length && !args[i + 2].StartsWith("--"))
-                GetParent().GetNodeOrNull<Net.ChatManager>("Chat")?.Send($"/login {args[i + 2]}");
+            if (CmdArgs.Value("--switchcheck", 2, notFlag: true) is { } password)
+                GetParent().GetNodeOrNull<Net.ChatManager>("Chat")?.Send($"/login {password}");
         }
         double t = _t - _since;
 
@@ -200,11 +196,9 @@ public partial class CarSwitchCheck : Node
     private void TakeCockpitShot()
     {
         if (_shotCamera == null || ++_shotFrames < 3) return;
-        var args = CmdArgs.All;
-        int i = Array.IndexOf(args, "--switchcheck");
-        if (i + 2 < args.Length && args[i + 2].EndsWith(".png"))
+        if (CmdArgs.Value("--switchcheck", 2) is { } png && png.EndsWith(".png"))
         {
-            var path = args[i + 2][..^4] + "_cockpit.png";
+            var path = png[..^4] + "_cockpit.png";
             GD.Print($"[switchcheck] watch: wrote {path}: {GetViewport().GetTexture().GetImage().SavePng(path)}");
         }
         _restore?.MakeCurrent();
@@ -215,10 +209,8 @@ public partial class CarSwitchCheck : Node
 
     private void Shot()
     {
-        var args = CmdArgs.All;
-        int i = Array.IndexOf(args, "--switchcheck");
-        if (i + 2 >= args.Length || !args[i + 2].EndsWith(".png")) return;
-        GD.Print($"[switchcheck] watch: wrote {args[i + 2]}: {GetViewport().GetTexture().GetImage().SavePng(args[i + 2])}");
+        if (CmdArgs.Value("--switchcheck", 2) is not { } png || !png.EndsWith(".png")) return;
+        GD.Print($"[switchcheck] watch: wrote {png}: {GetViewport().GetTexture().GetImage().SavePng(png)}");
     }
 
     private void Finish(bool ok, string why)
