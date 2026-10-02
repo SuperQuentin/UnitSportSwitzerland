@@ -87,6 +87,8 @@
   a parked boat's side in the gamey swell (`Player/HullTouch`, #378): the collision box within 3 cm of
   the drawn hull at every corner, tilted with it, the swimmer's contacts on it as drawn, not pushed
   under; `boatnetcheck` does it on B, against A's boat as B draws it.
-- **Not done**: the jetski and runabout at real harbours (the steamer has a berth at Nyon, `steamer`); wake foam lies where it was dropped, not on the
+- **At a jetty** (#377, `world/landings`): harbour jetties are solid decks; getting out beside one steps
+  onto it instead of into the water (`FootPlayer.Pier.cs`, `--steamercheck pier|nyon`).
+- **Not done**: boats placed at the real harbours (the jetties are there, nothing parks at them); wake foam lies where it was dropped, not on the
   moving waves; no water hiss/slap sound; boats in races have no water courses (the mount words
   `jetski`/`boat` parse); the jetski's rider is the motorbike rider (helmet).
