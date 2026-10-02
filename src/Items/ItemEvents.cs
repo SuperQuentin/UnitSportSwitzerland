@@ -12,6 +12,18 @@ public enum ItemEventKind
     Shot = 1,
     /// <summary>A camera flash. Position = the camera, direction = where it looks.</summary>
     PhotoFlash = 2,
+    /// <summary>
+    /// A weapon hit a player (#178). Position = the hit point, direction = the shot, extra =
+    /// <see cref="PlayerHits.Hit"/>. Delivered to the victim only, and only while PvP is on.
+    /// </summary>
+    Hit = 3,
+    /// <summary>A flare fired into the sky (#198). Position = the muzzle; it climbs and burns red.</summary>
+    Flare = 4,
+    /// <summary>
+    /// A thrown item hit a player (#261). Position = where, direction = the item's velocity, extra =
+    /// <see cref="ThrowHits.Bonk"/>. Relayed to everyone near: all play the reaction, the victim takes it.
+    /// </summary>
+    Bonk = 5,
 }
 
 /// <summary>
@@ -58,6 +70,9 @@ public partial class ItemEvents : Node
     {
         [ItemEventKind.Shot] = (n, e) => n.ShotEffect(e),
         [ItemEventKind.PhotoFlash] = (n, e) => n.FlashEffect(e),
+        [ItemEventKind.Hit] = PlayerHits.OnHit,
+        [ItemEventKind.Flare] = (n, e) => n.FlareEffect(e),
+        [ItemEventKind.Bonk] = ThrowHits.OnBonk,
     };
 
     /// <summary>
@@ -112,6 +127,16 @@ public partial class ItemEvents : Node
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
         if (extra.Length > MaxExtra) return;
+        if (kind == (int)ItemEventKind.Hit)
+        {
+            RelayHit(sender, position, direction, extra);
+            return;
+        }
+        if (kind == (int)ItemEventKind.Bonk)
+        {
+            RelayBonk(sender, position, direction, extra);
+            return;
+        }
         // a sound somewhere the sender is not is not an item it is holding
         if (GetNodeOrNull<Node3D>("../Players/" + sender) is { } body && body.GlobalPosition.DistanceTo(position) > MaxOffset)
             return;
@@ -121,11 +146,56 @@ public partial class ItemEvents : Node
                 RpcId(peer, MethodName.Deliver, sender, kind, position, direction, extra);
     }
 
+    /// <summary>
+    /// Server: a player says it hit another. Passed on to the victim alone when PvP is on, the
+    /// weapon exists and could do that much, the shooter stands by its body and the victim is
+    /// within the weapon's reach of it, where the shot says.
+    /// </summary>
+    private void RelayHit(long sender, Vector3 position, Vector3 direction, string extra)
+    {
+        if (PlayerHits.Hit.Parse(extra) is not { } hit || hit.Victim == sender) return;
+        if (!Combat.PvpRules.Allows(sender, hit.Victim)) return;
+        if (Weapons.Get(hit.Weapon) is not { } weapon || hit.Damage > weapon.MaxHit + 0.5f) return;
+        var shooter = GetNodeOrNull<FootPlayer>("../Players/" + sender);
+        var victim = GetNodeOrNull<FootPlayer>("../Players/" + hit.Victim);
+        if (shooter == null || victim == null || victim.Down != 0 || shooter.Down != 0) return;
+        // the bodies are where their owners last said: allow for a quarter second of running at both ends
+        const float Slack = 8f;
+        if (shooter.GlobalPosition.DistanceTo(victim.GlobalPosition) > weapon.Range + Slack) return;
+        if (victim.GlobalPosition.DistanceTo(position) > Slack) return;
+        if (!Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
+        GD.Print(FormattableString.Invariant($"[pvp] peer {sender} hit peer {hit.Victim} for {hit.Damage:F1} ({hit.Weapon})"));
+        RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position, direction, extra);
+        Combat.PvpRules.RaiseHit(sender, hit.Victim, hit.Damage);
+    }
+
+    /// <summary>
+    /// Server: a player says something it threw hit another (#261). Passed on to everyone who can
+    /// see the thrower or the victim when it could be true: a real throw's speed, the victim where
+    /// the hit says, the thrower within a long throw of it, no more damage than a throw can do.
+    /// Not a weapon and never lethal, so it is not a PvP matter.
+    /// </summary>
+    private void RelayBonk(long sender, Vector3 position, Vector3 direction, string extra)
+    {
+        if (ThrowHits.Bonk.Parse(extra) is not { } bonk || bonk.Victim == sender || bonk.Damage > ThrowHits.MaxDamage + 0.5f) return;
+        if (!direction.IsFinite() || direction.Length() > 45f) return;
+        var thrower = GetNodeOrNull<FootPlayer>("../Players/" + sender);
+        var victim = GetNodeOrNull<FootPlayer>("../Players/" + bonk.Victim);
+        if (thrower == null || victim == null || victim.Down != 0) return;
+        const float Slack = 8f;
+        if (victim.GlobalPosition.DistanceTo(position) > Slack || thrower.GlobalPosition.DistanceTo(position) > 60f) return;
+        GD.Print(FormattableString.Invariant($"[bonk] peer {sender} hit peer {bonk.Victim} with {bonk.Item} for {bonk.Damage:F1}"));
+        var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
+        foreach (int peer in Multiplayer.GetPeers())
+            if (peer != sender && (peer == bonk.Victim || interest?.ServerSees(peer, sender) != false || interest?.ServerSees(peer, bonk.Victim) != false))
+                RpcId(peer, MethodName.Deliver, sender, (int)ItemEventKind.Bonk, position, direction, extra);
+    }
+
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Deliver(long sender, int kind, Vector3 position, Vector3 direction, string extra)
     {
         // on the owner's body as this peer shows it, when it is here
-        if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && direction.LengthSquared() > 1e-6f)
+        if (kind is not ((int)ItemEventKind.Hit or (int)ItemEventKind.Bonk) && GetNodeOrNull<FootPlayer>("../Players/" + sender) is { } body && direction.LengthSquared() > 1e-6f)
             position = MuzzleOf(body, direction.Normalized(), kind == (int)ItemEventKind.Shot ? 0.55f : 0.1f);
         GD.Print(FormattableString.Invariant($"[items] event {(ItemEventKind)kind} from peer {sender} at {position.X:F1},{position.Y:F1},{position.Z:F1}"));
         Run(new ItemEvent(sender, (ItemEventKind)kind, position, direction, extra, Local: false));
@@ -146,8 +216,11 @@ public partial class ItemEvents : Node
 
     private void ShotEffect(ItemEvent e)
     {
+        // which gun: extra is its item id; empty is the shotgun (the only gun before #178)
+        var weapon = int.TryParse(e.Extra, out int id) ? Weapons.Get((ItemId)id) : null;
+        bool pump = weapon == null || weapon.Id == ItemId.Shotgun;
         var (stream, pitch, db) = SfxSynth.Shotgun.Pick(_rng);
-        Sound3D(e.Position, stream, pitch, db - 1f, unitSize: 18f, maxDistance: 1500f);
+        Sound3D(e.Position, stream, pitch * (weapon?.Pitch ?? 1f), db - (pump ? 1f : 3f), unitSize: 18f, maxDistance: 1500f);
         LightPulse(e.Position, new Color(1f, 0.78f, 0.45f), energy: 6f, range: 7f, time: 0.07f);
         if (!e.Local) Glow(e.Position, new Color(1f, 0.85f, 0.5f), size: 0.35f, time: 0.05f);   // in the owner's own view it is a hard-edged square on the lens
 
@@ -159,8 +232,9 @@ public partial class ItemEvents : Node
         if (shooter != null)
         {
             shooter.BodyJolt();
-            if (!e.Local) shooter.GetNodeOrNull<HeldItemVisual>("HeldItem")?.Pump();
+            if (!e.Local && pump) shooter.GetNodeOrNull<HeldItemVisual>("HeldItem")?.Pump();
         }
+        if (!pump) return;
         var at = e.Position;
         GetTree().CreateTimer(HeldItemVisual.PumpDelay + 0.10f).Timeout += () =>
         {
@@ -169,6 +243,28 @@ public partial class ItemEvents : Node
             Sound3D(shooter != null && IsInstanceValid(shooter) ? shooter.GlobalPosition + Vector3.Up * 1.3f : at,
                 stream, pitch, db - 4f, unitSize: 6f, maxDistance: 250f);
         };
+    }
+
+    /// <summary>A red flare climbing about 140 m over four seconds, a light on it, a pop and a hiss.</summary>
+    private void FlareEffect(ItemEvent e)
+    {
+        Sound3D(e.Position, SfxSynth.Shotgun.Pick(_rng).Stream, 1.9f, -6f, unitSize: 12f, maxDistance: 1500f);
+        var flare = new MeshInstance3D
+        {
+            Mesh = new SphereMesh { Radius = 0.6f, Height = 1.2f, RadialSegments = 8, Rings = 4 },
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = new Color(1f, 0.25f, 0.15f),
+            },
+            TopLevel = true,
+        };
+        flare.AddChild(new OmniLight3D { LightColor = new Color(1f, 0.3f, 0.2f), LightEnergy = 8f, OmniRange = 60f, ShadowEnabled = false });
+        AddChild(flare);
+        flare.GlobalPosition = e.Position;
+        var t = flare.CreateTween();
+        t.TweenProperty(flare, "global_position", e.Position + Vector3.Up * 140f, 4.0).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Quad);
+        t.TweenInterval(2.0);
+        t.TweenCallback(Callable.From(flare.QueueFree));
     }
 
     private void FlashEffect(ItemEvent e)

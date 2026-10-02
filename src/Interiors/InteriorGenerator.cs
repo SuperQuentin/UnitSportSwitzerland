@@ -61,13 +61,22 @@ public static partial class InteriorGenerator
             EntryWidth = BuildingFootprint.VehicleDoor(b.Kind) ? fp.Door.Width : Math.Min(fp.Door.Width, 1.8f),
         };
 
+        bool bank = BuildingFootprint.IsBank(fp);
+        if (bank) layout.Type = BuildingType.Bank;
+
         bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
             or BuildingKind.Garage
             or BuildingKind.UnderConstruction or BuildingKind.Sacral
             || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
 
-        if (single || !TryCored(layout, fp, b.Kind, n, rng))
+        int below = single ? 0 : Cellars(layout.Key, b.Kind, n);
+        if (single || !TryCored(layout, fp, b.Kind, n, below, bank, rng)
+            && (below == 0 || !TryCored(layout, fp, b.Kind, n, 0, bank, rng)))
+        {
+            layout.Below = 0;
             SingleRoom(layout, b.Kind, fp.Door.Height, rng);
+            if (bank) layout.Floors[0].Rooms[0].Type = RoomType.BankHall;
+        }
 
         Furnish(layout, rng);
         return layout;
@@ -89,6 +98,23 @@ public static partial class InteriorGenerator
                 ? (Math.Clamp(wall * 0.78f, 3.5f, 12f), 1)
                 : (Math.Clamp(wall * 0.78f, 2.7f, 4f), 1);
         return (Math.Max(2.7f, height), Math.Min(count, MaxFloors));
+    }
+
+    /// <summary>
+    /// Whether a building gets a cellar under its ground floor (#213), from its own seed so the
+    /// rest of the plan does not shift. Most Swiss homes have one, and in it, often, the
+    /// civil-defence shelter the law asked of houses built from the 1960s.
+    /// </summary>
+    private static int Cellars(string key, BuildingKind kind, int floors)
+    {
+        double chance = kind switch
+        {
+            BuildingKind.House => 0.65,
+            BuildingKind.Apartment => 0.85,
+            BuildingKind.Other => floors <= 3 ? 0.5 : 0.7,
+            _ => 0,
+        };
+        return new Random(StableHash(key + "|cellar")).NextDouble() < chance ? 1 : 0;
     }
 
     // ---- single room -------------------------------------------------------------------
@@ -131,10 +157,13 @@ public static partial class InteriorGenerator
 
     private sealed record Item(RoomType Type, float Weight);
 
-    private static bool TryCored(InteriorLayout l, Footprint fp, BuildingKind kind, int floors, Random rng)
+    private static bool TryCored(InteriorLayout l, Footprint fp, BuildingKind kind, int above, int below, bool bank, Random rng)
     {
         float W = l.Width, D = l.Depth, h = l.StoreyHeight;
         float hw = W / 2, hd = D / 2;
+        // every floor's stair is the same flight, so a cellar is one more floor at the bottom of
+        // the stack: index f stands at level f - below
+        int floors = above + below;
 
         // stair geometry; steepen before giving up, and give up by dropping to one floor
         float run = 0, zs0 = 0;
@@ -143,7 +172,7 @@ public static partial class InteriorGenerator
         {
             float room = D - 1.6f - 2 * Landing;
             float tread = Math.Min(0.27f, room / steps);
-            if (tread < 0.2f) floors = 1;
+            if (tread < 0.2f) { floors = 1; below = 0; }
             else
             {
                 run = tread * steps;
@@ -151,6 +180,7 @@ public static partial class InteriorGenerator
             }
         }
 
+        l.Below = below;
         float coreW = floors > 1 ? 2 * LaneWidth + WalkWidth : 2.2f;
         if (W < coreW + 1.0f) return false;
 
@@ -180,15 +210,16 @@ public static partial class InteriorGenerator
         l.Floors.Clear();
         for (int f = 0; f < floors; f++)
         {
+            int level = f - below;
             var floor = new FloorPlan();
             var core = new RoomPlan
             {
                 X0 = c0, Z0 = -hd, X1 = c1, Z1 = hd,
-                Type = f == 0 ? (apartment || kind is BuildingKind.Commercial or BuildingKind.Civic ? RoomType.Lobby : RoomType.Hall)
+                Type = level == 0 ? (apartment || kind is BuildingKind.Commercial or BuildingKind.Civic ? RoomType.Lobby : RoomType.Hall)
                     : RoomType.Landing,
             };
             floor.Rooms.Add(core);
-            if (f == 0)
+            if (level == 0)
                 core.Openings.Add(new OpeningPlan
                 {
                     Side = Side.Front, Center = l.EntryX, Width = dw, Bottom = 0,
@@ -227,9 +258,11 @@ public static partial class InteriorGenerator
             if (sides.Count == 0) return false;
             float sideArea = sides.Sum(s => (s.X1 - s.X0) * (s.Z1 - s.Z0));
 
-            if (residential)
+            if (residential || level < 0 || bank && level == 0)
             {
-                var program = HouseProgram(f, floors, sideArea, rng);
+                var program = level < 0 ? CellarProgram(apartment, sideArea, rng)
+                    : bank ? BankProgram(sideArea)
+                    : HouseProgram(level, above, sideArea, rng);
                 // hand each side a share of the program by area, biggest rooms first
                 var shares = sides.Select(_ => new List<Item>()).ToList();
                 var load = new float[sides.Count];
@@ -247,10 +280,22 @@ public static partial class InteriorGenerator
                     shares[best].Add(item);
                     load[best] += item.Weight;
                 }
+                // a bank keeps its vault behind the banking hall, on the same side, so it opens
+                // off the hall; the office and the WC take the other side
+                if (bank && level == 0 && sides.Count > 1)
+                {
+                    int hall = sides.Select((r, i) => (Area: (r.X1 - r.X0) * (r.Z1 - r.Z0), i)).MaxBy(x => x.Area).i;
+                    for (int s = 0; s < sides.Count; s++) shares[s].Clear();
+                    foreach (var item in program)
+                        shares[item.Type is RoomType.BankHall or RoomType.Vault ? hall : 1 - hall].Add(item);
+                }
                 for (int s = 0; s < sides.Count; s++)
                 {
-                    if (shares[s].Count == 0) shares[s].Add(new Item(f == 0 ? RoomType.Living : RoomType.Bedroom, 1));
-                    foreach (var r in Treemap(sides[s], shares[s])) { r.Unit = -1; floor.Rooms.Add(r); }
+                    if (shares[s].Count == 0)
+                        shares[s].Add(new Item(level < 0 ? RoomType.Cellar : bank ? RoomType.Office : level == 0 ? RoomType.Living : RoomType.Bedroom, 1));
+                    // street end first, the deep rooms (shelter, vault, carnotzet) at the back
+                    var ordered = shares[s].OrderBy(i => bank && level == 0 && i.Type is RoomType.Office or RoomType.WC ? -2 : Depth(i.Type)).ToList();
+                    foreach (var r in Treemap(sides[s], ordered)) { r.Unit = -1; floor.Rooms.Add(r); }
                 }
             }
             else
@@ -264,7 +309,7 @@ public static partial class InteriorGenerator
                     {
                         var unit = new RectPlan(side.X0, side.Z0 + sd * k / slices, side.X1, side.Z0 + sd * (k + 1) / slices);
                         float area = (unit.X1 - unit.X0) * (unit.Z1 - unit.Z0);
-                        var program = UnitProgram(kind, apartment, f, area, rng);
+                        var program = UnitProgram(kind, apartment, level, area, rng);
                         foreach (var r in Treemap(unit, program)) { r.Unit = unitId; floor.Rooms.Add(r); }
                         unitId++;
                     }
@@ -272,10 +317,59 @@ public static partial class InteriorGenerator
             }
 
             if (!Connect(floor, walkLeft, walkRight, c0, c1, clear)) return false;
-            AddWindows(l, floor, f);
+            if (level >= 0) AddWindows(l, floor, level);
             l.Floors.Add(floor);
         }
         return true;
+    }
+
+    /// <summary>Where a room sits along a side, street end (low) to back (high): the treemap fills in this order.</summary>
+    private static int Depth(RoomType t) => t switch
+    {
+        RoomType.Laundry or RoomType.Cellar or RoomType.BankHall => -1,
+        RoomType.Shelter or RoomType.Vault or RoomType.Carnotzet => 1,
+        _ => 0,
+    };
+
+    /// <summary>
+    /// A cellar (#213). A house's mixes what Swiss basements hold: the laundry, then a few of a
+    /// guest room, a home cinema, a carnotzet (the wine cellar you sit in), a music room and a
+    /// storage cellar, and often the shelter with its blast door. A block of flats has the shared
+    /// laundry, a cellar compartment per few flats and always the shelter.
+    /// </summary>
+    private static List<Item> CellarProgram(bool apartment, float area, Random rng)
+    {
+        var p = new List<Item> { new(RoomType.Laundry, apartment ? 1.5f : 1.2f) };
+        if (apartment)
+        {
+            p.Add(new Item(RoomType.Shelter, 3f));
+            int cellars = Math.Clamp((int)MathF.Round(area / 18f), 1, 6);
+            for (int i = 0; i < cellars; i++) p.Add(new Item(RoomType.Cellar, 1.1f));
+            return p;
+        }
+        if (rng.NextDouble() < 0.45) p.Add(new Item(RoomType.Shelter, 1.9f));
+        var extras = new List<Item>
+        {
+            new(RoomType.GuestRoom, 2.2f), new(RoomType.HomeCinema, 2.5f), new(RoomType.Carnotzet, 2.1f),
+            new(RoomType.MusicRoom, 2.2f), new(RoomType.Cellar, 1.3f),
+        };
+        for (int i = extras.Count - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            (extras[i], extras[j]) = (extras[j], extras[i]);
+        }
+        int n = Math.Clamp((int)MathF.Round(area / 22f), 1, extras.Count);
+        p.AddRange(extras.Take(n));
+        return p;
+    }
+
+    /// <summary>A bank's ground floor: the banking hall at the street, the advisers' office, the vault at the back.</summary>
+    private static List<Item> BankProgram(float area)
+    {
+        var p = new List<Item> { new(RoomType.BankHall, 5f), new(RoomType.Vault, 1.8f) };
+        if (area > 60) p.Add(new Item(RoomType.Office, 1.6f));
+        if (area > 90) p.Add(new Item(RoomType.WC, 0.6f));
+        return p;
     }
 
     private static List<Item> HouseProgram(int f, int floors, float area, Random rng)
@@ -287,7 +381,8 @@ public static partial class InteriorGenerator
             p.Add(new Item(RoomType.Kitchen, 2.2f));
             p.Add(new Item(RoomType.WC, 0.7f));
             if (area > 45) p.Add(new Item(RoomType.Dining, 1.8f));
-            if (area > 75) p.Add(new Item(RoomType.Office, 1.5f));
+            if (area > 60 && rng.NextDouble() < 0.4) p.Add(new Item(RoomType.Pantry, 0.7f));
+            if (area > 75) p.Add(new Item(rng.NextDouble() < 0.5 ? RoomType.Office : RoomType.Study, 1.5f));
             if (area > 100) p.Add(new Item(RoomType.Storage, 1f));
             if (floors == 1 && area > 55)
             {
@@ -299,9 +394,12 @@ public static partial class InteriorGenerator
         {
             int beds = Math.Clamp((int)MathF.Round(area / 16f) + rng.Next(-1, 1), 1, 5);
             p.Add(new Item(RoomType.Bedroom, 3f));
-            for (int i = 1; i < beds; i++) p.Add(new Item(RoomType.Bedroom, 2.2f));
+            for (int i = 1; i < beds; i++)
+                // a family house: one of the children's rooms is sometimes a playroom
+                p.Add(new Item(i == beds - 1 && beds >= 3 && rng.NextDouble() < 0.35 ? RoomType.Playroom : RoomType.Bedroom, 2.2f));
             p.Add(new Item(RoomType.Bathroom, 1.3f));
-            if (area > 90) p.Add(new Item(RoomType.Office, 1.5f));
+            if (area > 90) p.Add(new Item(rng.NextDouble() < 0.5 ? RoomType.Office : RoomType.Study, 1.5f));
+            else if (area > 65 && rng.NextDouble() < 0.3) p.Add(new Item(RoomType.Study, 1.3f));
         }
         return p;
     }
@@ -316,6 +414,7 @@ public static partial class InteriorGenerator
             p.Add(new Item(RoomType.Bathroom, 1f));
             int beds = Math.Clamp((int)MathF.Round((area - 25f) / 14f) + rng.Next(0, 2), 0, 3);
             for (int i = 0; i < beds; i++) p.Add(new Item(RoomType.Bedroom, 2.2f));
+            if (area > 55 && rng.NextDouble() < 0.25) p.Add(new Item(RoomType.Study, 1.3f));
         }
         else if (kind == BuildingKind.Commercial)
         {
@@ -344,7 +443,8 @@ public static partial class InteriorGenerator
     private static float MinSideFor(RoomType t) => t switch
     {
         RoomType.WC => 1.1f,
-        RoomType.Bathroom or RoomType.Storage => 1.6f,
+        RoomType.Bathroom or RoomType.Storage or RoomType.Laundry or RoomType.Cellar => 1.6f,
+        RoomType.Pantry => 1.2f,
         _ => 2.2f,
     };
 
@@ -443,6 +543,9 @@ public static partial class InteriorGenerator
                 // private rooms prefer the hall, living rooms prefer to be the hub
                 if (rt.Type is RoomType.Living or RoomType.Shop && from == 0) score += 5;
                 if (rt.Type is RoomType.WC or RoomType.Bathroom && rf.Type is RoomType.Living or RoomType.Kitchen) score -= 8;
+                // the vault opens off the banking hall, behind the counter; a pantry off the kitchen
+                if (rt.Type == RoomType.Vault) score += rf.Type == RoomType.BankHall ? 15 : from == 0 ? -30 : 0;
+                if (rt.Type == RoomType.Pantry && rf.Type == RoomType.Kitchen) score += 15;
                 score += (int)Math.Min(e.S1 - e.S0, 4f);
                 if (score > bestScore) { bestScore = score; best = e; }
             }
@@ -524,7 +627,8 @@ public static partial class InteriorGenerator
                     Side.Left => Math.Abs(r.X0 + hw) < 0.02f,
                     _ => Math.Abs(r.X1 - hw) < 0.02f,
                 };
-                if (!exterior) continue;
+                // a vault and a shelter are blind on purpose
+                if (!exterior || r.Type is RoomType.Vault or RoomType.Shelter) continue;
                 // the core's front wall is the entrance; its sides are rooms
                 if (core && side == Side.Front) continue;
                 float a = side is Side.Front or Side.Back ? r.X0 : r.Z0;
@@ -703,6 +807,101 @@ public static partial class InteriorGenerator
             new Piece(FurnitureType.Shelf, 0.9f, 0.35f, 1.0f, true),
             new Piece(FurnitureType.Plant, 0.4f, 0.4f, 1.1f, true),
         },
+        RoomType.Laundry => new[]
+        {
+            new Piece(FurnitureType.WashingMachine, 0.6f, 0.6f, 0.85f, true),
+            new Piece(FurnitureType.Dryer, 0.6f, 0.6f, 0.85f, true),
+            new Piece(FurnitureType.Sink, 0.6f, 0.45f, 0.85f, true),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.8f, true),
+            new Piece(FurnitureType.IroningBoard, 1.2f, 0.35f, 0.9f, true),
+        },
+        RoomType.GuestRoom => new[]
+        {
+            Math.Min(r.Width, r.Depth) > 2.8f
+                ? new Piece(FurnitureType.Bed, 1.4f, 2.0f, 0.55f, true)
+                : new Piece(FurnitureType.SingleBed, 0.9f, 2.0f, 0.5f, true),
+            new Piece(FurnitureType.Nightstand, 0.45f, 0.4f, 0.5f, true),
+            new Piece(FurnitureType.Wardrobe, 1.0f, 0.6f, 2.0f, true),
+            new Piece(FurnitureType.Armchair, 0.8f, 0.8f, 0.9f, true),
+        },
+        RoomType.HomeCinema => new[]
+        {
+            new Piece(FurnitureType.CinemaScreen, Math.Clamp(Math.Min(r.Width, r.Depth) - 0.8f, 1.6f, 3.0f), 0.12f, 2.1f, true),
+            new Piece(FurnitureType.Sofa, 2.0f, 0.9f, 0.8f, false),
+            new Piece(FurnitureType.Armchair, 0.85f, 0.85f, 0.9f, true),
+            new Piece(FurnitureType.Armchair, 0.85f, 0.85f, 0.9f, true),
+            new Piece(FurnitureType.Amplifier, 0.45f, 0.35f, 1.0f, true),
+            new Piece(FurnitureType.Amplifier, 0.45f, 0.35f, 1.0f, true),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.35f, 1.0f, true),
+        },
+        RoomType.Carnotzet => new[]
+        {
+            new Piece(FurnitureType.WineRack, 1.2f, 0.4f, 1.9f, true),
+            new Piece(FurnitureType.WineRack, 1.2f, 0.4f, 1.9f, true),
+            new Piece(FurnitureType.Table, 1.6f, 0.85f, 0.75f, false),
+            new Piece(FurnitureType.Barrel, 0.7f, 0.7f, 0.9f, true),
+            new Piece(FurnitureType.Barrel, 0.7f, 0.7f, 0.9f, true),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.6f, true),
+        },
+        RoomType.MusicRoom => new[]
+        {
+            new Piece(FurnitureType.DrumKit, 1.6f, 1.3f, 1.1f, false),
+            new Piece(FurnitureType.Piano, 1.5f, 0.6f, 1.25f, true),
+            new Piece(FurnitureType.Keyboard, 1.2f, 0.45f, 0.9f, true),
+            new Piece(FurnitureType.GuitarStand, 0.5f, 0.4f, 1.1f, true),
+            new Piece(FurnitureType.GuitarStand, 0.5f, 0.4f, 1.1f, true),
+            new Piece(FurnitureType.Amplifier, 0.6f, 0.35f, 0.6f, true),
+            new Piece(FurnitureType.AcousticFoam, 1.5f, 0.08f, 2.0f, true),
+            new Piece(FurnitureType.AcousticFoam, 1.5f, 0.08f, 2.0f, true),
+            new Piece(FurnitureType.AcousticFoam, 1.5f, 0.08f, 2.0f, true),
+        },
+        RoomType.Shelter => new[]
+        {
+            new Piece(FurnitureType.BunkBed, 0.9f, 2.0f, 1.7f, true),
+            new Piece(FurnitureType.BunkBed, 0.9f, 2.0f, 1.7f, true),
+            new Piece(FurnitureType.WaterTank, 0.6f, 0.6f, 1.2f, true),
+            new Piece(FurnitureType.Shelf, 1.2f, 0.45f, 1.9f, true),
+            new Piece(FurnitureType.BunkBed, 0.9f, 2.0f, 1.7f, true),
+            new Piece(FurnitureType.Crate, 0.8f, 0.6f, 0.6f, true),
+        },
+        RoomType.Cellar => new[]
+        {
+            new Piece(FurnitureType.Shelf, 1.2f, 0.45f, 1.9f, true),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.45f, 1.9f, true),
+            new Piece(FurnitureType.Crate, 0.8f, 0.8f, 0.7f, true),
+            new Piece(FurnitureType.WineRack, 1.0f, 0.4f, 1.6f, true),
+        },
+        RoomType.Playroom => new[]
+        {
+            new Piece(FurnitureType.ToyBox, 0.8f, 0.5f, 0.5f, true),
+            new Piece(FurnitureType.Rug, 1.6f, 1.2f, 0.02f, false),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.35f, 1.2f, true),
+            new Piece(FurnitureType.Desk, 1.0f, 0.55f, 0.6f, true),
+            new Piece(FurnitureType.ToyBox, 0.7f, 0.45f, 0.45f, true),
+        },
+        RoomType.Study => new[]
+        {
+            new Piece(FurnitureType.Bookcase, 1.2f, 0.35f, 2.1f, true),
+            new Piece(FurnitureType.Desk, 1.4f, 0.7f, 0.75f, true),
+            new Piece(FurnitureType.Bookcase, 1.2f, 0.35f, 2.1f, true),
+            new Piece(FurnitureType.Armchair, 0.8f, 0.8f, 0.9f, true),
+            new Piece(FurnitureType.Plant, 0.4f, 0.4f, 1.2f, true),
+        },
+        RoomType.Pantry => new[]
+        {
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
+            new Piece(FurnitureType.Fridge, 0.6f, 0.65f, 1.8f, true),
+            new Piece(FurnitureType.Shelf, 0.9f, 0.4f, 1.9f, true),
+        },
+        RoomType.BankHall => new[]
+        {
+            new Piece(FurnitureType.TellerDesk, Math.Clamp(Math.Max(r.Width, r.Depth) * 0.45f, 2.0f, 3.6f), 0.8f, 1.15f, true),
+            new Piece(FurnitureType.Armchair, 0.8f, 0.8f, 0.9f, true),
+            new Piece(FurnitureType.Armchair, 0.8f, 0.8f, 0.9f, true),
+            new Piece(FurnitureType.Plant, 0.5f, 0.5f, 1.4f, true),
+            new Piece(FurnitureType.Plant, 0.5f, 0.5f, 1.4f, true),
+            new Piece(FurnitureType.Rug, 2.2f, 1.4f, 0.02f, false),
+        },
         _ => Array.Empty<Piece>(),
     };
 
@@ -720,6 +919,9 @@ public static partial class InteriorGenerator
                 rooms.Add((f, r, placed, blocked));
                 foreach (var o in r.Openings)
                     if (o.Kind != OpeningKind.Window) blocked.Add(Clearance(r, o));
+                if (r.Type == RoomType.Shelter)
+                    foreach (var o in r.Openings)
+                        if (o.Kind == OpeningKind.Door) blocked.Add(BlastLeaf(r, o));
                 // a garage or a barn is driven into: a lane from its door, as wide, kept clear
                 if (f == 0 && BuildingFootprint.VehicleDoor(l.Kind))
                     foreach (var o in r.Openings)
@@ -736,12 +938,51 @@ public static partial class InteriorGenerator
 
                 if (r.Type == RoomType.Nave) { Pews(l, f, r, placed, blocked); continue; }
                 if (r.Type == RoomType.Classroom) Desks(l, f, r, placed, blocked);
+                if (r.Type == RoomType.Vault) { Vault(l, f, r, placed, blocked, rng); continue; }
 
                 foreach (var p in Pieces(r.Type, r, rng, l.Kind))
                     TryPlace(l, f, r, p, placed, blocked, rng);
             }
         }
+        if (l.IsBank) Counter(l, rooms, rng);
         Secure(l, rooms);
+    }
+
+    /// <summary>
+    /// A bank must have its teller desk, or nowhere takes your cash: when the banking hall's walls
+    /// were too short or too cut up for the full one, a shorter desk, then any ground-floor room.
+    /// </summary>
+    private static void Counter(InteriorLayout l, List<(int Floor, RoomPlan Room, List<RectPlan> Placed, List<RectPlan> Blocked)> rooms, Random rng)
+    {
+        if (l.Furniture.Any(f => f.Type == FurnitureType.TellerDesk)) return;
+        var ground = rooms.Where(x => x.Floor == l.Below)
+            .OrderByDescending(x => x.Room.Type == RoomType.BankHall).ThenByDescending(x => x.Room.Area).ToList();
+        foreach (float width in new[] { 2.0f, 1.5f, 1.1f })
+            foreach (var c in ground)
+            {
+                int before = l.Furniture.Count;
+                TryPlace(l, c.Floor, c.Room, new Piece(FurnitureType.TellerDesk, width, 0.7f, 1.15f, true), c.Placed, c.Blocked, rng);
+                if (l.Furniture.Count > before) return;
+                TryPlace(l, c.Floor, c.Room, new Piece(FurnitureType.TellerDesk, width, 0.7f, 1.15f, false), c.Placed, c.Blocked, rng);
+                if (l.Furniture.Count > before) return;
+            }
+    }
+
+    private static readonly Piece VaultSafePiece = new(FurnitureType.VaultSafe, 0.9f, 0.75f, 1.7f, true);
+
+    /// <summary>
+    /// A bank's vault: steel safes all round the walls, as many as fit (up to six), each cracked
+    /// with the dial and then the Simon panel (<c>LootService</c>), and a crate of coin rolls.
+    /// </summary>
+    private static void Vault(InteriorLayout l, int f, RoomPlan r, List<RectPlan> placed, List<RectPlan> blocked, Random rng)
+    {
+        for (int i = 0; i < 6; i++)
+        {
+            int before = l.Furniture.Count;
+            TryPlace(l, f, r, VaultSafePiece, placed, blocked, rng);
+            if (l.Furniture.Count == before) break;
+        }
+        TryPlace(l, f, r, new Piece(FurnitureType.Crate, 0.7f, 0.5f, 0.5f, true), placed, blocked, rng);
     }
 
     private static readonly Piece LockerPiece = new(FurnitureType.GunLocker, 0.6f, 0.45f, 1.8f, true);
@@ -754,7 +995,9 @@ public static partial class InteriorGenerator
     /// </summary>
     private static IEnumerable<(Piece Piece, double Chance, RoomType[] Rooms)> SecureFor(InteriorLayout l)
     {
-        var homeLocker = new[] { RoomType.Bedroom, RoomType.Storage, RoomType.Office, RoomType.Living, RoomType.Hall };
+        // the army rifle in the shelter or the cellar, else the bedroom wardrobe's neighbour
+        var homeLocker = new[] { RoomType.Shelter, RoomType.Cellar, RoomType.Bedroom, RoomType.Storage, RoomType.Study, RoomType.Office, RoomType.Living, RoomType.Hall };
+
         switch (l.Kind)
         {
             case BuildingKind.House:
@@ -837,7 +1080,24 @@ public static partial class InteriorGenerator
         return new RectPlan(o.Center - half, r.Z0, o.Center + half, r.Z0 + Math.Max(deep, 1.1f));
     }
 
+    /// <summary>
+    /// The wall strip a shelter's open blast-door leaf stands on, past the doorway's far jamb
+    /// (<c>InteriorMeshBuilder.BlastDoor</c> draws it there), kept free of furniture.
+    /// </summary>
+    private static RectPlan BlastLeaf(RoomPlan r, OpeningPlan o)
+    {
+        float u0 = o.Center + o.Width / 2, u1 = u0 + o.Width + 0.4f, deep = 0.35f;
+        return o.Side switch
+        {
+            Side.Front => new RectPlan(u0, r.Z0, u1, r.Z0 + deep),
+            Side.Back => new RectPlan(u0, r.Z1 - deep, u1, r.Z1),
+            Side.Left => new RectPlan(r.X0, u0, r.X0 + deep, u1),
+            _ => new RectPlan(r.X1 - deep, u0, r.X1, u1),
+        };
+    }
+
     /// <summary>Space that must stay clear in front of a doorway, on this room's side.</summary>
+
     private static RectPlan Clearance(RoomPlan r, OpeningPlan o)
     {
         float half = o.Width / 2 + 0.25f, deep = 1.1f;
@@ -927,10 +1187,14 @@ public static partial class InteriorGenerator
         });
     }
 
+    /// <summary>The pastor rat (#241): robed, mitred, arms spread, by the altar of every church.</summary>
+    private static readonly Piece RatPiece = new(FurnitureType.PastorRat, 0.9f, 0.45f, 1.35f, false);
+
     private static void Pews(InteriorLayout l, int f, RoomPlan r, List<RectPlan> placed, List<RectPlan> blocked)
     {
         TryPlace(l, f, r, new Piece(FurnitureType.Altar, Math.Min(2.0f, r.Width * 0.4f), 0.9f, 1.0f, true),
             placed, blocked, new Random(0));
+        TryPlace(l, f, r, RatPiece, placed, blocked, new Random(1));
         float aisle = 1.4f;
         float pewW = Math.Min(3.5f, (r.Width - aisle) / 2 - 0.5f);
         if (pewW < 1.2f) return;
@@ -943,6 +1207,17 @@ public static partial class InteriorGenerator
                 if (Free(r, rect, placed, blocked, 0.05f))
                     Add(l, f, new Piece(FurnitureType.Pew, pewW, 0.5f, 0.9f, false), rect, 0, placed);
             }
+        FillFrontPews(l, f);
+    }
+
+    /// <summary>The row nearest the altar is full: the pastor rat's congregation (#241).</summary>
+    private static void FillFrontPews(InteriorLayout l, int f)
+    {
+        var pews = l.Furniture.Where(p => p.Floor == f && p.Type == FurnitureType.Pew).ToList();
+        if (pews.Count == 0) return;
+        float front = pews.Max(p => p.Z);
+        foreach (var p in pews)
+            if (p.Z > front - 0.05f) p.Type = FurnitureType.FrontPew;
     }
 
     private static void Desks(InteriorLayout l, int f, RoomPlan r, List<RectPlan> placed, List<RectPlan> blocked)

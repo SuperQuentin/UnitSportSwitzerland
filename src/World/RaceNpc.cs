@@ -353,6 +353,8 @@ public partial class RaceNpcs : Node
         npc.SetSimulator((int)to);
         _live[id].Since = Now;
         npc.RefreshNetVisibility(to);   // it must exist there: an NPC always does on its simulator
+        // and the old simulator keeps it only if it sees it (visibility is refreshed on change only)
+        if (_players!.GetNodeOrNull(from.ToString()) != null) npc.RefreshNetVisibility(from);
         Rpc(MethodName.Migrate, id, (int)to);
         npc.RefreshRelays();   // the relays skip the simulator: now another peer
         Race?.ResumeNpc(id);
@@ -379,10 +381,6 @@ public partial class RaceNpcs : Node
         }
         return best;
     }
-
-    /// <summary>Server: whether <paramref name="peer"/>'s player may take on an NPC at <paramref name="at"/> (the host role uses the same zone).</summary>
-    public bool InZone(long peer, Vector3 at) =>
-        _players?.GetNodeOrNull<FootPlayer>(peer.ToString()) is { } p && Flat(p.GlobalPosition, at) <= Zone;
 
     public static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
 

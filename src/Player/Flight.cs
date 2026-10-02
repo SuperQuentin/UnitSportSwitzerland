@@ -80,6 +80,13 @@ public abstract class Flyer : Rideable
     /// <summary>The look input turns the craft (helicopter) rather than looking around it.</summary>
     public virtual bool LookSteers => false;
 
+    /// <summary>
+    /// How much looking aside (mouse or right stick, the free look) banks the craft that way, on top
+    /// of the stick: 0 for craft flown by the stick alone. The look recentres on its own, so a flick
+    /// is a nudge and a held look a turn.
+    /// </summary>
+    public virtual float LookBank => 0f;
+
     /// <summary>Chase camera distance and height, and the point on the craft it looks at.</summary>
     public virtual float CameraDistance => 7f;
     public virtual float CameraHeight => 2f;
@@ -176,6 +183,7 @@ public sealed class Wingsuit : Flyer
     private const float MaxBank = 1.0f;
 
     public override float CrashSpeed => 12f;
+    public override float LookBank => 0.6f;
     public override float CameraDistance => 5.5f;
     public override float CameraHeight => 1.2f;
     public override float CameraPivot => 1.0f;
@@ -185,11 +193,11 @@ public sealed class Wingsuit : Flyer
     public override float MaxFov => 105f;
     public override float FovSpeed => 60f;
 
-    public override Node3D BuildVisual(int riderIndex) => new MeshInstance3D
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => new MeshInstance3D
     {
         Name = "Wingsuit",
-        Mesh = AircraftMeshBuilder.Wingsuit(HumanPalette.ForRider(riderIndex)),
-        MaterialOverride = HumanMeshBuilder.Material(),
+        Mesh = AircraftMeshBuilder.Wingsuit(HumanPalette.ForRider(riderIndex) with { Outfit = outfit }),
+        MaterialOverride = HumanMeshBuilder.FigureMaterial(),
     };
 
     public override void Begin(ref FlightMotion m, Vector3 velocity, float yaw)
@@ -277,6 +285,7 @@ public class Canopy : Flyer
     private float TurnRate => _paraglider ? 0.9f : 1.2f;
 
     public override float CrashSpeed => 9f;
+    public override float LookBank => 0.6f;
     public override float CameraDistance => _paraglider ? 13f : 10f;
     public override float CameraHeight => _paraglider ? 4f : 3.5f;
     public override float CameraPivot => _paraglider ? 3f : 2.5f;
@@ -288,11 +297,11 @@ public class Canopy : Flyer
     public override float MaxFov => 82f;
     public override float FovSpeed => 16f;
 
-    public override Node3D BuildVisual(int riderIndex) => new MeshInstance3D
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => new MeshInstance3D
     {
         Name = Label,
-        Mesh = AircraftMeshBuilder.Canopy(HumanPalette.ForRider(riderIndex), _paraglider),
-        MaterialOverride = HumanMeshBuilder.Material(),
+        Mesh = AircraftMeshBuilder.Canopy(HumanPalette.ForRider(riderIndex) with { Outfit = outfit }, _paraglider),
+        MaterialOverride = HumanMeshBuilder.FigureMaterial(),
     };
 
     public override FlightEvent Fly(in FlightInput input, in FlightEnv env, float dt, ref FlightMotion m)
@@ -378,7 +387,7 @@ public sealed class Helicopter : Flyer
     public override float MaxFov => 90f;
     public override float FovSpeed => 60f;
 
-    public override Node3D BuildVisual(int riderIndex)
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default)
     {
         var paint = Color.FromHsv((riderIndex * 0.37f) % 1f, 0.55f, 0.75f);
         var root = new Node3D { Name = "Helicopter" };
@@ -487,7 +496,7 @@ public sealed class Plane : Flyer
     public override float MaxFov => 92f;
     public override float FovSpeed => 80f;
 
-    public override Node3D BuildVisual(int riderIndex)
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default)
     {
         float hue = (riderIndex * 0.37f) % 1f;
         var root = new Node3D { Name = "Plane" };

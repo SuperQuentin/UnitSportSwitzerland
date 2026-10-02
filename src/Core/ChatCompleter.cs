@@ -48,17 +48,25 @@ public sealed class ChatCompleter
         ("city", false, true, "<town>"),
         ("occasion", false, true, "[list | start | stop | auto] [id]"),
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
+        ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
         ("spawn", true, true, "<item> [count]"),
+        ("catalogue", true, true, ""),
+        ("clear", false, true, "[player]"),
+        ("money", true, true, "<amount> [player]"),
+        ("bank", true, true, "[player] [set | add | take <amount>]"),
+        ("give", true, false, "<player> <item> [count]"),
         ("name", false, false, "<name>"),
         ("login", false, false, "<password>"),
         ("stream", false, false, ""),
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
+        ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | start | cancel | status"),
         ("say", true, false, "<message>"),
         ("admin", true, false, "list | add <player> | remove <player>"),
         ("tp", true, false, "<player>"),
         ("bring", true, false, "<player>"),
         ("tpall", true, false, "<town>"),
         ("kick", true, false, "<player> [reason]"),
+        ("pvp", true, false, "on | off"),
     ];
 
     /// <summary>The commands this player can run right now.</summary>
@@ -135,6 +143,36 @@ public sealed class ChatCompleter
                 options = PlayerNames();
                 break;
 
+            case "give":
+                options = argIndex switch
+                {
+                    0 => PlayerNames().Prepend("me"),
+                    1 => ItemLookup.Names(),
+                    _ => [],
+                };
+                break;
+
+            case "clear":
+                options = argIndex == 0 && Permissions.Online && Permissions.IsAdmin ? PlayerNames().Prepend("me") : [];
+                break;
+
+            case "money":
+                options = argIndex == 1 && Permissions.Online ? PlayerNames().Prepend("me") : [];
+                break;
+
+            case "bank":
+            {
+                string[] verbs = ["set", "add", "take"];
+                bool named = words.Length > 1 && !verbs.Contains(words[1].ToLowerInvariant());
+                options = argIndex switch
+                {
+                    0 => Permissions.Online ? verbs.Concat(PlayerNames()) : verbs,
+                    1 when named => verbs,
+                    _ => [],
+                };
+                break;
+            }
+
             case "kick":
                 // the reason after the name is free text
                 if (argIndex != 0) return PlayerWord(text);
@@ -151,6 +189,20 @@ public sealed class ChatCompleter
                     1 when words[1].ToLowerInvariant() is "add" or "remove" => PlayerNames(),
                     _ => [],
                 };
+                break;
+
+            case "br":
+                bool admin = Permissions.IsAdmin;
+                options = argIndex switch
+                {
+                    0 => admin ? ["join", "leave", "status", "open", "start", "cancel"] : ["join", "leave", "status"],
+                    _ when admin && words[1].ToLowerInvariant() == "open" => ["here", "short", "normal", "long", "5", "6", "7"],
+                    _ => [],
+                };
+                break;
+
+            case "pvp":
+                options = argIndex == 0 ? ["on", "off"] : [];
                 break;
 
             case "race":
@@ -170,6 +222,10 @@ public sealed class ChatCompleter
                     1 when mayTime && words[1].ToLowerInvariant() == "set" => World.TimeCommand.Named.Select(n => n.Name),
                     _ => [],
                 };
+                break;
+
+            case "style":
+                options = argIndex == 0 ? Styles.StyleCommand.Words : [];
                 break;
 
             case "occasion":

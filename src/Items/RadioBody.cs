@@ -63,6 +63,8 @@ public partial class RadioBody : RigidBody3D
     private MultiplayerSynchronizer? _sync;
     private double _age, _restTime;
     private RadioSpeaker? _speaker;
+    private Vector3 _lastPos, _lastVel;
+    private bool _bonked;
 
     public static RadioBody Create(RadioState state)
     {
@@ -131,6 +133,9 @@ public partial class RadioBody : RigidBody3D
             LinearVelocity = s.Velocity;
             AngularVelocity = new Vector3(GD.Randf() * 6f - 3f, GD.Randf() * 2f - 1f, GD.Randf() * 6f - 3f);
             ContactMonitor = false;
+            ContinuousCd = true;
+            _lastPos = s.Position;
+            _lastVel = s.Velocity;
         }
 
         if (!Headless && !NetworkManager.DedicatedServer)
@@ -138,6 +143,7 @@ public partial class RadioBody : RigidBody3D
             AddChild(new MeshInstance3D { Name = "Visual", Mesh = Mesh(), MaterialOverride = ItemDefs.Material });
             _speaker = new RadioSpeaker { Name = "Speaker" };
             AddChild(_speaker);
+            AddChild(new ImpactFx { Name = "Impact", Size = BodyW });
         }
     }
 
@@ -146,6 +152,10 @@ public partial class RadioBody : RigidBody3D
     {
         if (Settled) return;
         _age += delta;
+        // a boombox thrown at someone hurts (#261)
+        if (!_bonked && _age < 4) _bonked = ThrowHits.Step(this, _lastPos, GlobalPosition, _lastVel, ItemId.Radio);
+        _lastPos = GlobalPosition;
+        _lastVel = LinearVelocity;
         _restTime = LinearVelocity.LengthSquared() < 0.05f * 0.05f ? _restTime + delta : 0;
         if (Sleeping || _restTime > RestFor || _age > SettleAfter || Position.Y < -500)
         {
@@ -164,6 +174,34 @@ public partial class RadioBody : RigidBody3D
         _speaker.StartedAt = StartedAt;
         _speaker.On = Playing;
         _speaker.Length = Length > 0 ? Length : Cd?.Duration ?? 0;
+
+        // it bounces to the music it is actually making (not while the CD is still downloading)
+        _visual ??= GetNodeOrNull<MeshInstance3D>("Visual");
+        if (_visual == null) return;
+        _visual.Transform = _speaker.Playing && BeatAt(ClockSync.ServerNow, out float phase, out int beat, out _, out _)
+            ? Bounce(phase, beat, BodyH * 0.5f, 1f)
+            : Transform3D.Identity;
+    }
+
+    private MeshInstance3D? _visual;
+
+    /// <summary>
+    /// A boombox's dance (#261), as a transform about its centre: squashed flat on the beat, then
+    /// springing up off the floor and rocking toward the next beat's side — left on one beat, right
+    /// on the next. <paramref name="half"/> is half its height (the squash is about its bottom face),
+    /// <paramref name="amount"/> scales it all (a radio on someone's back bounces less).
+    /// </summary>
+    public static Transform3D Bounce(float phase, int beat, float half, float amount)
+    {
+        float kick = Mathf.Exp(-phase * 7f);                       // the hit, decaying through the beat
+        float spring = Mathf.Sin(Mathf.Pi * Mathf.Clamp((phase - 0.08f) / 0.7f, 0f, 1f));
+        float sy = 1f - 0.16f * kick * amount + 0.05f * spring * amount;
+        float sxz = 1f + 0.09f * kick * amount - 0.02f * spring * amount;
+        float hop = 0.03f * spring * spring * amount;
+        float side = (beat & 1) == 0 ? 1f : -1f;
+        var basis = new Basis(Vector3.Back, 0.07f * side * spring * amount) * Basis.FromScale(new Vector3(sxz, sy, sxz));
+        // the bottom face stays down while squashed: lower the centre by what the height lost
+        return new Transform3D(basis, new Vector3(0, -half * (1f - sy) + hop, 0));
     }
 
     /// <summary>The state to respawn it from: where it is now, what it plays.</summary>
@@ -180,8 +218,18 @@ public partial class RadioBody : RigidBody3D
     public bool BeatAt(double serverNow, out float beatPhase, out int beatIndex, out int bar, out MusicStyle style)
     {
         beatPhase = 0; beatIndex = 0; bar = 0; style = MusicStyle.Pop;
-        if (!Playing || Cd is not { } cd || cd.Bpm < 1f) return false;
-        double t = serverNow - StartedAt - cd.BeatOffset;
+        return Playing && BeatOf(CdId, StartedAt, serverNow, out beatPhase, out beatIndex, out bar, out style);
+    }
+
+    /// <summary>
+    /// <see cref="BeatAt"/> for any radio, lying here or carried (<see cref="RadioPlay"/>): which CD,
+    /// since when, and the clock. False when the CD is unknown here, beatless or over.
+    /// </summary>
+    public static bool BeatOf(int cdId, double startedAt, double serverNow, out float beatPhase, out int beatIndex, out int bar, out MusicStyle style)
+    {
+        beatPhase = 0; beatIndex = 0; bar = 0; style = MusicStyle.Pop;
+        if (cdId == 0 || CdLibrary.Instance?.Find(cdId) is not { } cd || cd.Bpm < 1f) return false;
+        double t = serverNow - startedAt - cd.BeatOffset;
         if (t > cd.Duration) return false;
         double beat = t * cd.Bpm / 60.0;
         double floor = Math.Floor(beat);

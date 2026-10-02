@@ -184,69 +184,59 @@ public sealed partial class ClientTerrainSync : Node
     /// Pulls the region's far-horizon lattice so a client streaming everything still sees the
     /// mountains past its LOD rings. 1.6 MB for the current region, once per session.
     /// </summary>
-    private async Task SyncHorizonAsync(CancellationToken ct)
-    {
-        string dir = Core.TerrainPaths.FindCacheDir();
-        string path = Path.Combine(dir, HorizonFormat.FileName);
-
-        byte[]? bytes = (await _streamer
-            .FetchAsync(AssetKind.Horizon, new TileId(0, 0), ct)
-            .ConfigureAwait(false)).Data;
-
-        if (bytes is null)
-        {
-            GD.Print("[stream] server has no horizon file; the world ends at the last ring");
-            return;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(dir);
-            await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
-        }
-        catch (Exception e)
-        {
-            GD.PushWarning($"[stream] could not cache the horizon: {e.Message}");
-            return;
-        }
-
-        GD.Print($"[stream] horizon received: {bytes.Length / 1024} KB");
-        HorizonReceived?.Invoke();
-    }
+    private Task SyncHorizonAsync(CancellationToken ct) =>
+        SyncFileAsync(AssetKind.Horizon, HorizonFormat.FileName, "horizon",
+            "server has no horizon file; the world ends at the last ring", ct, bytes =>
+            {
+                GD.Print($"[stream] horizon received: {bytes.Length / 1024} KB");
+                HorizonReceived?.Invoke();
+            });
 
     /// <summary>
     /// Pulls the town index so the Tab teleport search works on a client that shipped without
     /// one. Purely cosmetic if it fails — /city still resolves server-side.
     /// </summary>
-    private async Task SyncPlacesAsync(CancellationToken ct)
+    private Task SyncPlacesAsync(CancellationToken ct) =>
+        SyncFileAsync(AssetKind.Places, PlaceIndex.FileName, "place index",
+            "server has no place index; the Tab search will stay empty", ct, bytes =>
+            {
+                int count = PlaceIndex.FromJson(System.Text.Encoding.UTF8.GetString(bytes)).Places.Count;
+                GD.Print($"[stream] place index received: {count} towns");
+                PlacesReceived?.Invoke();
+            });
+
+    /// <summary>
+    /// Fetches one region-wide file (tile 0,0 of <paramref name="kind"/>), writes it into the cache
+    /// dir as <paramref name="fileName"/> and calls <paramref name="onDone"/>; logs and returns when
+    /// the server has none or the write fails.
+    /// </summary>
+    private async Task SyncFileAsync(AssetKind kind, string fileName, string what, string missingMsg,
+        CancellationToken ct, Action<byte[]> onDone)
     {
         string dir = Core.TerrainPaths.FindCacheDir();
-        string path = Path.Combine(dir, PlaceIndex.FileName);
 
         byte[]? bytes = (await _streamer
-            .FetchAsync(AssetKind.Places, new TileId(0, 0), ct)
+            .FetchAsync(kind, new TileId(0, 0), ct)
             .ConfigureAwait(false)).Data;
 
         if (bytes is null)
         {
-            GD.Print("[stream] server has no place index; the Tab search will stay empty");
+            GD.Print($"[stream] {missingMsg}");
             return;
         }
 
         try
         {
             Directory.CreateDirectory(dir);
-            await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(Path.Combine(dir, fileName), bytes, ct).ConfigureAwait(false);
         }
         catch (Exception e)
         {
-            GD.PushWarning($"[stream] could not cache the place index: {e.Message}");
+            GD.PushWarning($"[stream] could not cache the {what}: {e.Message}");
             return;
         }
 
-        int count = PlaceIndex.FromJson(System.Text.Encoding.UTF8.GetString(bytes)).Places.Count;
-        GD.Print($"[stream] place index received: {count} towns");
-        PlacesReceived?.Invoke();
+        onDone(bytes);
     }
 
     /// <summary>Filename of the cached copy of the server's index.</summary>

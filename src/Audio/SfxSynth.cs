@@ -26,6 +26,79 @@ public static class SfxSynth
 
     private static AudioStreamWav? _hiss, _tyre, _scrape;
     private static SfxBank? _stepsBank, _landingBank, _whooshBank, _tickBank, _impactBank, _chimeBank, _boomBank, _gulpBank, _crunchBank;
+    private static SfxBank? _boneBreakBank, _glassBank;
+
+    /// <summary>
+    /// A bone going (#214): two to four dry cracks a few milliseconds apart, each a bright snap
+    /// with a short ringing knock in it, over the dull thump of the body landing and a gritty
+    /// crunch as the ends grind. The cracks are what sell it; the thump is what says it was a person.
+    /// </summary>
+    public static SfxBank BoneBreakBank => _boneBreakBank ??= SfxBank.Build("bone_break", 6, 0.4f, 214, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.2f;
+        var bright = HighPass(Noise(rng, n), 0.45f * J());
+        var dull = LowPass(Noise(rng, n), 0.05f * J());
+        var grit = BandPass(Noise(rng, n), 0.08f, 0.5f);
+        int cracks = 2 + rng.Next(3);
+        var at = new float[cracks];
+        var knock = new float[cracks];
+        for (int c = 0; c < cracks; c++)
+        {
+            at[c] = c == 0 ? 0f : at[c - 1] + 0.008f + 0.022f * (float)rng.NextDouble();
+            knock[c] = 1700f + 1400f * (float)rng.NextDouble();
+        }
+        float thud = 105f * J();
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate, crack = 0f;
+            for (int c = 0; c < cracks; c++)
+            {
+                float u = t - at[c];
+                if (u < 0) continue;
+                float gain = c == 0 ? 1f : 0.55f + 0.3f * (c % 2);
+                crack += gain * (bright[i] * 1.8f * Mathf.Exp(-u * 380f) + Mathf.Sin(Mathf.Tau * knock[c] * u) * 0.6f * Mathf.Exp(-u * 260f));
+            }
+            float body = Mathf.Sin(Mathf.Tau * thud * t * (1f - t * 0.6f)) * 0.75f * Mathf.Exp(-t * 22f) + dull[i] * 2.5f * Mathf.Exp(-t * 30f);
+            // the grind: noise switched on and off in grains, a little after the snap
+            float grain = Mathf.Sin(t * 900f + 3f * Mathf.Sin(t * 170f)) > 0.2f ? 1f : 0.15f;
+            float crunch = t > 0.02f ? grit[i] * 0.9f * grain * Mathf.Exp(-(t - 0.02f) * 14f) : 0f;
+            s[i] = Mathf.Clamp(crack + body + crunch, -1.2f, 1.2f);
+        }
+        return s;
+    });
+
+    /// <summary>
+    /// A windscreen going (#214): the bang of the hit, a burst of bright noise as it crazes, then a
+    /// shower of little glass pings falling away over most of a second.
+    /// </summary>
+    public static SfxBank GlassBank => _glassBank ??= SfxBank.Build("glass", 4, 1.1f, 215, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.15f;
+        var hiss = HighPass(Noise(rng, n), 0.55f);
+        var bang = LowPass(Noise(rng, n), 0.08f * J());
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            s[i] = bang[i] * 3f * Mathf.Exp(-t * 35f) + hiss[i] * (0.9f * Mathf.Exp(-t * 18f) + 0.12f * Mathf.Exp(-t * 3.5f));
+        }
+        // the tinkle: a hundred-odd short pings, thinning out as the shards land
+        int pings = 90 + rng.Next(40);
+        for (int k = 0; k < pings; k++)
+        {
+            float u = (float)rng.NextDouble();
+            int start = (int)(u * u * 0.9f * Rate);
+            float f = 2800f + 6500f * (float)rng.NextDouble(), amp = 0.25f * (1f - u * 0.7f) * (0.4f + 0.6f * (float)rng.NextDouble());
+            for (int i = start, end = Math.Min(n, start + Rate / 25); i < end; i++)
+            {
+                float t = (float)(i - start) / Rate;
+                s[i] += Mathf.Sin(Mathf.Tau * f * t) * amp * Mathf.Exp(-t * 160f);
+            }
+        }
+        for (int i = 0; i < n; i++) s[i] = Mathf.Clamp(s[i], -1.2f, 1.2f);
+        return s;
+    });
 
     /// <summary>Looping edge hiss for skis: bright, high-passed noise.</summary>
     public static AudioStreamWav Hiss => _hiss ??= Loop(2.0f, 12, (rng, n) =>
@@ -187,6 +260,27 @@ public static class SfxSynth
         return s;
     });
     private static AudioStreamWav? _engine;
+
+    /// <summary>
+    /// A throw winding up: a soft hum with a breathy edge and a fast tremolo, looped. Every
+    /// frequency is a whole number of cycles per second, so the loop has no seam; the throw raises
+    /// its pitch with the charge.
+    /// </summary>
+    public static AudioStreamWav ChargeHum => _chargeHum ??= Loop(1.0f, 42, (rng, n) =>
+    {
+        var air = LowPass(Noise(rng, n), 0.08f);
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float tone = Mathf.Sin(Mathf.Tau * 220f * t) + 0.35f * Mathf.Sin(Mathf.Tau * 440f * t)
+                       + 0.15f * Mathf.Sin(Mathf.Tau * 663f * t);
+            float tremolo = 0.75f + 0.25f * Mathf.Sin(Mathf.Tau * 12f * t);
+            s[i] = (tone * 0.35f + air[i] * 1.5f) * tremolo;
+        }
+        return s;
+    });
+    private static AudioStreamWav? _chargeHum;
 
     /// <summary>
     /// An explosion: a noise blast with a hard attack, a falling sub-bass thump under it, and a
@@ -406,4 +500,104 @@ public static class SfxSynth
 
     private static SfxBank? _doorOpenBank, _doorCloseBank;
     private static AudioStreamWav? _street;
+
+    // ---- a thrown thing hitting someone (#261) ------------------------------------------------
+
+    private static SfxBank? _bonkBank, _oofBank, _dizzyBank;
+
+    /// <summary>
+    /// A cartoon bonk: a hollow knock whose pitch drops fast, a woody second partial, a short
+    /// tick of contact on top. The sound of a thing bouncing off a head rather than a wound.
+    /// </summary>
+    public static SfxBank BonkBank => _bonkBank ??= SfxBank.Build("bonk", 5, 0.35f, 261, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        float f0 = 520f * J(), f1 = 260f * J(), d = 14f * J();
+        var tick = HighPass(Noise(rng, n), 0.4f);
+        var s = new float[n];
+        float pa = 0, pb = 0;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float f = Mathf.Lerp(f0, f1, Mathf.Min(1f, t / 0.06f));
+            pa += Mathf.Tau * f / Rate;
+            pb += Mathf.Tau * f * 2.71f / Rate;
+            float env = Mathf.Min(1f, t * 900f) * Mathf.Exp(-d * t);
+            s[i] = env * (Mathf.Sin(pa) * 0.85f + Mathf.Sin(pb) * 0.25f * Mathf.Exp(-40f * t))
+                   + tick[i] * 1.2f * Mathf.Exp(-260f * t);
+        }
+        return s;
+    });
+
+    /// <summary>
+    /// "Oof": a short voiced grunt, a buzzy glottal pulse falling in pitch through two vowel
+    /// resonances (an "u" sliding toward "o"). Not a scream: it hurts, it does not kill.
+    /// </summary>
+    public static SfxBank OofBank => _oofBank ??= SfxBank.Build("oof", 4, 0.42f, 262, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
+        float g0 = 170f * J(), g1 = 105f * J();
+        var s = new float[n];
+        // two resonators (formants) over a sawtooth pulse train, plus breath
+        float y1a = 0, y2a = 0, y1b = 0, y2b = 0, phase = 0;
+        var breath = BandPass(Noise(rng, n), 0.05f, 0.3f);
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float u = Mathf.Min(1f, t / 0.35f);
+            phase += Mathf.Lerp(g0, g1, u) / Rate;
+            phase -= Mathf.Floor(phase);
+            float src = (phase * 2f - 1f) * 0.6f + breath[i] * 0.8f;
+            float fa = Mathf.Lerp(330f, 480f, u), fb = Mathf.Lerp(800f, 900f, u);
+            Resonate(src, fa, 0.94f, ref y1a, ref y2a);
+            Resonate(src, fb, 0.92f, ref y1b, ref y2b);
+            float env = Mathf.Min(1f, t * 60f) * Mathf.Exp(-5.5f * t) * (t < 0.36f ? 1f : Mathf.Exp(-60f * (t - 0.36f)));
+            s[i] = env * (y1a * 0.09f + y1b * 0.05f);
+        }
+        return s;
+    });
+
+    /// <summary>A two-pole resonator step: rings at <paramref name="f"/> Hz, <paramref name="r"/> the pole radius (bandwidth).</summary>
+    private static void Resonate(float x, float f, float r, ref float y1, ref float y2)
+    {
+        float y = x + 2f * r * Mathf.Cos(Mathf.Tau * f / Rate) * y1 - r * r * y2;
+        y2 = y1;
+        y1 = y;
+    }
+
+    /// <summary>
+    /// The "seeing stars" tune after a hit: four quick square-wave notes stepping down, then a
+    /// trill — a little chiptune song played over the one who was hit.
+    /// </summary>
+    public static SfxBank DizzyBank => _dizzyBank ??= SfxBank.Build("dizzy", 3, 1.1f, 263, (rng, n) =>
+    {
+        float key = 1f + (rng.Next(3) - 1) * 0.06f;
+        float[] notes = { 1568f, 1319f, 1175f, 988f };   // G6 E6 D6 B5
+        var s = new float[n];
+        float phase = 0;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float f, local;
+            if (t < 0.48f)
+            {
+                int k = Mathf.Min((int)(t / 0.12f), 3);
+                f = notes[k] * key;
+                local = t - k * 0.12f;
+            }
+            else
+            {
+                // the trill: between the last two notes, eight times a second, fading
+                int k = (int)((t - 0.48f) / 0.0625f);
+                f = ((k & 1) == 0 ? notes[3] : notes[2]) * key;
+                local = (t - 0.48f) % 0.0625f;
+            }
+            phase += f / Rate;
+            phase -= Mathf.Floor(phase);
+            float sq = phase < 0.5f ? 1f : -1f;
+            float env = Mathf.Min(1f, local * 400f) * Mathf.Exp(-9f * local) * (t < 0.48f ? 1f : Mathf.Exp(-3.5f * (t - 0.48f)));
+            s[i] = sq * env * 0.22f;
+        }
+        return s;
+    });
 }

@@ -1,5 +1,7 @@
 using Godot;
+using UnitSport.Avatar;
 using UnitSport.Core;
+using UnitSport.Ui;
 
 namespace UnitSport.Player;
 
@@ -9,31 +11,76 @@ namespace UnitSport.Player;
 /// <para>
 /// A menu rather than a cycle key, for two reasons: the list is meant to grow, and a refusal
 /// needs somewhere to be explained. On a server, the vehicles in it (anything left in the world
-/// when you get out) are an admin's to spawn â€” see <see cref="Permissions"/>; the rows stay
-/// listed, greyed, so the reason is visible rather than the vehicles simply missing. You cannot get on a bike while airborne or step off skis at
-/// 70 km/h, and a key that silently does nothing in those moments reads as a broken key â€” so the
-/// panel says why and stays open.
+/// when you get out) are an admin's to spawn — see <see cref="Permissions"/>; the cards stay
+/// listed, greyed, so the reason is visible rather than the vehicles simply missing. You cannot get
+/// on a bike while airborne or step off skis at 70 km/h, and a key that silently does nothing in
+/// those moments reads as a broken key — so the panel says why and stays open.
+/// </para>
+///
+/// <para>
+/// <b>Layout</b> (#210): the menus' glass panel, sized to the window. Tabs (Mounts, Cars,
+/// Motorbikes, Trucks and buses, Trailers) over a scrolling grid of cards, each with a thumbnail
+/// rendered from the real model (<see cref="RideThumbs"/>); beside it a live <see cref="RideStage"/>
+/// showing the card under the pointer or the pad's focus: its doors swing open and its lamps come
+/// on while it is pointed at, and shut again when the pointer leaves. Under the stage: the name, the
+/// blurb, the car preset or the load, and why a choice was refused.
 /// </para>
 ///
 /// <para>
 /// It registers with <see cref="UiFocus"/> while open. That is not about text: <see cref="FootPlayer"/>
-/// reads physical keys every frame, so without it the 1/2/3 shortcuts would arrive at the same
+/// reads physical keys every frame, so without it the 1–9 shortcuts would arrive at the same
 /// time as W and you would ride away while choosing.
 /// </para>
 /// </summary>
 public partial class RideUi : CanvasLayer
 {
+    private const float CardW = 168, CardH = 162, ThumbW = 152, ThumbH = 93, Gap = 10;
+    /// <summary>Picker cards for trailers carry this plus the trailer's index as their kind; never a real mount.</summary>
+    private const int TrailerRow = 1000;
+    private static readonly (string Name, float Load)[] Loads = { ("Empty", 0f), ("Half", 0.5f), ("Full", 1f) };
+
+    private sealed class Card
+    {
+        public required RideKind Kind;
+        public required string Label, Blurb, ThumbKey;
+        public required bool Vehicle;
+        public required Func<Node3D?> Build;
+        public Button Button = null!;
+        public TextureRect Thumb = null!;
+        public Label Badge = null!;
+    }
+
+    private sealed class Tab
+    {
+        public required string Name;
+        public required List<Card> Cards;
+        public Button Button = null!;
+        public GridContainer Grid = null!;
+        public ScrollContainer Scroll = null!;
+    }
+
     private PanelContainer _panel = null!;
-    private Label _status = null!;
-    private readonly List<(RideKind Kind, Button Button, bool Vehicle)> _entries = new();
-    private readonly List<(Label Line, string Blurb)> _blurbs = new();
-    private Label _hint = null!, _lockNote = null!;
+    private readonly List<Tab> _tabs = new();
+    private int _tab;
+    private Label _lockNote = null!, _hint = null!, _current = null!;
+    private Label _name = null!, _blurb = null!, _status = null!;
+    private Control _setupBox = null!, _loadBox = null!;
     /// <summary>The car preset (#40): put on the car being driven, and on any car picked from here.</summary>
     private OptionButton _setup = null!;
-    /// <summary>Entries reachable by number key: the mounts, not the car list.</summary>
-    private int _shortcuts;
-    /// <summary>The folded rosters (cars, motorbikes), on the number keys after the mounts.</summary>
-    private readonly List<(Button Button, ScrollContainer List)> _folds = new();
+    private Label _setupBlurb = null!;
+    private OptionButton _load = null!;
+    private Button _go = null!;
+
+    private RideThumbs _thumbs = null!;
+    private RideStage _stage = null!;
+    private TextureRect _stageView = null!;
+    private Card? _shown;      // on the stage
+    private Card? _pointed;    // under the pointer or focused: the stage's doors and lamps are open while set
+    private float _juiceDelay;
+    /// <summary>The turn a pointed-at vehicle swings to: nose and the driver's open door towards you.</summary>
+    private const float PresentYaw = 0.35f;
+    private float _spin;
+    private bool _dragging;
 
     /// <summary>Resolved per press, never captured: in multiplayer the player node is respawned.</summary>
     public Func<FootPlayer?>? ActivePlayer { get; set; }
@@ -46,90 +93,342 @@ public partial class RideUi : CanvasLayer
     {
         Layer = 30;   // under the main menu, over the world
 
-        var centre = new CenterContainer
-        {
-            AnchorRight = 1, AnchorBottom = 1,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        };
+        _thumbs = new RideThumbs { Name = "Thumbs" };
+        AddChild(_thumbs);
+        _stage = RideStage.Create(new Vector2I(560, 340), live: true);
+        AddChild(_stage);
+
+        var centre = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        centre.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(centre);
 
-        _panel = new PanelContainer { CustomMinimumSize = new Vector2(440, 0), Visible = false };
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.05f, 0.06f, 0.08f, 0.94f),
-            ContentMarginLeft = 22, ContentMarginRight = 22,
-            ContentMarginTop = 18, ContentMarginBottom = 18,
-        };
-        style.SetCornerRadiusAll(6);
-        _panel.AddThemeStyleboxOverride("panel", style);
+        // themed on the panel's own root, never the Window (docs/notes/ui/style-guide.md)
+        _panel = new PanelContainer { Visible = false, Theme = UiTheme.Get() };
+        _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.9f, 12, 20));
         centre.AddChild(_panel);
 
-        var rows = new VBoxContainer();
-        rows.AddThemeConstantOverride("separation", 8);
+        var rows = UiKit.VBox(10);
         _panel.AddChild(rows);
 
-        var title = new Label { Text = "Travel as" };
-        title.AddThemeFontSizeOverride("font_size", 22);
-        title.AddThemeColorOverride("font_color", new Color(0.98f, 0.72f, 0.10f));
-        rows.AddChild(title);
+        // ---- header: title, tabs, what you are on now ----
+        var head = UiKit.HBox(16);
+        head.AddChild(UiKit.Text("Travel as", UiTheme.FontHeading, UiTheme.Text, bold: true));
+        var tabs = UiKit.HBox(4);
+        tabs.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        head.AddChild(tabs);
+        _current = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        _current.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+        head.AddChild(_current);
+        rows.AddChild(head);
 
-        _lockNote = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Visible = false };
-        _lockNote.AddThemeFontSizeOverride("font_size", 12);
-        _lockNote.AddThemeColorOverride("font_color", new Color(0.92f, 0.72f, 0.4f));
+        _lockNote = UiKit.Text("", UiTheme.FontSmall, UiTheme.Warn, wrap: true);
+        _lockNote.Visible = false;
         rows.AddChild(_lockNote);
 
-        rows.AddChild(new HSeparator());
+        // ---- body: cards on the left, the stage and the details on the right ----
+        var body = UiKit.HBox(18);
+        body.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        rows.AddChild(body);
 
-        Entry(rows, 1, RideKind.OnFoot, "On foot",
-            "{move_forward}{move_left}{move_back}{move_right} walk, {sprint} run, {jump} jump, {crouch_slide} slide, jump at a wall to kick off",
-            false);
+        var pages = new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        body.AddChild(pages);
 
-        int number = 2;
-        foreach (var ride in Rideable.All)
-            Entry(rows, number++, ride.Kind, ride.Label, ride.Blurb, ride.IsVehicle);
-        _shortcuts = _entries.Count;
+        var side = UiKit.VBox(8);
+        side.CustomMinimumSize = new Vector2(320, 0);
+        body.AddChild(side);
+        BuildSide(side);
+        BuildTabs(tabs, pages);
 
-        // The cars and the motorbikes are rosters, not a line each: one button folds a scrolling
-        // list open, so the mounts above stay on screen and in reach of the number keys.
-        Fold(rows, number, "Cars", CarCatalog.All.Select(c => (c.Kind, c.Label, c.Blurb)));
-        SetupRow(rows);
-        Fold(rows, number + 1, "Motorbikes", MotorbikeCatalog.All.Select(b => (b.Kind, b.Label, b.Blurb)));
-        Fold(rows, number + 2, "Trucks and buses", HeavyCatalog.All.Select(h => (h.Kind, h.Label,
-            h.Blurb + (h.Look.Operator.Length > 0 ? $" ({h.Look.Operator} colours)" : ""))));
-        // trailers are not mounts: each row couples one behind the truck being driven, or leaves it
-        // in the world ahead to back onto (RideKind.Trailer + its index, decoded in Choose)
-        Fold(rows, number + 3, "Trailers", TrailerCatalog.All.Select((t, i) => ((RideKind)(TrailerRow + i), t.Label,
-            t.Blurb + (t.Operator.Length > 0 ? $" ({t.Operator} colours)" : ""))));
-        LoadRow(rows);
-
-        _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        _status.AddThemeColorOverride("font_color", new Color(0.92f, 0.55f, 0.35f));
-        rows.AddChild(_status);
-
-        _hint = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        _hint.AddThemeFontSizeOverride("font_size", 12);
-        _hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
+        _hint = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextFaint, wrap: true);
         rows.AddChild(_hint);
 
+        GetViewport().SizeChanged += Fit;
         Permissions.Changed += Relabel;
         PlayerInput.DeviceChanged += Relabel;
+        Fit();
+        SelectTab(0);
         Relabel();
     }
 
     public override void _ExitTree()
     {
+        GetViewport().SizeChanged -= Fit;
         Permissions.Changed -= Relabel;
         PlayerInput.DeviceChanged -= Relabel;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // construction
+    // ------------------------------------------------------------------------------------
+
+    private static Card NewCard(RideKind kind, string label, string blurb, bool vehicle, string key, Func<Node3D?> build) =>
+        new() { Kind = kind, Label = label, Blurb = blurb, Vehicle = vehicle, ThumbKey = key, Build = build };
+
+    private void BuildTabs(HBoxContainer bar, Control pages)
+    {
+        var mounts = new List<Card>
+        {
+            NewCard(RideKind.OnFoot, "On foot",
+                "{move_forward}{move_left}{move_back}{move_right} walk, {sprint} run, {jump} jump, {crouch_slide} slide, jump at a wall to kick off",
+                false, "OnFoot", () => new MeshInstance3D
+                {
+                    Mesh = HumanMeshBuilder.Build(HumanPalette.ForRider(0)),
+                    MaterialOverride = HumanMeshBuilder.Material(),
+                }),
+        };
+        foreach (var ride in Rideable.All)
+        {
+            var kind = ride.Kind;
+            mounts.Add(NewCard(kind, ride.Label, ride.Blurb, ride.IsVehicle, $"{kind}|{ride.Label}",
+                () => Rideable.Create(kind)?.BuildParkedVisual(0)));
+        }
+        AddTab(bar, pages, "Mounts", mounts);
+
+        AddTab(bar, pages, "Cars", CarCatalog.All.Select(c => NewCard(c.Kind, c.Label, c.Blurb, true,
+            $"{c.Kind}|{c}", () => Rideable.Create(c.Kind)?.BuildParkedVisual(0))).ToList());
+        AddTab(bar, pages, "Motorbikes", MotorbikeCatalog.All.Select(b => NewCard(b.Kind, b.Label, b.Blurb, true,
+            $"{b.Kind}|{b}", () => Rideable.Create(b.Kind)?.BuildParkedVisual(0))).ToList());
+        AddTab(bar, pages, "Trucks and buses", HeavyCatalog.All.Select(h => NewCard(h.Kind, h.Label,
+            h.Blurb + (h.Look.Operator.Length > 0 ? $" ({h.Look.Operator} colours)" : ""), true,
+            $"{h.Kind}|{h}", () => HeavyRig.Create(h, 0, 0.5f))).ToList());
+        // trailers are not mounts: each card couples one behind the truck being driven, or leaves it
+        // in the world ahead to back onto (RideKind.Trailer + its index, decoded in Choose)
+        AddTab(bar, pages, "Trailers", TrailerCatalog.All.Select((t, i) => NewCard((RideKind)(TrailerRow + i), t.Label,
+            t.Blurb + (t.Operator.Length > 0 ? $" ({t.Operator} colours)" : ""), true,
+            $"Trailer{i}|{t}", () => HeavyRig.CreateTrailer(t, 0, 0.5f))).ToList());
+    }
+
+    private void AddTab(HBoxContainer bar, Control pages, string name, List<Card> cards)
+    {
+        var tab = new Tab { Name = name, Cards = cards };
+        int index = _tabs.Count;
+        tab.Button = TabButton($"{name}  {cards.Count}");
+        tab.Button.Pressed += () => SelectTab(index);
+        bar.AddChild(tab.Button);
+
+        tab.Scroll = new ScrollContainer
+        {
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            Visible = false,
+        };
+        tab.Scroll.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        pages.AddChild(tab.Scroll);
+        tab.Grid = new GridContainer { Columns = 3, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        tab.Grid.AddThemeConstantOverride("h_separation", (int)Gap);
+        tab.Grid.AddThemeConstantOverride("v_separation", (int)Gap);
+        tab.Scroll.AddChild(UiKit.Margin(tab.Grid, 4, 4, 10, 4));   // room for the focus outline, the hover pop and the scrollbar
+        foreach (var card in cards)
+        {
+            BuildCard(card);
+            tab.Grid.AddChild(card.Button);
+        }
+        _tabs.Add(tab);
+    }
+
+    private static Button TabButton(string text)
+    {
+        var b = new Button { Text = text, ToggleMode = true, FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 32) };
+        b.AddThemeFontSizeOverride("font_size", UiTheme.FontSmall);
+        b.AddThemeStyleboxOverride("normal", UiTheme.Flat(new Color(1, 1, 1, 0), 8, 12, 6));
+        b.AddThemeStyleboxOverride("hover", UiTheme.Flat(new Color(1, 1, 1, 0.06f), 8, 12, 6));
+        b.AddThemeStyleboxOverride("pressed", UiTheme.Flat(new Color(UiTheme.Amber, 0.16f), 8, 12, 6));
+        b.AddThemeStyleboxOverride("hover_pressed", UiTheme.Flat(new Color(UiTheme.Amber, 0.22f), 8, 12, 6));
+        b.AddThemeColorOverride("font_color", UiTheme.TextDim);
+        b.AddThemeColorOverride("font_hover_color", UiTheme.Text);
+        b.AddThemeColorOverride("font_pressed_color", UiTheme.Amber);
+        b.AddThemeColorOverride("font_hover_pressed_color", UiTheme.Amber);
+        return b;
+    }
+
+    private void BuildCard(Card card)
+    {
+        var b = new Button
+        {
+            CustomMinimumSize = new Vector2(CardW, CardH),
+            FocusMode = Control.FocusModeEnum.All,
+            PivotOffset = new Vector2(CardW, CardH) * 0.5f,
+        };
+        var normal = UiTheme.Flat(new Color(0.10f, 0.115f, 0.14f, 0.7f), 10, 8, 8, new Color(1, 1, 1, 0.07f), 1);
+        var hot = UiTheme.Flat(new Color(0.14f, 0.16f, 0.19f, 0.9f), 10, 8, 8, new Color(UiTheme.Amber, 0.8f), 2);
+        b.AddThemeStyleboxOverride("normal", normal);
+        b.AddThemeStyleboxOverride("hover", hot);
+        b.AddThemeStyleboxOverride("pressed", hot);
+        b.AddThemeStyleboxOverride("hover_pressed", hot);
+        b.AddThemeStyleboxOverride("focus", UiTheme.Flat(new Color(0, 0, 0, 0), 10, 8, 8, UiTheme.Amber, 2));
+        b.AddThemeStyleboxOverride("disabled", normal);
+
+        var inside = UiKit.VBox(3);
+        inside.MouseFilter = Control.MouseFilterEnum.Ignore;
+        inside.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        inside.OffsetLeft = 8; inside.OffsetRight = -8; inside.OffsetTop = 8; inside.OffsetBottom = -6;
+        b.AddChild(inside);
+
+        card.Thumb = new TextureRect
+        {
+            CustomMinimumSize = new Vector2(ThumbW, ThumbH),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Modulate = new Color(1, 1, 1, 0),
+        };
+        inside.AddChild(card.Thumb);
+        // two lines for the long names (motorbike generations), then an ellipsis
+        var name = UiKit.Text(card.Label, UiTheme.FontSmall, UiTheme.Text, bold: true, wrap: true);
+        name.MaxLinesVisible = 2;
+        name.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+        name.CustomMinimumSize = new Vector2(ThumbW, 0);
+        inside.AddChild(name);
+        card.Badge = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextFaint);
+        inside.AddChild(card.Badge);
+
+        b.Pressed += () => Choose(card.Kind);
+        b.MouseEntered += () => Point(card);
+        b.FocusEntered += () => Point(card);
+        b.MouseExited += () => Unpoint(card);
+        b.FocusExited += () => Unpoint(card);
+        card.Button = b;
+    }
+
+    private void BuildSide(VBoxContainer side)
+    {
+        // the stage: a live render of the card under the pointer
+        var frame = new PanelContainer();
+        frame.AddThemeStyleboxOverride("panel", UiTheme.Flat(new Color(0.07f, 0.08f, 0.10f, 1f), 10, 0, 0, new Color(1, 1, 1, 0.08f), 1));
+        _stageView = new TextureRect
+        {
+            Texture = _stage.GetTexture(),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+            CustomMinimumSize = new Vector2(320, 194),
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            TooltipText = "Drag to turn it",
+        };
+        // dragging on the stage turns the vehicle round, like a showroom turntable
+        _stageView.GuiInput += e =>
+        {
+            if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } mb) _dragging = mb.Pressed;
+            else if (e is InputEventMouseMotion mm && _dragging) _stage.Yaw += mm.Relative.X * 0.012f;
+        };
+        frame.AddChild(_stageView);
+        side.AddChild(frame);
+
+        _name = UiKit.Text("", UiTheme.FontBody + 3, UiTheme.Text, bold: true, wrap: true);
+        side.AddChild(_name);
+        _blurb = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim, wrap: true);
+        _blurb.CustomMinimumSize = new Vector2(320, 0);
+        side.AddChild(_blurb);
+
+        // the car preset chooser, data-driven from CarSetups.All (#40); the garage (#56) calls
+        // FootPlayer.SetCarSetup the same way
+        var setup = UiKit.VBox(4);
+        var setupRow = UiKit.HBox(10);
+        setupRow.AddChild(UiKit.Text("Car preset", UiTheme.FontSmall, UiTheme.TextDim));
+        _setup = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        foreach (var s in CarSetups.All) _setup.AddItem(s.Name, s.Id);
+        setupRow.AddChild(_setup);
+        setup.AddChild(setupRow);
+        _setupBlurb = UiKit.Text(CarSetups.All[0].Blurb, UiTheme.FontTiny, UiTheme.TextFaint, wrap: true);
+        setup.AddChild(_setupBlurb);
+        _setup.ItemSelected += i =>
+        {
+            var preset = CarSetups.For(_setup.GetItemId((int)i));
+            _setupBlurb.Text = preset.Blurb;
+            // in a car: on it now, if it is standing still
+            if (ActivePlayer?.Invoke() is { Vehicle: Car } player)
+                _status.Text = player.SetCarSetup(preset.Id) ? $"{preset.Name} fitted." : "Stop the car first.";
+        };
+        _setupBox = setup;
+        side.AddChild(setup);
+
+        // how full the next truck, bus or trailer comes: cargo, or passengers
+        var load = UiKit.HBox(10);
+        load.AddChild(UiKit.Text("Load", UiTheme.FontSmall, UiTheme.TextDim));
+        _load = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        foreach (var (name, _) in Loads) _load.AddItem(name);
+        _load.Select(1);
+        load.AddChild(_load);
+        _loadBox = load;
+        side.AddChild(load);
+
+        side.AddChild(UiKit.Spacer(expand: true));
+        _status = UiKit.Text("", UiTheme.FontSmall, UiTheme.Bad, wrap: true);
+        side.AddChild(_status);
+        _go = UiKit.Button("Ride", primary: true);
+        _go.Pressed += () => { if (_shown != null) Choose(_shown.Kind); };
+        side.AddChild(_go);
+    }
+
+    /// <summary>The panel fills most of the window, whatever its size, and the card grid reflows to it.</summary>
+    private void Fit()
+    {
+        if (_panel == null || _stageView == null) return;
+        var view = GetViewport().GetVisibleRect().Size;
+        var size = new Vector2(Mathf.Min(view.X - 48, 1240), Mathf.Min(view.Y - 48, 780));
+        _panel.CustomMinimumSize = size;
+        _panel.Size = size;
+        // the side column narrows on a small window; the grid takes the rest
+        float side = Mathf.Clamp(size.X * 0.3f, 250, 360);
+        _stageView.CustomMinimumSize = new Vector2(side, Mathf.Min(side * 0.6f, size.Y * 0.36f));
+        _blurb.CustomMinimumSize = new Vector2(side, 0);
+        float gridWidth = size.X - 40 - 18 - side - 14 - 16;   // margins, gap, the scrollbar
+        int columns = Mathf.Max(1, (int)((gridWidth + Gap) / (CardW + Gap)));
+        foreach (var tab in _tabs) tab.Grid.Columns = columns;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // state
+    // ------------------------------------------------------------------------------------
+
+    private void SelectTab(int index)
+    {
+        _tab = ((index % _tabs.Count) + _tabs.Count) % _tabs.Count;
+        for (int i = 0; i < _tabs.Count; i++)
+        {
+            _tabs[i].Scroll.Visible = i == _tab;
+            _tabs[i].Button.SetPressedNoSignal(i == _tab);
+        }
+        var tab = _tabs[_tab];
+        _setupBox.Visible = tab.Name == "Cars";
+        _loadBox.Visible = tab.Name is "Trucks and buses" or "Trailers";
+        _go.Text = tab.Name == "Trailers" ? "Couple / leave ahead" : "Ride";
+        _status.Text = "";
+        if (!IsOpen) return;   // the stage and the thumbnails are drawn only while the menu is up
+        RequestThumbs(tab);
+        if (tab.Cards.Count > 0) Show(tab.Cards[0]);
+        // a pad drives the cards by focus; a mouse by pointing, so focus would point at the first card unasked
+        if (PlayerInput.LastDevice == InputDevice.Gamepad) PlayerInput.FocusFirst(tab.Scroll);
+    }
+
+    /// <summary>This tab's thumbnails, ahead of every other tab's; then the rest of the roster, in the background.</summary>
+    private void RequestThumbs(Tab first)
+    {
+        foreach (var card in first.Cards.AsEnumerable().Reverse()) RequestThumb(card, first: true);
+        foreach (var tab in _tabs)
+            if (tab != first)
+                foreach (var card in tab.Cards) RequestThumb(card, first: false);
+    }
+
+    private void RequestThumb(Card card, bool first)
+    {
+        if (card.Thumb.Texture != null) return;
+        _thumbs.Request(card.ThumbKey, card.Build, tex =>
+        {
+            if (card.Thumb.Texture != null) return;
+            card.Thumb.Texture = tex;
+            // fades in where it lands, so a roster filling up reads as arriving, not popping
+            card.Thumb.CreateTween().TweenProperty(card.Thumb, "modulate:a", 1f, 0.25f);
+        }, first);
     }
 
     /// <summary>Everything that names a key or depends on being an admin, redone when either changes.</summary>
     private void Relabel()
     {
         if (_hint == null) return;
-        _hint.Text = InputHints.Format(
-            "1-9 to pick, {ride_menu} / Esc closes. Bikes, cars, motorbikes, helicopter and plane are left where you get off "
-            + "({interact_mount}); {interact_mount} next to one gets back in.");
-        foreach (var (line, blurb) in _blurbs) line.Text = InputHints.Format(blurb);
+        bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
+        _hint.Text = InputHints.Format(pad
+            ? "LB / RB switch tabs · (A) ride · {ride_menu} / (B) closes. Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in."
+            : "Tab / Shift+Tab or click a tab · click a card or 1–9 to ride · drag the preview to turn it · {ride_menu} / Esc closes. "
+              + "Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in.");
 
         bool locked = !Permissions.CanSpawnVehicles;
         _lockNote.Text = InputHints.Format(
@@ -137,115 +436,103 @@ public partial class RideUi : CanvasLayer
         _lockNote.Visible = locked;
 
         var current = ActivePlayer?.Invoke()?.Ride ?? RideKind.OnFoot;
-        foreach (var (kind, button, vehicle) in _entries)
+        string currentName = "On foot";
+        foreach (var tab in _tabs)
+            foreach (var card in tab.Cards)
+            {
+                bool here = card.Kind == current;
+                if (here) currentName = card.Label;
+                card.Button.Disabled = card.Vehicle && locked;
+                card.Button.Modulate = card.Button.Disabled ? new Color(1, 1, 1, 0.45f) : Colors.White;
+                card.Badge.Text = here ? "● Riding now" : card.Vehicle && locked ? "Admin only" : "";
+                card.Badge.AddThemeColorOverride("font_color", here ? UiTheme.Amber : UiTheme.TextFaint);
+            }
+        _current.Text = $"Now: {currentName}";
+        if (_shown != null) ShowText(_shown);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // the stage
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>The pointer (or the pad's focus) arrives on a card: it goes on the stage, doors and lamps open.</summary>
+    private void Point(Card card)
+    {
+        _pointed = card;
+        if (_shown != card) Show(card);
+        _juiceDelay = 0.12f;   // a beat for the eye to land before the doors swing
+        card.Button.CreateTween().TweenProperty(card.Button, "scale", Vector2.One * 1.04f, 0.12f)
+            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+    }
+
+    /// <summary>It leaves: the doors shut and the lamps go out; the vehicle stays on the stage.</summary>
+    private void Unpoint(Card card)
+    {
+        card.Button.CreateTween().TweenProperty(card.Button, "scale", Vector2.One, 0.15f);
+        if (_pointed != card) return;
+        _pointed = null;
+        _stage.Juice = 0;
+    }
+
+    private void Show(Card card)
+    {
+        _shown = card;
+        _stage.Show(card.Build());
+        // starts at the thumbnail's angle and turns slowly from there
+        _stage.Yaw = RideStage.ThumbYaw;
+        _spin = 0;
+        // a little drop onto the stage
+        _stageView.PivotOffset = _stageView.Size * 0.5f;
+        _stageView.Scale = Vector2.One * 0.94f;
+        _stageView.CreateTween().TweenProperty(_stageView, "scale", Vector2.One, 0.25f)
+            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+        ShowText(card);
+    }
+
+    private void ShowText(Card card)
+    {
+        _name.Text = card.Label;
+        _blurb.Text = InputHints.Format(card.Blurb);
+        _go.Disabled = card.Button.Disabled;
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!IsOpen) return;
+        float dt = (float)delta;
+        if (_pointed != null && _juiceDelay > 0 && (_juiceDelay -= dt) <= 0) _stage.Juice = 1;
+        if (_dragging) return;
+        if (_pointed != null)
         {
-            button.Disabled = kind == current || (vehicle && locked);
-            button.TooltipText = vehicle && locked ? "Admin only on this server" : "";
+            // pointed at: it swings round to show its face, the doors and the lamps
+            float target = _stage.Yaw + Mathf.AngleDifference(_stage.Yaw, PresentYaw);
+            _stage.Yaw = Mathf.Lerp(_stage.Yaw, target, 1f - Mathf.Exp(-dt * 4f));
+            _spin = 0;
+        }
+        else
+        {
+            // otherwise a slow turntable, eased in so it starts from where it stopped
+            _spin = Mathf.MoveToward(_spin, 0.22f, dt * 0.15f);
+            _stage.Yaw += _spin * dt;
         }
     }
 
-    private void Fold(Container rows, int number, string name, IEnumerable<(RideKind Kind, string Label, string Blurb)> items)
-    {
-        var list = items.ToList();
-        string Title(bool open) => $"{number}.  {name}  ({list.Count})  {(open ? "â–¾" : "â–¸")}";
-        var button = new Button { Text = Title(false), CustomMinimumSize = new Vector2(0, 32), Alignment = HorizontalAlignment.Left };
-        rows.AddChild(button);
-        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 380), Visible = false };
-        scroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
-        var into = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        into.AddThemeConstantOverride("separation", 6);
-        scroll.AddChild(into);
-        rows.AddChild(scroll);
-        foreach (var (kind, label, blurb) in list) Entry(into, 0, kind, label, blurb, vehicle: true);
-        button.Pressed += () =>
-        {
-            bool open = !scroll.Visible;
-            // one list at a time, in the mounts' place, or the panel outgrows a 648 px screen
-            foreach (var (b, l) in _folds) l.Visible = false;
-            scroll.Visible = open;
-            for (int i = 0; i < _shortcuts; i++) _entries[i].Button.GetParent<Control>().Visible = !open;
-            foreach (var (b, l) in _folds) b.Text = b == button ? Title(open) : b.Text.Replace("â–¾", "â–¸");
-            _lockNote.Visible = !Permissions.CanSpawnVehicles;
-            if (open) PlayerInput.FocusFirst(scroll);
-        };
-        _folds.Add((button, scroll));
-    }
-
-    /// <summary>
-    /// The car preset chooser, data-driven from <see cref="CarSetups.All"/>: the one piece of UI
-    /// for #40, meant to be replaced by the garage (#56), which calls
-    /// <see cref="FootPlayer.SetCarSetup"/> the same way.
-    /// </summary>
-    private void SetupRow(Container rows)
-    {
-        var row = new HBoxContainer();
-        row.AddChild(new Label { Text = "Car preset" });
-        _setup = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        foreach (var s in CarSetups.All) _setup.AddItem(s.Name, s.Id);
-        row.AddChild(_setup);
-        rows.AddChild(row);
-        var blurb = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Text = CarSetups.All[0].Blurb };
-        blurb.AddThemeFontSizeOverride("font_size", 12);
-        blurb.AddThemeColorOverride("font_color", new Color(0.55f, 0.59f, 0.65f));
-        rows.AddChild(blurb);
-        _setup.ItemSelected += i =>
-        {
-            var setup = CarSetups.For(_setup.GetItemId((int)i));
-            blurb.Text = setup.Blurb;
-            // in a car: on it now, if it is standing still
-            if (ActivePlayer?.Invoke() is { Vehicle: Car } player)
-                _status.Text = player.SetCarSetup(setup.Id) ? $"{setup.Name} fitted." : "Stop the car first.";
-        };
-    }
-
-    /// <summary>Picker rows for trailers carry this plus the trailer's index as their kind; never a real mount.</summary>
-    private const int TrailerRow = 1000;
-    private OptionButton _load = null!;
-    private static readonly (string Name, float Load)[] Loads = { ("Empty", 0f), ("Half", 0.5f), ("Full", 1f) };
-
-    /// <summary>How full the next truck, bus or trailer comes: cargo, or passengers.</summary>
-    private void LoadRow(Container rows)
-    {
-        var row = new HBoxContainer();
-        row.AddChild(new Label { Text = "Load (trucks, buses, trailers)" });
-        _load = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        foreach (var (name, _) in Loads) _load.AddItem(name);
-        _load.Select(1);
-        row.AddChild(_load);
-        rows.AddChild(row);
-    }
-
-    private void Entry(Container into, int number, RideKind kind, string label, string blurb, bool vehicle)
-    {
-        var box = new VBoxContainer();
-        box.AddThemeConstantOverride("separation", 0);
-
-        var button = new Button { Text = number > 0 ? $"{number}.  {label}" : label, CustomMinimumSize = new Vector2(0, 32) };
-        button.Alignment = HorizontalAlignment.Left;
-        button.Pressed += () => Choose(kind);
-        box.AddChild(button);
-
-        var line = new Label { Text = InputHints.Format(blurb), AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        line.AddThemeFontSizeOverride("font_size", 12);
-        line.AddThemeColorOverride("font_color", new Color(0.55f, 0.59f, 0.65f));
-        box.AddChild(line);
-        _blurbs.Add((line, blurb));
-
-        into.AddChild(box);
-        _entries.Add((kind, button, vehicle));
-    }
+    // ------------------------------------------------------------------------------------
+    // choosing
+    // ------------------------------------------------------------------------------------
 
     private void Choose(RideKind kind)
     {
         var player = ActivePlayer?.Invoke();
         if (player == null)
         {
-            _status.Text = InputHints.Format("Nothing to mount â€” press {toggle_mode} to drop out of the fly camera first.");
+            _status.Text = InputHints.Format("Nothing to mount — press {toggle_mode} to drop out of the fly camera first.");
             return;
         }
 
+        bool vehicle = _tabs.Any(t => t.Cards.Any(c => c.Kind == kind && c.Vehicle));
         // the server refuses to park one anyway; saying so here beats a vehicle that vanishes
-        if (_entries.Any(e => e.Kind == kind && e.Vehicle) && !Permissions.CanSpawnVehicles)
+        if (vehicle && !Permissions.CanSpawnVehicles)
         {
             _status.Text = "Only an admin can spawn vehicles on this server.";
             return;
@@ -260,6 +547,11 @@ public partial class RideUi : CanvasLayer
                 : "Get off first: a trailer is left 14 m ahead of you.";
             return;
         }
+        if (kind == player.Ride)
+        {
+            _status.Text = "You are already on it.";
+            return;
+        }
         player.NextLoad = load;
         if (player.SetRide(kind))
         {
@@ -272,7 +564,7 @@ public partial class RideUi : CanvasLayer
         _status.Text = player.IsSliding
             ? "Not mid-slide."
             : player.IsOnFloor()
-                ? "Too fast â€” slow down first."
+                ? "Too fast — slow down first."
                 : "Not in the air.";
     }
 
@@ -284,25 +576,62 @@ public partial class RideUi : CanvasLayer
 
     public void Open()
     {
+        if (Permissions.RidesLocked) return;   // in a Battle Royale match you ride what you find
         // marks what you are already on, so the panel answers "what am I riding" too, and greys
         // the vehicles for a non-admin on a server
         Relabel();
         // the chooser shows what is on the car being driven
         if (ActivePlayer?.Invoke() is { Vehicle: Car } driver) _setup.Select(_setup.GetItemIndex(driver.CarSetupId));
 
-        _status.Text = "";
+        Fit();
         _panel.Visible = true;
+        _stage.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         Input.MouseMode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
-        // a controller player drives the list with the D-pad and A from here
-        PlayerInput.FocusFirst(_panel);
+        // open on the tab of what you are riding; a controller player drives the cards with the D-pad and A from there
+        var current = ActivePlayer?.Invoke()?.Ride ?? RideKind.OnFoot;
+        int tab = _tabs.FindIndex(t => t.Cards.Any(c => c.Kind == current));
+        SelectTab(tab >= 0 ? tab : _tab);
+        ApplyShotArgs();
+    }
+
+    /// <summary>"--ridemenu &lt;tab&gt; &lt;card&gt;" (0-based): opens on that tab with that card pointed at, for screenshots.</summary>
+    private void ApplyShotArgs()
+    {
+        var args = OS.GetCmdlineUserArgs();
+        int at = Array.IndexOf(args, "--ridemenu");
+        if (at < 0 || at + 1 >= args.Length || !int.TryParse(args[at + 1], out int tab)) return;
+        SelectTab(tab);
+        if (at + 2 < args.Length && int.TryParse(args[at + 2], out int card) && card < _tabs[_tab].Cards.Count)
+            Point(_tabs[_tab].Cards[card]);
     }
 
     public void Close()
     {
         _panel.Visible = false;
+        _stage.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+        _stage.Juice = 0;
+        _pointed = null;
+        _dragging = false;
         UiFocus.Set(this, false);
         Core.MouseCapture.Capture();
+    }
+
+    // _Input, ahead of the inventory's Tab: while this is open, Tab switches tabs here
+    public override void _Input(InputEvent e)
+    {
+        if (!IsOpen || !e.IsPressed() || e.IsEcho()) return;
+        int step = e switch
+        {
+            InputEventKey { PhysicalKeycode: Key.Tab, ShiftPressed: true } => -1,
+            InputEventKey { PhysicalKeycode: Key.Tab } => 1,
+            InputEventJoypadButton { ButtonIndex: JoyButton.LeftShoulder } => -1,
+            InputEventJoypadButton { ButtonIndex: JoyButton.RightShoulder } => 1,
+            _ => 0,
+        };
+        if (step == 0) return;
+        SelectTab(_tab + step);
+        GetViewport().SetInputAsHandled();
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -322,17 +651,11 @@ public partial class RideUi : CanvasLayer
         if (@event is not InputEventKey key) return;
 
         // Key.Key1 is the physical "1", so the shortcuts land in the same place on an AZERTY
-        // keyboard as on a QWERTY one â€” the same reason the movement keys are read physically.
+        // keyboard as on a QWERTY one — the same reason the movement keys are read physically.
         int index = (int)key.PhysicalKeycode - (int)Key.Key1;
-        if (index >= _shortcuts && index < _shortcuts + _folds.Count)
-        {
-            _folds[index - _shortcuts].Button.EmitSignal(BaseButton.SignalName.Pressed);
-            GetViewport().SetInputAsHandled();
-            return;
-        }
-        if (index < 0 || index >= _shortcuts) return;
-
-        Choose(_entries[index].Kind);
+        var cards = _tabs[_tab].Cards;
+        if (index < 0 || index >= Math.Min(9, cards.Count)) return;
+        Choose(cards[index].Kind);
         GetViewport().SetInputAsHandled();
     }
 }

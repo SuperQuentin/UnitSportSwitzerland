@@ -1,10 +1,12 @@
 using Godot;
 using UnitSport.Items;
+using UnitSport.Net;
 
 namespace UnitSport.Core;
 
 /// <summary>
-/// <c>--chatcheck</c>: tab completion, <c>/spawn</c> and <c>/time</c> parsing, offline and without a world.
+/// <c>--chatcheck</c>: tab completion, <c>/spawn</c> and <c>/time</c> parsing, and Up/Down through
+/// what was sent, offline and without a world.
 /// Prints each failure and a RESULT line; exits non-zero if any case is wrong.
 /// </summary>
 public static class ChatCheck
@@ -13,7 +15,7 @@ public static class ChatCheck
 
     private static int _failures;
 
-    public static int Run()
+    public static int Run(Node host)
     {
         var completer = new ChatCompleter
         {
@@ -96,8 +98,102 @@ public static class ChatCheck
         inv.Add(ItemId.Bread, 7);
         Expect(inv.Room(ItemId.Bread) == before - 7, "spawned items take room");
 
+        // the admin item and money commands (#262)
+        ExpectTexts(completer, "/cat", ["/catalogue "], "catalogue command offline");
+        ExpectTexts(completer, "/giv", [], "/give needs a server");
+        ExpectTexts(completer, "/bank s", ["/bank set"], "bank verbs");
+        Offline(host);
+
+        History(host);
+
         GD.Print($"[chatcheck] RESULT {(_failures == 0 ? "PASS" : $"FAIL ({_failures})")}");
         return _failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// A real <see cref="ChatUi"/> fed key events through the viewport, the way the focused box
+    /// gets them: the LineEdit must not keep Up and Down for itself.
+    /// </summary>
+    private static void History(Node host)
+    {
+        var chat = ChatManager.CreateClient();
+        var ui = ChatUi.Create(chat, new ChatCompleter());
+        host.AddChild(chat);
+        host.AddChild(ui);
+        var input = (LineEdit)ui.FindChildren("*", "LineEdit", true, false)[0];
+
+        void Press(Key key)
+        {
+            host.GetViewport().PushInput(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = true });
+            host.GetViewport().PushInput(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
+        }
+        void Send(string text)
+        {
+            ui.OpenInput(text);
+            Press(Key.Enter);
+        }
+        void Step(Key key, string want, string what)
+        {
+            Press(key);
+            Expect(input.Text == want && input.CaretColumn == want.Length,
+                $"history {what}: wanted \"{want}\", got \"{input.Text}\" (caret {input.CaretColumn})");
+        }
+
+        Send("one");
+        Expect(!ui.IsTyping, "Enter sends and closes");
+        Send("two");
+        Send("two");   // a repeat is one step
+        Send("three");
+
+        ui.OpenInput("dra");
+        Step(Key.Up, "three", "first Up: newest");
+        Step(Key.Up, "two", "a repeat is one step");
+        Step(Key.Up, "one", "oldest");
+        Step(Key.Up, "one", "stops at the oldest");
+        Step(Key.Down, "two", "Down");
+        Step(Key.Down, "three", "Down to the newest");
+        Step(Key.Down, "dra", "past the newest: the draft is back");
+        Step(Key.Down, "dra", "stays on the draft");
+        ui.CloseInput(recaptureMouse: false);
+
+        ui.QueueFree();
+        chat.QueueFree();
+    }
+
+    /// <summary>
+    /// The item and money commands typed with no server: they act on this machine's inventory,
+    /// and <c>/catalogue</c> asks for the panel (#262).
+    /// </summary>
+    private static void Offline(Node host)
+    {
+        var chat = ChatManager.CreateClient();
+        var inv = Inventory.Scratch();
+        chat.Inventory = inv;
+        host.AddChild(chat);
+        string last = "";
+        chat.LineReceived += (line, _) => last = line;
+        int opened = 0;
+        chat.CatalogueRequested += () => opened++;
+
+        chat.Send("/spawn bread 3");
+        Expect(inv.Contains(ItemId.Bread), $"/spawn puts it in the pack: {last}");
+        int cash = inv.Cash;
+        chat.Send("/money 2.5k");
+        Expect(inv.Cash == cash + 2500, $"/money adds cash: {last}");
+        chat.Send("/money -1000000");
+        Expect(inv.Cash == 0, $"/money takes no more than there is: {last}");
+        chat.Send("/money lots");
+        Expect(last.StartsWith("Usage"), $"/money with no amount: {last}");
+        inv.Add(ItemId.Francs, 40);
+        chat.Send("/clear");
+        Expect(!inv.Contains(ItemId.Bread) && inv.Cash == 40, $"/clear empties the pack, cash kept: {last}");
+        chat.Send("/give Bob bread");
+        Expect(last.Contains("/spawn"), $"/give offline points at /spawn: {last}");
+        chat.Send("/catalogue");
+        chat.Send("/ITEMS");
+        Expect(opened == 2, $"/catalogue and /items open the panel offline ({opened})");
+
+        chat.QueueFree();
     }
 
     private static bool TimeParses(string[] args, World.TimeOp op, double hour) =>

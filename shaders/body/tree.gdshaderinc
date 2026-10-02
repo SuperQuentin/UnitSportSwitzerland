@@ -1,12 +1,9 @@
 // Tree body, shared by ps1_tree (the 3D trees, near) and ps1_treefar (billboards, far:
 // TREE_BILLBOARD). Each wrapper is shader_type, render_mode, its defines, then this include.
 
-// Time of day, set once per frame for the whole world by World/DayNight: the sun's direction,
-// the colour of the light, the sky the fog fades into (linear), and 0 day .. 1 night.
-global uniform vec3 world_sun_dir;
-global uniform vec3 world_tint;
-global uniform vec3 world_sky;
-global uniform float world_night;
+#include "res://shaders/common/world.gdshaderinc"
+#include "res://shaders/common/retro.gdshaderinc"
+#include "res://shaders/common/sightline.gdshaderinc"
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
@@ -14,8 +11,6 @@ global uniform float world_night;
 // Trees are MultiMesh instances sharing one cone; colour comes from the per-instance
 // colour, with the same snap/dither/fog treatment as everything else.
 
-uniform vec2 snap_resolution = vec2(640.0, 480.0);
-uniform float color_levels = 16.0;
 uniform float fog_start = 3500.0;
 uniform float fog_end = 8000.0;
 uniform vec3 fog_color : source_color = vec3(0.72, 0.78, 0.86);
@@ -46,43 +41,6 @@ float near_keep(vec3 v) {
     return 1.0 - near_fade * close * ahead;
 }
 
-// --- sightline cut ----------------------------------------------------------------------
-// Dissolves anything standing between a camera and its subject. The fade is a Bayer-dither
-// discard, not alpha blending: these shaders are unshaded and opaque, the trees are one
-// MultiMesh sharing a single material, and a dithered dissolve is already this renderer's
-// visual language. cut_radius = 0 switches the whole thing off.
-uniform vec3 cut_from = vec3(0.0);
-uniform vec3 cut_to = vec3(0.0);
-uniform float cut_radius = 0.0;
-uniform float cut_softness = 1.6;
-
-// How much of this fragment survives: 1 fully drawn, 0 fully dissolved.
-float sightline_keep(vec3 p) {
-    if (cut_radius <= 0.0) {
-        return 1.0;
-    }
-    vec3 axis = cut_to - cut_from;
-    float len2 = dot(axis, axis);
-    if (len2 < 1.0) {
-        return 1.0;
-    }
-
-    // where along the camera -> subject segment this fragment sits
-    float t = dot(p - cut_from, axis) / len2;
-    if (t <= 0.0 || t >= 1.0) {
-        return 1.0;
-    }
-
-    float radial = length(p - (cut_from + axis * t));
-
-    // Taper to nothing at both ends, so the runner's own feet and the ground immediately under
-    // the lens are never eaten - only what is genuinely in between.
-    float ends = smoothstep(0.0, 0.12, t) * smoothstep(0.0, 0.12, 1.0 - t);
-    float core = 1.0 - smoothstep(cut_radius, cut_radius + cut_softness, radial);
-
-    return 1.0 - core * ends;
-}
-
 // --- tree LOD (Styles/StyleKit) -----------------------------------------------------------
 // The 3D tree inside tree_near of the camera, a billboard beyond, with a dithered crossfade
 // between. Measured from world_cam_pos (the player's camera, Styles/CameraGlobal), not
@@ -103,16 +61,6 @@ varying vec3 bb_origin;    // the instance's base, world space
 varying vec3 bb_scale;     // (radius, height, radius): the instance basis is diagonal
 varying float bb_kind;     // 0 conifer, 1 broadleaf
 #endif
-
-vec4 snap(vec4 clip) {
-    if (clip.w > 0.0) {
-        vec2 half_res = snap_resolution * 0.5;
-        vec2 ndc = clip.xy / clip.w;
-        ndc = floor(ndc * half_res + 0.5) / half_res;
-        clip.xy = ndc * clip.w;
-    }
-    return clip;
-}
 
 void vertex() {
 #ifdef TREE_BILLBOARD
@@ -143,7 +91,7 @@ void vertex() {
     NORMAL = -fwd;
     world_pos = wp;
     view_pos = (VIEW_MATRIX * vec4(wp, 1.0)).xyz;
-    POSITION = snap(PROJECTION_MATRIX * VIEW_MATRIX * vec4(wp, 1.0));
+    POSITION = retro_snap(PROJECTION_MATRIX * VIEW_MATRIX * vec4(wp, 1.0));
 #else
     lod_keep = 1.0;
     if (tree_lod) {
@@ -154,7 +102,7 @@ void vertex() {
     }
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     view_pos = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    POSITION = snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
+    POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
 #endif
 }
 
@@ -238,21 +186,14 @@ void fragment() {
         discard;
     }
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
-    float light = floor(ndl * 3.0) / 3.0 * 0.45 + 0.6;
+    float light = retro_steps(ndl, 3.0) * 0.45 + 0.6;
     // snow settles on the upper faces of a crown (a running occasion's world_snow)
     vec3 col = occasion_snow_amount(COLOR.rgb, smoothstep(0.25, 0.75, abs(n.y)) * 0.8) * light;
-
-    const float bayer[16] = float[16](
-        0.0, 8.0, 2.0, 10.0,
-        12.0, 4.0, 14.0, 6.0,
-        3.0, 11.0, 1.0, 9.0,
-        15.0, 7.0, 13.0, 5.0);
 
     // dissolve anything between the camera and its subject, or right in front of the lens, and
     // crossfade 3D and billboard, using the same 4x4 Bayer pattern the colour quantiser below
     // uses, so the fade reads as part of the renderer
-    int ci = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
-    float threshold = bayer[ci] / 16.0;
+    float threshold = bayer4(FRAGCOORD.xy);
 #ifdef TREE_BILLBOARD
     // the billboard takes exactly the pixels the 3D tree gives up (it keeps those where
     // 1 - lod_keep >= threshold), or mid-fade a pixel would show neither and the ground between
@@ -270,9 +211,7 @@ void fragment() {
     col *= world_tint + door_light(wpos, n);
     // valley mist of a running occasion; a no-op on an ordinary day
     col = occasion_mist(col, (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz, length(VERTEX));
-    int bi = int(mod(FRAGCOORD.x, 4.0)) + 4 * int(mod(FRAGCOORD.y, 4.0));
-    float dith = (bayer[bi] / 16.0 - 0.5) / color_levels;
-    col = floor((col + dith) * color_levels + 0.5) / color_levels;
+    col = retro_posterize(col, FRAGCOORD.xy);
 
     float fog = smoothstep(fog_start, fog_end, length(VERTEX));
     ALBEDO = mix(col, world_sky, fog);

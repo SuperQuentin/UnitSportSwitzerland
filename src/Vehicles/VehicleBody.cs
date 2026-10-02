@@ -55,6 +55,9 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
 
+    /// <summary>The drawn machine (null on a headless peer), for outlining it (#261).</summary>
+    public Node3D? Visual => _visual;
+
     private VehicleState _initial;
     private RideMotion _motion;
     private FlightMotion _flight;
@@ -273,7 +276,8 @@ public partial class VehicleBody : CharacterBody3D
         if (!inside && Terrain != null && !Terrain.HasCollisionAt(GlobalPosition)) return;
 
         // the player's safety net, for vehicles: never under the terrain surface
-        if (!inside && Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f)
+        if (!inside && Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f
+            && !Terrain.InTunnel(GlobalPosition) && !Terrain.FloorBelow(this, GlobalPosition, GetRid()))
         {
             GlobalPosition = GlobalPosition with { Y = ground + 0.2f };
             Velocity = Velocity with { Y = 0f };
@@ -426,12 +430,17 @@ public partial class VehicleBody : CharacterBody3D
             rig.RoofOpen = _initial.RoofOpen;
         }
         StandOnGround(dt);
-        if (_visual is HeavyRig heavy && Ride is Truck truck)
+        // standing still, a parked truck's rigs were dressed with the same values every frame, the
+        // sections found by name each time (#221): once at rest is enough, again if it moves or burns
+        bool restDressed = _dressedAtRest == Wrecked && Velocity == Vector3.Zero;
+        if (_visual is HeavyRig heavy && Ride is Truck truck && !restDressed)
         {
             // parked as the driver left it: lamps, doors, the display; every section's wheels roll
             truck.UnpackFlags(_initial.Flags);
             _heavySpin += Velocity.Length() / truck.WheelRadius * dt;
-            foreach (var section in heavy.FindChildren("Section*", "", false, false).OfType<HeavyRig>().Prepend(heavy))
+            _dressedAtRest = Velocity == Vector3.Zero ? Wrecked : null;
+            _heavySections ??= heavy.FindChildren("Section*", "", false, false).OfType<HeavyRig>().Prepend(heavy).ToArray();
+            foreach (var section in _heavySections)
             {
                 truck.Dress(section, 0, false);
                 section.BrakeLights = false;
@@ -454,6 +463,12 @@ public partial class VehicleBody : CharacterBody3D
 
     private float _standIn;
     private bool _stoodAsleep;
+    /// <summary>Wrecked or not when the parked rigs were last dressed standing still; null while it moves.</summary>
+    private bool? _dressedAtRest;
+    private HeavyRig[]? _heavySections;
+    /// <summary>The drawn sections by index (0 the visual itself), found by name once.</summary>
+    private Node3D?[]? _standSections;
+    private PhysicsRayQueryParameters3D? _groundQuery;
 
     /// <summary>
     /// A truck, a bus or a trailer stands on the ground as it did when driven: every section pitched
@@ -470,12 +485,16 @@ public partial class VehicleBody : CharacterBody3D
         if (bodies == null || local == null || _visual == null || Wrecked) return;
         bool rolling = Velocity.LengthSquared() > 0.01f;
         if (!rolling && (_standIn -= dt) > 0f) return;
-        _standIn = 0.25f;
+        // at rest and stood: the ground under it is looked at again every 2 s, not 4 times a second
+        // (a parked truck cast its rays for ever, #221); often enough for a road that streams in late
+        _standIn = _stoodAsleep ? 2f : 0.25f;
 
         var poses = HeavyGround.Stand(GlobalTransform, bodies, local, Ground);
+        if (_standSections?.Length != poses.Length)
+            _standSections = Enumerable.Range(0, poses.Length).Select(k => k == 0 ? _visual : _visual.GetNodeOrNull<Node3D>($"Section{k}")).ToArray();
         _visual.GlobalTransform = poses[0];
         for (int k = 1; k < poses.Length; k++)
-            if (_visual.GetNodeOrNull<Node3D>($"Section{k}") is { } rig) rig.GlobalTransform = poses[k];
+            if (_standSections[k] is { } rig) rig.GlobalTransform = poses[k];
 
         // the boxes, at rest only (and once more when it settles): sections from their own pose
         bool settled = _asleep || !IsMultiplayerAuthority();
@@ -500,8 +519,11 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>The ground's height under a point: whatever is solid there (a road, a deck) but this vehicle, else the terrain.</summary>
     private float Ground(Vector3 p)
     {
-        var query = PhysicsRayQueryParameters3D.Create(p + Vector3.Up * 3f, p + Vector3.Down * 6f,
-            CollisionMask & ~World.TreeColliders.Layer, new Godot.Collections.Array<Rid> { GetRid() });
+        // one query for all its rays (a new one and a new exclude array per ray before, #221)
+        var query = _groundQuery ??= new PhysicsRayQueryParameters3D { Exclude = new Godot.Collections.Array<Rid> { GetRid() } };
+        query.From = p + Vector3.Up * 3f;
+        query.To = p + Vector3.Down * 6f;
+        query.CollisionMask = CollisionMask & ~World.TreeColliders.Layer;
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         if (hit.Count > 0) return hit["position"].AsVector3().Y;
         return Terrain != null && Terrain.TryGetHeight(p, out float g) ? g : p.Y;

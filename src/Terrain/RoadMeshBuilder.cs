@@ -35,6 +35,8 @@ public static class RoadMeshBuilder
             AppendJunction(junction, vertices, colors, uvs, uv2s, indices);
 
         var joins = FindTypeJoins(tile);
+        // the network stage's tiles carry their markings as paint (RoadPaintBuilder), not stripes
+        bool painted = (tile.Flags & RoadTileFlags.Network) != 0;
 
         for (int i = 0; i < tile.Segments.Count; i++)
         {
@@ -54,14 +56,23 @@ public static class RoadMeshBuilder
                 continue;
             }
 
-            AppendSegment(seg, joins[i], vertices, colors, uvs, uv2s, indices);
-            if (seg.Class == RoadClass.Railway)
+            // a rail embedded in a carriageway (#124) is the road's RailGroove paint: no ballast, no raised rails
+            if (seg.Class == RoadClass.Railway && seg.Attributes.Has(RoadAttrFlags.Embedded)) continue;
+            AppendSegment(seg, joins[i], painted, vertices, colors, uvs, uv2s, indices);
+            // a town tram's track lies in paving (#119): its grooves are paint, no raised rails
+            if (seg.Class == RoadClass.Railway && !seg.Attributes.Has(RoadAttrFlags.PavedBed))
                 AppendRails(seg, vertices, colors, uvs, uv2s, indices);
             if ((seg.Flags & RoadFlags.Tunnel) != 0)
-                AppendTunnelBore(seg, tile.Id, grid, vertices, colors, uvs, uv2s, indices);
+                AppendTunnelBore(seg, tile, vertices, colors, uvs, uv2s, indices);
             if ((seg.Flags & RoadFlags.Bridge) != 0)
                 AppendBridgeStructure(seg, tile.Id, grid, vertices, colors, uvs, uv2s, indices);
         }
+        RoadWallBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // retaining walls (#125)
+        RailingBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);    // guardrails and fences (#126)
+        IslandBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);     // roundabout islands (#122)
+        PavementBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // turn lane widenings (#123)
+        RoadSignBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // junction signs (#121)
+        RoadStreetBuilder.Append(tile, vertices, colors, uvs, uv2s, indices); // sidewalks (#119)
 
         return vertices.Count == 0
             ? null
@@ -89,21 +100,28 @@ public static class RoadMeshBuilder
 
         foreach (var seg in tile.Segments)
         {
-            if ((seg.Flags & RoadFlags.Bridge) == 0) continue;
+            // and every tunnel's floor (#119): the ground over a bore is its roof, not its floor
+            bool tunnel = RoadTunnels.IsBore(seg);
+            if ((seg.Flags & RoadFlags.Bridge) == 0 && !tunnel) continue;
             int n = seg.PointCount;
             if (n < 2) continue;
 
-            float half = seg.Width * 0.5f;
+            // a tunnel's floor reaches past the bore's sides over the hole its mouth punched (0.3 m)
+            float half = tunnel ? RoadTunnels.HalfWidth(seg) + RoadTunnels.FloorMargin : seg.Width * 0.5f;
+            // a tunnel's floor is its road, run out through the mouth's hole like the bore
+            var line = tunnel ? ExtendedTunnelPath(seg) : Enumerable.Range(0, n).Select(i => Point(seg, i)).ToList();
+            n = line.Count;
+            var lift = tunnel ? Vector3.Zero : new Vector3(0, BridgeLift, 0);
             var left = new Vector3[n];
             var right = new Vector3[n];
             for (int i = 0; i < n; i++)
             {
                 // same deck line AppendBridgeStructure draws from, so the collision sits exactly
                 // under the visible tread rather than needing its own separate height source
-                var p = Point(seg, i) + new Vector3(0, BridgeLift, 0);
-                Vector3 forward = i == 0 ? Point(seg, 1) - Point(seg, 0)
-                    : i == n - 1 ? Point(seg, n - 1) - Point(seg, n - 2)
-                    : Point(seg, i + 1) - Point(seg, i - 1);
+                var p = line[i] + lift;
+                Vector3 forward = i == 0 ? line[1] - line[0]
+                    : i == n - 1 ? line[n - 1] - line[n - 2]
+                    : line[i + 1] - line[i - 1];
                 forward.Y = 0;
                 if (forward.LengthSquared() < 1e-8f) forward = Vector3.Forward;
                 forward = forward.Normalized();
@@ -117,6 +135,16 @@ public static class RoadMeshBuilder
                 faces.Add(left[i]); faces.Add(right[i]); faces.Add(left[i + 1]);
                 faces.Add(right[i]); faces.Add(right[i + 1]); faces.Add(left[i + 1]);
             }
+            if (!tunnel) continue;
+            // the bore's walls, floor to crown: a body drifting off the road meets the tunnel's
+            // side as it would the drawn arch, rather than driving out of it into the hillside
+            var up = new Vector3(0, RoadTunnels.ClearHeight(seg, tile), 0);
+            for (int i = 0; i < n - 1; i++)
+                foreach (var (a, b) in new[] { (left[i], left[i + 1]), (right[i], right[i + 1]) })
+                {
+                    faces.Add(a); faces.Add(b); faces.Add(b + up);
+                    faces.Add(a); faces.Add(b + up); faces.Add(a + up);
+                }
         }
 
         return faces.ToArray();
@@ -502,15 +530,21 @@ public static class RoadMeshBuilder
             ends[key] = (segment, atStart, 1);
     }
 
-    private static void AppendSegment(RoadSegment seg, in RoadJoin join, List<Vector3> vertices,
+    private static void AppendSegment(RoadSegment seg, in RoadJoin join, bool painted, List<Vector3> vertices,
         List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices)
     {
         int n = seg.PointCount;
         if (n < 2) return;
 
-        var pts = new Vector3[n];
+        // Each end runs on EndTuck past its point, EndTuckDrop lower: under the junction cap or the
+        // next piece it stays hidden, and it closes the hairline crack between the cap's edge and
+        // the ribbon's end (different vertices, the same line) through which the ground showed.
+        var pts = new Vector3[n + 2];
         for (int i = 0; i < n; i++)
-            pts[i] = new Vector3(seg.Points[i * 3], seg.Points[i * 3 + 1], seg.Points[i * 3 + 2]);
+            pts[i + 1] = new Vector3(seg.Points[i * 3], seg.Points[i * 3 + 1], seg.Points[i * 3 + 2]);
+        pts[0] = Tuck(pts[1], pts[2]);
+        pts[n + 1] = Tuck(pts[n], pts[n - 1]);
+        n += 2;
 
         float lift = (seg.Flags & RoadFlags.Bridge) != 0 ? BridgeLift : 0f;
         float half = seg.Width * 0.5f;
@@ -531,7 +565,7 @@ public static class RoadMeshBuilder
         // Per-vertex offset direction = bisector of adjacent segment directions, so the
         // ribbon stays continuous through corners instead of tearing at each joint.
         int baseIndex = vertices.Count;
-        float style = (float)MarkingStyleFor(seg);
+        float style = (float)MarkingStyleFor(seg, painted);
 
         for (int i = 0; i < n; i++)
         {
@@ -582,6 +616,17 @@ public static class RoadMeshBuilder
         }
     }
 
+    private const float EndTuck = 0.15f, EndTuckDrop = 0.01f;
+
+    /// <summary>The point EndTuck on past <paramref name="end"/>, away from <paramref name="inner"/>, EndTuckDrop lower.</summary>
+    private static Vector3 Tuck(Vector3 end, Vector3 inner)
+    {
+        var d = end - inner;
+        d.Y = 0;
+        if (d.LengthSquared() < 1e-8f) return end + Vector3.Down * EndTuckDrop;
+        return end + d.Normalized() * EndTuck + Vector3.Down * EndTuckDrop;
+    }
+
     /// <summary>Smoothstep: zero slope at both ends, so the taper leaves no crease.</summary>
     private static float Smooth(float t)
     {
@@ -605,11 +650,14 @@ public static class RoadMeshBuilder
         Motorway = 3,      // edge lines plus a dashed lane divider
         RailBallast = 4,   // sleeper stripes
         RailSteel = 5,     // the rails themselves
+        // 6: v3 paint, a separate surface (RoadPaintBuilder.Style)
     }
 
-    private static MarkingStyle MarkingStyleFor(RoadSegment seg)
+    private static MarkingStyle MarkingStyleFor(RoadSegment seg, bool painted)
     {
-        if (seg.Class == RoadClass.Railway) return MarkingStyle.RailBallast;
+        if (seg.Class == RoadClass.Railway)
+            return seg.Attributes.Has(RoadAttrFlags.PavedBed) ? MarkingStyle.None : MarkingStyle.RailBallast;
+        if (painted) return MarkingStyle.None;
         // unpaved surfaces and anything narrower than a lane are never marked
         if (seg.Surface != RoadSurface.Paved) return MarkingStyle.None;
         if (seg.Class >= RoadClass.Track) return MarkingStyle.None;
@@ -842,7 +890,10 @@ public static class RoadMeshBuilder
     /// <c>TunnelCarver</c> (tools/TerrainPreprocessor) extends its own carve, so the hole
     /// breaks the surface at exactly the same point the bore does.
     /// </summary>
-    private const float PortalExtension = 5f;
+    private const float PortalExtension = 1.0f;
+
+    /// <summary>The mouth's direction is taken over this much of the centreline, not its first chord (5 cm).</summary>
+    private const float PortalAim = 3f;
 
     /// <summary>
     /// A tunnel segment's centreline, extended <see cref="PortalExtension"/> past each end
@@ -860,8 +911,8 @@ public static class RoadMeshBuilder
             return path;
         }
 
-        var firstDir = (Point(seg, 1) - Point(seg, 0)) with { Y = 0 };
-        var lastDir = (Point(seg, n - 1) - Point(seg, n - 2)) with { Y = 0 };
+        var firstDir = (Point(seg, Aim(seg, fromStart: true)) - Point(seg, 0)) with { Y = 0 };
+        var lastDir = (Point(seg, n - 1) - Point(seg, Aim(seg, fromStart: false))) with { Y = 0 };
         if (firstDir.LengthSquared() > 1e-8f)
             path.Add(Point(seg, 0) - firstDir.Normalized() * PortalExtension);
         for (int i = 0; i < n; i++) path.Add(Point(seg, i));
@@ -870,23 +921,27 @@ public static class RoadMeshBuilder
         return path;
     }
 
-    /// <summary>
-    /// A tunnel segment's half-width and clear height, the latter fit to the cover that
-    /// actually exists: the nominal clear height is a guess by road class, but an underpass
-    /// beneath a rail embankment may have only two or three metres over it, and a bore
-    /// taller than its own cover pokes out through the ground above — which is exactly what
-    /// a tunnel must never do. Shared by the bore extrusion and
-    /// <see cref="ComputeTunnelPortals"/> so both use the identical dimensions.
-    /// </summary>
-    private static (float HalfWidth, float Height) TunnelDims(RoadSegment seg, TileId tile, ChunkGrid? grid)
+    /// <summary>The first point at least <see cref="PortalAim"/> (plan) from the given end, or the far end.</summary>
+    private static int Aim(RoadSegment seg, bool fromStart)
     {
-        float halfWidth = RoadFormat.TunnelWidth(seg.Class) * 0.5f;
-        float height = RoadFormat.TunnelHeight(seg.Class);
-        float cover = MinCover(seg, tile, grid);
-        if (cover > 0f)
-            height = Mathf.Clamp(cover - 0.4f, 2.4f, height);
-        return (halfWidth, height);
+        int n = seg.PointCount;
+        var end = Point(seg, fromStart ? 0 : n - 1);
+        for (int k = 1; k < n; k++)
+        {
+            int i = fromStart ? k : n - 1 - k;
+            var d = Point(seg, i) - end;
+            if (d.X * d.X + d.Z * d.Z >= PortalAim * PortalAim) return i;
+        }
+        return fromStart ? n - 1 : 0;
     }
+
+    /// <summary>
+    /// A tunnel segment's half-width and clear height (<see cref="RoadTunnels.ClearHeight"/>: the
+    /// class's, lowered only under a road crossing over it). Shared by the bore extrusion,
+    /// <see cref="ComputeTunnelPortals"/> and the road blend, which keeps ground over the crown.
+    /// </summary>
+    private static (float HalfWidth, float Height) TunnelDims(RoadSegment seg, RoadTile tile) =>
+        (RoadTunnels.HalfWidth(seg), RoadTunnels.ClearHeight(seg, tile));
 
     /// <summary>
     /// Every tunnel mouth in a tile, for <c>TerrainMeshBuilder</c>'s portal wall — computed
@@ -897,15 +952,36 @@ public static class RoadMeshBuilder
     public static List<TunnelPortal> ComputeTunnelPortals(RoadTile tile, ChunkGrid? grid)
     {
         var portals = new List<TunnelPortal>();
+        // A tunnel line is cut into pieces (tile seams, junction trims): only an end that does not
+        // carry on into another piece is a mouth (#119). A face at every piece end stood across
+        // the bore inside the tunnel, its outline sized to the ground above.
+        var ends = new Dictionary<(int, int), int>();
+        foreach (var seg in tile.Segments)
+            if ((seg.Flags & RoadFlags.Tunnel) != 0 && seg.PointCount >= 2)
+                foreach (int i in new[] { 0, seg.PointCount - 1 })
+                {
+                    var key = Key(seg, i);
+                    ends[key] = ends.GetValueOrDefault(key) + 1;
+                }
         foreach (var seg in tile.Segments)
         {
             if ((seg.Flags & RoadFlags.Tunnel) == 0) continue;
             var path = ExtendedTunnelPath(seg);
             if (path.Count < 2) continue;
 
-            var (halfWidth, height) = TunnelDims(seg, tile.Id, grid);
-            portals.Add(new TunnelPortal(path[0], path[1], halfWidth, height));
-            portals.Add(new TunnelPortal(path[^1], path[^2], halfWidth, height));
+            var (halfWidth, height) = TunnelDims(seg, tile);
+            // a mouth: no other piece carries on there, not a tile seam (the neighbour's piece
+            // does), and the bore meets the surface there (not a gap in an underground line)
+            bool Mouth(int i)
+            {
+                var p = Point(seg, i);
+                if (ends.GetValueOrDefault(Key(seg, i)) != 1) return false;
+                if (p.X < 0.05f || p.Z < 0.05f || p.X > 999.95f || p.Z > 999.95f) return false;
+                double ground = grid?.SampleHeight(tile.Id.MinE + p.X, tile.Id.MaxN - p.Z) ?? double.NaN;
+                return RoadTunnels.AtSurface(ground, p.Y, height);
+            }
+            if (Mouth(0)) portals.Add(new TunnelPortal(path[0], path[1], halfWidth, height));
+            if (Mouth(seg.PointCount - 1)) portals.Add(new TunnelPortal(path[^1], path[^2], halfWidth, height));
         }
         return portals;
     }
@@ -919,7 +995,7 @@ public static class RoadMeshBuilder
     /// independent guess. Rendered with cull_disabled, so the faces read correctly from
     /// inside the bore.
     /// </summary>
-    private static void AppendTunnelBore(RoadSegment seg, TileId tile, ChunkGrid? grid,
+    private static void AppendTunnelBore(RoadSegment seg, RoadTile tile,
         List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s,
         List<int> indices)
     {
@@ -927,7 +1003,7 @@ public static class RoadMeshBuilder
         int m = path.Count;
         if (m < 2) return;
 
-        var (halfWidth, height) = TunnelDims(seg, tile, grid);
+        var (halfWidth, height) = TunnelDims(seg, tile);
         int ring = BoreProfile.Length;
         int baseIndex = vertices.Count;
 
@@ -964,25 +1040,27 @@ public static class RoadMeshBuilder
                 indices.Add(a); indices.Add(c); indices.Add(b);
                 indices.Add(b); indices.Add(c); indices.Add(d);
             }
-    }
 
-    /// <summary>
-    /// Smallest gap between the carriageway and the ground above it, over the segment's
-    /// interior. Returns 0 when no terrain data is available.
-    /// </summary>
-    private static float MinCover(RoadSegment seg, TileId tile, ChunkGrid? grid)
-    {
-        if (grid == null) return 0f;
-        float min = float.MaxValue;
-        int n = seg.PointCount;
-        for (int i = 0; i < n; i++)
+        // the floor from wall to wall, just under the road ribbon: the ground is the bore's roof
+        // (#119), so nothing else is under it, and the sky showed beside the road
+        var floorColor = new Color(0.30f, 0.29f, 0.28f).SrgbToLinear();
+        int floorBase = vertices.Count;
+        for (int i = 0; i < m; i++)
         {
-            var p = Point(seg, i);
-            double e = tile.MinE + p.X;
-            double nn = tile.MaxN - p.Z;
-            min = Mathf.Min(min, (float)grid.SampleHeight(e, nn) - p.Y);
+            int a = baseIndex + i * ring;
+            // 10 cm on under each wall, or a hairline of sky shows along its foot
+            var across = (vertices[a + ring - 1] - vertices[a]) with { Y = 0 };
+            across = across.LengthSquared() > 1e-8f ? across.Normalized() * 0.1f : Vector3.Zero;
+            vertices.Add(vertices[a] - across + new Vector3(0, -0.03f, 0));
+            vertices.Add(vertices[a + ring - 1] + across + new Vector3(0, -0.03f, 0));
+            for (int k = 0; k < 2; k++) { colors.Add(floorColor); uvs.Add(Vector2.Zero); uv2s.Add(Vector2.Zero); }
         }
-        return min == float.MaxValue ? 0f : Mathf.Max(min, 0f);
+        for (int i = 0; i < m - 1; i++)
+        {
+            int a = floorBase + i * 2;
+            indices.Add(a); indices.Add(a + 2); indices.Add(a + 1);
+            indices.Add(a + 1); indices.Add(a + 2); indices.Add(a + 3);
+        }
     }
 
     private static Vector3 Point(RoadSegment s, int i) =>
@@ -994,6 +1072,8 @@ public static class RoadMeshBuilder
     /// </summary>
     public static Color ColorFor(RoadSegment seg)
     {
+        if (seg.Class == RoadClass.Railway && seg.Attributes.Has(RoadAttrFlags.PavedBed))
+            return new Color(0.40f, 0.40f, 0.38f);  // a tram track laid in paving (#119)
         if (seg.Class == RoadClass.Railway)
             return (seg.Flags & RoadFlags.Funicular) != 0
                 ? new Color(0.34f, 0.32f, 0.30f)   // concrete funicular bed

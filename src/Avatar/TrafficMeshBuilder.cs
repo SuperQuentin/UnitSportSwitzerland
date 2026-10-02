@@ -22,8 +22,20 @@ public static class TrafficMeshBuilder
         new(0.3f, 0.32f, 0.36f), new(0.62f, 0.1f, 0.1f), new(0.12f, 0.22f, 0.45f), new(0.7f, 0.66f, 0.55f),
     };
 
-    /// <summary>A hatchback, 4.2 m, or a van, 5 m and taller. Origin on the road, +Z forward.</summary>
+    // Built once per look and shared by every car or carriage that wears it: there are 16 car
+    // looks and a handful of carriages, and a new pair of meshes per spawn was garbage (#221).
+    // Nothing draws on or changes a traffic mesh after it is built.
+    private static readonly Dictionary<(Color, bool), (ArrayMesh, ArrayMesh)> Cars = new();
+    private static readonly Dictionary<(Color, Color, float, bool, bool, bool), (ArrayMesh, ArrayMesh)> Carriages = new();
+
+    /// <summary>A hatchback, 4.2 m, or a van, 5 m and taller. Origin on the road, +Z forward. Shared: do not change it.</summary>
     public static (ArrayMesh Body, ArrayMesh Lamps) Car(Color paint, bool van)
+    {
+        if (!Cars.TryGetValue((paint, van), out var built)) Cars[(paint, van)] = built = BuildCar(paint, van);
+        return built;
+    }
+
+    private static (ArrayMesh Body, ArrayMesh Lamps) BuildCar(Color paint, bool van)
     {
         var s = new MeshScratch();
         float len = van ? 5.0f : 4.2f, wid = 1.8f;
@@ -51,8 +63,16 @@ public static class TrafficMeshBuilder
         return (s.Build(), l.Build());
     }
 
-    /// <summary>A railcar or carriage: length along +Z, the cab ends shaped when it leads.</summary>
+    /// <summary>A railcar or carriage: length along +Z, the cab ends shaped when it leads. Shared: do not change it.</summary>
     public static (ArrayMesh Body, ArrayMesh Lamps) Carriage(Color paint, Color band, float length,
+        bool narrow, bool cabFront, bool cabBack)
+    {
+        var key = (paint, band, length, narrow, cabFront, cabBack);
+        if (!Carriages.TryGetValue(key, out var built)) Carriages[key] = built = BuildCarriage(paint, band, length, narrow, cabFront, cabBack);
+        return built;
+    }
+
+    private static (ArrayMesh Body, ArrayMesh Lamps) BuildCarriage(Color paint, Color band, float length,
         bool narrow, bool cabFront, bool cabBack)
     {
         var s = new MeshScratch();
