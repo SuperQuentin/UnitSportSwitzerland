@@ -92,6 +92,9 @@ public partial class DriveProbe : Node
     {
         _chunks = chunks;
         _origin = origin;
+        // the probe keeps its route, cars and logs in world space for the whole run: no floating-origin
+        // shift under it (#185 moved the origin 34 km mid-build and the route came out in a village)
+        if (Core.OriginShifter.Instance is { } shifter) shifter.ThresholdM = double.MaxValue;
         _shotPrefix = shotPrefix;
         _seconds = seconds;
         var list = ArgAfter("--cars");

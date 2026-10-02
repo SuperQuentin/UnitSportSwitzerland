@@ -482,6 +482,19 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                 blocked |= oSpeed < 0.5f;
             }
 
+            // giving way to someone coming along the road this car is about to turn into (#159): beyond the
+            // junction it is "on this road", and the oncoming rule below waited for sight and a reaction time —
+            // a car stood in the junction mouth in front of racers at 120-150 km/h. At the line a driver looks
+            if (onRoad && ov < -2f)
+            {
+                if (!junctionLooked) { junction = car.Route.NextJunction(_roads!, 60f); junctionLooked = true; }
+                if (junction is var (_, jD, jGives) && jGives && jD >= 5f && along > jD + 2f && (along - jD) / -ov < 9f)
+                {
+                    hold = true;
+                    target = Mathf.Min(target, StopWithin(jD - 12f));
+                    continue;
+                }
+            }
             if (onRoad && along > 0.5f && ov < -2f)
             {
                 // coming the other way: they meet in this many seconds
