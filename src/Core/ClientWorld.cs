@@ -105,7 +105,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => StyleKit.ReportRequested, StyleKit.Report),
         (() => BattleRoyale.BrCheck.Requested, BattleRoyale.BrCheck.Run),
         (() => Occasions.OccasionProbe.Requested, Occasions.OccasionProbe.Run),
-        (() => Player.WheelProbe.CheckRequested, Player.WheelProbe.Check),
+        (() => Player.WheelProbe.CheckRequested, () => Player.WheelProbe.Check(GetParent())),
         // the network rules' own self-checks: vision interest and remote interpolation
         (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
         // the CD beat analyser's self-test: synthetic clicks at known tempos
@@ -128,6 +128,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // idempotent: the shell, which owns the window settings, has usually installed it already
         PlayerInput.Install(GetParent());
+        if (Player.WheelProbe.ForceCheckRequested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Player.WheelProbe { Name = "WheelProbe" });
+            return;
+        }
 
         // a hand-made street to show the door portals: no terrain, no server
         if (Interiors.PortalDemo.ParseArgs() is { Requested: true } portalDemo)

@@ -48,7 +48,7 @@ public sealed class GatePilot
         float yaw = _p.IsFlying ? _p.Flight.Yaw : _p.Rotation.Y;
         // + = the gate is to the left
         float err = finished || to.LengthSquared() < 1f ? 0f
-            : Mathf.Wrap(Mathf.Atan2(-to.X, -to.Z) - yaw, -Mathf.Pi, Mathf.Pi);
+            : MathX.WrapAngle(Mathf.Atan2(-to.X, -to.Z) - yaw);
         float flat = Mathf.Max(to.Length(), 1f);
 
         switch (_p.Vehicle)

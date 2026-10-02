@@ -129,7 +129,7 @@ public static class DriftCheck
         {
             float before = m.Speed;
             car.Step(new RideInput(0f, brake, steer, false), ground, Dt, ref m);
-            float slip = Mathf.Abs(Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi));
+            float slip = Mathf.Abs(MathX.WrapAngle(m.Slip));
             peak = Mathf.Max(peak, slip);
             yaw = Mathf.Max(yaw, Mathf.Abs(m.YawRate));
             if (!spun && slip > 1.6f) { spun = true; at = before; }
@@ -155,7 +155,7 @@ public static class DriftCheck
         for (float t = 0; t < 30f; t += Dt)
         {
             // the Drive() hold: wheels toward the travel, turned in short of the target angle
-            float slip = Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi);
+            float slip = MathX.WrapAngle(m.Slip);
             float wheel = slip + 1.5f * (slip - Target) - 0.12f * m.YawRate - 0.45f * slip;
             float throttle = Mathf.Clamp(0.75f + 2f * (Mathf.Abs(Target) - Mathf.Abs(slip)), 0.2f, 1f);
             car.Step(new RideInput(throttle, 0f, Mathf.Clamp(-wheel / car.Spec.MaxSteer, -1f, 1f), false), ground, Dt, ref m);
@@ -209,7 +209,7 @@ public static class DriftCheck
         bool spun = false;
         for (float h = 0; h < 4f; h += Dt)
         {
-            float slip = Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi);
+            float slip = MathX.WrapAngle(m.Slip);
             // Hold an angle, as a driver does: the wheels point down the direction of travel,
             // turned in when the angle is short of the target and out when it is past it, and
             // against any rotation still building. The throttle keeps the rears on the circle.
@@ -229,10 +229,10 @@ public static class DriftCheck
         // recovery: steer fully into the slide, a whiff of throttle
         for (float r = 0; r < 3f; r += Dt)
         {
-            float slip = Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi);
+            float slip = MathX.WrapAngle(m.Slip);
             car.Step(new RideInput(0.2f, 0f, Mathf.Clamp(-slip / spec.MaxSteer, -1f, 1f), false), ground, Dt, ref m);
         }
-        float endSlip = Mathf.Abs(Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi));
+        float endSlip = Mathf.Abs(MathX.WrapAngle(m.Slip));
 
         // top speed, a separate straight run
         var top = new Car(spec);
