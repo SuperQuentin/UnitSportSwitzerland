@@ -91,8 +91,9 @@ public sealed class GameSettings
     /// <summary>
     /// Viewport 3D scale, the biggest single fidelity/performance knob: the 3D is drawn at this
     /// fraction of the window's real pixels (<c>stretch/mode = "canvas_items"</c>), so 1 is native
-    /// and above 1 supersamples. The UI lays out at a fixed <see cref="BaseWidth"/>x<see cref="BaseHeight"/>
-    /// content scale and is untouched by it.
+    /// and above 1 supersamples; in PS1, a fraction of the UI canvas instead, so its low resolution
+    /// holds on any screen (<see cref="DisplaySettings.EffectiveScale"/>). The UI lays out at a fixed
+    /// <see cref="BaseWidth"/>x<see cref="BaseHeight"/> content scale and is untouched by it.
     /// </summary>
     public float RenderScale { get; set; } = 0.75f;
     public const int BaseWidth = 1152, BaseHeight = 648;
