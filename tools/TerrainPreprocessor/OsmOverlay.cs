@@ -9,8 +9,9 @@ namespace UnitSport.Tools.Preprocessor;
 /// Optional OpenStreetMap overlay (#118): conflates OSM ways onto swissTLM3D road lines and
 /// writes the attributes TLM does not record (one-way, lanes, width, sidewalks, cycleways,
 /// turn lanes, roundabouts, trams) to <c>&lt;temp&gt;/osm_overlay.tsv</c>, keyed by TLM uuid, part
-/// and along-line interval. Geometry is never taken from OSM. Nothing reads the file yet: the
-/// road network stage (#115) joins it. Format and key: docs/notes/tools/osm-overlay.md.
+/// and along-line interval. Geometry is never taken from OSM. The road network stage (#115) joins
+/// it. Signal nodes, bike boxes and turn restrictions go to <c>osm_nodes.tsv</c> beside it
+/// (<see cref="OsmNodes"/>, #347). Format and key: docs/notes/tools/osm-overlay.md.
 /// </summary>
 public static class OsmOverlay
 {
@@ -44,7 +45,8 @@ public static class OsmOverlay
 
     public sealed record TlmLine(string Uuid, int Part, string Objektart, bool Divided, double[] E, double[] N, double HalfWidth);
 
-    public sealed record OsmWay(long Id, double[] E, double[] N, Dictionary<string, string> Tags)
+    /// <summary>An OSM way, or the piece of one inside the region; <see cref="Refs"/> are its node ids, one per vertex.</summary>
+    public sealed record OsmWay(long Id, double[] E, double[] N, Dictionary<string, string> Tags, long[]? Refs = null)
     {
         public bool IsTram => Tags.GetValueOrDefault("railway") == "tram";
     }
@@ -71,21 +73,28 @@ public static class OsmOverlay
 
         var tlm = LoadTlm(tlmGpkg, minE, minN, maxE, maxN);
         double tlmSec = clock.Elapsed.TotalSeconds;
-        var osm = LoadOsm(pbfPath, minE - 200, minN - 200, maxE + 200, maxN + 200, jobs);
+        var (osm, points, relations, position) = LoadOsm(pbfPath, minE - 200, minN - 200, maxE + 200, maxN + 200, jobs);
         double osmSec = clock.Elapsed.TotalSeconds - tlmSec;
         var result = Conflate(tlm, osm);
+        // signals, bike boxes and via nodes inside the region box only (the 200 m margin is for the ways)
+        bool Inside(double e, double n) => e >= minE && e <= maxE && n >= minN && n <= maxN;
+        var (nodeRows, nodeStats) = OsmNodes.Snap(tlm, osm, result.Rows, points.Where(p => Inside(p.E, p.N)).ToList(), relations,
+            id => position(id) is { } q && Inside(q.E, q.N) ? q : null);
         double total = clock.Elapsed.TotalSeconds;
 
         Directory.CreateDirectory(tempDir);
         string outPath = Path.Combine(tempDir, FileName);
-        File.WriteAllText(outPath, Format(result.Rows, Path.GetFileName(pbfPath), Path.GetFileName(tlmGpkg), minE, minN, maxE, maxN));
+        string pbfName = Path.GetFileName(pbfPath), tlmName = Path.GetFileName(tlmGpkg);
+        File.WriteAllText(outPath, Format(result.Rows, pbfName, tlmName, minE, minN, maxE, maxN));
+        File.WriteAllText(Path.Combine(tempDir, OsmNodes.FileName), OsmNodes.Format(nodeRows, pbfName, tlmName, minE, minN, maxE, maxN));
         long peak = Process.GetCurrentProcess().PeakWorkingSet64;
-        string report = Report(result, tlm.Count, osm.Count) + MedianProbe(tlm, osm)
+        string report = Report(result, tlm.Count, osm.Count)
+            + OsmNodes.Report(nodeRows, nodeStats, Lines(result, x => x.TurnFwd != "" || x.TurnBwd != "")) + MedianProbe(tlm, osm)
             + $"\ntiming: TLM {tlmSec:F1} s, OSM read {osmSec:F1} s, conflation {total - tlmSec - osmSec:F1} s, "
             + $"total {total:F1} s; peak working set {peak / 1048576.0:F0} MB\n";
         File.WriteAllText(Path.Combine(tempDir, ReportName), report);
         Console.WriteLine(report.Length > 6000 ? report[..6000] + "\n... (full report in " + ReportName + ")" : report);
-        Console.WriteLine($"OSM overlay: {result.Rows.Count} intervals -> {outPath}");
+        Console.WriteLine($"OSM overlay: {result.Rows.Count} intervals -> {outPath}, {nodeRows.Count} node rows -> {OsmNodes.FileName}");
         return 0;
     }
 
@@ -112,7 +121,12 @@ public static class OsmOverlay
         return lines;
     }
 
-    private static List<OsmWay> LoadOsm(string pbf, double minE, double minN, double maxE, double maxN, int jobs)
+    /// <summary>
+    /// Ways (cut to the box), the signal and bike-box nodes in LV95, restriction relations, and a
+    /// position lookup for any node inside the box (a restriction's via node).
+    /// </summary>
+    private static (List<OsmWay> Ways, List<OsmNodes.Point> Points, List<PbfReader.Relation> Relations,
+        Func<long, (double E, double N)?> Position) LoadOsm(string pbf, double minE, double minN, double maxE, double maxN, int jobs)
     {
         // a lat/lon box around the LV95 box; LV95 is not aligned with meridians, so take all four corners
         var corners = new[] { (minE, minN), (minE, maxN), (maxE, minN), (maxE, maxN) }
@@ -122,33 +136,47 @@ public static class OsmOverlay
 
         // ponytail: every node inside the box is held in one dictionary; fine for a region, about
         // 2 GB for the whole country. Two passes (ways first, then only their nodes) if that matters.
-        var (nodes, ways) = PbfReader.Read(pbf, jobs,
-            (lat, lon) => lat >= la0 && lat <= la1 && lon >= lo0 && lon <= lo1,
-            tags => tags.GetValueOrDefault("area") != "yes"
-                    && ((tags.TryGetValue("highway", out var h) && !IgnoredHighways.Contains(h))
-                        || tags.GetValueOrDefault("railway") == "tram"),
-            TagKeys);
+        var data = PbfReader.Read(pbf, jobs, new PbfReader.Filter
+        {
+            KeepNode = (lat, lon) => lat >= la0 && lat <= la1 && lon >= lo0 && lon <= lo1,
+            KeepWay = tags => tags.GetValueOrDefault("area") != "yes"
+                              && ((tags.TryGetValue("highway", out var h) && !IgnoredHighways.Contains(h))
+                                  || tags.GetValueOrDefault("railway") == "tram"),
+            WayTags = TagKeys,
+            KeepTaggedNode = OsmNodes.KeepNode,
+            NodeTags = OsmNodes.NodeTagKeys,
+            KeepRelation = OsmNodes.KeepRelation,
+            RelationTags = OsmNodes.RelationTagKeys,
+        });
+        var nodes = data.Nodes;
 
         var result = new List<OsmWay>();
-        foreach (var w in ways)
+        foreach (var w in data.Ways)
         {
             // a way leaving the box keeps each run of nodes that is inside it
             var e = new List<double>();
             var n = new List<double>();
+            var ids = new List<long>();
             void Flush()
             {
-                if (e.Count >= 2) result.Add(new OsmWay(w.Id, e.ToArray(), n.ToArray(), w.Tags));
-                e.Clear(); n.Clear();
+                if (e.Count >= 2) result.Add(new OsmWay(w.Id, e.ToArray(), n.ToArray(), w.Tags, ids.ToArray()));
+                e.Clear(); n.Clear(); ids.Clear();
             }
             foreach (long id in w.Refs)
             {
                 if (!nodes.TryGetValue(id, out var ll)) { Flush(); continue; }
                 var (pe, pn) = SwissProjection.ToLv95(ll.Lat, ll.Lon);
-                e.Add(pe); n.Add(pn);
+                e.Add(pe); n.Add(pn); ids.Add(id);
             }
             Flush();
         }
-        return result;
+        var points = data.TaggedNodes.Select(t =>
+        {
+            var (pe, pn) = SwissProjection.ToLv95(t.Lat, t.Lon);
+            return new OsmNodes.Point(t.Id, pe, pn, t.Tags);
+        }).ToList();
+        (double E, double N)? Position(long id) => nodes.TryGetValue(id, out var ll) ? SwissProjection.ToLv95(ll.Lat, ll.Lon) : null;
+        return (result, points, data.Relations, Position);
     }
 
     // ---- conflation (pure, what --osm-check exercises) ----------------------------------------
@@ -421,7 +449,7 @@ public static class OsmOverlay
 
     // ---- geometry -------------------------------------------------------------------------------
 
-    private static double[] Cumulative(double[] e, double[] n)
+    internal static double[] Cumulative(double[] e, double[] n)
     {
         var cum = new double[e.Length];
         for (int i = 1; i < e.Length; i++) cum[i] = cum[i - 1] + Math.Sqrt(Sq(e[i] - e[i - 1]) + Sq(n[i] - n[i - 1]));
@@ -443,7 +471,7 @@ public static class OsmOverlay
     private static double Sq(double v) => v * v;
 
     /// <summary>Uniform grid of polyline segments, for "nearest parallel segment within r".</summary>
-    private sealed class SegmentGrid
+    internal sealed class SegmentGrid
     {
         private const double Cell = 50.0;
         private readonly Dictionary<(long, long), List<(int Line, int Seg)>> _cells = new();
@@ -571,6 +599,9 @@ public static class OsmOverlay
 
         // same input, same bytes
         Check(Format(r.Rows, "a", "b", 0, 0, 1, 1) == Format(Conflate(tlm, osm).Rows, "a", "b", 0, 0, 1, 1), "deterministic output");
+
+        // signals, bike boxes and turn restrictions (#347)
+        fails.AddRange(OsmNodes.SelfCheck());
 
         foreach (var f in fails) Console.Error.WriteLine("FAIL " + f);
         Console.WriteLine(fails.Count == 0 ? "osm-check: OK" : $"osm-check: {fails.Count} failure(s)");
