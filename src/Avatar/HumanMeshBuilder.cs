@@ -1054,8 +1054,9 @@ public static partial class HumanMeshBuilder
     };
 
     /// <summary>
-    /// Unlit, vertex-coloured, backface-culled. Matches how the rest of the world is shaded:
-    /// the terrain gets its form from flat facets and dither, not from specular highlights.
+    /// Vertex-coloured, backface-culled, no specular. Matches how the rest of the world is shaded:
+    /// the terrain gets its form from flat facets and dither, not from specular highlights. The
+    /// visual style shades it its own way (<see cref="Styles.StyleKit.Figure"/>: toon in Cartoon).
     ///
     /// <para>
     /// One shared instance (#221): every caller used to get an identical new one, one per figure,
@@ -1063,24 +1064,25 @@ public static partial class HumanMeshBuilder
     /// <c>VehicleBody.Char</c>) is a material of its own.
     /// </para>
     /// </summary>
-    public static StandardMaterial3D Material() => _material ??= new()
+    public static StandardMaterial3D Material() => _material ??= Styles.StyleKit.Figure(new()
     {
         VertexColorUseAsAlbedo = true,
         ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
         SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
         Roughness = 1f,
-    };
+    });
 
     private static StandardMaterial3D? _material;
     private static ShaderMaterial? _figureMaterial;
 
     /// <summary>
     /// <see cref="Material"/> as a shader that also draws the clothes' finishes (rainbow, disco
-    /// ball, galaxy…, <c>shaders/avatar.gdshader</c>), read from the vertex alpha. One shared
-    /// instance: it has no per-figure parameters.
+    /// ball, galaxy…, <c>shaders/body/avatar.gdshaderinc</c>), read from the vertex alpha. One
+    /// shared instance: it has no per-figure parameters. The visual style swaps its shader
+    /// (<see cref="Styles.MaterialRole.Figure"/>).
     /// </summary>
     public static ShaderMaterial FigureMaterial() =>
-        _figureMaterial ??= new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/avatar.gdshader") };
+        _figureMaterial ??= Styles.StyleKit.Material(Styles.MaterialRole.Figure);
 
     // =====================================================================================
     // Dance layer. The spec (conventions, every move's joint formulas, moving variants) is
