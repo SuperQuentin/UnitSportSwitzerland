@@ -504,10 +504,11 @@ public sealed class AutoPilot
                 float gap = Mathf.Abs(theirs - myLat);
                 // in the way where this car is headed OR where it still is: a car at -0.5 m ran into one
                 // standing at -1.7 m at 66 km/h because its target lateral was clear of it (#85)
-                bool inWay = Mathf.Min(Mathf.Abs(theirs - mine), gap) <= clear + 0.5f;
                 float spaceL = RoomL(qi) - (theirs + clear), spaceR = (theirs - clear) + RoomR(qi);
                 // a squeeze of up to 0.4 m past it is still a way through (the room keeps 0.3 off the edge)
                 bool wayL = spaceL >= -0.4f, wayR = spaceR >= -0.4f;
+                // already clear of it where it is, with room on that side: the bound below keeps it there (WIP #159)
+                bool inWay = gap <= clear + 0.5f || (!(myLat > theirs ? wayL : wayR) && Mathf.Abs(theirs - mine) <= clear + 0.5f);
                 if (!wayL && !wayR)
                 {
                     if (inWay) { stopped = true; CapBy(StopWithin(ahead - 6f)); }
@@ -571,11 +572,14 @@ public sealed class AutoPilot
                 : along + StopWithin(ahead - followGap);
             _ahead.Add((theirs, follow, beside));   // in the way or not: a pass may move into its lane
             // in the way where this car is headed, or where it still is (the car lags its target)
-            if (Mathf.Min(Mathf.Abs(theirs - mine), Mathf.Abs(theirs - myLat)) > beside + 0.1f)
+            // or clear of it where it is now, with room for a car on that side (WIP #159)
+            bool clearNow = Mathf.Abs(theirs - myLat) > beside + 0.1f
+                && (theirs > myLat ? theirs - beside >= -RoomR(qi) : theirs + beside <= RoomL(qi));
+            if (clearNow || Mathf.Min(Mathf.Abs(theirs - mine), Mathf.Abs(theirs - myLat)) > beside + 0.1f)
             {
                 // out of the way but closing on it: stay on this side of it until past — the line swinging
                 // over at the last moment ran racers into the back of traffic at 65-85 km/h (#85)
-                if (closing > 0.5f && ahead / closing < 3f)
+                if (clearNow || (closing > 0.5f && ahead / closing < 3f))
                 {
                     if (theirs > myLat) hi = Mathf.Min(hi, theirs - beside + shift); else lo = Mathf.Max(lo, theirs + beside + shift);
                 }
