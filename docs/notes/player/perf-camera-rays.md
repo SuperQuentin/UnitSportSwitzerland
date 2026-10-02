@@ -15,7 +15,17 @@
 #221 client investigation #13: a new `PhysicsRayQueryParameters3D` + `Array<Rid>` per camera ray per
 frame (1 to 3 rays a frame, every client, every mode), plus the item highlight / aim / photo rays,
 the throw arc (one query per step), the hearing occlusion (per audible source per frame) and the
-NPC arrival rays. Numbers: see the PR (#221 round 3, `footplayer`).
+NPC arrival rays. PR #321 (with the snapshot changes), `--drivecheck --chunks fixture:hairpin --traffic 35
+--perflog 60`, steady part t 50-90 s, `GC.GetTotalAllocatedBytes`, 2 runs each, back to back:
+
+| | allocated | gen0 / gen1 per min | physics ms p50 |
+|---|---|---|---|
+| main | 96.1, 96.3 MB/min | 9 / 9 | 1.65, 1.59 |
+| #321 | 92.3, 93.2 MB/min | 9 / 9 | 1.76, 1.67 |
+
+About 3.5 MB/min less for one car (-4 %); the saving scales with players (snapshot) and with rays
+cast (third person on foot, passengers, aiming). On foot in town among 12 swarm bots the allocation
+is dominated by terrain streaming (~700 MB/min) and the difference is within noise.
 
 ## Same logic, preserved
 - Same rays: same from/to/mask, the same excluded RIDs (third person: the body; chase: the body and
