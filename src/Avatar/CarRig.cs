@@ -175,6 +175,7 @@ public partial class CarRig : Node3D
     private HumanPalette? _driverPalette;
     private MeshInstance3D? _driverBody, _driverHead;
     private (int Turn, int Throttle, int Brake) _driverPose = (int.MinValue, 0, 0);
+    private readonly Dictionary<(int Turn, int Throttle, int Brake), ArrayMesh> _driverPoses = new();
     private float _rpmShown, _speedShown;
     private CabMirrors _mirrors = null!;
     private StandardMaterial3D _glass = null!;
@@ -445,9 +446,7 @@ public partial class CarRig : Node3D
         var pose = (Mathf.RoundToInt(WheelTurn / 0.03f), Mathf.RoundToInt(Throttle * 8f), Mathf.RoundToInt(Brake * 8f));
         if (pose == _driverPose) return;
         _driverPose = pose;
-        var s = new MeshScratch();
-        HumanMeshBuilder.AppendDriver(s, palette, _cabin.Seat, WheelTurn, Throttle, Brake, head: false);
-        _driverBody.Mesh = s.Build();
+        _driverBody.Mesh = HumanMeshBuilder.DriverBody(_driverPoses, pose, palette, _cabin.Seat);
     }
 
     public override void _Process(double delta)

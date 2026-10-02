@@ -174,25 +174,37 @@ public static partial class HumanMeshBuilder
     /// <param name="phase">Gait cycle position, 0..1. Both feet complete one step each per cycle.</param>
     /// <param name="dance">Beat-driven dance layer over the gait (<see cref="ApplyDance"/>); null = no dance.
     /// The caller passes <c>arm = None</c> while dancing, the dance owns the arms.</param>
+    /// <param name="into">A mesh to rebuild in place (an animated figure keeps one), or null for a new one.</param>
     public static ArrayMesh BuildStride(HumanPalette palette, float speed, float phase,
         bool helmet = false, Headwear hat = Headwear.None,
-        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null)
+        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, ArrayMesh? into = null)
     {
-        var scratch = new MeshScratch();
+        var scratch = ScratchFor(into);
         // a skirt with no measured wind still feels the stride's own (#251)
         if (palette.Wind == Vector3.Zero && speed > 0.05f && Flutters(palette.Outfit))
             palette = palette with { Wind = new Vector3(0, 0, -speed) };
         AppendRig(scratch, palette, ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), includeLegs: true, helmet, hat);
-        return scratch.Build();
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
     }
 
     /// <summary>A fixed pose with the item arm override on top (uncached: the blend changes every frame).</summary>
     public static ArrayMesh BuildPosed(HumanPalette palette, HumanPose pose, ItemArmPose arm, float armBlend,
-        Headwear hat = Headwear.None)
+        Headwear hat = Headwear.None, ArrayMesh? into = null)
     {
-        var scratch = new MeshScratch();
+        var scratch = ScratchFor(into);
         AppendRig(scratch, palette, ApplyArms(RigFor(pose), arm, armBlend), includeLegs: true, helmet: false, hat);
-        return scratch.Build();
+        return into == null ? scratch.Build() : scratch.BuildInto(into);
+    }
+
+    // one scratch per thread for in-place rebuilds, emptied each time: its lists keep their capacity
+    [ThreadStatic] private static MeshScratch? _reused;
+
+    private static MeshScratch ScratchFor(ArrayMesh? into)
+    {
+        if (into == null) return new MeshScratch();
+        var scratch = _reused ??= new MeshScratch();
+        scratch.Clear();
+        return scratch;
     }
 
     /// <summary>
@@ -469,6 +481,23 @@ public static partial class HumanMeshBuilder
     public static void AppendDriver(MeshScratch scratch, HumanPalette palette, DriverSeat seat,
         float wheelAngle, float throttle, float brake, bool body = true, bool head = true, Headwear hat = Headwear.None) =>
         AppendRig(scratch, palette, DriverRig(seat, wheelAngle, throttle, brake), includeLegs: true, helmet: false, hat, body, head);
+
+    /// <summary>
+    /// A seated driver's body (no head) for a wheel angle, throttle and brake quantised to what can
+    /// be seen (0.03 rad, eighths), from <paramref name="cache"/> or built once into it (#221): a car
+    /// or a truck keeps one cache, so a wheel that comes back to straight does not rebuild the figure.
+    /// </summary>
+    public static ArrayMesh DriverBody(Dictionary<(int Turn, int Throttle, int Brake), ArrayMesh> cache,
+        (int Turn, int Throttle, int Brake) pose, HumanPalette palette, DriverSeat seat)
+    {
+        if (cache.TryGetValue(pose, out var mesh)) return mesh;
+        // ponytail: a full cache is emptied, not evicted by age; a hard drive of a full lock-to-lock
+        // wheel crosses ~500 keys, and an LRU is not worth it for a figure this cheap to rebuild
+        if (cache.Count >= 256) cache.Clear();
+        var s = new MeshScratch();
+        AppendDriver(s, palette, seat, pose.Turn * 0.03f, pose.Throttle / 8f, pose.Brake / 8f, head: false);
+        return cache[pose] = s.Build();
+    }
 
     /// <summary>Camera mounts for <see cref="AppendDriver"/>'s figure at rest, flipped to face -Z like the mesh.</summary>
     public static GaitMounts MountsForDriver(DriverSeat seat) => MountsForRig(DriverRig(seat, 0f, 0f, 0f));
@@ -1026,8 +1055,14 @@ public static partial class HumanMeshBuilder
     /// <summary>
     /// Unlit, vertex-coloured, backface-culled. Matches how the rest of the world is shaded:
     /// the terrain gets its form from flat facets and dither, not from specular highlights.
+    ///
+    /// <para>
+    /// One shared instance (#221): every caller used to get an identical new one, one per figure,
+    /// vehicle and preview. Never modify it; a variant (the soot of a burnt vehicle,
+    /// <c>VehicleBody.Char</c>) is a material of its own.
+    /// </para>
     /// </summary>
-    public static StandardMaterial3D Material() => new()
+    public static StandardMaterial3D Material() => _material ??= new()
     {
         VertexColorUseAsAlbedo = true,
         ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
@@ -1035,6 +1070,7 @@ public static partial class HumanMeshBuilder
         Roughness = 1f,
     };
 
+    private static StandardMaterial3D? _material;
     private static ShaderMaterial? _figureMaterial;
 
     /// <summary>
