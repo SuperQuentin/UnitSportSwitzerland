@@ -72,8 +72,9 @@ public static partial class HumanMeshBuilder
             {
                 AppendLeg(s, p, rig.HipL, rig.KneeL, rig.AnkleL, rig.ToeL, top, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
                 AppendLeg(s, p, rig.HipR, rig.KneeR, rig.AnkleR, rig.ToeR, top, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
-                AppendSkirt(s, rig, top, bottom);
             }
+            // with the legs or without (a cyclist's are their own mesh, driven by the cranks)
+            AppendSkirt(s, rig, top, bottom, p.Wind);
         }
         if (!head) return;
 
@@ -526,15 +527,33 @@ public static partial class HumanMeshBuilder
 
     /// <summary>
     /// A skirt, or the lower half of a robe or dress: an open cone from the waist, its hem following
-    /// the knees or the ankles so it swings with the stride.
+    /// the knees or the ankles so it swings with the stride, blown back by <paramref name="wind"/>
+    /// (<see cref="HumanPalette.Wind"/>) and fluttering faster the harder it blows.
     /// </summary>
-    private static void AppendSkirt(MeshScratch s, Rig r, Garment? top, Garment? bottom)
+    private static void AppendSkirt(MeshScratch s, Rig r, Garment? top, Garment? bottom, Vector3 wind)
     {
         var knees = (r.KneeL + r.KneeR) * 0.5f;
         var ankles = (r.AnkleL + r.AnkleR) * 0.5f;
         // how wide the legs are apart at the hem, so a stride does not poke through it
         float spreadK = (r.KneeL - r.KneeR).Length() * 0.5f;
         float spreadA = (r.AnkleL - r.AnkleR).Length() * 0.5f;
+
+        // full streaming by ~50 km/h; a walk barely stirs it
+        float speed = wind.Length();
+        float gust = Mathf.Clamp(speed / 14f, 0f, 1f);
+        var downwind = speed > 0.05f ? wind / speed : Vector3.Zero;
+        float ripple = speed > 0.05f ? 0.03f + 0.13f * gust : 0f;
+        float phase = Time.GetTicksMsec() / 1000f * (5f + 1.1f * Mathf.Min(speed, 30f));
+        // the hem carried downwind, never further than the skirt is long, nor up past the waist
+        Vector3 Blown(Vector3 from, Vector3 hem)
+        {
+            if (gust <= 0f) return hem;
+            float length = (hem - from).Length();
+            var shifted = hem + downwind * length * 0.65f * gust;
+            return from + (shifted - from).Normalized() * length;
+        }
+        void Cone(Vector3 from, Vector3 hem, float ra, float rb, Color colour, int sides, Vector3 gap = default, float gapAngle = 0f) =>
+            s.Skirt(from, Blown(r.Waist, hem) + (from - r.Waist), ra, rb, colour, sides, gap, gapAngle, ripple, phase);
 
         if (top is { CoversBottom: true })
         {
@@ -543,16 +562,16 @@ public static partial class HumanMeshBuilder
             {
                 var hem = ankles + Vector3.Up * 0.035f;
                 float rh = Mathf.Max(0.30f, spreadA + 0.07f);
-                s.Skirt(r.Waist, hem, 0.148f, rh, c.A, 12);
-                s.Skirt(r.Waist.Lerp(hem, 0.95f), hem, rh * 0.97f + 0.004f, rh + 0.004f, c.B, 12);
+                Cone(r.Waist, hem, 0.148f, rh, c.A, 12);
+                Cone(r.Waist.Lerp(hem, 0.95f), hem, rh * 0.97f + 0.004f, rh + 0.004f, c.B, 12);
             }
             else
             {
                 var hem = r.Hip.Lerp(knees, 0.85f);
                 float rh = Mathf.Max(0.29f, spreadK + 0.12f);
-                s.Skirt(r.Waist, hem, 0.150f, rh, c.A, 12);
+                Cone(r.Waist, hem, 0.150f, rh, c.A, 12);
                 // the petticoat frothing out under it
-                s.Skirt(r.Waist.Lerp(hem, 0.78f), hem - Vector3.Up * 0.035f, rh * 0.9f, rh + 0.03f, c.B, 12);
+                Cone(r.Waist.Lerp(hem, 0.78f), hem - Vector3.Up * 0.035f, rh * 0.9f, rh + 0.03f, c.B, 12);
             }
             return;
         }
@@ -562,41 +581,32 @@ public static partial class HumanMeshBuilder
         switch (bottom!.Shape)
         {
             case GarmentShape.PleatedSkirt:
-            {
-                var hem = r.Hip.Lerp(knees, 0.55f);
-                s.Skirt(r.Waist, hem, 0.150f, Mathf.Max(0.25f, spreadK + 0.09f), b.A, 14);
+                Cone(r.Waist, r.Hip.Lerp(knees, 0.55f), 0.150f, Mathf.Max(0.25f, spreadK + 0.09f), b.A, 14);
                 break;
-            }
             case GarmentShape.RuffleMini:
             {
                 var hem = r.Hip.Lerp(knees, 0.40f);
                 float rh = Mathf.Max(0.22f, spreadK + 0.08f);
-                s.Skirt(r.Waist, hem, 0.150f, rh, b.A, 12);
+                Cone(r.Waist, hem, 0.150f, rh, b.A, 12);
                 // a second tier of ruffle under the first
-                s.Skirt(r.Waist.Lerp(hem, 0.55f), hem - Vector3.Up * 0.045f, rh * 0.95f, rh + 0.035f, b.B, 12);
+                Cone(r.Waist.Lerp(hem, 0.55f), hem - Vector3.Up * 0.045f, rh * 0.95f, rh + 0.035f, b.B, 12);
                 break;
             }
             case GarmentShape.HighLowSkirt:
-            {
                 // the axis leans back, so the hem rides high in front and trails low behind
-                var hem = r.Hip.Lerp(knees, 0.85f) + new Vector3(0, -0.04f, -0.14f);
-                s.Skirt(r.Waist, hem, 0.152f, Mathf.Max(0.27f, spreadK + 0.11f), b.A, 14);
+                Cone(r.Waist, r.Hip.Lerp(knees, 0.85f) + new Vector3(0, -0.04f, -0.14f), 0.152f, Mathf.Max(0.27f, spreadK + 0.11f), b.A, 14);
                 break;
-            }
             case GarmentShape.SlitMaxi:
-            {
                 // to the ankles, with a slit up the front of the right leg (−X)
-                var hem = ankles + Vector3.Up * 0.05f;
-                s.Skirt(r.Waist, hem, 0.152f, Mathf.Max(0.29f, spreadA + 0.08f), b.A, 14,
+                Cone(r.Waist, ankles + Vector3.Up * 0.05f, 0.152f, Mathf.Max(0.29f, spreadA + 0.08f), b.A, 14,
                     gap: new Vector3(-0.55f, 0, 1f), gapAngle: 0.42f);
                 break;
-            }
             case GarmentShape.LongPleated:
             {
                 // to mid-calf, brown straps running down it front and back
-                var hem = r.Hip.Lerp(ankles, 0.80f);
+                var hem = Blown(r.Waist, r.Hip.Lerp(ankles, 0.80f));
                 float rh = Mathf.Max(0.29f, spreadK + 0.12f);
-                s.Skirt(r.Waist, hem, 0.150f, rh, b.A, 16);
+                s.Skirt(r.Waist, hem, 0.150f, rh, b.A, 16, ripple: ripple, phase: phase);
                 var axis = Frame.Along(r.Waist - hem);
                 foreach (float a in new[] { -0.45f, 0.45f, Mathf.Pi - 0.45f, Mathf.Pi + 0.45f })
                 {
@@ -606,6 +616,27 @@ public static partial class HumanMeshBuilder
                 break;
             }
         }
+    }
+
+    /// <summary>Whether the outfit has something that blows in the wind: a skirt, a robe, a dress.</summary>
+    public static bool Flutters(Outfit o) =>
+        o[WearSlot.Top] is { CoversBottom: true } || IsSkirt(o[WearSlot.Bottom]);
+
+    /// <summary>
+    /// One leg in the clothes of <paramref name="p"/>, from free joints: a cyclist's, driven by the
+    /// cranks. The bare leg with the cycling shorts and shoes when nothing is worn.
+    /// </summary>
+    public static void AppendLeg(MeshScratch s, HumanPalette p, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe)
+    {
+        var o = p.Outfit;
+        if (o.IsEmpty)
+        {
+            Leg(s, p, hip, knee, ankle, toe);
+            return;
+        }
+        var top = o[WearSlot.Top];
+        var bottom = top is { CoversBottom: true } ? null : o[WearSlot.Bottom];
+        AppendLeg(s, p, hip, knee, ankle, toe, top, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
     }
 
     // ------------------------------------------------------------------------------------

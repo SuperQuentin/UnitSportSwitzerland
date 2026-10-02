@@ -17,14 +17,27 @@
   colours (so every pose, dance, seated passenger and ragdoll gets them), skirts with the open
   `MeshScratch.Skirt` (double-sided, hem follows the knees/ankles, optional slit), stripes as
   geometry bands (`Banded`), mask faces as 15×7 pixel art (`MaskFaces`). Head clothes replace a hat;
-  an occasion hat shows only with the head slot empty. Drivers and riders (bike, car) are not dressed yet.
+  an occasion hat shows only with the head slot empty.
 - **Finishes**: `Garments.Fx` puts the finish id in the colour's alpha (`1 - id/255`); everything else
   in the game has alpha 1. `HumanMeshBuilder.FigureMaterial()` (`shaders/avatar.gdshader`) reproduces
   `Material()` for alpha 1 and decodes rainbow, disco, galaxy, holo, glitch, lava, neon, and the
-  patterns tartan, fishnet (discard over skin), lace. Only figure meshes use it (walker, passenger,
-  ragdoll, preview); the shared `Material()` is untouched. Specials put the finish on all three
+  patterns tartan, fishnet (discard over skin), lace. Only meshes that carry a figure use it (walker,
+  passenger, ragdoll, the rides below, preview); the shared `Material()` is untouched. Specials put the finish on all three
   colours, patterns only on A. Effects that need an angle compute a facet normal from derivatives:
   `MeshScratch` writes no normals.
 - **Checks**: `--outfitcheck` (headless: data, packing, every look built in six poses, finish alpha
   round trip); `--avatars <s> <png> --outfits [page|slot name] [--focus N [--count k]] [--walk]` renders
   them (`page 0` = 15 whole outfits; a slot name lines up every look for it).
+- **Riders and drivers**: `Rideable.BuildVisual(rider, outfit)` gets `FootPlayer.OutfitBits` and every
+  figure-carrying visual is dressed and drawn in `FigureMaterial` (`Cyclist`, `Motorcyclist` — a dressed
+  rider is its own "Rider" mesh —, `CarRig`/`HeavyRig` drivers, skier, wingsuit, paraglider);
+  `RefreshVisual` redraws the ride when `OutfitBits` changes. The cyclist's crank-driven legs use the
+  public `HumanMeshBuilder.AppendLeg`; skirts are drawn even when the legs are not (`includeLegs: false`).
+- **Wind**: `HumanPalette.Wind` (author space, m/s of air past the figure). `FigureWind` measures it
+  from the figure node's own motion each frame (owner and remote copies alike, nothing replicated);
+  the walker, cyclist and motorcyclist rebuild while `HumanMeshBuilder.Flutters(outfit)` (a skirt, robe
+  or dress). `AppendSkirt` carries the hem downwind (full by ~14 m/s, length kept) and
+  `MeshScratch.Skirt(ripple, phase)` waves the hem round its edge faster with speed. `BuildStride` with
+  no measured wind uses the stride's own speed. Cars give no wind (closed cabin, driver pose cached).
+- Preview: `--avatars <s> <png> --outfits riders [--speed m/s] [--focus 0..3]` moves a dressed cyclist,
+  motorcyclist, driver and runner together with the camera, so the skirts blow as in the game.

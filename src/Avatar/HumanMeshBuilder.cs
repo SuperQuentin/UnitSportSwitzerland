@@ -72,6 +72,13 @@ public sealed record HumanPalette(
     /// </summary>
     public Outfit Outfit { get; init; }
 
+    /// <summary>
+    /// The air streaming past the figure, m/s in its author space (+Z forward): riding forward at
+    /// v is (0, 0, −v), falling is up. Skirts and robes stream with it and flutter
+    /// (<see cref="FigureWind"/> measures it from a node's motion). Zero: they hang still.
+    /// </summary>
+    public Vector3 Wind { get; init; }
+
     /// <summary>A deterministic jersey colour, so each rider in a race is distinguishable.</summary>
     public static HumanPalette ForRider(int index)
     {
@@ -167,6 +174,9 @@ public static partial class HumanMeshBuilder
         ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null)
     {
         var scratch = new MeshScratch();
+        // a skirt with no measured wind still feels the stride's own (#251)
+        if (palette.Wind == Vector3.Zero && speed > 0.05f && Flutters(palette.Outfit))
+            palette = palette with { Wind = new Vector3(0, 0, -speed) };
         AppendRig(scratch, palette, ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), includeLegs: true, helmet, hat);
         return scratch.Build();
     }

@@ -45,6 +45,9 @@ public static class OutfitCheck
                 ("stride", HumanMeshBuilder.BuildStride(dressed, 3.5f, 0.3f)),
                 ("held", HumanMeshBuilder.BuildPosed(dressed, HumanPose.Standing, ItemArmPose.ShoulderAim, 1f)),
                 ("ragdoll", HumanMeshBuilder.BuildJoints(dressed, HumanMeshBuilder.PoseJoints(HumanPose.Running))),
+                // a gale from ahead and below (riding fast, falling): skirts stream, nothing flies off
+                ("windy", HumanMeshBuilder.Build(dressed with { Wind = new Vector3(3f, 8f, -40f) }, HumanPose.Cycling)),
+                ("motorbike", MotoRider(dressed with { Wind = new Vector3(0, 0, -30f) })),
             };
             foreach (var (pose, mesh) in meshes)
             {
@@ -63,9 +66,17 @@ public static class OutfitCheck
             Fail($"a figure dressed head to toe: {whole}");
 
         GD.Print(failed == 0
-            ? $"[outfitcheck] RESULT: ok — {Garments.All.Length} looks, {built} figures built"
+            ? $"[outfitcheck] RESULT: ok — {Garments.All.Length} looks, {built} figures built (poses, wind, motorbike)"
             : $"[outfitcheck] RESULT: FAILED — {failed}");
         return failed == 0 ? 0 : 1;
+    }
+
+    private static ArrayMesh MotoRider(HumanPalette p)
+    {
+        var look = Player.MotorbikeCatalog.All[0].Look;
+        var s = new MeshScratch();
+        HumanMeshBuilder.AppendRider(s, p, look.Seat, look.Grip, look.Peg);
+        return s.Build();
     }
 
     /// <summary>What is wrong with a dressed figure's mesh, or null.</summary>

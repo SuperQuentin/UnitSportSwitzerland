@@ -141,6 +141,12 @@ public partial class UseAnimProbe : Node
         Expect(inv.Outfit.Bits == Dressed.Bits, "every piece is in its body slot");
         Expect(await Until(() => me.OutfitBits == Dressed.Bits, 5), "the outfit is published on A's player");
         Say("dressed");
+        // dressed on a bike too: B must see the cyclist in the same clothes
+        await Heard("B", "seen", 60);
+        bool mounted = me.SetRide(RideKind.RoadBike);
+        if (!mounted) { me.DebugLaunch(me.GlobalPosition, Vector3.Zero); mounted = me.SetRide(RideKind.RoadBike); }
+        Expect(mounted, "A mounts a road bike");
+        Say("riding");
         Say("done");
         await Heard("B", "done", 30);
     }
@@ -175,6 +181,13 @@ public partial class UseAnimProbe : Node
         Expect(await Until(() => a.OutfitBits == Dressed.Bits, 60), "A's outfit arrived as OutfitBits");
         await Seconds(0.8);
         Shot("outfit_3p_remote");
+        Say("seen");
+        // A gets on a bike (#251): the remote cyclist wears the outfit, drawn in the figure shader
+        Expect(await Until(() => a.RideKindId == (int)RideKind.RoadBike
+            && a.FindChild("Rider", true, false) is MeshInstance3D { MaterialOverride: ShaderMaterial }, 60),
+            "A's cyclist is drawn dressed");
+        await Seconds(0.8);
+        Shot("outfit_bike_3p_remote");
         Say("done");
     }
 

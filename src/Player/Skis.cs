@@ -87,12 +87,12 @@ public sealed class Skis : Rideable
     public override float FovSpeed => 22f;
     public override float DismountSpeed => 3.0f;
 
-    public override Node3D BuildVisual(int riderIndex) => new MeshInstance3D
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => new MeshInstance3D
     {
         Name = "Skier",
         Mesh = SkierMeshBuilder.BuildSkier(
-            HumanPalette.ForRider(riderIndex), SkiPalette.ForRider(riderIndex)),
-        MaterialOverride = HumanMeshBuilder.Material(),
+            HumanPalette.ForRider(riderIndex) with { Outfit = outfit }, SkiPalette.ForRider(riderIndex)),
+        MaterialOverride = HumanMeshBuilder.FigureMaterial(),
     };
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)

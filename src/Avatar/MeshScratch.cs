@@ -89,9 +89,11 @@ public sealed class MeshScratch
     /// out: a skirt, a flared sleeve (#251). Faces whose middle points within
     /// <paramref name="gapAngle"/> radians of <paramref name="gap"/> are left out, which makes a
     /// slit. Not closed, so like <see cref="Pane"/> it has no volume for <c>--meshcheck</c>.
+    /// <paramref name="ripple"/> (a fraction of the hem radius) waves the hem in and out and up and
+    /// down round its edge, at <paramref name="phase"/>: a skirt fluttering in the wind.
     /// </summary>
     public void Skirt(Vector3 a, Vector3 b, float radiusA, float radiusB, Color colour, int sides = 10,
-        Vector3 gap = default, float gapAngle = 0f)
+        Vector3 gap = default, float gapAngle = 0f, float ripple = 0f, float phase = 0f)
     {
         var axis = b - a;
         float length = axis.Length();
@@ -113,7 +115,10 @@ public sealed class MeshScratch
             float angle = Mathf.Tau * i / sides;
             var offset = u * Mathf.Cos(angle) + v * Mathf.Sin(angle);
             Add(a + offset * radiusA, linear);
-            Add(b + offset * radiusB, linear);
+            // two waves of different speed round the hem, so it never pulses as one
+            float wave = Mathf.Sin(phase + i * 2.4f) * 0.7f + Mathf.Sin(phase * 1.7f + i * 1.1f) * 0.3f;
+            float lift = Mathf.Cos(phase * 1.3f + i * 1.9f);
+            Add(b + offset * radiusB * (1f + ripple * wave) + axis * (radiusB * ripple * 0.6f * lift), linear);
         }
         for (int i = 0; i < sides; i++)
         {

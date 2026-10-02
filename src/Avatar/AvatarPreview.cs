@@ -465,6 +465,12 @@ public partial class AvatarPreview : Node3D
         string page = at + 1 < args.Length && !args[at + 1].StartsWith("--") ? args[at + 1] : "0";
         _outfitWalk = args.Contains("--walk");
 
+        if (page == "riders")
+        {
+            BuildRiders(args);
+            return;
+        }
+
         var looks = new List<(Outfit Outfit, Headwear Hat)>();
         if (Enum.TryParse<WearSlot>(page, ignoreCase: true, out var slot) && slot != WearSlot.None)
         {
@@ -509,6 +515,73 @@ public partial class AvatarPreview : Node3D
         GD.Print($"[outfits] page {page}: {looks.Count} figures");
     }
 
+    private Node3D? _convoy;
+    private float _convoySpeed;
+
+    /// <summary>
+    /// "--outfits riders [--speed m/s]": dressed riders on a bike, a motorbike, in a car and on foot,
+    /// all moving together at --speed (default 12) with the camera alongside, so the skirts feel
+    /// the wind of their own motion (<see cref="FigureWind"/>) exactly as in the game.
+    /// </summary>
+    private void BuildRiders(string[] args)
+    {
+        int si = Array.IndexOf(args, "--speed");
+        _convoySpeed = si >= 0 && si + 1 < args.Length && float.TryParse(args[si + 1], System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float v) ? v : 12f;
+        _convoy = new Node3D { Name = "Convoy" };
+        AddChild(_convoy);
+        var yaw = new Vector3(0, Mathf.Pi * 0.5f, 0);   // facing −X: side-on to the camera, riding left
+        Outfit Of(params Items.ItemId[] items) => Outfit.Of(items);
+
+        var bike = Cyclist.Create(1, Of(Items.ItemId.PinkBow, Items.ItemId.PinkCropTop, Items.ItemId.PinkPleated,
+            Items.ItemId.PinkStockings, Items.ItemId.PinkSneakers));
+        bike.CadenceRpm = 80;
+        bike.Position = new Vector3(-6.5f, 0, 0);
+        bike.Rotation = yaw;
+        _convoy.AddChild(bike);
+
+        var moto = Motorcyclist.Create(Player.MotorbikeCatalog.All[0].Look, 2, outfit: Of(Items.ItemId.BuckleCorset,
+            Items.ItemId.TartanSkirt, Items.ItemId.GothStockings, Items.ItemId.PlatformBoots, Items.ItemId.LaceArmWarmers));
+        moto.Position = new Vector3(-2.5f, 0, 0);
+        moto.Rotation = yaw;
+        _convoy.AddChild(moto);
+
+        var spec = Player.CarCatalog.All[0];
+        var car = CarRig.Create(spec.Body, spec.Wheelbase, spec.Gauges, HumanPalette.ForRider(3) with
+        {
+            Outfit = Of(Items.ItemId.CatHeadset, Items.ItemId.HeartShades, Items.ItemId.GalaxyHoodie),
+        });
+        car.View = CockpitView.Outside;
+        car.Position = new Vector3(2.5f, 0, 0);
+        car.Rotation = yaw;
+        _convoy.AddChild(car);
+
+        var walker = new MeshInstance3D { MaterialOverride = HumanMeshBuilder.FigureMaterial(), Position = new Vector3(7f, 0, 0), Rotation = yaw };
+        _convoy.AddChild(walker);
+        _walkers.Add((walker, HumanPalette.ForRider(4) with { Outfit = Of(Items.ItemId.LolitaDress, Items.ItemId.KneeSocks, Items.ItemId.MaryJanes) }, Headwear.None));
+        _riderWind = new FigureWind();
+        _outfitWalk = true;
+
+        // the ground rides along too, so a fast convoy does not leave it behind
+        _convoy.AddChild(new MeshInstance3D
+        {
+            Mesh = new PlaneMesh { Size = new Vector2(80, 80) },
+            Position = Vector3.Down * 0.005f,
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.34f, 0.38f, 0.31f), SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled },
+        });
+        // --focus 0..3: the bike, the motorbike, the car or the walker close up, from a little ahead
+        float[] at = { -6.5f, -2.5f, 2.5f, 7f };
+        bool close = _focus is >= 0 and < 4;
+        float x = close ? at[_focus] : 0f;
+        var cam = new Camera3D { Fov = close ? 32 : 45, Position = close ? new Vector3(x - 1.6f, 1.5f, 4.2f) : new Vector3(0, 1.8f, 15f) };
+        _convoy.AddChild(cam);
+        cam.LookAt(new Vector3(x, 0.95f, 0), Vector3.Up);
+        cam.Current = true;
+        GD.Print($"[outfits] riders at {_convoySpeed:F1} m/s");
+    }
+
+    private FigureWind? _riderWind;
+
     private void Place(float x, Node3D node)
     {
         var pivot = new Node3D { Position = new Vector3(x, 0, 0) };
@@ -521,11 +594,18 @@ public partial class AvatarPreview : Node3D
     {
         _elapsed += delta;
         if (_dance is { } dance) UpdateDance(dance.Style, dance.Move, (float)delta);
+        // the riders' convoy rides to −X, the way they all face
+        if (_convoy != null) _convoy.Position += Vector3.Left * _convoySpeed * (float)delta;
         if (_outfitWalk)
         {
-            _walkPhase = HumanMeshBuilder.AdvancePhase(_walkPhase, 1.4f, (float)delta);
+            // in the convoy the walker runs at its speed (capped to a sprint) in the wind it measures
+            float speed = _convoy != null ? Mathf.Min(_convoySpeed, 7f) : 1.4f;
+            _walkPhase = HumanMeshBuilder.AdvancePhase(_walkPhase, speed, (float)delta);
             foreach (var (mesh, palette, hat) in _walkers)
-                mesh.Mesh = HumanMeshBuilder.BuildStride(palette, 1.4f, _walkPhase, hat: hat);
+            {
+                var p = _riderWind != null ? palette with { Wind = _riderWind.Update(mesh, (float)delta) } : palette;
+                mesh.Mesh = HumanMeshBuilder.BuildStride(p, speed, _walkPhase, hat: hat);
+            }
         }
 
         // A fixed angle, not a turn. Bicycle and rider geometry is judged side-on — saddle
