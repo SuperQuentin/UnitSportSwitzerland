@@ -11,7 +11,9 @@
 
 ## Why
 14+ `OnChange` properties on two relays per player, read every frame on the server: ~27k property
-reads a second at 16 players, ~110k at 32. Numbers: PR (server busy p50/p99, see `perf-interest-round`).
+reads a second at 16 players, ~110k at 32. Measured together with `perf-interest-round`:
+`tools/loadtest.sh` (real terrain), before -> after this PR, back to back: 16 players busy p50 1.58 -> 1.58 ms,
+p99 3.48 -> 2.78 ms; 32 players busy p50 3.43 -> 3.03 ms, p99 18.48 -> 6.68 ms, slow frames 24 -> 12.
 
 ## Same logic, preserved
 - What is sent and to whom is unchanged; an on-change value reaches viewers up to 0.1 s later

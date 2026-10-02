@@ -11,7 +11,9 @@
 
 ## Why
 Every 0.5 s the pass made ~3·N² native position reads, up to 2·N² ground lookups, N² delegate
-allocations and 2·N² `Together` calls. Now N reads/lookups and N² cheap float maths. Numbers: see the PR.
+allocations and 2·N² `Together` calls. Now N reads/lookups and N² cheap float maths.
+`tools/loadtest.sh` (real terrain), before -> after this PR, back to back: 16 players busy p50 1.58 -> 1.58 ms,
+p99 3.48 -> 2.78 ms; 32 players busy p50 3.43 -> 3.03 ms, p99 18.48 -> 6.68 ms, slow frames 24 -> 12.
 
 ## Same logic, preserved
 - Same inputs, same order, same decisions: positions are taken in the same frame, the rules
