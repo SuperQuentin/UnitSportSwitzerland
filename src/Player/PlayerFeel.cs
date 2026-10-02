@@ -384,7 +384,7 @@ public partial class PlayerFeel : Node3D
             _driftLabel.Visible = false;
             return;
         }
-        float slip = Mathf.Abs(Mathf.Wrap(_player.Motion.Slip, -Mathf.Pi, Mathf.Pi));
+        float slip = Mathf.Abs(MathX.WrapAngle(_player.Motion.Slip));
         bool valid = grounded && speed > DriftMinSpeed && slip > DriftMinSlip && slip < DriftMaxSlip;
         if (valid)
         {

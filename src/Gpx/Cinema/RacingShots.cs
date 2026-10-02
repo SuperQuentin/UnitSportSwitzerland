@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Terrain.Format;
+using UnitSport.Core;
 
 namespace UnitSport.Gpx.Cinema;
 
@@ -100,7 +101,7 @@ public abstract class DroneShot : Shot
         var target = Floor(ctx, Target(ctx) + Vector3.Up * _climb);
         // Feed-forward the target's own motion so a drone holding station alongside a 150 km/h car
         // does not trail it by the distance the spring needs to generate that speed.
-        _targetVel = _targetVel.Lerp((target - _lastTarget) / dt, 1f - Mathf.Exp(-4f * dt));
+        _targetVel = _targetVel.Lerp((target - _lastTarget) / dt, MathX.Damp(4f, dt));
         _lastTarget = target;
 
         var want = _targetVel + (target - Pos) * Gain;
@@ -117,7 +118,7 @@ public abstract class DroneShot : Shot
         if (Pos.Y < floor) { Pos.Y = floor; if (_vel.Y < 0f) _vel.Y = 0f; }
 
         // a gimbal, not a tripod: the camera eases onto its subject rather than snapping to it
-        _aim = _aim.Lerp(Aim(ctx), 1f - Mathf.Exp(-7f * dt));
+        _aim = _aim.Lerp(Aim(ctx), MathX.Damp(7f, dt));
         ctx.Place(Pos, _aim, Fov);
     }
 
@@ -163,8 +164,8 @@ public abstract class DroneShot : Shot
         for (double t = from; t <= to; t += 0.25)
         {
             var p = Course(ctx, t);
-            var before = Flat(p - Course(ctx, t - 1.0));
-            var after = Flat(Course(ctx, t + 1.0) - p);
+            var before = MathX.Flat(p - Course(ctx, t - 1.0));
+            var after = MathX.Flat(Course(ctx, t + 1.0) - p);
             if (before.LengthSquared() < 4f || after.LengthSquared() < 4f) continue;   // stopped
             before = before.Normalized();
             after = after.Normalized();
@@ -176,7 +177,6 @@ public abstract class DroneShot : Shot
         return best;
     }
 
-    protected static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
 
     /// <summary>The rival when it is close enough to share the frame.</summary>
     protected static Vector3? RivalNear(ShotContext ctx, float within) =>
@@ -314,7 +314,7 @@ public sealed class SwoopOver : DroneShot
     {
         // over five track seconds: from 45 m ahead and 25 m up to 12 m behind and 6 m up
         float k = Mathf.Clamp((float)(ctx.Time - _start) / 5f, 0f, 1f);
-        k = k * k * (3f - 2f * k);
+        k = Mathf.SmoothStep(0f, 1f, k);
         return ctx.Subject + ctx.Heading * Mathf.Lerp(45f, -12f, k) + Vector3.Up * Mathf.Lerp(25f, 6f, k);
     }
 

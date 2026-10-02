@@ -909,7 +909,7 @@ internal static class AmbienceDsp
             for (int i = 0; i < len && pos + i < s.Length; i++)
             {
                 float u = (float)i / len, t = (float)i / Dsp.Rate;
-                float e = u * u * (3f - 2f * u);                             // smoothstep glissando
+                float e = Mathf.SmoothStep(0f, 1f, u);                       // smoothstep glissando
                 float f = (nt.F0 + (nt.F1 - nt.F0) * e) * pitchMul;
                 f *= 1f + nt.Vib * MathF.Sin(MathF.Tau * nt.VibHz * t);
                 f = MathF.Min(f, 5400f);   // the FM sidebands must stay under Nyquist (11 kHz)

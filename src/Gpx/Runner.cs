@@ -265,7 +265,7 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
         {
             // scale with clock speed, or fast playback would lag badly behind
             float rate = PositionFollow * Mathf.Max(1f, (float)clockSpeed);
-            _smoothPos = _smoothPos.Lerp(pos, 1f - Mathf.Exp(-rate * (float)delta));
+            _smoothPos = _smoothPos.Lerp(pos, MathX.Damp(rate, (float)delta));
         }
         pos = _smoothPos;
 
@@ -296,7 +296,7 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
             // its heading lagged eight times as far behind every corner.
             float turn = 5f * Mathf.Max(1f, (float)clockSpeed);
             Heading = delta > 0
-                ? Heading.Slerp(target, 1f - Mathf.Exp(-turn * (float)delta)).Normalized()
+                ? Heading.Slerp(target, MathX.Damp(turn, (float)delta)).Normalized()
                 : target;
         }
 
@@ -310,7 +310,7 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
             basis = new Basis(Vector3.Up, yaw);
             float travelYaw = Mathf.Atan2(-Heading.X, -Heading.Z);
             // counter-steer: the fronts point down the direction of travel, as far as the lock allows
-            _car.SteerAngle = Mathf.Clamp(Mathf.Wrap(travelYaw - yaw, -Mathf.Pi, Mathf.Pi), -0.6f, 0.6f);
+            _car.SteerAngle = Mathf.Clamp(MathX.WrapAngle(travelYaw - yaw), -0.6f, 0.6f);
             _car.WheelTurn = _car.SteerAngle * _steerRatio;
         }
         Avatar.GlobalTransform = new Transform3D(basis, pos);
