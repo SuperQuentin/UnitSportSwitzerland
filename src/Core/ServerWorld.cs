@@ -210,7 +210,19 @@ public partial class ServerWorld : Node3D, IOriginContainer
             _structures.InMatch = br.Playing;
             _structures.MatchRunning = () => br.State.Running;
             _structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+            // a match piece that comes down leaves a pile of some of its materials (#276)
+            var crates = _brCrates;
+            _structures.Rubble = (at, stacks) =>
+            {
+                if (crates == null) return;
+                var (e, n) = origin.ToLv95(at);
+                var pile = new BattleRoyale.Crate { Style = BattleRoyale.CrateStyle.Pile, E = e, N = n, Alt = BattleRoyale.BrCrates.Ground, Label = "the rubble" };
+                pile.SetStacks(stacks);
+                crates.Spawn(new[] { pile });
+            };
+            br.Structures = _structures;
         }
+        br.Placed = _placed;
 
         // a vehicle out of nothing is an admin's, or the one a race put you on (Core/Permissions)
         // (a wreck cannot be driven and burns out: no loophole, and race NPCs' wrecks park through

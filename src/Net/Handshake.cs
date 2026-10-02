@@ -26,8 +26,9 @@ public partial class Handshake : Node
     /// 3: one packed NetPose array replaces the replicated BodyPose and TrainPose (#221).
     /// 4: built structures, World/Structures (#274).
     /// 5: gadgets as placed kinds 5-10, with a zipline/ladder payload (#275).
+    /// 6: Battle Royale prefabs: Structures.AddPieces, match-owned gadgets (#276).
     /// </summary>
-    public const int Protocol = 5;
+    public const int Protocol = 6;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

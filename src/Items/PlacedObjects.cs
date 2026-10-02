@@ -77,6 +77,9 @@ public partial class PlacedObjects : Node
 
     public static PlacedObjects? Instance { get; private set; }
 
+    /// <summary>The owner of what a Battle Royale match sets out (#276): nobody can take it, it is never saved, it goes with the match.</summary>
+    public const string MatchOwner = "(match)";
+
     /// <summary>Kinds anyone may remove; every other kind only its owner. Must agree on the server.</summary>
     public static readonly HashSet<PlacedKind> RemovableByAnyone = new() { PlacedKind.Flag };
 
@@ -330,6 +333,30 @@ public partial class PlacedObjects : Node
         Reply(peer, req, o.Id, "");
     }
 
+    /// <summary>Server: sets something down on its own authority (a match's gadgets): no checks, told to everyone.</summary>
+    public PlacedObject ServerPlace(PlacedKind kind, Transform3D at, string payload, string owner)
+    {
+        var (e, n) = _origin.ToLv95(at.Origin);
+        var o = Put(new PlacedObject(_nextId++, kind, owner, e, n, at.Origin.Y, at.Basis.Orthonormalized().GetRotationQuaternion(), payload));
+        if (owner != MatchOwner) Save();
+        if (Online)
+            foreach (int p in Multiplayer.GetPeers())
+                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, o.Owner, o.E, o.N, o.Altitude, o.Rotation, o.Payload);
+        return o;
+    }
+
+    /// <summary>Server: takes away everything one owner set down (the match's gadgets when it is over).</summary>
+    public void ClearOwner(string owner)
+    {
+        foreach (var o in _objects.Values.Where(o => o.Owner == owner).ToList())
+        {
+            Drop(o.Id);
+            if (Online)
+                foreach (int p in Multiplayer.GetPeers())
+                    RpcId(p, MethodName.Remove, o.Id);
+        }
+    }
+
     private void ServeRemove(long peer, int req, long id)
     {
         string? refused = !_objects.TryGetValue(id, out var o) ? "It is not there any more."
@@ -416,7 +443,7 @@ public partial class PlacedObjects : Node
             var store = new Store
             {
                 Next = _nextId,
-                Objects = _objects.Values.OrderBy(o => o.Id).Select(o => new Entry
+                Objects = _objects.Values.Where(o => o.Owner != MatchOwner).OrderBy(o => o.Id).Select(o => new Entry
                 {
                     Id = o.Id, Kind = o.Kind.ToString(), Owner = o.Owner, E = o.E, N = o.N, Altitude = o.Altitude,
                     Rotation = new[] { o.Rotation.X, o.Rotation.Y, o.Rotation.Z, o.Rotation.W }, Payload = o.Payload,

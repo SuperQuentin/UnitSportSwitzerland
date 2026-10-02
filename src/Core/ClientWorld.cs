@@ -563,7 +563,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
         if (Items.ShotgunProbe.Role != null) { inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.Shotgun, 1)); inventory.Add(Items.ItemId.Shells, 25); }   // on the hotbar for --hold
@@ -594,6 +594,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Build.BuildNetProbe.Role != null) AddChild(new Build.BuildNetProbe(items));
         if (Build.GadgetProbe.Requested) { Build.GadgetProbe.Stock(items.Inventory); AddChild(new Build.GadgetProbe(items)); }
         if (Build.GadgetNetProbe.Role != null) AddChild(new Build.GadgetNetProbe(items));
+        if (BattleRoyale.PrefabProbe.Requested) AddChild(new BattleRoyale.PrefabProbe());
         if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
             && Items.DropCheck.Requested && Items.DropCheck.Create(() => LocalPlayer, () => _players, items) is { } soloDrop)
