@@ -21,6 +21,7 @@
 - **Budget per kind** (`LootTables.BudgetFactor`): `Abundance` = (6 + 3·floors)·factor / lootable pieces;
   Commercial 1.3, Industrial 1.2, Annex/Garage 0.7. Locked containers are neither counted nor scaled
   (`AbundanceFor` = 1 for them).
+- **Plan version 11** (#273): shops get a counter, PAUSA vending machines in lobbies (the loot `shops`, `vending` notes).
 - **Plan version 7** (`InteriorLayout.CurrentVersion`): stored plans regenerate, so furniture indexes change and old
   take masks no longer line up — harmless, masks only live one restock period.
 - `--lootstats` also prints, per kind, % of buildings with a gun locker / safe and shotguns/shells per hundred.

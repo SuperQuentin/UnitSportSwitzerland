@@ -8,3 +8,5 @@
   name is the key and is not known on connect), offline in `user://account.json`. Cash leaves the
   pocket only when the server answers, and the server refuses a peer that is not inside a bank. The server cannot verify the amount — the inventory is the
   client's — and a name is not a password.
+  The account is also the **card** in shops (#273, the loot `shops` note): the server debits it
+  itself (`Bank.Charge`, no overdraft) and sends the new balance (`Bank.Report`).
