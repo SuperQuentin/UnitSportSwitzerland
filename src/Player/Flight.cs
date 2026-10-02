@@ -193,11 +193,11 @@ public sealed class Wingsuit : Flyer
     public override float MaxFov => 105f;
     public override float FovSpeed => 60f;
 
-    public override Node3D BuildVisual(int riderIndex) => new MeshInstance3D
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => new MeshInstance3D
     {
         Name = "Wingsuit",
-        Mesh = AircraftMeshBuilder.Wingsuit(HumanPalette.ForRider(riderIndex)),
-        MaterialOverride = HumanMeshBuilder.Material(),
+        Mesh = AircraftMeshBuilder.Wingsuit(HumanPalette.ForRider(riderIndex) with { Outfit = outfit }),
+        MaterialOverride = HumanMeshBuilder.FigureMaterial(),
     };
 
     public override void Begin(ref FlightMotion m, Vector3 velocity, float yaw)
@@ -297,11 +297,11 @@ public class Canopy : Flyer
     public override float MaxFov => 82f;
     public override float FovSpeed => 16f;
 
-    public override Node3D BuildVisual(int riderIndex) => new MeshInstance3D
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) => new MeshInstance3D
     {
         Name = Label,
-        Mesh = AircraftMeshBuilder.Canopy(HumanPalette.ForRider(riderIndex), _paraglider),
-        MaterialOverride = HumanMeshBuilder.Material(),
+        Mesh = AircraftMeshBuilder.Canopy(HumanPalette.ForRider(riderIndex) with { Outfit = outfit }, _paraglider),
+        MaterialOverride = HumanMeshBuilder.FigureMaterial(),
     };
 
     public override FlightEvent Fly(in FlightInput input, in FlightEnv env, float dt, ref FlightMotion m)
@@ -387,7 +387,7 @@ public sealed class Helicopter : Flyer
     public override float MaxFov => 90f;
     public override float FovSpeed => 60f;
 
-    public override Node3D BuildVisual(int riderIndex)
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default)
     {
         var paint = Color.FromHsv((riderIndex * 0.37f) % 1f, 0.55f, 0.75f);
         var root = new Node3D { Name = "Helicopter" };
@@ -496,7 +496,7 @@ public sealed class Plane : Flyer
     public override float MaxFov => 92f;
     public override float FovSpeed => 80f;
 
-    public override Node3D BuildVisual(int riderIndex)
+    public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default)
     {
         float hue = (riderIndex * 0.37f) % 1f;
         var root = new Node3D { Name = "Plane" };

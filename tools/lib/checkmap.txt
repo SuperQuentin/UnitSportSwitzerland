@@ -12,6 +12,7 @@
 src/Net/                 quick  --interestcheck
 src/Audio/Cd/            quick  --beatcheck
 src/Avatar/              quick  --meshcheck
+src/Avatar/              quick  --outfitcheck
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck

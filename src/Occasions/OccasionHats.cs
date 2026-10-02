@@ -6,13 +6,15 @@ using UnitSport.Player;
 namespace UnitSport.Occasions;
 
 /// <summary>
-/// Decides what the local player wears on their head and writes it to the replicated
-/// <see cref="FootPlayer.HeadwearId"/>, so every other player sees the same hat.
+/// Decides what the local player wears and writes it to the replicated
+/// <see cref="FootPlayer.HeadwearId"/> (the hat) and <see cref="FootPlayer.OutfitBits"/> (the
+/// clothes in the body slots, #251), so every other player sees the same figure.
 ///
 /// <para>
-/// A hat the player chose to wear (<see cref="Inventory.Worn"/>, a hunt find) comes first; else
-/// the hat of the highest-priority running occasion with the Hats facet. That facet is cosmetic,
-/// so a player who turned the occasion off simply has none — no separate hat setting needed.
+/// A hat the player chose to wear (in the head slot, a hunt find) comes first; else, with nothing
+/// on the head, the hat of the highest-priority running occasion with the Hats facet. That facet
+/// is cosmetic, so a player who turned the occasion off simply has none — no separate hat setting
+/// needed. Clothes on the head (cat ears) are drawn from the outfit, so they take the head too.
 /// </para>
 /// </summary>
 public partial class OccasionHats : Node
@@ -47,8 +49,10 @@ public partial class OccasionHats : Node
 
         if (_player() is not { } p || !IsInstanceValid(p) || !p.IsMultiplayerAuthority()) return;
         var hat = ForItem(_inventory.Worn);
-        if (hat == Headwear.None && OccasionManager.Instance?.Top(OccasionFacets.Hats) is { } top)
+        if (_inventory.Worn == ItemId.None && OccasionManager.Instance?.Top(OccasionFacets.Hats) is { } top)
             hat = top.Content.Hat;
         if (p.HeadwearId != (int)hat) p.HeadwearId = (int)hat;
+        long outfit = _inventory.Outfit.Bits;
+        if (p.OutfitBits != outfit) p.OutfitBits = outfit;
     }
 }

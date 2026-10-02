@@ -93,6 +93,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 GetTree().Quit(Avatar.MeshScratch.Check());
                 return;
             }
+            if (Array.IndexOf(scArgs, "--outfitcheck") >= 0)
+            {
+                GetTree().Quit(Avatar.OutfitCheck.Run());
+                return;
+            }
             if (Array.IndexOf(scArgs, "--cockpitcheck") >= 0)
             {
                 GetTree().Quit(Player.CockpitCheck.Run());

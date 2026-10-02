@@ -141,7 +141,7 @@ public partial class FootPlayer
         }
         if (_ragdollMesh == null)
         {
-            _ragdollMesh = new MeshInstance3D { Name = "Ragdoll", TopLevel = true, MaterialOverride = HumanMeshBuilder.Material() };
+            _ragdollMesh = new MeshInstance3D { Name = "Ragdoll", TopLevel = true, MaterialOverride = HumanMeshBuilder.FigureMaterial() };
             AddChild(_ragdollMesh);
         }
         _ragdollMesh.Visible = true;
@@ -189,7 +189,7 @@ public partial class FootPlayer
         Span<Vector3> local = stackalloc Vector3[HumanMeshBuilder.JointCount];
         // relative to the hips, and pre-flipped: the mesh builder turns everything a half turn on the way out
         for (int i = 0; i < local.Length; i++) local[i] = Flip(points[i] - pelvis);
-        _ragdollMesh.Mesh = HumanMeshBuilder.BuildJoints(HumanPalette.ForRider(GetMultiplayerAuthority()), local, Hat);
+        _ragdollMesh.Mesh = HumanMeshBuilder.BuildJoints(FigurePalette(GetMultiplayerAuthority()), local, Hat);
         _ragdollMesh.GlobalTransform = new Transform3D(Basis.Identity, pelvis);
         if (_walker != null) _walker.Visible = false;
 
