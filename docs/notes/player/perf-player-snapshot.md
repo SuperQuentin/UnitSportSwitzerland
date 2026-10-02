@@ -48,11 +48,14 @@ is where it counts. `--combatcheck` (plane and paraglider) passes on both.
   replace `foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group)) if (node is FootPlayer p ...)`
   with `foreach (var s in PlayerSnapshot.Of(GetTree())) { var p = s.Player; ... }` and use
   `s.Pos` / `s.Vel` / `s.Ride` instead of `p.GlobalPosition` / `p.WorldVelocity` / `p.Ride`.
-- Not yet migrated (open PRs own the files): `FootPlayer.OtherVehicles` (slipstream, every rider
-  every tick: `foreach (var s in PlayerSnapshot.Of(GetTree())) if (s.Player != this && s.Ride != RideKind.OnFoot) yield (s.Pos, s.Vel)`,
-  better as a loop into a reused list), `FootPlayer.Overlap.AnyPlayerNear` (`s.Pos`),
-  `FootPlayer.DancersAround`, `RaceNpc` (lines ~134, ~425), `RaceManager` (~1159),
-  `VehicleBody` (~199), `PlayerHits`, `ThrowHits` (per throw, fine).
+- Migrated in round 3: `FootPlayer.OtherVehicles` (slipstream, into the reused `_otherVehicles`;
+  `RideGround.DraftBehind` takes a `List` now), `FootPlayer.Overlap.AnyPlayerNear`,
+  `RaceNpc.Bodies` (reused `_bodies`), `RaceManager.Others` (one static list refilled per call:
+  read it within the pilot's `Drive`, never keep it). Their positions are the tick's snapshot ones.
+- Left as scans on purpose (not per tick): `FootPlayer.DancersAround` (every 0.5 s, from `_Process`,
+  where the snapshot may be a tick old), `RaceNpc` `--npccheck` (every 5 s, probe), `RaceManager`'s
+  GO print (once), `VehicleBody._Ready`, `FootPlayer.Deck`/`Passenger` riders (on events),
+  `PlayerHits`, `ThrowHits` (per throw).
 - `Traffic.Obstacles` keeps its type `Func<IEnumerable<(Vector3 Pos, Vector3 Vel)>>`. A branch that
   edits the old `Obstacles?.Invoke().ToList()` line keeps the new three lines (`_obstacles` refilled).
 - Open PRs touching these files when this landed: #269 (`CombatManager.cs`: the `Shot`/`ShotFrom`

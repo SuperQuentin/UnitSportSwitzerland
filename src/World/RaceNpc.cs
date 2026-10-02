@@ -130,14 +130,15 @@ public partial class RaceNpc : Node
         GD.Print($"[npc] {_me.Name} arriving {a.Style} for slot {a.Slot + 1} of {a.Count}");
     }
 
-    /// <summary>Everyone else, for driving in: players, NPCs, parked or moving.</summary>
+    /// <summary>Everyone else, for driving in: players, NPCs, parked or moving. One reused list, from this tick's <see cref="PlayerSnapshot"/> (#221).</summary>
     private List<NpcArrival.Body> Bodies()
     {
-        var list = new List<NpcArrival.Body>();
-        foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (node is FootPlayer p && p != _me) list.Add(new NpcArrival.Body(p.GlobalPosition, p.WorldVelocity, p.Npc));
-        return list;
+        _bodies.Clear();
+        foreach (var s in PlayerSnapshot.Of(GetTree()))
+            if (s.Player != _me) _bodies.Add(new NpcArrival.Body(s.Pos, s.Vel, s.Player.Npc));
+        return _bodies;
     }
+    private readonly List<NpcArrival.Body> _bodies = new();
 
     private void OnSetup(RaceManager.NpcGrid g)
     {

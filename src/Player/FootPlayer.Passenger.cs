@@ -147,6 +147,27 @@ public partial class FootPlayer
     /// The camera from a seat: from the figure's own eye on the vehicle's body (first person), or
     /// behind the vehicle (third), turned by the free look, which stays where it is put.
     /// </summary>
+    /// <summary>
+    /// What the seat camera's ray ignores: this body, the vehicle and its section bodies. Rebuilt
+    /// only when the vehicle, its train (<see cref="TrainRids"/> is a new array then) or its child
+    /// count changes (#221: a new array and a LINQ scan per frame before).
+    /// </summary>
+    private Godot.Collections.Array<Rid> SeatExclude(FootPlayer who)
+    {
+        var train = who.TrainRids();
+        int children = who.GetChildCount();
+        if (_seatExclude != null && who == _seatWho && ReferenceEquals(train, _seatTrain) && children == _seatChildren) return _seatExclude;
+        _seatExclude = new Godot.Collections.Array<Rid> { GetRid(), who.GetRid() };
+        foreach (var section in who.GetChildren().OfType<CollisionObject3D>()) _seatExclude.Add(section.GetRid());
+        _seatWho = who;
+        _seatTrain = train;
+        _seatChildren = children;
+        return _seatExclude;
+    }
+    private Godot.Collections.Array<Rid>? _seatExclude, _seatTrain;
+    private FootPlayer? _seatWho;
+    private int _seatChildren;
+
     private void UpdateSeatCamera(float dt)
     {
         if (_camera == null || WhereSeated() is not { } s) return;
@@ -164,9 +185,7 @@ public partial class FootPlayer
         var centre = s.Who.GlobalPosition + Vector3.Up * ride.EyeHeight;
         float yaw = s.Who.GlobalRotation.Y + _lookYaw;
         var wanted = centre + new Basis(Vector3.Up, yaw) * new Vector3(0, ride.ChaseHeight, ride.ChaseDistance);
-        var exclude = new Godot.Collections.Array<Rid> { GetRid(), s.Who.GetRid() };
-        foreach (var section in s.Who.GetChildren().OfType<CollisionObject3D>()) exclude.Add(section.GetRid());
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(centre, wanted, CameraMask, exclude));
+        var hit = _camRay.Cast(GetWorld3D().DirectSpaceState, centre, wanted, CameraMask, SeatExclude(s.Who));
         var at = hit.Count > 0 ? centre.Lerp(hit["position"].AsVector3(), 0.85f) : wanted;
         _camera.GlobalTransform = Transform3D.Identity.LookingAt(centre - at, Vector3.Up).Translated(at);
         _camera.RotateObjectLocal(Vector3.Right, _pitch + ride.ChasePitch + 0.1f);

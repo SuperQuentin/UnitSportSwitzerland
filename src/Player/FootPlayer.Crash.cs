@@ -351,14 +351,14 @@ public partial class FootPlayer
     /// <summary>As far toward <paramref name="to"/> as the lens can go from <paramref name="from"/>: stopped short of a wall or a tree.</summary>
     private Vector3 CameraReach(PhysicsDirectSpaceState3D space, Vector3 from, Vector3 to)
     {
-        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to, RagdollMask, new Godot.Collections.Array<Rid> { GetRid() }));
+        var hit = _camRay.Cast(space, from, to, RagdollMask, SelfExclude);
         if (hit.Count == 0) return to;
         var at = hit["position"].AsVector3();
         return at + (from - at).Normalized() * 0.4f;
     }
 
     private bool Sees(PhysicsDirectSpaceState3D space, Vector3 from, Vector3 to) =>
-        space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to, RagdollMask, new Godot.Collections.Array<Rid> { GetRid() })).Count == 0;
+        _camRay.Cast(space, from, to, RagdollMask, SelfExclude).Count == 0;
 
     private void UpdateCrashCamera(float dt)
     {

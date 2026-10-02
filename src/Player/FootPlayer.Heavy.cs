@@ -49,6 +49,7 @@ public partial class FootPlayer
             s.QueueFree();
         }
         _sections.Clear();
+        _trainRids = null;
         _visualTrailer = TrailerCode;
         var truck = _ride as Truck;
         if (truck == null && HeavyCatalog.For(kind) is { } spec)
@@ -93,26 +94,32 @@ public partial class FootPlayer
             AddCollisionExceptionWith(body);
             foreach (var other in _sections) { body.AddCollisionExceptionWith(other); other.AddCollisionExceptionWith(body); }
             _sections.Add(body);
+            _trainRids = null;
         }
         for (int j = 0; j < _shownAngles.Length; j++) _shownAngles[j] = truck.Articulation[j];
     }
 
-    /// <summary>What the section bodies' own ray tests must not hit: this player and its train.</summary>
+    /// <summary>
+    /// What the section bodies' own ray tests and the chase camera must not hit: this player and its
+    /// train. One array, rebuilt only when the sections change (#221); never add to it.
+    /// </summary>
     private Godot.Collections.Array<Rid> TrainRids()
     {
+        if (_trainRids != null) return _trainRids;
         var rids = new Godot.Collections.Array<Rid> { GetRid() };
         foreach (var s in _sections) rids.Add(s.GetRid());
-        return rids;
+        return _trainRids = rids;
     }
+    private Godot.Collections.Array<Rid>? _trainRids;
+    private readonly Core.RayQuery _groundRay = new();
 
     /// <summary>The ground's height under a point: whatever is solid there (a road, a bridge deck), else the terrain.</summary>
 
     private float GroundUnder(Vector3 p, Godot.Collections.Array<Rid> exclude)
     {
 
-        var query = PhysicsRayQueryParameters3D.Create(p + Vector3.Up * 3f, p + Vector3.Down * 6f,
+        var hit = _groundRay.Cast(GetWorld3D().DirectSpaceState, p + Vector3.Up * 3f, p + Vector3.Down * 6f,
             CollisionMask & ~World.TreeColliders.Layer, exclude);
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         if (hit.Count > 0) return hit["position"].AsVector3().Y;
         return Terrain != null && Terrain.TryGetHeight(p, out float g) ? g : p.Y;
     }
@@ -246,12 +253,6 @@ public partial class FootPlayer
             body.GlobalTransform = SectionWorld(truck, k, exclude);
             if (body.GetNodeOrNull<Avatar.HeavyRig>("Visual") is { } rig) truck.Dress(rig, k, reversing);
         }
-    }
-
-    /// <summary>The camera's pull-in ray ignores the train it is looking along.</summary>
-    private void ExcludeTrain(Godot.Collections.Array<Rid> rids)
-    {
-        foreach (var s in _sections) rids.Add(s.GetRid());
     }
 
     // ---- driving: before and after the train's step ---------------------------------------------

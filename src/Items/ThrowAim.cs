@@ -205,6 +205,9 @@ public partial class ThrowAim : Node3D
         _sfx.Play();
     }
 
+    /// <summary>The path's rays: one query, reused (#221).</summary>
+    private readonly Core.RayQuery _ray = new();
+
     /// <summary>The throw's path at <paramref name="power"/>, until it meets something or runs out of time.</summary>
     private void Simulate(FootPlayer player, float power)
     {
@@ -215,7 +218,7 @@ public partial class ThrowAim : Node3D
         var p = Origin(player);
         var v = Launch(player, power);
         var space = player.GetWorld3D().DirectSpaceState;
-        var exclude = new Godot.Collections.Array<Rid> { player.GetRid() };
+        var exclude = player.SelfExclude;
         _points.Add(p);
         var from = p;
         for (float t = 0; t < MaxTime; t += StepTime)
@@ -226,7 +229,7 @@ public partial class ThrowAim : Node3D
             // a ray every other step: plenty for a path, half the queries
             if (((int)(t / StepTime) & 1) == 1 || t + StepTime >= MaxTime)
             {
-                var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, p, uint.MaxValue, exclude));
+                var hit = _ray.Cast(space, from, p, uint.MaxValue, exclude);
                 if (hit.Count > 0)
                 {
                     _hitPoint = hit["position"].AsVector3();
