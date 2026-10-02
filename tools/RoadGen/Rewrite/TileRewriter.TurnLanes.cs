@@ -72,7 +72,7 @@ public static partial class TileRewriter
     private static double Sq(double v) => v * v;
 
     private static void EmitTurnLanes(PriorityResult priority, RoadGenResult result,
-        Dictionary<int, (RoadSegment Segment, TileId Tile)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
+        Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
         Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
         Dictionary<TileId, List<RoadPointProp>> signs, TurnLaneStats stats)
@@ -87,11 +87,11 @@ public static partial class TileRewriter
         var pockets = new List<PocketPlan>();
         var slots = new Dictionary<(RoadSegment, int), Slot>();
         var order = new List<Slot>();
-        Slot SlotOf(RoadSegment s, TileId t, int side)
+        Slot SlotOf((RoadSegment Segment, TileId Tile, RoadSegment Painted) s, int side)
         {
-            if (!slots.TryGetValue((s, side), out var slot))
+            if (!slots.TryGetValue((s.Segment, side), out var slot))
             {
-                slots[(s, side)] = slot = new Slot(s, t);
+                slots[(s.Segment, side)] = slot = new Slot(s.Segment, s.Tile, s.Painted);
                 order.Add(slot);
             }
             return slot;
@@ -129,8 +129,8 @@ public static partial class TileRewriter
 
                 // approach: traffic drives toward the junction and keeps right; exit: away from it, keeping right
                 bool inAtEnd = arm.End == LinkEnd.End, outAtEnd = plan.Arms[exit].End == LinkEnd.End;
-                var approach = SlotOf(inSeg.Segment, inSeg.Tile, inAtEnd ? 1 : -1);
-                var departure = SlotOf(outSeg.Segment, outSeg.Tile, outAtEnd ? -1 : 1);
+                var approach = SlotOf(inSeg, inAtEnd ? 1 : -1);
+                var departure = SlotOf(outSeg, outAtEnd ? -1 : 1);
                 // a slot holds one approach and one exit; a second would be another arm on the same segment
                 if (approach.Approach is not null || departure.Exit is not null) { stats.NoSegment++; continue; }
                 var pocket = new PocketPlan(home, approach, inAtEnd, departure, outAtEnd, right);
@@ -194,9 +194,11 @@ public static partial class TileRewriter
     /// and the approach, they merge: the through lane stays out the whole way (2+1), the exit's
     /// hatched median stays a lane wide and opens into the next pocket.
     /// </summary>
-    private sealed class Slot(RoadSegment segment, TileId tile)
+    private sealed class Slot(RoadSegment segment, TileId tile, RoadSegment painted)
     {
         public readonly RoadSegment Segment = segment;
+        /// <summary>The segment its lines were laid on: an Urban-flagged copy in a built-up stretch (#119).</summary>
+        public readonly RoadSegment Painted = painted;
         public readonly TileId Tile = tile;
         public PocketPlan? Approach, Exit;
         public Widening? ApproachWay, ExitWay;
@@ -213,7 +215,7 @@ public static partial class TileRewriter
             Merged = false;
             int self = tileSegments.IndexOf(Segment);
             Widening Way(PocketPlan p, bool exit, double length, double taper, double clear = TurnClear, double[]? stations = null) =>
-                new(Segment, Tile, self, junctionAtEnd: exit ? p.OutAtEnd : p.InAtEnd,
+                new(Segment, Painted, Tile, self, junctionAtEnd: exit ? p.OutAtEnd : p.InAtEnd,
                     side: (exit ? p.OutAtEnd : p.InAtEnd) == exit ? -1 : 1, length, taper, clear, stations);
 
             if (e is not null)
@@ -307,7 +309,7 @@ public static partial class TileRewriter
     /// </summary>
     private sealed class Widening
     {
-        private readonly RoadSegment _seg;
+        private readonly RoadSegment _seg, _painted;
         private readonly TileId _tile;
         private readonly int _self, _side;
         private readonly bool _atEnd;
@@ -318,10 +320,11 @@ public static partial class TileRewriter
         /// <summary>Set once its strip and paint are out (a merged one serves two pockets).</summary>
         public bool Emitted { get; private set; }
 
-        public Widening(RoadSegment seg, TileId tile, int self, bool junctionAtEnd, int side, double length, double taper,
+        /// <param name="painted">The segment the road's lines were laid on (the one they name), <paramref name="seg"/> or an Urban-flagged copy of it.</param>
+        public Widening(RoadSegment seg, RoadSegment painted, TileId tile, int self, bool junctionAtEnd, int side, double length, double taper,
             double clear = TurnClear, double[]? stations = null)
         {
-            _seg = seg; _tile = tile; _self = self; _atEnd = junctionAtEnd; _side = side;
+            _seg = seg; _painted = painted; _tile = tile; _self = self; _atEnd = junctionAtEnd; _side = side;
             _length = length; _taper = taper; _clear = clear; _half = seg.Width * 0.5;
             int n = seg.PointCount;
             var p = seg.Points;
@@ -462,7 +465,7 @@ public static partial class TileRewriter
             });
 
             // the old edge line stops where the widening starts; a new one follows the strip
-            var edge = paint.FirstOrDefault(q => q.Segment == _seg && q.Dash == 0 && Math.Sign(q.Offset) == _side && Math.Abs(q.Offset) > _half * 0.5);
+            var edge = paint.FirstOrDefault(q => q.Segment == _painted && q.Dash == 0 && Math.Sign(q.Offset) == _side && Math.Abs(q.Offset) > _half * 0.5);
             if (edge is null) return;
             Cut(paint, edge);
             paint.Add(new RoadPaint
@@ -478,7 +481,8 @@ public static partial class TileRewriter
             paint.Remove(line);
             double far = AlongOf(_length);   // the widening's far end, in along-segment metres
             double from = _atEnd ? line.From : far, to = _atEnd ? far : line.To;
-            if (to - from > 1)
+            // a line to the end has To = infinity: none is left past a strip as long as the segment (#325)
+            if (Math.Min(to, _total) - from > 1)
                 paint.Add(RoadPaint.AlongSegment(_seg, line.Type, line.Rgba, line.Width, line.Dash, line.Gap, line.Offset, from, to, line.Variant));
         }
 
@@ -569,7 +573,7 @@ public static partial class TileRewriter
         /// <summary>The dashed centre line along the widening turned solid: no overtaking into the junction.</summary>
         private void SolidCentre(List<RoadPaint> paint)
         {
-            var centre = paint.FirstOrDefault(q => q.Segment == _seg && q.Dash > 0 && Math.Abs(q.Offset) < 0.3);
+            var centre = paint.FirstOrDefault(q => q.Segment == _painted && q.Dash > 0 && Math.Abs(q.Offset) < 0.3);
             if (centre is null) return;
             Cut(paint, centre);
             paint.Add(Line(PaintType.WhiteSolid, 0, 0, centre.Offset, 0, _length));
