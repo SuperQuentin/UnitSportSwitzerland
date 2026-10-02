@@ -26,8 +26,12 @@ public readonly record struct HullColumn(Vector3 Foot, float Width, float Length
     public float Volume => Area * Height;
 }
 
-/// <summary>What pushes a boat: a propeller with a rudder behind it, or a steerable water jet.</summary>
-public enum BoatDrive { Propeller, Jet }
+/// <summary>
+/// What pushes a boat: a propeller with a rudder behind it, a steerable water jet, or a pair of side
+/// paddle wheels on one steam engine's shaft (#303: the shaft turns either way, through stop, at
+/// the engine's own pace; the rudder works with the way the hull has on it, there is no wash over it).
+/// </summary>
+public enum BoatDrive { Propeller, Jet, Paddle }
 
 /// <summary>
 /// A boat as numbers: its hull, its mass, its drive and how it planes. Everything the model does
@@ -56,8 +60,11 @@ public sealed record BoatSpec
     public float StaticThrust { get; init; }
     /// <summary>Reverse thrust as a share of forward.</summary>
     public float ReverseShare { get; init; } = 0.4f;
-    /// <summary>Where the prop or the jet's nozzle pushes, hull frame: at the stern, under water.</summary>
+    /// <summary>Where the prop or the jet's nozzle pushes, hull frame: at the stern, under water. Paddles: the starboard wheel's floats (the port one mirrors it).</summary>
     public Vector3 ThrustAt { get; init; }
+    /// <summary>The rudder's (and skeg's) place, hull frame; zero: at <see cref="ThrustAt"/> (behind the prop).</summary>
+    public Vector3 RudderAt { get; init; }
+    public Vector3 Rudder => RudderAt != Vector3.Zero ? RudderAt : ThrustAt;
     /// <summary>The prop disc's (or the jet's intake's) area, m²: its wash over the rudder.</summary>
     public float DiscArea { get; init; } = 0.1f;
     /// <summary>Full helm, rad (rudder or nozzle), and how fast the helm gets there, rad/s.</summary>
@@ -167,8 +174,12 @@ public sealed record BoatSpec
         }
     }
 
-    /// <summary>A little drag linear in speed, so a slow drift dies out instead of lasting for ever.</summary>
-    public float Drag1 => Mass * 0.05f;
+    /// <summary>
+    /// A little drag linear in speed, so a slow drift dies out instead of lasting for ever: this much
+    /// per kg. A 500 t ship takes far less (at the small boats' 0.05 it could not make 3 m/s).
+    /// </summary>
+    public float LinearDrag { get; init; } = 0.05f;
+    public float Drag1 => Mass * LinearDrag;
 
     /// <summary>The water's drag on the hull at a forward water speed (either way), N.</summary>
     public float Resistance(float u)
@@ -284,6 +295,8 @@ public struct BoatState
     /// <summary>The engine, 0 idle .. 1 full, and the lever's sign (1 ahead, −1 astern).</summary>
     public float Rpm01;
     public int Gear;
+    /// <summary>A paddle steamer's shaft (#303), −1 full astern .. 1 full ahead: it goes through stop to reverse.</summary>
+    public float Shaft;
     /// <summary>Rudder or nozzle now, rad, + to starboard.</summary>
     public float Helm;
     /// <summary>Water displaced over the water displaced at rest: 1 floating still, ~0.3 on the plane, 0 in the air.</summary>
@@ -519,21 +532,49 @@ public static class BoatDynamics
         if (lever > 0f) b.Gear = 1;
         else if (lever < 0f) b.Gear = -1;
         var thrustAt = P + R * (s.ThrustAt - s.Centre);
-        b.Biting = water.Surface(thrustAt.X, thrustAt.Z, out float atStern, out _) && thrustAt.Y < atStern + 0.05f;
-        // out of the water the prop or the impeller spins free: the engine races
-        float wantRpm = Mathf.Abs(lever) * (b.Biting ? 1f : 1.15f);
-        b.Rpm01 += (wantRpm - b.Rpm01) * MathX.Damp(s.SpoolRate * (b.Biting ? 1f : 3f), h);
         float thrust = 0f;
-        if (b.Biting && lever != 0f)
-            thrust = s.FullThrust(u) * b.Rpm01 * (b.Gear < 0 ? -s.ReverseShare : 1f);
-        b.Thrust = thrust;
+        if (s.Drive == BoatDrive.Paddle)
+        {
+            // A steam engine on the wheels' shaft: the shaft's speed follows the telegraph's order at
+            // the engine's own pace, through stop to go astern (no gearbox to swap). Each wheel pushes
+            // where its floats are in the water: a wheel lifted clear by a roll pushes nothing.
+            b.Shaft = Mathf.MoveToward(b.Shaft, lever, s.SpoolRate * h);
+            b.Rpm01 = Mathf.Abs(b.Shaft);
+            if (b.Shaft > 0.01f) b.Gear = 1;
+            else if (b.Shaft < -0.01f) b.Gear = -1;
+            float each = 0.5f * s.FullThrust(u) * b.Rpm01 * (b.Shaft < 0f ? -s.ReverseShare : 1f);
+            bool any = false;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var wheel = P + R * (s.ThrustAt with { X = s.ThrustAt.X * side } - s.Centre);
+                if (!water.Surface(wheel.X, wheel.Z, out float atWheel, out _) || wheel.Y > atWheel + 0.05f) continue;
+                any = true;
+                if (each == 0f) continue;
+                var f = fwd * each;
+                force += f;
+                torque += (wheel - P).Cross(f);
+                thrust += each;
+            }
+            b.Biting = any;
+            b.Thrust = thrust;
+        }
+        else
+        {
+            b.Biting = water.Surface(thrustAt.X, thrustAt.Z, out float atStern, out _) && thrustAt.Y < atStern + 0.05f;
+            // out of the water the prop or the impeller spins free: the engine races
+            float wantRpm = Mathf.Abs(lever) * (b.Biting ? 1f : 1.15f);
+            b.Rpm01 += (wantRpm - b.Rpm01) * MathX.Damp(s.SpoolRate * (b.Biting ? 1f : 3f), h);
+            if (b.Biting && lever != 0f)
+                thrust = s.FullThrust(u) * b.Rpm01 * (b.Gear < 0 ? -s.ReverseShare : 1f);
+            b.Thrust = thrust;
+        }
 
         b.Helm = Mathf.MoveToward(b.Helm, Mathf.Clamp(c.Steer, -1f, 1f) * s.MaxSteer, s.SteerRate * h);
         var thrustDir = fwd;
         if (s.Drive == BoatDrive.Jet)
             // the nozzle turns the jet: no thrust, no steering
             thrustDir = (fwd * Mathf.Cos(b.Helm) - right * Mathf.Sin(b.Helm)).Normalized();
-        if (thrust != 0f)
+        if (thrust != 0f && s.Drive != BoatDrive.Paddle)
         {
             var f = thrustDir * thrust;
             force += f;
@@ -542,17 +583,21 @@ public static class BoatDynamics
         // The rudder and the skeg: fins at the stern, lifting with the water past them (the boat's
         // way and, over a rudder, the prop's wash) at their angle to it (the helm plus the stern's
         // sideslip). A jet has no rudder (its nozzle steers) but its pump housing is a skeg.
-        float fin = s.SkegArea + (s.Drive == BoatDrive.Propeller ? s.RudderArea : 0f);
-        if (fin > 0f && b.Biting)
+        bool rudder = s.Drive != BoatDrive.Jet;
+        float fin = s.SkegArea + (rudder ? s.RudderArea : 0f);
+        var finAt = P + R * (s.Rudder - s.Centre);
+        bool finWet = s.Drive != BoatDrive.Paddle ? b.Biting
+            : water.Surface(finAt.X, finAt.Z, out float atRudder, out _) && finAt.Y < atRudder;
+        if (fin > 0f && finWet)
         {
-            var rs = thrustAt - P;
+            var rs = finAt - P;
             var vs = V + W.Cross(rs) - flowMean;
             float us = vs.Dot(fwd), ls = vs.Dot(right);
             float slip = Mathf.Atan2(ls, Mathf.Abs(us) + 0.5f);
             float wash = s.Drive == BoatDrive.Propeller ? Mathf.Max(thrust, 0f) / (Rho * s.DiscArea) : 0f;
             float qs = us * us + wash;
-            float rudder = s.Drive == BoatDrive.Propeller ? s.RudderArea * Mathf.Sign(us) * b.Helm : 0f;
-            float lift = 0.5f * Rho * 3f * qs * (fin * Mathf.Sin(Mathf.Clamp(slip, -0.6f, 0.6f)) + rudder);
+            float helm = rudder ? s.RudderArea * Mathf.Sign(us) * b.Helm : 0f;
+            float lift = 0.5f * Rho * 3f * qs * (fin * Mathf.Sin(Mathf.Clamp(slip, -0.6f, 0.6f)) + helm);
             var f = -right * lift - fwd * (Mathf.Abs(lift) * 0.1f * Mathf.Sign(us));
             force += f;
             torque += rs.Cross(f);

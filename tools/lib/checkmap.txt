@@ -107,6 +107,15 @@ src/Player/FootPlayer.Bo quick  --boatcheck jetski --chunks fixture:lake
 src/Player/FootPlayer.Bo quick  --boatcheck speedboat --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --boatcheck speedboat --chunks fixture:lake
 src/Avatar/BoatMesh      quick  --boatcheck jetski --chunks fixture:lake
+# the paddle steamer (#303): draught, telegraph, slow way on and long stop, walking its tilting decks in a swell, stairs, saloon, gangway, bow, overboard and back, a seat
+src/Player/Steamer       quick  --steamercheck --chunks fixture:lake
+src/Player/FootPlayer.St quick  --steamercheck --chunks fixture:lake
+src/Player/FootPlayer.De quick  --steamercheck --chunks fixture:lake
+src/Player/Boat          quick  --steamercheck --chunks fixture:lake
+src/Avatar/SteamerMesh   quick  --steamercheck --chunks fixture:lake
+src/Avatar/VehicleDeck   quick  --steamercheck --chunks fixture:lake
+src/Vehicles/VehicleBody quick  --steamercheck --chunks fixture:lake
+src/World/SteamerBerth   quick  --steamercheck --chunks fixture:lake
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
@@ -134,6 +143,14 @@ src/Avatar/HumanMeshBuilder.Sw net tools/swimnetcheck.sh
 src/Player/Boat          net    tools/boatnetcheck.sh
 src/Player/FootPlayer.Bo net    tools/boatnetcheck.sh
 src/Vehicles/VehicleBody net    tools/boatnetcheck.sh
+src/Player/Steamer       net    tools/steamernetcheck.sh
+src/Player/FootPlayer.St net    tools/steamernetcheck.sh
+src/Player/FootPlayer.De net    tools/steamernetcheck.sh
+src/Avatar/SteamerMesh   net    tools/steamernetcheck.sh
+src/Avatar/VehicleDeck   net    tools/steamernetcheck.sh
+src/Vehicles/VehicleBody net    tools/steamernetcheck.sh
+src/Vehicles/PassengerSe net    tools/steamernetcheck.sh
+tools/steamernetcheck    net    tools/steamernetcheck.sh
 
 src/BattleRoyale/        full   tools/brcheck.sh
 src/Combat/              full   tools/pvpcheck.sh

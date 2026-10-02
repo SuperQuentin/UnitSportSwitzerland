@@ -135,6 +135,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Audio.Live.WebRadio.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
         AddChild(new World.AfricaTwinEgg(_chunks));
+        // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
+        AddChild(new World.SteamerBerth(_chunks));
 
         // gunfire: clients send their rounds here to be relayed; the server flies none of them
         Combat.CombatManager.Create(this, null, origin, server: true);
