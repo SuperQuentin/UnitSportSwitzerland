@@ -93,7 +93,7 @@ while read -r prefix tier check; do
       grep -q "^$prefix" <<< "$CHANGED" || continue
     fi
   fi
-  printf '%s\n' "${CHECKS[@]}" | grep -Fqx -- "$tier $check" || CHECKS+=("$tier $check")
+  printf "%s\n" ${CHECKS[@]+"${CHECKS[@]}"} | grep -Fqx -- "$tier $check" || CHECKS+=("$tier $check")
 done < tools/lib/checkmap.txt
 
 # --- tier 0 -----------------------------------------------------------------------------------

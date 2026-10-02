@@ -10,7 +10,7 @@ check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1"; fails=$((fails
 took() { local t0=$SECONDS; ( guard_lock 30 && guard_unlock ) 2>/dev/null; echo $(( SECONDS - t0 )); }
 
 # 1. owner killed without unlocking -> taken over without waiting for the heartbeat
-( guard_lock; kill -9 $BASHPID ) 2>/dev/null; sleep 1
+( guard_lock; kill -9 "$(_guard_lock_pid)" ) 2>/dev/null; sleep 1
 check "dead owner taken over at once" '[ "$(took)" -le 3 ]'
 
 # 2. owner alive but heartbeat stopped (hung, or its PID reused) -> taken over after GUARD_STALE
@@ -20,7 +20,7 @@ kill $hung 2>/dev/null; wait $hung 2>/dev/null
 
 # 3. owner alive and beating but past max_hold + 120 s -> taken over
 ( guard_lock 10 1; sleep 30 ) & over=$!; sleep 2
-sed -i "s/^started=.*/started=$(( $(date +%s) - 200 ))/" "$GUARD_LOCK_DIR/info"
+sed -i.bak "s/^started=.*/started=$(( $(date +%s) - 200 ))/" "$GUARD_LOCK_DIR/info" && rm -f "$GUARD_LOCK_DIR/info.bak"
 check "held past its max taken over" '[ "$(took)" -le 3 ]'
 kill $over 2>/dev/null; wait $over 2>/dev/null
 
