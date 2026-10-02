@@ -164,6 +164,7 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
     /// </summary>
     public Music? NearestMusic(Vector3 point, float radius, bool heard = false)
     {
+        if (heard && !MusicAudible()) return null;
         Music? best = null;
         float bestDist = radius;
         if (NearestPlaying(point, radius) is { } radio && (!heard || radio.Speaker is { Playing: true }))
@@ -182,6 +183,23 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
             if (d < bestDist) { bestDist = d; best = new Music(p, play.CdId, play.StartedAt); }
         }
         return best;
+    }
+
+    /// <summary>
+    /// Whether music can reach this machine's speakers at all: false when the Music bus, or any
+    /// bus it feeds into (Master), is muted — the Music or Master slider at 0 mutes them
+    /// (<see cref="Audio.SfxBus.ApplyVolumes"/>).
+    /// </summary>
+    private static bool MusicAudible()
+    {
+        int bus = AudioServer.GetBusIndex(Audio.SfxBus.Music);
+        for (int hops = 0; bus >= 0 && hops < 16; hops++)
+        {
+            if (AudioServer.IsBusMute(bus) || AudioServer.GetBusVolumeDb(bus) <= -79f) return false;
+            if (bus == 0) return true;
+            bus = AudioServer.GetBusIndex(AudioServer.GetBusSend(bus));
+        }
+        return true;
     }
 
     // ---- server side ---------------------------------------------------------------------------
