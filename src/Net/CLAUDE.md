@@ -25,6 +25,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `perf-server-frame-metrics` — Server cost = `--serverstats` per-frame busy + `[stats] slow frame` lines; wrap periodic jobs in `ServerStats.Ran`; never the 1 s-max `TimeProcess` monitor
 - `perf-no-main-thread-periodic-jobs` — No per-player `GD.Print` on a server timer (blocks ms on Windows), file writes on a worker, `/proc` reads Linux-only
 - `perf-mcp-logger-gated` — godot_ai `game_helper` adds its Logger only when `EngineDebugger.is_active()`; keep the gate on addon updates (it leaked every log line)
+- `perf-player-snapshot-size` — `BodyPose`/`TrainPose` go as one `float[] NetPose` (quat + offset + squash, train angles only on a train); no Transform3D on the wire
 
 ## Commands
 

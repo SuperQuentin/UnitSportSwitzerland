@@ -22,7 +22,7 @@ reason (numbers), the traps and the exact migration steps; read only the ones yo
 
 | Area | Notes |
 |---|---|
-| Server / net | `perf-server-frame-metrics` (busy is per frame now), `perf-no-main-thread-periodic-jobs` (no IO / prints per player on the main thread; `--player-status` is opt-in), `perf-mcp-logger-gated`, `perf-visibility-on-change`, `udp-receive-loop` (`Udp.ReceiveLoop`), `region-file-sync`, `is-online` (`NetLink.Online`) |
+| Server / net | `perf-server-frame-metrics` (busy is per frame now), `perf-no-main-thread-periodic-jobs` (no IO / prints per player on the main thread; `--player-status` is opt-in), `perf-mcp-logger-gated`, `perf-visibility-on-change`, `udp-receive-loop` (`Udp.ReceiveLoop`), `perf-player-snapshot-size` (`NetPose` replaces the replicated `BodyPose`/`TrainPose`), `region-file-sync`, `is-online` (`NetLink.Online`) |
 | Terrain | `perf-collision-commits` (collision is queued in 4×4 cell pieces; a new collision layer goes through the queue), `perf-lod-trees` (ring strides, trees by ring, shared tree meshes, free replaced meshes), `perf-door-portals`, `building-triangles` (`b.Tri(t)`, one `RoofNormalY`) |
 | Avatars | `perf-pose-mesh-cache` (rebuild a figure only on a new pose key, in place; no `ArrayMesh` per frame), `perf-shared-materials`, `cockpit-kit` (cabin wheel/dials/lamps/pedals/mirrors through `CockpitKit` + `CockpitSpec`) |
 | Vehicles / world / audio | `perf-surface-grid` (`Surfaces.At(..., caller)`), `perf-traffic-tick` (lazy obstacle sampling, lane neighbours, shared traffic meshes, 600 m car draw), `perf-racenpc-server-physics` (no NPC physics step on the server), `perf-parked-vehicles` (nothing per frame while asleep, reused ray queries), `perf-engine-synth-idle` |
