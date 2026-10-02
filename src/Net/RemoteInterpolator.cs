@@ -1,5 +1,6 @@
 using System;
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Net;
 
@@ -15,10 +16,17 @@ namespace UnitSport.Net;
 /// actually drove, not the chords between samples. Past the newest state it extrapolates on
 /// velocity for a short while; when the truth arrives the gap is eased away instead of snapped.
 /// </para>
+///
+/// <para>
+/// States are <see cref="GlobalPos"/>, never world space (#185): every peer has its own origin
+/// and this one's moves while the states sit in the ring, so they are mapped to world space only
+/// on the way out. The arithmetic is on offsets between neighbouring states, which stay small and
+/// precise however far from anything the player is.
+/// </para>
 /// </summary>
 public sealed class RemoteInterpolator
 {
-    private struct State { public double T; public Vector3 P, V; public float Yaw; }
+    private struct State { public double T; public GlobalPos P; public Vector3 V; public float Yaw; }
 
     private const int Capacity = 32;
     private readonly State[] _buf = new State[Capacity];
@@ -37,7 +45,7 @@ public sealed class RemoteInterpolator
     private double _interval = 1.0 / 30.0;
     private Vector3 _error;                 // rendered − true, eased to zero after a correction
     private float _yawError;
-    private Vector3 _lastOut;
+    private GlobalPos _lastOut;
     private float _lastYaw;
     private bool _hasOut;
 
@@ -47,7 +55,7 @@ public sealed class RemoteInterpolator
     public bool HasData => _count > 0;
 
     /// <summary>Records a state the owner sent, stamped with the owner's clock.</summary>
-    public void Push(double senderTime, double localTime, Vector3 position, Vector3 velocity, float yaw)
+    public void Push(double senderTime, double localTime, GlobalPos position, Vector3 velocity, float yaw)
     {
         if (_count > 0)
         {
@@ -92,7 +100,7 @@ public sealed class RemoteInterpolator
     private bool _rebase;
 
     /// <summary>The position and yaw to draw at <paramref name="localTime"/>.</summary>
-    public (Vector3 Position, float Yaw) Sample(double localTime, float dt)
+    public (GlobalPos Position, float Yaw) Sample(double localTime, float dt)
     {
         if (_count == 0) return (_lastOut, _lastYaw);
         double t = RenderTime(localTime, dt);
@@ -145,7 +153,7 @@ public sealed class RemoteInterpolator
 
     private bool _pending;
     private double _pendingT;
-    private Vector3 _pendingP;
+    private GlobalPos _pendingP;
     private float _pendingYaw;
 
     private double _lag = double.NaN;   // local − render time actually used, eased
@@ -162,7 +170,7 @@ public sealed class RemoteInterpolator
         return localTime - _lag;
     }
 
-    private (Vector3, float) Raw(double t)
+    private (GlobalPos, float) Raw(double t)
     {
         ref var newest = ref _buf[_head];
         if (t >= newest.T)
@@ -184,7 +192,7 @@ public sealed class RemoteInterpolator
             {
                 float span = (float)(b.T - a.T);
                 float u = span > 1e-6f ? (float)((t - a.T) / span) : 1f;
-                return (Hermite(a.P, a.V * span, b.P, b.V * span, u), Mathf.LerpAngle(a.Yaw, b.Yaw, u));
+                return (a.P + Hermite(b.P - a.P, a.V * span, b.V * span, u), Mathf.LerpAngle(a.Yaw, b.Yaw, u));
             }
             i = prev;
         }
@@ -192,16 +200,18 @@ public sealed class RemoteInterpolator
         return (oldest.P, oldest.Yaw);
     }
 
-    private static Vector3 Hermite(Vector3 p0, Vector3 m0, Vector3 p1, Vector3 m1, float u)
+    /// <summary>The cubic Hermite from p0 to p0 + <paramref name="span"/>, as an offset from p0 (its weights sum to one).</summary>
+    private static Vector3 Hermite(Vector3 span, Vector3 m0, Vector3 m1, float u)
     {
         float u2 = u * u, u3 = u2 * u;
-        return p0 * (2 * u3 - 3 * u2 + 1) + m0 * (u3 - 2 * u2 + u) + p1 * (-2 * u3 + 3 * u2) + m1 * (u3 - u2);
+        return span * (-2 * u3 + 3 * u2) + m0 * (u3 - 2 * u2 + u) + m1 * (u3 - u2);
     }
 
     /// <summary>
     /// Self-check (<c>--interestcheck</c>): a car at 150 and 300 km/h sent at 30 Hz with 60 ms of
     /// arrival jitter and 5% (then 20%) loss must be drawn with no step over 1.5 × v·dt at 60 fps
-    /// and no freeze. Then a wingsuit or the cargo plane at 80 m/s whose sender hitches, a third of a
+    /// and no freeze. It drives at LV95 E 3,600 km (#185), where a float would quantise the position
+    /// to 25 cm, more than half a frame's step at 150 km/h. Then a wingsuit or the cargo plane at 80 m/s whose sender hitches, a third of a
     /// second of states lost at once now and then (#207): no snap, the catch-up eased (no step over 3.5 × v·dt).
     /// </summary>
     public static bool SelfCheck() => Run(42f, 0.05) & Run(83f, 0.05) & Run(42f, 0.2) & Run(80f, 0.03, 10, 3.5);
@@ -213,7 +223,7 @@ public sealed class RemoteInterpolator
         var ip = new RemoteInterpolator();
         double send = 0, sendDt = 1.0 / 30.0, frameDt = 1.0 / 60.0;
         var inFlight = new System.Collections.Generic.List<(double Arrive, double T)>();
-        double worstRatio = 0; int freezes = 0; Vector3? prev = null;
+        double worstRatio = 0; int freezes = 0; GlobalPos? prev = null;
         for (double now = 0; now < 10; now += frameDt)
         {
             while (send <= now)
@@ -229,14 +239,14 @@ public sealed class RemoteInterpolator
                 double t = inFlight[0].T;
                 inFlight.RemoveAt(0);
                 ip.BeginCorrection(now);
-                ip.Push(t, now, new Vector3((float)(v * t), 0, 0), new Vector3(v, 0, 0), 0f);
+                ip.Push(t, now, new GlobalPos(3_600_000 + v * t, 1_200_000, 600), new Vector3(v, 0, 0), 0f);
                 ip.EndCorrection();
             }
             if (!ip.HasData) continue;
             var (p, _) = ip.Sample(now, (float)frameDt);
             if (prev is { } q && now > 1)
             {
-                float step = p.DistanceTo(q);
+                float step = (float)p.DistanceTo(q);
                 worstRatio = Math.Max(worstRatio, step / (v * frameDt));
                 if (step < 0.05f * v * frameDt) freezes++;
             }

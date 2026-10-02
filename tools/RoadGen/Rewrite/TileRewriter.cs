@@ -377,7 +377,7 @@ public static partial class TileRewriter
                     plans.Add((source, plan, write, link.Id));
                 }
 
-                var segmentOf = new Dictionary<int, (RoadSegment, TileId)>();   // turn lanes (#123)
+                var segmentOf = new Dictionary<int, (RoadSegment, TileId, RoadSegment)>();   // turn lanes (#123)
                 // what a sidewalk stops at (#119): every ground-level line of the block and its halo
                 var obstacles = new StreetPlanner.Obstacles();
                 for (int k = 0; k < plans.Count; k++)
@@ -470,7 +470,6 @@ public static partial class TileRewriter
                     if (mouths.Count > 0) street = street.Select(piece => RampShoulders(piece, source.Tile, mouths)).ToList();
                     list.Add(segment);
                     if (street.Count != 1 || !ReferenceEquals(street[0], segment)) streetPieces[segment] = street;
-                    segmentOf[linkId] = (segment, source.Tile);
                     written += street.Count;
 
                     var link = result.Network.Links[linkId];
@@ -480,6 +479,7 @@ public static partial class TileRewriter
                     if (track)   // a street that got its paths has no painted lanes
                         paintAttributes = paintAttributes with { Left = NoLane(paintAttributes.Left), Right = NoLane(paintAttributes.Right) };
                     var paintOn = paintAttributes == attributes ? segment : ToSegment(plan, source, paintAttributes);
+                    segmentOf[linkId] = (segment, source.Tile, paintOn);   // turn lanes find the lines on paintOn (#325)
                     double station = source.Key is { } at ? at.FromM + source.AlongOf(plan[0]) : 0;
                     PaintEmitter.Emit(paintOn, station, painted, startsAtJunction, endsAtJunction, bikeLanes: false);
                     if (paintAttributes.Left.HasLane || paintAttributes.Right.HasLane)   // on the final pieces (#120)

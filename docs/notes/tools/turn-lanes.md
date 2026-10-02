@@ -20,6 +20,17 @@
   triangles, 45 deg stripes every 2.5 m) between the centre line and the through lane's left edge,
   a lane wide at the mouth and closing at 30 m, bordered by solid lines (the centre line turns
   solid along it). A pocket is placed only when its exit fits too (`Widening.Check` on both).
+- **Close junctions (#325)**: an exit and the next junction's approach widen the same side of
+  the segment between them, and used to be checked apart, so on a short segment both were placed
+  and crossed (two strips, two hatches, two edge lines). Now every pocket is planned first, then
+  each side of a segment is a `Slot` (one approach, one exit), laid out until no pocket is
+  dropped. Apart, the approach must leave the 30 m exit plus 30 m at normal width (`TurnRejoin`);
+  when the segment is shorter than exit + 30 + the longest pocket (30 + 40) + 5, they **merge**
+  first: one full-lane strip mouth to mouth (2+1 kept, taper 0), the exit's hatch stays a lane wide
+  and the left-turn lane opens out of it over a 15 m diagonal (`TurnEntry`, at least 5 m of hatch
+  behind it); arrows, stop bar and dashed/solid edge as for a pocket. A merged strip that does not
+  fit drops the approach's pocket (the exit is needed by the one before). Not handled: two
+  junctions whose slot is split across 6 km rewrite blocks.
 - **Room**: every 2.5 m where the strip is over 0.3 m wide, at its middle and 0.5 m past its
   outer edge: inside the tile, no building footprint, no other line covering it, the raw ground
   within 1.2 m of the road (0.6 rejected 5 of 13 in Sion, where roads sit on low embankments; the
@@ -36,17 +47,7 @@
   and the junction's guide line on that side (`junction-priority`) moves out onto its edge. Signs beside the old edge (#121's 3.03)
   move out by the widening there (8 in the test region). Sidewalks, bike paths and painted bike
   lanes beside the widening move out with the edge instead of being dropped (#120,
-  `bike-infrastructure`: `RoadSide` shifts).
-- **Beside a painted bike lane** (#120): along the solid centre line a car must pass a cyclist
-  without crossing it, so every car lane beside the bike lane is 3.0 m (ZH Standards
-  Veloverkehr): the pocket is the approach lane widened to 3.0 m (`_pocket`), the through lane
-  3.0 m, the bike lane outside. The extra comes on over a 1:6 lead-in (at least 6 m) before the
-  taper, and goes again over a lead-out after an exit's hatch; where the street has no room for
-  it, with the taper itself. The solid centre line covers the lead-in too. Nyon: 16 of 18
-  pockets beside a bike lane, 14 with a lead-in.
-- **Solid centre line fix** (#120): `SolidCentre` matched the centre line by segment object and
-  missed a town street's (painted on a copy carrying the Urban flag: matched by points now); a
-  road with none (Kernfahrbahn, or too narrow) gets a solid line at its middle along the pocket. Arrows two per lane in the storage,
+  `bike-infrastructure`: `RoadSide` shifts). Arrows two per lane in the storage,
   tips 5 m from the stop bar and 15 m apart (Bern Normalien; 8 m apart in a 20 m pocket): left in the pocket, straight (or straight + right)
   in the through lane, as `PaintType.Arrow` triangles (variant = `PaintArrow` bits): outlines
   traced from the Commons SVG of SSV 6.06 (`road-markings` has the link), scaled so the straight
@@ -54,12 +55,27 @@
   notched dart head; left: the shaft jogs left near its end into an open corner head at 45 deg,
   within 0.55 m of the lane's middle. Two attempts from memory were wrong (the old Swiss
   branch arrow, then a guessed jog). The stop bar is a `StopLine` polyline.
+- **Beside a painted bike lane** (#120): along the solid centre line a car must pass a cyclist
+  without crossing it, so every car lane beside the bike lane is 3.0 m (ZH Standards
+  Veloverkehr): the pocket is the approach lane widened to 3.0 m (`_pocket`), the through lane
+  3.0 m, the bike lane outside. The extra comes on over a 1:6 lead-in (at least 6 m) before the
+  taper, and goes again over a lead-out after an exit's hatch; where the slot has no room for it,
+  with the taper itself; a merged strip (#325) is that wide all along. The solid centre line
+  runs along the taper and storage only (the lane beside the bike lane is full width there); a
+  road with no centre line (a Kernfahrbahn, or too narrow) gets one at the middle of its car
+  lanes along the pocket.
 - **Runtime**: `src/Terrain/PavementBuilder.cs` draws the strip in the road's asphalt; the road
   blend (`HoldUnderPavement`, sharing `Rasterise` with `HoldUnderIsland`) holds its cells at the
   strip's height as road core, so the heightfield collision carries it like a ribbon.
 - **Not done**: lane-level topology in the format (which lane goes where); traffic still drives
   the original lane and so turns left from it, and goes straight from it too. Right-turn lanes,
-  pockets across a tile seam, OSM `turn:lanes`.
+  pockets across a tile seam, OSM `turn:lanes`. Roads with 3 lanes (8 m, lane lines at ±1.33 m,
+  no centre line) still get a pocket laid out for 2 lanes of half the width: the hatch covers a
+  lane and a half (seen at LV95 2506561,1138202).
+- **In town** (#325): a built-up stretch's lines are laid on an Urban-flagged copy of the segment
+  (#119, `paintOn` in `TileRewriter`), so until #325 the widening never found the centre line to
+  make solid nor the edge line to cut there (47 widenings of the 20-tile region below). The
+  `Slot` carries that copy (`Painted`) and the widening matches lines by it.
 - **6-tile test region**: 13 main-road approaches with a left turn, 4 pockets placed with their
   exits (1 Riddes, 3 Sion; 3 with 40 m storage, 1 with 20 m), 16 arrows, 4 stop bars, 77 median stripes; rejected: approach or exit too short 7,
   ground 1 (6 pockets fitted before the exit was required). Rebuild byte-identical;
@@ -68,3 +84,10 @@
   edge line, divider, left and straight arrows). `--roadcheck --at E,N` now also drops a body on
   up to 4 strips of the tile (widest triangle): approach and exit strips, body within 1 mm.
   Screenshots from above of a Sion and the Riddes pocket with their exits.
+- **20-tile region (#325)**, LV95 2505-2509 / 1136-1139 (`test120`, rewritten from its raw
+  roads): 309 approaches with a left turn; before 32 pockets, 3 of them crossing the exit before;
+  after 33 (3 merged, one of them rescued: it had been rejected), storage 20 x11, 30 x8, 40 x14;
+  only the 3 tiles with a merge changed bytes before the town fix. Rerun byte-identical;
+  `--format-check`, `--plan-check`, `--priority-check` pass; `--roadcheck --at` on two merged sites
+  (2507575,1138901 and 2508284,1137860): bodies on the strips within 1 mm. Screenshots from above
+  (`--shot-queue --origin 2507500,1138000 --chunks <copy>`) before and after at all three.

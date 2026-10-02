@@ -3,8 +3,10 @@
 
 # Floating origin
 
-Status: **phase 1 done** (offline floating origin, #215); **phase 2 next** (positions on the
-wire). The working rules are in `docs/notes/core/floating-origin.md`. Issue: #185.
+Status: **phases 1-4 done** (offline floating origin, #215; positions on the wire and the server
+in LV95, #269; the visual styles across a shift, measured: SDFGI relights in one frame, falling
+snow wraps in pattern space, see Phase 4). The working rules are in
+`docs/notes/core/floating-origin.md` and `docs/notes/net/positions-on-the-wire.md`. Issue: #185.
 
 ## Why
 
@@ -207,22 +209,47 @@ A transient use (computed and used in the same frame) needs no change.
 - Done when: offline play with `--originstress 50` shows no visible pop, jump or doppler spike, on
   foot, driving, flying and in an interior.
 
-**Phase 2: global positions on the wire.**
+**Phase 2: global positions on the wire.** Done.
 - Replicated positions and position RPCs become global, and the interpolator works in `GlobalPos`.
   Remove the origin mismatch refusal and the adopt-on-connect rebase.
 - Done when: the multiplayer test below passes.
+- As built: positions are **doubles** (`GlobalPos`; lists as an anchor plus float offsets), bodies
+  carry a `Net/NetPlace`, and connecting starts with a **version handshake** (`Net/Handshake`,
+  protocol 2). Race courses carry their frame and `Follow` the receiver's shifts.
 
-**Phase 3: server in global coordinates.**
+**Phase 3: server in global coordinates.** Done.
 - Interest, NPC handoff zones, vehicle placement, loot and combat checks in `GlobalPos`. Audit
   server-side `GlobalPosition` reads.
+- As built: the server measures with what players publish (`FootPlayer.Global`); interest judges
+  each viewer's pairs in a frame anchored at the viewer; each race is built and checked in a frame
+  at its host. The audit left only metre-scale checks between nearby bodies on the server's own
+  world floats (door and seat reach, despawn ranges): 6 cm at 1,000 km does not matter to them.
+  Server-simulated birds still fly in the server's world space, so far from its origin they move
+  on a coarser float grid (6 cm at 1,000 km).
+- Verified with the server's own origin 1,000 km away (`--server --origin E,N`, new) rather than
+  players 1,000 km apart: the generated fill does **not** cover any LV95 coordinate, only 40 tiles
+  round the spawn and the real set, so a server has no ground (birds, buildings, roads) for a player
+  1,000 km off. Growing the fill round players is a terrain change (#27), not this one.
 - Done when: two players 1,000+ km apart (the generated fill covers any LV95 coordinate) each see
   correct terrain and their neighbours, and the server log has no precision-related warnings.
 
-**Phase 4: visual styles.**
+**Phase 4: visual styles.** Done. Measured with a `shift dE,dN` shot-queue line (the origin moves
+with the camera still, and the frames after it are timed); the numbers are in
+`docs/notes/core/floating-origin.md`. SDFGI re-voxelises in one frame (25-37 ms of GPU instead of
+8-12 on an RTX 4070) with no visible pop; there are no reflection probes, decals or lightmaps; the
+falling snow was the one world-space pattern left, and now wraps in pattern space. What follows is
+the plan as written:
 - Check the new styles against shifts: SDFGI cascades and reflection probes in Realistic+ (a shift
   may force them to relight; measure it), decals, texture UVs taken from world space (use
   `world_origin_offset`).
 - This phase depends on `docs/plans/visual-styles.md`. Whichever lands second adapts to the other.
+- Already fine: the Cartoon and Realistic role bodies read world-space UVs through `pattern_xz()`,
+  and `Terrain/PhotoLayer` gives each tile its photo by an instance uniform, not by world XZ.
+- Left (done since, see above): Realistic+ with `--sdfgi` and its reflection probes across a shift
+  (relight cost, visible pop), and any decals.
+- Settled: `--origin E,N` (#212's pin for screenshot runs) pins the **starting** origin and the
+  shifter runs from there; `ShotRunner` maps queued shots from that first frame, and
+  `--originshift 1000000` keeps the origin still when a run needs it.
 
 ## Multiplayer test (required by the workflow)
 
@@ -256,9 +283,11 @@ Dedicated server plus two clients on loopback, all with `--originstress 50`:
   countries. `GlobalPos` is named so that the frame behind it can change.
 - A double-precision Godot build (see above).
 
-## Notes to write when this lands
+## Notes (written)
 
-- Replace `docs/notes/core/never-default-world-origin-lv95.md` with a `floating-origin` note: the
-  rules (store `GlobalPos` or handle `Shifted`, no world `Vector3` on the wire, shader patterns
-  through `world_origin_offset`) plus the stress command.
-- Update the README "Two things change when the area grows" section.
+- `docs/notes/core/floating-origin.md`: the rules (store `GlobalPos` or handle `Shifted`, shared
+  point lists `Follow`, shader patterns through `world_origin_offset`) plus the stress commands.
+- `docs/notes/net/positions-on-the-wire.md` (no world `Vector3` on the wire) and
+  `docs/notes/net/protocol-handshake.md`.
+- `docs/notes/core/never-default-world-origin-lv95.md` rewritten (no rebase any more), and the README
+  "Two things change when the area grows" section updated.

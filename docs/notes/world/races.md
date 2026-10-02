@@ -25,9 +25,9 @@
     `/race duel npc [metres] [mount]` is a duel against one (the race's `Invited` is the NPC id, so it
     starts as soon as the course is built). Mount: the race's, else the one asked, else the sender's car,
     else the AE86. The **server** spawns them out of sight on the race road and they drive in to their slots (`npc-arrivals`; before the road is found they are queued, then spawned) (`RaceNpcs.Spawn`, spawn data
-    `[owner, n, kind, pos, yaw]`, node `npc_<owner>_<n>`, named "NPC <mount> #n") and enters them itself —
+    `[owner, n, kind, E, N, alt, yaw, setup]`, node `npc_<owner>_<n>`, named "NPC <mount> #n") and enters them itself —
     it already knows the ids, so the client-side `EnterNpcs` path is not used by `/race npc`. An NPC is a
-    `FootPlayer` with `Npc = true` and its **current simulator** as authority (first the owner client, see `npc-handoff`): it publishes NetPos like any
+    `FootPlayer` with `Npc = true` and its **current simulator** as authority (first the owner client, see `npc-handoff`): it publishes NetGlobal (LV95) like any
     authority player, is its own interest target, is its own collision anchor, has no camera, feel
     or input. Its `RaceNpc` driver takes `NpcSetup` (grid slot), `TrackNpc`s its position (RaceManager
     reports its checkpoints), drives `AutoPilot.For` at GO with `RaceManager.Others` (every player on the

@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Player;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -48,14 +49,12 @@ public partial class DropCheck : Node
     }
 
     /// <summary>"--dropcheck" on the command line: the client must use a scratch inventory, never the player's save.</summary>
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--dropcheck");
 
     public static DropCheck? Create(Func<FootPlayer?> local, Func<Node?> players, ItemController? items)
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--dropcheck");
-        if (i < 0) return null;
-        string role = i + 1 < args.Length ? args[i + 1] : "watch";
+        if (!CmdArgs.Has("--dropcheck")) return null;
+        string role = CmdArgs.Value("--dropcheck") ?? "watch";
         GD.Print($"[dropcheck] role {role}");
         return new DropCheck(role == "thrower", role == "solo", local, players, items);
     }

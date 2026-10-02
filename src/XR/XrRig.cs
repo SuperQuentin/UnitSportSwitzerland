@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Player;
+using UnitSport.Core;
 
 namespace UnitSport.XR;
 
@@ -160,13 +161,9 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
         // "--xrheadshot <png> [seconds]": what the headset camera itself renders, saved to a file
         // (with --xrsim the headset viewport is otherwise not drawn); for checks of the panel
-        var args = OS.GetCmdlineUserArgs();
-        int shot = Array.IndexOf(args, "--xrheadshot");
-        if (shot >= 0 && shot + 1 < args.Length)
+        if (CmdArgs.Value("--xrheadshot") is { } path)
         {
-            string path = args[shot + 1];
-            double wait = shot + 2 < args.Length && double.TryParse(args[shot + 2], System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out double w) ? w : 2.0;
+            double wait = CmdArgs.Double("--xrheadshot", 2) ?? 2.0;
             if (XrSession.Simulated)
             {
                 _view.Size = new Vector2I(1152, 648);
@@ -450,7 +447,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
                 target = (Mathf.Clamp((speed - 1.5f) / 14f, 0f, 0.55f) + Mathf.Clamp((turn - 0.4f) / 2.5f, 0f, 0.45f)) * frame;
             }
         }
-        _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, 1f - Mathf.Exp(-6f * dt));
+        _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, MathX.Damp(6f, dt));
         _blink = Mathf.Max(0f, _blink - dt / BlinkSeconds);
         _vignette.Visible = _vignetteLevel > 0.02f || _blink > 0f;
         _vignetteMat.SetShaderParameter("strength", _vignetteLevel);

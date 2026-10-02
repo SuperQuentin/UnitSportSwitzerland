@@ -1,6 +1,10 @@
 # Vision-based interest: a player out of sight does not exist on your client
 
 - `Net/Interest` (pure rules) + `Net/InterestService` at `World/Interest` on server and clients (#37).
+- **Measured in LV95** (#185): from what each owner published (`FootPlayer.Global`, exact on the
+  server's proxies), each viewer's pairs judged in an `OriginFrame` anchored at that viewer, and the
+  ground (`HorizonGround`) read by LV95. The server's own origin plays no part: players 1,000 km apart
+  are judged as precisely as two at its origin.
 - **The server decides**, every 0.5 s for every pair: range = the target's size at the 1152 px render
   width, cut at 1.5 px (walker ~0.9 km, car ~2.2 km, plane/heli ~5 km; ×1.6 above 25 m AGL — a
   silhouette against the sky carries), clamped to the viewer's reported `CameraFar`; line of sight

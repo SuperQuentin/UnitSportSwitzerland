@@ -76,7 +76,7 @@ public static partial class TileRewriter
     /// a sidewalk corner.
     /// </summary>
     private static void EmitBikeCrossings(PriorityResult priority, RoadGenResult result,
-        Dictionary<int, (RoadSegment Segment, TileId Tile)> segmentOf, Dictionary<RoadSegment, List<RoadSegment>> finalPieces,
+        Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<RoadSegment, List<RoadSegment>> finalPieces,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<RoadPointProp>> signs, Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges,
         BikePlanner.Stats stats)

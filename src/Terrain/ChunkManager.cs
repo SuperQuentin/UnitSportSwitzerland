@@ -539,6 +539,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public StaticBody3D? BuildingBodyAt(TileId id) =>
         _chunks.TryGetValue(id, out var state) ? state.Node?.BuildingBody : null;
 
+    /// <summary>A loaded tile's ground mesh, for per-tile shader parameters (<see cref="PhotoLayer"/>).</summary>
+    public MeshInstance3D? GroundAt(TileId id) =>
+        _chunks.TryGetValue(id, out var state) ? state.Node?.Ground : null;
+
     /// <summary>
     /// The buildings with players inside, for the facade shader's occupancy cues (more lit
     /// windows, figures behind the glass). Each box is (world x, world z, half width along the
@@ -726,33 +730,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         FitHorizonCoverage();
         Horizon?.Reload();
         TerrainReplaced?.Invoke(affected);
-    }
-
-    /// <summary>
-    /// Throws the whole world away — every tile, every cached asset and blend, the horizon — for
-    /// a rebase, which changes what every world coordinate means. <paramref name="moveOrigin"/>
-    /// runs once nothing placed against the old origin is left; the rings then rebuild everything
-    /// round the new one. Main thread only.
-    /// </summary>
-    public void ResetAll(Action? moveOrigin = null)
-    {
-        foreach (var id in _chunks.Keys.ToList()) UnloadTile(id);
-        _desired.Clear();
-        _wanted = [];
-        _ordered = [];
-        _desiredKey = "";
-        _orderedView = null;
-        _worldVersion++;
-        _sinceEval = double.MaxValue;
-        _invalidate?.Invoke(null);
-        _fallback?.ClearBlends();
-        Horizon?.Clear();
-        moveOrigin?.Invoke();
-        // the coverage texture is placed in world space: after the move, not before
-        FitHorizonCoverage();
-        Horizon?.Reload();
-        GD.Print("[terrain] world reset");
-        TerrainReplaced?.Invoke(null);
     }
 
     /// <summary>
@@ -1376,7 +1353,28 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     private KeyValuePair<TileId, Want>[] _wanted = [];
     private KeyValuePair<TileId, Want>[] _ordered = [];
     private double[] _orderKeys = [];
-    private string _desiredKey = "";
+    /// <summary>
+    /// What the desired set was computed from: each anchor's tile and whether it wants collision,
+    /// the LOD policy, the world version and <see cref="BuildMeshes"/>. Compared field by field at
+    /// 10 Hz, with nothing allocated (it was a string built every evaluation, #221).
+    /// </summary>
+    private readonly List<(TileId Tile, bool Collision)> _desiredKey = new(), _keyNow = new();
+    private (LodPolicy? Lod, long Version, bool Meshes) _desiredKeyRest;
+
+    private bool RingKeyChanged()
+    {
+        _keyNow.Clear();
+        foreach (var anchor in _anchors)
+            _keyNow.Add((_origin!.TileAt(anchor.GlobalPosition), _collisionAnchors.Contains(anchor)));
+        (LodPolicy? Lod, long Version, bool Meshes) rest = (Lod, _worldVersion, BuildMeshes);
+        if (rest == _desiredKeyRest   // the policy by reference: a new one is a new key
+            && System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_keyNow).SequenceEqual(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_desiredKey)))
+            return false;
+        _desiredKeyRest = rest;
+        _desiredKey.Clear();
+        _desiredKey.AddRange(_keyNow);
+        return true;
+    }
     private ViewCone? _orderedView;
 
     /// <summary>
@@ -1409,16 +1407,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     private void EvaluateRings()
     {
-        var keyBuilder = new System.Text.StringBuilder();
-        foreach (var anchor in _anchors)
-            keyBuilder.Append(_origin!.TileAt(anchor.GlobalPosition)).Append(_collisionAnchors.Contains(anchor) ? 'p' : 'c').Append(';');
-        keyBuilder.Append('|').Append(Lod.GetHashCode())
-            .Append('|').Append(_worldVersion).Append('|').Append(BuildMeshes);
-        string key = keyBuilder.ToString();
-
-        if (key != _desiredKey)
+        if (RingKeyChanged())
         {
-            _desiredKey = key;
             _orderedView = null;
             RecomputeDesired();
         }

@@ -64,16 +64,7 @@ public partial class PortalDemo : Node3D
 
     public PortalDemo(string? shot) => _shot = shot;
 
-    public static (bool Requested, string? Shot) ParseArgs()
-    {
-        foreach (var a in OS.GetCmdlineUserArgs())
-            if (a.StartsWith("--portaldemo"))
-            {
-                var parts = a.Split(',');
-                return (true, parts.Length > 1 ? parts[1] : null);
-            }
-        return (false, null);
-    }
+    public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--portaldemo");
 
     public override void _Ready()
     {
@@ -327,7 +318,9 @@ public partial class PortalDemo : Node3D
         const float speed = 1.3f;
         _walkerZ -= speed * dt;
         _phase = Avatar.HumanMeshBuilder.AdvancePhase(_phase, speed, dt);
-        _walkerMesh.Mesh = Avatar.HumanMeshBuilder.BuildStride(Avatar.HumanPalette.Default, speed, _phase);
+        // one mesh rebuilt in place, not a new ArrayMesh per frame (#221)
+        _walkerMesh.Mesh = Avatar.HumanMeshBuilder.BuildStride(Avatar.HumanPalette.Default, speed, _phase,
+            into: _walkerMesh.Mesh as ArrayMesh ?? new ArrayMesh());
         var a = _links.First(l => l.Plan == "0_0_0" && l.Outside.Basis.Z.Z > 0);
         // facing north: the figure is authored facing +Z
         var street = new Transform3D(new Basis(Vector3.Up, Mathf.Pi), new Vector3(0.15f, 0, _walkerZ));

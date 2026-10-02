@@ -50,15 +50,18 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
     private readonly HashSet<string> _claimed = new();
     private double _housekeeping;
 
-    public static DroppedItems Create(Node world)
+    /// <summary>This peer's origin: drop states carry LV95 (#185), the items lie in world space.</summary>
+    public Core.WorldOrigin Origin { get; private set; } = null!;
+
+    public static DroppedItems Create(Node world, Core.WorldOrigin origin)
     {
-        var manager = new DroppedItems { Name = NodeName };
+        var manager = new DroppedItems { Name = NodeName, Origin = origin };
         world.AddChild(manager);
         manager._spawner = new MultiplayerSpawner
         {
             Name = "DroppedSpawner",
             SpawnPath = new NodePath("../" + NodeName),
-            SpawnFunction = Callable.From((Variant data) => (Node)DroppedItem.Create(DropState.FromDict(data.AsGodotDictionary()))),
+            SpawnFunction = Callable.From((Variant data) => (Node)DroppedItem.Create(DropState.FromDict(data.AsGodotDictionary()), origin)),
         };
         world.AddChild(manager._spawner);
         manager._spawner.Spawned += manager.OnSpawned;
@@ -86,16 +89,16 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
     public void Drop(ItemStack stack, Vector3 at, Vector3 velocity, Vector3 rotation, Vector3 spin)
     {
         if (stack.IsEmpty) return;
-        var state = new DropState("", 0, stack, at, rotation, velocity, spin);
+        var state = new DropState("", 0, stack, Origin.ToGlobal(at), rotation, velocity, spin);
         if (!Online)
         {
-            AddChild(DroppedItem.Create(state));
+            AddChild(DroppedItem.Create(state, Origin));
             TrimOffline();
             return;
         }
         // it flies here now; the server's spawn takes over from wherever it has got to
         state = state with { Token = ++_token };
-        var proxy = DroppedItem.Create(state with { Name = $"proxy_{_token}" }, proxy: true);
+        var proxy = DroppedItem.Create(state with { Name = $"proxy_{_token}" }, Origin, proxy: true);
         AddChild(proxy);
         _pendingDrops[_token] = (stack, proxy);
         RpcId(1, MethodName.RequestDrop, state.ToDict());
@@ -145,7 +148,7 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
         var def = ItemDefs.Get(dropped.Stack.Id);
         if (def == null || dropped.Stack.Count < 1 || dropped.Stack.Count > def.MaxStack
             || dropped.Stack.Data is { Length: > 512 } || dropped.Stack.Id == ItemId.Francs
-            || dropped.Velocity.Length() > 40f || !dropped.Position.IsFinite() || !dropped.Spin.IsFinite())
+            || dropped.Velocity.Length() > 40f || !dropped.Position.IsFinite || !dropped.Spin.IsFinite())
         {
             GD.Print($"[drop] refused from {sender}: {dropped.Stack.Id} x{dropped.Stack.Count}, {dropped.Velocity.Length():F1} m/s");
             RpcId(sender, MethodName.DropRefused, dropped.Token);

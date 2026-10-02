@@ -114,12 +114,16 @@ public partial class GameShell : Node
 
         Book = ServerBook.Load();
 
-        var args = OS.GetCmdlineUserArgs();
-        bool Has(string flag) => Array.IndexOf(args, flag) >= 0;
         // "VR mode" saved on, launched from the desktop: start again with OpenXR (once: the
         // relaunch carries --vr, and a run with --vr never relaunches)
-        if (!Direct && !vr && GameSettings.Current.VrMode && !Has("--vr") && !Has("--xrsim")
+        if (!Direct && !vr && GameSettings.Current.VrMode && !CmdArgs.Has("--vr") && !CmdArgs.Has("--xrsim")
             && DisplayServer.GetName() != "headless" && XR.XrSession.Relaunch(true))
+        {
+            Quit();
+            return;
+        }
+        // a saved Realistic+ wants Forward+, which Godot only picks at startup (once, likewise)
+        if (!Direct && !vr && Styles.RendererRelaunch.Wanted && Styles.RendererRelaunch.Relaunch())
         {
             Quit();
             return;
@@ -130,30 +134,30 @@ public partial class GameShell : Node
             // started for VR, but no headset answered: back on the screen, VR mode saved off. Said
             // only when the player just chose VR (#244); a launch that followed the saved setting
             // with the headset unplugged stays quiet
-            if (Has("--vr") && !vr)
+            if (CmdArgs.Has("--vr") && !vr)
             {
                 GameSettings.Current.VrMode = false;
                 GameSettings.Current.Commit();
-                if (Has(XR.XrSession.AskedFlag))
+                if (CmdArgs.Has(XR.XrSession.AskedFlag))
                     Callable.From(() => Modal.Inform(_menuRoot, "No VR headset",
                         "OpenXR did not start. Connect the headset with Quest Link (Meta set as the OpenXR runtime), "
                         + "then turn VR mode on again in Settings. Playing on the screen for now.", null)).CallDeferred();
             }
-            if (Has("--settings")) Push(SettingsScreen.Create());
+            if (CmdArgs.Has("--settings")) Push(SettingsScreen.Create());
             // "--licenses": Settings on its About tab, the licenses and data sources (#118), for screenshotting it
-            else if (Has("--licenses"))
+            else if (CmdArgs.Has("--licenses"))
             {
                 var settings = SettingsScreen.Create();
                 Push(settings);
                 Callable.From(settings.ShowLicenses).CallDeferred();
             }
-            else if (Has("--multiplayer")) Push(MultiplayerScreen.Create());
-            else if (Has("--solo")) Push(SoloScreen.Create());
+            else if (CmdArgs.Has("--multiplayer")) Push(MultiplayerScreen.Create());
+            else if (CmdArgs.Has("--solo")) Push(SoloScreen.Create());
             // "--autostart": straight into Explore through the loading screen, for screenshotting
             // it (and, with --menu, the pause menu once in)
-            if (Has("--autostart")) Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore })).CallDeferred();
+            if (CmdArgs.Has("--autostart")) Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore })).CallDeferred();
         }
-        if (Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
+        if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
         if (MenuCheck.Requested()) AddChild(new MenuCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
@@ -186,13 +190,12 @@ public partial class GameShell : Node
         if (Direct)
         {
             _state = State.InWorld;
-            var args = OS.GetCmdlineUserArgs();
             // "--menu" / "--settings" open the pause menu over the world, for screenshotting it
-            if (Array.IndexOf(args, "--menu") >= 0 || Array.IndexOf(args, "--settings") >= 0)
+            if (CmdArgs.Has("--menu") || CmdArgs.Has("--settings"))
                 Callable.From(() =>
                 {
                     OpenPause();
-                    if (Array.IndexOf(args, "--settings") >= 0) Push(SettingsScreen.Create());
+                    if (CmdArgs.Has("--settings")) Push(SettingsScreen.Create());
                 }).CallDeferred();
         }
     }
@@ -420,7 +423,7 @@ public partial class GameShell : Node
         UpdateMenuState();
         if (_launch is { Mode: GameMode.Multiplayer, Hosted: false } l)
             Book.NotePlayed(l.Endpoint, l.ServerName);
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--menu") >= 0) Callable.From(OpenPause).CallDeferred();
+        if (CmdArgs.Has("--menu")) Callable.From(OpenPause).CallDeferred();
         GD.Print($"[shell] in world: {_launch?.Mode}");
     }
 
@@ -499,7 +502,7 @@ public partial class GameShell : Node
             HardRestart();
             return;
         }
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--leave-restart") >= 0) { HardRestart(); return; }
+        if (CmdArgs.Has("--leave-restart")) { HardRestart(); return; }
 
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -518,7 +521,7 @@ public partial class GameShell : Node
     /// <summary>The way out if a world cannot be torn down in place: start the game again.</summary>
     private void HardRestart()
     {
-        var args = OS.GetCmdlineUserArgs().Where(a => a != "--leave-restart").ToArray();
+        var args = CmdArgs.All.Where(a => a != "--leave-restart").ToArray();
         OS.SetRestartOnExit(true, OS.GetCmdlineArgs().TakeWhile(a => a != "--").Concat(args.Length > 0 ? new[] { "--" }.Concat(args) : Array.Empty<string>()).ToArray());
         GetTree().Quit();
     }
@@ -562,13 +565,9 @@ public partial class GameShell : Node
     /// <summary>"--uishot &lt;png&gt; [seconds]": saves the screen after a few seconds and quits.</summary>
     private static (string Path, double Seconds)? UiShot()
     {
-        var a = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(a, "--uishot");
-        if (i < 0 || i + 1 >= a.Length) return null;
-        double seconds = 3;
-        if (i + 2 < a.Length) double.TryParse(a[i + 2], System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out seconds);
-        return (a[i + 1], seconds <= 0 ? 3 : seconds);
+        if (CmdArgs.Value("--uishot") is not { } path) return null;
+        double seconds = CmdArgs.Double("--uishot", 2) ?? 0;   // a missing or unreadable delay is 3 s
+        return (path, seconds <= 0 ? 3 : seconds);
     }
 
     private void SaveShot(string path)

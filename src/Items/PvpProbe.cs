@@ -13,25 +13,15 @@ namespace UnitSport.Items;
 /// knife stab at arm's length, then rifle rounds until B goes down — B's Died event must name A as the killer,
 /// and A must see B's replicated Down flag. Scratch inventories; outputs in <c>test_output/</c>.
 /// </summary>
-public partial class PvpProbe : Node
+public partial class PvpProbe : ChatProbe
 {
-    public static string? Role => Arg("--pvpcheck")?.ToUpperInvariant();
-    private static bool ExpectOn => Arg("--pvpexpect") != "off";
+    public static string? Role => RoleArg("--pvpcheck");
+    private static bool ExpectOn => RoleArg("--pvpexpect") != "OFF";
 
-    private static string? Arg(string flag)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, flag);
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-    }
-
-    private readonly ItemController _items;
-    private readonly List<string> _heard = new();
-    private string _role = "";
-    private int _failures;
-
-    public PvpProbe(ItemController items) => _items = items;
+    public PvpProbe(ItemController items) : base(items, "pvp", "PV", "pvp_") { }
     public PvpProbe() : this(null!) { }
+
+    protected override string Dash => "-";
 
     /// <summary>Puts the kit in a fresh inventory: weapons on the hotbar, ammunition and a vest in the pack.</summary>
     public static void Stock(Inventory inv)
@@ -44,20 +34,13 @@ public partial class PvpProbe : Node
         inv.Add(ItemId.Ammo9mm, 30);
     }
 
-    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
-    private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
-
     public override async void _Ready()
     {
         _role = Role ?? "A";
-        if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor() && ItemEvents.Instance != null, 150))
-        { Fail("no player on the ground"); return; }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
+        if (!await Joined(150, () => ItemEvents.Instance != null)) return;
         await Seconds(2.0);
         if (_role == "A") await RunA(Me!); else await RunB(Me!);
-        GD.Print(_failures == 0 ? $"[pvp {_role}] RESULT: ok" : $"[pvp {_role}] RESULT: FAILED ({_failures})");
-        await Seconds(1.0);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(1.0);
     }
 
     // ------------------------------------------------------------------------------------
@@ -67,7 +50,9 @@ public partial class PvpProbe : Node
     private async Task RunA(FootPlayer me)
     {
         me.LookYaw = 0f;
-        string pos = Fmt($"posA {me.GlobalPosition.X:F2} {me.GlobalPosition.Y:F2} {me.GlobalPosition.Z:F2}");
+        // LV95: B's world space is not this one (every peer has its own origin, #185)
+        var at = me.Global;
+        string pos = Fmt($"posA {at.E:F2} {at.N:F2} {at.Alt:F2}");
         for (int tries = 0; tries < 60 && !Said("B", "ready"); tries++)
         {
             Say(pos);
@@ -96,7 +81,7 @@ public partial class PvpProbe : Node
             await Fire(me, b, ItemId.Rifle, 1, null);
         await Until(() => b.Down != 0, 3);
         Expect(b.Down != 0, "B's body is down here (replicated Down flag)");
-        Snap("a_down");
+        Shot("a_down");
         int before = Hits;
         await Fire(me, b, ItemId.Rifle, 1, null);
         Expect(Hits == before, "a downed body is not hit again");
@@ -148,14 +133,14 @@ public partial class PvpProbe : Node
     // B: the target
     // ------------------------------------------------------------------------------------
 
-    private Vector3 _a;
+    private GlobalPos _a;
     private long _killer = -1;
 
     private async Task RunB(FootPlayer me)
     {
         if (!await Until(() => _heard.Any(l => l.Contains("PV A posA")), 150)) { Fail("A never reported"); return; }
         var parts = _heard.First(l => l.Contains("PV A posA")).Split("posA ")[1].Split(' ');
-        _a = new Vector3(Float(parts[0]), Float(parts[1]), Float(parts[2]));
+        _a = new GlobalPos(Lv95(parts[0]), Lv95(parts[1]), Lv95(parts[2]));
         _items.Inventory.Select(0);
         me.Died += (killer, cause) => { _killer = killer; GD.Print($"[pvp B] died, killer {killer}, cause {cause}"); };
         await StandAt(me, 10f);
@@ -186,7 +171,7 @@ public partial class PvpProbe : Node
 
         await Until(() => me.KnockedOut, 30);
         Expect(me.KnockedOut, "B went down");
-        Snap("b_down");
+        Shot("b_down");
         await Until(() => _killer >= 0, 3);
         long a = PeerOfA();
         Expect(_killer == a && a > 0, $"Died names A (peer {a}) as the killer ({_killer})");
@@ -207,16 +192,17 @@ public partial class PvpProbe : Node
         // after this client's own spawn has settled: a spawn still pending puts the body back on its point
         await Until(() => !GetParent().GetChildren().OfType<Core.SpawnPoint>().Any() && me.IsOnFloor(), 60);
         await Seconds(0.5);
-        var want = _a + new Vector3(0f, 1.0f, -d);
+        // from A's LV95 every time: moving B shifts the origin under --originstress (#185)
+        Vector3 Want() => me.Origin!.ToWorld(_a) + new Vector3(0f, 1.0f, -d);
         // set down again until it stays: under load the arrival from the spawn can still land late
         for (int tries = 0; tries < 4; tries++)
         {
-            me.GlobalPosition = want;
+            me.GlobalPosition = Want();
             me.Velocity = Vector3.Zero;
             me.RequestReplacement();
             await Until(() => me.IsOnFloor(), 10);
             await Seconds(1.5);
-            if (Flat(me.GlobalPosition - want) < 1.5f) break;
+            if (Flat(me.GlobalPosition - Want()) < 1.5f) break;
             GD.Print(Fmt($"[pvp {_role}] put back at {me.GlobalPosition.X:F1},{me.GlobalPosition.Z:F1}: again"));
         }
         me.LookYaw = Mathf.Pi;   // facing A
@@ -244,57 +230,7 @@ public partial class PvpProbe : Node
         if (!await Until(() => Said(role, what), 40)) Expect(false, $"{role} said {what}");
     }
 
-    private void Snap(string name)
-    {
-        var dir = ProjectSettings.GlobalizePath("res://test_output");
-        System.IO.Directory.CreateDirectory(dir);
-        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, $"pvp_{name}.png"));
-    }
-
     private static string Fmt(FormattableString s) => FormattableString.Invariant(s);
-    private static float Float(string s) => float.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
-
-    private int SlotOf(ItemId id)
-    {
-        for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].Id == id && !_items.Inventory[i].IsEmpty) return i;
-        return -1;
-    }
-
-    private int CountOf(ItemId id)
-    {
-        int n = 0;
-        for (int i = 0; i < Inventory.Size; i++) if (_items.Inventory[i].Id == id) n += _items.Inventory[i].Count;
-        return n;
-    }
-
-    private void Say(string what)
-    {
-        GD.Print($"[pvp {_role}] say {what}");
-        Chat?.Send($"PV {_role} {what}");
-    }
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[pvp {_role}] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[pvp {_role}] RESULT: FAILED - {why}");
-        GetTree().Quit(1);
-    }
+    private static double Lv95(string s) =>
+        double.Parse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture);
 }

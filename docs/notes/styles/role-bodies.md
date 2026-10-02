@@ -7,12 +7,14 @@ How a world shader is laid out since phase 1, part 2 (#212), so another style ca
 functional parts and only change the finish.
 
 - **A role's shader file is a thin wrapper**: `shader_type`, `render_mode`, its defines, then one
-  include of the role's body in `shaders/body/` (`terrain`, `road`, `building`, `water`, `tree`). The body
+  include of the role's body in `shaders/body/` (`terrain`, `road`, `building`, `water`, `tree`,
+  `prop`, `path`). The body
   holds everything the game depends on: portal clipping, door light, occasions, surface patterns,
   windows and rooms, tree LOD. A Cartoon terrain is a `cartoon_terrain.gdshader` that includes the
   same body with its own defines, plus a row in `StyleKit.Shaders`.
 - **`shaders/common/`** holds what every body shares: `world` (the `world_*` time-of-day
-  globals), `retro` (the PS1 finish), `sightline` (the camera-to-subject dissolve). Guarded with
+  globals), `retro` (the PS1 finish), `sightline` (the camera-to-subject dissolve), `style` (the
+  lit styles' finish: `STYLE_LIT`, `STYLE_CARTOON`, the cel `light()`). Guarded with
   `#ifndef`, so a body may include them in any order. The older functional includes
   (`portal_clip`, `door_light`, `world_occasion`, `world_origin`) stay in `shaders/`: moving them
   would touch every open branch's shaders for no gain.
@@ -29,6 +31,9 @@ functional parts and only change the finish.
   and tree-far, prop, interior, path. `ps1_snowfall` has no retro finish. The road's paint
   dissolve (a line under ~1.5 px dithers away instead of aliasing) is anti-aliasing, not the
   finish: it keeps `bayer4()` in every style.
-- Unshaded vs lit is a `render_mode`, so it cannot be a uniform: a lit style gets its own wrapper
-  over the same body (phase 2 adds the `STYLE_LIT` path to the bodies, from the prototype's
-  `style.gdshaderinc` on `feat/181-visual-styles-prototype`).
+- **Unshaded vs lit** is a `render_mode`, so it cannot be a uniform: a lit style has its own
+  wrapper over the same body, without `unshaded`, defining `STYLE_LIT`. Each body ends its
+  fragment in `#ifdef STYLE_LIT`: write `ALBEDO` (graded), `NORMAL` (the facet, through
+  `style_view_normal`; the 3D trees keep their mesh normals) and `EMISSION` (door light, lit
+  windows, glows), and skip its own sun, tint, posterize and fog; the `#else` is PS1's path,
+  untouched. Discards (portal clip, dissolves) come before and serve both. Cartoon: `cartoon`.

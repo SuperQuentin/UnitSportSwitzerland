@@ -14,6 +14,7 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `car-cabin` — Car cabin (#69): hollow body, glass as panes in a second surface, dash/dials/wheel/pedals/mirrors, the driver's seat derived from the body and the figure posed from it; `--cockpitcheck`
 - (`VehicleDeck`/`DeckBuilder`, a vehicle's walkable deck built with its model: see the player note `walk-aboard`)
 - `heavy-cabin` — Truck cabs and bus driver's place and saloon (#157): hollow cabs with panes, derived seat and flat wheel (hands' reach at `MaxGrip`), air gauge and gear display, binnacle square to the dials, 2+2 bus seats, seat anchors for passengers
+- `cockpit-kit` — Wheel, column, dials, needles, lamps, pedals and mirrors of cars and heavies come from `CockpitKit` + a per-vehicle `CockpitSpec`; never copy them into a cabin; no static field built from another partial's statics (#221)
 - `item-arm-poses` — Held items pose the arms (ItemArmPose, replicated ItemAction) and the held mesh follows the hand basis
 - `clothing` — Clothes (#251): Garments catalog, WearSlot, Outfit bits (OutfitBits), AppendDressed from the rig, open Skirt primitive, finishes in vertex alpha + FigureMaterial/avatar.gdshader; `--outfitcheck`, `--avatars … --outfits`
 
@@ -25,4 +26,4 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `gait-solved-from-no-slip` — A gait is solved from the no-slip constraint, and the arithmetic has two traps
 - `avatar-meshes-authored-facing-z` — Avatar meshes are authored facing +Z; a Godot node faces −Z
 - `crank-turning-wrong-way-instantly` — A crank turning the wrong way is instantly obvious to anyone who rides
-- `meshscratch-boxes-render-inside-out` — MeshScratch winding, fixed: every face clockwise from outside (Godot front face); `--meshcheck` signed-volume check (#54); overlays must stand ~1 cm proud or they z-fight at distance
+- `meshscratch-boxes-render-inside-out` — MeshScratch winding, fixed: every face clockwise from outside (Godot front face); `--meshcheck` signed-volume check (#54), smooth primitives too (#311); overlays must stand ~1 cm proud or they z-fight at distance

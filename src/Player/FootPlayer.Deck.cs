@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Avatar;
 using UnitSport.Vehicles;
 
@@ -186,7 +187,7 @@ public partial class FootPlayer
                 {
                     var raw = ((pos - set.LastPos) / dt) with { Y = 0 };
                     // a jump of the drawn frame (a copy appearing, a teleport) is not motion
-                    if (raw.Length() < 120f) set.Velocity = set.Velocity.Lerp(raw, 1f - Mathf.Exp(-10f * dt));
+                    if (raw.Length() < 120f) set.Velocity = set.Velocity.Lerp(raw, MathX.Damp(10f, dt));
                 }
                 set.LastPos = pos;
                 set.Measured = true;
@@ -212,7 +213,7 @@ public partial class FootPlayer
         if (_deckCarried)
         {
             var delta = now * _carriedFrom.AffineInverse();
-            float turn = Mathf.Wrap(YawOf(now) - YawOf(_carriedFrom), -Mathf.Pi, Mathf.Pi);
+            float turn = MathX.WrapAngle(YawOf(now) - YawOf(_carriedFrom));
             GlobalPosition = delta * GlobalPosition;
             Rotation = new Vector3(0, Rotation.Y + turn, 0);
             _viewYaw += turn;
@@ -222,7 +223,7 @@ public partial class FootPlayer
         _carriedFrom = now;
         _deckCarried = true;
         DeckPos = now.AffineInverse() * GlobalPosition;
-        DeckYaw = Mathf.Wrap(Rotation.Y - YawOf(now), -Mathf.Pi, Mathf.Pi);
+        DeckYaw = MathX.WrapAngle(Rotation.Y - YawOf(now));
     }
 
     /// <summary>
@@ -304,7 +305,8 @@ public partial class FootPlayer
 
     private void FreeDeck(DeckSet set)
     {
-        foreach (var (_, body, _) in set.Sections) if (IsInstanceValid(body)) body.QueueFree();
+        // out of the physics now: freed at the end of the frame, a step could still stand on it
+        foreach (var (_, body, _) in set.Sections) if (IsInstanceValid(body)) { body.CollisionLayer = 0; body.QueueFree(); }
         foreach (var other in set.Excepted) if (IsInstanceValid(other)) RemoveCollisionExceptionWith(other);
     }
 
@@ -416,11 +418,11 @@ public partial class FootPlayer
         // A turn shows as the velocity turning: the push out of a bend comes with it.
         var velocity = VelocityOfHost(set.Host);
         if (!_deckFrameValid) { _deckFrameVel = velocity; _deckAccel = Vector3.Zero; _hardFor = 0f; }
-        var smooth = _deckFrameVel.Lerp(velocity, 1f - Mathf.Exp(-8f * dt));
+        var smooth = _deckFrameVel.Lerp(velocity, MathX.Damp(8f, dt));
         var accel = (smooth - _deckFrameVel) / dt;
         _deckFrameVel = smooth;
         _deckFrameValid = true;
-        _deckAccel = _deckAccel.Lerp(accel with { Y = 0 }, 1f - Mathf.Exp(-5f * dt));
+        _deckAccel = _deckAccel.Lerp(accel with { Y = 0 }, MathX.Damp(5f, dt));
         if (mode == PassengerService.DeckInertia.Steady) return;
 
         var local = frame.AffineInverse() * GlobalPosition;
@@ -666,7 +668,7 @@ public partial class FootPlayer
     {
         if (HostNamed(DeckOn) is not { } host || SectionFrame(host, DeckSection) is not { } node) { _deckShownValid = false; return false; }
         // eased between sends, but a jump (just boarded, just stood up) is taken at once
-        _deckShown = _deckShownValid && _deckShown.DistanceTo(DeckPos) < 1f ? _deckShown.Lerp(DeckPos, 1f - Mathf.Exp(-14f * dt)) : DeckPos;
+        _deckShown = _deckShownValid && _deckShown.DistanceTo(DeckPos) < 1f ? _deckShown.Lerp(DeckPos, MathX.Damp(14f, dt)) : DeckPos;
         _deckShownValid = true;
         var frame = node.GlobalTransform.Orthonormalized();
         GlobalPosition = frame * _deckShown;

@@ -21,15 +21,7 @@ namespace UnitSport.Items;
 /// </summary>
 public partial class EconomyProbe : ChatProbe
 {
-    public static string? Password
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--econcheck");
-            return i >= 0 ? (i + 1 < args.Length ? args[i + 1] : "") : null;
-        }
-    }
+    public static string? Password => CmdArgs.Has("--econcheck") ? CmdArgs.Value("--econcheck") ?? "" : null;
 
     private readonly ChatManager _chat;
     private readonly Inventory _inventory;
@@ -55,7 +47,7 @@ public partial class EconomyProbe : ChatProbe
 
         var vehicles = VehicleManager.Instance!;
         var at = GetViewport().GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
-        var bike = new VehicleState(RideKind.RoadBike, at + new Vector3(3, 0, 0), 0, Vector3.Zero, 100, true, false, 0, 0);
+        var bike = new VehicleState(RideKind.RoadBike, vehicles.Origin.ToGlobal(at + new Vector3(3, 0, 0)), 0, Vector3.Zero, 100, true, false, 0, 0);
 
         int count = Count(vehicles);
         vehicles.Park(bike);

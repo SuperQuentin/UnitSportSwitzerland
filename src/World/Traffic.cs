@@ -138,6 +138,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// junction for one about to pass it.
     /// </summary>
     public Func<IEnumerable<(Vector3 Pos, Vector3 Vel)>>? Obstacles { get; set; }
+    private readonly List<(Vector3 Pos, Vector3 Vel)> _obstacles = new();
 
     /// <summary>
     /// The traffic of this client, for the race pilots that drive among it (one world per process).
@@ -327,7 +328,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (_trains.Count < wantTrains) SpawnTrain(focus);
         }
 
-        var obstacles = Obstacles?.Invoke().ToList() ?? new List<(Vector3 Pos, Vector3 Vel)>();
+        // one list for the traffic's life, refilled each tick (#221)
+        var obstacles = _obstacles;
+        obstacles.Clear();
+        if (Obstacles?.Invoke() is { } seen) obstacles.AddRange(seen);
         _byX.Clear();
         _byX.AddRange(_cars);
         _byX.Sort(ByX);
@@ -491,10 +495,10 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             // where it is on this car's road (bends and all): metres ahead (- behind), and right of the centreline
             int best = 0;
             for (int k = 1; k < _roadPos.Length; k++)
-                if (Flat(oPos - _roadPos[k]).LengthSquared() < Flat(oPos - _roadPos[best]).LengthSquared()) best = k;
+                if (MathX.Flat(oPos - _roadPos[k]).LengthSquared() < MathX.Flat(oPos - _roadPos[best]).LengthSquared()) best = k;
             var t = _roadDir[best];
             var side = new Vector3(-t.Z, 0, t.X).Normalized();
-            var r = Flat(oPos - _roadPos[best]);
+            var r = MathX.Flat(oPos - _roadPos[best]);
             float along = 4f * (best - Behind) + r.Dot(t), lat = r.Dot(side);
             float ov = oVel.X * t.X + oVel.Z * t.Z;   // its speed along this car's way
             // on this road (not past either end of what was sampled) and not on a bridge over it
@@ -502,7 +506,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
             // whatever the road says, never drive into a body: anything in front of its own nose, within
             // a car's width of where it actually is (a kinematic box shoves a car it drives into)
-            var nose = Flat(oPos - car.Head);
+            var nose = MathX.Flat(oPos - car.Head);
             float noseAhead = nose.Dot(dir), noseSide = Mathf.Abs(nose.X * -dir.Z + nose.Z * dir.X);
             if (noseAhead > 0f && noseAhead < 6f + Mathf.Max(0f, car.Speed - (oVel.X * dir.X + oVel.Z * dir.Z)) && noseSide < 2.1f && Mathf.Abs(rel.Y) < 3f)
             {
@@ -575,7 +579,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (oSpeed < 2f) continue;
             if (!junctionLooked) { junction = car.Route.NextJunction(_roads!, 60f); junctionLooked = true; }
             if (junction is not var (j, dj, gives)) continue;
-            var toJ = Flat(j - oPos);
+            var toJ = MathX.Flat(j - oPos);
             float dJ = toJ.Length(), towards = dJ > 0.1f ? (oVel.X * toJ.X + oVel.Z * toJ.Z) / dJ : oSpeed;
             // giving way (#159): look left and right over what a racer covers while this car pulls out (from the
             // line to clear the main road: ~3.5 s from standing, and a margin) — 9 s, not 7
@@ -625,12 +629,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         car.Route.Trim(90f);   // the road behind it too: whoever is closing from behind is found on it
         float pull = car.Startle > 0f ? Mathf.Clamp(car.Pull + 0.12f * Mathf.Sin(car.Startle * 14f), 0f, maxPull) : car.Pull;
         car.Place(e => KeepRight(e) + pull);
-        car.Vel = dt > 0f ? Flat(car.Head - before) / dt : Vector3.Zero;
+        car.Vel = dt > 0f ? MathX.Flat(car.Head - before) / dt : Vector3.Zero;
         // where its lane takes it, 0.5 s apart at this speed: a racer reads it to see it coming out of a side road
         for (int k = 0; k < PathSteps; k++) car.Path[k] = car.Route.At(-car.Speed * 0.5f * (k + 1)).Pos;
     }
 
-    private static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
 
     /// <summary>How far a driver notices a car coming, m.</summary>
     private const float SightRange = 250f;
@@ -688,13 +691,15 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         if (remaining > YieldLookAhead) return float.MaxValue;
         var junction = forward ? edge.Points[^1] : edge.Points[0];
 
-        bool conflict = obstacles.Any(o => FlatLength(o.Pos - junction) < 8f);
+        bool conflict = false;
+        foreach (var o in obstacles)
+            if (MathX.FlatLength(o.Pos - junction) < 8f) { conflict = true; break; }
         foreach (var other in _cars)
         {
             if (conflict) break;
             if (other == car || IsWaiting(other, junction)) continue;
             var to = junction - other.Head;
-            float d = FlatLength(to);
+            float d = MathX.FlatLength(to);
             if (d > YieldWatch) continue;
             var (_, dir) = other.Route.At(0);
             bool coming = new Vector2(dir.X, dir.Z).Dot(new Vector2(to.X, to.Z)) > 0;
@@ -712,10 +717,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         var (edge, forward) = v.Route.Legs[v.Route.Leg];
         if ((edge.Yield & (forward ? RoadAttrFlags.YieldAtEnd : RoadAttrFlags.YieldAtStart)) == 0) return false;
         var end = forward ? edge.Points[^1] : edge.Points[0];
-        return FlatLength(end - junction) < 30f;
+        return MathX.FlatLength(end - junction) < 30f;
     }
 
-    private static float FlatLength(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
     /// <summary>Cars stopped or slowing at a side road's Wartelinie for main-road traffic right now.</summary>
     public int GivingWayCars => _cars.Count(c => c.GivingWay);
@@ -874,7 +878,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     {
         for (int i = _cars.Count - 1; i >= 0; i--)
         {
-            if (Flat(_cars[i].Head - at).Length() >= radius) continue;
+            if (MathX.Flat(_cars[i].Head - at).Length() >= radius) continue;
             foreach (var u in _cars[i].Units) _byBody.Remove(u.GetInstanceId());
             _cars[i].Free();
             _cars.RemoveAt(i);

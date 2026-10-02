@@ -130,7 +130,7 @@ public partial class LoadingScreen : CanvasLayer
     public override void _Process(double delta)
     {
         if (!_root.Visible) return;
-        _shown = Mathf.Lerp(_shown, _target, 1 - Mathf.Exp(-6f * (float)delta));
+        _shown = Mathf.Lerp(_shown, _target, MathX.Damp(6f, (float)delta));
         _bar.Value = _shown;
         _sinceJoke += delta;
         if (_sinceJoke > 2.6) NextJoke(instant: false);
