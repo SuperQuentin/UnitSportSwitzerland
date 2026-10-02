@@ -54,6 +54,18 @@ public partial class InterestService : Node
     private readonly List<(long Id, FootPlayer Player)> _targets = new();
     private readonly Dictionary<long, FootPlayer> _byId = new();
     private readonly List<long> _changed = new();
+    /// <summary>
+    /// Per round, parallel to <see cref="_targets"/>: where each one is, its height above ground,
+    /// what it rides, and the index of each viewer in it. Read once per target, not once per pair
+    /// (#221): a pair used to cost three native position reads and two ground lookups.
+    /// </summary>
+    private readonly List<Vector3> _at = new();
+    private readonly List<float> _agl = new();
+    private readonly List<RideKind> _ride = new();
+    private readonly List<int> _viewerIndex = new();
+    /// <summary>The pairs that race each other this round, asked once per pair.</summary>
+    private readonly HashSet<(long Viewer, long Target)> _together = new();
+    private Func<Vector3, Vector3, bool>? _sight;
     private double _timer;
 
     public static InterestService CreateServer(Node parent, Node players, Func<Vector3, float?>? ground)
@@ -126,34 +138,43 @@ public partial class InterestService : Node
         _scratch.Clear();
         _targets.Clear();
         _byId.Clear();
+        _at.Clear(); _agl.Clear(); _ride.Clear(); _viewerIndex.Clear(); _together.Clear();
         foreach (var child in Players!.GetChildren())
             if (child is FootPlayer p && FootPlayer.NetId(p.Name) is long id)
             {
+                if (id > 0) { _scratch.Add((id, p)); _viewerIndex.Add(_targets.Count); }
                 _targets.Add((id, p));
                 _byId[id] = p;
-                if (id > 0) _scratch.Add((id, p));
+                var where = Where(p);
+                _at.Add(where);
+                var at = where + Vector3.Up;
+                _agl.Add(Ground?.Invoke(at) is { } g ? at.Y - g : 0f);
+                _ride.Add(p.Ride);
             }
+        _sight ??= LineOfSight;
 
-        foreach (var (viewer, viewerNode) in _scratch)
+        for (int vi = 0; vi < _scratch.Count; vi++)
         {
+            var (viewer, _) = _scratch[vi];
             // A new viewer was spawned everyone before its first set existed: its first round
             // re-decides every target, even if the answer is "nobody", or they stay for ever.
             bool first = !_sets.TryGetValue(viewer, out var set);
             if (first) _sets[viewer] = set = new HashSet<long>();
             var view = _views.TryGetValue(viewer, out var v) ? v : Interest.View.Default;
             // someone inside a building is 3 km under it: seen, and seeing, from where the building is
-            var eye = Where(viewerNode) + Vector3.Up * 1.7f;
+            var eye = _at[_viewerIndex[vi]] + Vector3.Up * 1.7f;
             _changed.Clear();
 
-            foreach (var (target, targetNode) in _targets)
+            for (int ti = 0; ti < _targets.Count; ti++)
             {
+                long target = _targets[ti].Id;
                 if (target == viewer) continue;
                 bool was = set.Contains(target);
                 if (first) _changed.Add(target);
-                var at = Where(targetNode) + Vector3.Up;
-                float agl = Ground?.Invoke(at) is { } g ? at.Y - g : 0f;
-                bool now_ = Interest.Relevant(eye, at, targetNode.Ride, agl, view, was,
-                    Together?.Invoke(viewer, target) == true, Ground == null ? null : LineOfSight);
+                bool together = Together?.Invoke(viewer, target) == true;
+                if (together) _together.Add((viewer, target));
+                bool now_ = Interest.Relevant(eye, _at[ti] + Vector3.Up, _ride[ti], _agl[ti], view, was,
+                    together, Ground == null ? null : _sight);
                 if (now_ == was) continue;
                 if (first) { if (now_) set.Add(target); continue; }
                 // an edge case must not blink: each pair flips at most once a second
@@ -175,17 +196,19 @@ public partial class InterestService : Node
         // audience, not the set: visibility is asymmetric (a plane is seen 8 km away, a walker
         // 0.9 km), so what counts is who sees the target, not whom the target sees.
         // A race NPC is a target like a player (#50): relayed from where IT is, whoever simulates it.
-        foreach (var (target, targetNode) in _targets)
+        for (int ti = 0; ti < _targets.Count; ti++)
         {
+            var (target, targetNode) = _targets[ti];
             _near.Clear(); _far.Clear();
-            var at = Where(targetNode);
+            var at = _at[ti];
             _nearOf.TryGetValue(target, out var lastNear);
-            foreach (var (viewer, viewerNode) in _scratch)
+            for (int vi = 0; vi < _scratch.Count; vi++)
             {
+                long viewer = _scratch[vi].Id;
                 if (viewer == target || !_sets.TryGetValue(viewer, out var set) || !set.Contains(target)) continue;
                 float radius = lastNear != null && lastNear.Contains(viewer) ? NearRadius * 1.2f : NearRadius;
-                bool near = Together?.Invoke(viewer, target) == true
-                    || Where(viewerNode).DistanceSquaredTo(at) < radius * radius;
+                bool near = _together.Contains((viewer, target))
+                    || _at[_viewerIndex[vi]].DistanceSquaredTo(at) < radius * radius;
                 (near ? _near : _far).Add(viewer);
             }
             if (lastNear != null && _farOf.TryGetValue(target, out var lastFar)
