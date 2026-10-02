@@ -126,6 +126,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             OriginCheck.Run(this);
             return;
         }
+        // the wave shader against the C# wave field (#299): needs frames and a GPU, builds no world
+        if (World.WaterParity.Requested)
+        {
+            AddChild(new World.WaterParity { Name = "WaterParity" });
+            return;
+        }
         // idempotent: the shell, which owns the window settings, has usually installed it already
         PlayerInput.Install(GetParent());
         if (Player.WheelProbe.ForceCheckRequested)
