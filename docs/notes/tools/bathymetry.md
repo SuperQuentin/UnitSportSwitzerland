@@ -88,7 +88,15 @@ is #299: `terrain/water-level-layer`.
   line) and `water_depth_*` per cluster; `--png-crop E,N[,size]` adds 1 m/px crops.
 - Petit Lac (in region): max **78.2 m** (published ~76 m), mean 44.4 m, 97.8% surveyed, 2.2% gap
   fill; join median 0.15 m, p99 1.06 m (the 1:1 bank), max 1.76 m. 132 bodies, 55 km² of water.
-  Rhône at Martigny (synthetic channel): max 3.4 m. 21-36 s for the region with 8 jobs.
+  Rhône at Martigny (synthetic channel): max 3.4 m. 15.6 s for the region with 16 jobs (peak
+  4.2 GB), 21-36 s with 8. A second run, and a run with another job count, writes byte-identical
+  files (SHA-256 of every `.terr/.terrc/.water`, the manifest and horizon.bin); every vertex off the
+  Water cover is unchanged.
+- `--waterprobe lv95E,lv95N,seconds[,minDepth]` (`Terrain/WaterProbe`): the runtime's level, the
+  terrain (bed) and a ray's hit at a point. Quick tier on a generated lake (`checkmap`); by hand on
+  the real tiles (`--chunks DIR --waterprobe 2506500,1133500,20,20`: level 372.14, bed and collision
+  342.09), and from a client with no local terrain streaming them from a server (same numbers;
+  `.water` streams, and a cache filled from the old server drops its 94 changed tiles).
 - `tools/BlendCheck` "water:" section: generated Léman 58.5 m deep, no wet sample whose bed is above
   its level, shore samples <= 1.5 m deep, water levels equal across tile edges.
 - Unit: `WaterBedTests` (profiles, blend without a step, distance transform vs brute force),
@@ -105,5 +113,6 @@ is #299: `terrain/water-level-layer`.
   `ChunkManager.TryGetWaterLevel` (Ambience's lapping, Gathering's water, `BirdLife.Ground`).
 - Re-running roads (`--roads-only`, RoadGen) after the pass drapes on the bed; bridges keep their
   surveyed Z, and no road should cross water otherwise.
-- Memory: every water tile's wet mask + surface stay in memory (3 MB each) for the region-wide
-  labelling; a 16-thread run of the western region peaks around 3 GB.
+- Memory: every water tile's wet mask + surface (3 MB) stay in memory for the region-wide
+  labelling, plus ~200 MB of window arrays per job: 4.2 GB peak at 16 jobs for 152 water tiles.
+  A country-wide build would want fewer `--jobs`.
