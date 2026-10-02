@@ -142,6 +142,7 @@ public partial class OriginShifter : Node
         foreach (var node in pass.Doppler) ResetDoppler(node);
         double nodesMs = clock.Elapsed.TotalMilliseconds;
         foreach (var node in pass.Aware) node.OnOriginShifted(shift);
+        Player.PlayerSnapshot.Forget();   // this tick's positions were taken in the old world space
         _origin.RaiseShifted(shift);
         PushPatternOffset();
 
