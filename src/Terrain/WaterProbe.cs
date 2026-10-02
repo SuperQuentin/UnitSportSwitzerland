@@ -64,10 +64,24 @@ public partial class WaterProbe : Node3D
         var at = _origin.ToWorld(_e, _n, 0);
         bool wet = _chunks.TryGetWaterLevel(at, out float level);
         bool ground = _chunks.TryGetHeight(at, out float bed);
+        // the ground's collision only: a player spawned here (--at) stands in the ray
         var space = GetViewport().World3D.DirectSpaceState;
-        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            _origin.ToWorld(_e, _n, 5000), _origin.ToWorld(_e, _n, -500)));
-        float? hitY = hit.Count > 0 ? hit["position"].AsVector3().Y : null;
+        var query = PhysicsRayQueryParameters3D.Create(_origin.ToWorld(_e, _n, 5000), _origin.ToWorld(_e, _n, -500));
+        var exclude = new Godot.Collections.Array<Rid>();
+        float? hitY = null;
+        for (int tries = 0; tries < 8; tries++)
+        {
+            query.Exclude = exclude;
+            var hit = space.IntersectRay(query);
+            if (hit.Count == 0) break;
+            if (hit["collider"].AsGodotObject() is PhysicsBody3D body and not StaticBody3D)
+            {
+                exclude.Add(body.GetRid());
+                continue;
+            }
+            hitY = hit["position"].AsVector3().Y;
+            break;
+        }
 
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         GD.Print(string.Format(inv, "[waterprobe] at {0:F0},{1:F0}: level {2}, terrain {3}, collision {4}",
