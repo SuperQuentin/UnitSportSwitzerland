@@ -3414,6 +3414,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // a bus: people walking in it or up to its doors are not in its hull's way (#162)
         IgnoreGuests();
+        // in water deeper than it wades, the water has it (#299): afloat, then going down
+        if (WaterPhysics(dt)) return;
         // Triggers are analog, and the vehicles already take 0..1: half a trigger is half the
         // watts. Pushing the stick forward or back does the same, for anyone who expects it to.
         var stick = PlayerInput.Move;

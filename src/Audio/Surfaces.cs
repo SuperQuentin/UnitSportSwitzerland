@@ -75,6 +75,9 @@ public static class Surfaces
 
     private static Surface Compute(ChunkManager chunks, Vector3 feet)
     {
+        // standing in water (World/WaterField, #299): a lake's shallows over a gravel bed are water
+        if (chunks.TryGetWaterLevel(feet, out float still) && still - feet.Y > 0.05f) return Surface.Water;
+
         bool known = chunks.TryGetCover(feet, out var cover);
 
         // water is water even where a road is mapped across it: the raster says the lake is here

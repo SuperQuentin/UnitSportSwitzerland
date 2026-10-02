@@ -40,7 +40,9 @@ void vertex() {
     // UV.x: the water layer's wave scale (fetch x depth). The tile's transform is a translation,
     // so the world displacement is the local one.
     vec3 rest = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    vec3 d = water_wave_displace(pattern_xz(rest), UV.x, wave_normal);
+    vec3 n;
+    vec3 d = water_wave_displace(pattern_xz(rest), UV.x, n);
+    wave_normal = n;
     VERTEX += d;
     wave_lift = d.y;
     world_pos = rest + d;

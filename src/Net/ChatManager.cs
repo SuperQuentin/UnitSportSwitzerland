@@ -322,6 +322,10 @@ public partial class ChatManager : Node
                 Show(LocalTime(parts[1..], out bool failed), failed ? ChatKind.Error : ChatKind.Admin);
                 return;
 
+            case "water":
+                Show(World.WaterField.Command(rest, GetViewport().GetCamera3D()?.GlobalPosition), ChatKind.Private);
+                return;
+
             case "seastate":
                 if (parts.Length == 1) Show($"The sea is {World.SeaStateCommand.Describe(World.WaterField.SeaState)}.", ChatKind.Private);
                 else if (World.SeaStateCommand.TryParse(rest, out float sea, out string seaError))
@@ -551,6 +555,11 @@ public partial class ChatManager : Node
             case "time": CommandTime(sender, parts[1..]); return;
             // anyone may ask; setting it is an admin's (checked inside)
             case "seastate": CommandSeaState(sender, rest); return;
+            // the water at a point as the server sees it (#299): a debug line, two peers compare it
+            case "water":
+                ReplyTo(sender, World.WaterField.Command(rest,
+                    _players?.GetNodeOrNull<Node3D>(sender.ToString())?.GlobalPosition), ChatKind.Private);
+                return;
             // anyone may list; start/stop/auto are checked inside, against the same IsAdmin
             case "occasion" or "occasions":
                 if (Occasions.OccasionManager.Instance is not { } occasions)

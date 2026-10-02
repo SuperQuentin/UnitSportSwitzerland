@@ -1,3 +1,4 @@
+using System.Globalization;
 using Godot;
 using UnitSport.Terrain;
 
@@ -77,11 +78,27 @@ public static class WaterField
     /// The water surface's altitude above (x, z) now: the still level plus the waves. False where
     /// there is no water. This is what a hull floats on and a swimmer's head clears.
     /// </summary>
-    public static bool TryLevelAt(Vector3 world, out float level)
+    public static bool TryLevelAt(Vector3 world, out float level) => TryLevelAt(world, Now, out level);
+
+    /// <summary><see cref="TryLevelAt(Vector3, out float)"/> at a given wave time (<see cref="Now"/> is the present).</summary>
+    public static bool TryLevelAt(Vector3 world, double t, out float level)
     {
         if (!TryGetStill(world, out level, out float scale)) return false;
-        level += (float)HeightOver(world.X, world.Z, Now, scale);
+        level += (float)HeightOver(world.X, world.Z, t, scale);
         return true;
+    }
+
+    /// <summary>
+    /// One line about the water at a point, for <c>/water</c> and the probes: still level, wave
+    /// scale, surface level at wave time <paramref name="t"/>, the time and the sea state. Invariant
+    /// culture, enough digits to compare two peers to the millimetre.
+    /// </summary>
+    public static string Describe(Vector3 world, double t)
+    {
+        if (!TryGetStill(world, out float still, out float scale)) return $"no water (t {t.ToString("F4", CultureInfo.InvariantCulture)})";
+        TryLevelAt(world, t, out float level);
+        return string.Create(CultureInfo.InvariantCulture,
+            $"level {level:F4} still {still:F4} scale {scale:F4} t {t:F4} sea {SeaState:F3}");
     }
 
     /// <summary>Whether a point is under the water surface (waves included).</summary>
@@ -148,6 +165,44 @@ public static class WaterField
             px = x - dx;
             pz = z - dz;
         }
+    }
+
+    /// <summary>The world position (current frame) of an LV95 point, at altitude 0; false with no tiles bound.</summary>
+    public static bool TryWorld(double lv95E, double lv95N, out Vector3 world)
+    {
+        world = Vector3.Zero;
+        if (_chunks?.Origin is not { } origin) return false;
+        world = origin.ToWorld(lv95E, lv95N, 0);
+        return true;
+    }
+
+    /// <summary>The LV95 position of a world point; false with no tiles bound.</summary>
+    public static bool TryLv95(Vector3 world, out double lv95E, out double lv95N)
+    {
+        lv95E = lv95N = 0;
+        if (_chunks?.Origin is not { } origin) return false;
+        (lv95E, lv95N) = origin.ToLv95(world);
+        return true;
+    }
+
+    /// <summary>
+    /// <c>/water [E N]</c>: the water at an LV95 point, or at <paramref name="here"/> (world) without
+    /// one, now. Both sides answer it the same way, so two peers' lines compare directly.
+    /// </summary>
+    public static string Command(string args, Vector3? here)
+    {
+        var parts = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        Vector3 at;
+        if (parts.Length == 2
+            && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double e)
+            && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double n))
+        {
+            if (!TryWorld(e, n, out at)) return "No terrain here.";
+        }
+        else if (parts.Length == 0 && here is { } h) at = h;
+        else return "Usage: /water [E N]  (LV95; without them, where you are)";
+        TryLv95(at, out double pe, out double pn);
+        return string.Create(CultureInfo.InvariantCulture, $"water at {pe:F2},{pn:F2}: ") + Describe(at, Now);
     }
 
     /// <summary>Pattern coordinates (LV95 modulo 9.6 km, see <see cref="WaveSpectrum"/>) of a world point.</summary>
