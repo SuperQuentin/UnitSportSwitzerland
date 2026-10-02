@@ -48,6 +48,8 @@ public partial class WheelProbe : Node
     /// <summary>Runs the numbers; call after <see cref="PlayerInput.Install"/> so the actions exist.</summary>
     public static int Check(Node root)
     {
+        // a quick check runs before the world installs the input: the pad bindings tested below need it
+        PlayerInput.Install(root);
         int failures = 0;
         void Expect(bool ok, string what)
         {

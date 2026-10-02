@@ -27,7 +27,7 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class RideProbe : Node
 {
-    private readonly ChunkManager _chunks;
+    private readonly ChunkManager? _chunks;   // null on --world flat
     private readonly WorldOrigin _origin;
     private readonly RideKind _kind;
     private readonly double _seconds;
@@ -61,7 +61,7 @@ public partial class RideProbe : Node
     /// <summary>A motorbike's worst use of its wheelie / stoppie limit; 1 or more would be a flip.</summary>
     private float _worstPitch;
 
-    public RideProbe(ChunkManager chunks, WorldOrigin origin, RideKind kind, double seconds,
+    public RideProbe(ChunkManager? chunks, WorldOrigin origin, RideKind kind, double seconds,
         string? shot = null)
     {
         _chunks = chunks;
@@ -122,7 +122,7 @@ public partial class RideProbe : Node
         {
             var (e, n) = SpawnPoint.ParseTarget();
             var at = _origin.ToWorld(e, n, 0);
-            if (!_chunks.TryGetHeight(at, out float ground)) return;
+            if (!TestWorld.TryGround(_chunks, at, out float ground)) return;
 
             _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
             // --heading is a compass bearing: a node faces −Z (north) and +yaw turns it toward −X
@@ -134,6 +134,7 @@ public partial class RideProbe : Node
                 _player.Rotation = new Vector3(0, -Mathf.DegToRad(bearing), 0);
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, ground + 1.5f, at.Z);
+            if (_chunks == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
             _start = _origin.ToGlobal(_player.GlobalPosition);
             _startAltitude = ground;
             GD.Print($"[ride] spawned at LV95 {e:F0}/{n:F0}, ground {ground:F1} m");
@@ -214,12 +215,12 @@ public partial class RideProbe : Node
         {
             _sinceReport = 0;
             var p = _player.GlobalPosition;
-            float clearance = _chunks.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
+            float clearance = TestWorld.TryGround(_chunks, p, out float g) ? p.Y - g : float.NaN;
             GD.Print($"[ride] t={_elapsed,5:F1}s  v={_player.RideSpeed,5:F1} m/s "
                 + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
                 + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
-                + (_player.Vehicle is Car car ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {car.Gear}" : "")
-                + (_player.Vehicle is Truck truck ? $"  on {Audio.Surfaces.At(_chunks, p, false)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
+                + (_player.Vehicle is Car car ? $"  on {(_chunks is { } c ? Audio.Surfaces.At(c, p, false) : Audio.Surface.Asphalt)}  gear {car.Gear}" : "")
+                + (_player.Vehicle is Truck truck ? $"  on {(_chunks is { } tc ? Audio.Surfaces.At(tc, p, false) : Audio.Surface.Asphalt)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
                     + $"  joints {string.Join(" ", truck.Articulation.Take(truck.SectionCount - 1).Select(j => $"{Mathf.RadToDeg(j):F0}°"))}" : "")
                 + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : "")
                 + (Inside() is { } inside ? $"  inside {inside.DressedKind()} {inside.Key}" : "")
@@ -231,7 +232,7 @@ public partial class RideProbe : Node
 
         var end = _player.GlobalPosition;
         float travelled = (float)_origin.ToGlobal(end).HorizontalDistanceTo(_start);
-        bool underground = _chunks.TryGetHeight(end, out float endGround) && end.Y < endGround - 1.5f;
+        bool underground = TestWorld.TryGround(_chunks, end, out float endGround) && end.Y < endGround - 1.5f;
         if (Inside() is { } building)
         {
             // driven in through the door's portal: the interior's floor is the ground in there

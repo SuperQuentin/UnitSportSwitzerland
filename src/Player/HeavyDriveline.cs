@@ -96,7 +96,6 @@ public sealed class HeavyDriveline
     private float _powershiftCut;  // converter box: torque held back for a moment after a shift
     private int _preselect = -1;   // H-pattern: a splitter move waiting for the clutch or a lift
 
-    public bool Shifting => _shift > 0f;
     public bool Converter => _s.Box == Transmission.TorqueConverter;
     private bool AutoClutch => Converter || Mode is HeavyShift.Automatic or HeavyShift.Sequential;
 

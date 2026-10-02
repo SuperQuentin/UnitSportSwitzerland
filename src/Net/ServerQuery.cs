@@ -69,7 +69,7 @@ public sealed class ServerQuery : IDisposable
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
         var udp = _udp;
-        Task.Run(() => ReceiveLoop(udp, token));
+        Task.Run(() => Udp.ReceiveLoop(udp, token, (p, from) => Handle(p, from.Address)));
     }
 
     public void Stop()
@@ -205,20 +205,6 @@ public sealed class ServerQuery : IDisposable
     {
         try { _udp?.Send(packet, packet.Length, to); }
         catch (Exception) { /* an interface without a route: the others still go */ }
-    }
-
-    private async Task ReceiveLoop(UdpClient udp, CancellationToken token)
-    {
-        while (!token.IsCancellationRequested)
-        {
-            UdpReceiveResult got;
-            try { got = await udp.ReceiveAsync(token); }
-            catch (OperationCanceledException) { return; }
-            catch (ObjectDisposedException) { return; }
-            catch (SocketException) { continue; }   // ICMP port unreachable from a server that is down (Windows)
-            try { Handle(got.Buffer, got.RemoteEndPoint.Address); }
-            catch (Exception) { /* malformed: ignore */ }
-        }
     }
 
     private void Handle(byte[] p, IPAddress from)

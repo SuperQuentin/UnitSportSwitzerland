@@ -212,10 +212,10 @@ public partial class DropCheck : Node
                 Next($"looking down at them: me {me.GlobalPosition}, bars {Items[0].GlobalPosition}");
                 break;
             }
-            case 2 when InStep > 0.35:
+            case 2 when InStep > 0.35 && (Items[0].Floating || InStep > 4):   // at rest: floating (DropFloat)
                 if (Highlight.Pointed is not DroppedItem { } pointed)
                 {
-                    Finish(false, $"nothing pointed at; the bars are {Items[0].GlobalPosition.DistanceTo(me.GlobalPosition):F1} m away");
+                    Finish(false, $"nothing pointed at; the bars are {Items[0].GlobalPosition.DistanceTo(me.GlobalPosition):F1} m away (me {me.GlobalPosition}, bars {Items[0].GlobalPosition}, settled {Items[0].Settled})");
                     return;
                 }
                 Shot("dropcheck_solo");

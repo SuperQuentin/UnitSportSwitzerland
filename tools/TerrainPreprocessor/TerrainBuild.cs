@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -384,13 +383,15 @@ public static class TerrainBuild
         var info = new FileInfo(path);
         long expected = ChunkFormat.HeaderSize + (long)ChunkFormat.GridSize * ChunkFormat.GridSize * 2;
         if (!info.Exists || info.Length != expected) return false;
-        Span<byte> h = stackalloc byte[20];
+        Span<byte> h = stackalloc byte[ChunkFormat.HeaderSize];
         using var fs = File.OpenRead(path);
         fs.ReadExactly(h);
-        return BinaryPrimitives.ReadUInt32LittleEndian(h) == ChunkFormat.Magic
-            && BinaryPrimitives.ReadUInt16LittleEndian(h[4..]) == ChunkFormat.Version
-            && BinaryPrimitives.ReadUInt16LittleEndian(h[16..]) == ChunkFormat.GridSize
-            && BinaryPrimitives.ReadUInt16LittleEndian(h[18..]) is 0 or 1;
+        var header = ChunkCodec.ReadHeader(h);
+        // stride 0 (legacy) or 1 only: a coarse companion is not a built full-resolution tile
+        return header.Tile.Magic == ChunkFormat.Magic
+            && header.Tile.Version == ChunkFormat.Version
+            && header.GridSize == ChunkFormat.GridSize
+            && header.RawStride is 0 or 1;
     }
 
     private static ManifestTile ReadHeaderTile(string path, TileId id)
@@ -398,11 +399,7 @@ public static class TerrainBuild
         Span<byte> h = stackalloc byte[ChunkFormat.HeaderSize];
         using var fs = File.OpenRead(path);
         fs.ReadExactly(h);
-        return new ManifestTile
-        {
-            E = id.E, N = id.N,
-            Min = BinaryPrimitives.ReadSingleLittleEndian(h[20..]),
-            Max = BinaryPrimitives.ReadSingleLittleEndian(h[24..]),
-        };
+        var header = ChunkCodec.ReadHeader(h);
+        return new ManifestTile { E = id.E, N = id.N, Min = header.MinHeight, Max = header.MaxHeight };
     }
 }

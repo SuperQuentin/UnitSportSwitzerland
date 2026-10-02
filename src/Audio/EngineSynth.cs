@@ -128,6 +128,7 @@ public partial class EngineSynth : Node3D
     private AudioStreamPlayer3D? _player3D;
     private AudioStreamGeneratorPlayback? _playback;
     private Vector2[] _push = [];
+    private float _quietFor;
 
     private IChipVoice _voice;
     private EngineVoice _voiceKind;
@@ -167,9 +168,6 @@ public partial class EngineSynth : Node3D
         _voice = ChipVoices.Create(_voiceKind, seed);
         Name = "EngineSynth";
     }
-
-    /// <summary>The 3D player, when spatial, for attenuation and doppler settings.</summary>
-    public AudioStreamPlayer3D? Player3D => _player3D;
 
     /// <summary>
     /// Sets what the engine is doing. <paramref name="rpm01"/>: idle 0 .. redline 1 (a turboshaft's
@@ -213,16 +211,35 @@ public partial class EngineSynth : Node3D
         var want = VoiceOverride ?? GameSettings.Current.EngineVoice;
         if (want != _voiceKind) { _voiceKind = want; _voice = ChipVoices.Create(want, _seed); }
 
+        // A parked engine is silent but would still render and push a buffer every frame (#221).
+        // Stop the player once the fade-out has played through the buffer; start it again when
+        // the level rises: the per-sample ramp still starts from silence, so neither end clicks.
+        bool quiet = _tLevel < 1e-4f && _level < 1e-4f;
+        _quietFor = quiet ? _quietFor + (float)delta : 0f;
+        AudioStreamPlayer3D? p3 = _player3D;
+        bool playing = p3?.Playing ?? _player!.Playing;
+        if (playing && _quietFor > 2f * BufferSeconds)
+        {
+            if (p3 != null) p3.Stop(); else _player!.Stop();
+            return;
+        }
+        if (!playing)
+        {
+            if (quiet) return;
+            if (p3 != null) p3.Play(); else _player!.Play();
+            _playback = (AudioStreamGeneratorPlayback)(p3 != null ? p3.GetStreamPlayback() : _player!.GetStreamPlayback());
+        }
+
         int frames = _playback.GetFramesAvailable();
         if (frames <= 0) return;
-        if (_push.Length != frames) _push = new Vector2[frames];
+        if (_push.Length < frames) _push = new Vector2[frames];
         const float vol = 1f;   // the Sfx bus carries the slider (SfxBus.ApplyVolumes)
         for (int i = 0; i < frames; i++)
         {
             float s = NextSample(vol);
             _push[i] = new Vector2(s, s);
         }
-        _playback.PushBuffer(_push);
+        _playback.PushBuffer(new ReadOnlySpan<Vector2>(_push, 0, frames));
     }
 
     /// <summary>
@@ -393,8 +410,18 @@ public static class SfxBus
 {
     public const string Name = "Sfx";
 
+    /// <summary>
+    /// The music bus (#261): radios, car stereos, live stations. Its own slider in Settings, and its
+    /// own reverb kept in step with the Sfx one by <see cref="ReverbZones"/>, so a boombox in a
+    /// tunnel rings like the footsteps beside it.
+    /// </summary>
+    public const string Music = "Music";
+
     /// <summary>The bus's reverb, or null before <see cref="Ensure"/>.</summary>
     public static AudioEffectReverb? Reverb { get; private set; }
+
+    /// <summary>The music bus's reverb, or null before <see cref="Ensure"/>.</summary>
+    public static AudioEffectReverb? MusicReverb { get; private set; }
 
     /// <summary>
     /// A volume slider position as decibels. Hearing is logarithmic: a LINEAR 5 % is only -26 dB,
@@ -422,6 +449,12 @@ public static class SfxBus
             AudioServer.SetBusVolumeDb(idx, SliderDb(s.SfxVolume));
             AudioServer.SetBusMute(idx, s.SfxVolume <= 0.001f);
         }
+        int music = AudioServer.GetBusIndex(Music);
+        if (music >= 0)
+        {
+            AudioServer.SetBusVolumeDb(music, SliderDb(s.MusicVolume));
+            AudioServer.SetBusMute(music, s.MusicVolume <= 0.001f);
+        }
     }
 
     private static bool _subscribed;
@@ -443,6 +476,21 @@ public static class SfxBus
         }
         for (int e = 0; e < AudioServer.GetBusEffectCount(idx); e++)
             if (AudioServer.GetBusEffect(idx, e) is AudioEffectReverb r) Reverb = r;
+
+        int music = AudioServer.GetBusIndex(Music);
+        if (music < 0)
+        {
+            AudioServer.AddBus();
+            music = AudioServer.BusCount - 1;
+            AudioServer.SetBusName(music, Music);
+            AudioServer.SetBusSend(music, "Master");
+            AudioServer.AddBusEffect(music, new AudioEffectReverb
+            {
+                RoomSize = 0.3f, Damping = 0.5f, Wet = 0f, Dry = 1f, Spread = 1f, Hipass = 0.15f,
+            });
+        }
+        for (int e = 0; e < AudioServer.GetBusEffectCount(music); e++)
+            if (AudioServer.GetBusEffect(music, e) is AudioEffectReverb r) MusicReverb = r;
         ApplyVolumes();
         if (!_subscribed) { _subscribed = true; Core.GameSettings.Changed += ApplyVolumes; }
     }

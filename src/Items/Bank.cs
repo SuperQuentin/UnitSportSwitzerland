@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using UnitSport.Net;
 
 namespace UnitSport.Items;
 
@@ -85,8 +86,7 @@ public partial class Bank : Node
         if (Instance == this) Instance = null;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     private const string LocalName = "local";
 
@@ -215,6 +215,35 @@ public partial class Bank : Node
     }
 
     private string Account(long peer) => NameOf?.Invoke(peer) ?? $"Rider{peer}";
+
+    // ---- admin ----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// <c>/bank</c>: reads an account, or sets it (<paramref name="set"/>) or adds to it
+    /// (<paramref name="add"/>, negative to take). On the server <paramref name="account"/> is a
+    /// player name (an offline player's account works too); offline it is ignored, there is one
+    /// account. The caller has checked the rights. Returns the balance after.
+    /// </summary>
+    public long AdminAdjust(string? account, long? set = null, long add = 0)
+    {
+        string who = _server ? account ?? LocalName : LocalName;
+        long had = _accounts.GetValueOrDefault(who);
+        long now = Math.Clamp(set ?? had + add, 0, Net.AdminArgs.MaxBalance);
+        if (now != had)
+        {
+            // an emptied account is no account: the file keeps only names that hold something
+            if (now == 0) _accounts.Remove(who);
+            else _accounts[who] = now;
+            SaveAccounts(_server ? ServerFile : LocalFile);
+            GD.Print($"[bank] admin: {who} {had} -> {now} CHF");
+        }
+        if (!_server)
+        {
+            Balance = now;
+            BalanceChanged?.Invoke(0);
+        }
+        return now;
+    }
 
     // ---- storage --------------------------------------------------------------------------------
 

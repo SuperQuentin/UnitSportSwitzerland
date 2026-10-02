@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using UnitSport.Net;
 using UnitSport.Audio;
 using UnitSport.Core;
 using UnitSport.Interiors;
@@ -106,8 +107,7 @@ public partial class LootService : Node
         if (Instance == this) Instance = null;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     private static long Now => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -121,7 +121,12 @@ public partial class LootService : Node
     public static int NearestCounter(FootPlayer p, InteriorLayout layout, InteriorNode node) =>
         layout.IsBank ? NearestOf(p, layout, node, t => t == FurnitureType.TellerDesk) : -1;
 
-    private static int NearestOf(FootPlayer p, InteriorLayout layout, InteriorNode node, Func<FurnitureType, bool> wanted)
+    /// <summary>
+    /// The nearest wanted piece within <paramref name="reach"/> on the player's floor, as an index into
+    /// the layout, or -1. <paramref name="facing"/> also prefers what is in front and skips what is behind.
+    /// </summary>
+    public static int NearestOf(FootPlayer p, InteriorLayout layout, InteriorNode node, Func<FurnitureType, bool> wanted,
+        float reach = SearchReach, bool facing = true)
     {
         var local = node.ToLocal(p.GlobalPosition);
         var look = node.GlobalTransform.Basis.Inverse() * -p.Camera.GlobalTransform.Basis.Z;
@@ -143,13 +148,13 @@ public partial class LootService : Node
             var r = new Vector2(rel.X * Mathf.Cos(a) + rel.Y * Mathf.Sin(a), -rel.X * Mathf.Sin(a) + rel.Y * Mathf.Cos(a));
             float dx = Mathf.Max(0, Mathf.Abs(r.X) - f.W / 2), dz = Mathf.Max(0, Mathf.Abs(r.Y) - f.D / 2);
             float dist = Mathf.Sqrt(dx * dx + dz * dz);
-            if (dist > SearchReach) continue;
+            if (dist > reach) continue;
 
             // prefer what is in front of the player; behind them only if nothing else is near
             var to = -rel;
-            float facing = to.LengthSquared() > 1e-4f ? lookFlat.Dot(to.Normalized()) : 1f;
-            if (facing < -0.2f) continue;
-            float score = dist - facing * 0.8f;
+            float front = !facing ? 0f : to.LengthSquared() > 1e-4f ? lookFlat.Dot(to.Normalized()) : 1f;
+            if (front < -0.2f) continue;
+            float score = dist - front * 0.8f;
             if (score < bestScore) { bestScore = score; best = i; }
         }
         return best;
@@ -205,8 +210,80 @@ public partial class LootService : Node
         return true;
     }
 
+    // ---- client: a Battle Royale crate in the same panel (#194) --------------------------------
+
+    /// <summary>The crate (<c>BattleRoyale.BrCrates</c>) open in the panel instead of furniture, if any.</summary>
+    private long? _crate;
+
+    /// <summary>Opens a crate's contents in the loot panel; taking goes to the crate's server.</summary>
+    public void OpenCrate(FootPlayer p, long id, string title)
+    {
+        Close();
+        _crate = id;
+        _searcher = p;
+        _ui?.Open(title);
+        Play(SfxSynth.Tick, 0.6f);
+    }
+
+    /// <summary>The locked crate whose dial is being worked (a bunker door), if any.</summary>
+    private long? _pickingCrate;
+
+    /// <summary>Opens the dial on a locked crate; the numbers it settles on go to the crate's server.</summary>
+    public void PickCrate(FootPlayer p, long id, string title, int[] combo)
+    {
+        Close();
+        StopPicking();
+        _pickingCrate = id;
+        _searcher = p;
+        _lockUi?.Open(title, combo, 1.0f);
+    }
+
+    /// <summary>A crate's dial was cracked; by this player: straight into its contents.</summary>
+    public void CrateUnlocked(long id, bool mine)
+    {
+        if (!mine || _pickingCrate != id) return;
+        var p = _searcher;
+        StopPicking();
+        if (p != null && IsInstanceValid(p)) BattleRoyale.BrCrates.Instance?.TryOpen(p);
+    }
+
+    public void CrateUnlockRefused(long id)
+    {
+        if (_pickingCrate == id) _lockUi?.Refused();
+    }
+
+    /// <summary>The open crate's contents changed (someone took from it): redraw.</summary>
+    public void CrateChanged(long id)
+    {
+        if (_crate == id) _ui?.Refresh();
+    }
+
+    /// <summary>The server gave this player a stack of a crate.</summary>
+    public void CrateGranted(long id, ItemStack stack)
+    {
+        _waiting = false;
+        if (Items != null)
+        {
+            int left = Items.Inventory.Add(stack);
+            Items.Ui.Toast($"+{stack.Count - left} {ItemDefs.Get(stack.Id)?.Name}");
+        }
+        Play(SfxSynth.Chime, 1.5f);
+        if (_crate != id) return;
+        _ui?.Refresh();
+        if (_pendingAll) { _pendingAll = false; TakeAll(); }
+    }
+
+    /// <summary>The server said no (someone was quicker): the panel shows what is left.</summary>
+    public void CrateRefused(long id)
+    {
+        _waiting = false;
+        _pendingAll = false;
+        if (_crate == id) _ui?.Refresh();
+    }
+
     public void Close()
     {
+        _crate = null;
         _open = null;
         _searcher = null;
         _waiting = false;
@@ -228,7 +305,14 @@ public partial class LootService : Node
     public override void _Process(double delta)
     {
         SyncLocks();
-
+        if (_pickingCrate is long locked && (_searcher is not { } lp || !IsInstanceValid(lp) || !lp.IsViewing
+            || BattleRoyale.BrCrates.Instance?.InReach(locked, lp.GlobalPosition, 1.4f) != true)) StopPicking();
+        if (_crate is long crate)
+        {
+            if (_searcher is not { } cp || !IsInstanceValid(cp) || !cp.IsViewing
+                || BattleRoyale.BrCrates.Instance?.InReach(crate, cp.GlobalPosition, 1.4f) != true) Close();
+            return;
+        }
         if (_picking is { } pick && (_searcher is not { } sp || !IsInstanceValid(sp) || !sp.IsViewing
             || InteriorManager.Instance?.Current?.Key != pick.Key)) StopPicking();
         if (_open == null) return;
@@ -247,16 +331,38 @@ public partial class LootService : Node
     /// <summary>The stacks still in the open container, with their index in the roll.</summary>
     public IEnumerable<(int Index, ItemStack Stack)> OpenContents()
     {
+        if (_crate is long crate)
+        {
+            var stacks = BattleRoyale.BrCrates.Instance?.StacksOf(crate) ?? new List<ItemStack>();
+            for (int i = 0; i < stacks.Count; i++) yield return (i, stacks[i]);
+            yield break;
+        }
         for (int i = 0; i < _openStacks.Count; i++)
             if ((_openMask & (1 << i)) == 0) yield return (i, _openStacks[i]);
     }
 
     public bool Waiting => _waiting;
-    public bool IsOpen => _open != null;
+    public bool IsOpen => _open != null || _crate != null;
+    /// <summary>A Battle Royale crate's panel or dial is open (not a house's container).</summary>
+    public bool CrateOpen => _crate != null || _pickingCrate != null;
 
     /// <summary>Asks for one stack of the open container. Refused locally when it would not fit.</summary>
     public void Take(int index)
     {
+        if (_crate is long crate)
+        {
+            if (_waiting || Items == null || BattleRoyale.BrCrates.Instance is not { } crates) return;
+            var stacks = crates.StacksOf(crate);
+            if (index < 0 || index >= stacks.Count) return;
+            if (Items.Inventory.Room(stacks[index].Id, stacks[index].Data) < stacks[index].Count)
+            {
+                Items.Ui.Toast("No room in your pack.");
+                return;
+            }
+            _waiting = true;
+            crates.Take(crate, index, stacks[index]);
+            return;
+        }
         if (_open is not { } open || _waiting || index < 0 || index >= _openStacks.Count) return;
         if ((_openMask & (1 << index)) != 0 || Items == null) return;
         var stack = _openStacks[index];
@@ -416,6 +522,7 @@ public partial class LootService : Node
     public void StopPicking()
     {
         _picking = null;
+        _pickingCrate = null;
         _dialDone = null;
         _lockUi?.Close();
         _simonUi?.Close();
@@ -442,6 +549,11 @@ public partial class LootService : Node
     /// </summary>
     public void SubmitCombination(int[] combo)
     {
+        if (_pickingCrate is long crate)
+        {
+            BattleRoyale.BrCrates.Instance?.Unlock(crate, combo);
+            return;
+        }
         if (_picking is not { } pick) return;
         // a vault safe's dial only lets you at its code panel: that is checked with it, at the end
         if (InteriorManager.Instance?.Current is { } layout && layout.Key == pick.Key
@@ -620,12 +732,20 @@ public partial class LootService : Node
         public Dictionary<string, Dictionary<string, long[]>> Buildings { get; set; } = new();
     }
 
+    /// <summary>Server: what was taken in a Battle Royale match's buildings, kept in memory only (#194).</summary>
+    private readonly Dictionary<(string, int), (long Epoch, int Mask)> _matchMasks = new();
+
+    /// <summary>Server: a match is over; its taken marks go.</summary>
+    public void ForgetMatch() => _matchMasks.Clear();
+
     /// <summary>A saved record that still applies: this restock period, and plans of the current version.</summary>
     private static bool Current(long[] e, long epoch) =>
         e.Length >= 3 && e[0] == epoch && e[2] == InteriorLayout.CurrentVersion;
 
     private int MaskOf(string key, int furniture, long epoch)
     {
+        if (LootTables.MatchEpoch?.Invoke(key) != null)
+            return _matchMasks.TryGetValue((key, furniture), out var m) && m.Epoch == epoch ? m.Mask : 0;
         if (!BuildingKey.TryParse(key, out var k)) return 0;
         var tile = TileFor(k);
         return tile.Buildings.TryGetValue(k.Index.ToString(), out var b)
@@ -635,6 +755,11 @@ public partial class LootService : Node
 
     private void SetMask(string key, int furniture, long epoch, int mask)
     {
+        if (LootTables.MatchEpoch?.Invoke(key) != null)
+        {
+            _matchMasks[(key, furniture)] = (epoch, mask);
+            return;
+        }
         if (!BuildingKey.TryParse(key, out var k)) return;
         var tile = TileFor(k);
         if (!tile.Buildings.TryGetValue(k.Index.ToString(), out var b))

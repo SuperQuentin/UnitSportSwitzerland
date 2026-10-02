@@ -57,6 +57,19 @@ public static class Permissions
         }
     }
 
+    /// <summary>
+    /// The travel menu is closed for this player: a Battle Royale match rides only what it finds
+    /// (#183). Raises <see cref="Changed"/>.
+    /// </summary>
+    public static bool RidesLocked { get; private set; }
+
+    public static void SetRidesLocked(bool locked)
+    {
+        if (RidesLocked == locked) return;
+        RidesLocked = locked;
+        Changed?.Invoke();
+    }
+
     /// <summary>A new vehicle may be conjured from the travel menu.</summary>
     public static bool CanSpawnVehicles => !Online || IsAdmin;
 }
