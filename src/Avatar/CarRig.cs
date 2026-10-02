@@ -208,7 +208,7 @@ public partial class CarRig : Node3D
 
     private void Assemble(CarParts p)
     {
-        var body = HumanMeshBuilder.Material();
+        var body = HumanMeshBuilder.FigureMaterial();   // the driver wears clothes, maybe with a finish (#251)
         var glass = _glass = GlassMaterial();
         _headMaterial = TrafficMeshBuilder.LampMaterial();
         _tailMaterial = TrafficMeshBuilder.LampMaterial();

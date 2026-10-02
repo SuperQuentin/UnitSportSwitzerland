@@ -66,6 +66,19 @@ public sealed record HumanPalette(
         Shoes: new Color(0.92f, 0.92f, 0.90f),
         Helmet: new Color(0.93f, 0.90f, 0.86f));
 
+    /// <summary>
+    /// The clothes the figure has on (#251): what is worn replaces the jersey, shorts and shoes it
+    /// would otherwise get; empty for everyone who never put anything on, and for every NPC.
+    /// </summary>
+    public Outfit Outfit { get; init; }
+
+    /// <summary>
+    /// The air streaming past the figure, m/s in its author space (+Z forward): riding forward at
+    /// v is (0, 0, −v), falling is up. Skirts and robes stream with it and flutter
+    /// (<see cref="FigureWind"/> measures it from a node's motion). Zero: they hang still.
+    /// </summary>
+    public Vector3 Wind { get; init; }
+
     /// <summary>A deterministic jersey colour, so each rider in a race is distinguishable.</summary>
     public static HumanPalette ForRider(int index)
     {
@@ -120,7 +133,7 @@ public readonly record struct DanceParams(Audio.Cd.MusicStyle Style, int Move, f
 /// cylinders reading as scaffolding.
 /// </para>
 /// </summary>
-public static class HumanMeshBuilder
+public static partial class HumanMeshBuilder
 {
     /// <summary>Joint positions in metres, origin at the feet, +Z forward, +X right.</summary>
     private readonly record struct Rig(
@@ -166,6 +179,9 @@ public static class HumanMeshBuilder
         ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null)
     {
         var scratch = new MeshScratch();
+        // a skirt with no measured wind still feels the stride's own (#251)
+        if (palette.Wind == Vector3.Zero && speed > 0.05f && Flutters(palette.Outfit))
+            palette = palette with { Wind = new Vector3(0, 0, -speed) };
         AppendRig(scratch, palette, ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), includeLegs: true, helmet, hat);
         return scratch.Build();
     }
@@ -547,6 +563,12 @@ public static class HumanMeshBuilder
     private static void AppendRig(MeshScratch scratch, HumanPalette palette, Rig rig,
         bool includeLegs, bool helmet, Headwear hat = Headwear.None, bool body = true, bool head = true)
     {
+        // dressed (#251): the clothes replace the jersey, shorts and shoes (HumanMeshBuilder.Clothing.cs)
+        if (!palette.Outfit.IsEmpty)
+        {
+            AppendDressed(scratch, palette, rig, includeLegs, helmet, hat, body, head);
+            return;
+        }
         if (body)
         {
             // torso as a lozenge rather than a cylinder: shoulders wider than waist is most of
@@ -1012,6 +1034,16 @@ public static class HumanMeshBuilder
         SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled,
         Roughness = 1f,
     };
+
+    private static ShaderMaterial? _figureMaterial;
+
+    /// <summary>
+    /// <see cref="Material"/> as a shader that also draws the clothes' finishes (rainbow, disco
+    /// ball, galaxy…, <c>shaders/avatar.gdshader</c>), read from the vertex alpha. One shared
+    /// instance: it has no per-figure parameters.
+    /// </summary>
+    public static ShaderMaterial FigureMaterial() =>
+        _figureMaterial ??= new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/avatar.gdshader") };
 
     // =====================================================================================
     // Dance layer. The spec (conventions, every move's joint formulas, moving variants) is

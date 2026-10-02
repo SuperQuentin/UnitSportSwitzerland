@@ -30,9 +30,10 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 
 | Tier | What | Command | Measured (Windows, 4.7.1) |
 |---|---|---|---|
-| 0 unit | `tests/UnitSportSwitzerland.Tests`: xUnit, plain .NET, **no Godot** | `tools/test.sh unit` | 53 tests in ~0.1 s, ~3 s with the build |
-| 1 quick | unit + the headless no-map checks the diff calls for | `tools/test.sh quick [area]` | most checks 1-5 s and ~190 MB; `--lootchancecheck` 20 s; `--huntcheck` 10 s / 770 MB; `--leavecheck` 21 s / 1.7 GB; `--synccheck` 60 s / 2.2 GB |
-| 2 net | quick + a headless dedicated server (`--generated-world`) and a headless `--leavecheck connect` client that joins it twice | `tools/test.sh net [area]` | `@netsmoke` 46 s, peak 1.8 GB (server + client) |
+| 0 unit | `tests/UnitSportSwitzerland.Tests`: xUnit, plain .NET, **no Godot** | `tools/test.sh unit` | 72 tests in ~1 s, ~3 s with the build |
+| 0.5 quick | unit + the headless checks on `--world flat` (TestWorld) or `--systems ui`: no map, no generated world | `tools/test.sh quick [area]` | most 1-25 s at 170-430 MB; `--synccheck --world flat` 56 s / 210 MB |
+| 1 quick | the same runner: checks on a fixture world or course (`--world fixture`, `--chunks fixture:<course>`) | `tools/test.sh quick [area]` | `--leavecheck --world fixture` 23 s / 540 MB; `--drivecheck --chunks fixture:hairpin` 94 s / 690 MB; `--huntcheck` 10 s / 770 MB, `--lootchancecheck` 20 s (no world flags yet) |
+| 2 net | quick + a headless dedicated server and a headless `--leavecheck connect` client that joins it twice, both `--world fixture` | `tools/test.sh net [area]` | `@netsmoke` 41 s, client 750 MB + server 210 MB |
 | 3 full | all of the above for every area, plus the windowed two-client `tools/*check.sh` and `loadtest.sh` | `tools/test.sh full [area]` | not measured yet: needs real terrain (`CHUNKS=`) and a display |
 
 - `GODOT` must point at the editor executable. On Windows use the full path of
@@ -41,6 +42,41 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 - Verdict: the check's last `RESULT` line (`FAIL` in it fails; exit 139 at shutdown is ignored,
   see `headless-exit-139`), else its exit code. A timeout (`TEST_TIMEOUT`, 600 s) is `TIMEOUT`.
 - The quick/net tiers build `UnitSportSwitzerland.csproj` first, and import once if `.godot/` is missing.
+
+## Tiers 0.5 and 1: each check boots only what it tests (#221 part 2)
+
+Every check in the map carries its world flags; the rules for new probes (lightest world first,
+fixture courses for driving, switchable systems, migrating a probe) are in `test-systems-optin`.
+
+- `--world flat`: `Core/TestWorld`, a 20 km box at y 0, a fixed sun, no `ChunkManager`, physics
+  only, and the one probe that supports it (`--hitboxcheck`, `--synccheck`, `--ride`).
+- `--systems a,b`: the client world with only those of `terrain generated traffic trains npcs
+  birds physics audio network sky interiors loot occasions ui` (`Core/Systems`). Without `terrain`
+  it streams the one-tile flat fixture; without `physics` the physics server is off; without `sky`
+  no clock (the style's fixed sun); without `network` a connect fails. `ui` is the baseline (menus,
+  HUD, chat, inventory screen are always built on a client). The server honours the fixture only.
+- `--world fixture` = every system but the map and the generated fill, on `--chunks fixture:<course>`
+  (`flat` by default). Courses (`Terrain/Fixture/FixtureCourse`): `flat`, `straight` (3 km),
+  `hairpin` (6 legs, 15 m hairpins, 7 % down), `narrow` (4 m, a trunk every 5 m on both edges),
+  `junction` (9 m road, a T and a crossroads), `verge` (two bends, 6 m of grass, then trees). A
+  course starts at the spawn (`--at`), so `--drivecheck` runs on it unchanged.
+- Absent flags: today's boot, for players and every old command line.
+
+Measured back to back under the lock (Windows, 4.7.1 headless, no real terrain; before = the same
+check with no flags, i.e. on the generated world with every system):
+
+| Check | Before | After |
+|---|---|---|
+| `--synccheck` → `--world flat` | 64.5 s, 2 318 MB | 55.5 s, 210 MB |
+| `--hitboxcheck` → `--world flat` | 7.9 s, 403 MB | 1.3 s, 175 MB |
+| `--ride bike,20` → `--world flat` | 31.3 s, 1 306 MB | 23.4 s, 210 MB |
+| `--menucheck` → `--systems ui` | 13.3 s, 887 MB | 11.9 s, 430 MB |
+| `--leavecheck` → `--world fixture` | 25.9 s, 1 333 MB | 22.6 s, 537 MB |
+| `--drivecheck --traffic 0` → `--chunks fixture:hairpin` | 70.7 s, 2 225 MB (straight generated road) | 93.8 s, 693 MB (2.9 km, six hairpins) |
+| `@netsmoke` client / server | 48.4 s, 1 418 / 318 MB | 40.6 s, 749 / 210 MB |
+
+`--drivecheck` with the AE86 (car 0) fails on both: "no drift car held a planned drift". The map
+row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks at 339 m.
 
 ## Tier 0: unit tests
 
@@ -51,7 +87,8 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 - Covered: LV95 tiles and projection (swisstopo reference point, round trips; outside Switzerland
   the inverse drifts ~1.5 m), `.terr` full and coarse round trips, legacy stride 0, bad magic,
   truncation, bilinear vs mesh height, cover, holes, trees, buildings, horizon, manifest JSON,
-  `/time` parsing (also under a French locale).
+  `/time` parsing (also under a French locale), the fixture courses (`FixtureCourseTests`: tile
+  splits, valid tiles, ground under the road, hairpin grade).
 - The game csproj excludes `tests/**`; `tests/.gdignore` keeps it out of the Godot import.
 
 ## Path-to-check map: `tools/lib/checkmap.txt`
@@ -65,7 +102,9 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 - Only list checks that end on their own and print a `RESULT` line or exit non-zero.
   Verified to do so headless, without a map: `--interestcheck --beatcheck --meshcheck --chatcheck
   --invcheck --lootchancecheck --setupcheck --motocheck --truckcheck --driftcheck --spincheck
-  --cockpitcheck --tuningcheck --occasioncheck --huntcheck --origincheck --synccheck --leavecheck`.
+  --cockpitcheck --tuningcheck --occasioncheck --huntcheck --origincheck --synccheck --leavecheck`,
+  and with world flags `--hitboxcheck --synccheck --ride` (flat), `--menucheck` (`--systems ui`),
+  `--leavecheck` and `--drivecheck` (fixture).
 
 ## Resource guard: `tools/lib/guard.sh`
 

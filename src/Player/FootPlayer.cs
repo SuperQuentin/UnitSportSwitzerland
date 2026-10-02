@@ -368,6 +368,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private Avatar.Headwear _poseHat;
 
     /// <summary>
+    /// The clothes on the figure, an <see cref="Avatar.Outfit"/> packed into 60 bits (#251).
+    /// Replicated like <see cref="HeadwearId"/>; set on the owner by <c>Occasions.OccasionHats</c>
+    /// from the inventory's body slots.
+    /// </summary>
+    [Export] public long OutfitBits { get; set; }
+
+    private long _poseOutfit;
+
+    /// <summary>The figure's colours with what it wears: the jersey of whoever owns it, the clothes it has on.</summary>
+    private Avatar.HumanPalette FigurePalette(int rider) => Avatar.HumanPalette.ForRider(rider) with { Outfit = new(OutfitBits) };
+
+    /// <summary>
     /// The figure's right hand in this node's local space, or null when no figure is drawn
     /// (first person on foot, or mounted). Updated whenever the body mesh is posed.
     /// </summary>
@@ -452,6 +464,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private RideKind _visualKind = RideKind.OnFoot;
     private int _visualSetup;
     private long _visualTuning;
+    // the clothes a ride's rider was drawn in (#251): a change redraws the ride
+    private long _visualOutfit;
+    private readonly Avatar.FigureWind _walkWind = new();
     /// <summary>Owner: seconds until every door open while getting in (the driver's, any left open) shuts.</summary>
     private float _shutDriverIn;
     /// <summary>Doors shut by themselves above this speed, m/s (20 km/h).</summary>
@@ -971,6 +986,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:ItemAction");
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
+        replication.AddProperty(".:OutfitBits");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:HeldRadio");
         replication.AddProperty(".:BackItemId");
@@ -985,7 +1001,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:DanceId", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         NetPos = Position;
         NetYaw = Rotation.Y;
@@ -1161,7 +1177,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         var kind = (RideKind)RideKindId;
         // a car is redrawn when its preset or garage parts change too (the garage's live preview, a remote tune)
-        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup && TrailerCode == _visualTrailer) return;
+        if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup && TrailerCode == _visualTrailer
+            && OutfitBits == _visualOutfit) return;
 
         _visual?.QueueFree();
         _visual = null;
@@ -1170,6 +1187,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _visualKind = kind;
         _visualSetup = CarSetupId;
         _visualTuning = TuningBits;
+        _visualOutfit = OutfitBits;
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
         // the sections behind a truck's cab: their own bodies, whatever else is drawn
         FitSections(kind);
@@ -1181,12 +1199,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             // first person: nothing to draw, except in VR for the monitor's third-person view (#186)
             if (IsMultiplayerAuthority() && !Npc && !_thirdPerson && !XR.XrSession.Active) return;
-            _walkPalette = Avatar.HumanPalette.ForRider(rider);
+            _walkPalette = FigurePalette(rider);
+            _poseOutfit = OutfitBits;
             _walker = new MeshInstance3D
             {
                 Name = "Body",
                 Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, 0f, 0f, hat: Hat),
-                MaterialOverride = Avatar.HumanMeshBuilder.Material(),
+                MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial(),
             };
             if (IsMultiplayerAuthority() && !Npc && !_thirdPerson) _walker.Layers = XR.XrSession.SpectatorOnlyLayer;
             _visual = _walker;
@@ -1194,7 +1213,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else
         {
             _walker = null;
-            _visual = (_ride ?? CarSetups.Ride(kind, CarSetupId, TuningBits))?.BuildVisual(rider);
+            _visual = (_ride ?? CarSetups.Ride(kind, CarSetupId, TuningBits))?.BuildVisual(rider, new Avatar.Outfit(OutfitBits));
         }
 
         if (_visual != null)
@@ -1662,6 +1681,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_walker == null) return;
         // the two held poses are cached, so a hat put on or taken off (#18) rebuilds them
         if (_poseHat != Hat) { _slidePose = null; _airPose = null; _poseHat = Hat; }
+        // and so do clothes put on or taken off (#251)
+        if (_poseOutfit != OutfitBits)
+        {
+            _slidePose = null; _airPose = null; _poseOutfit = OutfitBits;
+            _walkPalette = _walkPalette with { Outfit = new(OutfitBits) };
+        }
         float dt = (float)GetProcessDeltaTime();
         StepArmPose(dt);
         var dance = StepDance(dt);
@@ -1670,21 +1695,29 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
         if (dance != null && ItemAction == 0) { arm = Avatar.ItemArmPose.None; blend = 0f; }
         bool armed = arm != Avatar.ItemArmPose.None && blend > 0.001f;
+        // a skirt streams in the air the figure moves through (#251): walking, running, falling
+        var palette = _walkPalette;
+        if (Avatar.HumanMeshBuilder.Flutters(palette.Outfit))
+        {
+            palette = palette with { Wind = _walkWind.Update(_walker, dt) };
+            _slidePose = null;
+            _airPose = null;
+        }
         Avatar.HumanMeshBuilder.GaitMounts mounts;
         switch (PoseKind)
         {
             case PoseTucked:
-                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(_walkPalette, Avatar.HumanPose.Tucked, arm, blend, Hat)
-                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Tucked, hat: Hat);
+                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Tucked, arm, blend, Hat)
+                    : _slidePose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Tucked, hat: Hat);
                 mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend);
                 break;
             case PoseAir:
-                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(_walkPalette, Avatar.HumanPose.Running, arm, blend, Hat)
-                    : _airPose ??= Avatar.HumanMeshBuilder.Build(_walkPalette, Avatar.HumanPose.Running, hat: Hat);
+                _walker.Mesh = armed ? Avatar.HumanMeshBuilder.BuildPosed(palette, Avatar.HumanPose.Running, arm, blend, Hat)
+                    : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat);
                 mounts = Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend);
                 break;
             default:
-                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(_walkPalette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend, dance: dance);
+                _walker.Mesh = Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend, dance: dance);
                 mounts = Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance);
                 break;
         }
