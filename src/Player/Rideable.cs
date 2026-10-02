@@ -309,6 +309,13 @@ public abstract class Rideable
     /// </summary>
     public virtual (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual);
 
+    /// <summary>
+    /// A new collision shape for the hull of the vehicle standing empty in the world, node space,
+    /// when a box (<see cref="ParkedBox"/>) is too coarse: a ship's hull tapering to its bow (#378).
+    /// Null: the box.
+    /// </summary>
+    public virtual Shape3D? BuildParkedHull() => null;
+
     private static readonly System.Collections.Generic.Dictionary<object, (Vector3, Vector3)> _measured = new();
 
     /// <summary>

@@ -79,7 +79,8 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>
     /// The drawn machine, for outlining it (#261), and the frame of its first section (a parked
     /// train's others are its children named <c>Section{k}</c>). Null on a headless peer, but for a
-    /// parked truck or bus: an empty frame there, posed on the ground as the model would be (#162).
+    /// parked truck, bus or boat: an empty frame there, posed on the ground (#162) or on the waves
+    /// (#378) as the model would be.
     /// </summary>
     public Node3D? Visual => _visual;
 
@@ -143,7 +144,10 @@ public partial class VehicleBody : CharacterBody3D
         Velocity = s.Velocity;
 
         var box = Ride.ParkedBox;
-        AddChild(new CollisionShape3D { Name = "Hull", Shape = new BoxShape3D { Size = box.Size }, Position = box.Centre });
+        // a ship's hull as drawn (#378), else the box
+        AddChild(Ride.BuildParkedHull() is { } shaped
+            ? new CollisionShape3D { Name = "Hull", Shape = shaped }
+            : new CollisionShape3D { Name = "Hull", Shape = new BoxShape3D { Size = box.Size }, Position = box.Centre });
         // a parked train's trailer, a drawbar trailer's body: each section its own box, where it stands
         int extra = 0;
         foreach (var (pose, centre, size) in Ride.ExtraBoxes())
@@ -207,14 +211,15 @@ public partial class VehicleBody : CharacterBody3D
                 AddChild(_engineSound);
             }
         }
-        else if (Ride is Truck or ParkedTrailer or Boat { Walkable: true })
+        else if (Ride is Truck or ParkedTrailer or Boat)
         {
             // Headless (the server, a check) nothing is drawn, but the frame the model would stand in
             // still matters: a parked bus's decks are walked in it, and its guests found by it
             // (#162). Its box rests on whatever it touches, a metre off the road at a door on a
             // crest; the frame is posed on the ground axle by axle, as the model is.
             _visual = new Node3D { Name = "Visual" };
-            // (a walkable boat, #303: one section, posed by DrawBoat as its model is)
+            // (a boat: one section, posed by DrawBoat as its model is; its deck is walked in it,
+            // #303, and its hull's collision box follows it, #378)
             int sections = Ride is Truck train ? train.Train.Count : Ride is ParkedTrailer lone ? lone.Bodies.Count : 1;
             for (int k = 1; k < sections; k++) _visual.AddChild(new Node3D { Name = $"Section{k}" });
             AddChild(_visual);

@@ -15,6 +15,12 @@ public partial class VehicleBody
     private readonly BoatWater _boatWater = new();
     private Quaternion _drawnTilt = Quaternion.Identity;
     private bool _boatCalm;
+    /// <summary>The hull's collision shape, its offset in the drawn boat's frame, and where it was last put (#378).</summary>
+    private CollisionShape3D? _hull;
+    private Vector3 _hullCentre;
+    private Transform3D _hullPosed;
+    /// <summary>The smallest turn of the box worth setting, squared (a basis axis's move): its far corner moves a centimetre.</summary>
+    private float _hullTurn2;
 
     /// <summary>Waves smaller than this (summed amplitude where it floats, m) do not keep a boat awake.</summary>
     private const float CalmSwell = 0.06f;
@@ -26,6 +32,12 @@ public partial class VehicleBody
         if (s.Angles != default) boat.State.Attitude = Quaternion.FromEuler(s.Angles);
         Tilt = boat.State.Attitude;
         _drawnTilt = Tilt;
+        _hull = GetNodeOrNull<CollisionShape3D>("Hull");
+        // where the shape was put in the level boat's frame: the box's centre, nothing for a shaped hull
+        _hullCentre = _hull?.Position ?? Vector3.Zero;
+        _hullPosed = _hull?.Transform ?? Transform3D.Identity;
+        float reach = (boat.ParkedBox.Size * 0.5f).Length();
+        _hullTurn2 = 0.01f / Mathf.Max(reach, 0.5f) * (0.01f / Mathf.Max(reach, 0.5f));
     }
 
     private void StepBoat(float dt, Boat boat)
@@ -78,6 +90,7 @@ public partial class VehicleBody
             boat.Pose(_visual, Rotation.Y, boat.State.Attitude);
             // the frame its deck is walked in stands where the model is now (#303): from the first pose
             Posed = true;
+            PoseHull();
             if (_visual is BoatRig own) own.Water(speed, boat.State.Wet, 0f, boat.State.Airborne <= 0.1f);
             else if (_visual is SteamerRig ownSteamer)
                 ownSteamer.Animate(boat.State.Shaft, speed, boat.State.Airborne <= 0.1f && boat.State.Wet > 0.05f, false, 0f, DoorsOpen, dt);
@@ -88,7 +101,27 @@ public partial class VehicleBody
         float y = boat.RemoteY(GlobalPosition, Rotation.Y, Heave);
         _visual.Position += Vector3.Up * (y - GlobalPosition.Y);
         Posed = true;
+        PoseHull();
         if (_visual is BoatRig rig) rig.Water(speed, 1f, 0f, Heave < Boat.NoHeave * 0.5f);
         else if (_visual is SteamerRig steamer) steamer.Animate(0f, speed, Heave < Boat.NoHeave * 0.5f, false, 0f, DoorsOpen, dt);
+    }
+
+    /// <summary>
+    /// The hull's collision box where the hull is drawn (#378): heaving, pitching and rolling with it
+    /// on every peer, on its own copy of the waves (a headless one poses an empty frame the same
+    /// way). A level box let the bow rise through a swimmer's head and left a player standing on
+    /// air beside a rolled hull. Only the shape moves inside the body, which stays where it is: the
+    /// body is not teleported, so Jolt has nothing to sweep. Set only when its middle or its far corner
+    /// moved by a centimetre, so a boat asleep in a calm touches nothing.
+    /// </summary>
+    private void PoseHull()
+    {
+        if (_hull == null || _visual == null) return;
+        var at = _visual.Transform * new Transform3D(Basis.Identity, _hullCentre);
+        if (at.Origin.DistanceSquaredTo(_hullPosed.Origin) < 1e-4f
+            && at.Basis.Y.DistanceSquaredTo(_hullPosed.Basis.Y) < _hullTurn2
+            && at.Basis.Z.DistanceSquaredTo(_hullPosed.Basis.Z) < _hullTurn2) return;
+        _hullPosed = at;
+        _hull.Transform = at;
     }
 }
