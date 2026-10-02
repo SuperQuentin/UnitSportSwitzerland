@@ -116,6 +116,21 @@ src/Avatar/SteamerMesh   quick  --steamercheck --chunks fixture:lake
 src/Avatar/VehicleDeck   quick  --steamercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --steamercheck --chunks fixture:lake
 src/World/SteamerBerth   quick  --steamercheck --chunks fixture:lake
+# water small fixes (#380): wading paces, a crash ragdoll into the lake, foam on the waves and hull slaps (drawn windowed only), the sounds rendered
+src/Player/Ragdoll       quick  --swimcheck --chunks fixture:lake
+src/Player/FootPlayer.Cr quick  --swimcheck --chunks fixture:lake
+src/Player/Wading        quick  --swimcheck --chunks fixture:lake
+src/Items/HeldItemVisual quick  --swimcheck --chunks fixture:lake
+src/Avatar/WakeFoam      quick  --boatcheck speedboat --chunks fixture:lake
+src/Avatar/HullSlap      quick  --boatcheck speedboat --chunks fixture:lake
+shaders/wake_foam        quick  --boatcheck speedboat --chunks fixture:lake
+src/Audio/SfxSynth       quick  --soundcheck test_output/soundcheck
+src/Audio/EngineSynth    quick  --soundcheck test_output/soundcheck
+src/Audio/Soundcheck     quick  --soundcheck test_output/soundcheck
+src/Audio/ChipVoice      quick  --soundcheck test_output/soundcheck
+src/Audio/Nes2A03Voice   quick  --soundcheck test_output/soundcheck
+src/Audio/Sid6581Voice   quick  --soundcheck test_output/soundcheck
+src/Audio/Ym2612Voice    quick  --soundcheck test_output/soundcheck
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
@@ -139,6 +154,8 @@ src/Interiors/BankSigns  net    tools/shopcheck.sh
 src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
 src/Player/SwimNet       net    tools/swimnetcheck.sh
+src/Player/Ragdoll       net    tools/swimnetcheck.sh
+src/Player/FootPlayer.Cr net    tools/swimnetcheck.sh
 src/Avatar/HumanMeshBuilder.Sw net tools/swimnetcheck.sh
 src/Player/Boat          net    tools/boatnetcheck.sh
 src/Player/FootPlayer.Bo net    tools/boatnetcheck.sh

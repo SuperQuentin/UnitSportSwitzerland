@@ -10,7 +10,7 @@ public static class Soundcheck
         System.IO.Directory.CreateDirectory(outDir);
         int bad = Water(outDir);
         // --water-sounds: only those (#380), for listening to the water by its numbers
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--water-sounds") >= 0) return bad > 0 ? 1 : 0;
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--water-sounds") >= 0) return Verdict(bad);
 
         var banks = new[]
         {
@@ -53,6 +53,13 @@ public static class Soundcheck
                 bad += Save(System.IO.Path.Combine(outDir, $"engine_{pname}_{voice.ToString().ToLowerInvariant()}.wav"), all.ToArray());
                 synth.Free();
             }
+        return Verdict(bad);
+    }
+
+    /// <summary>The RESULT line (tools/test.sh reads it) and the exit code: a NaN or a clipped sample fails.</summary>
+    private static int Verdict(int bad)
+    {
+        GD.Print(bad == 0 ? "[soundcheck] RESULT: ok" : $"[soundcheck] RESULT: FAILED ({bad} files clip or are not finite)");
         return bad > 0 ? 1 : 0;
     }
 
