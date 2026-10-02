@@ -1987,13 +1987,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Items.RadioUi.Instance?.Open(radio);
             return true;
         }
-        // music in earshot: E starts or stops the dance
-        if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius) != null)
+        // a building's door in reach beats the dance: music next door must not lock you out
+        if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
+        // music heard here: E starts the dance; stopping works for as long as it lasts
+        if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius, heard: DanceId == 0) != null)
         {
             DanceId = DanceId == 0 ? 1 : 0;
             return true;
         }
-        return IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true;
+        if (DanceId != 0) { DanceId = 0; return true; }
+        return false;
     }
 
     /// <summary>

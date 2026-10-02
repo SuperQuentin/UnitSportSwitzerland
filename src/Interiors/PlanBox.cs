@@ -10,9 +10,6 @@ namespace UnitSport.Interiors;
 /// </summary>
 public readonly record struct PlanBox(Vector2 Center, Vector2 AxisU, float Width, float Depth, float Eave)
 {
-    /// <summary>Same wall/roof split the building renderer uses.</summary>
-    private const float RoofNormalY = 0.45f;
-
     /// <summary>A face this close to vertical is a wall proper; a steep spire face is not.</summary>
     private const float VerticalNormalY = 0.05f;
 
@@ -78,13 +75,10 @@ public readonly record struct PlanBox(Vector2 Center, Vector2 AxisU, float Width
         var tops = new List<float>();
         for (int t = 0; t < b.TriangleCount; t++)
         {
-            int o = t * 9;
-            var a = new Vector3(b.Triangles[o], b.Triangles[o + 1], b.Triangles[o + 2]);
-            var c = new Vector3(b.Triangles[o + 3], b.Triangles[o + 4], b.Triangles[o + 5]);
-            var d = new Vector3(b.Triangles[o + 6], b.Triangles[o + 7], b.Triangles[o + 8]);
+            var (a, c, d) = b.Tri(t);
             var n = (c - a).Cross(d - a);
             float len = n.Length();
-            if (len < 1e-6f || Mathf.Abs(n.Y / len) >= RoofNormalY) continue;
+            if (len < 1e-6f || Mathf.Abs(n.Y / len) >= BuildingTriangles.RoofNormalY) continue;
             if (new Vector2(n.X, n.Z).LengthSquared() < 1e-10f) continue;
             pts.Add(new Vector2(a.X, a.Z)); pts.Add(new Vector2(c.X, c.Z)); pts.Add(new Vector2(d.X, d.Z));
             if (Mathf.Abs(n.Y / len) < VerticalNormalY) tops.Add(Math.Max(a.Y, Math.Max(c.Y, d.Y)));

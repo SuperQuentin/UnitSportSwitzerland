@@ -121,7 +121,12 @@ public partial class LootService : Node
     public static int NearestCounter(FootPlayer p, InteriorLayout layout, InteriorNode node) =>
         layout.IsBank ? NearestOf(p, layout, node, t => t == FurnitureType.TellerDesk) : -1;
 
-    private static int NearestOf(FootPlayer p, InteriorLayout layout, InteriorNode node, Func<FurnitureType, bool> wanted)
+    /// <summary>
+    /// The nearest wanted piece within <paramref name="reach"/> on the player's floor, as an index into
+    /// the layout, or -1. <paramref name="facing"/> also prefers what is in front and skips what is behind.
+    /// </summary>
+    public static int NearestOf(FootPlayer p, InteriorLayout layout, InteriorNode node, Func<FurnitureType, bool> wanted,
+        float reach = SearchReach, bool facing = true)
     {
         var local = node.ToLocal(p.GlobalPosition);
         var look = node.GlobalTransform.Basis.Inverse() * -p.Camera.GlobalTransform.Basis.Z;
@@ -143,13 +148,13 @@ public partial class LootService : Node
             var r = new Vector2(rel.X * Mathf.Cos(a) + rel.Y * Mathf.Sin(a), -rel.X * Mathf.Sin(a) + rel.Y * Mathf.Cos(a));
             float dx = Mathf.Max(0, Mathf.Abs(r.X) - f.W / 2), dz = Mathf.Max(0, Mathf.Abs(r.Y) - f.D / 2);
             float dist = Mathf.Sqrt(dx * dx + dz * dz);
-            if (dist > SearchReach) continue;
+            if (dist > reach) continue;
 
             // prefer what is in front of the player; behind them only if nothing else is near
             var to = -rel;
-            float facing = to.LengthSquared() > 1e-4f ? lookFlat.Dot(to.Normalized()) : 1f;
-            if (facing < -0.2f) continue;
-            float score = dist - facing * 0.8f;
+            float front = !facing ? 0f : to.LengthSquared() > 1e-4f ? lookFlat.Dot(to.Normalized()) : 1f;
+            if (front < -0.2f) continue;
+            float score = dist - front * 0.8f;
             if (score < bestScore) { bestScore = score; best = i; }
         }
         return best;
