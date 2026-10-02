@@ -32,7 +32,16 @@ public static class SignalBuilder
     /// <summary>A head's face stands this far in front of the pole's axis: the pole, the board, the housing.</summary>
     private const float InFront = PoleRadius + BoardThickness + HeadDepth + 0.01f;
 
-    public enum Shape : byte { Circle = 0, LeftArrow = 1, RightArrow = 2, Square = 3 }
+    public enum Shape : byte { Circle = 0, LeftArrow = 1, RightArrow = 2, Square = 3, Bike = 4 }
+
+    /// <summary>Shapes there are (one lens mesh and one MultiMesh each).</summary>
+    public const int ShapeCount = 5;
+
+    /// <summary>
+    /// A bike head (#351): 100 mm lenses (Stadt Zürich Velostandards LSA), half a car head, low on
+    /// the main pole below the priority sign, facing the approach.
+    /// </summary>
+    private const float BikeScale = 0.5f, BikeLowerEdge = 1.05f;
 
     public enum Role : byte { Red, Amber, Green, Flash }
 
@@ -47,7 +56,7 @@ public static class SignalBuilder
     }
 
     /// <summary>A head on a pole: its centre, the way it faces and its right as the viewer sees it, its group, its lenses.</summary>
-    private readonly record struct Head(Vector3 Centre, Vector3 Front, Vector3 Right, int Group, Shape Shape, int Lenses, bool Flasher);
+    private readonly record struct Head(Vector3 Centre, Vector3 Front, Vector3 Right, int Group, Shape Shape, int Lenses, bool Flasher, float Scale = 1f);
 
     /// <summary>Appends every pole, housing and backboard of the tile to a road mesh under construction.</summary>
     public static void Append(RoadTile tile, List<Vector3> vertices, List<Color> colors, List<Vector2> uvs,
@@ -59,11 +68,12 @@ public static class SignalBuilder
                 var heads = Heads(signal.Plan, pole);
                 var foot = new Vector3(pole.X, pole.Y, pole.Z);
                 float top = 0f;
-                foreach (var h in heads) top = Mathf.Max(top, h.Centre.Y - pole.Y + h.Lenses * Pitch * 0.5f + BoardMargin);
+                foreach (var h in heads) top = Mathf.Max(top, h.Centre.Y - pole.Y + h.Lenses * Pitch * h.Scale * 0.5f + BoardMargin);
                 Column(vertices, colors, uvs, uv2s, indices, foot, top);
                 foreach (var h in heads)
                 {
-                    float half = h.Lenses * Pitch * 0.5f;
+                    float half = h.Lenses * Pitch * h.Scale * 0.5f, w = HeadWidth * h.Scale, depth = HeadDepth * h.Scale;
+                    float margin = BoardMargin * h.Scale, border = BoardBorder * h.Scale;
                     // a bracket from the pole to a head beside it
                     var reach = h.Centre - foot;
                     reach.Y = 0;
@@ -71,13 +81,13 @@ public static class SignalBuilder
                         Box(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
                             new Vector3(foot.X, h.Centre.Y, foot.Z) + reach * 0.5f, reach.Normalized(), 0.04f, reach.Length() * 0.5f, 0.04f);
                     // the backboard: white border, black field, then the housing in front
-                    var board = h.Centre - h.Front * (HeadDepth + BoardThickness * 0.5f);
+                    var board = h.Centre - h.Front * (depth + BoardThickness * 0.5f);
                     Plate(vertices, colors, uvs, uv2s, indices, Border.SrgbToLinear(), board, h.Front, h.Right,
-                        HeadWidth * 0.5f + BoardMargin, half + BoardMargin);
+                        w * 0.5f + margin, half + margin);
                     Plate(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), board + h.Front * 0.004f, h.Front, h.Right,
-                        HeadWidth * 0.5f + BoardMargin - BoardBorder, half + BoardMargin - BoardBorder);
-                    Box(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), h.Centre - h.Front * (HeadDepth * 0.5f), h.Right,
-                        HeadWidth * 0.5f, HeadDepth * 0.5f, half, h.Front);
+                        w * 0.5f + margin - border, half + margin - border);
+                    Box(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), h.Centre - h.Front * (depth * 0.5f), h.Right,
+                        w * 0.5f, depth * 0.5f, half, h.Front);
                     if (h.Flasher)
                     {
                         // the flasher's own small housing beside the green
@@ -127,12 +137,12 @@ public static class SignalBuilder
                 {
                     var basis = new Basis(h.Right, Vector3.Up, h.Front);
                     var face = h.Front * 0.006f;
-                    float half = h.Lenses * Pitch * 0.5f;
+                    float pitch = Pitch * h.Scale, half = h.Lenses * pitch * 0.5f;
                     for (int k = 0; k < h.Lenses; k++)
                     {
                         // top down: red, (yellow), green
                         var role = h.Lenses == 2 ? (k == 0 ? Role.Red : Role.Green) : (Role)k;
-                        var at = h.Centre + Vector3.Up * (half - Pitch * (k + 0.5f)) + face;
+                        var at = h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)) + face;
                         lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(basis, at), j, h.Group, role));
                     }
                     if (h.Flasher && Flasher(signal.Plan, h.Group) is int f and >= 0)
@@ -176,6 +186,11 @@ public static class SignalBuilder
                 if (rightArrow >= 0) row.Add((rightArrow, Shape.RightArrow));
                 else if (rightLane >= 0 && rightLane != car) row.Add((rightLane, Shape.Circle));
             }
+            // the bike head (#351), low, in front of the pole, facing the approach
+            int bike = main ? Find(plan, SignalGroupKind.Bike, pole.Arm, SignalMoves.None) : -1;
+            if (bike >= 0)
+                heads.Add(new Head(foot + front * (PoleRadius + BoardThickness + HeadDepth * BikeScale + 0.01f)
+                    + Vector3.Up * (BikeLowerEdge + 1.5f * Pitch * BikeScale), front, right, bike, Shape.Bike, 3, false, BikeScale));
             int centre = Math.Max(0, row.FindIndex(r => r.Group == car));
             for (int i = 0; i < row.Count; i++)
             {
