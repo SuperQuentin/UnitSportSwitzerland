@@ -62,7 +62,8 @@ public class BoatTests
 
     private static float Deg(float rad) => rad * 180f / Mathf.Pi;
 
-    public static IEnumerable<object[]> Boats => BoatCatalog.All.Select(s => new object[] { s.Name });
+    /// <summary>The planing boats (#302); the steamer (#303) has its own tests (SteamerTests).</summary>
+    public static IEnumerable<object[]> Boats => BoatCatalog.All.Where(s => s.LiftShare > 0f).Select(s => new object[] { s.Name });
     private static BoatSpec Spec(string name) => BoatCatalog.All.First(s => s.Name == name);
 
     [Theory]

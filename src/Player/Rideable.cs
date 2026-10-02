@@ -25,7 +25,9 @@ public enum RideKind
     // 121.. are boats (#302): BoatCatalog.All[kind - BoatCatalog.First], append-only; the steamer (#303) is 123.
     Jetski = 121,
     Speedboat = 122,
-    // The next other mount is 123.
+    /// <summary>The CGN Belle Époque paddle steamer (#303), walkable.</summary>
+    Steamer = 123,
+    // The next other mount is 124.
 }
 
 /// <summary>
