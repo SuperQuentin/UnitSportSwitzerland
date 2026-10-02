@@ -45,7 +45,26 @@
   portal clipping are fine as they are (they want small local values). Uniforms holding world
   positions that are not pushed every frame must be re-pushed on a shift (`cover_origin`, the
   building shader's occupancy and open-door boxes).
-- **Cost**: ~5 ms per shift with ~1,500 nodes moved (headless), once every few km.
+- **Cost**: ~5 ms per shift with ~1,500 nodes moved (headless), once every few km; 22-47 ms in a
+  window at Riddes (~530 nodes, 120 kinematic), so the frame that shifts takes 50-90 ms.
+- **The renderer across a shift** (phase 4, measured in a window at Riddes, RTX 4070, 1600x900,
+  a `shift 1000,0` shot-queue line with the camera still):
+  - **SDFGI** (Realistic+ with `--sdfgi`, Forward+): its cascades sit on the world grid round the
+    camera, so a shift re-voxelises all of them. One frame takes 25-37 ms of GPU instead of 8-12,
+    the next is back to normal. No dark flash: the frame after a shift differs from the one before
+    as little as without SDFGI. The light then drifts for ~1 s to a slightly different result
+    (house walls, ~1/255 on average): the coarse cascades' cells (up to 12.8 m) do not divide
+    1 km, so they land differently on the geometry. Nothing to fix; a weaker GPU pays more for
+    that one frame (SDFGI is 15-20 ms per frame on an M1 Pro).
+  - **Shadows** move by less than a texel for one frame (the directional shadow map snaps to world
+    space). No reflection probes, decals or lightmaps exist.
+  - **Particles** are world space (Godot's default): those alive at a shift stay at the old place,
+    1-3 km away. All are bursts of 2 s or less except an explosion's smoke (5 s) and the BR crate
+    smoke (9 s, continuous), which thin out for a few seconds. Local coordinates would fix it for
+    an emitter that stays put, but rotate its gravity and drift with the node, and a falling
+    airdrop's trail needs world space: left as is.
+  - **Falling snow** wraps round the camera in a 60 m box: in pattern space (`world_origin_offset`,
+    9.6 km = 160 boxes), or every flake lands somewhere else at a shift.
 - **Checks**: `--origincheck` (headless: frames, lane keys, the wire between two origins, a race
   road followed across a shift, a remote interpolated 3,600 km out, the node walk, the kinematic
   case; RESULT line). Multiplayer: the `tools/*check.sh` loopback scripts with `--originstress` on
