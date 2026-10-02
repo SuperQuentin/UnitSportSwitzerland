@@ -138,6 +138,33 @@ public class LandingTests
     }
 
     [Fact]
+    public void Boat_places_lie_either_side_of_a_jetty_and_the_same_ones_are_chosen_every_time()
+    {
+        var jetty = new Jetty { Id = "{ABC}", Ribbon = new PierRibbon { Kind = PierKind.Jetty, Width = 2.2,
+            Points = { new double[] { 0, 0, Water + 0.4 }, new double[] { 0, 60, Water + 0.4 } } } };
+        var slots = jetty.BoatSlots();
+        // every 9 m from 4 m in, both sides
+        Assert.Equal(2 * 6, slots.Count);   // 4, 13 .. 49 (58 is within 4 m of the end)
+        Assert.All(slots, b => Assert.InRange(Math.Abs(b.E), 1.1 + 0.4 + 0.65 - 1e-6, 1.1 + 0.4 + 1.2 + 1e-6));
+        Assert.All(slots, b => Assert.True(b.Heading is 0 or 180, $"{b.Heading}"));
+        Assert.Equal(slots.Count, slots.Select(b => b.Id).Distinct().Count());
+        var chosen = jetty.BoatBerths();
+        Assert.InRange(chosen.Count, 1, Jetty.MaxBoats);
+        Assert.Equal(chosen, jetty.BoatBerths());
+        Assert.Equal(chosen.Select(b => b.Id), LandingIndex.FromJson(new LandingIndex { Jetties = { jetty } }.ToJson()).Jetties[0].BoatBerths().Select(b => b.Id));
+    }
+
+    [Fact]
+    public void Jetties_near_one_another_are_one_harbour()
+    {
+        Jetty J(string id, double e) => new() { Id = id, Ribbon = new PierRibbon { Width = 2, Points = { new double[] { e, 0, 0 }, new double[] { e, 30, 0 } } } };
+        var index = new LandingIndex { Jetties = { J("a", 0), J("b", 20), J("c", 2000), J("d", 120) } };
+        var harbours = index.Harbours();
+        Assert.Equal(2, harbours.Count);
+        Assert.Equal(new[] { "a", "b", "d" }, harbours[0].Select(j => j.Id));
+    }
+
+    [Fact]
     public void The_berth_s_numbers_are_the_steamer_s()
     {
         var o = LandingPlanner.Default;

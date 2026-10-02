@@ -344,6 +344,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new World.AfricaTwinEgg(_chunks));
         // the paddle steamer at the Nyon landing (#303): likewise
         AddChild(new World.SteamerBerth(_chunks));
+        // jetskis and speedboats along the harbour jetties (#383): likewise
+        AddChild(new World.MarinaBoats(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.

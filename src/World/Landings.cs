@@ -33,6 +33,13 @@ public static class Landings
     /// <summary>The landing named <paramref name="name"/>, or whose name starts with it ("Nyon" finds "Nyon (lac)"); null if none.</summary>
     public static Landing? Find(string name) => _current.Find(name);
 
+    /// <summary>Every boat place along the jetties (#383, <see cref="Jetty.BoatBerths"/>): where the marina boats lie.</summary>
+    public static IEnumerable<BoatBerth> BoatBerths()
+    {
+        foreach (var j in _current.Jetties)
+            foreach (var b in j.BoatBerths()) yield return b;
+    }
+
     /// <summary>The landing nearest an LV95 point; null when there are none.</summary>
     public static Landing? Nearest(double e, double n) => _current.Nearest(e, n);
 

@@ -356,33 +356,45 @@ public partial class SteamerCheck : Node
         await Wait(0.8);
         Expect(!me.Aboard && me.IsOnFloor() && Mathf.Abs(me.GlobalPosition.Y - deckY) < 0.15f, F($"back on the pier's head ({me.GlobalPosition.Y - deckY:+0.00;-0.00} m), ashore"));
 
-        await JettyBoat(me, landing);
+        await JettyBoat(me, landing, neckSpot);
     }
 
-    /// <summary>A speedboat brought alongside the jetty nearest the landing; its driver steps out onto the jetty, not into the lake.</summary>
-    private async Task JettyBoat(FootPlayer me, Landing landing)
+    /// <summary>
+    /// The harbour by the landing (#383): its jetty's marina boats moored at their places, a speedboat
+    /// brought alongside a free place whose driver steps out onto the jetty (#377), one marina boat
+    /// taken and put back, and the boats counted per harbour.
+    /// </summary>
+    private async Task JettyBoat(FootPlayer me, Landing landing, Vector3 away)
     {
-        var origin = me.Terrain!.Origin!;
+        var chunks = me.Terrain!;
+        var origin = chunks.Origin!;
+        var vehicles = VehicleManager.Instance!;
         var jetty = Landings.Current.Jetties.MinBy(j => Math.Abs(j.Ribbon.Points[0][0] - landing.E) + Math.Abs(j.Ribbon.Points[0][1] - landing.N));
-        if (jetty == null) { Expect(false, "a jetty near the landing"); return; }
-        var pts = jetty.Ribbon.Points;
-        // two thirds along it (out over the water), and its direction there
-        int i = Math.Clamp(pts.Count * 2 / 3, 1, pts.Count - 1);
-        var p0 = origin.ToWorld(pts[i - 1][0], pts[i - 1][1], pts[i - 1][2]);
-        var p1 = origin.ToWorld(pts[i][0], pts[i][1], pts[i][2]);
-        var along = ((p1 - p0) with { Y = 0 }).Normalized();
-        var beside = new Vector3(along.Z, 0, -along.X);
-        float jettyDeck = (p0.Y + p1.Y) * 0.5f;
-        var mid = (p0 + p1) * 0.5f;
-        Log(F($"jetty {jetty.Id}: {pts.Count} points, deck {jettyDeck:F2} (world), the boat by its point {i}"));
-        // standing on the jetty, then into a speedboat put in the water alongside
-        if (!await Until(() => me.Terrain!.HasCollisionAt(mid), 40)) Log("  the jetty's tile has no collision yet");
+        if (jetty == null || MarinaBoats.Instance == null) { Expect(false, "a jetty near the landing, and the marina boats"); return; }
+        bool Wet(BoatBerth b) => chunks.TryGetWater(origin.ToWorld(b.E, b.N, 0), out float l, out _)
+            && chunks.TryGetHeight(origin.ToWorld(b.E, b.N, 0), out float bed) && l - bed >= MarinaBoats.MinDepth;
+        var berths = jetty.BoatBerths();
+        VehicleBody? At(BoatBerth b) => vehicles.GetNodeOrNull<VehicleBody>(MarinaBoats.Prefix + b.Id);
+        await Until(() => berths.All(b => !Wet(b) || At(b) != null), 30);
+        int wet = berths.Count(Wet), moored = berths.Count(b => At(b) != null);
+        float worst = berths.Where(b => At(b) != null).Select(b => MathX.FlatDistance(At(b)!.GlobalPosition, origin.ToWorld(b.E, b.N, 0))).DefaultIfEmpty(0f).Max();
+        Log(F($"jetty {jetty.Id}: {jetty.BoatSlots().Count} places, {berths.Count} chosen, {wet} with water enough: {moored} boats moored ({berths.Count(b => b.Speedboat && At(b) != null)} speedboats), {worst:F2} m off their places at most"));
+        Expect(moored == wet && moored > 0 && worst < 1.5f, "the jetty's marina boats lie at their places");
+
+        // a free place with water, as far from the moored boats as there is
+        var free = jetty.BoatSlots().Where(s => !berths.Any(b => b.Id == s.Id) && Wet(s))
+            .OrderByDescending(s => berths.Select(b => (s.E - b.E) * (s.E - b.E) + (s.N - b.N) * (s.N - b.N)).DefaultIfEmpty(1e9).Min()).FirstOrDefault();
+        if (free.Id == null) { Expect(false, "a free place along the jetty"); return; }
+        var water = origin.ToWorld(free.E, free.N, 0);
+        var (deckSpot, along) = OnRibbon(jetty.Ribbon, origin, water);
+        float jettyDeck = deckSpot.Y;
+        Log(F($"a speedboat at the free place {free.Id}, the jetty's deck {jettyDeck:F2} (world)"));
+        if (!await Until(() => chunks.HasCollisionAt(deckSpot), 40)) Log("  the jetty's tile has no collision yet");
         me.Velocity = Vector3.Zero;
-        me.GlobalPosition = mid + Vector3.Up * 0.3f;
+        me.GlobalPosition = deckSpot + Vector3.Up * 0.3f;
         await Until(() => me.IsOnFloor(), 8);
         await Wait(0.5);
         if (!me.SetRide(RideKind.Speedboat)) { Expect(false, $"a speedboat from the jetty ({WhereText(me)}, {me.WalkState})"); return; }
-        var water = mid + beside * ((float)jetty.Ribbon.Width * 0.5f + 1.5f);
         WaterField.TryLevelAt(water, out float level);
         float yaw = Mathf.Atan2(-along.X, -along.Z);
         me.PlaceBoat(water with { Y = level - 0.25f }, yaw);
@@ -391,16 +403,73 @@ public partial class SteamerCheck : Node
         me.RideControls = null;
         me.ExitVehicle();
         await Wait(1.2);
-        Log(F($"out of the boat: swimming {me.IsSwimming}, on the floor {me.IsOnFloor()}, {me.GlobalPosition.Y - jettyDeck:+0.00;-0.00} m off the jetty's deck, {MathX.FlatDistance(me.GlobalPosition, mid):F1} m from its middle"));
+        Log(F($"out of the boat: swimming {me.IsSwimming}, on the floor {me.IsOnFloor()}, {me.GlobalPosition.Y - jettyDeck:+0.00;-0.00} m off the jetty's deck, {MathX.FlatDistance(me.GlobalPosition, deckSpot):F1} m from the spot beside the boat"));
         Expect(!me.IsSwimming && me.IsOnFloor() && Mathf.Abs(me.GlobalPosition.Y - jettyDeck) < 0.25f, "the driver steps out of the boat onto the jetty, not into the water");
-        var boat = VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => v.Kind == RideKind.Speedboat);
+        var boat = vehicles.GetChildren().OfType<VehicleBody>().Where(v => v.Kind == RideKind.Speedboat).MinBy(v => v.GlobalPosition.DistanceTo(water));
+        var beside = new Vector3(along.Z, 0, -along.X);
         await Shot("jetty_boat", () =>
         {
             var at = boat?.GlobalPosition ?? water;
-            var eye = at + beside * 12f - along * 7f + Vector3.Up * 4.5f;
-            var target = (at + mid) * 0.5f + Vector3.Up * 0.8f;
+            var side = (at - deckSpot) with { Y = 0 };
+            side = side.LengthSquared() > 0.01f ? side.Normalized() : beside;
+            var eye = at + side * 12f - along * 7f + Vector3.Up * 4.5f;
+            var target = (at + deckSpot) * 0.5f + Vector3.Up * 0.8f;
             return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
         });
+
+        // the whole harbour from above its jetties
+        var harbour = Landings.Current.Harbours().First(h => h.Contains(jetty));
+        double he = harbour.SelectMany(j => j.Ribbon.Points).Average(p => p[0]), hn = harbour.SelectMany(j => j.Ribbon.Points).Average(p => p[1]);
+        var centre = origin.ToWorld(he, hn, 0);
+        if (WaterField.TryLevelAt(centre, out float hl)) centre.Y = hl;
+        else centre.Y = jettyDeck;
+        await Shot("marina", () =>
+        {
+            var eye = centre + new Vector3(-0.6f, 0, 0.8f).Normalized() * 70f + Vector3.Up * 28f;
+            return new Transform3D(Basis.LookingAt(centre - eye, Vector3.Up), eye);
+        });
+
+        // one taken away comes back once its place is clear and nobody is near
+        if (berths.FirstOrDefault(b => At(b) != null) is { Id: not null } taken)
+        {
+            double was = MarinaBoats.RespawnSeconds;
+            MarinaBoats.RespawnSeconds = 2;
+            vehicles.Claim(At(taken)!, _ => { });
+            await Wait(0.5);
+            Expect(At(taken) == null, $"a marina boat taken away ({taken.Id})");
+            me.Velocity = Vector3.Zero;
+            me.GlobalPosition = away;
+            bool back = await Until(() => At(taken) != null, 20);
+            MarinaBoats.RespawnSeconds = was;
+            Expect(back, "and put back at its place a while later, nobody near");
+        }
+
+        // a count per harbour, of the jetties seen
+        foreach (var h in Landings.Current.Harbours())
+        {
+            var places = h.SelectMany(j => j.BoatBerths()).ToList();
+            int n = places.Count(b => At(b) != null);
+            if (n == 0) continue;
+            Log(F($"harbour of {h.Count} jetties at {h[0].Ribbon.Points[0][0]:F0}/{h[0].Ribbon.Points[0][1]:F0}: {n} boats moored of {places.Count} places"));
+        }
+    }
+
+    /// <summary>The point of a ribbon's deck nearest a world point (world, on the deck), and the ribbon's direction there.</summary>
+    private static (Vector3 At, Vector3 Along) OnRibbon(PierRibbon r, Core.WorldOrigin origin, Vector3 to)
+    {
+        Vector3 best = default, dir = Vector3.Forward;
+        float bestD = float.MaxValue;
+        for (int i = 1; i < r.Points.Count; i++)
+        {
+            var a = origin.ToWorld(r.Points[i - 1][0], r.Points[i - 1][1], r.Points[i - 1][2]);
+            var b = origin.ToWorld(r.Points[i][0], r.Points[i][1], r.Points[i][2]);
+            var ab = (b - a) with { Y = 0 };
+            float t = ab.LengthSquared() < 1e-6f ? 0f : Mathf.Clamp(((to - a) with { Y = 0 }).Dot(ab) / ab.LengthSquared(), 0f, 1f);
+            var p = a.Lerp(b, t);
+            float d = MathX.FlatDistance(p, to);
+            if (d < bestD) { bestD = d; best = p; dir = ab.Normalized(); }
+        }
+        return (best, dir);
     }
 
     /// <summary>Walks to world points in turn (level); false if it never got there.</summary>
