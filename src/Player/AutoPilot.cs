@@ -676,6 +676,8 @@ public sealed class AutoPilot
         if (cap < D.Cap) { D.Cap = cap; _capRule = rule; }
     }
     private int _capRule;
+    /// <summary>The source line that set the speed cap this step (checks).</summary>
+    public int CapRule => _capRule;
 
     /// <summary>
     /// Traffic about to come out onto the road ahead — out of a side road, across a junction — that

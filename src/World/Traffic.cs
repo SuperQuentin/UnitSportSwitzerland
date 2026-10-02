@@ -617,18 +617,38 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         {
             car.Stale = 0f;
             car.Route = new Route(edge, !car.Route.Forward, edge.Length - car.Route.Arc);
+            car.Lat = float.NaN; car.Psi = 0f;   // turned round: its lane is the other one
         }
-        car.Pull = Mathf.MoveToward(car.Pull, Mathf.Min(wantPull, maxPull), (car.Startle > 0f ? 2.2f : 0.8f) * dt);
+        // pulling over is driven, not slid (#159): a kinematic bicycle in lane terms — the heading leaves the
+        // lane by Psi (yaw rate at most v/L·tan(steer max)), and only the motion along that heading moves the car
+        // across (v·tan Psi). Standing, it cannot get over at all: it stays where it is in the lane
+        if (float.IsNaN(car.Lat)) car.Lat = keep + car.Pull;
+        float wantLat = keep + Mathf.Clamp(wantPull, 0f, maxPull);
+        float latRate = Mathf.Clamp((wantLat - car.Lat) * 1.5f, -1f, 1f) * (car.Startle > 0f ? 2.2f : 0.8f);
+        float psiWant = Mathf.Clamp(Mathf.Atan2(latRate, Mathf.Max(car.Speed, 0.5f)), -0.3f, 0.3f);
+        car.Psi = Mathf.MoveToward(car.Psi, psiWant, car.Speed / 2.6f * Mathf.Tan(0.55f) * dt);
+        car.Lat += car.Speed * Mathf.Tan(car.Psi) * dt;
+        car.Pull = car.Lat - keep;
 
         var before = car.Head;
         if (!car.Route.Advance(car.Speed * dt, leg => NextRoad(leg))) car.Stuck += 5f;
         car.Route.Trim(90f);   // the road behind it too: whoever is closing from behind is found on it
-        float pull = car.Startle > 0f ? Mathf.Clamp(car.Pull + 0.12f * Mathf.Sin(car.Startle * 14f), 0f, maxPull) : car.Pull;
-        car.Place(e => KeepRight(e) + pull);
+        if (float.IsNaN(car.Lat)) car.Lat = KeepRight(car.Route.Edge) + car.Pull;
+        float latNow = car.Lat;
+        car.Place(_ => latNow, car.Psi);
         car.Vel = dt > 0f ? Flat(car.Head - before) / dt : Vector3.Zero;
+        // check: speed across its own heading (a slide), when it moved like a car (not a turn-round or a jump)
+        if (dt > 0f && car.Vel.Length() < 60f)
+        {
+            var fwdNow = -car.Units[0].GlobalTransform.Basis.Z;
+            MaxSideSlip = Mathf.Max(MaxSideSlip, Mathf.Abs(car.Vel.X * -fwdNow.Z + car.Vel.Z * fwdNow.X));
+        }
         // where its lane takes it, 0.5 s apart at this speed: a racer reads it to see it coming out of a side road
         for (int k = 0; k < PathSteps; k++) car.Path[k] = car.Route.At(-car.Speed * 0.5f * (k + 1)).Pos;
     }
+
+    /// <summary>Largest speed of a traffic car across its own heading so far, m/s (checks: ≈ 0, it drives, it does not slide).</summary>
+    public static float MaxSideSlip;
 
     private static Vector3 Flat(Vector3 v) => new(v.X, 0, v.Z);
 
@@ -926,6 +946,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         /// <summary>The driver: reaction time (s), how long it has had someone in view, when it last saw
         /// them, when it looks again, and a fright (s left, and whether it brakes in it).</summary>
         public float Reaction = 0.75f, Alert, SawAgo = 99f, LookIn, Startle;
+        /// <summary>Where it actually is across its road (m right of the centreline) and its heading off the lane (rad, + right).</summary>
+        public float Lat = float.NaN, Psi;
         /// <summary>When it was spawned (ms): a car met just after it appeared (#159 logs).</summary>
         public readonly ulong Born = Time.GetTicksMsec();
         public bool StartleBrake;
@@ -953,7 +975,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         /// bogies, so a carriage in a curve is a chord, not a tangent) and pushed right of the
         /// centreline by <paramref name="right"/>.
         /// </summary>
-        public void Place(Func<LaneEdge, float> right)
+        public void Place(Func<LaneEdge, float> right, float psi = 0f)
         {
             float lateral = right(Route.Edge);
             for (int i = 0; i < Units.Length; i++)
@@ -966,6 +988,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                 dir = dir.Normalized();
                 var side = new Vector3(-dir.Z, 0, dir.X).Normalized();
                 var at = (front + rear) * 0.5f + side * lateral + Vector3.Up * Lift;
+                if (psi != 0f) dir = (dir * Mathf.Cos(psi) + side * Mathf.Sin(psi)).Normalized();
                 // MeshScratch turns the meshes to face -Z, the node's forward: point -Z along travel
                 var basis = Player.Flyer.Orient(dir, Vector3.Up, Vector3.Forward);
                 Units[i].GlobalTransform = new Transform3D(basis, at);

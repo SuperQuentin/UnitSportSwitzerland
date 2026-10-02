@@ -279,6 +279,7 @@ public partial class DriveProbe : Node
         }
 
         _t += delta;
+        StepDummies(dt);
         foreach (var en in _entries)
         {
             if (en.Out) continue;
@@ -361,6 +362,7 @@ public partial class DriveProbe : Node
             if (q.Out) { if (q.Wreck is { } w) yield return new AutoPilot.Other(w, Vector3.Zero, true); }
             else yield return new AutoPilot.Other(q.Player.GlobalPosition, q.Player.WorldVelocity, false);
         }
+        foreach (var o in DummyRivals()) yield return o;
     }
 
     // ------------------------------------------------------------------------------------
@@ -507,6 +509,7 @@ public partial class DriveProbe : Node
             return l.Count == 0 ? "n/a" : $"{l.Average():F1}%";
         }
         float best = _entries.Max(e => e.Pilot?.Skill ?? 0f);
+        PrintDummies();
         GD.Print($"[drive] PACE ace (skill {best:F2}) {Index(_entries.Where(e => (e.Pilot?.Skill ?? 0f) >= best))}, others {Index(_entries.Where(e => (e.Pilot?.Skill ?? 0f) < best))}");
         bool anyFinish = _entries.Any(e => e.FinishTime >= 0);
         bool driftOk = _entries.All(e => e.Spec == null || e.Grip) || _entries.Any(e => e.Pilot?.Drifts > 0);
