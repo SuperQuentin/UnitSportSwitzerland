@@ -196,9 +196,16 @@ public sealed class FallbackChunkSource : IChunkSource
         return await Task.Run<byte[]?>(() => World.BuildCover(id, blend), ct).ConfigureAwait(false);
     }
 
-    /// <summary>Generated tiles have no water layer yet: their lakes are cover, the legacy way.</summary>
-    public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default) =>
-        Covers(id) ? Task.FromResult<WaterTile?>(null) : _inner.LoadWaterAsync(id, ct);
+    /// <summary>
+    /// A generated tile's still water (#298): its lakes' and rivers' levels where its cover says
+    /// Water; the beds are in its height grid. Same blend as the cover, which it reads.
+    /// </summary>
+    public async Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default)
+    {
+        if (!Covers(id)) return await _inner.LoadWaterAsync(id, ct).ConfigureAwait(false);
+        var blend = await BlendFor(id, full: false, ct).ConfigureAwait(false);
+        return await Task.Run(() => World.BuildWater(id, blend), ct).ConfigureAwait(false);
+    }
 
     public async Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default)
     {
