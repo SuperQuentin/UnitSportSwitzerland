@@ -22,7 +22,7 @@ public partial class WaterSurface : Node
     private static (Color Colour, float Visibility) Look(Styles.VisualStyle style) => style switch
     {
         // PS1: the bed and what swims show at 8-15 m, then the fog closes
-        Styles.VisualStyle.Ps1 => (new Color(0.09f, 0.22f, 0.25f), 22f),
+        Styles.VisualStyle.Ps1 => (new Color(0.14f, 0.32f, 0.36f), 22f),
         // Cartoon: bright, clear turquoise, as its shallows
         Styles.VisualStyle.Cartoon => (new Color(0.14f, 0.46f, 0.52f), 20f),
         // Realistic: a dark blue-green, as its absorption

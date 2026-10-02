@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Audio;
 using UnitSport.Avatar;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -251,9 +252,7 @@ public static class CarSetups
     /// </summary>
     public static int Check()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int at = System.Array.IndexOf(args, "--setupcheck");
-        int index = at >= 0 && at + 1 < args.Length && int.TryParse(args[at + 1], out int n) ? n : 0;
+        int index = CmdArgs.Int("--setupcheck") ?? 0;
         var fails = new List<string>();
         foreach (var s in All)
             if (Clamp(s.Id) != s.Id || Parse(Slug(s)) != s) fails.Add($"{s.Name} does not round-trip");

@@ -2,6 +2,7 @@
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
 using UnitSport.Ui;
+using UnitSport.Core;
 
 namespace UnitSport.Gpx;
 
@@ -721,7 +722,7 @@ public partial class VideoExporter : Node
         Release();
 
         // "--export" runs unattended, so there is nobody to see the HUD go back to normal
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--export") >= 0) GetTree().Quit(ok ? 0 : 1);
+        if (CmdArgs.Has("--export")) GetTree().Quit(ok ? 0 : 1);
     }
 
     /// <summary>

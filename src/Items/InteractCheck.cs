@@ -40,7 +40,7 @@ public partial class InteractCheck : Node
     }
 
     /// <summary>Asked for on the command line: the world then gives it a scratch inventory (the real one is shared by every worktree).</summary>
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--interactcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--interactcheck");
 
     public static InteractCheck? Create(Func<FootPlayer?> local, Inventory inventory) =>
         Requested ? new InteractCheck(local, inventory) : null;
@@ -170,8 +170,9 @@ public partial class InteractCheck : Node
                     me.DanceId = 0;
                     // a radio of its own on the ground, playing, to take with a click
                     var ahead = -me.Camera.GlobalTransform.Basis.Z with { Y = 0 };
-                    RadioManager.Instance?.Throw(new RadioState("", 0, me.GlobalPosition + Vector3.Up * 0.5f + ahead.Normalized() * 1.4f,
-                        0, Vector3.Zero, cd, ClockSync.ServerNow - 1, true, false, length));
+                    if (RadioManager.Instance is { } mine)
+                        mine.Throw(new RadioState("", 0, mine.Origin.ToGlobal(me.GlobalPosition + Vector3.Up * 0.5f + ahead.Normalized() * 1.4f),
+                            0, Vector3.Zero, cd, ClockSync.ServerNow - 1, true, false, length));
                     Next();
                 }
                 break;
@@ -203,7 +204,7 @@ public partial class InteractCheck : Node
                 side = side.LengthSquared() > 0.01f ? side.Normalized() : Vector3.Right;
                 float half = _car.Ride.ParkedBox.Size.X * 0.5f;
                 _farSide = _car.GlobalPosition - side * (half + 0.45f) + Vector3.Up * 0.25f;
-                RadioManager.Instance?.Throw(new RadioState("", 0, _farSide, 0, Vector3.Zero, cd, ClockSync.ServerNow - 1, true, false, length));
+                if (RadioManager.Instance is { } boombox) boombox.Throw(new RadioState("", 0, boombox.Origin.ToGlobal(_farSide), 0, Vector3.Zero, cd, ClockSync.ServerNow - 1, true, false, length));
                 me.GlobalPosition = _car.GlobalPosition + side * (half + 2.5f) + Vector3.Up * 0.3f;
                 me.Velocity = Vector3.Zero;
                 Next();

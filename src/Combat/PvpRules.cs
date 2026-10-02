@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Combat;
 
@@ -10,7 +11,7 @@ namespace UnitSport.Combat;
 /// </summary>
 public static class PvpRules
 {
-    public static bool Enabled { get; set; } = OS.GetCmdlineUserArgs().Contains("--pvp");
+    public static bool Enabled { get; set; } = CmdArgs.Has("--pvp");
 
     /// <summary>
     /// A game mode's say over one shooter/victim pair, asked before <see cref="Enabled"/>: true or

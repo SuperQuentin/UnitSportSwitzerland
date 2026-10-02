@@ -23,7 +23,7 @@ public partial class MenuCheck : Node
         Name = "MenuCheck";
     }
 
-    public static bool Requested() => Array.IndexOf(OS.GetCmdlineUserArgs(), "--menucheck") >= 0;
+    public static bool Requested() => CmdArgs.Has("--menucheck");
 
     private bool Top<T>() where T : Screen => _shell.Top is T;
 

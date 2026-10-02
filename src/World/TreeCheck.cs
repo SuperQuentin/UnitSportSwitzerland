@@ -30,16 +30,7 @@ public partial class TreeCheck : Node
         _shot = shot;
     }
 
-    public static (bool Requested, string? Shot) ParseArgs()
-    {
-        foreach (var a in OS.GetCmdlineUserArgs())
-            if (a.StartsWith("--treecheck"))
-            {
-                var parts = a.Split(',');
-                return (true, parts.Length > 1 ? parts[1] : null);
-            }
-        return (false, null);
-    }
+    public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--treecheck");
 
     public override void _PhysicsProcess(double delta)
     {
@@ -118,7 +109,7 @@ public partial class TreeCheck : Node
                     bool low = !_chunks.TryGetHeight(_player!.GlobalPosition, out float gh) || _player.GlobalPosition.Y < gh + 4f;
                     if (low) Input.ActionPress(Core.PlayerInput.Jump); else Input.ActionRelease(Core.PlayerInput.Jump);
                 }
-                if (System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trace") >= 0 && (int)(_t * 2) != (int)((_t - delta) * 2))
+                if (CmdArgs.Has("--trace") && (int)(_t * 2) != (int)((_t - delta) * 2))
                     GD.Print($"[treecheck]   t={_t:F1} d={MathX.Flat(_player!.GlobalPosition - _tree).Length():F1} v={_player.Velocity} floor={_player.IsOnFloor()} wall={_player.IsOnWall()} ride={_player.Ride}");
                 var p = _player!.GlobalPosition;
                 _closest = Mathf.Min(_closest, MathX.Flat(p - _tree).Length());
@@ -155,10 +146,7 @@ public partial class TreeCheck : Node
     /// <summary><c>--ride bike|car|heli|plane</c>: what to throw at the trunk (bike by default).</summary>
     private static RideKind Kind()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, "--ride");
-        string v = i >= 0 && i + 1 < args.Length ? args[i + 1] : "bike";
-        return v switch
+        return (CmdArgs.Value("--ride") ?? "bike") switch
         {
             "car" => (RideKind)Player.CarCatalog.First,
             "heli" or "helicopter" => RideKind.Helicopter,
