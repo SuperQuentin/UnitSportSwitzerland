@@ -328,6 +328,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // the Africa Twin at Riddes: placed here offline, by the server online
         AddChild(new World.AfricaTwinEgg(_chunks));
+        // the paddle steamer at the Nyon landing (#303): likewise
+        AddChild(new World.SteamerBerth(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
@@ -572,6 +574,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.ExitProbe.Requested) AddChild(new Player.ExitProbe(() => LocalPlayer));
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
+        if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
         if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
