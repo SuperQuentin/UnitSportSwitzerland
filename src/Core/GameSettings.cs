@@ -153,6 +153,8 @@ public sealed class GameSettings
     public float SfxVolume { get; set; } = 0.5f;
     /// <summary>Ambience volume, 0..1.</summary>
     public float AmbienceVolume { get; set; } = 0.7f;
+    /// <summary>Music volume, 0..1 — the Music bus: radios, car stereos, live stations (#261).</summary>
+    public float MusicVolume { get; set; } = 0.7f;
 
     /// <summary>Which sound chip the engines are rendered as (<see cref="Audio.EngineSynth"/>).</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -300,6 +302,7 @@ public sealed class GameSettings
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);
+        MusicVolume = Math.Clamp(MusicVolume, 0f, 1f);
         DayLengthMinutes = Math.Clamp(DayLengthMinutes, 0f, 240f);
         StartHour = Math.Clamp(StartHour, 0f, 23.99f);
         TrafficCars = Math.Clamp(TrafficCars, 0, 150);

@@ -55,6 +55,9 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
 
+    /// <summary>The drawn machine (null on a headless peer), for outlining it (#261).</summary>
+    public Node3D? Visual => _visual;
+
     private VehicleState _initial;
     private RideMotion _motion;
     private FlightMotion _flight;

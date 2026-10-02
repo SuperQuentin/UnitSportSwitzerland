@@ -95,8 +95,13 @@ public enum Headwear
 /// Beat-driven pose parameters for one frame of a dance (docs/notes/avatar/dance-moves.md).
 /// <paramref name="Bar"/> is the absolute 4-beat bar index (8-count moves use <c>Bar % 2</c>);
 /// <paramref name="Weight"/> (0..1) eases the dance in and out from the rest pose.
+/// <paramref name="PrevMove"/> is the move before (-1 none) and <paramref name="MoveBlend"/> how far
+/// the figure has flowed out of it into <paramref name="Move"/> (0..1): a move change is a short
+/// crossfade on the beat, not a cut (#261). A move at or past <see cref="HumanMeshBuilder.GroupMoves"/>
+/// is one of the crowd moves danced together (<see cref="HumanMeshBuilder.GroupPogo"/>, <see cref="HumanMeshBuilder.GroupJump"/>).
 /// </summary>
-public readonly record struct DanceParams(Audio.Cd.MusicStyle Style, int Move, float BeatPhase, float BarPhase, int Bar, float Weight);
+public readonly record struct DanceParams(Audio.Cd.MusicStyle Style, int Move, float BeatPhase, float BarPhase, int Bar, float Weight,
+    int PrevMove = -1, float MoveBlend = 1f);
 
 /// <summary>
 /// A low-poly human, built from tubes and boxes at roughly 1.78 m.
@@ -1027,7 +1032,18 @@ public static class HumanMeshBuilder
         SideStepClap, HipSway, ClapBackbeat, Carlton, Macarena, DiscoPoint, Floss, OrangeJustice,
         GangnamStyle, Headbang, AirGuitar, FistPump, Bounce, ArmWave, RunningMan, TStep, Robot,
         Sprinkler, ShoulderLean, Twerk, Dab, Griddy, Moonwalk, Sway, FolkClap, HandsOnHipsSkip,
+        Pogo, JumpTogether,
     }
+
+    /// <summary>
+    /// <see cref="DanceParams.Move"/> values from here on are the crowd moves (#261), outside any
+    /// style's table: every dancer near the same music switches to one on the same bar.
+    /// </summary>
+    public const int GroupMoves = 1000;
+    /// <summary>Pogo: straight up on every beat, everyone in the air at once.</summary>
+    public const int GroupPogo = GroupMoves;
+    /// <summary>Three bounces winding up, then one big jump with the arms thrown up, together on beat four.</summary>
+    public const int GroupJump = GroupMoves + 1;
 
     /// <summary>The move table of the note, indexed by <see cref="Audio.Cd.MusicStyle"/> (its numeric order).</summary>
     private static readonly DanceMove[][] DanceTable =
@@ -1038,10 +1054,10 @@ public static class HumanMeshBuilder
             DanceMove.GangnamStyle },
         // Rock
         new[] { DanceMove.Headbang, DanceMove.AirGuitar, DanceMove.FistPump, DanceMove.Bounce,
-            DanceMove.ClapBackbeat, DanceMove.ArmWave },
+            DanceMove.ClapBackbeat, DanceMove.ArmWave, DanceMove.Pogo },
         // Electronic
         new[] { DanceMove.Bounce, DanceMove.FistPump, DanceMove.RunningMan, DanceMove.TStep,
-            DanceMove.Robot, DanceMove.Sprinkler, DanceMove.ArmWave },
+            DanceMove.Robot, DanceMove.Sprinkler, DanceMove.ArmWave, DanceMove.Pogo },
         // HipHop
         new[] { DanceMove.Bounce, DanceMove.ShoulderLean, DanceMove.Twerk, DanceMove.Dab,
             DanceMove.Griddy, DanceMove.Moonwalk, DanceMove.RunningMan, DanceMove.Floss },
@@ -1082,24 +1098,63 @@ public static class HumanMeshBuilder
     private static Rig ApplyDance(Rig rig, in DanceParams d, float moving)
     {
         if (d.Weight <= 0.001f) return rig;
-        var table = DanceTable[DanceStyleIndex(d.Style)];
-        var move = table[((d.Move % table.Length) + table.Length) % table.Length];
+        var move = Resolve(d.Style, d.Move);
+        // the move it is flowing out of, for the crossfade on a change (#261)
+        float flow = d.PrevMove >= 0 && d.MoveBlend < 0.999f ? DSm(d.MoveBlend) : 1f;
+        var prev = flow < 1f ? Resolve(d.Style, d.PrevMove) : move;
+        if (prev == move) flow = 1f;
         var beat = new Beat(d.BarPhase, d.Bar);
         float we = DSm(d.Weight);
         float m = DSm(moving);
 
-        if (m <= 0.001f) return DanceVariant(rig, move, beat, we, false);
-        if (m >= 0.999f) return DanceVariant(rig, move, beat, we, true);
-        return MixRigs(DanceVariant(rig, move, beat, we, false), DanceVariant(rig, move, beat, we, true), m);
+        if (m <= 0.001f) return DanceVariant(rig, prev, move, flow, beat, we, false);
+        if (m >= 0.999f) return DanceVariant(rig, prev, move, flow, beat, we, true);
+        return MixRigs(DanceVariant(rig, prev, move, flow, beat, we, false), DanceVariant(rig, prev, move, flow, beat, we, true), m);
     }
 
-    private static Rig DanceVariant(in Rig rig, DanceMove move, in Beat t, float we, bool mv)
+    /// <summary>A move number as the caller has it (a style's table index, or a crowd move) to the move itself.</summary>
+    private static DanceMove Resolve(Audio.Cd.MusicStyle style, int index)
+    {
+        if (index == GroupPogo) return DanceMove.Pogo;
+        if (index == GroupJump) return DanceMove.JumpTogether;
+        var table = DanceTable[DanceStyleIndex(style)];
+        return table[((index % table.Length) + table.Length) % table.Length];
+    }
+
+    private static Rig DanceVariant(in Rig rig, DanceMove prev, DanceMove move, float flow, in Beat t, float we, bool mv)
+    {
+        var ch = Channels(move, t, mv);
+        if (flow < 1f) ch = Mix(Channels(prev, t, mv), ch, flow);
+        return Compose(rig, ch, we, mv);
+    }
+
+    private static DanceCh Channels(DanceMove move, in Beat t, bool mv)
     {
         var ch = default(DanceCh);
         ch.ArmBlend = 1f;
         Planted(ref ch, 0.098f, 0f);
         EvalMove(move, t, mv, ref ch);
-        return Compose(rig, ch, we, mv);
+        if (move is not (DanceMove.Pogo or DanceMove.JumpTogether)) Groove(ref ch, t, mv);
+        return ch;
+    }
+
+    /// <summary>
+    /// The groove under every move (#261): the knees give a little on each beat, the head nods
+    /// into it and the shoulders bounce a beat-fraction later, so even a move that only works the
+    /// arms has the whole body in time. Small on purpose: added to what the move already does.
+    /// </summary>
+    private static void Groove(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float hit = DDip(t.B);
+        float late = DDip(DFrac(t.B - 0.12f));
+        float k = mv ? 0.5f : 1f;
+        ch.Py -= 0.018f * hit * k;
+        ch.ThN += 0.045f * hit * k;
+        ch.ShL += 0.010f * late * k;
+        ch.ShR += 0.010f * late * k;
+        // a sway of the hips over two beats, alternating, under whatever the move does
+        ch.Px += 0.012f * t.D * k;
+        ch.Phi += 0.02f * t.D * k;
     }
 
     // ---- beat clock and small helpers ---------------------------------------------------
@@ -1459,7 +1514,89 @@ public static class HumanMeshBuilder
             case DanceMove.Sway: Sway(ref ch, t, mv); break;
             case DanceMove.FolkClap: FolkClap(ref ch, t, mv); break;
             case DanceMove.HandsOnHipsSkip: HandsOnHipsSkip(ref ch, t, mv); break;
+            case DanceMove.Pogo: Pogo(ref ch, t, mv); break;
+            case DanceMove.JumpTogether: JumpTogether(ref ch, t, mv); break;
         }
+    }
+
+    /// <summary>0 on the ground, rising to 1 at the top of a jump that leaves at <paramref name="off"/> and lands at <paramref name="on"/> (beat phase).</summary>
+    private static float Air(float b, float off, float on)
+    {
+        float x = (b - off) / (on - off);
+        return x <= 0f || x >= 1f ? 0f : 4f * x * (1f - x);
+    }
+
+    /// <summary>A soft knee-bend peaking at beat phase <paramref name="at"/>, wrapping round the beat.</summary>
+    private static float Give(float b, float at, float width)
+    {
+        float d = Mathf.Abs(b - at);
+        d = Mathf.Min(d, 1f - d) / width;
+        return Mathf.Exp(-d * d);
+    }
+
+    /// <summary>
+    /// Pogo (#261), punk's jump: straight up on every beat with the legs together, landing soft
+    /// on the next one and going straight back up. Arms tucked at the chest, a fist punched up
+    /// every other beat, the head snapping down on the landing.
+    /// </summary>
+    private static void Pogo(ref DanceCh ch, in Beat t, bool mv)
+    {
+        float air = Air(t.B, 0.16f, 0.94f);
+        float give = Give(t.B, 0.03f, 0.09f);
+        float h = 0.19f * air;
+        ch.Py = h - 0.085f * give;
+        ch.Theta = 0.05f + 0.10f * give;
+        ch.ThN = 0.20f * give - 0.10f * air;
+        ch.Phi = 0.04f * t.D;
+        ch.ShL = ch.ShR = 0.025f * air;
+        float punch = (t.K & 1) == 0 ? air : 0f;
+        // fists by the chest, elbows in; rig-L (the figure's right) punches up on the even beats
+        Aim(ref ch, 1f, 0.08f, -0.22f, 0.20f, HLow(1f));
+        SetArm(ref ch, -1f, new Vector3(-0.08f, -0.22f, 0.20f).Lerp(new Vector3(-0.12f, 0.46f, 0.08f), punch), HLow(-1f).Lerp(HUp(-1f), punch));
+        Foot(ref ch, -1f, -0.11f, AnkleHeight + h, 0f, 0.1f, air);
+        Foot(ref ch, 1f, 0.11f, AnkleHeight + h, 0f, 0.1f, air);
+        if (mv) { MovingScale(ref ch, 0.5f, 1f); ch.Py = Mathf.Clamp(h, 0f, 0.04f); }
+    }
+
+    /// <summary>
+    /// Jump together (#261): three bounces that sink deeper while the arms swing back further,
+    /// then on four everybody near the music leaves the ground at once, arms thrown up, and lands
+    /// on the next bar's one.
+    /// </summary>
+    private static void JumpTogether(ref DanceCh ch, in Beat t, bool mv)
+    {
+        if (t.K < 3)
+        {
+            // wind-up: a bounce per beat, each a little deeper
+            float depth = 0.035f + 0.025f * t.K;
+            float dip = DDip(t.B);
+            ch.Py = -depth * dip;
+            ch.Theta = 0.06f + 0.06f * dip + 0.03f * t.K;
+            ch.ThN = 0.08f * dip;
+            float back = (0.25f + 0.2f * t.K) * dip;
+            AimO(ref ch, -1f, -0.18f, -0.42f, -0.10f - back * 0.35f, HLow(-1f));
+            AimO(ref ch, 1f, 0.18f, -0.42f, -0.10f - back * 0.35f, HLow(1f));
+            Planted(ref ch, 0.14f, 0.15f);
+            Lift(ref ch, -1f, 0.02f * (1f - dip)); Lift(ref ch, 1f, 0.02f * (1f - dip));
+        }
+        else
+        {
+            // four: down hard, then up as high as legs go, arms flung overhead; land on the next one
+            float crouch = Give(t.B, 0.02f, 0.10f);
+            float air = Air(t.B, 0.12f, 0.98f);
+            float h = 0.34f * air;
+            ch.Py = h - 0.13f * crouch;
+            ch.Theta = 0.14f * crouch - 0.06f * air;
+            ch.ThN = -0.18f * air + 0.10f * crouch;
+            ch.ShL = ch.ShR = 0.04f * air;
+            float up = DSm(Mathf.Clamp((t.B - 0.05f) / 0.3f, 0f, 1f));
+            SetArm(ref ch, -1f, new Vector3(-0.18f, -0.42f, -0.25f).Lerp(new Vector3(-0.30f, 0.44f, 0.05f), up), HLow(-1f).Lerp(HUp(-1f), up));
+            SetArm(ref ch, 1f, new Vector3(0.18f, -0.42f, -0.25f).Lerp(new Vector3(0.30f, 0.44f, 0.05f), up), HLow(1f).Lerp(HUp(1f), up));
+            // knees come up a little at the top, as a real jump tucks
+            Foot(ref ch, -1f, -0.14f, AnkleHeight + h + 0.06f * air, -0.04f * air, 0.15f, air);
+            Foot(ref ch, 1f, 0.14f, AnkleHeight + h + 0.06f * air, -0.04f * air, 0.15f, air);
+        }
+        if (mv) { MovingScale(ref ch, 0.5f, 1f); ch.Py = Mathf.Clamp(ch.Py, -0.04f, 0.04f); }
     }
 
     private static void Twerk(ref DanceCh ch, in Beat t, bool mv)

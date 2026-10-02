@@ -173,7 +173,13 @@ public partial class DroppedItem : RigidBody3D
     {
         LinearVelocity = s.Velocity;
         AngularVelocity = s.Spin;
+        _lastPos = s.Position;
+        _lastVel = s.Velocity;
     }
+
+    /// <summary>The flight so far, for hitting someone on the way (#261): last step's position and speed, and whether it already has.</summary>
+    private Vector3 _lastPos, _lastVel;
+    private bool _bonked;
 
     private void StopPredicting()
     {
@@ -207,6 +213,9 @@ public partial class DroppedItem : RigidBody3D
     {
         GlobalTransform = proxy.GlobalTransform;
         _age = proxy._age;
+        _bonked = proxy._bonked;
+        _lastPos = proxy._lastPos;
+        _lastVel = proxy._lastVel;
         if (proxy.Settled) Settle();
         else
         {
@@ -246,6 +255,10 @@ public partial class DroppedItem : RigidBody3D
             if (_age > SettleAfter) StopPredicting();
             return;
         }
+        // simulated here (the thrower's proxy or body): someone in the way takes it (#261)
+        if (!_bonked && _age < 4) _bonked = ThrowHits.Step(this, _lastPos, GlobalPosition, _lastVel, Stack.Id);
+        _lastPos = GlobalPosition;
+        _lastVel = LinearVelocity;
         _restTime = LinearVelocity.LengthSquared() < 0.05f * 0.05f && AngularVelocity.LengthSquared() < 0.2f ? _restTime + delta : 0;
         if (Sleeping || _restTime > RestFor || _age > SettleAfter || Position.Y < -5000) Settle();
     }

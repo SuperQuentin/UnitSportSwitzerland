@@ -175,10 +175,11 @@ public partial class FootPlayer
         {
             if (p == this || p.RidingAlong || p.Ride == RideKind.OnFoot || VehicleOf(p) is not { IsVehicle: true } vehicle) continue;
             if (vehicle.Seats.Length < 2) continue;
+            // at its door, or right against its side (#261): not anywhere within a few metres of its middle
             var entry = vehicle.EntryPoint;
             float d = entry != Vector3.Zero
-                ? p.ToGlobal(entry).DistanceTo(GlobalPosition)
-                : p.GlobalPosition.DistanceTo(GlobalPosition) - vehicle.ParkedBox.Size.X * 0.25f;
+                ? p.ToGlobal(entry).DistanceTo(GlobalPosition + Vector3.Up)
+                : VehicleReach.HullDistance(p, vehicle.ParkedBox, GlobalPosition + Vector3.Up) + reach - 1.2f;
             if (d < bestDist) { bestDist = d; best = p; }
         }
         return best;

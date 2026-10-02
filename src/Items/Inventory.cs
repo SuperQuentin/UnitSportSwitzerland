@@ -114,6 +114,24 @@ public sealed class Inventory
 
     public ItemId HeldId => Held.IsEmpty ? ItemId.None : Held.Id;
 
+    /// <summary>
+    /// The radio this player carries and plays (#261): the one in the hand, else the first one in
+    /// the hotbar or pack with a CD in it, else the first one at all; -1 for none. Only one radio
+    /// sounds at a time, and a radio put away keeps playing on its owner's back.
+    /// </summary>
+    public int RadioSlot()
+    {
+        if (HeldId == ItemId.Radio) return Selected;
+        int any = -1;
+        for (int i = 0; i < Capacity; i++)
+        {
+            if (_slots[i].IsEmpty || _slots[i].Id != ItemId.Radio) continue;
+            if (!string.IsNullOrEmpty(_slots[i].Data)) return i;
+            if (any < 0) any = i;
+        }
+        return any;
+    }
+
     public static bool IsHotbar(int slot) => slot < HotbarSize;
 
     public void Select(int hotbarSlot)

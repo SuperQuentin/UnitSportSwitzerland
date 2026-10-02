@@ -224,7 +224,7 @@ public static class ItemDefs
         new(ItemId.Photo, "Photo", "A Polaroid you took. {use_item} to look at it; {aim_item} + {use_item} sticks it on a wall or the ground, {use_item} on it again takes it back.",
             ItemUse.Print, 1, new Color(0.96f, 0.95f, 0.90f), "PH"),
         // radio (#104): thrown into the world, plays burned CDs for whoever stands near
-        new(ItemId.Radio, "Radio", "{use_item} opens it in your hand: it plays as you carry it. {aim_item} + {use_item} throws it; stand beside it and press {interact_mount} to play a CD or pick it up.",
+        new(ItemId.Radio, "Radio", "{use_item} opens it in your hand; put away, it rides on your back and keeps playing. {aim_item} + {use_item} throws it (it hurts whoever it hits). Lying in the world: point at it, {use_item} takes it in hand, {interact_mount} opens it to play a CD.",
             ItemUse.Throw, 1, new Color(0.16f, 0.17f, 0.19f), "RD", 0, ItemCategory.Gear, 80f),
 
         // weapons (#178): they hurt players only while the server allows it (/pvp, a Battle Royale match)

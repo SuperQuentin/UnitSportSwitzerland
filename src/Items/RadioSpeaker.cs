@@ -47,46 +47,46 @@ public partial class RadioSpeaker : AudioStreamPlayer3D
     private int _pathFor, _fetching, _failed;
     private double _sinceSeek, _failedAt;
 
-    // ---- the listener's volume, one for every radio, kept on this machine --------------------
+    // ---- the listener's volume: the Music bus (#261) --------------------------------------------
 
-    private static float _volume = -1;
-
-    /// <summary>0..1, the panel's slider; scales every radio this player hears.</summary>
+    /// <summary>
+    /// 0..1, the panel's slider and Settings → Audio → Music alike: the Music bus every radio, car
+    /// stereo and station plays on. Applied by the bus, never per speaker, so nothing scales twice.
+    /// </summary>
     public static float UserVolume
     {
-        get
+        get => Core.GameSettings.Current.MusicVolume;
+        set
         {
-            if (_volume < 0)
-            {
-                var cfg = new ConfigFile();
-                _volume = cfg.Load(SettingsFile) == Error.Ok ? Mathf.Clamp(cfg.GetValue("radio", "volume", 0.6f).AsSingle(), 0f, 1f) : 0.6f;
-            }
-            return _volume;
+            Core.GameSettings.Current.MusicVolume = Mathf.Clamp(value, 0f, 1f);
+            SfxBus.ApplyVolumes();
         }
-        set => _volume = Mathf.Clamp(value, 0f, 1f);
     }
 
-    public static void SaveVolume()
-    {
-        var cfg = new ConfigFile();
-        cfg.SetValue("radio", "volume", UserVolume);
-        cfg.Save(SettingsFile);
-    }
+    /// <summary>Keeps the slider's value (Settings saves it with everything else).</summary>
+    public static void SaveVolume() => Core.GameSettings.Current.Save();
+
+    private readonly Hearing _hearing = new(8000f);
+
+    /// <summary>The path the sound takes to this machine's ear: "open", "wall", "door", "walls". For the probes.</summary>
+    public string HeardThrough => _hearing.Path;
 
     public override void _Ready()
     {
         SfxBus.Ensure();
-        Bus = SfxBus.Name;
+        Bus = SfxBus.Music;
         // full volume within ~3 m, a quarter at 12 m, gone past 45 m: a boombox, not a stadium
         UnitSize = 3f;
         MaxDistance = 45f;
         AttenuationModel = AttenuationModelEnum.InverseDistance;
         AttenuationFilterCutoffHz = 8000f;
+        _hearing.Attach(this);
     }
 
     public override void _Process(double delta)
     {
-        VolumeDb = UserVolume <= 0.001f ? -80f : BaseDb + Mathf.LinearToDb(UserVolume);
+        _hearing.Step(this, (float)delta);
+        VolumeDb = BaseDb + _hearing.Db;
         _sinceSeek += delta;
         double want = WantedPosition;
         if (double.IsNaN(want) || want < 0 || want >= Length || CdId == 0)

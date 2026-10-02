@@ -300,6 +300,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.DroppedItems.Create(this).PlayerPositions = vehicles.PlayerPositions;
         var chunksForDrops = _chunks;
         Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetHeight(p, out float y) ? y : null;
+        Audio.Hearing.Ground = Items.DroppedItems.GroundHeight;
         // every body that may hold a radio that plays (#168): the remote players and this one
         radios.Players = () =>
         {
@@ -1349,14 +1350,22 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else if (Items.Highlight.Pointed is Items.DroppedItem pointed)
                 yield return (PlayerInput.InteractMount, $"Pick up {pointed.Label}");
+            else if (Items.Highlight.Pointed is Items.RadioBody)
+            {
+                yield return (PlayerInput.UseItem, "Take the radio");
+                yield return (PlayerInput.InteractMount, "Radio");
+            }
             else if (!p.Indoors)
             {
-                if (Items.Highlight.Pointed is Items.RadioBody || Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
+                if (Vehicles.VehicleReach.Current == null && Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
                     yield return (PlayerInput.InteractMount, "Radio");
-                else if (Items.RadioManager.Instance?.NearestPlaying(p.GlobalPosition, Items.RadioManager.DanceRadius) != null)
+                else if (Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
-                if (Vehicles.VehicleManager.Instance?.Nearest(p.GlobalPosition, FootPlayer.EnterReach) is { } parked)
-                    yield return (PlayerInput.InteractMount, $"Get in the {parked.Ride.Label.ToLowerInvariant()}");
+                if (Vehicles.VehicleReach.Current is { } at)
+                {
+                    yield return (PlayerInput.InteractMount, at.Action);
+                    if (at is { HasDoor: true, DoorOpen: true }) yield return (PlayerInput.CarDoor, "Close the door");
+                }
                 yield return (PlayerInput.RideMenu, "Travel");
                 yield return (PlayerInput.Inventory, "Inventory");
                 yield return (PlayerInput.Teleport, "Map");
