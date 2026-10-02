@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Net;
 
@@ -13,7 +14,7 @@ public partial class NetworkManager : Node
     /// <c>Multiplayer.IsServer()</c>: offline, Godot's default peer calls itself the server too.
     /// </summary>
     public static bool DedicatedServer { get; } = OS.HasFeature("dedicated_server")
-        || System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--server") >= 0;
+        || CmdArgs.Has("--server");
 
     /// <summary>
     /// Starts listening.
@@ -140,12 +141,5 @@ public partial class NetworkManager : Node
     }
 
     /// <summary>Reads an optional "--bind &lt;ip&gt;" from the server command line.</summary>
-    public static string? ParseBindArg()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--bind")
-                return args[i + 1];
-        return null;
-    }
+    public static string? ParseBindArg() => CmdArgs.Value("--bind");
 }

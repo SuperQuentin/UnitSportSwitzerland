@@ -163,7 +163,7 @@ public partial class ControlsHelp : CanvasLayer
         GetViewport().SizeChanged += Rebuild;
         Rebuild();
         // "--controls" opens it from boot, for screenshotting it
-        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--controls") >= 0) Callable.From(Open).CallDeferred();
+        if (CmdArgs.Has("--controls")) Callable.From(Open).CallDeferred();
     }
 
     public override void _ExitTree()

@@ -35,17 +35,9 @@ public partial class WallOffProbe : Node
         (_spawnE, _spawnN) = SpawnPoint.ParseTarget();
     }
 
-    public static double? ParseArgs()
-    {
-        foreach (var a in OS.GetCmdlineUserArgs())
-            if (a.StartsWith("--walloff"))
-            {
-                var parts = a.Split(',');
-                return parts.Length > 1 && double.TryParse(parts[1], System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out double s) ? s : 20;
-            }
-        return null;
-    }
+    public static double? ParseArgs() => CmdArgs.FlagWithShot("--walloff") is (true, var seconds)
+        ? double.TryParse(seconds, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double s) ? s : 20
+        : null;
 
     public override void _PhysicsProcess(double delta)
     {

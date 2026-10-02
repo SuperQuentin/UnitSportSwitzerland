@@ -48,7 +48,7 @@ public sealed record WorldLaunch
     /// <summary>The session the command line asks for: <c>--connect [host]</c>, <c>--gpx path</c> (repeatable), else exploring.</summary>
     public static WorldLaunch FromArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         var gpx = new List<string>();
         string? host = null;
         for (int i = 0; i < args.Length; i++)

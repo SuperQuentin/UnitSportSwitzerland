@@ -192,10 +192,8 @@ public partial class SettingsScreen : Screen
     /// <summary>"--settings wheel" opens on that tab, for screenshotting it.</summary>
     private static int StartTab(List<string> names)
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--settings");
-        return i >= 0 && i + 1 < args.Length
-            ? Math.Max(0, names.FindIndex(n => n.Equals(args[i + 1], StringComparison.OrdinalIgnoreCase)))
+        return CmdArgs.Value("--settings") is { } tab
+            ? Math.Max(0, names.FindIndex(n => n.Equals(tab, StringComparison.OrdinalIgnoreCase)))
             : 0;
     }
 

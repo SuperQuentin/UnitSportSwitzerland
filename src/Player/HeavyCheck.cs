@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Audio;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -38,7 +39,7 @@ public static class HeavyCheck
     public static int Run()
     {
         _failures = 0;
-        _trace = OS.GetCmdlineUserArgs().Contains("trace");
+        _trace = CmdArgs.Has("trace");
         var settings = Core.GameSettings.Current;
         var was = settings.RideProfile;
         settings.RideProfile = Core.RideProfile.Sim;

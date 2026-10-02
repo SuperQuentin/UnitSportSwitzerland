@@ -19,7 +19,7 @@ namespace UnitSport.Core;
 /// </summary>
 public static class OriginCheck
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--origincheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--origincheck");
 
     private static int _failures;
 

@@ -30,8 +30,8 @@ public partial class CombatProbe : Node
     private FootPlayer? _player;
     private double _t, _wait, _sinceKill = -1;
     private bool _started, _done, _noGround;
-    private readonly bool _paraglider = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "paraglider") > 0
-        && System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--craft") >= 0;
+    private readonly bool _paraglider = System.Array.IndexOf(CmdArgs.All, "paraglider") > 0
+        && CmdArgs.Has("--craft");
     private FootPlayer? _target;
     private RideKind Craft => _paraglider ? RideKind.Paraglider : RideKind.Plane;
 
@@ -42,16 +42,7 @@ public partial class CombatProbe : Node
         _shot = shot;
     }
 
-    public static (bool Requested, string? Shot) ParseArgs()
-    {
-        foreach (var a in OS.GetCmdlineUserArgs())
-            if (a.StartsWith("--combatcheck"))
-            {
-                var parts = a.Split(',');
-                return (true, parts.Length > 1 ? parts[1] : null);
-            }
-        return (false, null);
-    }
+    public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--combatcheck");
 
     private static CombatManager Combat => CombatManager.Instance!;
 

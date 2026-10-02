@@ -99,7 +99,7 @@ public partial class OccasionManager : Node
     public override void _Ready()
     {
         _config = OccasionConfig.Load();
-        ParseCommandLine(OS.GetCmdlineUserArgs());
+        ParseCommandLine(CmdArgs.All);
         GameSettings.Changed += OnSettingsChanged;
         EvaluateAuthority(force: true);
 
