@@ -131,6 +131,15 @@ src/Audio/ChipVoice      quick  --soundcheck test_output/soundcheck
 src/Audio/Nes2A03Voice   quick  --soundcheck test_output/soundcheck
 src/Audio/Sid6581Voice   quick  --soundcheck test_output/soundcheck
 src/Audio/Ym2612Voice    quick  --soundcheck test_output/soundcheck
+# piers and landings (#377): the fixture's landing planned like the real ones, the steamer at its berth, pier -> plank -> deck and back, a boat's driver onto a jetty
+src/World/Landings       quick  --steamercheck pier --chunks fixture:lake
+src/World/SteamerBerth   quick  --steamercheck pier --chunks fixture:lake
+src/Terrain/PierMesh     quick  --steamercheck pier --chunks fixture:lake
+src/Terrain/ChunkManager quick  --steamercheck pier --chunks fixture:lake
+src/Terrain/Fixture/     quick  --steamercheck pier --chunks fixture:lake
+src/Player/FootPlayer.Pi quick  --steamercheck pier --chunks fixture:lake
+src/Player/SteamerCheck  quick  --steamercheck pier --chunks fixture:lake
+tools/TerrainFormat/Land quick  --steamercheck pier --chunks fixture:lake
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke

@@ -2473,8 +2473,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
         if (aisle is { } spot) StandIn(spot, state.Velocity, (door, right, side, frame, vehicle));
         else GlobalPosition = FindExit(door, right, side, frame, vehicle, grounded);
-        // over the side of a boat: into the water beside it, swimming (#302, #301)
-        if (vehicle is Boat && aisle == null) IntoWater(GlobalPosition, state.Velocity with { Y = 0 } * 0.5f);
+        // over the side of a boat: onto a pier or jetty alongside (#377), else into the water beside
+        // it, swimming (#302, #301)
+        if (vehicle is Boat && aisle == null && !StepOntoPier(door, right, side))
+            IntoWater(GlobalPosition, state.Velocity with { Y = 0 } * 0.5f);
     }
 
     /// <summary>

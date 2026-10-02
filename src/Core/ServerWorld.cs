@@ -94,6 +94,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = false };
         _chunks.Initialize(source, origin, manifest, null);
         if (fallback != null) _chunks.UseFallback(fallback, source.Invalidate);
+        // the landings (#377): where the steamer lies; the piers are the clients' (no collision here)
+        World.Landings.Use(await World.Landings.LoadAsync(source));
         AddChild(_chunks);
         // the water (#299): the server answers water queries too, and owns the sea state
         World.WaterField.Bind(_chunks);
@@ -254,6 +256,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 SuggestedOriginLv95 = new Lv95Point { E = origin.E, N = origin.N },
             }.ToJson());
+        // the landings this server uses (#377), whatever its chunk directory holds
+        if (World.Landings.Current is { } landings && (landings.Landings.Count > 0 || landings.Jetties.Count > 0))
+            _streamer.LandingsOverride = System.Text.Encoding.UTF8.GetBytes(landings.ToJson());
         if (ParseStreamBandwidth() is { } megabytesPerSecond)
         {
             _streamer.BytesPerSecondPerPeer = (int)(megabytesPerSecond * 1024 * 1024);
