@@ -18,6 +18,8 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 
 ## Gotchas
 
+- `perf-pose-mesh-cache` — Never a new ArrayMesh per frame: rebuild in place (`into:`) only when the pose key changes, remote figures 15 Hz far/off-view, cranks/legs/drivers cached by quantised pose (#221)
+- `perf-shared-materials` — `HumanMeshBuilder.Material()` is one shared instance: never modify it, a variant is its own material (#221)
 - `stopped-figure-slow-walk` — A stopped figure is not a slow walk: `HumanMeshBuilder.Cadence` has a floor — it must, or a figure inching forward...
 - `gait-solved-from-no-slip` — A gait is solved from the no-slip constraint, and the arithmetic has two traps
 - `avatar-meshes-authored-facing-z` — Avatar meshes are authored facing +Z; a Godot node faces −Z

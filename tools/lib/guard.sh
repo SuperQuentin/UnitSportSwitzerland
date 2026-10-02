@@ -69,8 +69,9 @@ _guard_stale_reason() {
   local pid now beat started hold
   pid=$(_guard_lock_pid); now=$(date +%s)
   if [ -z "$pid" ]; then
-    # the pid file is written right after mkdir: only stale once the dir has stayed empty a while
-    [ $(( now - $(_guard_mtime "$GUARD_LOCK_DIR") )) -ge 10 ] && echo "no owner recorded"
+    # the pid file is written right after mkdir; 60 s, not less: a hand-written lock loop or a busy
+    # machine can be slow to write it, and taking a live lock over runs two heavy jobs at once
+    [ $(( now - $(_guard_mtime "$GUARD_LOCK_DIR") )) -ge 60 ] && echo "no owner recorded for 60 s"
     return
   fi
   if ! kill -0 "$pid" 2>/dev/null; then echo "owner PID $pid is gone"; return; fi
