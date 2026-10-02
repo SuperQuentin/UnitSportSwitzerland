@@ -4,27 +4,50 @@ using System.Text;
 namespace UnitSport.Tools.Preprocessor;
 
 /// <summary>
-/// Minimal OpenStreetMap PBF reader: node positions and tagged ways, nothing else (no relations,
-/// no metadata). The format is a length-prefixed sequence of zlib blobs holding protobuf blocks
-/// (https://wiki.openstreetmap.org/wiki/PBF_Format); decoding the handful of fields we need by
-/// hand is smaller than a package, needs no GDAL, and decodes blocks in parallel. OsmSharp 6.2
-/// was measured on the same Switzerland extract: 238 s single-threaded and 33 transitive
-/// packages (protobuf-net 2.3 plus netstandard1.x shims), against this file's parallel decode.
+/// Minimal OpenStreetMap PBF reader: node positions, tagged ways, the tags of chosen nodes, and
+/// chosen relations with their members (no metadata). The format is a length-prefixed sequence of
+/// zlib blobs holding protobuf blocks (https://wiki.openstreetmap.org/wiki/PBF_Format); decoding
+/// the handful of fields we need by hand is smaller than a package, needs no GDAL, and decodes
+/// blocks in parallel. OsmSharp 6.2 was measured on the same Switzerland extract: 238 s
+/// single-threaded and 33 transitive packages (protobuf-net 2.3 plus netstandard1.x shims),
+/// against this file's parallel decode.
 /// </summary>
 public static class PbfReader
 {
     public sealed record Way(long Id, long[] Refs, Dictionary<string, string> Tags);
 
+    /// <summary>A kept tagged node (signals, bike boxes); its position is in <see cref="Data.Nodes"/> too.</summary>
+    public sealed record Node(long Id, double Lat, double Lon, Dictionary<string, string> Tags);
+
+    public enum MemberType : byte { Node = 0, Way = 1, Relation = 2 }
+
+    public readonly record struct Member(MemberType Type, long Ref, string Role);
+
+    public sealed record Relation(long Id, Member[] Members, Dictionary<string, string> Tags);
+
     /// <summary>
-    /// Reads the whole file. <paramref name="keepNode"/> filters positions (lat, lon in degrees);
-    /// <paramref name="keepWay"/> sees a way's tags and decides; <paramref name="tagKeys"/> is the
-    /// only tags a kept way retains. Result order is the file's order, so it is deterministic.
+    /// What to keep. <see cref="KeepNode"/> filters positions (lat, lon in degrees); each Keep*
+    /// predicate sees an element's tags, already narrowed to its *Tags key set, and decides. A
+    /// null node or relation predicate keeps none of them. A tagged node must also pass KeepNode.
     /// </summary>
-    public static (Dictionary<long, (double Lat, double Lon)> Nodes, List<Way> Ways) Read(string path, int jobs,
-        Func<double, double, bool> keepNode, Func<Dictionary<string, string>, bool> keepWay, IReadOnlySet<string> tagKeys)
+    public sealed class Filter
     {
-        var nodes = new Dictionary<long, (double, double)>();
-        var ways = new List<Way>();
+        public required Func<double, double, bool> KeepNode { get; init; }
+        public required Func<Dictionary<string, string>, bool> KeepWay { get; init; }
+        public required IReadOnlySet<string> WayTags { get; init; }
+        public Func<Dictionary<string, string>, bool>? KeepTaggedNode { get; init; }
+        public IReadOnlySet<string> NodeTags { get; init; } = new HashSet<string>();
+        public Func<Dictionary<string, string>, bool>? KeepRelation { get; init; }
+        public IReadOnlySet<string> RelationTags { get; init; } = new HashSet<string>();
+    }
+
+    public sealed record Data(Dictionary<long, (double Lat, double Lon)> Nodes, List<Way> Ways,
+        List<Node> TaggedNodes, List<Relation> Relations);
+
+    /// <summary>Reads the whole file. Result order is the file's order, so it is deterministic.</summary>
+    public static Data Read(string path, int jobs, Filter filter)
+    {
+        var data = new Data(new Dictionary<long, (double, double)>(), new List<Way>(), new List<Node>(), new List<Relation>());
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
         var batch = new List<byte[]>();
         while (true)
@@ -33,19 +56,23 @@ public static class PbfReader
             if (blob != null) batch.Add(blob);
             if (batch.Count < jobs * 8 && blob != null) continue; // bounded: each inflated block is ~1 MB
 
-            var results = new (List<(long, double, double)> N, List<Way> W)[batch.Count];
+            var results = new Block[batch.Count];
             Parallel.For(0, batch.Count, new ParallelOptions { MaxDegreeOfParallelism = jobs },
-                i => results[i] = DecodeBlock(Inflate(batch[i]), keepNode, keepWay, tagKeys));
-            foreach (var (n, w) in results)
+                i => results[i] = DecodeBlock(Inflate(batch[i]), filter));
+            foreach (var b in results)
             {
-                foreach (var (id, lat, lon) in n) nodes[id] = (lat, lon);
-                ways.AddRange(w);
+                foreach (var (id, lat, lon) in b.Nodes) data.Nodes[id] = (lat, lon);
+                data.Ways.AddRange(b.Ways);
+                data.TaggedNodes.AddRange(b.Tagged);
+                data.Relations.AddRange(b.Relations);
             }
             batch.Clear();
             if (blob == null) break;
         }
-        return (nodes, ways);
+        return data;
     }
+
+    private sealed record Block(List<(long, double, double)> Nodes, List<Way> Ways, List<Node> Tagged, List<Relation> Relations);
 
     /// <summary>The next OSMData blob, skipping the header block; null at end of file.</summary>
     private static byte[]? NextDataBlob(Stream s)
@@ -93,8 +120,7 @@ public static class PbfReader
         return output;
     }
 
-    private static (List<(long, double, double)>, List<Way>) DecodeBlock(byte[] block,
-        Func<double, double, bool> keepNode, Func<Dictionary<string, string>, bool> keepWay, IReadOnlySet<string> tagKeys)
+    private static Block DecodeBlock(byte[] block, Filter filter)
     {
         var strings = new List<string>();
         var groups = new List<(int Start, int Length)>();
@@ -116,12 +142,29 @@ public static class PbfReader
                 default: r.Skip(w); break;
             }
 
-        var nodes = new List<(long, double, double)>();
-        var ways = new List<Way>();
-        void AddNode(long id, long lat, long lon)
+        // which strings of this block are node tag keys we keep: almost every node carries none of
+        // them, so a node's key/value pairs only become a dictionary when one shows up
+        bool wantNodeTags = filter.KeepTaggedNode != null;
+        var nodeKey = new bool[strings.Count];
+        if (wantNodeTags)
+            for (int i = 0; i < strings.Count; i++) nodeKey[i] = filter.NodeTags.Contains(strings[i]);
+
+        var result = new Block(new(), new(), new(), new());
+        Dictionary<string, string> Tags(List<long> keys, List<long> vals, IReadOnlySet<string> wanted)
+        {
+            var tags = new Dictionary<string, string>();
+            for (int i = 0; i < keys.Count && i < vals.Count; i++)
+                if (wanted.Contains(strings[(int)keys[i]])) tags[strings[(int)keys[i]]] = strings[(int)vals[i]];
+            return tags;
+        }
+        void AddNode(long id, long lat, long lon, List<long>? keys, List<long>? vals)
         {
             double la = 1e-9 * (latOffset + granularity * lat), lo = 1e-9 * (lonOffset + granularity * lon);
-            if (keepNode(la, lo)) nodes.Add((id, la, lo));
+            if (!filter.KeepNode(la, lo)) return;
+            result.Nodes.Add((id, la, lo));
+            if (keys == null || vals == null) return;
+            var tags = Tags(keys, vals, filter.NodeTags);
+            if (tags.Count > 0 && filter.KeepTaggedNode!(tags)) result.Tagged.Add(new Node(id, la, lo, tags));
         }
 
         foreach (var (start, length) in groups)
@@ -134,28 +177,43 @@ public static class PbfReader
                     {
                         var n = new Pb(g.Bytes());
                         long id = 0, lat = 0, lon = 0;
+                        List<long> keys = [], vals = [];
                         while (n.Next(out int nf, out int nw))
                             if (nf == 1) id = Pb.Zig(n.Varint());
+                            else if (nf == 2 && wantNodeTags) n.PackedUnsigned(keys);
+                            else if (nf == 3 && wantNodeTags) n.PackedUnsigned(vals);
                             else if (nf == 8) lat = Pb.Zig(n.Varint());
                             else if (nf == 9) lon = Pb.Zig(n.Varint());
                             else n.Skip(nw);
-                        AddNode(id, lat, lon);
+                        bool any = keys.Any(k => nodeKey[(int)k]);
+                        AddNode(id, lat, lon, any ? keys : null, any ? vals : null);
                         break;
                     }
                     case 2: // DenseNodes: delta-coded parallel arrays
                     {
                         var d = new Pb(g.Bytes());
-                        List<long> ids = [], lats = [], lons = [];
+                        List<long> ids = [], lats = [], lons = [], kv = [];
                         while (d.Next(out int df, out int dw))
                             if (df == 1) d.PackedSigned(ids);
                             else if (df == 8) d.PackedSigned(lats);
                             else if (df == 9) d.PackedSigned(lons);
+                            else if (df == 10 && wantNodeTags) d.PackedUnsigned(kv); // keys_vals: k, v, k, v, ..., 0 per node
                             else d.Skip(dw);
                         long id = 0, lat = 0, lon = 0;
+                        int j = 0;
+                        List<long> keys = [], vals = [];
                         for (int i = 0; i < ids.Count; i++)
                         {
                             id += ids[i]; lat += lats[i]; lon += lons[i];
-                            AddNode(id, lat, lon);
+                            keys.Clear(); vals.Clear();
+                            bool any = false;
+                            for (; j + 1 < kv.Count && kv[j] != 0; j += 2)
+                            {
+                                any |= nodeKey[(int)kv[j]];
+                                keys.Add(kv[j]); vals.Add(kv[j + 1]);
+                            }
+                            j++; // the 0 that ends this node's pairs
+                            AddNode(id, lat, lon, any ? keys : null, any ? vals : null);
                         }
                         break;
                     }
@@ -170,20 +228,40 @@ public static class PbfReader
                             else if (wf == 3) wr.PackedUnsigned(vals);
                             else if (wf == 8) wr.PackedSigned(refs);
                             else wr.Skip(ww);
-                        var tags = new Dictionary<string, string>();
-                        for (int i = 0; i < keys.Count; i++)
-                            if (tagKeys.Contains(strings[(int)keys[i]])) tags[strings[(int)keys[i]]] = strings[(int)vals[i]];
-                        if (!keepWay(tags)) break;
+                        var tags = Tags(keys, vals, filter.WayTags);
+                        if (!filter.KeepWay(tags)) break;
                         var nd = new long[refs.Count];
                         long acc = 0;
                         for (int i = 0; i < refs.Count; i++) nd[i] = acc += refs[i];
-                        ways.Add(new Way(id, nd, tags));
+                        result.Ways.Add(new Way(id, nd, tags));
+                        break;
+                    }
+                    case 4 when filter.KeepRelation != null: // Relation: members as parallel arrays, ids delta-coded
+                    {
+                        var rr = new Pb(g.Bytes());
+                        long id = 0;
+                        List<long> keys = [], vals = [], roles = [], memids = [], types = [];
+                        while (rr.Next(out int rf, out int rw))
+                            if (rf == 1) id = (long)rr.Varint();
+                            else if (rf == 2) rr.PackedUnsigned(keys);
+                            else if (rf == 3) rr.PackedUnsigned(vals);
+                            else if (rf == 8) rr.PackedUnsigned(roles);
+                            else if (rf == 9) rr.PackedSigned(memids);
+                            else if (rf == 10) rr.PackedUnsigned(types);
+                            else rr.Skip(rw);
+                        var tags = Tags(keys, vals, filter.RelationTags);
+                        if (!filter.KeepRelation(tags)) break;
+                        var members = new Member[Math.Min(memids.Count, Math.Min(roles.Count, types.Count))];
+                        long acc = 0;
+                        for (int i = 0; i < members.Length; i++)
+                            members[i] = new Member((MemberType)types[i], acc += memids[i], strings[(int)roles[i]]);
+                        result.Relations.Add(new Relation(id, members, tags));
                         break;
                     }
                     default: g.Skip(w); break;
                 }
         }
-        return (nodes, ways);
+        return result;
     }
 
     /// <summary>Protobuf wire-format cursor over a span.</summary>

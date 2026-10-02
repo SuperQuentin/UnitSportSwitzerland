@@ -476,6 +476,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             return car.Alert >= car.Reaction;
         }
         target = Mathf.Min(target, GiveWay(car, obstacles));
+        target = Mathf.Min(target, ObeySignal(car));   // traffic lights (#353)
 
         bool sampled = false;
         foreach (var (oPos, oVel) in obstacles)
@@ -628,7 +629,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         if (!car.Route.Advance(car.Speed * dt, leg => NextRoad(leg))) car.Stuck += 5f;
         car.Route.Trim(90f);   // the road behind it too: whoever is closing from behind is found on it
         float pull = car.Startle > 0f ? Mathf.Clamp(car.Pull + 0.12f * Mathf.Sin(car.Startle * 14f), 0f, maxPull) : car.Pull;
-        car.Place(e => KeepRight(e) + pull);
+        car.Lane = Mathf.MoveToward(car.Lane, car.LaneWanted, 1.2f * dt);   // a lane change over ~2.5 s (#353)
+        float lane = car.Lane;
+        car.Place(e => KeepRight(e) + pull + lane);
         car.Vel = dt > 0f ? MathX.Flat(car.Head - before) / dt : Vector3.Zero;
         // where its lane takes it, 0.5 s apart at this speed: a racer reads it to see it coming out of a side road
         for (int k = 0; k < PathSteps; k++) car.Path[k] = car.Route.At(-car.Speed * 0.5f * (k + 1)).Pos;
@@ -687,6 +690,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         car.GivingWay = false;
         var (edge, forward) = car.Route.Legs[car.Route.Leg];
         if ((edge.Yield & (forward ? RoadAttrFlags.YieldAtEnd : RoadAttrFlags.YieldAtStart)) == 0) return float.MaxValue;
+        // a signalised approach (#353): the lights decide, the yield signs are for when they are off
+        if ((forward ? edge.SignalAtEnd : edge.SignalAtStart) is not null) return float.MaxValue;
         float remaining = edge.Length - car.Route.Arc;
         if (remaining > YieldLookAhead) return float.MaxValue;
         var junction = forward ? edge.Points[^1] : edge.Points[0];
@@ -710,6 +715,154 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         float look = 3f + remaining * 0.35f;
         return conflict ? Mathf.Max(0f, (remaining - 2f) * 0.7f) : look;
     }
+
+    // ---- traffic lights (#353) --------------------------------------------------------------
+
+    /// <summary>A car reads the lights this far before the stop line.</summary>
+    private const float SignalLookAhead = 80f;
+
+    /// <summary>On yellow a car stops if it can at this deceleration (m/s²), else it clears the junction.</summary>
+    private const float AmberBrake = 3f;
+
+    /// <summary>
+    /// The speed a car may still do toward the traffic lights its road ends at (#353): it takes the
+    /// group of the lane for its next turn (a pocket's arrow, else the main head) and reads it on
+    /// the server clock, so every peer's traffic stops for the same red. Red or red and yellow: it
+    /// stops half a metre short of the stop line; yellow: it stops if it can at
+    /// <see cref="AmberBrake"/>, else goes; green: it goes. +∞ when no lights are ahead.
+    /// </summary>
+    private float ObeySignal(Vehicle car)
+    {
+        car.AtRed = false;
+        // the next lights on its route within reach: an approach may be a short edge after another
+        // (a split line, a junction just before), read before the car is on it
+        SignalSite? site = null;
+        int arm = 0;
+        float toLine = float.MaxValue, toEnd = 0f, along = 0f;
+        for (int i = car.Route.Leg; i < car.Route.Legs.Count && along < SignalLookAhead; i++)
+        {
+            var (e, f) = car.Route.Legs[i];
+            float rem = i == car.Route.Leg ? e.Length - car.Route.Arc : e.Length;
+            if ((f ? e.SignalAtEnd : e.SignalAtStart) is var (s, a, back))
+            {
+                site = s; arm = a; toEnd = along + rem; toLine = toEnd - back;
+                break;
+            }
+            along += rem;
+        }
+        float before = car.ToLine;
+        car.ToLine = toLine;
+        car.Site = site;
+        car.SiteArm = arm;
+        car.LaneWanted = 0f;
+        if (site is null)
+        {
+            car.ClearingAmber = car.WasAtRed = false;
+            return float.MaxValue;
+        }
+        if (toLine > SignalLookAhead || toLine < -0.5f) return float.MaxValue;
+        var (group, turn) = SignalGroupFor(car, site, arm, toEnd);
+        if (group < 0) return float.MaxValue;
+        car.LaneWanted = LaneFor(site.Plan.Arms[arm], turn, toLine);
+        var aspect = site.Plan.State(group, Net.ClockSync.ServerNow);
+        // crossing the line on red, unless it was already clearing a yellow it could not stop for
+        if (before > 0f && before < SignalLookAhead && toLine <= 0f)
+        {
+            if (aspect is SignalAspect.Red && !car.ClearingAmber) RedRuns++;
+            else LinesCrossed++;
+        }
+        if (aspect is SignalAspect.Green or SignalAspect.FlashingAmber or SignalAspect.Off)
+        {
+            car.ClearingAmber = false;
+            // a left turn from the shared lane gives way to oncoming traffic: it waits at the line
+            if (turn == SignalMoves.Left && site.Plan.Groups[group].Kind == SignalGroupKind.Car && toLine > 0f && Oncoming(car, site, arm))
+                return StopWithin(toLine - 0.5f);
+            return float.MaxValue;
+        }
+        // first sight of it too close to stop even hard (a car just spawned or turned in): it clears
+        bool firstSight = before >= SignalLookAhead;
+        if (car.ClearingAmber || (aspect == SignalAspect.Amber || firstSight)
+            && car.Speed * car.Speed / (2f * (firstSight ? 6f : AmberBrake)) > toLine)
+        {
+            car.ClearingAmber = true;
+            return float.MaxValue;
+        }
+        if (!car.WasAtRed) RedStops++;
+        car.AtRed = car.WasAtRed = true;
+        return StopWithin(toLine - 0.5f);
+    }
+
+    /// <summary>The group for a car's next turn at a signalised junction: where its route goes 15 m past the end of its road.</summary>
+    private static (int Group, SignalMoves Turn) SignalGroupFor(Vehicle car, SignalSite site, int arm, float remaining)
+    {
+        var end = car.Route.At(-remaining).Pos;
+        var past = car.Route.At(-(remaining + 15f)).Pos;
+        var way = new Vector3(past.X - end.X, 0f, past.Z - end.Z);
+        var arms = site.Plan.Arms;
+        int exit = -1;
+        float best = -2f;
+        for (int k = 0; k < arms.Count; k++)
+        {
+            if (k == arm || !arms[k].Out) continue;
+            float d = site.Out[k].Dot(way);
+            if (d > best) { best = d; exit = k; }
+        }
+        var turn = exit < 0 || way.LengthSquared() < 1f ? SignalMoves.Through : SignalPlan.Turn(arms, arm, exit);
+        int any = -1;
+        for (int g = 0; g < site.Plan.Groups.Count; g++)
+        {
+            var group = site.Plan.Groups[g];
+            if (group.Arm != arm || (group.Moves & turn) == 0) continue;
+            if (group.Kind is SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow) return (g, turn);
+            if (group.Kind == SignalGroupKind.Car && any < 0) any = g;
+        }
+        return (any, turn);
+    }
+
+    /// <summary>
+    /// How far right of its usual line a car drives on a signalised approach (#353): the pockets
+    /// (#123, #348) widen the road on the right and through traffic moves onto the widening, so a
+    /// car not turning left moves a lane over where an arm has a left pocket, and one turning right
+    /// a lane further where it has a right pocket; both over the 20 m before the storage
+    /// (the shortest pocket, so the move is done in every one).
+    /// </summary>
+    private static float LaneFor(SignalArm arm, SignalMoves turn, float toLine)
+    {
+        float shift = 0f;
+        if (arm.LeftPocket && turn != SignalMoves.Left) shift += PocketLane * Mathf.Clamp((45f - toLine) / 20f, 0f, 1f);
+        if (arm.RightPocket && turn == SignalMoves.Right) shift += PocketLane * Mathf.Clamp((35f - toLine) / 15f, 0f, 1f);
+        return shift;
+    }
+
+    /// <summary>A pocket's lane width (#123): the through lane moves over by it.</summary>
+    private const float PocketLane = 3f;
+
+    /// <summary>Whether a car comes the other way through a signalised junction: on the opposite approach, near its line and moving, or in the junction.</summary>
+    private bool Oncoming(Vehicle car, SignalSite site, int arm)
+    {
+        int opposite = -1;
+        float most = 0f;
+        for (int k = 0; k < site.Out.Length; k++)
+        {
+            float d = -site.Out[k].Dot(site.Out[arm]);
+            if (k != arm && d > most) { most = d; opposite = k; }
+        }
+        if (opposite < 0 || most < 0.7f) return false;
+        foreach (var other in _cars)
+            if (other != car && other.Site == site && other.SiteArm == opposite && other.ToLine < 40f && other.ToLine > -12f
+                && other.Speed > 1f && !other.AtRed)
+                return true;
+        return false;
+    }
+
+    /// <summary>Cars waiting at a red light now; cars that crossed a stop line on red since the start (#353).</summary>
+    public int AtRedCars => _cars.Count(c => c.AtRed);
+    /// <summary>Signalised approaches in the road graph (#353).</summary>
+    public int SignalApproaches => _roads?.Edges.Count(e => e.SignalAtEnd is not null || e.SignalAtStart is not null) ?? 0;
+    public int RedRuns { get; private set; }
+    /// <summary>Times a car came to read red and stopped for it, and stop lines crossed on green or a cleared yellow (#353).</summary>
+    public int RedStops { get; private set; }
+    public int LinesCrossed { get; private set; }
 
     /// <summary>A car itself on a yielding approach to that junction (waiting at its own line or about to).</summary>
     private static bool IsWaiting(Vehicle v, Vector3 junction)
@@ -915,6 +1068,13 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public float Speed;
         public float Stuck;
         public bool GivingWay;
+        /// <summary>Stopping for a red light (#353), and metres to the stop line it reads (+∞ none).</summary>
+        public bool AtRed, ClearingAmber, WasAtRed;
+        /// <summary>The lights it reads (#353), on which arm, and its lane: metres right of its usual line, and the target.</summary>
+        public SignalSite? Site;
+        public int SiteArm;
+        public float Lane, LaneWanted;
+        public float ToLine = float.MaxValue;
         public float Lift;
         public float Offset;
         public Vector3 Head;

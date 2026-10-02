@@ -38,6 +38,14 @@ public sealed class LaneEdge
     /// </summary>
     public RoadAttrFlags Yield { get; init; }
 
+    /// <summary>
+    /// The traffic lights this edge's last (<see cref="SignalAtEnd"/>) or first point
+    /// (<see cref="SignalAtStart"/>) approaches (#353): the junction, the arm it comes in on, and
+    /// how far before that end the stop line lies. Null where no signalised approach ends.
+    /// </summary>
+    public (SignalSite Site, int Arm, float StopBack)? SignalAtEnd { get; set; }
+    public (SignalSite Site, int Arm, float StopBack)? SignalAtStart { get; set; }
+
     public float Length => Cumulative[^1];
 
     /// <summary>The origin moved (#185): the line is somewhere else in world space, the same shape.</summary>
@@ -71,6 +79,16 @@ public sealed class LaneEdge
 }
 
 /// <summary>
+/// A signalised junction as traffic sees it (#353): its plan (#349, shared with the lamps, a
+/// function of the server clock) and, per arm, the way out of the junction along it (world, flat).
+/// </summary>
+public sealed class SignalSite
+{
+    public required SignalPlan Plan { get; init; }
+    public required Vector3[] Out { get; init; }
+}
+
+/// <summary>
 /// The drivable roads (or the railway) around the player, stitched into a graph traffic can
 /// follow. Built from the same <c>.road</c> tiles the renderer draws, straight into world
 /// coordinates, with endpoints snapped onto a half-metre lattice so a line cut at a kilometre
@@ -97,6 +115,12 @@ public sealed class LaneGraph
     private const float EmbeddedRailSink = 0.16f;
 
     private LaneGraph(OriginFrame frame) => Frame = frame;
+
+    /// <summary>The traffic lights of the tiles it was built from (#353).</summary>
+    public List<SignalSite> Signals { get; } = new();
+
+    /// <summary>An approach's stop line is matched to an edge end this close to it.</summary>
+    private const float StopReach = 15f;
 
     /// <summary>The snap cell of an LV95 point, laid out like world X/Z (east, then south).</summary>
     private static long Key(double e, double n) =>
@@ -143,7 +167,49 @@ public sealed class LaneGraph
                 g.Link(edge.KeyEnd, edge, false);
             }
         g.OrientDivided();
+        foreach (var tile in tiles)
+            foreach (var signal in tile.Signals)
+                g.AttachSignal(signal, tile.Id, origin);
         return g;
+    }
+
+    /// <summary>
+    /// Ties each signalised approach (#353) to the edge that ends at it: the end nearest its stop
+    /// line, of an edge driven toward the junction along the arm. Where the stop line lies before
+    /// that end is what a car stops at.
+    /// </summary>
+    private void AttachSignal(RoadSignal signal, TileId tile, OriginFrame origin)
+    {
+        var plan = signal.Plan;
+        var outs = new Vector3[plan.Arms.Count];
+        for (int a = 0; a < outs.Length; a++)
+            outs[a] = new Vector3((float)Math.Cos(plan.Arms[a].Heading), 0f, -(float)Math.Sin(plan.Arms[a].Heading));
+        var site = new SignalSite { Plan = plan, Out = outs };
+        Signals.Add(site);
+        for (int a = 0; a < outs.Length; a++)
+        {
+            if (!plan.Arms[a].In || float.IsNaN(signal.Stops[a * 3])) continue;
+            var stop = origin.ToWorld(tile.MinE + signal.Stops[a * 3], tile.MaxN - signal.Stops[a * 3 + 2], signal.Stops[a * 3 + 1]);
+            LaneEdge? best = null;
+            bool bestAtEnd = false;
+            float bestDist = StopReach, bestBack = 0f;
+            foreach (var e in Edges)
+                foreach (bool atEnd in (ReadOnlySpan<bool>)[true, false])
+                {
+                    if (atEnd ? e.OneWay < 0 : e.OneWay > 0) continue;   // driven toward that end
+                    var end = atEnd ? e.Points[^1] : e.Points[0];
+                    float d = new Vector2(end.X - stop.X, end.Z - stop.Z).Length();
+                    if (d >= bestDist) continue;
+                    var dir = atEnd ? e.Sample(e.Length).Tangent : -e.Sample(0f).Tangent;
+                    var flat = new Vector3(dir.X, 0f, dir.Z).Normalized();
+                    if (flat.Dot(-outs[a]) < 0.7f) continue;   // driving into the junction along this arm
+                    best = e; bestAtEnd = atEnd; bestDist = d;
+                    bestBack = (end - stop).Dot(flat);
+                }
+            if (best is null) continue;
+            if (bestAtEnd) best.SignalAtEnd = (site, a, bestBack);
+            else best.SignalAtStart = (site, a, bestBack);
+        }
     }
 
     private void Link(long key, LaneEdge edge, bool atStart)

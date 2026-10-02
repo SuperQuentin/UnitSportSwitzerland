@@ -80,6 +80,7 @@ public static partial class TileRewriter
         public readonly CrossSectionPlanner.Stats Carriageways = new();
         public readonly RoundaboutShaper.Stats Roundabouts = new();
         public readonly TurnLaneStats TurnLanes = new();
+        public readonly SignalStats Signals = new();
         /// <summary>Terrain under each shifted carriageway vertex vs under the TLM line it came from.</summary>
         public HeightAudit Shifted = HeightAudit.Empty;
         public int MaxBytes;
@@ -105,7 +106,7 @@ public static partial class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Bikes.Format();
+                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Signals.Format() + "\n" + Bikes.Format();
         }
     }
 
@@ -241,6 +242,11 @@ public static partial class TileRewriter
         if (rewritten.Count > 0) log($"  skipping {rewritten.Count} rewritten tiles with no raw input");
 
         var overlay = options.OsmOverlay is { } overlayPath ? OsmOverlayReader.TryLoad(overlayPath) : null;
+        var cantons = Cantons.Find();   // pedestrian heads per canton (#348)
+        // OSM traffic signals (#347), beside the overlay
+        var signalSites = SignalSites.From(options.OsmOverlay is { } nodesBeside
+            ? OsmNodesReader.TryLoad(Path.Combine(Path.GetDirectoryName(nodesBeside) ?? ".", OsmNodesReader.FileName)) : null);
+        if (signalSites is not null) log($"  OSM traffic signals: {signalSites.Count:N0} junction signals");
         if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
 
         var wanted = new HashSet<TileId>(targets);
@@ -320,6 +326,7 @@ public static partial class TileRewriter
             var caps = new Dictionary<TileId, List<RoadJunction>>();
             var paint = new Dictionary<TileId, List<RoadPaint>>();
             var signs = new Dictionary<TileId, List<RoadPointProp>>();
+            var signalRecords = new Dictionary<TileId, List<RoadSignal>>();   // traffic lights (#348)
             var bikeBridges = new Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>>();   // paths through junctions (#120)
 
             // the full-res terrain of the block and its halo: the height audit and the walls (#125)
@@ -342,7 +349,10 @@ public static partial class TileRewriter
                     Analyze: options.Measure,
                     JoinNearEnds: MayJoinNearEnd));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
-                var priority = PlanPriority(result);
+                // traffic lights: from OSM where the overlay covers a junction, else where two main
+                // roads cross in a dense core (#348)
+                var priority = PlanPriority(result, j => Lights(j, result.Network, field, signalSites,
+                    block.Contains(TileId.FromLv95(j.Centre.X, j.Centre.Y)) ? netStats.Signals : null), netStats.Signals);
                 var bikeLayouts = BikePlanner.StrokeLayouts(result.Network, BikeStrokeKey);   // one path layout per street (#120)
                 var trackPaint = new List<(RoadSegment Segment, TileId Tile, bool Start, bool End)>();
                 var lanePaint = new List<(RoadSegment Segment, TileId Tile, double Station, bool Start, bool End)>();
@@ -502,7 +512,8 @@ public static partial class TileRewriter
                 }
 
                 EmitPriority(priority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
-                EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs, netStats.TurnLanes);
+                var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs, netStats.TurnLanes);
+                EmitSignals(priority, result, pockets, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals);
 
                 // now the streets are cut into their sidewalk pieces (#119); a side that would stand on
                 // a turn lane's widening (#123) moves out past it (#120)
@@ -569,6 +580,7 @@ public static partial class TileRewriter
                         .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl), bridges, netStats.Bikes),   // sidewalk corners (#119)
                         .. bridges.Select(x => x.Band)],
                     PointProps = pointProps,
+                    Signals = signalRecords.TryGetValue(id, out var sg) ? sg : new List<RoadSignal>(),
                 };
                 rails.ClearTrackZones(tile.Paint, id);
                 var bytes = Encode(tile);

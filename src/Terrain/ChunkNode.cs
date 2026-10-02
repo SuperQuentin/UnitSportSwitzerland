@@ -44,6 +44,7 @@ public partial class ChunkNode : Node3D
         _hidden = hidden;
         if (_meshInstance != null) _meshInstance.Visible = Shows(TileLayers.Ground);
         if (_roadInstance != null) _roadInstance.Visible = Shows(TileLayers.Roads);
+        if (_lamps != null) _lamps.Visible = Shows(TileLayers.Roads);
         if (_buildingInstance != null) _buildingInstance.Visible = Shows(TileLayers.Buildings);
         if (_waterInstance != null) _waterInstance.Visible = Shows(TileLayers.Water);
         ApplyTreeDensity();
@@ -165,6 +166,19 @@ public partial class ChunkNode : Node3D
             AddChild(_roadInstance);
         }
         Swap(_roadInstance, mesh);
+    }
+
+    private SignalLamps? _lamps;
+
+    /// <summary>The traffic lights' lenses (#350), replaced with the roads they stand beside; null removes them.</summary>
+    public void SetSignalLamps(SignalBuilder.Lamps? lamps)
+    {
+        _lamps?.QueueFree();
+        _lamps = null;
+        if (lamps == null) return;
+        _lamps = SignalLamps.Create(lamps);
+        _lamps.Visible = Shows(TileLayers.Roads);
+        AddChild(_lamps);
     }
 
     private MeshInstance3D? _buildingInstance;
