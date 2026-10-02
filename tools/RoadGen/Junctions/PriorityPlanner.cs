@@ -118,22 +118,7 @@ public static class PriorityPlanner
     /// </summary>
     public static bool InferSignal(Junction j, RoadNetwork net, Func<RoadLink, LinkInfo?> infoOf, double density)
     {
-        if (density < SignalDensity) return false;
-        var car = new List<(JunctionArm Arm, LinkInfo Info)>();
-        int ins = 0, outs = 0;
-        foreach (var arm in j.Arms)
-        {
-            if (infoOf(net.Links[arm.LinkId]) is not { } info || !IsCarRoad(info.Class) || (info.Flags & RoadFlags.Stairs) != 0) continue;
-            if (info.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Ramp || info.Attributes.Has(RoadAttrFlags.Roundabout)
-                || info.Surface != RoadSurface.Paved || (info.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) return false;
-            car.Add((arm, info));
-            var end = EndAt(net, j, arm);
-            if (end == LinkEnd.End ? info.Attributes.OneWay >= 0 : info.Attributes.OneWay <= 0) ins++;
-            if (Leaves(info, end)) outs++;
-        }
-        // four car arms, and traffic through them (not every arm a one-way road in, as where the
-        // carriageways of a divided road are cut into several nodes)
-        if (car.Count < 4 || ins < 2 || outs < 2) return false;
+        if (density < SignalDensity || SignalShape(j, net, infoOf, 4) is not { } car) return false;
         int roads = 0;
         var used = new bool[car.Count];
         for (int a = 0; a < car.Count; a++)
@@ -149,6 +134,29 @@ public static class PriorityPlanner
             }
         }
         return roads >= 2;
+    }
+
+    /// <summary>
+    /// A junction that can carry traffic lights at all: at least <paramref name="minArms"/> car
+    /// arms, at grade, paved, no roundabout or motorway class, at least two arms in and two out
+    /// (not every arm a one-way road in, as where a divided road's carriageways are cut into
+    /// several nodes). Its car arms, or null.
+    /// </summary>
+    public static List<(JunctionArm Arm, LinkInfo Info)>? SignalShape(Junction j, RoadNetwork net, Func<RoadLink, LinkInfo?> infoOf, int minArms)
+    {
+        var car = new List<(JunctionArm Arm, LinkInfo Info)>();
+        int ins = 0, outs = 0;
+        foreach (var arm in j.Arms)
+        {
+            if (infoOf(net.Links[arm.LinkId]) is not { } info || !IsCarRoad(info.Class) || (info.Flags & RoadFlags.Stairs) != 0) continue;
+            if (info.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Ramp || info.Attributes.Has(RoadAttrFlags.Roundabout)
+                || info.Surface != RoadSurface.Paved || (info.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) return null;
+            car.Add((arm, info));
+            var end = EndAt(net, j, arm);
+            if (end == LinkEnd.End ? info.Attributes.OneWay >= 0 : info.Attributes.OneWay <= 0) ins++;
+            if (Leaves(info, end)) outs++;
+        }
+        return car.Count < minArms || ins < 2 || outs < 2 ? null : car;
     }
 
     public static Plan Decide(Junction j, RoadNetwork net, Func<RoadLink, LinkInfo?> infoOf, bool signal = false)

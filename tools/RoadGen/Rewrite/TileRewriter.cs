@@ -243,6 +243,10 @@ public static partial class TileRewriter
 
         var overlay = options.OsmOverlay is { } overlayPath ? OsmOverlayReader.TryLoad(overlayPath) : null;
         var cantons = Cantons.Find();   // pedestrian heads per canton (#348)
+        // OSM traffic signals (#347), beside the overlay
+        var signalSites = SignalSites.From(options.OsmOverlay is { } nodesBeside
+            ? OsmNodesReader.TryLoad(Path.Combine(Path.GetDirectoryName(nodesBeside) ?? ".", OsmNodesReader.FileName)) : null);
+        if (signalSites is not null) log($"  OSM traffic signals: {signalSites.Count:N0} junction signals");
         if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
 
         var wanted = new HashSet<TileId>(targets);
@@ -345,9 +349,10 @@ public static partial class TileRewriter
                     Analyze: options.Measure,
                     JoinNearEnds: MayJoinNearEnd));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
-                // traffic lights where two main roads cross in a dense core (#348)
-                var priority = PlanPriority(result, j => PriorityPlanner.InferSignal(j, result.Network, InfoOf,
-                    field.Density(j.Centre.X, j.Centre.Y)), netStats.Signals);
+                // traffic lights: from OSM where the overlay covers a junction, else where two main
+                // roads cross in a dense core (#348)
+                var priority = PlanPriority(result, j => Lights(j, result.Network, field, signalSites,
+                    block.Contains(TileId.FromLv95(j.Centre.X, j.Centre.Y)) ? netStats.Signals : null), netStats.Signals);
                 var bikeLayouts = BikePlanner.StrokeLayouts(result.Network, BikeStrokeKey);   // one path layout per street (#120)
                 var trackPaint = new List<(RoadSegment Segment, TileId Tile, bool Start, bool End)>();
                 var lanePaint = new List<(RoadSegment Segment, TileId Tile, double Station, bool Start, bool End)>();

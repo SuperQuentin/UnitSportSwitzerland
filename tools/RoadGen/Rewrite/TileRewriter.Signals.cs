@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Text;
 using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.Geometry;
+using UnitSport.Tools.RoadGen.Import;
 using UnitSport.Tools.RoadGen.Junctions;
 using UnitSport.Tools.RoadGen.Meshing;
 using UnitSport.Tools.RoadGen.Network;
@@ -30,6 +31,22 @@ public static partial class TileRewriter
     private const double SignalStopSetback = 3.0;
 
     /// <summary>
+    /// A link this short between two signalised junction nodes is inside one junction (a large
+    /// junction is several TLM nodes, e.g. round tram tracks or a divided road's carriageways):
+    /// no stop line on it, and it is not an approach (#348).
+    /// </summary>
+    private const double InternalLinkM = 30.0;
+
+    private static bool Internal(RoadLink link, int node, HashSet<int> signalNodes)
+    {
+        int other = link.StartNode == node ? link.EndNode : link.StartNode;
+        if (other == node || !signalNodes.Contains(other)) return false;
+        double length = 0;
+        for (int i = 1; i < link.Centreline.Count; i++) length += link.Centreline[i].DistanceTo(link.Centreline[i - 1]);
+        return length < InternalLinkM;
+    }
+
+    /// <summary>
     /// How much further out than its middle a skewed mouth reaches along the arm: a stop line
     /// square to the road stands that much further back, so none of it lies in the junction (#348).
     /// </summary>
@@ -43,20 +60,103 @@ public static partial class TileRewriter
     public sealed class SignalStats
     {
         public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, RightPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
+        /// <summary>Where OSM decides, what the inference rule would have said: both, rule only, OSM only (#348 tuning).</summary>
+        public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
+        public readonly List<string> InvalidExamples = new();
         public readonly SortedDictionary<int, int> Cycles = new();
 
-        public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    traffic lights (#348): {Junctions:N0} junctions ({Inferred:N0} inferred, {FromData:N0} from data), {Arms:N0} arms, {Approaches:N0} approaches, " +
-            $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, " +
-            $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}\n");
+        public string Format()
+        {
+            var c = CultureInfo.InvariantCulture;
+            var sb = new StringBuilder();
+            sb.Append(c, $"    traffic lights (#348): {Junctions:N0} junctions ({Inferred:N0} inferred, {FromData:N0} from data), {Arms:N0} arms, {Approaches:N0} approaches, ");
+            sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
+            sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}").AppendLine();
+            sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes").AppendLine();
+            foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
+            return sb.ToString();
+        }
     }
 
-    private static PriorityResult PlanPriority(RoadGenResult result, Func<Junction, bool> signal, SignalStats stats)
+    /// <summary>Why a junction has traffic lights: none, the inference rule, or OSM data (#347).</summary>
+    private enum SignalSource : byte { None, Inferred, Data }
+
+    /// <summary>
+    /// Where a junction gets traffic lights (#348). Data first: where most of its car arms were
+    /// matched to OSM ways (the overlay covers it) and the overlay's signal file exists, it has
+    /// lights only if OSM has <c>highway=traffic_signals</c> at it (#347: on the junction's node, or
+    /// on an approach of one of its arms' TLM lines, anchored at that line's end), on any junction
+    /// shape that can carry them (a T too). Elsewhere the inference rule
+    /// (<see cref="PriorityPlanner.InferSignal"/>).
+    /// </summary>
+    private static SignalSource Lights(Junction j, RoadNetwork net, UrbanField field, SignalSites? sites, SignalStats? stats = null)
+    {
+        var car = j.Arms.Select(a => net.Links[a.LinkId].Tag as Source)
+            .Where(s => s is not null && PriorityPlanner.IsCarRoad(s.Segment.Class)).ToList();
+        bool covered = sites is not null && car.Count > 0 && car.Count(s => s!.Line.Osm is not null) * 2 >= car.Count;
+        bool rule = PriorityPlanner.InferSignal(j, net, InfoOf, field.Density(j.Centre.X, j.Centre.Y));
+        if (!covered) return rule ? SignalSource.Inferred : SignalSource.None;
+        var uuids = car.Select(s => s!.Key?.Uuid).Where(u => u is not null).ToHashSet();
+        bool osm = sites!.At(j.Centre, uuids!) && PriorityPlanner.SignalShape(j, net, InfoOf, 3) is not null;
+        if (stats is not null)
+        {
+            if (rule && osm) stats.RuleAndOsm++;
+            else if (rule) stats.RuleOnly++;
+            else if (osm) stats.OsmOnly++;
+        }
+        return osm ? SignalSource.Data : SignalSource.None;
+    }
+
+    /// <summary>
+    /// OSM junction signals (#347, <c>osm_nodes.tsv</c>), by where they anchor: a signal on an
+    /// approach at its TLM line's end (the junction it stands before), one on a junction node at
+    /// itself. Pedestrian-only signals (<c>crossing=traffic_signals</c>) do not make a junction.
+    /// </summary>
+    private sealed class SignalSites
+    {
+        /// <summary>A line end or node this close to a junction's centre is that junction's.</summary>
+        private const double Reach = 12.0, Cell = 50.0;
+        private readonly Dictionary<(long, long), List<(Vec2 At, string Uuid, bool Node)>> _grid = new();
+        public int Count { get; private set; }
+
+        public static SignalSites? From(OsmNodesReader? nodes)
+        {
+            if (nodes is null) return null;
+            var sites = new SignalSites();
+            foreach (var e in nodes.All)
+            {
+                if (e.Kind != OsmNodesReader.NodeKind.Signal || e.PedestrianOnly) continue;
+                bool node = e.Junction == OsmNodesReader.JunctionKind.Node;
+                if (!node && (e.Junction != OsmNodesReader.JunctionKind.Approach || e.LineEnd == OsmNodesReader.End.None)) continue;
+                var at = node ? new Vec2(e.E, e.N) : new Vec2(e.EndE, e.EndN);
+                var key = ((long)Math.Floor(at.X / Cell), (long)Math.Floor(at.Y / Cell));
+                if (!sites._grid.TryGetValue(key, out var list)) sites._grid[key] = list = new();
+                list.Add((at, e.Uuid, node));
+                sites.Count++;
+            }
+            return sites;
+        }
+
+        public bool At(Vec2 centre, HashSet<string> armLines)
+        {
+            long cx = (long)Math.Floor(centre.X / Cell), cy = (long)Math.Floor(centre.Y / Cell);
+            for (long x = cx - 1; x <= cx + 1; x++)
+            for (long y = cy - 1; y <= cy + 1; y++)
+                if (_grid.TryGetValue((x, y), out var list))
+                    foreach (var (at, uuid, node) in list)
+                        if (at.DistanceTo(centre) <= Reach && (node || armLines.Contains(uuid))) return true;
+            return false;
+        }
+    }
+
+    private static PriorityResult PlanPriority(RoadGenResult result, Func<Junction, SignalSource> signal, SignalStats stats)
     {
         var r = new PriorityResult();
         foreach (var junction in result.Junctions)
         {
-            bool lights = signal(junction);
+            var source = signal(junction);
+            bool lights = source != SignalSource.None;
+            if (source == SignalSource.Data) r.SignalsFromData.Add(junction.NodeId);
             var plan = PriorityPlanner.Decide(junction, result.Network, InfoOf, lights);
             r.Plans.Add((junction, plan));
             foreach (var arm in plan.Arms)
@@ -72,6 +172,7 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, SignalStats stats)
     {
         var net = result.Network;
+        var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
         foreach (var (junction, plan) in priority.Plans)
         {
             if (plan.Kind != PriorityPlanner.Kind.Signal) continue;
@@ -87,7 +188,9 @@ public static partial class TileRewriter
                 var link = net.Links[plan.Arms[i].LinkId];
                 if (link.Tag is not Source source || InfoOf(link) is not { } info || !PriorityPlanner.IsCarRoad(info.Class)) continue;
                 var arm = junction.Arms[i];
-                bool approach = plan.Arms[i].Approach, leaves = PriorityPlanner.Leaves(info, plan.Arms[i].End);
+                bool inside = Internal(link, junction.NodeId, signalNodes);
+                bool approach = plan.Arms[i].Approach && !inside, leaves = PriorityPlanner.Leaves(info, plan.Arms[i].End);
+                if (inside) stats.InternalArms++;
                 var (pocket, rightPocket) = pockets.GetValueOrDefault((junction.NodeId, i));
                 var u = Vec2.FromHeading(arm.OutwardHeading);
                 var right = u.Perp;   // the approaching driver's right (they drive along -u)
@@ -122,13 +225,20 @@ public static partial class TileRewriter
             bool amber = PedestrianAmber(cantons?.CodeAt(junction.Centre.X, junction.Centre.Y));
             uint seed = (uint)(long)Math.Round(junction.Centre.X) * 73856093u ^ (uint)(long)Math.Round(junction.Centre.Y) * 19349663u;
             var signalPlan = SignalPlan.Build(arms, seed, amber);
-            if (signalPlan.Validate().Count > 0) { stats.Invalid++; continue; }
+            if (signalPlan.Validate() is { Count: > 0 } errors)
+            {
+                stats.Invalid++;
+                if (stats.InvalidExamples.Count < 5)
+                    stats.InvalidExamples.Add(string.Create(CultureInfo.InvariantCulture,
+                        $"LV95 {junction.Centre.X:F0},{junction.Centre.Y:F0} {arms.Count} arms ({string.Join(" ", arms.Select(a => $"{a.Heading * 180 / Math.PI:F0}{(a.In ? "i" : "")}{(a.Out ? "o" : "")}{(a.LeftPocket ? "L" : "")}{(a.RightPocket ? "R" : "")}r{a.Rank}"))}): {string.Join("; ", errors.Take(2))}"));
+                continue;
+            }
 
             var anchors = Anchors(junction, net);
             var centre = Local(home, [junction.Centre], p => HeightAt(anchors, p), 0f);
             Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan });
             stats.Junctions++;
-            stats.Inferred++;
+            if (priority.SignalsFromData.Contains(junction.NodeId)) stats.FromData++; else stats.Inferred++;
             stats.Groups += signalPlan.Groups.Count;
             if (!amber) stats.TwoLensPedestrian++;
             int cycle = (int)MathF.Round(signalPlan.Cycle);

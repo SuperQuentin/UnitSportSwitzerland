@@ -238,4 +238,20 @@ public class SignalPlanTests(ITestOutputHelper output)
                 Assert.Equal(plan.State(g, t), p.State(g, t));
         Assert.Empty(p.Validate());
     }
+    [Theory]
+    [InlineData(187, -135, 45)]
+    [InlineData(176, -37, 145)]
+    public void SkewedT_FromGeneva_StillValid(double a, double b, double c)
+    {
+        static SignalArm Deg(double d) => new(d * Math.PI / 180, true, true, Pedestrians: true);
+        AssertValid(SignalPlan.Build([Deg(a), Deg(b), Deg(c)]));
+    }
+    [Fact]
+    public void ArmWithNoTraffic_FromGeneva_StillValid()
+    {
+        static SignalArm Deg(double d, bool i, bool o) => new(d * Math.PI / 180, i, o, Pedestrians: true);
+        AssertValid(SignalPlan.Build([Deg(198, false, false), Deg(-84, true, true), Deg(5, false, true), Deg(95, true, false)]));
+        // the same with a right pocket on the approach that can only turn right
+        AssertValid(SignalPlan.Build([Deg(198, false, false), Deg(-84, true, true) with { RightPocket = true }, Deg(5, false, true), Deg(95, true, false)]));
+    }
 }

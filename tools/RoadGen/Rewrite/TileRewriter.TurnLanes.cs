@@ -90,6 +90,7 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadPointProp>> signs, TurnLaneStats stats)
     {
         var net = result.Network;
+        var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
         var indexes = new Dictionary<TileId, EmbankmentPlanner.LineIndex>();
         EmbankmentPlanner.LineIndex Lines(TileId t) =>
             indexes.TryGetValue(t, out var l) ? l : indexes[t] = new EmbankmentPlanner.LineIndex(output[t]);
@@ -120,7 +121,8 @@ public static partial class TileRewriter
             for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
             {
                 var arm = plan.Arms[i];
-                if ((signal ? !arm.Approach : arm.Role != PriorityPlanner.Role.Main) || !TurnLaneRoad(net.Links[arm.LinkId])) continue;
+                if ((signal ? !arm.Approach || Internal(net.Links[arm.LinkId], junction.NodeId, signalNodes) : arm.Role != PriorityPlanner.Role.Main)
+                    || !TurnLaneRoad(net.Links[arm.LinkId])) continue;
 
                 // the approaching driver's way, and whether a car road leaves to their left / right
                 var d = Vec2.FromHeading(junction.Arms[i].OutwardHeading) * -1;

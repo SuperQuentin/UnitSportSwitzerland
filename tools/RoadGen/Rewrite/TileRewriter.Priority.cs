@@ -27,6 +27,9 @@ public static partial class TileRewriter
         public readonly Dictionary<int, List<(TileId Tile, int Index)>> SignsOf = new();
 
         public RoadAttrFlags FlagsOf(int linkId) => Yield.GetValueOrDefault(linkId);
+
+        /// <summary>Junction nodes whose traffic lights come from OSM (#347), not the inference rule (#348).</summary>
+        public readonly HashSet<int> SignalsFromData = new();
     }
 
     /// <summary>Dash and gap of a guide line (Führungslinie, SSV 6.16) through a junction.</summary>

@@ -272,17 +272,12 @@ public sealed class SignalPlan
             var moves = SignalMoves.None;
             for (int to = 0; to < arms.Count; to++)
                 if (to != a && arms[to].Out) moves |= Turn(arms, a, to);
-            var main = moves;
-            if (arms[a].LeftPocket && (moves & SignalMoves.Left) != 0)
-            {
-                left[a] = plan.Add(SignalGroupKind.LeftArrow, a, SignalMoves.Left);
-                main &= ~SignalMoves.Left;
-            }
-            if (arms[a].RightPocket && (moves & SignalMoves.Right) != 0)
-            {
-                right[a] = plan.Add(SignalGroupKind.RightArrow, a, SignalMoves.Right);
-                main &= ~SignalMoves.Right;
-            }
+            // pockets get their own arrows only beside a main lane: an approach whose every
+            // movement a pocket would take (a right turn out, say) is one group
+            var pockets = (arms[a].LeftPocket ? SignalMoves.Left : 0) | (arms[a].RightPocket ? SignalMoves.Right : 0);
+            var main = (moves & ~pockets) == SignalMoves.None ? moves : moves & ~pockets;
+            if ((moves & pockets & SignalMoves.Left) != 0 && main != moves) left[a] = plan.Add(SignalGroupKind.LeftArrow, a, SignalMoves.Left);
+            if ((moves & pockets & SignalMoves.Right) != 0 && main != moves) right[a] = plan.Add(SignalGroupKind.RightArrow, a, SignalMoves.Right);
             if (main != SignalMoves.None) car[a] = plan.Add(SignalGroupKind.Car, a, main);
             if (arms[a].BikeSignal && (moves & SignalMoves.Through) != 0) plan.Add(SignalGroupKind.Bike, a, SignalMoves.Through);
         }
@@ -291,6 +286,9 @@ public sealed class SignalPlan
 
         var phases = Phases(plan, arms, car, left, right);
         var conflicts = plan.Conflicts();
+        // a scheme that would run two crossing movements together (an odd shape): split phasing
+        if (phases.Any(p => p.Base.Any(g => p.Base.Any(h => conflicts[g, h] == Conflict.Hard))))
+            phases = Split(plan, arms);
         Expand(plan, phases, conflicts);
 
         // a right arrow no phase can carry: a full green with its own approach (the flasher marks the pedestrians)
@@ -361,24 +359,24 @@ public sealed class SignalPlan
     {
         var phases = new List<Phase>();
         var used = new bool[arms.Count];
-        // roads through the junction: pairs of arms about opposite, the highest ranked first
-        var axes = new List<(int P, int Q)>();
-        var order = Enumerable.Range(0, arms.Count).OrderByDescending(i => arms[i].Rank).ThenBy(i => i).ToList();
-        foreach (int a in order)
+        // roads through the junction: pairs of arms about opposite, the straightest pairs first
+        // (a skewed T has an arm nearly opposite each of two others), then by rank
+        var pairs = new List<(int A, int B, double Off)>();
+        for (int a = 0; a < arms.Count; a++)
+        for (int b = a + 1; b < arms.Count; b++)
         {
-            if (used[a]) continue;
-            int best = -1;
-            double bestOff = 40 * Math.PI / 180;
-            foreach (int b in order)
-            {
-                if (b == a || used[b]) continue;
-                double off = Math.Abs(Math.IEEERemainder(arms[b].Heading - arms[a].Heading - Math.PI, 2 * Math.PI));
-                if (off < bestOff) { bestOff = off; best = b; }
-            }
-            if (best < 0) continue;
-            used[a] = used[best] = true;
-            axes.Add((Math.Min(a, best), Math.Max(a, best)));
+            double off = Math.Abs(Math.IEEERemainder(arms[b].Heading - arms[a].Heading - Math.PI, 2 * Math.PI));
+            if (off < 40 * Math.PI / 180) pairs.Add((a, b, off));
         }
+        var axes = new List<(int P, int Q)>();
+        foreach (var (a, b, _) in pairs.OrderBy(p => p.Off).ThenByDescending(p => arms[p.A].Rank + arms[p.B].Rank).ThenBy(p => p.A).ThenBy(p => p.B))
+        {
+            if (used[a] || used[b]) continue;
+            used[a] = used[b] = true;
+            axes.Add((a, b));
+        }
+        // the higher ranked road runs first
+        axes = axes.OrderByDescending(x => arms[x.P].Rank + arms[x.Q].Rank).ThenBy(x => x.P).ToList();
         var single = Enumerable.Range(0, arms.Count).Where(i => !used[i]).ToList();
         void Add(Phase p, params int[] groups)
         {
@@ -414,14 +412,21 @@ public sealed class SignalPlan
             if (ml >= 0) Add(new Phase(0, TurnPhaseGreen), car[ml], left[ml]);
             Add(new Phase(Math.Max(1, Rank(s))), car[s], left[s], right[s]);
         }
-        else
+        else phases.AddRange(Split(plan, arms));
+        return phases;
+    }
+
+    /// <summary>Split phasing: each approach on its own, every lane of it.</summary>
+    private static List<Phase> Split(SignalPlan plan, IReadOnlyList<SignalArm> arms)
+    {
+        var phases = new List<Phase>();
+        for (int a = 0; a < arms.Count; a++)
         {
-            // split phasing: each approach on its own, every lane of it
-            for (int a = 0; a < arms.Count; a++)
-                if (arms[a].In)
-                    Add(new Phase(Math.Max(1, Rank(a))), Enumerable.Range(0, plan.Groups.Count)
-                        .Where(g => plan.Groups[g].Arm == a && plan.Groups[g].Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow)
-                        .ToArray());
+            if (!arms[a].In) continue;
+            var phase = new Phase(Math.Max(1, (float)arms[a].Rank));
+            phase.Base.AddRange(Enumerable.Range(0, plan.Groups.Count)
+                .Where(g => plan.Groups[g].Arm == a && plan.Groups[g].Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow));
+            if (phase.Base.Count > 0) phases.Add(phase);
         }
         return phases;
     }
