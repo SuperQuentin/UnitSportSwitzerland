@@ -158,13 +158,15 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
     /// <summary>
     /// The nearest music within <paramref name="radius"/> (#261): a playing radio in the world, or a
     /// player carrying one that plays, in the hand or on the back. Null when none, or when the CD
-    /// is unknown here (nothing to take the beat from).
+    /// is unknown here (nothing to take the beat from). With <paramref name="heard"/>, only music
+    /// this machine's speaker actually plays: a radio "on" with a CD it cannot load (someone
+    /// else's personal CD, a failed fetch) is silent, and must not offer a dance.
     /// </summary>
-    public Music? NearestMusic(Vector3 point, float radius)
+    public Music? NearestMusic(Vector3 point, float radius, bool heard = false)
     {
         Music? best = null;
         float bestDist = radius;
-        if (NearestPlaying(point, radius) is { } radio)
+        if (NearestPlaying(point, radius) is { } radio && (!heard || radio.Speaker is { Playing: true }))
         {
             best = new Music(radio, radio.CdId, radio.StartedAt);
             bestDist = radio.GlobalPosition.DistanceTo(point);
@@ -175,6 +177,7 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
         {
             if (!IsInstanceValid(p) || !p.IsInsideTree() || RadioPlay.Decode(p.HeldRadio) is not { } play || !play.Sounding(now)) continue;
             if (CdLibrary.Instance?.Find(play.CdId) == null) continue;
+            if (heard && p.GetNodeOrNull<RadioSpeaker>(HeldSpeakerName) is not { Playing: true }) continue;
             float d = p.GlobalPosition.DistanceTo(point);
             if (d < bestDist) { bestDist = d; best = new Music(p, play.CdId, play.StartedAt); }
         }
