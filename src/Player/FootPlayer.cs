@@ -3172,7 +3172,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // Not for a stock race NPC car: its racing line is planned on tarmac grip and may put two
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
         var surface = (_ride is Motorbike or Truck || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
-            ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors) : Audio.Surface.Asphalt;
+            ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors, this) : Audio.Surface.Asphalt;
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
