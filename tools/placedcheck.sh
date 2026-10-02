@@ -15,6 +15,8 @@ set -u
 AT=${1:-2583250,1113250}
 PORT=7793
 GODOT=${GODOT:-godot}
+# the server and the Godot under its timeout wrapper, by PID (on Git Bash a kill stops only the wrapper)
+stop() { for C in $(ps -ef | awk -v p=$1 '$3 == p { print $2 }'); do kill -9 $C 2>/dev/null; done; kill -9 $1 2>/dev/null; }
 cd "$(dirname "$0")/.."
 OUT=test_output
 mkdir -p "$OUT"
@@ -31,12 +33,12 @@ client A & A=$!
 for _ in $(seq 1 180); do grep -q "A\] say planted" "$OUT/placed_A.log" 2>/dev/null && break; sleep 1; done
 client B --view first   # first person: the Polaroid on the ground fills the screenshot
 wait $A
-kill $SERVER 2>/dev/null; wait $SERVER 2>/dev/null
+stop $SERVER; wait $SERVER 2>/dev/null
 sleep 2
 server 2
 sleep 12
 client C
-kill $SERVER 2>/dev/null
+stop $SERVER
 grep -h "\[placedcheck\|\[items\] event\|\[photo\]" "$OUT"/placed_A.log "$OUT"/placed_B.log "$OUT"/placed_C.log
 grep -h "\[placed\]\|\[photo\]" "$OUT"/placed_server*.log
 if [ "$(grep -h "RESULT: ok" "$OUT"/placed_A.log "$OUT"/placed_B.log "$OUT"/placed_C.log | wc -l)" -eq 3 ]; then

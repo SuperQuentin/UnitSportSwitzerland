@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Net;
 
 namespace UnitSport.Items;
 
@@ -55,8 +56,7 @@ public partial class PhotoTransfer : Node
         if (Instance == this) Instance = null;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     // ---- client API -----------------------------------------------------------------------------
 

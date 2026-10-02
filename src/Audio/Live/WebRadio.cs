@@ -85,8 +85,7 @@ public partial class WebRadio : Node
         _taps.Clear();
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     /// <summary>The audio heard of a station on this machine, or null when none has arrived.</summary>
     public StationBuffer? Buffer(int station) => _buffers.GetValueOrDefault(station);

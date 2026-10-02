@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using UnitSport.Net;
 using UnitSport.Audio;
 using UnitSport.Core;
 using UnitSport.Interiors;
@@ -106,8 +107,7 @@ public partial class LootService : Node
         if (Instance == this) Instance = null;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     private static long Now => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 

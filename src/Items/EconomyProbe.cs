@@ -19,7 +19,7 @@ namespace UnitSport.Items;
 /// </list>
 /// Runs on a scratch inventory.
 /// </summary>
-public partial class EconomyProbe : Node
+public partial class EconomyProbe : ChatProbe
 {
     public static string? Password
     {
@@ -33,10 +33,9 @@ public partial class EconomyProbe : Node
 
     private readonly ChatManager _chat;
     private readonly Inventory _inventory;
-    private int _failures;
     private string? _refused;
 
-    public EconomyProbe(ChatManager chat, Inventory inventory)
+    public EconomyProbe(ChatManager chat, Inventory inventory) : base(null!, "econ")
     {
         _chat = chat;
         _inventory = inventory;
@@ -102,34 +101,8 @@ public partial class EconomyProbe : Node
         _chat.Send("/clear");
         Expect(await Until(() => !_inventory.Contains(ItemId.Bread), 5), "/clear: the pack is empty");
 
-        GD.Print(_failures == 0 ? "[econ] RESULT: ok" : $"[econ] RESULT: FAILED ({_failures})");
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(0);
     }
 
     private static int Count(Node vehicles) => vehicles.GetChildren().OfType<VehicleBody>().Count();
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[econ] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[econ] RESULT: FAILED — {why}");
-        GetTree().Quit(1);
-    }
 }
