@@ -27,7 +27,8 @@ public static class Highlight
             dir = length(dir) > 0.0001 ? normalize(dir) : NORMAL;
             float d = length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
             float pulse = 1.0 + 0.3 * sin(TIME * 6.5);
-            VERTEX += dir * width * clamp(d, 0.6, 14.0) * pulse;
+            // in the mesh's own units: a blown-up floating item keeps the same rim
+            VERTEX += dir * width * clamp(d, 0.6, 14.0) * pulse / max(length(MODEL_MATRIX[0].xyz), 0.001);
         }
         void fragment() {
             float pulse = 0.75 + 0.25 * sin(TIME * 6.5);

@@ -739,7 +739,7 @@ public partial class ItemController : Node
             float e = t * t;
             var at = start.Origin.Lerp(hand, e) + Vector3.Up * (Mathf.Sin(t * Mathf.Pi) * 0.35f);
             var basis = new Basis(turn) * new Basis(Vector3.Up, t * 5f);
-            ghost.GlobalTransform = new Transform3D(basis.Scaled(Vector3.One * Mathf.Lerp(1f, 0.2f, e)), at);
+            ghost.GlobalTransform = new Transform3D(basis.Scaled(start.Basis.Scale * Mathf.Lerp(1f, 0.2f, e)), at);
         }), 0f, 1f, 0.26f);
         tween.TweenCallback(Callable.From(ghost.QueueFree));
     }

@@ -203,6 +203,6 @@ guard_watch() {
       fi
       sleep "$GUARD_MEM_EVERY"
     done
-  ) &
+  ) > /dev/null 2>&1 &   # never hold the caller's $(...) pipe open, or `w=$(guard_watch ...)` hangs
   echo $!
 }
