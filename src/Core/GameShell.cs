@@ -124,6 +124,12 @@ public partial class GameShell : Node
             Quit();
             return;
         }
+        // a saved Realistic+ wants Forward+, which Godot only picks at startup (once, likewise)
+        if (!Direct && !vr && Styles.RendererRelaunch.Wanted && Styles.RendererRelaunch.Relaunch())
+        {
+            Quit();
+            return;
+        }
         if (!Direct)
         {
             ShowTitle();

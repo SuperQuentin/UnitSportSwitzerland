@@ -40,6 +40,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private DirectionalLight3D? _sun;
     private ShaderMaterial? _treeMaterial;
     private NearTrees? _nearTrees;
+    private PhotoLayer? _photos;
 
     /// <summary>The session this world is built for: the title screen's choice, or the command line's.</summary>
     public WorldLaunch Launch { get; init; } = WorldLaunch.FromArgs();
@@ -272,6 +273,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         AddChild(_chunks);
         ApplyNearTrees();
+        ApplyPhotos();
         Audio.Surfaces.Origin = origin;
         var chunksForAudio = _chunks;
         AddChild(new Audio.ReverbZones(() => GetViewport().GetCamera3D(), () => LocalPlayer?.Indoors == true, chunksForAudio)
@@ -956,6 +958,22 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         ApplySun();
         ApplyNearTrees();
+        ApplyPhotos();
+    }
+
+    /// <summary>
+    /// The SWISSIMAGE drape (<see cref="PhotoLayer"/>) while the style has one: on the tiles'
+    /// terrain material, from the local terrain folder's photos.
+    /// </summary>
+    private void ApplyPhotos()
+    {
+        bool want = StyleKit.HasPhotos && _chunks != null && _worldOrigin != null && _worldMaterials.Length > 0;
+        if (want == (_photos != null)) return;
+        _photos?.QueueFree();
+        _photos = null;
+        if (!want) return;
+        _photos = new PhotoLayer(_chunks!, _worldOrigin!, _worldMaterials[0], TerrainPaths.FindChunkDir());
+        AddChild(_photos);
     }
 
     /// <summary>

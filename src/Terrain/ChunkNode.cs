@@ -10,6 +10,9 @@ namespace UnitSport.Terrain;
 public partial class ChunkNode : Node3D
 {
     private MeshInstance3D? _meshInstance;
+
+    /// <summary>The tile's ground mesh, once built.</summary>
+    public MeshInstance3D? Ground => _meshInstance;
     private MeshInstance3D? _roadInstance;
     private StaticBody3D? _body;
 

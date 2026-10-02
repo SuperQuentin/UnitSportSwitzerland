@@ -4,6 +4,8 @@
 # Commands
 
 - `--style ps1|cartoon|real-|real+`: the visual style for this run (`GameSettings.VisualStyle`).
+- `--rendering-method forward_plus` (an engine flag, before `--`): Realistic+'s renderer; `--sdfgi`
+  adds global illumination (`realistic-plus`). `TerrainPreprocessor --photos`: SWISSIMAGE (`swissimage`).
 - `--bake-impostors` (windowed): re-pictures the realistic trees' impostors into
   `assets/realistic/trees` (`assets`).
 - `--style-report`: headless check of the style kit's shader table, RESULT PASS/FAIL, and what

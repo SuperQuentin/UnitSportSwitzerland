@@ -87,7 +87,14 @@ public static class StyleKit
     }
 
     /// <summary>The styles the settings menu offers: those with a look of their own so far.</summary>
-    public static readonly VisualStyle[] MenuStyles = [VisualStyle.Ps1, VisualStyle.Cartoon, VisualStyle.RealisticLow];
+    public static readonly VisualStyle[] MenuStyles =
+        [VisualStyle.Ps1, VisualStyle.Cartoon, VisualStyle.RealisticLow, VisualStyle.RealisticHigh];
+
+    /// <summary>Whether a style needs the Forward+ renderer, which Godot only picks at startup.</summary>
+    public static bool NeedsForwardPlus(VisualStyle style) => Pick(style, l => l.Effects).Value;
+
+    /// <summary>Whether this run is on Forward+ (<c>--rendering-method forward_plus</c>).</summary>
+    public static bool OnForwardPlus => RenderingServer.GetCurrentRenderingMethod() == "forward_plus";
 
     /// <summary>"PS1", "Cartoon", "Realistic−", "Realistic+": for menus.</summary>
     public static string Label(VisualStyle style) => style switch
@@ -370,7 +377,7 @@ public static class StyleKit
 
     /// <summary>A style's look beyond its shaders; null borrows the parent's.</summary>
     private sealed record Look(MeshDetail? Detail = null, int? FinestStride = null, bool? Sun = null, Finish? Finish = null,
-        float? TreeNear = null);
+        float? TreeNear = null, bool? Effects = null, bool? Photos = null);
 
     /// <summary>
     /// A style's finish outside its shaders: how its sky, ambient light and haze are made and
@@ -388,13 +395,15 @@ public static class StyleKit
 
     private static readonly Dictionary<VisualStyle, Look> Looks = new()
     {
-        [VisualStyle.Ps1] = new(MeshDetail.Low, FinestStride: 1, Sun: false, Finish: Finish.Flat, TreeNear: 220f),
+        [VisualStyle.Ps1] = new(MeshDetail.Low, FinestStride: 1, Sun: false, Finish: Finish.Flat, TreeNear: 220f,
+            Effects: false, Photos: false),
         [VisualStyle.Cartoon] = new(MeshDetail.High, Sun: true, Finish: Finish.Cartoon),
         // Textures carry the surface detail, so 2 m quads underfoot rather than 1 m: the
         // prototype's biggest geometry lever (Realistic-, Riddes, M1 Pro: ~25 -> 11-20 ms)
         // ...and 3D trees to 80 m only: an EZ-Tree is ~3k triangles against Cartoon's 50-120
         [VisualStyle.RealisticLow] = new(FinestStride: 2, Finish: Finish.Realistic, TreeNear: 80f),
-        [VisualStyle.RealisticHigh] = new(),
+        // Realistic- plus Forward+'s effects and the SWISSIMAGE drape
+        [VisualStyle.RealisticHigh] = new(Effects: true, Photos: true),
     };
 
     /// <summary>An item of <paramref name="style"/>'s look, and the style it comes from.</summary>
@@ -417,6 +426,18 @@ public static class StyleKit
 
     /// <summary>Whether the applied style lights the world with a real sun (a shadowed <see cref="DirectionalLight3D"/>).</summary>
     public static bool HasSun => Pick(Applied, l => l.Sun).Value;
+
+    /// <summary>Whether the applied style drapes the SWISSIMAGE photos over its terrain (<c>Terrain/PhotoLayer</c>).</summary>
+    public static bool HasPhotos => Pick(Applied, l => l.Photos).Value;
+
+    /// <summary>
+    /// Whether the applied style's screen-space and volumetric effects are on: the style asks for
+    /// them and this run is on Forward+. On Mobile a Realistic+ choice draws as Realistic−.
+    /// </summary>
+    public static bool EffectsOn => Pick(Applied, l => l.Effects).Value && OnForwardPlus;
+
+    /// <summary>"--sdfgi": global illumination in Realistic+, off until measured on a gaming laptop.</summary>
+    private static readonly bool Sdfgi = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--sdfgi") >= 0;
 
     private static Finish StyleFinish => Pick(Applied, l => l.Finish).Value;
 
@@ -451,6 +472,22 @@ public static class StyleKit
             env.GlowEnabled = true;
             env.GlowIntensity = 0.4f;
             env.GlowHdrThreshold = 1.2f;
+            if (EffectsOn)
+            {
+                // Realistic+ on Forward+: contact shadows, reflections on water and glass, and
+                // light in the air. SDFGI only with --sdfgi (~15-20 ms on the M1 Pro).
+                env.SsaoEnabled = true;
+                env.SsaoRadius = 1.5f;
+                env.SsaoIntensity = 1.6f;
+                env.SsrEnabled = true;
+                env.VolumetricFogEnabled = true;
+                env.VolumetricFogDensity = 0.0004f;
+                env.VolumetricFogLength = 200f;
+                env.SdfgiEnabled = Sdfgi;
+                env.SdfgiUseOcclusion = true;
+                env.SdfgiCascades = 6;
+                env.SdfgiMinCellSize = 0.4f;
+            }
         }
         if (StyleFinish == Finish.Cartoon)
         {
@@ -625,7 +662,8 @@ public static class StyleKit
     public static int Report()
     {
         int failures = 0;
-        if (Looks[Base] is not { Detail: not null, FinestStride: not null, Sun: not null, Finish: not null, TreeNear: not null })
+        if (Looks[Base] is not { Detail: not null, FinestStride: not null, Sun: not null, Finish: not null, TreeNear: not null,
+            Effects: not null, Photos: not null })
         {
             GD.PrintErr($"[style-report] FAIL: the base style {Base} has an incomplete look");
             failures++;
@@ -671,6 +709,8 @@ public static class StyleKit
                 LookItem("sun", l => l.Sun);
                 LookItem("finish", l => l.Finish);
                 LookItem("tree-near", l => l.TreeNear);
+                LookItem("effects", l => l.Effects);
+                LookItem("photos", l => l.Photos);
                 // a model id no style down the chain has is the base's builder: the base's own
                 foreach (var id in ModelCatalog.Ids)
                     if (ModelCatalog.Resolve(style, id) is { } model && model.From != style) borrowed.Add($"{id}<-{model.From}");

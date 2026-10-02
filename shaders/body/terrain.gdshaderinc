@@ -44,12 +44,26 @@ uniform sampler2D nrm_forest : hint_normal, filter_linear_mipmap_anisotropic, re
 uniform sampler2D nrm_gravel : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float tex_scale = 4.0;          // metres per repeat, near
 uniform float tex_color_weight = 0.35;  // how much of the texture's own colour shows
+// SWISSIMAGE (Terrain/PhotoLayer): one layer per tile near the camera, the tile's own layer in
+// photo_slot (-1: none). Blended in with distance and with height over the ground, so walkers
+// see the cover textures and pilots the real patchwork of fields.
+uniform bool use_photos = false;
+uniform sampler2DArray photos : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
+instance uniform int photo_slot = -1;
+uniform float photo_near = 120.0;
+uniform float photo_far = 700.0;
+uniform float photo_max = 0.9;
+varying vec2 tile_uv;
 #endif
 
 varying vec3 world_pos;
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#ifdef STYLE_REAL
+    // a tile's mesh runs from its NW corner, x east and z south, 1000 m each: the photo's frame
+    tile_uv = clamp(VERTEX.xz / 1000.0, vec2(0.0), vec2(1.0));
+#endif
     POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
 }
 
@@ -147,6 +161,14 @@ void fragment() {
                       + texture(tex_rock, ground / rs).rgb * bw.y
                       + texture(tex_rock, vec2(ground.x, world_pos.y) / rs).rgb * bw.z;
             col = mix(col, rock * 0.9, rockiness);
+        }
+        if (use_photos && photo_slot >= 0) {
+            // the photo carries its own sun and shade: kept out of cliffs, where the rock is
+            // better, and lit on top like any albedo
+            float over = CAMERA_POSITION_WORLD.y - world_pos.y;
+            float t = max(smoothstep(photo_near, photo_far, length(VERTEX)), smoothstep(40.0, 250.0, over));
+            vec3 photo = texture(photos, vec3(tile_uv, float(photo_slot))).rgb * 1.1;
+            col = mix(col, photo, t * photo_max * (1.0 - rockiness * 0.7));
         }
     }
 #else

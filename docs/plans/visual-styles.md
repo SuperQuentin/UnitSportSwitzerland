@@ -344,6 +344,12 @@ Android client exists by then.
 
 ### Phase 4: Realistic+
 
+**Status (#255):** built. The Forward+ relaunch (settings, boot, guarded), SSAO, SSR, volumetric
+fog and glow on Forward+, SDFGI behind `--sdfgi`, and the SWISSIMAGE drape (`TerrainPreprocessor
+--photos` from swisstopo's WMS, `PhotoLayer`). Not yet: the gaming-laptop measurement that decides
+SDFGI, photos for streamed clients and the far horizon. Details: `docs/notes/styles/realistic-plus.md`,
+`docs/notes/styles/swissimage.md`.
+
 The Forward+ restart path, shadows, SSAO, SSR, glow, volumetrics, and the optional SWISSIMAGE
 layer in `TerrainPreprocessor` and the tile format. SDFGI only if a gaming-laptop measurement
 allows it (~15–20 ms on the M1 Pro).
