@@ -55,12 +55,25 @@ public class LandingTests
     }
 
     [Fact]
-    public void At_a_surveyed_pier_a_ramp_runs_from_its_end_down_to_a_head_across_it()
+    public void At_a_surveyed_pier_the_head_meets_its_end_at_its_own_height_the_plank_tilts_to_it()
     {
         var shore = new Shore(0.1, 8);
-        // a 4 m Steg out to E = 30, its deck 1.5 m over the water, running east-north-east
+        // a Steg 1.6 m over the water (Nyon's): within the plank's tilt of the ship's deck (1.36 m)
         double de = Math.Cos(0.2), dn = Math.Sin(0.2);
-        var road = new LandingPlanner.RoadEnd(30, 0, Water + 1.5, de, dn, 4);
+        var landing = LandingPlanner.PlanLanding("Steg (lac)", 30, 0, shore, road: new LandingPlanner.RoadEnd(30, 0, Water + 1.6, de, dn, 4))!;
+        Assert.Equal(Water + 1.6, landing.Berth!.Deck, 3);
+        var head = Assert.Single(landing.Ribbons);
+        var mid = new[] { (head.Points[0][0] + head.Points[1][0]) / 2, (head.Points[0][1] + head.Points[1][1]) / 2 };
+        Assert.Equal(head.Width * 0.5, Dist(mid, new double[] { 30, 0 }), 2);
+    }
+
+    [Fact]
+    public void At_a_surveyed_pier_too_high_for_the_plank_a_ramp_runs_from_its_end_down_to_a_head_across_it()
+    {
+        var shore = new Shore(0.1, 8);
+        // a 4 m Steg out to E = 30, its deck 2.5 m over the water: past the plank's tilt
+        double de = Math.Cos(0.2), dn = Math.Sin(0.2);
+        var road = new LandingPlanner.RoadEnd(30, 0, Water + 2.5, de, dn, 4);
         var landing = LandingPlanner.PlanLanding("Steg (lac)", 30, 0, shore, road: road)!;
         var berth = landing.Berth!;
         Assert.True(berth.Fits);
@@ -71,7 +84,8 @@ public class LandingTests
         var ramp = landing.Ribbons.Single(r => r.Rails);
         Assert.Equal(4, ramp.Width);
         Assert.Equal(30, ramp.Points[0][0], 3);
-        Assert.Equal(Water + 1.5, ramp.Points[0][2], 3);
+        Assert.Equal(Water + 2.5, ramp.Points[0][2], 3);
+        Assert.Equal(Water + LandingPlanner.Default.ShipDeckOverWater + LandingPlanner.Default.PlankRise, berth.Deck, 3);
         Assert.Equal(berth.Deck, ramp.Points[^1][2], 3);
         for (int i = 1; i < ramp.Points.Count; i++)
             Assert.True(Math.Abs(ramp.Points[i][2] - ramp.Points[i - 1][2]) / Dist(ramp.Points[i], ramp.Points[i - 1]) <= LandingPlanner.Default.MaxRamp + 1e-3);
@@ -131,7 +145,10 @@ public class LandingTests
         Assert.Equal(SteamerLines.WaterlineHalf, o.HullHalfLength, 3);
         Assert.Equal(SteamerLines.Draught + 0.6, o.HullNeeds, 3);
         // the plank's foot (main deck 3.0 over the keel, down 0.3) of a keel floating 1.64 m deep, plus 2 cm
-        Assert.Equal(SteamerLines.Depth - 0.3 - (SteamerLines.Draught - 0.04) + 0.02, o.DeckOverWater, 3);
+        Assert.Equal(SteamerLines.Depth - (SteamerLines.Draught - 0.04), o.ShipDeckOverWater, 3);
+        Assert.Equal(o.ShipDeckOverWater - 0.3, o.DeckOverWater, 3);
+        // the face at the plank's reach: its hinge on the deck's edge (4.35 m) plus 1.3 m
+        Assert.Equal(4.35 + 1.3, o.FaceOffset, 3);
         // the head starts clear of the paddle box (the wheels 1.5 m forward of the centre, the box 4.75 m either side)
         Assert.True(o.HeadAft > 4.75 - SteamerLines.WheelZ);
     }
