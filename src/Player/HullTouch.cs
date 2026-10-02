@@ -100,6 +100,8 @@ public static class HullTouch
             await host.ToSignal(host.GetTree().CreateTimer(1.0), SceneTreeTimer.SignalName.Timeout);
         }
         int frames = 0, contacts = 0, levelN = 0;
+        // the physics step met the shape as it was posed the frame before (posed in _Process)
+        Transform3D? before = null;
         float worstPose = 0f, tilt = 0f, worstOff = 0f, levelSum = 0f, deepest = 0f, under = 0f, underMax = 0f;
         // into the side, square to it as drawn: the hull's long side, not its middle (76 m of steamer)
         me.WalkControls = () =>
@@ -135,11 +137,14 @@ public static class HullTouch
                     if (hit.GetCollider(j) != boat) continue;
                     touching = true;
                     var p = hit.GetPosition(j);
-                    worstOff = Mathf.Max(worstOff, Mathf.Abs(Distance(boat.Ride, shape, drawn, p)));
+                    float d = Mathf.Abs(Distance(boat.Ride, shape, drawn, p));
+                    if (before is { } last) d = Mathf.Min(d, Mathf.Abs(Distance(boat.Ride, shape, last, p)));
+                    worstOff = Mathf.Max(worstOff, d);
                     levelSum += Mathf.Abs(Distance(boat.Ride, shape, level, p));
                     levelN++;
                 }
             }
+            before = drawn;
             if (!touching) { under = 0f; continue; }
             contacts++;
             deepest = Mathf.Max(deepest, me.SwimDepth);

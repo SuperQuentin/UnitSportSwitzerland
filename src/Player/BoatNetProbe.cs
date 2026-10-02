@@ -248,7 +248,8 @@ public partial class BoatNetProbe : ChatProbe
         GD.Print($"{Log} swimming into A's parked boat here, gamey: {touch}");
         Expect(touch.Frames > 100 && touch.WorstPose < 0.03f, "its collision box is posed as B draws it (B's waves, A's height over them and attitude)");
         Expect(touch.MaxTilt > 1.5f, $"the box pitches and rolls with it here ({touch.MaxTilt:F1}°)");
-        Expect(touch.Contacts > 10 && touch.WorstOff < 0.08f, "B meets the hull where B draws it");
+        // a copy's body follows the 20 Hz stream, swept there by Jolt over a step, its shape re-posed each frame: a few cm
+        Expect(touch.Contacts > 10 && touch.WorstOff < 0.12f, "B meets the hull where B draws it");
         Expect(touch.Deepest < 2.1f && touch.UnderFor < 1.5f, "and is not pushed under by it");
         Say("touched");
     }
