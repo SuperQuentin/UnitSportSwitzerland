@@ -61,3 +61,18 @@
   there (HORI: peak 84°, settles 60–74°, still a ±10° wobble with no hands). In a truck at 1800° the lock
   (~1790°) is the wheel's own stop, so there is nothing to feel; a car (AE86 1260°) has 270° of soft lock
   either side.
+- **Low speed**: below 4 m/s the car blends to kinematic steering, and the feel blends with it (front
+  mass × u × kinematic yaw rate, not the tyre curve at noise-sized slip angles): a parked wheel pulled
+  back harder the further it turned, −0.5 at 2 m/s, and hid the soft lock. Now nothing to 1 m/s.
+- **Soft lock at full device force**, whatever `FfbStrength`: capped at 70% a hand pushed 121° through it.
+- **Engine** (`WheelFeel.EngineFrom`, added by `PlayerFeel`, which knows `EngineOn`): a sine at the
+  crank's rate (rpm/60, 8–60 Hz), 0.15 at idle to 0.5 at the redline, gain `FfbEngine`. **Road** is
+  roughness only, half scale, nothing on tarmac (it grew with speed everywhere and reached 0.8 on gravel).
+- **Godot must never touch the wheel**: `PlayerInput.Install` runs again when a world loads, and its
+  `RegisterActions` put the every-device pad bindings back; past the stick deadzone (180° of an 1800°
+  wheel) the wheel steered as a stick (eased, from centre: a "snap"). `Install` retargets again.
+  `PlayerInput.Rumble` skips the ignored pads too: Godot rumbles a force-feedback wheel through its own
+  SDL, which can take the forces away. Refused effect updates are logged, restarted, and the device
+  reopened (`Send`/`RecoverHaptic`).
+- Tools: `--ffbcheck` (direction + soft-lock push, hardware), `--wheellock deg` (every vehicle's lock to
+  lock, steering ratio and cockpit wheel follow), `--ffblog` (what the wheel is given every 2 s).

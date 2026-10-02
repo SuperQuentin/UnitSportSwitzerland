@@ -40,4 +40,6 @@
   a car on a swept simulated wheel, B must see it steer both ways). `--fakewheel` alone plays with that
   wheel; `--wheel on|off`, `--wheelrange deg` override for one run; `--settings wheel` opens Settings on
   the Wheel tab. `--ffbcheck` (window, real wheel, hands off): pushes it right then left at 30% for
-  0.5 s and reads back which way it turned; RESULT PASS/FAIL.
+  0.5 s and reads back which way it turned; RESULT PASS/FAIL, then pushes into a simulated 60° soft lock.
+  `--wheellock deg` gives every vehicle that lock to lock (steering and cockpit wheel follow);
+  `--ffblog` prints what the wheel is given every 2 s.
