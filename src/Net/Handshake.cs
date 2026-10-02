@@ -28,8 +28,9 @@ public partial class Handshake : Node
     /// 5: gadgets as placed kinds 5-10, with a zipline/ladder payload (#275).
     /// 6: Battle Royale prefabs: Structures.AddPieces, match-owned gadgets (#276).
     /// 7: campfire and field workbench as placed kinds 3-4, the server-set lighting time (#272).
+    /// 8: shops and PAUSA vending machines: ShopService buy/sell/vend, card payment (#273).
     /// </summary>
-    public const int Protocol = 7;
+    public const int Protocol = 8;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
