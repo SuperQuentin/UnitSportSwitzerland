@@ -1199,6 +1199,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
         // the sections behind a truck's cab: their own bodies, whatever else is drawn
         FitSections(kind);
+        // on foot the vehicle's hull goes, drawn or not: first person draws nothing and returns
+        // below, and a bus's 12 m hull stayed on the walker, who was lifted onto its roof (#209)
+        if (kind == RideKind.OnFoot) FitHull(null);
 
         // an NPC keeps its jersey whoever simulates it: the colours of the client that asked for it
         int rider = Npc && NetId(Name) is long npcId && npcId < 0 ? (int)Net.PlayerReplication.NpcOwner(npcId) : GetMultiplayerAuthority();
@@ -1278,7 +1281,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         bool wants = ride is { IsVehicle: true } and not Flyer && _visual != null;
         if (!wants)
         {
-            for (int i = 0; i < 2; i++) { _hull[i]?.QueueFree(); _hull[i] = null; }
+            // out of the body now, not at the end of the frame: the next physics step is a walker's
+            for (int i = 0; i < 2; i++) { if (_hull[i] is { } h) { RemoveChild(h); h.QueueFree(); } _hull[i] = null; }
             return;
         }
         // measured at rest: the pose is applied per frame, so the visual's own transform is undone
