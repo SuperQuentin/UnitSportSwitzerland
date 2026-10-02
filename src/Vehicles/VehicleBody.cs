@@ -325,16 +325,7 @@ public partial class VehicleBody : CharacterBody3D
         if (Ride.Walkable) FootPlayer.WatchGuests(this, Ride, _guests, new PhysicsBody3D[] { this }, k => k == 0 ? Visual ?? this : Visual?.GetNodeOrNull<Node3D>($"Section{k}"));
         float dt = (float)delta;
         _life += dt;
-        if (_life > SettleTime && _ignoring.Count > 0)
-            // a trailer just dropped stands over the truck that left it: it ignores it until that
-            // has driven clear, not for a second
-            _ignoring.RemoveAll(body =>
-            {
-                bool gone = !IsInstanceValid(body);
-                bool clear = gone || Ride is not ParkedTrailer || body.GlobalPosition.DistanceTo(GlobalPosition) > 22f;
-                if (clear && !gone) RemoveCollisionExceptionWith(body);
-                return clear;
-            });
+        ReleaseIgnored();
         if (_asleep) return;
 
         // Parked in a garage or a barn: down where the interiors are, on a floor that is only there
@@ -515,6 +506,11 @@ public partial class VehicleBody : CharacterBody3D
             if (!Drowned) { Char(); Detonate(); }
         }
         if (Wrecked) WreckAge += delta;
+        if (!IsMultiplayerAuthority())
+        {
+            _life += dt;
+            ReleaseIgnored();
+        }
 
         if (_shutDriverIn > 0f && (_shutDriverIn -= dt) <= 0f) DoorsOpen &= unchecked((byte)~CarRig.DriverDoor);
 
@@ -589,6 +585,24 @@ public partial class VehicleBody : CharacterBody3D
         // the fire burns out after half a minute; the smoke lingers until the wreck is cleared
         if (_fire != null && WreckAge > 30) _fire.Emitting = false;
         if (_smoke != null && WreckAge > 75) _smoke.Emitting = false;
+    }
+
+    /// <summary>
+    /// Whoever was beside it when it appeared collides with it again after <see cref="SettleTime"/>.
+    /// A trailer just dropped stands over the truck that left it: it ignores it until that has driven
+    /// clear, not for a second. A copy does it too, from <c>_Process</c> (#378): it has no physics
+    /// step, and the players near it when it appeared there went through it for good.
+    /// </summary>
+    private void ReleaseIgnored()
+    {
+        if (_life <= SettleTime || _ignoring.Count == 0) return;
+        _ignoring.RemoveAll(body =>
+        {
+            bool gone = !IsInstanceValid(body);
+            bool clear = gone || Ride is not ParkedTrailer || body.GlobalPosition.DistanceTo(GlobalPosition) > 22f;
+            if (clear && !gone) RemoveCollisionExceptionWith(body);
+            return clear;
+        });
     }
 
     private float _standIn;
