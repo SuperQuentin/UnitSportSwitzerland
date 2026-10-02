@@ -28,6 +28,8 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
 {
     /// <summary>The building's kind, so door consumers need not keep the tile.</summary>
     public BuildingKind Kind { get; init; }
+    /// <summary>A bank (<see cref="BuildingFootprint.IsBank"/>): a sign over the door, a teller desk inside.</summary>
+    public bool Bank { get; init; }
 }
 
 /// <summary>
@@ -64,8 +66,14 @@ public sealed record Footprint(
 
 public static class BuildingFootprint
 {
-    /// <summary>Same wall/roof split the building renderer uses.</summary>
-    private const float RoofNormalY = 0.45f;
+    /// <summary>
+    /// Whether a building is a bank (#213). The data has no banks, so about one shop or office
+    /// building in five of some size is one, by a stable hash of its key: a pure function of the tile,
+    /// so the server's plan and every client's door sign agree without sending anything.
+    /// </summary>
+    public static bool IsBank(Footprint fp) =>
+        fp.Kind == BuildingKind.Commercial && fp.Width * fp.Depth >= 60f && Math.Min(fp.Width, fp.Depth) >= 6f
+        && (uint)InteriorGenerator.StableHash(fp.Key + "|bank") % 5 == 0;
 
     /// <summary>Rooms need somewhere to stand; a 1.5 m shed is still entered, as a 3 m box.</summary>
     public const float MinSide = 3.0f;
@@ -138,7 +146,10 @@ public static class BuildingFootprint
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
         var doors = new DoorSpot[tile.Buildings.Count];
         for (int i = 0; i < doors.Length; i++)
-            doors[i] = (Compute(tile, i, roadIndex, grid)?.Door ?? default) with { Kind = tile.Buildings[i].Kind };
+        {
+            var fp = Compute(tile, i, roadIndex, grid);
+            doors[i] = (fp?.Door ?? default) with { Kind = tile.Buildings[i].Kind, Bank = fp != null && IsBank(fp) };
+        }
         return doors;
     }
 
@@ -171,13 +182,10 @@ public static class BuildingFootprint
         var walls = new List<(Vector3 A, Vector3 B, Vector3 C, Vector2 N)>();
         for (int t = 0; t < b.TriangleCount; t++)
         {
-            int o = t * 9;
-            var a = new Vector3(b.Triangles[o], b.Triangles[o + 1], b.Triangles[o + 2]);
-            var c = new Vector3(b.Triangles[o + 3], b.Triangles[o + 4], b.Triangles[o + 5]);
-            var d = new Vector3(b.Triangles[o + 6], b.Triangles[o + 7], b.Triangles[o + 8]);
+            var (a, c, d) = b.Tri(t);
             var n = (c - a).Cross(d - a);
             float len = n.Length();
-            if (len < 1e-6f || Mathf.Abs(n.Y / len) >= RoofNormalY) continue;
+            if (len < 1e-6f || Mathf.Abs(n.Y / len) >= BuildingTriangles.RoofNormalY) continue;
             var flat = new Vector2(n.X, n.Z);
             if (flat.LengthSquared() < 1e-10f) continue;
             walls.Add((a, c, d, flat.Normalized()));
@@ -322,10 +330,7 @@ public static class BuildingFootprint
         var p = door.Position + Vector3.Up * Math.Min(1.0f, door.Height * 0.5f) - door.Outward * 0.03f;
         for (int t = 0; t < b.TriangleCount; t++)
         {
-            int o = t * 9;
-            var a = new Vector3(b.Triangles[o], b.Triangles[o + 1], b.Triangles[o + 2]);
-            var c = new Vector3(b.Triangles[o + 3], b.Triangles[o + 4], b.Triangles[o + 5]);
-            var d = new Vector3(b.Triangles[o + 6], b.Triangles[o + 7], b.Triangles[o + 8]);
+            var (a, c, d) = b.Tri(t);
             var n = (c - a).Cross(d - a);
             float len = n.Length();
             if (len < 1e-6f) continue;

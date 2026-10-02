@@ -1,8 +1,8 @@
 # Radio: a thrown world item that plays CDs everyone hears in time (#104)
 
 - **The first world item.** `ItemId.Radio` with `ItemUse.Throw`: Use opens its panel in the hand,
-  Aim + Use throws it (`ItemController.UseSlot`, origin at the eye, `forward*8 + up*3 + player
-  velocity`) and it leaves the inventory. It lives on
+  Aim + hold Use winds up a throw (`ThrowAim`, the `throw-drop` note; Q drops it at your feet) and it
+  leaves the inventory. It lives on
   as a `RadioBody` (`RigidBody3D`) under `World/Radios`, spawned for everyone by `RadioManager`
   through `World/RadioSpawner` — the `VehicleManager` pattern: offline `AddChild`, online
   request/grant RPCs (`RequestThrow`, `RequestPickUp`, `RequestPlay`, `RequestStop`).
@@ -12,9 +12,20 @@
   The dedicated server never simulates (no ground): a radio whose thrower left is re-spawned by
   `ForgetOwner` server-owned and `Settled`. The **server** owns what plays (`State` synchronizer,
   authority 1: `CdId`, `StartedAt`, `Playing`, on-change and with the spawn for late joiners).
-- **E beside it** (`RadioManager.Reach` 2.5 m) opens `RadioUi`; `Nearest` in `TryInteract` runs
-  before the vehicle lookup; the prompt bar shows "Radio". Use opens it on the radio in the hand,
-  R on a car stereo (below).
+- **Pointed at, Use (click) takes it straight into the hand (#261)**: `ItemController.TakeRadio` (the
+  mesh flies to the hand, the server's pick-up as before, the stack keeps the CD/start/mode, the
+  slot is selected or swapped in from the pack). **E** on the pointed radio opens `RadioUi`; E with
+  none pointed opens the nearest within `RadioManager.Reach` 2.5 m, but only after the vehicle at
+  hand (`door-reach`). Use opens the panel on the radio in the hand, R on a car stereo (below).
+- **Carried, it keeps playing (#261)**: `Inventory.RadioSlot()` (the hand's radio, else the first
+  with a CD, else the first) writes `FootPlayer.HeldRadio`; one not in the hand sets the replicated
+  `FootPlayer.BackItemId` (OnChange) and is drawn on the back (`FootPlayer.Back.cs`, on the posed
+  chest frame, child of the body mesh, with straps), bouncing to its beat at 0.55 size. The
+  changer (`RadioUi.Changer`) follows that slot too. Only one radio sounds at a time.
+- **It bounces (#261)**: `RadioBody.Bounce(phase, beat, half, amount)` squashes on the beat about the
+  bottom face, springs up 3 cm and rocks to alternate sides; the world radio while its speaker
+  really plays, the one in the hand (figure 0.7, viewmodel 0.45) and on the back from
+  `RadioBody.BeatOf(cd, startedAt, clock)`.
 - **The panel is a music picker (#211)**, menu look (`UiTheme`/`UiKit`, glass 0.95, at most
   700 x 660 px, re-fitted on resize): now playing (title, bpm/style, "CD n of m", elapsed / length
   bar), previous / Play-Stop / next (round the list; on a station, the next station), the mode
@@ -43,17 +54,18 @@
   CD's clock, everywhere, so "Play" looked like it did nothing. Everything loaded or fetching is now
   keyed by CD id (`RadioSpeaker.TryLoad`); `LoadedCd`/`LoadedLength` let the probe check the file.
 - **Loudness.** `RadioSpeaker`: −8 dB base, unit size 3, max 45 m (was 0 dB, 8, 120 m — it drowned
-  the world), times the player's own volume (`UserVolume`, panel slider, `user://radio.cfg`).
+  the world), on the Music bus (the panel slider is Settings' Music volume) and muffled by walls
+  and doorways (`docs/notes/audio/hearing.md`).
 - **In the hand (#168).** The playing CD lives in the radio's `ItemStack.Data` as a `RadioPlay`
   (`cd;startedAt;length`): Play/Stop in the held panel rewrite it (`Inventory.SetData`), a throw
   carries it into the world (`RequestThrow` keeps it if `TrustedLength` vouches), a pick-up carries
   the world radio's back into the stack. `ItemController` copies the held stack's data to the
   replicated `FootPlayer.HeldRadio` (OnChange), and `RadioManager.UpdateHeld` hangs a `RadioSpeaker`
   ("HeldRadio", 1.1 m up) on every player holding a playing radio, the holder included. Held
-  radios do not count for dancing (`NearestPlaying` is world radios only).
-- **Dancing.** `NearestPlaying(pos, DanceRadius 20 m)` decides whether E toggles `FootPlayer.DanceId`
+  radios count for dancing too since #261 (`NearestMusic`).
+- **Dancing.** `NearestMusic(pos, DanceRadius 20 m)` (a world radio or a carried one) decides whether E toggles `FootPlayer.DanceId`
   (replicated int; prompt "Dance"/"Stop dancing"). The beat is never replicated: every peer calls
-  `RadioBody.BeatAt(ClockSync.ServerNow)`, so figures on every screen step on the same beat, and a
+  `RadioBody.BeatOf(cd, startedAt, ClockSync.ServerNow)`, so figures on every screen step on the same beat, and a
   client still downloading the CD dances in silence. See `docs/notes/avatar/dance-moves.md`.
 - **Car stereo (#211):** `PlayerInput.RadioPanel` (R, keyboard only like U / P; shared with the travel picker: in a vehicle with a stereo R opens the radio and `ClientWorld` skips the picker, on foot R is the picker; F1 row, prompt
   "Radio") opens the panel on `FootPlayer.StereoOwner`: yourself at the wheel of a car/truck/bus, or

@@ -87,6 +87,9 @@ public partial class RadioUi : CanvasLayer
     /// <summary>The panel is on a car's stereo. For the probes.</summary>
     public bool OnCar => IsOpen && _target == Target.Car;
 
+    /// <summary>Into the pack, or on the ground when it is full (<see cref="ItemController.Give"/>).</summary>
+    public Func<ItemStack, int>? Give { get; set; }
+
     public static RadioUi Create(Func<FootPlayer?> local, Inventory inventory) =>
         new() { Name = "RadioUi", _local = local, _inventory = inventory };
 
@@ -506,7 +509,8 @@ public partial class RadioUi : CanvasLayer
         string? playing = radio.NowPlaying is { } p ? (p with { Mode = RadioQueue.Clamp(radio.Mode) }).Encode() : null;
         manager.PickUp(radio, () =>
         {
-            _inventory.Add(new ItemStack(ItemId.Radio, 1, playing));
+            if (Give != null) Give(new ItemStack(ItemId.Radio, 1, playing));
+            else _inventory.Add(new ItemStack(ItemId.Radio, 1, playing));
             Close();
         });
     }
@@ -826,10 +830,12 @@ public partial class RadioUi : CanvasLayer
     private void Changer()
     {
         double now = ClockSync.ServerNow;
-        if (_inventory.HeldId == ItemId.Radio && RadioPlay.Decode(_inventory.Held.Data) is { Mode: not RadioMode.Once } held && !held.Sounding(now))
+        // the carried radio, in the hand or on the back (#261): it plays on either way
+        int slot = _inventory.RadioSlot();
+        if (slot >= 0 && RadioPlay.Decode(_inventory[slot].Data) is { Mode: not RadioMode.Once } held && !held.Sounding(now))
         {
             var next = RadioQueue.Continue(held, now, CdLibrary.Instance, _random);
-            _inventory.SetData(_inventory.Selected, next?.Encode());
+            _inventory.SetData(slot, next?.Encode());
         }
         if (_local() is { RidingWith: 0 } me && IsInstanceValid(me) && NetLink.Ready(me) && me.IsMultiplayerAuthority()
             && me.PlayingCarCd is { } car && !car.Sounding(now))

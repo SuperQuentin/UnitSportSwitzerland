@@ -65,16 +65,113 @@ public partial class InventoryUiProbe : Node
         // 4: shift-click sends a hotbar stack to the pack
         var gps = Inv[2];
         await Click(2, MouseButton.Left, shift: true);
-        Expect(Inv[2].IsEmpty && Enumerable.Range(pack, Inventory.BackpackSize).Any(i => Inv[i] == gps), "shift-click to the pack");
+        Expect(Inv[2].IsEmpty && Enumerable.Range(pack, Inv.PackSize).Any(i => Inv[i] == gps), "shift-click to the pack");
 
         // 5: right click takes half
         await Click(15, MouseButton.Right);
         Expect(!Inv.Carried.IsEmpty, $"right click takes half ({Inv.Carried.Count})");
         Inv.ReturnCarried();
 
+        // 6: a click outside the panel with a stack on the cursor drops it on the ground (#208, #206)
+        int dropSlot = Enumerable.Range(0, Inv.Capacity).First(i => !Inv[i].IsEmpty && Inv[i].Id != ItemId.Radio);
+        var dropped = Inv[dropSlot];
+        int before = DroppedItems.Instance?.GetChildCount() ?? -1;
+        await Click(dropSlot, MouseButton.Left);
+        var outside = new Vector2(6, 6);
+        Push(new InputEventMouseMotion { Position = outside, GlobalPosition = outside });
+        await Frames(2);
+        Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = outside, GlobalPosition = outside });
+        await Frames(2);
+        Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = outside, GlobalPosition = outside });
+        await Frames(20);
+        int after = DroppedItems.Instance?.GetChildCount() ?? -1;
+        Expect(Inv.Carried.IsEmpty && Inv[dropSlot].IsEmpty && after > before && before >= 0,
+            $"click outside drops {dropped} on the ground (dropped items {before} -> {after})");
+
+        // 7: clothes (#251): carried onto their body slot, shift-clicked on, refused in the wrong one
+        int top = Inventory.SlotOf(Avatar.WearSlot.Top), head = Inventory.SlotOf(Avatar.WearSlot.Head);
+        int free = Enumerable.Range(pack, Inv.PackSize).First(i => Inv[i].IsEmpty);
+        Inv.Put(free, new ItemStack(ItemId.BuckleCorset, 1));
+        int ears = Enumerable.Range(pack, Inv.PackSize).First(i => Inv[i].IsEmpty);
+        Inv.Put(ears, new ItemStack(ItemId.CatEarsBlack, 1));
+        await Click(free, MouseButton.Left);
+        await Click(head, MouseButton.Left);
+        Expect(Inv[head].IsEmpty && Inv.Carried.Id == ItemId.BuckleCorset, "the corset is refused on the head");
+        await Click(top, MouseButton.Left);
+        Expect(Inv[top].Id == ItemId.BuckleCorset && Inv.Carried.IsEmpty, "and put on in the top slot");
+        await Click(ears, MouseButton.Left, shift: true);
+        Expect(Inv[head].Id == ItemId.CatEarsBlack && Inv[ears].IsEmpty, "shift-click puts the cat ears on");
+        await Move(top);
+        await Frames(4);
+        var dir = ProjectSettings.GlobalizePath("res://test_output");
+        System.IO.Directory.CreateDirectory(dir);
+        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "invui_wearing.png"));
+        await Click(top, MouseButton.Left);
+        Expect(Inv.Carried.Id == ItemId.BuckleCorset && Inv[top].IsEmpty, "a click takes the corset off");
+        Inv.ReturnCarried();
+
+        await Catalogue();
+
         _items.Ui.Close();
         GD.Print(_failures == 0 ? "[invui] RESULT: ok" : $"[invui] RESULT: FAILED ({_failures})");
         GetTree().Quit(_failures == 0 ? 0 : 1);
+    }
+
+    /// <summary>
+    /// 8 (#262): the inventory's catalogue button opens the catalogue; real clicks on a tile give
+    /// one, right click ten, shift-click a stack; a screenshot lands in test_output/ when windowed.
+    /// Offline, so the clicks run /spawn on this machine.
+    /// </summary>
+    private async Task Catalogue()
+    {
+        var open = _items.Ui.FindChildren("*", "Button", true, false).OfType<Button>()
+            .FirstOrDefault(b => b.Text == "Item catalogue");
+        Expect(open is { Visible: true }, "the inventory offers the catalogue offline");
+        open?.EmitSignal(BaseButton.SignalName.Pressed);
+        await Frames(3);
+        var cat = _items.Catalogue;
+        Expect(cat.IsOpen && !_items.Ui.IsOpen, "the catalogue opens over a closed inventory");
+
+        var search = cat.FindChildren("*", "LineEdit", true, false).OfType<LineEdit>().First();
+        search.Text = "bread";
+        search.EmitSignal(LineEdit.SignalName.TextChanged, "bread");
+        await Frames(3);
+        var tile = cat.FindChildren("*", "", true, false).OfType<SlotButton>().First(b => b.TooltipText == "Bread");
+        Expect(tile.IsVisibleInTree(), "search finds the bread");
+
+        int Bread() => Enumerable.Range(0, Inv.Capacity).Where(i => Inv[i].Id == ItemId.Bread).Sum(i => Inv[i].Count);
+        int had = Bread();
+        var at = tile.GetGlobalRect().GetCenter();
+        async Task ClickTile(MouseButton button, bool shift = false)
+        {
+            Push(new InputEventMouseMotion { Position = at, GlobalPosition = at });
+            await Frames(2);
+            Push(new InputEventMouseButton { ButtonIndex = button, Pressed = true, Position = at, GlobalPosition = at, ShiftPressed = shift });
+            await Frames(2);
+            Push(new InputEventMouseButton { ButtonIndex = button, Pressed = false, Position = at, GlobalPosition = at, ShiftPressed = shift });
+            await Frames(4);
+        }
+        await ClickTile(MouseButton.Left);
+        Expect(Bread() == had + 1, $"a click gives one bread ({had} -> {Bread()})");
+        await ClickTile(MouseButton.Right);
+        Expect(Bread() == had + 11, $"a right click gives ten ({Bread()})");
+        int stack = ItemDefs.Get(ItemId.Bread)!.MaxStack;
+        await ClickTile(MouseButton.Left, shift: true);
+        Expect(Bread() == had + 11 + stack, $"a shift-click gives a stack of {stack} ({Bread()})");
+
+        search.Text = "";
+        search.EmitSignal(LineEdit.SignalName.TextChanged, "");
+        await Frames(4);
+        if (DisplayServer.GetName() != "headless")
+        {
+            string png = ProjectSettings.GlobalizePath("res://test_output/catalogue.png");
+            DirAccess.MakeDirRecursiveAbsolute(png.GetBaseDir());
+            GetViewport().GetTexture().GetImage().SavePng(png);
+            GD.Print($"[invui] screenshot {png}");
+        }
+        cat.Close();
+        await Frames(2);
+        Expect(!cat.IsOpen, "the catalogue closes");
     }
 
     private SlotButton SlotButtonOf(int slot) =>

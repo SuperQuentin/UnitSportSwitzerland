@@ -14,9 +14,10 @@ namespace UnitSport.Items;
 /// is refused by the server (<c>VehicleManager.RequestPark</c>);</item>
 /// <item><c>/login</c> flips the admin flag through <c>ChatManager.AdminStatus</c>, and the same
 /// park is then spawned by the server;</item>
-/// <item>cash claimed goes to the server-kept account and leaves the pocket only on its answer.</item>
+/// <item>cash deposited away from a bank is refused by the server and stays in the pocket (#213:
+/// money moves only at a bank's counter; <c>tools/bankcheck.sh</c> checks the counter itself).</item>
 /// </list>
-/// Runs on a scratch inventory. Leaves one test deposit in the server's <c>user://bank/accounts.json</c>.
+/// Runs on a scratch inventory.
 /// </summary>
 public partial class EconomyProbe : Node
 {
@@ -63,6 +64,14 @@ public partial class EconomyProbe : Node
         await Seconds(1);
         Expect(Count(vehicles) == count, "and no vehicle appeared");
 
+        // #262: the admin item and money commands are refused to a plain player
+        int cash0 = _inventory.Cash;
+        _chat.Send("/money 100");
+        _chat.Send("/give me bread 2");
+        await Seconds(1.5);
+        Expect(_inventory.Cash == cash0 && !_inventory.Contains(ItemId.Bread), "a plain player's /money and /give are refused");
+        Expect(!_chat.CanUseCatalogue && !CatalogueUi.Allowed, "no catalogue for a plain player");
+
         _chat.Send($"/login {Password}");
         Expect(await Until(() => Permissions.IsAdmin, 5), "/login: the server says admin");
         Expect(Permissions.CanSpawnVehicles, "an admin may spawn vehicles");
@@ -74,9 +83,24 @@ public partial class EconomyProbe : Node
         _inventory.Add(ItemId.Francs, 25);
         Bank.Instance!.ClaimAll();
         Expect(Bank.Instance.Pending && _inventory.Cash == 25, "cash stays in the pocket until the server answers");
-        Expect(await Until(() => !Bank.Instance.Pending, 5), "the server answered the claim");
-        Expect(_inventory.Cash == 0 && Bank.Instance.Balance == before + 25,
-            $"account {before} -> {Bank.Instance.Balance}, pocket empty");
+        Expect(await Until(() => !Bank.Instance.Pending, 5), "the server answered the deposit");
+        Expect(_inventory.Cash == 25 && Bank.Instance.Balance == before,
+            $"refused outside a bank: account {before} -> {Bank.Instance.Balance}, pocket {_inventory.Cash}");
+
+        // #262, as an admin: the server's commands reach this client
+        Expect(_chat.CanUseCatalogue && CatalogueUi.Allowed, "an admin gets the catalogue");
+        int cash = _inventory.Cash;
+        _chat.Send("/money 500");
+        Expect(await Until(() => _inventory.Cash == cash + 500, 5), $"/money: pocket {cash} -> {_inventory.Cash}");
+        _chat.Send("/give me bread 2");
+        Expect(await Until(() => _inventory.Contains(ItemId.Bread), 5), "/give me: bread arrives");
+        _chat.Send("/bank set 777");
+        Expect(await Until(() => Bank.Instance.Balance == 777, 5), $"/bank set: account {Bank.Instance.Balance}");
+        // the server's accounts file is shared user data: put it back
+        _chat.Send($"/bank set {Math.Max(before, 0)}");
+        await Until(() => Bank.Instance.Balance == Math.Max(before, 0), 5);
+        _chat.Send("/clear");
+        Expect(await Until(() => !_inventory.Contains(ItemId.Bread), 5), "/clear: the pack is empty");
 
         GD.Print(_failures == 0 ? "[econ] RESULT: ok" : $"[econ] RESULT: FAILED ({_failures})");
         GetTree().Quit(_failures == 0 ? 0 : 1);

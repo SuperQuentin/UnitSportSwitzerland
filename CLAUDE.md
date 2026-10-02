@@ -9,14 +9,18 @@ on foot, mounted, driving or flying, over ENet multiplayer.
 Knowledge lives in ~180 micro notes, `docs/notes/<area>/<name>.md`, one topic each. Each code
 directory's `CLAUDE.md` (auto-loaded when you touch files there) is only an **index**: one line per
 note. Read a note only when the task needs it; find one with `grep -ril <word> docs/notes`.
-Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, world, combat, birds, items, loot,
+Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, world, combat, br, birds, items, crafting, loot,
 occasions, core, ui, xr, styles, general. New knowledge goes in a new or existing note plus one index line — never in this file.
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
-`linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH).
+`linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
+`testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
+`dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
+`test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
+`perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change).
 
 ## Rules
 
@@ -32,9 +36,11 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
      and a local crash loses nothing.
 - **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
   in the main checkout and push. No issue, branch, worktree or PR.
-  4. **Test in multiplayer**: dedicated server + client on loopback, check the feature on the
-     **remote** peer (replication, authority, animation, damage). The PR says what was and was not
-     verified. Network model: `src/Net/CLAUDE.md`.
+  4. **Test the cheapest tier that can catch the bug** (`docs/notes/general/testing.md`):
+     `tools/test.sh quick` on every change; **tier 2 (`tools/test.sh net`) when the change touches
+     network/authority/replicated state**, checking the feature on the **remote** peer (replication,
+     authority, animation, damage). The PR says what was and was not verified. Network model:
+     `src/Net/CLAUDE.md`.
 - Check and probe output goes in `test_output/` (gitignored), never the repo root.
 
 ## Commands

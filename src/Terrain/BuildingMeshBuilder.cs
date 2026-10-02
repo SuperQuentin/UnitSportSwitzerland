@@ -24,9 +24,6 @@ public static class BuildingMeshBuilder
     /// </summary>
     public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector2[] Uvs, Vector2[] Uv2s, float[] Frames);
 
-    /// <summary>Faces steeper than this are walls; flatter ones are roof.</summary>
-    private const float RoofNormalY = 0.45f;
-
     /// <summary>
     /// UV2.y flags read by <c>ps1_building.gdshader</c>: 0 plain, <see cref="SignFlag"/> a garage
     /// sign's light face (lit at night), <see cref="GarageWallFlag"/> a garage wall, whose UV is
@@ -39,7 +36,9 @@ public static class BuildingMeshBuilder
     /// after the facades, with no windows (uv.y &lt; 0), so a tile's buildings and all their doors
     /// stay one surface and one draw call.
     /// </summary>
-    public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors)
+    /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors,
+        Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
         var data = Build(tile);
         if (data == null || doors == null || doors.Length == 0) return data;
@@ -197,14 +196,11 @@ public static class BuildingMeshBuilder
 
             for (int t = 0; t < b.TriangleCount; t++)
             {
-                int o = t * 9;
-                var a = new Vector3(b.Triangles[o], b.Triangles[o + 1], b.Triangles[o + 2]);
-                var c = new Vector3(b.Triangles[o + 3], b.Triangles[o + 4], b.Triangles[o + 5]);
-                var d = new Vector3(b.Triangles[o + 6], b.Triangles[o + 7], b.Triangles[o + 8]);
+                var (a, c, d) = b.Tri(t);
 
                 var normal = (c - a).Cross(d - a);
                 float len = normal.Length();
-                bool isRoof = len > 1e-6f && Mathf.Abs(normal.Y / len) >= RoofNormalY
+                bool isRoof = len > 1e-6f && Mathf.Abs(normal.Y / len) >= BuildingTriangles.RoofNormalY
                     || (a.Y + c.Y + d.Y) / 3f > spireFrom;
                 var color = isRoof ? roof : wall;
 
@@ -258,10 +254,8 @@ public static class BuildingMeshBuilder
         foreach (var b in tile.Buildings)
             for (int t = 0; t < b.TriangleCount; t++)
             {
-                int o = t * 9;
-                faces[v++] = new Vector3(b.Triangles[o], b.Triangles[o + 1], b.Triangles[o + 2]);
-                faces[v++] = new Vector3(b.Triangles[o + 3], b.Triangles[o + 4], b.Triangles[o + 5]);
-                faces[v++] = new Vector3(b.Triangles[o + 6], b.Triangles[o + 7], b.Triangles[o + 8]);
+                var (a, c, d) = b.Tri(t);
+                faces[v++] = a; faces[v++] = c; faces[v++] = d;
             }
         return faces;
     }

@@ -26,14 +26,7 @@ public static class HoleFormat
 
     public static void Encode(TileId id, IReadOnlyCollection<int> cells, Stream output)
     {
-        Span<byte> header = stackalloc byte[HeaderSize];
-        BinaryPrimitives.WriteUInt32LittleEndian(header[0..], Magic);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[4..], Version);
-        BinaryPrimitives.WriteUInt16LittleEndian(header[6..], 0);
-        BinaryPrimitives.WriteInt32LittleEndian(header[8..], id.E);
-        BinaryPrimitives.WriteInt32LittleEndian(header[12..], id.N);
-        BinaryPrimitives.WriteUInt32LittleEndian(header[16..], (uint)cells.Count);
-        output.Write(header);
+        new TileHeader(Magic, Version, 0, id, (uint)cells.Count).Write(output);
 
         Span<byte> rec = stackalloc byte[4];
         foreach (int cell in cells)
@@ -46,16 +39,9 @@ public static class HoleFormat
 
     public static HashSet<int> Decode(Stream input)
     {
-        Span<byte> header = stackalloc byte[HeaderSize];
-        input.ReadExactly(header);
-
-        uint magic = BinaryPrimitives.ReadUInt32LittleEndian(header[0..]);
-        if (magic != Magic)
-            throw new InvalidDataException($"Bad hole magic 0x{magic:X8}");
-        ushort version = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
-        if (version != Version)
-            throw new InvalidDataException($"Unsupported hole version {version}");
-        uint count = BinaryPrimitives.ReadUInt32LittleEndian(header[16..]);
+        var header = TileHeader.Read(input, Magic, "hole");
+        header.CheckVersion(Version, "hole");
+        uint count = header.Count;
 
         var cells = new HashSet<int>((int)count);
         var bytes = new byte[count * 4];

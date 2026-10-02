@@ -11,6 +11,9 @@ namespace UnitSport.Core;
 public partial class PlaceSearchUi : CanvasLayer
 {
     private PlaceIndex _index = new();
+
+    /// <summary>Every place of the index (the Battle Royale map names its towns from it).</summary>
+    public IReadOnlyList<Place> All => _index.Places;
     private Teleporter _teleporter = null!;
 
     private PanelContainer _panel = null!;
