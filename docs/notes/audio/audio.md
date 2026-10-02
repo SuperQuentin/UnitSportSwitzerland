@@ -20,4 +20,16 @@
   700-2450 m, a Farnell bubble brook near watercourses, per-forest bird species seeded by tile,
   church bells on the hour at towns < 1.5 km (local clock — the game has none), alpine rockfall.
   Check: `<godot> --headless --path . -- --soundcheck test_output/soundcheck` writes every bank variant and a 7 s
-  rev sweep per voice × profile as WAV, non-zero exit on NaN or clipping.
+  rev sweep per voice × profile as WAV, `[soundcheck] RESULT: ok`, FAILED on NaN or clipping.
+- **The water's sounds (#380)**, rendered as the game plays them into `water_*.wav` (with
+  `--water-sounds` only those): the swim banks (splash, stroke, gasp), `WadeBank`, `HullSlapBank`,
+  the steamer's paddles at a quarter, half and full shaft (resampled at `PaddlePitch`), a whistle
+  blast (`WhistleShape` per frame) and its engine from STOP to full ahead and back to slow through
+  each voice. **Nobody can hear them here, so judge them by numbers**: peak, RMS, crest, clipped
+  samples, DC, spectral centroid and band shares, spectral peaks (pitch), the envelope's beat
+  rate (autocorrelation) and its depth (10th to 90th percentile of a 20 ms RMS envelope), and a
+  waveform + spectrogram PNG to look at (numpy/scipy/matplotlib in a scratch venv; the script is in
+  PR #380's body). What it caught: the steam engine (a petrol model at 3 Hz: a 2 dB dip in a roar),
+  the paddles' beat at low speed, the whistle's dead start and stop, a gasp with a quarter of its
+  energy under 100 Hz (wind on a microphone). A steam engine is `EngineProfile.Steam`: puffs of
+  hiss through the funnel comb, the chip voices gated by the puff (`EngineFrame.SteamGate`).
