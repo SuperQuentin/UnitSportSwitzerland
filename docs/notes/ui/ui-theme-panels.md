@@ -13,7 +13,7 @@
 
 ## Why
 
-#221 PR 2: 7 HUD files lost their copies of the panel stylebox, the outlined prompt label and the
+#221 PR 2: 9 HUD files lost their copies of the panel stylebox, the outlined prompt label and the
 amber literal (one implementation each in `Ui/UiTheme`).
 
 ## Same logic, preserved
@@ -29,10 +29,9 @@ amber literal (one implementation each in `Ui/UiTheme`).
 - grep `new StyleBoxFlat` in a HUD → `UiTheme.Flat(...)` with the same numbers.
 - grep `AddThemeConstantOverride("outline_size", 6)` next to `Position = new Vector2(-150, …)` → `UiTheme.Prompt(…)`.
 - Not migrated yet because open PRs edit them (do it when you next touch the file, same values):
-  `Birds/BirdJournal` (#228), `Core/ControlsHelp` (#169), `Player/RideUi` (#188), `Interiors/InteriorManager`
-  prompt (#197, #219), `Core/PlaceSearchUi` title (#191), `Items/InventoryUi` title and slot (#219).
-  `RadioUi` already used `UiTheme` (#227). A branch that conflicts in one of the 7 migrated files: take
-  main's version, then re-apply your own change on top of the `UiTheme` call.
+  `Interiors/InteriorManager` prompt (#269), `Core/ControlsHelp` panel (#169). `RadioUi`, `RideUi` and
+  `InventoryUi` already used `UiTheme`. A branch that conflicts in a migrated file: take main's version,
+  then re-apply your own change on top of the `UiTheme` call.
 
 ## How to check
 
