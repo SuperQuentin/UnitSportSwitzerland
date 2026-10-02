@@ -15,9 +15,18 @@
 - A group only counted: `GetNodeCountInGroup(StringName)`, not `GetNodesInGroup(...).Count`.
 
 ## Why
-#221 client investigation #9 (`GetNodesInGroup` + LINQ per tick per vehicle). Before → after,
-`--perflog`, same machine, back to back (see the PR for the runs):
-NUMBERS
+#221 client investigation #9 (`GetNodesInGroup` + LINQ per tick per vehicle). `--perflog`, same
+machine, back to back, allocation and GC pause from `GC.GetTotalAllocatedBytes` /
+`GetTotalPauseDuration` over the steady part:
+
+| run (steady part, t 47 to 90 s) | allocated | GC pause | physics ms p50 / mean | RESULT |
+|---|---|---|---|---|
+| `--drivecheck --chunks fixture:hairpin --traffic 35`, main | 75.7 MB | 33.8 ms | 1.59 / 2.29 | same classification |
+| same, this branch | 72.8 MB | 36.2 ms | 1.59 / 2.23 | same classification |
+
+Small at one player and 35 cars (the probe sets its own `Obstacles`, so only the `Traffic` side runs
+there); the scan it replaces grows with players × callers, so a race among traffic, or a dogfight,
+is where it counts. `--combatcheck` (plane and paraglider) passes on both.
 
 ## Same logic, preserved
 - Users: `Traffic` obstacles (via `ClientWorld`), `CombatManager.Targets` / `WingHit` /
@@ -47,8 +56,8 @@ NUMBERS
 - `Traffic.Obstacles` keeps its type `Func<IEnumerable<(Vector3 Pos, Vector3 Vel)>>`. A branch that
   edits the old `Obstacles?.Invoke().ToList()` line keeps the new three lines (`_obstacles` refilled).
 - Open PRs touching these files when this landed: #269 (`CombatManager.cs`: the `Shot`/`ShotFrom`
-  RPCs and `Create`, not the lines changed here; `ClientWorld.cs`), #281, #264, #254, #248, #169
-  (`ClientWorld.cs`, away from the traffic block). Conflicts, if any, keep both sides.
+  RPCs and `Create`, not the lines changed here; `ClientWorld.cs`), #281 (`ClientWorld.cs`, away
+  from the traffic block). Conflicts, if any, keep both sides.
 
 ## How to check
 - `--drivecheck --chunks fixture:hairpin --traffic 35 --perflog 60`: the RESULT line as on main,
