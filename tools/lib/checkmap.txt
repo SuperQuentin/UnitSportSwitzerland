@@ -73,6 +73,9 @@ src/Player/FootPlayer.B  net    tools/bonkcheck.sh
 src/BattleRoyale/        full   tools/brcheck.sh
 src/Combat/              full   tools/pvpcheck.sh
 src/Items/Weapons        full   tools/pvpcheck.sh
+src/Combat/Medic         full   tools/mediccheck.sh
+src/Items/PvpProbe       full   tools/mediccheck.sh
+src/Items/ItemEvents     full   tools/mediccheck.sh
 src/Items/               full   tools/gunshotcheck.sh
 src/Items/               full   tools/placedcheck.sh
 src/Items/               full   tools/plantcheck.sh

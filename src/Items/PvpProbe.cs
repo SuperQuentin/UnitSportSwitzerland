@@ -39,7 +39,9 @@ public partial class PvpProbe : ChatProbe
         _role = Role ?? "A";
         if (!await Joined(150, () => ItemEvents.Instance != null)) return;
         await Seconds(2.0);
-        if (_role == "A") await RunA(Me!); else await RunB(Me!);
+        if (Expectation == "REJOIN") await RunRejoin();
+        else if (Expectation == "MEDIC") await (_role == "A" ? RunMedicA(Me!) : RunMedicB(Me!));
+        else if (_role == "A") await RunA(Me!); else await RunB(Me!);
         await Finish(1.0);
     }
 

@@ -30,6 +30,7 @@
   - Neither body is down.
   - The two bodies are within `Range + 8 m` of each other, and the victim is within 8 m of the hit point.
   - The victim is connected.
+  - Neither wears the medic armband (`medic-armband` note, #218); such a hit still restarts the attacker's medic cooldown.
 
   When it passes, the hit goes to the **victim only**, and `PvpRules.HitRelayed` is raised (for match statistics).
 - **Victim** (`PlayerHits.OnHit`): `FootPlayer.ShotHit(damage, shooter)`. Inside a vehicle, the vehicle takes the hit.
