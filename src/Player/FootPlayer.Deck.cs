@@ -81,6 +81,15 @@ public partial class FootPlayer
     /// <summary>Just stood up or left the wheel: carried at this velocity until the vehicle's deck is here to stand on.</summary>
     private float _deckWait;
     private Vector3 _deckWaitVelocity;
+
+    /// <summary>
+    /// How long a driver who got up from the wheel waits for the parked vehicle's deck: the server
+    /// spawns it a round trip later, more under load. Past it, they step out by the door instead.
+    /// </summary>
+    private const float StandInWait = 5f;
+
+    /// <summary>Got up from the wheel (#162): the way out by the door if the deck never comes, and where they stood up.</summary>
+    private (Vector3 Door, Vector3 Right, float Side, Transform3D Frame, Rideable Vehicle, Vector3 From)? _standInExit;
     /// <summary>The vehicle's velocity smoothed, its acceleration, and how long that has been hard: the push a standing passenger feels.</summary>
     private Vector3 _deckFrameVel, _deckAccel;
     private bool _deckFrameValid;
@@ -158,8 +167,13 @@ public partial class FootPlayer
             Velocity = world;
             _deckWait = 2.5f;
             _deckWaitVelocity = world with { Y = 0 };
+            _standInExit = null;
             _deckScan = 0;
         }
+        // waiting for the deck to stand on: looked for every frame, not twice a second, so it and the
+        // exception from the vehicle's hull come the frame the vehicle does — in between, the parked
+        // bus closed round a player not excepted from it, and shoved them out onto its roof
+        if (_deckWait > 0f && !Aboard) _deckScan = 0;
         _deckScan -= dt;
         if (_deckScan <= 0) { _deckScan = 0.5; ScanDecks(); }
 
@@ -211,6 +225,26 @@ public partial class FootPlayer
         DeckYaw = Mathf.Wrap(Rotation.Y - YawOf(now), -Mathf.Pi, Mathf.Pi);
     }
 
+    /// <summary>
+    /// The origin moved (#185, offline): the deck state kept in world space moves with it. The frame
+    /// it was carried from, above all: stale, the next carry jumps the player by the whole shift.
+    /// </summary>
+    private void ShiftDeck(Core.OriginShift shift)
+    {
+        _carriedFrom = shift.Apply(_carriedFrom);
+        _deckWaitVelocity = shift.Direction(_deckWaitVelocity);
+        _deckFrameVel = shift.Direction(_deckFrameVel);
+        _deckAccel = shift.Direction(_deckAccel);
+        _stumble = shift.Direction(_stumble);
+        foreach (var set in _decks.Values)
+        {
+            set.LastPos = shift.Point(set.LastPos);
+            set.Velocity = shift.Direction(set.Velocity);
+        }
+        if (_standInExit is { } e)
+            _standInExit = (shift.Point(e.Door), shift.Direction(e.Right), e.Side, shift.Apply(e.Frame), e.Vehicle, shift.Point(e.From));
+    }
+
     /// <summary>Builds the decks of walkable vehicles that came near and frees those that left.</summary>
     private void ScanDecks()
     {
@@ -218,7 +252,8 @@ public partial class FootPlayer
         foreach (var p in GetTree().GetNodesInGroup(Group).OfType<FootPlayer>())
             if (p != this && RideOfHost(p) is { Walkable: true } && p.GlobalPosition.DistanceTo(GlobalPosition) < DeckReach) near.Add(p);
         foreach (var v in VehicleManager.Instance?.GetChildren().OfType<VehicleBody>() ?? Enumerable.Empty<VehicleBody>())
-            if (RideOfHost(v) is { Walkable: true } && v.GlobalPosition.DistanceTo(GlobalPosition) < DeckReach) near.Add(v);
+            // only once its frame stands on the ground (VehicleBody.Posed): a frame later it jumps there
+            if (RideOfHost(v) is { Walkable: true } && v.Posed && v.GlobalPosition.DistanceTo(GlobalPosition) < DeckReach) near.Add(v);
 
         var keys = near.Select(KeyOf).ToHashSet();
         foreach (var gone in _decks.Keys.Where(k => !keys.Contains(k) || !IsInstanceValid(_decks[k].Host)).ToList())
@@ -246,6 +281,10 @@ public partial class FootPlayer
         foreach (var deck in ride.Decks)
         {
             var body = new StaticBody3D { Name = $"Deck_{key.Replace(':', '_')}_{deck.Section}", TopLevel = true, CollisionLayer = 0, CollisionMask = 0 };
+            // created where it stands: put there after entering the world, Jolt sweeps a body from the
+            // origin to its place in the next step, and a deck's roof swept up through the player
+            // standing in the aisle, who came out on top of it (#162)
+            if (SectionFrame(host, deck.Section) is { } at && at.IsInsideTree()) body.Transform = at.GlobalTransform.Orthonormalized();
             var doorParts = new List<(CollisionShape3D, DeckBox)>();
             foreach (var box in deck.Boxes)
             {
@@ -322,6 +361,14 @@ public partial class FootPlayer
             _deckWait -= dt;
             GlobalPosition += _deckWaitVelocity * dt;
             Velocity = _deckWaitVelocity;
+            if (_deckWait <= 0f && _standInExit is { } exit)
+            {
+                // the parked vehicle never came: out by its door, where it will stand, not in it
+                var moved = GlobalPosition - exit.From;
+                var frame = exit.Frame with { Origin = exit.Frame.Origin + moved };
+                _standInExit = null;
+                GlobalPosition = FindExit(exit.Door + moved, exit.Right, exit.Side, frame, exit.Vehicle, grounded: true);
+            }
             return true;
         }
         return false;
@@ -336,6 +383,7 @@ public partial class FootPlayer
         _carriedFrom = frame;
         _carried = true;
         _deckWait = 0f;
+        _standInExit = null;
         _deckFrameValid = false;
         Velocity -= VelocityOfHost(set.Host);
         CollisionMask = DeckLayer;
@@ -572,14 +620,19 @@ public partial class FootPlayer
         return frame.GlobalTransform * local;
     }
 
-    /// <summary>On one's feet at <paramref name="spot"/> in a walkable vehicle going at <paramref name="velocity"/>, aboard as soon as its deck is here.</summary>
-    private void StandIn(Vector3 spot, Vector3 velocity)
+    /// <summary>
+    /// On one's feet at <paramref name="spot"/> in a walkable vehicle going at <paramref name="velocity"/>,
+    /// aboard as soon as its deck is here. <paramref name="exit"/>: up from the wheel of a vehicle
+    /// being parked, the way out by its door should its deck not come.
+    /// </summary>
+    private void StandIn(Vector3 spot, Vector3 velocity, (Vector3 Door, Vector3 Right, float Side, Transform3D Frame, Rideable Vehicle)? exit = null)
     {
         GlobalPosition = spot;
         Velocity = velocity;
-        _deckWait = 2f;
+        _deckWait = exit != null ? StandInWait : 2f;
         _deckWaitVelocity = velocity;
         _deckScan = 0;
+        _standInExit = exit is { } e ? (e.Door, e.Right, e.Side, e.Frame, e.Vehicle, spot) : null;
     }
 
     /// <summary>A passenger in a walkable vehicle stands up into the aisle, at any speed.</summary>

@@ -74,12 +74,39 @@
   aisle (passenger, driverless host, or driver: `ExitVehicle` → `StandIn`), held where the deck
   will be until the vehicle's new form (parked, or rehosted) is here. E from outside still drives a
   parked bus; it no longer seats a passenger (walk in).
+- **Up from the wheel, waiting for the parked bus** (`StandIn`, `_standInExit`): the server spawns
+  it a round trip later, more under load. While waiting the decks are looked for **every frame**
+  (not twice a second): in between, the arriving bus closed round a player not yet excepted from its
+  hull, who was shoved onto its roof, or left standing on the road under its floor. The wait is 5 s
+  (`StandInWait`); past it, the player steps out by the door (`FindExit`, #209) instead of being
+  dropped where the bus will appear. Reproduced with the server's spawn held back 2.5 s and 8 s.
+- **A headless peer poses a frame for a parked truck or bus** (`VehicleBody`, an empty `Visual` with
+  `Section{k}` children, posed by `StandOnGround` like the model): the dedicated server and every
+  check. The body's own node was the frame before, and its box rests on whatever it touches: a
+  metre off the road at a door on a crest, so the driver who got up stood under the aboard box and
+  never boarded (`--decknet solo` failed there), and the server's guests were looked for a metre off.
+- **A deck body is created where it stands** (`BuildDeck`): created at the origin and put in place
+  in the same frame, Jolt sweeps it there in the next step (as it does a kinematic body, see
+  `core/floating-origin`), and the roof slab swept up through the player waiting in the aisle, who
+  came out standing on the roof. Deterministic on the generated world: every bus driver who got up
+  ended on the roof, 7 of 13 `--exitcheck` exits. A parked vehicle's deck is also not built before
+  its frame is posed on the ground (`VehicleBody.Posed`), so it never jumps a metre or more.
+- **A parked vehicle's ground ray skips players** (`VehicleBody.Ground`): a player standing in the
+  bus by its front axle was read as the road, and the frame stood two metres up on their head.
+- **Floating origin** (#185, offline): the deck state kept in world space (`_carriedFrom`, each
+  deck's `LastPos`, `_standInExit`) moves in `ShiftDeck`. Without it the first shift dropped the
+  driver who got up from a rolling bus 17 m behind it (`--exitcheck --originstress 20`).
 - **Checks**: `--decknet a|b` (loopback server + 2 clients: a drives a city bus, b walks in by the
   middle door, sits, stands when it stops, presses the middle door open from inside as the bus
   drives, rides standing until a jumps out at 35 km/h, stays aboard as it coasts to a stop, opens
   the parked bus's door by its button and walks out; both peers check where b is drawn), `--decknet solo pw` (one client: up from the wheel into the
   now parked bus, out, the outside button shuts and opens the door, back in, sit, stand, walk to the
   wheel, drive), both with `--deck-inertia`
+  on the server; `--exitcheck [pw]` gets up from every bus's wheel (into the aisle) and from a city
+  bus's at 19 km/h (still aboard as it rolls on). Run them **on generated terrain** (no
+  `terrain_location.json`, the server with `--generated-world`): on the real Martigny data the scripted drive of `--decknet a|b` goes into
+  a house as a jumps out (the bus stops dead, "still rolls" fails) and both clients' spawn can put the
+  bus over b;
   on the server; `--avatars … --cockpit --heavy N --deck [--door]` draws the deck. Test traps met:
   both clients spawn on one spot (b was inside a's bus and was carried off), a headless client has
   no parked models (the parked vehicle's own node is the frame then).

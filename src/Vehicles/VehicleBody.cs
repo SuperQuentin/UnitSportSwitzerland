@@ -181,6 +181,17 @@ public partial class VehicleBody : CharacterBody3D
                 AddChild(_engineSound);
             }
         }
+        else if (Ride is Truck or ParkedTrailer)
+        {
+            // Headless (the server, a check) nothing is drawn, but the frame the model would stand in
+            // still matters: a parked bus's decks are walked in it, and its guests found by it
+            // (#162). Its box rests on whatever it touches, a metre off the road at a door on a
+            // crest; the frame is posed on the ground axle by axle, as the model is.
+            _visual = new Node3D { Name = "Visual" };
+            int sections = Ride is Truck train ? train.Train.Count : ((ParkedTrailer)Ride).Bodies.Count;
+            for (int k = 1; k < sections; k++) _visual.AddChild(new Node3D { Name = $"Section{k}" });
+            AddChild(_visual);
+        }
 
         _wasWrecked = Wrecked;
         if (Wrecked)
@@ -514,6 +525,14 @@ public partial class VehicleBody : CharacterBody3D
     }
 
     private float _standIn;
+
+    /// <summary>
+    /// Its frame (<see cref="Visual"/> and its sections) stands on the ground: false until the
+    /// first pose after it appears, while the frame is still the body's own, wherever its box came
+    /// to rest. A deck is not walked in before (#162): one built in the unposed frame and moved onto
+    /// the ground a frame later swept the driver who had just got up onto its roof.
+    /// </summary>
+    public bool Posed { get; private set; }
     private bool _stoodAsleep;
 
     /// <summary>
@@ -537,6 +556,7 @@ public partial class VehicleBody : CharacterBody3D
         _visual.GlobalTransform = poses[0];
         for (int k = 1; k < poses.Length; k++)
             if (_visual.GetNodeOrNull<Node3D>($"Section{k}") is { } rig) rig.GlobalTransform = poses[k];
+        Posed = true;
 
         // the boxes, at rest only (and once more when it settles): sections from their own pose
         bool settled = _asleep || !IsMultiplayerAuthority();
@@ -561,10 +581,19 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>The ground's height under a point: whatever is solid there (a road, a deck) but this vehicle, else the terrain.</summary>
     private float Ground(Vector3 p)
     {
+        var exclude = new Godot.Collections.Array<Rid> { GetRid() };
         var query = PhysicsRayQueryParameters3D.Create(p + Vector3.Up * 3f, p + Vector3.Down * 6f,
-            CollisionMask & ~World.TreeColliders.Layer, new Godot.Collections.Array<Rid> { GetRid() });
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.Count > 0) return hit["position"].AsVector3().Y;
+            CollisionMask & ~World.TreeColliders.Layer, exclude);
+        // not a player: one standing in a parked bus by its front axle (up from the wheel, #162) was
+        // read as the road, and the bus stood on their head, two metres up
+        for (int tries = 0; tries < 4; tries++)
+        {
+            var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+            if (hit.Count == 0) break;
+            if (hit["collider"].AsGodotObject() is not FootPlayer) return hit["position"].AsVector3().Y;
+            exclude.Add(hit["rid"].AsRid());
+            query.Exclude = exclude;
+        }
         return Terrain != null && Terrain.TryGetHeight(p, out float g) ? g : p.Y;
     }
 

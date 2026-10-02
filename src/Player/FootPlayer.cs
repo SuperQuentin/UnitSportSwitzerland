@@ -1915,7 +1915,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         SeatIndex = 0;
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
-        if (aisle is { } spot) StandIn(spot, state.Velocity);
+        if (aisle is { } spot) StandIn(spot, state.Velocity, (door, right, side, frame, vehicle));
         else GlobalPosition = FindExit(door, right, side, frame, vehicle, grounded);
     }
 
@@ -2097,6 +2097,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _mantleForward = shift.Direction(_mantleForward);
         _camFwd = shift.Direction(_camFwd);
         Velocity = shift.Direction(Velocity);
+        ShiftDeck(shift);
     }
 
     private void RememberSafe(Vector3 at)
