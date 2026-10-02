@@ -76,5 +76,5 @@
 - **Test region** (D: on the dev machine, not in the repo): Nyon E 2506-2508 N 1137-1138 copied
   with a one-tile halo and its raw roads; `--roadcheck --sidewalks --at 2507650,1137678` samples
   verge, path, buffer bands.
-- **Follow-ups**: protected intersections #291, pedestrian crossings #292. Not done: a single
+- **Follow-ups** (tracked in #345): protected intersections #291, pedestrian crossings #292. Not done: a single
   uphill lane on narrow rural climbs; paths across a roundabout; bikes as traffic.
