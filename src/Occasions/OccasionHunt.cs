@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Godot;
 using UnitSport.Items;
+using UnitSport.Core;
 
 namespace UnitSport.Occasions;
 
@@ -49,7 +50,7 @@ public partial class OccasionHunt : Node, Core.IOriginShiftAware
     public override void _Ready()
     {
         Name = "OccasionHunt";
-        _probe = OS.GetCmdlineUserArgs().Contains("--huntcheck");
+        _probe = CmdArgs.Has("--huntcheck");
         // a probe must leave the player's real claims alone: it starts from none and never saves
         if (!_probe) Load();
         if (OccasionDecor.Instance is { } decor) decor.IsClaimed = IsClaimed;

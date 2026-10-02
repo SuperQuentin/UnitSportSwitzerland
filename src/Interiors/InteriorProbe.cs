@@ -55,16 +55,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
         _shot = shot;
     }
 
-    public static (bool Requested, string? Shot) ParseArgs()
-    {
-        foreach (var a in OS.GetCmdlineUserArgs())
-            if (a.StartsWith("--interiorcheck"))
-            {
-                var parts = a.Split(',');
-                return (true, parts.Length > 1 ? parts[1] : null);
-            }
-        return (false, null);
-    }
+    public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--interiorcheck");
 
     /// <summary>
     /// <c>--doorkind Agricultural</c>: the check and the door watch use the nearest door of that
@@ -72,7 +63,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     /// </summary>
     public static BuildingKind? DoorKindArg()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         for (int i = 0; i < args.Length - 1; i++)
             if (args[i] == "--doorkind" && Enum.TryParse<BuildingKind>(args[i + 1], true, out var kind))
                 return kind;
@@ -991,7 +982,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 return null;
             case 2:
                 // --film: every frame of the way through, to see the step over the sill
-                if (_shot != null && shot != null && _frame < 400 && Array.IndexOf(OS.GetCmdlineUserArgs(), "--film") >= 0)
+                if (_shot != null && shot != null && _frame < 400 && CmdArgs.Has("--film"))
                     GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", $"{shot}_f{_frame++:000}.png"));
                 if (_player!.Indoors != inward && _walkT < 6) return null;
                 // a step past the sill, then stop

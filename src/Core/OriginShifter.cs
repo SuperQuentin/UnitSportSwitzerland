@@ -92,14 +92,7 @@ public partial class OriginShifter : Node
     /// <summary>"--originshift &lt;m&gt;": a different threshold, still snapped to whole tiles.</summary>
     public static double? ParseThreshold() => ParseMetres("--originshift");
 
-    private static double? ParseMetres(string flag)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, flag);
-        if (i < 0 || i + 1 >= args.Length) return null;
-        return double.TryParse(args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out double m) && m > 0
-            ? m : null;
-    }
+    private static double? ParseMetres(string flag) => CmdArgs.Double(flag) is double m && m > 0 ? m : null;
 
     public override void _EnterTree()
     {

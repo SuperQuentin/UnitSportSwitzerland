@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Net;
 
@@ -232,22 +233,8 @@ public sealed class PlayerRegistry
     }
 
     /// <summary>Reads "--admin-password &lt;pw&gt;" from the server command line.</summary>
-    public static string? ParseAdminPassword()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--admin-password")
-                return args[i + 1];
-        return null;
-    }
+    public static string? ParseAdminPassword() => CmdArgs.Value("--admin-password");
 
     /// <summary>Reads "--name &lt;n&gt;" from the client command line.</summary>
-    public static string ParseRequestedName()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--name")
-                return args[i + 1];
-        return string.Empty;
-    }
+    public static string ParseRequestedName() => CmdArgs.Value("--name") ?? string.Empty;
 }

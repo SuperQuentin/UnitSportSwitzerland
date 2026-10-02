@@ -45,7 +45,7 @@ public partial class NetSmoothProbe : Node
 
     public static (double Seconds, string Label, float MinSpeed)? ParseArgs()
     {
-        foreach (var a in OS.GetCmdlineUserArgs())
+        foreach (var a in CmdArgs.All)
             if (a.StartsWith("--netsmooth"))
             {
                 var parts = a.Split(',');

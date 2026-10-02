@@ -219,7 +219,7 @@ public sealed class NpcArrival
     /// <summary>What it is actually doing: a turn with no room falls back to a simpler one.</summary>
     public ArrivalStyle Style { get; private set; }
     public System.Action<string>? Log;
-    private static readonly bool Trace = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trace") >= 0;
+    private static readonly bool Trace = CmdArgs.Has("--trace");
 
     private float _slotS, _slotLat;
     private Step _step = Step.Approach;

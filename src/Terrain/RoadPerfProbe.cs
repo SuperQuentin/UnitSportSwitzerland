@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using Godot;
 using UnitSport.Terrain.Format;
+using UnitSport.Core;
 
 namespace UnitSport.Terrain;
 
@@ -19,10 +20,8 @@ public partial class RoadPerfProbe : Node
 {
     public static (string Dir, string Label)? ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--roadperf");
-        if (i < 0 || i + 1 >= args.Length) return null;
-        var p = args[i + 1].Split(',');
+        if (CmdArgs.Value("--roadperf") is not { } value) return null;
+        var p = value.Split(',');
         return (p[0], p.Length > 1 ? p[1] : "roads");
     }
 

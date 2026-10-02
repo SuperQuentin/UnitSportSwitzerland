@@ -19,17 +19,9 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class ExitProbe : Node, Core.IOriginShiftAware
 {
-    public static bool Requested => System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--exitcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--exitcheck");
 
-    private static string? Password
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = System.Array.IndexOf(args, "--exitcheck");
-            return i >= 0 && i + 1 < args.Length && !args[i + 1].StartsWith("--") ? args[i + 1] : null;
-        }
-    }
+    private static string? Password => CmdArgs.Value("--exitcheck", notFlag: true);
 
     private readonly System.Func<FootPlayer?> _local;
     private int _failed;

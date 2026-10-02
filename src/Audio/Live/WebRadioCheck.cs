@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Net;
 using UnitSport.Player;
 using UnitSport.Vehicles;
+using UnitSport.Core;
 
 namespace UnitSport.Audio.Live;
 
@@ -55,21 +56,14 @@ public partial class WebRadioCheck : Node
     /// <summary>The check for this run, if asked for: <paramref name="networked"/> for driver/watch, not for offline.</summary>
     public static WebRadioCheck? Create(Func<FootPlayer?> local, Func<Node?> players, bool networked)
     {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--webradiocheck");
-        if (i < 0) return null;
-        string role = i + 1 < args.Length ? args[i + 1] : "watch";
+        if (!CmdArgs.Has("--webradiocheck")) return null;
+        string role = CmdArgs.Value("--webradiocheck") ?? "watch";
         if (networked == (role == "offline")) return null;
         GD.Print($"[webradiocheck] role {role}");
         return new WebRadioCheck(role, local, players);
     }
 
-    private static string? Password()
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = Array.IndexOf(args, "--webradiopw");
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-    }
+    private static string? Password() => CmdArgs.Value("--webradiopw");
 
     private FootPlayer? Other()
     {
