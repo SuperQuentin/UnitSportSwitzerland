@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Godot;
+using UnitSport.Net;
 
 namespace UnitSport.Items;
 
@@ -85,8 +86,7 @@ public partial class Bank : Node
         if (Instance == this) Instance = null;
     }
 
-    private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
-        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
+    private bool Online => NetLink.Online(this);
 
     private const string LocalName = "local";
 
@@ -263,10 +263,8 @@ public partial class Bank : Node
         }
     }
 
-    private void SaveAccounts(string file)
-    {
-        DirAccess.MakeDirRecursiveAbsolute(ProjectSettings.GlobalizePath(file.GetBaseDir()));
-        using var f = Godot.FileAccess.Open(file, Godot.FileAccess.ModeFlags.Write);
-        f?.StoreString(JsonSerializer.Serialize(_accounts, new JsonSerializerOptions { WriteIndented = true }));
-    }
+    // written in the background (json-store): a claim does not wait for the disk
+    private void SaveAccounts(string file) =>
+        Core.JsonStore.SaveAsync(file, _accounts, Core.JsonStore.Indented,
+            e => GD.PushWarning($"[bank] could not write {file}: {e.Message}"));
 }

@@ -11,7 +11,12 @@
   on a 15 GB machine several agents running clients at once get OOM-killed — check `free -g`,
   and a run with a process killed (exit 137) is invalid.
 - `--serverstats`: frame (wall clock) and busy ms p50/p99/max, working set, heap, GC counts and
-  pauses, ENet bytes/packets per second total and per peer, rtt/loss, kernel UDP receive drops.
+  pauses, ENet bytes/packets per second total and per peer, rtt/loss, kernel UDP receive drops
+  (Linux only).
+- busy is measured per frame and slow frames name their jobs (#221): `perf-server-frame-metrics`;
+  periodic main-thread jobs and prints: `perf-no-main-thread-periodic-jobs`.
+- Windows (Git Bash): `$!` is the console wrapper's msys pid; `loadtest.sh` reads swarm CPU and
+  memory from the Godot child process through PowerShell, and free memory from `MemFree`.
 - **Results, 32 players (issue #37)**:
 
   | | before | after |

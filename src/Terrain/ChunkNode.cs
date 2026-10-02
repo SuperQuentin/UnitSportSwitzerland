@@ -10,6 +10,9 @@ namespace UnitSport.Terrain;
 public partial class ChunkNode : Node3D
 {
     private MeshInstance3D? _meshInstance;
+
+    /// <summary>The tile's ground mesh, once built.</summary>
+    public MeshInstance3D? Ground => _meshInstance;
     private MeshInstance3D? _roadInstance;
     private StaticBody3D? _body;
 
@@ -109,7 +112,9 @@ public partial class ChunkNode : Node3D
     {
         if (_meshInstance == null)
         {
-            _meshInstance = new MeshInstance3D();
+            // the ground, its roads and its water never cast sun shadows (lit styles): millions
+            // of triangles under the cascades, for shade the cel light already gives the slopes
+            _meshInstance = new MeshInstance3D { CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
             AddChild(_meshInstance);
         }
         Swap(_meshInstance, mesh);
@@ -119,7 +124,7 @@ public partial class ChunkNode : Node3D
     {
         if (_roadInstance == null)
         {
-            _roadInstance = new MeshInstance3D { Name = "Roads" };
+            _roadInstance = new MeshInstance3D { Name = "Roads", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
             AddChild(_roadInstance);
         }
         Swap(_roadInstance, mesh);
@@ -144,17 +149,42 @@ public partial class ChunkNode : Node3D
     /// <summary>The buildings' collision shape — one place, so <c>--hitboxcheck</c> tests exactly what the world gets.</summary>
     public static ConcavePolygonShape3D BuildingShape(Vector3[] faces) => new() { Data = faces };
 
-    public void SetBuildingCollision(Vector3[] faces)
+    private CollisionShape3D?[]? _buildingCells;
+
+    /// <summary>
+    /// Sorts collision triangles into the ground's 4×4 cells by centroid, on the build worker:
+    /// a town tile's one BVH was up to 56 ms on the main thread, a cell's is a fraction of it.
+    /// </summary>
+    public static Vector3[][] SplitByCell(Vector3[] faces)
     {
-        var shape = BuildingShape(faces);
+        var cells = new List<Vector3>[CollisionCellCount];
+        for (int c = 0; c < CollisionCellCount; c++) cells[c] = new List<Vector3>();
+        float spacing = (float)ChunkFormat.SpacingM;
+        for (int t = 0; t + 2 < faces.Length; t += 3)
+        {
+            var mid = (faces[t] + faces[t + 1] + faces[t + 2]) / 3f;
+            var list = cells[CollisionCell((int)(mid.X / spacing), (int)(mid.Z / spacing))];
+            list.Add(faces[t]); list.Add(faces[t + 1]); list.Add(faces[t + 2]);
+        }
+        var result = new Vector3[CollisionCellCount][];
+        for (int c = 0; c < CollisionCellCount; c++) result[c] = cells[c].ToArray();
+        return result;
+    }
+
+    /// <summary>Builds (or clears, when empty) one cell of the building collision.</summary>
+    public void SetBuildingCell(Vector3[] faces, int cell)
+    {
         if (_buildingBody == null)
         {
             _buildingBody = new StaticBody3D { Name = "BuildingBody" };
             AddChild(_buildingBody);
         }
-        foreach (Node child in _buildingBody.GetChildren())
-            child.QueueFree();
-        _buildingBody.AddChild(new CollisionShape3D { Shape = shape });
+        _buildingCells ??= new CollisionShape3D?[CollisionCellCount];
+        _buildingCells[cell]?.QueueFree();
+        _buildingCells[cell] = null;
+        if (faces.Length == 0) return;
+        _buildingCells[cell] = new CollisionShape3D { Shape = BuildingShape(faces) };
+        _buildingBody.AddChild(_buildingCells[cell]);
     }
 
     private StaticBody3D? _roadBody;
@@ -165,14 +195,16 @@ public partial class ChunkNode : Node3D
     /// other at-grade road/path already stands on terrain collision blended toward it; see
     /// <c>TerrainMeshBuilder.ComputeRoadBlend</c>.
     /// </summary>
-    public void SetRoadCollision(Vector3[] faces)
+    /// <remarks>
+    /// Road collision (decks, walls, railings, islands, sign poles, kerbs) is cut into the same
+    /// 4×4 cells as the ground (<see cref="SplitByCell"/>) and committed one cell per frame.
+    /// </remarks>
+    public void SetRoadCell(Vector3[] faces, int cell)
     {
-        if (faces.Length == 0)
-        {
-            _roadBody?.QueueFree();
-            _roadBody = null;
-            return;
-        }
+        _roadCells ??= new CollisionShape3D?[CollisionCellCount];
+        _roadCells[cell]?.QueueFree();
+        _roadCells[cell] = null;
+        if (faces.Length == 0) return;
 
         // BackfaceCollision: a bridge deck is walked on from above, but Godot's default (false)
         // makes a ConcavePolygonShape3D one-sided for exactly the queries a player's own
@@ -187,10 +219,11 @@ public partial class ChunkNode : Node3D
             _roadBody = new StaticBody3D { Name = "RoadBody" };
             AddChild(_roadBody);
         }
-        foreach (Node child in _roadBody.GetChildren())
-            child.QueueFree();
-        _roadBody.AddChild(new CollisionShape3D { Shape = shape });
+        _roadCells[cell] = new CollisionShape3D { Shape = shape };
+        _roadBody.AddChild(_roadCells[cell]);
     }
+
+    private CollisionShape3D?[]? _roadCells;
 
     private MultiMeshInstance3D? _coniferInstance;
     private MultiMeshInstance3D? _broadleafInstance;
@@ -227,6 +260,13 @@ public partial class ChunkNode : Node3D
         foreach (var t in trees) if (wanted(t)) count++;
         var buffer = new float[count * FloatsPerInstance];
 
+        // Instances go out in a shuffled order, so any prefix is an even thinning of the whole
+        // tile: a far tile draws only the first VisibleInstanceCount (SetTreeDensity). Seeded,
+        // so every peer and every rebuild thins the same trees.
+        var slot = new int[count];
+        for (int k = 0; k < count; k++) slot[k] = k;
+        new Random(count).Shuffle(slot);
+
         int i = 0;
         foreach (var t in trees)
         {
@@ -253,7 +293,7 @@ public partial class ChunkNode : Node3D
 
             // Transform3D as three rows of (basis column x, y, z, origin): a diagonal basis
             // of (radius, height, radius) with the tree's position as the last column.
-            int o = i * FloatsPerInstance;
+            int o = slot[i] * FloatsPerInstance;
             buffer[o + 0] = radius; buffer[o + 1] = 0; buffer[o + 2] = 0; buffer[o + 3] = t.X;
             buffer[o + 4] = 0; buffer[o + 5] = t.Height; buffer[o + 6] = 0; buffer[o + 7] = t.Y;
             buffer[o + 8] = 0; buffer[o + 9] = 0; buffer[o + 10] = radius; buffer[o + 11] = t.Z;
@@ -267,8 +307,13 @@ public partial class ChunkNode : Node3D
     /// The MultiMeshes of a tile, built on the worker; null where a tile has none. The far pair
     /// holds the same trees as billboards, when the style has them (<see cref="Styles.StyleKit.TreeLod"/>).
     /// </summary>
+    /// <para>
+    /// With <see cref="Styles.MeshDetail.High"/> trees and billboards, a tile builds no 3D trees:
+    /// <see cref="Near"/> hands its instances to <see cref="NearTrees"/>, which draws the ones in
+    /// range from every tile, so the heavier trees cost only what is near the camera.
+    /// </para>
     public sealed record TreeMeshes(MultiMesh? Conifers, MultiMesh? Broadleaves,
-        MultiMesh? ConifersFar = null, MultiMesh? BroadleavesFar = null)
+        MultiMesh? ConifersFar = null, MultiMesh? BroadleavesFar = null, TreeBuffers? Near = null)
     {
         /// <summary>Frees a build that is thrown away before it reached a tile.</summary>
         public void Dispose()
@@ -285,18 +330,50 @@ public partial class ChunkNode : Node3D
     /// computed: assigning a buffer makes the RenderingServer walk every instance for an AABB,
     /// 16 ms for a 60k-tree tile on the main thread, unless a custom one is already set.
     /// </summary>
-    /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    /// <param name="detail">The visual style's mesh detail: PS1's 20-triangle trees, or Cartoon's
+    /// tiered conifers and puffy broadleaves (<see cref="HighDetailTrees"/>).</param>
     public static TreeMeshes BuildTreeMeshes(TreeBuffers trees, Material material, Aabb bounds,
         Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
-        var conifers = Make(trees.Conifers, trees.ConiferCount, ConeMesh(material), bounds);
-        var broadleaves = Make(trees.Broadleaves, trees.BroadleafCount, CrownMesh(material), bounds);
-        if (Styles.StyleKit.TreeFarMaterial is not { } far)
-            return new TreeMeshes(conifers, broadleaves);
-        // the same instances again as billboards: the shaders crossfade the two per tree
-        return new TreeMeshes(conifers, broadleaves,
-            Make(trees.Conifers, trees.ConiferCount, BillboardMesh(far, 0f), bounds),
-            Make(trees.Broadleaves, trees.BroadleafCount, BillboardMesh(far, 1f), bounds));
+        var far = Styles.StyleKit.TreeFarMaterial;
+        MultiMesh? conifersFar = null, broadleavesFar = null;
+        if (far != null)
+        {
+            // the same instances again as billboards: the shaders crossfade the two per tree
+            conifersFar = Make(trees.Conifers, trees.ConiferCount, UnitMesh(far, 2), bounds);
+            broadleavesFar = Make(trees.Broadleaves, trees.BroadleafCount, UnitMesh(far, 3), bounds);
+        }
+        bool high = detail == Styles.MeshDetail.High;
+        if (high && far != null)
+            return new TreeMeshes(null, null, conifersFar, broadleavesFar, Near: trees);
+        return new TreeMeshes(Make(trees.Conifers, trees.ConiferCount, UnitMesh(material, high ? 4 : 0), bounds),
+            Make(trees.Broadleaves, trees.BroadleafCount, UnitMesh(material, high ? 5 : 1), bounds),
+            conifersFar, broadleavesFar);
+    }
+
+    private static readonly Dictionary<(Material, int), ArrayMesh> UnitMeshes = new();
+
+    /// <summary>
+    /// The unit tree meshes, shared by every tile: 0 cone, 1 crown, 2/3 conifer/broadleaf
+    /// billboard, 4/5 <see cref="Styles.MeshDetail.High"/>'s tiered cone and puffy crown. They used
+    /// to be built per tile build and never freed (a MultiMesh does not own its mesh), four
+    /// RenderingServer meshes leaked with every tree tile.
+    /// </summary>
+    private static ArrayMesh UnitMesh(Material material, int kind)
+    {
+        lock (UnitMeshes)
+        {
+            if (!UnitMeshes.TryGetValue((material, kind), out var mesh))
+                UnitMeshes[(material, kind)] = mesh = kind switch
+                {
+                    0 => ConeMesh(material),
+                    1 => CrownMesh(material),
+                    4 => TieredConeMesh(material),
+                    5 => PuffCrownMesh(material),
+                    _ => BillboardMesh(material, kind - 2),
+                };
+            return mesh;
+        }
     }
 
     private static MultiMesh? Make(float[] buffer, int count, ArrayMesh mesh, Aabb bounds)
@@ -320,12 +397,39 @@ public partial class ChunkNode : Node3D
         Fill(ref _broadleafInstance, "Broadleaves", trees.Broadleaves);
         Fill(ref _coniferFarInstance, "TreesFar", trees.ConifersFar);
         Fill(ref _broadleafFarInstance, "BroadleavesFar", trees.BroadleavesFar);
+        // a ray-traced billboard is traced from the rendering camera, and a shadow pass would
+        // trace it from the light: far trees cast no shadow (they are past the shadow range anyway)
+        foreach (var farNode in new[] { _coniferFarInstance, _broadleafFarInstance })
+            if (farNode != null) farNode.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        if (trees.Near != null) NearTrees.Register(this, trees.Near);
+        else NearTrees.Unregister(this);
         // a tile too far for any of its trees to be 3D skips the 3D MultiMeshes outright: the
         // shader collapses each far tree, but the GPU would still run every vertex
         bool billboards = trees.ConifersFar != null || trees.BroadleavesFar != null;
         foreach (var near in new[] { _coniferInstance, _broadleafInstance })
             if (near?.Multimesh is { } multi)
                 near.VisibilityRangeEnd = billboards ? Styles.StyleKit.TreeNearRange(multi.CustomAabb) : 0f;
+        ApplyTreeDensity();
+    }
+
+    private float _treeDensity = 1f;
+
+    /// <summary>
+    /// The share of this tile's trees drawn, 0..1 (<see cref="LodPolicy.TreeDensity"/>): the
+    /// first that many of the shuffled instances, so a far forest thins evenly, never in patches.
+    /// </summary>
+    public void SetTreeDensity(float density)
+    {
+        if (density == _treeDensity) return;
+        _treeDensity = density;
+        ApplyTreeDensity();
+    }
+
+    private void ApplyTreeDensity()
+    {
+        foreach (var node in new[] { _coniferInstance, _broadleafInstance, _coniferFarInstance, _broadleafFarInstance })
+            if (node?.Multimesh is { } multi)
+                multi.VisibleInstanceCount = _treeDensity >= 1f ? -1 : (int)Math.Ceiling(multi.InstanceCount * _treeDensity);
     }
 
     private void Fill(ref MultiMeshInstance3D? node, string name, MultiMesh? multi)
@@ -413,6 +517,105 @@ public partial class ChunkNode : Node3D
     }
 
     /// <summary>
+    /// Cartoon's trees (<see cref="Styles.MeshDetail.High"/>), unit height, origin at the base,
+    /// with smooth normals for the cel light. The far billboards trace the same shapes
+    /// (<c>shaders/body/tree.gdshaderinc</c>, <c>hit_tier</c> and <c>hit_puff</c>): change both together.
+    /// </summary>
+    public static (ArrayMesh Conifer, ArrayMesh Broadleaf) HighDetailTrees(Material material) =>
+        (UnitMesh(material, 4), UnitMesh(material, 5));
+
+    /// <summary>Conifer: three stacked 7-sided tiers on a trunk. 54 triangles.</summary>
+    private static ArrayMesh TieredConeMesh(Material material)
+    {
+        var v = new List<Vector3>();
+        var n = new List<Vector3>();
+        Trunk(v, n, 0.06f, 0.3f);
+        (float Base, float Top, float R)[] tiers = { (0.22f, 0.62f, 1.0f), (0.45f, 0.82f, 0.75f), (0.66f, 1.0f, 0.5f) };
+        const int sides = 7;
+        foreach (var (b, t, r) in tiers)
+        {
+            float slope = r / (t - b);
+            Vector3 Side(float a) => new Vector3(Mathf.Cos(a), slope, Mathf.Sin(a)).Normalized();
+            for (int i = 0; i < sides; i++)
+            {
+                float a0 = Mathf.Tau * i / sides, a1 = Mathf.Tau * (i + 1) / sides, am = (a0 + a1) * 0.5f;
+                var p0 = new Vector3(Mathf.Cos(a0) * r, b, Mathf.Sin(a0) * r);
+                var p1 = new Vector3(Mathf.Cos(a1) * r, b, Mathf.Sin(a1) * r);
+                v.Add(new Vector3(0, t, 0)); n.Add(Side(am));
+                v.Add(p0); n.Add(Side(a0));
+                v.Add(p1); n.Add(Side(a1));
+                // the underside: a shallow dent up into the tier
+                v.Add(p1); n.Add(Vector3.Down);
+                v.Add(p0); n.Add(Vector3.Down);
+                v.Add(new Vector3(0, b + 0.04f, 0)); n.Add(Vector3.Down);
+            }
+        }
+        return BuildMesh(v, material, n);
+    }
+
+    /// <summary>Broadleaf: three overlapping ellipsoid puffs on a trunk. 120 triangles.</summary>
+    private static ArrayMesh PuffCrownMesh(Material material)
+    {
+        var v = new List<Vector3>();
+        var n = new List<Vector3>();
+        Trunk(v, n, 0.07f, 0.5f);
+        Puff(v, n, new Vector3(0f, 0.70f, 0f), new Vector3(0.72f, 0.28f, 0.72f));
+        Puff(v, n, new Vector3(0.34f, 0.56f, 0.18f), new Vector3(0.52f, 0.22f, 0.52f));
+        Puff(v, n, new Vector3(-0.30f, 0.58f, -0.22f), new Vector3(0.55f, 0.23f, 0.55f));
+        return BuildMesh(v, material, n);
+    }
+
+    /// <summary>A 6-sided trunk prism, corners at radius <paramref name="r"/>, from 0 to <paramref name="top"/>.</summary>
+    private static void Trunk(List<Vector3> v, List<Vector3> n, float r, float top)
+    {
+        const int sides = 6;
+        for (int i = 0; i < sides; i++)
+        {
+            float a0 = Mathf.Tau * i / sides, a1 = Mathf.Tau * (i + 1) / sides;
+            var d0 = new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0));
+            var d1 = new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1));
+            Vector3 b0 = d0 * r, b1 = d1 * r, t0 = b0 + Vector3.Up * top, t1 = b1 + Vector3.Up * top;
+            v.Add(b0); n.Add(d0); v.Add(t1); n.Add(d1); v.Add(b1); n.Add(d1);
+            v.Add(b0); n.Add(d0); v.Add(t0); n.Add(d0); v.Add(t1); n.Add(d1);
+        }
+    }
+
+    /// <summary>A low-poly ellipsoid, 6 around and 4 down, with smooth normals.</summary>
+    private static void Puff(List<Vector3> v, List<Vector3> n, Vector3 c, Vector3 r)
+    {
+        const int seg = 6, rings = 4;
+        static Vector3 P(int i, int j)
+        {
+            float th = Mathf.Pi * j / rings, ph = Mathf.Tau * i / seg;
+            return new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th), Mathf.Sin(th) * Mathf.Sin(ph));
+        }
+        void Add(Vector3 unit)
+        {
+            v.Add(c + unit * r);
+            n.Add(new Vector3(unit.X / r.X, unit.Y / r.Y, unit.Z / r.Z).Normalized());
+        }
+        for (int j = 0; j < rings; j++)
+            for (int i = 0; i < seg; i++)
+            {
+                Vector3 a = P(i, j), b = P(i + 1, j), cc = P(i, j + 1), d = P(i + 1, j + 1);
+                if (j > 0) { Add(a); Add(b); Add(cc); }
+                if (j < rings - 1) { Add(b); Add(d); Add(cc); }
+            }
+    }
+
+    private static ArrayMesh BuildMesh(List<Vector3> verts, Material material, List<Vector3> normals)
+    {
+        using var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = verts.ToArray();
+        arrays[(int)Mesh.ArrayType.Normal] = normals.ToArray();
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        mesh.SurfaceSetMaterial(0, material);
+        return mesh;
+    }
+
+    /// <summary>
     /// A unit quad for the billboard trees: UV = (across, up), UV2.x = kind (0 conifer, 1
     /// broadleaf). The shader rebuilds the positions around each instance, facing the camera.
     /// </summary>
@@ -456,7 +659,7 @@ public partial class ChunkNode : Node3D
     {
         if (_waterInstance == null)
         {
-            _waterInstance = new MeshInstance3D { Name = "Water" };
+            _waterInstance = new MeshInstance3D { Name = "Water", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
             AddChild(_waterInstance);
         }
         Swap(_waterInstance, mesh);
@@ -469,6 +672,7 @@ public partial class ChunkNode : Node3D
     /// </summary>
     public void ReleaseResources()
     {
+        NearTrees.Unregister(this);
         foreach (var instance in new[] { _meshInstance, _roadInstance, _buildingInstance, _waterInstance })
         {
             var mesh = instance?.Mesh;
@@ -485,23 +689,48 @@ public partial class ChunkNode : Node3D
         }
     }
 
-    public void SetCollision(float[] collisionMap)
+    // ---- Height-field collision, in cells ------------------------------------------------
+    //
+    // One 1001² HeightMapShape3D took ~80 ms on the main thread. The tile's ground is cut into
+    // 4×4 cells of 251² samples (neighbours share their edge row), committed one per frame by
+    // ChunkManager, nearest a body first.
+
+    private const int CellsPerSide = 4;
+    private const int CellQuads = (ChunkFormat.GridSize - 1) / CellsPerSide;   // 250
+    public const int CollisionCellCount = CellsPerSide * CellsPerSide;
+    public const int AllCollisionCells = (1 << CollisionCellCount) - 1;
+    public const float TileSizeM = (float)((ChunkFormat.GridSize - 1) * ChunkFormat.SpacingM);
+    private CollisionShape3D?[]? _cells;
+
+    /// <summary>The cell holding grid sample (col, row); row 0 is the tile's north edge.</summary>
+    public static int CollisionCell(int col, int row) =>
+        Math.Clamp(row / CellQuads, 0, CellsPerSide - 1) * CellsPerSide
+        + Math.Clamp(col / CellQuads, 0, CellsPerSide - 1);
+
+    /// <summary>A cell's extent in tile-local metres: x east, y = z south, from the NW corner.</summary>
+    public static Rect2 CollisionCellRect(int cell)
     {
-        var shape = new HeightMapShape3D
-        {
-            MapWidth = ChunkFormat.GridSize,
-            MapDepth = ChunkFormat.GridSize,
-            MapData = collisionMap,
-        };
+        float size = (float)(CellQuads * ChunkFormat.SpacingM);
+        return new Rect2(cell % CellsPerSide * size, cell / CellsPerSide * size, size, size);
+    }
+
+    /// <summary>Builds (or replaces) one cell of the ground collision from the tile's full map.</summary>
+    public void SetCollisionCell(float[] collisionMap, int cell)
+    {
+        const int side = CellQuads + 1;
+        int cx = cell % CellsPerSide, cz = cell / CellsPerSide;
+        var data = new float[side * side];
+        for (int r = 0; r < side; r++)
+            Array.Copy(collisionMap, (cz * CellQuads + r) * ChunkFormat.GridSize + cx * CellQuads, data, r * side, side);
+
+        float spacing = (float)ChunkFormat.SpacingM;
         var collisionShape = new CollisionShape3D
         {
-            Shape = shape,
-            // HeightMapShape3D cells are 1 unit and the shape is XZ-centered; scale to
-            // ChunkFormat.SpacingM and move to the tile center. Verified against the height
-            // sampler in M3. Position is half the 1000 m tile size, not the grid spacing —
-            // unaffected by a spacing change.
-            Position = new Vector3(500f, 0f, 500f),
-            Scale = new Vector3((float)ChunkFormat.SpacingM, 1f, (float)ChunkFormat.SpacingM),
+            Shape = new HeightMapShape3D { MapWidth = side, MapDepth = side, MapData = data },
+            // HeightMapShape3D cells are 1 unit and the shape is XZ-centred: scale to the grid
+            // spacing and move to the cell's centre
+            Position = new Vector3((cx * CellQuads + CellQuads / 2f) * spacing, 0f, (cz * CellQuads + CellQuads / 2f) * spacing),
+            Scale = new Vector3(spacing, 1f, spacing),
         };
 
         if (_body == null)
@@ -509,8 +738,9 @@ public partial class ChunkNode : Node3D
             _body = new StaticBody3D();
             AddChild(_body);
         }
-        foreach (Node child in _body.GetChildren())
-            child.QueueFree();
+        _cells ??= new CollisionShape3D?[CollisionCellCount];
+        _cells[cell]?.QueueFree();
+        _cells[cell] = collisionShape;
         _body.AddChild(collisionShape);
     }
 }

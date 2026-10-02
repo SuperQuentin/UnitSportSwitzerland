@@ -14,10 +14,9 @@ public partial class Main : Node
 	/// </summary>
 	private static void SetWindowTitle(Window window)
 	{
-		var args = OS.GetCmdlineUserArgs();
-		int t = System.Array.IndexOf(args, "--title");
+		var args = CmdArgs.All;
 		string what;
-		if (t >= 0 && t + 1 < args.Length) what = args[t + 1];
+		if (CmdArgs.Value("--title") is { } title) what = title;
 		else
 		{
 			var shown = new System.Collections.Generic.List<string>();
@@ -35,29 +34,13 @@ public partial class Main : Node
 	{
 		SetWindowTitle(GetWindow());
 
-		// the network rules' own self-checks: vision interest and remote interpolation
-		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--interestcheck") >= 0)
-		{
-			bool ok = UnitSport.Net.Interest.SelfCheck() & UnitSport.Net.RemoteInterpolator.SelfCheck();
-			GD.Print(ok ? "[interestcheck] RESULT: ok" : "[interestcheck] RESULT: FAILED");
-			GetTree().Quit(ok ? 0 : 1);
-			return;
-		}
-
-		// the CD beat analyser's self-test: synthetic clicks at known tempos
-		if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--beatcheck") >= 0)
-		{
-			bool ok = UnitSport.Audio.Cd.BeatAnalyzer.SelfCheck();
-			GD.Print(ok ? "[beatcheck] RESULT: ok" : "[beatcheck] RESULT: FAILED");
-			GetTree().Quit(ok ? 0 : 1);
-			return;
-		}
+		// the quick self-checks (--interestcheck, --beatcheck…) run in ClientWorld.QuickChecks
 
 		// LAN discovery probe: browse mDNS for dedicated servers, list them, quit (docs/notes/net/lan-discovery.md)
-		int dc = Array.IndexOf(OS.GetCmdlineUserArgs(), "--discovercheck");
+		int dc = Array.IndexOf(CmdArgs.All, "--discovercheck");
 		if (dc >= 0)
 		{
-			var a = OS.GetCmdlineUserArgs();
+			var a = CmdArgs.All;
 			double wait = 8;
 			if (dc + 1 < a.Length) double.TryParse(a[dc + 1], System.Globalization.NumberStyles.Float,
 				System.Globalization.CultureInfo.InvariantCulture, out wait);
@@ -88,8 +71,10 @@ public partial class Main : Node
 		// there is no point streaming terrain to look at them.
 		if (UnitSport.Avatar.AvatarPreview.Requested(out double seconds, out string output))
 		{
+			// the figures are built and shaded for the visual style: the saved one, or --style
+			GameSettings.Load();
 			float view = 90;
-			var a = OS.GetCmdlineUserArgs();
+			var a = CmdArgs.All;
 			int vi = Array.IndexOf(a, "--view");
 			if (vi >= 0 && vi + 1 < a.Length) float.TryParse(a[vi + 1],
 				System.Globalization.NumberStyles.Float,
@@ -142,7 +127,7 @@ public partial class Main : Node
 		}
 
 		bool isServer = OS.HasFeature("dedicated_server")
-			|| OS.GetCmdlineUserArgs().Contains("--server");
+			|| CmdArgs.Has("--server");
 
 		if (isServer)
 		{
@@ -154,7 +139,7 @@ public partial class Main : Node
 		// picked, the world beside it at /root/Main/World. A run that names a session or a tool on
 		// its command line skips the title and builds the world straight away (GameShell.UseTitle).
 		GameSettings.Load();
-		if (GameShell.UseTitle(OS.GetCmdlineUserArgs()))
+		if (GameShell.UseTitle(CmdArgs.All))
 		{
 			AddChild(new GameShell { Name = "Shell" });
 			return;
@@ -165,4 +150,7 @@ public partial class Main : Node
 		shell.Attach(world);
 		AddChild(world);
 	}
+
+	// after every child's _ExitTree (Godot exits children first): saves still queued reach the disk
+	public override void _ExitTree() => SaveQueue.Flush();
 }

@@ -51,8 +51,8 @@
   buildings or trees are null leaves the old ones standing), dropped from the cache
   (`CachingChunkSource.Invalidate(predicate)`, which bumps the epoch so a straddling fetch is not
   cached), the horizon reloads, and `TerrainReplaced(affected)` fires — `ClientWorld` re-places the
-  player only if their own tile is affected. 87 tiles merge in 6 ms. `ResetAll(moveOrigin)` throws
-  everything away for a rebase (`ClientTerrainSync.Adopt`, when the client has no real tiles).
+  player only if their own tile is affected. 87 tiles merge in 6 ms. A client joining a server merges
+  its tiles the same way and keeps its own origin (#185: no rebase, no world reset).
   **Horizon**: `FallbackChunkSource.LoadHorizonAsync` merges the real index with generated samples for
   the domain + 60 tiles (knots-only blend near real ground; unblended samples cached across reloads):
   45k tiles in ~0.2 s. `HorizonLayer.Reload` queues a re-run asked for mid-load and keeps old blocks

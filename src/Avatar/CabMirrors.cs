@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Avatar;
 
@@ -100,7 +101,7 @@ public sealed class CabMirrors
     /// off every 3 s, whatever the setting, and each span's mean frame time and draw calls logged,
     /// so the two halves see the same stretch of road.
     /// </summary>
-    private static readonly bool MirrorPerf = OS.GetCmdlineUserArgs().Contains("--mirrorperf");
+    private static readonly bool MirrorPerf = CmdArgs.Has("--mirrorperf");
     private bool _perfOn = true;
     private double _perfWall, _perfDraws;
     private int _perfFrames;

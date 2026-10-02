@@ -726,7 +726,7 @@ public partial class ItemController : Node
         {
             var play = RadioPlay.Decode(stack.Data);
             for (int i = 0; i < stack.Count; i++)
-                RadioManager.Instance!.Throw(new RadioState("", 0, origin + Vector3.Up * (0.25f * i), yaw, velocity,
+                RadioManager.Instance!.Throw(new RadioState("", 0, _origin.ToGlobal(origin + Vector3.Up * (0.25f * i)), yaw, velocity,
                     play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
             return;
         }
@@ -854,6 +854,9 @@ public partial class ItemController : Node
         player.Punch(Mathf.DegToRad(weapon.Id switch { ItemId.Shotgun => 4.5f, ItemId.HuntingRifle => 5f, ItemId.Pistol => 2.5f, _ => 1.4f }));
     }
 
+    /// <summary>The crosshair's and the photo's view rays: one query, reused (#221).</summary>
+    private static readonly Core.RayQuery AimRay = new();
+
     /// <summary>
     /// Where a shot from <paramref name="player"/> starts and goes. It leaves the EYE: in third
     /// person the camera is ~3 m behind and to the side, so the camera's ray finds what the
@@ -869,8 +872,7 @@ public partial class ItemController : Node
         {
             var start = cam.GlobalPosition + look * Mathf.Max(0f, (eye - cam.GlobalPosition).Dot(look));
             var end = start + look * (range + 10f);
-            var ray = player.GetWorld3D().DirectSpaceState.IntersectRay(
-                PhysicsRayQueryParameters3D.Create(start, end, uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() }));
+            var ray = AimRay.Cast(player.GetWorld3D().DirectSpaceState, start, end, uint.MaxValue, player.SelfExclude);
             var point = ray.Count > 0 ? ray["position"].AsVector3() : end;
             if (point.DistanceTo(eye) > 1f) aim = (point - eye).Normalized();
         }
@@ -1010,9 +1012,7 @@ public partial class ItemController : Node
         var from = camera.GlobalPosition;
         var forward = -camera.GlobalTransform.Basis.Z;
         float reach = PlaceReach + from.DistanceTo(player.GlobalPosition + Vector3.Up * 1.6f);
-        var query = PhysicsRayQueryParameters3D.Create(from, from + forward * reach,
-            uint.MaxValue, new Godot.Collections.Array<Rid> { player.GetRid() });
-        var hit = player.GetWorld3D().DirectSpaceState.IntersectRay(query);
+        var hit = AimRay.Cast(player.GetWorld3D().DirectSpaceState, from, from + forward * reach, uint.MaxValue, player.SelfExclude);
         if (hit.Count == 0) return (null, null, "Nothing in reach to stick it on.");
         if (PlacedObjects.IdOf(hit["collider"].AsGodotObject() as Node) is long id
             && PlacedObjects.Instance?.All.TryGetValue(id, out var o) == true && o.Kind == PlacedKind.Photo)

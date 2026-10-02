@@ -22,6 +22,9 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
 
     public ChunkManager? Terrain { get; set; }
 
+    /// <summary>This peer's origin: vehicle states carry LV95 (#185), its bodies stand in world space.</summary>
+    public Core.WorldOrigin Origin { get; private set; } = null!;
+
     /// <summary>Where the players are, for despawning what nobody is near.</summary>
     public Func<IEnumerable<Vector3>>? PlayerPositions { get; set; }
 
@@ -54,16 +57,16 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     /// <summary>The manager of this process's world, if there is one.</summary>
     public static VehicleManager? Instance { get; private set; }
 
-    public static VehicleManager Create(Node world, ChunkManager? terrain)
+    public static VehicleManager Create(Node world, ChunkManager? terrain, Core.WorldOrigin origin)
     {
-        var manager = new VehicleManager { Name = NodeName, Terrain = terrain };
+        var manager = new VehicleManager { Name = NodeName, Terrain = terrain, Origin = origin };
         world.AddChild(manager);
         manager._spawner = new MultiplayerSpawner
         {
             Name = "VehicleSpawner",
             SpawnPath = new NodePath("../" + NodeName),
             SpawnFunction = Callable.From((Variant data) =>
-                (Node)VehicleBody.Create(VehicleState.FromDict(data.AsGodotDictionary()), manager.Terrain)),
+                (Node)VehicleBody.Create(VehicleState.FromDict(data.AsGodotDictionary()), manager.Terrain, manager.Origin)),
         };
         world.AddChild(manager._spawner);
         Instance = manager;
@@ -83,7 +86,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         if (!Online)
         {
-            AddChild(VehicleBody.Create(state with { SpawnedAt = VehicleState.Now }, Terrain));
+            AddChild(VehicleBody.Create(state with { SpawnedAt = VehicleState.Now }, Terrain, Origin));
             return;
         }
         RpcId(1, MethodName.RequestPark, state.ToDict());
@@ -99,7 +102,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         state = state with { Owner = 0, Name = name, SpawnedAt = VehicleState.Now };
         if (!Online)
         {
-            AddChild(VehicleBody.Create(state, Terrain));
+            AddChild(VehicleBody.Create(state, Terrain, Origin));
             return name;
         }
         if (!Multiplayer.IsServer() || _spawner == null) return null;
@@ -117,6 +120,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         if (!Online)
         {
             var state = vehicle.Capture();
+            vehicle.Retire();
             vehicle.QueueFree();
             granted(state);
             return;
@@ -253,7 +257,10 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         var claim = _pendingClaim;
         _pendingClaim = null;
-        claim?.Invoke(VehicleState.FromDict(data));
+        var state = VehicleState.FromDict(data);
+        // the server's despawn of it may come after this: out of the way of its new driver until then
+        if (claim != null) GetNodeOrNull<VehicleBody>(state.Name)?.Retire();
+        claim?.Invoke(state);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -264,13 +271,16 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         if (!Multiplayer.IsServer()) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car } vehicle) return;
+        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car or Player.Truck { IsBus: true } } vehicle) return;
         // the server's copy of the asker: only someone standing at the car works its doors
         var asker = GetTree().GetNodesInGroup(Player.FootPlayer.Group).OfType<Player.FootPlayer>()
             .FirstOrDefault(p => p.Name == sender.ToString());
         if (asker == null) return;
         var gap = (asker.GlobalPosition - vehicle.GlobalPosition) with { Y = 0 };
-        if (gap.Length() - vehicle.Ride.ParkedBox.Size.X * 0.5f > DoorReach) return;
+        // a car's doors from its side; a bus's buttons are along its whole length (#162)
+        var box = vehicle.Ride.ParkedBox.Size;
+        float half = vehicle.Ride is Player.Truck ? Mathf.Max(box.X, box.Z) * 0.5f : box.X * 0.5f;
+        if (gap.Length() - half > DoorReach) return;
         int authority = vehicle.GetMultiplayerAuthority();
         if (authority == 1) vehicle.ToggleDoor(bit);
         else RpcId(authority, MethodName.DoorToggled, name, bit);
@@ -306,6 +316,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         if (_housekeeping < 5) return;
         double step = _housekeeping;
         _housekeeping = 0;
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // a car parked in a garage is 3 km under it: measured from up in the world
         float? Ground(Vector3 at) => Terrain != null && Terrain.TryGetHeight(at, out float g) ? g : null;
@@ -319,5 +330,6 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
             v.LonelyFor = near ? 0 : v.LonelyFor + step;
             if (v.LonelyFor > LonelyTime) v.QueueFree();
         }
+        Net.ServerStats.Ran("vehicle housekeeping", t0);
     }
 }

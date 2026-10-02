@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -10,7 +11,7 @@ namespace UnitSport.Items;
 /// </summary>
 public static class InventoryCheck
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--invcheck") >= 0;
+    public static bool Requested => CmdArgs.Has("--invcheck");
 
     private static int _failures;
 

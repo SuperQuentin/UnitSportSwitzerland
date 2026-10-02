@@ -27,11 +27,11 @@ public partial class ArrivalProbe : Node
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
     private readonly string? _prefix;
-    private readonly int _n = int.TryParse(Arg("--npcs"), out int n) ? Mathf.Clamp(n, 1, 8) : 4;
-    private readonly ArrivalStyle? _only = int.TryParse(Arg("--style"), out int st) ? (ArrivalStyle)Mathf.Clamp(st, 0, 3) : null;
-    private readonly int _shift = int.TryParse(Arg("--shift"), out int sh) ? sh : 0;
-    private readonly double _entry = double.TryParse(Arg("--seconds"), NumberStyles.Float, CultureInfo.InvariantCulture, out double sec) ? sec : 110;
-    private readonly int _seed = int.TryParse(Arg("--seed"), out int sd) ? sd : 51;
+    private readonly int _n = CmdArgs.Int("--npcs") is int n ? Mathf.Clamp(n, 1, 8) : 4;
+    private readonly ArrivalStyle? _only = CmdArgs.Int("--style") is int st ? (ArrivalStyle)Mathf.Clamp(st, 0, 3) : null;
+    private readonly int _shift = CmdArgs.Int("--shift") ?? 0;
+    private readonly double _entry = CmdArgs.Double("--seconds") ?? 110;
+    private readonly int _seed = CmdArgs.Int("--seed") ?? 51;
 
     private bool _requested, _done;
     private RaceRoute? _route, _lane;
@@ -60,23 +60,7 @@ public partial class ArrivalProbe : Node
         _prefix = prefix;
     }
 
-    public static (bool Requested, string? Prefix) ParseArgs()
-    {
-        foreach (var a in OS.GetCmdlineUserArgs())
-            if (a.StartsWith("--arrivalcheck"))
-            {
-                var parts = a.Split(',');
-                return (true, parts.Length > 1 ? parts[1] : null);
-            }
-        return (false, null);
-    }
-
-    private static string? Arg(string flag)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, flag);
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-    }
+    public static (bool Requested, string? Prefix) ParseArgs() => CmdArgs.FlagWithShot("--arrivalcheck");
 
     public override void _PhysicsProcess(double delta)
     {
@@ -222,7 +206,7 @@ public partial class ArrivalProbe : Node
         var (s, _) = NpcArrival.Frame(_lane!, car, -1);
         var t = NpcArrival.TangentAt(_lane!, s);
         var want = car + t.Cross(Vector3.Up) * 13f - t * 6f + Vector3.Up * 9f;
-        _cam.GlobalPosition = _placed ? _cam.GlobalPosition.Lerp(want, 1f - Mathf.Exp(-2f * dt)) : want;
+        _cam.GlobalPosition = _placed ? _cam.GlobalPosition.Lerp(want, MathX.Damp(2f, dt)) : want;
         _placed = true;
         if (_chunks.TryGetHeight(_cam.GlobalPosition, out float g) && _cam.GlobalPosition.Y < g + 2f)
             _cam.GlobalPosition = _cam.GlobalPosition with { Y = g + 2f };

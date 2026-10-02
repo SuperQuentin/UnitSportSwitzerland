@@ -90,13 +90,19 @@ public static partial class CarMeshBuilder
     private static readonly Color Carpet = new(0.1f, 0.09f, 0.09f);
     private static readonly Color Seat = new(0.12f, 0.12f, 0.14f);
     private static readonly Color Dash = new(0.09f, 0.09f, 0.1f);
-    private static readonly Color Dial = new(0.02f, 0.02f, 0.025f);
-    private static readonly Color Tick = new(0.92f, 0.92f, 0.88f);
-    private static readonly Color RedBand = new(0.95f, 0.12f, 0.08f);
-    private static readonly Color Needle = new(1f, 0.38f, 0.1f);
-    private static readonly Color Bezel = new(0.45f, 0.46f, 0.5f);
-    private static readonly Color MirrorFace = new(0.16f, 0.18f, 0.22f);
     private static readonly Color Digit = new(1f, 0.7f, 0.2f);
+
+    /// <summary>A car's wheel, column, dials' plane, pedals and mirror housings (<see cref="CockpitKit"/>).</summary>
+    /// <remarks>Lazy: a static field here could initialise before <c>Trim</c> (CarMeshBuilder.cs) and take it black.</remarks>
+    private static CockpitSpec Kit => _kit ??= new(Trim, Dash,
+        ColumnFrom: 0.04f, ColumnTo: 0.3f, ColumnRadius: 0.035f, ColumnFoot: 0.045f,
+        RimIn: 0.022f, RimOut: 0.006f, RimDepth: 0.03f, RimSides: 14,
+        HubBack: 0.02f, Hub: new Vector3(0.1f, 0.09f, 0.05f), SpokeBack: 0.015f, SpokeShort: 0.015f, SpokeRadius: 0.014f,
+        Mark: new Vector3(0.03f, 0.02f, 0.034f),
+        DialsAhead: 0.13f,
+        PedalArm: 0.01f, ThrottlePad: new Vector3(0.05f, 0.11f, 0.015f), Pad: new Vector3(0.075f, 0.07f, 0.015f),
+        MirrorRim: 0.02f);
+    private static CockpitSpec? _kit;
 
     /// <summary>The seat and everything the driver reaches, for this body. Cheap: no meshes.</summary>
     public static DriverSeat SeatFor(CarBody body, float wheelbase) => SeatFor(For(body, wheelbase));
@@ -149,7 +155,6 @@ public static partial class CarMeshBuilder
     {
         var seat = SeatFor(d);
         var c = new MeshScratch();
-        var inst = new MeshScratch();
         float hw = d.Width * 0.5f, inner = hw - Skin - Lining;
         float firewall = Firewall(d), back = d.RgBase;
         var eye = HumanMeshBuilder.DriverEye(seat.Hip, seat.Recline);
@@ -194,31 +199,12 @@ public static partial class CarMeshBuilder
         }
 
         // ---- column, wheel ----
-        var n = seat.WheelAxis;
-        var up = (Vector3.Up - n * n.Dot(Vector3.Up)).Normalized();
-        var left = n.Cross(up);
-        var wc = seat.WheelCentre;
-        c.Tube(wc - n * 0.04f, wc - n * 0.3f, 0.035f, 0.045f, Dash, 6);
-        var wheel = new MeshScratch();
-        float r = seat.WheelRadius;
-        wheel.Ring(wc, n, r - 0.022f, r + 0.006f, 0.03f, Trim, 14);
-        var hubBasis = new Basis(-left, up, n);
-        wheel.Box(wc - n * 0.02f, new Vector3(0.1f, 0.09f, 0.05f), Trim, hubBasis);
-        // three spokes, 3, 9 and 6 o'clock, and a mark at the top so the turn is readable
-        foreach (var dir in new[] { left, -left, -up })
-            wheel.Tube(wc - n * 0.015f, wc + dir * (r - 0.015f), 0.014f, Steel, 4);
-        wheel.Box(wc + up * r + n * 0.004f, new Vector3(0.03f, 0.02f, 0.034f), Amber, hubBasis);
+        var steering = CockpitKit.Wheel(c, seat, Kit);
 
-        // ---- the binnacle, seen through the top of the wheel ----
-        // Its face is where the line from the eye through the top of the wheel's opening meets
-        // a plane 13 cm ahead of the hub, square to the eye: the dials just under the rim.
-        var through = wc + up * r * 0.62f;
-        var ray = through - eye;
-        float dialZ = wc.Z + 0.13f;
-        var face = eye + ray * ((dialZ - eye.Z) / ray.Z);
-        var nd = (eye - face).Normalized();
-        var ud = (Vector3.Up - nd * nd.Dot(Vector3.Up)).Normalized();
-        var ld = nd.Cross(ud);
+        // ---- the binnacle, seen through the top of the wheel, 13 cm ahead of the hub ----
+        var panel = new CockpitKit.Panel(seat, eye, Kit);
+        var inst = panel.Inst;
+        var (face, nd, ud, ld, dialZ) = (panel.Face, panel.N, panel.Up, panel.Left, panel.DialZ);
         const float dialR = 0.052f, spread = 0.068f;
         var tachAt = face + new Vector3(spread, 0, 0);   // on the driver's left, the speedometer on the right
         var speedoAt = face - new Vector3(spread, 0, 0);
@@ -239,76 +225,27 @@ public static partial class CarMeshBuilder
         c.Tube(gate, gate + new Vector3(0, 0.17f, -0.04f), 0.012f, Steel, 4);
         c.Box(gate + new Vector3(0, 0.19f, -0.045f), new Vector3(0.045f, 0.045f, 0.045f), Trim);
 
-        // ---- dials ----
-        var dialBasis = new Basis(-ld, ud, nd);
-        Vector3 Dir(float angle) => ud * Mathf.Cos(angle) + ld * Mathf.Sin(angle);
-        void DialFace(Vector3 at, float full, float step, float major, float red)
-        {
-            inst.Ring(at + nd * 0.002f, nd, 0.003f, dialR, 0.004f, Dial, 16);
-            inst.Ring(at + nd * 0.004f, nd, dialR, dialR + 0.006f, 0.008f, Bezel, 16);
-            for (float v = 0; v <= full + 0.01f; v += step)
-            {
-                bool big = Mathf.Abs(v / major - Mathf.Round(v / major)) < 0.01f;
-                var dir = Dir(CarNeedle.Angle(v / full));
-                float length = big ? 0.013f : 0.007f;
-                inst.Box(at + nd * 0.005f + dir * (dialR * 0.86f - length * 0.5f), new Vector3(0.0035f, length, 0.002f),
-                    v >= red ? RedBand : Tick, new Basis(dir.Cross(nd), dir, nd));
-            }
-        }
-        DialFace(tachAt, gauges.TachRpm, 500f, 1000f, gauges.RedlineRpm);
-        DialFace(speedoAt, gauges.SpeedoKmh, 10f, 20f, float.MaxValue);
-        CarNeedle BuildNeedle(Vector3 at)
-        {
-            var m = new MeshScratch();
-            float length = dialR * 0.84f;
-            m.Box(at + nd * 0.008f + ud * (length * 0.5f - 0.008f), new Vector3(0.004f, length, 0.002f), Needle, dialBasis);
-            m.Box(at + nd * 0.009f, new Vector3(0.012f, 0.012f, 0.004f), Trim, dialBasis);
-            return new CarNeedle(m.Build(at), Turned(at), Turned(nd));
-        }
+        // ---- dials: ticks of a fixed length (a heavy's scale with the dial) ----
+        var dialBasis = panel.Basis;
+        panel.DialFace(tachAt, dialR, gauges.TachRpm, 500f, 1000f, 0.013f, 0.007f, gauges.RedlineRpm);
+        panel.DialFace(speedoAt, dialR, gauges.SpeedoKmh, 10f, 20f, 0.013f, 0.007f, float.MaxValue);
 
         // ---- the gear digit between the dials, the warning lamps under them ----
         var digitAt = face + nd * 0.006f - ud * 0.012f;
         var digits = "rn123456".Select(ch => SevenSegment(digitAt, ud, -ld, nd, ch)).ToArray();
-        inst.Box(digitAt - nd * 0.002f, new Vector3(0.026f, 0.04f, 0.002f), Dial, dialBasis);
-        var lampColours = new[] { RedBand, new Color(0.25f, 1f, 0.35f), Amber };
-        var lamps = new ArrayMesh[lampColours.Length];
-        for (int i = 0; i < lamps.Length; i++)
-        {
-            var at = face - ud * 0.07f + ld * ((i - 1) * 0.03f) + nd * 0.004f;
-            inst.Box(at, new Vector3(0.018f, 0.01f, 0.002f), lampColours[i].Darkened(0.85f), dialBasis);
-            var lit = new MeshScratch();
-            lit.Box(at + nd * 0.0015f, new Vector3(0.018f, 0.01f, 0.002f), lampColours[i], dialBasis);
-            lamps[i] = lit.Build();
-        }
+        inst.Box(digitAt - nd * 0.002f, new Vector3(0.026f, 0.04f, 0.002f), CockpitKit.Dial, dialBasis);
+        var lamps = panel.Lamps(new[] { CockpitKit.RedBand, new Color(0.25f, 1f, 0.35f), Amber }, 0.07f, 1f, 0.03f, new Vector2(0.018f, 0.01f));
 
         // ---- pedals, each on its own hinge ----
-        var pedals = new[] { seat.Throttle, seat.Brake, seat.Rest }.Select((pad, i) =>
-        {
-            var hinge = pad + DriverSeat.PedalHinge;
-            var m = new MeshScratch();
-            m.Tube(hinge, pad + new Vector3(0, 0.03f, 0), 0.01f, Steel, 4);
-            // the pad square to its arm, sloping back toward the sole
-            m.Box(pad + new Vector3(0, 0, 0.012f), new Vector3(i == 0 ? 0.05f : 0.075f, i == 0 ? 0.11f : 0.07f, 0.015f), Trim,
-                new Basis(Vector3.Right, -0.35f));
-            return new HingedPart(m.Build(hinge), Turned(hinge));
-        }).ToArray();
+        var pedals = CockpitKit.Pedals(new[] { seat.Throttle, seat.Brake, seat.Rest }, Kit);
 
         // ---- mirrors: inside at the top of the windscreen, outside on the doors' front corners ----
-        // halfway between the eye and straight back: what the driver sees in it is behind the car
-        Vector3 Facing(Vector3 at) => ((eye - at).Normalized() + new Vector3(0, 0, -1f)).Normalized();
         var mirrors = new List<CarMirror>();
-        void Mirror(string name, MeshScratch into, Vector3 at, Vector2 size, Color housing, float depth)
-        {
-            var normal = Facing(at);
-            var side = Vector3.Up.Cross(normal).Normalized();
-            var basis = new Basis(side, normal.Cross(side), normal);
-            into.Box(at - normal * depth * 0.5f, new Vector3(size.X + 0.02f, size.Y + 0.02f, depth), housing, basis);
-            into.Box(at + normal * 0.001f, new Vector3(size.X, size.Y, 0.002f), MirrorFace, basis);
-            mirrors.Add(new CarMirror(name, Turned(at + normal * 0.004f), Turned(normal), size));
-        }
+        void Mirror(string name, MeshScratch into, Vector3 at, Vector2 size, Color housing, float depth) =>
+            mirrors.Add(CockpitKit.Mirror(into, eye, Kit, name, at, size, housing, depth));
         var rearView = new Vector3(0, d.Roof - 0.05f - 0.09f, d.WsTop + 0.01f);
         // the stem comes down from the headlining to the back of the housing, not through the glass
-        c.Tube(new Vector3(0, d.Roof - 0.06f, d.WsTop + 0.05f), rearView - Facing(rearView) * 0.03f, 0.008f, Trim, 4);
+        c.Tube(new Vector3(0, d.Roof - 0.06f, d.WsTop + 0.05f), rearView - CockpitKit.Facing(eye, rearView) * 0.03f, 0.008f, Trim, 4);
         Mirror("MirrorRear", c, rearView, new Vector2(0.18f, 0.05f), Trim, 0.03f);
         foreach (float sx in new[] { -1f, 1f })
         {
@@ -319,8 +256,8 @@ public static partial class CarMeshBuilder
         }
 
         return new CarCabin(c.Build(), inst.Build(),
-            new HingedPart(wheel.Build(wc), Turned(wc)), Turned(n),
-            BuildNeedle(tachAt), BuildNeedle(speedoAt), gauges, digits, lamps, pedals,
+            steering, Turned(seat.WheelAxis),
+            panel.Needle(tachAt, dialR), panel.Needle(speedoAt, dialR), gauges, digits, lamps, pedals,
             mirrors.ToArray(), seat, Turned(eye), seats.ToArray());
     }
 

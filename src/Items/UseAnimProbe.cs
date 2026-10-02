@@ -12,28 +12,12 @@ namespace UnitSport.Items;
 /// arm pose for both the drink and the hat, then A's worn hat and outfit, and screenshots A in third person. Uses a
 /// scratch inventory.
 /// </summary>
-public partial class UseAnimProbe : Node
+public partial class UseAnimProbe : ChatProbe
 {
-    public static string? Role
-    {
-        get
-        {
-            var args = OS.GetCmdlineUserArgs();
-            int i = Array.IndexOf(args, "--useanim");
-            return i >= 0 && i + 1 < args.Length ? args[i + 1].ToUpperInvariant() : null;
-        }
-    }
+    public static string? Role => RoleArg("--useanim");
 
-    private readonly ItemController _items;
-    private readonly List<string> _heard = new();
-    private string _role = "";
-    private int _failures;
-
-    public UseAnimProbe(ItemController items) => _items = items;
+    public UseAnimProbe(ItemController items) : base(items, "useanim", "UA", "useanim_") { }
     public UseAnimProbe() : this(null!) { }
-
-    private ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
-    private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
 
     private FootPlayer? Other() =>
         Find(GetTree().Root);
@@ -55,13 +39,10 @@ public partial class UseAnimProbe : Node
     public override async void _Ready()
     {
         _role = Role ?? "A";
-        if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor(), 150)) { Fail("no player on the ground"); return; }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
+        if (!await Joined(150)) return;
         await Seconds(2.0);
         if (_role == "A") await RunA(Me!); else await RunB(Me!);
-        GD.Print(_failures == 0 ? $"[useanim {_role}] RESULT: ok" : $"[useanim {_role}] RESULT: FAILED ({_failures})");
-        await Seconds(1.0);
-        GetTree().Quit(_failures == 0 ? 0 : 1);
+        await Finish(1.0);
     }
 
     private async Task RunA(FootPlayer me)
@@ -191,45 +172,10 @@ public partial class UseAnimProbe : Node
         Say("done");
     }
 
-    private void Shot(string name)
+    protected override string Shot(string name)
     {
-        var dir = ProjectSettings.GlobalizePath("res://test_output");
-        System.IO.Directory.CreateDirectory(dir);
-        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, $"useanim_{name}.png"));
-        GD.Print($"[useanim {_role}] screenshot {name}");
-    }
-
-    private void Say(string what)
-    {
-        GD.Print($"[useanim {_role}] say {what}");
-        Chat?.Send($"UA {_role} {what}");
-    }
-
-    private Task<bool> Heard(string role, string what, double seconds) =>
-        Until(() => _heard.Any(l => l.Contains($"UA {role} {what}")), seconds);
-
-    private async Task<bool> Until(Func<bool> condition, double seconds)
-    {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (!condition())
-        {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        }
-        return true;
-    }
-
-    private async Task Seconds(double s) => await ToSignal(GetTree().CreateTimer(s), SceneTreeTimer.SignalName.Timeout);
-
-    private void Expect(bool ok, string what)
-    {
-        GD.Print($"[useanim {_role}] {(ok ? "ok  " : "FAIL")} {what}");
-        if (!ok) _failures++;
-    }
-
-    private void Fail(string why)
-    {
-        GD.Print($"[useanim {_role}] RESULT: FAILED — {why}");
-        GetTree().Quit(1);
+        string path = base.Shot(name);
+        GD.Print($"{Log} screenshot {name}");
+        return path;
     }
 }

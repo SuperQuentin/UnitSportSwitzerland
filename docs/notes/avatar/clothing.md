@@ -19,7 +19,9 @@
   geometry bands (`Banded`), mask faces as 15×7 pixel art (`MaskFaces`). Head clothes replace a hat;
   an occasion hat shows only with the head slot empty.
 - **Finishes**: `Garments.Fx` puts the finish id in the colour's alpha (`1 - id/255`); everything else
-  in the game has alpha 1. `HumanMeshBuilder.FigureMaterial()` (`shaders/avatar.gdshader`) reproduces
+  in the game has alpha 1. `HumanMeshBuilder.FigureMaterial()` (`shaders/body/avatar.gdshaderinc`, the visual
+  style's `MaterialRole.Figure` wrapper: `avatar` in PS1, `cartoon_avatar` toon and rim, `real_avatar`
+  GGX) reproduces
   `Material()` for alpha 1 and decodes rainbow, disco, galaxy, holo, glitch, lava, neon, and the
   patterns tartan, fishnet (discard over skin), lace. Only meshes that carry a figure use it (walker,
   passenger, ragdoll, the rides below, preview); the shared `Material()` is untouched. Specials put the finish on all three

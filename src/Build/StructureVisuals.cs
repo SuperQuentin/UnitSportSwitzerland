@@ -10,7 +10,7 @@ namespace UnitSport.Build;
 /// grounded pieces, a grow-in when a piece goes up live, a darker tint as it takes damage, and a
 /// burst of debris when it breaks or falls. A dedicated server builds none of this.
 /// </summary>
-public partial class StructureVisuals : Node3D
+public partial class StructureVisuals : Node3D, Core.IOriginContainer
 {
     private readonly Structures _owner;
     private readonly Dictionary<long, Node3D> _roots = new();
@@ -98,14 +98,6 @@ public partial class StructureVisuals : Node3D
         float k = 1f - 0.18f * step;
         mat.AlbedoColor = new Color(k, k, k);
         return Worn[step] = mat;
-    }
-
-    /// <summary>After a rebase: every structure root back on its LV95 origin.</summary>
-    public void RedrawAll()
-    {
-        foreach (var (id, root) in _roots)
-            if (_owner.All.TryGetValue(id, out var s) && IsInstanceValid(root))
-                root.GlobalTransform = s.WorldTransform(_owner.Origin);
     }
 
     public override void _Process(double delta)

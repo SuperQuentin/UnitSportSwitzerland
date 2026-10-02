@@ -43,6 +43,8 @@ src/Avatar/              quick  --hitboxcheck --world flat
 src/Player/              quick  --ride bike,20 --world flat
 src/Player/              quick  --ride car,15 --world flat
 src/Vehicles/            quick  --ride car,15 --world flat
+src/Player/              quick  --exitcheck --world fixture
+src/Vehicles/            quick  --exitcheck --world fixture
 src/Core/TestWorld       quick  --hitboxcheck --world flat
 src/Core/Systems         quick  --hitboxcheck --world flat
 src/Ui/                  quick  --leavecheck --world fixture
@@ -83,5 +85,8 @@ src/World/               full   tools/racecheck.sh
 src/Audio/               full   tools/radiocheck.sh
 src/Player/              full   tools/switchcheck.sh
 src/Vehicles/            full   tools/switchcheck.sh
+src/Player/              full   tools/decknetcheck.sh
+src/Vehicles/            full   tools/decknetcheck.sh
+src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
 tools/lib/               quick  tools/lib/guard_selftest.sh

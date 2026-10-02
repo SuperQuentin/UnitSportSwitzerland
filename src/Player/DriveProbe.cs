@@ -10,7 +10,7 @@ namespace UnitSport.Player;
 /// <summary>
 /// <c>godot --path . -- --drivecheck[,out_prefix] [--cars 0,1,3,4 | --car N] [--seconds S] [--finish M]
 /// [--record prefix] [--trace] [--tyrewear on] [--brakewear on] [--at E,N] [--traffic 0]
-/// [--mount K [--riders N]] [--verge 0] [--setups 0,4,3]</c>
+/// [--mount K [--riders N]] [--verge 0] [--setups 0,4,3] [--to E,N]</c>
 ///
 /// <para>
 /// A race down the real road from the spawn (<see cref="RaceRoute"/>): every listed car on a
@@ -27,7 +27,8 @@ namespace UnitSport.Player;
 /// <see cref="RideKind"/> number, 0 on foot, 1 the road bike, 2 skis — each on the pilot
 /// <see cref="AutoPilot.For"/> picks for it. <c>--verge 0</c> skips the verge survey, so the line
 /// keeps to the tarmac (for comparison). <c>--setups</c> gives each listed car a preset
-/// (<see cref="CarSetups"/> id or name, in the order of <c>--cars</c>; one value for all).
+/// (<see cref="CarSetups"/> id or name, in the order of <c>--cars</c>; one value for all). <c>--to E,N</c>
+/// (LV95): the road from the spawn toward that point, finishing level with it (overrides <c>--finish</c>).
 /// </para>
 /// </summary>
 public partial class DriveProbe : Node
@@ -37,7 +38,7 @@ public partial class DriveProbe : Node
     private readonly string? _shotPrefix;
     private readonly int[] _cars;
     private readonly double _seconds;
-    private static readonly bool Trace = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trace") >= 0;
+    private static readonly bool Trace = CmdArgs.Has("--trace");
 
     private bool _done, _routeRequested, _started;
     private double _t, _wait, _countdown = 2.5;
@@ -54,8 +55,8 @@ public partial class DriveProbe : Node
     private int _shots;
     private bool _shotThisDrift;
 
-    private readonly string? _record = ArgAfter("--record");
-    private readonly int? _mount = int.TryParse(ArgAfter("--mount"), out int k) ? k : null;
+    private readonly string? _record = CmdArgs.Value("--record");
+    private readonly int? _mount = CmdArgs.Int("--mount");
 
     /// <summary>One car in the race: its driver and what is measured of it.</summary>
     private sealed class Entry
@@ -91,18 +92,21 @@ public partial class DriveProbe : Node
     {
         _chunks = chunks;
         _origin = origin;
+        // the probe keeps its route, cars and logs in world space for the whole run: no floating-origin
+        // shift under it (#185 moved the origin 34 km mid-build and the route came out in a village)
+        if (Core.OriginShifter.Instance is { } shifter) shifter.ThresholdM = double.MaxValue;
         _shotPrefix = shotPrefix;
         _seconds = seconds;
-        var list = ArgAfter("--cars");
+        var list = CmdArgs.Value("--cars");
         _cars = list != null
             ? list.Split(',').Select(x => int.TryParse(x, out int i) ? i : 0).ToArray()
             : new[] { car };
-        _finish = float.TryParse(ArgAfter("--finish"), NumberStyles.Float, CultureInfo.InvariantCulture, out float f) ? f : 2000f;
+        _finish = CmdArgs.Float("--finish") ?? 2000f;
     }
 
     public static (bool Requested, string? Shot, int Car, double Seconds) ParseArgs()
     {
-        var args = OS.GetCmdlineUserArgs();
+        var args = CmdArgs.All;
         bool requested = false;
         string? shot = null;
         int car = 0;
@@ -122,13 +126,6 @@ public partial class DriveProbe : Node
         return (requested, shot, car, seconds);
     }
 
-    private static string? ArgAfter(string flag)
-    {
-        var args = OS.GetCmdlineUserArgs();
-        int i = System.Array.IndexOf(args, flag);
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-    }
-
     public override void _PhysicsProcess(double delta)
     {
         if (_done) return;
@@ -143,18 +140,33 @@ public partial class DriveProbe : Node
             var (e, n) = SpawnPoint.ParseTarget();
             var at = _origin.ToWorld(e, n, 0);
             var source = _chunks.Source!;
+            // --to E,N: the race runs from the spawn toward that point and finishes level with it
+            Vector3? to = CmdArgs.Value("--to")?.Split(',') is [var te, var tn]
+                && double.TryParse(te, NumberStyles.Float, CultureInfo.InvariantCulture, out double toE)
+                && double.TryParse(tn, NumberStyles.Float, CultureInfo.InvariantCulture, out double toN) ? _origin.ToWorld(toE, toN, 0) : null;
             _ = System.Threading.Tasks.Task.Run(async () =>
             {
-                var route = await RaceRoute.BuildAsync(source, _origin, at);
-                if (route != null && ArgAfter("--verge") != "0") route.Line = await RaceLine.Widen(route, source, _origin);
+                var route = await RaceRoute.BuildAsync(source, _origin, at, toward: to);
+                if (route != null && CmdArgs.Value("--verge") != "0") route.Line = await RaceLine.Widen(route, source, _origin);
                 Callable.From(() =>
                 {
                     if (route == null) { GD.Print("[drive] no road near the spawn"); Finish(1); return; }
                     _route = route;
+                    if (to is { } end)
+                    {
+                        var pts = route.Line.Points;
+                        int k = Enumerable.Range(0, pts.Count).MinBy(i => RaceRoute.Flat(pts[i] - end).LengthSquared());
+                        _finish = route.Line.Arc[k];
+                        GD.Print($"[drive] --to: finish at {_finish:F0} m, {RaceRoute.Flat(pts[k] - end).Length():F0} m from the point");
+                    }
                     _finish = Mathf.Min(_finish, route.Length - 40f);
                     GD.Print($"[drive] route: {route.Class}, {route.Arc[^1]:F0} m, racing line {route.Length:F0} m "
                         + $"(max {route.Line.RoomLeft.Concat(route.Line.RoomRight).DefaultIfEmpty(0).Max():F1} m of room to a side)");
                     PrintVerge(route);
+                    // bridged junctions: centreline points further apart than the 2 m step
+                    var gaps = Enumerable.Range(1, route.Arc.Count - 1).Where(i => route.Arc[i] - route.Arc[i - 1] > 5f)
+                        .Select(i => $"{route.Arc[i - 1]:F0}+{route.Arc[i] - route.Arc[i - 1]:F0}").ToList();
+                    GD.Print($"[drive] route gaps over 5 m ({gaps.Count}): {string.Join(" ", gaps)}");
                     // where the route runs, to find a spot again (LV95 every 500 m)
                     GD.Print("[drive] route LV95: " + string.Join(", ", Enumerable.Range(0, (int)(route.Length / 500f) + 1)
                         .Select(k => { var (e, n) = _origin.ToLv95(route.Line.PointAt(k * 500f)); return $"{k * 500} m {e:F0},{n:F0}"; })));
@@ -170,11 +182,11 @@ public partial class DriveProbe : Node
         if (_entries.Count == 0)
         {
             if (!_chunks.TryGetHeight(line.Points[0], out _)) return;
-            int count = _mount != null ? (int.TryParse(ArgAfter("--riders"), out int riders) ? riders : 1) : _cars.Length;
+            int count = _mount != null ? (CmdArgs.Int("--riders") ?? 1) : _cars.Length;
             for (int k = 0; k < count; k++)
             {
                 var spec = _mount == null ? CarCatalog.All[Mathf.Clamp(_cars[k], 0, CarCatalog.All.Count - 1)] : null;
-                if (spec != null && ArgAfter("--setups")?.Split(',') is { } setups
+                if (spec != null && CmdArgs.Value("--setups")?.Split(',') is { } setups
                     && CarSetups.Parse(setups[Mathf.Min(k, setups.Length - 1)]) is { Id: > 0 } preset)
                     spec = preset.Apply(spec);
                 var kind = spec?.Kind ?? (RideKind)_mount!.Value;
@@ -242,8 +254,8 @@ public partial class DriveProbe : Node
                 // set them all)
                 var rng = new System.Random(1000 + _entries.IndexOf(en));
                 float drawn = AutoPilot.GridSkills(_entries.Count, new System.Random(77))[_entries.IndexOf(en)];
-                float skill = float.TryParse(ArgAfter("--skill"), NumberStyles.Float, CultureInfo.InvariantCulture, out float sk) ? sk : drawn;
-                float aggr = float.TryParse(ArgAfter("--aggression"), NumberStyles.Float, CultureInfo.InvariantCulture, out float ag) ? ag : 0.3f * (float)rng.NextDouble();
+                float skill = CmdArgs.Float("--skill") ?? drawn;
+                float aggr = CmdArgs.Float("--aggression") ?? 0.3f * (float)rng.NextDouble();
                 en.Pilot.Temperament(skill, aggr, 1000 + _entries.IndexOf(en));
                 en.Pilot.Go = false;
                 en.Player.RideControls = () => entry.Pilot!.Drive((float)GetPhysicsProcessDeltaTime(), _started && !entry.Out, Others(entry));
@@ -299,7 +311,7 @@ public partial class DriveProbe : Node
             {
                 var m = en.Player.Motion;
                 GD.Print($"[drive]   t={_t,5:F1} {en.Label,-12} s={en.Arc,6:F0} v={m.Speed * 3.6f,4:F0}/{en.Pilot!.Profile[en.Pilot.D.Near] * 3.6f,4:F0} "
-                    + $"slip={Mathf.RadToDeg(Mathf.Wrap(m.Slip, -Mathf.Pi, Mathf.Pi)),4:F0} off={_route.Off(en.Player.GlobalPosition),4:F1} "
+                    + $"slip={Mathf.RadToDeg(MathX.WrapAngle(m.Slip)),4:F0} off={_route.Off(en.Player.GlobalPosition),4:F1} "
                     + $"R={1f / Mathf.Max(Mathf.Abs(_route.Line.Curvature[en.Pilot.D.Near]), 1e-4f),5:F0} drift={en.Pilot.D.Drifting}"
                     + $" in={en.Player.LastRideInput.Throttle:F2}/{en.Player.LastRideInput.Brake:F2}/{en.Player.LastRideInput.Steer:F2}{(en.Player.LastRideInput.Handbrake ? " HB" : "")} lat={en.Pilot.D.Lateral:F2} cap={(en.Pilot.D.Cap < 1e9f ? en.Pilot.D.Cap * 3.6f : 0f):F0} draft={en.Player.Draft:F2}"
                     + (en.Player.GetSlideCollisionCount() > 0 && Enumerable.Range(0, en.Player.GetSlideCollisionCount())
@@ -380,7 +392,7 @@ public partial class DriveProbe : Node
         else if (!d.Drifting)
         {
             var want = car + new Basis(Vector3.Up, p.Motion.Yaw + p.Motion.Slip) * new Vector3(-4f, 5f, 11f);
-            _cine.GlobalPosition = _cinePlaced ? _cine.GlobalPosition.Lerp(want, 1f - Mathf.Exp(-3f * dt)) : want;
+            _cine.GlobalPosition = _cinePlaced ? _cine.GlobalPosition.Lerp(want, MathX.Damp(3f, dt)) : want;
         }
         _cinePlaced = true;
         var cp = _cine.GlobalPosition;
@@ -391,7 +403,7 @@ public partial class DriveProbe : Node
         _chunks.SetSightlineCut(_cine.GlobalPosition, car, 3f);
         _cine.Current = true;
 
-        float slip = Mathf.Abs(Mathf.Wrap(p.Motion.Slip, -Mathf.Pi, Mathf.Pi));
+        float slip = Mathf.Abs(MathX.WrapAngle(p.Motion.Slip));
         if (_shotPrefix != null && d.Drifting && d.Planned && _shots < 4 && slip > 0.45f && d.DriftTime > 0.3f && !_shotThisDrift)
         {
             _shotThisDrift = true;
@@ -480,6 +492,15 @@ public partial class DriveProbe : Node
             + $"impacts {(hits.Count == 0 ? "0" : string.Join(" ", hits.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} {kv.Value}")))}, "
             + $"passes {_entries.Sum(e => e.Passes)}, spins {_entries.Sum(e => e.Pilot?.Spins ?? 0)}, mistakes {_entries.Sum(e => e.Pilot?.Mistakes ?? 0)}, "
             + $"resets {_entries.Sum(e => e.Pilot?.Resets ?? 0)}, out {_entries.Count(e => e.Out)}");
+        // pace index (#159): a finisher's time against what a skill-1 driver of the same car would do on the same
+        // line with a clear road (> 100% = faster); the ace (best skill) against the other finishers
+        string Index(IEnumerable<Entry> es)
+        {
+            var l = es.Where(e => e.FinishTime >= 0 && e.Pilot != null).Select(e => e.Pilot!.ReferenceSeconds(_finish) / e.FinishTime * 100.0).ToList();
+            return l.Count == 0 ? "n/a" : $"{l.Average():F1}%";
+        }
+        float best = _entries.Max(e => e.Pilot?.Skill ?? 0f);
+        GD.Print($"[drive] PACE ace (skill {best:F2}) {Index(_entries.Where(e => (e.Pilot?.Skill ?? 0f) >= best))}, others {Index(_entries.Where(e => (e.Pilot?.Skill ?? 0f) < best))}");
         bool anyFinish = _entries.Any(e => e.FinishTime >= 0);
         bool driftOk = _entries.All(e => e.Spec == null || e.Grip) || _entries.Any(e => e.Pilot?.Drifts > 0);
         bool ok = anyFinish && driftOk;

@@ -123,8 +123,9 @@ public partial class BrHud : CanvasLayer
                     float e = 26f;
                     DrawRect(new Rect2(0, 0, w, e), red);
                     DrawRect(new Rect2(0, Size.Y - e, w, e), red);
-                    DrawRect(new Rect2(0, 0, e, Size.Y), red);
-                    DrawRect(new Rect2(w - e, 0, e, Size.Y), red);
+                    // the sides stop at the top and bottom bands: overlapping corners drew twice as red
+                    DrawRect(new Rect2(0, e, e, Size.Y - 2 * e), red);
+                    DrawRect(new Rect2(w - e, e, e, Size.Y - 2 * e), red);
                     Banner(font, new Vector2(w * 0.5f, Y0 + 92), $"OUTSIDE THE ZONE  −{zn.Dps:F0} HP/s", 18, Danger);
                 }
                 // armour and the held gun's rounds, bottom left

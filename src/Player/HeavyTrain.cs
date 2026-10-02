@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Player;
 
@@ -89,6 +90,8 @@ public sealed class HeavyTrain
         public readonly float[] AxleZ, StaticLoad, Load;
         /// <summary>Per axle, last step: forward speed at the axle (for the wheels' spin) and how hard it slid, 0..1.</summary>
         public readonly float[] AxleSpeed, AxleSlide;
+        /// <summary>Per axle, last substep: side force, N, + left, and slip angle, rad — a steering wheel's feel.</summary>
+        public readonly float[] AxleFy, AxleAlpha;
         public Vector2 P, V;
         public float Psi, W;
         /// <summary>Acceleration of the centre of mass in the body's frame, last step (+x forward, +y left), m/s².</summary>
@@ -109,6 +112,8 @@ public sealed class HeavyTrain
             Load = new float[spec.Axles.Length];
             AxleSpeed = new float[spec.Axles.Length];
             AxleSlide = new float[spec.Axles.Length];
+            AxleFy = new float[spec.Axles.Length];
+            AxleAlpha = new float[spec.Axles.Length];
             SetPayload(payload);
         }
 
@@ -273,7 +278,7 @@ public sealed class HeavyTrain
     {
         for (int k = 1; k < Bodies.Count && k - 1 < gamma.Length; k++)
         {
-            gamma[k - 1] = Mathf.Wrap(Bodies[k].Psi - Bodies[k - 1].Psi, -Mathf.Pi, Mathf.Pi);
+            gamma[k - 1] = MathX.WrapAngle(Bodies[k].Psi - Bodies[k - 1].Psi);
             gammaRate[k - 1] = Bodies[k].W - Bodies[k - 1].W;
         }
     }
@@ -392,6 +397,8 @@ public sealed class HeavyTrain
                     float stopY = Mathf.Abs(vy) * m / h * 0.5f;
                     if (Mathf.Abs(fy) > stopY) fy = -Mathf.Sign(vy) * stopY;
                     b.AxleSpeed[i] = vx;
+                    b.AxleFy[i] = fy;
+                    b.AxleAlpha[i] = alpha;
                     b.AxleSlide[i] = Mathf.Clamp((Mathf.Abs(alpha) - 0.12f) / 0.2f, 0f, 1f) * Mathf.Clamp(Mathf.Abs(vx) / 4f, 0f, 1f);
                     slide = Mathf.Max(slide, b.AxleSlide[i]);
 
@@ -423,7 +430,7 @@ public sealed class HeavyTrain
         for (int k = 1; k < n; k++)
         {
             float damp = Bodies[k].Spec.JointDamping;
-            float gamma = Mathf.Wrap(Bodies[k].Psi - Bodies[k - 1].Psi, -Mathf.Pi, Mathf.Pi);
+            float gamma = MathX.WrapAngle(Bodies[k].Psi - Bodies[k - 1].Psi);
             float rate = Bodies[k].W - Bodies[k - 1].W;
             if (c.FoldDamping > 0f && gamma * rate > 0f && Mathf.Abs(gamma) > 0.12f)
                 damp += c.FoldDamping * Mathf.Clamp((u0f - 4f) / 6f, 0f, 1f);
@@ -525,7 +532,7 @@ public sealed class HeavyTrain
                 p.W -= Cross(rp, lambda) * ip;
 
                 // the stop: the trailer's front corner against the cab, the dolly against the frame
-                float gamma = Mathf.Wrap(c.Psi - p.Psi, -Mathf.Pi, Mathf.Pi);
+                float gamma = MathX.WrapAngle(c.Psi - p.Psi);
                 float max = c.Spec.MaxArticulation;
                 if (Mathf.Abs(gamma) > max - 0.02f)
                 {

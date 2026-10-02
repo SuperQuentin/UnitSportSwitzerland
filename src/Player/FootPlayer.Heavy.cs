@@ -21,7 +21,8 @@ public partial class FootPlayer
     [Export] public int TrailerCode { get; set; }
 
     /// <summary>The train's joint angles (rad), written by the owner every frame: what a remote copy poses the sections from.</summary>
-    [Export] public Vector4 TrainPose { get; set; }
+    /// Replicated inside <see cref="NetPose"/>, and only while not all zero.
+    public Vector4 TrainPose { get; set; }
 
     /// <summary>A truck being driven, or null.</summary>
     public Truck? Heavy => _ride as Truck;
@@ -49,6 +50,7 @@ public partial class FootPlayer
             s.QueueFree();
         }
         _sections.Clear();
+        _trainRids = null;
         _visualTrailer = TrailerCode;
         var truck = _ride as Truck;
         if (truck == null && HeavyCatalog.For(kind) is { } spec)
@@ -93,29 +95,29 @@ public partial class FootPlayer
             AddCollisionExceptionWith(body);
             foreach (var other in _sections) { body.AddCollisionExceptionWith(other); other.AddCollisionExceptionWith(body); }
             _sections.Add(body);
+            _trainRids = null;
         }
         for (int j = 0; j < _shownAngles.Length; j++) _shownAngles[j] = truck.Articulation[j];
     }
 
-    /// <summary>What the section bodies' own ray tests must not hit: this player and its train.</summary>
+    /// <summary>
+    /// What the section bodies' own ray tests and the chase camera must not hit: this player and its
+    /// train. One array, rebuilt only when the sections change (#221); never add to it.
+    /// </summary>
     private Godot.Collections.Array<Rid> TrainRids()
     {
+        if (_trainRids != null) return _trainRids;
         var rids = new Godot.Collections.Array<Rid> { GetRid() };
         foreach (var s in _sections) rids.Add(s.GetRid());
-        return rids;
+        return _trainRids = rids;
     }
+    private Godot.Collections.Array<Rid>? _trainRids;
+    private readonly Core.RayQuery _groundRay = new();
 
     /// <summary>The ground's height under a point: whatever is solid there (a road, a bridge deck), else the terrain.</summary>
 
-    private float GroundUnder(Vector3 p, Godot.Collections.Array<Rid> exclude)
-    {
-
-        var query = PhysicsRayQueryParameters3D.Create(p + Vector3.Up * 3f, p + Vector3.Down * 6f,
-            CollisionMask & ~World.TreeColliders.Layer, exclude);
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.Count > 0) return hit["position"].AsVector3().Y;
-        return Terrain != null && Terrain.TryGetHeight(p, out float g) ? g : p.Y;
-    }
+    private float GroundUnder(Vector3 p, Godot.Collections.Array<Rid> exclude) =>
+        World.GroundQuery.Under(this, _groundRay, exclude, p, Terrain);
 
     /// <summary>
     /// The cab's pitch on the ground under its axles: a 12 m bus on a 10% road leans with it, and its
@@ -209,7 +211,7 @@ public partial class FootPlayer
                 if (toPin.LengthSquared() > 0.01f && b.PivotZ > 0.1f)
                 {
                     float actual = Mathf.Atan2(toPin.Y, toPin.X);
-                    float change = Mathf.Wrap(actual - psi, -Mathf.Pi, Mathf.Pi);
+                    float change = MathX.WrapAngle(actual - psi);
                     if (Mathf.Abs(change) < 0.5f)
                     {
                         truck.Articulation[k - 1] = Mathf.Clamp(truck.Articulation[k - 1] + change, -b.Spec.MaxArticulation, b.Spec.MaxArticulation);
@@ -233,7 +235,7 @@ public partial class FootPlayer
     {
         if (_remoteRide is not Truck truck) return;
         if (TrailerCode != _visualTrailer) { RefreshVisual(force: true); return; }
-        float ease = 1f - Mathf.Exp(-15f * dt);
+        float ease = MathX.Damp(15f, dt);
         var angles = new Vector3(TrainPose.X, TrainPose.Y, TrainPose.Z);
         for (int j = 0; j < Truck.MaxJoints; j++) _shownAngles[j] = Mathf.Lerp(_shownAngles[j], angles[j], ease);
         truck.SetAngles(new Vector3(_shownAngles[0], _shownAngles[1], _shownAngles[2]));
@@ -248,18 +250,13 @@ public partial class FootPlayer
         }
     }
 
-    /// <summary>The camera's pull-in ray ignores the train it is looking along.</summary>
-    private void ExcludeTrain(Godot.Collections.Array<Rid> rids)
-    {
-        foreach (var s in _sections) rids.Add(s.GetRid());
-    }
-
     // ---- driving: before and after the train's step ---------------------------------------------
 
     /// <summary>The ignition and the clutch pedal into the truck, and last frame's section contacts are already in.</summary>
     private void PrepareTruck(Truck truck)
     {
-        truck.EngineRunning = EngineOn;
+        // nobody at the wheel (#158): the engine only drags; idling in drive it would creep on for ever
+        truck.EngineRunning = EngineOn && SeatIndex == 0;
         truck.Box.ClutchHeld = !Npc && RideControls == null && PlayerInput.Held(PlayerInput.Clutch);
     }
 
@@ -350,7 +347,7 @@ public partial class FootPlayer
         float tolerance = truck.Spec.Takes == Coupling.Drawbar ? 1.2f : 0.9f;
         return Vehicles?.NearestTrailer(hitch, CoupleReach, v =>
             truck.Accepts(v.Trailer!.Spec)
-            && Mathf.Abs(Mathf.Wrap(v.Rotation.Y - Rotation.Y, -Mathf.Pi, Mathf.Pi)) < tolerance);
+            && Mathf.Abs(MathX.WrapAngle(v.Rotation.Y - Rotation.Y)) < tolerance);
     }
 
     /// <summary>{couple}: drops the trailer where it stands, or backs onto the one whose pivot is over the hitch.</summary>
@@ -368,7 +365,7 @@ public partial class FootPlayer
         Vehicles!.Claim(target, state =>
         {
             if (_ride is not Truck t) { Vehicles?.Park(state); return; }
-            float yaw = Mathf.Wrap(state.Yaw - Rotation.Y, -Mathf.Pi, Mathf.Pi);
+            float yaw = MathX.WrapAngle(state.Yaw - Rotation.Y);
             if (!t.Couple(state.Train, new Vector3(yaw, state.Angles.X, state.Angles.Y))) { Vehicles?.Park(state); return; }
             TrailerCode = t.TrailerCode;
             RefreshVisual(force: true);
@@ -383,7 +380,7 @@ public partial class FootPlayer
         if (code == 0) return;
         var pos = ToGlobal(new Vector3(-at.Y, 0f, -at.X));
         if (_sections.Count > 0) pos.Y = _sections[0].GlobalPosition.Y;
-        Vehicles?.Park(new VehicleState(RideKind.Trailer, pos, Rotation.Y + yaw, Vector3.Zero, 400f, false, false, 0f,
+        Vehicles?.Park(new VehicleState(RideKind.Trailer, Origin!.ToGlobal(pos), Rotation.Y + yaw, Vector3.Zero, 400f, false, false, 0f,
             VehicleState.Now, Train: code, Angles: angles));
         TrailerCode = 0;
         RefreshVisual(force: true);
@@ -410,7 +407,7 @@ public partial class FootPlayer
         var ahead = -GlobalTransform.Basis.Z with { Y = 0 };
         var pos = GlobalPosition + ahead.Normalized() * 14f;
         if (Terrain != null && Terrain.TryGetHeight(pos, out float g)) pos.Y = g;
-        Vehicles.Park(new VehicleState(RideKind.Trailer, pos, Rotation.Y, Vector3.Zero, 400f, false, false, 0f,
+        Vehicles.Park(new VehicleState(RideKind.Trailer, Origin!.ToGlobal(pos), Rotation.Y, Vector3.Zero, 400f, false, false, 0f,
             VehicleState.Now, Train: code));
         return true;
     }
