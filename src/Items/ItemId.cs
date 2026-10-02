@@ -109,6 +109,20 @@ public enum ItemId
     KneeSocks = 137, RainbowStockings = 138,
     PlatformBoots = 139, CombatBoots = 140, PinkSneakers = 141, WhiteSneakers = 142, MaryJanes = 143, DiscoPlatforms = 144,
     LaceArmWarmers = 145, FingerlessGloves = 146, PawGloves = 147, StripedArmWarmers = 148, NeonGloves = 149,
+
+    // 150 is taken by the building hammer (#274, another branch)
+
+    // ---- fire and placeables (#272, docs/notes/crafting/campfire.md) ----
+    /// <summary>Cooked at a fire (#272).</summary>
+    Fondue = 151,
+    HotChocolate = 152,
+    ToastedBread = 153,
+    /// <summary>Placed: a fire that burns 20 minutes, a cooking station (<c>PlacedKind.Campfire</c>).</summary>
+    Campfire = 154,
+    /// <summary>Held: a light in the hand, seen by everyone (it follows the replicated held item).</summary>
+    Torch = 155,
+    /// <summary>Placed: a workbench station anywhere (<c>PlacedKind.FieldWorkbench</c>).</summary>
+    FieldWorkbench = 156,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>

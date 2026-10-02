@@ -1192,6 +1192,105 @@ public static class ItemIcons
             "...kk......kk...",
         };
 
+        // ---- fire and placeables (#272) ----
+        d[ItemId.Fondue] = new[]
+        {
+            "..........k.....",
+            "..........gk....",
+            ".........kgk....",
+            "........kgk.....",
+            ".kkkkkkkgkkkkk..",
+            "kllllyyygyyyyyk.",
+            "kryyyyyyyyyyYrk.",
+            ".krrrrrrrrrrRk..",
+            ".krwrrrwrrrrRk..",
+            ".krrrrrrrrrrRk..",
+            "..krrrwrrrwRk...",
+            "...kRRRRRRRk....",
+            "....kkkkkkk.....",
+        };
+
+        d[ItemId.HotChocolate] = new[]
+        {
+            "...a...a........",
+            "....a...a.......",
+            "...a...a........",
+            ".kkkkkkkkk......",
+            ".kNnnnnnNkkk....",
+            ".kwwwwwwwk..k...",
+            ".kwwrrwwwk..k...",
+            ".kwwrrwwwk..k...",
+            ".kwwwwwwak.k....",
+            ".kwwwwwwakk.....",
+            "..kaaaaak.......",
+            "...kkkkk........",
+        };
+
+        d[ItemId.ToastedBread] = new[]
+        {
+            "...kkkkkkkkk....",
+            "..kNNNNNNNNNk...",
+            ".kNnttttttttNk..",
+            ".kNtnttttnttNk..",
+            ".kNttttnttttNk..",
+            "..kNtnttttnNk...",
+            "..kNttttnttNk...",
+            "..kNttntttnNk...",
+            "..kNtttttttNk...",
+            "..kNNNNNNNNNk...",
+            "...kkkkkkkkk....",
+        };
+
+        d[ItemId.Campfire] = new[]
+        {
+            ".......o........",
+            "......oyo.......",
+            ".....oyly.o.....",
+            "....ooyllyoo....",
+            "....oyllllyo....",
+            ".....oyllyo.....",
+            "...kNnNkkNnNk...",
+            "..knNnNnnNnNnk..",
+            ".kgakNnNNnNkagk.",
+            "kgaGkkkkkkkkGagk",
+            ".kGgkgaGgakgGk..",
+            "..kkk.kkk.kkk...",
+        };
+
+        d[ItemId.Torch] = new[]
+        {
+            "..........o.....",
+            ".........oyo....",
+            "........oylyo...",
+            "........oyly....",
+            ".........oo.....",
+            "........kNNk....",
+            ".......kNNk.....",
+            "......knnk......",
+            ".....knnk.......",
+            "....knnk........",
+            "...knnk.........",
+            "..knnk..........",
+            "..kkk...........",
+        };
+
+        d[ItemId.FieldWorkbench] = new[]
+        {
+            "..........kkk...",
+            "..........kgk...",
+            ".kkkkkkkkkkgkkk.",
+            ".kttttttttttttk.",
+            ".kNnnnnnnnnnnNk.",
+            ".kkkkkkkkkkkkkk.",
+            "..knk......knk..",
+            "..knk......knk..",
+            "..knkkkkkkkknk..",
+            "..knNNNNNNNNnk..",
+            "..knkkkkkkkknk..",
+            "..knk......knk..",
+            "..kkk......kkk..",
+        };
+
         return d;
     }
 }

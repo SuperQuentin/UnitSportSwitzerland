@@ -256,7 +256,9 @@ public partial class ItemController : Node
         bool sticking = usable && !UiFocus.TextEntryActive && def?.Use == ItemUse.Print
                         && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
         ShowGhost(sticking ? StickTarget(player).At : null);
-        _flagGhost.Step(player, usable && !_planting && _inventory.HeldId == ItemId.SwissFlag);
+        // a placeable in hand shows where it goes; an empty hand, the fire or bench it would take back
+        var placeable = Placeables.ForItem(_inventory.HeldId);
+        _flagGhost.Step(player, usable && !_planting && !_ui.IsOpen && (placeable != null || _inventory.Held.IsEmpty), placeable);
         if (visual != null)
         {
             visual.SetPose(_raiseFlag ? ViewPose.Raise : !aiming ? ViewPose.Rest : def!.Use switch
@@ -349,7 +351,7 @@ public partial class ItemController : Node
     // using things
     // ------------------------------------------------------------------------------------
 
-    private void UseHeld(FootPlayer player)
+    internal void UseHeld(FootPlayer player)
     {
         // aiming a throw: Use winds it up, letting go throws (StepThrow)
         if (_throw.Active)
@@ -369,7 +371,13 @@ public partial class ItemController : Node
             PickUp(dropped);
             return;
         }
-        // an empty hand takes back a photo of yours you are looking at
+        // an empty hand takes back a photo of yours you are looking at, or puts out a campfire,
+        // clears its ashes, packs up a field workbench (#272)
+        if (_inventory.Held.IsEmpty && FlagGhost.Aim(player, null) is { Kind: FlagAimKind.PickUp } byHand)
+        {
+            TakeBack(player, byHand);
+            return;
+        }
         if (_inventory.Held.IsEmpty)
         {
             if (StickTarget(player).PhotoId is long id) PickUpPhoto(id);
@@ -429,7 +437,7 @@ public partial class ItemController : Node
                 break;
 
             case ItemUse.Place:
-                PlaceOrPickUpFlag(player, slot);
+                PlaceOrPickUp(player, slot);
                 break;
 
             case ItemUse.Optic:
@@ -1078,29 +1086,24 @@ public partial class ItemController : Node
     /// reached down for and pulled up. Planted flags are <see cref="PlacedObjects"/>: the server
     /// keeps and saves them, so the flag leaves the pack at the stab and comes back if refused.
     /// </summary>
-    private async void PlaceOrPickUpFlag(FootPlayer player, int slot)
+    /// <summary>
+    /// Use with a placeable in hand (<see cref="Placeables"/>): places it where <see cref="FlagGhost.Aim(FootPlayer, Placeable?)"/>
+    /// says, or takes back the placed one of its kind it points at. The item leaves the pack at once
+    /// and comes back if the server says no.
+    /// </summary>
+    private async void PlaceOrPickUp(FootPlayer player, int slot)
     {
-        if (_planting || PlacedObjects.Instance is not { } placed) return;
-        var aim = FlagGhost.Aim(player);
+        if (_planting || PlacedObjects.Instance is not { } placed || Placeables.ForItem(_inventory[slot].Id) is not { } spec) return;
+        var aim = FlagGhost.Aim(player, spec);
         if (aim.Kind == FlagAimKind.None)
         {
-            _ui.Toast("Nothing in reach to plant it in.");
+            _ui.Toast(aim.Reason);
             return;
         }
 
         if (aim.Kind == FlagAimKind.PickUp)
         {
-            await Stroke(player, raise: false, () => placed.RequestRemove(aim.Id, r =>
-            {
-                if (!r.Ok)
-                {
-                    _ui.Toast($"Cannot pick it up: {r.Refused}");
-                    return;
-                }
-                if (_inventory.Room(ItemId.SwissFlag) >= 1) _ui.Toast("Flag picked up.");
-                Give(new ItemStack(ItemId.SwissFlag, 1));
-                Play(SfxSynth.Whoosh, 1.3f);
-            }));
+            TakeBack(player, aim);
             return;
         }
 
@@ -1111,22 +1114,45 @@ public partial class ItemController : Node
         }
 
         var at = new Transform3D(new Basis(Vector3.Up, aim.Yaw), aim.Point);
-        await Stroke(player, raise: true, () =>
+        await Stroke(player, raise: spec.Raise, () =>
         {
-            if (_inventory[slot].Id != ItemId.SwissFlag) return;   // swapped away during the raise
+            if (_inventory[slot].Id != spec.Item) return;   // swapped away during the raise
             _inventory.TakeOne(slot);
             Kick(player);
-            placed.RequestPlace(PlacedKind.Flag, at, "", r =>
+            placed.RequestPlace(spec.Kind, at, "", r =>
             {
                 if (!r.Ok)
                 {
-                    Give(new ItemStack(ItemId.SwissFlag, 1));   // the server said no: the flag comes back
-                    _ui.Toast($"Cannot plant it here: {r.Refused}");
+                    Give(new ItemStack(spec.Item, 1));   // the server said no: the item comes back
+                    _ui.Toast($"Cannot put it here: {r.Refused}");
                     return;
                 }
-                _ui.Toast("Flag planted.");
+                _ui.Toast(spec.Done);
             });
         });
+    }
+
+    /// <summary>Takes back a placed object (<paramref name="aim"/> is a pick-up): the flag or the bench comes back to the pack, a fire is spent.</summary>
+    private async void TakeBack(FootPlayer player, FlagAim aim)
+    {
+        if (_planting || PlacedObjects.Instance is not { } placed || !placed.All.TryGetValue(aim.Id, out var o)) return;
+        string verb = Placeables.TakeVerb(o);
+        await Stroke(player, raise: false, () => placed.RequestRemove(aim.Id, r =>
+        {
+            if (!r.Ok)
+            {
+                _ui.Toast($"Cannot {verb}: {r.Refused}");
+                return;
+            }
+            var refund = Placeables.Refund(o.Kind);
+            if (refund != ItemId.None)
+            {
+                if (_inventory.Room(refund) >= 1) _ui.Toast($"{ItemDefs.Get(refund)?.Name} picked up.");
+                Give(new ItemStack(refund, 1));
+            }
+            else _ui.Toast(verb == "put it out" ? "Fire put out." : "Ashes cleared.");
+            Play(SfxSynth.Whoosh, 1.3f);
+        }));
     }
 
     private bool _planting, _raiseFlag;

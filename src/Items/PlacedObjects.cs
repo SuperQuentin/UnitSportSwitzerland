@@ -13,6 +13,13 @@ public enum PlacedKind
     Flag = 1,
     /// <summary>A photo stuck on something. Payload: the photo's id/hash. Only its owner removes it.</summary>
     Photo = 2,
+    /// <summary>
+    /// A campfire (#272). Payload: the Unix time it was lit, set by the server
+    /// (<see cref="Crafting.CampfireClock"/>). Its owner may put it out; once burnt out, anyone may clear it.
+    /// </summary>
+    Campfire = 3,
+    /// <summary>A field workbench (#272): a workbench station anywhere. Only its owner packs it up.</summary>
+    FieldWorkbench = 4,
 }
 
 /// <summary>
@@ -72,7 +79,17 @@ public partial class PlacedObjects : Node
     {
         [PlacedKind.Flag] = _ => FlagVisual(),
         [PlacedKind.Photo] = PhotoVisuals.Placed,
+        [PlacedKind.Campfire] = Crafting.StationVisuals.Campfire,
+        [PlacedKind.FieldWorkbench] = Crafting.StationVisuals.Workbench,
     };
+
+    /// <summary>
+    /// Whether anyone (not only its owner) may remove <paramref name="o"/> now: a kind in
+    /// <see cref="RemovableByAnyone"/>, or a campfire that has burnt out. Must agree on the server.
+    /// </summary>
+    public static bool AnyoneMayRemove(PlacedObject o) =>
+        RemovableByAnyone.Contains(o.Kind)
+        || o.Kind == PlacedKind.Campfire && !Crafting.CampfireClock.Burning(o.Payload, Time.GetUnixTimeFromSystem());
 
     /// <summary>
     /// Sets (or replaces) how a kind is drawn: the factory returns a node whose origin is the
@@ -301,6 +318,8 @@ public partial class PlacedObjects : Node
             return;
         }
 
+        // a campfire is lit now, by the server's clock: what the client sent does not count
+        if ((PlacedKind)kind == PlacedKind.Campfire) payload = Crafting.CampfireClock.Lit(Time.GetUnixTimeFromSystem());
         var o = new PlacedObject(_nextId++, (PlacedKind)kind, owner, e, n, alt, rot.Normalized(), payload);
         Spawned(Put(o));   // offline the client plays the server's part; a dedicated server has no visual, so it is a no-op there
         Save();
@@ -314,7 +333,7 @@ public partial class PlacedObjects : Node
     private void ServeRemove(long peer, int req, long id)
     {
         string? refused = !_objects.TryGetValue(id, out var o) ? "It is not there any more."
-            : !RemovableByAnyone.Contains(o.Kind) && o.Owner != OwnerName(peer) ? "That is not yours."
+            : !AnyoneMayRemove(o) && o.Owner != OwnerName(peer) ? "That is not yours."
             : !InReach(peer, o.E, o.N, o.Altitude) ? "Too far away."
             : null;
         if (refused != null)
