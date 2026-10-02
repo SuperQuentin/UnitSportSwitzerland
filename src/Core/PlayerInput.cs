@@ -240,13 +240,21 @@ public partial class PlayerInput : Node
         }
         if (!GameSettings.Current.Vibration || LastDevice != InputDevice.Gamepad) return;
         foreach (int pad in Input.GetConnectedJoypads())
-            Input.StartJoyVibration(pad, Mathf.Clamp(weak, 0, 1), Mathf.Clamp(strong, 0, 1), seconds);
+            // never the steering wheel: Godot rumbles a force-feedback wheel through its own SDL,
+            // which takes the wheel's forces away from SteeringWheel (#68); its knocks are its own
+            if (!_ignoredPads.Contains(pad))
+                Input.StartJoyVibration(pad, Mathf.Clamp(weak, 0, 1), Mathf.Clamp(strong, 0, 1), seconds);
     }
 
     /// <summary>Adds the tracker node and the steering wheel reader, and registers the default bindings. Idempotent.</summary>
     public static void Install(Node root)
     {
         RegisterActions();
+        // RegisterActions puts back any every-device pad binding it does not find, and a wheel
+        // claimed on the title screen has had those replaced by per-pad copies: without this, loading
+        // a world handed the wheel back to the pad bindings, and past the stick deadzone (180° of an
+        // 1800° wheel) it steered as a stick — the car's wheel snapping back to centre (#68)
+        if (_ignoredPads.Count > 0) RetargetPads();
         if (root.GetNodeOrNull("PlayerInput") == null)
             root.AddChild(new PlayerInput { Name = "PlayerInput" });
         SteeringWheel.Install(root);

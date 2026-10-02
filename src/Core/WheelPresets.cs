@@ -21,6 +21,7 @@ public static class WheelPresets
         // 12-18 the H-shifter's 1-6 and R, 23 enter, 24 PS; the D-pad is hat 0.
         new("Logitech G29", n => Has(n, "G29") || Has(n, "G923") || Has(n, "Driving Force"), s =>
         {
+            s.RangeDeg = 900f;
             s.SteerAxis = 0;
             s.Throttle = Pedal(1);
             s.Brake = Pedal(2);
@@ -40,9 +41,10 @@ public static class WheelPresets
         }),
         // HORI Force Feedback Truck Control System ("HORI TRUCK CONTROL SYSTEM WHEEL", 0f0d:017a),
         // recorded on the device: 8 axes, 54 buttons, 1 hat. Steering on axis 0 (left negative);
-        // clutch, brake and gas on axes 4, 5, 6, each resting at −1 and reading +1 floored.
+        // clutch, brake and gas on axes 4, 5, 6, each resting at −1 and reading +1 floored. 1800° of rotation.
         new("HORI Truck Control", n => Has(n, "HORI") && (Has(n, "Truck") || Has(n, "Force Feedback")), s =>
         {
+            s.RangeDeg = 1800f;
             s.SteerAxis = 0;
             s.Throttle = Pedal(6, rest: -1f);
             s.Brake = Pedal(5, rest: -1f);
