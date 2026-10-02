@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 
 namespace UnitSport.Avatar;
 
@@ -425,7 +426,7 @@ public partial class CarRig : Node3D
         _wheel.Basis = new Basis(_cabin.ColumnAxis, WheelTurn);
         // needles swing to a reading rather than jump to it, like a real movement's damping
         float rpm = EngineRunning ? Rpm : 0f;
-        float ease = 1f - Mathf.Exp(-14f * dt);
+        float ease = MathX.Damp(14f, dt);
         _rpmShown = Mathf.Lerp(_rpmShown, rpm, ease);
         _speedShown = Mathf.Lerp(_speedShown, Mathf.Abs(SpeedKmh), ease);
         _tach.Basis = new Basis(_cabin.Tach.Axis, CarNeedle.Angle(_rpmShown / _cabin.Gauges.TachRpm));

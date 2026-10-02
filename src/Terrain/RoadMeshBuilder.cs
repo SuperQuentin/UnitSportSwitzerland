@@ -585,13 +585,13 @@ public static class RoadMeshBuilder
             // taper meets the constant width, because the *rate* of change jumps there.
             if (startBlend > 0 && along[i] < startBlend)
             {
-                float t = Smooth(along[i] / startBlend);
+                float t = Mathf.SmoothStep(0f, 1f, along[i] / startBlend);
                 vertexHalf = Mathf.Lerp(join.StartWidth * 0.5f, half, t);
                 vertexColor = join.StartColour.Lerp(color, t);
             }
             else if (endBlend > 0 && total - along[i] < endBlend)
             {
-                float t = Smooth((total - along[i]) / endBlend);
+                float t = Mathf.SmoothStep(0f, 1f, (total - along[i]) / endBlend);
                 vertexHalf = Mathf.Lerp(join.EndWidth * 0.5f, half, t);
                 vertexColor = join.EndColour.Lerp(color, t);
             }
@@ -625,13 +625,6 @@ public static class RoadMeshBuilder
         d.Y = 0;
         if (d.LengthSquared() < 1e-8f) return end + Vector3.Down * EndTuckDrop;
         return end + d.Normalized() * EndTuck + Vector3.Down * EndTuckDrop;
-    }
-
-    /// <summary>Smoothstep: zero slope at both ends, so the taper leaves no crease.</summary>
-    private static float Smooth(float t)
-    {
-        t = Math.Clamp(t, 0f, 1f);
-        return t * t * (3f - 2f * t);
     }
 
     /// <summary>

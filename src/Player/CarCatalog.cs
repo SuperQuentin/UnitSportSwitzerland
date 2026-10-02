@@ -51,6 +51,7 @@ public static class CarCatalog
             RefZeroTo100 = 8.6f, RefTopKmh = 195f,
             MaxSteer = 0.62f, DragArea = 0.62f,
             LockTurns = 3.5f, // lock to lock, est.: unassisted rack
+            PowerSteering = false,
         },
         new CarSpec
         {
@@ -240,6 +241,7 @@ public static class CarCatalog
             RefZeroTo100 = 13.5f, RefTopKmh = 165f,
             MaxSteer = 0.62f, DragArea = 0.62f,
             LockTurns = 3.5f, // lock to lock, est.: unassisted rack
+            PowerSteering = false,
         },
         new CarSpec
         {
@@ -260,6 +262,7 @@ public static class CarCatalog
             RefZeroTo100 = 8.5f, RefTopKmh = 195f,
             MaxSteer = 0.62f, DragArea = 0.62f,
             LockTurns = 3.5f, // lock to lock, est.: unassisted rack
+            PowerSteering = false,
         },
         // ---- Lancer Evolutions (Team Emperor and later rivals) ----
         new CarSpec
@@ -349,6 +352,7 @@ public static class CarCatalog
             RefZeroTo100 = 5.6f, RefTopKmh = 265f,
             MaxSteer = 0.58f, DragArea = 0.62f,
             LockTurns = 3.0f, // lock to lock, est.: unassisted with the manual box
+            PowerSteering = false,
         },
         new CarSpec
         {

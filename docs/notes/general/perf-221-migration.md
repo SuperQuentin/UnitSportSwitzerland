@@ -23,10 +23,10 @@ reason (numbers), the traps and the exact migration steps; read only the ones yo
 |---|---|
 | Server / net | `perf-server-frame-metrics` (busy is per frame now), `perf-no-main-thread-periodic-jobs` (no IO / prints per player on the main thread; `--player-status` is opt-in), `perf-mcp-logger-gated`, `perf-visibility-on-change`, `udp-receive-loop` (`Udp.ReceiveLoop`), `region-file-sync`, `is-online` (`NetLink.Online`) |
 | Terrain | `perf-collision-commits` (collision is queued in 4×4 cell pieces; a new collision layer goes through the queue), `perf-lod-trees` (ring strides, trees by ring, shared tree meshes, free replaced meshes), `perf-door-portals`, `building-triangles` (`b.Tri(t)`, one `RoofNormalY`) |
-| Avatars | `perf-pose-mesh-cache` (rebuild a figure only on a new pose key, in place; no `ArrayMesh` per frame), `perf-shared-materials` |
+| Avatars | `perf-pose-mesh-cache` (rebuild a figure only on a new pose key, in place; no `ArrayMesh` per frame), `perf-shared-materials`, `cockpit-kit` (cabin wheel/dials/lamps/pedals/mirrors through `CockpitKit` + `CockpitSpec`) |
 | Vehicles / world / audio | `perf-surface-grid` (`Surfaces.At(..., caller)`), `perf-traffic-tick` (lazy obstacle sampling, lane neighbours, shared traffic meshes, 600 m car draw), `perf-racenpc-server-physics` (no NPC physics step on the server), `perf-parked-vehicles` (nothing per frame while asleep, reused ray queries), `perf-engine-synth-idle` |
 | Probes / UI | `chat-probe` (two-client probes derive from `ChatProbe`, register in `ClientWorld`'s check tables), `ui-theme-panels` (`UiTheme.Title/Prompt/Flat/Amber`, no hand-built styles) |
-| Tools / formats | `perf-tile-header` (`TileHeader`, byte-identical goldens in `tests/`), `perf-road-segment-helpers` (`RoadSegment.Lv95`, `RoadProfiles.For`), `dead-code-and-shared-helpers` |
+| Tools / formats | `perf-tile-header` (`TileHeader`, byte-identical goldens in `tests/`), `perf-road-segment-helpers` (`RoadSegment.Lv95`, `RoadProfiles.For`), `dead-code-and-shared-helpers`, `mathx` (`MathX.Flat/Damp/WrapAngle`, `Mathf.SmoothStep`) |
 
 ## Rebasing an old branch: the order that conflicts least
 
