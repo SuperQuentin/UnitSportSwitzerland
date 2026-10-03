@@ -41,7 +41,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 
 ## Gotchas
 
-- `collision-build-load-road-tile` — A collision build must load the road tile even when the roads are already drawn
+- `collision-build-load-road-tile` — A collision or near-field mesh rebuild must load the road tile even when the roads are already drawn (or the ground swallows them after flying away and back)
 - `road-s-collision-core-takes` — A road's collision core takes the height at the cell's perpendicular foot on the centreline, nearest segment wins
 - `concavepolygonshape3d-one-sided-collision-unless` — `ConcavePolygonShape3D` is one-sided for collision unless told otherwise, and geometry that "looks right" can still...
 - `flat-shaded-quad-mesh-bilinear` — A flat-shaded quad mesh is NOT a bilinear surface, and a height query must match whichever one is actually on screen
