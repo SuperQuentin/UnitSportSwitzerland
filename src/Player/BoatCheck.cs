@@ -429,17 +429,23 @@ public partial class BoatCheck : Node
     /// </summary>
     private async Task HullContact(FootPlayer me, VehicleBody parked)
     {
-        if (_shots) HullTouch.Overlay(parked);
+        if (_shots)
+        {
+            HullTouch.Overlay(parked);
+            me.ViewForCheck(true);   // the swimmer is in the picture (a first-person setting hides it)
+        }
         var swim = HullTouch.Swim(this, me, parked, 10);
         if (_shots)
         {
             // pictured once the swimmer is against it and the hull is well over on the swell
             await Until(() => !IsInstanceValid(parked) || HullTouch.Hull(parked, out _, out var box, out _)
-                && Mathf.RadToDeg(box.Basis.Y.Normalized().AngleTo(Vector3.Up)) > 3f && me.GetSlideCollisionCount() > 0, 6);
+                && Mathf.RadToDeg(box.Basis.Y.Normalized().AngleTo(Vector3.Up)) > 3f && me.GetSlideCollisionCount() > 0 && !me.HeadUnderwater, 6);
             if (IsInstanceValid(parked))
             {
-                await Shot("hull_touch", () => Look(parked, side: 1f, back: -0.35f, up: 0.3f, distance: 1.4f));
-                await Shot("hull_side", () => Look(parked, side: -1f, back: 0.02f, up: 0.04f, distance: 1.6f));
+                // from the swimmer's side; then abeam from the other, at the water
+                float side = (me.GlobalPosition - parked.GlobalPosition).Dot(parked.GlobalTransform.Basis.X) < 0f ? -1f : 1f;
+                await Shot("hull_touch", () => Look(parked, side: side, back: -0.35f, up: 0.3f, distance: 1.4f));
+                await Shot("hull_side", () => Look(parked, side: -side, back: 0.02f, up: 0.04f, distance: 1.6f));
             }
         }
         var touch = await swim;

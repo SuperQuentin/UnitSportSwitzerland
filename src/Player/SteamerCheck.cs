@@ -646,7 +646,7 @@ public partial class SteamerCheck : Node
         var swim = HullTouch.Swim(this, me, ship, 10, along: 20f);
         if (_shots)
         {
-            await Until(() => me.GetSlideCollisionCount() > 0, 6);
+            await Until(() => me.GetSlideCollisionCount() > 0 && !me.HeadUnderwater, 8);
             float side = Mathf.Sign((me.GlobalPosition - ship.GlobalPosition).Dot(ship.GlobalTransform.Basis.X));
             // beside the swimmer, from out on the water; then the whole ship abeam, at the water
             await Shot("hull_touch", () =>
