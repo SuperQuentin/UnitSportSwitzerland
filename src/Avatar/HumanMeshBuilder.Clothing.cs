@@ -120,11 +120,19 @@ public static partial class HumanMeshBuilder
             s.Box(h.Point(0.10f, Mathf.Pi / 2f, 0f) + f.Fwd * (0.02f + 0.012f), new Vector3(0.17f, 0.07f, 0.03f), new Color(0.08f, 0.09f, 0.12f), f.Basis);
         }
         else if (helmet)
-            s.Box(h.Top(hair) - f.Up * 0.035f, new Vector3(2f * h.HalfWidth(hair) + 0.024f, 0.085f, 0.177f * h.K + 0.035f), palette.Helmet, f.Basis);
+        {
+            // a cycling helmet: a shell from the hat seat over the crown, a short peak at the front
+            var seat = h.Seat(hair);
+            float k = h.HatScale(hair);
+            var mid = seat + f.Up * 0.05f * k;
+            s.Tube(seat - f.Up * 0.012f * k, mid, 0.118f * k, 0.113f * k, palette.Helmet, 8);
+            s.Tube(mid, h.Top(hair) + f.Up * 0.02f * k, 0.113f * k, 0.055f * k, palette.Helmet, 8);
+            s.Box(seat + (f.Fwd * 0.112f + f.Up * 0.004f) * k, new Vector3(0.12f, 0.012f, 0.03f) * k, palette.Helmet, f.Basis);
+        }
         else if (headwear != null)
             AppendHeadwear(s, headwear, h, hair);
         else if (hat != Headwear.None)
-            AppendHat(s, hat, h.Top(hair), f.Side, f.Up, f.Fwd, h.HalfWidth(hair) / 0.075f);
+            AppendHat(s, hat, h.Seat(hair), h.Centre(0.11f), f.Side, f.Up, f.Fwd, h.HatScale(hair));
 
         if (cover == HairCover.Head) return;
         if (o[WearSlot.Face] is { } mask) AppendMask(s, mask, h);

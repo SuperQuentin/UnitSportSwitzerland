@@ -34,3 +34,7 @@
   rolls round the trunk and the Cartoon ink outline closes over the edges (`cartoon-outline`).
 - Preview: `<godot> --path . -- --avatars <s> <png> --bodies builds|crowd|looks|guys|faces|eyes|hair|hair2|heads|walk [--style ps1|cartoon|real-] [--view deg]`.
   Check: `--outfitcheck` builds every build × hair plain, dressed, under a hat and a helmet.
+- Hats sit on `Head.Seat(hair)`, just above the brow (0.184, 0.192 over hair), not on the crown:
+  the head is round, so a band rests where it is as wide as the band. `Head.HatScale` scales the
+  hats' radii (authored for a ~0.11 m band). The cycling helmet is a shell from the same seat.
+  Check with `--avatars 2 <png> --hats --close` (every hat, then the helmet, heads only).

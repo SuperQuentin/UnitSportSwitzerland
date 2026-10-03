@@ -813,6 +813,16 @@ public static partial class HumanMeshBuilder
         /// <summary>The top of the head, or of the hair on it.</summary>
         public Vector3 Top(bool hair) => _base + UpAxis * (hair ? HairCrown : Crown) * K;
 
+        /// <summary>
+        /// Where a hat's band rests: the head is round, so a hat sits down over the crown to just
+        /// above the brow (0.178), where the head is as wide as the band, a little higher over hair;
+        /// back a little, as the skull is deeper behind than in front.
+        /// </summary>
+        public Vector3 Seat(bool hair) => Centre(hair ? 0.192f : 0.184f) - Fwd * 0.008f * K;
+
+        /// <summary>The hats' radii (authored for a band of about 0.11 m) on this head.</summary>
+        public float HatScale(bool hair) => K * (hair ? 1.06f : 1f);
+
         /// <summary>Half the head's width at its widest, with hair on or not.</summary>
         public float HalfWidth(bool hair) => (0.084f + (hair ? 0.013f : 0f)) * K;
 

@@ -627,20 +627,20 @@ public static partial class HumanMeshBuilder
         var up = axis.LengthSquared() > 1e-8f ? axis.Normalized() : Vector3.Up;
         var fwd = Vector3.Back - up * up.Dot(Vector3.Back);
         fwd = fwd.LengthSquared() > 1e-6f ? fwd.Normalized() : Vector3.Back;
-        AppendHat(s, hat, centre + up * (axis.Length() * 0.5f + 0.0275f), up.Cross(fwd), up, fwd, 1f);
+        var seat = centre + up * (axis.Length() * 0.5f + 0.0275f);
+        AppendHat(s, hat, seat, seat - up * 0.1225f, up.Cross(fwd), up, fwd, 1f);
     }
 
     /// <summary>
-    /// A hat sitting on <paramref name="top"/> (the head's, or its hair's), in the head's frame;
-    /// <paramref name="scale"/> is how much wider the head is than the 0.150 m box the hats were
-    /// authored on (#394: the figure's real head, with or without hair).
+    /// A hat whose band rests at <paramref name="top"/> (on the round head, a little above the
+    /// brow, where the head is as wide as the band), in the head's frame; <paramref name="centre"/>
+    /// is the middle of the head, for what goes round all of it; <paramref name="scale"/> scales the
+    /// hat's radii to the head (#394).
     /// </summary>
-    internal static void AppendHat(MeshScratch s, Headwear hat, Vector3 top, Vector3 side, Vector3 up, Vector3 fwd, float scale)
+    internal static void AppendHat(MeshScratch s, Headwear hat, Vector3 top, Vector3 centre, Vector3 side, Vector3 up, Vector3 fwd, float scale)
     {
         var frame = new Basis(side, up, fwd);
         float k = scale;
-        // the middle of the head, where what goes round it is centred
-        var centre = top - up * 0.1225f * k;
 
         switch (hat)
         {

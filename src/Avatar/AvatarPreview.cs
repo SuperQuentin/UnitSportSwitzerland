@@ -95,20 +95,24 @@ public partial class AvatarPreview : Node3D
         // camera, so the occasions' hats (#18) can be judged together.
         if (CmdArgs.Has("--hats"))
         {
+            // every hat, then the cycling helmet
             var hats = Enum.GetValues<Headwear>();
-            for (int i = 0; i < hats.Length; i++)
+            for (int i = 0; i <= hats.Length; i++)
             {
+                bool helmet = i == hats.Length;
                 var figure = new MeshInstance3D
                 {
-                    Mesh = HumanMeshBuilder.Build(HumanPalette.ForRider(i), hat: hats[i]),
+                    Mesh = HumanMeshBuilder.Build(HumanPalette.ForRider(i), helmet: helmet, hat: helmet ? Headwear.None : hats[i]),
                     MaterialOverride = material,
                     Rotation = new Vector3(0, Mathf.Pi - 0.55f, 0),
                 };
-                Place((i - (hats.Length - 1) * 0.5f) * 1.0f, figure);
+                Place((i - hats.Length * 0.5f) * 1.0f, figure);
             }
-            var hatCam = new Camera3D { Position = new Vector3(0, 1.3f, 9f), Fov = 30 };
+            // --close: the heads only, to see how each hat sits
+            bool close = CmdArgs.Has("--close");
+            var hatCam = new Camera3D { Position = new Vector3(0, close ? 1.62f : 1.3f, 9f), Fov = close ? 19 : 30 };
             AddChild(hatCam);
-            hatCam.LookAt(new Vector3(0, 1.1f, 0), Vector3.Up);
+            hatCam.LookAt(new Vector3(0, close ? 1.6f : 1.1f, 0), Vector3.Up);
             hatCam.Current = true;
             return;
         }
