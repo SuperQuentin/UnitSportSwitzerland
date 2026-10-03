@@ -71,7 +71,7 @@ public partial class VehicleBody : CharacterBody3D
     public long Owner { get; private set; }
 
     /// <summary>A parked bus's doors, one bit each (#162: open, they can be walked through; anyone works them by their buttons).</summary>
-    public byte BusDoors => Ride is Truck { IsBus: true } or Steamer ? DoorsOpen : (byte)0;
+    public byte BusDoors => Ride is Truck { IsBus: true } or Steamer or Airliner ? DoorsOpen : (byte)0;
 
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
@@ -113,7 +113,9 @@ public partial class VehicleBody : CharacterBody3D
             Ride = state.CreateRide() ?? new Bicycle(),
             Wrecked = state.Wrecked,
             // a car's doors, or a bus's (kept in its flags while it is driven)
-            DoorsOpen = (byte)((state.CreateRide() is Truck { IsBus: true } ? state.Flags >> 4 : state.DoorsOpen) & 15),
+            // an airliner's in its flags too (#416)
+            DoorsOpen = (byte)((state.CreateRide() is Truck { IsBus: true } ? state.Flags >> 4
+                : Airliner.IsAirliner(state.Kind) ? state.Flags >> 13 : state.DoorsOpen) & 15),
             Health = state.Health,
             EngineOn = state.EngineOn,
             Owner = state.Owner,
@@ -209,7 +211,7 @@ public partial class VehicleBody : CharacterBody3D
                 AddChild(_engineSound);
             }
         }
-        else if (Ride is Truck or ParkedTrailer or Boat { Walkable: true })
+        else if (Ride is Truck or ParkedTrailer or Boat { Walkable: true } or Airliner { Walkable: true })
         {
             // Headless (the server, a check) nothing is drawn, but the frame the model would stand in
             // still matters: a parked bus's decks are walked in it, and its guests found by it
@@ -291,7 +293,8 @@ public partial class VehicleBody : CharacterBody3D
         // a boat's attitude as it floats now (#302; the replicated one, which the server has too)
         _initial.Train, Ride is Boat ? new Basis(Tilt).GetEuler() : _initial.Angles,
         // a bus's doors as they are now, where a truck keeps them
-        Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4) : _initial.Flags, _initial.Load,
+        Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4)
+            : Ride is Airliner ? (_initial.Flags & ~(15 << 13)) | ((DoorsOpen & 15) << 13) : _initial.Flags, _initial.Load,
         _initial.Radio, _initial.Cd);
 
     /// <summary>The live station its radio plays, as the driver left it (spawn data only: nobody tunes a parked car).</summary>
@@ -309,7 +312,7 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>Opens or shuts one door. The authority's call: others ask <see cref="VehicleManager.ToggleDoor"/>.</summary>
     public void ToggleDoor(byte bit)
     {
-        if (Wrecked || Ride is not (Car or Truck { IsBus: true } or Steamer)) return;
+        if (Wrecked || Ride is not (Car or Truck { IsBus: true } or Steamer or Airliner)) return;
         DoorsOpen ^= (byte)(bit & 15);
         _shutDriverIn = 0f;   // a door someone chose to leave open stays open
     }
@@ -446,7 +449,12 @@ public partial class VehicleBody : CharacterBody3D
     {
         var attitude = _flight.Attitude == default ? Basis.Identity : _flight.Attitude;
         Tilt = attitude.Orthonormalized().GetRotationQuaternion();
-        if (_visual != null) flyer.Pose(_visual, _flight.Yaw, _flight);
+        if (_visual != null)
+        {
+            flyer.Pose(_visual, _flight.Yaw, _flight);
+            // a walkable aircraft's deck stands in this frame (#416)
+            Posed = true;
+        }
     }
 
     /// <summary>
@@ -525,7 +533,10 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         if (!IsMultiplayerAuthority() && Ride is Flyer remoteFlyer)
+        {
             remoteFlyer.Pose(_visual, Rotation.Y, new FlightMotion { Attitude = new Basis(Tilt) });
+            Posed = true;
+        }
         if (Ride is Boat afloat) DrawBoat(afloat, dt);
 
         if (Ride is Bicycle)
@@ -538,6 +549,8 @@ public partial class VehicleBody : CharacterBody3D
 
         // what the engine and rotor are doing, as far as this peer can know
         if (IsMultiplayerAuthority()) Spool = _flight.Spool;
+        // the doors as replicated (#416): what the rig opens and the deck walks through
+        if (Ride is Airliner jetDoors) jetDoors.DoorsOpen = DoorsOpen;
         float spool = Wrecked ? 0f : Spool;
         if (Ride is Flyer f && !Wrecked) f.AnimateFlight(_visual, _flight with { Spool = spool }, dt);
         if (_visual is Avatar.CarRig rig)

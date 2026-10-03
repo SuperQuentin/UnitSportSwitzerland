@@ -481,7 +481,8 @@ public partial class FootPlayer
         // A turn shows as the velocity turning: the push out of a bend comes with it.
         var velocity = VelocityOfHost(set.Host);
         // a ship's deck (#303): the spot the walker stands on, which its roll and pitch swing about too
-        bool tilting = set.Ride is Boat;
+        // and an airliner's cabin pitches and banks with it (#416)
+        bool tilting = set.Ride is Boat or Airliner;
         if (tilting && _deckSpotValid) velocity = _deckSpotVel;
         if (!_deckFrameValid) { _deckFrameVel = velocity; _deckAccel = Vector3.Zero; _hardFor = 0f; }
         var smooth = _deckFrameVel.Lerp(velocity, MathX.Damp(8f, dt));
@@ -645,6 +646,7 @@ public partial class FootPlayer
     {
         if (_ride is Truck { IsBus: true } bus) bus.ToggleDoor(door);
         else if (_ride is Steamer steamer && door is >= 0 and < Steamer.GangwayCount) steamer.DoorsOpen ^= (byte)(1 << door);
+        else if (_ride is Airliner jet) jet.ToggleDoor(door);
     }
 
     // ---- seats and the wheel from the aisle ------------------------------------------------------
@@ -709,6 +711,7 @@ public partial class FootPlayer
     {
         if (seat < 0 || seat >= ride.Seats.Length || SectionFrame(host, ride.Seats[seat].Section) is not { } frame) return null;
         var s = ride.Seats[seat];
+        if (ride.StandSpot(seat) is { } own) return frame.GlobalTransform * own;
         // the driver's corner is a block to the walk: out past it, by the front door
         float step = seat == 0 ? 0.8f : 0.55f;
         var local = new Vector3(s.Hip.X - Mathf.Sign(s.Hip.X) * step, s.Floor + 0.05f, s.Hip.Z);
