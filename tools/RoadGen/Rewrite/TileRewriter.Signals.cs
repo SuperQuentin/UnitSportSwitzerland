@@ -256,7 +256,10 @@ public static partial class TileRewriter
                 var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | SignalPoleFlags.Pedestrian;
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,
                     rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));
-                wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, -right, half, u, right,
+                // the left kerb stands out by the exit widening of the opposite approach's pocket (#123):
+                // measured from the old edge, every spot tried was on that strip (#386)
+                double exitWidening = pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0;
+                wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, -right, half + exitWidening, u, right,
                     leftSide.OuterDm > 0 ? leftSide.KerbCm / 100f : 0f, secondFlags, -1));
                 // a bike head (#351) beside a separated path, or a kerbside bike lane a right pocket's cars
                 // cross (layout (a)); a bike lane between the pocket and the through lane (b) goes with the
