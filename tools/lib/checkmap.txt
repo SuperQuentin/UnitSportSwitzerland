@@ -124,6 +124,7 @@ src/Player/Ragdoll       quick  --swimcheck --chunks fixture:lake
 src/Player/FootPlayer.Cr quick  --swimcheck --chunks fixture:lake
 src/Player/Wading        quick  --swimcheck --chunks fixture:lake
 src/Items/HeldItemVisual quick  --swimcheck --chunks fixture:lake
+src/Loot/Gathering       quick  --swimcheck --chunks fixture:lake
 src/Avatar/WakeFoam      quick  --boatcheck speedboat --chunks fixture:lake
 src/Avatar/HullSlap      quick  --boatcheck speedboat --chunks fixture:lake
 shaders/wake_foam        quick  --boatcheck speedboat --chunks fixture:lake
